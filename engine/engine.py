@@ -4,9 +4,11 @@ from pathlib import Path
 from datetime import datetime
 import pandas as pd
 
-# Providers (soft fallback if file missing)
+# engine/engine.py (top of file)
 try:
-    from engine_adapters.providers import run_nflverse, run_espn, run_nflgsis, run_msf, run_apisports
+    from engine.adapters.providers import (
+        run_nflverse, run_espn, run_nflgsis, run_msf, run_apisports
+    )
 except Exception:
     def _stub(name):
         def _run(season:int, date:str|None):
