@@ -234,6 +234,19 @@ def fetch_odds(
     if not api_key:
         log.info("ERROR: ODDS_API_KEY not set")
         sys.exit(2)
+        Path("outputs").mkdir(parents=True, exist_ok=True)
+# === ADD BELOW HERE ===
+normalized_markets = []
+for mk in markets:
+    if mk in GAME_MARKETS:
+        log.info(f"skip non-player market in --markets: {mk}")
+        continue
+    resolved = MARKET_ALIASES.get(mk, mk)
+    if resolved != mk:
+        log.info(f"alias: {mk} → {resolved}")
+    normalized_markets.append(resolved)
+markets = normalized_markets
+# === END ADD ===
 
     books_set = {b.strip().lower().replace(" ", "_") for b in books if b.strip()}
     markets = [m.strip() for m in markets if m.strip()]
