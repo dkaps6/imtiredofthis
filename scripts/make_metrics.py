@@ -24,7 +24,6 @@ for a, n in TEAM_ABBR_TO_NAME.items():
     TEAM_NAME_TO_ABBR.setdefault(n, a)
 
 def load_id_map() -> Optional[pd.DataFrame]:
-    """Optional: data/id_map.csv with columns like: team, team_name (or full_name)."""
     p = Path("data/id_map.csv")
     if not p.exists() or p.stat().st_size == 0:
         return None
@@ -61,13 +60,18 @@ def build_schedule_map(odds_path: Path, idmap: Optional[pd.DataFrame]) -> pd.Dat
     """
     required = ["event_id","home_team","away_team","home_wp","away_wp"]
     if not odds_path.exists() or odds_path.stat().st_size == 0:
-        print("[metrics] WARNING: outputs/odds_game.csv missing/empty; opp_team will be NaN")
+        print("[metrics] INFO: odds_game.csv missing or empty; continuing without opp_team")
         return pd.DataFrame(columns=["team","opp_team","event_id","home_away","team_wp"])
 
-    og = pd.read_csv(odds_path)
+    try:
+        og = pd.read_csv(odds_path)
+    except pd.errors.EmptyDataError:
+        print("[metrics] INFO: odds_game.csv has no columns; continuing without opp_team")
+        return pd.DataFrame(columns=["team","opp_team","event_id","home_away","team_wp"])
+
     miss = [c for c in required if c not in og.columns]
     if miss:
-        print(f"[metrics] WARNING: outputs/odds_game.csv missing columns {miss}; opp_team will be NaN")
+        print(f"[metrics] INFO: odds_game.csv missing columns {miss}; continuing without opp_team")
         return pd.DataFrame(columns=["team","opp_team","event_id","home_away","team_wp"])
 
     og["home_abbr"] = og["home_team"].apply(lambda n: name_to_abbr(n, idmap))
@@ -111,7 +115,6 @@ def main():
     tf = pd.read_csv(tfp)
     pf = pd.read_csv(pfp)
 
-    # normalize
     if "team" in tf.columns: tf["team"] = tf["team"].astype(str).str.upper()
     if "team" in pf.columns: pf["team"] = pf["team"].astype(str).str.upper()
 
@@ -130,10 +133,9 @@ def main():
 
     # --- attach opponent defensive context here (pre-merge for pricing) ---
     opp_cols = [
-        "team",  # join key (will become opp_team)
+        "team",
         "def_sack_rate","def_pass_epa","def_rush_epa",
         "light_box_rate","heavy_box_rate",
-        # add any other defensive columns you maintain in team_form (e.g., pressure_rate_z)
     ]
     present = [c for c in opp_cols if c in tf.columns]
     tf_opp = tf[present].copy()
