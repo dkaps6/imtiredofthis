@@ -6,15 +6,34 @@ from typing import Dict, Tuple, List
 import pandas as pd
 import numpy as np
 
-# Optional: scipy for bivariate normal CDF (SGP joint probs)
+# -------- Optional SciPy for SGP bivariate normal ----------
 try:
     from scipy.stats import multivariate_normal, norm
     _HAS_SCIPY = True
 except Exception:
     _HAS_SCIPY = False
 
-# ---- Local model pieces (keep your existing ensemble module) ----
-from scripts.models import ensemble
+# -------- Import ensemble WITHOUT re-importing package symbols (no circulars) ----
+try:
+    from . import ensemble  # pkg-relative; __init__.py must stay light/empty
+except Exception:
+    import scripts.models.ensemble as ensemble  # fallback if needed
+
+# -------- Safe Leg type: try shared_types, else define a local minimal dataclass ----
+try:
+    from .shared_types import Leg  # preferred if you already have it
+except Exception:
+    from dataclasses import dataclass
+    @dataclass
+    class Leg:
+        player_id: str
+        player: str
+        team: str
+        market: str
+        line: float
+        features: dict
+
+# -------- Config pulled from your repo structure (already referenced by engine) ----
 from scripts.config import LOG_DIR, RUN_ID, MONTE_CARLO_TRIALS
 
 # ----------------------- Utils -----------------------
@@ -180,6 +199,7 @@ def run(season: int):
         if col in odds_game.columns: odds_game[col]=odds_game[col].astype(str).str.upper()
     if 'player' in props.columns: props['player'] = props['player'].astype(str)
 
+    # Market fair p (de-vig) just in case it hasn't been computed upstream
     p_market_fair=[]
     for _,r in props.iterrows():
         p_o=american_to_prob(r.get('over_odds')); p_u=american_to_prob(r.get('under_odds'))
@@ -205,6 +225,7 @@ def run(season: int):
         position=str(r.get('position') or r.get('position_pf') or "")
         tgt_mult, ypt_mult, covnote = coverage_multiplier(position, opp, player, cov_tags, cb_pen)
 
+        # ---------- Anytime TD ----------
         if market == 'player_anytime_td':
             lam_team = _team_expected_tds(team, odds_game, merged)
             opp_row = tf[tf['team']==opp].head(1).squeeze() if not tf.empty else pd.Series(dtype='float64')
@@ -220,6 +241,7 @@ def run(season: int):
             leg_records.append({'event_id':r.get('event_id'),'team':team,'player':player,'market':market,'p':p_final,'side':'yes','position':position})
             continue
 
+        # ---------- 2+ TD ----------
         if market in ('player_2_or_more_tds','player_two_plus_tds'):
             lam_team = _team_expected_tds(team, odds_game, merged)
             opp_row = tf[tf['team']==opp].head(1).squeeze() if not tf.empty else pd.Series(dtype='float64')
@@ -236,6 +258,7 @@ def run(season: int):
             leg_records.append({'event_id':r.get('event_id'),'team':team,'player':player,'market':market,'p':p_final,'side':'yes','position':position})
             continue
 
+        # ---------- Continuous markets ----------
         try: line=float(r.get('line'))
         except Exception: continue
 
@@ -247,6 +270,7 @@ def run(season: int):
                'heavy_box_rate': r.get('heavy_box_rate',0.0),'def_sack_rate': r.get('def_sack_rate',0.0),
                'def_pass_epa': r.get('def_pass_epa',0.0),'pace': r.get('pace',0.0),'proe': r.get('proe',0.0)}
 
+        # Apply coverage/CB impact to receiving markets
         if market in ('player_rec_yds','player_receptions','player_rush_rec_yds'):
             if feats.get('mu') is not None and not pd.isna(feats['mu']):
                 if market in ('player_rec_yds','player_rush_rec_yds'): feats['mu']  = float(feats['mu'])  * ypt_mult
@@ -255,10 +279,10 @@ def run(season: int):
                 if market in ('player_rec_yds','player_rush_rec_yds'): feats['eff_mu'] = float(feats['eff_mu']) * ypt_mult
                 if market == 'player_receptions':                   feats['eff_mu'] = float(feats['eff_mu']) * tgt_mult
 
-        from scripts.models import Leg
+        # Build leg and blend
         leg=Leg(player_id=f"{player}|{team}|{market}|{line}", player=player, team=team, market=market, line=line, features=feats)
-
         blended=ensemble.blend(leg, context={'w_mc':0.25,'w_bayes':0.25,'w_markov':0.25,'w_ml':0.25})
+
         p_mkt=blended.get('p_market',0.5); p_final=blended.get('p_final',0.5)
         edge=(p_final-p_mkt) if p_mkt is not None else None
         fair=prob_to_american(p_final) if p_final is not None else None
@@ -272,6 +296,7 @@ def run(season: int):
 
         leg_records.append({'event_id':r.get('event_id'),'team':team,'player':player,'market':market,'p':p_final,'side':'over','position':position})
 
+    # ---------- Write singles ----------
     singles=pd.DataFrame(out_rows).sort_values(['tier','edge'], ascending=[True, False])
     singles_path=Path('outputs/master_model_predictions.csv'); singles.to_csv(singles_path, index=False)
     (LOG_DIR/'summary.json').write_text(json.dumps({'run_id':RUN_ID,'season':int(season),
