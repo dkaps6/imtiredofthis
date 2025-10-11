@@ -313,6 +313,24 @@ def main():
     wide.to_csv(wide_out, index=False)
     log.info(f"wrote {wide_out} rows={len(wide)}")
 
-
 if __name__ == "__main__":
-    main()
+    import argparse
+    
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--books", default="draftkings,fanduel,betmgm,caesars")
+    ap.add_argument("--markets", default="player_pass_yds")
+    ap.add_argument("--region", default="us")
+    ap.add_argument("--date", default="")  # ← ADD THIS LINE
+    ap.add_argument("--out", default="outputs/props_raw.csv")
+    ap.add_argument("--out_game", default="outputs/odds_game.csv")
+    args = ap.parse_args()
+
+    # Pass date through if your fetch function supports it
+    fetch_odds(
+        books=args.books.split(","),
+        markets=args.markets.split(","),
+        region=args.region,
+        out=args.out,
+        out_game=args.out_game,
+        date=args.date,  # ← ADD THIS LINE TOO
+    )
