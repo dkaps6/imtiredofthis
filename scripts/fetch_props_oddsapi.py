@@ -17,6 +17,12 @@ TIMEOUT_S = 25
 BACKOFF_S = [0.6, 1.2, 2.0, 3.5, 5.0]    # simple backoff on 429/5xx
 GAME_MARKETS = ["h2h", "spreads", "totals"]
 
+# ADDED: alias map for renamed markets in v4
+MARKET_ALIASES = {
+    # old_name              : new_name
+    "player_rec_yds": "player_receiving_yards",
+}
+
 # ------------------------- LOGGING ------------------------
 
 log = logging.getLogger("oddsapi")
@@ -235,6 +241,18 @@ def fetch_odds(
     else:
         pd.DataFrame().to_csv(out_game, index=False)
         log.info(f"wrote empty {out_game}")
+
+    # ADDED: normalize/alias markets and drop any game markets that slipped in
+    normalized_markets: List[str] = []
+    for mk in markets:
+        if mk in GAME_MARKETS:
+            log.info(f"skip non-player market in --markets: {mk}")
+            continue
+        resolved = MARKET_ALIASES.get(mk, mk)
+        if resolved != mk:
+            log.info(f"alias: {mk} → {resolved}")
+        normalized_markets.append(resolved)
+    markets = normalized_markets
 
     # 2) per-market player props
     frames: List[pd.DataFrame] = []
