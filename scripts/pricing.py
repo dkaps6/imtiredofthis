@@ -490,6 +490,36 @@ def main():
     ap.add_argument("--write", default=str(PROPS_OUT))
     args = ap.parse_args()
 
+    # ---- SAFETY GUARDS ---------------------------------------------------------
+from pathlib import Path
+import pandas as pd
+import numpy as np
+import sys
+
+def _write_empty_priced():
+    Path("outputs").mkdir(exist_ok=True)
+    Path("outputs/props_priced_clean.csv").write_text(
+        "game_id,commence_time,player,team,market,line,book,"
+        "vegas_over_odds,vegas_under_odds,vegas_over_fair_pct,vegas_under_fair_pct,"
+        "model_over_pct,edge_abs,kelly_pct,tier\n"
+    )
+
+# If your variable is not `args.props`, change it accordingly
+props_path = Path(args.props)
+
+if not props_path.exists() or props_path.stat().st_size == 0:
+    print(f"[pricing] WARNING: props file missing/empty: {props_path}")
+    _write_empty_priced()
+    sys.exit(0)
+
+# If you already read props into a DataFrame, reuse that variable.
+df_props = pd.read_csv(props_path)
+
+if df_props.empty:
+    print("[pricing] WARNING: no props rows; writing empty")
+    _write_empty_priced()
+    sys.exit(0)
+
     Path(OUT_DIR).mkdir(parents=True, exist_ok=True)
 
     props = _read_first(Path(args.props))
