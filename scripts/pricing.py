@@ -5,6 +5,18 @@ from pathlib import Path
 from typing import Dict, Any, Tuple
 import numpy as np
 import pandas as pd
+import os
+
+def _safe_load_csv(path: str) -> pd.DataFrame:
+    p = Path(path)
+    if not p.exists() or p.stat().st_size <= 5:
+        print(f"[pricing] WARNING: {path} is empty, writing stub frame.")
+        return pd.DataFrame(columns=["event_id","commence_time","book","market","player","line","odds"])
+    try:
+        return pd.read_csv(p)
+    except pd.errors.EmptyDataError:
+        print(f"[pricing] WARNING: {path} had no columns, writing stub frame.")
+        return pd.DataFrame(columns=["event_id","commence_time","book","market","player","line","odds"])
 
 # ----------------------------
 # Paths (keep these as-is unless you changed locations)
@@ -404,7 +416,7 @@ def main():
         print(f"[pricing] WARNING: props file missing/empty: {props_path}")
         _write_empty_priced();  return
 
-    props = pd.read_csv(props_path)
+    props = _safe_load_csv(props_path)
     if props.empty:
         print("[pricing] WARNING: no props rows; writing empty")
         _write_empty_priced();  return
