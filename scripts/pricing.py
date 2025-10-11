@@ -1,282 +1,282 @@
 # scripts/pricing.py
+# Prices props with model μ/σ, de-vig, blend, Kelly, tiers, plus:
+#   - Coverage-by-route adjustments (press/man/zone vs route_profile_*)
+#   - SGP pair-aware dynamic: QB→WR small lift in same-game edges
+#   - Market-specific sigmas learned via EMA in data/market_sigmas.json
+
 from __future__ import annotations
-import math
-import argparse
+import json, math
 from pathlib import Path
-from typing import Tuple
 import numpy as np
 import pandas as pd
 
 # ---------- Odds helpers ----------
-
-def american_to_prob(odds):
-    o = pd.to_numeric(odds, errors="coerce")
-    return np.where(o > 0, 100 / (o + 100.0), -o / (-o + 100.0))
-
-def prob_to_american(p):
-    p = np.clip(p, 1e-6, 1 - 1e-6)
-    dec = 1.0 / p
-    am = np.where(dec >= 2.0, (dec - 1.0) * 100.0, -100.0 / (dec - 1.0))
-    return am
-
-def devig_two_way(p_over, p_under) -> Tuple[float, float]:
-    a = (pd.to_numeric(p_over, errors="coerce")).astype(float)
-    b = (pd.to_numeric(p_under, errors="coerce")).astype(float)
-    s = a + b
-    a_fair = np.where(s > 1e-9, a / s, np.nan)
-    b_fair = np.where(s > 1e-9, b / s, np.nan)
-    return a_fair, b_fair
-
-# ---------- Distribution helpers ----------
-
-SQRT2 = math.sqrt(2.0)
-def _phi(z):    # standard normal CDF
-    return 0.5 * (1.0 + math.erf(z / SQRT2))
-
-def p_over_normal(line, mean, sigma):
-    if not np.isfinite(line) or not np.isfinite(mean) or not np.isfinite(sigma) or sigma <= 1e-9:
-        return np.nan
-    z = (line - mean) / float(sigma)
-    return 1.0 - _phi(z)
-
-# ---------- Safe getters ----------
-
-def _get(row, col, default=0.0):
-    v = row.get(col)
+def american_to_prob(odds: float) -> float:
     try:
-        if v is None or (isinstance(v, float) and math.isnan(v)):
-            return default
-        return float(v)
+        o = float(odds)
     except Exception:
-        return default
-
-# ---------- Feature multipliers (+ SGP hooks) ----------
-
-def apply_multipliers(row: pd.Series, market: str, base_mean: float) -> tuple[float, float]:
-    qb_pressure_mult = _get(row, "qb_pressure_mult", 1.0)
-    sack_elasticity  = _get(row, "sack_elasticity", 1.0)
-    proe_z           = _get(row, "proe_z", 0.0)
-    run_funnel       = _get(row, "run_funnel", 0.0)
-    pass_funnel      = _get(row, "pass_funnel", 0.0)
-    wx_pass          = _get(row, "wx_mult_pass", 1.0)
-    wx_rec           = _get(row, "wx_mult_rec", 1.0)
-    wx_rush          = _get(row, "wx_mult_rush", 1.0)
-    wx_ru_re         = _get(row, "wx_mult_rush_rec", 1.0)
-
-    rb_attempts_escalator = _get(row, "rb_attempts_escalator", 0.0)
-    wr_shadow_penalty     = _get(row, "wr_shadow_penalty", 0.0)
-    slot_zone_boost       = _get(row, "slot_zone_boost", 0.0)
-    vol                   = _get(row, "volatility_flag", 0.0)
-
-    sgp_qb_wr_boost       = _get(row, "sgp_qb_wr_boost", 0.0)  # 0..0.25
-
-    # Base sigma heuristic per market
-    if market in ("player_pass_yds",):
-        sigma = max(18.0, 0.45 * math.sqrt(max(base_mean, 40.0)))
-    elif market in ("player_rush_yds",):
-        sigma = max(12.0, 0.60 * math.sqrt(max(base_mean, 20.0)))
-    elif market in ("player_rec_yds",):
-        sigma = max(14.0, 0.55 * math.sqrt(max(base_mean, 25.0)))
-    elif market in ("player_receptions",):
-        sigma = max(1.8, 0.38 * math.sqrt(max(base_mean, 1.0)))
-    elif market in ("player_anytime_td",):
-        sigma = 0.27
+        return np.nan
+    if o > 0:
+        return 100.0 / (o + 100.0)
     else:
-        sigma = max(10.0, 0.5 * math.sqrt(max(base_mean, 10.0)))
+        return (-o) / ((-o) + 100.0)
 
-    mean = base_mean
+def prob_to_american(p: float) -> float:
+    if p <= 0: return np.nan
+    if p >= 1: return np.nan
+    return (100.0 * p / (1.0 - p)) if p < 0.5 else (-100.0 * (1.0 - p) / p)
 
-    if market == "player_pass_yds":
-        mean *= qb_pressure_mult
-        mean *= sack_elasticity
-        mean *= (1.0 + 0.030 * proe_z)
-        mean *= (1.0 + 0.040 * pass_funnel - 0.030 * run_funnel)
-        mean *= wx_pass
+def devig_two_way(p_over_vig: pd.Series, p_under_vig: pd.Series) -> tuple[pd.Series, pd.Series]:
+    s = (p_over_vig + p_under_vig).replace(0, np.nan)
+    p_over_fair = p_over_vig / s
+    p_under_fair = p_under_vig / s
+    return p_over_fair, p_under_fair
 
-    elif market == "player_rec_yds":
-        mean *= (1.0 + wr_shadow_penalty + slot_zone_boost)
-        mean *= (1.0 + 0.022 * proe_z + 0.035 * pass_funnel - 0.020 * run_funnel)
-        mean *= wx_rec
-        # SGP tilt: bump WR rec yds if he’s the paired WR and game is pass-leaning
-        mean *= (1.0 + 0.08 * sgp_qb_wr_boost)
+# ---------- Sigma memory ----------
+SIGMA_PATH = Path("data/market_sigmas.json")
+SIGMA_DEFAULTS = {
+    "player_pass_yds": 48.0,
+    "player_rec_yds": 26.0,
+    "player_rush_yds": 24.0,
+    "player_receptions": 1.8,
+    "player_rush_rec_yds": 30.0,
+}
 
-    elif market == "player_receptions":
-        mean *= (1.0 + wr_shadow_penalty + slot_zone_boost)
-        mean *= (1.0 + 0.025 * proe_z + 0.030 * pass_funnel - 0.015 * run_funnel)
-        mean *= wx_rec
-        mean *= (1.0 + 0.06 * sgp_qb_wr_boost)
+def load_sigmas() -> dict[str, float]:
+    if SIGMA_PATH.exists():
+        try:
+            return json.loads(SIGMA_PATH.read_text())
+        except Exception:
+            pass
+    return SIGMA_DEFAULTS.copy()
 
-    elif market == "player_rush_yds":
-        mean *= (1.0 + 0.050 * run_funnel - 0.025 * pass_funnel)
-        mean += rb_attempts_escalator
-        mean *= wx_rush
+def save_sigmas(sigmas: dict[str, float]) -> None:
+    SIGMA_PATH.parent.mkdir(parents=True, exist_ok=True)
+    SIGMA_PATH.write_text(json.dumps(sigmas, indent=2))
 
-    elif market == "player_anytime_td":
-        pass
+def ema_update(old: float, new: float, alpha: float = 0.2) -> float:
+    if np.isnan(new): return old
+    return alpha*new + (1.0-alpha)*old
 
-    if vol >= 1.0:
-        sigma *= 1.18
+# ---------- Coverage boosts/penalties ----------
+# route_profile_* are shares; press/man/zone rates from opponent.
+def coverage_multiplier(row: pd.Series) -> float:
+    # weights can be tuned; keep conservative
+    press_w = 0.95  # slight downshift vs press if profile heavily press
+    man_w   = 0.97
+    zone_w  = 1.02
+    rp_press = float(row.get("route_profile_press", 0.33) or 0.33)
+    rp_man   = float(row.get("route_profile_man", 0.33) or 0.33)
+    rp_zone  = float(row.get("route_profile_zone", 0.33) or 0.33)
 
-    return mean, sigma
+    opp_press = float(row.get("press_rate_opp", 0.33) or 0.33)
+    opp_man   = float(row.get("man_rate_opp",   0.50) or 0.50)
+    opp_zone  = float(row.get("zone_rate_opp",  0.50) or 0.50)
 
-# ---------- Role priors → baseline mean ----------
+    # expected multiplier = sum(profile * opp_rate * weight) normalized
+    # normalize opp rates man/zone to 1 baseline
+    mz_den = max(1e-9, opp_man + opp_zone)
+    opp_man_n  = opp_man / mz_den
+    opp_zone_n = opp_zone / mz_den
 
-def choose_baseline_mean(row: pd.Series, market: str, fallback_line: float) -> float:
-    base = float(fallback_line) if np.isfinite(fallback_line) else 0.0
-
-    # Enrich using priors if present (routes/yprr, ypc/att, ypa/att, targets)
-    if market == "player_rec_yds":
-        yprr   = row.get("yprr")
-        routes = row.get("routes")
-        if pd.notna(yprr) and pd.notna(routes):
-            base = 0.55 * base + 0.45 * float(yprr) * float(routes)
-
-    elif market == "player_rush_yds":
-        ypc = row.get("ypc")
-        att = row.get("rush_att_proj")
-        if pd.notna(ypc) and pd.notna(att):
-            base = 0.55 * base + 0.45 * float(ypc) * float(att)
-
-    elif market == "player_pass_yds":
-        ypa = row.get("qb_ypa")
-        att = row.get("qb_att_proj")
-        if pd.notna(ypa) and pd.notna(att):
-            base = 0.55 * base + 0.45 * float(ypa) * float(att)
-
-    elif market == "player_receptions":
-        tgs = row.get("targets_proj")
-        if pd.notna(tgs):
-            base = 0.65 * base + 0.35 * float(tgs) * 0.70  # 70% catch prior
-
-    base *= 1.005
-    return base
-
-# ---------- Main ----------
-
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--props",   default="outputs/props_raw.csv")
-    ap.add_argument("--metrics", default="data/metrics_ready.csv")
-    ap.add_argument("--out",     default="outputs/props_priced_clean.csv")
-    ap.add_argument("--top",     default="outputs/props_priced_top.csv")
-    args = ap.parse_args()
-
-    Path("outputs").mkdir(parents=True, exist_ok=True)
-
-    props = pd.read_csv(args.props)
-    if props.empty:
-        print(f"[pricing] No props found at {args.props}")
-        pd.DataFrame().to_csv(args.out, index=False)
-        return
-
-    metrics = pd.read_csv(args.metrics) if Path(args.metrics).exists() else pd.DataFrame()
-
-    # Normalize props columns
-    for col in ["event_id","date","book","market","player","side","line","price_american","commence_time"]:
-        if col not in props.columns:
-            props[col] = np.nan
-
-    # Pivot into O/U pairs
-    key = ["event_id","date","book","market","player","line"]
-    over = props[props["side"].str.lower() == "over"].copy()
-    under = props[props["side"].str.lower() == "under"].copy()
-
-    over  = over.groupby(key, as_index=False).agg({"price_american":"first","commence_time":"first"}).rename(columns={"price_american":"over_american"})
-    under = under.groupby(key, as_index=False).agg({"price_american":"first"}).rename(columns={"price_american":"under_american"})
-    book  = over.merge(under, on=key, how="outer")
-    book  = book.dropna(subset=["over_american","under_american"], how="any")
-
-    book["p_over"]  = american_to_prob(book["over_american"])
-    book["p_under"] = american_to_prob(book["under_american"])
-    book["p_over_fair"], book["p_under_fair"] = devig_two_way(book["p_over"], book["p_under"])
-
-    # Merge metrics (event_id+player) → (date+player) → (player)
-    m = metrics.copy()
-    for c in ["event_id","date","player"]:
-        if c not in m.columns:
-            m[c] = np.nan
-
-    merged = book.merge(m, on=["event_id","player"], how="left", suffixes=("",""))
-    need_date = merged["qb_pressure_mult"].isna() & merged["date"].notna()
-    if need_date.any():
-        fallback = book[need_date].merge(m, on=["date","player"], how="left", suffixes=("",""))
-        merged.loc[need_date, merged.columns] = fallback.reindex(columns=merged.columns).values
-
-    need_player = merged["qb_pressure_mult"].isna()
-    if need_player.any():
-        fallback = book[need_player].merge(m.drop(columns=["event_id","date"], errors="ignore"), on=["player"], how="left")
-        merged.loc[need_player, merged.columns] = fallback.reindex(columns=merged.columns).values
-
-    # Model probabilities
-    rows = []
-    for _, r in merged.iterrows():
-        market = str(r.get("market") or "")
-        line   = pd.to_numeric(r.get("line"), errors="coerce")
-        if not np.isfinite(line):
-            continue
-
-        base = choose_baseline_mean(r, market, line)
-        mean_adj, sigma_adj = apply_multipliers(r, market, base)
-
-        if market == "player_anytime_td":
-            p_fair = r.get("p_over_fair")
-            p_prior = 0.45 if pd.isna(p_fair) else float(p_fair)
-            logit = math.log(p_prior / max(1e-6, 1 - p_prior))
-            logit += 0.25 * _get(r, "run_funnel", 0.0)
-            logit -= 0.18 * _get(r, "pass_funnel", 0.0)
-            logit += 0.20 * (_get(r, "rb_attempts_escalator", 0.0) / 6.0)
-            logit += 0.15 * _get(r, "proe_z", 0.0)
-            model_p_over = 1 / (1 + math.exp(-logit))
-        else:
-            model_p_over = p_over_normal(float(line), float(mean_adj), float(sigma_adj))
-
-        rows.append({
-            "event_id": r.get("event_id"),
-            "date": r.get("date"),
-            "commence_time": r.get("commence_time"),
-            "book": r.get("book"),
-            "market": market,
-            "player": r.get("player"),
-            "line": float(line),
-            "over_american": r.get("over_american"),
-            "under_american": r.get("under_american"),
-            "p_over_fair": r.get("p_over_fair"),
-            "p_under_fair": r.get("p_under_fair"),
-            "model_p_over": model_p_over,
-            "model_mean": mean_adj,
-            "model_sigma": sigma_adj,
-        })
-
-    out = pd.DataFrame(rows)
-    if out.empty:
-        print("[pricing] No priceable props after merging and modeling.")
-        out.to_csv(args.out, index=False)
-        return
-
-    out["edge_over"] = out["model_p_over"] - out["p_over_fair"]
-    # Kelly on American odds (very rough, safeguards applied)
-    dec = np.abs(pd.to_numeric(out["over_american"], errors="coerce")) / 100.0
-    kelly = (out["model_p_over"] * (dec + 1) - 1) / dec
-    out["kelly_frac"] = kelly.replace([np.inf, -np.inf], np.nan).clip(lower=0)
-
-    keep = [
-        "event_id","date","commence_time","book","market","player","line",
-        "over_american","under_american",
-        "p_over_fair","p_under_fair","model_p_over","edge_over",
-        "model_mean","model_sigma","kelly_frac",
-    ]
-    out = out[keep].sort_values(["market","edge_over"], ascending=[True, False])
-
-    out.to_csv(args.out, index=False)
-    print(f"[pricing] wrote → {args.out} rows={len(out)}")
-
-    top = (
-        out.assign(rank=out.groupby("market")["edge_over"].rank(method="first", ascending=False))
-           .query("rank <= 10")
-           .sort_values(["market","rank"])
+    mult = (
+        rp_press * opp_press * press_w +
+        rp_man   * opp_man_n * man_w   +
+        rp_zone  * opp_zone_n * zone_w
     )
-    top.to_csv(args.top, index=False)
-    print(f"[pricing] wrote top picks → {args.top}")
+    # scale into a modest [0.94, 1.06] band
+    return max(0.94, min(1.06, mult * 1.06))
+
+# ---------- μ builders ----------
+def base_mu(row: pd.Series) -> float:
+    mkt = str(row.get("market",""))
+    # volumes & priors
+    tgt = float(row.get("target_share", 0.18))
+    rsh = float(row.get("rush_share",   0.30))
+    yprr= float(row.get("yprr_proxy",   1.7))
+    ypc = float(row.get("ypc",          4.2))
+    ypa = float(row.get("qb_ypa",       6.9))
+    wp  = float(row.get("team_wp",      0.5))
+
+    # opponent context (Z-like scales are already baked into priors)
+    pass_e = float(row.get("def_pass_epa_opp",   0.0))
+    rush_e = float(row.get("def_rush_epa_opp",   0.0))
+    sack_r = float(row.get("def_sack_rate_opp",  0.0))
+    lbx    = float(row.get("light_box_rate_opp", 0.5))
+    hbx    = float(row.get("heavy_box_rate_opp", 0.5))
+    pace   = float(row.get("pace_opp",           0.0))
+    proe   = float(row.get("proe_opp",           0.0))
+
+    # coverage/CB/weather
+    cov_mult = coverage_multiplier(row)
+    cb_pen = float(row.get("cb_penalty", 0.0) or 0.0)  # 0..0.25
+    wind   = float(row.get("wind_mph",   np.nan))
+    precip = str(row.get("precip","")).lower().strip()
+
+    # script nudges (RB favored when wp↑; QB volume ↓ modest vs elite pass D/sacks)
+    run_bonus = 1.0 + 0.04 * (wp - 0.5)  # +2..4% RB attempts when favored
+    qb_pen    = 1.0 - 0.15 * max(0.0, sack_r) - 0.12 * max(0.0, pass_e)
+
+    # weather
+    weather_m = 1.0
+    if not np.isnan(wind) and wind >= 15:
+        if mkt in {"player_pass_yds","player_rec_yds","player_receptions","player_rush_rec_yds"}:
+            weather_m *= 0.94
+    if precip in {"rain","snow"}:
+        if mkt in {"player_rec_yds","player_rush_rec_yds"}:
+            weather_m *= 0.97
+        if mkt in {"player_rush_yds"}:
+            weather_m *= 1.02
+
+    if mkt == "player_pass_yds":
+        return max(0.0, ypa * 28.0 * qb_pen * weather_m)  # ~28 attempts baseline
+    if mkt == "player_rec_yds":
+        # WR/TE receiving yards from YPRR * routes, coverage penalty & CB
+        mu = yprr * (35.0 * tgt) * cov_mult * (1.0 - cb_pen) * weather_m
+        # sanity downshift for very low YPRR teams
+        team_ay_att = float(row.get("team_ay_per_att", 0.0))
+        if team_ay_att <= -0.8:  # low air-yards profile
+            mu = min(mu, 0.8 * max(20.0, mu))
+        return max(0.0, mu)
+    if mkt == "player_receptions":
+        cr = 0.62 * cov_mult * (1.0 - 0.5*cb_pen)  # catch rate proxy
+        return max(0.0, cr * (32.0 * tgt) * weather_m)
+    if mkt == "player_rush_yds":
+        ypc_mod = ypc * ((1.0 + 0.07*lbx) * (1.0 - 0.06*hbx)) * run_bonus * weather_m
+        return max(0.0, ypc_mod * (14.0 * rsh))
+    if mkt == "player_rush_rec_yds":
+        return max(0.0, base_mu(row.copy().assign(market="player_rush_yds")) +
+                         0.7*base_mu(row.copy().assign(market="player_rec_yds")))
+    # default
+    return np.nan
+
+def sigma_for_market(market: str, sigmas: dict[str,float], volatility_flag: float = 0.0) -> float:
+    s = float(sigmas.get(market, SIGMA_DEFAULTS.get(market, 25.0)))
+    if volatility_flag > 0:
+        s *= (1.0 + 0.15 * min(1.0, volatility_flag))
+    return max(1e-6, s)
+
+# ---------- Pricing ----------
+def main(props_path: str) -> None:
+    props = pd.read_csv(props_path) if Path(props_path).exists() else pd.DataFrame()
+    if props.empty:
+        print("[pricing] no props found at", props_path); return
+
+    met = pd.read_csv("data/metrics_ready.csv") if Path("data/metrics_ready.csv").exists() else pd.DataFrame()
+    if met.empty:
+        print("[pricing] WARNING: metrics_ready.csv is empty; proceeding with minimal features.")
+    # Merge
+    keys = ["event_id","player"]
+    if "event_id" not in props.columns: keys = ["player"]
+    df = props.merge(met, on=keys, how="left", suffixes=("","_m"))
+
+    # De-vig market fair Over/Under
+    if "over_odds" in df.columns and "under_odds" in df.columns:
+        p_over_vig  = df["over_odds"].apply(american_to_prob)
+        p_under_vig = df["under_odds"].apply(american_to_prob)
+        df["mkt_over_fair"], df["mkt_under_fair"] = devig_two_way(p_over_vig, p_under_vig)
+    else:
+        side = df.get("side","OVER").astype(str).str.upper()
+        odds = df.get("odds", np.nan).astype(float)
+        p_vig = odds.apply(american_to_prob)
+        df["mkt_over_fair"]  = np.where(side=="OVER", p_vig, 1.0-p_vig)
+        df["mkt_under_fair"] = 1.0 - df["mkt_over_fair"]
+
+    # Model μ/σ and Over% at the posted line
+    sigmas = load_sigmas()
+    df["model_proj"] = df.apply(base_mu, axis=1)
+    # volatility flag: strong pass rush vs weak OL proxy — use sack rate opp + pass epa opp
+    df["vol_flag"] = (df.get("def_sack_rate_opp",0).fillna(0) + np.maximum(0, df.get("def_pass_epa_opp",0).fillna(0))) / 2.0
+    df["model_sd"] = df.apply(lambda r: sigma_for_market(str(r.get("market","")), sigmas, r.get("vol_flag",0)), axis=1)
+
+    # Over probability under Normal(μ,σ)
+    from scipy.stats import norm
+    line = df.get("line", np.nan).astype(float)
+    mu   = df["model_proj"].astype(float)
+    sd   = df["model_sd"].astype(float).replace(0,1e-6)
+    z    = (line - mu) / sd
+    df["model_over_pct"] = (1.0 - norm.cdf(z)).clip(0,1)
+
+    # Blend with market anchor (65/35)
+    df["p_over_blend"] = 0.65*df["model_over_pct"] + 0.35*df["mkt_over_fair"]
+    df["fair_over_odds"] = df["p_over_blend"].apply(prob_to_american)
+
+    # Edge & Kelly
+    df["edge_abs"] = df["p_over_blend"] - df["mkt_over_fair"]
+    def kelly_fraction(p, o):
+        # o is American price for OVER
+        if np.isnan(p) or np.isnan(o): return 0.0
+        b = (100/o) if o>0 else (-o/100.0)
+        q = 1.0 - p
+        frac = (b*p - q) / b
+        return max(0.0, min(frac, 0.05))  # cap 5%
+    df["kelly_frac"] = [kelly_fraction(p, o) for p,o in zip(df["p_over_blend"], df["over_odds"])]
+
+    # Tiers
+    def tier(e):
+        if e >= 0.06: return "ELITE"
+        if e >= 0.04: return "GREEN"
+        if e >= 0.01: return "AMBER"
+        return "RED"
+    df["tier"] = df["edge_abs"].apply(tier)
+
+    # ---------- SGP pair-aware dynamic (QB→WR small lift) ----------
+    # For each game (event_id), if a QB pass_yds edge is large, give WR rec_yds/receptions
+    # a small, correlation-based lift in edge (does NOT change market fair price).
+    sgp_threshold = 0.05      # trigger threshold on QB edge
+    sgp_max_lift  = 0.015     # cap per WR
+    qb_to_wr_corr = 0.60      # same-game base correlation
+
+    df["edge_bonus_sgp"] = 0.0
+    if "event_id" in df.columns and "position" in df.columns:
+        for eid, g in df.groupby("event_id"):
+            qb_rows = g[(g["position"].str.upper()=="QB") & (g["market"]=="player_pass_yds")]
+            if qb_rows.empty: 
+                continue
+            qb_edge = float(qb_rows["edge_abs"].max())
+            if qb_edge < sgp_threshold:
+                continue
+            # WR candidates on same team as that QB
+            qb_team = qb_rows.iloc[0].get("team","")
+            wr_mask = (g["position"].str.upper().isin(["WR","TE"])) & \
+                      (g["team"]==qb_team) & \
+                      (g["market"].isin(["player_rec_yds","player_receptions"]))
+            lift = min(sgp_max_lift, qb_to_wr_corr * 0.25 * max(0.0, qb_edge-0.03))  # small + bounded
+            df.loc[wr_mask.index[wr_mask], "edge_bonus_sgp"] += lift
+
+    df["edge_total"] = (df["edge_abs"] + df["edge_bonus_sgp"]).clip(-1, 1)
+
+    # ---------- Persist sigma learning (EMA) ----------
+    # We learn per-market empirical σ = RMSE around line vs model mean (rough proxy).
+    # Use only rows with numeric line & model_proj.
+    for mkt, sub in df.groupby("market"):
+        try:
+            se = ((sub["line"].astype(float) - sub["model_proj"].astype(float))**2).mean()
+            est_sigma = float(np.sqrt(se)) if not np.isnan(se) else np.nan
+            if not np.isnan(est_sigma) and est_sigma>1e-3:
+                sigmas[mkt] = round(ema_update(sigmas.get(mkt, SIGMA_DEFAULTS.get(mkt,25.0)), est_sigma), 4)
+        except Exception:
+            pass
+    save_sigmas(sigmas)
+
+    # Output
+    out_cols = [
+        "event_id","player","team","opponent","position","market","line",
+        "over_odds","under_odds","mkt_over_fair",
+        "model_proj","model_sd","model_over_pct",
+        "p_over_blend","fair_over_odds",
+        "edge_abs","edge_bonus_sgp","edge_total","kelly_frac","tier"
+    ]
+    for c in out_cols:
+        if c not in df.columns: df[c] = np.nan
+
+    Path("outputs").mkdir(exist_ok=True)
+    df[out_cols].to_csv("outputs/props_priced_clean.csv", index=False)
+    print(f"[pricing] ✅ wrote outputs/props_priced_clean.csv rows={len(df)}")
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--props", default="outputs/props_raw.csv")
+    args = ap.parse_args()
+    main(args.props)
