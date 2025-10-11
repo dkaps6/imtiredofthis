@@ -16,20 +16,14 @@ REGION_DEFAULT = "us"
 TIMEOUT_S = 25
 BACKOFF_S = [0.6, 1.2, 2.0, 3.5, 5.0]    # simple backoff on 429/5xx
 GAME_MARKETS = ["h2h", "spreads", "totals"]
-# === ADD: v4 market alias map (keeps your old names working) ===
-MARKET_ALIASES = {
-    # old_name              : new_name (OddsAPI v4)
-    "player_rec_yds": "player_receiving_yards",
-    # If you also use these older shorthands anywhere, you can keep them too:
-    "player_rush_rec_yds": "player_rush_reception_yds",
-    "receiving_yards": "player_receiving_yards",
-    "rush_rec": "player_rush_reception_yds",
-}
 
-# ADDED: alias map for renamed markets in v4
+# v4 market alias map (keeps older names working)
 MARKET_ALIASES = {
-    # old_name              : new_name
+    # old_name               -> v4 name
     "player_rec_yds": "player_receiving_yards",
+    "receiving_yards": "player_receiving_yards",
+    "player_rush_rec_yds": "player_rush_reception_yds",
+    "rush_rec": "player_rush_reception_yds",
 }
 
 # ------------------------- LOGGING ------------------------
@@ -41,6 +35,12 @@ h.setFormatter(logging.Formatter("[oddsapi] %(message)s"))
 log.addHandler(h)
 
 # ------------------------- HTTP --------------------------
+
+def _try_json(r: requests.Response):
+    try:
+        return r.json()
+    except Exception:
+        return {"text": r.text[:500]}
 
 def _get(url: str, params: dict, max_retries: int = 5) -> Tuple[int, Optional[Any], dict]:
     for i in range(max_retries):
@@ -65,12 +65,6 @@ def _get(url: str, params: dict, max_retries: int = 5) -> Tuple[int, Optional[An
             time.sleep(wait)
     return 0, None, {}
 
-def _try_json(r: requests.Response):
-    try:
-        return r.json()
-    except Exception:
-        return {"text": r.text[:500]}
-
 def _lim(headers: dict) -> dict:
     out = {}
     for k in ("x-requests-remaining", "x-requests-used", "x-requests-apikey-remaining"):
@@ -89,7 +83,7 @@ def _normalize_game_rows(events: list, books_filter: set[str]) -> pd.DataFrame:
         away = ev.get("away_team")
         for bm in ev.get("bookmakers", []):
             book = (bm.get("title") or "").strip().lower().replace(" ", "_")
-            if books_filter and book not in books_filter: 
+            if books_filter and book not in books_filter:
                 continue
             for mk in bm.get("markets", []):
                 market = mk.get("key")
@@ -121,7 +115,7 @@ def _normalize_player_rows(events: list, books_filter: set[str], market_key: str
                     continue
                 for oc in mk.get("outcomes", []):
                     side = (oc.get("name") or "").upper()    # "OVER"/"UNDER" or "YES"/"NO"
-                    if market_key == "player_anytime_td":     # normalize YES/NO to OVER/UNDER
+                    if market_key == "player_anytime_td":
                         if side == "YES": side = "OVER"
                         if side == "NO":  side = "UNDER"
                     player = oc.get("description") or oc.get("participant")
@@ -142,11 +136,15 @@ def _normalize_player_rows(events: list, books_filter: set[str], market_key: str
     return df
 
 def _wide_over_under(df: pd.DataFrame) -> pd.DataFrame:
-    if df.empty: 
+    if df.empty:
         return df
-    key = ["event_id","commence_time","book","market","player","line"]
-    over  = df[df["side"]=="OVER"].groupby(key, as_index=False)["price_american"].first().rename(columns={"price_american":"over_odds"})
-    under = df[df["side"]=="UNDER"].groupby(key, as_index=False)["price_american"].first().rename(columns={"price_american":"under_odds"})
+    key = ["event_id", "commence_time", "book", "market", "player", "line"]
+    over  = (df[df["side"] == "OVER"]
+             .groupby(key, as_index=False)["price_american"]
+             .first().rename(columns={"price_american": "over_odds"}))
+    under = (df[df["side"] == "UNDER"]
+             .groupby(key, as_index=False)["price_american"]
+             .first().rename(columns={"price_american": "under_odds"}))
     return over.merge(under, on=key, how="outer")
 
 # ------------------------- CORE FETCHERS ------------------
@@ -171,7 +169,8 @@ def _fetch_events_by_h2h(api_key: str, region: str, books: set[str]) -> list:
             for bm in ev.get("bookmakers", []):
                 book = (bm.get("title") or "").strip().lower().replace(" ", "_")
                 if book in books:
-                    keep = True; break
+                    keep = True
+                    break
             if keep:
                 filtered.append(ev)
         return filtered
@@ -192,7 +191,8 @@ def _fetch_game_odds(api_key: str, region: str, books: set[str]) -> pd.DataFrame
         return pd.DataFrame()
     return _normalize_game_rows(js, books)
 
-def _fetch_market_for_events(api_key: str, region: str, books: set[str], event_ids: list[str], market_key: str) -> pd.DataFrame:
+def _fetch_market_for_events(api_key: str, region: str, books: set[str],
+                             event_ids: list[str], market_key: str) -> pd.DataFrame:
     frames: List[pd.DataFrame] = []
     for eid in event_ids:
         url = f"{BASE}/sports/{SPORT}/events/{eid}/odds"
@@ -234,37 +234,12 @@ def fetch_odds(
     if not api_key:
         log.info("ERROR: ODDS_API_KEY not set")
         sys.exit(2)
-        Path("outputs").mkdir(parents=True, exist_ok=True)
-# === ADD BELOW HERE ===
-normalized_markets = []
-for mk in markets:
-    if mk in GAME_MARKETS:
-        log.info(f"skip non-player market in --markets: {mk}")
-        continue
-    resolved = MARKET_ALIASES.get(mk, mk)
-    if resolved != mk:
-        log.info(f"alias: {mk} → {resolved}")
-    normalized_markets.append(resolved)
-markets = normalized_markets
-# === END ADD ===
 
+    # Normalize inputs
     books_set = {b.strip().lower().replace(" ", "_") for b in books if b.strip()}
     markets = [m.strip() for m in markets if m.strip()]
 
-    Path("outputs").mkdir(parents=True, exist_ok=True)
-
-    # 1) events + game odds
-    events = _fetch_events_by_h2h(api_key, region, books_set)
-    event_ids = [e.get("id") for e in events if e.get("id")]
-    game_df = _fetch_game_odds(api_key, region, books_set)
-    if not game_df.empty:
-        game_df.to_csv(out_game, index=False)
-        log.info(f"wrote {out_game} rows={len(game_df)}")
-    else:
-        pd.DataFrame().to_csv(out_game, index=False)
-        log.info(f"wrote empty {out_game}")
-
-    # ADDED: normalize/alias markets and drop any game markets that slipped in
+    # Resolve aliases & drop any non-player markets if they slipped in
     normalized_markets: List[str] = []
     for mk in markets:
         if mk in GAME_MARKETS:
@@ -275,6 +250,20 @@ markets = normalized_markets
             log.info(f"alias: {mk} → {resolved}")
         normalized_markets.append(resolved)
     markets = normalized_markets
+
+    Path("outputs").mkdir(parents=True, exist_ok=True)
+
+    # 1) events + game odds (once)
+    events = _fetch_events_by_h2h(api_key, region, books_set)
+    event_ids = [e.get("id") for e in events if e.get("id")]
+
+    game_df = _fetch_game_odds(api_key, region, books_set)
+    if not game_df.empty:
+        game_df.to_csv(out_game, index=False)
+        log.info(f"wrote {out_game} rows={len(game_df)}")
+    else:
+        pd.DataFrame().to_csv(out_game, index=False)
+        log.info(f"wrote empty {out_game}")
 
     # 2) per-market player props
     frames: List[pd.DataFrame] = []
@@ -288,7 +277,9 @@ markets = normalized_markets
 
     if not frames:
         # write schema-correct empty
-        pd.DataFrame(columns=["event_id","commence_time","book","market","player","side","line","price_american"]).to_csv(out, index=False)
+        pd.DataFrame(columns=[
+            "event_id","commence_time","book","market","player","side","line","price_american"
+        ]).to_csv(out, index=False)
         log.info(f"wrote empty {out}")
         return
 
