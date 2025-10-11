@@ -1,164 +1,210 @@
-#!/usr/bin/env python3
-from __future__ import annotations
-import argparse
-from pathlib import Path
-from typing import Optional, Dict
-
+# scripts/make_metrics.py
 import pandas as pd
+import numpy as np
+from pathlib import Path
+import argparse
 
-# --------- Fallback team maps if data/id_map.csv isn't present ----------
-TEAM_ABBR_TO_NAME = {
-    "ARI":"Arizona Cardinals","ATL":"Atlanta Falcons","BAL":"Baltimore Ravens","BUF":"Buffalo Bills",
-    "CAR":"Carolina Panthers","CHI":"Chicago Bears","CIN":"Cincinnati Bengals","CLE":"Cleveland Browns",
-    "DAL":"Dallas Cowboys","DEN":"Denver Broncos","DET":"Detroit Lions","GB":"Green Bay Packers","GNB":"Green Bay Packers",
-    "HOU":"Houston Texans","IND":"Indianapolis Colts","JAX":"Jacksonville Jaguars","JAC":"Jacksonville Jaguars",
-    "KC":"Kansas City Chiefs","KAN":"Kansas City Chiefs","LAC":"Los Angeles Chargers","LAR":"Los Angeles Rams",
-    "LV":"Las Vegas Raiders","LVR":"Las Vegas Raiders","MIA":"Miami Dolphins","MIN":"Minnesota Vikings",
-    "NE":"New England Patriots","NWE":"New England Patriots","NO":"New Orleans Saints","NOR":"New Orleans Saints",
-    "NYG":"New York Giants","NYJ":"New York Jets","PHI":"Philadelphia Eagles","PIT":"Pittsburgh Steelers",
-    "SEA":"Seattle Seahawks","SF":"San Francisco 49ers","SFO":"San Francisco 49ers","TB":"Tampa Bay Buccaneers","TAM":"Tampa Bay Buccaneers",
-    "TEN":"Tennessee Titans","WAS":"Washington Commanders","WSH":"Washington Commanders",
-}
-TEAM_NAME_TO_ABBR: Dict[str,str] = {}
-for a, n in TEAM_ABBR_TO_NAME.items():
-    TEAM_NAME_TO_ABBR.setdefault(n, a)
-
-def load_id_map() -> Optional[pd.DataFrame]:
-    p = Path("data/id_map.csv")
-    if not p.exists() or p.stat().st_size == 0:
-        return None
+def _safe_read_csv(p: str) -> pd.DataFrame:
+    fp = Path(p)
+    if not fp.exists():
+        return pd.DataFrame()
     try:
-        df = pd.read_csv(p)
-        cols = {c.lower(): c for c in df.columns}
-        name_col = None
-        for cand in ("team_name","full_name","name"):
-            if cand in cols:
-                name_col = cols[cand]; break
-        if "team" in cols and name_col:
-            out = df[[cols["team"], name_col]].dropna().copy()
-            out.columns = ["team","team_name"]
-            out["team"] = out["team"].astype(str).str.upper()
-            out["team_name"] = out["team_name"].astype(str)
-            return out
+        return pd.read_csv(fp)
     except Exception:
-        return None
-    return None
+        return pd.DataFrame()
 
-def name_to_abbr(name: str, idmap: Optional[pd.DataFrame]) -> Optional[str]:
-    if not isinstance(name, str): return None
-    n = name.strip()
-    if idmap is not None:
-        row = idmap[idmap["team_name"].str.lower() == n.lower()]
-        if not row.empty:
-            return row.iloc[0]["team"]
-    return TEAM_NAME_TO_ABBR.get(n)
+def _z(col: pd.Series) -> pd.Series:
+    x = col.astype(float)
+    return (x - x.mean()) / (x.std(ddof=1) + 1e-9)
 
-def build_schedule_map(odds_path: Path, idmap: Optional[pd.DataFrame]) -> pd.DataFrame:
-    """
-    From outputs/odds_game.csv create team-level slate rows:
-      team (abbr), opp_team (abbr), event_id, home_away, team_wp
-    """
-    required = ["event_id","home_team","away_team","home_wp","away_wp"]
-    if not odds_path.exists() or odds_path.stat().st_size == 0:
-        print("[metrics] INFO: odds_game.csv missing or empty; continuing without opp_team")
-        return pd.DataFrame(columns=["team","opp_team","event_id","home_away","team_wp"])
+def _implied_prob_from_american(odds):
+    # American to implied probability (vigged). Use later for win prob proxy.
+    o = pd.to_numeric(odds, errors="coerce")
+    prob = np.where(o > 0, 100 / (o + 100), -o / (-o + 100))
+    return pd.to_numeric(prob, errors="coerce")
 
-    try:
-        og = pd.read_csv(odds_path)
-    except pd.errors.EmptyDataError:
-        print("[metrics] INFO: odds_game.csv has no columns; continuing without opp_team")
-        return pd.DataFrame(columns=["team","opp_team","event_id","home_away","team_wp"])
+def build_metrics(season: int) -> pd.DataFrame:
+    # base inputs
+    team_form = _safe_read_csv("data/team_form.csv")          # expects def_* EPA/sack/pressure/pace/proe/box rates
+    player_form = _safe_read_csv("data/player_form.csv")      # shares, yprr, ypc priors, role info
+    roles = _safe_read_csv("data/roles.csv")
+    injuries = _safe_read_csv("data/injuries.csv")            # player/team/status
+    coverage = _safe_read_csv("data/coverage.csv")            # defense_team, tag in {top_shadow,heavy_man,heavy_zone}
+    cb_assign = _safe_read_csv("data/cb_assignments.csv")     # defense_team, receiver, cb, quality/penalty
+    weather = _safe_read_csv("data/weather.csv")              # event_id, wind_mph, temp_f, precip, altitude_ft
+    odds_game = _safe_read_csv("outputs/odds_game.csv")       # event_id, book, market (h2h/spreads/totals), price_american, point
 
-    miss = [c for c in required if c not in og.columns]
-    if miss:
-        print(f"[metrics] INFO: odds_game.csv missing columns {miss}; continuing without opp_team")
-        return pd.DataFrame(columns=["team","opp_team","event_id","home_away","team_wp"])
+    # ---- Team-level normalizations ----
+    if not team_form.empty:
+        # Compute z-scores where present
+        for c in ["def_pass_epa","def_rush_epa","def_sack_rate","def_pressure_rate",
+                  "light_box_rate","heavy_box_rate","pace","proe","ay_per_att"]:
+            if c in team_form.columns:
+                team_form[f"{c}_z"] = _z(team_form[c])
+        # Fallback if proe missing
+        if "proe" not in team_form.columns:
+            team_form["proe"] = 0.0
+            team_form["proe_z"] = 0.0
 
-    og["home_abbr"] = og["home_team"].apply(lambda n: name_to_abbr(n, idmap))
-    og["away_abbr"] = og["away_team"].apply(lambda n: name_to_abbr(n, idmap))
+    # ---- Injuries: cap WR1 + redistribute flags ----
+    if not injuries.empty:
+        injuries["status_flag"] = injuries["status"].str.lower().isin(["out","doubtful","questionable","limited"]).astype(int)
 
-    if og["home_abbr"].isna().any() or og["away_abbr"].isna().any():
-        bad = og[(og["home_abbr"].isna()) | (og["away_abbr"].isna())][["event_id","home_team","away_team"]]
-        print("[metrics] WARNING: could not map some team names:\n", bad.to_string(index=False))
+    # ---- Coverage tags to wide flags ----
+    if not coverage.empty:
+        tag_pivot = (coverage
+                     .assign(val=1)
+                     .pivot_table(index="defense_team", columns="tag", values="val", aggfunc="max", fill_value=0)
+                     .reset_index())
+    else:
+        tag_pivot = pd.DataFrame(columns=["defense_team","top_shadow","heavy_man","heavy_zone"])
 
-    home_rows = og.assign(team=og["home_abbr"], opp_team=og["away_abbr"],
-                          home_away="home", team_wp=og["home_wp"])[["event_id","team","opp_team","home_away","team_wp"]]
-    away_rows = og.assign(team=og["away_abbr"], opp_team=og["home_abbr"],
-                          home_away="away", team_wp=og["away_wp"])[["event_id","team","opp_team","home_away","team_wp"]]
+    # ---- CB assignments kept for WR-specific penalties later ----
+    if cb_assign.empty:
+        cb_assign = pd.DataFrame(columns=["defense_team","receiver","cb","quality","penalty"])
 
-    sched = pd.concat([home_rows, away_rows], ignore_index=True)
-    for c in ("team","opp_team"):
-        if c in sched.columns:
-            sched[c] = sched[c].astype(str).str.upper()
-    return sched
+    # ---- Weather keyed by event_id ----
+    if not weather.empty:
+        weather["wind_mph"] = pd.to_numeric(weather.get("wind_mph"), errors="coerce")
+        weather["temp_f"] = pd.to_numeric(weather.get("temp_f"), errors="coerce")
+        weather["precip"] = weather.get("precip").astype(str).str.lower()
+    else:
+        weather = pd.DataFrame(columns=["event_id","wind_mph","temp_f","precip","altitude_ft"])
+
+    # ---- Get rough win-prob from h2h odds to drive script escalators ----
+    # Use first book’s h2h for simplicity
+    if not odds_game.empty:
+        h2h = odds_game[odds_game["market"]=="h2h"].copy()
+        # choose the shortest price per event/team
+        h2h["prob"] = _implied_prob_from_american(h2h["price_american"])
+        h2h = (h2h.sort_values(["event_id","team","prob"], ascending=[True,True,False])
+                  .drop_duplicates(["event_id","team"]))
+        winp = h2h[["event_id","team","prob"]].rename(columns={"prob":"win_prob"})
+    else:
+        winp = pd.DataFrame(columns=["event_id","team","win_prob"])
+
+    # ---- Merge everything to a player-game frame skeleton ----
+    # We expect player_form to have at least: player, team, position/role priors
+    df = player_form.copy()
+    if "team" not in df.columns:
+        df["team"] = ""
+    if "player" not in df.columns:
+        df["player"] = ""
+
+    # merge team-level onto players
+    team_keys = [c for c in ["team"] if c in team_form.columns]
+    if team_keys:
+        df = df.merge(team_form, on="team", how="left", suffixes=("","_team"))
+
+    # attach injuries
+    if not injuries.empty:
+        df = df.merge(injuries[["player","status","status_flag"]], on="player", how="left")
+
+    # attach roles if provided
+    if not roles.empty and "player" in roles.columns:
+        df = df.merge(roles, on="player", how="left", suffixes=("","_role"))
+
+    # attach coverage flags by defense opponent if you store opp team column; else keep zeros
+    for x in ["top_shadow","heavy_man","heavy_zone"]:
+        df[x] = 0
+    if "opp_team" in df.columns:
+        df = df.merge(tag_pivot, left_on="opp_team", right_on="defense_team", how="left")
+        for x in ["top_shadow","heavy_man","heavy_zone"]:
+            if x in df.columns:
+                df[x] = df[x].fillna(0).astype(int)
+
+    # attach win prob if you store event_id + team
+    if "event_id" in df.columns and not winp.empty:
+        df = df.merge(winp, left_on=["event_id","team"], right_on=["event_id","team"], how="left")
+    else:
+        df["win_prob"] = np.nan
+
+    # attach weather
+    if "event_id" in df.columns and not weather.empty:
+        df = df.merge(weather[["event_id","wind_mph","temp_f","precip"]], on="event_id", how="left")
+    else:
+        for c in ["wind_mph","temp_f","precip"]:
+            if c not in df.columns: df[c] = np.nan
+
+    # ---- Derived features (exact rules you specified) ----
+    # Pressure-adjusted QB baseline proxy, sack elasticity, funnels, weather multipliers, volatility flags
+    def qb_pressure_mult(row):
+        # needs def_pressure_rate_z and def_pass_epa_z on opponent
+        pz = row.get("def_pressure_rate_z", 0.0)
+        ez = row.get("def_pass_epa_z", 0.0)
+        m = (1 - 0.35 * (pz if pd.notna(pz) else 0.0)) * (1 - 0.25 * (ez if pd.notna(ez) else 0.0))
+        return max(m, 0.6)  # clamp a bit
+
+    def sack_elasticity(row):
+        z = row.get("def_sack_rate_z", 0.0)
+        return 1 - 0.15 * (z if pd.notna(z) else 0.0)
+
+    def run_funnel(row):
+        # run funnel when def_rush_epa is poor (>=60th pct) and pass is good (<=40th pct)
+        rp = row.get("def_rush_epa_z", 0.0)
+        pp = row.get("def_pass_epa_z", 0.0)
+        return int((rp >= 0.253) and (pp <= -0.253))
+
+    def pass_funnel(row):
+        rp = row.get("def_rush_epa_z", 0.0)
+        pp = row.get("def_pass_epa_z", 0.0)
+        return int((pp >= 0.253) and (rp <= -0.253))
+
+    def weather_mult(row, market_hint: str):
+        w = 1.0
+        wind = row.get("wind_mph")
+        precip = str(row.get("precip", "")).lower()
+        if pd.notna(wind) and wind >= 15:
+            if market_hint in ("pass","rec","rush_rec"):
+                w *= 0.94
+        if precip in {"rain","snow"}:
+            if market_hint in ("rec","rush_rec"):
+                w *= 0.97
+            if market_hint in ("rush","rush_att"):
+                w *= 1.02
+        return w
+
+    # Add feature columns
+    if "position" not in df.columns:
+        df["position"] = df.get("role","")  # fallback
+
+    df["qb_pressure_mult"] = df.apply(lambda r: qb_pressure_mult(r), axis=1)
+    df["sack_elasticity"] = df.apply(lambda r: sack_elasticity(r), axis=1)
+    df["run_funnel"] = df.apply(lambda r: run_funnel(r), axis=1)
+    df["pass_funnel"] = df.apply(lambda r: pass_funnel(r), axis=1)
+
+    # Script escalators: rough – if favored (win_prob >= .55) → RB attempts bump
+    df["rb_attempts_escalator"] = np.where(df["win_prob"] >= 0.55, 3.0, 0.0)
+
+    # Weather multipliers as generic hints (specialize downstream per market)
+    df["wx_mult_pass"] = df.apply(lambda r: weather_mult(r, "pass"), axis=1)
+    df["wx_mult_rec"]  = df.apply(lambda r: weather_mult(r, "rec"), axis=1)
+    df["wx_mult_rush"] = df.apply(lambda r: weather_mult(r, "rush"), axis=1)
+    df["wx_mult_rush_rec"] = df.apply(lambda r: weather_mult(r, "rush_rec"), axis=1)
+
+    # Volatility flag (pressure mismatch or QB inconsistency proxy)
+    df["volatility_flag"] = ((df.get("def_pressure_rate_z",0) > 0.75) | (df.get("def_sack_rate_z",0) > 0.75)).astype(int)
+
+    # Coverage effects: WR vs top shadow / heavy man / heavy zone
+    df["wr_shadow_penalty"] = np.where((df["position"].astype(str).str.upper().str.contains("WR")) & (df.get("top_shadow",0)==1), -0.08, 0.0)
+    df["slot_zone_boost"]   = np.where((df["position"].astype(str).str.contains("SLOT", case=False)) & (df.get("heavy_zone",0)==1), 0.05, 0.0)
+
+    # Sanity
+    df = df.replace([np.inf, -np.inf], np.nan)
+
+    return df
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", type=int, required=True)
-    a = ap.parse_args()
+    args = ap.parse_args()
 
-    Path("data").mkdir(exist_ok=True)
+    Path("data").mkdir(parents=True, exist_ok=True)
+    out = "data/metrics_ready.csv"
 
-    tfp = Path("data/team_form.csv")
-    pfp = Path("data/player_form.csv")
-    ogp = Path("outputs/odds_game.csv")
-
-    if not tfp.exists() or tfp.stat().st_size == 0:
-        print("[metrics] team_form missing/empty; wrote empty metrics_ready.csv")
-        (Path("data")/"metrics_ready.csv").write_text("")
-        return
-    if not pfp.exists() or pfp.stat().st_size == 0:
-        print("[metrics] player_form missing/empty; wrote empty metrics_ready.csv")
-        (Path("data")/"metrics_ready.csv").write_text("")
-        return
-
-    tf = pd.read_csv(tfp)
-    pf = pd.read_csv(pfp)
-
-    if "team" in tf.columns: tf["team"] = tf["team"].astype(str).str.upper()
-    if "team" in pf.columns: pf["team"] = pf["team"].astype(str).str.upper()
-
-    idmap = load_id_map()
-    sched = build_schedule_map(ogp, idmap)
-
-    # attach slate context
-    if not sched.empty:
-        pf = pf.merge(sched, on="team", how="left")
-    else:
-        for c in ("opp_team","event_id","home_away","team_wp"):
-            pf[c] = pd.NA
-
-    # our own team features
-    mf = pf.merge(tf, on="team", how="left", suffixes=("","_team"))
-
-    # --- attach opponent defensive context here (pre-merge for pricing) ---
-    opp_cols = [
-        "team",
-        "def_sack_rate","def_pass_epa","def_rush_epa",
-        "light_box_rate","heavy_box_rate",
-    ]
-    present = [c for c in opp_cols if c in tf.columns]
-    tf_opp = tf[present].copy()
-    tf_opp = tf_opp.rename(columns={"team":"opp_team"})
-
-    if "opp_team" in mf.columns:
-        mf["opp_team"] = mf["opp_team"].astype(str).str.upper()
-    if "opp_team" in tf_opp.columns:
-        tf_opp["opp_team"] = tf_opp["opp_team"].astype(str).str.upper()
-
-    mf = mf.merge(tf_opp, on="opp_team", how="left", suffixes=("", "_opp"))
-
-    # clarify opponent columns with explicit suffix when needed
-    rename_map = {}
-    for c in ("def_sack_rate","def_pass_epa","def_rush_epa","light_box_rate","heavy_box_rate"):
-        if c in mf.columns and f"{c}_opp" not in mf.columns:
-            rename_map[c] = f"{c}_opp"
-    if rename_map:
-        mf = mf.rename(columns=rename_map)
-
-    outp = Path("data/metrics_ready.csv")
-    mf.to_csv(outp, index=False)
-    print(f"[metrics] rows={len(mf)} → {outp}")
+    df = build_metrics(args.season)
+    df.to_csv(out, index=False)
+    print(f"[metrics] wrote rows={len(df)} → {out}")
 
 if __name__ == "__main__":
     main()
