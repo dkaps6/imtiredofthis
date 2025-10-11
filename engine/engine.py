@@ -77,16 +77,68 @@ def run_pipeline(*, season: str, date: str = "", books=None, markets=None):
     _run(f"python scripts/make_player_form.py --season {season}")
     print(f"[engine]   data/player_form.csv → {_size('data/player_form.csv')}")
 
-    # 3) odds props — fetch BEFORE metrics so odds_game.csv exists
-    b = ",".join(books or ["draftkings","fanduel","betmgm","caesars"])
-    m = ",".join(markets or [])
+# 3) odds props — v4 requires one market per request; also write odds_game.csv
+b = ",".join(books or ["draftkings", "fanduel", "betmgm", "caesars"])
+
+# If you pass --markets on the CLI we honor it; otherwise use our default set:
+_default_markets = [
+    "player_pass_yds",
+    "player_rec_yds",
+    "player_rush_yds",
+    "player_receptions",
+    "player_rush_rec_yds",
+    "player_anytime_td",   # ← added TD market
+]
+markets_to_pull = [m.strip() for m in (markets or _default_markets) if m.strip()]
+
+# Temp folder to hold per-market pulls before concatenation
+from pathlib import Path as _Path
+_tmp = _Path("outputs/_tmp_props")
+_tmp.mkdir(parents=True, exist_ok=True)
+for f in _tmp.glob("*.csv"):
+    try:
+        f.unlink()
+    except Exception:
+        pass
+
+# 3a) Pull game-only odds once (h2h/spreads/totals) → also produce outputs/odds_game.csv
+_run(
+    "python scripts/fetch_props_oddsapi.py "
+    f"--books {b} --markets h2h,spreads,totals "
+    f"--date {date} --out {_tmp/'_game.csv'} --out_game outputs/odds_game.csv"
+)
+
+# 3b) Pull each player market separately (required by The Odds API v4)
+for mk in markets_to_pull:
+    print(f"[engine] oddsapi: pulling market={mk}")
     _run(
-        f"python scripts/fetch_props_oddsapi.py "
-        f"--books {b} "
-        f"{'--markets ' + m if m else ''} "
-        f"--date {date} "
-        f"--out outputs/props_raw.csv"
+        "python scripts/fetch_props_oddsapi.py "
+        f"--books {b} --markets {mk} "
+        f"--date {date} --out {_tmp/(mk+'.csv')}"
     )
+
+# 3c) Concatenate per-market CSVs → outputs/props_raw.csv
+try:
+    import pandas as _pd
+    frames = []
+    for f in sorted(_tmp.glob("*.csv")):
+        if f.name == "_game.csv":
+            continue
+        try:
+            frames.append(_pd.read_csv(f))
+        except Exception as e:
+            print(f"[engine] warn: could not read {f}: {e}")
+    if frames:
+        _pd.concat(frames, ignore_index=True).to_csv("outputs/props_raw.csv", index=False)
+    else:
+        _Path("outputs/props_raw.csv").write_text("")
+except Exception as e:
+    print(f"[engine] ERROR concatenating prop CSVs: {e}")
+    _Path("outputs/props_raw.csv").write_text("")
+
+print(f"[engine]   outputs/props_raw.csv → {_size('outputs/props_raw.csv')}")
+print(f"[engine]   outputs/odds_game.csv → {_size('outputs/odds_game.csv')}")
+
     print(f"[engine]   outputs/props_raw.csv → {_size('outputs/props_raw.csv')}")
     print(f"[engine]   outputs/odds_game.csv → {_size('outputs/odds_game.csv')}")
 
