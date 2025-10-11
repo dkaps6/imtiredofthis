@@ -1,210 +1,250 @@
 # scripts/make_metrics.py
+from __future__ import annotations
+import argparse
+from pathlib import Path
 import pandas as pd
 import numpy as np
-from pathlib import Path
-import argparse
 
-def _safe_read_csv(p: str) -> pd.DataFrame:
+# ---------- IO helpers ----------
+
+def _read_csv(p: str) -> pd.DataFrame:
     fp = Path(p)
-    if not fp.exists():
-        return pd.DataFrame()
+    if fp.exists():
+        try:
+            return pd.read_csv(fp)
+        except Exception:
+            return pd.DataFrame()
+    return pd.DataFrame()
+
+def _num(s, default=np.nan):
     try:
-        return pd.read_csv(fp)
+        x = float(s)
+        return x
     except Exception:
-        return pd.DataFrame()
+        return default
 
-def _z(col: pd.Series) -> pd.Series:
-    x = col.astype(float)
-    return (x - x.mean()) / (x.std(ddof=1) + 1e-9)
-
-def _implied_prob_from_american(odds):
-    # American to implied probability (vigged). Use later for win prob proxy.
-    o = pd.to_numeric(odds, errors="coerce")
-    prob = np.where(o > 0, 100 / (o + 100), -o / (-o + 100))
-    return pd.to_numeric(prob, errors="coerce")
-
-def build_metrics(season: int) -> pd.DataFrame:
-    # base inputs
-    team_form = _safe_read_csv("data/team_form.csv")          # expects def_* EPA/sack/pressure/pace/proe/box rates
-    player_form = _safe_read_csv("data/player_form.csv")      # shares, yprr, ypc priors, role info
-    roles = _safe_read_csv("data/roles.csv")
-    injuries = _safe_read_csv("data/injuries.csv")            # player/team/status
-    coverage = _safe_read_csv("data/coverage.csv")            # defense_team, tag in {top_shadow,heavy_man,heavy_zone}
-    cb_assign = _safe_read_csv("data/cb_assignments.csv")     # defense_team, receiver, cb, quality/penalty
-    weather = _safe_read_csv("data/weather.csv")              # event_id, wind_mph, temp_f, precip, altitude_ft
-    odds_game = _safe_read_csv("outputs/odds_game.csv")       # event_id, book, market (h2h/spreads/totals), price_american, point
-
-    # ---- Team-level normalizations ----
-    if not team_form.empty:
-        # Compute z-scores where present
-        for c in ["def_pass_epa","def_rush_epa","def_sack_rate","def_pressure_rate",
-                  "light_box_rate","heavy_box_rate","pace","proe","ay_per_att"]:
-            if c in team_form.columns:
-                team_form[f"{c}_z"] = _z(team_form[c])
-        # Fallback if proe missing
-        if "proe" not in team_form.columns:
-            team_form["proe"] = 0.0
-            team_form["proe_z"] = 0.0
-
-    # ---- Injuries: cap WR1 + redistribute flags ----
-    if not injuries.empty:
-        injuries["status_flag"] = injuries["status"].str.lower().isin(["out","doubtful","questionable","limited"]).astype(int)
-
-    # ---- Coverage tags to wide flags ----
-    if not coverage.empty:
-        tag_pivot = (coverage
-                     .assign(val=1)
-                     .pivot_table(index="defense_team", columns="tag", values="val", aggfunc="max", fill_value=0)
-                     .reset_index())
-    else:
-        tag_pivot = pd.DataFrame(columns=["defense_team","top_shadow","heavy_man","heavy_zone"])
-
-    # ---- CB assignments kept for WR-specific penalties later ----
-    if cb_assign.empty:
-        cb_assign = pd.DataFrame(columns=["defense_team","receiver","cb","quality","penalty"])
-
-    # ---- Weather keyed by event_id ----
-    if not weather.empty:
-        weather["wind_mph"] = pd.to_numeric(weather.get("wind_mph"), errors="coerce")
-        weather["temp_f"] = pd.to_numeric(weather.get("temp_f"), errors="coerce")
-        weather["precip"] = weather.get("precip").astype(str).str.lower()
-    else:
-        weather = pd.DataFrame(columns=["event_id","wind_mph","temp_f","precip","altitude_ft"])
-
-    # ---- Get rough win-prob from h2h odds to drive script escalators ----
-    # Use first book’s h2h for simplicity
-    if not odds_game.empty:
-        h2h = odds_game[odds_game["market"]=="h2h"].copy()
-        # choose the shortest price per event/team
-        h2h["prob"] = _implied_prob_from_american(h2h["price_american"])
-        h2h = (h2h.sort_values(["event_id","team","prob"], ascending=[True,True,False])
-                  .drop_duplicates(["event_id","team"]))
-        winp = h2h[["event_id","team","prob"]].rename(columns={"prob":"win_prob"})
-    else:
-        winp = pd.DataFrame(columns=["event_id","team","win_prob"])
-
-    # ---- Merge everything to a player-game frame skeleton ----
-    # We expect player_form to have at least: player, team, position/role priors
-    df = player_form.copy()
-    if "team" not in df.columns:
-        df["team"] = ""
-    if "player" not in df.columns:
-        df["player"] = ""
-
-    # merge team-level onto players
-    team_keys = [c for c in ["team"] if c in team_form.columns]
-    if team_keys:
-        df = df.merge(team_form, on="team", how="left", suffixes=("","_team"))
-
-    # attach injuries
-    if not injuries.empty:
-        df = df.merge(injuries[["player","status","status_flag"]], on="player", how="left")
-
-    # attach roles if provided
-    if not roles.empty and "player" in roles.columns:
-        df = df.merge(roles, on="player", how="left", suffixes=("","_role"))
-
-    # attach coverage flags by defense opponent if you store opp team column; else keep zeros
-    for x in ["top_shadow","heavy_man","heavy_zone"]:
-        df[x] = 0
-    if "opp_team" in df.columns:
-        df = df.merge(tag_pivot, left_on="opp_team", right_on="defense_team", how="left")
-        for x in ["top_shadow","heavy_man","heavy_zone"]:
-            if x in df.columns:
-                df[x] = df[x].fillna(0).astype(int)
-
-    # attach win prob if you store event_id + team
-    if "event_id" in df.columns and not winp.empty:
-        df = df.merge(winp, left_on=["event_id","team"], right_on=["event_id","team"], how="left")
-    else:
-        df["win_prob"] = np.nan
-
-    # attach weather
-    if "event_id" in df.columns and not weather.empty:
-        df = df.merge(weather[["event_id","wind_mph","temp_f","precip"]], on="event_id", how="left")
-    else:
-        for c in ["wind_mph","temp_f","precip"]:
-            if c not in df.columns: df[c] = np.nan
-
-    # ---- Derived features (exact rules you specified) ----
-    # Pressure-adjusted QB baseline proxy, sack elasticity, funnels, weather multipliers, volatility flags
-    def qb_pressure_mult(row):
-        # needs def_pressure_rate_z and def_pass_epa_z on opponent
-        pz = row.get("def_pressure_rate_z", 0.0)
-        ez = row.get("def_pass_epa_z", 0.0)
-        m = (1 - 0.35 * (pz if pd.notna(pz) else 0.0)) * (1 - 0.25 * (ez if pd.notna(ez) else 0.0))
-        return max(m, 0.6)  # clamp a bit
-
-    def sack_elasticity(row):
-        z = row.get("def_sack_rate_z", 0.0)
-        return 1 - 0.15 * (z if pd.notna(z) else 0.0)
-
-    def run_funnel(row):
-        # run funnel when def_rush_epa is poor (>=60th pct) and pass is good (<=40th pct)
-        rp = row.get("def_rush_epa_z", 0.0)
-        pp = row.get("def_pass_epa_z", 0.0)
-        return int((rp >= 0.253) and (pp <= -0.253))
-
-    def pass_funnel(row):
-        rp = row.get("def_rush_epa_z", 0.0)
-        pp = row.get("def_pass_epa_z", 0.0)
-        return int((pp >= 0.253) and (rp <= -0.253))
-
-    def weather_mult(row, market_hint: str):
-        w = 1.0
-        wind = row.get("wind_mph")
-        precip = str(row.get("precip", "")).lower()
-        if pd.notna(wind) and wind >= 15:
-            if market_hint in ("pass","rec","rush_rec"):
-                w *= 0.94
-        if precip in {"rain","snow"}:
-            if market_hint in ("rec","rush_rec"):
-                w *= 0.97
-            if market_hint in ("rush","rush_att"):
-                w *= 1.02
-        return w
-
-    # Add feature columns
-    if "position" not in df.columns:
-        df["position"] = df.get("role","")  # fallback
-
-    df["qb_pressure_mult"] = df.apply(lambda r: qb_pressure_mult(r), axis=1)
-    df["sack_elasticity"] = df.apply(lambda r: sack_elasticity(r), axis=1)
-    df["run_funnel"] = df.apply(lambda r: run_funnel(r), axis=1)
-    df["pass_funnel"] = df.apply(lambda r: pass_funnel(r), axis=1)
-
-    # Script escalators: rough – if favored (win_prob >= .55) → RB attempts bump
-    df["rb_attempts_escalator"] = np.where(df["win_prob"] >= 0.55, 3.0, 0.0)
-
-    # Weather multipliers as generic hints (specialize downstream per market)
-    df["wx_mult_pass"] = df.apply(lambda r: weather_mult(r, "pass"), axis=1)
-    df["wx_mult_rec"]  = df.apply(lambda r: weather_mult(r, "rec"), axis=1)
-    df["wx_mult_rush"] = df.apply(lambda r: weather_mult(r, "rush"), axis=1)
-    df["wx_mult_rush_rec"] = df.apply(lambda r: weather_mult(r, "rush_rec"), axis=1)
-
-    # Volatility flag (pressure mismatch or QB inconsistency proxy)
-    df["volatility_flag"] = ((df.get("def_pressure_rate_z",0) > 0.75) | (df.get("def_sack_rate_z",0) > 0.75)).astype(int)
-
-    # Coverage effects: WR vs top shadow / heavy man / heavy zone
-    df["wr_shadow_penalty"] = np.where((df["position"].astype(str).str.upper().str.contains("WR")) & (df.get("top_shadow",0)==1), -0.08, 0.0)
-    df["slot_zone_boost"]   = np.where((df["position"].astype(str).str.contains("SLOT", case=False)) & (df.get("heavy_zone",0)==1), 0.05, 0.0)
-
-    # Sanity
-    df = df.replace([np.inf, -np.inf], np.nan)
-
+def _safe(df: pd.DataFrame, col: str, default):
+    if col not in df.columns:
+        df[col] = default
     return df
 
-def main():
+def _norm_col(df: pd.DataFrame, name: str, default=np.nan):
+    if name not in df.columns:
+        df[name] = default
+    return df
+
+# ---------- feature constructors ----------
+
+def weather_multipliers(w: pd.DataFrame) -> pd.DataFrame:
+    """Expect optional: event_id, wind_mph, temp_f, precip, roof, surface"""
+    if w.empty:
+        return w
+    w = w.copy()
+
+    for c in ["wind_mph", "temp_f"]:
+        w[c] = pd.to_numeric(w.get(c), errors="coerce")
+
+    # Simple weather factors (safe, conservative)
+    # wind hurts pass + receptions, mild bump to rush.
+    wind = w["wind_mph"].fillna(0.0)
+    w["wx_mult_pass"]      = (1.0 - 0.006 * np.clip(wind - 8.0, 0, 40)).clip(0.85, 1.02)
+    w["wx_mult_rec"]       = (1.0 - 0.005 * np.clip(wind - 8.0, 0, 40)).clip(0.86, 1.02)
+    w["wx_mult_rush"]      = (1.0 + 0.004 * np.clip(wind - 8.0, 0, 40)).clip(0.98, 1.06)
+    w["wx_mult_rush_rec"]  = (w["wx_mult_rush"] * w["wx_mult_rec"]).clip(0.86, 1.06)
+    return w
+
+def coverage_effects(cvg: pd.DataFrame) -> pd.DataFrame:
+    """Expect optional WR shadow info: event_id, player, cb_grade, is_shadow, slot_rate"""
+    if cvg.empty:
+        return cvg
+    cvg = cvg.copy()
+    _norm_col(cvg, "cb_grade", np.nan)
+    _norm_col(cvg, "is_shadow", 0.0)
+    _norm_col(cvg, "slot_rate", 0.0)
+
+    cb = pd.to_numeric(cvg["cb_grade"], errors="coerce")
+    is_shadow = pd.to_numeric(cvg["is_shadow"], errors="coerce").fillna(0.0)
+    slot_rate = pd.to_numeric(cvg["slot_rate"],  errors="coerce").fillna(0.0)
+
+    # Convert CB grade to small penalty (negative if elite CB)
+    # Assume 80+ graded CBs impose ~6-10% yds drop if shadowed.
+    penalty = -0.0015 * np.clip(cb - 70.0, 0, 30) * is_shadow
+    boost   =  0.12 * slot_rate  # slot usage vs zone → mild boost
+
+    cvg["wr_shadow_penalty"] = penalty.clip(-0.12, 0.0)
+    cvg["slot_zone_boost"]   = boost.clip(-0.02, 0.15)
+    return cvg
+
+def team_to_pressure(team: pd.DataFrame) -> pd.DataFrame:
+    """Yield qb_pressure_mult, sack_elasticity, funnels, proe_z from team defense/offense."""
+    if team.empty:
+        return team
+    team = team.copy()
+
+    # Normalize expected cols if present
+    for c in ["pressure_rate_def","def_sack_rate","proe_z","run_funnel","pass_funnel"]:
+        _norm_col(team, c, np.nan)
+
+    team["pressure_rate_def"] = pd.to_numeric(team["pressure_rate_def"], errors="coerce")
+    team["def_sack_rate"]     = pd.to_numeric(team["def_sack_rate"],     errors="coerce")
+    team["proe_z"]            = pd.to_numeric(team["proe_z"],            errors="coerce").fillna(0.0)
+    team["run_funnel"]        = pd.to_numeric(team["run_funnel"],        errors="coerce").fillna(0.0)
+    team["pass_funnel"]       = pd.to_numeric(team["pass_funnel"],       errors="coerce").fillna(0.0)
+
+    # Multipliers relative to league average
+    pr = team["pressure_rate_def"].fillna(team["pressure_rate_def"].median(skipna=True))
+    sr = team["def_sack_rate"].fillna(team["def_sack_rate"].median(skipna=True))
+    pr_lg = np.nanmean(pr) if np.isfinite(np.nanmean(pr)) else 0.28
+    sr_lg = np.nanmean(sr) if np.isfinite(np.nanmean(sr)) else 0.07
+
+    team["qb_pressure_mult"] = (1.0 - 0.80 * (pr - pr_lg)).clip(0.82, 1.10)
+    team["sack_elasticity"]  = (1.0 - 0.60 * (sr - sr_lg)).clip(0.85, 1.10)
+    return team
+
+def role_priors(pf: pd.DataFrame) -> pd.DataFrame:
+    """Create safe role priors: routes, yprr, targets_proj, rush_att_proj, ypc, qb_ypa, qb_att_proj."""
+    if pf.empty:
+        return pf
+    pf = pf.copy()
+    for c in ["routes","yprr","targets_proj","rush_att_proj","ypc","qb_ypa","qb_att_proj","target_share"]:
+        _norm_col(pf, c, np.nan)
+        pf[c] = pd.to_numeric(pf[c], errors="coerce")
+
+    return pf
+
+def injuries_volatility(inj: pd.DataFrame) -> pd.DataFrame:
+    """Create rb_attempts_escalator and volatility_flag from injuries depth info if present."""
+    if inj.empty:
+        return inj
+    inj = inj.copy()
+    # Try to infer if primary backup RB is out → bump attempts for starter
+    _norm_col(inj, "player", "")
+    _norm_col(inj, "status", "")
+    _norm_col(inj, "position", "")
+    inj["is_rb_backup_out"] = ((inj["position"].str.upper() == "RB") &
+                               (inj["status"].str.lower().isin(["out","doubtful"]))).astype(float)
+    # Aggregate per (event_id, team, starter?) — if you have it
+    depth = inj.groupby(["event_id","team"], as_index=False)["is_rb_backup_out"].sum()
+    depth["rb_attempts_escalator"] = (depth["is_rb_backup_out"] * 2.0).clip(0, 8)  # add 0–8 attempts ceiling
+    depth["volatility_flag"] = (inj["status"].str.lower().isin(["questionable","doubtful"])).groupby(
+        [inj.get("event_id", pd.Series(index=inj.index)), inj.get("team", pd.Series(index=inj.index))]
+    ).transform("max").fillna(0).astype(float)
+    depth = depth.drop(columns=["is_rb_backup_out"], errors="ignore")
+    depth = depth.drop_duplicates(subset=["event_id","team"])
+    return depth
+
+def sgp_links(pf: pd.DataFrame, tf: pd.DataFrame) -> pd.DataFrame:
+    """
+    Build simple SGP hooks:
+      - qb_wr_pair: qb_player string for a WR/TE
+      - sgp_qb_wr_boost: tilt factor ~ f(target_share, proe_z)
+    """
+    if pf.empty:
+        return pf
+
+    pf = pf.copy()
+    _norm_col(pf, "position", "")
+    _norm_col(pf, "target_share", np.nan)
+
+    # derive qb per team/event if present in team_form
+    qb_map = {}
+    if not tf.empty:
+        if "event_id" in tf.columns and "team" in tf.columns and "qb_player" in tf.columns:
+            qb_map = tf.set_index(["event_id","team"])["qb_player"].to_dict()
+
+    pf["qb_wr_pair"] = np.where(
+        pf["position"].str.upper().isin(["WR","TE"]),
+        pf.apply(lambda r: qb_map.get((r.get("event_id"), r.get("team"))), axis=1),
+        np.nan
+    )
+
+    ts = pd.to_numeric(pf.get("target_share"), errors="coerce").fillna(0.0)
+    proe = pd.to_numeric(pf.get("proe_z"), errors="coerce").fillna(0.0)
+    pf["sgp_qb_wr_boost"] = (0.35 * ts + 0.12 * proe).clip(0.0, 0.25)
+    return pf
+
+# ---------- build pipeline ----------
+
+def build_metrics(season: int) -> pd.DataFrame:
+    PATH = Path("data")
+
+    team_form   = _read_csv(PATH / "team_form.csv")
+    player_form = _read_csv(PATH / "player_form.csv")
+    injuries    = _read_csv(PATH / "injuries.csv")
+    coverage    = _read_csv(PATH / "coverage.csv")
+    weather     = _read_csv(PATH / "weather.csv")
+
+    # Normalize keys we try to join on
+    for df in (team_form, player_form, coverage, weather):
+        if not df.empty:
+            for k in ["event_id","team","player","date"]:
+                _norm_col(df, k, np.nan)
+
+    tf_feats  = team_to_pressure(team_form) if not team_form.empty else pd.DataFrame()
+    pf_roles  = role_priors(player_form)    if not player_form.empty else pd.DataFrame()
+    inj_depth = injuries_volatility(injuries) if not injuries.empty else pd.DataFrame()
+    wx        = weather_multipliers(weather)  if not weather.empty else pd.DataFrame()
+    cvg       = coverage_effects(coverage)    if not coverage.empty else pd.DataFrame()
+
+    # Merge player_form with team pressure/funnel features
+    if not pf_roles.empty and not tf_feats.empty:
+        m = pf_roles.merge(
+            tf_feats[["event_id","team","qb_pressure_mult","sack_elasticity","proe_z","run_funnel","pass_funnel"]],
+            on=["event_id","team"], how="left"
+        )
+    else:
+        m = pf_roles.copy() if not pf_roles.empty else pd.DataFrame()
+
+    # join SGP links
+    m = sgp_links(m, team_form) if not m.empty else m
+
+    # join coverage (by event_id + player)
+    if not m.empty and not cvg.empty:
+        m = m.merge(cvg[["event_id","player","wr_shadow_penalty","slot_zone_boost"]],
+                    on=["event_id","player"], how="left")
+
+    # join injuries depth → escalator + volatility
+    if not m.empty and not inj_depth.empty:
+        m = m.merge(inj_depth[["event_id","team","rb_attempts_escalator","volatility_flag"]],
+                    on=["event_id","team"], how="left")
+
+    # join weather multipliers
+    if not m.empty and not wx.empty:
+        m = m.merge(wx[["event_id","wx_mult_pass","wx_mult_rec","wx_mult_rush","wx_mult_rush_rec"]],
+                    on="event_id", how="left")
+
+    # Ensure all columns exist (pricing is fail-safe if any are missing)
+    needed = [
+        "qb_pressure_mult","sack_elasticity","proe_z","run_funnel","pass_funnel",
+        "wx_mult_pass","wx_mult_rec","wx_mult_rush","wx_mult_rush_rec",
+        "wr_shadow_penalty","slot_zone_boost","rb_attempts_escalator","volatility_flag",
+        "routes","yprr","targets_proj","rush_att_proj","ypc","qb_ypa","qb_att_proj",
+        "qb_wr_pair","sgp_qb_wr_boost",
+    ]
+    for c in needed:
+        _norm_col(m, c, np.nan)
+
+    # Fill gentle defaults
+    m["qb_pressure_mult"] = m["qb_pressure_mult"].fillna(1.0).clip(0.8, 1.2)
+    m["sack_elasticity"]  = m["sack_elasticity"].fillna(1.0).clip(0.8, 1.2)
+    for c in ["proe_z","run_funnel","pass_funnel","wr_shadow_penalty","slot_zone_boost",
+              "rb_attempts_escalator","volatility_flag","sgp_qb_wr_boost"]:
+        m[c] = pd.to_numeric(m[c], errors="coerce").fillna(0.0)
+
+    for c in ["wx_mult_pass","wx_mult_rec","wx_mult_rush","wx_mult_rush_rec"]:
+        m[c] = pd.to_numeric(m[c], errors="coerce").fillna(1.0).clip(0.80, 1.10)
+
+    # Output
+    outp = Path("data") / "metrics_ready.csv"
+    m.to_csv(outp, index=False)
+    print(f"[metrics] wrote {outp} rows={len(m)}")
+    return m
+
+def cli():
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", type=int, required=True)
     args = ap.parse_args()
-
-    Path("data").mkdir(parents=True, exist_ok=True)
-    out = "data/metrics_ready.csv"
-
-    df = build_metrics(args.season)
-    df.to_csv(out, index=False)
-    print(f"[metrics] wrote rows={len(df)} → {out}")
+    build_metrics(args.season)
 
 if __name__ == "__main__":
-    main()
+    cli()
