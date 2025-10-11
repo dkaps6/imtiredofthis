@@ -1,4 +1,5 @@
-# scripts/fetch_props_oddsapi.py
+#!/usr/bin/env python3
+from __future__ import annotations
 import argparse, csv, os, sys, time
 from pathlib import Path
 import requests
@@ -11,7 +12,7 @@ def _q(url, params):
     return r.json()
 
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description="Fetch NFL odds/props from TheOddsAPI with graceful fallbacks")
     ap.add_argument("--books", required=True, help="Comma list of bookmakers")
     ap.add_argument("--markets", default="", help="Comma list of player markets to try")
     ap.add_argument("--date", default="", help="YYYY-MM-DD (optional)")
@@ -21,7 +22,9 @@ def main():
     api_key = os.getenv("ODDS_API_KEY", "")
     if not api_key:
         print("[oddsapi] ERROR: ODDS_API_KEY not set", file=sys.stderr)
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
         Path(args.out).write_text("")
+        Path("outputs/odds_game.csv").write_text("")
         return 0
 
     Path("outputs").mkdir(exist_ok=True)
@@ -39,11 +42,10 @@ def main():
         common["dateFormat"] = "iso"
         common["commenceTimeFrom"] = args.date
 
-    # 1) Game markets (never require premium plans)
+    # 1) Game markets (h2h, spreads, totals)
     try:
         print("[oddsapi] game markets=h2h,spreads,totals")
         game = _q(f"{base}/sports/{SPORT}/odds", {**common, "markets": "h2h,spreads,totals"})
-        # write simple snapshot for sanity
         with open("outputs/odds_game.csv", "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
             w.writerow(["id","commence_time","home","away","bookmaker","market","price"])
@@ -61,7 +63,7 @@ def main():
         print(f"[oddsapi] WARNING game markets failed: {e}", file=sys.stderr)
         Path("outputs/odds_game.csv").write_text("")
 
-    # 2) Player markets (plan dependent). Probe, handle 401 gracefully.
+    # 2) Player markets (probe individually; handle 401 cleanly)
     wrote_any = False
     with open(args.out, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
@@ -69,30 +71,37 @@ def main():
             "game_id","commence_time","player","team","position",
             "market","outcome","line","price","bookmaker"
         ])
-        if player_markets:
-            for m in player_markets:
-                try:
-                    print(f"[oddsapi] probe market={m}")
-                    js = _q(f"{base}/sports/{SPORT}/odds", {**common, "markets": m})
-                    for g in js:
-                        gid = g.get("id"); ct = g.get("commence_time","")
-                        for bk in g.get("bookmakers", []):
-                            bname = bk.get("key")
-                            for mkt in bk.get("markets", []):
-                                for o in mkt.get("outcomes", []):
-                                    # TheOddsAPI player payloads vary by market; keep generic fields
-                                    w.writerow([gid, ct, o.get("participant",""), "", "", m, o.get("name",""), o.get("point",""), o.get("price",""), bname])
-                                    wrote_any = True
-                except requests.HTTPError as e:
-                    if e.response is not None and e.response.status_code == 401:
-                        print(f"[oddsapi] 401 Unauthorized on market={m} — continuing with game-only.", file=sys.stderr)
-                        continue
-                    else:
-                        print(f"[oddsapi] error market={m}: {e}", file=sys.stderr)
-                        continue
+        targets = player_markets or [
+            "player_receiving_yards","player_receptions","player_rushing_yards",
+            "player_rush_and_receive_yards","player_passing_yards","player_passing_tds",
+            "player_anytime_td"
+        ]
+        for m in targets:
+            try:
+                print(f"[oddsapi] probe market={m}")
+                js = _q(f"{base}/sports/{SPORT}/odds", {**common, "markets": m})
+                for g in js:
+                    gid = g.get("id"); ct = g.get("commence_time","")
+                    for bk in g.get("bookmakers", []):
+                        bname = bk.get("key")
+                        for mkt in bk.get("markets", []):
+                            for o in mkt.get("outcomes", []):
+                                w.writerow([gid, ct, o.get("participant","") or o.get("description",""),
+                                            o.get("team",""), o.get("position",""),
+                                            m, o.get("name",""), o.get("point",""), o.get("price",""), bname])
+                                wrote_any = True
+                time.sleep(0.35)
+            except requests.HTTPError as e:
+                if e.response is not None and e.response.status_code == 401:
+                    print(f"[oddsapi] 401 Unauthorized on {m} — continuing with others.", file=sys.stderr)
+                    continue
+                print(f"[oddsapi] error market={m}: {e}", file=sys.stderr)
+                continue
 
     if not wrote_any:
         print("[oddsapi] no supported player markets detected (props=0)")
+    else:
+        print("[oddsapi] props written")
 
     return 0
 
