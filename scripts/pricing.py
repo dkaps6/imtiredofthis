@@ -310,6 +310,15 @@ def price_props(props: pd.DataFrame, team: pd.DataFrame, pform: pd.DataFrame, ct
             df = df.merge(inj[["player","team","status"]], on=["player","team"], how="left")
         else:
             df["status"] = ""
+            
+if "opp_team" not in df.columns:
+    # derive from matchup or skip merge safely
+    print("[pricing] warning: opp_team missing; skipping defensive merge")
+else:
+    df = df.merge(
+        opp_t[["opp_team","def_sack_rate","def_pass_epa","def_rush_epa","light_box_rate","heavy_box_rate"]],
+        on="opp_team", how="left"
+    )
 
     opp_t = team.rename(columns={"team":"opp_team"})
     df = df.merge(opp_t[["opp_team","def_sack_rate","def_pass_epa","def_rush_epa","light_box_rate","heavy_box_rate"]],
