@@ -16,6 +16,15 @@ REGION_DEFAULT = "us"
 TIMEOUT_S = 25
 BACKOFF_S = [0.6, 1.2, 2.0, 3.5, 5.0]    # simple backoff on 429/5xx
 GAME_MARKETS = ["h2h", "spreads", "totals"]
+# === ADD: v4 market alias map (keeps your old names working) ===
+MARKET_ALIASES = {
+    # old_name              : new_name (OddsAPI v4)
+    "player_rec_yds": "player_receiving_yards",
+    # If you also use these older shorthands anywhere, you can keep them too:
+    "player_rush_rec_yds": "player_rush_reception_yds",
+    "receiving_yards": "player_receiving_yards",
+    "rush_rec": "player_rush_reception_yds",
+}
 
 # ADDED: alias map for renamed markets in v4
 MARKET_ALIASES = {
