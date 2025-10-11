@@ -1,129 +1,100 @@
 # scripts/fetch_props_oddsapi.py
-import os, argparse, pathlib, pandas as pd, requests, time
+import argparse, csv, os, sys, time
+from pathlib import Path
+import requests
 
-CANDIDATE_PLAYER_MARKETS = [
-    "player_pass_yards","player_rush_yards","player_rec_yards","player_receptions",
-    "player_rush_rec_yards","player_anytime_td","player_pass_tds",
-    "player_passing_yards","player_rushing_yards","player_receiving_yards",
-    "player_rush_and_receive_yards","player_two_or_more_tds","player_2_or_more_tds",
-]
-GAME_MARKETS = ["h2h","spreads","totals"]
+SPORT = "americanfootball_nfl"  # TheOddsAPI sport key
 
-def _write(df, path):
-    pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(path, index=False)
-
-def _call(url, params, key):
-    params = dict(params)  # copy to avoid mutating caller
-    params["apiKey"] = key                           # ✅ add the API key
-    r = requests.get(url, params=params, timeout=45)
-    for k in ("x-requests-remaining","x-requests-used"):
-        if k in r.headers:
-            print(f"[oddsapi] {k}: {r.headers[k]}")
-    if r.status_code == 422:
-        raise ValueError("422")
+def _q(url, params):
+    r = requests.get(url, params=params, timeout=30)
     r.raise_for_status()
     return r.json()
 
-def _fetch_market(url, key, books, api_key):
-    params={'regions':'us','oddsFormat':'american','bookmakers':books,'markets':key}
-    try:
-        print(f"[oddsapi] probe market={key}")
-        data=_call(url, params, api_key)
-        return True, data
-    except ValueError:
-        print(f"[oddsapi] 422 unsupported market={key}")
-        return False, None
-    except requests.HTTPError as e:
-        print(f"[oddsapi] http {e.response.status_code} market={key}: {e}")
-        return False, None
-    except Exception as e:
-        print(f"[oddsapi] error market={key}: {e}")
-        return False, None
-
-def _flatten_props(payload):
-    cols=['player','team','opp_team','event_id','market','line','over_odds','under_odds','book','commence_time','sport_key','position']
-    rows=[]
-    for g in payload:
-        home=(g.get('home_team') or '').upper(); away=(g.get('away_team') or '').upper()
-        for bk in g.get('bookmakers', []):
-            bk_key=bk.get('key')
-            for mk in bk.get('markets', []):
-                mkey=mk.get('key')
-                if not str(mkey).startswith("player_"):  # keep only player markets here
-                    continue
-                for ou in mk.get('outcomes', []):
-                    name=ou.get('description') or ou.get('name')
-                    team=(ou.get('team') or '').upper()
-                    opp=away if team==home else home if team==away else ''
-                    line=ou.get('point') if 'point' in ou else (1.0 if 'anytime_td' in mkey else None)
-                    side=(ou.get('name','') or '').lower()
-                    price=ou.get('price')
-                    over_odds=price if side in ('over','yes') else None
-                    under_odds=price if side in ('under','no') else None
-                    rows.append([name,team,opp,g.get('id'),mkey,line,over_odds,under_odds,bk_key,g.get('commence_time'),g.get('sport_key','nfl'),ou.get('position') or ''])
-    return pd.DataFrame(rows, columns=cols)
-
-def _flatten_games(payload):
-    cols=['event_id','commence_time','sport_key','home_team','away_team','market','point','book']
-    rows=[]
-    for g in payload:
-        home=(g.get('home_team') or '').upper(); away=(g.get('away_team') or '').upper()
-        for bk in g.get('bookmakers', []):
-            bk_key=bk.get('key')
-            for mk in bk.get('markets', []):
-                mkey=mk.get('key')
-                if mkey not in ("h2h","spreads","totals"):
-                    continue
-                point=None
-                if mk.get('outcomes'):
-                    point = mk['outcomes'][0].get('point')
-                rows.append([g.get('id'), g.get('commence_time'), g.get('sport_key'), home, away, mkey, point, bk_key])
-    return pd.DataFrame(rows, columns=cols)
-
 def main():
-    ap=argparse.ArgumentParser()
-    ap.add_argument('--books', default='draftkings,fanduel,betmgm,caesars')
-    ap.add_argument('--date', default='')  # kept for CLI compat; not used to avoid 422
-    ap.add_argument('--out', default='outputs/props_raw.csv')
-    a=ap.parse_args()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--books", required=True, help="Comma list of bookmakers")
+    ap.add_argument("--markets", default="", help="Comma list of player markets to try")
+    ap.add_argument("--date", default="", help="YYYY-MM-DD (optional)")
+    ap.add_argument("--out", default="outputs/props_raw.csv")
+    args = ap.parse_args()
 
-    api_key=os.getenv('ODDS_API_KEY','').strip()
+    api_key = os.getenv("ODDS_API_KEY", "")
     if not api_key:
-        print('[oddsapi] key missing; writing empty CSVs')
-        _write(pd.DataFrame(), a.out); _write(pd.DataFrame(), "outputs/odds_game.csv"); return 0
+        print("[oddsapi] ERROR: ODDS_API_KEY not set", file=sys.stderr)
+        Path(args.out).write_text("")
+        return 0
 
-    base='https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds'
+    Path("outputs").mkdir(exist_ok=True)
+    books = [b.strip() for b in args.books.split(",") if b.strip()]
+    player_markets = [m.strip() for m in args.markets.split(",") if m.strip()]
 
-    # 1) game markets
+    base = "https://api.the-odds-api.com/v4"
+    common = {
+        "regions": "us",
+        "oddsFormat": "american",
+        "bookmakers": ",".join(books),
+        "apiKey": api_key,
+    }
+    if args.date:
+        common["dateFormat"] = "iso"
+        common["commenceTimeFrom"] = args.date
+
+    # 1) Game markets (never require premium plans)
     try:
-        print(f"[oddsapi] request game markets={','.join(GAME_MARKETS)}")
-        game_json=_call(base, {'regions':'us','oddsFormat':'american','bookmakers':a.books,'markets':','.join(GAME_MARKETS)}, api_key)
-    except Exception as e:
-        print(f"[oddsapi] game error: {e}"); game_json=[]
+        print("[oddsapi] game markets=h2h,spreads,totals")
+        game = _q(f"{base}/sports/{SPORT}/odds", {**common, "markets": "h2h,spreads,totals"})
+        # write simple snapshot for sanity
+        with open("outputs/odds_game.csv", "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["id","commence_time","home","away","bookmaker","market","price"])
+            for g in game:
+                gid = g.get("id")
+                ct  = g.get("commence_time","")
+                home = g.get("home_team",""); away = g.get("away_team","")
+                for bk in g.get("bookmakers", []):
+                    bname = bk.get("key")
+                    for mkt in bk.get("markets", []):
+                        mname = mkt.get("key")
+                        for o in mkt.get("outcomes", []):
+                            w.writerow([gid, ct, home, away, bname, mname, o.get("price")])
+    except requests.HTTPError as e:
+        print(f"[oddsapi] WARNING game markets failed: {e}", file=sys.stderr)
+        Path("outputs/odds_game.csv").write_text("")
 
-    games=_flatten_games(game_json)
-    _write(games, "outputs/odds_game.csv")
-    print(f"[oddsapi] wrote games={len(games)}")
+    # 2) Player markets (plan dependent). Probe, handle 401 gracefully.
+    wrote_any = False
+    with open(args.out, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow([
+            "game_id","commence_time","player","team","position",
+            "market","outcome","line","price","bookmaker"
+        ])
+        if player_markets:
+            for m in player_markets:
+                try:
+                    print(f"[oddsapi] probe market={m}")
+                    js = _q(f"{base}/sports/{SPORT}/odds", {**common, "markets": m})
+                    for g in js:
+                        gid = g.get("id"); ct = g.get("commence_time","")
+                        for bk in g.get("bookmakers", []):
+                            bname = bk.get("key")
+                            for mkt in bk.get("markets", []):
+                                for o in mkt.get("outcomes", []):
+                                    # TheOddsAPI player payloads vary by market; keep generic fields
+                                    w.writerow([gid, ct, o.get("participant",""), "", "", m, o.get("name",""), o.get("point",""), o.get("price",""), bname])
+                                    wrote_any = True
+                except requests.HTTPError as e:
+                    if e.response is not None and e.response.status_code == 401:
+                        print(f"[oddsapi] 401 Unauthorized on market={m} — continuing with game-only.", file=sys.stderr)
+                        continue
+                    else:
+                        print(f"[oddsapi] error market={m}: {e}", file=sys.stderr)
+                        continue
 
-    # 2) per-market player probing
-    all_payload=[]; supported=[]
-    for mk in CANDIDATE_PLAYER_MARKETS:
-        ok, data = _fetch_market(base, mk, a.books, api_key)
-        if ok and data:
-            supported.append(mk)
-            all_payload.extend(data)
-            time.sleep(0.35)  # gentle pacing
+    if not wrote_any:
+        print("[oddsapi] no supported player markets detected (props=0)")
 
-    if supported:
-        print(f"[oddsapi] supported player markets: {supported}")
-    else:
-        print("[oddsapi] no supported player markets detected")
-
-    props = _flatten_props(all_payload)
-    _write(props, a.out)
-    print(f"[oddsapi] wrote props={len(props)}")
     return 0
 
-if __name__=='__main__':
-    main()
+if __name__ == "__main__":
+    sys.exit(main())
