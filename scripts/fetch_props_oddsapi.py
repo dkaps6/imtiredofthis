@@ -1,50 +1,119 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import sys, os, time
+import os
 from pathlib import Path
+from datetime import datetime, timezone
+import requests
 import pandas as pd
 
-OUT = Path("data/team_form.csv")
+API = "https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds"
+KEY = os.getenv("ODDS_API_KEY", "")
 
-def _safe_write(df: pd.DataFrame, out: Path) -> None:
-    out.parent.mkdir(parents=True, exist_ok=True)
-    # Always write at least headers to avoid 0B files
-    if df is None or df.empty:
+OUT_PROPS = Path("outputs/props_raw.csv")
+OUT_GAME  = Path("outputs/odds_game.csv")
+
+GAME_MARKETS   = ["h2h","spreads","totals"]
+PLAYER_MARKETS = [
+    "player_receiving_yards","player_receptions","player_rushing_yards",
+    "player_rush_and_receive_yards","player_passing_yards","player_passing_tds",
+    "player_anytime_td"
+]
+
+def _unix_start_of_day(iso_date: str) -> int:
+    dt = datetime.fromisoformat(iso_date).replace(tzinfo=timezone.utc)
+    return int(dt.timestamp())
+
+def _get(params: dict) -> requests.Response:
+    r = requests.get(API, params=params, timeout=20)
+    r.raise_for_status()
+    return r
+
+def fetch(date: str|None, books: list[str]) -> tuple[pd.DataFrame,pd.DataFrame]:
+    if not KEY:
+        print("[oddsapi] ERROR: ODDS_API_KEY missing", flush=True)
+        return pd.DataFrame(), pd.DataFrame()
+
+    base = dict(apiKey=KEY, regions="us", oddsFormat="american", bookmakers=",".join(books))
+
+    # Game lines: OK to use commenceTimeFrom (UNIX)
+    base_game = base.copy()
+    if date:
+        base_game["commenceTimeFrom"] = _unix_start_of_day(date)
+
+    # 1) Game markets
+    game_df = pd.DataFrame()
+    try:
+        p = base_game | {"markets": ",".join(GAME_MARKETS)}
+        print(f"[oddsapi] game markets={p['markets']}")
+        r = _get(p)
+        game_df = pd.json_normalize(r.json())
+    except requests.HTTPError as e:
+        print(f"[oddsapi] WARNING game markets failed: {e}", flush=True)
+
+    # 2) Player props (no commenceTimeFrom — some accounts/regions 422 if you include it)
+    props = []
+    for mkt in PLAYER_MARKETS:
+        try:
+            p = base | {"markets": mkt}
+            print(f"[oddsapi] probe market={mkt}")
+            r = _get(p)
+            for game in r.json():
+                gid = game.get("id"); commence = game.get("commence_time")
+                for bm in game.get("bookmakers", []):
+                    book = bm.get("key")
+                    for mk in bm.get("markets", []):
+                        if mk.get("key") != mkt: 
+                            continue
+                        for o in mk.get("outcomes", []):
+                            props.append({
+                                "event_id": gid,
+                                "commence_time": commence,
+                                "book": book,
+                                "market": mkt,
+                                "player": o.get("name"),
+                                "line": o.get("point"),
+                                "odds": o.get("price")
+                            })
+        except requests.HTTPError as e:
+            print(f"[oddsapi] error market={mkt}: {e}", flush=True)
+            continue
+
+    props_df = pd.DataFrame(props)
+
+    # Always write CSVs with headers
+    OUT_PROPS.parent.mkdir(parents=True, exist_ok=True)
+    if props_df.empty:
         pd.DataFrame(columns=[
-            "team","def_pass_epa_z","def_rush_epa_z","def_sack_rate_z",
-            "pace_z","proe_z","light_box_rate_z","heavy_box_rate_z"
-        ]).to_csv(out, index=False)
+            "event_id","commence_time","book","market","player","line","odds"
+        ]).to_csv(OUT_PROPS, index=False)
     else:
-        df.to_csv(out, index=False)
+        props_df.to_csv(OUT_PROPS, index=False)
 
-def build_from_nflverse(season: int) -> pd.DataFrame:
-    # Replace this with your real nflverse pull
-    # (kept minimal so the pipeline runs even if nflverse is unreachable)
-    try:
-        # EXAMPLE stub (you will replace with your real join)
-        df = pd.DataFrame([
-            {"team":"BUF","def_pass_epa_z":0.1,"def_rush_epa_z":-0.2,"def_sack_rate_z":0.3,
-             "pace_z":0.1,"proe_z":0.2,"light_box_rate_z":-0.1,"heavy_box_rate_z":0.0}
-        ])
-        return df
-    except Exception as e:
-        print(f"[team_form] nflverse error: {e}", flush=True)
-        return pd.DataFrame()
+    if game_df is None or game_df.empty:
+        pd.DataFrame(columns=["id","commence_time","home_team","away_team","bookmakers"]).to_csv(OUT_GAME, index=False)
+    else:
+        game_df.to_csv(OUT_GAME, index=False)
 
-def cli(season: int) -> int:
-    try:
-        df = build_from_nflverse(season)
-    except Exception as e:
-        # Catch everything explicitly (fixes: name 'Error' is not defined)
-        print(f"[team_form] fatal error: {e}", flush=True)
-        df = pd.DataFrame()
-    _safe_write(df, OUT)
-    print(f"[team_form] wrote rows={len(df)} → {OUT}")
+    print(f"[oddsapi] wrote props={len(props_df)} games={len(game_df)}")
+    return props_df, game_df
+
+def cli(books: list[str], date: str|None, out: str|None, season: int|None) -> int:
+    # season is optional; included only to be flexible with other callers
+    props_df, _ = fetch(date, books)
+    if out:
+        try:
+            Path(out).parent.mkdir(parents=True, exist_ok=True)
+            pd.read_csv(OUT_PROPS).to_csv(out, index=False)
+        except Exception:
+            pass
     return 0
 
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser()
-    ap.add_argument("--season", required=True, type=int)
+    ap.add_argument("--books", default="draftkings,fanduel,betmgm,caesars")
+    ap.add_argument("--date", default="")
+    ap.add_argument("--out", default="outputs/props_raw.csv")
+    ap.add_argument("--season", type=int, default=None)  # OPTIONAL
     a = ap.parse_args()
-    sys.exit(cli(a.season))
+    sys.exit(cli([b.strip() for b in a.books.split(",") if b.strip()], a.date or None, a.out, a.season))
