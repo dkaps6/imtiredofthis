@@ -71,27 +71,35 @@ def run_pipeline(*, season: str, date: str = "", books=None, markets=None):
     except Exception as e:
         print(f"[engine] provider chain error (non-fatal): {e}")
 
-    # 2) builders
+    # 2) builders — build team & player first (no schedule needed yet)
     _run(f"python scripts/make_team_form.py --season {season}")
     print(f"[engine]   data/team_form.csv → {_size('data/team_form.csv')}")
     _run(f"python scripts/make_player_form.py --season {season}")
     print(f"[engine]   data/player_form.csv → {_size('data/player_form.csv')}")
-    _run(f"python scripts/make_metrics.py --season {season}")
-    print(f"[engine]   data/metrics_ready.csv → {_size('data/metrics_ready.csv')}")
 
-    # 3) odds props
+    # 3) odds props — fetch BEFORE metrics so odds_game.csv exists
     b = ",".join(books or ["draftkings","fanduel","betmgm","caesars"])
     m = ",".join(markets or [])
-    _run(f"python scripts/fetch_props_oddsapi.py --books {b} {'--markets '+m if m else ''} --date {date} --out outputs/props_raw.csv")
+    _run(
+        f"python scripts/fetch_props_oddsapi.py "
+        f"--books {b} "
+        f"{'--markets ' + m if m else ''} "
+        f"--date {date} "
+        f"--out outputs/props_raw.csv"
+    )
     print(f"[engine]   outputs/props_raw.csv → {_size('outputs/props_raw.csv')}")
     print(f"[engine]   outputs/odds_game.csv → {_size('outputs/odds_game.csv')}")
 
-    # 4) pricing + predictors
+    # 4) metrics — now build metrics_ready using odds_game.csv for slate/opponents
+    _run(f"python scripts/make_metrics.py --season {season}")
+    print(f"[engine]   data/metrics_ready.csv → {_size('data/metrics_ready.csv')}")
+
+    # 5) pricing + predictors
     _run("python scripts/pricing.py --props outputs/props_raw.csv")
     _run(f"python -m scripts.models.run_predictors --season {season}")
     print(f"[engine]   outputs/master_model_predictions.csv → {_size('outputs/master_model_predictions.csv')}")
 
-    # 5) export Excel + diagnostics
+    # 6) export Excel + diagnostics
     _run("python scripts/export_excel.py")
     _dump_diag()
 
