@@ -1,21 +1,26 @@
+# engine/engine.py
 from __future__ import annotations
+
 import os, sys, shlex, subprocess
 from pathlib import Path
 from datetime import datetime
 import pandas as pd
 
-# engine/engine.py (top of file)
+# Providers (soft fallback if module not present)
 try:
     from engine.adapters.providers import (
         run_nflverse, run_espn, run_nflgsis, run_msf, run_apisports
     )
 except Exception:
     def _stub(name):
-        def _run(season:int, date:str|None):
+        def _run(season: int, date: str | None):
             return {"ok": False, "source": name, "notes": [f"{name} adapter missing"]}
         return _run
-    run_nflverse=_stub("nflverse"); run_espn=_stub("ESPN")
-    run_nflgsis=_stub("NFLGSIS"); run_msf=_stub("MySportsFeeds"); run_apisports=_stub("API-Sports")
+    run_nflverse   = _stub("nflverse")
+    run_espn       = _stub("ESPN")
+    run_nflgsis    = _stub("NFLGSIS")
+    run_msf        = _stub("MySportsFeeds")
+    run_apisports  = _stub("API-Sports")
 
 def _run(cmd: str):
     print(f"[engine] ▶ {cmd}", flush=True)
@@ -31,11 +36,11 @@ def _size(p: str) -> str:
 def _dump_diag():
     Path("logs").mkdir(exist_ok=True)
     targets = [
-        "data/team_form.csv","data/player_form.csv","data/metrics_ready.csv",
-        "outputs/props_raw.csv","outputs/odds_game.csv",
-        "outputs/master_model_predictions.csv","outputs/sgp_candidates.csv"
+        "data/team_form.csv", "data/player_form.csv", "data/metrics_ready.csv",
+        "outputs/props_raw.csv", "outputs/odds_game.csv",
+        "outputs/master_model_predictions.csv", "outputs/sgp_candidates.csv",
     ]
-    with open("logs/run_diagnostics.txt","w") as f:
+    with open("logs/run_diagnostics.txt", "w") as f:
         for t in targets:
             f.write(f"{t}: {_size(t)}\n")
     for t in targets:
@@ -60,10 +65,14 @@ def _provider_chain(season: int, date: str | None):
     print("[engine] ⚠ no external provider succeeded; will rely on builders")
 
 def run_pipeline(*, season: str, date: str = "", books=None, markets=None):
+    # ensure dirs
     for d in ("data", "outputs", "outputs/metrics", "logs"):
         Path(d).mkdir(parents=True, exist_ok=True)
-    print(f"[engine] keys: ODDS_API_KEY={'set' if os.getenv('ODDS_API_KEY') else 'missing'} "
-          f"ESPN_COOKIE={'set' if os.getenv('ESPN_COOKIE') else 'missing'}")
+
+    print(
+        f"[engine] keys: ODDS_API_KEY={'set' if os.getenv('ODDS_API_KEY') else 'missing'} "
+        f"ESPN_COOKIE={'set' if os.getenv('ESPN_COOKIE') else 'missing'}"
+    )
 
     # 1) upstream providers (best-effort)
     try:
@@ -71,78 +80,68 @@ def run_pipeline(*, season: str, date: str = "", books=None, markets=None):
     except Exception as e:
         print(f"[engine] provider chain error (non-fatal): {e}")
 
-    # 2) builders — build team & player first (no schedule needed yet)
+    # 2) builders — team & player form first
     _run(f"python scripts/make_team_form.py --season {season}")
     print(f"[engine]   data/team_form.csv → {_size('data/team_form.csv')}")
     _run(f"python scripts/make_player_form.py --season {season}")
     print(f"[engine]   data/player_form.csv → {_size('data/player_form.csv')}")
 
-# 3) odds props — v4 requires one market per request; also write odds_game.csv
-b = ",".join(books or ["draftkings", "fanduel", "betmgm", "caesars"])
+    # 3) odds props — v4 requires one market per request; also write odds_game.csv
+    b = ",".join(books or ["draftkings", "fanduel", "betmgm", "caesars"])
+    _default_markets = [
+        "player_pass_yds",
+        "player_rec_yds",
+        "player_rush_yds",
+        "player_receptions",
+        "player_rush_rec_yds",
+        "player_anytime_td",   # added TDs
+    ]
+    markets_to_pull = [m.strip() for m in (markets or _default_markets) if m.strip()]
 
-# If you pass --markets on the CLI we honor it; otherwise use our default set:
-_default_markets = [
-    "player_pass_yds",
-    "player_rec_yds",
-    "player_rush_yds",
-    "player_receptions",
-    "player_rush_rec_yds",
-    "player_anytime_td",   # ← added TD market
-]
-markets_to_pull = [m.strip() for m in (markets or _default_markets) if m.strip()]
+    tmp_dir = Path("outputs/_tmp_props")
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    for f in tmp_dir.glob("*.csv"):
+        try: f.unlink()
+        except Exception: pass
 
-# Temp folder to hold per-market pulls before concatenation
-from pathlib import Path as _Path
-_tmp = _Path("outputs/_tmp_props")
-_tmp.mkdir(parents=True, exist_ok=True)
-for f in _tmp.glob("*.csv"):
-    try:
-        f.unlink()
-    except Exception:
-        pass
-
-# 3a) Pull game-only odds once (h2h/spreads/totals) → also produce outputs/odds_game.csv
-_run(
-    "python scripts/fetch_props_oddsapi.py "
-    f"--books {b} --markets h2h,spreads,totals "
-    f"--date {date} --out {_tmp/'_game.csv'} --out_game outputs/odds_game.csv"
-)
-
-# 3b) Pull each player market separately (required by The Odds API v4)
-for mk in markets_to_pull:
-    print(f"[engine] oddsapi: pulling market={mk}")
+    # 3a) game-only odds once → also create outputs/odds_game.csv
     _run(
         "python scripts/fetch_props_oddsapi.py "
-        f"--books {b} --markets {mk} "
-        f"--date {date} --out {_tmp/(mk+'.csv')}"
+        f"--books {b} --markets h2h,spreads,totals "
+        f"--date {date} --out {tmp_dir/'_game.csv'} --out_game outputs/odds_game.csv"
     )
 
-# 3c) Concatenate per-market CSVs → outputs/props_raw.csv
-try:
-    import pandas as _pd
-    frames = []
-    for f in sorted(_tmp.glob("*.csv")):
-        if f.name == "_game.csv":
-            continue
-        try:
-            frames.append(_pd.read_csv(f))
-        except Exception as e:
-            print(f"[engine] warn: could not read {f}: {e}")
-    if frames:
-        _pd.concat(frames, ignore_index=True).to_csv("outputs/props_raw.csv", index=False)
-    else:
-        _Path("outputs/props_raw.csv").write_text("")
-except Exception as e:
-    print(f"[engine] ERROR concatenating prop CSVs: {e}")
-    _Path("outputs/props_raw.csv").write_text("")
+    # 3b) each player market separately
+    for mk in markets_to_pull:
+        print(f"[engine] oddsapi: pulling market={mk}")
+        _run(
+            "python scripts/fetch_props_oddsapi.py "
+            f"--books {b} --markets {mk} "
+            f"--date {date} --out {tmp_dir/(mk + '.csv')}"
+        )
 
-print(f"[engine]   outputs/props_raw.csv → {_size('outputs/props_raw.csv')}")
-print(f"[engine]   outputs/odds_game.csv → {_size('outputs/odds_game.csv')}")
+    # 3c) concat -> outputs/props_raw.csv
+    try:
+        frames = []
+        for f in sorted(tmp_dir.glob("*.csv")):
+            if f.name == "_game.csv":
+                continue
+            try:
+                frames.append(pd.read_csv(f))
+            except Exception as e:
+                print(f"[engine] warn: could not read {f}: {e}")
+        if frames:
+            pd.concat(frames, ignore_index=True).to_csv("outputs/props_raw.csv", index=False)
+        else:
+            Path("outputs/props_raw.csv").write_text("")
+    except Exception as e:
+        print(f"[engine] ERROR concatenating prop CSVs: {e}")
+        Path("outputs/props_raw.csv").write_text("")
 
     print(f"[engine]   outputs/props_raw.csv → {_size('outputs/props_raw.csv')}")
     print(f"[engine]   outputs/odds_game.csv → {_size('outputs/odds_game.csv')}")
 
-    # 4) metrics — now build metrics_ready using odds_game.csv for slate/opponents
+    # 4) metrics (now odds_game.csv exists)
     _run(f"python scripts/make_metrics.py --season {season}")
     print(f"[engine]   data/metrics_ready.csv → {_size('data/metrics_ready.csv')}")
 
