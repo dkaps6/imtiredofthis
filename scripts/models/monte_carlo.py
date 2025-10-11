@@ -1,5 +1,5 @@
 from math import erf, sqrt
-from . import Leg, LegResult
+from .shared_types import Leg, LegResult
 try:
     from scripts.config import MONTE_CARLO_TRIALS
 except Exception:
