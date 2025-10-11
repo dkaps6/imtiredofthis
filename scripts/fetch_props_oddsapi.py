@@ -1,166 +1,171 @@
-#!/usr/bin/env python3
-from __future__ import annotations
-import sys, os
-from pathlib import Path
-from datetime import datetime, timezone
+# scripts/fetch_props_oddsapi.py
+import argparse
+import os
+import sys
 import time
+import datetime as dt
+from pathlib import Path
+from typing import List, Dict, Any
+
 import requests
 import pandas as pd
 
-API_BASE = "https://api.the-odds-api.com/v4/sports/americanfootball_nfl"
-KEY = os.getenv("ODDS_API_KEY", "")
+BASE = "https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds"
 
-OUT_PROPS = Path("outputs/props_raw.csv")
-OUT_GAME  = Path("outputs/odds_game.csv")
+def _iso_bounds_for_date(d: str) -> Dict[str, str]:
+    # d is YYYY-MM-DD (local naive); convert to Z bounds
+    day = dt.date.fromisoformat(d)
+    start = dt.datetime.combine(day, dt.time(0, 0))
+    end = start + dt.timedelta(days=1)
+    return {
+        "commenceTimeFrom": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "commenceTimeTo": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "dateFormat": "iso",
+    }
 
-GAME_MARKETS   = ["h2h","spreads","totals"]
-PLAYER_MARKETS = [
-    "player_receiving_yards","player_receptions","player_rushing_yards",
-    "player_rush_and_receive_yards","player_passing_yards","player_passing_tds",
-    "player_anytime_td"
-]
+def _normalize_event_rows(
+    payload: List[Dict[str, Any]],
+    market_key: str,
+    allowed_books: List[str],
+) -> List[Dict[str, Any]]:
+    """
+    Flatten Odds API JSON into rows:
+    event_id, commence_time, book, market, player, line, side, odds
+    For non-player markets (h2h/spreads/totals) we still emit rows but player will be blank.
+    """
+    rows = []
+    for ev in payload:
+        event_id = ev.get("id")
+        commence_time = ev.get("commence_time")
 
-def _unix_start_of_day(iso_date: str) -> int:
-    dt = datetime.fromisoformat(iso_date).replace(tzinfo=timezone.utc)
-    return int(dt.timestamp())
-
-def _GET(path: str, params: dict, label: str):
-    try:
-        r = requests.get(path, params=params, timeout=20)
-        r.raise_for_status()
-        return r
-    except requests.HTTPError as e:
-        print(f"[oddsapi] {label} failed: {e} url={r.url if 'r' in locals() else path}", flush=True)
-        return None
-    except Exception as e:
-        print(f"[oddsapi] {label} error: {e}", flush=True)
-        return None
-
-def _write_headers():
-    OUT_PROPS.parent.mkdir(parents=True, exist_ok=True)
-    if not OUT_PROPS.exists() or OUT_PROPS.stat().st_size == 0:
-        pd.DataFrame(columns=[
-            "event_id","commence_time","book","market","player","line","odds"
-        ]).to_csv(OUT_PROPS, index=False)
-    if not OUT_GAME.exists() or OUT_GAME.stat().st_size == 0:
-        pd.DataFrame(columns=["id","commence_time","home_team","away_team","bookmakers"]).to_csv(OUT_GAME, index=False)
-
-def fetch(date: str|None, books: list[str]) -> tuple[pd.DataFrame,pd.DataFrame]:
-    if not KEY:
-        print("[oddsapi] ERROR: ODDS_API_KEY missing", flush=True)
-        _write_headers(); return pd.DataFrame(), pd.DataFrame()
-
-    # ---------- GAME LINES ----------
-    game_df = pd.DataFrame()
-    games_url = f"{API_BASE}/odds"
-    # Try parameterizations in order:
-    game_param_sets = []
-
-    # A) Most strict (UNIX since you passed --date)
-    if date:
-        game_param_sets.append(dict(
-            apiKey=KEY, regions="us", oddsFormat="american",
-            bookmakers=",".join(books), markets=",".join(GAME_MARKETS),
-            commenceTimeFrom=_unix_start_of_day(date)
-        ))
-    # B) No commenceTimeFrom (some accounts/regions reject it)
-    game_param_sets.append(dict(
-        apiKey=KEY, regions="us", oddsFormat="american",
-        bookmakers=",".join(books), markets=",".join(GAME_MARKETS),
-    ))
-    # C) Split markets one-by-one (some accounts reject multi-market combos)
-    for m in GAME_MARKETS:
-        game_param_sets.append(dict(
-            apiKey=KEY, regions="us", oddsFormat="american",
-            bookmakers=",".join(books), markets=m,
-        ))
-
-    for i,params in enumerate(game_param_sets,1):
-        r = _GET(games_url, params, f"game attempt#{i}")
-        if r is None: 
-            continue
-        try:
-            df = pd.json_normalize(r.json())
-            if not df.empty:
-                game_df = df
-                break
-        except Exception as e:
-            print(f"[oddsapi] game parse error: {e}", flush=True)
-            continue
-
-    # ---------- PLAYER PROPS ----------
-    props_rows = []
-    # Try each market; for robustness, try all books together, then each book separately
-    for mkt in PLAYER_MARKETS:
-        # 1) all books together
-        param_sets = [dict(
-            apiKey=KEY, regions="us", oddsFormat="american",
-            bookmakers=",".join(books), markets=mkt
-        )]
-        # 2) each book individually (fallback)
-        param_sets += [dict(apiKey=KEY, regions="us", oddsFormat="american", bookmakers=b, markets=mkt) for b in books]
-
-        got_any = False
-        for i,params in enumerate(param_sets,1):
-            r = _GET(games_url, params, f"props {mkt} attempt#{i}")
-            if r is None: 
+        for bk in (ev.get("bookmakers") or []):
+            book_key = bk.get("key")
+            if allowed_books and book_key not in allowed_books:
                 continue
-            try:
-                js = r.json()
-                added = 0
-                for game in js:
-                    gid = game.get("id"); commence = game.get("commence_time")
-                    for bm in game.get("bookmakers", []):
-                        book = bm.get("key")
-                        for mk in bm.get("markets", []):
-                            if mk.get("key") != mkt: 
-                                continue
-                            for o in mk.get("outcomes", []):
-                                props_rows.append({
-                                    "event_id": gid,
-                                    "commence_time": commence,
-                                    "book": book,
-                                    "market": mkt,
-                                    "player": o.get("name"),
-                                    "line": o.get("point"),
-                                    "odds": o.get("price")
-                                })
-                                added += 1
-                if added > 0:
-                    got_any = True
-                    break
-            except Exception as e:
-                print(f"[oddsapi] props parse error ({mkt}): {e}", flush=True)
-                continue
-        if not got_any:
-            print(f"[oddsapi] props {mkt}: no data (after retries)")
 
-    props_df = pd.DataFrame(props_rows)
+            for mk in (bk.get("markets") or []):
+                mk_key = mk.get("key")
+                if mk_key != market_key:
+                    continue
+                for oc in (mk.get("outcomes") or []):
+                    # Outcome fields vary by market. Props typically have name (player), price, point
+                    player = oc.get("name") or ""
+                    line = oc.get("point")
+                    price = oc.get("price")
+                    # 'side' for props usually "Over"/"Under"; for h2h it's a team/participant
+                    side = oc.get("description") or oc.get("name") or ""
 
-    # ---------- WRITE ----------
-    _write_headers()
-    if not props_df.empty: props_df.to_csv(OUT_PROPS, index=False)
-    if game_df is not None and not game_df.empty: game_df.to_csv(OUT_GAME, index=False)
+                    rows.append({
+                        "event_id": event_id,
+                        "commence_time": commence_time,
+                        "book": book_key,
+                        "market": mk_key,
+                        "player": player,
+                        "line": line,
+                        "side": side,
+                        "odds": price,
+                    })
+    return rows
 
-    print(f"[oddsapi] wrote props={len(props_df)} games={0 if game_df is None else len(game_df)}")
-    return props_df, game_df
+def fetch_market(
+    api_key: str,
+    market: str,
+    books: List[str],
+    date_str: str = "",
+    region: str = "us",
+    odds_format: str = "american",
+    pause_sec: float = 0.35,
+) -> pd.DataFrame:
+    params = {
+        "apiKey": api_key,
+        "regions": region,
+        "oddsFormat": odds_format,
+        "bookmakers": ",".join(books) if books else "",
+        "markets": market,
+    }
 
-def cli(books: list[str], date: str|None, out: str|None, season: int|None) -> int:
-    props_df, _ = fetch(date, books)
-    if out:
-        try:
-            Path(out).parent.mkdir(parents=True, exist_ok=True)
-            pd.read_csv(OUT_PROPS).to_csv(out, index=False)
-        except Exception:
-            pass
-    return 0
+    # If --date is supplied, convert to ISO bounds (The Odds API doesn’t accept --date directly)
+    if date_str:
+        params.update(_iso_bounds_for_date(date_str))
 
-if __name__ == "__main__":
-    import argparse
+    url = BASE
+    print(f"[oddsapi] request market={market} -> {url}")
+    r = requests.get(url, params=params, timeout=20)
+
+    # Log rate-limit headers if present
+    xr = r.headers.get("x-requests-remaining")
+    xu = r.headers.get("x-requests-used")
+    if xr is not None and xu is not None:
+        print(f"[oddsapi] x-requests-remaining: {xr}")
+        print(f"[oddsapi] x-requests-used: {xu}")
+
+    if r.status_code == 200:
+        data = r.json() if r.text else []
+        rows = _normalize_event_rows(data, market, books)
+        df = pd.DataFrame(rows)
+        print(f"[oddsapi] market={market} rows={len(df)}")
+        time.sleep(pause_sec)  # be nice to the API
+        return df
+
+    # Soft-fail on 401/422/other
+    print(f"[oddsapi] error market={market}: {r.status_code} {r.text[:200]}")
+    time.sleep(pause_sec)
+    return pd.DataFrame(columns=["event_id","commence_time","book","market","player","line","side","odds"])
+
+def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--books", default="draftkings,fanduel,betmgm,caesars")
-    ap.add_argument("--date", default="")
+    ap.add_argument("--markets", default="")  # comma-separated; if blank we do a sane default set
+    ap.add_argument("--date", default="")     # YYYY-MM-DD optional
     ap.add_argument("--out", default="outputs/props_raw.csv")
-    ap.add_argument("--season", type=int, default=None)  # optional
     a = ap.parse_args()
-    sys.exit(cli([b.strip() for b in a.books.split(",") if b.strip()], a.date or None, a.out, a.season))
+
+    api_key = os.getenv("ODDS_API_KEY", "")
+    if not api_key:
+        print("[oddsapi] ERROR: ODDS_API_KEY is not set")
+        sys.exit(2)
+
+    books = [b.strip() for b in a.books.split(",") if b.strip()]
+    # If no markets passed, use a curated set (ask for one at a time)
+    if a.markets.strip():
+        markets = [m.strip() for m in a.markets.split(",") if m.strip()]
+    else:
+        markets = [
+            # game odds (featured)
+            "h2h", "spreads", "totals",
+            # popular player props (ask one-by-one)
+            "player_pass_yds",
+            "player_rush_yds",
+            "player_rec_yds",
+            "player_receptions",
+            "player_passing_tds",
+            "player_anytime_td",
+            # add/remove per need:
+            # "player_rush_rec_yds", "player_two_or_more_tds",
+        ]
+
+    # Loop one market at a time and merge
+    frames = []
+    for m in markets:
+        df = fetch_market(api_key, m, books=books, date_str=a.date)
+        if not df.empty:
+            frames.append(df)
+
+    if frames:
+        props = pd.concat(frames, ignore_index=True)
+    else:
+        # still write an empty, but well-formed CSV so downstream doesn't explode
+        props = pd.DataFrame(columns=["event_id","commence_time","book","market","player","line","side","odds"])
+
+    Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+    props.to_csv(a.out, index=False)
+    print(f"[oddsapi] wrote props={len(props)} -> {a.out}")
+
+    # Additionally write game-only odds if present
+    game_df = props[props["market"].isin(["h2h", "spreads", "totals"])]
+    game_out = "outputs/odds_game.csv"
+    game_df.to_csv(game_out, index=False)
+    print(f"[oddsapi] wrote game-only odds -> {game_out}")
+
+if __name__ == "__main__":
+    main()
