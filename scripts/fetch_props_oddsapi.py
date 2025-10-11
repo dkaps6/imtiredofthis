@@ -313,9 +313,13 @@ def main():
     wide.to_csv(wide_out, index=False)
     log.info(f"wrote {wide_out} rows={len(wide)}")
 
+def fetch_odds(**kwargs):
+    """Compatibility shim for engine.run_pipeline"""
+    from scripts.fetch_props_oddsapi import fetch_props_oddsapi
+    return fetch_props_oddsapi(**kwargs)
+
 if __name__ == "__main__":
     import argparse
-    
     ap = argparse.ArgumentParser()
     ap.add_argument("--books", default="draftkings,fanduel,betmgm,caesars")
     ap.add_argument("--markets", default="player_pass_yds")
@@ -325,7 +329,6 @@ if __name__ == "__main__":
     ap.add_argument("--out_game", default="outputs/odds_game.csv")
     args = ap.parse_args()
 
-    # Pass date through if your fetch function supports it
     fetch_odds(
         books=args.books.split(","),
         markets=args.markets.split(","),
