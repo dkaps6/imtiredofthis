@@ -1,5 +1,5 @@
 from math import erf, sqrt
-from . import Leg, LegResult
+from .shared_types import Leg, LegResult
 def run(leg: Leg)->LegResult:
     att=leg.features.get('adj_attempts'); eff=leg.features.get('eff_mu'); sd=leg.features.get('eff_sd')
     if att and eff and sd:
