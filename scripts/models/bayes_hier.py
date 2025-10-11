@@ -1,5 +1,5 @@
 from math import erf, sqrt
-from . import Leg, LegResult
+from .shared_types import Leg, LegResult
 def run(leg: Leg)->LegResult:
     mu=leg.features.get('bayes_mu', leg.features.get('mu',0.0))
     sd=leg.features.get('bayes_sd', leg.features.get('sd',1.0))
