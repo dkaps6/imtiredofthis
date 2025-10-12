@@ -31,7 +31,7 @@ MARKET_ALIASES = {
 
 # some v4 NFL player markets 422 on the per-event endpoint; fetch them at sport-level
 BULK_ONLY_MARKETS = {
-    "player_receiving_yards",
+    "player_reception_yds",
 }
 
 # ------------------------- LOGGING ------------------------
