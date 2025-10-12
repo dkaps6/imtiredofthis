@@ -19,10 +19,12 @@ GAME_MARKETS = ["h2h", "spreads", "totals"]
 
 # v4 market alias map (keeps older names working)
 MARKET_ALIASES = {
-    # old_name               -> v4 name
-    "player_rec_yds": "player_receiving_yards",
-    "player_reception_yds": "player_receiving_yards",  # ← add this line
-    "receiving_yards": "player_receiving_yards",
+    # receiving yards synonyms
+    "player_rec_yds": "player_reception_yds",
+    "player_receiving_yards": "player_reception_yds",
+    "player_receiving_yds": "player_reception_yds",
+    "player_reception_yds": "player_reception_yds",
+    # rush+rec
     "player_rush_rec_yds": "player_rush_reception_yds",
     "rush_rec": "player_rush_reception_yds",
 }
