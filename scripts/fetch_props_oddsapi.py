@@ -21,6 +21,7 @@ GAME_MARKETS = ["h2h", "spreads", "totals"]
 MARKET_ALIASES = {
     # old_name               -> v4 name
     "player_rec_yds": "player_receiving_yards",
+    "player_reception_yds": "player_receiving_yards",  # ← add this line
     "receiving_yards": "player_receiving_yards",
     "player_rush_rec_yds": "player_rush_reception_yds",
     "rush_rec": "player_rush_reception_yds",
