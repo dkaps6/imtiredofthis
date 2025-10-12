@@ -165,7 +165,14 @@ def main(props_path: str) -> None:
     met = pd.read_csv("data/metrics_ready.csv") if Path("data/metrics_ready.csv").exists() else pd.DataFrame()
     if met.empty:
         print("[pricing] WARNING: metrics_ready.csv is empty; proceeding with minimal features.")
-    # Merge
+
+# >>> ADDED: coerce merge keys to string to avoid object/float mismatches
+    for _df in (props, met):
+        for k in ("event_id","player","book","market","team","opponent"):
+            if k in _df.columns:
+                _df[k] = _df[k].astype(str).str.replace(r"\.0$", "", regex=True).str.strip()
+
+# Merge
     keys = ["event_id","player"]
     if "event_id" not in props.columns: keys = ["player"]
     df = props.merge(met, on=keys, how="left", suffixes=("","_m"))
