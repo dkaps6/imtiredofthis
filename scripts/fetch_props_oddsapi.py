@@ -347,7 +347,7 @@ if __name__ == "__main__":
     ap.add_argument("--books", default="draftkings,fanduel,betmgm,caesars")
     ap.add_argument("--markets", default="player_pass_yds,player_rec_yds,player_rush_yds,player_receptions,player_anytime_td")
     ap.add_argument("--region", default=REGION_DEFAULT)
-    ap.add_argument("--date", default="")  # accepted for engine compatibility
+    ap.add_argument("--date", nargs="?", default="", const="")  # accept --date with or without a value
     ap.add_argument("--out", default="outputs/props_raw.csv")
     ap.add_argument("--out_game", default="outputs/odds_game.csv")
     args = ap.parse_args()
