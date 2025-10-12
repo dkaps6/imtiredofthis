@@ -26,6 +26,11 @@ MARKET_ALIASES = {
     "rush_rec": "player_rush_reception_yds",
 }
 
+# ADDED: some v4 NFL player markets 422 on the per-event endpoint; fetch them at sport-level
+BULK_ONLY_MARKETS = {
+    "player_receiving_yards",
+}
+
 # ------------------------- LOGGING ------------------------
 
 log = logging.getLogger("oddsapi")
@@ -157,6 +162,10 @@ def _fetch_events_by_h2h(api_key: str, region: str, books: set[str]) -> list:
         "markets": "h2h",
         "oddsFormat": "american",
     }
+    # ADDED: filter at source so we only see the books you care about
+    if books:
+        params["bookmakers"] = ",".join(sorted(books))
+
     status, js, headers = _get(url, params)
     log.info(f"events status={status} limit={_lim(headers)}")
     if status != 200 or not isinstance(js, list):
@@ -184,6 +193,10 @@ def _fetch_game_odds(api_key: str, region: str, books: set[str]) -> pd.DataFrame
         "markets": ",".join(GAME_MARKETS),
         "oddsFormat": "american",
     }
+    # ADDED: pass bookmakers to reduce payload / align with books filter
+    if books:
+        params["bookmakers"] = ",".join(sorted(books))
+
     status, js, headers = _get(url, params)
     log.info(f"game-odds status={status} limit={_lim(headers)}")
     if status != 200 or not isinstance(js, list):
@@ -202,6 +215,10 @@ def _fetch_market_for_events(api_key: str, region: str, books: set[str],
             "markets": market_key,
             "oddsFormat": "american",
         }
+        # ADDED: pass bookmakers to align with your selection
+        if books:
+            params["bookmakers"] = ",".join(sorted(books))
+
         status, js, headers = _get(url, params)
         log.info(f"{market_key} eid={eid} status={status} limit={_lim(headers)}")
         if status == 200 and isinstance(js, dict):
@@ -215,6 +232,30 @@ def _fetch_market_for_events(api_key: str, region: str, books: set[str],
     if not frames:
         return pd.DataFrame()
     return pd.concat(frames, ignore_index=True)
+
+# ADDED: sport-level bulk fetch for markets that 422 on per-event endpoint (e.g., receiving yards)
+def _fetch_bulk_market(api_key: str, region: str, books: set[str], market_key: str) -> pd.DataFrame:
+    """
+    Pull a whole market at once via /v4/sports/{sport}/odds (works for markets like player_receiving_yards).
+    """
+    url = f"{BASE}/sports/{SPORT}/odds"
+    params = {
+        "apiKey": api_key,
+        "regions": region,
+        "markets": market_key,
+        "oddsFormat": "american",
+    }
+    if books:
+        params["bookmakers"] = ",".join(sorted(books))
+
+    status, js, headers = _get(url, params)
+    log.info(f"bulk {market_key} status={status} limit={_lim(headers)}")
+    if status != 200 or not isinstance(js, list):
+        log.info(f"bulk fetch failed market={market_key}: {js}")
+        return pd.DataFrame()
+
+    # Reuse the normalizer by wrapping js as events list
+    return _normalize_player_rows(js, books, market_key)
 
 # ------------------------- PUBLIC ENTRY -------------------
 
@@ -268,10 +309,16 @@ def fetch_odds(
     # 2) per-market player props
     frames: List[pd.DataFrame] = []
     for mk in markets:
-        if not event_ids:
+        if not event_ids and mk not in BULK_ONLY_MARKETS:
             break
         log.info(f"=== MARKET {mk} ===")
-        df = _fetch_market_for_events(api_key, region, books_set, event_ids, mk)
+
+        if mk in BULK_ONLY_MARKETS:
+            # ADDED: use sport-level call for markets that fail per-event with 422
+            df = _fetch_bulk_market(api_key, region, books_set, mk)
+        else:
+            df = _fetch_market_for_events(api_key, region, books_set, event_ids, mk)
+
         if not df.empty:
             frames.append(df)
 
