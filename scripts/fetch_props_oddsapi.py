@@ -26,7 +26,7 @@ MARKET_ALIASES = {
     "rush_rec": "player_rush_reception_yds",
 }
 
-# ADDED: some v4 NFL player markets 422 on the per-event endpoint; fetch them at sport-level
+# some v4 NFL player markets 422 on the per-event endpoint; fetch them at sport-level
 BULK_ONLY_MARKETS = {
     "player_receiving_yards",
 }
@@ -162,7 +162,6 @@ def _fetch_events_by_h2h(api_key: str, region: str, books: set[str]) -> list:
         "markets": "h2h",
         "oddsFormat": "american",
     }
-    # ADDED: filter at source so we only see the books you care about
     if books:
         params["bookmakers"] = ",".join(sorted(books))
 
@@ -174,12 +173,10 @@ def _fetch_events_by_h2h(api_key: str, region: str, books: set[str]) -> list:
     if books:
         filtered = []
         for ev in js:
-            keep = False
-            for bm in ev.get("bookmakers", []):
-                book = (bm.get("title") or "").strip().lower().replace(" ", "_")
-                if book in books:
-                    keep = True
-                    break
+            keep = any(
+                (bm.get("title") or "").strip().lower().replace(" ", "_") in books
+                for bm in ev.get("bookmakers", [])
+            )
             if keep:
                 filtered.append(ev)
         return filtered
@@ -193,7 +190,6 @@ def _fetch_game_odds(api_key: str, region: str, books: set[str]) -> pd.DataFrame
         "markets": ",".join(GAME_MARKETS),
         "oddsFormat": "american",
     }
-    # ADDED: pass bookmakers to reduce payload / align with books filter
     if books:
         params["bookmakers"] = ",".join(sorted(books))
 
@@ -215,7 +211,6 @@ def _fetch_market_for_events(api_key: str, region: str, books: set[str],
             "markets": market_key,
             "oddsFormat": "american",
         }
-        # ADDED: pass bookmakers to align with your selection
         if books:
             params["bookmakers"] = ",".join(sorted(books))
 
@@ -233,11 +228,8 @@ def _fetch_market_for_events(api_key: str, region: str, books: set[str],
         return pd.DataFrame()
     return pd.concat(frames, ignore_index=True)
 
-# ADDED: sport-level bulk fetch for markets that 422 on per-event endpoint (e.g., receiving yards)
+# sport-level bulk fetch for markets that 422 on per-event endpoint (e.g., receiving yards)
 def _fetch_bulk_market(api_key: str, region: str, books: set[str], market_key: str) -> pd.DataFrame:
-    """
-    Pull a whole market at once via /v4/sports/{sport}/odds (works for markets like player_receiving_yards).
-    """
     url = f"{BASE}/sports/{SPORT}/odds"
     params = {
         "apiKey": api_key,
@@ -254,7 +246,6 @@ def _fetch_bulk_market(api_key: str, region: str, books: set[str], market_key: s
         log.info(f"bulk fetch failed market={market_key}: {js}")
         return pd.DataFrame()
 
-    # Reuse the normalizer by wrapping js as events list
     return _normalize_player_rows(js, books, market_key)
 
 # ------------------------- PUBLIC ENTRY -------------------
@@ -268,15 +259,11 @@ def fetch_odds(
     out: str = "outputs/props_raw.csv",
     out_game: str = "outputs/odds_game.csv",
 ) -> None:
-    """
-    Public entry used by engine. Pulls game odds once, then per-market player props.
-    """
     api_key = os.getenv("ODDS_API_KEY", "").strip()
     if not api_key:
         log.info("ERROR: ODDS_API_KEY not set")
         sys.exit(2)
 
-    # Normalize inputs
     books_set = {b.strip().lower().replace(" ", "_") for b in books if b.strip()}
     markets = [m.strip() for m in markets if m.strip()]
 
@@ -294,7 +281,7 @@ def fetch_odds(
 
     Path("outputs").mkdir(parents=True, exist_ok=True)
 
-    # 1) events + game odds (once)
+    # events + game odds
     events = _fetch_events_by_h2h(api_key, region, books_set)
     event_ids = [e.get("id") for e in events if e.get("id")]
 
@@ -306,24 +293,20 @@ def fetch_odds(
         pd.DataFrame().to_csv(out_game, index=False)
         log.info(f"wrote empty {out_game}")
 
-    # 2) per-market player props
+    # per-market player props
     frames: List[pd.DataFrame] = []
     for mk in markets:
         if not event_ids and mk not in BULK_ONLY_MARKETS:
             break
         log.info(f"=== MARKET {mk} ===")
-
         if mk in BULK_ONLY_MARKETS:
-            # ADDED: use sport-level call for markets that fail per-event with 422
             df = _fetch_bulk_market(api_key, region, books_set, mk)
         else:
             df = _fetch_market_for_events(api_key, region, books_set, event_ids, mk)
-
         if not df.empty:
             frames.append(df)
 
     if not frames:
-        # write schema-correct empty
         pd.DataFrame(columns=[
             "event_id","commence_time","book","market","player","side","line","price_american"
         ]).to_csv(out, index=False)
@@ -334,7 +317,6 @@ def fetch_odds(
     props.to_csv(out, index=False)
     log.info(f"wrote {out} rows={len(props)}")
 
-    # Optional: wide debug snapshot
     wide = _wide_over_under(props)
     wide_out = Path(out).with_name("props_raw_wide.csv")
     wide.to_csv(wide_out, index=False)
