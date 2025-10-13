@@ -6,6 +6,23 @@ from pathlib import Path
 from datetime import datetime
 import pandas as pd
 
+# --- config wiring (ADD) ---
+try:
+    from scripts.config import (
+        FILES, DIR, ensure_dirs,
+        books_from_env, markets_from_env,
+        ODDS
+    )
+except Exception:
+    FILES = {
+        "props_raw": "outputs/props_raw.csv",
+        "odds_game": "outputs/odds_game.csv",
+    }
+    def ensure_dirs(): pass
+    def books_from_env(): return ["draftkings","fanduel","betmgm","caesars"]
+    def markets_from_env(): return []
+    ODDS = {"region": "us"}
+
 # Providers (soft fallback if module not present)
 try:
     from engine.adapters.providers import (
@@ -65,7 +82,7 @@ def _provider_chain(season: int, date: str | None):
     print("[engine] ⚠ no external provider succeeded; will rely on builders")
 
 def run_pipeline(*, season: str, date: str = "", books=None, markets=None):
-    # ensure dirs
+    ensure_dirs()  # uses config dirs (still writes to the same folders)
     for d in ("data", "outputs", "outputs/metrics", "logs"):
         Path(d).mkdir(parents=True, exist_ok=True)
 
