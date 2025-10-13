@@ -10,34 +10,35 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-# --- Market alias normalization: make keys consistent across books/APIs ---
+# --- normalize market keys (aliases) BEFORE any grouping/pivoting ---
+# Put this near the top of pricing, after `props = pd.read_csv(...)` and before any pivot logic.
+
 MARKET_ALIASES = {
-    # Receiving yards (v4 canonical is 'player_reception_yds')
-    "player_rec_yds": "player_reception_yds",
-    "player_rec_yards": "player_reception_yds",
-    "player_receiving_yards": "player_reception_yds",
-    "player_receiving_yds": "player_reception_yds",
-    "rec_yds": "player_reception_yds",
-    "receiving_yards": "player_reception_yds",
-    "player_rec_yds_ou": "player_reception_yds",
-
-    # Rush+Rec combo (v4 canonical)
-    "player_rush_rec_yds": "player_rush_and_receive_yds",
-
-    # Minor book differences you may see elsewhere
-    "player_rush_yards": "player_rush_yds",
-    "player_rushing_yards": "player_rush_yds",
-    "player_pass_yards": "player_pass_yds",
-    "player_passing_yards": "player_pass_yds",
-
-    # (add more book-specific synonyms here if you encounter them)
+    # receiving yards (v4’s naming varies by feed)
+    "player_rec_yds": "player_receiving_yards",
+    "player_reception_yds": "player_receiving_yards",
+    "player_receiving_yds": "player_receiving_yards",
+    # combined rush+rec
+    "player_rush_rec_yds": "player_rush_reception_yds",
+    "player_rush_receive_yds": "player_rush_reception_yds",  # safety alias
+    # keep passthrough for the ones we already fetch
+    "player_pass_yds": "player_pass_yds",
+    "player_rush_yds": "player_rush_yds",
+    "player_receptions": "player_receptions",
+    "player_anytime_td": "player_anytime_td",
 }
 
-def normalize_market_key(m: str) -> str:
-    if not isinstance(m, str):
-        return m
-    m_clean = m.strip().lower()
-    return MARKET_ALIASES.get(m_clean, m_clean)
+def normalize_market_key(k: str) -> str:
+    k2 = str(k).strip().lower()
+    return MARKET_ALIASES.get(k2, k2)
+
+# Guard + normalize with proper indentation
+if "market" in props.columns:
+    props["market"] = (
+        props["market"]
+        .astype(str)
+        .map(normalize_market_key)
+    )
 
 # ---------- Odds helpers ----------
 def american_to_prob(odds: float) -> float:
