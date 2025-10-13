@@ -273,6 +273,7 @@ def fetch_odds(
     # Resolve aliases & drop any non-player markets if they slipped in
     normalized_markets: List[str] = []
     for mk in markets:
+        mk = _normalize_market(mk)
         if mk in GAME_MARKETS:
             log.info(f"skip non-player market in --markets: {mk}")
             continue
@@ -299,6 +300,7 @@ def fetch_odds(
     # per-market player props
     frames: List[pd.DataFrame] = []
     for mk in markets:
+        mk = _normalize_market(mk)
         if not event_ids and mk not in BULK_ONLY_MARKETS:
             break
         log.info(f"=== MARKET {mk} ===")
@@ -339,7 +341,7 @@ if __name__ == "__main__":
 
     fetch_odds(
         books=[b.strip() for b in args.books.split(",") if b.strip()],
-        markets=[m.strip() for m in args.markets.split(",") if m.strip()],
+        markets=[_normalize_market(m) for m in args.markets.split(',') if m.strip()],
         region=args.region,
         date=args.date,
         out=args.out,
