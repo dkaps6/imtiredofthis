@@ -329,6 +329,47 @@ def fetch_odds(
 
 # ------------------------- CLI ----------------------------
 
+_MARKET_ALIASES = {
+    "player_pass_yds": [
+        "player_passing_yards", "player_passing_yds", "passing_yards",
+    ],
+    "player_rush_yds": [
+        "player_rushing_yards", "player_rushing_yds", "rushing_yards",
+    ],
+    "player_rec_yds": [
+        # receiving yards: we accept several v4/v3/book variants
+        "player_receiving_yards", "player_receiving_yds",
+        "player_reception_yds", "receiving_yards",
+    ],
+    "player_receptions": [
+        "player_rec", "receptions",
+    ],
+    "player_rush_rec_yds": [
+        "player_rush_and_receive_yards", "player_rush_and_receive_yds",
+        "rushing_plus_receiving_yards", "rush_rec_yards",
+    ],
+    "player_anytime_td": [
+        "player_anytime_td", "anytime_td", "player_anytime_touchdown",
+    ],
+    # team/game markets (we still pass them through to the API unchanged)
+    "h2h": ["h2h","moneyline","ml"],
+    "spreads": ["spread","spreads"],
+    "totals": ["total","totals","game_totals"],
+}
+
+def _normalize_market(m: str) -> str:
+    """
+    Map a user/book/old-version market key to our canonical key.
+    If it doesn't match any alias, return the lowercased input.
+    """
+    key = (m or "").strip().lower()
+    if not key:
+        return key
+    for canon, variants in _MARKET_ALIASES.items():
+        if key == canon or key in variants:
+            return canon
+    return key
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--books", default="draftkings,fanduel,betmgm,caesars")
