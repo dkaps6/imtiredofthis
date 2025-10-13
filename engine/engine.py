@@ -149,28 +149,33 @@ for mk in markets_to_pull:
     print(f"[engine] ✅ complete (run_id={rid})")
     return 0
 
-# ... all your existing code above ...
+# -------- keep everything above this line unchanged --------
 
 def run_pipeline(*, season: str, date: str = "", books=None, markets=None):
-    # your existing body here (providers → builders → odds → pricing → export)
-    # make sure any 'return' is inside this function
-    rid = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    print(f"[engine] ✅ complete (run_id={rid})")
-    return 0  # <-- legal here
+    # ... your existing orchestration stays here ...
+    # make sure the very last line of run_pipeline is:
+    return 0
 
-# ---- CLI entrypoint (for `python -m engine`) ----
-if __name__ == "__main__":
-    import argparse, sys
+
+def cli_main() -> int:
+    """CLI entrypoint used by `python -m engine`."""
+    import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", required=True)
     ap.add_argument("--date", default="")
     ap.add_argument("--books", default="draftkings,fanduel,betmgm,caesars")
     ap.add_argument("--markets", default="")
-    a = ap.parse_args()
-    exit_code = run_pipeline(
-        season=a.season,
-        date=a.date,
-        books=[b.strip() for b in a.books.split(",") if b.strip()],
-        markets=[m.strip() for m in a.markets.split(",") if m.strip()] or None,
+    args = ap.parse_args()
+
+    rc = run_pipeline(
+        season=args.season,
+        date=args.date,
+        books=[b.strip() for b in args.books.split(",") if b.strip()],
+        markets=[m.strip() for m in args.markets.split(",") if m.strip()] or None,
     )
-    sys.exit(exit_code)
+    return rc
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(cli_main())
