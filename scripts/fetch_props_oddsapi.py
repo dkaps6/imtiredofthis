@@ -159,15 +159,9 @@ def _wide_over_under(df: pd.DataFrame) -> pd.DataFrame:
 
 def _fetch_events_by_h2h(api_key: str, region: str, books: set[str]) -> list:
     url = f"{BASE}/sports/{SPORT}/odds"
-    params = {
-        "apiKey": api_key,
-        "regions": region,
-        "markets": "h2h",
-        "oddsFormat": "american",
-    }
+    params = {"apiKey": api_key, "regions": region, "markets": "h2h", "oddsFormat": "american"}
     if books:
         params["bookmakers"] = ",".join(sorted(books))
-
     status, js, headers = _get(url, params)
     log.info(f"events status={status} limit={_lim(headers)}")
     if status != 200 or not isinstance(js, list):
@@ -187,15 +181,9 @@ def _fetch_events_by_h2h(api_key: str, region: str, books: set[str]) -> list:
 
 def _fetch_game_odds(api_key: str, region: str, books: set[str]) -> pd.DataFrame:
     url = f"{BASE}/sports/{SPORT}/odds"
-    params = {
-        "apiKey": api_key,
-        "regions": region,
-        "markets": ",".join(GAME_MARKETS),
-        "oddsFormat": "american",
-    }
+    params = {"apiKey": api_key, "regions": region, "markets": ",".join(GAME_MARKETS), "oddsFormat": "american"}
     if books:
         params["bookmakers"] = ",".join(sorted(books))
-
     status, js, headers = _get(url, params)
     log.info(f"game-odds status={status} limit={_lim(headers)}")
     if status != 200 or not isinstance(js, list):
@@ -208,15 +196,9 @@ def _fetch_market_for_events(api_key: str, region: str, books: set[str],
     frames: List[pd.DataFrame] = []
     for eid in event_ids:
         url = f"{BASE}/sports/{SPORT}/events/{eid}/odds"
-        params = {
-            "apiKey": api_key,
-            "regions": region,
-            "markets": market_key,
-            "oddsFormat": "american",
-        }
+        params = {"apiKey": api_key, "regions": region, "markets": market_key, "oddsFormat": "american"}
         if books:
             params["bookmakers"] = ",".join(sorted(books))
-
         status, js, headers = _get(url, params)
         log.info(f"{market_key} eid={eid} status={status} limit={_lim(headers)}")
         if status == 200 and isinstance(js, dict):
@@ -234,21 +216,14 @@ def _fetch_market_for_events(api_key: str, region: str, books: set[str],
 # sport-level bulk fetch for markets that 422 on per-event endpoint (e.g., receiving yards)
 def _fetch_bulk_market(api_key: str, region: str, books: set[str], market_key: str) -> pd.DataFrame:
     url = f"{BASE}/sports/{SPORT}/odds"
-    params = {
-        "apiKey": api_key,
-        "regions": region,
-        "markets": market_key,
-        "oddsFormat": "american",
-    }
+    params = {"apiKey": api_key, "regions": region, "markets": market_key, "oddsFormat": "american"}
     if books:
         params["bookmakers"] = ",".join(sorted(books))
-
     status, js, headers = _get(url, params)
     log.info(f"bulk {market_key} status={status} limit={_lim(headers)}")
     if status != 200 or not isinstance(js, list):
         log.info(f"bulk fetch failed market={market_key}: {js}")
         return pd.DataFrame()
-
     return _normalize_player_rows(js, books, market_key)
 
 # ------------------------- PUBLIC ENTRY -------------------
