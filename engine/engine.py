@@ -149,17 +149,28 @@ for mk in markets_to_pull:
     print(f"[engine] ✅ complete (run_id={rid})")
     return 0
 
+# ... all your existing code above ...
+
+def run_pipeline(*, season: str, date: str = "", books=None, markets=None):
+    # your existing body here (providers → builders → odds → pricing → export)
+    # make sure any 'return' is inside this function
+    rid = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    print(f"[engine] ✅ complete (run_id={rid})")
+    return 0  # <-- legal here
+
+# ---- CLI entrypoint (for `python -m engine`) ----
 if __name__ == "__main__":
-    import argparse
+    import argparse, sys
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", required=True)
     ap.add_argument("--date", default="")
     ap.add_argument("--books", default="draftkings,fanduel,betmgm,caesars")
     ap.add_argument("--markets", default="")
     a = ap.parse_args()
-    run_pipeline(
+    exit_code = run_pipeline(
         season=a.season,
         date=a.date,
         books=[b.strip() for b in a.books.split(",") if b.strip()],
         markets=[m.strip() for m in a.markets.split(",") if m.strip()] or None,
     )
+    sys.exit(exit_code)
