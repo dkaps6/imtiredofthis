@@ -147,6 +147,7 @@ for mk in markets_to_pull:
 
     rid = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     print(f"[engine] ✅ complete (run_id={rid})")
+    
     return 0
 
 # -------- keep everything above this line unchanged --------
