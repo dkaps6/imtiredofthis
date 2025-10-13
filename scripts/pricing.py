@@ -188,6 +188,9 @@ def sigma_for_market(market: str, sigmas: dict[str,float], volatility_flag: floa
 # ---------- Pricing ----------
 def main(props_path: str) -> None:
     props = pd.read_csv(props_path) if Path(props_path).exists() else pd.DataFrame()
+    # Normalize market keys so downstream logic works no matter what the book called it
+    if "market" in props.columns:
+    props["market"] = props["market"].astype(str).map(normalize_market_key)
     if props.empty:
         print("[pricing] no props found at", props_path); return
 
