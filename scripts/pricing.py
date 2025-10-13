@@ -10,6 +10,35 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+# --- Market alias normalization: make keys consistent across books/APIs ---
+MARKET_ALIASES = {
+    # Receiving yards (v4 canonical is 'player_reception_yds')
+    "player_rec_yds": "player_reception_yds",
+    "player_rec_yards": "player_reception_yds",
+    "player_receiving_yards": "player_reception_yds",
+    "player_receiving_yds": "player_reception_yds",
+    "rec_yds": "player_reception_yds",
+    "receiving_yards": "player_reception_yds",
+    "player_rec_yds_ou": "player_reception_yds",
+
+    # Rush+Rec combo (v4 canonical)
+    "player_rush_rec_yds": "player_rush_and_receive_yds",
+
+    # Minor book differences you may see elsewhere
+    "player_rush_yards": "player_rush_yds",
+    "player_rushing_yards": "player_rush_yds",
+    "player_pass_yards": "player_pass_yds",
+    "player_passing_yards": "player_pass_yds",
+
+    # (add more book-specific synonyms here if you encounter them)
+}
+
+def normalize_market_key(m: str) -> str:
+    if not isinstance(m, str):
+        return m
+    m_clean = m.strip().lower()
+    return MARKET_ALIASES.get(m_clean, m_clean)
+
 # ---------- Odds helpers ----------
 def american_to_prob(odds: float) -> float:
     try:
