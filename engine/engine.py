@@ -6,19 +6,20 @@ from pathlib import Path
 from datetime import datetime
 import pandas as pd
 
-# --- config wiring (ADD) ---
+# --- config wiring (optional; safe fallback if missing) ---
 try:
     from scripts.config import (
         FILES, DIR, ensure_dirs,
-        books_from_env, markets_from_env,
-        ODDS
+        books_from_env, markets_from_env, ODDS
     )
 except Exception:
     FILES = {
         "props_raw": "outputs/props_raw.csv",
         "odds_game": "outputs/odds_game.csv",
     }
-    def ensure_dirs(): pass
+    def ensure_dirs():  # no-op if config not present
+        for d in ("data", "outputs", "outputs/metrics", "logs", "outputs/_tmp_props"):
+            Path(d).mkdir(parents=True, exist_ok=True)
     def books_from_env(): return ["draftkings","fanduel","betmgm","caesars"]
     def markets_from_env(): return []
     ODDS = {"region": "us"}
@@ -53,11 +54,11 @@ def _size(p: str) -> str:
 def _dump_diag():
     Path("logs").mkdir(exist_ok=True)
     targets = [
-        "data/team_form.csv", "data/player_form.csv", "data/metrics_ready.csv",
-        "outputs/props_raw.csv", "outputs/odds_game.csv",
-        "outputs/master_model_predictions.csv", "outputs/sgp_candidates.csv",
+        "data/team_form.csv","data/player_form.csv","data/metrics_ready.csv",
+        "outputs/props_raw.csv","outputs/odds_game.csv",
+        "outputs/master_model_predictions.csv","outputs/sgp_candidates.csv",
     ]
-    with open("logs/run_diagnostics.txt", "w") as f:
+    with open("logs/run_diagnostics.txt","w") as f:
         for t in targets:
             f.write(f"{t}: {_size(t)}\n")
     for t in targets:
@@ -82,8 +83,9 @@ def _provider_chain(season: int, date: str | None):
     print("[engine] ⚠ no external provider succeeded; will rely on builders")
 
 def run_pipeline(*, season: str, date: str = "", books=None, markets=None):
-    ensure_dirs()  # uses config dirs (still writes to the same folders)
-    for d in ("data", "outputs", "outputs/metrics", "logs"):
+    # --- setup dirs & keys status ---
+    ensure_dirs()
+    for d in ("data", "outputs", "outputs/metrics", "logs", "outputs/_tmp_props"):
         Path(d).mkdir(parents=True, exist_ok=True)
 
     print(
@@ -103,60 +105,49 @@ def run_pipeline(*, season: str, date: str = "", books=None, markets=None):
     _run(f"python scripts/make_player_form.py --season {season}")
     print(f"[engine]   data/player_form.csv → {_size('data/player_form.csv')}")
 
-    
-# 3) odds props — v4 requires one market per request; also write odds_game.csv
-b = ",".join(books or ["draftkings", "fanduel", "betmgm", "caesars"])
+    # 3) odds props — v4 requires one market per request; also write odds_game.csv
+    b = ",".join(books or ["draftkings","fanduel","betmgm","caesars"])
 
-_default_markets = [
-    "player_pass_yds",
-    "player_rec_yds",
-    "player_rush_yds",
-    "player_receptions",
-    "player_rush_rec_yds",
-    "player_anytime_td",  # added TDs
-]
+    _default_markets = [
+        "player_pass_yds",
+        "player_rec_yds",          # we keep this name; fetcher handles aliases
+        "player_rush_yds",
+        "player_receptions",
+        "player_rush_rec_yds",
+        "player_anytime_td",
+    ]
+    markets_to_pull = [m.strip() for m in (markets or _default_markets) if m.strip()]
 
-markets_to_pull = [m.strip() for m in (markets or _default_markets) if m.strip()]
-
-# First ensure game lines exist once
-_run(
-    "python scripts/fetch_props_oddsapi.py "
-    f"--books {b} --markets h2h,spreads,totals "
-    f"--date {date or ''} "
-    "--out outputs/_tmp_props/_game.csv --out_game outputs/odds_game.csv"
-)
-
-# Then pull each player market individually (required by v4)
-for mk in markets_to_pull:
+    # ensure game lines exist once
     _run(
         "python scripts/fetch_props_oddsapi.py "
-        f"--books {b} --markets {mk} "
+        f"--books {b} --markets h2h,spreads,totals "
         f"--date {date or ''} "
-        "--out outputs/_tmp_props/_player.csv"
+        "--out outputs/_tmp_props/_game.csv --out_game outputs/odds_game.csv"
     )
 
-# Merge temp props into final props_raw.csv inside fetcher; it appends per run.
+    # each player market separately (v4)
+    for mk in markets_to_pull:
+        _run(
+            "python scripts/fetch_props_oddsapi.py "
+            f"--books {b} --markets {mk} "
+            f"--date {date or ''} "
+            "--out outputs/_tmp_props/_player.csv"
+        )
+    # fetcher appends & builds outputs/props_raw.csv
 
+    # 4) pricing + predictors
     _run("python scripts/pricing.py --props outputs/props_raw.csv")
     _run(f"python -m scripts.models.run_predictors --season {season}")
     print(f"[engine]   outputs/master_model_predictions.csv → {_size('outputs/master_model_predictions.csv')}")
 
-    # 6) export Excel + diagnostics
+    # 5) export Excel + diagnostics
     _run("python scripts/export_excel.py")
     _dump_diag()
 
     rid = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     print(f"[engine] ✅ complete (run_id={rid})")
-    
     return 0
-
-# -------- keep everything above this line unchanged --------
-
-def run_pipeline(*, season: str, date: str = "", books=None, markets=None):
-    # ... your existing orchestration stays here ...
-    # make sure the very last line of run_pipeline is:
-    return 0
-
 
 def cli_main() -> int:
     """CLI entrypoint used by `python -m engine`."""
@@ -168,15 +159,12 @@ def cli_main() -> int:
     ap.add_argument("--markets", default="")
     args = ap.parse_args()
 
-    rc = run_pipeline(
+    return run_pipeline(
         season=args.season,
         date=args.date,
         books=[b.strip() for b in args.books.split(",") if b.strip()],
         markets=[m.strip() for m in args.markets.split(",") if m.strip()] or None,
     )
-    return rc
-
 
 if __name__ == "__main__":
-    import sys
     sys.exit(cli_main())
