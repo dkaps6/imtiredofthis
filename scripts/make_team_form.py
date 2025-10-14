@@ -9,6 +9,16 @@ OUT = Path("data/team_form.csv")
 LOG_DIR = Path("logs"); LOG_DIR.mkdir(parents=True, exist_ok=True)
 ERR_LOG = LOG_DIR / "nfl_pbp_error.txt"
 
+# ---------------------- utils ----------------------
+def _safe_read_csv(p: str | Path) -> pd.DataFrame:
+    p = Path(p)
+    if not p.exists() or (hasattr(p, "stat") and p.stat().st_size < 5):
+        return pd.DataFrame()
+    try:
+        return pd.read_csv(p)
+    except Exception:
+        return pd.DataFrame()
+
 def _safe_write(df: pd.DataFrame, out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     if df is None or df.empty:
@@ -25,7 +35,53 @@ def _z(s: pd.Series) -> pd.Series:
     s = pd.to_numeric(s, errors="coerce")
     mu, sd = s.mean(), s.std(ddof=0)
     if not np.isfinite(sd) or sd == 0: return pd.Series(0.0, index=s.index)
-    return (s - mu) / sd
+    return (s - mu) / (sd + 1e-9)
+
+def _merge_missing_team(df: pd.DataFrame, add: pd.DataFrame, on="team", mapping: dict[str, str] | None = None, tag: str = "") -> pd.DataFrame:
+    if add.empty:
+        return df
+    src = add.copy()
+    if mapping:
+        src = src.rename(columns=mapping)
+    cols = [on] + [c for c in (mapping.values() if mapping else []) if c in src.columns]
+    cols = [c for c in cols if c in src.columns]
+    if len(cols) <= 1:
+        return df
+    merged = df.merge(src[cols], on=on, how="left", suffixes=("","__prov"))
+    for col in cols:
+        if col == on: 
+            continue
+        prov = f"{col}__prov"
+        if prov in merged.columns:
+            mask = merged[col].isna() & merged[prov].notna()
+            if mask.any():
+                print(f"[team_form] filled {mask.sum()} rows for {col} from {tag}")
+                merged.loc[mask, col] = merged.loc[mask, prov]
+            merged.drop(columns=[prov], inplace=True)
+    return merged
+
+def _fill_prior_season_missing(df: pd.DataFrame, season: int, cols: list[str]) -> pd.DataFrame:
+    """
+    Last resort only. Uses last season outputs if available; fills ONLY NaNs.
+    Looks in outputs/season_cache/team_form_{season-1}.csv or data/team_form_{season-1}.csv
+    """
+    prior = _safe_read_csv(Path("outputs/season_cache") / f"team_form_{season-1}.csv")
+    if prior.empty:
+        prior = _safe_read_csv(Path("data") / f"team_form_{season-1}.csv")
+    if prior.empty or "team" not in prior.columns:
+        return df
+    prior = prior.copy()
+    prior["team"] = prior["team"].astype(str).str.upper()
+    merged = df.merge(prior[["team"] + [c for c in cols if c in prior.columns]],
+                      on="team", how="left", suffixes=("","__prior"))
+    for c in cols:
+        if c in merged.columns and f"{c}__prior" in merged.columns:
+            mask = merged[c].isna() & merged[f"{c}__prior"].notna()
+            if mask.any():
+                print(f"[team_form] prior-season fallback filled {mask.sum()} rows for {c}")
+                merged.loc[mask, c] = merged.loc[mask, f"{c}__prior"]
+            merged.drop(columns=[f"{c}__prior"], inplace=True)
+    return merged
 
 # --- PBP fetcher: prefer nflreadpy (2025), fall back to nfl_data_py; 404 -> prior season ---
 def _fetch_pbp_with_retry(season: int, tries: int = 3, wait: int = 4) -> pd.DataFrame:
@@ -68,17 +124,12 @@ def _fetch_pbp_with_retry(season: int, tries: int = 3, wait: int = 4) -> pd.Data
     raise RuntimeError(f"PBP fetch failed: {type(last).__name__}: {last}")
 
 def _try_load_participation(season: int) -> pd.DataFrame:
-    """
-    Try a few loaders for nflverse participation with defenders_in_box.
-    Returns empty DataFrame if none are available.
-    """
     try:
         import nflreadpy as nfr
         pf = nfr.load_participation([season])  # polars
         return pf.to_pandas()
     except Exception:
         pass
-    # nfl_data_py has shipped participation in some versions; try a few likely names
     try:
         import nfl_data_py as nfl
         for fn in ("import_participation", "import_participation_data", "import_ngs_participation"):
@@ -88,8 +139,9 @@ def _try_load_participation(season: int) -> pd.DataFrame:
         pass
     return pd.DataFrame()
 
+# ---------------------- builder ----------------------
 def build_from_nflverse(season: int) -> pd.DataFrame:
-    # --- pull PBP
+    # 1) PBP (real data)
     pbp = _fetch_pbp_with_retry(season)
     pbp = pbp.loc[pbp["season"] == season].copy()
 
@@ -101,28 +153,23 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
     pbp["is_dropback"] = (pbp.get("dropback",0)==1)
     pbp["is_sack"]     = (pbp.get("sack",0)==1)
 
-    # --- defensive EPA splits
     def_pass = pbp.loc[pbp["is_pass"]].groupby("defteam")["epa"].mean().rename("def_pass_epa")
     def_rush = pbp.loc[pbp["is_rush"]].groupby("defteam")["epa"].mean().rename("def_rush_epa")
 
-    # --- defensive sack rate
     drop  = pbp.loc[pbp["is_dropback"]].groupby("defteam")["is_dropback"].count().rename("db")
     sacks = pbp.loc[pbp["is_sack"]].groupby("defteam")["is_sack"].count().rename("sacks")
     sack_rate = (sacks / drop).replace([np.inf,-np.inf], np.nan).fillna(0.0).rename("def_sack_rate")
 
-    # --- pace proxy (seconds per snap) from league mean plays per game
     plays_by_off = pbp.groupby(["game_id","posteam"])["play_id"].count().rename("plays").reset_index()
     g_counts     = plays_by_off.groupby("posteam")["game_id"].nunique()
     plays_pg     = (plays_by_off.groupby("posteam")["plays"].sum() / g_counts)
     sec_per_snap = 3600.0 / (plays_pg.mean() if np.isfinite(plays_pg.mean()) else 120.0)
     pace = pd.Series(sec_per_snap, index=def_pass.index, name="pace")
 
-    # --- PROE: prefer xPass, else neutral pass rate method
     if "xpass" in pbp.columns:
-        # team-level PROE = mean(actual pass) − mean(expected pass)
         by_off = pbp.groupby("posteam")[["is_pass","xpass"]].mean(numeric_only=True)
         proe_off = (by_off["is_pass"] - by_off["xpass"]).rename("proe")
-        proe = proe_off.reindex(def_pass.index)  # map to same team index
+        proe = proe_off.reindex(def_pass.index)
     else:
         neutral = pbp[(pbp["qtr"]<=3) & (pbp["score_differential"].abs()<=7)].copy()
         if "wp" in neutral.columns:
@@ -132,21 +179,20 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
         proe = (team_pr - league_pr).reindex(def_pass.index).fillna(0.0)
     proe.name = "proe"
 
-    # start frame
     df = pd.concat([def_pass, def_rush, sack_rate, pace, proe], axis=1).reset_index().rename(columns={"defteam":"team"})
+    df["team"] = df["team"].astype(str).str.upper()
 
-    # --- optional participation enrichment for box rates (real only; no fabrication)
+    # 2) Participation → light/heavy box
     try:
         part = _try_load_participation(season)
-        # Expect (at least): game_id, play_id, defenders_in_box
-        # Join to PBP by game_id + play_id, compute rates allowed by defense.
         needed = {"game_id","play_id","defenders_in_box"}
         if isinstance(part, pd.DataFrame) and len(part) and needed.issubset(set(part.columns)):
             p = part[["game_id","play_id","defenders_in_box"]].copy()
             p = p.merge(pbp[["game_id","play_id","defteam","is_rush"]], on=["game_id","play_id"], how="inner")
             p = p[p["is_rush"]==True].copy()
-            p["light"] = (pd.to_numeric(p["defenders_in_box"], errors="coerce") <= 6).astype(float)
-            p["heavy"] = (pd.to_numeric(p["defenders_in_box"], errors="coerce") >= 8).astype(float)
+            p["defenders_in_box"] = pd.to_numeric(p["defenders_in_box"], errors="coerce")
+            p["light"] = (p["defenders_in_box"] <= 6).astype(float)
+            p["heavy"] = (p["defenders_in_box"] >= 8).astype(float)
             box = p.groupby("defteam")[["light","heavy"]].mean(numeric_only=True).rename(columns={
                 "light":"light_box_rate","heavy":"heavy_box_rate"
             })
@@ -154,7 +200,7 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
     except Exception as e:
         print(f"[team_form] participation enrich skipped: {type(e).__name__}: {e}", flush=True)
 
-    # --- optional PFR/mirrors enrich (leave NaN if not present)
+    # 3) PFR team enrich (observed box rates etc) if present
     try:
         enrich_path = Path("data/pfr_team_enrich.csv")
         if enrich_path.exists():
@@ -184,12 +230,54 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
     except Exception as e:
         print(f"[team_form] PFR enrich skipped: {type(e).__name__}: {e}", flush=True)
 
-    # z-scores
+    # 4) External provider fallbacks (fill only remaining NaNs)
+    espn = _safe_read_csv("data/espn_team.csv")
+    df = _merge_missing_team(df, espn, "team", {
+        "def_sack_rate":"def_sack_rate",
+        "pace":"pace", "pace_sec_per_snap":"pace",
+        "proe":"proe",
+        "light_box_rate":"light_box_rate",
+        "heavy_box_rate":"heavy_box_rate",
+    }, tag="ESPN")
+
+    msf = _safe_read_csv("data/msf_team.csv")
+    df = _merge_missing_team(df, msf, "team", {
+        "def_sack_rate":"def_sack_rate",
+        "pace":"pace","pace_sec_per_snap":"pace",
+        "proe":"proe",
+        "light_box_rate":"light_box_rate",
+        "heavy_box_rate":"heavy_box_rate",
+    }, tag="MySportsFeeds")
+
+    gsis = _safe_read_csv("data/gsis_team.csv")
+    df = _merge_missing_team(df, gsis, "team", {
+        "def_sack_rate":"def_sack_rate",
+        "pace":"pace",
+        "proe":"proe",
+        "light_box_rate":"light_box_rate",
+        "heavy_box_rate":"heavy_box_rate",
+    }, tag="NFLGSIS")
+
+    apis = _safe_read_csv("data/apisports_team.csv")
+    df = _merge_missing_team(df, apis, "team", {
+        "def_sack_rate":"def_sack_rate",
+        "pace":"pace",
+        "proe":"proe",
+        "light_box_rate":"light_box_rate",
+        "heavy_box_rate":"heavy_box_rate",
+    }, tag="API-Sports")
+
+    # 5) Last-resort from prior season (only if still NaN)
+    df = _fill_prior_season_missing(df, season, [
+        "def_sack_rate","pace","proe","light_box_rate","heavy_box_rate"
+    ])
+
+    # 6) z-scores
     for c in ["def_pass_epa","def_rush_epa","def_sack_rate","pace","proe","light_box_rate","heavy_box_rate"]:
         if c in df.columns:
             df[f"{c}_z"] = _z(df[c])
 
-    # ensure schema stability
+    # 7) ensure schema stability
     cols = ["team","def_pass_epa","def_rush_epa","def_sack_rate",
             "pace","proe","light_box_rate","heavy_box_rate",
             "def_pass_epa_z","def_rush_epa_z","def_sack_rate_z",
@@ -199,6 +287,7 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
             df[c] = np.nan
     return df[cols]
 
+# ---------------------- CLI ----------------------
 def cli(season: int) -> int:
     try:
         df = build_from_nflverse(season)
