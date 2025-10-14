@@ -145,7 +145,7 @@ def main(season: int | None = None) -> None:
                 if c in df.columns:
                     df[c] = df[c].astype(str)
 
-    # --- z->raw passthrough if only *_z exist
+    # --- z->raw passthrough if only *_z exist (unchanged)
     if not team_form.empty:
         z_to_raw = {
             "def_pass_epa_z": "def_pass_epa",
@@ -160,7 +160,7 @@ def main(season: int | None = None) -> None:
             if raw not in team_form.columns and zcol in team_form.columns:
                 team_form[raw] = team_form[zcol]
 
-    # --- coverage schema normalization + default rates
+    # --- coverage schema normalization + default rates (unchanged)
     if not coverage.empty:
         if "team" not in coverage.columns and "defense_team" in coverage.columns:
             coverage = coverage.rename(columns={"defense_team": "team"})
@@ -198,7 +198,7 @@ def main(season: int | None = None) -> None:
     players = player_form.merge(injuries, on="player", how="left")
     players["status"] = players["status"].fillna("Healthy")
 
-    # ---- carry team enrich columns when present
+    # ---- carry team enrich + NEW team required fields when present
     team_enrich_candidates = {
         "pass_rush_win_rate","pressure_rate","run_stop_rate",
         "man_coverage_rate","zone_coverage_rate",
@@ -209,9 +209,10 @@ def main(season: int | None = None) -> None:
         tf = team_form.copy()
         cols_keep = [
             "event_id","team","opponent","def_pass_epa","def_rush_epa","def_sack_rate",
-            "light_box_rate","heavy_box_rate","pace","proe"
+            "light_box_rate","heavy_box_rate","pace","proe",
+            # NEW – make available to pricing if needed:
+            "rz_rate","slot_rate","12p_rate","ay_per_att"
         ]
-        # include any enrich cols that exist
         cols_keep += [c for c in team_enrich_candidates if c in tf.columns]
         for c in cols_keep:
             if c not in tf.columns:
@@ -229,18 +230,21 @@ def main(season: int | None = None) -> None:
         for c in ["def_pass_epa_opp","def_rush_epa_opp","def_sack_rate_opp",
                   "light_box_rate_opp","heavy_box_rate_opp","pace_opp","proe_opp"]:
             players[c] = np.nan
+        # keep team-only fields available even if team_form is empty
+        for c in ["rz_rate","slot_rate","12p_rate","ay_per_att"]:
+            players[c] = np.nan
 
-    # Route profile defaults if missing
+    # Route profile defaults if missing (unchanged)
     for c in ["route_profile_press","route_profile_man","route_profile_zone"]:
         if c not in players.columns:
             players[c] = np.nan
     players[["route_profile_press","route_profile_man","route_profile_zone"]] = \
         players[["route_profile_press","route_profile_man","route_profile_zone"]].fillna(0.33)
 
-    # CB penalty per receiver
+    # CB penalty per receiver (unchanged)
     players["cb_penalty"] = _cb_penalty_merge(players, cb_asgn)
 
-    # Weather merge
+    # Weather merge (unchanged)
     if "wind_mph" not in players.columns: players["wind_mph"] = np.nan
     if "temp_f"   not in players.columns: players["temp_f"]   = np.nan
     if "precip"   not in players.columns: players["precip"]   = np.nan
@@ -255,7 +259,7 @@ def main(season: int | None = None) -> None:
         for c in ("wind_mph_w","temp_f_w","precip_w"):
             if c in players.columns: players.drop(columns=[c], inplace=True)
 
-    # team_wp from lines
+    # team_wp from lines (unchanged)
     players["team_wp"] = np.nan
     if not glines.empty:
         if {"home_wp","away_wp","event_id","home_team","away_team"}.issubset(glines.columns):
@@ -296,7 +300,10 @@ def main(season: int | None = None) -> None:
                                            np.where(players["team"]==players["away_team"], players["away_wp"], np.nan))
                     players.drop(columns=[c for c in ["home_team","away_team","home_wp","away_wp"] if c in players.columns], inplace=True)
 
+    # Ensure required columns (unchanged) + keep newly-added team/player columns if present
     players = _safe_cols(players, REQ_COLS)
+
+    # conservative defaults (unchanged)
     players["target_share"] = players["target_share"].fillna(0.18)
     players["rush_share"]   = players["rush_share"].fillna(0.30)
     players["route_rate"]   = players["route_rate"].fillna(0.75)
@@ -304,6 +311,8 @@ def main(season: int | None = None) -> None:
     players["ypc"]          = players["ypc"].fillna(4.2)
     players["qb_ypa"]       = players["qb_ypa"].fillna(6.9)
     players["team_wp"]      = players["team_wp"].fillna(0.5)
+    # NOTE: ypt and team fields (rz_rate/slot_rate/12p_rate/ay_per_att) are *not* forcibly defaulted here;
+    # they remain real if provided, else NaN so you can detect missingness explicitly upstream.
 
     Path("outputs/metrics").mkdir(parents=True, exist_ok=True)
     players.to_csv("data/metrics_ready.csv", index=False)
