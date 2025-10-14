@@ -179,8 +179,10 @@ def base_mu(row: pd.Series) -> float:
         ypc_mod = ypc * ((1.0 + 0.07*lbx) * (1.0 - 0.06*hbx)) * run_bonus * weather_m
         return max(0.0, ypc_mod * (14.0 * rsh))
     if mkt == "player_rush_rec_yds":
-        return max(0.0, base_mu(row.copy().assign(market="player_rush_yds")) +
-                         0.7*base_mu(row.copy().assign(market="player_rec_yds")))
+        # FIX: avoid Series.assign (Series has no .assign)
+        s_rush = row.copy(); s_rush.loc["market"] = "player_rush_yds"
+        s_rec  = row.copy(); s_rec.loc["market"]  = "player_rec_yds"
+        return max(0.0, base_mu(s_rush) + 0.7 * base_mu(s_rec))
     # default
     return np.nan
 
