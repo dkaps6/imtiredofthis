@@ -10,18 +10,26 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-# --- normalize market keys (aliases) BEFORE any grouping/pivoting ---
-# Put this near the top of pricing, after `props = pd.read_csv(...)` and before any pivot logic.
-
+# --- normalize market keys (aliases) ---
+# INTERNAL canonical keys we use elsewhere in pricing/base_mu():
+#   player_pass_yds, player_rec_yds, player_rush_yds, player_receptions, player_rush_rec_yds, player_anytime_td
 MARKET_ALIASES = {
-    # receiving yards (v4’s naming varies by feed)
-    "player_rec_yds": "player_receiving_yards",
-    "player_reception_yds": "player_receiving_yards",
-    "player_receiving_yds": "player_receiving_yards",
-    # combined rush+rec
-    "player_rush_rec_yds": "player_rush_reception_yds",
-    "player_rush_receive_yds": "player_rush_reception_yds",  # safety alias
-    # keep passthrough for the ones we already fetch
+    # receiving yards (map all variants to our internal 'player_rec_yds')
+    "player_reception_yds": "player_rec_yds",       # Odds API canonical
+    "player_receiving_yards": "player_rec_yds",
+    "player_receiving_yds": "player_rec_yds",
+    "player_rec_yds": "player_rec_yds",
+
+    # rush+rec (map to our internal 'player_rush_rec_yds')
+    "player_rush_reception_yds": "player_rush_rec_yds",
+    "player_rush_rec_yds": "player_rush_rec_yds",
+    "player_rush_and_receive_yards": "player_rush_rec_yds",
+    "player_rush_and_receive_yds": "player_rush_rec_yds",
+    "rushing_plus_receiving_yards": "player_rush_rec_yds",
+    "rush_rec_yards": "player_rush_rec_yds",
+    "rush_rec": "player_rush_rec_yds",
+
+    # passthrough for others
     "player_pass_yds": "player_pass_yds",
     "player_rush_yds": "player_rush_yds",
     "player_receptions": "player_receptions",
@@ -31,11 +39,6 @@ MARKET_ALIASES = {
 def normalize_market_key(k: str) -> str:
     k2 = str(k).strip().lower()
     return MARKET_ALIASES.get(k2, k2)
-
-# Apply market key aliases safely (v4 naming differences)
-if "market" in props.columns:
-    props["market"] = props["market"].astype(str)
-    props["market"] = props["market"].map(normalize_market_key).fillna(props["market"])
 
 # ---------- Odds helpers ----------
 def american_to_prob(odds: float) -> float:
@@ -63,10 +66,14 @@ def devig_two_way(p_over_vig: pd.Series, p_under_vig: pd.Series) -> tuple[pd.Ser
 SIGMA_PATH = Path("data/market_sigmas.json")
 SIGMA_DEFAULTS = {
     "player_pass_yds": 48.0,
+    # include both internal canonical & a couple externals so lookups never miss
     "player_rec_yds": 26.0,
+    "player_reception_yds": 26.0,
+    "player_receiving_yards": 26.0,
     "player_rush_yds": 24.0,
     "player_receptions": 1.8,
     "player_rush_rec_yds": 30.0,
+    "player_rush_reception_yds": 30.0,
 }
 
 def load_sigmas() -> dict[str, float]:
@@ -186,23 +193,24 @@ def sigma_for_market(market: str, sigmas: dict[str,float], volatility_flag: floa
 # ---------- Pricing ----------
 def main(props_path: str) -> None:
     props = pd.read_csv(props_path) if Path(props_path).exists() else pd.DataFrame()
-    # Normalize market keys so downstream logic works no matter what the book called it
-    if "market" in props.columns:
-    props["market"] = props["market"].astype(str).map(normalize_market_key)
     if props.empty:
         print("[pricing] no props found at", props_path); return
+
+    # Normalize market keys so downstream logic matches our internal names
+    if "market" in props.columns:
+        props["market"] = props["market"].astype(str).map(normalize_market_key)
 
     met = pd.read_csv("data/metrics_ready.csv") if Path("data/metrics_ready.csv").exists() else pd.DataFrame()
     if met.empty:
         print("[pricing] WARNING: metrics_ready.csv is empty; proceeding with minimal features.")
 
-# >>> ADDED: coerce merge keys to string to avoid object/float mismatches
+    # Coerce merge keys to string to avoid object/float mismatches
     for _df in (props, met):
         for k in ("event_id","player","book","market","team","opponent"):
             if k in _df.columns:
                 _df[k] = _df[k].astype(str).str.replace(r"\.0$", "", regex=True).str.strip()
 
-# Merge
+    # Merge
     keys = ["event_id","player"]
     if "event_id" not in props.columns: keys = ["player"]
     df = props.merge(met, on=keys, how="left", suffixes=("","_m"))
@@ -258,8 +266,6 @@ def main(props_path: str) -> None:
     df["tier"] = df["edge_abs"].apply(tier)
 
     # ---------- SGP pair-aware dynamic (QB→WR small lift) ----------
-    # For each game (event_id), if a QB pass_yds edge is large, give WR rec_yds/receptions
-    # a small, correlation-based lift in edge (does NOT change market fair price).
     sgp_threshold = 0.05      # trigger threshold on QB edge
     sgp_max_lift  = 0.015     # cap per WR
     qb_to_wr_corr = 0.60      # same-game base correlation
@@ -268,24 +274,21 @@ def main(props_path: str) -> None:
     if "event_id" in df.columns and "position" in df.columns:
         for eid, g in df.groupby("event_id"):
             qb_rows = g[(g["position"].str.upper()=="QB") & (g["market"]=="player_pass_yds")]
-            if qb_rows.empty: 
+            if qb_rows.empty:
                 continue
             qb_edge = float(qb_rows["edge_abs"].max())
             if qb_edge < sgp_threshold:
                 continue
-            # WR candidates on same team as that QB
             qb_team = qb_rows.iloc[0].get("team","")
             wr_mask = (g["position"].str.upper().isin(["WR","TE"])) & \
                       (g["team"]==qb_team) & \
                       (g["market"].isin(["player_rec_yds","player_receptions"]))
-            lift = min(sgp_max_lift, qb_to_wr_corr * 0.25 * max(0.0, qb_edge-0.03))  # small + bounded
+            lift = min(sgp_max_lift, qb_to_wr_corr * 0.25 * max(0.0, qb_edge-0.03))
             df.loc[wr_mask.index[wr_mask], "edge_bonus_sgp"] += lift
 
     df["edge_total"] = (df["edge_abs"] + df["edge_bonus_sgp"]).clip(-1, 1)
 
     # ---------- Persist sigma learning (EMA) ----------
-    # We learn per-market empirical σ = RMSE around line vs model mean (rough proxy).
-    # Use only rows with numeric line & model_proj.
     for mkt, sub in df.groupby("market"):
         try:
             se = ((sub["line"].astype(float) - sub["model_proj"].astype(float))**2).mean()
