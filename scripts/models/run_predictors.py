@@ -40,10 +40,8 @@ except Exception:
     from datetime import datetime, timezone
     LOG_DIR = os.getenv("LOG_DIR", "logs")
     RUN_ID = os.getenv("RUN_ID", datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S"))
-    # Prefer MC_TRIALS env (already set in your workflow), else MONTE_CARLO_TRIALS, else default
     MONTE_CARLO_TRIALS = int(os.getenv("MC_TRIALS", os.getenv("MONTE_CARLO_TRIALS", "20000")))
 
-# --- ensure LOG_DIR behaves like a Path even if provided as str ---
 if not isinstance(LOG_DIR, Path):
     LOG_DIR = Path(LOG_DIR)
 
@@ -76,6 +74,35 @@ def tier_from_edge(e: float | None) -> str:
     if e >= 0.04: return "GREEN"
     if e >= 0.01: return "AMBER"
     return "RED"
+
+def _num(x):
+    try:
+        v = float(x)
+        if np.isnan(v) or np.isinf(v):
+            return None
+        return v
+    except Exception:
+        return None
+
+# canonicalize a few market aliases coming from different sources
+MARKET_ALIASES = {
+    "player_receiving_yards": "player_rec_yds",
+    "player_rushing_yards": "player_rush_yds",
+    "player_passing_yards": "player_pass_yds",
+    "player_rush_rec_yds": "player_rush_rec_yds",
+    "player_receptions": "player_receptions",
+    "player_anytime_td": "player_anytime_td",
+    "player_two_plus_tds": "player_two_plus_tds",
+    "player_2_or_more_tds": "player_two_plus_tds",
+}
+
+SD_DEFAULTS = {
+    "player_rec_yds": 26.0,
+    "player_receptions": 1.8,
+    "player_rush_yds": 23.0,
+    "player_pass_yds": 48.0,
+    "player_rush_rec_yds": 28.0,
+}
 
 # ----------------------- Coverage & CB shadow -----------------------
 def _load_coverage() -> Dict[str, set]:
@@ -198,10 +225,28 @@ def _bvn_joint_prob(pA: float, pB: float, rho: float) -> float:
 def run(season: int):
     Path('outputs').mkdir(parents=True, exist_ok=True); LOG_DIR.mkdir(parents=True, exist_ok=True)
 
+    # prefer the PRICED file (has mu/sd etc.); fallback to raw
+    priced = Path('outputs/props_priced_clean.csv')
+    props_path = priced if priced.exists() and priced.stat().st_size > 0 else Path('outputs/props_raw.csv')
+
     pf=_read_csv('data/player_form.csv', ['player','team','position'])
     tf=_read_csv('data/team_form.csv', ['team'])
-    props=_read_csv('outputs/props_raw.csv', ['player','team','opp_team','market','line','over_odds','under_odds','book','commence_time','event_id','position'])
+    props=_read_csv(str(props_path), ['player','team','opp_team','market','line','over_odds','under_odds','book','commence_time','event_id','position'])
     odds_game=_read_csv('outputs/odds_game.csv', ['event_id','commence_time','sport_key','home_team','away_team','market','point','book'])
+
+    # --- try to normalize the key column names coming from pricing
+    if 'vegas_line' in props.columns and 'line' not in props.columns:
+        props['line'] = props['vegas_line']
+    if 'vegas_over_odds' in props.columns and 'over_odds' not in props.columns:
+        props['over_odds'] = props['vegas_over_odds']
+    if 'vegas_under_odds' in props.columns and 'under_odds' not in props.columns:
+        props['under_odds'] = props['vegas_under_odds']
+
+    # mu / sd may be named differently in priced file
+    for src, dst in [('model_proj','mu'), ('model_mean','mu'), ('proj','mu'),
+                     ('model_sd','sd'), ('stdev','sd')]:
+        if src in props.columns and dst not in props.columns:
+            props[dst] = props[src]
 
     # --- Normalization (upper-case etc.) ---
     for df,col in [(pf,'team'),(tf,'team'),(props,'team')]:
@@ -213,34 +258,31 @@ def run(season: int):
 
     # === TEAM KEY RESCUE (minimal & robust) ==================================
     if 'team' not in props.columns or props['team'].isna().all():
-        # try common alternates coming from fetchers/books
         for alt in ('player_team','team_name','team_abbr','team_code'):
             if alt in props.columns and not props[alt].isna().all():
                 props['team'] = props[alt].astype(str)
                 break
-        # if still missing, we'll merge on player only and backfill from pf later
 
-    # Market fair p (de-vig) just in case it hasn't been computed upstream
-    p_market_fair=[]
-    for _,r in props.iterrows():
-        p_o=american_to_prob(r.get('over_odds')); p_u=american_to_prob(r.get('under_odds'))
-        if p_o is None and p_u is None: p_market_fair.append(0.5)
-        elif p_o is None:               p_market_fair.append(1-p_u)
-        elif p_u is None:               p_market_fair.append(p_o)
-        else:
-            s=p_o+p_u; p_market_fair.append(p_o/s if s>0 else 0.5)
-    props['p_market_fair']=p_market_fair
+    # Market fair p (de-vig) if not present
+    if 'p_market_fair' not in props.columns:
+        p_market_fair=[]
+        for _,r in props.iterrows():
+            p_o=american_to_prob(r.get('over_odds')); p_u=american_to_prob(r.get('under_odds'))
+            if p_o is None and p_u is None: p_market_fair.append(0.5)
+            elif p_o is None:               p_market_fair.append(1-p_u)
+            elif p_u is None:               p_market_fair.append(p_o)
+            else:
+                s=p_o+p_u; p_market_fair.append(p_o/s if s>0 else 0.5)
+        props['p_market_fair']=p_market_fair
 
     # === MERGE (with fallback if team is absent) =============================
     if 'team' in props.columns and not props['team'].isna().all():
         merged = props.merge(pf, on=['player','team'], how='left', suffixes=('','_pf')).merge(
                  tf, on='team', how='left', suffixes=('','_tf'))
     else:
-        # merge on player only, then backfill team from pf
         merged = props.merge(pf, on=['player'], how='left', suffixes=('','_pf'))
         if 'team' not in merged.columns or merged['team'].isna().all():
             merged['team'] = merged.get('team_pf')
-        # and bring in team_form on the filled team
         merged = merged.merge(tf, left_on='team', right_on='team', how='left', suffixes=('','_tf'))
 
     cov_tags = _load_coverage()
@@ -250,6 +292,7 @@ def run(season: int):
 
     for _,r in merged.iterrows():
         market=str(r.get('market',''))
+        market=MARKET_ALIASES.get(market, market)  # canonicalize
         player=str(r.get('player',''))
         team=str(r.get('team',''))
         opp=str(r.get('opp_team',''))
@@ -273,7 +316,7 @@ def run(season: int):
             continue
 
         # ---------- 2+ TD ----------
-        if market in ('player_2_or_more_tds','player_two_plus_tds'):
+        if market in ('player_two_plus_tds'):
             lam_team = _team_expected_tds(team, odds_game, merged)
             opp_row = tf[tf['team']==opp].head(1).squeeze() if not tf.empty else pd.Series(dtype='float64')
             rush_mix = _rush_mix_from_def(opp_row)
@@ -290,27 +333,37 @@ def run(season: int):
             continue
 
         # ---------- Continuous markets ----------
-        try: line=float(r.get('line'))
-        except Exception: continue
+        try:
+            line=float(r.get('line'))
+        except Exception:
+            continue
 
-        feats={'mu': r.get('mu'),'sd': r.get('sd'),'sd_widen': r.get('sd_widen',1.0),
-               'eff_mu': r.get('eff_mu'),'eff_sd': r.get('eff_sd'),
-               'p_market_fair': r.get('p_market_fair',0.5),
-               'target_share': r.get('target_share',0.0),'rush_share': r.get('rush_share',0.0),
-               'qb_ypa': r.get('qb_ypa',0.0),'light_box_rate': r.get('light_box_rate',0.0),
-               'heavy_box_rate': r.get('heavy_box_rate',0.0),'def_sack_rate': r.get('def_sack_rate',0.0),
-               'def_pass_epa': r.get('def_pass_epa',0.0),'pace': r.get('pace',0.0),'proe': r.get('proe',0.0)}
+        # robust mu/sd extraction + defaults/skip
+        mu = _num(r.get('mu') or r.get('model_proj') or r.get('model_mean') or r.get('proj'))
+        sd = _num(r.get('sd') or r.get('model_sd') or r.get('stdev'))
+        if sd is None:
+            sd = SD_DEFAULTS.get(market, 20.0)
+        if mu is None:
+            # cannot price this leg; skip it
+            continue
+
+        feats={'mu': mu,'sd': sd,'sd_widen': _num(r.get('sd_widen')) or 1.0,
+               'eff_mu': _num(r.get('eff_mu')),'eff_sd': _num(r.get('eff_sd')),
+               'p_market_fair': _num(r.get('p_market_fair')) or 0.5,
+               'target_share': _num(r.get('target_share')) or 0.0,'rush_share': _num(r.get('rush_share')) or 0.0,
+               'qb_ypa': _num(r.get('qb_ypa')) or 0.0,'light_box_rate': _num(r.get('light_box_rate')) or 0.0,
+               'heavy_box_rate': _num(r.get('heavy_box_rate')) or 0.0,'def_sack_rate': _num(r.get('def_sack_rate')) or 0.0,
+               'def_pass_epa': _num(r.get('def_pass_epa')) or 0.0,'pace': _num(r.get('pace')) or 0.0,'proe': _num(r.get('proe')) or 0.0}
 
         # Apply coverage/CB impact to receiving markets
         if market in ('player_rec_yds','player_receptions','player_rush_rec_yds'):
-            if feats.get('mu') is not None and not pd.isna(feats['mu']):
+            if feats.get('mu') is not None:
                 if market in ('player_rec_yds','player_rush_rec_yds'): feats['mu']  = float(feats['mu'])  * ypt_mult
                 if market == 'player_receptions':                   feats['mu']  = float(feats['mu'])  * tgt_mult
-            if feats.get('eff_mu') is not None and not pd.isna(feats['eff_mu']):
+            if feats.get('eff_mu') is not None:
                 if market in ('player_rec_yds','player_rush_rec_yds'): feats['eff_mu'] = float(feats['eff_mu']) * ypt_mult
                 if market == 'player_receptions':                   feats['eff_mu'] = float(feats['eff_mu']) * tgt_mult
 
-        # Build leg and blend
         leg=Leg(player_id=f"{player}|{team}|{market}|{line}", player=player, team=team, market=market, line=line, features=feats)
         blended=ensemble.blend(leg, context={'w_mc':0.25,'w_bayes':0.25,'w_markov':0.25,'w_ml':0.25})
 
