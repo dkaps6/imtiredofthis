@@ -157,6 +157,8 @@ def base_mu(row: pd.Series) -> float:
     ypc = float(row.get("ypc",          4.2))
     ypa = float(row.get("qb_ypa",       6.9))
     wp  = float(row.get("team_wp",      0.5))
+    # ★ patch: optional efficiency extras
+    ypt = float(row.get("ypt",          np.nan))  # receiving efficiency (yards per target)
 
     # opponent context (Z-like scales are already baked into priors)
     pass_e = float(row.get("def_pass_epa_opp",   0.0))
@@ -201,17 +203,30 @@ def base_mu(row: pd.Series) -> float:
         return max(0.0, ypa * 28.0 * qb_pen * weather_m)  # ~28 attempts baseline
 
     # ★ enrich: receiving-volume enrichments
-    # routes_per_dropback (0..1) raises/lower route volume a little; slot_rate boosts vs zone
+    # Prefer route_rate if present; else routes_per_dropback (both 0..1)
+    route_rate = row.get("route_rate", np.nan)
     routes_per_db = float(row.get("routes_per_dropback", np.nan))
-    slot_rate     = float(row.get("slot_rate", np.nan))
-    opp_zone      = float(row.get("zone_rate_opp", 0.50) or 0.50)
+    if not np.isnan(route_rate):
+        rvol_factor = 0.75 + 0.5 * max(0.0, min(1.0, float(route_rate)))   # 0.75x..1.25x
+    elif not np.isnan(routes_per_db):
+        rvol_factor = 0.75 + 0.5 * max(0.0, min(1.0, routes_per_db))       # 0.75x..1.25x
+    else:
+        rvol_factor = 1.0
 
     # modest slot boost when opponent plays more zone
+    slot_rate     = float(row.get("slot_rate", np.nan))     # team-level slot target share (0..1)
+    opp_zone      = float(row.get("zone_rate_opp", 0.50) or 0.50)
     slot_mult = 1.0
     if not np.isnan(slot_rate):
-        slot_mult *= (1.0 + 0.06 * (slot_rate - 0.33) * opp_zone)  # ≈ ±3–4% typical range
+        slot_mult *= (1.0 + 0.06 * (slot_rate - 0.33) * opp_zone)  # ≈ ±3–4% typical
         slot_mult = max(0.94, min(1.06, slot_mult))
         cov_mult *= slot_mult
+
+    # ★ patch: TE bump from 12p_rate (team-level)
+    twelp = float(row.get("12p_rate", np.nan))
+    te12_mult = 1.0
+    if str(row.get("position","")).upper().startswith("TE") and not np.isnan(twelp):
+        te12_mult *= (1.0 + 0.06 * max(0.0, min(1.0, twelp)))
 
     if mkt == "player_rec_yds":
         # WR/TE receiving yards from YPRR * routes, coverage penalty & CB
@@ -223,23 +238,27 @@ def base_mu(row: pd.Series) -> float:
             yprr_eff = yprr * (1.0 + 0.02 * (aDOT - 9.0))
             yprr_eff = max(0.6*yprr, min(1.4*yprr, yprr_eff))
 
-        routes_base = 35.0 * tgt
-        if not np.isnan(routes_per_db):
-            routes_base *= (0.75 + 0.5 * max(0.0, min(1.0, routes_per_db)))  # 0.75x..1.25x
+        # ★ patch: tiny ypt efficiency tilt (kept very small to avoid destabilizing tails)
+        if not np.isnan(ypt) and ypt > 0:
+            yprr_eff *= max(0.94, min(1.06, 1.0 + 0.03 * (ypt - 7.8) / 7.8))
 
-        mu = yprr_eff * routes_base * cov_mult * (1.0 - cb_pen) * weather_m
-        # sanity downshift for very low air-yards teams (if provided)
-        team_ay_att = float(row.get("team_ay_per_att", 0.0))
-        if team_ay_att <= -0.8:  # low air-yards profile
-            mu = min(mu, 0.8 * max(20.0, mu))
+        routes_base = 35.0 * tgt * rvol_factor
+        mu = yprr_eff * routes_base * cov_mult * (1.0 - cb_pen) * te12_mult * weather_m
+
+        # ★ patch: sanity downshift for low air-yards teams (use actual ay_per_att)
+        ay_per_att = float(row.get("ay_per_att", np.nan))
+        if not np.isnan(ay_per_att):
+            league_med = 7.6
+            if ay_per_att < 0.85 * league_med:
+                mu = min(mu, 0.80 * max(20.0, mu))
+
         return max(0.0, mu)
 
     if mkt == "player_receptions":
         cr = 0.62 * cov_mult * (1.0 - 0.5*cb_pen)  # catch rate proxy
-        rec_routes = 32.0 * tgt
-        if not np.isnan(routes_per_db):
-            rec_routes *= (0.75 + 0.5 * max(0.0, min(1.0, routes_per_db)))
-        return max(0.0, cr * rec_routes * weather_m)
+        rec_routes = 32.0 * tgt * rvol_factor
+        mu = cr * rec_routes * te12_mult * weather_m
+        return max(0.0, mu)
 
     if mkt == "player_rush_yds":
         # ★ enrich: run_stop_rate penalizes YPC a touch when available
