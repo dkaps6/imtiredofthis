@@ -55,13 +55,21 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
              "yprr_proxy":2.1,"ypc":0.0,"qb_ypa":7.6}
         ])
 
+    # NEW: guard against shadowing; show exactly what got imported
+    import importlib
+    nfl_mod = importlib.import_module("nfl_data_py")
+    nfl_path = getattr(nfl_mod, "__file__", "")
+    print(f"[player_form] nfl_data_py path → {nfl_path}", flush=True)
+    if "site-packages" not in (nfl_path or "") and "dist-packages" not in (nfl_path or ""):
+        raise RuntimeError(f"Wrong nfl_data_py imported (shadowed). Path: {nfl_path}")
+
     print("[player_form] pulling pbp…", flush=True)
     pbp = _fetch_pbp_with_retry(season)
     pbp = pbp.loc[pbp["season"]==season].copy()
 
     pbp["posteam"] = pbp["posteam"].astype(str).str.upper()
     pbp["receiver"] = pbp.get("receiver_player_name","").fillna("").astype(str)
-    pbp["rusher"]   = pbp.get("rusher_player_name","").fillna("").astype str
+    pbp["rusher"]   = pbp.get("rusher_player_name","").fillna("").astype(str)  # FIXED
     pbp["passer"]   = pbp.get("passer_player_name","").fillna("").astype(str)
 
     pbp["is_pass"] = (pbp.get("pass",0)==1) | (pbp.get("pass_attempt",0)==1) | (pbp.get("play_type","")=="pass")
