@@ -37,14 +37,13 @@ except Exception:
 try:
     from scripts.config import LOG_DIR, RUN_ID, MONTE_CARLO_TRIALS
 except Exception:
-    import os
     from datetime import datetime, timezone
     LOG_DIR = os.getenv("LOG_DIR", "logs")
     RUN_ID = os.getenv("RUN_ID", datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S"))
     # Prefer MC_TRIALS env (already set in your workflow), else MONTE_CARLO_TRIALS, else default
     MONTE_CARLO_TRIALS = int(os.getenv("MC_TRIALS", os.getenv("MONTE_CARLO_TRIALS", "20000")))
 
-# --- NO-NUKES tweak: ensure LOG_DIR behaves like a Path even if provided as str ---
+# --- ensure LOG_DIR behaves like a Path even if provided as str ---
 if not isinstance(LOG_DIR, Path):
     LOG_DIR = Path(LOG_DIR)
 
@@ -204,12 +203,22 @@ def run(season: int):
     props=_read_csv('outputs/props_raw.csv', ['player','team','opp_team','market','line','over_odds','under_odds','book','commence_time','event_id','position'])
     odds_game=_read_csv('outputs/odds_game.csv', ['event_id','commence_time','sport_key','home_team','away_team','market','point','book'])
 
+    # --- Normalization (upper-case etc.) ---
     for df,col in [(pf,'team'),(tf,'team'),(props,'team')]:
         if col in df.columns: df[col]=df[col].astype(str).str.upper()
     for col in ['opp_team','home_team','away_team']:
         if col in props.columns: props[col]=props[col].astype(str).str.upper()
         if col in odds_game.columns: odds_game[col]=odds_game[col].astype(str).str.upper()
     if 'player' in props.columns: props['player'] = props['player'].astype(str)
+
+    # === TEAM KEY RESCUE (minimal & robust) ==================================
+    if 'team' not in props.columns or props['team'].isna().all():
+        # try common alternates coming from fetchers/books
+        for alt in ('player_team','team_name','team_abbr','team_code'):
+            if alt in props.columns and not props[alt].isna().all():
+                props['team'] = props[alt].astype(str)
+                break
+        # if still missing, we'll merge on player only and backfill from pf later
 
     # Market fair p (de-vig) just in case it hasn't been computed upstream
     p_market_fair=[]
@@ -222,7 +231,17 @@ def run(season: int):
             s=p_o+p_u; p_market_fair.append(p_o/s if s>0 else 0.5)
     props['p_market_fair']=p_market_fair
 
-    merged=props.merge(pf, on=['player','team'], how='left', suffixes=('','_pf')).merge(tf, on='team', how='left', suffixes=('','_tf'))
+    # === MERGE (with fallback if team is absent) =============================
+    if 'team' in props.columns and not props['team'].isna().all():
+        merged = props.merge(pf, on=['player','team'], how='left', suffixes=('','_pf')).merge(
+                 tf, on='team', how='left', suffixes=('','_tf'))
+    else:
+        # merge on player only, then backfill team from pf
+        merged = props.merge(pf, on=['player'], how='left', suffixes=('','_pf'))
+        if 'team' not in merged.columns or merged['team'].isna().all():
+            merged['team'] = merged.get('team_pf')
+        # and bring in team_form on the filled team
+        merged = merged.merge(tf, left_on='team', right_on='team', how='left', suffixes=('','_tf'))
 
     cov_tags = _load_coverage()
     cb_pen   = _load_cb_assign()
