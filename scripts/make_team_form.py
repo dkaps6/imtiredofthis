@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import sys, os
+import sys, os, time
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -26,10 +26,24 @@ def _z(s: pd.Series) -> pd.Series:
     if not np.isfinite(sd) or sd == 0: return pd.Series(0.0, index=s.index)
     return (s - mu) / sd
 
+# NEW: resilient fetch with retries (handles transient parquet/network hiccups)
+def _fetch_pbp_with_retry(season: int, tries: int = 3, wait: int = 4) -> pd.DataFrame:
+    import nfl_data_py as nfl
+    last = None
+    for i in range(tries):
+        try:
+            df = nfl.import_pbp_data([season])
+            if df is not None and len(df):
+                return df
+        except Exception as e:
+            last = e
+        time.sleep(wait)
+    raise RuntimeError(f"nfl_data_py import failed after {tries} tries: {last}")
+
 def build_from_nflverse(season: int) -> pd.DataFrame:
     # NOTE: do NOT raise “Error” (that symbol isn’t defined) — use Exception/RuntimeError only.
     try:
-        import nfl_data_py as nfl
+        import nfl_data_py as nfl  # noqa: F401 (ensures module exists for retry helper)
     except Exception as e:
         print(f"[team_form] nfl_data_py import failed → fallback: {e}", flush=True)
         # fallback stub (keeps pipeline alive)
@@ -39,7 +53,7 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
         ])
 
     print("[team_form] pulling pbp…", flush=True)
-    pbp = nfl.import_pbp_data([season])
+    pbp = _fetch_pbp_with_retry(season)  # NEW: was nfl.import_pbp_data([season])
     pbp = pbp.loc[pbp["season"]==season].copy()
 
     pbp["defteam"] = pbp["defteam"].astype(str).str.upper()
@@ -95,6 +109,11 @@ def cli(season: int) -> int:
         ]:
             if raw not in df.columns and z in df.columns:
                 df[raw] = df[z]
+
+        # NEW: optional strict gate (helpful while stabilizing CI)
+        if os.getenv("NFL_FORM_STRICT") == "1":
+            if df is None or df.empty or df["team"].nunique() < 8:
+                raise RuntimeError("[team_form] looks empty/stub — check requirements install and network")
     except Exception as e:
         print(f"[team_form] fatal error: {e}", flush=True)  # ← only Exception here
         df = pd.DataFrame()
