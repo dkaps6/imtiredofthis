@@ -2,7 +2,6 @@
 from __future__ import annotations
 import os, json, math
 from pathlib import Path
-Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
 from typing import Dict, Tuple, List
 import pandas as pd
 import numpy as np
