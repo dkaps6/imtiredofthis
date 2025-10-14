@@ -27,22 +27,16 @@ def _z(s: pd.Series) -> pd.Series:
     if not np.isfinite(sd) or sd == 0: return pd.Series(0.0, index=s.index)
     return (s - mu) / sd
 
-# ---- DIAGNOSTIC/RETRY WRAPPER (nflreadpy first, then nfl_data_py; 404 fallback seasons) ----
+# --- PBP fetcher: prefer nflreadpy (2025), fall back to nfl_data_py; 404 -> prior season ---
 def _fetch_pbp_with_retry(season: int, tries: int = 3, wait: int = 4) -> pd.DataFrame:
-    import traceback, time
     seasons_to_try = [season, season - 1, season - 2]
     last = None
-
-    # prefer nflreadpy (mirrors nflreadr; 2025-ready)
     try:
         import nflreadpy as nfr
         use_readpy = True
     except Exception:
         use_readpy = False
-
-    # fall back client
-    if not use_readpy:
-        import nfl_data_py as nfl
+        import nfl_data_py as nfl  # noqa: F401
 
     with open(ERR_LOG, "a", encoding="utf-8") as f:
         f.write(f"\n=== PBP fetch wanted season={season} ===\n")
@@ -51,140 +45,166 @@ def _fetch_pbp_with_retry(season: int, tries: int = 3, wait: int = 4) -> pd.Data
         for i in range(1, tries + 1):
             try:
                 if use_readpy:
-                    pf = nfr.load_pbp([s])     # Polars -> Pandas
+                    pf = nfr.load_pbp([s])
                     df = pf.to_pandas()
                 else:
                     df = nfl.import_pbp_data([s])
 
-                if df is not None and len(df):
+                if isinstance(df, pd.DataFrame) and len(df):
                     with open(ERR_LOG, "a", encoding="utf-8") as f:
                         f.write(f"season {s} try {i}: OK rows={len(df)} via "
                                 f"{'nflreadpy' if use_readpy else 'nfl_data_py'}\n")
                     if s != season:
                         print(f"[team_form] NOTE: using season {s} as fallback for {season}", flush=True)
                     return df
-
-                raise RuntimeError("PBP fetch returned empty dataframe")
+                raise RuntimeError("empty dataframe")
             except Exception as e:
                 last = e
-                tb = traceback.format_exc()
-                msg = f"{type(e).__name__}: {e}"
-                print(f"[team_form] season {s} try {i}/{tries} failed: {msg}", flush=True)
                 with open(ERR_LOG, "a", encoding="utf-8") as f:
-                    f.write(f"season {s} try {i}: {msg}\n{tb}\n")
-                # If nfl_data_py hit a 404 for current season, advance season quickly
+                    f.write(f"season {s} try {i}: {type(e).__name__}: {e}\n{traceback.format_exc()}\n")
                 if (not use_readpy) and ("HTTP Error 404" in str(e)):
-                    print(f"[team_form] season {s}: 404 detected; trying previous season…", flush=True)
                     break
                 time.sleep(wait)
+    raise RuntimeError(f"PBP fetch failed: {type(last).__name__}: {last}")
 
-    raise RuntimeError(f"PBP fetch failed for {season}: {type(last).__name__}: {last}")
+def _try_load_participation(season: int) -> pd.DataFrame:
+    """
+    Try a few loaders for nflverse participation with defenders_in_box.
+    Returns empty DataFrame if none are available.
+    """
+    try:
+        import nflreadpy as nfr
+        pf = nfr.load_participation([season])  # polars
+        return pf.to_pandas()
+    except Exception:
+        pass
+    # nfl_data_py has shipped participation in some versions; try a few likely names
+    try:
+        import nfl_data_py as nfl
+        for fn in ("import_participation", "import_participation_data", "import_ngs_participation"):
+            if hasattr(nfl, fn):
+                return getattr(nfl, fn)([season])
+    except Exception:
+        pass
+    return pd.DataFrame()
 
 def build_from_nflverse(season: int) -> pd.DataFrame:
-    try:
-        import nfl_data_py as nfl  # noqa: F401
-    except Exception as e:
-        print(f"[team_form] nfl_data_py import failed → fallback: {e}", flush=True)
-        return pd.DataFrame([
-            {"team":"BUF","def_pass_epa":0.10,"def_rush_epa":-0.05,"def_sack_rate":0.08,
-             "pace":30.0,"proe":0.02,"light_box_rate":np.nan,"heavy_box_rate":np.nan}
-        ])
-
-    # guard against shadowing; show exactly what got imported
-    import importlib
-    nfl_mod = importlib.import_module("nfl_data_py")
-    nfl_path = getattr(nfl_mod, "__file__", "")
-    print(f"[team_form] nfl_data_py path → {nfl_path}", flush=True)
-    if "site-packages" not in (nfl_path or "") and "dist-packages" not in (nfl_path or ""):
-        raise RuntimeError(f"Wrong nfl_data_py imported (shadowed). Path: {nfl_path}")
-
-    print("[team_form] pulling pbp…", flush=True)
+    # --- pull PBP
     pbp = _fetch_pbp_with_retry(season)
-    pbp = pbp.loc[pbp["season"]==season].copy()
+    pbp = pbp.loc[pbp["season"] == season].copy()
 
     pbp["defteam"] = pbp["defteam"].astype(str).str.upper()
     pbp["posteam"] = pbp["posteam"].astype(str).str.upper()
 
-    pbp["is_pass"] = (pbp.get("pass",0)==1) | (pbp.get("pass_attempt",0)==1) | (pbp.get("play_type","")=="pass")
-    pbp["is_rush"] = (pbp.get("rush",0)==1) | (pbp.get("play_type","")=="run")
+    pbp["is_pass"]     = (pbp.get("pass",0)==1) | (pbp.get("pass_attempt",0)==1) | (pbp.get("play_type","")=="pass")
+    pbp["is_rush"]     = (pbp.get("rush",0)==1) | (pbp.get("play_type","")=="run")
     pbp["is_dropback"] = (pbp.get("dropback",0)==1)
-    pbp["is_sack"] = (pbp.get("sack",0)==1)
+    pbp["is_sack"]     = (pbp.get("sack",0)==1)
 
+    # --- defensive EPA splits
     def_pass = pbp.loc[pbp["is_pass"]].groupby("defteam")["epa"].mean().rename("def_pass_epa")
     def_rush = pbp.loc[pbp["is_rush"]].groupby("defteam")["epa"].mean().rename("def_rush_epa")
 
-    drop = pbp.loc[pbp["is_dropback"]].groupby("defteam")["is_dropback"].count().rename("db")
+    # --- defensive sack rate
+    drop  = pbp.loc[pbp["is_dropback"]].groupby("defteam")["is_dropback"].count().rename("db")
     sacks = pbp.loc[pbp["is_sack"]].groupby("defteam")["is_sack"].count().rename("sacks")
     sack_rate = (sacks / drop).replace([np.inf,-np.inf], np.nan).fillna(0.0).rename("def_sack_rate")
 
+    # --- pace proxy (seconds per snap) from league mean plays per game
     plays_by_off = pbp.groupby(["game_id","posteam"])["play_id"].count().rename("plays").reset_index()
-    g_counts = plays_by_off.groupby("posteam")["game_id"].nunique()
-    plays_pg = (plays_by_off.groupby("posteam")["plays"].sum() / g_counts)
+    g_counts     = plays_by_off.groupby("posteam")["game_id"].nunique()
+    plays_pg     = (plays_by_off.groupby("posteam")["plays"].sum() / g_counts)
     sec_per_snap = 3600.0 / (plays_pg.mean() if np.isfinite(plays_pg.mean()) else 120.0)
     pace = pd.Series(sec_per_snap, index=def_pass.index, name="pace")
 
-    neutral = pbp[(pbp["qtr"]<=3) & (pbp["score_differential"].abs()<=7)].copy()
-    if "wp" in neutral.columns:
-        neutral = neutral[(neutral["wp"]>=0.20) & (neutral["wp"]<=0.80)]
-    team_pr = neutral.groupby("posteam")["is_pass"].mean().rename("team_neutral_pr")
-    league_pr = float(team_pr.mean()) if len(team_pr) else 0.55
-    proe = pd.Series(-(team_pr.mean() - league_pr if len(team_pr) else 0.0), index=def_pass.index, name="proe")
+    # --- PROE: prefer xPass, else neutral pass rate method
+    if "xpass" in pbp.columns:
+        # team-level PROE = mean(actual pass) − mean(expected pass)
+        by_off = pbp.groupby("posteam")[["is_pass","xpass"]].mean(numeric_only=True)
+        proe_off = (by_off["is_pass"] - by_off["xpass"]).rename("proe")
+        proe = proe_off.reindex(def_pass.index)  # map to same team index
+    else:
+        neutral = pbp[(pbp["qtr"]<=3) & (pbp["score_differential"].abs()<=7)].copy()
+        if "wp" in neutral.columns:
+            neutral = neutral[(neutral["wp"]>=0.20) & (neutral["wp"]<=0.80)]
+        team_pr   = neutral.groupby("posteam")["is_pass"].mean().rename("team_neutral_pr")
+        league_pr = float(team_pr.mean()) if len(team_pr) else 0.55
+        proe = (team_pr - league_pr).reindex(def_pass.index).fillna(0.0)
+    proe.name = "proe"
 
-    lb = pd.Series(np.nan, index=def_pass.index, name="light_box_rate")
-    hb = pd.Series(np.nan, index=def_pass.index, name="heavy_box_rate")
+    # start frame
+    df = pd.concat([def_pass, def_rush, sack_rate, pace, proe], axis=1).reset_index().rename(columns={"defteam":"team"})
 
-    df = pd.concat([def_pass, def_rush, sack_rate, pace, proe, lb, hb], axis=1).reset_index().rename(columns={"defteam":"team"})
+    # --- optional participation enrichment for box rates (real only; no fabrication)
+    try:
+        part = _try_load_participation(season)
+        # Expect (at least): game_id, play_id, defenders_in_box
+        # Join to PBP by game_id + play_id, compute rates allowed by defense.
+        needed = {"game_id","play_id","defenders_in_box"}
+        if isinstance(part, pd.DataFrame) and len(part) and needed.issubset(set(part.columns)):
+            p = part[["game_id","play_id","defenders_in_box"]].copy()
+            p = p.merge(pbp[["game_id","play_id","defteam","is_rush"]], on=["game_id","play_id"], how="inner")
+            p = p[p["is_rush"]==True].copy()
+            p["light"] = (pd.to_numeric(p["defenders_in_box"], errors="coerce") <= 6).astype(float)
+            p["heavy"] = (pd.to_numeric(p["defenders_in_box"], errors="coerce") >= 8).astype(float)
+            box = p.groupby("defteam")[["light","heavy"]].mean(numeric_only=True).rename(columns={
+                "light":"light_box_rate","heavy":"heavy_box_rate"
+            })
+            df = df.merge(box.reset_index().rename(columns={"defteam":"team"}), on="team", how="left")
+    except Exception as e:
+        print(f"[team_form] participation enrich skipped: {type(e).__name__}: {e}", flush=True)
 
-    # ---- OPTIONAL ENRICHMENTS (PFR / mirrors) ----
+    # --- optional PFR/mirrors enrich (leave NaN if not present)
     try:
         enrich_path = Path("data/pfr_team_enrich.csv")
         if enrich_path.exists():
             ten = pd.read_csv(enrich_path)
             ten = ten.rename(columns={
-                "prwr": "pass_rush_win_rate",
-                "press_rate": "pressure_rate",
-                "rsr": "run_stop_rate",
-                "man_rate": "man_coverage_rate",
-                "zone_rate": "zone_coverage_rate",
-                "light_box_rate": "light_box_rate_obs",
-                "heavy_box_rate": "heavy_box_rate_obs",
-                "team_abbr": "team"
+                "team_abbr":"team",
+                "light_box_rate":"light_box_rate_obs",
+                "heavy_box_rate":"heavy_box_rate_obs",
+                "prwr":"pass_rush_win_rate",
+                "press_rate":"pressure_rate",
+                "rsr":"run_stop_rate",
+                "man_rate":"man_coverage_rate",
+                "zone_rate":"zone_coverage_rate",
             })
-            keep = ["team","pass_rush_win_rate","pressure_rate","run_stop_rate",
-                    "man_coverage_rate","zone_coverage_rate","light_box_rate_obs","heavy_box_rate_obs"]
+            keep = ["team","light_box_rate_obs","heavy_box_rate_obs",
+                    "pass_rush_win_rate","pressure_rate","run_stop_rate",
+                    "man_coverage_rate","zone_coverage_rate"]
             ten = ten[[c for c in keep if c in ten.columns]].copy()
-            for col in keep:
-                if col in ten.columns and col != "team":
-                    ten[col] = pd.to_numeric(ten[col], errors="coerce")
-            df = df.merge(ten, on="team", how="left", suffixes=("","_enrich"))
+            for c in ten.columns:
+                if c != "team":
+                    ten[c] = pd.to_numeric(ten[c], errors="coerce")
+            df = df.merge(ten, on="team", how="left")
             if "light_box_rate_obs" in df.columns:
                 df["light_box_rate"] = df["light_box_rate"].fillna(df["light_box_rate_obs"])
             if "heavy_box_rate_obs" in df.columns:
                 df["heavy_box_rate"] = df["heavy_box_rate"].fillna(df["heavy_box_rate_obs"])
     except Exception as e:
-        print(f"[team_form] enrich skipped: {type(e).__name__}: {e}", flush=True)
+        print(f"[team_form] PFR enrich skipped: {type(e).__name__}: {e}", flush=True)
 
+    # z-scores
     for c in ["def_pass_epa","def_rush_epa","def_sack_rate","pace","proe","light_box_rate","heavy_box_rate"]:
-        df[f"{c}_z"] = _z(df[c]) if c in df.columns else 0.0
-    return df
+        if c in df.columns:
+            df[f"{c}_z"] = _z(df[c])
+
+    # ensure schema stability
+    cols = ["team","def_pass_epa","def_rush_epa","def_sack_rate",
+            "pace","proe","light_box_rate","heavy_box_rate",
+            "def_pass_epa_z","def_rush_epa_z","def_sack_rate_z",
+            "pace_z","proe_z","light_box_rate_z","heavy_box_rate_z"]
+    for c in cols:
+        if c not in df.columns:
+            df[c] = np.nan
+    return df[cols]
 
 def cli(season: int) -> int:
     try:
         df = build_from_nflverse(season)
-        for z, raw in [
-            ("def_pass_epa_z","def_pass_epa"),
-            ("def_rush_epa_z","def_rush_epa"),
-            ("def_sack_rate_z","def_sack_rate"),
-            ("pace_z","pace"),
-            ("proe_z","proe"),
-            ("light_box_rate_z","light_box_rate"),
-            ("heavy_box_rate_z","heavy_box_rate"),
-        ]:
-            if raw not in df.columns and z in df.columns:
-                df[raw] = df[z]
         if os.getenv("NFL_FORM_STRICT") == "1":
             if df is None or df.empty or df["team"].nunique() < 8:
-                raise RuntimeError("[team_form] looks empty/stub — check requirements install and network; see logs/nfl_pbp_error.txt")
+                raise RuntimeError("[team_form] looks empty/stub — check logs/nfl_pbp_error.txt")
     except Exception as e:
         print(f"[team_form] fatal error: {type(e).__name__}: {e}", flush=True)
         df = pd.DataFrame()
