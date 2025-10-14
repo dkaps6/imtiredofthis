@@ -32,13 +32,10 @@ def normalize_market_key(k: str) -> str:
     k2 = str(k).strip().lower()
     return MARKET_ALIASES.get(k2, k2)
 
-# Guard + normalize with proper indentation
+# Apply market key aliases safely (v4 naming differences)
 if "market" in props.columns:
-    props["market"] = (
-        props["market"]
-        .astype(str)
-        .map(normalize_market_key)
-    )
+    props["market"] = props["market"].astype(str)
+    props["market"] = props["market"].map(normalize_market_key).fillna(props["market"])
 
 # ---------- Odds helpers ----------
 def american_to_prob(odds: float) -> float:
