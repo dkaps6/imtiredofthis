@@ -139,7 +139,6 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
     # fetcher appends & builds outputs/props_raw.csv
 
     # 4) pricing + predictors
-    import os
     if not os.path.exists("outputs/props_raw.csv") or os.stat("outputs/props_raw.csv").st_size == 0:
         print("[engine] ERROR: outputs/props_raw.csv is missing or empty – skipping pricing")
         sys.exit(2)
