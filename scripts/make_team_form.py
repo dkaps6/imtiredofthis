@@ -12,7 +12,10 @@ def _safe_write(df: pd.DataFrame, out: Path) -> None:
     if df is None or df.empty:
         pd.DataFrame(columns=[
             "team","def_pass_epa_z","def_rush_epa_z","def_sack_rate_z",
-            "pace_z","proe_z","light_box_rate_z","heavy_box_rate_z"
+            "pace_z","proe_z","light_box_rate_z","heavy_box_rate_z",
+            # NEW: raw mirrors so downstream can read expected names
+            "def_pass_epa","def_rush_epa","def_sack_rate",
+            "pace","proe","light_box_rate","heavy_box_rate"
         ]).to_csv(out, index=False)
     else:
         df.to_csv(out, index=False)
@@ -34,6 +37,23 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
 def cli(season: int) -> int:
     try:
         df = build_from_nflverse(season)
+        # ---- NEW: add raw mirrors (no nukes; just duplicate when raw missing) ----
+        if df is None:
+            df = pd.DataFrame()
+        if not df.empty:
+            df = df.copy()
+            z_to_raw = [
+                ("def_pass_epa_z","def_pass_epa"),
+                ("def_rush_epa_z","def_rush_epa"),
+                ("def_sack_rate_z","def_sack_rate"),
+                ("pace_z","pace"),
+                ("proe_z","proe"),
+                ("light_box_rate_z","light_box_rate"),
+                ("heavy_box_rate_z","heavy_box_rate"),
+            ]
+            for z, raw in z_to_raw:
+                if raw not in df.columns and z in df.columns:
+                    df[raw] = df[z]
     except Exception as e:
         # Catch everything explicitly (fixes: name 'Error' is not defined)
         print(f"[team_form] fatal error: {e}", flush=True)
