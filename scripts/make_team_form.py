@@ -153,36 +153,52 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
     pbp["is_dropback"] = (pbp.get("dropback",0)==1)
     pbp["is_sack"]     = (pbp.get("sack",0)==1)
 
+    # --- Defensive EPA (pass / rush)
     def_pass = pbp.loc[pbp["is_pass"]].groupby("defteam")["epa"].mean().rename("def_pass_epa")
     def_rush = pbp.loc[pbp["is_rush"]].groupby("defteam")["epa"].mean().rename("def_rush_epa")
 
+    # --- Defensive sack rate from opponent dropbacks
     drop  = pbp.loc[pbp["is_dropback"]].groupby("defteam")["is_dropback"].count().rename("db")
     sacks = pbp.loc[pbp["is_sack"]].groupby("defteam")["is_sack"].count().rename("sacks")
-    sack_rate = (sacks / drop).replace([np.inf,-np.inf], np.nan).fillna(0.0).rename("def_sack_rate")
+    sack_rate = (sacks / drop).replace([np.inf,-np.inf], np.nan).rename("def_sack_rate")
 
-    plays_by_off = pbp.groupby(["game_id","posteam"])["play_id"].count().rename("plays").reset_index()
-    g_counts     = plays_by_off.groupby("posteam")["game_id"].nunique()
-    plays_pg     = (plays_by_off.groupby("posteam")["plays"].sum() / g_counts)
-    sec_per_snap = 3600.0 / (plays_pg.mean() if np.isfinite(plays_pg.mean()) else 120.0)
-    pace = pd.Series(sec_per_snap, index=def_pass.index, name="pace")
+    # --- Neutral PACE (sec/snap) per OFFENSE team using inter-snap deltas
+    neutral = pbp.loc[
+        (pbp["qtr"] <= 3) &
+        (pbp["down"].between(1, 3, inclusive="both")) &
+        (pbp["score_differential"].between(-7, 7, inclusive="both"))
+    ].copy()
 
+    # use game clock: higher to lower -> negative diff; take absolute
+    neutral.sort_values(["game_id","posteam","qtr","game_seconds_remaining"],
+                        ascending=[True, True, True, False], inplace=True)
+    neutral["delta"] = neutral.groupby(["game_id","posteam"])["game_seconds_remaining"].diff(-1).abs()
+    neutral["delta"] = neutral["delta"].clip(lower=5, upper=90).fillna(40)
+    pace_off = neutral.groupby("posteam")["delta"].mean().rename("pace")  # seconds per snap (lower = faster)
+
+    # --- PROE from neutral: mean(pass - xpass) if xpass available; else delta vs league neutral PR
     if "xpass" in pbp.columns:
-        by_off = pbp.groupby("posteam")[["is_pass","xpass"]].mean(numeric_only=True)
-        proe_off = (by_off["is_pass"] - by_off["xpass"]).rename("proe")
-        proe = proe_off.reindex(def_pass.index)
+        nu = neutral.copy()
+        for c in ["is_pass","xpass"]:
+            nu[c] = pd.to_numeric(nu[c], errors="coerce")
+        proe_off = (nu["is_pass"] - nu["xpass"]).groupby(nu["posteam"]).mean().rename("proe")
     else:
-        neutral = pbp[(pbp["qtr"]<=3) & (pbp["score_differential"].abs()<=7)].copy()
-        if "wp" in neutral.columns:
-            neutral = neutral[(neutral["wp"]>=0.20) & (neutral["wp"]<=0.80)]
-        team_pr   = neutral.groupby("posteam")["is_pass"].mean().rename("team_neutral_pr")
+        nu = neutral.copy()
+        team_pr   = nu.groupby("posteam")["is_pass"].mean().rename("team_neutral_pr")
         league_pr = float(team_pr.mean()) if len(team_pr) else 0.55
-        proe = (team_pr - league_pr).reindex(def_pass.index).fillna(0.0)
-    proe.name = "proe"
+        proe_off  = (team_pr - league_pr).rename("proe")
 
-    df = pd.concat([def_pass, def_rush, sack_rate, pace, proe], axis=1).reset_index().rename(columns={"defteam":"team"})
+    # Build frame keyed by team (uppercase)
+    pace = pace_off.reset_index().rename(columns={"posteam":"team"})
+    proe = proe_off.reset_index().rename(columns={"posteam":"team"})
+    pace["team"] = pace["team"].astype(str).str.upper()
+    proe["team"] = proe["team"].astype(str).str.upper()
+
+    df = pd.concat([def_pass, def_rush, sack_rate], axis=1).reset_index().rename(columns={"defteam":"team"})
     df["team"] = df["team"].astype(str).str.upper()
+    df = df.merge(pace, on="team", how="left").merge(proe, on="team", how="left")
 
-    # 2) Participation → light/heavy box
+    # 2) Participation → light/heavy box (best-effort)
     try:
         part = _try_load_participation(season)
         needed = {"game_id","play_id","defenders_in_box"}
