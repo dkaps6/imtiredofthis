@@ -13,16 +13,14 @@ on:
         default: ""
 
 jobs:
-  run:
+  full_slate:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-
     env:
-      # your existing knobs
+      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+      ESPN_COOKIE: ${{ secrets.ESPN_COOKIE }}   # optional
+      NFL_FORM_STRICT: "1"
       MC_TRIALS: "25000"
       PYTHONUNBUFFERED: "1"
-      # strict mode makes builders fail fast if they returned stub/empty data
-      NFL_FORM_STRICT: "1"
 
     steps:
       - name: Checkout
