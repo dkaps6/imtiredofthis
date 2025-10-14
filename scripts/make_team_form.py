@@ -25,6 +25,8 @@ def _safe_write(df: pd.DataFrame, out: Path) -> None:
         pd.DataFrame(columns=[
             "team","def_pass_epa","def_rush_epa","def_sack_rate",
             "pace","proe","light_box_rate","heavy_box_rate",
+            # NEW required team features
+            "rz_rate","slot_rate","12p_rate","ay_per_att",
             "def_pass_epa_z","def_rush_epa_z","def_sack_rate_z",
             "pace_z","proe_z","light_box_rate_z","heavy_box_rate_z"
         ]).to_csv(out, index=False)
@@ -176,7 +178,7 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
     neutral["delta"] = neutral["delta"].clip(lower=5, upper=90).fillna(40)
     pace_off = neutral.groupby("posteam")["delta"].mean().rename("pace")  # seconds per snap (lower = faster)
 
-    # --- PROE from neutral: mean(pass - xpass) if xpass available; else delta vs league neutral PR
+    # --- PROE from neutral
     if "xpass" in pbp.columns:
         nu = neutral.copy()
         for c in ["is_pass","xpass"]:
@@ -188,7 +190,6 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
         league_pr = float(team_pr.mean()) if len(team_pr) else 0.55
         proe_off  = (team_pr - league_pr).rename("proe")
 
-    # Build frame keyed by team (uppercase)
     pace = pace_off.reset_index().rename(columns={"posteam":"team"})
     proe = proe_off.reset_index().rename(columns={"posteam":"team"})
     pace["team"] = pace["team"].astype(str).str.upper()
@@ -198,7 +199,57 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
     df["team"] = df["team"].astype(str).str.upper()
     df = df.merge(pace, on="team", how="left").merge(proe, on="team", how="left")
 
-    # 2) Participation → light/heavy box (best-effort)
+    # ---- NEW: Real team features you requested: rz_rate, 12p_rate, ay_per_att, slot_rate
+    off = pbp.loc[pbp["posteam"].notna()].copy()
+    off["team_off"] = off["posteam"].str.upper()
+
+    # rz_rate: share of offensive plays in red zone
+    off["is_rz_play"] = (off["yardline_100"] <= 20).astype(int)
+    rz = off.groupby("team_off", as_index=False).agg(
+        off_plays=("play_id","count"),
+        rz_plays=("is_rz_play","sum"),
+    )
+    rz["rz_rate"] = rz["rz_plays"] / rz["off_plays"].replace(0, np.nan)
+    df = df.merge(rz[["team_off","rz_rate"]].rename(columns={"team_off":"team"}), on="team", how="left")
+
+    # 12p_rate: personnel_offense contains '12'
+    per = off[["team_off","personnel_offense"]].copy()
+    per["is_12p"] = per["personnel_offense"].astype(str).str.extract(r"(\d{2})", expand=False).eq("12").astype(int)
+    per_agg = per.groupby("team_off", as_index=False).agg(snaps=("personnel_offense","count"),
+                                                          snaps_12p=("is_12p","sum"))
+    per_agg["12p_rate"] = per_agg["snaps_12p"] / per_agg["snaps"].replace(0, np.nan)
+    df = df.merge(per_agg[["team_off","12p_rate"]].rename(columns={"team_off":"team"}), on="team", how="left")
+
+    # ay_per_att: air yards per team pass attempt (zeros for throws w/o air_yards)
+    pas = off.loc[off["is_pass"]==True].copy()
+    pas["air_yards_filled"] = pas["air_yards"].fillna(0.0)
+    ay = pas.groupby("team_off", as_index=False).agg(
+        ay_sum=("air_yards_filled","sum"),
+        att=("play_id","count"),
+    )
+    ay["ay_per_att"] = ay["ay_sum"] / ay["att"].replace(0, np.nan)
+    df = df.merge(ay[["team_off","ay_per_att"]].rename(columns={"team_off":"team"}), on="team", how="left")
+
+    # slot_rate: share of team targets to players labeled SLOT in your roles.csv
+    try:
+        roles = _safe_read_csv("data/roles.csv")
+        if not roles.empty and {"player","team","role"}.issubset(roles.columns):
+            roles["player_norm"] = roles["player"].astype(str).str.lower().str.replace(r"[.'’]", "", regex=True).str.strip()
+            roles["team"] = roles["team"].astype(str).str.upper()
+            tgt = off.loc[off["receiver_player_name"].notna(), ["team_off","receiver_player_name"]].copy()
+            tgt["player_norm"] = tgt["receiver_player_name"].astype(str).str.lower().str.replace(r"[.'’]", "", regex=True).str.strip()
+            tgt = tgt.merge(roles[["player_norm","team","role"]], left_on=["player_norm","team_off"], right_on=["player_norm","team"], how="left")
+            tgt["is_slot"] = tgt["role"].astype(str).str.upper().eq("SLOT").astype(int)
+            slot = tgt.groupby("team_off", as_index=False).agg(
+                team_targets=("receiver_player_name","count"),
+                slot_targets=("is_slot","sum")
+            )
+            slot["slot_rate"] = slot["slot_targets"] / slot["team_targets"].replace(0, np.nan)
+            df = df.merge(slot[["team_off","slot_rate"]].rename(columns={"team_off":"team"}), on="team", how="left")
+    except Exception as e:
+        print(f"[team_form] slot_rate compute skipped: {type(e).__name__}: {e}", flush=True)
+
+    # 2) Participation → light/heavy box (best-effort) — preserved
     try:
         part = _try_load_participation(season)
         needed = {"game_id","play_id","defenders_in_box"}
@@ -216,7 +267,7 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
     except Exception as e:
         print(f"[team_form] participation enrich skipped: {type(e).__name__}: {e}", flush=True)
 
-    # 3) PFR team enrich (observed box rates etc) if present
+    # 3) PFR team enrich — preserved
     try:
         enrich_path = Path("data/pfr_team_enrich.csv")
         if enrich_path.exists():
@@ -246,7 +297,7 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
     except Exception as e:
         print(f"[team_form] PFR enrich skipped: {type(e).__name__}: {e}", flush=True)
 
-    # 4) External provider fallbacks (fill only remaining NaNs)
+    # 4) External provider fallbacks — preserved
     espn = _safe_read_csv("data/espn_team.csv")
     df = _merge_missing_team(df, espn, "team", {
         "def_sack_rate":"def_sack_rate",
@@ -254,6 +305,8 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
         "proe":"proe",
         "light_box_rate":"light_box_rate",
         "heavy_box_rate":"heavy_box_rate",
+        # in case some providers carry these too:
+        "rz_rate":"rz_rate","slot_rate":"slot_rate","12p_rate":"12p_rate","ay_per_att":"ay_per_att",
     }, tag="ESPN")
 
     msf = _safe_read_csv("data/msf_team.csv")
@@ -263,6 +316,7 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
         "proe":"proe",
         "light_box_rate":"light_box_rate",
         "heavy_box_rate":"heavy_box_rate",
+        "rz_rate":"rz_rate","slot_rate":"slot_rate","12p_rate":"12p_rate","ay_per_att":"ay_per_att",
     }, tag="MySportsFeeds")
 
     gsis = _safe_read_csv("data/gsis_team.csv")
@@ -272,6 +326,7 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
         "proe":"proe",
         "light_box_rate":"light_box_rate",
         "heavy_box_rate":"heavy_box_rate",
+        "rz_rate":"rz_rate","slot_rate":"slot_rate","12p_rate":"12p_rate","ay_per_att":"ay_per_att",
     }, tag="NFLGSIS")
 
     apis = _safe_read_csv("data/apisports_team.csv")
@@ -281,11 +336,13 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
         "proe":"proe",
         "light_box_rate":"light_box_rate",
         "heavy_box_rate":"heavy_box_rate",
+        "rz_rate":"rz_rate","slot_rate":"slot_rate","12p_rate":"12p_rate","ay_per_att":"ay_per_att",
     }, tag="API-Sports")
 
-    # 5) Last-resort from prior season (only if still NaN)
+    # 5) Last-resort from prior season — preserved (now includes the four new fields)
     df = _fill_prior_season_missing(df, season, [
-        "def_sack_rate","pace","proe","light_box_rate","heavy_box_rate"
+        "def_sack_rate","pace","proe","light_box_rate","heavy_box_rate",
+        "rz_rate","slot_rate","12p_rate","ay_per_att"
     ])
 
     # 6) z-scores
@@ -296,6 +353,7 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
     # 7) ensure schema stability
     cols = ["team","def_pass_epa","def_rush_epa","def_sack_rate",
             "pace","proe","light_box_rate","heavy_box_rate",
+            "rz_rate","slot_rate","12p_rate","ay_per_att",
             "def_pass_epa_z","def_rush_epa_z","def_sack_rate_z",
             "pace_z","proe_z","light_box_rate_z","heavy_box_rate_z"]
     for c in cols:
