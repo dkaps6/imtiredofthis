@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import sys, os, time
+import sys, os, time, traceback
 from pathlib import Path
 import pandas as pd
 import numpy as np
 
 OUT = Path("data/player_form.csv")
+LOG_DIR = Path("logs"); LOG_DIR.mkdir(parents=True, exist_ok=True)
+ERR_LOG = LOG_DIR / "nfl_pbp_error.txt"
 
 def _safe_write(df: pd.DataFrame, out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -19,19 +21,27 @@ def _safe_write(df: pd.DataFrame, out: Path) -> None:
     else:
         df.to_csv(out, index=False)
 
-# NEW
 def _fetch_pbp_with_retry(season: int, tries: int = 3, wait: int = 4) -> pd.DataFrame:
     import nfl_data_py as nfl
     last = None
-    for i in range(tries):
+    with open(ERR_LOG, "a", encoding="utf-8") as f:
+        f.write(f"\n=== import_pbp_data season={season} ===\n")
+    for i in range(1, tries+1):
         try:
             df = nfl.import_pbp_data([season])
             if df is not None and len(df):
+                with open(ERR_LOG, "a", encoding="utf-8") as f:
+                    f.write(f"try {i}: OK rows={len(df)}\n")
                 return df
+            raise RuntimeError("import_pbp_data returned empty dataframe")
         except Exception as e:
             last = e
-        time.sleep(wait)
-    raise RuntimeError(f"nfl_data_py import failed after {tries} tries: {last}")
+            tb = traceback.format_exc()
+            print(f"[player_form] import_pbp_data try {i}/{tries} failed: {type(e).__name__}: {e}", flush=True)
+            with open(ERR_LOG, "a", encoding="utf-8") as f:
+                f.write(f"try {i}: {type(e).__name__}: {e}\n{tb}\n")
+            time.sleep(wait)
+    raise RuntimeError(f"nfl_data_py import failed after {tries} tries: {type(last).__name__}: {last}")
 
 def build_from_nflverse(season: int) -> pd.DataFrame:
     try:
@@ -46,35 +56,31 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
         ])
 
     print("[player_form] pulling pbp…", flush=True)
-    pbp = _fetch_pbp_with_retry(season)  # NEW
+    pbp = _fetch_pbp_with_retry(season)
     pbp = pbp.loc[pbp["season"]==season].copy()
 
     pbp["posteam"] = pbp["posteam"].astype(str).str.upper()
     pbp["receiver"] = pbp.get("receiver_player_name","").fillna("").astype(str)
-    pbp["rusher"]   = pbp.get("rusher_player_name","").fillna("").astype(str)
+    pbp["rusher"]   = pbp.get("rusher_player_name","").fillna("").astype str
     pbp["passer"]   = pbp.get("passer_player_name","").fillna("").astype(str)
 
     pbp["is_pass"] = (pbp.get("pass",0)==1) | (pbp.get("pass_attempt",0)==1) | (pbp.get("play_type","")=="pass")
     pbp["is_rush"] = (pbp.get("rush",0)==1) | (pbp.get("play_type","")=="run")
     pbp["in_rz"]   = (pbp.get("yardline_100").fillna(100) <= 20)
 
-    # targets
     targs = pbp.loc[pbp["is_pass"] & (pbp["receiver"]!=""), ["game_id","posteam","receiver"]].copy()
     targs["targets"] = 1
     team_tgts = targs.groupby(["game_id","posteam"])["targets"].sum().rename("team_targets")
     rec_tgts  = targs.groupby(["game_id","posteam","receiver"])["targets"].sum().rename("player_targets")
 
-    # rush attempts & yards
     rush = pbp.loc[pbp["is_rush"] & (pbp["rusher"]!=""), ["game_id","posteam","rusher","yards_gained"]].copy()
     rush["rush_att"] = 1
     team_rush = rush.groupby(["game_id","posteam"])["rush_att"].sum().rename("team_rush_att")
     ply_rush  = rush.groupby(["game_id","posteam","rusher"])["rush_att"].sum().rename("player_rush_att")
     ply_rush_yds = rush.groupby(["game_id","posteam","rusher"])["yards_gained"].sum().rename("rush_yards")
 
-    # receiving yards (proxy efficiency)
     rec_yards = pbp.loc[pbp["receiver"]!=""].groupby(["game_id","posteam","receiver"])["yards_gained"].sum().rename("rec_yards")
 
-    # red-zone
     rz_targs = pbp.loc[pbp["is_pass"] & pbp["in_rz"] & (pbp["receiver"]!=""), ["game_id","posteam","receiver"]].copy()
     rz_targs["rz_tgt"] = 1
     ply_rz_tgt = rz_targs.groupby(["game_id","posteam","receiver"])["rz_tgt"].sum().rename("player_rz_tgt")
@@ -85,14 +91,12 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
     ply_rz_carry = rz_rush.groupby(["game_id","posteam","rusher"])["rz_carry"].sum().rename("player_rz_carry")
     team_rz_carry = rz_rush.groupby(["game_id","posteam"])["rz_carry"].sum().rename("team_rz_carry")
 
-    # QB YPA per team
     pass_att = pbp.loc[pbp["is_pass"] & (pbp["passer"]!=""), ["game_id","posteam","passer","yards_gained"]].copy()
     pass_att["att"] = 1
     team_pass_yds = pass_att.groupby(["game_id","posteam"])["yards_gained"].sum().rename("team_pass_yds")
     team_atts = pass_att.groupby(["game_id","posteam"])["att"].sum().rename("team_pass_att")
     team_ypa = (team_pass_yds.groupby("posteam").sum() / team_atts.groupby("posteam").sum()).rename("qb_ypa_all")
 
-    # union receivers & rushers, per game → season
     rec_level = rec_tgts.reset_index().rename(columns={"receiver":"player"})
     rush_level = ply_rush.reset_index().rename(columns={"rusher":"player"})
     players = pd.concat([rec_level[["game_id","posteam","player","player_targets"]],
@@ -128,7 +132,6 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
     agg["yprr_proxy"] = (agg["rec_yards"] / agg["player_targets"]).replace([np.inf,-np.inf], np.nan).fillna(0.0)
     agg["ypc"]        = (agg["rush_yards"] / agg["player_rush_att"]).replace([np.inf,-np.inf], np.nan).fillna(0.0)
 
-    # simple position guess; role left blank (your roles.csv/merge fills later)
     agg["position"] = np.where(agg["player_rush_att"] > agg["player_targets"], "RB", "WR")
     agg["route_rate"] = np.nan
     agg["role"] = ""
@@ -149,12 +152,11 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
 def cli(season: int) -> int:
     try:
         df = build_from_nflverse(season)
-        # NEW: optional strict gate
         if os.getenv("NFL_FORM_STRICT") == "1":
             if df is None or df.empty or df["team"].nunique() < 8 or len(df) < 50:
-                raise RuntimeError("[player_form] looks empty/stub — check requirements install and network")
+                raise RuntimeError("[player_form] looks empty/stub — check requirements install and network; see logs/nfl_pbp_error.txt")
     except Exception as e:
-        print(f"[player_form] fatal error: {e}", flush=True)  # ← only Exception here
+        print(f"[player_form] fatal error: {type(e).__name__}: {e}", flush=True)
         df = pd.DataFrame()
     _safe_write(df, OUT)
     print(f"[player_form] wrote rows={len(df)} → {OUT}")
