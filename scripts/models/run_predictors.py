@@ -2,6 +2,7 @@
 from __future__ import annotations
 import os, json, math
 from pathlib import Path
+Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
 from typing import Dict, Tuple, List
 import pandas as pd
 import numpy as np
@@ -34,7 +35,15 @@ except Exception:
         features: dict
 
 # -------- Config pulled from your repo structure (already referenced by engine) ----
-from scripts.config import LOG_DIR, RUN_ID, MONTE_CARLO_TRIALS
+try:
+    from scripts.config import LOG_DIR, RUN_ID, MONTE_CARLO_TRIALS
+except Exception:
+    import os
+    from datetime import datetime, timezone
+    LOG_DIR = os.getenv("LOG_DIR", "logs")
+    RUN_ID = os.getenv("RUN_ID", datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S"))
+    # Prefer MC_TRIALS env (already set in your workflow), else MONTE_CARLO_TRIALS, else default
+    MONTE_CARLO_TRIALS = int(os.getenv("MC_TRIALS", os.getenv("MONTE_CARLO_TRIALS", "20000")))
 
 # ----------------------- Utils -----------------------
 def _read_csv(path: str, cols: List[str] | None = None) -> pd.DataFrame:
