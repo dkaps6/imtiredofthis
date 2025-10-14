@@ -44,6 +44,10 @@ except Exception:
     # Prefer MC_TRIALS env (already set in your workflow), else MONTE_CARLO_TRIALS, else default
     MONTE_CARLO_TRIALS = int(os.getenv("MC_TRIALS", os.getenv("MONTE_CARLO_TRIALS", "20000")))
 
+# --- NO-NUKES tweak: ensure LOG_DIR behaves like a Path even if provided as str ---
+if not isinstance(LOG_DIR, Path):
+    LOG_DIR = Path(LOG_DIR)
+
 # ----------------------- Utils -----------------------
 def _read_csv(path: str, cols: List[str] | None = None) -> pd.DataFrame:
     p = Path(path)
