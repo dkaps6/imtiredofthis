@@ -245,15 +245,31 @@ def _fetch_market_for_events(api_key: str, region: str, books: set[str],
             params["bookmakers"] = ",".join(sorted(books))
         status, js, headers = _get(url, params)
         log.info(f"{market_key} eid={eid} status={status} limit={_lim(headers)}")
+
         if status == 200 and isinstance(js, dict):
-            df = _normalize_player_rows([js], books, market_key)
+            # If our book filter removed everything, retry once without it
+            bm_count = len(js.get("bookmakers", []))
+            if bm_count == 0 and books:
+                log.info(f"{market_key} eid={eid}: 0 bookmakers after filter → retry w/o filter")
+                params2 = dict(params)
+                params2.pop("bookmakers", None)
+                status2, js2, headers2 = _get(url, params2)
+                if status2 == 200 and isinstance(js2, dict):
+                    df = _normalize_player_rows([js2], set(), market_key)
+                else:
+                    df = pd.DataFrame()
+            else:
+                df = _normalize_player_rows([js], books, market_key)
+
             if not df.empty:
                 frames.append(df)
+
         elif status in (401, 403, 422):
-            # If we hit invalid-market, we log and continue (bulk path disabled for this market class).
+            # 422 happens when the market isn't offered for that event/endpoint
             log.info(f"skip market={market_key} for eid={eid}: {js}")
         else:
             log.info(f"market fetch error eid={eid} market={market_key}: {js}")
+
     if not frames:
         return pd.DataFrame()
     return pd.concat(frames, ignore_index=True)
