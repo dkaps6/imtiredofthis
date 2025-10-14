@@ -28,6 +28,8 @@ MARKET_ALIASES = {
     "player_rush_rec_yds": "player_rush_reception_yds",
     "rush_rec": "player_rush_reception_yds",
 }
+def _normalize_market(m: str) -> str:
+    return MARKET_ALIASES.get(m.strip(), m.strip())
 
 # some v4 NFL player markets 422 on the per-event endpoint; fetch them at sport-level
 BULK_ONLY_MARKETS = {
