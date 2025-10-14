@@ -147,9 +147,18 @@ def base_mu(row: pd.Series) -> float:
     wind   = float(row.get("wind_mph",   np.nan))
     precip = str(row.get("precip","")).lower().strip()
 
-    # script nudges (RB favored when wp↑; QB volume ↓ modest vs elite pass D/sacks)
+    # ★ enrich: use defensive pressure metrics when present
+    press_rate = float(row.get("pressure_rate", np.nan))  # 0..1 if provided
+    prwr       = float(row.get("pass_rush_win_rate", np.nan))  # 0..1 if provided
+    eff_pressure = sack_r
+    if not np.isnan(press_rate):
+        eff_pressure = max(eff_pressure, press_rate)
+    if not np.isnan(prwr):
+        eff_pressure = max(eff_pressure, prwr)
+
+    # script nudges (RB favored when wp↑; QB volume ↓ modest vs elite pass D/sacks/pressure)
     run_bonus = 1.0 + 0.04 * (wp - 0.5)  # +2..4% RB attempts when favored
-    qb_pen    = 1.0 - 0.15 * max(0.0, sack_r) - 0.12 * max(0.0, pass_e)
+    qb_pen    = 1.0 - 0.15 * max(0.0, eff_pressure) - 0.12 * max(0.0, pass_e)
 
     # weather
     weather_m = 1.0
@@ -164,25 +173,62 @@ def base_mu(row: pd.Series) -> float:
 
     if mkt == "player_pass_yds":
         return max(0.0, ypa * 28.0 * qb_pen * weather_m)  # ~28 attempts baseline
+
+    # ★ enrich: receiving-volume enrichments
+    # routes_per_dropback (0..1) raises/lower route volume a little; slot_rate boosts vs zone
+    routes_per_db = float(row.get("routes_per_dropback", np.nan))
+    slot_rate     = float(row.get("slot_rate", np.nan))
+    opp_zone      = float(row.get("zone_rate_opp", 0.50) or 0.50)
+
+    # modest slot boost when opponent plays more zone
+    slot_mult = 1.0
+    if not np.isnan(slot_rate):
+        slot_mult *= (1.0 + 0.06 * (slot_rate - 0.33) * opp_zone)  # ≈ ±3–4% typical range
+        slot_mult = max(0.94, min(1.06, slot_mult))
+        cov_mult *= slot_mult
+
     if mkt == "player_rec_yds":
         # WR/TE receiving yards from YPRR * routes, coverage penalty & CB
-        mu = yprr * (35.0 * tgt) * cov_mult * (1.0 - cb_pen) * weather_m
-        # sanity downshift for very low YPRR teams
+        # aDOT can tilt YPRR slightly (very conservative)
+        aDOT = float(row.get("aDOT", np.nan))
+        yprr_eff = yprr
+        if not np.isnan(aDOT):
+            # center ~9 yards; clamp within ±40%
+            yprr_eff = yprr * (1.0 + 0.02 * (aDOT - 9.0))
+            yprr_eff = max(0.6*yprr, min(1.4*yprr, yprr_eff))
+
+        routes_base = 35.0 * tgt
+        if not np.isnan(routes_per_db):
+            routes_base *= (0.75 + 0.5 * max(0.0, min(1.0, routes_per_db)))  # 0.75x..1.25x
+
+        mu = yprr_eff * routes_base * cov_mult * (1.0 - cb_pen) * weather_m
+        # sanity downshift for very low air-yards teams (if provided)
         team_ay_att = float(row.get("team_ay_per_att", 0.0))
         if team_ay_att <= -0.8:  # low air-yards profile
             mu = min(mu, 0.8 * max(20.0, mu))
         return max(0.0, mu)
+
     if mkt == "player_receptions":
         cr = 0.62 * cov_mult * (1.0 - 0.5*cb_pen)  # catch rate proxy
-        return max(0.0, cr * (32.0 * tgt) * weather_m)
+        rec_routes = 32.0 * tgt
+        if not np.isnan(routes_per_db):
+            rec_routes *= (0.75 + 0.5 * max(0.0, min(1.0, routes_per_db)))
+        return max(0.0, cr * rec_routes * weather_m)
+
     if mkt == "player_rush_yds":
+        # ★ enrich: run_stop_rate penalizes YPC a touch when available
+        run_stop_rate = float(row.get("run_stop_rate", np.nan))
         ypc_mod = ypc * ((1.0 + 0.07*lbx) * (1.0 - 0.06*hbx)) * run_bonus * weather_m
+        if not np.isnan(run_stop_rate):
+            ypc_mod *= (1.0 - 0.05 * max(0.0, min(1.0, run_stop_rate)))
         return max(0.0, ypc_mod * (14.0 * rsh))
+
     if mkt == "player_rush_rec_yds":
         # FIX: avoid Series.assign (Series has no .assign)
         s_rush = row.copy(); s_rush.loc["market"] = "player_rush_yds"
         s_rec  = row.copy(); s_rec.loc["market"]  = "player_rec_yds"
         return max(0.0, base_mu(s_rush) + 0.7 * base_mu(s_rec))
+
     # default
     return np.nan
 
@@ -257,8 +303,17 @@ def main(props_path: str) -> None:
     # Model μ/σ and Over% at the posted line
     sigmas = load_sigmas()
     df["model_proj"] = df.apply(base_mu, axis=1)
-    # volatility flag: strong pass rush vs weak OL proxy — use sack rate opp + pass epa opp
-    df["vol_flag"] = (df.get("def_sack_rate_opp",0).fillna(0) + np.maximum(0, df.get("def_pass_epa_opp",0).fillna(0))) / 2.0
+
+    # ★ enrich: more robust volatility flag using pressure enrich if present
+    vol_parts = []
+    for col in ["def_sack_rate_opp","def_pass_epa_opp","pressure_rate","pass_rush_win_rate"]:
+        if col in df.columns:
+            vol_parts.append(df[col].fillna(0))
+    if vol_parts:
+        df["vol_flag"] = pd.concat(vol_parts, axis=1).mean(axis=1)
+    else:
+        df["vol_flag"] = (df.get("def_sack_rate_opp",0).fillna(0) + np.maximum(0, df.get("def_pass_epa_opp",0).fillna(0))) / 2.0
+
     df["model_sd"] = df.apply(lambda r: sigma_for_market(str(r.get("market","")), sigmas, r.get("vol_flag",0)), axis=1)
 
     # Over probability under Normal(μ,σ)
