@@ -21,9 +21,8 @@ def _safe_write(df: pd.DataFrame, out: Path) -> None:
     else:
         df.to_csv(out, index=False)
 
-# ---- DIAGNOSTIC/RETRY WRAPPER (nflreadpy first, then nfl_data_py; 404 fallback seasons) ----
+# --- PBP fetcher: prefer nflreadpy (2025), fall back to nfl_data_py; 404 -> prior season ---
 def _fetch_pbp_with_retry(season: int, tries: int = 3, wait: int = 4) -> pd.DataFrame:
-    import traceback, time
     seasons_to_try = [season, season - 1, season - 2]
     last = None
     try:
@@ -31,8 +30,7 @@ def _fetch_pbp_with_retry(season: int, tries: int = 3, wait: int = 4) -> pd.Data
         use_readpy = True
     except Exception:
         use_readpy = False
-    if not use_readpy:
-        import nfl_data_py as nfl
+        import nfl_data_py as nfl  # noqa: F401
 
     with open(ERR_LOG, "a", encoding="utf-8") as f:
         f.write(f"\n=== PBP fetch wanted season={season} ===\n")
@@ -46,50 +44,24 @@ def _fetch_pbp_with_retry(season: int, tries: int = 3, wait: int = 4) -> pd.Data
                 else:
                     df = nfl.import_pbp_data([s])
 
-                if df is not None and len(df):
+                if isinstance(df, pd.DataFrame) and len(df):
                     with open(ERR_LOG, "a", encoding="utf-8") as f:
                         f.write(f"season {s} try {i}: OK rows={len(df)} via "
                                 f"{'nflreadpy' if use_readpy else 'nfl_data_py'}\n")
                     if s != season:
                         print(f"[player_form] NOTE: using season {s} as fallback for {season}", flush=True)
                     return df
-
-                raise RuntimeError("PBP fetch returned empty dataframe")
+                raise RuntimeError("empty dataframe")
             except Exception as e:
                 last = e
-                tb = traceback.format_exc()
-                msg = f"{type(e).__name__}: {e}"
-                print(f"[player_form] season {s} try {i}/{tries} failed: {msg}", flush=True)
                 with open(ERR_LOG, "a", encoding="utf-8") as f:
-                    f.write(f"season {s} try {i}: {msg}\n{tb}\n")
+                    f.write(f"season {s} try {i}: {type(e).__name__}: {e}\n{traceback.format_exc()}\n")
                 if (not use_readpy) and ("HTTP Error 404" in str(e)):
-                    print(f"[player_form] season {s}: 404 detected; trying previous season…", flush=True)
                     break
                 time.sleep(wait)
-
-    raise RuntimeError(f"PBP fetch failed for {season}: {type(last).__name__}: {last}")
+    raise RuntimeError(f"PBP fetch failed: {type(last).__name__}: {last}")
 
 def build_from_nflverse(season: int) -> pd.DataFrame:
-    try:
-        import nfl_data_py as nfl  # noqa: F401
-    except Exception as e:
-        print(f"[player_form] nfl_data_py import failed → fallback: {e}", flush=True)
-        return pd.DataFrame([
-            {"player":"Example WR1","team":"BUF","position":"WR","role":"WR1",
-             "target_share":0.24,"rush_share":0.00,"route_rate":0.90,
-             "rz_tgt_share":0.28,"rz_carry_share":0.00,
-             "yprr_proxy":2.1,"ypc":0.0,"qb_ypa":7.6}
-        ])
-
-    # guard against shadowing; show exactly what got imported
-    import importlib
-    nfl_mod = importlib.import_module("nfl_data_py")
-    nfl_path = getattr(nfl_mod, "__file__", "")
-    print(f"[player_form] nfl_data_py path → {nfl_path}", flush=True)
-    if "site-packages" not in (nfl_path or "") and "dist-packages" not in (nfl_path or ""):
-        raise RuntimeError(f"Wrong nfl_data_py imported (shadowed). Path: {nfl_path}")
-
-    print("[player_form] pulling pbp…", flush=True)
     pbp = _fetch_pbp_with_retry(season)
     pbp = pbp.loc[pbp["season"]==season].copy()
 
@@ -102,6 +74,7 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
     pbp["is_rush"] = (pbp.get("rush",0)==1) | (pbp.get("play_type","")=="run")
     pbp["in_rz"]   = (pbp.get("yardline_100").fillna(100) <= 20)
 
+    # team totals
     targs = pbp.loc[pbp["is_pass"] & (pbp["receiver"]!=""), ["game_id","posteam","receiver"]].copy()
     targs["targets"] = 1
     team_tgts = targs.groupby(["game_id","posteam"])["targets"].sum().rename("team_targets")
@@ -131,10 +104,13 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
     team_atts = pass_att.groupby(["game_id","posteam"])["att"].sum().rename("team_pass_att")
     team_ypa = (team_pass_yds.groupby("posteam").sum() / team_atts.groupby("posteam").sum()).rename("qb_ypa_all")
 
-    rec_level = rec_tgts.reset_index().rename(columns={"receiver":"player"})
+    rec_level  = rec_tgts.reset_index().rename(columns={"receiver":"player"})
     rush_level = ply_rush.reset_index().rename(columns={"rusher":"player"})
-    players = pd.concat([rec_level[["game_id","posteam","player","player_targets"]],
-                         rush_level[["game_id","posteam","player","player_rush_att"]]], ignore_index=True).fillna(0)
+    players = pd.concat(
+        [rec_level[["game_id","posteam","player","player_targets"]],
+         rush_level[["game_id","posteam","player","player_rush_att"]]],
+        ignore_index=True
+    ).fillna(0)
 
     merges = [
         team_tgts.reset_index(),
@@ -163,8 +139,8 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
     agg["rz_tgt_share"]   = (agg["player_rz_tgt"] / agg["team_rz_tgt"]).replace([np.inf,-np.inf], np.nan).fillna(0.0)
     agg["rz_carry_share"] = (agg["player_rz_carry"] / agg["team_rz_carry"]).replace([np.inf,-np.inf], np.nan).fillna(0.0)
 
-    agg["yprr_proxy"] = (agg["rec_yards"] / agg["player_targets"]).replace([np.inf,-np.inf], np.nan).fillna(0.0)
-    agg["ypc"]        = (agg["rush_yards"] / agg["player_rush_att"]).replace([np.inf,-np.inf], np.nan).fillna(0.0)
+    agg["yprr_proxy"] = (agg["rec_yards"] / np.where(agg["player_targets"]>0, agg["player_targets"], np.nan)).replace([np.inf,-np.inf], np.nan).fillna(0.0)
+    agg["ypc"]        = (agg["rush_yards"] / np.where(agg["player_rush_att"]>0, agg["player_rush_att"], np.nan)).replace([np.inf,-np.inf], np.nan).fillna(0.0)
 
     agg["position"] = np.where(agg["player_rush_att"] > agg["player_targets"], "RB", "WR")
     agg["route_rate"] = np.nan
@@ -181,33 +157,25 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
         "yprr_proxy","ypc","qb_ypa"
     ]].sort_values(["team","player"]).reset_index(drop=True)
 
-    # ---- OPTIONAL ENRICHMENTS (PFR / mirrors) ----
+    # optional PFR/mirrors enrich for real route/adot if you provide it
     try:
         enrich_path = Path("data/pfr_player_enrich.csv")
         if enrich_path.exists():
             enrich = pd.read_csv(enrich_path)
             rename_map = {
                 "team_abbr": "team",
-                "air_yards_total": "air_yards",
                 "routes_db": "routes_per_dropback",
-                "rz_tgts": "red_zone_tgts",
+                "aDOT": "aDOT",
             }
-            enrich = enrich.rename(columns={k: v for k, v in rename_map.items() if k in enrich.columns})
-            keep = ["player","team","snap_share","routes_per_dropback","air_yards","aDOT","red_zone_tgts","slot_rate"]
+            enrich = enrich.rename(columns={k:v for k,v in rename_map.items() if k in enrich.columns})
+            keep = ["player","team","routes_per_dropback","aDOT","slot_rate","snap_share"]
             enrich = enrich[[c for c in keep if c in enrich.columns]].copy()
-            for col in ["snap_share","routes_per_dropback","slot_rate"]:
-                if col in enrich.columns:
-                    enrich[col] = pd.to_numeric(enrich[col], errors="coerce").clip(0,1)
-            for col in ["air_yards","aDOT","red_zone_tgts"]:
+            for col in ["routes_per_dropback","slot_rate","snap_share"]:
                 if col in enrich.columns:
                     enrich[col] = pd.to_numeric(enrich[col], errors="coerce")
             out = out.merge(enrich, on=["player","team"], how="left", suffixes=("","_enrich"))
             if "routes_per_dropback" in out.columns:
                 out["route_rate"] = out["route_rate"].fillna(out["routes_per_dropback"])
-            if "aDOT" not in out.columns and "air_yards" in out.columns:
-                out["aDOT"] = np.where(out["target_share"]>0,
-                                       out["air_yards"]/(out["target_share"]*100.0),
-                                       np.nan)
     except Exception as e:
         print(f"[player_form] enrich skipped: {type(e).__name__}: {e}", flush=True)
 
@@ -218,7 +186,7 @@ def cli(season: int) -> int:
         df = build_from_nflverse(season)
         if os.getenv("NFL_FORM_STRICT") == "1":
             if df is None or df.empty or df["team"].nunique() < 8 or len(df) < 50:
-                raise RuntimeError("[player_form] looks empty/stub — check requirements install and network; see logs/nfl_pbp_error.txt")
+                raise RuntimeError("[player_form] looks empty/stub — check logs/nfl_pbp_error.txt")
     except Exception as e:
         print(f"[player_form] fatal error: {type(e).__name__}: {e}", flush=True)
         df = pd.DataFrame()
