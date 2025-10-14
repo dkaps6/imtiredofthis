@@ -222,7 +222,23 @@ def main(props_path: str) -> None:
         df["mkt_over_fair"], df["mkt_under_fair"] = devig_two_way(p_over_vig, p_under_vig)
     else:
         side = df.get("side","OVER").astype(str).str.upper()
-        odds = df.get("odds", np.nan).astype(float)
+        # normalize odds column name and coerce to numeric
+    if "odds" not in df.columns:
+        # common cases from Odds API
+        if "price_american" in df.columns:
+            df["odds"] = df["price_american"]
+        elif {"over_odds", "under_odds"} <= set(df.columns) and "side" in df.columns:
+            # pick the correct side if you melted earlier and kept a 'side' column
+            df["odds"] = np.where(
+                df["side"].str.lower().eq("over"), df["over_odds"],
+                np.where(df["side"].str.lower().eq("under"), df["under_odds"], np.nan)
+            )
+        else:
+            # fall back: create an aligned NaN series
+            df["odds"] = np.nan
+
+    odds = pd.to_numeric(df["odds"], errors="coerce")
+
         p_vig = odds.apply(american_to_prob)
         df["mkt_over_fair"]  = np.where(side=="OVER", p_vig, 1.0-p_vig)
         df["mkt_under_fair"] = 1.0 - df["mkt_over_fair"]
