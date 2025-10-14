@@ -111,9 +111,11 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
     _default_markets = [
         "player_pass_yds",
         "player_reception_yds",    # receiving yards (canonical key)
+        "player_receiving_yards",
         "player_rush_yds",
         "player_receptions",
         "player_rush_reception_yds",
+        "player_rush_and_receive_yards",
         "player_anytime_td",
     ]
     markets_to_pull = [m.strip() for m in (markets or _default_markets) if m.strip()]
