@@ -61,6 +61,14 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
              "pace":30.0,"proe":0.02,"light_box_rate":np.nan,"heavy_box_rate":np.nan}
         ])
 
+    # NEW: guard against shadowing; show exactly what got imported
+    import importlib
+    nfl_mod = importlib.import_module("nfl_data_py")
+    nfl_path = getattr(nfl_mod, "__file__", "")
+    print(f"[team_form] nfl_data_py path → {nfl_path}", flush=True)
+    if "site-packages" not in (nfl_path or "") and "dist-packages" not in (nfl_path or ""):
+        raise RuntimeError(f"Wrong nfl_data_py imported (shadowed). Path: {nfl_path}")
+
     print("[team_form] pulling pbp…", flush=True)
     pbp = _fetch_pbp_with_retry(season)
     pbp = pbp.loc[pbp["season"]==season].copy()
