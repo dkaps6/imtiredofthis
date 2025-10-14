@@ -82,7 +82,16 @@ def _provider_chain(season: int, date: str | None):
             return
     print("[engine] ⚠ no external provider succeeded; will rely on builders")
 
-def run_pipeline(*, season: str, date: str = "", books=None, markets=None):
+--- a/engine/engine.py
++++ b/engine/engine.py
+@@ -60,7 +60,7 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
+     _default_markets = [
+         "player_pass_yds",
+-        "player_rec_yds",          # we keep this name; fetcher handles aliases
++        "player_reception_yds",    # canonical Odds API key (receiving yards)
+         "player_rush_yds",
+         "player_receptions",
+         "player_rush_rec_yds",
     # --- setup dirs & keys status ---
     ensure_dirs()
     for d in ("data", "outputs", "outputs/metrics", "logs", "outputs/_tmp_props"):
