@@ -147,6 +147,9 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
         f"ESPN_COOKIE={'set' if os.getenv('ESPN_COOKIE') else 'missing'}"
     )
 
+    # env flag to enable strict checks that fail-fast on stub data
+    STRICT = os.getenv("NFL_FORM_STRICT") == "1"  # NEW
+
     try:
         # 1) upstream providers (best-effort)
         try:
@@ -158,10 +161,28 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
         _run(f"python scripts/make_team_form.py --season {season}",
              label="team_form", snap_after=["data/team_form.csv"])
         print(f"[engine]   data/team_form.csv → {_size('data/team_form.csv')}")
+        # NEW: optional strict check to avoid stub runs
+        if STRICT:
+            try:
+                tf = pd.read_csv("data/team_form.csv")
+                if tf["team"].nunique() < 8:
+                    snapshot(["data/team_form.csv"], "team_form_stub")
+                    raise RuntimeError("team_form looks like a stub (too few teams). Check requirements install and nfl_data_py import.")
+            except Exception as _e:
+                raise
 
         _run(f"python scripts/make_player_form.py --season {season}",
              label="player_form", snap_after=["data/player_form.csv"])
         print(f"[engine]   data/player_form.csv → {_size('data/player_form.csv')}")
+        # NEW: optional strict check
+        if STRICT:
+            try:
+                pf = pd.read_csv("data/player_form.csv")
+                if pf["team"].nunique() < 8 or len(pf) < 50:
+                    snapshot(["data/player_form.csv"], "player_form_stub")
+                    raise RuntimeError("player_form looks like a stub (too few teams/players). Check requirements install and nfl_data_py import.")
+            except Exception as _e:
+                raise
 
         # 3) odds props — v4 requires one market per request; also write odds_game.csv
         b = ",".join(books or ["draftkings","fanduel","betmgm","caesars"])
