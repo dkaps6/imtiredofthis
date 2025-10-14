@@ -17,102 +17,65 @@ TIMEOUT_S = 25
 BACKOFF_S = [0.6, 1.2, 2.0, 3.5, 5.0]    # simple backoff on 429/5xx
 GAME_MARKETS = ["h2h", "spreads", "totals"]
 
---- a/scripts/fetch_props_oddsapi.py
-+++ b/scripts/fetch_props_oddsapi.py
-@@ -20,7 +20,11 @@ TIMEOUT_S = 25
+# Canonicalize market keys (single source of truth: alias -> canonical)
+MARKET_ALIASES: Dict[str, str] = {
+    # receiving yards (this is the key you MUST hit in v4)
+    "player_reception_yds": "player_reception_yds",
+    "player_rec_yds": "player_reception_yds",
+    "player_receiving_yards": "player_reception_yds",
+    "player_receiving_yds": "player_reception_yds",
+    "receiving_yards": "player_reception_yds",
 
--# receiving yards synonyms and a couple of others
--MARKET_ALIASES = {
--    "player_rec_yds": "player_reception_yds",
--    "player_receiving_yards": "player_reception_yds",
--    "player_receiving_yds": "player_reception_yds",
--    "player_reception_yds": "player_reception_yds",
--    "player_rush_rec_yds": "player_rush_reception_yds",
--    "rush_rec": "player_rush_reception_yds",
--}
-+# Canonicalize market keys (single source of truth)
-+_MARKET_ALIASES = {
-+    # NFL receiving yards
-+    "player_reception_yds": "player_reception_yds",
-+    "player_rec_yds": "player_reception_yds",
-+    "player_receiving_yards": "player_reception_yds",
-+    "player_receiving_yds": "player_reception_yds",
-+    # rush+rec
-+    "player_rush_reception_yds": "player_rush_reception_yds",
-+    "player_rush_rec_yds": "player_rush_reception_yds",
-+    "rush_rec": "player_rush_reception_yds",
-+}
-+
-+def _normalize_market(m: str) -> str:
-+    key = (m or "").strip().lower()
-+    return _MARKET_ALIASES.get(key, key)
+    # passing yards
+    "player_pass_yds": "player_pass_yds",
+    "player_passing_yards": "player_pass_yds",
+    "player_passing_yds": "player_pass_yds",
+    "passing_yards": "player_pass_yds",
 
-@@
--# markets that 422 on per-event endpoint (e.g., receiving yards)
--BULK_ONLY_MARKETS = {
--    "player_reception_yds",
--}
-+# Markets we should force via sport-level bulk (be liberal; alias-safe)
-+BULK_ONLY_MARKETS = {
-+    "player_reception_yds",
-+    "player_rec_yds",
-+    "player_receiving_yards",
-+    "player_receiving_yds",
-+}
+    # rushing yards
+    "player_rush_yds": "player_rush_yds",
+    "player_rushing_yards": "player_rush_yds",
+    "player_rushing_yds": "player_rush_yds",
+    "rushing_yards": "player_rush_yds",
 
-@@
--def _fetch_market_for_events(api_key: str, region: str, books: set[str],
--                             event_ids: list[str], market_key: str) -> pd.DataFrame:
-+def _fetch_market_for_events(api_key: str, region: str, books: set[str],
-+                             event_ids: list[str], market_key: str) -> pd.DataFrame:
-+    # Normalize ASAP so logs and routing are canonical
-+    market_key = _normalize_market(market_key)
-     frames: List[pd.DataFrame] = []
-     for eid in event_ids:
-         url = f"{BASE}/sports/{SPORT}/events/{eid}/odds"
-         params = {"apiKey": api_key, "regions": region, "markets": market_key, "oddsFormat": "american"}
-@@
--        if status == 200 and isinstance(js, dict):
-+        if status == 200 and isinstance(js, dict):
-             df = _normalize_player_rows([js], books, market_key)
-             if not df.empty:
-                 frames.append(df)
--        elif status in (401, 403, 422):
--            log.info(f"skip market={market_key} for eid={eid}: {js}")
-+        elif status in (401, 403, 422):
-+            # If we somehow hit invalid-market, try a last-chance bulk pull for this market.
-+            if status == 422:
-+                log.info(f"retry via bulk for market={market_key} eid={eid} due to 422")
-+                bulk_df = _fetch_bulk_market(api_key, region, books, market_key)
-+                if not bulk_df.empty:
-+                    # filter back to this event only (bulk returns many)
-+                    bulk_df = bulk_df[bulk_df["event_id"] == eid]
-+                    if not bulk_df.empty:
-+                        frames.append(bulk_df)
-+                        continue
-+            log.info(f"skip market={market_key} for eid={eid}: {js}")
-         else:
-             log.info(f"market fetch error eid={eid} market={market_key}: {js}")
-@@
--    for mk in markets:
--        mk = _normalize_market(mk)
-+    for mk in markets:
-+        mk = _normalize_market(mk)
-         if not event_ids and mk not in BULK_ONLY_MARKETS:
-             break
-         log.info(f"=== MARKET {mk} ===")
--        if mk in BULK_ONLY_MARKETS:
-+        if mk in BULK_ONLY_MARKETS:
-             df = _fetch_bulk_market(api_key, region, books_set, mk)
-         else:
-             df = _fetch_market_for_events(api_key, region, books_set, event_ids, mk)
+    # receptions
+    "player_receptions": "player_receptions",
+    "player_rec": "player_receptions",
+    "receptions": "player_receptions",
+
+    # rush + rec
+    "player_rush_reception_yds": "player_rush_reception_yds",
+    "player_rush_rec_yds": "player_rush_reception_yds",
+    "player_rush_and_receive_yards": "player_rush_reception_yds",
+    "player_rush_and_receive_yds": "player_rush_reception_yds",
+    "rushing_plus_receiving_yards": "player_rush_reception_yds",
+    "rush_rec_yards": "player_rush_reception_yds",
+    "rush_rec": "player_rush_reception_yds",
+
+    # anytime TD
+    "player_anytime_td": "player_anytime_td",
+    "anytime_td": "player_anytime_td",
+    "player_anytime_touchdown": "player_anytime_td",
+
+    # team/game markets (passed through but filtered from player list)
+    "h2h": "h2h",
+    "moneyline": "h2h",
+    "ml": "h2h",
+    "spreads": "spreads",
+    "spread": "spreads",
+    "totals": "totals",
+    "total": "totals",
+    "game_totals": "totals",
 }
-def _normalize_market(m: str) -> str:
-    return MARKET_ALIASES.get(m.strip(), m.strip())
 
-# some v4 NFL player markets 422 on the per-event endpoint; fetch them at sport-level
-BULK_ONLY_MARKETS = {
-    "player_reception_yds",
+def _normalize_market(m: str) -> str:
+    key = (m or "").strip().lower()
+    return MARKET_ALIASES.get(key, key)
+
+# Markets that should be fetched via the sport-level bulk endpoint.
+# We check membership on the CANONICAL key.
+BULK_ONLY_CANONICAL = {
+    "player_reception_yds",     # receiving yards 422s on some per-event calls
 }
 
 # ------------------------- LOGGING ------------------------
@@ -274,6 +237,8 @@ def _fetch_game_odds(api_key: str, region: str, books: set[str]) -> pd.DataFrame
 
 def _fetch_market_for_events(api_key: str, region: str, books: set[str],
                              event_ids: list[str], market_key: str) -> pd.DataFrame:
+    # Normalize ASAP so logs and routing are canonical
+    market_key = _normalize_market(market_key)
     frames: List[pd.DataFrame] = []
     for eid in event_ids:
         url = f"{BASE}/sports/{SPORT}/events/{eid}/odds"
@@ -287,6 +252,15 @@ def _fetch_market_for_events(api_key: str, region: str, books: set[str],
             if not df.empty:
                 frames.append(df)
         elif status in (401, 403, 422):
+            # If we hit invalid-market, retry once via bulk and filter back to this event.
+            if status == 422:
+                log.info(f"retry via bulk for market={market_key} eid={eid} due to 422")
+                bulk_df = _fetch_bulk_market(api_key, region, books, market_key)
+                if not bulk_df.empty:
+                    bulk_df = bulk_df[bulk_df["event_id"] == eid]
+                    if not bulk_df.empty:
+                        frames.append(bulk_df)
+                        continue
             log.info(f"skip market={market_key} for eid={eid}: {js}")
         else:
             log.info(f"market fetch error eid={eid} market={market_key}: {js}")
@@ -294,8 +268,9 @@ def _fetch_market_for_events(api_key: str, region: str, books: set[str],
         return pd.DataFrame()
     return pd.concat(frames, ignore_index=True)
 
-# sport-level bulk fetch for markets that 422 on per-event endpoint (e.g., receiving yards)
+# sport-level bulk fetch for markets that 422 on per-event endpoint
 def _fetch_bulk_market(api_key: str, region: str, books: set[str], market_key: str) -> pd.DataFrame:
+    market_key = _normalize_market(market_key)
     url = f"{BASE}/sports/{SPORT}/odds"
     params = {"apiKey": api_key, "regions": region, "markets": market_key, "oddsFormat": "american"}
     if books:
@@ -333,10 +308,7 @@ def fetch_odds(
         if mk in GAME_MARKETS:
             log.info(f"skip non-player market in --markets: {mk}")
             continue
-        resolved = MARKET_ALIASES.get(mk, mk)
-        if resolved != mk:
-            log.info(f"alias: {mk} → {resolved}")
-        normalized_markets.append(resolved)
+        normalized_markets.append(mk)
     markets = normalized_markets
 
     Path("outputs").mkdir(parents=True, exist_ok=True)
@@ -353,17 +325,17 @@ def fetch_odds(
         pd.DataFrame().to_csv(out_game, index=False)
         log.info(f"wrote empty {out_game}")
 
-    # per-market player props
+    # per-market player props (v4)
     frames: List[pd.DataFrame] = []
     for mk in markets:
-        mk = _normalize_market(mk)
-        if not event_ids and mk not in BULK_ONLY_MARKETS:
+        canon = _normalize_market(mk)
+        if not event_ids and canon not in BULK_ONLY_CANONICAL:
             break
-        log.info(f"=== MARKET {mk} ===")
-        if mk in BULK_ONLY_MARKETS:
-            df = _fetch_bulk_market(api_key, region, books_set, mk)
+        log.info(f"=== MARKET {canon} ===")
+        if canon in BULK_ONLY_CANONICAL:
+            df = _fetch_bulk_market(api_key, region, books_set, canon)
         else:
-            df = _fetch_market_for_events(api_key, region, books_set, event_ids, mk)
+            df = _fetch_market_for_events(api_key, region, books_set, event_ids, canon)
         if not df.empty:
             frames.append(df)
 
@@ -385,51 +357,11 @@ def fetch_odds(
 
 # ------------------------- CLI ----------------------------
 
-_MARKET_ALIASES = {
-    "player_pass_yds": [
-        "player_passing_yards", "player_passing_yds", "passing_yards",
-    ],
-    "player_rush_yds": [
-        "player_rushing_yards", "player_rushing_yds", "rushing_yards",
-    ],
-    "player_rec_yds": [
-        # receiving yards: we accept several v4/v3/book variants
-        "player_receiving_yards", "player_receiving_yds",
-        "player_reception_yds", "receiving_yards",
-    ],
-    "player_receptions": [
-        "player_rec", "receptions",
-    ],
-    "player_rush_rec_yds": [
-        "player_rush_and_receive_yards", "player_rush_and_receive_yds",
-        "rushing_plus_receiving_yards", "rush_rec_yards",
-    ],
-    "player_anytime_td": [
-        "player_anytime_td", "anytime_td", "player_anytime_touchdown",
-    ],
-    # team/game markets (we still pass them through to the API unchanged)
-    "h2h": ["h2h","moneyline","ml"],
-    "spreads": ["spread","spreads"],
-    "totals": ["total","totals","game_totals"],
-}
-
-def _normalize_market(m: str) -> str:
-    """
-    Map a user/book/old-version market key to our canonical key.
-    If it doesn't match any alias, return the lowercased input.
-    """
-    key = (m or "").strip().lower()
-    if not key:
-        return key
-    for canon, variants in _MARKET_ALIASES.items():
-        if key == canon or key in variants:
-            return canon
-    return key
-
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--books", default="draftkings,fanduel,betmgm,caesars")
-    ap.add_argument("--markets", default="player_pass_yds,player_rec_yds,player_rush_yds,player_receptions,player_anytime_td")
+    # default includes canonical receiving yards
+    ap.add_argument("--markets", default="player_pass_yds,player_reception_yds,player_rush_yds,player_receptions,player_anytime_td")
     ap.add_argument("--region", default=REGION_DEFAULT)
     ap.add_argument("--date", nargs="?", default="", const="")  # accept --date with or without a value
     ap.add_argument("--out", default="outputs/props_raw.csv")
