@@ -73,10 +73,8 @@ def _normalize_market(m: str) -> str:
     return MARKET_ALIASES.get(key, key)
 
 # Markets that should be fetched via the sport-level bulk endpoint.
-# We check membership on the CANONICAL key.
-BULK_ONLY_CANONICAL = {
-    "player_reception_yds",     # receiving yards 422s on some per-event calls
-}
+# IMPORTANT: receiving yards should **not** be forced to bulk (can 422 there).
+BULK_ONLY_CANONICAL: set[str] = set()
 
 # ------------------------- LOGGING ------------------------
 
@@ -252,15 +250,7 @@ def _fetch_market_for_events(api_key: str, region: str, books: set[str],
             if not df.empty:
                 frames.append(df)
         elif status in (401, 403, 422):
-            # If we hit invalid-market, retry once via bulk and filter back to this event.
-            if status == 422:
-                log.info(f"retry via bulk for market={market_key} eid={eid} due to 422")
-                bulk_df = _fetch_bulk_market(api_key, region, books, market_key)
-                if not bulk_df.empty:
-                    bulk_df = bulk_df[bulk_df["event_id"] == eid]
-                    if not bulk_df.empty:
-                        frames.append(bulk_df)
-                        continue
+            # If we hit invalid-market, we log and continue (bulk path disabled for this market class).
             log.info(f"skip market={market_key} for eid={eid}: {js}")
         else:
             log.info(f"market fetch error eid={eid} market={market_key}: {js}")
@@ -268,7 +258,7 @@ def _fetch_market_for_events(api_key: str, region: str, books: set[str],
         return pd.DataFrame()
     return pd.concat(frames, ignore_index=True)
 
-# sport-level bulk fetch for markets that 422 on per-event endpoint
+# sport-level bulk fetch (still available for any other markets you add later)
 def _fetch_bulk_market(api_key: str, region: str, books: set[str], market_key: str) -> pd.DataFrame:
     market_key = _normalize_market(market_key)
     url = f"{BASE}/sports/{SPORT}/odds"
