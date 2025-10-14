@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import sys, os
+import sys, os, time
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -19,9 +19,23 @@ def _safe_write(df: pd.DataFrame, out: Path) -> None:
     else:
         df.to_csv(out, index=False)
 
+# NEW
+def _fetch_pbp_with_retry(season: int, tries: int = 3, wait: int = 4) -> pd.DataFrame:
+    import nfl_data_py as nfl
+    last = None
+    for i in range(tries):
+        try:
+            df = nfl.import_pbp_data([season])
+            if df is not None and len(df):
+                return df
+        except Exception as e:
+            last = e
+        time.sleep(wait)
+    raise RuntimeError(f"nfl_data_py import failed after {tries} tries: {last}")
+
 def build_from_nflverse(season: int) -> pd.DataFrame:
     try:
-        import nfl_data_py as nfl
+        import nfl_data_py as nfl  # noqa: F401
     except Exception as e:
         print(f"[player_form] nfl_data_py import failed → fallback: {e}", flush=True)
         return pd.DataFrame([
@@ -32,7 +46,7 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
         ])
 
     print("[player_form] pulling pbp…", flush=True)
-    pbp = nfl.import_pbp_data([season]).copy()
+    pbp = _fetch_pbp_with_retry(season)  # NEW
     pbp = pbp.loc[pbp["season"]==season].copy()
 
     pbp["posteam"] = pbp["posteam"].astype(str).str.upper()
@@ -135,6 +149,10 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
 def cli(season: int) -> int:
     try:
         df = build_from_nflverse(season)
+        # NEW: optional strict gate
+        if os.getenv("NFL_FORM_STRICT") == "1":
+            if df is None or df.empty or df["team"].nunique() < 8 or len(df) < 50:
+                raise RuntimeError("[player_form] looks empty/stub — check requirements install and network")
     except Exception as e:
         print(f"[player_form] fatal error: {e}", flush=True)  # ← only Exception here
         df = pd.DataFrame()
