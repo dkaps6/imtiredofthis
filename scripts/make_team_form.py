@@ -27,29 +27,58 @@ def _z(s: pd.Series) -> pd.Series:
     if not np.isfinite(sd) or sd == 0: return pd.Series(0.0, index=s.index)
     return (s - mu) / sd
 
-# ---- DIAGNOSTIC/RETRY WRAPPER (enhanced) ----
+# ---- DIAGNOSTIC/RETRY WRAPPER (nflreadpy first, then nfl_data_py; 404 fallback seasons) ----
 def _fetch_pbp_with_retry(season: int, tries: int = 3, wait: int = 4) -> pd.DataFrame:
-    import nfl_data_py as nfl
+    import traceback, time
+    seasons_to_try = [season, season - 1, season - 2]
     last = None
+
+    # prefer nflreadpy (mirrors nflreadr; 2025-ready)
+    try:
+        import nflreadpy as nfr
+        use_readpy = True
+    except Exception:
+        use_readpy = False
+
+    # fall back client
+    if not use_readpy:
+        import nfl_data_py as nfl
+
     with open(ERR_LOG, "a", encoding="utf-8") as f:
-        f.write(f"\n=== import_pbp_data season={season} ===\n")
-    for i in range(1, tries+1):
-        try:
-            df = nfl.import_pbp_data([season])
-            if df is not None and len(df):
+        f.write(f"\n=== PBP fetch wanted season={season} ===\n")
+
+    for s in seasons_to_try:
+        for i in range(1, tries + 1):
+            try:
+                if use_readpy:
+                    pf = nfr.load_pbp([s])     # Polars -> Pandas
+                    df = pf.to_pandas()
+                else:
+                    df = nfl.import_pbp_data([s])
+
+                if df is not None and len(df):
+                    with open(ERR_LOG, "a", encoding="utf-8") as f:
+                        f.write(f"season {s} try {i}: OK rows={len(df)} via "
+                                f"{'nflreadpy' if use_readpy else 'nfl_data_py'}\n")
+                    if s != season:
+                        print(f"[team_form] NOTE: using season {s} as fallback for {season}", flush=True)
+                    return df
+
+                raise RuntimeError("PBP fetch returned empty dataframe")
+            except Exception as e:
+                last = e
+                tb = traceback.format_exc()
+                msg = f"{type(e).__name__}: {e}"
+                print(f"[team_form] season {s} try {i}/{tries} failed: {msg}", flush=True)
                 with open(ERR_LOG, "a", encoding="utf-8") as f:
-                    f.write(f"try {i}: OK rows={len(df)}\n")
-                return df
-            raise RuntimeError("import_pbp_data returned empty dataframe")
-        except Exception as e:
-            last = e
-            tb = traceback.format_exc()
-            # print to console AND persist to logs so we can see the true source module
-            print(f"[team_form] import_pbp_data try {i}/{tries} failed: {type(e).__name__}: {e}", flush=True)
-            with open(ERR_LOG, "a", encoding="utf-8") as f:
-                f.write(f"try {i}: {type(e).__name__}: {e}\n{tb}\n")
-            time.sleep(wait)
-    raise RuntimeError(f"nfl_data_py import failed after {tries} tries: {type(last).__name__}: {last}")
+                    f.write(f"season {s} try {i}: {msg}\n{tb}\n")
+                # If nfl_data_py hit a 404 for current season, advance season quickly
+                if (not use_readpy) and ("HTTP Error 404" in str(e)):
+                    print(f"[team_form] season {s}: 404 detected; trying previous season…", flush=True)
+                    break
+                time.sleep(wait)
+
+    raise RuntimeError(f"PBP fetch failed for {season}: {type(last).__name__}: {last}")
 
 def build_from_nflverse(season: int) -> pd.DataFrame:
     try:
@@ -61,7 +90,7 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
              "pace":30.0,"proe":0.02,"light_box_rate":np.nan,"heavy_box_rate":np.nan}
         ])
 
-    # NEW: guard against shadowing; show exactly what got imported
+    # guard against shadowing; show exactly what got imported
     import importlib
     nfl_mod = importlib.import_module("nfl_data_py")
     nfl_path = getattr(nfl_mod, "__file__", "")
