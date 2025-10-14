@@ -9,6 +9,16 @@ OUT = Path("data/player_form.csv")
 LOG_DIR = Path("logs"); LOG_DIR.mkdir(parents=True, exist_ok=True)
 ERR_LOG = LOG_DIR / "nfl_pbp_error.txt"
 
+# ---------------------- utils ----------------------
+def _safe_read_csv(p: str | Path) -> pd.DataFrame:
+    p = Path(p)
+    if not p.exists() or (hasattr(p, "stat") and p.stat().st_size < 5):
+        return pd.DataFrame()
+    try:
+        return pd.read_csv(p)
+    except Exception:
+        return pd.DataFrame()
+
 def _safe_write(df: pd.DataFrame, out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     if df is None or df.empty:
@@ -20,6 +30,49 @@ def _safe_write(df: pd.DataFrame, out: Path) -> None:
         ]).to_csv(out, index=False)
     else:
         df.to_csv(out, index=False)
+
+def _merge_missing_player(df: pd.DataFrame, add: pd.DataFrame, on=("player","team"), mapping: dict[str, str] | None = None, tag: str = "") -> pd.DataFrame:
+    if add.empty:
+        return df
+    src = add.copy()
+    if mapping:
+        src = src.rename(columns=mapping)
+    on_cols = list(on) if isinstance(on, (list, tuple)) else [on]
+    cols = on_cols + [c for c in (mapping.values() if mapping else []) if c in src.columns]
+    cols = [c for c in cols if c in src.columns]
+    if len(cols) <= len(on_cols):
+        return df
+    merged = df.merge(src[cols], on=on_cols, how="left", suffixes=("","__prov"))
+    for col in cols:
+        if col in on_cols:
+            continue
+        prov = f"{col}__prov"
+        if prov in merged.columns:
+            mask = merged[col].isna() & merged[prov].notna()
+            if mask.any():
+                print(f"[player_form] filled {mask.sum()} rows for {col} from {tag}")
+                merged.loc[mask, col] = merged.loc[mask, prov]
+            merged.drop(columns=[prov], inplace=True)
+    return merged
+
+def _fill_prior_season_missing(df: pd.DataFrame, season: int, cols: list[str]) -> pd.DataFrame:
+    prior = _safe_read_csv(Path("outputs/season_cache") / f"player_form_{season-1}.csv")
+    if prior.empty:
+        prior = _safe_read_csv(Path("data") / f"player_form_{season-1}.csv")
+    if prior.empty or not {"player","team"}.issubset(prior.columns):
+        return df
+    prior = prior.copy()
+    prior["team"] = prior["team"].astype(str).str.upper()
+    merged = df.merge(prior[["player","team"] + [c for c in cols if c in prior.columns]],
+                      on=["player","team"], how="left", suffixes=("","__prior"))
+    for c in cols:
+        if c in merged.columns and f"{c}__prior" in merged.columns:
+            mask = merged[c].isna() & merged[f"{c}__prior"].notna()
+            if mask.any():
+                print(f"[player_form] prior-season fallback filled {mask.sum()} rows for {c}")
+                merged.loc[mask, c] = merged.loc[mask, f"{c}__prior"]
+            merged.drop(columns=[f"{c}__prior"], inplace=True)
+    return merged
 
 # --- PBP fetcher: prefer nflreadpy (2025), fall back to nfl_data_py; 404 -> prior season ---
 def _fetch_pbp_with_retry(season: int, tries: int = 3, wait: int = 4) -> pd.DataFrame:
@@ -61,6 +114,7 @@ def _fetch_pbp_with_retry(season: int, tries: int = 3, wait: int = 4) -> pd.Data
                 time.sleep(wait)
     raise RuntimeError(f"PBP fetch failed: {type(last).__name__}: {last}")
 
+# ---------------------- builder ----------------------
 def build_from_nflverse(season: int) -> pd.DataFrame:
     pbp = _fetch_pbp_with_retry(season)
     pbp = pbp.loc[pbp["season"]==season].copy()
@@ -74,7 +128,6 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
     pbp["is_rush"] = (pbp.get("rush",0)==1) | (pbp.get("play_type","")=="run")
     pbp["in_rz"]   = (pbp.get("yardline_100").fillna(100) <= 20)
 
-    # team totals
     targs = pbp.loc[pbp["is_pass"] & (pbp["receiver"]!=""), ["game_id","posteam","receiver"]].copy()
     targs["targets"] = 1
     team_tgts = targs.groupby(["game_id","posteam"])["targets"].sum().rename("team_targets")
@@ -157,30 +210,61 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
         "yprr_proxy","ypc","qb_ypa"
     ]].sort_values(["team","player"]).reset_index(drop=True)
 
-    # optional PFR/mirrors enrich for real route/adot if you provide it
+    # Optional: PFR/mirrors enrich for route/adot if provided
     try:
         enrich_path = Path("data/pfr_player_enrich.csv")
         if enrich_path.exists():
             enrich = pd.read_csv(enrich_path)
-            rename_map = {
-                "team_abbr": "team",
-                "routes_db": "routes_per_dropback",
-                "aDOT": "aDOT",
-            }
+            rename_map = {"team_abbr":"team","routes_db":"routes_per_dropback","aDOT":"aDOT"}
             enrich = enrich.rename(columns={k:v for k,v in rename_map.items() if k in enrich.columns})
-            keep = ["player","team","routes_per_dropback","aDOT","slot_rate","snap_share"]
+            keep = ["player","team","routes_per_dropback","route_rate","aDOT","slot_rate","snap_share"]
             enrich = enrich[[c for c in keep if c in enrich.columns]].copy()
-            for col in ["routes_per_dropback","slot_rate","snap_share"]:
+            for col in ["routes_per_dropback","route_rate","slot_rate","snap_share"]:
                 if col in enrich.columns:
                     enrich[col] = pd.to_numeric(enrich[col], errors="coerce")
             out = out.merge(enrich, on=["player","team"], how="left", suffixes=("","_enrich"))
             if "routes_per_dropback" in out.columns:
                 out["route_rate"] = out["route_rate"].fillna(out["routes_per_dropback"])
+            if "route_rate_enrich" in out.columns:
+                out["route_rate"] = out["route_rate"].fillna(out["route_rate_enrich"])
     except Exception as e:
-        print(f"[player_form] enrich skipped: {type(e).__name__}: {e}", flush=True)
+        print(f"[player_form] PFR enrich skipped: {type(e).__name__}: {e}", flush=True)
+
+    # 4) External provider fallbacks (fill only remaining NaNs)
+    espn = _safe_read_csv("data/espn_player.csv")
+    out = _merge_missing_player(out, espn, ("player","team"), {
+        "routes_db":"route_rate","route_rate":"route_rate",
+        "target_share":"target_share","targets_share":"target_share",
+        "rush_share":"rush_share"
+    }, tag="ESPN")
+
+    msf = _safe_read_csv("data/msf_player.csv")
+    out = _merge_missing_player(out, msf, ("player","team"), {
+        "route_rate":"route_rate",
+        "target_share":"target_share",
+        "rush_share":"rush_share"
+    }, tag="MySportsFeeds")
+
+    gsis = _safe_read_csv("data/gsis_player.csv")
+    out = _merge_missing_player(out, gsis, ("player","team"), {
+        "route_rate":"route_rate",
+        "target_share":"target_share",
+        "rush_share":"rush_share"
+    }, tag="NFLGSIS")
+
+    apis = _safe_read_csv("data/apisports_player.csv")
+    out = _merge_missing_player(out, apis, ("player","team"), {
+        "route_rate":"route_rate",
+        "target_share":"target_share",
+        "rush_share":"rush_share"
+    }, tag="API-Sports")
+
+    # 5) Last-resort prior season (only if still NaN)
+    out = _fill_prior_season_missing(out, season, ["route_rate","target_share","rush_share"])
 
     return out
 
+# ---------------------- CLI ----------------------
 def cli(season: int) -> int:
     try:
         df = build_from_nflverse(season)
