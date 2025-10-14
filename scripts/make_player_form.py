@@ -205,7 +205,6 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
             if "routes_per_dropback" in out.columns:
                 out["route_rate"] = out["route_rate"].fillna(out["routes_per_dropback"])
             if "aDOT" not in out.columns and "air_yards" in out.columns:
-                # optional back-of-envelope if you haven't provided explicit aDOT
                 out["aDOT"] = np.where(out["target_share"]>0,
                                        out["air_yards"]/(out["target_share"]*100.0),
                                        np.nan)
