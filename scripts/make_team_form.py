@@ -134,6 +134,36 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
     hb = pd.Series(np.nan, index=def_pass.index, name="heavy_box_rate")
 
     df = pd.concat([def_pass, def_rush, sack_rate, pace, proe, lb, hb], axis=1).reset_index().rename(columns={"defteam":"team"})
+
+    # ---- OPTIONAL ENRICHMENTS (PFR / mirrors) ----
+    try:
+        enrich_path = Path("data/pfr_team_enrich.csv")
+        if enrich_path.exists():
+            ten = pd.read_csv(enrich_path)
+            ten = ten.rename(columns={
+                "prwr": "pass_rush_win_rate",
+                "press_rate": "pressure_rate",
+                "rsr": "run_stop_rate",
+                "man_rate": "man_coverage_rate",
+                "zone_rate": "zone_coverage_rate",
+                "light_box_rate": "light_box_rate_obs",
+                "heavy_box_rate": "heavy_box_rate_obs",
+                "team_abbr": "team"
+            })
+            keep = ["team","pass_rush_win_rate","pressure_rate","run_stop_rate",
+                    "man_coverage_rate","zone_coverage_rate","light_box_rate_obs","heavy_box_rate_obs"]
+            ten = ten[[c for c in keep if c in ten.columns]].copy()
+            for col in keep:
+                if col in ten.columns and col != "team":
+                    ten[col] = pd.to_numeric(ten[col], errors="coerce")
+            df = df.merge(ten, on="team", how="left", suffixes=("","_enrich"))
+            if "light_box_rate_obs" in df.columns:
+                df["light_box_rate"] = df["light_box_rate"].fillna(df["light_box_rate_obs"])
+            if "heavy_box_rate_obs" in df.columns:
+                df["heavy_box_rate"] = df["heavy_box_rate"].fillna(df["heavy_box_rate_obs"])
+    except Exception as e:
+        print(f"[team_form] enrich skipped: {type(e).__name__}: {e}", flush=True)
+
     for c in ["def_pass_epa","def_rush_epa","def_sack_rate","pace","proe","light_box_rate","heavy_box_rate"]:
         df[f"{c}_z"] = _z(df[c]) if c in df.columns else 0.0
     return df
