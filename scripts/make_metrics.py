@@ -35,10 +35,10 @@ REQ_COLS = {
     "team_wp",
 
     # injuries + coverage + cb
-    "status",                      # Out/Doubtful/Questionable/Limited/Probable/Healthy
-    "coverage_tags",               # free text tags (heavy_man, heavy_zone, press, top_shadow, etc.)
+    "status",
+    "coverage_tags",
     "man_rate_opp", "zone_rate_opp", "press_rate_opp",
-    "cb_penalty",                  # (0..0.25) penalty for the receiver (0 default)
+    "cb_penalty",
 
     # weather
     "wind_mph", "temp_f", "precip",
@@ -78,11 +78,9 @@ def _status_simplify(s: str) -> str:
 def _cb_penalty_merge(players: pd.DataFrame, cbs: pd.DataFrame) -> pd.Series:
     if players.empty or cbs.empty:
         return pd.Series(0.0, index=players.index)
-    # Expect columns: defense_team, receiver, cb_penalty
     cols_needed = {"defense_team","receiver","cb_penalty"}
     missing = cols_needed - set(cbs.columns)
     if missing:
-        # Try to normalize schema quickly
         cbs = cbs.copy()
         if "team" in cbs.columns and "defense_team" not in cbs.columns:
             cbs = cbs.rename(columns={"team":"defense_team"})
@@ -100,9 +98,8 @@ def _cb_penalty_merge(players: pd.DataFrame, cbs: pd.DataFrame) -> pd.Series:
 
 def _coverage_rates(opponent: str, coverage: pd.DataFrame) -> tuple[float,float,float]:
     if coverage.empty:
-        return (0.33, 0.5, 0.5)  # press_rate, man_rate, zone_rate default
+        return (0.33, 0.5, 0.5)
     cov = coverage.copy()
-    # Normalize schema: defense_team/tag -> team/tags
     if "team" not in cov.columns and "defense_team" in cov.columns:
         cov = cov.rename(columns={"defense_team":"team"})
     if "tags" not in cov.columns and "tag" in cov.columns:
@@ -120,7 +117,6 @@ def _coverage_rates(opponent: str, coverage: pd.DataFrame) -> tuple[float,float,
     pr = float(row.iloc[0].get("press_rate", np.nan))
     mr = float(row.iloc[0].get("man_rate", np.nan))
     zr = float(row.iloc[0].get("zone_rate", np.nan))
-    # clamp & fallback
     pr = 0.33 if np.isnan(pr) else max(0.0, min(1.0, pr))
     mr = 0.5  if np.isnan(mr) else max(0.0, min(1.0, mr))
     zr = 0.5  if np.isnan(zr) else max(0.0, min(1.0, zr))
@@ -149,7 +145,7 @@ def main(season: int | None = None) -> None:
                 if c in df.columns:
                     df[c] = df[c].astype(str)
 
-    # --- NEW: team_form z->raw passthrough if only *_z exist
+    # --- z->raw passthrough if only *_z exist
     if not team_form.empty:
         z_to_raw = {
             "def_pass_epa_z": "def_pass_epa",
@@ -164,7 +160,7 @@ def main(season: int | None = None) -> None:
             if raw not in team_form.columns and zcol in team_form.columns:
                 team_form[raw] = team_form[zcol]
 
-    # --- NEW: coverage schema normalization (team/tags + default rates)
+    # --- coverage schema normalization + default rates
     if not coverage.empty:
         if "team" not in coverage.columns and "defense_team" in coverage.columns:
             coverage = coverage.rename(columns={"defense_team": "team"})
@@ -181,12 +177,12 @@ def main(season: int | None = None) -> None:
             if c not in coverage.columns:
                 coverage[c] = default
 
-    # Player base (player_form) – must contain at least player, team, position
+    # Base player frame
     if player_form.empty:
         player_form = pd.DataFrame(columns=["player","team","position"])
     player_form["position"] = player_form.get("position","").fillna("")
 
-    # Map opponent / event_id if provided in player_form; otherwise set NaN (engine can merge later)
+    # Ensure join keys
     if "event_id" not in player_form.columns:
         player_form["event_id"] = np.nan
     if "opponent" not in player_form.columns:
@@ -202,20 +198,26 @@ def main(season: int | None = None) -> None:
     players = player_form.merge(injuries, on="player", how="left")
     players["status"] = players["status"].fillna("Healthy")
 
-    # Opponent attach from team_form by (team, event_id) if present
+    # ---- carry team enrich columns when present
+    team_enrich_candidates = {
+        "pass_rush_win_rate","pressure_rate","run_stop_rate",
+        "man_coverage_rate","zone_coverage_rate",
+        "light_box_rate_obs","heavy_box_rate_obs"
+    }
+
     if not team_form.empty:
         tf = team_form.copy()
         cols_keep = [
             "event_id","team","opponent","def_pass_epa","def_rush_epa","def_sack_rate",
             "light_box_rate","heavy_box_rate","pace","proe"
         ]
+        # include any enrich cols that exist
+        cols_keep += [c for c in team_enrich_candidates if c in tf.columns]
         for c in cols_keep:
             if c not in tf.columns:
                 tf[c] = np.nan
         tf = tf[cols_keep]
-        # Merge onto players
         players = players.merge(tf, on=["event_id","team"], how="left", suffixes=("","_team"))
-        # Guarantee *_opp
         players["def_pass_epa_opp"]   = players.get("def_pass_epa",   np.nan)
         players["def_rush_epa_opp"]   = players.get("def_rush_epa",   np.nan)
         players["def_sack_rate_opp"]  = players.get("def_sack_rate",  np.nan)
@@ -235,10 +237,10 @@ def main(season: int | None = None) -> None:
     players[["route_profile_press","route_profile_man","route_profile_zone"]] = \
         players[["route_profile_press","route_profile_man","route_profile_zone"]].fillna(0.33)
 
-    # CB penalty per receiver (schema-normalized inside helper)
+    # CB penalty per receiver
     players["cb_penalty"] = _cb_penalty_merge(players, cb_asgn)
 
-    # Weather
+    # Weather merge
     if "wind_mph" not in players.columns: players["wind_mph"] = np.nan
     if "temp_f"   not in players.columns: players["temp_f"]   = np.nan
     if "precip"   not in players.columns: players["precip"]   = np.nan
@@ -253,10 +255,9 @@ def main(season: int | None = None) -> None:
         for c in ("wind_mph_w","temp_f_w","precip_w"):
             if c in players.columns: players.drop(columns=[c], inplace=True)
 
-    # --- Robust Game lines → team_wp
+    # team_wp from lines
     players["team_wp"] = np.nan
     if not glines.empty:
-        # Case 1: already has home_wp/away_wp
         if {"home_wp","away_wp","event_id","home_team","away_team"}.issubset(glines.columns):
             players = players.merge(glines[["event_id","home_team","away_team","home_wp","away_wp"]],
                                     on="event_id", how="left")
@@ -264,7 +265,6 @@ def main(season: int | None = None) -> None:
                                    np.where(players["team"]==players["away_team"], players["away_wp"], np.nan))
             players.drop(columns=[c for c in ["home_team","away_team","home_wp","away_wp"] if c in players.columns], inplace=True)
         else:
-            # Case 2 (optional): derive from H2H american odds if present
             has_h2h = ("market" in glines.columns) and (glines["market"].astype(str).str.lower()=="h2h").any()
             if has_h2h and "price_american" in glines.columns and "outcome" in glines.columns:
                 g = glines.copy()
@@ -276,7 +276,6 @@ def main(season: int | None = None) -> None:
                     except Exception:
                         return np.nan
                 h2h["p"] = h2h["price_american"].apply(_p_from_american)
-                # de-vig per (event_id, book)
                 grouped = []
                 for (eid, bk), grp in h2h.groupby(["event_id","book"], dropna=True):
                     s = grp["p"].sum()
@@ -285,7 +284,6 @@ def main(season: int | None = None) -> None:
                     grouped.append(rows)
                 if grouped:
                     h2h = pd.concat(grouped, ignore_index=True)
-                    # need home/away teams to map outcomes
                     teams = g[["event_id","home_team","away_team"]].dropna().drop_duplicates()
                     h2h = h2h.merge(teams, on="event_id", how="left")
                     h2h["is_home"] = h2h.apply(lambda r: str(r.get("outcome","")).upper()==str(r.get("home_team","")).upper(), axis=1)
@@ -298,18 +296,15 @@ def main(season: int | None = None) -> None:
                                            np.where(players["team"]==players["away_team"], players["away_wp"], np.nan))
                     players.drop(columns=[c for c in ["home_team","away_team","home_wp","away_wp"] if c in players.columns], inplace=True)
 
-    # Guarantee all required columns and defaults
     players = _safe_cols(players, REQ_COLS)
-    # Fill measured/prior defaults if missing
-    players["target_share"] = players["target_share"].fillna(0.18)   # WR default-ish
-    players["rush_share"]   = players["rush_share"].fillna(0.30)     # RB default-ish
+    players["target_share"] = players["target_share"].fillna(0.18)
+    players["rush_share"]   = players["rush_share"].fillna(0.30)
     players["route_rate"]   = players["route_rate"].fillna(0.75)
     players["yprr_proxy"]   = players["yprr_proxy"].fillna(1.7)
     players["ypc"]          = players["ypc"].fillna(4.2)
     players["qb_ypa"]       = players["qb_ypa"].fillna(6.9)
     players["team_wp"]      = players["team_wp"].fillna(0.5)
 
-    # Write
     Path("outputs/metrics").mkdir(parents=True, exist_ok=True)
     players.to_csv("data/metrics_ready.csv", index=False)
     players.to_csv("outputs/metrics/metrics_ready.csv", index=False)
