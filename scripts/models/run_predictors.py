@@ -211,6 +211,15 @@ def p_anytime_td(position: str, rz_tgt_share: float, rz_carry_share: float,
 def p_two_plus_td(lam_player: float) -> float:
     return 1.0 - math.exp(-lam_player)*(1.0 + lam_player)
 
+# ★ RZ patch: modest team red-zone access multiplier (±6% band, centered ~0.22)
+def _rz_access_multiplier(rz_rate: float | None) -> float:
+    if rz_rate is None or not np.isfinite(rz_rate):
+        return 1.0
+    center = 0.22
+    span = 0.08
+    x = (float(rz_rate) - center) / max(1e-6, span)
+    return max(0.94, min(1.06, 1.0 + 0.06 * max(-1.0, min(1.0, x))))
+
 # ----------------------- SGP helpers -----------------------
 def _bvn_joint_prob(pA: float, pB: float, rho: float) -> float:
     pA = min(max(pA, 1e-6), 1-1e-6)
@@ -304,12 +313,17 @@ def run(season: int):
             lam_team = _team_expected_tds(team, odds_game, merged)
             opp_row = tf[tf['team']==opp].head(1).squeeze() if not tf.empty else pd.Series(dtype='float64')
             rush_mix = _rush_mix_from_def(opp_row)
-            rz_tgt = (r.get('rz_tgt_share') or 0.0) * tgt_mult
-            rz_car = (r.get('rz_carry_share') or 0.0)
+
+            # ★ RZ patch: modest multiplier from team-level rz_rate
+            rz_mult = _rz_access_multiplier(_num(r.get('rz_rate')))
+            rz_tgt = (r.get('rz_tgt_share') or 0.0) * tgt_mult * rz_mult
+            rz_car = (r.get('rz_carry_share') or 0.0) * rz_mult
+
             p_final, lam_player = p_anytime_td(position, rz_tgt, rz_car, lam_team, rush_mix)
             p_mkt = american_to_prob(r.get('over_odds')) or 0.5
             edge = p_final - p_mkt; fair = prob_to_american(p_final)
-            note = f"AnyTD λ_team={lam_team:.2f}, rush_mix={rush_mix:.2f}" + (f", {covnote}" if covnote else "")
+            note = f"AnyTD λ_team={lam_team:.2f}, rush_mix={rush_mix:.2f}" + (f", RZ×{rz_mult:.3f}" if rz_mult!=1.0 else "")
+            if covnote: note += f", {covnote}"
             out_rows.append({'event_id':r.get('event_id'),'player':player,'team':team,'opp_team':opp,'market':market,'line':1.0,
                              'vegas_prob':p_mkt,'model_prob':p_final,'edge':edge,'fair_odds':fair,'tier':tier_from_edge(edge),'notes':note})
             leg_records.append({'event_id':r.get('event_id'),'team':team,'player':player,'market':market,'p':p_final,'side':'yes','position':position})
@@ -320,13 +334,18 @@ def run(season: int):
             lam_team = _team_expected_tds(team, odds_game, merged)
             opp_row = tf[tf['team']==opp].head(1).squeeze() if not tf.empty else pd.Series(dtype='float64')
             rush_mix = _rush_mix_from_def(opp_row)
-            rz_tgt = (r.get('rz_tgt_share') or 0.0) * tgt_mult
-            rz_car = (r.get('rz_carry_share') or 0.0)
+
+            # ★ RZ patch also applies to 2+ TD via lam_player
+            rz_mult = _rz_access_multiplier(_num(r.get('rz_rate')))
+            rz_tgt = (r.get('rz_tgt_share') or 0.0) * tgt_mult * rz_mult
+            rz_car = (r.get('rz_carry_share') or 0.0) * rz_mult
+
             _, lam_player = p_anytime_td(position, rz_tgt, rz_car, lam_team, rush_mix)
             p_final = p_two_plus_td(lam_player)
             p_mkt = (american_to_prob(r.get('over_odds')) or american_to_prob(r.get('under_odds')) or 0.5)
             edge = p_final - p_mkt; fair = prob_to_american(p_final)
-            note = f"2+TD λ_player={lam_player:.2f}" + (f", {covnote}" if covnote else "")
+            note = f"2+TD λ_player={lam_player:.2f}" + (f", RZ×{rz_mult:.3f}" if rz_mult!=1.0 else "")
+            if covnote: note += f", {covnote}"
             out_rows.append({'event_id':r.get('event_id'),'player':player,'team':team,'opp_team':opp,'market':market,'line':2.0,
                              'vegas_prob':p_mkt,'model_prob':p_final,'edge':edge,'fair_odds':fair,'tier':tier_from_edge(edge),'notes':note})
             leg_records.append({'event_id':r.get('event_id'),'team':team,'player':player,'market':market,'p':p_final,'side':'yes','position':position})
