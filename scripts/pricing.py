@@ -200,9 +200,18 @@ def main(props_path: str) -> None:
     if "market" in props.columns:
         props["market"] = props["market"].astype(str).map(normalize_market_key)
 
-    met = pd.read_csv("data/metrics_ready.csv") if Path("data/metrics_ready.csv").exists() else pd.DataFrame()
-    if met.empty:
-        print("[pricing] WARNING: metrics_ready.csv is empty; proceeding with minimal features.")
+    # Metrics (tolerate empty/missing)
+    from pandas.errors import EmptyDataError
+    m_path = Path("data/metrics_ready.csv")
+    if m_path.exists() and m_path.stat().st_size > 0:
+        try:
+            met = pd.read_csv(m_path)
+        except EmptyDataError:
+            print("[pricing] WARNING: data/metrics_ready.csv exists but is empty; continuing without metrics.")
+            met = pd.DataFrame()
+    else:
+        print("[pricing] WARNING: data/metrics_ready.csv missing or empty; continuing without metrics.")
+        met = pd.DataFrame()
 
     # Coerce merge keys to string to avoid object/float mismatches
     for _df in (props, met):
@@ -211,36 +220,36 @@ def main(props_path: str) -> None:
                 _df[k] = _df[k].astype(str).str.replace(r"\.0$", "", regex=True).str.strip()
 
     # Merge
-    keys = ["event_id","player"]
-    if "event_id" not in props.columns: keys = ["player"]
+    keys = ["event_id","player"] if "event_id" in props.columns else ["player"]
     df = props.merge(met, on=keys, how="left", suffixes=("","_m"))
 
-    # De-vig market fair Over/Under
-    if "over_odds" in df.columns and "under_odds" in df.columns:
-        p_over_vig  = df["over_odds"].apply(american_to_prob)
-        p_under_vig = df["under_odds"].apply(american_to_prob)
+    # --- Odds normalization & market de-vig (robust + correct indentation) ---
+
+    if {"over_odds", "under_odds"}.issubset(df.columns):
+        # Two-way present: remove vig from both sides
+        p_over_vig  = pd.to_numeric(df["over_odds"],  errors="coerce").apply(american_to_prob)
+        p_under_vig = pd.to_numeric(df["under_odds"], errors="coerce").apply(american_to_prob)
         df["mkt_over_fair"], df["mkt_under_fair"] = devig_two_way(p_over_vig, p_under_vig)
+        # Also define a unified 'odds' column for Kelly using the Over side
+        df["odds"] = df["over_odds"]
     else:
-        side = df.get("side","OVER").astype(str).str.upper()
-        # normalize odds column name and coerce to numeric
-    if "odds" not in df.columns:
-        # common cases from Odds API
-        if "price_american" in df.columns:
-            df["odds"] = df["price_american"]
-        elif {"over_odds", "under_odds"} <= set(df.columns) and "side" in df.columns:
-            # pick the correct side if you melted earlier and kept a 'side' column
-            df["odds"] = np.where(
-                df["side"].str.lower().eq("over"), df["over_odds"],
-                np.where(df["side"].str.lower().eq("under"), df["under_odds"], np.nan)
-            )
-        else:
-            # fall back: create an aligned NaN series
-            df["odds"] = np.nan
-
-    odds = pd.to_numeric(df["odds"], errors="coerce")
-
+        # One side present: infer fair prob from single odds + 'side'
+        side = df.get("side", "OVER").astype(str).str.upper()
+        # Ensure we have a single 'odds' column
+        if "odds" not in df.columns:
+            if "price_american" in df.columns:
+                df["odds"] = df["price_american"]
+            elif {"over_odds", "under_odds"}.issubset(df.columns) and "side" in df.columns:
+                df["odds"] = np.where(
+                    df["side"].astype(str).str.lower().eq("over"),
+                    df["over_odds"],
+                    np.where(df["side"].astype(str).str.lower().eq("under"), df["under_odds"], np.nan),
+                )
+            else:
+                df["odds"] = np.nan
+        odds = pd.to_numeric(df["odds"], errors="coerce")
         p_vig = odds.apply(american_to_prob)
-        df["mkt_over_fair"]  = np.where(side=="OVER", p_vig, 1.0-p_vig)
+        df["mkt_over_fair"]  = np.where(side.eq("OVER"), p_vig, 1.0 - p_vig)
         df["mkt_under_fair"] = 1.0 - df["mkt_over_fair"]
 
     # Model μ/σ and Over% at the posted line
@@ -264,6 +273,7 @@ def main(props_path: str) -> None:
 
     # Edge & Kelly
     df["edge_abs"] = df["p_over_blend"] - df["mkt_over_fair"]
+
     def kelly_fraction(p, o):
         # o is American price for OVER
         if np.isnan(p) or np.isnan(o): return 0.0
@@ -271,7 +281,10 @@ def main(props_path: str) -> None:
         q = 1.0 - p
         frac = (b*p - q) / b
         return max(0.0, min(frac, 0.05))  # cap 5%
-    df["kelly_frac"] = [kelly_fraction(p, o) for p,o in zip(df["p_over_blend"], df["over_odds"])]
+
+    # Prefer real over_odds when present; else fall back to unified 'odds'
+    over_price = pd.to_numeric(df["over_odds"], errors="coerce") if "over_odds" in df.columns else pd.to_numeric(df.get("odds", np.nan), errors="coerce")
+    df["kelly_frac"] = [kelly_fraction(p, o) for p, o in zip(df["p_over_blend"], over_price)]
 
     # Tiers
     def tier(e):
