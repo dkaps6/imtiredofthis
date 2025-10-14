@@ -6,6 +6,9 @@ from pathlib import Path
 from datetime import datetime
 import pandas as pd
 
+# NEW: snapshot helpers
+import shutil, time, traceback  # <— NEW
+
 # --- config wiring (optional; safe fallback if missing) ---
 try:
     from scripts.config import (
@@ -40,12 +43,63 @@ except Exception:
     run_msf        = _stub("MySportsFeeds")
     run_apisports  = _stub("API-Sports")
 
-def _run(cmd: str):
+# NEW: per-run snapshot directory & helpers
+RUN_ID = os.getenv("RUN_ID", datetime.utcnow().strftime("%Y%m%d_%H%M%S"))
+SNAP_DIR = Path("runs") / RUN_ID
+SNAP_DIR.mkdir(parents=True, exist_ok=True)
+
+def _safe_exists(p: Path) -> bool:
+    try:
+        return p.exists() and (p.stat().st_size > 0)
+    except Exception:
+        return False
+
+def snapshot(paths, label=None):
+    """
+    Copy files that exist into runs/<RUN_ID>/<label>_<epoch>/
+    so you can inspect outputs even if later steps fail.
+    """
+    stamp = f"{int(time.time())}"
+    tag = f"{label}_" if label else ""
+    outdir = SNAP_DIR / f"{tag}{stamp}"
+    outdir.mkdir(parents=True, exist_ok=True)
+    wrote = []
+    for s in (paths or []):
+        p = Path(s)
+        if _safe_exists(p):
+            shutil.copy2(p, outdir / p.name)
+            wrote.append(p.name)
+    (outdir / "_snapshot.txt").write_text(
+        f"Snapshot {label or ''} at {datetime.utcnow().isoformat()}Z\n"
+        f"Files: {', '.join(wrote) if wrote else '(none)'}\n",
+        encoding="utf-8"
+    )
+    print(f"[engine] snapshot → {outdir} ({len(wrote)} files)")
+
+def finalize_run():
+    """Zip runs/<RUN_ID> so CI can upload artifacts even on failure."""
+    try:
+        _dump_diag()  # keep your existing heads/sizes
+        bundle = SNAP_DIR.with_suffix(".zip")
+        if bundle.exists():
+            bundle.unlink()
+        shutil.make_archive(str(SNAP_DIR), "zip", root_dir=SNAP_DIR)
+        print(f"[engine] packaged snapshots → {bundle}")
+    except Exception:
+        traceback.print_exc()
+
+def _run(cmd: str, label: str | None = None, snap_after: list[str] | None = None):
+    """Run a shell step; snapshot selected files; raise on failure (no sys.exit)."""
     print(f"[engine] ▶ {cmd}", flush=True)
     rc = subprocess.call(shlex.split(cmd))
+    # snapshot even if the step fails (best-effort)
+    if snap_after:
+        snapshot(snap_after, label or "step")
     if rc != 0:
         print(f"[engine] ✖ step failed (exit {rc})", flush=True)
-        sys.exit(rc)
+        # raise instead of sys.exit, so finalize_run() still packages artifacts
+        raise RuntimeError(f"step failed: {label or cmd} (exit {rc})")
+    return rc
 
 def _size(p: str) -> str:
     fp = Path(p)
@@ -93,72 +147,106 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
         f"ESPN_COOKIE={'set' if os.getenv('ESPN_COOKIE') else 'missing'}"
     )
 
-    # 1) upstream providers (best-effort)
     try:
-        _provider_chain(int(season), date or None)
+        # 1) upstream providers (best-effort)
+        try:
+            _provider_chain(int(season), date or None)
+        except Exception as e:
+            print(f"[engine] provider chain error (non-fatal): {e}")
+
+        # 2) builders — team & player form first
+        _run(f"python scripts/make_team_form.py --season {season}",
+             label="team_form", snap_after=["data/team_form.csv"])
+        print(f"[engine]   data/team_form.csv → {_size('data/team_form.csv')}")
+
+        _run(f"python scripts/make_player_form.py --season {season}",
+             label="player_form", snap_after=["data/player_form.csv"])
+        print(f"[engine]   data/player_form.csv → {_size('data/player_form.csv')}")
+
+        # 3) odds props — v4 requires one market per request; also write odds_game.csv
+        b = ",".join(books or ["draftkings","fanduel","betmgm","caesars"])
+
+        _default_markets = [
+            "player_pass_yds",
+            "player_reception_yds",    # receiving yards (canonical key)
+            "player_receiving_yards",  # alias (safety)
+            "player_rush_yds",
+            "player_receptions",
+            "player_rush_reception_yds",
+            "player_rush_and_receive_yards",
+            "player_anytime_td",
+        ]
+        # NEW: de-duplicate any overlapping aliases before fetching
+        markets_to_pull = [m.strip() for m in (markets or _default_markets) if m.strip()]
+        markets_to_pull = list(dict.fromkeys(markets_to_pull))  # NEW
+
+        # ensure game lines exist once
+        _run(
+            "python scripts/fetch_props_oddsapi.py "
+            f"--books {b} --markets h2h,spreads,totals "
+            f"--date {date or ''} "
+            "--out outputs/_tmp_props/_game.csv --out_game outputs/odds_game.csv",
+            label="odds_game", snap_after=["outputs/odds_game.csv", "outputs/_tmp_props/_game.csv"]
+        )
+
+        # fetch ALL player markets in one call → writes outputs/props_raw.csv (+ props_raw_wide.csv)
+        all_mk = ",".join(markets_to_pull)
+        _run(
+            "python scripts/fetch_props_oddsapi.py "
+            f"--books {b} --markets {all_mk} "
+            f"--date {date or ''} "
+            "--out outputs/props_raw.csv --out_game outputs/odds_game.csv",
+            label="props_raw", snap_after=["outputs/props_raw.csv"]
+        )
+
+        # 3.5) build metrics_ready (features for pricing)
+        _run("python scripts/make_metrics.py",
+             label="metrics", snap_after=["data/metrics_ready.csv", "outputs/metrics/metrics_ready.csv"])
+        print(
+            f"[engine]   data/metrics_ready.csv → "
+            f"{os.path.getsize('data/metrics_ready.csv') if Path('data/metrics_ready.csv').exists() else 'MISSING'}"
+        )
+
+        # 4) pricing + predictors
+        if not os.path.exists("outputs/props_raw.csv") or os.stat("outputs/props_raw.csv").st_size == 0:
+            snapshot(["outputs/props_raw.csv"], "props_check")
+            raise RuntimeError("[engine] outputs/props_raw.csv is missing or empty – skipping pricing")
+
+        _run("python scripts/pricing.py --props outputs/props_raw.csv",
+             label="pricing", snap_after=["outputs/props_priced_clean.csv"])
+
+        _run(f"python -m scripts.models.run_predictors --season {season}",
+             label="predictors", snap_after=[
+                 "outputs/master_model_predictions.csv",
+                 "outputs/sgp_candidates.csv",
+                 "logs/master_model_predictions.csv",
+                 "logs/summary.json"
+             ])
+        print(f"[engine]   outputs/master_model_predictions.csv → {_size('outputs/master_model_predictions.csv')}")
+
+        # 5) export Excel + diagnostics
+        _run("python scripts/export_excel.py",
+             label="export", snap_after=["outputs/model_report.xlsx"])
+        _dump_diag()
+        snapshot([
+            "logs/run_diagnostics.txt",
+            "outputs/master_model_predictions.csv",
+            "outputs/sgp_candidates.csv",
+            "data/metrics_ready.csv",
+            "outputs/props_raw.csv",
+            "outputs/odds_game.csv"
+        ], "final")
+
+        rid = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        print(f"[engine] ✅ complete (run_id={rid})")
+        return 0
+
     except Exception as e:
-        print(f"[engine] provider chain error (non-fatal): {e}")
-
-    # 2) builders — team & player form first
-    _run(f"python scripts/make_team_form.py --season {season}")
-    print(f"[engine]   data/team_form.csv → {_size('data/team_form.csv')}")
-    _run(f"python scripts/make_player_form.py --season {season}")
-    print(f"[engine]   data/player_form.csv → {_size('data/player_form.csv')}")
-
-    # 3) odds props — v4 requires one market per request; also write odds_game.csv
-    b = ",".join(books or ["draftkings","fanduel","betmgm","caesars"])
-
-    _default_markets = [
-        "player_pass_yds",
-        "player_reception_yds",    # receiving yards (canonical key)
-        "player_receiving_yards",
-        "player_rush_yds",
-        "player_receptions",
-        "player_rush_reception_yds",
-        "player_rush_and_receive_yards",
-        "player_anytime_td",
-    ]
-    markets_to_pull = [m.strip() for m in (markets or _default_markets) if m.strip()]
-
-    # ensure game lines exist once
-    _run(
-        "python scripts/fetch_props_oddsapi.py "
-        f"--books {b} --markets h2h,spreads,totals "
-        f"--date {date or ''} "
-        "--out outputs/_tmp_props/_game.csv --out_game outputs/odds_game.csv"
-    )
-
-    # fetch ALL player markets in one call → writes outputs/props_raw.csv (+ props_raw_wide.csv)
-    all_mk = ",".join(markets_to_pull)
-    _run(
-        "python scripts/fetch_props_oddsapi.py "
-        f"--books {b} --markets {all_mk} "
-        f"--date {date or ''} "
-        "--out outputs/props_raw.csv --out_game outputs/odds_game.csv"
-    )
-
-    # 3.5) build metrics_ready (features for pricing)
-    _run("python scripts/make_metrics.py")
-    print(
-        f"[engine]   data/metrics_ready.csv → "
-        f"{os.path.getsize('data/metrics_ready.csv') if Path('data/metrics_ready.csv').exists() else 'MISSING'}"
-    )
-
-    # 4) pricing + predictors
-    if not os.path.exists("outputs/props_raw.csv") or os.stat("outputs/props_raw.csv").st_size == 0:
-        print("[engine] ERROR: outputs/props_raw.csv is missing or empty – skipping pricing")
-        sys.exit(2)
-    _run("python scripts/pricing.py --props outputs/props_raw.csv")
-    _run(f"python -m scripts.models.run_predictors --season {season}")
-    print(f"[engine]   outputs/master_model_predictions.csv → {_size('outputs/master_model_predictions.csv')}")
-
-    # 5) export Excel + diagnostics
-    _run("python scripts/export_excel.py")
-    _dump_diag()
-
-    rid = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    print(f"[engine] ✅ complete (run_id={rid})")
-    return 0
+        # Don’t hide the error, but let finally package snapshots
+        print(f"[engine] ERROR: {e}", file=sys.stderr)
+        return 1
+    finally:
+        finalize_run()
 
 def cli_main() -> int:
     """CLI entrypoint used by `python -m engine`."""
