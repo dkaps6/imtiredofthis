@@ -45,13 +45,20 @@ jobs:
         run: |
           python - <<'PY'
           import sys, importlib
-          for m in ["nfl_data_py", "pyarrow", "pandas", "numpy"]:
-              try:
-                  mod = importlib.import_module(m)
-                  print(f"{m}: OK", getattr(mod, "__version__", "(no __version__)"))
-              except Exception as e:
-                  print(f"{m}: FAIL -> {e}")
-                  sys.exit(1)
+          def check(mod):
+              m = importlib.import_module(mod)
+              path = getattr(m, "__file__", "(builtin)")
+              ok_path = ("site-packages" in (path or "")) or ("dist-packages" in (path or ""))
+              print(f"{mod}: path={path}")
+              if mod == "nfl_data_py":
+                  if not hasattr(m, "import_pbp_data"):
+                      print("nfl_data_py present but missing import_pbp_data() — wrong module")
+                      sys.exit(1)
+                  if not ok_path:
+                      print("nfl_data_py not from site/dist-packages — likely shadowed")
+                      sys.exit(1)
+          for mod in ["nfl_data_py","pyarrow","pandas","numpy"]:
+              check(mod)
           PY
 
       - name: Prepare dirs
