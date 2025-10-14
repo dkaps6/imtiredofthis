@@ -126,7 +126,6 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
         "--out outputs/_tmp_props/_game.csv --out_game outputs/odds_game.csv"
     )
 
-    # each player market separately (v4)
     # fetch ALL player markets in one call → writes outputs/props_raw.csv (+ props_raw_wide.csv)
     all_mk = ",".join(markets_to_pull)
     _run(
@@ -136,7 +135,12 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
         "--out outputs/props_raw.csv --out_game outputs/odds_game.csv"
     )
 
-    # fetcher appends & builds outputs/props_raw.csv
+    # 3.5) build metrics_ready (features for pricing)
+    _run("python scripts/make_metrics.py")
+    print(
+        f"[engine]   data/metrics_ready.csv → "
+        f"{os.path.getsize('data/metrics_ready.csv') if Path('data/metrics_ready.csv').exists() else 'MISSING'}"
+    )
 
     # 4) pricing + predictors
     if not os.path.exists("outputs/props_raw.csv") or os.stat("outputs/props_raw.csv").st_size == 0:
@@ -160,7 +164,7 @@ def cli_main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", required=True)
     ap.add_argument("--date", default="")
-    ap.add_argument("--books", default="draftkings,fanduel,betmgm,caesars")
+    ap.add_argument("--books", default="draftkings,fanduel,betmgam,caesars")
     ap.add_argument("--markets", default="")
     args = ap.parse_args()
 
