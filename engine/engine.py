@@ -127,16 +127,22 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
     )
 
     # each player market separately (v4)
-    for mk in markets_to_pull:
-        _run(
-            "python scripts/fetch_props_oddsapi.py "
-            f"--books {b} --markets {mk} "
-            f"--date {date or ''} "
-            "--out outputs/_tmp_props/_player.csv"
-        )
+    # fetch ALL player markets in one call → writes outputs/props_raw.csv (+ props_raw_wide.csv)
+    all_mk = ",".join(markets_to_pull)
+    _run(
+        "python scripts/fetch_props_oddsapi.py "
+        f"--books {b} --markets {all_mk} "
+        f"--date {date or ''} "
+        "--out outputs/props_raw.csv --out_game outputs/odds_game.csv"
+    )
+
     # fetcher appends & builds outputs/props_raw.csv
 
     # 4) pricing + predictors
+    import os
+    if not os.path.exists("outputs/props_raw.csv") or os.stat("outputs/props_raw.csv").st_size == 0:
+        print("[engine] ERROR: outputs/props_raw.csv is missing or empty – skipping pricing")
+        sys.exit(2)
     _run("python scripts/pricing.py --props outputs/props_raw.csv")
     _run(f"python -m scripts.models.run_predictors --season {season}")
     print(f"[engine]   outputs/master_model_predictions.csv → {_size('outputs/master_model_predictions.csv')}")
