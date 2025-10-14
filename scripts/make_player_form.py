@@ -199,6 +199,27 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
     agg["route_rate"] = np.nan
     agg["role"] = ""
 
+    # >>> ADDED: route_rate_proxy from PBP (targets per team dropback vs league TPDB)
+    _drop_col = "dropback" if "dropback" in pbp.columns else ("qb_dropback" if "qb_dropback" in pbp.columns else None)
+    if _drop_col:
+        _db = pbp.loc[pbp[_drop_col] == 1, ["game_id", "posteam"]].copy()
+        _db["db"] = 1
+        _team_db = _db.groupby("posteam")["db"].sum().rename("team_dropbacks")
+
+        _total_targets = pd.to_numeric(agg["player_targets"], errors="coerce").sum()
+        _total_db = float(_team_db.sum()) if _team_db.sum() else np.nan
+        _league_tpdb = (_total_targets / _total_db) if (_total_db and _total_db > 0) else 0.22
+
+        _tmp = _team_db.reset_index().rename(columns={"posteam": "team"})
+        agg = agg.merge(_tmp, on="team", how="left")
+        agg["team_dropbacks"] = pd.to_numeric(agg["team_dropbacks"], errors="coerce")
+
+        agg["route_rate_proxy"] = (agg["player_targets"] / agg["team_dropbacks"]) / max(_league_tpdb, 1e-6)
+        agg["route_rate_proxy"] = agg["route_rate_proxy"].replace([np.inf, -np.inf], np.nan).clip(lower=0, upper=1.15)
+    else:
+        agg["route_rate_proxy"] = np.nan
+    # <<< ADDED
+
     team_ypa = team_ypa.reset_index().rename(columns={"posteam":"team","qb_ypa_all":"qb_ypa"})
     out = agg.merge(team_ypa, on="team", how="left")
     out["qb_ypa"] = out["qb_ypa"].fillna(out["qb_ypa"].mean() if np.isfinite(out["qb_ypa"].mean()) else 6.9)
@@ -258,6 +279,22 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
         "target_share":"target_share",
         "rush_share":"rush_share"
     }, tag="API-Sports")
+
+    # >>> ADDED: fill route_rate from proxy if still missing, then clip
+    out = out.merge(agg[["player","team","route_rate_proxy"]], on=["player","team"], how="left")
+    out["route_rate"] = out["route_rate"].fillna(out["route_rate_proxy"]).clip(lower=0, upper=1.0)
+    out.drop(columns=["route_rate_proxy"], inplace=True, errors="ignore")
+    # <<< ADDED
+
+    # >>> ADDED: merge roles if provided
+    roles = _safe_read_csv("data/roles.csv")
+    if not roles.empty and {"player","team","role"}.issubset(roles.columns):
+        roles["team"] = roles["team"].astype(str).str.upper()
+        out = out.merge(roles[["player","team","role"]], on=["player","team"], how="left", suffixes=("","_r"))
+        out["role"] = out["role"].fillna(out.get("role_r"))
+        if "role_r" in out.columns:
+            out = out.drop(columns=["role_r"])
+    # <<< ADDED
 
     # 5) Last-resort prior season (only if still NaN)
     out = _fill_prior_season_missing(out, season, ["route_rate","target_share","rush_share"])
