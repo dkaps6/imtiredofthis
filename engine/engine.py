@@ -164,7 +164,7 @@ def cli_main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", required=True)
     ap.add_argument("--date", default="")
-    ap.add_argument("--books", default="draftkings,fanduel,betmgam,caesars")
+    ap.add_argument("--books", default="draftkings,fanduel,betmgm,caesars")
     ap.add_argument("--markets", default="")
     args = ap.parse_args()
 
