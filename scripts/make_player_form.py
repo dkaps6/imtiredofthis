@@ -181,6 +181,37 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
         "yprr_proxy","ypc","qb_ypa"
     ]].sort_values(["team","player"]).reset_index(drop=True)
 
+    # ---- OPTIONAL ENRICHMENTS (PFR / mirrors) ----
+    try:
+        enrich_path = Path("data/pfr_player_enrich.csv")
+        if enrich_path.exists():
+            enrich = pd.read_csv(enrich_path)
+            rename_map = {
+                "team_abbr": "team",
+                "air_yards_total": "air_yards",
+                "routes_db": "routes_per_dropback",
+                "rz_tgts": "red_zone_tgts",
+            }
+            enrich = enrich.rename(columns={k: v for k, v in rename_map.items() if k in enrich.columns})
+            keep = ["player","team","snap_share","routes_per_dropback","air_yards","aDOT","red_zone_tgts","slot_rate"]
+            enrich = enrich[[c for c in keep if c in enrich.columns]].copy()
+            for col in ["snap_share","routes_per_dropback","slot_rate"]:
+                if col in enrich.columns:
+                    enrich[col] = pd.to_numeric(enrich[col], errors="coerce").clip(0,1)
+            for col in ["air_yards","aDOT","red_zone_tgts"]:
+                if col in enrich.columns:
+                    enrich[col] = pd.to_numeric(enrich[col], errors="coerce")
+            out = out.merge(enrich, on=["player","team"], how="left", suffixes=("","_enrich"))
+            if "routes_per_dropback" in out.columns:
+                out["route_rate"] = out["route_rate"].fillna(out["routes_per_dropback"])
+            if "aDOT" not in out.columns and "air_yards" in out.columns:
+                # optional back-of-envelope if you haven't provided explicit aDOT
+                out["aDOT"] = np.where(out["target_share"]>0,
+                                       out["air_yards"]/(out["target_share"]*100.0),
+                                       np.nan)
+    except Exception as e:
+        print(f"[player_form] enrich skipped: {type(e).__name__}: {e}", flush=True)
+
     return out
 
 def cli(season: int) -> int:
