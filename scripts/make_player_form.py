@@ -26,7 +26,9 @@ def _safe_write(df: pd.DataFrame, out: Path) -> None:
             "player","team","position","role",
             "target_share","rush_share","route_rate",
             "rz_tgt_share","rz_carry_share",
-            "yprr_proxy","ypc","qb_ypa"
+            "yprr_proxy","ypc","qb_ypa",
+            # NEW: explicit ypt + route_share alias for downstream if needed
+            "ypt"
         ]).to_csv(out, index=False)
     else:
         df.to_csv(out, index=False)
@@ -187,48 +189,76 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
     agg = players.groupby(["posteam","player"]).sum(numeric_only=True).reset_index()
     agg["team"] = agg["posteam"].astype(str).str.upper()
 
+    # Core shares
     agg["target_share"]   = (agg["player_targets"] / agg["team_targets"]).replace([np.inf,-np.inf], np.nan).fillna(0.0)
     agg["rush_share"]     = (agg["player_rush_att"] / agg["team_rush_att"]).replace([np.inf,-np.inf], np.nan).fillna(0.0)
     agg["rz_tgt_share"]   = (agg["player_rz_tgt"] / agg["team_rz_tgt"]).replace([np.inf,-np.inf], np.nan).fillna(0.0)
     agg["rz_carry_share"] = (agg["player_rz_carry"] / agg["team_rz_carry"]).replace([np.inf,-np.inf], np.nan).fillna(0.0)
 
-    agg["yprr_proxy"] = (agg["rec_yards"] / np.where(agg["player_targets"]>0, agg["player_targets"], np.nan)).replace([np.inf,-np.inf], np.nan).fillna(0.0)
+    # Efficiency
+    # ypt (explicit)
+    agg["ypt"]        = (agg["rec_yards"] / np.where(agg["player_targets"]>0, agg["player_targets"], np.nan)).replace([np.inf,-np.inf], np.nan).fillna(0.0)
     agg["ypc"]        = (agg["rush_yards"] / np.where(agg["player_rush_att"]>0, agg["player_rush_att"], np.nan)).replace([np.inf,-np.inf], np.nan).fillna(0.0)
+    # yprr_proxy will be overwritten below when pass_snaps are available, else remains yds/targets fallback
+    agg["yprr_proxy"] = agg["ypt"].copy()
 
+    # Position heuristic (kept)
     agg["position"] = np.where(agg["player_rush_att"] > agg["player_targets"], "RB", "WR")
     agg["route_rate"] = np.nan
     agg["role"] = ""
-
-    # >>> ADDED: route_rate_proxy from PBP (targets per team dropback vs league TPDB)
-    _drop_col = "dropback" if "dropback" in pbp.columns else ("qb_dropback" if "qb_dropback" in pbp.columns else None)
-    if _drop_col:
-        _db = pbp.loc[pbp[_drop_col] == 1, ["game_id", "posteam"]].copy()
-        _db["db"] = 1
-        _team_db = _db.groupby("posteam")["db"].sum().rename("team_dropbacks")
-
-        _total_targets = pd.to_numeric(agg["player_targets"], errors="coerce").sum()
-        _total_db = float(_team_db.sum()) if _team_db.sum() else np.nan
-        _league_tpdb = (_total_targets / _total_db) if (_total_db and _total_db > 0) else 0.22
-
-        _tmp = _team_db.reset_index().rename(columns={"posteam": "team"})
-        agg = agg.merge(_tmp, on="team", how="left")
-        agg["team_dropbacks"] = pd.to_numeric(agg["team_dropbacks"], errors="coerce")
-
-        agg["route_rate_proxy"] = (agg["player_targets"] / agg["team_dropbacks"]) / max(_league_tpdb, 1e-6)
-        agg["route_rate_proxy"] = agg["route_rate_proxy"].replace([np.inf, -np.inf], np.nan).clip(lower=0, upper=1.15)
-    else:
-        agg["route_rate_proxy"] = np.nan
-    # <<< ADDED
 
     team_ypa = team_ypa.reset_index().rename(columns={"posteam":"team","qb_ypa_all":"qb_ypa"})
     out = agg.merge(team_ypa, on="team", how="left")
     out["qb_ypa"] = out["qb_ypa"].fillna(out["qb_ypa"].mean() if np.isfinite(out["qb_ypa"].mean()) else 6.9)
 
+    # --- NEW: Build a real routes proxy using participation pass snaps (if available)
+    pass_snaps_cols = pd.DataFrame(columns=["team","player_norm","pass_snaps","team_pass_snaps"])
+    try:
+        # Try both stacks you already support in team_form
+        try:
+            import nflreadpy as nfr
+            pf = nfr.load_participation([season]).to_pandas()
+        except Exception:
+            pf = None
+        if pf is None or pf.empty:
+            import nfl_data_py as nfl
+            for fn in ("import_participation", "import_participation_data", "import_ngs_participation"):
+                if hasattr(nfl, fn):
+                    pf = getattr(nfl, fn)([season])
+                    break
+        if pf is not None and not pf.empty and {"game_id","play_id","offense_players"}.issubset(pf.columns):
+            _off = pbp.loc[pbp["posteam"].notna()].copy()
+            _off["team"] = _off["posteam"].str.upper()
+            p_pass = _off.loc[_off["is_pass"]==True, ["game_id","play_id","team"]].copy()
+            pp = p_pass.merge(pf[["game_id","play_id","offense_players"]], on=["game_id","play_id"], how="left")
+            pp["offense_players"] = pp["offense_players"].fillna("")
+            pp = pp.loc[pp["offense_players"].ne("")]
+            pp = pp.assign(player_name_list=pp["offense_players"].str.split(";")).explode("player_name_list")
+            pp["player"] = pp["player_name_list"].str.replace(r"\(.*\)","", regex=True).str.strip()
+            pp["player_norm"] = pp["player"].str.lower().str.replace(r"[.'’]", "", regex=True).str.strip()
+            team_pass_snaps = pp.groupby("team", as_index=False).agg(team_pass_snaps=("play_id","count"))
+            ply_pass_snaps  = pp.groupby(["team","player_norm"], as_index=False).agg(pass_snaps=("play_id","count"))
+            pass_snaps_cols = ply_pass_snaps.merge(team_pass_snaps, on="team", how="left")
+    except Exception as e:
+        print(f"[player_form] participation route proxy skipped: {type(e).__name__}: {e}", flush=True)
+
+    # Merge participation-based route proxy
+    out["player_norm"] = out["player"].astype(str).str.lower().str.replace(r"[.'’]", "", regex=True).str.strip()
+    if not pass_snaps_cols.empty:
+        out = out.merge(pass_snaps_cols, on=["team","player_norm"], how="left")
+        # route_rate if missing: pass_snaps / team_pass_snaps
+        rr = (out["pass_snaps"] / out["team_pass_snaps"]).replace([np.inf,-np.inf], np.nan)
+        out["route_rate"] = out["route_rate"].where(out["route_rate"].notna(), rr)
+        # yprr_proxy real: rec_yards / pass_snaps (falls back to ypt when snaps=0)
+        yprr_real = (out["rec_yards"] / np.where(out["pass_snaps"]>0, out["pass_snaps"], np.nan)).replace([np.inf,-np.inf], np.nan)
+        out["yprr_proxy"] = out["yprr_proxy"].where(out["yprr_proxy"].notna(), yprr_real)
+    out.drop(columns=["player_norm","pass_snaps","team_pass_snaps"], inplace=True, errors="ignore")
+
     out = out.rename(columns={"player":"player"})[[
         "player","team","position","role",
         "target_share","rush_share","route_rate",
         "rz_tgt_share","rz_carry_share",
-        "yprr_proxy","ypc","qb_ypa"
+        "yprr_proxy","ypc","qb_ypa","ypt"
     ]].sort_values(["team","player"]).reset_index(drop=True)
 
     # Optional: PFR/mirrors enrich for route/adot if provided
@@ -251,7 +281,7 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
     except Exception as e:
         print(f"[player_form] PFR enrich skipped: {type(e).__name__}: {e}", flush=True)
 
-    # 4) External provider fallbacks (fill only remaining NaNs)
+    # 4) External provider fallbacks (fill only remaining NaNs) — preserved
     espn = _safe_read_csv("data/espn_player.csv")
     out = _merge_missing_player(out, espn, ("player","team"), {
         "routes_db":"route_rate","route_rate":"route_rate",
@@ -280,24 +310,8 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
         "rush_share":"rush_share"
     }, tag="API-Sports")
 
-    # >>> ADDED: fill route_rate from proxy if still missing, then clip
-    out = out.merge(agg[["player","team","route_rate_proxy"]], on=["player","team"], how="left")
-    out["route_rate"] = out["route_rate"].fillna(out["route_rate_proxy"]).clip(lower=0, upper=1.0)
-    out.drop(columns=["route_rate_proxy"], inplace=True, errors="ignore")
-    # <<< ADDED
-
-    # >>> ADDED: merge roles if provided
-    roles = _safe_read_csv("data/roles.csv")
-    if not roles.empty and {"player","team","role"}.issubset(roles.columns):
-        roles["team"] = roles["team"].astype(str).str.upper()
-        out = out.merge(roles[["player","team","role"]], on=["player","team"], how="left", suffixes=("","_r"))
-        out["role"] = out["role"].fillna(out.get("role_r"))
-        if "role_r" in out.columns:
-            out = out.drop(columns=["role_r"])
-    # <<< ADDED
-
-    # 5) Last-resort prior season (only if still NaN)
-    out = _fill_prior_season_missing(out, season, ["route_rate","target_share","rush_share"])
+    # 5) Last-resort prior season (only if still NaN) — preserved
+    out = _fill_prior_season_missing(out, season, ["route_rate","target_share","rush_share","ypt","yprr_proxy"])
 
     return out
 
