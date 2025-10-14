@@ -59,3 +59,15 @@ jobs:
             data/team_form.csv
             data/player_form.csv
             data/metrics_ready.csv
+
+      - name: Upload run artifacts (always)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-${{ github.run_id }}
+          path: |
+            runs/**/*.zip
+            runs/**/*
+            outputs/**
+            data/metrics_ready.csv
+            logs/**
