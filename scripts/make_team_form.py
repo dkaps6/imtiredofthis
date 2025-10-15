@@ -39,6 +39,38 @@ def _z(s: pd.Series) -> pd.Series:
     if not np.isfinite(sd) or sd == 0: return pd.Series(0.0, index=s.index)
     return (s - mu) / (sd + 1e-9)
 
+def _apply_team_defaults(df: pd.DataFrame) -> pd.DataFrame:
+    defaults = {
+        "def_pass_epa": df["def_pass_epa"].mean(skipna=True) if "def_pass_epa" in df.columns else 0.00,
+        "def_rush_epa": df["def_rush_epa"].mean(skipna=True) if "def_rush_epa" in df.columns else 0.00,
+        "def_sack_rate": df["def_sack_rate"].mean(skipna=True) if "def_sack_rate" in df.columns else 0.00,
+        "pace": df["pace"].mean(skipna=True) if "pace" in df.columns else 28.0,
+        "proe": df["proe"].mean(skipna=True) if "proe" in df.columns else 0.00,
+        "light_box_rate": 0.50,
+        "heavy_box_rate": 0.15,
+        "rz_rate": df["rz_rate"].mean(skipna=True) if "rz_rate" in df.columns else 0.53,
+        "slot_rate": df["slot_rate"].mean(skipna=True) if "slot_rate" in df.columns else 0.30,
+        "12p_rate": df["12p_rate"].mean(skipna=True) if "12p_rate" in df.columns else 0.15,
+        "ay_per_att": df["ay_per_att"].mean(skipna=True) if "ay_per_att" in df.columns else 6.8,
+    }
+    for k, v in defaults.items():
+        if k in df.columns:
+            df[k] = pd.to_numeric(df[k], errors="coerce").fillna(v)
+    return df
+
+def _ensure_team_columns(df: pd.DataFrame) -> pd.DataFrame:
+    need = [
+        "team","def_pass_epa","def_rush_epa","def_sack_rate",
+        "pace","proe","light_box_rate","heavy_box_rate",
+        "rz_rate","slot_rate","12p_rate","ay_per_att",
+        "def_pass_epa_z","def_rush_epa_z","def_sack_rate_z",
+        "pace_z","proe_z","light_box_rate_z","heavy_box_rate_z",
+    ]
+    for c in need:
+        if c not in df.columns:
+            df[c] = np.nan
+    return df
+
 def _merge_missing_team(df: pd.DataFrame, add: pd.DataFrame, on="team", mapping: dict[str, str] | None = None, tag: str = "") -> pd.DataFrame:
     if add.empty:
         return df
@@ -372,7 +404,16 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
         if c in df.columns:
             df[f"{c}_z"] = _z(df[c])
 
-    # 7) ensure schema stability
+    # --- ADD: defaults + schema safety ---
+    df = _apply_team_defaults(df)
+    df = _ensure_team_columns(df)
+
+    # 7) write to CSV
+    _safe_write(df, OUT)
+    print(f"[team_form] wrote rows={len(df)} → {OUT}")
+    return 0
+
+    # 8) ensure schema stability
     cols = ["team","def_pass_epa","def_rush_epa","def_sack_rate",
             "pace","proe","light_box_rate","heavy_box_rate",
             "rz_rate","slot_rate","12p_rate","ay_per_att",
