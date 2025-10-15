@@ -185,6 +185,8 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
                 raise
 
         # 3) odds props — v4 requires one market per request; also write odds_game.csv
+
+        # PATCH: respect explicit empty list (no bookmaker filter). Only use defaults if books is None.
         if books is None:
             b = "draftkings,fanduel,betmgm,caesars"
         else:
@@ -205,23 +207,29 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
         markets_to_pull = list(dict.fromkeys(markets_to_pull))  # NEW
 
         # ensure game lines exist once
-        _run(
-            "python scripts/fetch_props_oddsapi.py "
-            f"--books {b} --markets h2h,spreads,totals "
+        # PATCH: only include --books flag when non-empty
+        game_cmd = "python scripts/fetch_props_oddsapi.py "
+        if b:
+            game_cmd += f"--books {b} "
+        game_cmd += (
+            f"--markets h2h,spreads,totals "
             f"--date {date or ''} "
-            "--out outputs/_tmp_props/_game.csv --out_game outputs/odds_game.csv",
-            label="odds_game", snap_after=["outputs/odds_game.csv", "outputs/_tmp_props/_game.csv"]
+            "--out outputs/_tmp_props/_game.csv --out_game outputs/odds_game.csv"
         )
+        _run(game_cmd, label="odds_game", snap_after=["outputs/odds_game.csv", "outputs/_tmp_props/_game.csv"])
 
         # fetch ALL player markets in one call → writes outputs/props_raw.csv (+ props_raw_wide.csv)
         all_mk = ",".join(markets_to_pull)
-        _run(
-            "python scripts/fetch_props_oddsapi.py "
-            f"--books {b} --markets {all_mk} "
+        # PATCH: only include --books flag when non-empty
+        props_cmd = "python scripts/fetch_props_oddsapi.py "
+        if b:
+            props_cmd += f"--books {b} "
+        props_cmd += (
+            f"--markets {all_mk} "
             f"--date {date or ''} "
-            "--out outputs/props_raw.csv --out_game outputs/odds_game.csv",
-            label="props_raw", snap_after=["outputs/props_raw.csv"]
+            "--out outputs/props_raw.csv --out_game outputs/odds_game.csv"
         )
+        _run(props_cmd, label="props_raw", snap_after=["outputs/props_raw.csv"])
 
         # 3.5) build metrics_ready (features for pricing)
         _run("python scripts/make_metrics.py",
@@ -285,7 +293,7 @@ def cli_main() -> int:
     return run_pipeline(
         season=args.season,
         date=args.date,
-        books=[b.strip() for b in args.books.split(",") if b.strip()],
+        books=[b.strip() for b in args.books.split(",") if b.strip()],  # [] if user passes --books=""
         markets=[m.strip() for m in args.markets.split(",") if m.strip()] or None,
     )
 
