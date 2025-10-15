@@ -256,18 +256,27 @@ def _fetch_market_for_events(api_key: str, region: str, books: set[str],
         got_any = False
         for eid in event_ids:
             url = f"{BASE}/sports/{SPORT}/events/{eid}/odds"
-            params = {"apiKey": api_key, "regions": region, "markets": mk_try, "oddsFormat": "american"}
+            # PATCH: when filtering by bookmakers, omit regions on per-event calls
             if books:
+                params = {"apiKey": api_key, "markets": mk_try, "oddsFormat": "american"}  # no 'regions'
                 params["bookmakers"] = ",".join(sorted(books))
+            else:
+                params = {"apiKey": api_key, "regions": region, "markets": mk_try, "oddsFormat": "american"}
+
             status, js, headers = _get(url, params)
             log.info(f"{mk_try} eid={eid} status={status} limit={_lim(headers)}")
 
             if status == 200 and isinstance(js, dict):
-                bm_count = len(js.get("bookmakers", []))
+                bm_list = js.get("bookmakers", []) or []
+                bm_count = len(bm_list)
                 if bm_count == 0 and books:
-                    log.info(f"{mk_try} eid={eid}: 0 bookmakers after filter → retry w/o filter")
-                    params2 = dict(params)
-                    params2.pop("bookmakers", None)
+                    # PATCH: show which bookmaker keys were actually present, then retry w/o filter
+                    present = []
+                    # if empty list, present stays empty; we still show "requested"
+                    log.info(f"{mk_try} eid={eid}: 0 bookmakers after filter "
+                             f"(present={sorted(set([_bm.get('key') for _bm in bm_list if _bm.get('key')]))}, "
+                             f"requested={sorted(books)}) → retry w/o filter")
+                    params2 = {"apiKey": api_key, "markets": mk_try, "oddsFormat": "american"}  # no books, no regions
                     status2, js2, _ = _get(url, params2)
                     if status2 == 200 and isinstance(js2, dict):
                         df = _normalize_player_rows([js2], set(), mk_try)
@@ -296,17 +305,20 @@ def _fetch_market_for_events(api_key: str, region: str, books: set[str],
         frames_us2: List[pd.DataFrame] = []
         for eid in event_ids:
             url = f"{BASE}/sports/{SPORT}/events/{eid}/odds"
-            params = {"apiKey": api_key, "regions": "us2", "markets": mk, "oddsFormat": "american"}
+            # PATCH: same rule—omit regions when specifying bookmakers
             if books:
+                params = {"apiKey": api_key, "markets": mk, "oddsFormat": "american"}
                 params["bookmakers"] = ",".join(sorted(books))
+            else:
+                params = {"apiKey": api_key, "regions": "us2", "markets": mk, "oddsFormat": "american"}
+
             status, js, headers = _get(url, params)
             log.info(f"{mk} eid={eid} (us2) status={status} limit={_lim(headers)}")
             if status == 200 and isinstance(js, dict):
                 df = _normalize_player_rows([js], books, mk)
                 if df.empty and books:
-                    # try without filters in us2 too
-                    params2 = dict(params)
-                    params2.pop("bookmakers", None)
+                    # try without filters in us2 too (no regions / no books)
+                    params2 = {"apiKey": api_key, "markets": mk, "oddsFormat": "american"}
                     status2, js2, _ = _get(url, params2)
                     if status2 == 200 and isinstance(js2, dict):
                         df = _normalize_player_rows([js2], set(), mk)
