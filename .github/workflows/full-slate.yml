@@ -1,84 +1,78 @@
-name: Full Slate
+name: Run full slate
 
 on:
   workflow_dispatch:
     inputs:
       season:
-        description: "Season (e.g. 2025)"
-        required: false
+        description: "Season year"
+        required: true
         default: "2025"
       date:
-        description: "Slate date (YYYY-MM-DD) or blank for latest"
+        description: 'Slate date (YYYY-MM-DD). Leave blank "" for upcoming.'
+        required: false
+        default: ""
+      bookmakers:
+        description: 'Comma list (e.g. "draftkings,fanduel,betmgm,caesars"). Use "" for ALL books.'
         required: false
         default: ""
 
 jobs:
-  full_slate:
+  pipeline:
     runs-on: ubuntu-latest
     env:
       ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-      ESPN_COOKIE: ${{ secrets.ESPN_COOKIE }}   # optional
+      ESPN_COOKIE:  ${{ secrets.ESPN_COOKIE }}
       NFL_FORM_STRICT: "1"
       MC_TRIALS: "25000"
       PYTHONUNBUFFERED: "1"
 
     steps:
-      - name: Checkout
+      - name: "Check out repo"
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: "Set up Python"
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"
 
-      # --- Install dependencies BEFORE running the engine ---
-      - name: Install requirements
+      - name: "Install dependencies"
         run: |
-          python -m pip install --upgrade pip setuptools wheel
-          pip install --prefer-binary -r requirements.txt
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      # Replace the old duplicate "Install deps" with this quick import check
-      - name: Verify deps (nfl_data_py / pyarrow)
+      # Optional: show which "engine" Python would import (for debugging only)
+      - name: "Diagnostic: which engine would be imported?"
         run: |
           python - <<'PY'
-          import sys, importlib
-          def check(mod):
-              m = importlib.import_module(mod)
-              path = getattr(m, "__file__", "(builtin)")
-              ok_path = ("site-packages" in (path or "")) or ("dist-packages" in (path or ""))
-              print(f"{mod}: path={path}")
-              if mod == "nfl_data_py":
-                  if not hasattr(m, "import_pbp_data"):
-                      print("nfl_data_py present but missing import_pbp_data() — wrong module")
-                      sys.exit(1)
-                  if not ok_path:
-                      print("nfl_data_py not from site/dist-packages — likely shadowed")
-                      sys.exit(1)
-          for mod in ["nfl_data_py","pyarrow","pandas","numpy"]:
-              check(mod)
+          import sys, os
+          print("[diag] CWD:", os.getcwd())
+          try:
+              import engine, inspect
+              print("[diag] import engine ->", engine.__file__)
+              print("[diag] sys.path[0]:", sys.path[0])
+          except Exception as e:
+              print("[diag] could not import engine:", e)
           PY
 
-      - name: Prepare dirs
+      # IMPORTANT: run your repo's engine file directly to avoid module name collisions
+      - name: "Run pipeline"
         run: |
-          mkdir -p data outputs outputs/metrics logs
+          set -e
+          SEASON="${{ github.event.inputs.season }}"
+          DATE="${{ github.event.inputs.date }}"
+          BOOKS="${{ github.event.inputs.bookmakers }}"
+          echo "▶ python engine/engine.py --season \"$SEASON\" --date \"$DATE\" --bookmakers=\"$BOOKS\""
+          python engine/engine.py --season "$SEASON" --date "$DATE" --bookmakers="$BOOKS"
 
-      - name: Add repo to PYTHONPATH
-        run: echo "PYTHONPATH=$PWD" >> $GITHUB_ENV
-
-      - name: Run pipeline
-        run: |
-          python -m engine --season "2025" --date "" --bookmakers=""
-
-      # Always ship artifacts (snapshots, logs, partial CSVs) even if the run fails
-      - name: Upload artifacts (always)
-        if: ${{ always() }}
+      - name: "Upload run artifacts"
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: run-${{ github.run_id }}
+          name: run-artifacts
           path: |
             runs/**/*.zip
             runs/**/*
+            logs/**
             outputs/**
             data/**
-            logs/**
+          if-no-files-found: ignore
