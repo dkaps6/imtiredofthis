@@ -222,6 +222,11 @@ def build_player_form(season: int) -> pd.DataFrame:
         out["yprr_proxy"] = out["yprr_proxy"].where(out["yprr_proxy"].notna(), yprr_real)
     out.drop(columns=["player_norm","pass_snaps","team_pass_snaps"], inplace=True, errors="ignore")
 
+    # --- ADD: make sure critical columns exist BEFORE selecting subset (prevents KeyError when participation missing)
+    for c in ["route_rate","yprr_proxy","target_share","rush_share","rz_tgt_share","rz_carry_share","ypc","ypt"]:
+        if c not in out.columns:
+            out[c] = np.nan
+
     out = out.rename(columns={"player":"player"})[[
         "player","team","position","role",
         "target_share","rush_share","route_rate",
@@ -278,27 +283,55 @@ def build_player_form(season: int) -> pd.DataFrame:
     except Exception as _e:
         print(f"[player_form] WARN: QB rows enrich skipped: {_e}")
 
-    # 4) External provider fallbacks (fill only remaining NaNs) — preserved
+    # 4) External provider fallbacks (fill only remaining NaNs) — NO NUKES, try multiple common header names
+
+    # ESPN
     espn = _safe_read_csv("data/espn_player.csv")
     out = _merge_missing_player(out, espn, ("player","team"), {
-        "routes_db":"route_rate","route_rate":"route_rate",
-        "target_share":"target_share","targets_share":"target_share",
-        "rush_share":"rush_share"
+        # route %
+        "routes_db":"route_rate", "routes_per_dropback":"route_rate", "route_rate":"route_rate",
+        # shares
+        "target_share":"target_share", "targets_share":"target_share",
+        "rush_share":"rush_share",
+        # efficiencies
+        "yprr":"yprr_proxy", "yards_per_route_run":"yprr_proxy",
+        "ypc":"ypc", "yards_per_carry":"ypc",
+        # QB efficiency if present
+        "ypa":"qb_ypa", "yards_per_attempt":"qb_ypa",
     }, tag="ESPN")
 
+    # MySportsFeeds
     msf = _safe_read_csv("data/msf_player.csv")
     out = _merge_missing_player(out, msf, ("player","team"), {
-        "route_rate":"route_rate",
-        "target_share":"target_share",
-        "rush_share":"rush_share"
+        "route_rate":"route_rate", "routes_per_dropback":"route_rate",
+        "target_share":"target_share", "tgt_share":"target_share",
+        "rush_share":"rush_share",
+        "yprr":"yprr_proxy",
+        "ypc":"ypc",
+        "ypa":"qb_ypa",
     }, tag="MySportsFeeds")
 
+    # NFLGSIS
     gsis = _safe_read_csv("data/gsis_player.csv")
     out = _merge_missing_player(out, gsis, ("player","team"), {
-        "route_rate":"route_rate",
+        "route_rate":"route_rate", "routes_per_dropback":"route_rate",
         "target_share":"target_share",
-        "rush_share":"rush_share"
+        "rush_share":"rush_share",
+        "yprr":"yprr_proxy",
+        "ypc":"ypc",
+        "ypa":"qb_ypa",
     }, tag="NFLGSIS")
+
+    # --- ADD: API-Sports
+    apis = _safe_read_csv("data/apisports_player.csv")
+    out = _merge_missing_player(out, apis, ("player","team"), {
+        "routes_per_dropback":"route_rate", "route_pct":"route_rate",
+        "tgt_share":"target_share", "target_share":"target_share",
+        "rush_share":"rush_share",
+        "yprr":"yprr_proxy",
+        "ypc":"ypc",
+        "ypa":"qb_ypa",
+    }, tag="API-Sports")
 
     # Final sanitize
     for c in ("target_share","rush_share","route_rate","rz_tgt_share","rz_carry_share","yprr_proxy","ypc","qb_ypa","ypt"):
