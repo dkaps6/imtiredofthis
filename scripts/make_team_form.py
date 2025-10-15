@@ -145,11 +145,21 @@ def _try_load_participation(season: int) -> pd.DataFrame:
 def build_from_nflverse(season: int) -> pd.DataFrame:
     # 1) PBP (real data)
     pbp = _fetch_pbp_with_retry(season)
-    pbp = pbp.loc[pbp["season"] == season].copy()
+    # ★ compat: some mirrors use pos_team rather than posteam
+    if "posteam" not in pbp.columns and "pos_team" in pbp.columns:
+        pbp["posteam"] = pbp["pos_team"]
 
-    pbp["defteam"] = pbp["defteam"].astype(str).str.upper()
-    pbp["posteam"] = pbp["posteam"].astype(str).str.upper()
+    # Only keep requested season if present
+    if "season" in pbp.columns:
+        pbp = pbp.loc[pbp["season"] == season].copy()
 
+    # Normalize teams
+    if "defteam" in pbp.columns:
+        pbp["defteam"] = pbp["defteam"].astype(str).str.upper()
+    if "posteam" in pbp.columns:
+        pbp["posteam"] = pbp["posteam"].astype(str).str.upper()
+
+    # Basic flags (robust to missing columns)
     pbp["is_pass"]     = (pbp.get("pass",0)==1) | (pbp.get("pass_attempt",0)==1) | (pbp.get("play_type","")=="pass")
     pbp["is_rush"]     = (pbp.get("rush",0)==1) | (pbp.get("play_type","")=="run")
     pbp["is_dropback"] = (pbp.get("dropback",0)==1)
@@ -166,9 +176,9 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
 
     # --- Neutral PACE (sec/snap) per OFFENSE team using inter-snap deltas
     neutral = pbp.loc[
-        (pbp["qtr"] <= 3) &
-        (pbp["down"].between(1, 3, inclusive="both")) &
-        (pbp["score_differential"].between(-7, 7, inclusive="both"))
+        (pbp.get("qtr", 0) <= 3) &
+        (pbp.get("down", 0).between(1, 3, inclusive="both")) &
+        (pbp.get("score_differential", 0).between(-7, 7, inclusive="both"))
     ].copy()
 
     # use game clock: higher to lower -> negative diff; take absolute
@@ -200,11 +210,23 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
     df = df.merge(pace, on="team", how="left").merge(proe, on="team", how="left")
 
     # ---- NEW: Real team features you requested: rz_rate, 12p_rate, ay_per_att, slot_rate
-    off = pbp.loc[pbp["posteam"].notna()].copy()
-    off["team_off"] = off["posteam"].str.upper()
+    off = pbp.loc[pbp.get("posteam").notna()].copy()
+    off["team_off"] = off["posteam"].astype(str).str.upper()
+
+    # ★ compat: unify offensive personnel column to 'personnel_offense'
+    if "personnel_offense" not in off.columns:
+        for cand in ("offense_personnel", "personnel"):
+            if cand in off.columns:
+                off["personnel_offense"] = off[cand]
+                break
+        if "personnel_offense" not in off.columns:
+            off["personnel_offense"] = np.nan  # keep flow; rate will be NaN if unavailable
 
     # rz_rate: share of offensive plays in red zone
-    off["is_rz_play"] = (off["yardline_100"] <= 20).astype(int)
+    if "yardline_100" in off.columns:
+        off["is_rz_play"] = (off["yardline_100"] <= 20).astype(int)
+    else:
+        off["is_rz_play"] = 0  # conservative fallback
     rz = off.groupby("team_off", as_index=False).agg(
         off_plays=("play_id","count"),
         rz_plays=("is_rz_play","sum"),
@@ -222,7 +244,7 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
 
     # ay_per_att: air yards per team pass attempt (zeros for throws w/o air_yards)
     pas = off.loc[off["is_pass"]==True].copy()
-    pas["air_yards_filled"] = pas["air_yards"].fillna(0.0)
+    pas["air_yards_filled"] = pas.get("air_yards", pd.Series(index=pas.index)).fillna(0.0)
     ay = pas.groupby("team_off", as_index=False).agg(
         ay_sum=("air_yards_filled","sum"),
         att=("play_id","count"),
@@ -236,7 +258,7 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
         if not roles.empty and {"player","team","role"}.issubset(roles.columns):
             roles["player_norm"] = roles["player"].astype(str).str.lower().str.replace(r"[.'’]", "", regex=True).str.strip()
             roles["team"] = roles["team"].astype(str).str.upper()
-            tgt = off.loc[off["receiver_player_name"].notna(), ["team_off","receiver_player_name"]].copy()
+            tgt = off.loc[off.get("receiver_player_name").notna(), ["team_off","receiver_player_name"]].copy()
             tgt["player_norm"] = tgt["receiver_player_name"].astype(str).str.lower().str.replace(r"[.'’]", "", regex=True).str.strip()
             tgt = tgt.merge(roles[["player_norm","team","role"]], left_on=["player_norm","team_off"], right_on=["player_norm","team"], how="left")
             tgt["is_slot"] = tgt["role"].astype(str).str.upper().eq("SLOT").astype(int)
