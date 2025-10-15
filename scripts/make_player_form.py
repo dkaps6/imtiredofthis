@@ -33,7 +33,7 @@ def _safe_write(df: pd.DataFrame, out: Path) -> None:
     else:
         df.to_csv(out, index=False)
 
-def _merge_missing_player(df: pd.DataFrame, add: pd.DataFrame, on=("player","team"), mapping: dict[str, str] | None = None, tag: str = "") -> pd.DataFrame:
+def _merge_missing_player(df: pd.DataFrame, add: pd.DataFrame, on: tuple[str,str] | list[str], mapping: dict[str, str] | None = None, tag: str = "") -> pd.DataFrame:
     if add.empty:
         return df
     src = add.copy()
@@ -54,38 +54,18 @@ def _merge_missing_player(df: pd.DataFrame, add: pd.DataFrame, on=("player","tea
             if mask.any():
                 print(f"[player_form] filled {mask.sum()} rows for {col} from {tag}")
                 merged.loc[mask, col] = merged.loc[mask, prov]
-            merged.drop(columns=[prov], inplace=True)
+            merged.drop(columns=[prov], inplace=True, errors="ignore")
     return merged
 
-def _fill_prior_season_missing(df: pd.DataFrame, season: int, cols: list[str]) -> pd.DataFrame:
-    prior = _safe_read_csv(Path("outputs/season_cache") / f"player_form_{season-1}.csv")
-    if prior.empty:
-        prior = _safe_read_csv(Path("data") / f"player_form_{season-1}.csv")
-    if prior.empty or not {"player","team"}.issubset(prior.columns):
-        return df
-    prior = prior.copy()
-    prior["team"] = prior["team"].astype(str).str.upper()
-    merged = df.merge(prior[["player","team"] + [c for c in cols if c in prior.columns]],
-                      on=["player","team"], how="left", suffixes=("","__prior"))
-    for c in cols:
-        if c in merged.columns and f"{c}__prior" in merged.columns:
-            mask = merged[c].isna() & merged[f"{c}__prior"].notna()
-            if mask.any():
-                print(f"[player_form] prior-season fallback filled {mask.sum()} rows for {c}")
-                merged.loc[mask, c] = merged.loc[mask, f"{c}__prior"]
-            merged.drop(columns=[f"{c}__prior"], inplace=True)
-    return merged
-
-# --- PBP fetcher: prefer nflreadpy (2025), fall back to nfl_data_py; 404 -> prior season ---
-def _fetch_pbp_with_retry(season: int, tries: int = 3, wait: int = 4) -> pd.DataFrame:
-    seasons_to_try = [season, season - 1, season - 2]
+# ---------------------- sources ----------------------
+def _fetch_pbp(season: int, tries: int = 3, wait: float = 1.0) -> pd.DataFrame:
     last = None
+    seasons_to_try = [season, season-1]
     try:
         import nflreadpy as nfr
-        use_readpy = True
+        import nfl_data_py as nfl
     except Exception:
-        use_readpy = False
-        import nfl_data_py as nfl  # noqa: F401
+        pass
 
     with open(ERR_LOG, "a", encoding="utf-8") as f:
         f.write(f"\n=== PBP fetch wanted season={season} ===\n")
@@ -117,48 +97,51 @@ def _fetch_pbp_with_retry(season: int, tries: int = 3, wait: int = 4) -> pd.Data
     raise RuntimeError(f"PBP fetch failed: {type(last).__name__}: {last}")
 
 # ---------------------- builder ----------------------
-def build_from_nflverse(season: int) -> pd.DataFrame:
-    pbp = _fetch_pbp_with_retry(season)
-    pbp = pbp.loc[pbp["season"]==season].copy()
+def build_player_form(season: int) -> pd.DataFrame:
+    pbp = _fetch_pbp(season)
+    if pbp is None or pbp.empty:
+        raise RuntimeError("no pbp")
 
-    pbp["posteam"] = pbp["posteam"].astype(str).str.upper()
-    pbp["receiver"] = pbp.get("receiver_player_name","").fillna("").astype(str)
-    pbp["rusher"]   = pbp.get("rusher_player_name","").fillna("").astype(str)
-    pbp["passer"]   = pbp.get("passer_player_name","").fillna("").astype(str)
+    # Normalize strings for join safety
+    for c in ("posteam","defteam","receiver","rusher","passer"):
+        if c in pbp.columns:
+            pbp[c] = pbp[c].astype(str)
 
-    pbp["is_pass"] = (pbp.get("pass",0)==1) | (pbp.get("pass_attempt",0)==1) | (pbp.get("play_type","")=="pass")
-    pbp["is_rush"] = (pbp.get("rush",0)==1) | (pbp.get("play_type","")=="run")
-    pbp["in_rz"]   = (pbp.get("yardline_100").fillna(100) <= 20)
+    # Flags
+    for c in ("is_pass","is_rush","pass","rush"):
+        if c in pbp.columns:
+            pbp[c] = pbp[c].astype(str).str.lower().isin(["1","true","t","yes"])
+    pbp["pass_flag"] = pbp.get("is_pass", pbp.get("pass", False)).astype(bool)
+    pbp["rush_flag"] = pbp.get("is_rush", pbp.get("rush", False)).astype(bool)
 
-    targs = pbp.loc[pbp["is_pass"] & (pbp["receiver"]!=""), ["game_id","posteam","receiver"]].copy()
-    targs["targets"] = 1
-    team_tgts = targs.groupby(["game_id","posteam"])["targets"].sum().rename("team_targets")
-    rec_tgts  = targs.groupby(["game_id","posteam","receiver"])["targets"].sum().rename("player_targets")
+    # Receiving: player + team level targets & yards
+    rec = pbp.loc[pbp["pass_flag"]==True, ["game_id","posteam","receiver","yards_gained"]].copy()
+    rec["tgt"] = 1
+    rec_tgts = rec.groupby(["game_id","posteam","receiver"]).agg(player_targets=("tgt","sum")).astype(int)
+    team_tgts = rec.groupby(["game_id","posteam"]).agg(team_targets=("tgt","sum")).astype(int)
+    rec_yards = rec.groupby(["game_id","posteam","receiver"]).agg(rec_yards=("yards_gained","sum"))
 
-    rush = pbp.loc[pbp["is_rush"] & (pbp["rusher"]!=""), ["game_id","posteam","rusher","yards_gained"]].copy()
-    rush["rush_att"] = 1
-    team_rush = rush.groupby(["game_id","posteam"])["rush_att"].sum().rename("team_rush_att")
-    ply_rush  = rush.groupby(["game_id","posteam","rusher"])["rush_att"].sum().rename("player_rush_att")
-    ply_rush_yds = rush.groupby(["game_id","posteam","rusher"])["yards_gained"].sum().rename("rush_yards")
+    # Rushing: player + team carries & yards
+    rush = pbp.loc[pbp["rush_flag"]==True, ["game_id","posteam","rusher","yards_gained"]].copy()
+    rush["att"] = 1
+    ply_rush = rush.groupby(["game_id","posteam","rusher"]).agg(player_rush_att=("att","sum")).astype(int)
+    team_rush = rush.groupby(["game_id","posteam"]).agg(team_rush_att=("att","sum")).astype(int)
+    ply_rush_yds = rush.groupby(["game_id","posteam","rusher"]).agg(rush_yards=("yards_gained","sum"))
 
-    rec_yards = pbp.loc[pbp["receiver"]!=""].groupby(["game_id","posteam","receiver"])["yards_gained"].sum().rename("rec_yards")
+    # Red-zone targets/carries
+    rbp = pbp.copy()
+    if "yardline_100" in rbp.columns:
+        rbp["is_rz_play"] = (rbp["yardline_100"] <= 20).astype(int)
+    else:
+        rbp["is_rz_play"] = 0
+    rz_pass = rbp.loc[rbp["pass_flag"]==True, ["game_id","posteam","receiver","is_rz_play"]]
+    rz_rush = rbp.loc[rbp["rush_flag"]==True, ["game_id","posteam","rusher","is_rz_play"]]
+    ply_rz_tgt  = rz_pass.groupby(["game_id","posteam","receiver"]).agg(player_rz_tgt=("is_rz_play","sum"))
+    team_rz_tgt = rz_pass.groupby(["game_id","posteam"]).agg(team_rz_tgt=("is_rz_play","sum"))
+    ply_rz_carry  = rz_rush.groupby(["game_id","posteam","rusher"]).agg(player_rz_carry=("is_rz_play","sum"))
+    team_rz_carry = rz_rush.groupby(["game_id","posteam"]).agg(team_rz_carry=("is_rz_play","sum"))
 
-    rz_targs = pbp.loc[pbp["is_pass"] & pbp["in_rz"] & (pbp["receiver"]!=""), ["game_id","posteam","receiver"]].copy()
-    rz_targs["rz_tgt"] = 1
-    ply_rz_tgt = rz_targs.groupby(["game_id","posteam","receiver"])["rz_tgt"].sum().rename("player_rz_tgt")
-    team_rz_tgt = rz_targs.groupby(["game_id","posteam"])["rz_tgt"].sum().rename("team_rz_tgt")
-
-    rz_rush = pbp.loc[pbp["is_rush"] & pbp["in_rz"] & (pbp["rusher"]!=""), ["game_id","posteam","rusher"]].copy()
-    rz_rush["rz_carry"] = 1
-    ply_rz_carry = rz_rush.groupby(["game_id","posteam","rusher"])["rz_carry"].sum().rename("player_rz_carry")
-    team_rz_carry = rz_rush.groupby(["game_id","posteam"])["rz_carry"].sum().rename("team_rz_carry")
-
-    pass_att = pbp.loc[pbp["is_pass"] & (pbp["passer"]!=""), ["game_id","posteam","passer","yards_gained"]].copy()
-    pass_att["att"] = 1
-    team_pass_yds = pass_att.groupby(["game_id","posteam"])["yards_gained"].sum().rename("team_pass_yds")
-    team_atts = pass_att.groupby(["game_id","posteam"])["att"].sum().rename("team_pass_att")
-    team_ypa = (team_pass_yds.groupby("posteam").sum() / team_atts.groupby("posteam").sum()).rename("qb_ypa_all")
-
+    # Collect per-game player rows then aggregate season
     rec_level  = rec_tgts.reset_index().rename(columns={"receiver":"player"})
     rush_level = ply_rush.reset_index().rename(columns={"rusher":"player"})
     players = pd.concat(
@@ -188,44 +171,25 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
 
     agg = players.groupby(["posteam","player"]).sum(numeric_only=True).reset_index()
     agg["team"] = agg["posteam"].astype(str).str.upper()
+    agg["target_share"] = (agg["player_targets"] / agg["team_targets"]).replace([np.inf,-np.inf], np.nan)
+    agg["rush_share"]   = (agg["player_rush_att"] / agg["team_rush_att"]).replace([np.inf,-np.inf], np.nan)
+    agg["rz_tgt_share"] = (agg["player_rz_tgt"] / agg["team_rz_tgt"]).replace([np.inf,-np.inf], np.nan)
+    agg["rz_carry_share"] = (agg["player_rz_carry"] / agg["team_rz_carry"]).replace([np.inf,-np.inf], np.nan)
+    agg["ypt"] = (agg["rec_yards"] / agg["player_targets"].replace(0,np.nan)).replace([np.inf,-np.inf], np.nan)
+    agg["ypc"] = (agg["rush_yards"] / agg["player_rush_att"].replace(0,np.nan)).replace([np.inf,-np.inf], np.nan)
 
-    # Core shares
-    agg["target_share"]   = (agg["player_targets"] / agg["team_targets"]).replace([np.inf,-np.inf], np.nan).fillna(0.0)
-    agg["rush_share"]     = (agg["player_rush_att"] / agg["team_rush_att"]).replace([np.inf,-np.inf], np.nan).fillna(0.0)
-    agg["rz_tgt_share"]   = (agg["player_rz_tgt"] / agg["team_rz_tgt"]).replace([np.inf,-np.inf], np.nan).fillna(0.0)
-    agg["rz_carry_share"] = (agg["player_rz_carry"] / agg["team_rz_carry"]).replace([np.inf,-np.inf], np.nan).fillna(0.0)
+    # Default positions: WR/RB/TE guess from usage; refined later if you ingest roles.csv
+    agg["position"] = np.where(agg["target_share"].fillna(0) > 0.20, "WR",
+                        np.where(agg["rush_share"].fillna(0) > 0.20, "RB", "TE"))
+    agg["role"] = np.where(agg["position"].eq("WR"), "WR1",
+                     np.where(agg["position"].eq("RB"), "RB1", "TE1"))
 
-    # Efficiency
-    # ypt (explicit)
-    agg["ypt"]        = (agg["rec_yards"] / np.where(agg["player_targets"]>0, agg["player_targets"], np.nan)).replace([np.inf,-np.inf], np.nan).fillna(0.0)
-    agg["ypc"]        = (agg["rush_yards"] / np.where(agg["player_rush_att"]>0, agg["player_rush_att"], np.nan)).replace([np.inf,-np.inf], np.nan).fillna(0.0)
-    # yprr_proxy will be overwritten below when pass_snaps are available, else remains yds/targets fallback
-    agg["yprr_proxy"] = agg["ypt"].copy()
-
-    # Position heuristic (kept)
-    agg["position"] = np.where(agg["player_rush_att"] > agg["player_targets"], "RB", "WR")
-    agg["route_rate"] = np.nan
-    agg["role"] = ""
-
-    team_ypa = team_ypa.reset_index().rename(columns={"posteam":"team","qb_ypa_all":"qb_ypa"})
-    out = agg.merge(team_ypa, on="team", how="left")
-    out["qb_ypa"] = out["qb_ypa"].fillna(out["qb_ypa"].mean() if np.isfinite(out["qb_ypa"].mean()) else 6.9)
-
-    # --- NEW: Build a real routes proxy using participation pass snaps (if available)
-    pass_snaps_cols = pd.DataFrame(columns=["team","player_norm","pass_snaps","team_pass_snaps"])
+    # Participation-based route proxy (optional)
+    pass_snaps_cols = pd.DataFrame()
     try:
-        # Try both stacks you already support in team_form
-        try:
-            import nflreadpy as nfr
-            pf = nfr.load_participation([season]).to_pandas()
-        except Exception:
-            pf = None
-        if pf is None or pf.empty:
-            import nfl_data_py as nfl
-            for fn in ("import_participation", "import_participation_data", "import_ngs_participation"):
-                if hasattr(nfl, fn):
-                    pf = getattr(nfl, fn)([season])
-                    break
+        import nflreadpy as nfr
+        pf = nfr.load_participation([season])  # polars -> pandas
+        pf = pf.to_pandas()
         if pf is not None and not pf.empty and {"game_id","play_id","offense_players"}.issubset(pf.columns):
             _off = pbp.loc[pbp["posteam"].notna()].copy()
             _off["team"] = _off["posteam"].str.upper()
@@ -243,6 +207,7 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
         print(f"[player_form] participation route proxy skipped: {type(e).__name__}: {e}", flush=True)
 
     # Merge participation-based route proxy
+    out = agg.copy()
     out["player_norm"] = out["player"].astype(str).str.lower().str.replace(r"[.'’]", "", regex=True).str.strip()
     if not pass_snaps_cols.empty:
         out = out.merge(pass_snaps_cols, on=["team","player_norm"], how="left")
@@ -250,38 +215,68 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
         rr = (out["pass_snaps"] / out["team_pass_snaps"]).replace([np.inf,-np.inf], np.nan)
         out["route_rate"] = out["route_rate"].where(out["route_rate"].notna(), rr)
         # yprr_proxy real: rec_yards / pass_snaps (falls back to ypt when snaps=0)
-        yprr_real = (out["rec_yards"] / np.where(out["pass_snaps"]>0, out["pass_snaps"], np.nan)).replace([np.inf,-np.inf], np.nan)
+        yprr_real = (out["rec_yards"] / np.where(out["pass_snaps"].fillna(0).eq(0), np.nan, out["pass_snaps"])).replace([np.inf,-np.inf], np.nan)
         out["yprr_proxy"] = out["yprr_proxy"].where(out["yprr_proxy"].notna(), yprr_real)
     out.drop(columns=["player_norm","pass_snaps","team_pass_snaps"], inplace=True, errors="ignore")
 
     out = out.rename(columns={"player":"player"})[[
         "player","team","position","role",
         "target_share","rush_share","route_rate",
-        "rz_tgt_share","rz_carry_share",
-        "yprr_proxy","ypc","qb_ypa","ypt"
-    ]].sort_values(["team","player"]).reset_index(drop=True)
+        "rz_tgt_share","rz_carry_share","yprr_proxy","ypc","ypt"
+    ]]
 
-    # Optional: PFR/mirrors enrich for route/adot if provided
+    # ESPN/PFR enrich (optional, non-destructive)
     try:
-        enrich_path = Path("data/pfr_player_enrich.csv")
-        if enrich_path.exists():
-            enrich = pd.read_csv(enrich_path)
-            rename_map = {"team_abbr":"team","routes_db":"routes_per_dropback","aDOT":"aDOT"}
-            enrich = enrich.rename(columns={k:v for k,v in rename_map.items() if k in enrich.columns})
-            keep = ["player","team","routes_per_dropback","route_rate","aDOT","slot_rate","snap_share"]
-            enrich = enrich[[c for c in keep if c in enrich.columns]].copy()
-            for col in ["routes_per_dropback","route_rate","slot_rate","snap_share"]:
-                if col in enrich.columns:
-                    enrich[col] = pd.to_numeric(enrich[col], errors="coerce")
-            out = out.merge(enrich, on=["player","team"], how="left", suffixes=("","_enrich"))
-            if "routes_per_dropback" in out.columns:
-                out["route_rate"] = out["route_rate"].fillna(out["routes_per_dropback"])
-            if "route_rate_enrich" in out.columns:
+        pfr = _safe_read_csv("data/pfr_player_enrich.csv")
+        if not pfr.empty:
+            pfr = pfr.rename(columns={
+                "player":"player",
+                "team":"team",
+                "routes_per_dropback":"route_rate_enrich"
+            })
+            out = out.merge(pfr[["player","team","route_rate_enrich"]], on=["player","team"], how="left")
+            if "route_rate_enrich" in out.columns and "route_rate" in out.columns:
                 out["route_rate"] = out["route_rate"].fillna(out["route_rate_enrich"])
     except Exception as e:
         print(f"[player_form] PFR enrich skipped: {type(e).__name__}: {e}", flush=True)
 
-    # 4) External provider fallbacks (fill only remaining NaNs) — preserved
+    
+    # --- Ensure QB rows exist (QB1 per team) so QB props can merge cleanly
+    try:
+        pass_att = pbp.loc[pbp["pass_flag"]==True, ["posteam","passer","yards_gained"]].copy()
+        pass_att["att"] = 1
+        qb_by_team = pass_att.groupby(["posteam","passer"], as_index=False).agg(
+            att=("att","sum"),
+            pass_yards=("yards_gained","sum")
+        )
+        # pick top passer per team by attempts
+        qb_top = qb_by_team.sort_values(["posteam","att","pass_yards"], ascending=[True, False, False]).groupby("posteam", as_index=False).first()
+        qb_top["team"] = qb_top["posteam"].astype(str).str.upper()
+        qb_top["player"] = qb_top["passer"]
+        qb_top["qb_ypa"] = (qb_top["pass_yards"] / qb_top["att"].replace(0, np.nan)).replace([np.inf,-np.inf], np.nan)
+
+        # schema columns with safe defaults
+        qb_top["position"] = "QB"
+        qb_top["role"] = "QB1"
+        qb_top["target_share"] = 0.0
+        qb_top["rush_share"] = 0.0
+        qb_top["route_rate"] = 0.0
+        qb_top["rz_tgt_share"] = 0.0
+        qb_top["rz_carry_share"] = 0.0
+        qb_top["yprr_proxy"] = 0.0
+        qb_top["ypc"] = 0.0
+        qb_top["ypt"] = np.nan
+        qb_cols = ["player","team","position","role","target_share","rush_share","route_rate","rz_tgt_share","rz_carry_share","yprr_proxy","ypc","qb_ypa","ypt"]
+        # align to out columns, append
+        for col in qb_cols:
+            if col not in out.columns:
+                out[col] = np.nan
+        qb_out = qb_top.reindex(columns=qb_cols)
+        out = pd.concat([out, qb_out[out.columns]], ignore_index=True)
+    except Exception as _e:
+        print(f"[player_form] WARN: QB rows enrich skipped: {_e}")
+
+# 4) External provider fallbacks (fill only remaining NaNs) — preserved
     espn = _safe_read_csv("data/espn_player.csv")
     out = _merge_missing_player(out, espn, ("player","team"), {
         "routes_db":"route_rate","route_rate":"route_rate",
@@ -303,25 +298,19 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
         "rush_share":"rush_share"
     }, tag="NFLGSIS")
 
-    apis = _safe_read_csv("data/apisports_player.csv")
-    out = _merge_missing_player(out, apis, ("player","team"), {
-        "route_rate":"route_rate",
-        "target_share":"target_share",
-        "rush_share":"rush_share"
-    }, tag="API-Sports")
-
-    # 5) Last-resort prior season (only if still NaN) — preserved
-    out = _fill_prior_season_missing(out, season, ["route_rate","target_share","rush_share","ypt","yprr_proxy"])
+    # Final sanitize
+    for c in ("target_share","rush_share","route_rate","rz_tgt_share","rz_carry_share","yprr_proxy","ypc","qb_ypa","ypt"):
+        if c in out.columns:
+            out[c] = pd.to_numeric(out[c], errors="coerce")
 
     return out
 
 # ---------------------- CLI ----------------------
 def cli(season: int) -> int:
     try:
-        df = build_from_nflverse(season)
-        if os.getenv("NFL_FORM_STRICT") == "1":
-            if df is None or df.empty or df["team"].nunique() < 8 or len(df) < 50:
-                raise RuntimeError("[player_form] looks empty/stub — check logs/nfl_pbp_error.txt")
+        df = build_player_form(season)
+        if df is None or df.empty:
+            raise RuntimeError("[player_form] looks empty/stub — check logs/nfl_pbp_error.txt")
     except Exception as e:
         print(f"[player_form] fatal error: {type(e).__name__}: {e}", flush=True)
         df = pd.DataFrame()
