@@ -247,8 +247,43 @@ def _fetch_market_for_events(api_key: str, region: str, books: set[str],
         if got_any:
             break  # stop at first synonym that yields data
 
-    if not frames: return pd.DataFrame()
-    return pd.concat(frames, ignore_index=True)
+    # --- Dual-region fallback: US + US2 merge ---
+    if not frames and region == "us":
+        log.info(f"{mk} → no data from region=us; retrying region=us2 for same events...")
+        frames_us2 = []
+        for eid in event_ids:
+            url = f"{BASE}/sports/{SPORT}/events/{eid}/odds"
+            params = {
+                "apiKey": api_key,
+                "regions": "us2",
+                "markets": mk,
+                "oddsFormat": "american",
+            }
+            if books:
+                params["bookmakers"] = ",".join(sorted(books))
+            status, js, headers = _get(url, params)
+            log.info(f"{mk} eid={eid} (us2) status={status} limit={_lim(headers)}")
+            if status == 200 and isinstance(js, dict):
+                df = _normalize_player_rows([js], books, mk)
+                if df.empty and books:
+                    # try w/o filter in us2 as well
+                    log.info(f"{mk} eid={eid} (us2): 0 bookmakers after filter → retry w/o filter")
+                    params.pop("bookmakers", None)
+                    status2, js2, headers2 = _get(url, params)
+                    if status2 == 200 and isinstance(js2, dict):
+                        df = _normalize_player_rows([js2], set(), mk)
+                if not df.empty:
+                    frames_us2.append(df)
+        if frames_us2:
+            merged = pd.concat(frames_us2, ignore_index=True)
+            frames.append(merged)
+            log.info(f"{mk}: merged {len(merged)} rows from region=us2 fallback.")
+        else:
+            log.info(f"{mk}: region=us2 also empty.")
+
+    if not frames:
+        return pd.DataFrame()
+    )
 
 def _fetch_bulk_market(api_key: str, region: str, books: set[str], market_key: str) -> pd.DataFrame:
     # used only for game markets
