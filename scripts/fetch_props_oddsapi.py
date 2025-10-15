@@ -75,24 +75,8 @@ BOOK_KEY_ALIASES: Dict[str, set[str]] = {
     "fanduel": {"fanduel"},
     "betmgm": {"betmgm"},
     "caesars": {"caesars", "williamhill_us"},
-    "betrivers": {"betrivers", "barstool"},  # not required now, but handy if you add later
+    "betrivers": {"betrivers", "barstool"},
 }
-
-def _expand_books_filter(books: List[str]) -> set[str]:
-    want = {b.strip().lower().replace(" ", "_") for b in books if b.strip()}
-    if not want:
-        return set()
-    expanded = set()
-    for b in want:
-        expanded |= BOOK_KEY_ALIASES.get(b, {b})
-    return expanded
-
-def _normalize_market(m: str) -> str:
-    key = (m or "").strip().lower()
-    return MARKET_ALIASES.get(key, key)
-
-# Player props → per-event endpoint; game markets → bulk
-BULK_ONLY_CANONICAL: set[str] = set(GAME_MARKETS)
 
 # ------------------------- LOGGING ------------------------
 
@@ -102,13 +86,44 @@ _handler = logging.StreamHandler(sys.stdout)
 _handler.setFormatter(logging.Formatter("[oddsapi] %(message)s"))
 log.addHandler(_handler)
 
-# ------------------------- HTTP --------------------------
+# ------------------------- HELPERS ------------------------
+
+def _expand_books_filter(books: Optional[List[str]]) -> Optional[set[str]]:
+    """
+    Return None to mean 'no filter'. If a list is given, expand aliases and
+    return a concrete set of bookmaker keys.
+    """
+    if not books:
+        return None
+    want = {b.strip().lower().replace(" ", "_") for b in books if b.strip()}
+    if not want:
+        return None
+    expanded = set()
+    for b in want:
+        expanded |= BOOK_KEY_ALIASES.get(b, {b})
+    return expanded or None
+
+def _normalize_market(m: str) -> str:
+    key = (m or "").strip().lower()
+    return MARKET_ALIASES.get(key, key)
+
+def _lim(headers: dict) -> dict:
+    out = {}
+    for k in ("x-requests-remaining", "x-requests-used", "x-requests-apikey-remaining"):
+        if k in headers:
+            out[k] = headers.get(k)
+    return out
 
 def _try_json(r: requests.Response):
     try:
         return r.json()
     except Exception:
         return {"text": r.text[:500]}
+
+# Player props → per-event endpoint; game markets → bulk
+BULK_ONLY_CANONICAL: set[str] = set(GAME_MARKETS)
+
+# ------------------------- HTTP --------------------------
 
 def _get(url: str, params: dict, max_retries: int = 5) -> Tuple[int, Optional[Any], dict]:
     for i in range(max_retries):
@@ -133,16 +148,9 @@ def _get(url: str, params: dict, max_retries: int = 5) -> Tuple[int, Optional[An
             time.sleep(wait)
     return 0, None, {}
 
-def _lim(headers: dict) -> dict:
-    out = {}
-    for k in ("x-requests-remaining", "x-requests-used", "x-requests-apikey-remaining"):
-        if k in headers:
-            out[k] = headers.get(k)
-    return out
-
 # ------------------------- NORMALIZERS --------------------
 
-def _normalize_game_rows(events: list, books_filter: set[str]) -> pd.DataFrame:
+def _normalize_game_rows(events: list, books_filter: Optional[set[str]]) -> pd.DataFrame:
     rows = []
     for ev in events or []:
         eid = ev.get("id")
@@ -152,7 +160,7 @@ def _normalize_game_rows(events: list, books_filter: set[str]) -> pd.DataFrame:
         for bm in ev.get("bookmakers", []):
             book_key = (bm.get("key") or "").strip().lower()
             book_title = (bm.get("title") or "").strip()
-            if books_filter and book_key not in books_filter:
+            if books_filter is not None and book_key not in books_filter:
                 continue
             for mk in bm.get("markets", []):
                 market = mk.get("key")
@@ -171,7 +179,7 @@ def _normalize_game_rows(events: list, books_filter: set[str]) -> pd.DataFrame:
                     })
     return pd.DataFrame.from_records(rows)
 
-def _normalize_player_rows(events: list, books_filter: set[str], market_key: str) -> pd.DataFrame:
+def _normalize_player_rows(events: list, books_filter: Optional[set[str]], market_key: str) -> pd.DataFrame:
     recs: List[Dict[str, Any]] = []
     for ev in events or []:
         eid = ev.get("id")
@@ -179,7 +187,7 @@ def _normalize_player_rows(events: list, books_filter: set[str], market_key: str
         for bm in ev.get("bookmakers", []):
             book_key = (bm.get("key") or "").strip().lower()
             book_title = (bm.get("title") or "").strip()
-            if books_filter and book_key not in books_filter:
+            if books_filter is not None and book_key not in books_filter:
                 continue
             for mk in bm.get("markets", []):
                 if mk.get("key") != market_key:
@@ -223,17 +231,17 @@ def _wide_over_under(df: pd.DataFrame) -> pd.DataFrame:
 
 # ------------------------- CORE FETCHERS ------------------
 
-def _fetch_events_by_h2h(api_key: str, region: str, books: set[str]) -> list:
+def _fetch_events_by_h2h(api_key: str, region: str, books: Optional[set[str]]) -> list:
     url = f"{BASE}/sports/{SPORT}/odds"
     params = {"apiKey": api_key, "regions": region, "markets": "h2h", "oddsFormat": "american"}
-    if books:
+    if books is not None:
         params["bookmakers"] = ",".join(sorted(books))
     status, js, headers = _get(url, params)
     log.info(f"events status={status} limit={_lim(headers)}")
     if status != 200 or not isinstance(js, list):
         log.info(f"failed to fetch events: {js}")
         return []
-    if books:
+    if books is not None:
         filtered = []
         for ev in js:
             keep = any(
@@ -245,10 +253,10 @@ def _fetch_events_by_h2h(api_key: str, region: str, books: set[str]) -> list:
         return filtered
     return js
 
-def _fetch_game_odds(api_key: str, region: str, books: set[str]) -> pd.DataFrame:
+def _fetch_game_odds(api_key: str, region: str, books: Optional[set[str]]) -> pd.DataFrame:
     url = f"{BASE}/sports/{SPORT}/odds"
     params = {"apiKey": api_key, "regions": region, "markets": ",".join(GAME_MARKETS), "oddsFormat": "american"}
-    if books:
+    if books is not None:
         params["bookmakers"] = ",".join(sorted(books))
     status, js, headers = _get(url, params)
     log.info(f"game-odds status={status} limit={_lim(headers)}")
@@ -267,7 +275,7 @@ ALT_KEYS = {
     "player_anytime_td":    ["anytime_td"],
 }
 
-def _fetch_market_for_events(api_key: str, region: str, books: set[str],
+def _fetch_market_for_events(api_key: str, region: str, books: Optional[set[str]],
                              event_ids: list[str], market_key: str) -> pd.DataFrame:
     mk = _normalize_market(market_key)
     frames: List[pd.DataFrame] = []
@@ -278,20 +286,20 @@ def _fetch_market_for_events(api_key: str, region: str, books: set[str],
         for eid in event_ids:
             url = f"{BASE}/sports/{SPORT}/events/{eid}/odds"
             params = {"apiKey": api_key, "regions": region, "markets": mk_try, "oddsFormat": "american"}
-            if books:
+            if books is not None:
                 params["bookmakers"] = ",".join(sorted(books))
             status, js, headers = _get(url, params)
             log.info(f"{mk_try} eid={eid} status={status} limit={_lim(headers)}")
 
             if status == 200 and isinstance(js, dict):
                 bm_count = len(js.get("bookmakers", []))
-                if bm_count == 0 and books:
+                if bm_count == 0 and books is not None:
                     log.info(f"{mk_try} eid={eid}: 0 bookmakers after filter → retry w/o filter")
                     params2 = dict(params)
                     params2.pop("bookmakers", None)
                     status2, js2, _ = _get(url, params2)
                     if status2 == 200 and isinstance(js2, dict):
-                        df = _normalize_player_rows([js2], set(), mk_try)
+                        df = _normalize_player_rows([js2], None, mk_try)
                     else:
                         df = pd.DataFrame()
                 else:
@@ -318,19 +326,19 @@ def _fetch_market_for_events(api_key: str, region: str, books: set[str],
         for eid in event_ids:
             url = f"{BASE}/sports/{SPORT}/events/{eid}/odds"
             params = {"apiKey": api_key, "regions": "us2", "markets": mk, "oddsFormat": "american"}
-            if books:
+            if books is not None:
                 params["bookmakers"] = ",".join(sorted(books))
             status, js, headers = _get(url, params)
             log.info(f"{mk} eid={eid} (us2) status={status} limit={_lim(headers)}")
             if status == 200 and isinstance(js, dict):
                 df = _normalize_player_rows([js], books, mk)
-                if df.empty and books:
+                if df.empty and books is not None:
                     # try without filters in us2 too
                     params2 = dict(params)
                     params2.pop("bookmakers", None)
                     status2, js2, _ = _get(url, params2)
                     if status2 == 200 and isinstance(js2, dict):
-                        df = _normalize_player_rows([js2], set(), mk)
+                        df = _normalize_player_rows([js2], None, mk)
                 if not df.empty:
                     frames_us2.append(df)
         if frames_us2:
@@ -344,12 +352,12 @@ def _fetch_market_for_events(api_key: str, region: str, books: set[str],
         return pd.DataFrame()
     return pd.concat(frames, ignore_index=True)
 
-def _fetch_bulk_market(api_key: str, region: str, books: set[str], market_key: str) -> pd.DataFrame:
+def _fetch_bulk_market(api_key: str, region: str, books: Optional[set[str]], market_key: str) -> pd.DataFrame:
     # bulk for game markets only
     mk = _normalize_market(market_key)
     url = f"{BASE}/sports/{SPORT}/odds"
     params = {"apiKey": api_key, "regions": region, "markets": mk, "oddsFormat": "american"}
-    if books:
+    if books is not None:
         params["bookmakers"] = ",".join(sorted(books))
     status, js, headers = _get(url, params)
     log.info(f"bulk {mk} status={status} limit={_lim(headers)}")
@@ -362,7 +370,7 @@ def _fetch_bulk_market(api_key: str, region: str, books: set[str], market_key: s
 
 def fetch_odds(
     *,
-    books: List[str],
+    books: Optional[List[str]],
     markets: List[str],
     region: str = REGION_DEFAULT,
     date: str = "",
@@ -375,12 +383,12 @@ def fetch_odds(
         sys.exit(2)
 
     # Expand aliases first, then validate
-    books_set = _expand_books_filter(books)
+    books_set: Optional[set[str]] = _expand_books_filter(books)
     if region == "us" and books_set:
         bad = [b for b in books_set if b not in US_BOOK_KEYS]
         if bad:
             log.info(f"unknown/retired bookmaker key(s) for region=us: {bad} → removing from filter")
-            books_set = {b for b in books_set if b in US_BOOK_KEYS}
+            books_set = {b for b in books_set if b in US_BOOK_KEYS} or None
 
     markets = [m.strip() for m in markets if m.strip()]
     normalized_markets: List[str] = [_normalize_market(m) for m in markets]
@@ -445,8 +453,12 @@ if __name__ == "__main__":
     ap.add_argument("--out_game", default="outputs/odds_game.csv")
     args = ap.parse_args()
 
+    # IMPORTANT: interpret "" as ALL (None), not an empty list
+    raw_books = (args.books or "").strip()
+    books_list: Optional[List[str]] = None if raw_books == "" else [b.strip() for b in raw_books.split(",") if b.strip()]
+
     fetch_odds(
-        books=[b.strip() for b in (args.books or "").split(",") if b.strip()],
+        books=books_list,
         markets=[m.strip() for m in args.markets.split(",") if m.strip()],
         region=args.region,
         date=args.date,
