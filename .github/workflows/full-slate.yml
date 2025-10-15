@@ -68,7 +68,7 @@ jobs:
 
       - name: Run pipeline
         run: |
-          python -m engine --season "2025" --date "" --bookmakers "draftkings,fanduel,betmgm,caesars"
+          python -m engine --season "2025" --date "" --books "draftkings,fanduel,betmgm,caesars"
 
       # Always ship artifacts (snapshots, logs, partial CSVs) even if the run fails
       - name: Upload artifacts (always)
