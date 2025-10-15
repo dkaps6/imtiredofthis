@@ -128,8 +128,9 @@ def _normalize_game_rows(events: list, books_filter: set[str]) -> pd.DataFrame:
         home = ev.get("home_team")
         away = ev.get("away_team")
         for bm in ev.get("bookmakers", []):
-            book = (bm.get("title") or "").strip().lower().replace(" ", "_")
-            if books_filter and book not in books_filter:
+            book_key = (bm.get("key") or "").strip().lower()
+            book_title = (bm.get("title") or "").strip()
+            if books_filter and book_key not in books_filter:
                 continue
             for mk in bm.get("markets", []):
                 market = mk.get("key")
@@ -139,7 +140,8 @@ def _normalize_game_rows(events: list, books_filter: set[str]) -> pd.DataFrame:
                         "commence_time": commence,
                         "home_team": home,
                         "away_team": away,
-                        "book": book,
+                        "book": book_key,          # use key for joins/filters
+                        "book_title": book_title,  # keep for readability
                         "market": market,
                         "name": oc.get("name"),
                         "price_american": oc.get("price"),
@@ -148,16 +150,17 @@ def _normalize_game_rows(events: list, books_filter: set[str]) -> pd.DataFrame:
     return pd.DataFrame.from_records(rows)
 
 def _normalize_player_rows(events: list, books_filter: set[str], market_key: str) -> pd.DataFrame:
-    recs: List[Dict[str, Any]] = []
+    recs = []
     for ev in events or []:
         eid = ev.get("id")
         commence = ev.get("commence_time")
         for bm in ev.get("bookmakers", []):
-            book = (bm.get("title") or "").strip().lower().replace(" ", "_")
-            if books_filter and book not in books_filter:
+            book_key = (bm.get("key") or "").strip().lower()
+            book_title = (bm.get("title") or "").strip()
+            if books_filter and book_key not in books_filter:
                 continue
             for mk in bm.get("markets", []):
-                if mk.get("key") != market_key:
+                if mk.get("key") != market_key: 
                     continue
                 for oc in mk.get("outcomes", []):
                     side = (oc.get("name") or "").upper()
@@ -168,7 +171,8 @@ def _normalize_player_rows(events: list, books_filter: set[str], market_key: str
                     recs.append({
                         "event_id": eid,
                         "commence_time": commence,
-                        "book": book,
+                        "book": book_key,          # key
+                        "book_title": book_title,  # title
                         "market": market_key,
                         "player": player,
                         "side": side,
@@ -211,12 +215,13 @@ def _fetch_events_by_h2h(api_key: str, region: str, books: set[str]) -> list:
         filtered = []
         for ev in js:
             keep = any(
-                (bm.get("title") or "").strip().lower().replace(" ", "_") in books
+                (bm.get("key") or "").strip().lower() in books
                 for bm in ev.get("bookmakers", [])
             )
             if keep:
                 filtered.append(ev)
         return filtered
+    
     return js
 
 def _fetch_game_odds(api_key: str, region: str, books: set[str]) -> pd.DataFrame:
