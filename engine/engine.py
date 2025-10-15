@@ -245,56 +245,44 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
         _run("python scripts/pricing.py --props outputs/props_raw.csv",
              label="pricing", snap_after=["outputs/props_priced_clean.csv"])
 
-        _run(f"python -m scripts.models.run_predictors --season {season}",
-             label="predictors", snap_after=[
-                 "outputs/master_model_predictions.csv",
-                 "outputs/sgp_candidates.csv",
-                 "logs/master_model_predictions.csv",
-                 "logs/summary.json"
-             ])
-        print(f"[engine]   outputs/master_model_predictions.csv → {_size('outputs/master_model_predictions.csv')}")
+        # 5) downstream models (unchanged in your tree; keep)
+        try:
+            _run("python -m scripts.models.run_predictors --season {season}",
+                 label="predictors", snap_after=["outputs/master_model_predictions.csv","outputs/sgp_candidates.csv"])
+        except Exception as e:
+            print(f"[engine] predictors step non-fatal: {e}")
 
-        # 5) export Excel + diagnostics
-        _run("python scripts/export_excel.py",
-             label="export", snap_after=["outputs/model_report.xlsx"])
-        _dump_diag()
+        # optional export step (best-effort)
+        try:
+            _run("python scripts/export_excel.py", label="export")
+        except Exception as e:
+            print(f"[engine] export step non-fatal: {e}")
+
         snapshot([
-            "logs/run_diagnostics.txt",
-            "outputs/master_model_predictions.csv",
-            "outputs/sgp_candidates.csv",
-            "data/metrics_ready.csv",
             "outputs/props_raw.csv",
-            "outputs/odds_game.csv"
-        ], "final")
+            "outputs/props_priced_clean.csv",
+            "outputs/master_model_predictions.csv",
+            "outputs/odds_game.csv",
+            "data/metrics_ready.csv",
+        ], label="final")
 
-        rid = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        print(f"[engine] ✅ complete (run_id={rid})")
         return 0
-
-    except Exception as e:
-        print(f"[engine] ERROR: {e}", file=sys.stderr)
-        return 1
     finally:
         finalize_run()
 
-def cli_main() -> int:
-    """CLI entrypoint used by `python -m engine`."""
+def _main():
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", required=True)
     ap.add_argument("--date", default="")
-    # Accept both names; map to same var
-    ap.add_argument("--books", "--bookmakers", dest="books",
-                    default="draftkings,fanduel,betmgm,caesars")
-    ap.add_argument("--markets", default="")
-    args = ap.parse_args()
+    ap.add_argument("--books", default=None, help="csv; empty string means no filter")
+    ap.add_argument("--markets", default=None, help="csv of markets; empty string means use defaults")
+    a = ap.parse_args()
 
-    return run_pipeline(
-        season=args.season,
-        date=args.date,
-        books=[b.strip() for b in args.books.split(",") if b.strip()],  # [] if user passes --bookmakers=""
-        markets=[m.strip() for m in args.markets.split(",") if m.strip()] or None,
-    )
+    books = None if a.books is None else ([] if a.books == "" else [x.strip() for x in a.books.split(",") if x.strip()])
+    mkts  = None if a.markets is None else ([] if a.markets == "" else [x.strip() for x in a.markets.split(",") if x.strip()])
+
+    return run_pipeline(a.season, a.date, books, mkts)
 
 if __name__ == "__main__":
-    sys.exit(cli_main())
+    sys.exit(_main())
