@@ -61,11 +61,14 @@ def _merge_missing_player(df: pd.DataFrame, add: pd.DataFrame, on: tuple[str,str
 def _fetch_pbp(season: int, tries: int = 3, wait: float = 1.0) -> pd.DataFrame:
     last = None
     seasons_to_try = [season, season-1]
+
+    # FIX: initialize use_readpy just like in team file
     try:
         import nflreadpy as nfr
-        import nfl_data_py as nfl
+        use_readpy = True
     except Exception:
-        pass
+        use_readpy = False
+        import nfl_data_py as nfl  # noqa: F401
 
     with open(ERR_LOG, "a", encoding="utf-8") as f:
         f.write(f"\n=== PBP fetch wanted season={season} ===\n")
@@ -240,7 +243,6 @@ def build_player_form(season: int) -> pd.DataFrame:
     except Exception as e:
         print(f"[player_form] PFR enrich skipped: {type(e).__name__}: {e}", flush=True)
 
-    
     # --- Ensure QB rows exist (QB1 per team) so QB props can merge cleanly
     try:
         pass_att = pbp.loc[pbp["pass_flag"]==True, ["posteam","passer","yards_gained"]].copy()
@@ -276,7 +278,7 @@ def build_player_form(season: int) -> pd.DataFrame:
     except Exception as _e:
         print(f"[player_form] WARN: QB rows enrich skipped: {_e}")
 
-# 4) External provider fallbacks (fill only remaining NaNs) — preserved
+    # 4) External provider fallbacks (fill only remaining NaNs) — preserved
     espn = _safe_read_csv("data/espn_player.csv")
     out = _merge_missing_player(out, espn, ("player","team"), {
         "routes_db":"route_rate","route_rate":"route_rate",
