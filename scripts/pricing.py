@@ -194,7 +194,8 @@ def base_mu(row: pd.Series) -> float:
             weather_m *= 1.02
 
     if mkt == "player_pass_yds":
-        return max(0.0, ypa * 28.0 * qb_pen * weather_m)  # ~28 attempts baseline
+        # FIX: use qb_ypa (we compute it above) instead of undefined variable
+        return max(0.0, qb_ypa * 28.0 * qb_pen * weather_m)  # ~28 attempts baseline
 
     # ★ enrich: receiving-volume enrichments
     # Prefer route_rate if present; else routes_per_dropback (both 0..1)
