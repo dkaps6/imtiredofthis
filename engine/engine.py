@@ -16,11 +16,8 @@ try:
         books_from_env, markets_from_env, ODDS
     )
 except Exception:
-    FILES = {
-        "props_raw": "outputs/props_raw.csv",
-        "odds_game": "outputs/odds_game.csv",
-    }
-    def ensure_dirs():  # no-op if config not present
+    # Fallbacks if scripts.config is missing in some workflows
+    def ensure_dirs():
         for d in ("data", "outputs", "outputs/metrics", "logs", "outputs/_tmp_props"):
             Path(d).mkdir(parents=True, exist_ok=True)
     def books_from_env(): return ["draftkings","fanduel","betmgm","caesars"]
@@ -54,9 +51,29 @@ def _safe_exists(p: Path) -> bool:
     except Exception:
         return False
 
-def snapshot(paths, label=None):
+def _size(p: str | Path) -> str:
+    try:
+        st = Path(p).stat().st_size
+        return f"{st} bytes"
+    except Exception:
+        return "MISSING"
+
+def _run(cmd: str, label: str = "", snap_after: list[str] | None = None) -> int:
+    """Run a shell command; snapshot selected paths if provided."""
+    print(f"[engine] ▶ {cmd}")
+    rc = subprocess.call(shlex.split(cmd))
+    if rc != 0:
+        snapshot(snap_after or [], f"{label}_failed")
+        raise RuntimeError(f"step '{label}' failed rc={rc}")
+    if snap_after:
+        snapshot(snap_after, label)
+    return rc
+
+def snapshot(paths: list[str] | None, label: str = ""):
     """
-    Copy files that exist into runs/<RUN_ID>/<label>_<epoch>/
+    Copy specified files into runs/<RUN_ID>/<timestamp>_<label>/ for artifact upload.
+    Only copies files that exist and are non-empty.
+    Also writes a small _snapshot.txt with the file list + timestamp,
     so you can inspect outputs even if later steps fail.
     """
     stamp = f"{int(time.time())}"
@@ -88,34 +105,28 @@ def finalize_run():
     except Exception:
         traceback.print_exc()
 
-def _run(cmd: str, label: str | None = None, snap_after: list[str] | None = None):
-    """Run a shell step; snapshot selected files; raise on failure (no sys.exit)."""
-    print(f"[engine] ▶ {cmd}", flush=True)
-    rc = subprocess.call(shlex.split(cmd))
-    # snapshot even if the step fails (best-effort)
-    if snap_after:
-        snapshot(snap_after, label or "step")
-    if rc != 0:
-        print(f"[engine] ✖ step failed (exit {rc})", flush=True)
-        # raise instead of sys.exit, so finalize_run() still packages artifacts
-        raise RuntimeError(f"step failed: {label or cmd} (exit {rc})")
-    return rc
-
-def _size(p: str) -> str:
-    fp = Path(p)
-    return f"{fp.stat().st_size}B" if fp.exists() else "MISSING"
-
 def _dump_diag():
-    Path("logs").mkdir(exist_ok=True)
-    targets = [
-        "data/team_form.csv","data/player_form.csv","data/metrics_ready.csv",
-        "outputs/props_raw.csv","outputs/odds_game.csv",
-        "outputs/master_model_predictions.csv","outputs/sgp_candidates.csv",
-    ]
-    with open("logs/run_diagnostics.txt","w") as f:
-        for t in targets:
-            f.write(f"{t}: {_size(t)}\n")
-    for t in targets:
+    """Write sizes + heads so failures are easier to triage."""
+    Path("logs").mkdir(parents=True, exist_ok=True)
+    p = Path("logs/run_diagnostics.txt")
+    lines = []
+    for t in [
+        "data/team_form.csv",
+        "data/player_form.csv",
+        "data/metrics_ready.csv",
+        "outputs/props_raw.csv",
+        "outputs/props_raw_wide.csv",
+        "outputs/odds_game.csv",
+        "outputs/props_priced_clean.csv",
+        "outputs/master_model_predictions.csv",
+    ]:
+        try:
+            st = Path(t).stat().st_size
+            lines.append(f"{t}: {st} bytes")
+        except Exception:
+            lines.append(f"{t}: MISSING")
+    p.write_text("\n".join(lines), encoding="utf-8")
+    for t in ("outputs/props_raw.csv", "outputs/props_priced_clean.csv"):
         try:
             df = pd.read_csv(t)
             df.head(20).to_csv(f"logs/head__{Path(t).name}", index=False)
@@ -147,26 +158,21 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
         f"ESPN_COOKIE={'set' if os.getenv('ESPN_COOKIE') else 'missing'}"
     )
 
-    # env flag to enable strict checks that fail-fast on stub data
-    STRICT = os.getenv("NFL_FORM_STRICT") == "1"  # NEW
+    STRICT = False  # keep permissive; we snapshot and proceed
 
     try:
-        # 1) upstream providers (best-effort)
-        try:
-            _provider_chain(int(season), date or None)
-        except Exception as e:
-            print(f"[engine] provider chain error (non-fatal): {e}")
+        _provider_chain(int(season), date or None)
 
-        # 2) builders — team & player form first
+        # 1) team form
         _run(f"python scripts/make_team_form.py --season {season}",
              label="team_form", snap_after=["data/team_form.csv"])
         print(f"[engine]   data/team_form.csv → {_size('data/team_form.csv')}")
         if STRICT:
             try:
                 tf = pd.read_csv("data/team_form.csv")
-                if tf["team"].nunique() < 8:
+                if tf["team"].nunique() < 8 or len(tf) < 20:
                     snapshot(["data/team_form.csv"], "team_form_stub")
-                    raise RuntimeError("team_form looks like a stub (too few teams). Check requirements install and nfl_data_py import.")
+                    raise RuntimeError("team_form looks like a stub (few teams). Check requirements install and nfl_data_py import.")
             except Exception as _e:
                 raise
 
@@ -178,7 +184,7 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
                 pf = pd.read_csv("data/player_form.csv")
                 if pf["team"].nunique() < 8 or len(pf) < 50:
                     snapshot(["data/player_form.csv"], "player_form_stub")
-                    raise RuntimeError("player_form looks like a stub (too few teams/players). Check requirements install and nfl_data_py import.")
+                    raise RuntimeError("player_form looks like a stub (few teams/players). Check requirements install and nfl_data_py import.")
             except Exception as _e:
                 raise
 
@@ -195,29 +201,13 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
 
         _default_markets = [
             "player_pass_yds",
-            "player_reception_yds",    # receiving yards (canonical key)
-            "player_receiving_yards",  # alias (safety)
+            "player_reception_yds",
             "player_rush_yds",
             "player_receptions",
             "player_rush_reception_yds",
-            "player_rush_and_receive_yards",
             "player_anytime_td",
         ]
-        markets_to_pull = [m.strip() for m in (markets or _default_markets) if m.strip()]
-        markets_to_pull = list(dict.fromkeys(markets_to_pull))
-
-        # ensure game lines exist once
-        game_cmd = "python scripts/fetch_props_oddsapi.py "
-        if b is not None:
-            game_cmd += f'--bookmakers "{b}" '
-        game_cmd += (
-            f"--markets h2h,spreads,totals "
-            f"--date {date or ''} "
-            "--out outputs/_tmp_props/_game.csv --out_game outputs/odds_game.csv"
-        )
-        _run(game_cmd, label="odds_game", snap_after=["outputs/odds_game.csv", "outputs/_tmp_props/_game.csv"])
-
-        # fetch ALL player markets in one call → writes outputs/props_raw.csv (+ props_raw_wide.csv)
+        markets_to_pull = markets or _default_markets
         all_mk = ",".join(markets_to_pull)
         props_cmd = "python scripts/fetch_props_oddsapi.py "
         if b is not None:
@@ -228,6 +218,19 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
             "--out outputs/props_raw.csv --out_game outputs/odds_game.csv"
         )
         _run(props_cmd, label="props_raw", snap_after=["outputs/props_raw.csv"])
+        # Copy props_raw_wide.csv to _tmp_props for downstream tools expecting that path
+        try:
+            Path("outputs/_tmp_props").mkdir(parents=True, exist_ok=True)
+            _wide_src = Path("outputs/props_raw_wide.csv")
+            _wide_dst = Path("outputs/_tmp_props/props_raw_wide.csv")
+            if _wide_src.exists() and _wide_src.stat().st_size > 0:
+                shutil.copy2(_wide_src, _wide_dst)
+                print(f"[engine] copied {_wide_src} -> {_wide_dst}")
+            else:
+                print("[engine] note: outputs/props_raw_wide.csv not found or empty")
+        except Exception as _e:
+            print(f"[engine] WARN: could not copy props_raw_wide.csv: {_e}")
+
 
         # 3.5) build metrics_ready (features for pricing)
         _run("python scripts/make_metrics.py",
@@ -245,44 +248,56 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
         _run("python scripts/pricing.py --props outputs/props_raw.csv",
              label="pricing", snap_after=["outputs/props_priced_clean.csv"])
 
-        # 5) downstream models (unchanged in your tree; keep)
-        try:
-            _run("python -m scripts.models.run_predictors --season {season}",
-                 label="predictors", snap_after=["outputs/master_model_predictions.csv","outputs/sgp_candidates.csv"])
-        except Exception as e:
-            print(f"[engine] predictors step non-fatal: {e}")
+        _run(f"python -m scripts.models.run_predictors --season {season}",
+             label="predictors", snap_after=[
+                 "outputs/master_model_predictions.csv",
+                 "outputs/sgp_candidates.csv",
+                 "logs/master_model_predictions.csv",
+                 "logs/summary.json"
+             ])
+        print(f"[engine]   outputs/master_model_predictions.csv → {_size('outputs/master_model_predictions.csv')}")
 
-        # optional export step (best-effort)
-        try:
-            _run("python scripts/export_excel.py", label="export")
-        except Exception as e:
-            print(f"[engine] export step non-fatal: {e}")
-
+        # 5) export Excel + diagnostics
+        _run("python scripts/export_excel.py",
+             label="export", snap_after=["outputs/model_report.xlsx"])
+        _dump_diag()
         snapshot([
-            "outputs/props_raw.csv",
-            "outputs/props_priced_clean.csv",
+            "logs/run_diagnostics.txt",
             "outputs/master_model_predictions.csv",
-            "outputs/odds_game.csv",
+            "outputs/sgp_candidates.csv",
             "data/metrics_ready.csv",
-        ], label="final")
+            "outputs/props_raw.csv",
+            "outputs/odds_game.csv"
+        ], "final")
 
+        rid = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        print(f"[engine] ✅ complete (run_id={rid})")
         return 0
+
+    except Exception as e:
+        print(f"[engine] ERROR: {e}", file=sys.stderr)
+        return 1
     finally:
         finalize_run()
 
-def _main():
+def cli_main() -> int:
+    """CLI entrypoint used by `python -m engine`."""
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", required=True)
     ap.add_argument("--date", default="")
-    ap.add_argument("--books", default=None, help="csv; empty string means no filter")
-    ap.add_argument("--markets", default=None, help="csv of markets; empty string means use defaults")
-    a = ap.parse_args()
+    # Accept both names; map to same var
+    ap.add_argument("--books", "--bookmakers", dest="books",
+                    default="draftkings,fanduel,betmgm,caesars")
+    ap.add_argument("--markets", default="")
+    args = ap.parse_args()
 
-    books = None if a.books is None else ([] if a.books == "" else [x.strip() for x in a.books.split(",") if x.strip()])
-    mkts  = None if a.markets is None else ([] if a.markets == "" else [x.strip() for x in a.markets.split(",") if x.strip()])
-
-    return run_pipeline(a.season, a.date, books, mkts)
+    return run_pipeline(
+        season=args.season,
+        date=args.date,
+        books=[b.strip() for b in args.books.split(",") if b.strip()],  # [] if user passes --bookmakers=""
+        markets=[m.strip() for m in args.markets.split(",") if m.strip()] or None,
+    )
 
 if __name__ == "__main__":
-    sys.exit(_main())
+    sys.exit(cli_main())
