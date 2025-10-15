@@ -75,8 +75,14 @@ def _normalize_market(m: str) -> str:
 
 # Markets that should be fetched via the sport-level bulk endpoint.
 # IMPORTANT: most player props should use per-event endpoint; keep empty unless you know a bulk key works.
-BULK_ONLY_CANONICAL: set[str] = set()
-
+BULK_ONLY_CANONICAL: set[str] = {
+    "player_passing_yards",
+    "player_receiving_yards",
+    "player_rushing_yards",
+    "player_receptions",
+    "player_rush_and_receive_yards",
+    "player_anytime_td",
+}
 # ------------------------- LOGGING ------------------------
 
 log = logging.getLogger("oddsapi")
