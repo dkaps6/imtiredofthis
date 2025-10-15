@@ -161,7 +161,6 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
         _run(f"python scripts/make_team_form.py --season {season}",
              label="team_form", snap_after=["data/team_form.csv"])
         print(f"[engine]   data/team_form.csv → {_size('data/team_form.csv')}")
-        # NEW: optional strict check to avoid stub runs
         if STRICT:
             try:
                 tf = pd.read_csv("data/team_form.csv")
@@ -174,7 +173,6 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
         _run(f"python scripts/make_player_form.py --season {season}",
              label="player_form", snap_after=["data/player_form.csv"])
         print(f"[engine]   data/player_form.csv → {_size('data/player_form.csv')}")
-        # NEW: optional strict check
         if STRICT:
             try:
                 pf = pd.read_csv("data/player_form.csv")
@@ -202,14 +200,13 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
             "player_rush_and_receive_yards",
             "player_anytime_td",
         ]
-        # de-duplicate overlapping aliases before fetching
         markets_to_pull = [m.strip() for m in (markets or _default_markets) if m.strip()]
         markets_to_pull = list(dict.fromkeys(markets_to_pull))
 
         # ensure game lines exist once
         game_cmd = "python scripts/fetch_props_oddsapi.py "
         if b:
-            game_cmd += f"--bookmakers {b} "   # 👈 emit 'bookmakers' (not 'books')
+            game_cmd += f"--bookmakers {b} "
         game_cmd += (
             f"--markets h2h,spreads,totals "
             f"--date {date or ''} "
@@ -221,7 +218,7 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
         all_mk = ",".join(markets_to_pull)
         props_cmd = "python scripts/fetch_props_oddsapi.py "
         if b:
-            props_cmd += f"--bookmakers {b} "  # 👈 emit 'bookmakers' (not 'books')
+            props_cmd += f"--bookmakers {b} "
         props_cmd += (
             f"--markets {all_mk} "
             f"--date {date or ''} "
@@ -272,7 +269,6 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
         return 0
 
     except Exception as e:
-        # Don’t hide the error, but let finally package snapshots
         print(f"[engine] ERROR: {e}", file=sys.stderr)
         return 1
     finally:
