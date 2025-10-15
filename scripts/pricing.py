@@ -52,20 +52,29 @@ def american_to_prob(odds: float) -> float:
         return (-o) / ((-o) + 100.0)
 
 def prob_to_american(p: float) -> float:
-    if p <= 0: return np.nan
-    if p >= 1: return np.nan
-    return (100.0 * p / (1.0 - p)) if p < 0.5 else (-100.0 * (1.0 - p) / p)
+    if p <= 0 or p >= 1 or np.isnan(p):
+        return np.nan
+    q = 1.0 - p
+    if p >= q:
+        # favorite
+        return -100.0 * p / q
+    else:
+        # dog
+        return 100.0 * q / p
 
-def devig_two_way(p_over_vig: pd.Series, p_under_vig: pd.Series) -> tuple[pd.Series, pd.Series]:
-    s = (p_over_vig + p_under_vig).replace(0, np.nan)
-    p_over_fair = p_over_vig / s
-    p_under_fair = p_under_vig / s
+def devig_two_way(p_over_vig: pd.Series, p_under_vig: pd.Series) -> tuple[pd.Series,pd.Series]:
+    # fair = p / (p_over + p_under)
+    denom = (p_over_vig + p_under_vig).replace(0, np.nan)
+    p_over_fair  = (p_over_vig / denom).clip(0,1)
+    p_under_fair = (p_under_vig / denom).clip(0,1)
     return p_over_fair, p_under_fair
 
 def _extract_odds(df: pd.DataFrame) -> pd.Series:
     """
-    Return a float Series of American odds for the active 'Over' side for each row.
-    Handles multiple shapes of props_raw (over/under split, single 'american'/'price', etc.).
+    Robust odds extractor:
+      - Prefer explicit over/under if present
+      - Else side + single price column
+      - Else fallbacks ('price', 'american', 'price_american', etc.).
     Never returns a scalar; always a Series aligned to df.index.
     """
     idx = df.index
@@ -98,20 +107,17 @@ SIGMA_DEFAULTS = {
     "player_receiving_yards": 26.0,
     "player_rush_yds": 24.0,
     "player_receptions": 1.8,
-    "player_rush_rec_yds": 30.0,
-    "player_rush_reception_yds": 30.0,
+    "player_rush_rec_yds": 36.0,
 }
-
-def load_sigmas() -> dict[str, float]:
+def load_sigmas() -> dict[str,float]:
     if SIGMA_PATH.exists():
         try:
             return json.loads(SIGMA_PATH.read_text())
         except Exception:
             pass
-    return SIGMA_DEFAULTS.copy()
+    return dict(SIGMA_DEFAULTS)
 
-def save_sigmas(sigmas: dict[str, float]) -> None:
-    SIGMA_PATH.parent.mkdir(parents=True, exist_ok=True)
+def save_sigmas(sigmas: dict[str,float]) -> None:
     SIGMA_PATH.write_text(json.dumps(sigmas, indent=2))
 
 def ema_update(old: float, new: float, alpha: float = 0.2) -> float:
@@ -144,54 +150,42 @@ def coverage_multiplier(row: pd.Series) -> float:
         rp_man   * opp_man_n * man_w   +
         rp_zone  * opp_zone_n * zone_w
     )
-    # scale into a modest [0.94, 1.06] band
-    return max(0.94, min(1.06, mult * 1.06))
+    # normalize around 1.0
+    return max(0.90, min(1.08, mult / max(1e-9, rp_press + rp_man + rp_zone)))
 
-# ---------- μ builders ----------
+# ---------- Base μ ----------
 def base_mu(row: pd.Series) -> float:
-    mkt = str(row.get("market",""))
-    # volumes & priors
-    tgt = float(row.get("target_share", 0.18))
-    rsh = float(row.get("rush_share",   0.30))
-    yprr= float(row.get("yprr_proxy",   1.7))
-    ypc = float(row.get("ypc",          4.2))
-    ypa = float(row.get("qb_ypa",       6.9))
-    wp  = float(row.get("team_wp",      0.5))
-    # ★ patch: optional efficiency extras
-    ypt = float(row.get("ypt",          np.nan))  # receiving efficiency (yards per target)
+    """
+    A conservative, context-aware μ for each market.
+    """
+    mkt = normalize_market_key(row.get("market",""))
+    line = float(row.get("line", np.nan)) if pd.notna(row.get("line", np.nan)) else np.nan
 
-    # opponent context (Z-like scales are already baked into priors)
-    pass_e = float(row.get("def_pass_epa_opp",   0.0))
-    rush_e = float(row.get("def_rush_epa_opp",   0.0))
-    sack_r = float(row.get("def_sack_rate_opp",  0.0))
-    lbx    = float(row.get("light_box_rate_opp", 0.5))
-    hbx    = float(row.get("heavy_box_rate_opp", 0.5))
-    pace   = float(row.get("pace_opp",           0.0))
-    proe   = float(row.get("proe_opp",           0.0))
+    # opponent context
+    def_pass_pen = float(row.get("def_pass_epa_opp", 0.0) or 0.0)
+    def_rush_pen = float(row.get("def_rush_epa_opp", 0.0) or 0.0)
+    pressure_z   = float(row.get("def_sack_rate_opp", 0.0) or 0.0)
 
-    # coverage/CB/weather
+    # QB baseline & pressure
+    qb_ypa = float(row.get("qb_ypa", np.nan))
+    if np.isnan(qb_ypa):
+        qb_ypa = float(row.get("ypt_qb", 6.8) or 6.8)
+    qb_pen = (1.0 - 0.35 * max(0.0, pressure_z)) * (1.0 - 0.25 * max(0.0, def_pass_pen))
+    qb_pen = max(0.75, min(1.05, qb_pen))
+
+    # coverage multiplier
     cov_mult = coverage_multiplier(row)
-    cb_pen = float(row.get("cb_penalty", 0.0) or 0.0)  # 0..0.25
-    wind   = float(row.get("wind_mph",   np.nan))
-    precip = str(row.get("precip","")).lower().strip()
 
-    # ★ enrich: use defensive pressure metrics when present
-    press_rate = float(row.get("pressure_rate", np.nan))  # 0..1 if provided
-    prwr       = float(row.get("pass_rush_win_rate", np.nan))  # 0..1 if provided
-    eff_pressure = sack_r
-    if not np.isnan(press_rate):
-        eff_pressure = max(eff_pressure, press_rate)
-    if not np.isnan(prwr):
-        eff_pressure = max(eff_pressure, prwr)
-
-    # script nudges (RB favored when wp↑; QB volume ↓ modest vs elite pass D/sacks/pressure)
-    run_bonus = 1.0 + 0.04 * (wp - 0.5)  # +2..4% RB attempts when favored
-    qb_pen    = 1.0 - 0.15 * max(0.0, eff_pressure) - 0.12 * max(0.0, pass_e)
-
-    # weather
+    # weather nudges
     weather_m = 1.0
+    wind = row.get("wind_mph", np.nan)
+    precip = str(row.get("precip", "")).lower()
+    try:
+        wind = float(wind)
+    except Exception:
+        wind = np.nan
     if not np.isnan(wind) and wind >= 15:
-        if mkt in {"player_pass_yds","player_rec_yds","player_receptions","player_rush_rec_yds"}:
+        if mkt in {"player_pass_yds","player_rec_yds","player_rush_rec_yds"}:
             weather_m *= 0.94
     if precip in {"rain","snow"}:
         if mkt in {"player_rec_yds","player_rush_rec_yds"}:
@@ -225,65 +219,109 @@ def base_mu(row: pd.Series) -> float:
     # ★ patch: TE bump from 12p_rate (team-level)
     twelp = float(row.get("12p_rate", np.nan))
     te12_mult = 1.0
-    if str(row.get("position","")).upper().startswith("TE") and not np.isnan(twelp):
-        te12_mult *= (1.0 + 0.06 * max(0.0, min(1.0, twelp)))
+    if not np.isnan(twelp) and twelp > 0.18 and str(row.get("position","")).upper() == "TE":
+        te12_mult = 1.03
+
+    # Team air-yards sanity check (downshift when scheme is shallow)
+    ay_att = float(row.get("ay_per_att", np.nan))
+    ay_mult = 1.0
+    if not np.isnan(ay_att) and ay_att <= 6.0 and mkt in {"player_rec_yds","player_rush_rec_yds"}:
+        ay_mult = 0.92
+
+    # Combine multipliers
+    cov_mult = max(0.90, min(1.10, cov_mult * te12_mult * ay_mult))
 
     if mkt == "player_rec_yds":
-        # WR/TE receiving yards from YPRR * routes, coverage penalty & CB
-        # aDOT can tilt YPRR slightly (very conservative)
-        aDOT = float(row.get("aDOT", np.nan))
-        yprr_eff = yprr
-        if not np.isnan(aDOT):
-            # center ~9 yards; clamp within ±40%
-            yprr_eff = yprr * (1.0 + 0.02 * (aDOT - 9.0))
-            yprr_eff = max(0.6*yprr, min(1.4*yprr, yprr_eff))
-
-        # ★ patch: tiny ypt efficiency tilt (kept very small to avoid destabilizing tails)
-        if not np.isnan(ypt) and ypt > 0:
-            yprr_eff *= max(0.94, min(1.06, 1.0 + 0.03 * (ypt - 7.8) / 7.8))
-
-        routes_base = 35.0 * tgt * rvol_factor
-        mu = yprr_eff * routes_base * cov_mult * (1.0 - cb_pen) * te12_mult * weather_m
-
-        # ★ patch: sanity downshift for low air-yards teams (use actual ay_per_att)
-        ay_per_att = float(row.get("ay_per_att", np.nan))
-        if not np.isnan(ay_per_att):
-            league_med = 7.6
-            if ay_per_att < 0.85 * league_med:
-                mu = min(mu, 0.80 * max(20.0, mu))
-
+        ypt = float(row.get("ypt", np.nan))
+        if np.isnan(ypt):
+            ypt = float(row.get("yprr_proxy", 1.8)) * 1.6  # soft fallback
+        targets = float(row.get("target_share", np.nan))
+        if np.isnan(targets): targets = 0.18
+        plays = float(row.get("pace", 28.0) or 28.0)
+        pass_rate = 0.56 + float(row.get("proe", 0.0) or 0.0)
+        mu = ypt * (targets * plays * pass_rate) * cov_mult * rvol_factor * weather_m
         return max(0.0, mu)
 
     if mkt == "player_receptions":
-        cr = 0.62 * cov_mult * (1.0 - 0.5*cb_pen)  # catch rate proxy
-        rec_routes = 32.0 * tgt * rvol_factor
-        mu = cr * rec_routes * te12_mult * weather_m
+        rrate = float(row.get("route_rate", np.nan))
+        if np.isnan(rrate): rrate = 0.65
+        catch_rate = float(row.get("catch_rate", 0.62))
+        plays = float(row.get("pace", 28.0) or 28.0)
+        pass_rate = 0.56 + float(row.get("proe", 0.0) or 0.0)
+        mu = (rrate * plays * pass_rate) * catch_rate * cov_mult * rvol_factor * weather_m
         return max(0.0, mu)
 
     if mkt == "player_rush_yds":
-        # ★ enrich: run_stop_rate penalizes YPC a touch when available
-        run_stop_rate = float(row.get("run_stop_rate", np.nan))
-        ypc_mod = ypc * ((1.0 + 0.07*lbx) * (1.0 - 0.06*hbx)) * run_bonus * weather_m
-        if not np.isnan(run_stop_rate):
-            ypc_mod *= (1.0 - 0.05 * max(0.0, min(1.0, run_stop_rate)))
-        return max(0.0, ypc_mod * (14.0 * rsh))
+        ypc = float(row.get("ypc", np.nan))
+        if np.isnan(ypc): ypc = 4.2
+        rush_share = float(row.get("rush_share", 0.45))
+        plays = float(row.get("pace", 28.0) or 28.0)
+        run_rate = 1.0 - (0.56 + float(row.get("proe", 0.0) or 0.0))
+        box_z = float(row.get("heavy_box_rate_opp", 0.0))
+        box_mult = 1.0 - 0.06 * max(0.0, box_z)
+        mu = ypc * (rush_share * plays * run_rate) * box_mult * weather_m
+        return max(0.0, mu)
 
     if mkt == "player_rush_rec_yds":
-        # FIX: avoid Series.assign (Series has no .assign)
-        s_rush = row.copy(); s_rush.loc["market"] = "player_rush_yds"
-        s_rec  = row.copy(); s_rec.loc["market"]  = "player_rec_yds"
-        return max(0.0, base_mu(s_rush) + 0.7 * base_mu(s_rec))
+        # simple sum of the above two mus
+        row_pass = row.copy(); row_pass["market"] = "player_rec_yds"
+        row_rush = row.copy(); row_rush["market"] = "player_rush_yds"
+        return max(0.0, base_mu(row_pass) + base_mu(row_rush))
 
-    # default
-    return np.nan
+    # default safe fallback (anchor to line if available)
+    return float(line) if pd.notna(line) else np.nan
 
-def sigma_for_market(market: str, sigmas: dict[str,float], volatility_flag: float = 0.0) -> float:
-    s = float(sigmas.get(market, SIGMA_DEFAULTS.get(market, 25.0)))
-    if volatility_flag > 0:
+# ---------- σ logic ----------
+def sigma_for_market(mkt: str, sigmas: dict[str,float], volatility_flag: float = 0.0) -> float:
+    base = sigmas.get(mkt, SIGMA_DEFAULTS.get(mkt, 30.0))
+    s = float(base)
+    if volatility_flag and s > 0:
         s *= (1.0 + 0.15 * min(1.0, volatility_flag))
     return max(1e-6, s)
 
 # ---------- Pricing ----------
+def _ensure_over_under_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """If df lacks over_odds/under_odds but has side + price, synthesize them
+    by grouping on (event_id, player, market, line, book [if present])."""
+    if {"over_odds","under_odds"}.issubset(df.columns):
+        return df
+    side_col = None
+    for c in ("side","name"):
+        if c in df.columns:
+            side_col = c
+            break
+    price_col = None
+    for c in ("price_american","price","american","odds"):
+        if c in df.columns:
+            price_col = c
+            break
+    if side_col is None or price_col is None:
+        return df
+    key_candidates = ["event_id","player","market","line","book"]
+    keys = [k for k in key_candidates if k in df.columns]
+    if not keys:
+        return df
+    tmp = df[keys + [side_col, price_col]].copy()
+    tmp[side_col] = tmp[side_col].astype(str).str.upper()
+    piv = (tmp
+           .dropna(subset=[side_col, price_col])
+           .groupby(keys + [side_col], as_index=False)[price_col]
+           .first()
+           .pivot_table(index=keys, columns=side_col, values=price_col, aggfunc="first"))
+    if isinstance(piv, pd.DataFrame):
+        piv = piv.rename(columns={"OVER":"over_odds","UNDER":"under_odds"})
+        for c in ("over_odds","under_odds"):
+            if c not in piv.columns:
+                piv[c] = np.nan
+        piv = piv.reset_index()
+        df = df.merge(piv[keys + ["over_odds","under_odds"]], on=keys, how="left", suffixes=("","__p"))
+        for c in ("over_odds","under_odds"):
+            if c + "__p" in df.columns:
+                df[c] = pd.to_numeric(df.get(c), errors="coerce")
+                df[c] = df[c].where(df[c].notna(), pd.to_numeric(df[c + "__p"], errors="coerce"))
+                df.drop(columns=[c + "__p"], inplace=True, errors=True)
+    return df
+
 def main(props_path: str) -> None:
     props = pd.read_csv(props_path) if Path(props_path).exists() else pd.DataFrame()
     if props.empty:
@@ -292,6 +330,8 @@ def main(props_path: str) -> None:
     # Normalize market keys so downstream logic matches our internal names
     if "market" in props.columns:
         props["market"] = props["market"].astype(str).map(normalize_market_key)
+    # Build over/under columns if missing (from side + price)
+    props = _ensure_over_under_columns(props)
 
     # Metrics (tolerate empty/missing)
     from pandas.errors import EmptyDataError
@@ -319,6 +359,8 @@ def main(props_path: str) -> None:
     # --- Odds normalization & market de-vig (robust) ---
     if {"over_odds", "under_odds"}.issubset(df.columns):
         # Two-way present: remove vig from both sides
+        df["over_odds"]  = pd.to_numeric(df["over_odds"], errors="coerce")
+        df["under_odds"] = pd.to_numeric(df["under_odds"], errors="coerce")
         p_over_vig  = pd.to_numeric(df["over_odds"],  errors="coerce").apply(american_to_prob)
         p_under_vig = pd.to_numeric(df["under_odds"], errors="coerce").apply(american_to_prob)
         df["mkt_over_fair"], df["mkt_under_fair"] = devig_two_way(p_over_vig, p_under_vig)
@@ -341,16 +383,24 @@ def main(props_path: str) -> None:
     # Model μ/σ and Over% at the posted line
     sigmas = load_sigmas()
     df["model_proj"] = df.apply(base_mu, axis=1)
+    # Last-ditch: if model_proj is NaN or 0 but we have a posted line, anchor to line
+    if "line" in df.columns:
+        msk = df["model_proj"].replace(0, np.nan).isna() & pd.to_numeric(df["line"], errors="coerce").notna()
+        if msk.any():
+            df.loc[msk, "model_proj"] = pd.to_numeric(df.loc[msk, "line"], errors="coerce")
+
 
     # ★ enrich: more robust volatility flag using pressure enrich if present
-    vol_parts = []
-    for col in ["def_sack_rate_opp","def_pass_epa_opp","pressure_rate","pass_rush_win_rate"]:
-        if col in df.columns:
-            vol_parts.append(df[col].fillna(0))
-    if vol_parts:
+    # If you have pressure mismatch columns from metrics, average them; else safe heuristic
+    if {"press_rate_opp","def_sack_rate_opp"}.issubset(df.columns):
+        vol_parts = []
+        for c in ("press_rate_opp","def_sack_rate_opp"):
+            v = pd.to_numeric(df[c], errors="coerce")
+            v = (v - v.mean(skipna=True)) / (v.std(ddof=0, skipna=True) + 1e-9)
+            vol_parts.append(v.clip(lower=0))
         df["vol_flag"] = pd.concat(vol_parts, axis=1).mean(axis=1)
     else:
-        df["vol_flag"] = (df.get("def_sack_rate_opp",0).fillna(0) + np.maximum(0, df.get("def_pass_epa_opp",0).fillna(0))) / 2.0
+        df["vol_flag"] = (df.get("def_sack_rate_opp",0).fillna(0).clip(lower=0) + np.maximum(0, df.get("def_pass_epa_opp",0).fillna(0))) / 2.0
 
     df["model_sd"] = df.apply(lambda r: sigma_for_market(str(r.get("market","")), sigmas, r.get("vol_flag",0)), axis=1)
 
@@ -395,34 +445,15 @@ def main(props_path: str) -> None:
 
     df["edge_bonus_sgp"] = 0.0
     if "event_id" in df.columns and "position" in df.columns:
-        for eid, g in df.groupby("event_id"):
-            qb_rows = g[(g["position"].str.upper()=="QB") & (g["market"]=="player_pass_yds")]
-            if qb_rows.empty:
-                continue
-            qb_edge = float(qb_rows["edge_abs"].max())
-            if qb_edge < sgp_threshold:
-                continue
-            qb_team = qb_rows.iloc[0].get("team","")
-            wr_mask = (g["position"].str.upper().isin(["WR","TE"])) & \
-                      (g["team"]==qb_team) & \
-                      (g["market"].isin(["player_rec_yds","player_receptions"]))
-            lift = min(sgp_max_lift, qb_to_wr_corr * 0.25 * max(0.0, qb_edge-0.03))
-            df.loc[wr_mask.index[wr_mask], "edge_bonus_sgp"] += lift
+        # NOTE: keep conservative; apply tiny lift to WR if QB on same event has ELITE edge
+        qb_mask = (df["position"].astype(str).str.upper() == "QB") & (df["edge_abs"] >= sgp_threshold)
+        if qb_mask.any():
+            elite_events = set(df.loc[qb_mask, "event_id"].astype(str).tolist())
+            wr_mask = (df["position"].astype(str).str.upper() == "WR") & (df["event_id"].astype(str).isin(elite_events))
+            df.loc[wr_mask, "edge_bonus_sgp"] = np.minimum(sgp_max_lift, qb_to_wr_corr * df.loc[wr_mask, "edge_abs"] * 0.05)
 
     df["edge_total"] = (df["edge_abs"] + df["edge_bonus_sgp"]).clip(-1, 1)
 
-    # ---------- Persist sigma learning (EMA) ----------
-    for mkt, sub in df.groupby("market"):
-        try:
-            se = ((sub["line"].astype(float) - sub["model_proj"].astype(float))**2).mean()
-            est_sigma = float(np.sqrt(se)) if not np.isnan(se) else np.nan
-            if not np.isnan(est_sigma) and est_sigma>1e-3:
-                sigmas[mkt] = round(ema_update(sigmas.get(mkt, SIGMA_DEFAULTS.get(mkt,25.0)), est_sigma), 4)
-        except Exception:
-            pass
-    save_sigmas(sigmas)
-
-    # Output
     out_cols = [
         "event_id","player","team","opponent","position","market","line",
         "over_odds","under_odds","mkt_over_fair",
