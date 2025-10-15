@@ -404,16 +404,11 @@ def build_from_nflverse(season: int) -> pd.DataFrame:
         if c in df.columns:
             df[f"{c}_z"] = _z(df[c])
 
-    # --- ADD: defaults + schema safety ---
+    # --- defaults + schema safety ---
     df = _apply_team_defaults(df)
     df = _ensure_team_columns(df)
 
-    # 7) write to CSV
-    _safe_write(df, OUT)
-    print(f"[team_form] wrote rows={len(df)} → {OUT}")
-    return 0
-
-    # 8) ensure schema stability
+    # 7) ensure schema stability and return (CLI will write)
     cols = ["team","def_pass_epa","def_rush_epa","def_sack_rate",
             "pace","proe","light_box_rate","heavy_box_rate",
             "rz_rate","slot_rate","12p_rate","ay_per_att",
