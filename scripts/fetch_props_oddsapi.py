@@ -408,7 +408,10 @@ def fetch_odds(
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--books", default="draftkings,fanduel,betmgm,caesars")
+    # Accept both names; allow empty (no filter) with nargs='?' / const=''
+    ap.add_argument("--books", "--bookmakers", dest="books",
+                    default="draftkings,fanduel,betmgm,caesars",
+                    nargs="?", const="")
     ap.add_argument("--markets", default="player_pass_yds,player_reception_yds,player_rush_yds,player_receptions,player_rush_reception_yds,player_anytime_td")
     ap.add_argument("--region", default=REGION_DEFAULT)
     ap.add_argument("--date", nargs="?", default="", const="")
@@ -417,7 +420,7 @@ if __name__ == "__main__":
     args = ap.parse_args()
 
     fetch_odds(
-        books=[b.strip() for b in args.books.split(",") if b.strip()],
+        books=[b.strip() for b in (args.books or "").split(",") if b.strip()],
         markets=[m.strip() for m in args.markets.split(",") if m.strip()],
         region=args.region,
         date=args.date,
