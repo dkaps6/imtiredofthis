@@ -185,7 +185,10 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
                 raise
 
         # 3) odds props — v4 requires one market per request; also write odds_game.csv
-        b = ",".join(books or ["draftkings","fanduel","betmgm","caesars"])
+        if books is None:
+            b = "draftkings,fanduel,betmgm,caesars"
+        else:
+            b = ",".join(books)
 
         _default_markets = [
             "player_pass_yds",
