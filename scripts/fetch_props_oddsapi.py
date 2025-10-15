@@ -17,44 +17,45 @@ TIMEOUT_S = 25
 BACKOFF_S = [0.6, 1.2, 2.0, 3.5, 5.0]    # simple backoff on 429/5xx
 GAME_MARKETS = ["h2h", "spreads", "totals"]
 
-# Canonicalize market keys (single source of truth: alias -> canonical)
+# Canonicalize to vendor **official** keys (single source of truth: alias -> vendor)
+# Key fix vs earlier: receiving yards must be "player_receiving_yards"
 MARKET_ALIASES: Dict[str, str] = {
-    # receiving yards (this is the key you MUST hit in v4)
-    "player_reception_yds": "player_reception_yds",
-    "player_rec_yds": "player_reception_yds",
-    "player_receiving_yards": "player_reception_yds",
-    "player_receiving_yds": "player_reception_yds",
-    "receiving_yards": "player_reception_yds",
+    # receiving yards (official v4)
+    "player_receiving_yards": "player_receiving_yards",
+    "player_receiving_yds":   "player_receiving_yards",
+    "player_reception_yds":   "player_receiving_yards",  # your alias
+    "player_rec_yds":         "player_receiving_yards",
+    "receiving_yards":        "player_receiving_yards",
 
     # passing yards
-    "player_pass_yds": "player_pass_yds",
-    "player_passing_yards": "player_pass_yds",
-    "player_passing_yds": "player_pass_yds",
-    "passing_yards": "player_pass_yds",
+    "player_passing_yards": "player_passing_yards",
+    "player_passing_yds":   "player_passing_yards",
+    "player_pass_yds":      "player_passing_yards",
+    "passing_yards":        "player_passing_yards",
 
     # rushing yards
-    "player_rush_yds": "player_rush_yds",
-    "player_rushing_yards": "player_rush_yds",
-    "player_rushing_yds": "player_rush_yds",
-    "rushing_yards": "player_rush_yds",
+    "player_rushing_yards": "player_rushing_yards",
+    "player_rushing_yds":   "player_rushing_yards",
+    "player_rush_yds":      "player_rushing_yards",
+    "rushing_yards":        "player_rushing_yards",
 
     # receptions
     "player_receptions": "player_receptions",
-    "player_rec": "player_receptions",
-    "receptions": "player_receptions",
+    "player_rec":        "player_receptions",
+    "receptions":        "player_receptions",
 
     # rush + rec
-    "player_rush_reception_yds": "player_rush_reception_yds",
-    "player_rush_rec_yds": "player_rush_reception_yds",
-    "player_rush_and_receive_yards": "player_rush_reception_yds",
-    "player_rush_and_receive_yds": "player_rush_reception_yds",
-    "rushing_plus_receiving_yards": "player_rush_reception_yds",
-    "rush_rec_yards": "player_rush_reception_yds",
-    "rush_rec": "player_rush_reception_yds",
+    "player_rush_and_receive_yards": "player_rush_and_receive_yards",
+    "player_rush_and_receive_yds":   "player_rush_and_receive_yards",
+    "player_rush_reception_yds":     "player_rush_and_receive_yards",  # your alias
+    "player_rush_rec_yds":           "player_rush_and_receive_yards",
+    "rushing_plus_receiving_yards":  "player_rush_and_receive_yards",
+    "rush_rec_yards":                "player_rush_and_receive_yards",
+    "rush_rec":                      "player_rush_and_receive_yards",
 
     # anytime TD
-    "player_anytime_td": "player_anytime_td",
-    "anytime_td": "player_anytime_td",
+    "player_anytime_td":        "player_anytime_td",
+    "anytime_td":               "player_anytime_td",
     "player_anytime_touchdown": "player_anytime_td",
 
     # team/game markets (passed through but filtered from player list)
@@ -73,7 +74,7 @@ def _normalize_market(m: str) -> str:
     return MARKET_ALIASES.get(key, key)
 
 # Markets that should be fetched via the sport-level bulk endpoint.
-# IMPORTANT: receiving yards should **not** be forced to bulk (can 422 there).
+# IMPORTANT: most player props should use per-event endpoint; keep empty unless you know a bulk key works.
 BULK_ONLY_CANONICAL: set[str] = set()
 
 # ------------------------- LOGGING ------------------------
@@ -235,7 +236,7 @@ def _fetch_game_odds(api_key: str, region: str, books: set[str]) -> pd.DataFrame
 
 def _fetch_market_for_events(api_key: str, region: str, books: set[str],
                              event_ids: list[str], market_key: str) -> pd.DataFrame:
-    # Normalize ASAP so logs and routing are canonical
+    # Normalize ASAP so logs and routing are vendor-canonical
     market_key = _normalize_market(market_key)
     frames: List[pd.DataFrame] = []
     for eid in event_ids:
@@ -247,7 +248,6 @@ def _fetch_market_for_events(api_key: str, region: str, books: set[str],
         log.info(f"{market_key} eid={eid} status={status} limit={_lim(headers)}")
 
         if status == 200 and isinstance(js, dict):
-            # If our book filter removed everything, retry once without it
             bm_count = len(js.get("bookmakers", []))
             if bm_count == 0 and books:
                 log.info(f"{market_key} eid={eid}: 0 bookmakers after filter → retry w/o filter")
@@ -265,7 +265,6 @@ def _fetch_market_for_events(api_key: str, region: str, books: set[str],
                 frames.append(df)
 
         elif status in (401, 403, 422):
-            # 422 happens when the market isn't offered for that event/endpoint
             log.info(f"skip market={market_key} for eid={eid}: {js}")
         else:
             log.info(f"market fetch error eid={eid} market={market_key}: {js}")
@@ -274,7 +273,6 @@ def _fetch_market_for_events(api_key: str, region: str, books: set[str],
         return pd.DataFrame()
     return pd.concat(frames, ignore_index=True)
 
-# sport-level bulk fetch (still available for any other markets you add later)
 def _fetch_bulk_market(api_key: str, region: str, books: set[str], market_key: str) -> pd.DataFrame:
     market_key = _normalize_market(market_key)
     url = f"{BASE}/sports/{SPORT}/odds"
@@ -366,8 +364,8 @@ def fetch_odds(
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--books", default="draftkings,fanduel,betmgm,caesars")
-    # default includes canonical receiving yards
-    ap.add_argument("--markets", default="player_pass_yds,player_reception_yds,player_rush_yds,player_receptions,player_anytime_td")
+    # default now includes vendor-canonical receiving yards
+    ap.add_argument("--markets", default="player_passing_yards,player_receiving_yards,player_rushing_yards,player_receptions,player_anytime_td")
     ap.add_argument("--region", default=REGION_DEFAULT)
     ap.add_argument("--date", nargs="?", default="", const="")  # accept --date with or without a value
     ap.add_argument("--out", default="outputs/props_raw.csv")
