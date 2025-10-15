@@ -186,7 +186,7 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
 
         # 3) odds props — v4 requires one market per request; also write odds_game.csv
 
-        # PATCH: respect explicit empty list (no bookmaker filter). Only use defaults if books is None.
+        # Respect explicit empty list (no bookmaker filter). Only default if None.
         if books is None:
             b = "draftkings,fanduel,betmgm,caesars"
         else:
@@ -202,15 +202,14 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
             "player_rush_and_receive_yards",
             "player_anytime_td",
         ]
-        # NEW: de-duplicate any overlapping aliases before fetching
+        # de-duplicate overlapping aliases before fetching
         markets_to_pull = [m.strip() for m in (markets or _default_markets) if m.strip()]
-        markets_to_pull = list(dict.fromkeys(markets_to_pull))  # NEW
+        markets_to_pull = list(dict.fromkeys(markets_to_pull))
 
         # ensure game lines exist once
-        # PATCH: only include --books flag when non-empty
         game_cmd = "python scripts/fetch_props_oddsapi.py "
         if b:
-            game_cmd += f"--books {b} "
+            game_cmd += f"--bookmakers {b} "   # 👈 emit 'bookmakers' (not 'books')
         game_cmd += (
             f"--markets h2h,spreads,totals "
             f"--date {date or ''} "
@@ -220,10 +219,9 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
 
         # fetch ALL player markets in one call → writes outputs/props_raw.csv (+ props_raw_wide.csv)
         all_mk = ",".join(markets_to_pull)
-        # PATCH: only include --books flag when non-empty
         props_cmd = "python scripts/fetch_props_oddsapi.py "
         if b:
-            props_cmd += f"--books {b} "
+            props_cmd += f"--bookmakers {b} "  # 👈 emit 'bookmakers' (not 'books')
         props_cmd += (
             f"--markets {all_mk} "
             f"--date {date or ''} "
@@ -286,14 +284,16 @@ def cli_main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", required=True)
     ap.add_argument("--date", default="")
-    ap.add_argument("--books", default="draftkings,fanduel,betmgm,caesars")
+    # Accept both names; map to same var
+    ap.add_argument("--books", "--bookmakers", dest="books",
+                    default="draftkings,fanduel,betmgm,caesars")
     ap.add_argument("--markets", default="")
     args = ap.parse_args()
 
     return run_pipeline(
         season=args.season,
         date=args.date,
-        books=[b.strip() for b in args.books.split(",") if b.strip()],  # [] if user passes --books=""
+        books=[b.strip() for b in args.books.split(",") if b.strip()],  # [] if user passes --bookmakers=""
         markets=[m.strip() for m in args.markets.split(",") if m.strip()] or None,
     )
 
