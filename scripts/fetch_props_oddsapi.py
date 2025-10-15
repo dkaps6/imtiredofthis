@@ -15,7 +15,14 @@ TIMEOUT_S = 25
 BACKOFF_S = [0.6, 1.2, 2.0, 3.5, 5.0]
 GAME_MARKETS = ["h2h", "spreads", "totals"]
 
-# Map any aliases -> SHORT vendor keys that worked in your pipeline
+# --- US bookmaker keys (docs: US Bookmakers). Unknown keys are dropped with a warning.
+US_BOOK_KEYS = {
+    # keep this lean; expand if/when you confirm more keys on the docs page
+    "draftkings", "fanduel", "betmgm", "caesars",
+    # Add more after verifying on https://the-odds-api.com/sports-odds-data/bookmaker-apis.html#us-bookmakers
+}
+
+# Map any aliases -> SHORT vendor keys that work at the per-event endpoint
 MARKET_ALIASES: Dict[str, str] = {
     # passing yards
     "player_passing_yards": "player_pass_yds",
@@ -269,6 +276,13 @@ def fetch_odds(
         log.info("ERROR: ODDS_API_KEY not set"); sys.exit(2)
 
     books_set = {b.strip().lower().replace(" ", "_") for b in books if b.strip()}
+    # validate bookmaker keys for us region
+    if region == "us" and books_set:
+        bad = [b for b in books_set if b not in US_BOOK_KEYS]
+        if bad:
+            log.info(f"unknown/retired bookmaker key(s) for region=us: {bad} → removing from filter")
+            books_set = {b for b in books_set if b in US_BOOK_KEYS}
+
     markets = [m.strip() for m in markets if m.strip()]
 
     normalized_markets: List[str] = []
