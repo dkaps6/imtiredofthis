@@ -8,90 +8,68 @@ from typing import List, Tuple, Optional, Any, Dict
 import requests
 import pandas as pd
 
-# ------------------------- CONFIG -------------------------
-
-SPORT = "americanfootball_nfl"          # The Odds API sport key (v4)
+SPORT = "americanfootball_nfl"
 BASE  = "https://api.the-odds-api.com/v4"
 REGION_DEFAULT = "us"
 TIMEOUT_S = 25
-BACKOFF_S = [0.6, 1.2, 2.0, 3.5, 5.0]    # simple backoff on 429/5xx
+BACKOFF_S = [0.6, 1.2, 2.0, 3.5, 5.0]
 GAME_MARKETS = ["h2h", "spreads", "totals"]
 
-# Canonicalize to vendor **official** keys (single source of truth: alias -> vendor)
-# Key fix vs earlier: receiving yards must be "player_receiving_yards"
+# Map any aliases -> SHORT vendor keys that worked in your pipeline
 MARKET_ALIASES: Dict[str, str] = {
-    # receiving yards (official v4)
-    "player_receiving_yards": "player_receiving_yards",
-    "player_receiving_yds":   "player_receiving_yards",
-    "player_reception_yds":   "player_receiving_yards",  # your alias
-    "player_rec_yds":         "player_receiving_yards",
-    "receiving_yards":        "player_receiving_yards",
-
     # passing yards
-    "player_passing_yards": "player_passing_yards",
-    "player_passing_yds":   "player_passing_yards",
-    "player_pass_yds":      "player_passing_yards",
-    "passing_yards":        "player_passing_yards",
+    "player_passing_yards": "player_pass_yds",
+    "player_passing_yds":   "player_pass_yds",
+    "player_pass_yds":      "player_pass_yds",
+    "passing_yards":        "player_pass_yds",
+
+    # receiving yards
+    "player_receiving_yards": "player_reception_yds",
+    "player_receiving_yds":   "player_reception_yds",
+    "player_reception_yds":   "player_reception_yds",
+    "player_rec_yds":         "player_reception_yds",
+    "receiving_yards":        "player_reception_yds",
 
     # rushing yards
-    "player_rushing_yards": "player_rushing_yards",
-    "player_rushing_yds":   "player_rushing_yards",
-    "player_rush_yds":      "player_rushing_yards",
-    "rushing_yards":        "player_rushing_yards",
+    "player_rushing_yards": "player_rush_yds",
+    "player_rushing_yds":   "player_rush_yds",
+    "player_rush_yds":      "player_rush_yds",
+    "rushing_yards":        "player_rush_yds",
+
+    # rush + rec yards
+    "player_rush_and_receive_yards": "player_rush_reception_yds",
+    "player_rush_and_receive_yds":   "player_rush_reception_yds",
+    "player_rush_reception_yds":     "player_rush_reception_yds",
+    "player_rush_rec_yds":           "player_rush_reception_yds",
+    "rush_rec_yards":                "player_rush_reception_yds",
 
     # receptions
     "player_receptions": "player_receptions",
-    "player_rec":        "player_receptions",
     "receptions":        "player_receptions",
-
-    # rush + rec
-    "player_rush_and_receive_yards": "player_rush_and_receive_yards",
-    "player_rush_and_receive_yds":   "player_rush_and_receive_yards",
-    "player_rush_reception_yds":     "player_rush_and_receive_yards",  # your alias
-    "player_rush_rec_yds":           "player_rush_and_receive_yards",
-    "rushing_plus_receiving_yards":  "player_rush_and_receive_yards",
-    "rush_rec_yards":                "player_rush_and_receive_yards",
-    "rush_rec":                      "player_rush_and_receive_yards",
 
     # anytime TD
     "player_anytime_td":        "player_anytime_td",
     "anytime_td":               "player_anytime_td",
     "player_anytime_touchdown": "player_anytime_td",
 
-    # team/game markets (passed through but filtered from player list)
-    "h2h": "h2h",
-    "moneyline": "h2h",
-    "ml": "h2h",
-    "spreads": "spreads",
-    "spread": "spreads",
-    "totals": "totals",
-    "total": "totals",
-    "game_totals": "totals",
+    # pass-through game markets
+    "h2h": "h2h", "moneyline": "h2h", "ml": "h2h",
+    "spreads": "spreads", "spread": "spreads",
+    "totals": "totals", "total": "totals", "game_totals": "totals",
 }
 
 def _normalize_market(m: str) -> str:
     key = (m or "").strip().lower()
     return MARKET_ALIASES.get(key, key)
 
-# Markets that should be fetched via the sport-level bulk endpoint.
-# IMPORTANT: most player props should use per-event endpoint; keep empty unless you know a bulk key works.
-BULK_ONLY_CANONICAL: set[str] = {
-    "player_passing_yards",
-    "player_receiving_yards",
-    "player_rushing_yards",
-    "player_receptions",
-    "player_rush_and_receive_yards",
-    "player_anytime_td",
-}
-# ------------------------- LOGGING ------------------------
+# Player props should use per-event endpoint; keep bulk only for game markets
+BULK_ONLY_CANONICAL: set[str] = set(GAME_MARKETS)
 
 log = logging.getLogger("oddsapi")
 log.setLevel(logging.INFO)
 h = logging.StreamHandler(sys.stdout)
 h.setFormatter(logging.Formatter("[oddsapi] %(message)s"))
 log.addHandler(h)
-
-# ------------------------- HTTP --------------------------
 
 def _try_json(r: requests.Response):
     try:
@@ -113,8 +91,7 @@ def _get(url: str, params: dict, max_retries: int = 5) -> Tuple[int, Optional[An
             if r.status_code in (429, 500, 502, 503, 504):
                 wait = BACKOFF_S[min(i, len(BACKOFF_S)-1)]
                 log.info(f"HTTP {r.status_code} → backoff {wait}s: {url}")
-                time.sleep(wait)
-                continue
+                time.sleep(wait); continue
             return r.status_code, _try_json(r), r.headers
         except requests.RequestException as e:
             wait = BACKOFF_S[min(i, len(BACKOFF_S)-1)]
@@ -129,31 +106,22 @@ def _lim(headers: dict) -> dict:
             out[k] = headers.get(k)
     return out
 
-# ------------------------- NORMALIZERS --------------------
-
 def _normalize_game_rows(events: list, books_filter: set[str]) -> pd.DataFrame:
     rows = []
     for ev in events or []:
-        eid = ev.get("id")
-        commence = ev.get("commence_time")
-        home = ev.get("home_team")
-        away = ev.get("away_team")
+        eid = ev.get("id"); commence = ev.get("commence_time")
+        home = ev.get("home_team"); away = ev.get("away_team")
         for bm in ev.get("bookmakers", []):
             book = (bm.get("title") or "").strip().lower().replace(" ", "_")
-            if books_filter and book not in books_filter:
-                continue
+            if books_filter and book not in books_filter: continue
             for mk in bm.get("markets", []):
                 market = mk.get("key")
                 for oc in mk.get("outcomes", []):
                     rows.append({
-                        "event_id": eid,
-                        "commence_time": commence,
-                        "home_team": home,
-                        "away_team": away,
-                        "book": book,
-                        "market": market,
-                        "name": oc.get("name"),
-                        "price_american": oc.get("price"),
+                        "event_id": eid, "commence_time": commence,
+                        "home_team": home, "away_team": away,
+                        "book": book, "market": market,
+                        "name": oc.get("name"), "price_american": oc.get("price"),
                         "point": oc.get("point"),
                     })
     return pd.DataFrame.from_records(rows)
@@ -161,30 +129,23 @@ def _normalize_game_rows(events: list, books_filter: set[str]) -> pd.DataFrame:
 def _normalize_player_rows(events: list, books_filter: set[str], market_key: str) -> pd.DataFrame:
     recs: List[Dict[str, Any]] = []
     for ev in events or []:
-        eid = ev.get("id")
-        commence = ev.get("commence_time")
+        eid = ev.get("id"); commence = ev.get("commence_time")
         for bm in ev.get("bookmakers", []):
             book = (bm.get("title") or "").strip().lower().replace(" ", "_")
-            if books_filter and book not in books_filter:
-                continue
+            if books_filter and book not in books_filter: continue
             for mk in bm.get("markets", []):
-                if mk.get("key") != market_key:
-                    continue
+                if mk.get("key") != market_key: continue
                 for oc in mk.get("outcomes", []):
-                    side = (oc.get("name") or "").upper()    # "OVER"/"UNDER" or "YES"/"NO"
+                    side = (oc.get("name") or "").upper()
                     if market_key == "player_anytime_td":
                         if side == "YES": side = "OVER"
                         if side == "NO":  side = "UNDER"
                     player = oc.get("description") or oc.get("participant")
                     recs.append({
-                        "event_id": eid,
-                        "commence_time": commence,
-                        "book": book,
-                        "market": market_key,
-                        "player": player,
-                        "side": side,
-                        "line": oc.get("point"),
-                        "price_american": oc.get("price"),
+                        "event_id": eid, "commence_time": commence,
+                        "book": book, "market": market_key,
+                        "player": player, "side": side,
+                        "line": oc.get("point"), "price_american": oc.get("price"),
                     })
     df = pd.DataFrame.from_records(recs)
     if not df.empty:
@@ -193,106 +154,106 @@ def _normalize_player_rows(events: list, books_filter: set[str], market_key: str
     return df
 
 def _wide_over_under(df: pd.DataFrame) -> pd.DataFrame:
-    if df.empty:
-        return df
-    key = ["event_id", "commence_time", "book", "market", "player", "line"]
-    over  = (df[df["side"] == "OVER"]
-             .groupby(key, as_index=False)["price_american"]
-             .first().rename(columns={"price_american": "over_odds"}))
-    under = (df[df["side"] == "UNDER"]
-             .groupby(key, as_index=False)["price_american"]
-             .first().rename(columns={"price_american": "under_odds"}))
+    if df.empty: return df
+    key = ["event_id","commence_time","book","market","player","line"]
+    over  = (df[df["side"]=="OVER"].groupby(key, as_index=False)["price_american"].first()
+             .rename(columns={"price_american":"over_odds"}))
+    under = (df[df["side"]=="UNDER"].groupby(key, as_index=False)["price_american"].first()
+             .rename(columns={"price_american":"under_odds"}))
     return over.merge(under, on=key, how="outer")
-
-# ------------------------- CORE FETCHERS ------------------
 
 def _fetch_events_by_h2h(api_key: str, region: str, books: set[str]) -> list:
     url = f"{BASE}/sports/{SPORT}/odds"
     params = {"apiKey": api_key, "regions": region, "markets": "h2h", "oddsFormat": "american"}
-    if books:
-        params["bookmakers"] = ",".join(sorted(books))
+    if books: params["bookmakers"] = ",".join(sorted(books))
     status, js, headers = _get(url, params)
     log.info(f"events status={status} limit={_lim(headers)}")
     if status != 200 or not isinstance(js, list):
-        log.info(f"failed to fetch events: {js}")
-        return []
+        log.info(f"failed to fetch events: {js}"); return []
     if books:
         filtered = []
         for ev in js:
-            keep = any(
-                (bm.get("title") or "").strip().lower().replace(" ", "_") in books
-                for bm in ev.get("bookmakers", [])
-            )
-            if keep:
-                filtered.append(ev)
+            keep = any((bm.get("title") or "").strip().lower().replace(" ", "_") in books
+                       for bm in ev.get("bookmakers", []))
+            if keep: filtered.append(ev)
         return filtered
     return js
 
 def _fetch_game_odds(api_key: str, region: str, books: set[str]) -> pd.DataFrame:
     url = f"{BASE}/sports/{SPORT}/odds"
     params = {"apiKey": api_key, "regions": region, "markets": ",".join(GAME_MARKETS), "oddsFormat": "american"}
-    if books:
-        params["bookmakers"] = ",".join(sorted(books))
+    if books: params["bookmakers"] = ",".join(sorted(books))
     status, js, headers = _get(url, params)
     log.info(f"game-odds status={status} limit={_lim(headers)}")
     if status != 200 or not isinstance(js, list):
-        log.info(f"failed to fetch game odds: {js}")
-        return pd.DataFrame()
+        log.info(f"failed to fetch game odds: {js}"); return pd.DataFrame()
     return _normalize_game_rows(js, books)
+
+# try alternate short keys if a vendor returns 422 INVALID_MARKET
+ALT_KEYS = {
+    "player_reception_yds": ["player_receiving_yds", "player_receiving_yards"],
+    "player_pass_yds":      ["player_passing_yds", "player_passing_yards"],
+    "player_rush_yds":      ["player_rushing_yds", "player_rushing_yards"],
+    "player_rush_reception_yds": ["player_rush_and_receive_yards", "player_rush_and_receive_yds"],
+    "player_receptions":    ["receptions"],
+    "player_anytime_td":    ["anytime_td"],
+}
 
 def _fetch_market_for_events(api_key: str, region: str, books: set[str],
                              event_ids: list[str], market_key: str) -> pd.DataFrame:
-    # Normalize ASAP so logs and routing are vendor-canonical
-    market_key = _normalize_market(market_key)
+    mk = _normalize_market(market_key)
     frames: List[pd.DataFrame] = []
-    for eid in event_ids:
-        url = f"{BASE}/sports/{SPORT}/events/{eid}/odds"
-        params = {"apiKey": api_key, "regions": region, "markets": market_key, "oddsFormat": "american"}
-        if books:
-            params["bookmakers"] = ",".join(sorted(books))
-        status, js, headers = _get(url, params)
-        log.info(f"{market_key} eid={eid} status={status} limit={_lim(headers)}")
 
-        if status == 200 and isinstance(js, dict):
-            bm_count = len(js.get("bookmakers", []))
-            if bm_count == 0 and books:
-                log.info(f"{market_key} eid={eid}: 0 bookmakers after filter → retry w/o filter")
-                params2 = dict(params)
-                params2.pop("bookmakers", None)
-                status2, js2, headers2 = _get(url, params2)
-                if status2 == 200 and isinstance(js2, dict):
-                    df = _normalize_player_rows([js2], set(), market_key)
+    tried = [mk] + ALT_KEYS.get(mk, [])
+    for mk_try in tried:
+        got_any = False
+        for eid in event_ids:
+            url = f"{BASE}/sports/{SPORT}/events/{eid}/odds"
+            params = {"apiKey": api_key, "regions": region, "markets": mk_try, "oddsFormat": "american"}
+            if books: params["bookmakers"] = ",".join(sorted(books))
+            status, js, headers = _get(url, params)
+            log.info(f"{mk_try} eid={eid} status={status} limit={_lim(headers)}")
+
+            if status == 200 and isinstance(js, dict):
+                bm_count = len(js.get("bookmakers", []))
+                if bm_count == 0 and books:
+                    log.info(f"{mk_try} eid={eid}: 0 bookmakers after filter → retry w/o filter")
+                    params2 = dict(params); params2.pop("bookmakers", None)
+                    status2, js2, headers2 = _get(url, params2)
+                    if status2 == 200 and isinstance(js2, dict):
+                        df = _normalize_player_rows([js2], set(), mk_try)
+                    else:
+                        df = pd.DataFrame()
                 else:
-                    df = pd.DataFrame()
+                    df = _normalize_player_rows([js], books, mk_try)
+                if not df.empty:
+                    frames.append(df); got_any = True
+
+            elif status == 422:
+                # try next synonym
+                continue
+            elif status in (401,403,404):
+                log.info(f"skip market={mk_try} for eid={eid}: {js}")
             else:
-                df = _normalize_player_rows([js], books, market_key)
+                log.info(f"market fetch error eid={eid} market={mk_try}: {js}")
 
-            if not df.empty:
-                frames.append(df)
+        if got_any:
+            break  # stop at first synonym that yields data
 
-        elif status in (401, 403, 422):
-            log.info(f"skip market={market_key} for eid={eid}: {js}")
-        else:
-            log.info(f"market fetch error eid={eid} market={market_key}: {js}")
-
-    if not frames:
-        return pd.DataFrame()
+    if not frames: return pd.DataFrame()
     return pd.concat(frames, ignore_index=True)
 
 def _fetch_bulk_market(api_key: str, region: str, books: set[str], market_key: str) -> pd.DataFrame:
-    market_key = _normalize_market(market_key)
+    # used only for game markets
+    mk = _normalize_market(market_key)
     url = f"{BASE}/sports/{SPORT}/odds"
-    params = {"apiKey": api_key, "regions": region, "markets": market_key, "oddsFormat": "american"}
-    if books:
-        params["bookmakers"] = ",".join(sorted(books))
+    params = {"apiKey": api_key, "regions": region, "markets": mk, "oddsFormat": "american"}
+    if books: params["bookmakers"] = ",".join(sorted(books))
     status, js, headers = _get(url, params)
-    log.info(f"bulk {market_key} status={status} limit={_lim(headers)}")
+    log.info(f"bulk {mk} status={status} limit={_lim(headers)}")
     if status != 200 or not isinstance(js, list):
-        log.info(f"bulk fetch failed market={market_key}: {js}")
-        return pd.DataFrame()
-    return _normalize_player_rows(js, books, market_key)
-
-# ------------------------- PUBLIC ENTRY -------------------
+        log.info(f"bulk fetch failed market={mk}: {js}"); return pd.DataFrame()
+    return _normalize_player_rows(js, books, mk)
 
 def fetch_odds(
     *,
@@ -305,25 +266,20 @@ def fetch_odds(
 ) -> None:
     api_key = os.getenv("ODDS_API_KEY", "").strip()
     if not api_key:
-        log.info("ERROR: ODDS_API_KEY not set")
-        sys.exit(2)
+        log.info("ERROR: ODDS_API_KEY not set"); sys.exit(2)
 
     books_set = {b.strip().lower().replace(" ", "_") for b in books if b.strip()}
     markets = [m.strip() for m in markets if m.strip()]
 
-    # Resolve aliases & drop any non-player markets if they slipped in
     normalized_markets: List[str] = []
     for mk in markets:
         mk = _normalize_market(mk)
-        if mk in GAME_MARKETS:
-            log.info(f"skip non-player market in --markets: {mk}")
-            continue
         normalized_markets.append(mk)
     markets = normalized_markets
 
     Path("outputs").mkdir(parents=True, exist_ok=True)
 
-    # events + game odds
+    # events + game odds (bulk)
     events = _fetch_events_by_h2h(api_key, region, books_set)
     event_ids = [e.get("id") for e in events if e.get("id")]
 
@@ -335,24 +291,22 @@ def fetch_odds(
         pd.DataFrame().to_csv(out_game, index=False)
         log.info(f"wrote empty {out_game}")
 
-    # per-market player props (v4)
     frames: List[pd.DataFrame] = []
     for mk in markets:
-        canon = _normalize_market(mk)
-        if not event_ids and canon not in BULK_ONLY_CANONICAL:
-            break
-        log.info(f"=== MARKET {canon} ===")
-        if canon in BULK_ONLY_CANONICAL:
-            df = _fetch_bulk_market(api_key, region, books_set, canon)
+        if mk in GAME_MARKETS:
+            log.info(f"=== MARKET {mk} (bulk) ===")
+            df = _fetch_bulk_market(api_key, region, books_set, mk)
         else:
-            df = _fetch_market_for_events(api_key, region, books_set, event_ids, canon)
+            if not event_ids:
+                log.info(f"no events → skip player market {mk}")
+                continue
+            log.info(f"=== MARKET {mk} (per-event) ===")
+            df = _fetch_market_for_events(api_key, region, books_set, event_ids, mk)
         if not df.empty:
             frames.append(df)
 
     if not frames:
-        pd.DataFrame(columns=[
-            "event_id","commence_time","book","market","player","side","line","price_american"
-        ]).to_csv(out, index=False)
+        pd.DataFrame(columns=["event_id","commence_time","book","market","player","side","line","price_american"]).to_csv(out, index=False)
         log.info(f"wrote empty {out}")
         return
 
@@ -365,22 +319,19 @@ def fetch_odds(
     wide.to_csv(wide_out, index=False)
     log.info(f"wrote {wide_out} rows={len(wide)}")
 
-# ------------------------- CLI ----------------------------
-
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--books", default="draftkings,fanduel,betmgm,caesars")
-    # default now includes vendor-canonical receiving yards
-    ap.add_argument("--markets", default="player_passing_yards,player_receiving_yards,player_rushing_yards,player_receptions,player_anytime_td")
+    ap.add_argument("--markets", default="player_pass_yds,player_reception_yds,player_rush_yds,player_receptions,player_rush_reception_yds,player_anytime_td")
     ap.add_argument("--region", default=REGION_DEFAULT)
-    ap.add_argument("--date", nargs="?", default="", const="")  # accept --date with or without a value
+    ap.add_argument("--date", nargs="?", default="", const="")
     ap.add_argument("--out", default="outputs/props_raw.csv")
     ap.add_argument("--out_game", default="outputs/odds_game.csv")
     args = ap.parse_args()
 
     fetch_odds(
         books=[b.strip() for b in args.books.split(",") if b.strip()],
-        markets=[_normalize_market(m) for m in args.markets.split(',') if m.strip()],
+        markets=[_normalize_market(m) for m in args.markets.split(",") if m.strip()],
         region=args.region,
         date=args.date,
         out=args.out,
