@@ -184,11 +184,14 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
 
         # 3) odds props — v4 requires one market per request; also write odds_game.csv
 
-        # Respect explicit empty list (no bookmaker filter). Only default if None.
+        # Forward the exact user intent to the fetcher:
+        # - books == []  → user passed --bookmakers "" → pass --bookmakers "" (no filter)
+        # - books is None → no user flag → let fetcher use its own default
+        # - books list (non-empty) → pass the same list
         if books is None:
-            b = "draftkings,fanduel,betmgm,caesars"
+            b = None  # do not include the flag; fetcher will use its default
         else:
-            b = ",".join(books)
+            b = ",".join(books)  # may be "", which we will still forward
 
         _default_markets = [
             "player_pass_yds",
@@ -205,8 +208,8 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
 
         # ensure game lines exist once
         game_cmd = "python scripts/fetch_props_oddsapi.py "
-        if b:
-            game_cmd += f"--bookmakers {b} "
+        if b is not None:
+            game_cmd += f'--bookmakers "{b}" '
         game_cmd += (
             f"--markets h2h,spreads,totals "
             f"--date {date or ''} "
@@ -217,8 +220,8 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
         # fetch ALL player markets in one call → writes outputs/props_raw.csv (+ props_raw_wide.csv)
         all_mk = ",".join(markets_to_pull)
         props_cmd = "python scripts/fetch_props_oddsapi.py "
-        if b:
-            props_cmd += f"--bookmakers {b} "
+        if b is not None:
+            props_cmd += f'--bookmakers "{b}" '
         props_cmd += (
             f"--markets {all_mk} "
             f"--date {date or ''} "
