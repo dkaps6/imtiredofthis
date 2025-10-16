@@ -54,15 +54,16 @@ jobs:
               print("[diag] could not import engine:", e)
           PY
 
-      # IMPORTANT: run your repo's engine file directly to avoid module name collisions
+      # Run the full model pipeline
       - name: "Run pipeline"
         run: |
           set -e
           SEASON="${{ github.event.inputs.season }}"
           DATE="${{ github.event.inputs.date }}"
           BOOKS="${{ github.event.inputs.bookmakers }}"
-          echo "▶ python engine/engine.py --season \"$SEASON\" --date \"$DATE\" --bookmakers=\"$BOOKS\""
-          python engine/engine.py --season "$SEASON" --date "$DATE" --bookmakers="$BOOKS"
+
+          echo "▶ Running pipeline for season=$SEASON date=$DATE books=$BOOKS"
+          python -m engine --season "$SEASON" --date "$DATE" --bookmakers="$BOOKS"
 
       - name: "Upload run artifacts"
         if: always()
