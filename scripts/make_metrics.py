@@ -304,8 +304,8 @@ def build_metrics(season: int) -> pd.DataFrame:
             "light_box_rate":"light_box_rate_opp",
             "heavy_box_rate":"heavy_box_rate_opp",
         })
-        keep_opp = ["opponent","def_pass_epa_opp","def_rush_epa_opp","def_sack_rate_opp","light_box_rate_opp","heavy_box_rate_opp"]
-        base = base.merge(opp_tf[keep_opp].drop_duplicates(), on="opponent", how="left")
+    keep_opp = ["opponent","def_pass_epa_opp","def_rush_epa_opp","def_sack_rate_opp","light_box_rate_opp","heavy_box_rate_opp"]
+    base = base.merge(opp_tf[keep_opp].drop_duplicates(), on="opponent", how="left")
 
     if not cov.empty and "defense_team" in cov.columns:
         cov2 = cov.rename(columns={"defense_team":"opponent"})
