@@ -167,19 +167,29 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
 
     try:
         # Pre-materialize enrichers that are independent of the odds/providers
+        # (added) fallback to subprocess if module not importable
         try:
             if _pfr_pull_main:
                 _pfr_pull_main(int(season))
+            else:
+                _run(f"python scripts/providers/pfr_pull.py --season {season}",
+                     label="pfr_prefetch", snap_after=["data/pfr_player_enrich.csv","data/pfr_team_enrich.csv"])
         except Exception as e:
             print(f"[engine] PFR enrich failed (non-fatal): {type(e).__name__}: {e}")
         try:
             if _espn_depth_main:
                 _espn_depth_main()
+            else:
+                _run("python scripts/providers/espn_depth.py",
+                     label="espn_depth_prefetch", snap_after=["data/depth_chart_espn.csv"])
         except Exception as e:
             print(f"[engine] ESPN depth chart fetch failed (non-fatal): {type(e).__name__}: {e}")
         try:
             if _ourlads_depth_main:
                 _ourlads_depth_main()
+            else:
+                _run("python scripts/providers/ourlads_depth.py",
+                     label="ourlads_depth_prefetch", snap_after=["data/depth_chart_ourlads.csv"])
         except Exception as e:
             print(f"[engine] OurLads depth chart fetch failed (non-fatal): {type(e).__name__}: {e}")
 
