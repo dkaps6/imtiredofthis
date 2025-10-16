@@ -9,6 +9,9 @@ OUT = Path("data/player_form.csv")
 LOG_DIR = Path("logs"); LOG_DIR.mkdir(parents=True, exist_ok=True)
 ERR_LOG = LOG_DIR / "nfl_pbp_error.txt"
 
+# Toggle PFR use (off by default)
+USE_PFR = os.getenv("USE_PFR", "").strip() in ("1","true","TRUE","yes","YES")
+
 # ---------------------- utils ----------------------
 def _safe_read_csv(p: str | Path) -> pd.DataFrame:
     p = Path(p)
@@ -27,7 +30,6 @@ def _safe_write(df: pd.DataFrame, out: Path) -> None:
             "target_share","rush_share","route_rate",
             "rz_tgt_share","rz_carry_share",
             "yprr_proxy","ypc","qb_ypa",
-            # NEW: explicit ypt + route_share alias for downstream if needed
             "ypt"
         ]).to_csv(out, index=False)
     else:
@@ -67,7 +69,6 @@ def _fetch_pbp(season: int, *, allow_fallback: bool = False, tries: int = 3, wai
     last = None
     seasons_to_try = [season] if not allow_fallback else [season, season-1]
 
-    # FIX: initialize use_readpy just like in team file
     try:
         import nflreadpy as nfr
         use_readpy = True
@@ -143,7 +144,7 @@ def build_player_form(season: int, *, allow_fallback: bool = False) -> pd.DataFr
     else:
         rbp["is_rz_play"] = 0
     rz_pass = rbp.loc[rbp["pass_flag"]==True, ["game_id","posteam","receiver","is_rz_play"]]
-    rz_rush = rbp.loc[rbp["rush_flag"]==True, ["game_id","posteam","rusher","is_rz_play"]]
+    rz_rush = rbp.loc[pbp["rush_flag"]==True, ["game_id","posteam","rusher","is_rz_play"]]
     ply_rz_tgt  = rz_pass.groupby(["game_id","posteam","receiver"]).agg(player_rz_tgt=("is_rz_play","sum"))
     team_rz_tgt = rz_pass.groupby(["game_id","posteam"]).agg(team_rz_tgt=("is_rz_play","sum"))
     ply_rz_carry  = rz_rush.groupby(["game_id","posteam","rusher"]).agg(player_rz_carry=("is_rz_play","sum"))
@@ -192,7 +193,7 @@ def build_player_form(season: int, *, allow_fallback: bool = False) -> pd.DataFr
     agg["role"] = np.where(agg["position"].eq("WR"), "WR1",
                      np.where(agg["position"].eq("RB"), "RB1", "TE1"))
 
-    # Participation-based route proxy (optional)
+    # Participation-based route proxy (optional, non-fatal)
     pass_snaps_cols = pd.DataFrame()
     try:
         import nflreadpy as nfr
@@ -219,15 +220,13 @@ def build_player_form(season: int, *, allow_fallback: bool = False) -> pd.DataFr
     out["player_norm"] = out["player"].astype(str).str.lower().str.replace(r"[.'’]", "", regex=True).str.strip()
     if not pass_snaps_cols.empty:
         out = out.merge(pass_snaps_cols, on=["team","player_norm"], how="left")
-        # route_rate if missing: pass_snaps / team_pass_snaps
         rr = (out["pass_snaps"] / out["team_pass_snaps"]).replace([np.inf,-np.inf], np.nan)
         out["route_rate"] = out["route_rate"].where(out["route_rate"].notna(), rr)
-        # yprr_proxy real: rec_yards / pass_snaps (falls back to ypt when snaps=0)
         yprr_real = (out["rec_yards"] / np.where(out["pass_snaps"].fillna(0).eq(0), np.nan, out["pass_snaps"])).replace([np.inf,-np.inf], np.nan)
         out["yprr_proxy"] = out["yprr_proxy"].where(out["yprr_proxy"].notna(), yprr_real)
     out.drop(columns=["player_norm","pass_snaps","team_pass_snaps"], inplace=True, errors="ignore")
 
-    # --- ADD: make sure critical columns exist BEFORE selecting subset (prevents KeyError when participation missing)
+    # Ensure critical columns exist BEFORE selecting subset
     for c in ["route_rate","yprr_proxy","target_share","rush_share","rz_tgt_share","rz_carry_share","ypc","ypt"]:
         if c not in out.columns:
             out[c] = np.nan
@@ -238,57 +237,25 @@ def build_player_form(season: int, *, allow_fallback: bool = False) -> pd.DataFr
         "rz_tgt_share","rz_carry_share","yprr_proxy","ypc","ypt"
     ]]
 
-    # ESPN/PFR enrich (optional, non-destructive)
-    try:
-        pfr = _safe_read_csv("data/pfr_player_enrich.csv")
-        if not pfr.empty:
-            pfr = pfr.rename(columns={
-                "player":"player",
-                "team":"team",
-                "routes_per_dropback":"route_rate_enrich"
-            })
-            out = out.merge(pfr[["player","team","route_rate_enrich"]], on=["player","team"], how="left")
-            if "route_rate_enrich" in out.columns and "route_rate" in out.columns:
-                out["route_rate"] = out["route_rate"].fillna(out["route_rate_enrich"])
-    except Exception as e:
-        print(f"[player_form] PFR enrich skipped: {type(e).__name__}: {e}", flush=True)
+    # === PFR ENRICH (disabled by default) ===
+    if USE_PFR:
+        try:
+            pfr = _safe_read_csv("data/pfr_player_enrich.csv")
+            if not pfr.empty:
+                pfr = pfr.rename(columns={
+                    "player":"player",
+                    "team":"team",
+                    "routes_per_dropback":"route_rate_enrich"
+                })
+                out = out.merge(pfr[["player","team","route_rate_enrich"]], on=["player","team"], how="left")
+                if "route_rate_enrich" in out.columns and "route_rate" in out.columns:
+                    out["route_rate"] = out["route_rate"].fillna(out["route_rate_enrich"])
+        except Exception as e:
+            print(f"[player_form] PFR enrich skipped: {type(e).__name__}: {e}", flush=True)
+    else:
+        print("[player_form] PFR enrich disabled (USE_PFR not set)")
 
-    # --- Ensure QB rows exist (QB1 per team) so QB props can merge cleanly
-    try:
-        pass_att = pbp.loc[pbp["pass_flag"]==True, ["posteam","passer","yards_gained"]].copy()
-        pass_att["att"] = 1
-        qb_by_team = pass_att.groupby(["posteam","passer"], as_index=False).agg(
-            att=("att","sum"),
-            pass_yards=("yards_gained","sum")
-        )
-        # pick top passer per team by attempts
-        qb_top = qb_by_team.sort_values(["posteam","att","pass_yards"], ascending=[True, False, False]).groupby("posteam", as_index=False).first()
-        qb_top["team"] = qb_top["posteam"].astype(str).str.upper()
-        qb_top["player"] = qb_top["passer"]
-        qb_top["qb_ypa"] = (qb_top["pass_yards"] / qb_top["att"].replace(0, np.nan)).replace([np.inf,-np.inf], np.nan)
-
-        # schema columns with safe defaults
-        qb_top["position"] = "QB"
-        qb_top["role"] = "QB1"
-        qb_top["target_share"] = 0.0
-        qb_top["rush_share"] = 0.0
-        qb_top["route_rate"] = 0.0
-        qb_top["rz_tgt_share"] = 0.0
-        qb_top["rz_carry_share"] = 0.0
-        qb_top["yprr_proxy"] = 0.0
-        qb_top["ypc"] = 0.0
-        qb_top["ypt"] = np.nan
-        qb_cols = ["player","team","position","role","target_share","rush_share","route_rate","rz_tgt_share","rz_carry_share","yprr_proxy","ypc","qb_ypa","ypt"]
-        # align to out columns, append
-        for col in qb_cols:
-            if col not in out.columns:
-                out[col] = np.nan
-        qb_out = qb_top.reindex(columns=qb_cols)
-        out = pd.concat([out, qb_out[out.columns]], ignore_index=True)
-    except Exception as _e:
-        print(f"[player_form] WARN: QB rows enrich skipped: {_e}")
-
-    # 4) External provider fallbacks (fill only remaining NaNs) — NO NUKES, try multiple common header names
+    # === PROVIDER FALLBACKS (order matters): ESPN → MSF → API-Sports → NFLGSIS ===
 
     # ESPN
     espn = _safe_read_csv("data/espn_player.csv")
@@ -303,6 +270,8 @@ def build_player_form(season: int, *, allow_fallback: bool = False) -> pd.DataFr
         "ypc":"ypc", "yards_per_carry":"ypc",
         # QB efficiency if present
         "ypa":"qb_ypa", "yards_per_attempt":"qb_ypa",
+        # red zone (if present)
+        "rz_tgt_share":"rz_tgt_share", "rz_carry_share":"rz_carry_share",
     }, tag="ESPN")
 
     # MySportsFeeds
@@ -314,7 +283,22 @@ def build_player_form(season: int, *, allow_fallback: bool = False) -> pd.DataFr
         "yprr":"yprr_proxy",
         "ypc":"ypc",
         "ypa":"qb_ypa",
+        "rz_tgt_share":"rz_tgt_share", "rz_tgt_pct":"rz_tgt_share",
+        "rz_carry_share":"rz_carry_share",
     }, tag="MySportsFeeds")
+
+    # API-Sports
+    apis = _safe_read_csv("data/apisports_player.csv")
+    out = _merge_missing_player(out, apis, ("player","team"), {
+        "routes_per_dropback":"route_rate", "route_pct":"route_rate",
+        "tgt_share":"target_share", "target_share":"target_share",
+        "rush_share":"rush_share",
+        "yprr":"yprr_proxy",
+        "ypc":"ypc",
+        "ypa":"qb_ypa",
+        "rz_tgt_share":"rz_tgt_share",
+        "rz_carry_share":"rz_carry_share",
+    }, tag="API-Sports")
 
     # NFLGSIS
     gsis = _safe_read_csv("data/gsis_player.csv")
@@ -325,23 +309,46 @@ def build_player_form(season: int, *, allow_fallback: bool = False) -> pd.DataFr
         "yprr":"yprr_proxy",
         "ypc":"ypc",
         "ypa":"qb_ypa",
+        "rz_tgt_share":"rz_tgt_share",
+        "rz_carry_share":"rz_carry_share",
     }, tag="NFLGSIS")
-
-    # --- ADD: API-Sports
-    apis = _safe_read_csv("data/apisports_player.csv")
-    out = _merge_missing_player(out, apis, ("player","team"), {
-        "routes_per_dropback":"route_rate", "route_pct":"route_rate",
-        "tgt_share":"target_share", "target_share":"target_share",
-        "rush_share":"rush_share",
-        "yprr":"yprr_proxy",
-        "ypc":"ypc",
-        "ypa":"qb_ypa",
-    }, tag="API-Sports")
 
     # Final sanitize
     for c in ("target_share","rush_share","route_rate","rz_tgt_share","rz_carry_share","yprr_proxy","ypc","qb_ypa","ypt"):
         if c in out.columns:
             out[c] = pd.to_numeric(out[c], errors="coerce")
+
+    # Ensure QB rows exist (QB1 per team) so QB props can merge cleanly
+    try:
+        pass_att = pbp.loc[pbp["pass_flag"]==True, ["posteam","passer","yards_gained"]].copy()
+        pass_att["att"] = 1
+        qb_by_team = pass_att.groupby(["posteam","passer"], as_index=False).agg(
+            att=("att","sum"),
+            pass_yards=("yards_gained","sum")
+        )
+        qb_top = qb_by_team.sort_values(["posteam","att","pass_yards"], ascending=[True, False, False]).groupby("posteam", as_index=False).first()
+        qb_top["team"] = qb_top["posteam"].astype(str).str.upper()
+        qb_top["player"] = qb_top["passer"]
+        qb_top["qb_ypa"] = (qb_top["pass_yards"] / qb_top["att"].replace(0, np.nan)).replace([np.inf,-np.inf], np.nan)
+
+        qb_top["position"] = "QB"
+        qb_top["role"] = "QB1"
+        qb_top["target_share"] = 0.0
+        qb_top["rush_share"] = 0.0
+        qb_top["route_rate"] = 0.0
+        qb_top["rz_tgt_share"] = 0.0
+        qb_top["rz_carry_share"] = 0.0
+        qb_top["yprr_proxy"] = 0.0
+        qb_top["ypc"] = 0.0
+        qb_top["ypt"] = np.nan
+        qb_cols = ["player","team","position","role","target_share","rush_share","route_rate","rz_tgt_share","rz_carry_share","yprr_proxy","ypc","qb_ypa","ypt"]
+        for col in qb_cols:
+            if col not in out.columns:
+                out[col] = np.nan
+        qb_out = qb_top.reindex(columns=qb_cols)
+        out = pd.concat([out, qb_out[out.columns]], ignore_index=True)
+    except Exception as _e:
+        print(f"[player_form] WARN: QB rows enrich skipped: {_e}")
 
     return out
 
@@ -365,6 +372,5 @@ if __name__ == "__main__":
     ap.add_argument("--allow-fallback", action="store_true",
                     help="If set, allow trying season-1 if the requested season returns empty.")
     a = ap.parse_args()
-    # Also support ALLOW_PBP_FALLBACK=1 env toggle
     allow_fb = a.allow_fallback or os.getenv("ALLOW_PBP_FALLBACK", "").strip() in ("1","true","TRUE","yes","YES")
     sys.exit(cli(a.season, allow_fallback=allow_fb))
