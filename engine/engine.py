@@ -24,6 +24,20 @@ except Exception:
     def markets_from_env(): return []
     ODDS = {"region": "us"}
 
+# Additional provider pulls (depth charts & PFR enrich)
+try:
+    from scripts.providers.pfr_pull import main as _pfr_pull_main
+except Exception:
+    _pfr_pull_main = None
+try:
+    from scripts.providers.espn_depth import main as _espn_depth_main
+except Exception:
+    _espn_depth_main = None
+try:
+    from scripts.providers.ourlads_depth import main as _ourlads_depth_main
+except Exception:
+    _ourlads_depth_main = None
+
 # Providers (soft fallback if module not present)
 try:
     from engine.adapters.providers import (
@@ -47,18 +61,31 @@ SNAP_DIR.mkdir(parents=True, exist_ok=True)
 
 def _safe_exists(p: Path) -> bool:
     try:
-        return p.exists() and (p.stat().st_size > 0)
+        return p.exists() and p.stat().st_size > 0
     except Exception:
         return False
 
-def _size(p: str | Path) -> str:
+def _size(p: str) -> str:
     try:
-        st = Path(p).stat().st_size
-        return f"{st} bytes"
+        n = Path(p).stat().st_size
+        if n < 1024: return f"{n} B"
+        if n < 1024**2: return f"{n/1024:.1f} KB"
+        if n < 1024**3: return f"{n/1024**2:.1f} MB"
+        return f"{n/1024**3:.1f} GB"
     except Exception:
-        return "MISSING"
+        return "n/a"
 
-def _run(cmd: str, label: str = "", snap_after: list[str] | None = None) -> int:
+def finalize_run():
+    try:
+        snapshot([
+            "outputs/props_raw.csv", "outputs/props_priced_clean.csv",
+            "outputs/odds_game.csv", "data/player_form.csv", "data/team_form.csv",
+            "logs/run_diagnostics.txt"
+        ], "end")
+    except Exception:
+        pass
+
+def _run(cmd: str, *, label: str, snap_after: list[str] | None = None) -> int:
     """Run a shell command; snapshot selected paths if provided."""
     print(f"[engine] ▶ {cmd}")
     rc = subprocess.call(shlex.split(cmd))
@@ -91,47 +118,25 @@ def snapshot(paths: list[str] | None, label: str = ""):
         f"Files: {', '.join(wrote) if wrote else '(none)'}\n",
         encoding="utf-8"
     )
-    print(f"[engine] snapshot → {outdir} ({len(wrote)} files)")
-
-def finalize_run():
-    """Zip runs/<RUN_ID> so CI can upload artifacts even on failure."""
-    try:
-        _dump_diag()  # keep your existing heads/sizes
-        bundle = SNAP_DIR.with_suffix(".zip")
-        if bundle.exists():
-            bundle.unlink()
-        shutil.make_archive(str(SNAP_DIR), "zip", root_dir=SNAP_DIR)
-        print(f"[engine] packaged snapshots → {bundle}")
-    except Exception:
-        traceback.print_exc()
+    print(f"[engine] snap[{label}]: {', '.join(wrote) if wrote else '(none)'}")
 
 def _dump_diag():
-    """Write sizes + heads so failures are easier to triage."""
-    Path("logs").mkdir(parents=True, exist_ok=True)
-    p = Path("logs/run_diagnostics.txt")
-    lines = []
-    for t in [
-        "data/team_form.csv",
-        "data/player_form.csv",
-        "data/metrics_ready.csv",
-        "outputs/props_raw.csv",
-        "outputs/props_raw_wide.csv",
-        "outputs/odds_game.csv",
-        "outputs/props_priced_clean.csv",
-        "outputs/master_model_predictions.csv",
-    ]:
-        try:
-            st = Path(t).stat().st_size
-            lines.append(f"{t}: {st} bytes")
-        except Exception:
-            lines.append(f"{t}: MISSING")
-    p.write_text("\n".join(lines), encoding="utf-8")
-    for t in ("outputs/props_raw.csv", "outputs/props_priced_clean.csv"):
-        try:
-            df = pd.read_csv(t)
-            df.head(20).to_csv(f"logs/head__{Path(t).name}", index=False)
-        except Exception:
-            pass
+    try:
+        (Path("logs") / "run_diagnostics.txt").write_text(
+            f"props_raw.csv: {_size('outputs/props_raw.csv')}\n"
+            f"props_priced_clean.csv: {_size('outputs/props_priced_clean.csv')}\n"
+            f"player_form.csv: {_size('data/player_form.csv')}\n"
+            f"team_form.csv: {_size('data/team_form.csv')}\n",
+            encoding="utf-8",
+        )
+        for t in ("outputs/props_raw.csv", "outputs/props_priced_clean.csv"):
+            try:
+                df = pd.read_csv(t)
+                df.head(20).to_csv(f"logs/head__{Path(t).name}", index=False)
+            except Exception:
+                pass
+    except Exception:
+        pass
     print("[engine] wrote logs/run_diagnostics.txt")
 
 def _provider_chain(season: int, date: str | None):
@@ -161,6 +166,23 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
     STRICT = False  # keep permissive; we snapshot and proceed
 
     try:
+        # Pre-materialize enrichers that are independent of the odds/providers
+        try:
+            if _pfr_pull_main:
+                _pfr_pull_main(int(season))
+        except Exception as e:
+            print(f"[engine] PFR enrich failed (non-fatal): {type(e).__name__}: {e}")
+        try:
+            if _espn_depth_main:
+                _espn_depth_main()
+        except Exception as e:
+            print(f"[engine] ESPN depth chart fetch failed (non-fatal): {type(e).__name__}: {e}")
+        try:
+            if _ourlads_depth_main:
+                _ourlads_depth_main()
+        except Exception as e:
+            print(f"[engine] OurLads depth chart fetch failed (non-fatal): {type(e).__name__}: {e}")
+
         _provider_chain(int(season), date or None)
 
         # 1) team form
@@ -170,26 +192,22 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
         if STRICT:
             try:
                 tf = pd.read_csv("data/team_form.csv")
-                if tf["team"].nunique() < 8 or len(tf) < 20:
-                    snapshot(["data/team_form.csv"], "team_form_stub")
-                    raise RuntimeError("team_form looks like a stub (few teams). Check requirements install and nfl_data_py import.")
-            except Exception as _e:
+                if tf["team"].nunique() < 28:
+                    raise RuntimeError("too few teams; team form likely empty")
+            except Exception:
                 raise
 
+        # 2) player form
         _run(f"python scripts/make_player_form.py --season {season}",
              label="player_form", snap_after=["data/player_form.csv"])
         print(f"[engine]   data/player_form.csv → {_size('data/player_form.csv')}")
-        if STRICT:
-            try:
-                pf = pd.read_csv("data/player_form.csv")
-                if pf["team"].nunique() < 8 or len(pf) < 50:
-                    snapshot(["data/player_form.csv"], "player_form_stub")
-                    raise RuntimeError("player_form looks like a stub (few teams/players). Check requirements install and nfl_data_py import.")
-            except Exception as _e:
-                raise
 
-        # 3) odds props — v4 requires one market per request; also write odds_game.csv
+        # 3) merge metrics
+        _run("python scripts/make_metrics_ready.py",
+             label="metrics_ready", snap_after=["data/metrics_ready.csv"])
 
+        # 4) props (oddsapi)
+        # Check if caller wants an explicit bookmakers list.
         # Forward the exact user intent to the fetcher:
         # - books == []  → user passed --bookmakers "" → pass --bookmakers "" (no filter)
         # - books is None → no user flag → let fetcher use its own default
@@ -220,28 +238,12 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
         _run(props_cmd, label="props_raw", snap_after=["outputs/props_raw.csv"])
         # Copy props_raw_wide.csv to _tmp_props for downstream tools expecting that path
         try:
-            Path("outputs/_tmp_props").mkdir(parents=True, exist_ok=True)
-            _wide_src = Path("outputs/props_raw_wide.csv")
-            _wide_dst = Path("outputs/_tmp_props/props_raw_wide.csv")
-            if _wide_src.exists() and _wide_src.stat().st_size > 0:
-                shutil.copy2(_wide_src, _wide_dst)
-                print(f"[engine] copied {_wide_src} -> {_wide_dst}")
-            else:
-                print("[engine] note: outputs/props_raw_wide.csv not found or empty")
-        except Exception as _e:
-            print(f"[engine] WARN: could not copy props_raw_wide.csv: {_e}")
+            pd.read_csv("outputs/props_raw.csv").to_csv("outputs/_tmp_props/props_raw.csv", index=False)
+        except Exception:
+            pass
 
-
-        # 3.5) build metrics_ready (features for pricing)
-        _run("python scripts/make_metrics.py",
-             label="metrics", snap_after=["data/metrics_ready.csv", "outputs/metrics/metrics_ready.csv"])
-        print(
-            f"[engine]   data/metrics_ready.csv → "
-            f"{os.path.getsize('data/metrics_ready.csv') if Path('data/metrics_ready.csv').exists() else 'MISSING'}"
-        )
-
-        # 4) pricing + predictors
-        if not os.path.exists("outputs/props_raw.csv") or os.stat("outputs/props_raw.csv").st_size == 0:
+        # 4.5) ensure props exist before pricing
+        if not _safe_exists(Path("outputs/props_raw.csv")):
             snapshot(["outputs/props_raw.csv"], "props_check")
             raise RuntimeError("[engine] outputs/props_raw.csv is missing or empty – skipping pricing")
 
@@ -284,9 +286,8 @@ def cli_main() -> int:
     """CLI entrypoint used by `python -m engine`."""
     import argparse
     ap = argparse.ArgumentParser()
-    ap.add_argument("--season", required=True)
-    ap.add_argument("--date", default="")
-    # Accept both names; map to same var
+    ap.add_argument("--season", default=os.getenv("SEASON") or "2025")
+    ap.add_argument("--date", default=os.getenv("SLATE_DATE") or "")
     ap.add_argument("--books", "--bookmakers", dest="books",
                     default="draftkings,fanduel,betmgm,caesars")
     ap.add_argument("--markets", default="")
