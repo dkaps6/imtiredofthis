@@ -265,21 +265,35 @@ def compute_red_zone_and_airyards(pbp: pd.DataFrame) -> pd.DataFrame:
     if off_col is None:
         return pd.DataFrame()
 
-    df["_one"] = 1
-    total = df.groupby(off_col, dropna=False)["_one"].sum().rename("plays_total")
-    in_rz = df.loc[df.get("yardline_100", pd.Series(np.nan, index=df.index)) <= 20]
-    rz = in_rz.groupby(off_col, dropna=False)["_one"].sum().rename("plays_rz") if len(in_rz) else pd.Series(dtype=float)
-    rz_rate = safe_div(rz.reindex(total.index).fillna(0), total).astype(float)
+   # --- Total plays per team ---
+df["_one"] = 1
+total = df.groupby(off_col, dropna=False)["_one"].sum().rename("plays_total")
 
-    # Air yards per attempt
-    is_pass = df.get("pass", pd.Series(False, index=df.index)).astype(bool)
-    pass_df = df.loc[is_pass].copy()
-    ay = pass_df.get("air_yards", pd.Series(np.nan, index=pass_df.index)).astype(float)
-    ay_per_att = pass_df.groupby(off_col, dropna=False).apply(lambda x: x["air_yards"].mean()) if "air_yards" in pass_df else pd.Series(dtype=float)
+# --- Red-zone rate (snaps inside opp 20) ---
+rz = (
+    df.assign(yardline_100=pd.to_numeric(df.get("yardline_100"), errors="coerce"))
+      .assign(rz_flag=lambda x: (x["yardline_100"] <= 20).astype(int))
+      .groupby(off_col, dropna=False)["rz_flag"].mean()
+      .rename("rz_rate")
+)
 
-    out = pd.concat([rz_rate.rename("rz_rate"), ay_per_att.rename("ay_per_att")], axis=1).reset_index().rename(columns={off_col: "team"})
-    return out
+# --- Air yards per attempt (passing plays only) ---
+is_pass = df.get("pass", pd.Series(False, index=df.index)).astype(bool)
+pass_df = df.loc[is_pass].copy()
+ay_per_att = (
+    pass_df.assign(air_yards=pd.to_numeric(pass_df.get("air_yards"), errors="coerce"))
+           .groupby(off_col, dropna=False)["air_yards"]
+           .mean()
+           .rename("ay_per_att")
+)
 
+# --- Combine outputs ---
+out = (
+    pd.concat([rz, ay_per_att], axis=1)
+      .reset_index()
+      .rename(columns={off_col: "team"})
+)
+return out
 
 def compute_personnel_rates(pbp: pd.DataFrame, participation: pd.DataFrame) -> pd.DataFrame:
     """
