@@ -261,39 +261,36 @@ def compute_red_zone_and_airyards(pbp: pd.DataFrame) -> pd.DataFrame:
     Air yards per attempt (offense).
     """
     df = pbp.copy()
+    df.columns = [c.lower() for c in df.columns]
     off_col = "posteam" if "posteam" in df else ("offense_team" if "offense_team" in df else None)
     if off_col is None:
         return pd.DataFrame()
 
-   # --- Total plays per team ---
-df["_one"] = 1
-total = df.groupby(off_col, dropna=False)["_one"].sum().rename("plays_total")
+    # --- Red-zone rate (snaps inside opp 20) ---
+    rz = (
+        df.assign(yardline_100=pd.to_numeric(df.get("yardline_100"), errors="coerce"))
+          .assign(rz_flag=lambda x: (x["yardline_100"] <= 20).astype(int))
+          .groupby(off_col, dropna=False)["rz_flag"].mean()
+          .rename("rz_rate")
+    )
 
-# --- Red-zone rate (snaps inside opp 20) ---
-rz = (
-    df.assign(yardline_100=pd.to_numeric(df.get("yardline_100"), errors="coerce"))
-      .assign(rz_flag=lambda x: (x["yardline_100"] <= 20).astype(int))
-      .groupby(off_col, dropna=False)["rz_flag"].mean()
-      .rename("rz_rate")
-)
+    # --- Air yards per attempt (passing plays only) ---
+    is_pass = df.get("pass", pd.Series(False, index=df.index)).astype(bool)
+    pass_df = df.loc[is_pass].copy()
+    ay_per_att = (
+        pass_df.assign(air_yards=pd.to_numeric(pass_df.get("air_yards"), errors="coerce"))
+               .groupby(off_col, dropna=False)["air_yards"]
+               .mean()
+               .rename("ay_per_att")
+    )
 
-# --- Air yards per attempt (passing plays only) ---
-is_pass = df.get("pass", pd.Series(False, index=df.index)).astype(bool)
-pass_df = df.loc[is_pass].copy()
-ay_per_att = (
-    pass_df.assign(air_yards=pd.to_numeric(pass_df.get("air_yards"), errors="coerce"))
-           .groupby(off_col, dropna=False)["air_yards"]
-           .mean()
-           .rename("ay_per_att")
-)
-
-# --- Combine outputs ---
-out = (
-    pd.concat([rz, ay_per_att], axis=1)
-      .reset_index()
-      .rename(columns={off_col: "team"})
-)
-return out
+    # --- Combine outputs ---
+    out = (
+        pd.concat([rz, ay_per_att], axis=1)
+          .reset_index()
+          .rename(columns={off_col: "team"})
+    )
+    return out
 
 def compute_personnel_rates(pbp: pd.DataFrame, participation: pd.DataFrame) -> pd.DataFrame:
     """
