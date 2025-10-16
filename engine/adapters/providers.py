@@ -40,20 +40,110 @@ def _fail(source: str, exc: Exception | None = None, notes: list[str] | None = N
 
 # ---------------- adapters ----------------
 
-# Primary: nflverse/nflreadr mirrors (unchanged stub)
 def run_nflverse(season: int, date: str | None) -> dict:
+    """
+    Fetch core league data via nflreadpy (preferred) with nfl_data_py fallback.
+    Writes:
+      - data/pbp_<season>.csv
+      - data/participation_<season>.csv   (if nflreadpy provides it)
+      - data/schedules_<season>.csv
+    Returns ok=True only if at least one file has rows.
+    """
     source = "nflverse"
+    notes: list[str] = []
+    from pathlib import Path
+    import pandas as pd
+
+    def _safe_to_csv(df, path):
+        try:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                df.to_csv(path, index=False)
+                return True
+        except Exception as e:
+            notes.append(f"write {path}: {type(e).__name__}: {e}")
+        return False
+
+    wrote_any = False
+    pbp_rows = 0
+    sch_rows = 0
+    part_rows = 0
+
+    # --- Try nflreadpy first (preferred mirror) ---
     try:
-        outdir = Path("external/nflverse_bundle/outputs")
-        outdir.mkdir(parents=True, exist_ok=True)
-        # NOTE: Replace these sentinels with your real fetch if present.
-        for name in ("pbp.csv", "schedules.csv", "scoreboard.csv"):
-            p = outdir / name
-            if not p.exists():
-                p.write_text("")
-        return _ok(source, [f"created/confirmed mirrors in {outdir}"])
+        import nflreadpy as nfr  # modern python mirror of nflfastR
+        # Play-by-play
+        try:
+            pf = nfr.load_pbp([season])        # returns a Polars DataFrame
+            pbp_df = pf.to_pandas()
+            if _safe_to_csv(pbp_df, f"data/pbp_{season}.csv"):
+                pbp_rows = len(pbp_df)
+                wrote_any = True
+                notes.append(f"nflreadpy pbp rows={pbp_rows}")
+        except Exception as e:
+            notes.append(f"nflreadpy pbp: {type(e).__name__}: {e}")
+
+        # Participation (routes/snap participants) — not always available immediately
+        try:
+            part = nfr.load_participation([season])
+            part_df = part.to_pandas()
+            if _safe_to_csv(part_df, f"data/participation_{season}.csv"):
+                part_rows = len(part_df)
+                wrote_any = True
+                notes.append(f"nflreadpy participation rows={part_rows}")
+        except Exception as e:
+            notes.append(f"nflreadpy participation: {type(e).__name__}: {e}")
+
+        # Schedules / games
+        try:
+            sch = nfr.load_schedules([season])
+            sch_df = sch.to_pandas()
+            if _safe_to_csv(sch_df, f"data/schedules_{season}.csv"):
+                sch_rows = len(sch_df)
+                wrote_any = True
+                notes.append(f"nflreadpy schedules rows={sch_rows}")
+        except Exception as e:
+            notes.append(f"nflreadpy schedules: {type(e).__name__}: {e}")
+
     except Exception as e:
-        return _fail(source, e, [traceback.format_exc()])
+        notes.append(f"nflreadpy not available: {type(e).__name__}: {e}")
+
+    # --- Fallback to nfl_data_py if needed ---
+    if pbp_rows == 0 or sch_rows == 0:
+        try:
+            import nfl_data_py as nfl
+            # PBP
+            if pbp_rows == 0:
+                try:
+                    pbp_df = nfl.import_pbp_data([season])
+                    if _safe_to_csv(pbp_df, f"data/pbp_{season}.csv"):
+                        pbp_rows = len(pbp_df)
+                        wrote_any = True
+                        notes.append(f"nfl_data_py pbp rows={pbp_rows}")
+                except Exception as e:
+                    notes.append(f"nfl_data_py pbp: {type(e).__name__}: {e}")
+
+            # Schedules
+            if sch_rows == 0:
+                try:
+                    sch_df = nfl.import_schedules([season])
+                    if _safe_to_csv(sch_df, f"data/schedules_{season}.csv"):
+                        sch_rows = len(sch_df)
+                        wrote_any = True
+                        notes.append(f"nfl_data_py schedules rows={sch_rows}")
+                except Exception as e:
+                    notes.append(f"nfl_data_py schedules: {type(e).__name__}: {e}")
+
+        except Exception as e:
+            notes.append(f"nfl_data_py not available: {type(e).__name__}: {e}")
+
+    # Success if any core file has rows
+    ok = wrote_any and (pbp_rows > 0 or sch_rows > 0 or part_rows > 0)
+    if not ok:
+        notes.append("no rows written by nflreadpy/nfl_data_py")
+        return {"ok": False, "source": source, "notes": notes}
+
+    return {"ok": True, "source": source, "notes": notes}
 
 # ESPN (depth charts + optional normalized player sheet)
 def run_espn(season: int, date: str | None) -> dict:
