@@ -262,7 +262,9 @@ def compute_red_zone_and_airyards(pbp: pd.DataFrame) -> pd.DataFrame:
     """
     df = pbp.copy()
     df.columns = [c.lower() for c in df.columns]
-    off_col = "posteam" if "posteam" in df else ("offense_team" if "offense_team" in df else None)
+
+    # choose offense team column
+    off_col = "posteam" if "posteam" in df.columns else ("offense_team" if "offense_team" in df.columns else None)
     if off_col is None:
         return pd.DataFrame()
 
