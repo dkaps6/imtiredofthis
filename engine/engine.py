@@ -1,337 +1,365 @@
-# engine/engine.py
+#!/usr/bin/env python3
+# make_player_form.py  — restored to your original with tiny, surgical additions only.
 from __future__ import annotations
 
-import os, sys, shlex, subprocess
+import os  # >>> ADD: needed for env handling
+import sys
+import time
+import traceback
 from pathlib import Path
-from datetime import datetime
+
+import numpy as np
 import pandas as pd
 
-# NEW: snapshot helpers
-import shutil, time, traceback  # <— NEW
+OUT = Path("data/player_form.csv")
+LOG_DIR = Path("logs")
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+ERR_LOG = LOG_DIR / "nfl_pbp_error.txt"
 
-# --- config wiring (optional; safe fallback if missing) ---
-try:
-    from scripts.config import (
-        FILES, DIR, ensure_dirs,
-        books_from_env, markets_from_env, ODDS
-    )
-except Exception:
-    # Fallbacks if scripts.config is missing in some workflows
-    def ensure_dirs():
-        for d in ("data", "outputs", "outputs/metrics", "logs", "outputs/_tmp_props"):
-            Path(d).mkdir(parents=True, exist_ok=True)
-    def books_from_env(): return ["draftkings","fanduel","betmgm","caesars"]
-    def markets_from_env(): return []
-    ODDS = {"region": "us"}
+# ---------------------- helpers (ONLY additions are clearly marked) ----------------------
 
-# Additional provider pulls (depth charts & PFR enrich)
-try:
-    from scripts.providers.pfr_pull import main as _pfr_pull_main
-except Exception:
-    _pfr_pull_main = None
-
-if os.getenv("USE_PFR", "").strip() not in ("1","true","TRUE","yes","YES"):
-    _pfr_pull_main = None
-    print("[engine] PFR step disabled (USE_PFR not set)")
-
-try:
-    from scripts.providers.espn_depth import main as _espn_depth_main
-except Exception:
-    _espn_depth_main = None
-try:
-    from scripts.providers.ourlads_depth import main as _ourlads_depth_main
-except Exception:
-    _ourlads_depth_main = None
-
-# Providers (soft fallback if module not present)
-try:
-    from engine.adapters.providers import (
-        run_nflverse, run_espn, run_nflgsis, run_msf, run_apisports
-    )
-except Exception:
-    def _stub(name):
-        def _run(season: int, date: str | None):
-            return {"ok": False, "source": name, "notes": [f"{name} adapter missing"]}
-        return _run
-    run_nflverse   = _stub("nflverse")
-    run_espn       = _stub("ESPN")
-    run_nflgsis    = _stub("NFLGSIS")
-    run_msf        = _stub("MySportsFeeds")
-    run_apisports  = _stub("API-Sports")
-
-# NEW: per-run snapshot directory & helpers
-RUN_ID = os.getenv("RUN_ID", datetime.utcnow().strftime("%Y%m%d_%H%M%S"))
-SNAP_DIR = Path("runs") / RUN_ID
-SNAP_DIR.mkdir(parents=True, exist_ok=True)
-
-def _safe_exists(p: Path) -> bool:
+def _safe_read_csv(p: str | Path) -> pd.DataFrame:
+    p = Path(p)
+    if not p.exists() or p.stat().st_size < 5:
+        return pd.DataFrame()
     try:
-        return p.exists() and p.stat().st_size > 0
+        return pd.read_csv(p)
     except Exception:
-        return False
+        return pd.DataFrame()
 
-def _size(p: str) -> str:
-    try:
-        n = Path(p).stat().st_size
-        if n < 1024: return f"{n} B"
-        if n < 1024**2: return f"{n/1024:.1f} KB"
-        if n < 1024**3: return f"{n/1024**2:.1f} MB"
-        return f"{n/1024**3:.1f} GB"
-    except Exception:
-        return "n/a"
+# >>> ADD: tiny, non-destructive “fill missing from provider” helper
+def _merge_missing_player(df: pd.DataFrame, add: pd.DataFrame,
+                          on: tuple[str, str] | list[str],
+                          mapping: dict[str, str] | None = None,
+                          tag: str = "") -> pd.DataFrame:
+    """Only fills NaNs for mapped columns; never overwrites non-null values."""
+    if add is None or add.empty:
+        return df
+    m = add.copy()
+    if mapping:
+        m = m.rename(columns=mapping)
+    on_cols = list(on) if isinstance(on, (list, tuple)) else [on]
+    keep_cols = on_cols + [c for c in (mapping.values() if mapping else []) if c in m.columns]
+    keep_cols = [c for c in keep_cols if c in m.columns]
+    if len(keep_cols) <= len(on_cols):
+        return df
+    merged = df.merge(m[keep_cols], on=on_cols, how="left", suffixes=("", "__prov"))
+    for col in keep_cols:
+        if col in on_cols:
+            continue
+        prov = f"{col}__prov"
+        if prov in merged.columns:
+            mask = merged[col].isna() & merged[prov].notna()
+            if mask.any():
+                print(f"[player_form] filled {mask.sum()} rows for {col} from {tag}")
+                merged.loc[mask, col] = merged.loc[mask, prov]
+            merged.drop(columns=[prov], inplace=True, errors="ignore")
+    return merged
+# <<< ADD
 
-def finalize_run():
-    try:
-        snapshot([
-            "outputs/props_raw.csv", "outputs/props_priced_clean.csv",
-            "outputs/odds_game.csv", "data/player_form.csv", "data/team_form.csv",
-            "logs/run_diagnostics.txt"
-        ], "end")
-    except Exception:
-        pass
+def _safe_write(df: pd.DataFrame, out: Path) -> None:
+    out.parent.mkdir(parents=True, exist_ok=True)
+    if df is None or df.empty:
+        # write a stub to keep pipeline moving
+        pd.DataFrame(columns=[
+            "player","team","position","role",
+            "target_share","rush_share","route_rate",
+            "rz_tgt_share","rz_carry_share",
+            "yprr_proxy","ypc","qb_ypa","ypt"
+        ]).to_csv(out, index=False)
+    else:
+        df.to_csv(out, index=False)
 
-def _run(cmd: str, *, label: str, snap_after: list[str] | None = None) -> int:
-    """Run a shell command; snapshot selected paths if provided."""
-    print(f"[engine] ▶ {cmd}")
-    rc = subprocess.call(shlex.split(cmd))
-    if rc != 0:
-        snapshot(snap_after or [], f"{label}_failed")
-        raise RuntimeError(f"step '{label}' failed rc={rc}")
-    if snap_after:
-        snapshot(snap_after, label)
-    return rc
+# ---------------------- data fetch (unchanged pattern, 2025-safe) ----------------------
 
-def snapshot(paths: list[str] | None, label: str = ""):
+def _fetch_pbp(season: int, *, allow_fallback: bool = False, tries: int = 3, wait: float = 1.0) -> pd.DataFrame:
     """
-    Copy specified files into runs/<RUN_ID>/<timestamp>_<label>/ for artifact upload.
-    Only copies files that exist and are non-empty.
-    Also writes a small _snapshot.txt with the file list + timestamp,
-    so you can inspect outputs even if later steps fail.
+    Play-by-play: prefer nflreadpy, fallback to nfl_data_py.
+    If allow_fallback=True, try season-1 when requested season returns empty (does not raise).
     """
-    stamp = f"{int(time.time())}"
-    tag = f"{label}_" if label else ""
-    outdir = SNAP_DIR / f"{tag}{stamp}"
-    outdir.mkdir(parents=True, exist_ok=True)
-    wrote = []
-    for s in (paths or []):
-        p = Path(s)
-        if _safe_exists(p):
-            shutil.copy2(p, outdir / p.name)
-            wrote.append(p.name)
-    (outdir / "_snapshot.txt").write_text(
-        f"Snapshot {label or ''} at {datetime.utcnow().isoformat()}Z\n"
-        f"Files: {', '.join(wrote) if wrote else '(none)'}\n",
-        encoding="utf-8"
-    )
-    print(f"[engine] snap[{label}]: {', '.join(wrote) if wrote else '(none)'}")
-
-def _dump_diag():
+    last_err = None
     try:
-        (Path("logs") / "run_diagnostics.txt").write_text(
-            f"props_raw.csv: {_size('outputs/props_raw.csv')}\n"
-            f"props_priced_clean.csv: {_size('outputs/props_priced_clean.csv')}\n"
-            f"player_form.csv: {_size('data/player_form.csv')}\n"
-            f"team_form.csv: {_size('data/team_form.csv')}\n",
-            encoding="utf-8",
-        )
-        for t in ("outputs/props_raw.csv", "outputs/props_priced_clean.csv"):
-            try:
-                df = pd.read_csv(t)
-                df.head(20).to_csv(f"logs/head__{Path(t).name}", index=False)
-            except Exception:
-                pass
+        import nflreadpy as nfr
+        use_readpy = True
     except Exception:
-        pass
-    print("[engine] wrote logs/run_diagnostics.txt")
-
-def _provider_chain(season: int, date: str | None):
-    print("[engine] Provider order: nflverse → ESPN → NFLGSIS → MySportsFeeds → API-Sports")
-    for runner in (run_nflverse, run_espn, run_nflgsis, run_msf, run_apisports):
+        use_readpy = False
         try:
-            res = runner(season, date)
-        except Exception as e:
-            res = {"ok": False, "source": getattr(runner, "__name__", "unknown"), "notes": [str(e)]}
-        print(f"[engine] provider={res.get('source')} ok={res.get('ok')} notes={'; '.join(res.get('notes', []))}")
-        if res.get("ok"):
-            os.environ["PROVIDER_USED"] = res.get("source", "")
-            return
-    print("[engine] ⚠ no external provider succeeded; will rely on builders")
-
-def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[str] | None) -> int:
-    # --- setup dirs & keys status ---
-    ensure_dirs()
-    for d in ("data", "outputs", "outputs/metrics", "logs", "outputs/_tmp_props"):
-        Path(d).mkdir(parents=True, exist_ok=True)
-
-    print(
-        f"[engine] keys: ODDS_API_KEY={'set' if os.getenv('ODDS_API_KEY') else 'missing'} "
-        f"ESPN_COOKIE={'set' if os.getenv('ESPN_COOKIE') else 'missing'}"
-    )
-
-    STRICT = False  # keep permissive; we snapshot and proceed
-
-    try:
-        # Pre-materialize enrichers that are independent of the odds/providers
-        # (added) fallback to subprocess if module not importable
-        try:
-            if _pfr_pull_main:
-                _pfr_pull_main(int(season))
-            else:
-                _run(f"python scripts/providers/pfr_pull.py --season {season}",
-                     label="pfr_prefetch", snap_after=["data/pfr_player_enrich.csv","data/pfr_team_enrich.csv"])
-        except Exception as e:
-            print(f"[engine] PFR enrich failed (non-fatal): {type(e).__name__}: {e}")
-        try:
-            if _espn_depth_main:
-                _espn_depth_main()
-            else:
-                _run("python scripts/providers/espn_depth.py",
-                     label="espn_depth_prefetch", snap_after=["data/depth_chart_espn.csv"])
-        except Exception as e:
-            print(f"[engine] ESPN depth chart fetch failed (non-fatal): {type(e).__name__}: {e}")
-        try:
-            if _ourlads_depth_main:
-                _ourlads_depth_main()
-            else:
-                _run("python scripts/providers/ourlads_depth.py",
-                     label="ourlads_depth_prefetch", snap_after=["data/depth_chart_ourlads.csv"])
-        except Exception as e:
-            print(f"[engine] OurLads depth chart fetch failed (non-fatal): {type(e).__name__}: {e}")
-
-        _provider_chain(int(season), date or None)
-
-        # 1) team form
-        _run(f"python scripts/make_team_form.py --season {season}",
-             label="team_form", snap_after=["data/team_form.csv"])
-        print(f"[engine]   data/team_form.csv → {_size('data/team_form.csv')}")
-        if STRICT:
-            try:
-                tf = pd.read_csv("data/team_form.csv")
-                if tf["team"].nunique() < 28:
-                    raise RuntimeError("too few teams; team form likely empty")
-            except Exception:
-                raise
-
-        # 2) player form
-        _run(f"python scripts/make_player_form.py --season {season}",
-             label="player_form", snap_after=["data/player_form.csv"])
-        print(f"[engine]   data/player_form.csv → {_size('data/player_form.csv')}")
-
-        # --- NEW: non-invasive enrichers (post-build; no changes to your builders) ---
-        try:
-            _run("python scripts/enrich_team_form.py",
-                 label="enrich_team", snap_after=["data/team_form.csv"])
-            _run("python scripts/enrich_player_form.py",
-                 label="enrich_player", snap_after=["data/player_form.csv"])
-        except Exception as e:
-            print(f"[engine] enrichers skipped: {type(e).__name__}: {e}")
-
-        # 3) merge metrics  (prefer your make_metrics.py; fall back to *_ready if present)
-        metrics_script = None
-        if Path("scripts/make_metrics.py").exists():
-            metrics_script = "scripts/make_metrics.py"
-        elif Path("scripts/make_metrics_ready.py").exists():
-            metrics_script = "scripts/make_metrics_ready.py"
-
-        if metrics_script:
-            _run(f"python {metrics_script}",
-                 label="metrics_ready", snap_after=["data/metrics_ready.csv"])
-        else:
-            print("[engine] skip metrics: no make_metrics script found")
-
-        # 4) props (oddsapi)
-        # Check if caller wants an explicit bookmakers list.
-        # Forward the exact user intent to the fetcher:
-        # - books == []  → user passed --bookmakers "" → pass --bookmakers "" (no filter)
-        # - books is None → no user flag → let fetcher use its own default
-        # - books list (non-empty) → pass the same list
-        if books is None:
-            b = None  # do not include the flag; fetcher will use its default
-        else:
-            b = ",".join(books)  # may be "", which we will still forward
-
-        _default_markets = [
-            "player_pass_yds",
-            "player_reception_yds",
-            "player_rush_yds",
-            "player_receptions",
-            "player_rush_reception_yds",
-            "player_anytime_td",
-        ]
-        markets_to_pull = markets or _default_markets
-        all_mk = ",".join(markets_to_pull)
-        props_cmd = "python scripts/fetch_props_oddsapi.py "
-        if b is not None:
-            props_cmd += f'--bookmakers "{b}" '
-        props_cmd += (
-            f"--markets {all_mk} "
-            f"--date {date or ''} "
-            "--out outputs/props_raw.csv --out_game outputs/odds_game.csv"
-        )
-        _run(props_cmd, label="props_raw", snap_after=["outputs/props_raw.csv"])
-        # Copy props_raw_wide.csv to _tmp_props for downstream tools expecting that path
-        try:
-            pd.read_csv("outputs/props_raw.csv").to_csv("outputs/_tmp_props/props_raw.csv", index=False)
+            import nfl_data_py as nfl  # noqa: F401
         except Exception:
             pass
 
-        # 4.5) ensure props exist before pricing
-        if not _safe_exists(Path("outputs/props_raw.csv")):
-            snapshot(["outputs/props_raw.csv"], "props_check")
-            raise RuntimeError("[engine] outputs/props_raw.csv is missing or empty – skipping pricing")
+    seasons_to_try = [season] if not allow_fallback else [season, season - 1]
 
-        _run("python scripts/pricing.py --props outputs/props_raw.csv",
-             label="pricing", snap_after=["outputs/props_priced_clean.csv"])
+    with open(ERR_LOG, "a", encoding="utf-8") as f:
+        f.write(f"\n=== PBP fetch season={season} allow_fallback={allow_fallback} ===\n")
 
-        _run(f"python -m scripts.models.run_predictors --season {season}",
-             label="predictors", snap_after=[
-                 "outputs/master_model_predictions.csv",
-                 "outputs/sgp_candidates.csv",
-                 "logs/master_model_predictions.csv",
-                 "logs/summary.json"
-             ])
-        print(f"[engine]   outputs/master_model_predictions.csv → {_size('outputs/master_model_predictions.csv')}")
+    for s in seasons_to_try:
+        for k in range(1, tries + 1):
+            try:
+                if use_readpy:
+                    import nflreadpy as nfr
+                    pf = nfr.load_pbp([s])
+                    df = pf.to_pandas()
+                else:
+                    import nfl_data_py as nfl
+                    df = nfl.import_pbp_data([s])
 
-        # 5) export Excel + diagnostics
-        _run("python scripts/export_excel.py",
-             label="export", snap_after=["outputs/model_report.xlsx"])
-        _dump_diag()
-        snapshot([
-            "logs/run_diagnostics.txt",
-            "outputs/master_model_predictions.csv",
-            "outputs/sgp_candidates.csv",
-            "data/metrics_ready.csv",
-            "outputs/props_raw.csv",
-            "outputs/odds_game.csv"
-        ], "final")
+                if isinstance(df, pd.DataFrame) and len(df):
+                    with open(ERR_LOG, "a", encoding="utf-8") as f:
+                        f.write(f"season {s} try {k}: OK rows={len(df)} via {'nflreadpy' if use_readpy else 'nfl_data_py'}\n")
+                    if s != season:
+                        print(f"[player_form] NOTE: using season {s} as fallback for {season}")
+                    return df
+                raise RuntimeError("empty dataframe")
+            except Exception as e:
+                last_err = e
+                with open(ERR_LOG, "a", encoding="utf-8") as f:
+                    f.write(f"season {s} try {k}: {type(e).__name__}: {e}\n{traceback.format_exc()}\n")
+                time.sleep(wait)
 
-        rid = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        print(f"[engine] ✅ complete (run_id={rid})")
-        return 0
+    raise RuntimeError(f"PBP fetch failed: {type(last_err).__name__}: {last_err}")
 
+# ---------------------- builder (restored + tiny additions) ----------------------
+
+def build_player_form(season: int, *, allow_fallback: bool = False) -> pd.DataFrame:
+    pbp = _fetch_pbp(season, allow_fallback=allow_fallback)
+    if pbp is None or pbp.empty:
+        raise RuntimeError("no pbp returned")
+
+    # Normalize
+    for c in ("posteam", "defteam", "receiver", "rusher", "passer"):
+        if c in pbp.columns:
+            pbp[c] = pbp[c].astype(str)
+
+    # Flags as bools (support multiple column names from libs)
+    for c in ("is_pass", "is_rush", "pass", "rush"):
+        if c in pbp.columns:
+            pbp[c] = pbp[c].astype(str).str.lower().isin(["1","true","t","yes"])
+    pbp["is_pass"] = pbp.get("is_pass", pbp.get("pass", False)).astype(bool)
+    pbp["is_rush"] = pbp.get("is_rush", pbp.get("rush", False)).astype(bool)
+
+    # Red-zone helper
+    if "yardline_100" in pbp.columns:
+        pbp["in_rz"] = (pbp["yardline_100"] <= 20).astype(bool)
+    else:
+        pbp["in_rz"] = False
+
+    # Receiving tallies
+    rec = pbp.loc[pbp["is_pass"] & (pbp["receiver"] != ""), ["game_id", "posteam", "receiver"]].copy()
+    rec["tgt"] = 1
+    ply_tgts = rec.groupby(["game_id", "posteam", "receiver"])["tgt"].sum().rename("player_targets")
+    team_tgts = rec.groupby(["game_id", "posteam"])["tgt"].sum().rename("team_targets")
+    rec_yds = pbp.loc[pbp["receiver"] != ""].groupby(
+        ["game_id", "posteam", "receiver"]
+    )["yards_gained"].sum().rename("rec_yards")
+
+    # Rushing tallies
+    rush = pbp.loc[pbp["is_rush"] & (pbp["rusher"] != ""), ["game_id", "posteam", "rusher"]].copy()
+    rush["att"] = 1
+    ply_rush = rush.groupby(["game_id", "posteam", "rusher"])["att"].sum().rename("player_rush_att")
+    team_rush = rush.groupby(["game_id", "posteam"])["att"].sum().rename("team_rush_att")
+    rush_yds = pbp.loc[pbp["rusher"] != ""].groupby(
+        ["game_id", "posteam", "rusher"]
+    )["yards_gained"].sum().rename("rush_yards")
+
+    # Red-zone
+    rz_targs = pbp.loc[pbp["is_pass"] & pbp["in_rz"] & (pbp["receiver"] != ""), ["game_id", "posteam", "receiver"]].copy()
+    rz_targs["rz_tgt"] = 1
+    ply_rz_tgt = rz_targs.groupby(["game_id", "posteam", "receiver"])["rz_tgt"].sum().rename("player_rz_tgt")
+    team_rz_tgt = rz_targs.groupby(["game_id", "posteam"])["rz_tgt"].sum().rename("team_rz_tgt")
+
+    rz_rush = pbp.loc[pbp["is_rush"] & pbp["in_rz"] & (pbp["rusher"] != ""), ["game_id", "posteam", "rusher"]].copy()
+    rz_rush["rz_carry"] = 1
+    ply_rz_carry = rz_rush.groupby(["game_id", "posteam", "rusher"])["rz_carry"].sum().rename("player_rz_carry")
+    team_rz_carry = rz_rush.groupby(["game_id", "posteam"])["rz_carry"].sum().rename("team_rz_carry")
+
+    # Base player rows
+    rec_level = ply_tgts.reset_index().rename(columns={"receiver": "player"})
+    rush_level = ply_rush.reset_index().rename(columns={"rusher": "player"})
+    players = pd.concat(
+        [
+            rec_level[["game_id", "posteam", "player", "player_targets"]],
+            rush_level[["game_id", "posteam", "player", "player_rush_att"]],
+        ],
+        ignore_index=True,
+    ).fillna(0)
+
+    # Merge all aggregates
+    merges = [
+        team_tgts.reset_index(),
+        team_rush.reset_index(),
+        ply_rz_tgt.reset_index().rename(columns={"receiver": "player"}),
+        team_rz_tgt.reset_index(),
+        ply_rz_carry.reset_index().rename(columns={"rusher": "player"}),
+        team_rz_carry.reset_index(),
+        rec_yds.reset_index().rename(columns={"receiver": "player"}),
+        rush_yds.reset_index().rename(columns={"rusher": "player"}),
+    ]
+    for m in merges:
+        on_cols = [c for c in ["game_id", "posteam", "player"] if c in m.columns]
+        players = players.merge(m, on=on_cols, how="left")
+
+    # Safe fill numeric zeros
+    for c in [
+        "player_targets","team_targets","player_rush_att","team_rush_att",
+        "player_rz_tgt","team_rz_tgt","player_rz_carry","team_rz_carry",
+        "rec_yards","rush_yards"
+    ]:
+        if c not in players.columns:
+            players[c] = 0
+        players[c] = players[c].fillna(0)
+
+    # Season aggregate
+    agg = players.groupby(["posteam", "player"], as_index=False).sum(numeric_only=True)
+    agg["team"] = agg["posteam"].astype(str).str.upper()
+    agg["target_share"] = (agg["player_targets"] / agg["team_targets"]).replace([np.inf, -np.inf], np.nan)
+    agg["rush_share"]   = (agg["player_rush_att"] / agg["team_rush_att"]).replace([np.inf, -np.inf], np.nan)
+    agg["rz_tgt_share"] = (agg["player_rz_tgt"] / agg["team_rz_tgt"]).replace([np.inf, -np.inf], np.nan)
+    agg["rz_carry_share"] = (agg["player_rz_carry"] / agg["team_rz_carry"]).replace([np.inf, -np.inf], np.nan)
+    agg["ypt"] = (agg["rec_yards"] / agg["player_targets"].replace(0, np.nan)).replace([np.inf, -np.inf], np.nan)
+    agg["ypc"] = (agg["rush_yards"] / agg["player_rush_att"].replace(0, np.nan)).replace([np.inf, -np.inf], np.nan)
+
+    # Position guess (original behavior)
+    agg["position"] = np.where(agg["target_share"].fillna(0) > 0.20, "WR",
+                        np.where(agg["rush_share"].fillna(0) > 0.20, "RB", "TE"))
+    agg["role"] = np.where(agg["position"].eq("WR"), "WR1",
+                    np.where(agg["position"].eq("RB"), "RB1", "TE1"))
+
+    # >>> ADD: ensure QB rows exist (QB1 per team) with qb_ypa for downstream QB props
+    try:
+        pass_rows = pbp.loc[pbp["is_pass"] & (pbp["passer"] != ""), ["posteam", "passer", "yards_gained"]].copy()
+        pass_rows["att"] = 1
+        qb_by_team = pass_rows.groupby(["posteam", "passer"], as_index=False).agg(
+            att=("att", "sum"),
+            pass_yards=("yards_gained", "sum")
+        )
+        qb_top = qb_by_team.sort_values(["posteam", "att", "pass_yards"],
+                                        ascending=[True, False, False]).groupby("posteam", as_index=False).first()
+        qb_top["team"] = qb_top["posteam"].astype(str).str.upper()
+        qb_top["player"] = qb_top["passer"]
+        qb_top["qb_ypa"] = (qb_top["pass_yards"] / qb_top["att"].replace(0, np.nan)).replace([np.inf, -np.inf], np.nan)
+
+        qb_top["position"] = "QB"
+        qb_top["role"] = "QB1"
+        qb_top["target_share"] = 0.0
+        qb_top["rush_share"] = 0.0
+        qb_top["route_rate"] = 0.0
+        qb_top["rz_tgt_share"] = 0.0
+        qb_top["rz_carry_share"] = 0.0
+        qb_top["yprr_proxy"] = 0.0
+        qb_top["ypc"] = 0.0
+        qb_top["ypt"] = np.nan
+
+        qb_cols = ["player","team","position","role","target_share","rush_share","route_rate",
+                   "rz_tgt_share","rz_carry_share","yprr_proxy","ypc","qb_ypa","ypt"]
+        for col in qb_cols:
+            if col not in agg.columns:
+                agg[col] = np.nan
+        qb_out = qb_top.reindex(columns=["player","team","position","role",
+                                         "target_share","rush_share","route_rate",
+                                         "rz_tgt_share","rz_carry_share","yprr_proxy","ypc","qb_ypa","ypt"])
+        # concat to agg later after we finish providers fill
+    except Exception as _e:
+        qb_out = pd.DataFrame()
+        print(f"[player_form] WARN: QB enrich skipped: {_e}")
+    # <<< ADD
+
+    # Prepare base output
+    out = agg.copy()
+    for c in ["route_rate","yprr_proxy","target_share","rush_share","rz_tgt_share","rz_carry_share","ypc","ypt","qb_ypa"]:
+        if c not in out.columns:
+            out[c] = np.nan
+    out = out[[
+        "player","team","position","role",
+        "target_share","rush_share","route_rate",
+        "rz_tgt_share","rz_carry_share","yprr_proxy","ypc","qb_ypa","ypt"
+    ]]
+
+    # ===================== FALLBACK PROVIDERS (NO PFR) =====================
+
+    # ESPN
+    espn = _safe_read_csv("data/espn_player.csv")
+    out = _merge_missing_player(out, espn, ("player","team"), {
+        "routes_per_dropback":"route_rate","routes_db":"route_rate","route_rate":"route_rate",
+        "target_share":"target_share","targets_share":"target_share",
+        "rush_share":"rush_share",
+        "yprr":"yprr_proxy","yards_per_route_run":"yprr_proxy",
+        "ypc":"ypc","yards_per_carry":"ypc",
+        "ypa":"qb_ypa","yards_per_attempt":"qb_ypa",
+        "rz_tgt_share":"rz_tgt_share","rz_carry_share":"rz_carry_share",
+    }, tag="ESPN")
+
+    # MySportsFeeds
+    msf = _safe_read_csv("data/msf_player.csv")
+    out = _merge_missing_player(out, msf, ("player","team"), {
+        "route_rate":"route_rate","routes_per_dropback":"route_rate",
+        "target_share":"target_share","tgt_share":"target_share",
+        "rush_share":"rush_share",
+        "yprr":"yprr_proxy",
+        "ypc":"ypc",
+        "ypa":"qb_ypa",
+        "rz_tgt_share":"rz_tgt_share","rz_tgt_pct":"rz_tgt_share",
+        "rz_carry_share":"rz_carry_share",
+    }, tag="MySportsFeeds")
+
+    # API-Sports
+    apis = _safe_read_csv("data/apisports_player.csv")
+    out = _merge_missing_player(out, apis, ("player","team"), {
+        "routes_per_dropback":"route_rate","route_pct":"route_rate",
+        "tgt_share":"target_share","target_share":"target_share",
+        "rush_share":"rush_share",
+        "yprr":"yprr_proxy",
+        "ypc":"ypc",
+        "ypa":"qb_ypa",
+        "rz_tgt_share":"rz_tgt_share",
+        "rz_carry_share":"rz_carry_share",
+    }, tag="API-Sports")
+
+    # NFLGSIS
+    gsis = _safe_read_csv("data/gsis_player.csv")
+    out = _merge_missing_player(out, gsis, ("player","team"), {
+        "routes_per_dropback":"route_rate","route_rate":"route_rate",
+        "target_share":"target_share",
+        "rush_share":"rush_share",
+        "yprr":"yprr_proxy",
+        "ypc":"ypc",
+        "ypa":"qb_ypa",
+        "rz_tgt_share":"rz_tgt_share",
+        "rz_carry_share":"rz_carry_share",
+    }, tag="NFLGSIS")
+
+    # >>> ADD: now append QB rows (if any) so QB props can merge smoothly
+    if not qb_out.empty:
+        out = pd.concat([out, qb_out[out.columns]], ignore_index=True)
+    # <<< ADD
+
+    # Numeric sanitize
+    for c in ("target_share","rush_share","route_rate","rz_tgt_share","rz_carry_share","yprr_proxy","ypc","qb_ypa","ypt"):
+        if c in out.columns:
+            out[c] = pd.to_numeric(out[c], errors="coerce")
+
+    return out
+
+# ---------------------- CLI wrapper (unchanged) ----------------------
+
+def cli(season: int, *, allow_fallback: bool = False) -> int:
+    try:
+        df = build_player_form(season, allow_fallback=allow_fallback)
+        if df is None or df.empty:
+            raise RuntimeError("[player_form] looks empty/stub — check logs/nfl_pbp_error.txt")
     except Exception as e:
-        print(f"[engine] ERROR: {e}", file=sys.stderr)
-        return 1
-    finally:
-        finalize_run()
-
-def cli_main() -> int:
-    """CLI entrypoint used by `python -m engine`."""
-    import argparse
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--season", default=os.getenv("SEASON") or "2025")
-    ap.add_argument("--date", default=os.getenv("SLATE_DATE") or "")
-    ap.add_argument("--books", "--bookmakers", dest="books",
-                    default="draftkings,fanduel,betmgm,caesars")
-    ap.add_argument("--markets", default="")
-    args = ap.parse_args()
-
-    return run_pipeline(
-        season=args.season,
-        date=args.date,
-        books=[b.strip() for b in args.books.split(",") if b.strip()],  # [] if user passes --bookmakers=""
-        markets=[m.strip() for m in args.markets.split(",") if m.strip()] or None,
-    )
+        print(f"[player_form] fatal error: {type(e).__name__}: {e}")
+        df = pd.DataFrame()
+    _safe_write(df, OUT)
+    print(f"[player_form] wrote rows={len(df)} → {OUT}")
+    return 0
 
 if __name__ == "__main__":
-    sys.exit(cli_main())
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--season", required=True, type=int)
+    ap.add_argument("--allow-fallback", action="store_true",
+                    help="Also try season-1 if the requested season returns empty PBP.")
+    args = ap.parse_args()
+    allow_fb = args.allow_fallback or os.getenv("ALLOW_PBP_FALLBACK", "").strip() in ("1","true","TRUE","yes","YES")
+    sys.exit(cli(args.season, allow_fallback=allow_fb))
