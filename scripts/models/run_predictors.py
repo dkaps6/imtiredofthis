@@ -272,6 +272,16 @@ def run(season: int):
                 props['team'] = props[alt].astype(str)
                 break
 
+    # ensure we have opp_team (fallback to opponent from metrics, if engine wrote it)
+    if 'opp_team' not in props.columns or props['opp_team'].isna().all():
+        met = _read_csv('data/metrics_ready.csv', ['event_id','player','team','opponent'])
+        if 'opponent' in met.columns:
+            props = props.merge(met[['event_id','player','opponent']].drop_duplicates(),
+                                on=['event_id','player'], how='left', suffixes=('','_met'))
+            props['opp_team'] = props.get('opp_team').combine_first(props.get('opponent'))
+            if 'opponent' in props.columns:
+                props.drop(columns=['opponent'], inplace=True, errors='ignore')
+
     # Market fair p (de-vig) if not present
     if 'p_market_fair' not in props.columns:
         p_market_fair=[]
