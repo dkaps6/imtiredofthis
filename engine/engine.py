@@ -13,7 +13,9 @@ import time
 import json
 import shutil
 import subprocess
+import shlex
 from datetime import datetime
+
 
 # ------------------------------------------
 # Utilities
@@ -46,13 +48,12 @@ def _assert_nonempty_csv(path: str, name: str):
     if not os.path.exists(path):
         raise RuntimeError(f"{name} not written: missing file → {path}")
     try:
-        import pandas as pd  # local import to avoid hard dependency if not needed
+        import pandas as pd
         df = pd.read_csv(path)
         if df.empty:
             raise RuntimeError(f"{name} is empty; check build logs → {path}")
         print(f"[ENGINE] • {name}: {len(df)} rows ({len(df.columns)} cols)")
     except Exception as e:
-        # If pandas isn't available here for some reason, at least check size > 0
         if os.path.getsize(path) <= 1:
             raise RuntimeError(f"{name} appears empty ({path}); {e}")
 
@@ -89,8 +90,15 @@ def run_pipeline(season: int = 2025,
     # STEP 1: Fetch data (props + optional providers)
     # -------------------------
     try:
-        # Your props fetcher is stable—leave it untouched.
-        _run("python scripts/fetch_props_oddsapi.py")
+        # Build fetch command with passthrough flags IF provided
+        fetch_parts = ["python", "scripts/fetch_props_oddsapi.py"]
+        if bookmakers:
+            # pass both aliases in case the fetcher expects either name
+            fetch_parts += ["--bookmakers", bookmakers, "--books", bookmakers]
+        if markets:
+            fetch_parts += ["--markets", markets]
+        fetch_cmd = " ".join(shlex.quote(p) for p in fetch_parts)
+        _run(fetch_cmd)
 
         # Optional providers (soft-fail)
         _run("python scripts/providers/espn_depth.py || true")
