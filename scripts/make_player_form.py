@@ -58,9 +58,14 @@ def _merge_missing_player(df: pd.DataFrame, add: pd.DataFrame, on: tuple[str,str
     return merged
 
 # ---------------------- sources ----------------------
-def _fetch_pbp(season: int, tries: int = 3, wait: float = 1.0) -> pd.DataFrame:
+def _fetch_pbp(season: int, *, allow_fallback: bool = False, tries: int = 3, wait: float = 1.0) -> pd.DataFrame:
+    """
+    Fetch play-by-play for the given season.
+    - By default (allow_fallback=False), ONLY tries `season` (e.g., 2025).
+    - If allow_fallback=True (via CLI flag or ALLOW_PBP_FALLBACK=1), also tries season-1.
+    """
     last = None
-    seasons_to_try = [season, season-1]
+    seasons_to_try = [season] if not allow_fallback else [season, season-1]
 
     # FIX: initialize use_readpy just like in team file
     try:
@@ -71,7 +76,7 @@ def _fetch_pbp(season: int, tries: int = 3, wait: float = 1.0) -> pd.DataFrame:
         import nfl_data_py as nfl  # noqa: F401
 
     with open(ERR_LOG, "a", encoding="utf-8") as f:
-        f.write(f"\n=== PBP fetch wanted season={season} ===\n")
+        f.write(f"\n=== PBP fetch wanted season={season} allow_fallback={allow_fallback} ===\n")
 
     for s in seasons_to_try:
         for i in range(1, tries + 1):
@@ -100,8 +105,8 @@ def _fetch_pbp(season: int, tries: int = 3, wait: float = 1.0) -> pd.DataFrame:
     raise RuntimeError(f"PBP fetch failed: {type(last).__name__}: {last}")
 
 # ---------------------- builder ----------------------
-def build_player_form(season: int) -> pd.DataFrame:
-    pbp = _fetch_pbp(season)
+def build_player_form(season: int, *, allow_fallback: bool = False) -> pd.DataFrame:
+    pbp = _fetch_pbp(season, allow_fallback=allow_fallback)
     if pbp is None or pbp.empty:
         raise RuntimeError("no pbp")
 
@@ -341,9 +346,9 @@ def build_player_form(season: int) -> pd.DataFrame:
     return out
 
 # ---------------------- CLI ----------------------
-def cli(season: int) -> int:
+def cli(season: int, *, allow_fallback: bool = False) -> int:
     try:
-        df = build_player_form(season)
+        df = build_player_form(season, allow_fallback=allow_fallback)
         if df is None or df.empty:
             raise RuntimeError("[player_form] looks empty/stub — check logs/nfl_pbp_error.txt")
     except Exception as e:
@@ -357,5 +362,9 @@ if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", required=True, type=int)
+    ap.add_argument("--allow-fallback", action="store_true",
+                    help="If set, allow trying season-1 if the requested season returns empty.")
     a = ap.parse_args()
-    sys.exit(cli(a.season))
+    # Also support ALLOW_PBP_FALLBACK=1 env toggle
+    allow_fb = a.allow_fallback or os.getenv("ALLOW_PBP_FALLBACK", "").strip() in ("1","true","TRUE","yes","YES")
+    sys.exit(cli(a.season, allow_fallback=allow_fb))
