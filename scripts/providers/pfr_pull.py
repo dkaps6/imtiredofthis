@@ -35,28 +35,35 @@ PFR_TO_STD = {
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; DepthBot/1.0)"}
 
-# ── NEW: small retry wrapper ───────────────────────────────────────────────────
+# ── NEW: small retry wrapper with 403-safe behavior ───────────────────────────
 def _get_html(url: str, tries: int = 3, sleep: float = 0.8) -> str:
     for k in range(tries):
         try:
             r = requests.get(url, headers=HEADERS, timeout=30)
+            # 403 → return empty html so caller can gracefully proceed to placeholders
+            if r.status_code == 403:
+                return ""
             r.raise_for_status()
             return r.text
-        except Exception as e:
+        except requests.HTTPError as e:
+            # If not a 403 or on last try, propagate
+            if getattr(e.response, "status_code", None) == 403:
+                return ""
             if k == tries - 1:
                 raise
             time.sleep(sleep)
-    raise RuntimeError("unreachable")
+        except Exception:
+            if k == tries - 1:
+                raise
+            time.sleep(sleep)
+    # Should not reach here
+    return ""
 
 def _read_html(url: str) -> BeautifulSoup:
     return BeautifulSoup(_get_html(url), "lxml")
 
-# ── NEW: include commented tables in the HTML we give to read_html ────────────
+# ── include commented tables in the HTML we give to read_html ────────────────
 def _html_with_uncomment(soup: BeautifulSoup) -> str:
-    """
-    PFR wraps some tables in HTML comments (<!-- ... -->). We extract those
-    comment blocks that contain <table> and append them to the visible HTML.
-    """
     parts = [str(soup)]
     for c in soup.find_all(string=lambda t: isinstance(t, Comment)):
         text = str(c)
@@ -75,11 +82,10 @@ def fetch_league_receiving(season: int) -> pd.DataFrame:
     url = LEAGUE_RECEIVING_URL.format(season=season)
     soup = _read_html(url)
 
-    # handle commented tables
+    # If we were 403-blocked, _get_html returned ""; soup will be empty → no tables → empty DF
     html = _html_with_uncomment(soup)
     dfs = pd.read_html(html, match="Receiving", flavor="lxml") if "table" in html else []
     if not dfs:
-        # fallback: try the explicit table id if present
         table = soup.find("table", {"id": "receiving"})
         if table is None:
             return pd.DataFrame()
@@ -89,7 +95,6 @@ def fetch_league_receiving(season: int) -> pd.DataFrame:
         return pd.DataFrame()
     df = dfs[0]
 
-    # normalize headers
     cols = [re.sub(r"[\W]+", "_", str(c)).strip("_").lower() for c in df.columns]
     df.columns = cols
 
