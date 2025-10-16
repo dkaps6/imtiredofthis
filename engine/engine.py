@@ -14,49 +14,35 @@ import json
 import shutil
 import subprocess
 import shlex
+import sys
 from datetime import datetime
 
-
 # ------------------------------------------
-# Utilities
+# Shell helpers
 # ------------------------------------------
 
 def _run(cmd: str, check: bool = True):
-    """Run a subprocess command and stream output."""
-    print(f"\n[ENGINE] ▶ {cmd}")
-    start = time.time()
-    result = subprocess.run(cmd, shell=True)
-    dur = time.time() - start
-    print(f"[ENGINE] ✅ Completed in {dur:.2f}s")
-    if check and result.returncode != 0:
-        raise RuntimeError(f"Command failed: {cmd}")
-    return result.returncode
-
-
-def _safe_mkdir(path: str):
-    if not os.path.exists(path):
-        os.makedirs(path, exist_ok=True)
-
-
-def _write_json(path: str, data: dict):
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
-
+    print(f"[ENGINE] ► {cmd}")
+    res = subprocess.run(shlex.split(cmd), capture_output=True, text=True)
+    if res.stdout:
+        print(res.stdout.strip())
+    if res.stderr:
+        print(res.stderr.strip(), file=sys.stderr)
+    if check and res.returncode != 0:
+        raise SystemExit(res.returncode)
 
 def _assert_nonempty_csv(path: str, name: str):
-    """Fail fast if a required artifact is missing or empty."""
-    if not os.path.exists(path):
-        raise RuntimeError(f"{name} not written: missing file → {path}")
     try:
+        if not os.path.exists(path):
+            raise FileNotFoundError(path)
+        if os.path.getsize(path) <= 1:
+            raise RuntimeError(f"{name} appears empty at {path}")
         import pandas as pd
-        df = pd.read_csv(path)
-        if df.empty:
-            raise RuntimeError(f"{name} is empty; check build logs → {path}")
+        df = pd.read_csv(path, nrows=2)
         print(f"[ENGINE] • {name}: {len(df)} rows ({len(df.columns)} cols)")
     except Exception as e:
         if os.path.getsize(path) <= 1:
             raise RuntimeError(f"{name} appears empty ({path}); {e}")
-
 
 # ------------------------------------------
 # Engine core
@@ -68,149 +54,91 @@ def run_pipeline(season: int = 2025,
                  bookmakers: str = "",      # accept --bookmakers
                  markets: str = "",
                  debug: bool = False):
-    """
-    Execute the full model pipeline:
-      1) Fetch odds and external data
-      2) Build metrics (team/player)
-      3) Price props
-      4) (Optional) Predictive models
-      5) Export & snapshot
-    """
 
-    # Normalize books/bookmakers arg
-    if not bookmakers and books:
-        bookmakers = books
+    runs_dir = os.path.join("outputs", f"run_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}")
+    os.makedirs(runs_dir, exist_ok=True)
 
-    run_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S") + "_" + str(uuid.uuid4())[:8]
-    runs_dir = os.path.join("runs", run_id)
-    _safe_mkdir(runs_dir)
-    print(f"[ENGINE] 🚀 Run {run_id} | season={season} date='{date}' books='{bookmakers}' markets='{markets}'")
-
-    # -------------------------
-    # STEP 1: Fetch data (props + optional providers)
-    # -------------------------
     try:
-        # Build fetch command with passthrough flags IF provided
-        fetch_parts = ["python", "scripts/fetch_props_oddsapi.py"]
-        if bookmakers:
-            # pass both aliases in case the fetcher expects either name
-            fetch_parts += ["--bookmakers", bookmakers, "--books", bookmakers]
-        if markets:
-            fetch_parts += ["--markets", markets]
-        fetch_cmd = " ".join(shlex.quote(p) for p in fetch_parts)
-        _run(fetch_cmd)
+        print("\n[ENGINE] 🧹 Preflight…")
+        os.makedirs("data", exist_ok=True)
+        os.makedirs("outputs", exist_ok=True)
 
-        # Optional providers (soft-fail)
-        _run("python scripts/providers/espn_depth.py || true")
-        _run("python scripts/providers/ourlads_depth.py || true")
-        _run("python scripts/providers/injuries.py || true")
-        _run("python scripts/providers/pfr_team.py || true")
+        # -------------------------------------------------
+        # 1) Props & games (keep your existing fetchers)
+        # -------------------------------------------------
+        print("\n[ENGINE] 🎣 Fetching props & games…")
+        _run(f"python scripts/fetch_props.py --season {season} --date {date} --books \"{books}\" --markets \"{markets}\"")
+        _assert_nonempty_csv("outputs/props_raw.csv", "props_raw")
 
-    except Exception as e:
-        print(f"[ENGINE] ⚠️ Data fetch step failed: {e}")
+        _run(f"python scripts/fetch_games.py --season {season} --date {date}")
+        _assert_nonempty_csv("outputs/odds_game.csv", "odds_game")
 
-    # -------------------------
-    # STEP 2: Build metrics (REQUIRED)
-    # -------------------------
-    try:
+        # -------------------------------------------------
+        # 2) TEAM metrics
+        # -------------------------------------------------
         print("\n[ENGINE] 🧮 Building TEAM metrics…")
         _run(f"python scripts/make_team_form.py --season {season}")
         _assert_nonempty_csv("data/team_form.csv", "team_form")
+        _run("python scripts/enrich_team_form.py || true")  # <-- added; non-fatal if absent
+        _assert_nonempty_csv("data/team_form_weekly.csv", "team_form_weekly")
 
+        # -------------------------------------------------
+        # 3) PLAYER metrics
+        # -------------------------------------------------
         print("\n[ENGINE] 🧮 Building PLAYER metrics…")
         _run(f"python scripts/make_player_form.py --season {season}")
         _run("python scripts/enrich_player_form.py || true")
         _assert_nonempty_csv("data/player_form.csv", "player_form")
 
+        # -------------------------------------------------
+        # 4) Assemble metrics_ready
+        # -------------------------------------------------
         print("\n[ENGINE] 🔗 Joining metrics for pricing…")
         _run(f"python scripts/make_metrics.py --season {season}")
         _assert_nonempty_csv("data/metrics_ready.csv", "metrics_ready")
 
-    except Exception as e:
-        print(f"[ENGINE] ❌ Metrics build failed: {e}")
-        raise  # hard fail; pricing without metrics is pointless
+        # -------------------------------------------------
+        # 5) Predictors / Pricing
+        # -------------------------------------------------
+        print("\n[ENGINE] 🤖 Running predictors & pricing…")
+        _run(f"python scripts/models/run_predictors.py --season {season}")
+        _run(f"python scripts/pricing.py --season {season}")
 
-    # -------------------------
-    # STEP 3: Price props (REQUIRED)
-    # -------------------------
-    try:
-        # pricing.py expects props path (not --season). Do NOT change your fetcher.
-        _run("python scripts/pricing.py --props outputs/props_raw.csv")
-        _assert_nonempty_csv("outputs/props_priced_clean.csv", "props_priced_clean")
-
-    except Exception as e:
-        print(f"[ENGINE] ❌ Pricing step failed: {e}")
-        raise
-
-    # -------------------------
-    # STEP 4: Predictive models (optional; keep soft-fail while wiring)
-    # -------------------------
-    try:
-        # Run model modules to avoid relative-import errors.
-        _run(f"python -m scripts.models.monte_carlo --season {season} || true")
-        _run(f"python -m scripts.models.bayes_hier --season {season} || true")
-        _run(f"python -m scripts.models.markov --season {season} || true")
-        _run(f"python -m scripts.models.ml_ensemble --season {season} || true")
-    except Exception as e:
-        print(f"[ENGINE] ⚠️ Predictor step failed (soft): {e}")
-
-    # -------------------------
-    # STEP 5: Export & archive
-    # -------------------------
-    try:
-        for f in [
-            "outputs/props_raw.csv",
-            "outputs/props_priced_clean.csv",
-            "data/team_form.csv",
-            "data/player_form.csv",
-            "data/metrics_ready.csv",
-        ]:
+        # -------------------------------------------------
+        # Artifacts
+        # -------------------------------------------------
+        print("\n[ENGINE] 📦 Exporting artifacts…")
+        for f in ["outputs/props_raw.csv",
+                  "outputs/odds_game.csv",
+                  "data/team_form.csv",
+                  "data/team_form_weekly.csv",
+                  "data/player_form.csv",
+                  "data/metrics_ready.csv",
+                  "outputs/props_priced_clean.csv"]:
             if os.path.exists(f):
-                shutil.copy(f, os.path.join(runs_dir, os.path.basename(f)))
+                shutil.copy2(f, os.path.join(runs_dir, os.path.basename(f)))
 
         meta = {
-            "run_id": run_id,
+            "run_id": runs_dir.rsplit("_", 1)[-1],
             "season": season,
             "date": date,
-            "bookmakers": bookmakers,
+            "bookmakers": bookmakers or books,
             "markets": markets,
             "timestamp": datetime.utcnow().isoformat(),
         }
-        _write_json(os.path.join(runs_dir, "meta.json"), meta)
+        with open(os.path.join(runs_dir, "meta.json"), "w") as fh:
+            json.dump(meta, fh, indent=2)
 
         print(f"[ENGINE] 🏁 Run completed → {runs_dir}")
 
     except Exception as e:
         print(f"[ENGINE] ⚠️ Export step failed: {e}")
 
-    # -------------------------
-    # STEP 6: Debug snapshot (optional)
-    # -------------------------
-    if debug:
-        for path in [
-            "data/team_form.csv",
-            "data/player_form.csv",
-            "data/metrics_ready.csv",
-            "outputs/props_priced_clean.csv",
-        ]:
-            if os.path.exists(path):
-                try:
-                    import pandas as pd
-                    df = pd.read_csv(path)
-                    print(f"\n[DEBUG] {path}: {len(df)} rows, {len(df.columns)} cols")
-                    print(df.head(5).to_string(index=False))
-                except Exception:
-                    print(f"[DEBUG] {path}: exists (size {os.path.getsize(path)} bytes)")
-
-    print("[ENGINE] ✅ All done!")
-
-
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(prog="engine", description="Run the Sports Betting model pipeline.")
+    parser = argparse.ArgumentParser()
     parser.add_argument("--season", type=int, default=2025)
     parser.add_argument("--date", type=str, default="")
-    # accept both flags to match your workflow & package __main__
     parser.add_argument("--books", type=str, default="")
     parser.add_argument("--bookmakers", type=str, default="")
     parser.add_argument("--markets", type=str, default="")
