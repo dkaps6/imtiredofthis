@@ -202,6 +202,15 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
              label="player_form", snap_after=["data/player_form.csv"])
         print(f"[engine]   data/player_form.csv → {_size('data/player_form.csv')}")
 
+        # --- NEW: non-invasive enrichers (post-build; no changes to your builders) ---
+        try:
+            _run("python scripts/enrich_team_form.py",
+                 label="enrich_team", snap_after=["data/team_form.csv"])
+            _run("python scripts/enrich_player_form.py",
+                 label="enrich_player", snap_after=["data/player_form.csv"])
+        except Exception as e:
+            print(f"[engine] enrichers skipped: {type(e).__name__}: {e}")
+
         # 3) merge metrics
         _run("python scripts/make_metrics_ready.py",
              label="metrics_ready", snap_after=["data/metrics_ready.csv"])
