@@ -29,9 +29,10 @@ try:
     from scripts.providers.pfr_pull import main as _pfr_pull_main
 except Exception:
     _pfr_pull_main = None
-        if os.getenv("USE_PFR", "").strip() not in ("1","true","TRUE","yes","YES"):
-            _pfr_pull_main = None
-            print("[engine] PFR step disabled (USE_PFR not set)")
+
+if os.getenv("USE_PFR", "").strip() not in ("1","true","TRUE","yes","YES"):
+    _pfr_pull_main = None
+    print("[engine] PFR step disabled (USE_PFR not set)")
 
 try:
     from scripts.providers.espn_depth import main as _espn_depth_main
