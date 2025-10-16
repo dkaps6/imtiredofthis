@@ -16,4 +16,6 @@ class Leg:
 class LegResult:
     p_model: float
     p_market: Optional[float] = None
+    mu: Optional[float] = None      # <-- add
+    sigma: Optional[float] = None   # <-- add
     notes: str = ""
