@@ -211,9 +211,18 @@ def run_pipeline(season: str, date: str, books: list[str] | None, markets: list[
         except Exception as e:
             print(f"[engine] enrichers skipped: {type(e).__name__}: {e}")
 
-        # 3) merge metrics
-        _run("python scripts/make_metrics_ready.py",
-             label="metrics_ready", snap_after=["data/metrics_ready.csv"])
+        # 3) merge metrics  (prefer your make_metrics.py; fall back to *_ready if present)
+        metrics_script = None
+        if Path("scripts/make_metrics.py").exists():
+            metrics_script = "scripts/make_metrics.py"
+        elif Path("scripts/make_metrics_ready.py").exists():
+            metrics_script = "scripts/make_metrics_ready.py"
+
+        if metrics_script:
+            _run(f"python {metrics_script}",
+                 label="metrics_ready", snap_after=["data/metrics_ready.csv"])
+        else:
+            print("[engine] skip metrics: no make_metrics script found")
 
         # 4) props (oddsapi)
         # Check if caller wants an explicit bookmakers list.
