@@ -60,10 +60,14 @@ jobs:
           set -e
           SEASON="${{ github.event.inputs.season }}"
           DATE="${{ github.event.inputs.date }}"
-          BOOKS="${{ github.event.inputs.bookmakers }}"
+          BOOKS="${{ github.event.inputs.bookmakers }}"   # keep the GH input var if you like
+          MARKETS="${{ github.event.inputs.markets }}"     # if you have one
 
           echo "▶ Running pipeline for season=$SEASON date=$DATE books=$BOOKS"
-          python -m engine --season "$SEASON" --date "$DATE" --bookmakers="$BOOKS"
+          python -m engine --season "$SEASON" --date "$DATE" --books "$BOOKS" --markets "$MARKETS"
+          # or, if you don't pass markets:
+          # python -m engine --season "$SEASON" --date "$DATE" --books "$BOOKS"
+
 
       - name: "Upload run artifacts"
         if: always()
