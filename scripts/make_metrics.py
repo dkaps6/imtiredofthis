@@ -250,6 +250,32 @@ def build_metrics(season: int) -> pd.DataFrame:
     wx = load_weather()
     gl = load_game_lines()
 
+    # --- ADD: ensure a 'week' on props to allow weekly opponent env attach ---
+    need_week = ("week" not in props.columns) or props["week"].isna().all()
+
+    if need_week:
+        # 1) Best: derive from props.commence_time if present
+        if "commence_time" in props.columns:
+            props["week"] = pd.to_datetime(
+                props["commence_time"], errors="coerce", utc=True
+            ).dt.isocalendar().week.astype("Int64")
+        else:
+            # 2) Fallback: raw read of game_lines to grab commence_time → week by event_id
+            gl_raw = _read_csv(os.path.join("outputs", "game_lines.csv"))
+            if not gl_raw.empty and {"event_id","commence_time"}.issubset(gl_raw.columns) and "event_id" in props.columns:
+                wk_src = gl_raw[["event_id","commence_time"]].dropna().copy()
+                wk_src["week"] = pd.to_datetime(
+                    wk_src["commence_time"], errors="coerce", utc=True
+                ).dt.isocalendar().week.astype("Int64")
+                props = props.merge(wk_src[["event_id","week"]], on="event_id", how="left", suffixes=("", "_gl"))
+                if "week_gl" in props.columns:
+                    props["week"] = props["week"].combine_first(props["week_gl"])
+                    props.drop(columns=["week_gl"], inplace=True, errors="ignore")
+
+    if "week" not in props.columns:
+        props["week"] = pd.Series(pd.array([], dtype="Int64"))
+    # --- END ADD ---
+
     # if props.team missing entirely, try to backfill from player_form first
     if "team" in props.columns and props["team"].isna().all() and not pf.empty:
         props = props.merge(pf[["player","team"]].drop_duplicates(), on="player", how="left", suffixes=("","_pf"))
@@ -263,6 +289,12 @@ def build_metrics(season: int) -> pd.DataFrame:
 
     # Base: props + player_form
     base = props.copy()
+
+    # --- ADD: carry 'week' to base explicitly (safety) ---
+    if "week" not in base.columns and "week" in props.columns:
+        base["week"] = props["week"]
+    # --- END ADD ---
+
     if not pf.empty:
         keep_pf = ["player","team","target_share","rush_share","route_rate","yprr_proxy","ypt","ypc",
                    "rz_tgt_share","rz_carry_share","position","role","season"]
@@ -349,6 +381,10 @@ def build_metrics(season: int) -> pd.DataFrame:
         for c in ["wind_mph","temp_f","precip"]:
             base[c] = np.nan
 
+    # --- ADD: stamp season explicitly (keeps your original schema, reduces NaNs) ---
+    base["season"] = season
+    # --- END ADD ---
+
     # Final tidy and order
     want = [
         "event_id","player","team","opponent","market","line","over_odds","under_odds",
@@ -356,7 +392,10 @@ def build_metrics(season: int) -> pd.DataFrame:
         "pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
         "def_pass_epa_opp","def_rush_epa_opp","def_sack_rate_opp","light_box_rate_opp","heavy_box_rate_opp",
         "coverage_top_shadow_opp","coverage_heavy_man_opp","coverage_heavy_zone_opp",
-        "cb_penalty","injury_status","wind_mph","temp_f","precip","team_wp","season"
+        "cb_penalty","injury_status","wind_mph","temp_f","precip","team_wp","season",
+        # --- ADD: include week + future weekly opponent env columns in schema ---
+        "week","opp_plays_wk","opp_pace_wk","opp_proe_wk"
+        # --- END ADD ---
     ]
     for c in want:
         if c not in base.columns:
@@ -380,21 +419,28 @@ def main():
             "pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
             "def_pass_epa_opp","def_rush_epa_opp","def_sack_rate_opp","light_box_rate_opp","heavy_box_rate_opp",
             "coverage_top_shadow_opp","coverage_heavy_man_opp","coverage_heavy_zone_opp",
-            "cb_penalty","injury_status","wind_mph","temp_f","precip","team_wp","season"
+            "cb_penalty","injury_status","wind_mph","temp_f","precip","team_wp","season",
+            "week","opp_plays_wk","opp_pace_wk","opp_proe_wk"
         ])
-        # optional: add opponent weekly env (pace/proe/plays_est) if present
+
+    # optional: add opponent weekly env (pace/proe/plays_est) if present
     try:
-    tfw = _read_csv(os.path.join("data", "team_form_weekly.csv"))
-    if not df.empty and not tfw.empty and {"opponent","week"}.issubset(df.columns) and {"team","week"}.issubset(tfw.columns):
-        tfw = tfw.rename(columns={"team":"opponent"})
-        cols = [c for c in ["opponent","week","plays_est","pace","proe"] if c in tfw.columns]
-        tfw = tfw[cols].drop_duplicates().rename(columns={
-            "plays_est":"opp_plays_wk","pace":"opp_pace_wk","proe":"opp_proe_wk"
-        })
-        df = df.merge(tfw, on=["opponent","week"], how="left")
-        for c in ["opp_plays_wk","opp_pace_wk","opp_proe_wk"]:
-            if c not in df.columns:
-                df[c] = np.nan
+        tfw = _read_csv(os.path.join("data", "team_form_weekly.csv"))
+        if (
+            not df.empty
+            and not tfw.empty
+            and {"opponent","week"}.issubset(df.columns)
+            and {"team","week"}.issubset(tfw.columns)
+        ):
+            tfw = tfw.rename(columns={"team":"opponent"})
+            cols = [c for c in ["opponent","week","plays_est","pace","proe"] if c in tfw.columns]
+            tfw = tfw[cols].drop_duplicates().rename(columns={
+                "plays_est":"opp_plays_wk","pace":"opp_pace_wk","proe":"opp_proe_wk"
+            })
+            df = df.merge(tfw, on=["opponent","week"], how="left")
+            for c in ["opp_plays_wk","opp_pace_wk","opp_proe_wk"]:
+                if c not in df.columns:
+                    df[c] = np.nan
     except Exception:
         pass
 
