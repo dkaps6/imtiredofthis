@@ -109,6 +109,42 @@ def safe_div(n, d):
     return out
 
 
+def _read_csv_safe(path: str) -> pd.DataFrame:
+    if not os.path.exists(path): 
+        return pd.DataFrame()
+    try:
+        df = pd.read_csv(path)
+        df.columns = [c.lower() for c in df.columns]
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+def _non_destructive_team_merge(base: pd.DataFrame, add: pd.DataFrame) -> pd.DataFrame:
+    """
+    Merge team-level enrichers without overwriting existing non-null values.
+    Fills only the following columns when they are missing in `base`.
+    """
+    if add.empty or "team" not in add.columns:
+        return base
+    add = add.copy()
+    add.columns = [c.lower() for c in add.columns]
+    keep = [c for c in [
+        "team","pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
+        "def_pass_epa","def_rush_epa","def_sack_rate","light_box_rate","heavy_box_rate"
+    ] if c in add.columns]
+    if not keep:
+        return base
+    add = add[keep].drop_duplicates()
+    out = base.merge(add, on="team", how="left", suffixes=("","_ext"))
+    for c in keep:
+        if c == "team": 
+            continue
+        ext = f"{c}_ext"
+        if ext in out.columns:
+            out[c] = out[c].combine_first(out[ext])
+            out.drop(columns=[ext], inplace=True)
+    return out
+
 # -----------------------------
 # Loaders (abstract across libs)
 # -----------------------------
