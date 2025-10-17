@@ -52,6 +52,9 @@ python run_model.py --date today --season 2025 --write outputs
 > **Dependency note:** the refreshed `requirements.txt` sticks to *compatible
 > ranges* instead of exact pins so `pip` can choose wheels that exist for the
 > Python version in your environment. They keep the same lower bounds we used in
+> CI (`pandas 2.2.2+`, `numpy 1.26.4+`, `scipy 1.11+`, `statsmodels 0.14.2+`)
+> while relaxing the upper bounds to `<2.0` so the resolver no longer trips over
+> version conflicts during “Install dependencies”.
 > CI (`pandas 2.1.4+`, `numpy 1.26.4+`, `scipy 1.11+`, `statsmodels 0.14.2+`)
 > while relaxing the upper bounds to `<2.0`/`<2.2` so the resolver no longer
 > trips over version conflicts during “Install dependencies”.
