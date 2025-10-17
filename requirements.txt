@@ -12,6 +12,26 @@ pytz>=2024.1
 pyarrow>=14
 
 # nflverse (python)
+#
+# The latest `nflreadpy` wheel on PyPI is 0.1.3 (Python ≤3.11).  To avoid the
+# conflicting resolver requests you observed (simultaneous <0.3 and ≥0.3
+# constraints), we pin the companion libraries to the last known compatible
+# combination.  If newer releases appear, upgrade the pins together after
+# verifying they coexist.
+nfl_data_py>=0.3.3,<0.3.4
+nflreadpy==0.1.3; python_version < '3.12'
+polars>=0.20
+beautifulsoup4>=4.12
+lxml>=4.9.4,<5   # faster/more robust parser for bs4 (compatible with nflreadpy)
+
+# IO / utils
+requests>=2.31
+openpyxl>=3.1
+python-dateutil>=2.9
+pytz>=2024.1
+pyarrow>=14
+
+# nflverse (python)
 nfl_data_py>=0.3.3
 # nflreadpy wheels are published through 0.1.3 today. Keep the dependency scoped
 # to Python 3.11-and-earlier runners so installs succeed where wheels exist,
