@@ -116,6 +116,8 @@ def run_pipeline(season: int = 2025,
         print("\n[ENGINE] 🧮 Building TEAM metrics…")
         _run(f"python scripts/make_team_form.py --season {season}")
         _assert_nonempty_csv("data/team_form.csv", "team_form")
+       
+        _run("python scripts/enrich_team_form.py || true")  # ensures enrich step runs after team_form
 
         print("\n[ENGINE] 🧮 Building PLAYER metrics…")
         _run(f"python scripts/make_player_form.py --season {season}")
