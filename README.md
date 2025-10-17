@@ -52,6 +52,14 @@ python run_model.py --date today --season 2025 --write outputs
 > **Dependency note:** the refreshed `requirements.txt` sticks to *compatible
 > ranges* instead of exact pins so `pip` can choose wheels that exist for the
 > Python version in your environment. They keep the same lower bounds we used in
+> CI (`pandas 2.1.4+`, `numpy 1.26.4+`, `scipy 1.11+`, `statsmodels 0.14.2+`)
+> while relaxing the upper bounds to `<2.0`/`<2.2` so the resolver no longer
+> trips over version conflicts during “Install dependencies”.
+
+> Optional packages like `nflreadpy` (and its `polars` dependency) remain in the
+> list so the builders can hit the live 2025 nflverse feeds. If those packages
+> are absent, the scripts fall back to `nfl_data_py>=0.3.3`; make sure that
+> version is available so the shared `original_mlq` helper exists.
 > CI (`pandas 2.2.2+`, `numpy 1.26.4+`, `scipy 1.11+`, `statsmodels 0.14.2+`)
 > while relaxing the upper bounds to `<2.0`/`<2.3` so the resolver no longer
 > trips over version conflicts during “Install dependencies”.
