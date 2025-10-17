@@ -163,6 +163,17 @@ def run_pipeline(season: int = 2025,
         "allow_fallback": allow_fallback,
     }
 
+    summary: Dict[str, Any] = {
+        "run_id": run_id,
+        "season": season,
+        "date": date,
+        "bookmakers": bookmakers,
+        "markets": markets,
+        "started_at": start_wall.isoformat() + "Z",
+        "steps": {},
+        "status": "ok",
+    }
+
     overall_error: Exception | None = None
 
     try:
@@ -224,6 +235,7 @@ def run_pipeline(season: int = 2025,
             if allow_fallback:
                 player_cmd += " --allow-fallback"
             _run(player_cmd)
+            _run(f"python scripts/make_player_form.py --season {season}")
             _run("python scripts/enrich_player_form.py || true")
             player_info = _assert_nonempty_csv(
                 "data/player_form.csv",

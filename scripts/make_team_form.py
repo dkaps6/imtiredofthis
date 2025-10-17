@@ -305,6 +305,11 @@ def _load_pbp_with_fallback(
     When ``allow_prior_seasons`` is False, the function will raise if it can only
     source data from seasons earlier than the requested one – ensuring we never
     silently populate 2025 projections with 2024 (or older) metrics.
+def _load_pbp_with_fallback(season: int, max_lookback: int = 5) -> tuple[pd.DataFrame, int]:
+    """
+    Attempt to load play-by-play data for ``season``. If unavailable (future season
+    or network restriction), fall back to the most recent prior season that returns
+    data. Returns the dataframe and the season actually used.
     """
     errors: list[str] = []
     for offset in range(0, max_lookback + 1):
@@ -330,6 +335,11 @@ def _load_pbp_with_fallback(
                 f"season {candidate}: available but fallback disabled"
             )
             continue
+            if candidate != season:
+                print(
+                    f"[make_team_form] ⚠️ No PBP for {season}; using {candidate} as fallback"
+                )
+            return pbp, candidate
         errors.append(f"season {candidate}: empty dataframe")
     raise RuntimeError(
         "PBP unavailable for requested season and fallbacks. "
@@ -579,6 +589,10 @@ def build_team_form(season: int, *, allow_fallback: bool) -> tuple[pd.DataFrame,
     pbp, source_season = _load_pbp_with_fallback(
         season, allow_prior_seasons=allow_fallback
     )
+def build_team_form(season: int) -> tuple[pd.DataFrame, pd.DataFrame, int]:
+    """Return team-form dataframe, the PBP used, and the source season."""
+    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
+    pbp, source_season = _load_pbp_with_fallback(season)
     if pbp.empty:
         raise RuntimeError("PBP is empty; cannot compute team form.")
 
@@ -661,6 +675,7 @@ def main():
         df, pbp_used, source_season = build_team_form(
             args.season, allow_fallback=args.allow_fallback
         )
+        df, pbp_used, source_season = build_team_form(args.season)
         if source_season != args.season:
             print(
                 f"[make_team_form] ℹ️ Using {source_season} metrics as proxy for {args.season}"

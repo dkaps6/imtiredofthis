@@ -55,6 +55,8 @@ def _load_pbp_with_fallback(
     substituting older data; this keeps 2025 runs from drifting to 2024 metrics
     when live pulls fail.
     """
+def _load_pbp_with_fallback(season: int, max_lookback: int = 5) -> tuple[pd.DataFrame, int]:
+    """Return the first available season ≤ ``season`` with play-by-play data."""
     errors: list[str] = []
     for offset in range(0, max_lookback + 1):
         candidate = season - offset
@@ -79,6 +81,9 @@ def _load_pbp_with_fallback(
                 f"season {candidate}: available but fallback disabled"
             )
             continue
+            if candidate != season:
+                print(f"[make_player_form] ⚠️ No PBP for {season}; using {candidate} instead")
+            return df, candidate
         errors.append(f"season {candidate}: empty dataframe")
     raise RuntimeError(
         "PBP unavailable for requested season and fallbacks. "
@@ -319,6 +324,11 @@ def build_player_form(season:int, *, allow_fallback: bool)->tuple[pd.DataFrame, 
         raise RuntimeError("Empty PBP.")
     base = compute_player_usage(pbp)
     if base.empty and source_season > 2000 and allow_fallback:
+    pbp, source_season = _load_pbp_with_fallback(season)
+    if pbp.empty:
+        raise RuntimeError("Empty PBP.")
+    base = compute_player_usage(pbp)
+    if base.empty and source_season > 2000:
         # Try progressively earlier seasons when usage extraction fails (rare)
         for fallback in range(source_season - 1, max(source_season - 5, 1999), -1):
             try:
