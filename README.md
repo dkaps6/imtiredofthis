@@ -44,12 +44,43 @@ Artifacts:
 - `outputs/props_priced.csv` — Player props (with alternates), model μ/σ, blended probabilities, fair odds, **edge%**, **kelly** and **tier**.
 [Uploading README.md…]()
 
+### What to do next
+
+1. **Prime the data folders.** Drop any external scouting or share tables into `data/`. The builders now auto-detect both the `*_form.csv` files *and* the raw `espn_*.csv`, `msf_*.csv`, `apisports_*.csv`, `gsis_*.csv`, and `pfr_*` exports that already ship in this repo.
+2. **Build team context:** `python scripts/make_team_form.py --season 2025`
+   *The builder now **fails fast** if nflverse can’t serve 2025. Pass `--allow-fallback` only when you intentionally want an earlier proxy season.*
+3. **Build player usage:** `python scripts/make_player_form.py --season 2025`
+   *Same contract: no older data unless you explicitly add `--allow-fallback`.*
+4. **Run the full engine (optional while debugging):** `python -m engine --season 2025 --debug`
+   *Set `ALLOW_NFL_FALLBACK=1` if you truly need to let the pipeline reuse prior seasons. Otherwise it will halt when live pulls fail so you never price props with stale data.*
+
+After each builder runs you should see `data/team_form.csv`, `data/team_form_weekly.csv`, and `data/player_form.csv` populated. They’ll report the `source_season` column so you can verify which year powered the current projections.
+
+---
+
+## Inspecting run summaries
+
+Every invocation of `python -m engine` now appends a compact JSON line to `logs/actions_summary.log` and writes a detailed copy to `logs/daily/run_<RUN_ID>.json`. Each record captures:
+
+- which steps succeeded/failed (fetch, team/player builders, metrics join, pricing, predictors, export)
+- the row/column counts for critical CSVs (team_form, player_form, metrics_ready, props_priced)
+- the `source_season` used for team/player fallbacks (only present when you enable them)
+- run timing metadata (`run_id`, `started_at`, `duration_s`, etc.)
+
+Use it on GitHub Actions to confirm a slate ran cleanly, or locally via:
+
+```bash
+tail -n 1 logs/actions_summary.log | jq
+```
+
+This surfaces the most recent run without downloading the full artifact bundle.
+
 ---
 
 ## What’s inside (modules)
 
-- `scripts/odds_api.py` → pulls **game lines** and **player props** (event endpoint) from The Odds API.  
-- `scripts/features_external.py` → free features via **nfl_data_py**: schedules, IDs, weekly stats, injuries, depth, plus **rolling L4** team EPA/SR and player form.  
+- `scripts/odds_api.py` → pulls **game lines** and **player props** (event endpoint) from The Odds API.
+- `scripts/features_external.py` → free features via **nfl_data_py**: schedules, IDs, weekly stats, injuries, depth, plus **rolling L4** team EPA/SR and player form.
 - `scripts/id_map.py` → robust **player name → GSIS ID** resolver with a small cache file (`inputs/player_id_cache.csv`).  
 - `scripts/model_core.py` → μ/σ scaffolding and the **post‑mortem rules** hooks (pressure, funnels, volatility widening, etc.).  
 - `scripts/pricing.py` → **de‑vig**, probability/odds converters, **65/35 market blend**, **edge%**, **kelly**, **tiering**.  

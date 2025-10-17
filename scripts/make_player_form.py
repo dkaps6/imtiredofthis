@@ -41,6 +41,50 @@ def load_pbp(season:int)->pd.DataFrame:
     df.columns = [c.lower() for c in df.columns]
     return df
 
+
+def _load_pbp_with_fallback(
+    season: int,
+    *,
+    allow_prior_seasons: bool,
+    max_lookback: int = 5,
+) -> tuple[pd.DataFrame, int]:
+    """
+    Return the first available season ≤ ``season`` with play-by-play data.
+
+    When ``allow_prior_seasons`` is False we will raise instead of silently
+    substituting older data; this keeps 2025 runs from drifting to 2024 metrics
+    when live pulls fail.
+    """
+    errors: list[str] = []
+    for offset in range(0, max_lookback + 1):
+        candidate = season - offset
+        if candidate < 2000:
+            break
+        try:
+            df = load_pbp(candidate)
+        except Exception as err:
+            errors.append(f"season {candidate}: {err}")
+            continue
+        if not df.empty:
+            if candidate == season:
+                return df, candidate
+
+            if allow_prior_seasons:
+                print(
+                    f"[make_player_form] ⚠️ No PBP for {season}; using {candidate} instead"
+                )
+                return df, candidate
+
+            errors.append(
+                f"season {candidate}: available but fallback disabled"
+            )
+            continue
+        errors.append(f"season {candidate}: empty dataframe")
+    raise RuntimeError(
+        "PBP unavailable for requested season and fallbacks. "
+        + "; ".join(errors) if errors else ""
+    )
+
 def load_participation(season:int)->pd.DataFrame:
     try:
         if NFLPKG=="nflreadpy":
@@ -151,62 +195,179 @@ def enrich_with_participation(base: pd.DataFrame, part: pd.DataFrame) -> pd.Data
             base.drop(columns=["route_rate_part"], inplace=True)
     return base
 
+def _player_enricher_paths() -> list[str]:
+    """Return candidate CSV filenames that may contain player usage enrichments."""
+    return [
+        "espn_player_form.csv",
+        "espn_player.csv",
+        "msf_player_form.csv",
+        "msf_player.csv",
+        "apisports_player_form.csv",
+        "apisports_player.csv",
+        "nflgsis_player_form.csv",
+        "gsis_player.csv",
+        "pfr_player_enrich.csv",
+    ]
+
+
+_PLAYER_COLUMN_ALIASES = {
+    "player_name": "player",
+    "name": "player",
+    "athlete": "player",
+    "athlete_display_name": "player",
+    "full_name": "player",
+    "team_abbr": "team",
+    "team_code": "team",
+    "posteam": "team",
+    "offense_team": "team",
+    "team_name": "team",
+    "target_pct": "target_share",
+    "targets_share": "target_share",
+    "tgt_share": "target_share",
+    "rush_pct": "rush_share",
+    "rushing_share": "rush_share",
+    "carry_share": "rush_share",
+    "routes_share": "route_rate",
+    "route_pct": "route_rate",
+    "routes": "route_rate",
+    "routes_run_share": "route_rate",
+    "yards_per_target": "ypt",
+    "ypt_avg": "ypt",
+    "yards_per_carry": "ypc",
+    "rushing_yards_per_attempt": "ypc",
+    "yprr": "yprr_proxy",
+    "yards_per_route_run": "yprr_proxy",
+}
+
+
+def _standardize_player_enricher(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize column names so they align with player_form expectations."""
+    df = df.copy()
+    df.columns = [c.lower() for c in df.columns]
+
+    # apply alias map where canonical column missing
+    for src, dest in _PLAYER_COLUMN_ALIASES.items():
+        if src in df.columns and dest not in df.columns:
+            df = df.rename(columns={src: dest})
+
+    # ensure required keys exist
+    if "team" not in df.columns:
+        for cand in ["team", "team_abbreviation", "team_short", "club"]:
+            if cand in df.columns:
+                df["team"] = df[cand]
+                break
+    if "player" not in df.columns:
+        for cand in ["player", "player_short", "player_id", "gsis_name"]:
+            if cand in df.columns:
+                df["player"] = df[cand]
+                break
+
+    if not {"team", "player"}.issubset(df.columns):
+        return pd.DataFrame()
+
+    df["team"] = df["team"].astype(str).str.upper().str.strip()
+    df["player"] = df["player"].astype(str).str.strip()
+
+    keep_cols = [
+        c
+        for c in [
+            "team",
+            "player",
+            "target_share",
+            "rush_share",
+            "route_rate",
+            "ypt",
+            "ypc",
+            "yprr_proxy",
+            "rz_tgt_share",
+            "rz_carry_share",
+        ]
+        if c in df.columns
+    ]
+    if not keep_cols:
+        return pd.DataFrame()
+    return df[keep_cols].drop_duplicates()
+
+
 def fallback_from_external(base: pd.DataFrame) -> pd.DataFrame:
     """Merge optional enrichers without overwriting existing values."""
-    enrichers = ["espn_player_form.csv","msf_player_form.csv","apisports_player_form.csv","nflgsis_player_form.csv"]
-    for f in enrichers:
-        path = os.path.join(DATA_DIR, f)
+    for filename in _player_enricher_paths():
+        path = os.path.join(DATA_DIR, filename)
         if not os.path.exists(path):
             continue
         try:
-            e = pd.read_csv(path)
+            enrich = pd.read_csv(path)
         except Exception:
             continue
-        e.columns = [c.lower() for c in e.columns]
-        keep = [c for c in ["team","player","target_share","rush_share","route_rate","ypt","ypc","yprr_proxy"] if c in e.columns]
-        if not keep:
+        std = _standardize_player_enricher(enrich)
+        if std.empty:
             continue
-        e = e[keep]
-        base = base.merge(e, on=["team","player"], how="left", suffixes=("","_ext"))
-        for c in [k for k in keep if k not in ["team","player"]]:
-            base[c] = base[c].combine_first(base.get(f"{c}_ext"))
-            dropcol = f"{c}_ext"
-            if dropcol in base.columns:
-                base.drop(columns=[dropcol], inplace=True)
+        base = base.merge(std, on=["team", "player"], how="left", suffixes=("", "_ext"))
+        for col in [c for c in std.columns if c not in {"team", "player"}]:
+            ext_col = f"{col}_ext"
+            if ext_col in base.columns:
+                base[col] = base[col].combine_first(base[ext_col])
+                base.drop(columns=[ext_col], inplace=True)
     return base
 
-def build_player_form(season:int)->pd.DataFrame:
+def build_player_form(season:int, *, allow_fallback: bool)->tuple[pd.DataFrame, int]:
     print(f"[make_player_form] Loading PBP for {season} ({NFLPKG}) ...")
-    pbp = load_pbp(season)
+    pbp, source_season = _load_pbp_with_fallback(
+        season, allow_prior_seasons=allow_fallback
+    )
     if pbp.empty:
         raise RuntimeError("Empty PBP.")
     base = compute_player_usage(pbp)
-    if base.empty:
-        # Try prior season as a safety net (preseason weeks often sparse)
-        prev = load_pbp(season-1)
-        if not prev.empty:
-            base = compute_player_usage(prev)
-    part = load_participation(season)
+    if base.empty and source_season > 2000 and allow_fallback:
+        # Try progressively earlier seasons when usage extraction fails (rare)
+        for fallback in range(source_season - 1, max(source_season - 5, 1999), -1):
+            try:
+                alt_pbp = load_pbp(fallback)
+            except Exception:
+                continue
+            if alt_pbp.empty:
+                continue
+            tmp = compute_player_usage(alt_pbp)
+            if not tmp.empty:
+                print(f"[make_player_form] ⚠️ Usage empty; falling back to {fallback}")
+                base = tmp
+                source_season = fallback
+                pbp = alt_pbp
+                break
+    part = load_participation(source_season)
     base = enrich_with_participation(base, part)
     base = fallback_from_external(base)
     base["season"] = season
-    order = ["player","team","season","target_share","rush_share","rz_tgt_share","rz_carry_share","ypt","ypc","yprr_proxy","route_rate"]
+    base["source_season"] = source_season
+    order = ["player","team","season","source_season","target_share","rush_share","rz_tgt_share","rz_carry_share","ypt","ypc","yprr_proxy","route_rate"]
     for c in order:
         if c not in base.columns:
             base[c] = np.nan
     base = base[order].sort_values(["team","player"]).reset_index(drop=True)
-    return base
+    return base, source_season
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--season", type=int, default=2025)
+    parser.add_argument(
+        "--allow-fallback",
+        action="store_true",
+        help="Permit using prior seasons when requested season data is unavailable",
+    )
     args = parser.parse_args()
     _safe_mkdir(DATA_DIR)
     try:
-        df = build_player_form(args.season)
+        df, source_season = build_player_form(
+            args.season, allow_fallback=args.allow_fallback
+        )
+        if source_season != args.season:
+            print(
+                f"[make_player_form] ℹ️ Using {source_season} metrics as proxy for {args.season}"
+            )
     except Exception as e:
         print(f"[make_player_form] ERROR: {e}", file=sys.stderr)
-        df = pd.DataFrame(columns=["player","team","season","target_share","rush_share","rz_tgt_share","rz_carry_share","ypt","ypc","yprr_proxy","route_rate"])
+        df = pd.DataFrame(columns=["player","team","season","source_season","target_share","rush_share","rz_tgt_share","rz_carry_share","ypt","ypc","yprr_proxy","route_rate"])
+        source_season = args.season
     df.to_csv(OUTPATH, index=False)
     print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH}")
 
