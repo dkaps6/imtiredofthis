@@ -16,5 +16,5 @@ beautifulsoup4==4.12.3
 lxml==4.9.4   # 5.x causes trouble with some stacks
 
 # nflverse
-nfl_data_py==0.3.4
+nfl_data_py>=0.3,<0.4
 nflreadpy==0.1.3   # latest wheel on PyPI; supports Py3.11
