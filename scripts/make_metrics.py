@@ -85,6 +85,11 @@ def _normalize_player_name(x: pd.Series | str) -> pd.Series | str:
         return x.map(_one)
     return _one(x)
 
+# --- ADD (utils): stable player key for robust joins ---
+def _player_key_series(s: pd.Series) -> pd.Series:
+    return s.fillna("").astype(str).str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
+# --- END ADD ---
+
 # ----------------------------
 # Core loaders
 # ----------------------------
@@ -122,6 +127,27 @@ def load_props() -> pd.DataFrame:
     # Deduplicate
     keep = ["event_id","player","team","market","line","over_odds","under_odds"]
     df = df[keep + [c for c in df.columns if c not in keep]].drop_duplicates()
+
+    # --- ADD: pivot side rows into over_odds/under_odds if present ---
+    if "side" in df.columns and "price_american" in df.columns:
+        keycols = [c for c in ["event_id","player","team","market","line"] if c in df.columns]
+        if keycols:
+            tmp = df[keycols + ["side","price_american"]].copy()
+            tmp["side"] = tmp["side"].str.upper().str.strip()
+            pvt = tmp.pivot_table(index=keycols, columns="side", values="price_american", aggfunc="first").reset_index()
+            # normalize column names
+            pvt.columns = [("over_odds" if c=="OVER" else "under_odds" if c=="UNDER" else c) for c in pvt.columns]
+            for c in ["over_odds","under_odds"]:
+                if c not in pvt.columns:
+                    pvt[c] = np.nan
+            # merge back non-destructively
+            df = df.merge(pvt, on=keycols, how="left", suffixes=("","_pvt"))
+            for c in ["over_odds","under_odds"]:
+                c_p = c + "_pvt"
+                if c_p in df.columns:
+                    df[c] = df[c].combine_first(df[c_p])
+                    df.drop(columns=[c_p], inplace=True)
+    # --- END ADD ---
     return df
 
 def load_team_form() -> pd.DataFrame:
@@ -276,6 +302,11 @@ def build_metrics(season: int) -> pd.DataFrame:
         props["week"] = pd.Series(pd.array([], dtype="Int64"))
     # --- END ADD ---
 
+    # --- ADD: build robust player keys on both sides for merges ---
+    props["player_key"] = _player_key_series(props.get("player", pd.Series(dtype=object)))
+    pf["player_key"]    = _player_key_series(pf.get("player", pd.Series(dtype=object))) if not pf.empty else pd.Series([], dtype=object)
+    # --- END ADD ---
+
     # if props.team missing entirely, try to backfill from player_form first
     if "team" in props.columns and props["team"].isna().all() and not pf.empty:
         props = props.merge(pf[["player","team"]].drop_duplicates(), on="player", how="left", suffixes=("","_pf"))
@@ -290,18 +321,17 @@ def build_metrics(season: int) -> pd.DataFrame:
     # Base: props + player_form
     base = props.copy()
 
-    # --- ADD: carry 'week' to base explicitly (safety) ---
+    # carry week into base explicitly (safety)
     if "week" not in base.columns and "week" in props.columns:
         base["week"] = props["week"]
-    # --- END ADD ---
 
     if not pf.empty:
         keep_pf = ["player","team","target_share","rush_share","route_rate","yprr_proxy","ypt","ypc",
-                   "rz_tgt_share","rz_carry_share","position","role","season"]
+                   "rz_tgt_share","rz_carry_share","position","role","season","player_key"]
         keep_pf = [c for c in keep_pf if c in pf.columns]
 
-        # 1) player-only merge to capture players when team codes differ on props
-        base = base.merge(pf[keep_pf].drop_duplicates(), on=["player"], how="left", suffixes=("","_pf"))
+        # 1) robust merge using player_key (non-destructive)
+        base = base.merge(pf[keep_pf].drop_duplicates(), on=["player_key"], how="left", suffixes=("","_pf"))
         # backfill props.team if empty
         if "team" in base.columns and "team_pf" in base.columns:
             base["team"] = base["team"].combine_first(base["team_pf"])
@@ -381,9 +411,8 @@ def build_metrics(season: int) -> pd.DataFrame:
         for c in ["wind_mph","temp_f","precip"]:
             base[c] = np.nan
 
-    # --- ADD: stamp season explicitly (keeps your original schema, reduces NaNs) ---
+    # stamp season explicitly
     base["season"] = season
-    # --- END ADD ---
 
     # Final tidy and order
     want = [
@@ -393,9 +422,7 @@ def build_metrics(season: int) -> pd.DataFrame:
         "def_pass_epa_opp","def_rush_epa_opp","def_sack_rate_opp","light_box_rate_opp","heavy_box_rate_opp",
         "coverage_top_shadow_opp","coverage_heavy_man_opp","coverage_heavy_zone_opp",
         "cb_penalty","injury_status","wind_mph","temp_f","precip","team_wp","season",
-        # --- ADD: include week + future weekly opponent env columns in schema ---
         "week","opp_plays_wk","opp_pace_wk","opp_proe_wk"
-        # --- END ADD ---
     ]
     for c in want:
         if c not in base.columns:
