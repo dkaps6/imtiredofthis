@@ -67,6 +67,13 @@ python run_model.py --date today --season 2025 --write outputs
 > Optional packages like `nflreadpy` (and its `polars` dependency) remain in the
 > list for Python 3.11-and-earlier environments so the builders can hit the live
 > 2025 nflverse feeds. PyPI’s latest `nflreadpy` release is **0.1.3**, which ships
+> wheels through Python 3.11, so the requirements file simply lists the package
+> name and lets `pip` pick whichever compatible version is available. The same
+> idea applies to `nfl_data_py`: we keep a modest lower bound (**0.3.0**) for the
+> current API surface and otherwise allow the resolver to downgrade if a newer
+> release requests dependencies that are not yet published. On Python 3.12, `pip`
+> skips `nflreadpy` and the scripts fall back to `nfl_data_py` alone, logging
+> which provider handled each pull.
 > wheels through Python 3.11. We keep that as the lower bound but drop the strict
 > upper pin so future wheels (0.2.x/0.3.x, etc.) can install automatically once
 > they appear. The same approach applies to `nfl_data_py`—it’s bounded from below

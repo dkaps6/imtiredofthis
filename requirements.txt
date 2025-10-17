@@ -14,6 +14,27 @@ pyarrow>=14
 # nflverse (python)
 #
 # The latest `nflreadpy` wheel on PyPI is 0.1.3 (Python ≤3.11).  To avoid the
+# resolver conflict you saw when different packages demanded overlapping—but
+# incompatible—ranges, we now keep only the minimum versions required for the
+# 2025 endpoints and let pip decide everything else.  That means Actions can
+# downgrade to a compatible pair automatically when a newer release introduces
+# tighter bounds than the wheels currently published to PyPI.
+nfl_data_py>=0.3.0
+nflreadpy; python_version < '3.12'
+polars>=0.20
+beautifulsoup4>=4.12
+lxml>=4.9.4,<5   # faster/more robust parser for bs4 (compatible with nflreadpy)
+
+# IO / utils
+requests>=2.31
+openpyxl>=3.1
+python-dateutil>=2.9
+pytz>=2024.1
+pyarrow>=14
+
+# nflverse (python)
+#
+# The latest `nflreadpy` wheel on PyPI is 0.1.3 (Python ≤3.11).  To avoid the
 # conflicting resolver requests you observed (simultaneous <0.3 and ≥0.3
 # constraints), we keep the lower bounds required for 2025 data but otherwise
 # allow pip to choose any compatible wheel available in your environment.  That
