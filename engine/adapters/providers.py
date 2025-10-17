@@ -106,7 +106,12 @@ def run_nflverse(season: int, date: str | None) -> dict:
             notes.append(f"nflreadpy schedules: {type(e).__name__}: {e}")
 
     except Exception as e:
-        notes.append(f"nflreadpy not available: {type(e).__name__}: {e}")
+        if "original_mlq" in str(e):
+            notes.append(
+                "nflreadpy not available: nfl_data_py missing `original_mlq` (upgrade to >=0.3.4)"
+            )
+        else:
+            notes.append(f"nflreadpy not available: {type(e).__name__}: {e}")
 
     # --- Fallback to nfl_data_py if needed ---
     if pbp_rows == 0 or sch_rows == 0:
