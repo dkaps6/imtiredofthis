@@ -344,6 +344,58 @@ def _load_required_pbp(season: int) -> tuple[pd.DataFrame, int]:
 
     raise RuntimeError(
         "PBP unavailable for requested season. "
+def _load_pbp_with_fallback(
+    season: int,
+    *,
+    allow_prior_seasons: bool,
+    max_lookback: int = 5,
+) -> tuple[pd.DataFrame, int]:
+    """
+    Attempt to load play-by-play data for ``season``. If unavailable (future season
+    or network restriction), optionally fall back to the most recent prior season
+    that returns data. Returns the dataframe and the season actually used.
+
+    When ``allow_prior_seasons`` is False, the function will raise if it can only
+    source data from seasons earlier than the requested one – ensuring we never
+    silently populate 2025 projections with 2024 (or older) metrics.
+def _load_pbp_with_fallback(season: int, max_lookback: int = 5) -> tuple[pd.DataFrame, int]:
+    """
+    Attempt to load play-by-play data for ``season``. If unavailable (future season
+    or network restriction), fall back to the most recent prior season that returns
+    data. Returns the dataframe and the season actually used.
+    """
+    errors: list[str] = []
+    for offset in range(0, max_lookback + 1):
+        candidate = season - offset
+        if candidate < 2000:
+            break
+        try:
+            pbp = load_pbp(candidate)
+        except Exception as err:
+            errors.append(f"season {candidate}: {err}")
+            continue
+        if not pbp.empty:
+            if candidate == season:
+                return pbp, candidate
+
+            if allow_prior_seasons:
+                print(
+                    f"[make_team_form] ⚠️ No PBP for {season}; using {candidate} as fallback"
+                )
+                return pbp, candidate
+
+            errors.append(
+                f"season {candidate}: available but fallback disabled"
+            )
+            continue
+            if candidate != season:
+                print(
+                    f"[make_team_form] ⚠️ No PBP for {season}; using {candidate} as fallback"
+                )
+            return pbp, candidate
+        errors.append(f"season {candidate}: empty dataframe")
+    raise RuntimeError(
+        "PBP unavailable for requested season and fallbacks. "
         + "; ".join(errors) if errors else ""
     )
 
@@ -588,6 +640,16 @@ def build_team_form(season: int) -> tuple[pd.DataFrame, pd.DataFrame, int]:
     """Return team-form dataframe, the PBP used, and the source season."""
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
     pbp, source_season = _load_required_pbp(season)
+def build_team_form(season: int, *, allow_fallback: bool) -> tuple[pd.DataFrame, pd.DataFrame, int]:
+    """Return team-form dataframe, the PBP used, and the source season."""
+    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
+    pbp, source_season = _load_pbp_with_fallback(
+        season, allow_prior_seasons=allow_fallback
+    )
+def build_team_form(season: int) -> tuple[pd.DataFrame, pd.DataFrame, int]:
+    """Return team-form dataframe, the PBP used, and the source season."""
+    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
+    pbp, source_season = _load_pbp_with_fallback(season)
     if pbp.empty:
         raise RuntimeError("PBP is empty; cannot compute team form.")
 
@@ -653,6 +715,11 @@ def build_team_form(season: int) -> tuple[pd.DataFrame, pd.DataFrame, int]:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--season", type=int, default=2025)
+    parser.add_argument(
+        "--allow-fallback",
+        action="store_true",
+        help="Permit using prior seasons when the requested season is unavailable",
+    )
     args = parser.parse_args()
 
     _safe_mkdir(DATA_DIR)
@@ -665,6 +732,13 @@ def main():
         df, pbp_used, source_season = build_team_form(
             args.season
         )
+            args.season, allow_fallback=args.allow_fallback
+        )
+        df, pbp_used, source_season = build_team_form(args.season)
+        if source_season != args.season:
+            print(
+                f"[make_team_form] ℹ️ Using {source_season} metrics as proxy for {args.season}"
+            )
 
         # --- ADD: plays-weighted season roll-up of weekly pace/proe (non-destructive) ---
         df = _rollup_weekly_pace_proe(df)
