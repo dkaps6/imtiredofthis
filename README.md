@@ -60,6 +60,72 @@ python run_model.py --date today --season 2025 --write outputs
 > list so the builders can hit the live 2025 nflverse feeds. If those packages
 > are absent, the scripts fall back to `nfl_data_py>=0.3.3`; make sure that
 > version is available so the shared `original_mlq` helper exists.
+> CI (`pandas 2.2.2+`, `numpy 1.26.4+`, `scipy 1.11+`, `statsmodels 0.14.2+`)
+> while relaxing the upper bounds to `<2.0`/`<2.3` so the resolver no longer
+> trips over version conflicts during “Install dependencies”.
+> CI (`pandas 2.1.4+`, `numpy 1.26.4+`, `scipy 1.11+`, etc.) while relaxing the
+> upper bounds to `<2.0`/`<2.3` so the resolver no longer trips over version
+> conflicts during “Install dependencies”.
+
+> Optional packages like `nflreadpy` (and its `polars` dependency) remain in the
+> list so the builders can hit the live 2025 nflverse feeds. If those packages
+> are absent, the scripts fall back to `nfl_data_py>=0.3.4`; make sure that
+> version is available so the shared `original_mlq` helper exists.
+> **Heads-up:** `requirements.txt` now targets Python 3.12 by pinning
+> `pandas==2.1.4`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`,
+> `statsmodels==0.14.2`, and `pyarrow==15.0.2`.
+> Statsmodels 0.14.2 ships wheels built against `pandas<2.2`, so we pin
+> pandas to 2.1.4. If you decide to upgrade pandas later, bump statsmodels
+> at the same time to whatever release advertises compatibility with that
+> pandas series.
+
+> We removed `pandas-datareader` because its newest wheels currently depend on
+> `pandas<2.0`; installing it alongside pandas 2.1.4 would bring back the same
+> resolver error you saw in Actions. If you need `pandas-datareader`, install it
+> in a separate environment or adjust the rest of the stack accordingly.
+> `pandas==2.2.2`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`,
+> `statsmodels==0.14.2`, and `pyarrow==15.0.2`.
+> We removed `pandas-datareader` because its latest wheels cap
+> `pandas<2.2`, which is exactly why the GitHub Actions run aborted during
+> the **Install dependencies** step. If you later need `pandas-datareader`,
+> install it in a separate environment or adjust the pandas version accordingly.
+
+> The statsmodels wheels available today ship binaries that work with
+> pandas 2.2.x, so CI now stays on the same pandas version that GitHub Actions
+> preinstalls. If you bump pandas later, keep statsmodels at 0.14.2 or newer so
+> the resolver can still locate compatible wheels.
+> The statsmodels wheels available today still require `pandas<2.2`, so we
+> deliberately pin pandas to 2.1.4 to keep dependency resolution green in CI.
+> install it in a separate environment or downgrade pandas accordingly.
+> `statsmodels==0.14.2`, `pyarrow==15.0.2`, and `pandas-datareader==0.10.0`.
+> Statsmodels 0.14.2 advertises support through pandas 2.2, so the resolver
+> stops complaining even when other steps request `pandas-datareader` during
+> CI setup. If your
+> `pandas==2.1.4`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`,
+> `pyarrow==15.0.2`, and explicitly requiring `statsmodels>=0.14.1`. Pandas 2.1.x
+> keeps statsmodels happy (0.14.1 still caps support at `<2.2`). If your
+> `pandas==2.2.2`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`,
+> `pyarrow==15.0.2`, and explicitly requiring `statsmodels>=0.14.1` so pandas 2.x
+> resolves cleanly. If your
+> `pandas==2.2.2`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`, and
+> explicitly requiring `statsmodels>=0.14.1` so pandas 2.x resolves cleanly. If your
+> `pandas==2.2.2`, `numpy==1.26.4`, `scipy==1.12.0`, and `scikit-learn==1.4.2`. If your
+> environment cached older wheels (especially on GitHub Actions), run
+> `pip install --upgrade pip` first so compatible builds resolve cleanly.
+>
+> We also install `nflreadpy` (plus its `polars` dependency) so the builders can pull the
+> live 2025 nflverse feeds. Should `nflreadpy` be missing, the scripts fall back to
+> `nfl_data_py` — ensure you have `nfl_data_py>=0.3.4` available so the shared
+> `original_mlq` helper exists.
+> **Heads-up:** `requirements.txt` now installs `nflreadpy` (plus its `polars` dependency) so
+> the builders can pull the live 2025 nflverse feeds. If your environment pinned an older
+> dependency cache, run `pip install --upgrade pip` first so wheels for `polars` can be
+> resolved correctly on GitHub Actions.
+>
+> **New requirement:** `nflreadpy` now expects `nfl_data_py` to expose the helper
+> `original_mlq`. We pin `nfl_data_py>=0.3.4` in `requirements.txt`; if you maintain a
+> custom environment make sure that upgrade lands, otherwise the builders will fall back to
+> the older `nfl_data_py` interface and warn you in stderr.
 
 Artifacts:
 - `outputs/game_lines.csv` — H2H / spreads / totals (normalized)
