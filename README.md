@@ -48,6 +48,11 @@ Artifacts:
 
 1. **Prime the data folders.** Drop any external scouting or share tables into `data/`. The builders now auto-detect both the `*_form.csv` files *and* the raw `espn_*.csv`, `msf_*.csv`, `apisports_*.csv`, `gsis_*.csv`, and `pfr_*` exports that already ship in this repo.
 2. **Build team context:** `python scripts/make_team_form.py --season 2025`
+   *The builder reuses any cached `data/pbp_2025.csv` (or `external/nflverse_bundle/pbp_2025.csv`) before hitting nflverse. If 2025 PBP cannot be reached the script halts so you never blend in older seasons.*
+3. **Build player usage:** `python scripts/make_player_form.py --season 2025`
+   *Same guarantee: only 2025 play-by-play and participation are accepted. Older seasons trigger an explicit failure instead of a silent fallback.*
+4. **Run the full engine (optional while debugging):** `python -m engine --season 2025 --debug`
+   *The engine now enforces the same 2025-only constraint and surfaces a clear error when live pulls fail.*
    *The builder now **fails fast** if nflverse can’t serve 2025. Pass `--allow-fallback` only when you intentionally want an earlier proxy season.*
 3. **Build player usage:** `python scripts/make_player_form.py --season 2025`
    *Same contract: no older data unless you explicitly add `--allow-fallback`.*
@@ -69,6 +74,7 @@ Every invocation of `python -m engine` now appends a compact JSON line to `logs/
 
 - which steps succeeded/failed (fetch, team/player builders, metrics join, pricing, predictors, export)
 - the row/column counts for critical CSVs (team_form, player_form, metrics_ready, props_priced)
+- the `source_season` recorded by the builders (should read 2025 once live data lands)
 - the `source_season` used for team/player fallbacks (only present when you enable them)
 - the `source_season` used for team/player fallbacks
 - run timing metadata (`run_id`, `started_at`, `duration_s`, etc.)

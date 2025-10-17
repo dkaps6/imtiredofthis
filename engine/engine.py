@@ -147,6 +147,17 @@ def run_pipeline(season: int = 2025,
     _safe_mkdir(runs_dir)
     print(f"[ENGINE] 🚀 Run {run_id} | season={season} date='{date}' books='{bookmakers}' markets='{markets}'")
 
+    summary: Dict[str, Any] = {
+        "run_id": run_id,
+        "season": season,
+        "date": date,
+        "bookmakers": bookmakers,
+        "markets": markets,
+        "started_at": start_wall.isoformat() + "Z",
+        "steps": {},
+        "status": "ok",
+    }
+
     allow_fallback = (
         os.environ.get("ALLOW_NFL_FALLBACK", "").strip().lower() in {"1", "true", "yes"}
     )
@@ -232,6 +243,7 @@ def run_pipeline(season: int = 2025,
 
             print("\n[ENGINE] 🧮 Building PLAYER metrics…")
             player_cmd = f"python scripts/make_player_form.py --season {season}"
+            _run(player_cmd)
             if allow_fallback:
                 player_cmd += " --allow-fallback"
             _run(player_cmd)

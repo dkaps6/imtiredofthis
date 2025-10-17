@@ -34,7 +34,7 @@ import argparse
 import os
 import sys
 import warnings
-from typing import List
+from typing import List, Tuple
 
 import pandas as pd
 import numpy as np
@@ -62,6 +62,10 @@ NFLV, NFL_PKG = _import_nflverse()
 
 DATA_DIR = "data"
 OUTPATH = os.path.join(DATA_DIR, "team_form.csv")
+_CACHE_DIRS = [
+    DATA_DIR,
+    os.path.join("external", "nflverse_bundle"),
+]
 
 # -----------------------------
 # Helpers
@@ -70,6 +74,23 @@ OUTPATH = os.path.join(DATA_DIR, "team_form.csv")
 def _safe_mkdir(p: str):
     if not os.path.exists(p):
         os.makedirs(p, exist_ok=True)
+
+
+def _load_cached_csv(kind: str, season: int) -> Tuple[pd.DataFrame, str]:
+    """Return a cached nflverse export if one exists on disk."""
+    for base in _CACHE_DIRS:
+        path = os.path.join(base, f"{kind}_{season}.csv")
+        if not os.path.exists(path):
+            continue
+        try:
+            df = pd.read_csv(path)
+        except Exception:
+            continue
+        if df.empty:
+            continue
+        df.columns = [c.lower() for c in df.columns]
+        return df, path
+    return pd.DataFrame(), ""
 
 
 def zscore(df: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
@@ -265,6 +286,11 @@ def load_pbp(season: int) -> pd.DataFrame:
     nflreadpy: NFLV.load_pbp(seasons=[season])
     nfl_data_py: nfl_data_py.import_pbp_data([season], downcast=True)
     """
+    cached, source_path = _load_cached_csv("pbp", season)
+    if not cached.empty:
+        print(f"[make_team_form] ℹ️ Using cached pbp_{season}.csv from {source_path}")
+        return cached
+
     if NFL_PKG == "nflreadpy":
         pbp = NFLV.load_pbp(seasons=[season])
     else:
@@ -279,6 +305,12 @@ def load_participation(season: int) -> pd.DataFrame:
     Participation / personnel (optional). nflreadpy exposes load_participation()
     If not available, return empty DF.
     """
+    cached, source_path = _load_cached_csv("participation", season)
+    if not cached.empty:
+        print(
+            f"[make_team_form] ℹ️ Using cached participation_{season}.csv from {source_path}"
+        )
+        return cached
     try:
         if NFL_PKG == "nflreadpy":
             part = NFLV.load_participation(seasons=[season])
@@ -291,6 +323,27 @@ def load_participation(season: int) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def _load_required_pbp(season: int) -> tuple[pd.DataFrame, int]:
+    """Load play-by-play strictly for ``season`` or raise."""
+    cached, cache_path = _load_cached_csv("pbp", season)
+    if not cached.empty:
+        print(
+            f"[make_team_form] ℹ️ Loaded cached pbp_{season}.csv from {cache_path}"
+        )
+        return cached, season
+
+    errors: list[str] = []
+    try:
+        pbp = load_pbp(season)
+    except Exception as err:
+        errors.append(str(err))
+    else:
+        if not pbp.empty:
+            return pbp, season
+        errors.append("empty dataframe")
+
+    raise RuntimeError(
+        "PBP unavailable for requested season. "
 def _load_pbp_with_fallback(
     season: int,
     *,
@@ -583,6 +636,10 @@ def merge_slot_rate_from_roles(df: pd.DataFrame) -> pd.DataFrame:
 # Main builder
 # -----------------------------
 
+def build_team_form(season: int) -> tuple[pd.DataFrame, pd.DataFrame, int]:
+    """Return team-form dataframe, the PBP used, and the source season."""
+    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
+    pbp, source_season = _load_required_pbp(season)
 def build_team_form(season: int, *, allow_fallback: bool) -> tuple[pd.DataFrame, pd.DataFrame, int]:
     """Return team-form dataframe, the PBP used, and the source season."""
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
@@ -673,6 +730,8 @@ def main():
 
     try:
         df, pbp_used, source_season = build_team_form(
+            args.season
+        )
             args.season, allow_fallback=args.allow_fallback
         )
         df, pbp_used, source_season = build_team_form(args.season)
