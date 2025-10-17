@@ -40,6 +40,9 @@ python run_model.py --date today --season 2025 --write outputs
 ```
 
 > **Heads-up:** `requirements.txt` now targets Python 3.12 by pinning
+> `pandas==2.1.4`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`,
+> `pyarrow==15.0.2`, and explicitly requiring `statsmodels>=0.14.1`. Pandas 2.1.x
+> keeps statsmodels happy (0.14.1 still caps support at `<2.2`). If your
 > `pandas==2.2.2`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`,
 > `pyarrow==15.0.2`, and explicitly requiring `statsmodels>=0.14.1` so pandas 2.x
 > resolves cleanly. If your
