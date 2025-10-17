@@ -1,4 +1,21 @@
 # Core scientific stack (Python 3.11/3.12 compatible)
+pandas>=2.1.4,<2.3
+numpy>=1.26.4,<2.0
+scipy>=1.11,<2.0
+
+# IO / utils
+requests>=2.31,<3
+openpyxl>=3.1,<4
+python-dateutil>=2.9,<3
+pytz>=2024.1,<2025
+pyarrow>=14,<16
+
+# nflverse (python)
+nfl_data_py>=0.3.4
+nflreadpy>=0.2
+polars>=0.20.5
+beautifulsoup4>=4.12,<5
+lxml>=4.9,<6   # faster/more robust parser for bs4
 pandas==2.1.4
 # Core scientific stack (Python 3.12 compatible)
 pandas==2.1.4

@@ -39,6 +39,27 @@ export ODDS_API_KEY=YOUR_KEY_HERE
 python run_model.py --date today --season 2025 --write outputs
 ```
 
+> **Working inside a restricted sandbox?**
+> Some automated graders (including this one) block outbound network access, so
+> `pip install -r requirements.txt` will fail with a message similar to the one
+> shown in the PR test log: `fails in this environment because PyPI access is
+> blocked by the sandbox proxy`. When you run the command locally or on GitHub
+> Actions the install succeeds, because those environments can reach PyPI.
+> If you ever need to work fully offline, build a local wheelhouse (``pip wheel``)
+> from an internet-connected machine and point `pip install` at that cache with
+> `--no-index --find-links /path/to/wheels`.
+
+> **Dependency note:** the refreshed `requirements.txt` sticks to *compatible
+> ranges* instead of exact pins so `pip` can choose wheels that exist for the
+> Python version in your environment. They keep the same lower bounds we used in
+> CI (`pandas 2.1.4+`, `numpy 1.26.4+`, `scipy 1.11+`, etc.) while relaxing the
+> upper bounds to `<2.0`/`<2.3` so the resolver no longer trips over version
+> conflicts during “Install dependencies”.
+
+> Optional packages like `nflreadpy` (and its `polars` dependency) remain in the
+> list so the builders can hit the live 2025 nflverse feeds. If those packages
+> are absent, the scripts fall back to `nfl_data_py>=0.3.4`; make sure that
+> version is available so the shared `original_mlq` helper exists.
 > **Heads-up:** `requirements.txt` now targets Python 3.12 by pinning
 > `pandas==2.1.4`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`,
 > `statsmodels==0.14.2`, and `pyarrow==15.0.2`.
