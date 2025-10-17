@@ -573,6 +573,7 @@ def compute_pace_and_proe(pbp: pd.DataFrame) -> pd.DataFrame:
 
 
 
+
     pass_col = "pass" if "pass" in dfn.columns else None
     if pass_col is None:
         return pace_grp.rename(columns={off_col: "team"})[["team", "pace_neutral"]].assign(proe=np.nan)

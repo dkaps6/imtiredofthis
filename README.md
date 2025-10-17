@@ -54,6 +54,9 @@ python run_model.py --date today --season 2025 --write outputs
 > Python version in your environment. They keep the same lower bounds we used in
 > CI (`pandas 2.2.2+`, `numpy 1.26.4+`, `scipy 1.11+`, `statsmodels 0.14.2+`)
 > while relaxing the upper bounds to `<2.0` so the resolver no longer trips over
+> version conflicts during “Install dependencies”. We also lock `lxml` to
+> **4.9.4.x** because that release line is the sweet spot that satisfies
+> `nflreadpy==0.1.3` while keeping BeautifulSoup fast and reliable.
 > version conflicts during “Install dependencies”.
 
 > Optional packages like `nflreadpy` (and its `polars` dependency) remain in the
