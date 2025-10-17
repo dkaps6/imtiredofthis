@@ -3,6 +3,7 @@ pandas==2.2.2
 numpy==1.26.4
 scipy==1.12.0
 scikit-learn==1.4.2
+statsmodels>=0.14.1
 # Core scientific stack (py3.11 compatible, matches nfl_data_py 0.3.x)
 pandas==1.5.3
 numpy==1.24.4
