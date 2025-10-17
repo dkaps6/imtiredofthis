@@ -145,6 +145,29 @@ def _non_destructive_team_merge(base: pd.DataFrame, add: pd.DataFrame) -> pd.Dat
             out.drop(columns=[ext], inplace=True)
     return out
 
+# --- ADD: helper to roll up weekly pace/proe (plays-weighted), non-destructive ---
+def _rollup_weekly_pace_proe(df: pd.DataFrame) -> pd.DataFrame:
+    try:
+        tfw_path = os.path.join(DATA_DIR, "team_form_weekly.csv")
+        if os.path.exists(tfw_path):
+            tfw = pd.read_csv(tfw_path)
+            tfw.columns = [c.lower() for c in tfw.columns]
+            if {"team","plays_est","pace","proe"}.issubset(tfw.columns) and not tfw.empty:
+                grp = tfw.groupby("team", dropna=False)
+                pace_w = grp.apply(lambda g: np.average(g["pace"], weights=np.clip(g["plays_est"], 1, None))).rename("pace_season")
+                proe_w = grp.apply(lambda g: np.average(g["proe"], weights=np.clip(g["plays_est"], 1, None))).rename("proe_season")
+                roll = pd.concat([pace_w, proe_w], axis=1).reset_index()
+                df = df.merge(roll, on="team", how="left")
+                if "pace" in df.columns and "pace_season" in df.columns:
+                    df["pace"] = df["pace"].where(df["pace"].notna(), df["pace_season"])
+                if "proe" in df.columns and "proe_season" in df.columns:
+                    df["proe"] = df["proe"].where(df["proe"].notna(), df["proe_season"])
+                df.drop(columns=[c for c in ["pace_season","proe_season"] if c in df.columns], inplace=True)
+    except Exception:
+        pass
+    return df
+# --- END ADD ---
+
 # -----------------------------
 # Loaders (abstract across libs)
 # -----------------------------
@@ -490,28 +513,12 @@ def main():
 
     try:
         df = build_team_form(args.season)
-        # --- ADD: roll up weekly pace/proe to season-level (plays-weighted), non-destructive ---
-    try:
-        tfw_path = os.path.join(DATA_DIR, "team_form_weekly.csv")
-        if os.path.exists(tfw_path):
-            tfw = pd.read_csv(tfw_path)
-            tfw.columns = [c.lower() for c in tfw.columns]
-            if {"team","plays_est","pace","proe"}.issubset(tfw.columns) and not tfw.empty:
-                grp = tfw.groupby("team", dropna=False)
-                pace_w = grp.apply(lambda g: np.average(g["pace"], weights=np.clip(g["plays_est"], 1, None))).rename("pace_season")
-                proe_w = grp.apply(lambda g: np.average(g["proe"], weights=np.clip(g["plays_est"], 1, None))).rename("proe_season")
-                roll = pd.concat([pace_w, proe_w], axis=1).reset_index()
-                df = df.merge(roll, on="team", how="left")
-                if "pace" in df.columns and "pace_season" in df.columns:
-                    df["pace"] = df["pace"].where(df["pace"].notna(), df["pace_season"])
-                if "proe" in df.columns and "proe_season" in df.columns:
-                    df["proe"] = df["proe"].where(df["proe"].notna(), df["proe_season"])
-                df.drop(columns=[c for c in ["pace_season","proe_season"] if c in df.columns], inplace=True)
-    except Exception:
-        # never fail run on roll-up
-        pass
-# --- END ADD ---
 
+        # --- ADD: plays-weighted season roll-up of weekly pace/proe (non-destructive) ---
+        df = _rollup_weekly_pace_proe(df)
+        # --- END ADD ---
+
+        # --- Weekly writer (your original logic, kept verbatim) ---
         try:
             pbp = load_pbp(args.season)
             if not pbp.empty:
@@ -560,7 +567,7 @@ def main():
                 pd.DataFrame(columns=['team', 'week', 'plays_est', 'pace', 'proe']).to_csv(os.path.join(DATA_DIR, 'team_form_weekly.csv'), index=False)
             except Exception:
                 pass
-        # --- END ADDED ---
+        # --- END Weekly writer ---
 
     except Exception as e:
         print(f"[make_team_form] ERROR: {e}", file=sys.stderr)
@@ -572,6 +579,7 @@ def main():
         ])
         empty.to_csv(OUTPATH, index=False)
         sys.exit(1)
+
     # --- ADDED: optional external enrichers; fill only missing values ---
     try:
         for fn in ["espn_team_form.csv", "msf_team_form.csv", "apisports_team_form.csv", "nflgsis_team_form.csv"]:
