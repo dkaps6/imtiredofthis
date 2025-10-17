@@ -49,6 +49,17 @@ python run_model.py --date today --season 2025 --write outputs
 > from an internet-connected machine and point `pip install` at that cache with
 > `--no-index --find-links /path/to/wheels`.
 
+> **Dependency note:** the refreshed `requirements.txt` now pins the exact
+> versions that run cleanly on the GitHub Actions Python 3.11 image:
+> `pandas==2.1.4`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`,
+> `statsmodels==0.14.2`, and `pyarrow==15.0.2`. Companion libraries are locked
+> as well (`requests==2.32.3`, `openpyxl==3.1.5`, `python-dateutil==2.9.0.post0`,
+> `pytz==2024.1`, `polars==0.20.5`, `beautifulsoup4==4.12.3`,
+> `lxml==4.9.4`). The nflverse stack mirrors production: `nfl_data_py==0.3.4`
+> and `nflreadpy==0.1.3` (the latest wheel on PyPI for Python 3.11). Keeping
+> these pins avoids the resolver conflicts you saw during the “Install
+> dependencies” stage while guaranteeing the builders talk to the live 2025
+> endpoints.
 > **Dependency note:** the refreshed `requirements.txt` sticks to *compatible
 > ranges* instead of exact pins so `pip` can choose wheels that exist for the
 > Python version in your environment. They keep the same lower bounds we used in
