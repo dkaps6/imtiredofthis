@@ -490,6 +490,57 @@ def main():
 
     try:
         df = build_team_form(args.season)
+                # --- ADDED: also emit per-team, per-week environment safely ---
+        try:
+            pbp = load_pbp(args.season)
+            if not pbp.empty:
+                w = pbp.copy()
+                # neutral-ish filter to avoid garbage-time skew
+                if 'down' in w.columns:
+                    w = w[w['down'].isin([1, 2])]
+                if 'wp' in w.columns:
+                    w = w[w['wp'].between(0.2, 0.8, inclusive='both')]
+
+                # offense team column available in pbp
+                team_col = 'posteam' if 'posteam' in w.columns else ('offense_team' if 'offense_team' in w.columns else None)
+                if team_col is not None and 'week' in w.columns:
+                    # plays per team-week
+                    plays = w.groupby([team_col, 'week'], dropna=False)['play_id'].size().rename('plays_est')
+
+                    # pace proxy: seconds between snaps if available, else NaN
+                    if 'game_seconds_remaining' in w.columns:
+                        w = w.sort_values([team_col, 'game_id', 'qtr', 'play_id'])
+                        w['gsr_diff'] = w.groupby([team_col, 'game_id'])['game_seconds_remaining'].diff(-1).abs()
+                        pace = w.groupby([team_col, 'week'])['gsr_diff'].mean().rename('pace')
+                    else:
+                        pace = plays * 0 + np.nan
+
+                    # PROE: pass rate minus league weekly pass rate
+                    is_pass = w['play_type'].isin(['pass', 'no_play']) if 'play_type' in w.columns else pd.Series(False, index=w.index)
+                    if len(is_pass) > 0:
+                        pr = is_pass.groupby([w[team_col], w['week']]).mean().rename('pass_rate')
+                        lg = is_pass.groupby(w['week']).mean().rename('lg_pass_rate_week')
+                        wk = pd.concat([plays, pace, pr], axis=1).reset_index().rename(columns={team_col: 'team'})
+                        wk = wk.merge(lg.reset_index(), on='week', how='left')
+                        wk['proe'] = wk['pass_rate'] - wk['lg_pass_rate_week']
+                    else:
+                        wk = pd.concat([plays, pace], axis=1).reset_index().rename(columns={team_col: 'team'})
+                        wk['proe'] = np.nan
+
+                    wk[['team', 'week', 'plays_est', 'pace', 'proe']].to_csv(os.path.join(DATA_DIR, 'team_form_weekly.csv'), index=False)
+                else:
+                    # schema-only so downstream won’t crash if weekly isn’t computable
+                    pd.DataFrame(columns=['team', 'week', 'plays_est', 'pace', 'proe']).to_csv(os.path.join(DATA_DIR, 'team_form_weekly.csv'), index=False)
+            else:
+                pd.DataFrame(columns=['team', 'week', 'plays_est', 'pace', 'proe']).to_csv(os.path.join(DATA_DIR, 'team_form_weekly.csv'), index=False)
+        except Exception:
+            # never fail the run on weekly export
+            try:
+                pd.DataFrame(columns=['team', 'week', 'plays_est', 'pace', 'proe']).to_csv(os.path.join(DATA_DIR, 'team_form_weekly.csv'), index=False)
+            except Exception:
+                pass
+        # --- END ADDED ---
+
     except Exception as e:
         print(f"[make_team_form] ERROR: {e}", file=sys.stderr)
         # write empty but schema-like csv to avoid downstream crashes
@@ -500,6 +551,17 @@ def main():
         ])
         empty.to_csv(OUTPATH, index=False)
         sys.exit(1)
+    # --- ADDED: optional external enrichers; fill only missing values ---
+    try:
+        for fn in ["espn_team_form.csv", "msf_team_form.csv", "apisports_team_form.csv", "nflgsis_team_form.csv"]:
+            ext = _read_csv_safe(os.path.join(DATA_DIR, fn))
+            if not ext.empty and "team" in ext.columns:
+                ext["team"] = ext["team"].astype(str).str.upper().str.strip()
+                df = _non_destructive_team_merge(df, ext)
+    except Exception:
+        # enrichment is optional; never crash
+        pass
+    # --- END ADDED ---
 
     df.to_csv(OUTPATH, index=False)
     print(f"[make_team_form] Wrote {len(df)} rows → {OUTPATH}")
