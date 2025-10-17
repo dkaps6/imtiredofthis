@@ -294,7 +294,6 @@ def build_metrics(season: int) -> pd.DataFrame:
         base["team_wp"] = np.where(tmp.get("team").eq(tmp.get("home_team")), tmp.get("home_wp"),
                             np.where(tmp.get("team").eq(tmp.get("away_team")), tmp.get("away_wp"), np.nan))
 
-    # Opponent defense & coverage (left joins, keep rows)
     if not tf.empty:
         opp_tf = tf.rename(columns={
             "team":"opponent",
@@ -304,8 +303,12 @@ def build_metrics(season: int) -> pd.DataFrame:
             "light_box_rate":"light_box_rate_opp",
             "heavy_box_rate":"heavy_box_rate_opp",
         })
-    keep_opp = ["opponent","def_pass_epa_opp","def_rush_epa_opp","def_sack_rate_opp","light_box_rate_opp","heavy_box_rate_opp"]
-    base = base.merge(opp_tf[keep_opp].drop_duplicates(), on="opponent", how="left")
+        keep_opp = ["opponent","def_pass_epa_opp","def_rush_epa_opp","def_sack_rate_opp","light_box_rate_opp","heavy_box_rate_opp"]
+        base = base.merge(opp_tf[keep_opp].drop_duplicates(), on="opponent", how="left")
+    else:
+        for c in ["def_pass_epa_opp","def_rush_epa_opp","def_sack_rate_opp","light_box_rate_opp","heavy_box_rate_opp"]:
+            if c not in base.columns:
+                base[c] = np.nan
 
     if not cov.empty and "defense_team" in cov.columns:
         cov2 = cov.rename(columns={"defense_team":"opponent"})
@@ -381,17 +384,17 @@ def main():
         ])
         # optional: add opponent weekly env (pace/proe/plays_est) if present
     try:
-        tfw = _read_csv(os.path.join("data", "team_form_weekly.csv"))
-        if not tfw.empty and {"team","week"}.issubset(tfw.columns) and {"opponent","week"}.issubset(df.columns):
-            tfw = tfw.rename(columns={"team":"opponent"})
-            cols = [c for c in ["opponent","week","plays_est","pace","proe"] if c in tfw.columns]
-            tfw = tfw[cols].drop_duplicates().rename(columns={
-                "plays_est":"opp_plays_wk","pace":"opp_pace_wk","proe":"opp_proe_wk"
-            })
-            df = df.merge(tfw, on=["opponent","week"], how="left")
-            for c in ["opp_plays_wk","opp_pace_wk","opp_proe_wk"]:
-                if c not in df.columns: 
-                    df[c] = np.nan
+    tfw = _read_csv(os.path.join("data", "team_form_weekly.csv"))
+    if not df.empty and not tfw.empty and {"opponent","week"}.issubset(df.columns) and {"team","week"}.issubset(tfw.columns):
+        tfw = tfw.rename(columns={"team":"opponent"})
+        cols = [c for c in ["opponent","week","plays_est","pace","proe"] if c in tfw.columns]
+        tfw = tfw[cols].drop_duplicates().rename(columns={
+            "plays_est":"opp_plays_wk","pace":"opp_pace_wk","proe":"opp_proe_wk"
+        })
+        df = df.merge(tfw, on=["opponent","week"], how="left")
+        for c in ["opp_plays_wk","opp_pace_wk","opp_proe_wk"]:
+            if c not in df.columns:
+                df[c] = np.nan
     except Exception:
         pass
 
