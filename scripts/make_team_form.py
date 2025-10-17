@@ -52,6 +52,19 @@ def _import_nflverse():
             "Install nflreadpy to ensure 2025 data is available.",
             file=sys.stderr,
         )
+    except ImportError as exc:
+        if "original_mlq" in str(exc):
+            print(
+                "[make_team_form] ⚠️ nflreadpy requires nfl_data_py>=0.3.4 (missing "
+                "`original_mlq`); upgrade the dependency to use nflreadpy. Falling "
+                "back to nfl_data_py for now.",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"[make_team_form] ⚠️ nflreadpy import failed ({exc}); falling back to nfl_data_py.",
+                file=sys.stderr,
+            )
     except Exception as exc:
         print(
             f"[make_team_form] ⚠️ nflreadpy import failed ({exc}); falling back to nfl_data_py.",
@@ -557,6 +570,11 @@ def compute_pace_and_proe(pbp: pd.DataFrame) -> pd.DataFrame:
     if pass_col is None:
         return pace_grp.rename(columns={off_col: "team"})[["team", "pace_neutral"]].assign(proe=np.nan)
 
+
+    pass_col = "pass" if "pass" in dfn.columns else None
+    if pass_col is None:
+        return pace_grp.rename(columns={off_col: "team"})[["team", "pace_neutral"]].assign(proe=np.nan)
+
     dfn["_is_pass"] = dfn[pass_col].astype(float)
     prate = (
         dfn.groupby(off_col, dropna=False)["_is_pass"]
@@ -808,6 +826,8 @@ def _write_weekly_outputs(
 
 def build_team_form(season: int) -> tuple[pd.DataFrame, pd.DataFrame, int]:
     """Return team-form dataframe, the PBP used, and the source season."""
+    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
+    pbp, source_season = _load_required_pbp(season)
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
     pbp, source_season = _load_required_pbp(season)
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")

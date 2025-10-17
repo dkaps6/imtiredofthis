@@ -43,6 +43,11 @@ python run_model.py --date today --season 2025 --write outputs
 > the builders can pull the live 2025 nflverse feeds. If your environment pinned an older
 > dependency cache, run `pip install --upgrade pip` first so wheels for `polars` can be
 > resolved correctly on GitHub Actions.
+>
+> **New requirement:** `nflreadpy` now expects `nfl_data_py` to expose the helper
+> `original_mlq`. We pin `nfl_data_py>=0.3.4` in `requirements.txt`; if you maintain a
+> custom environment make sure that upgrade lands, otherwise the builders will fall back to
+> the older `nfl_data_py` interface and warn you in stderr.
 
 Artifacts:
 - `outputs/game_lines.csv` — H2H / spreads / totals (normalized)

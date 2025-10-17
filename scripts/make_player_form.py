@@ -24,6 +24,18 @@ def _import_nflverse():
             "Install nflreadpy so the 2025 feeds remain available.",
             file=sys.stderr,
         )
+    except ImportError as exc:
+        if "original_mlq" in str(exc):
+            print(
+                "[make_player_form] ⚠️ nflreadpy requires nfl_data_py>=0.3.4 (missing `original_mlq`). "
+                "Upgrade nfl_data_py to keep using the nflreadpy mirror. Falling back to nfl_data_py.",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"[make_player_form] ⚠️ nflreadpy import failed ({exc}); falling back to nfl_data_py.",
+                file=sys.stderr,
+            )
     except Exception as exc:
         print(
             f"[make_player_form] ⚠️ nflreadpy import failed ({exc}); falling back to nfl_data_py.",
