@@ -632,12 +632,113 @@ def merge_slot_rate_from_roles(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+WEEKLY_COLUMNS = ["team", "week", "plays_est", "pace", "proe"]
+
+
+def _empty_weekly_frame() -> pd.DataFrame:
+    return pd.DataFrame(columns=WEEKLY_COLUMNS)
+
+
+def _write_weekly_stub(path: str) -> None:
+    _empty_weekly_frame().to_csv(path, index=False)
+
+
+def _write_weekly_outputs(
+    pbp: pd.DataFrame,
+    source_season: int,
+    requested_season: int,
+    path: str,
+) -> None:
+    """Persist the team/week pace + PROE table or a schema-only placeholder."""
+
+    if pbp.empty:
+        _write_weekly_stub(path)
+        return
+
+    try:
+        w = pbp.copy()
+
+        # neutral-ish filter to avoid garbage-time skew
+        if "down" in w.columns:
+            w = w[w["down"].isin([1, 2])]
+        if "wp" in w.columns:
+            w = w[w["wp"].between(0.2, 0.8, inclusive="both")]
+
+        team_col = "posteam" if "posteam" in w.columns else (
+            "offense_team" if "offense_team" in w.columns else None
+        )
+        if team_col is None or "week" not in w.columns:
+            _write_weekly_stub(path)
+            return
+
+        # plays per team-week
+        plays = (
+            w.groupby([team_col, "week"], dropna=False)["play_id"].size().rename("plays_est")
+        )
+
+        # pace proxy: seconds between snaps if available, else NaN
+        if "game_seconds_remaining" in w.columns:
+            w = w.sort_values([team_col, "game_id", "qtr", "play_id"])
+            gsr_diff = (
+                w.groupby([team_col, "game_id"])["game_seconds_remaining"].diff(-1).abs()
+            )
+            w["gsr_diff"] = gsr_diff
+            pace = (
+                w.groupby([team_col, "week"], dropna=False)["gsr_diff"].mean().rename("pace")
+            )
+        else:
+            pace = plays * 0 + np.nan
+
+        # PROE: pass rate minus league weekly pass rate
+        if "play_type" in w.columns:
+            is_pass = w["play_type"].isin(["pass", "no_play"])
+        else:
+            is_pass = pd.Series(False, index=w.index)
+
+        if len(is_pass) > 0:
+            pass_frame = pd.DataFrame({
+                "is_pass": is_pass,
+                "team": w[team_col].values,
+                "week": w["week"].values,
+            })
+            grouped = (
+                pass_frame.groupby(["team", "week"], dropna=False)["is_pass"]
+                .mean()
+                .rename("pass_rate")
+            )
+            league = (
+                pass_frame.groupby("week", dropna=False)["is_pass"]
+                .mean()
+                .rename("lg_pass_rate_week")
+            )
+            wk = pd.concat([plays, pace, grouped], axis=1).reset_index().rename(
+                columns={team_col: "team"}
+            )
+            wk = wk.merge(league.reset_index(), on="week", how="left")
+            wk["proe"] = wk["pass_rate"] - wk["lg_pass_rate_week"]
+        else:
+            wk = pd.concat([plays, pace], axis=1).reset_index().rename(
+                columns={team_col: "team"}
+            )
+            wk["proe"] = np.nan
+
+        wk_out = wk[["team", "week", "plays_est", "pace", "proe"]].copy()
+        if source_season != requested_season:
+            wk_out["source_season"] = source_season
+
+        wk_out.to_csv(path, index=False)
+    except Exception:
+        _write_weekly_stub(path)
+
+
 # -----------------------------
 # Main builder
 # -----------------------------
 
 def build_team_form(season: int) -> tuple[pd.DataFrame, pd.DataFrame, int]:
     """Return team-form dataframe, the PBP used, and the source season."""
+    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
+    pbp, source_season = _load_required_pbp(season)
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
     pbp, source_season = _load_required_pbp(season)
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
@@ -749,6 +850,9 @@ def main():
         df = _rollup_weekly_pace_proe(df)
         # --- END ADD ---
 
+        # --- Weekly writer (persist results or an empty schema) ---
+        weekly_path = os.path.join(DATA_DIR, "team_form_weekly.csv")
+        _write_weekly_outputs(pbp_used, source_season, args.season, weekly_path)
         # --- Weekly writer (your original logic, kept verbatim) ---
         try:
             pbp = pbp_used.copy()
@@ -813,6 +917,7 @@ def main():
         ])
         pbp_used = pd.DataFrame()
         source_season = args.season
+        _write_weekly_outputs(pd.DataFrame(), args.season, args.season, os.path.join(DATA_DIR, "team_form_weekly.csv"))
         try:
             pd.DataFrame(columns=['team', 'week', 'plays_est', 'pace', 'proe']).to_csv(os.path.join(DATA_DIR, 'team_form_weekly.csv'), index=False)
         except Exception:

@@ -53,16 +53,6 @@ Artifacts:
    *Same guarantee: only 2025 play-by-play and participation are accepted. Older seasons trigger an explicit failure instead of a silent fallback.*
 4. **Run the full engine (optional while debugging):** `python -m engine --season 2025 --debug`
    *The engine now enforces the same 2025-only constraint and surfaces a clear error when live pulls fail.*
-   *The builder now **fails fast** if nflverse can’t serve 2025. Pass `--allow-fallback` only when you intentionally want an earlier proxy season.*
-3. **Build player usage:** `python scripts/make_player_form.py --season 2025`
-   *Same contract: no older data unless you explicitly add `--allow-fallback`.*
-4. **Run the full engine (optional while debugging):** `python -m engine --season 2025 --debug`
-   *Set `ALLOW_NFL_FALLBACK=1` if you truly need to let the pipeline reuse prior seasons. Otherwise it will halt when live pulls fail so you never price props with stale data.*
-   *If the 2025 regular season isn’t available yet, the script automatically falls back to the most recent season and logs the substitute year.*
-3. **Build player usage:** `python scripts/make_player_form.py --season 2025`
-   *External CSVs are merged in without overwriting the fresh nflverse metrics, so your manual tweaks still win.*
-4. **Run the full engine (optional while debugging):** `python -m engine --season 2025 --debug`
-   *Requires `ODDS_API_KEY` for props. Without network access you’ll still get the engineered tables thanks to the new fallbacks.*
 
 After each builder runs you should see `data/team_form.csv`, `data/team_form_weekly.csv`, and `data/player_form.csv` populated. They’ll report the `source_season` column so you can verify which year powered the current projections.
 
