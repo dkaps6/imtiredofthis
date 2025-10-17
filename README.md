@@ -41,6 +41,16 @@ python run_model.py --date today --season 2025 --write outputs
 
 > **Heads-up:** `requirements.txt` now targets Python 3.12 by pinning
 > `pandas==2.1.4`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`,
+> `statsmodels==0.14.2`, and `pyarrow==15.0.2`.
+> Statsmodels 0.14.2 ships wheels built against `pandas<2.2`, so we pin
+> pandas to 2.1.4. If you decide to upgrade pandas later, bump statsmodels
+> at the same time to whatever release advertises compatibility with that
+> pandas series.
+
+> We removed `pandas-datareader` because its newest wheels currently depend on
+> `pandas<2.0`; installing it alongside pandas 2.1.4 would bring back the same
+> resolver error you saw in Actions. If you need `pandas-datareader`, install it
+> in a separate environment or adjust the rest of the stack accordingly.
 > `pandas==2.2.2`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`,
 > `statsmodels==0.14.2`, and `pyarrow==15.0.2`.
 > We removed `pandas-datareader` because its latest wheels cap
