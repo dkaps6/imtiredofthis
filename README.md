@@ -39,6 +39,15 @@ export ODDS_API_KEY=YOUR_KEY_HERE
 python run_model.py --date today --season 2025 --write outputs
 ```
 
+> **Heads-up:** `requirements.txt` now targets Python 3.12 by pinning
+> `pandas==2.2.2`, `numpy==1.26.4`, `scipy==1.12.0`, and `scikit-learn==1.4.2`. If your
+> environment cached older wheels (especially on GitHub Actions), run
+> `pip install --upgrade pip` first so compatible builds resolve cleanly.
+>
+> We also install `nflreadpy` (plus its `polars` dependency) so the builders can pull the
+> live 2025 nflverse feeds. Should `nflreadpy` be missing, the scripts fall back to
+> `nfl_data_py` — ensure you have `nfl_data_py>=0.3.4` available so the shared
+> `original_mlq` helper exists.
 > **Heads-up:** `requirements.txt` now installs `nflreadpy` (plus its `polars` dependency) so
 > the builders can pull the live 2025 nflverse feeds. If your environment pinned an older
 > dependency cache, run `pip install --upgrade pip` first so wheels for `polars` can be

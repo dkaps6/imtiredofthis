@@ -107,6 +107,10 @@ def load_pbp(season:int)->pd.DataFrame:
 def load_pbp(season:int)->pd.DataFrame:
     cached, source_path = _load_cached_csv("pbp", season)
     if not cached.empty:
+        _validate_season(cached, season, "cached pbp")
+def load_pbp(season:int)->pd.DataFrame:
+    cached, source_path = _load_cached_csv("pbp", season)
+    if not cached.empty:
         print(f"[make_player_form] ℹ️ Using cached pbp_{season}.csv from {source_path}")
         return cached
     if NFLPKG=="nflreadpy":
@@ -431,6 +435,11 @@ def fallback_from_external(base: pd.DataFrame) -> pd.DataFrame:
     return base
 
 def build_player_form(season:int)->tuple[pd.DataFrame, int]:
+    print(f"[make_player_form] Loading PBP for {season} ({NFLPKG}) ...")
+    pbp, source_season = _load_required_pbp(season)
+    if pbp.empty:
+        raise RuntimeError("Empty PBP.")
+    base = compute_player_usage(pbp)
     print(f"[make_player_form] Loading PBP for {season} ({NFLPKG}) ...")
     pbp, source_season = _load_required_pbp(season)
     if pbp.empty:

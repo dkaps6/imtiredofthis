@@ -838,6 +838,8 @@ def build_team_form(season: int) -> tuple[pd.DataFrame, pd.DataFrame, int]:
     pbp, source_season = _load_required_pbp(season)
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
     pbp, source_season = _load_required_pbp(season)
+    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
+    pbp, source_season = _load_required_pbp(season)
 def build_team_form(season: int, *, allow_fallback: bool) -> tuple[pd.DataFrame, pd.DataFrame, int]:
     """Return team-form dataframe, the PBP used, and the source season."""
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
