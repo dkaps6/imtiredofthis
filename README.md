@@ -48,6 +48,10 @@ python run_model.py --date today --season 2025 --write outputs
 > the **Install dependencies** step. If you later need `pandas-datareader`,
 > install it in a separate environment or adjust the pandas version accordingly.
 
+> The statsmodels wheels available today ship binaries that work with
+> pandas 2.2.x, so CI now stays on the same pandas version that GitHub Actions
+> preinstalls. If you bump pandas later, keep statsmodels at 0.14.2 or newer so
+> the resolver can still locate compatible wheels.
 > The statsmodels wheels available today still require `pandas<2.2`, so we
 > deliberately pin pandas to 2.1.4 to keep dependency resolution green in CI.
 > install it in a separate environment or downgrade pandas accordingly.

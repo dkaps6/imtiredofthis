@@ -567,6 +567,7 @@ def compute_pace_and_proe(pbp: pd.DataFrame) -> pd.DataFrame:
         pace_grp.loc[pace_grp["pace_neutral"].isna() & (pace_grp["neutral_plays"] > 0), "pace_neutral"] = 24.0
 
 
+
     pass_col = "pass" if "pass" in dfn.columns else None
     if pass_col is None:
         return pace_grp.rename(columns={off_col: "team"})[["team", "pace_neutral"]].assign(proe=np.nan)
@@ -837,6 +838,8 @@ def _write_weekly_outputs(
 
 def build_team_form(season: int) -> tuple[pd.DataFrame, pd.DataFrame, int]:
     """Return team-form dataframe, the PBP used, and the source season."""
+    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
+    pbp, source_season = _load_required_pbp(season)
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
     pbp, source_season = _load_required_pbp(season)
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
