@@ -490,7 +490,28 @@ def main():
 
     try:
         df = build_team_form(args.season)
-                # --- ADDED: also emit per-team, per-week environment safely ---
+        # --- ADD: roll up weekly pace/proe to season-level (plays-weighted), non-destructive ---
+    try:
+        tfw_path = os.path.join(DATA_DIR, "team_form_weekly.csv")
+        if os.path.exists(tfw_path):
+            tfw = pd.read_csv(tfw_path)
+            tfw.columns = [c.lower() for c in tfw.columns]
+            if {"team","plays_est","pace","proe"}.issubset(tfw.columns) and not tfw.empty:
+                grp = tfw.groupby("team", dropna=False)
+                pace_w = grp.apply(lambda g: np.average(g["pace"], weights=np.clip(g["plays_est"], 1, None))).rename("pace_season")
+                proe_w = grp.apply(lambda g: np.average(g["proe"], weights=np.clip(g["plays_est"], 1, None))).rename("proe_season")
+                roll = pd.concat([pace_w, proe_w], axis=1).reset_index()
+                df = df.merge(roll, on="team", how="left")
+                if "pace" in df.columns and "pace_season" in df.columns:
+                    df["pace"] = df["pace"].where(df["pace"].notna(), df["pace_season"])
+                if "proe" in df.columns and "proe_season" in df.columns:
+                    df["proe"] = df["proe"].where(df["proe"].notna(), df["proe_season"])
+                df.drop(columns=[c for c in ["pace_season","proe_season"] if c in df.columns], inplace=True)
+    except Exception:
+        # never fail run on roll-up
+        pass
+# --- END ADD ---
+
         try:
             pbp = load_pbp(args.season)
             if not pbp.empty:
