@@ -145,6 +145,93 @@ def _non_destructive_team_merge(base: pd.DataFrame, add: pd.DataFrame) -> pd.Dat
             out.drop(columns=[ext], inplace=True)
     return out
 
+# --- NEW: external enricher discovery + normalization -----------------------
+
+
+def _team_enricher_paths() -> list[str]:
+    """Return candidate CSV filenames that may contain team context enrichers."""
+    return [
+        "espn_team_form.csv",
+        "espn_team.csv",
+        "msf_team_form.csv",
+        "msf_team.csv",
+        "apisports_team_form.csv",
+        "apisports_team.csv",
+        "nflgsis_team_form.csv",
+        "gsis_team.csv",
+        "pfr_team_enrich.csv",
+        "team.form.csv",
+    ]
+
+
+_TEAM_COLUMN_ALIASES = {
+    "team_abbr": "team",
+    "team_code": "team",
+    "team_name": "team",
+    "club": "team",
+    "pace_seconds": "pace",
+    "sec_per_play": "pace",
+    "seconds_per_play": "pace",
+    "pass_rate_over_expected": "proe",
+    "proe_pct": "proe",
+    "red_zone_rate": "rz_rate",
+    "rz_pct": "rz_rate",
+    "twelve_personnel_rate": "12p_rate",
+    "personnel_12_pct": "12p_rate",
+    "slot_usage_rate": "slot_rate",
+    "slot_pct": "slot_rate",
+    "air_yards_per_attempt": "ay_per_att",
+    "ay_per_att_avg": "ay_per_att",
+    "light_box_pct": "light_box_rate",
+    "heavy_box_pct": "heavy_box_rate",
+    "def_pass_epa_per_play": "def_pass_epa",
+    "def_rush_epa_per_play": "def_rush_epa",
+    "sack_rate": "def_sack_rate",
+    "def_sack_pct": "def_sack_rate",
+}
+
+
+def _standardize_team_enricher(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df.columns = [c.lower() for c in df.columns]
+
+    for src, dest in _TEAM_COLUMN_ALIASES.items():
+        if src in df.columns and dest not in df.columns:
+            df = df.rename(columns={src: dest})
+
+    if "team" not in df.columns:
+        for cand in ["team", "team_abbreviation", "abbr"]:
+            if cand in df.columns:
+                df["team"] = df[cand]
+                break
+
+    if "team" not in df.columns:
+        return pd.DataFrame()
+
+    df["team"] = df["team"].astype(str).str.upper().str.strip()
+
+    keep = [
+        c
+        for c in [
+            "team",
+            "pace",
+            "proe",
+            "rz_rate",
+            "12p_rate",
+            "slot_rate",
+            "ay_per_att",
+            "def_pass_epa",
+            "def_rush_epa",
+            "def_sack_rate",
+            "light_box_rate",
+            "heavy_box_rate",
+        ]
+        if c in df.columns
+    ]
+    if not keep:
+        return pd.DataFrame()
+    return df[keep].drop_duplicates()
+
 # --- ADD: helper to roll up weekly pace/proe (plays-weighted), non-destructive ---
 def _rollup_weekly_pace_proe(df: pd.DataFrame) -> pd.DataFrame:
     try:
@@ -628,11 +715,14 @@ def main():
 
     # --- ADDED: optional external enrichers; fill only missing values ---
     try:
-        for fn in ["espn_team_form.csv", "msf_team_form.csv", "apisports_team_form.csv", "nflgsis_team_form.csv"]:
+        for fn in _team_enricher_paths():
             ext = _read_csv_safe(os.path.join(DATA_DIR, fn))
-            if not ext.empty and "team" in ext.columns:
-                ext["team"] = ext["team"].astype(str).str.upper().str.strip()
-                df = _non_destructive_team_merge(df, ext)
+            if ext.empty:
+                continue
+            norm = _standardize_team_enricher(ext)
+            if norm.empty:
+                continue
+            df = _non_destructive_team_merge(df, norm)
     except Exception:
         # enrichment is optional; never crash
         pass
