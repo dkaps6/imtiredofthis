@@ -379,6 +379,22 @@ def main():
             "coverage_top_shadow_opp","coverage_heavy_man_opp","coverage_heavy_zone_opp",
             "cb_penalty","injury_status","wind_mph","temp_f","precip","team_wp","season"
         ])
+        # optional: add opponent weekly env (pace/proe/plays_est) if present
+    try:
+        tfw = _read_csv(os.path.join("data", "team_form_weekly.csv"))
+        if not tfw.empty and {"team","week"}.issubset(tfw.columns) and {"opponent","week"}.issubset(df.columns):
+            tfw = tfw.rename(columns={"team":"opponent"})
+            cols = [c for c in ["opponent","week","plays_est","pace","proe"] if c in tfw.columns]
+            tfw = tfw[cols].drop_duplicates().rename(columns={
+                "plays_est":"opp_plays_wk","pace":"opp_pace_wk","proe":"opp_proe_wk"
+            })
+            df = df.merge(tfw, on=["opponent","week"], how="left")
+            for c in ["opp_plays_wk","opp_pace_wk","opp_proe_wk"]:
+                if c not in df.columns: 
+                    df[c] = np.nan
+    except Exception:
+        pass
+
     df.to_csv(OUTPATH, index=False)
     print(f"[make_metrics] Wrote {len(df)} rows → {OUTPATH}")
 
