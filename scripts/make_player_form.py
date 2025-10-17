@@ -18,9 +18,19 @@ def _import_nflverse():
     try:
         import nflreadpy as nflv
         return nflv, "nflreadpy"
-    except Exception:
-        import nfl_data_py as nflv  # fallback
-        return nflv, "nfl_data_py"
+    except ModuleNotFoundError:
+        print(
+            "[make_player_form] ⚠️ nflreadpy missing; falling back to nfl_data_py. "
+            "Install nflreadpy so the 2025 feeds remain available.",
+            file=sys.stderr,
+        )
+    except Exception as exc:
+        print(
+            f"[make_player_form] ⚠️ nflreadpy import failed ({exc}); falling back to nfl_data_py.",
+            file=sys.stderr,
+        )
+    import nfl_data_py as nflv  # fallback
+    return nflv, "nfl_data_py"
 
 NFLV, NFLPKG = _import_nflverse()
 DATA_DIR = "data"
@@ -74,6 +84,10 @@ def _validate_season(df: pd.DataFrame, season: int, label: str) -> None:
         )
 
 
+def load_pbp(season:int)->pd.DataFrame:
+    cached, source_path = _load_cached_csv("pbp", season)
+    if not cached.empty:
+        _validate_season(cached, season, "cached pbp")
 def load_pbp(season:int)->pd.DataFrame:
     cached, source_path = _load_cached_csv("pbp", season)
     if not cached.empty:

@@ -39,6 +39,11 @@ export ODDS_API_KEY=YOUR_KEY_HERE
 python run_model.py --date today --season 2025 --write outputs
 ```
 
+> **Heads-up:** `requirements.txt` now installs `nflreadpy` (plus its `polars` dependency) so
+> the builders can pull the live 2025 nflverse feeds. If your environment pinned an older
+> dependency cache, run `pip install --upgrade pip` first so wheels for `polars` can be
+> resolved correctly on GitHub Actions.
+
 Artifacts:
 - `outputs/game_lines.csv` — H2H / spreads / totals (normalized)
 - `outputs/props_priced.csv` — Player props (with alternates), model μ/σ, blended probabilities, fair odds, **edge%**, **kelly** and **tier**.

@@ -46,16 +46,26 @@ def _import_nflverse():
     try:
         import nflreadpy as nflv  # Python port maintained by nflverse
         return nflv, "nflreadpy"
-    except Exception:
-        try:
-            # Fallback for some environments; limited and deprecated upstream
-            import nfl_data_py as nflv  # type: ignore
-            return nflv, "nfl_data_py"
-        except Exception as e:
-            raise RuntimeError(
-                "Neither nflreadpy nor nfl_data_py is available. "
-                "Please `pip install nflreadpy`."
-            ) from e
+    except ModuleNotFoundError:
+        print(
+            "[make_team_form] ⚠️ nflreadpy missing; falling back to nfl_data_py. "
+            "Install nflreadpy to ensure 2025 data is available.",
+            file=sys.stderr,
+        )
+    except Exception as exc:
+        print(
+            f"[make_team_form] ⚠️ nflreadpy import failed ({exc}); falling back to nfl_data_py.",
+            file=sys.stderr,
+        )
+    try:
+        # Fallback for some environments; limited and deprecated upstream
+        import nfl_data_py as nflv  # type: ignore
+        return nflv, "nfl_data_py"
+    except Exception as e:
+        raise RuntimeError(
+            "Neither nflreadpy nor nfl_data_py is available. "
+            "Please `pip install nflreadpy`."
+        ) from e
 
 
 NFLV, NFL_PKG = _import_nflverse()
@@ -798,6 +808,8 @@ def _write_weekly_outputs(
 
 def build_team_form(season: int) -> tuple[pd.DataFrame, pd.DataFrame, int]:
     """Return team-form dataframe, the PBP used, and the source season."""
+    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
+    pbp, source_season = _load_required_pbp(season)
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
     pbp, source_season = _load_required_pbp(season)
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
