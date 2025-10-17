@@ -84,6 +84,9 @@ def _normalize_player_name(x: pd.Series | str) -> pd.Series | str:
     if isinstance(x, pd.Series):
         return x.map(_one)
     return _one(x)
+# --- ADD (utils): stable player key for robust joins ---
+def _player_key_series(s: pd.Series) -> pd.Series:
+    return s.fillna("").astype(str).str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
 
 # --- ADD (utils): stable player key for robust joins ---
 def _player_key_series(s: pd.Series) -> pd.Series:
@@ -127,6 +130,23 @@ def load_props() -> pd.DataFrame:
     # Deduplicate
     keep = ["event_id","player","team","market","line","over_odds","under_odds"]
     df = df[keep + [c for c in df.columns if c not in keep]].drop_duplicates()
+# --- ADD: pivot side rows into over_odds/under_odds if present ---
+    if "side" in df.columns and "price_american" in df.columns:
+        keycols = [c for c in ["event_id","player","team","market","line"] if c in df.columns]
+        if keycols:
+            tmp = df[keycols + ["side","price_american"]].copy()
+            tmp["side"] = tmp["side"].str.upper().str.strip()
+            pvt = tmp.pivot_table(index=keycols, columns="side", values="price_american", aggfunc="first").reset_index()
+            pvt.columns = [("over_odds" if c=="OVER" else "under_odds" if c=="UNDER" else c) for c in pvt.columns]
+            for c in ["over_odds","under_odds"]:
+                if c not in pvt.columns:
+                    pvt[c] = np.nan
+            df = df.merge(pvt, on=keycols, how="left", suffixes=("","_pvt"))
+            for c in ["over_odds","under_odds"]:
+                c_p = c + "_pvt"
+                if c_p in df.columns:
+                    df[c] = df[c].combine_first(df[c_p])
+                    df.drop(columns=[c_p], inplace=True)
 
     # --- ADD: pivot side rows into over_odds/under_odds if present ---
     if "side" in df.columns and "price_american" in df.columns:
@@ -275,6 +295,19 @@ def build_metrics(season: int) -> pd.DataFrame:
     inj = load_injuries()
     wx = load_weather()
     gl = load_game_lines()
+# --- ADD: ensure a 'week' on props (if missing) ---
+    need_week = ("week" not in props.columns) or props["week"].isna().all()
+    if need_week and "commence_time" in props.columns:
+        props["week"] = pd.to_datetime(
+            props["commence_time"], errors="coerce", utc=True
+        ).dt.isocalendar().week.astype("Int64")
+# --- END ADD ---
+
+# --- ADD: build robust player keys on both sides for merges ---
+props["player_key"] = _player_key_series(props.get("player", pd.Series(dtype=object)))
+if not pf.empty:
+    pf["player_key"] = _player_key_series(pf.get("player", pd.Series(dtype=object)))
+# --- END ADD ---
 
     # --- ADD: ensure a 'week' on props to allow weekly opponent env attach ---
     need_week = ("week" not in props.columns) or props["week"].isna().all()
