@@ -40,11 +40,16 @@ python run_model.py --date today --season 2025 --write outputs
 ```
 
 > **Heads-up:** `requirements.txt` now targets Python 3.12 by pinning
+> `pandas==2.1.4`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`,
 > `pandas==2.2.2`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`,
 > `statsmodels==0.14.2`, and `pyarrow==15.0.2`.
 > We removed `pandas-datareader` because its latest wheels cap
 > `pandas<2.2`, which is exactly why the GitHub Actions run aborted during
 > the **Install dependencies** step. If you later need `pandas-datareader`,
+> install it in a separate environment or adjust the pandas version accordingly.
+
+> The statsmodels wheels available today still require `pandas<2.2`, so we
+> deliberately pin pandas to 2.1.4 to keep dependency resolution green in CI.
 > install it in a separate environment or downgrade pandas accordingly.
 > `statsmodels==0.14.2`, `pyarrow==15.0.2`, and `pandas-datareader==0.10.0`.
 > Statsmodels 0.14.2 advertises support through pandas 2.2, so the resolver
