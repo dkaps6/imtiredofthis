@@ -75,8 +75,6 @@ Every invocation of `python -m engine` now appends a compact JSON line to `logs/
 - which steps succeeded/failed (fetch, team/player builders, metrics join, pricing, predictors, export)
 - the row/column counts for critical CSVs (team_form, player_form, metrics_ready, props_priced)
 - the `source_season` recorded by the builders (should read 2025 once live data lands)
-- the `source_season` used for team/player fallbacks (only present when you enable them)
-- the `source_season` used for team/player fallbacks
 - run timing metadata (`run_id`, `started_at`, `duration_s`, etc.)
 
 Use it on GitHub Actions to confirm a slate ran cleanly, or locally via:

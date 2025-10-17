@@ -640,6 +640,8 @@ def build_team_form(season: int) -> tuple[pd.DataFrame, pd.DataFrame, int]:
     """Return team-form dataframe, the PBP used, and the source season."""
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
     pbp, source_season = _load_required_pbp(season)
+    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
+    pbp, source_season = _load_required_pbp(season)
 def build_team_form(season: int, *, allow_fallback: bool) -> tuple[pd.DataFrame, pd.DataFrame, int]:
     """Return team-form dataframe, the PBP used, and the source season."""
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
@@ -667,9 +669,12 @@ def build_team_form(season: int) -> tuple[pd.DataFrame, pd.DataFrame, int]:
     pers_tbl = compute_personnel_rates(pbp, part)
 
     print("[make_team_form] Merging components ...")
-    out = def_tbl.merge(pace_tbl, on="team", how="left") \
-                 .merge(rz_ay_tbl, on="team", how="left") \
-                 .merge(pers_tbl, on="team", how="left")
+    out = (
+        def_tbl
+        .merge(pace_tbl, on="team", how="left")
+        .merge(rz_ay_tbl, on="team", how="left")
+        .merge(pers_tbl, on="team", how="left")
+    )
 
     # add slot rate proxy from roles.csv if present
     out = merge_slot_rate_from_roles(out)

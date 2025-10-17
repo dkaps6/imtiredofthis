@@ -158,6 +158,7 @@ def run_pipeline(season: int = 2025,
         "status": "ok",
     }
 
+
     allow_fallback = (
         os.environ.get("ALLOW_NFL_FALLBACK", "").strip().lower() in {"1", "true", "yes"}
     )

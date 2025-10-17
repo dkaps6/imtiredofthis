@@ -373,6 +373,11 @@ def build_player_form(season:int)->tuple[pd.DataFrame, int]:
     if pbp.empty:
         raise RuntimeError("Empty PBP.")
     base = compute_player_usage(pbp)
+    print(f"[make_player_form] Loading PBP for {season} ({NFLPKG}) ...")
+    pbp, source_season = _load_required_pbp(season)
+    if pbp.empty:
+        raise RuntimeError("Empty PBP.")
+    base = compute_player_usage(pbp)
 def build_player_form(season:int, *, allow_fallback: bool)->tuple[pd.DataFrame, int]:
     print(f"[make_player_form] Loading PBP for {season} ({NFLPKG}) ...")
     pbp, source_season = _load_pbp_with_fallback(
