@@ -359,9 +359,12 @@ if not pf.empty:
         base["week"] = props["week"]
 
     if not pf.empty:
+        # robust merge using player_key (non-destructive)
         keep_pf = ["player","team","target_share","rush_share","route_rate","yprr_proxy","ypt","ypc",
                    "rz_tgt_share","rz_carry_share","position","role","season","player_key"]
         keep_pf = [c for c in keep_pf if c in pf.columns]
+
+        base = base.merge(pf[keep_pf].drop_duplicates(), on=["player_key"], how="left", suffixes=("","_pf"))
 
         # 1) robust merge using player_key (non-destructive)
         base = base.merge(pf[keep_pf].drop_duplicates(), on=["player_key"], how="left", suffixes=("","_pf"))
