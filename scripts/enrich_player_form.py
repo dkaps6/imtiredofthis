@@ -349,6 +349,17 @@ def main():
 
         # Final tidy: keep unique player-team-season rows
         pf = pf.drop_duplicates(subset=["player","team","season"], keep="first")
+# --- ADD: persist a stable player_key for robust downstream joins ---
+        try:
+            pf["player_key"] = (
+                pf.get("player", pd.Series([], dtype=object))
+                  .fillna("").astype(str)
+                  .str.lower()
+                  .str.replace(r"[^a-z0-9]", "", regex=True)
+            )
+        except Exception:
+            pass
+# --- END ADD ---
 
         # Write back
         _write_csv(OUTPATH, pf)
