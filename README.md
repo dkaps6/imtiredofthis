@@ -57,6 +57,17 @@ python run_model.py --date today --season 2025 --write outputs
 > “Install dependencies”. We also lock `lxml` to **4.9.4.x** because that release
 > line is the sweet spot that satisfies `nflreadpy` while keeping BeautifulSoup
 > fast and reliable.
+
+> Optional packages like `nflreadpy` (and its `polars` dependency) remain in the
+> list for Python 3.11-and-earlier environments so the builders can hit the live
+> 2025 nflverse feeds. PyPI’s latest `nflreadpy` wheels live in the **0.1.x**
+> series (0.1.3 today), so the requirements file explicitly requests
+> `nflreadpy>=0.1,<0.2` to prevent the resolver from grabbing incompatible 0.2+
+> prereleases. The same idea applies to `nfl_data_py`: we keep a modest lower
+> bound (**0.3.0**) for the current API surface and otherwise allow the resolver
+> to downgrade if a newer release requests dependencies that are not yet
+> published. On Python 3.12, `pip` skips `nflreadpy` and the scripts fall back to
+> `nfl_data_py` alone, logging which provider handled each pull.
 > CI (`pandas 2.2.2+`, `numpy 1.26.4+`, `scipy 1.11+`, `statsmodels 0.14.2+`)
 > while relaxing the upper bounds to `<2.0` so the resolver no longer trips over
 > version conflicts during “Install dependencies”. We also lock `lxml` to
