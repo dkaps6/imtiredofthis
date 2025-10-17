@@ -42,6 +42,19 @@ def load_pbp(season:int)->pd.DataFrame:
     return df
 
 
+def _load_pbp_with_fallback(
+    season: int,
+    *,
+    allow_prior_seasons: bool,
+    max_lookback: int = 5,
+) -> tuple[pd.DataFrame, int]:
+    """
+    Return the first available season ≤ ``season`` with play-by-play data.
+
+    When ``allow_prior_seasons`` is False we will raise instead of silently
+    substituting older data; this keeps 2025 runs from drifting to 2024 metrics
+    when live pulls fail.
+    """
 def _load_pbp_with_fallback(season: int, max_lookback: int = 5) -> tuple[pd.DataFrame, int]:
     """Return the first available season ≤ ``season`` with play-by-play data."""
     errors: list[str] = []
@@ -55,6 +68,19 @@ def _load_pbp_with_fallback(season: int, max_lookback: int = 5) -> tuple[pd.Data
             errors.append(f"season {candidate}: {err}")
             continue
         if not df.empty:
+            if candidate == season:
+                return df, candidate
+
+            if allow_prior_seasons:
+                print(
+                    f"[make_player_form] ⚠️ No PBP for {season}; using {candidate} instead"
+                )
+                return df, candidate
+
+            errors.append(
+                f"season {candidate}: available but fallback disabled"
+            )
+            continue
             if candidate != season:
                 print(f"[make_player_form] ⚠️ No PBP for {season}; using {candidate} instead")
             return df, candidate
@@ -289,8 +315,15 @@ def fallback_from_external(base: pd.DataFrame) -> pd.DataFrame:
                 base.drop(columns=[ext_col], inplace=True)
     return base
 
-def build_player_form(season:int)->pd.DataFrame:
+def build_player_form(season:int, *, allow_fallback: bool)->tuple[pd.DataFrame, int]:
     print(f"[make_player_form] Loading PBP for {season} ({NFLPKG}) ...")
+    pbp, source_season = _load_pbp_with_fallback(
+        season, allow_prior_seasons=allow_fallback
+    )
+    if pbp.empty:
+        raise RuntimeError("Empty PBP.")
+    base = compute_player_usage(pbp)
+    if base.empty and source_season > 2000 and allow_fallback:
     pbp, source_season = _load_pbp_with_fallback(season)
     if pbp.empty:
         raise RuntimeError("Empty PBP.")
@@ -321,18 +354,30 @@ def build_player_form(season:int)->pd.DataFrame:
         if c not in base.columns:
             base[c] = np.nan
     base = base[order].sort_values(["team","player"]).reset_index(drop=True)
-    return base
+    return base, source_season
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--season", type=int, default=2025)
+    parser.add_argument(
+        "--allow-fallback",
+        action="store_true",
+        help="Permit using prior seasons when requested season data is unavailable",
+    )
     args = parser.parse_args()
     _safe_mkdir(DATA_DIR)
     try:
-        df = build_player_form(args.season)
+        df, source_season = build_player_form(
+            args.season, allow_fallback=args.allow_fallback
+        )
+        if source_season != args.season:
+            print(
+                f"[make_player_form] ℹ️ Using {source_season} metrics as proxy for {args.season}"
+            )
     except Exception as e:
         print(f"[make_player_form] ERROR: {e}", file=sys.stderr)
         df = pd.DataFrame(columns=["player","team","season","source_season","target_share","rush_share","rz_tgt_share","rz_carry_share","ypt","ypc","yprr_proxy","route_rate"])
+        source_season = args.season
     df.to_csv(OUTPATH, index=False)
     print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH}")
 
