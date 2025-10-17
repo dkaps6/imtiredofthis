@@ -79,7 +79,7 @@ def run_nflverse(season: int, date: str | None) -> dict:
             if _safe_to_csv(pbp_df, f"data/pbp_{season}.csv"):
                 pbp_rows = len(pbp_df)
                 wrote_any = True
-                notes.append(f"nflreadpy pbp rows={pbp_rows}")
+                notes.append(f"nflreadpy pbp rows={pbp_rows} (season {season})")
         except Exception as e:
             notes.append(f"nflreadpy pbp: {type(e).__name__}: {e}")
 
@@ -90,7 +90,9 @@ def run_nflverse(season: int, date: str | None) -> dict:
             if _safe_to_csv(part_df, f"data/participation_{season}.csv"):
                 part_rows = len(part_df)
                 wrote_any = True
-                notes.append(f"nflreadpy participation rows={part_rows}")
+                notes.append(
+                    f"nflreadpy participation rows={part_rows} (season {season})"
+                )
         except Exception as e:
             notes.append(f"nflreadpy participation: {type(e).__name__}: {e}")
 
@@ -101,12 +103,17 @@ def run_nflverse(season: int, date: str | None) -> dict:
             if _safe_to_csv(sch_df, f"data/schedules_{season}.csv"):
                 sch_rows = len(sch_df)
                 wrote_any = True
-                notes.append(f"nflreadpy schedules rows={sch_rows}")
+                notes.append(f"nflreadpy schedules rows={sch_rows} (season {season})")
         except Exception as e:
             notes.append(f"nflreadpy schedules: {type(e).__name__}: {e}")
 
     except Exception as e:
-        notes.append(f"nflreadpy not available: {type(e).__name__}: {e}")
+        if "original_mlq" in str(e):
+            notes.append(
+                "nflreadpy not available: nfl_data_py missing `original_mlq` (upgrade to >=0.3.4)"
+            )
+        else:
+            notes.append(f"nflreadpy not available: {type(e).__name__}: {e}")
 
     # --- Fallback to nfl_data_py if needed ---
     if pbp_rows == 0 or sch_rows == 0:
@@ -119,7 +126,9 @@ def run_nflverse(season: int, date: str | None) -> dict:
                     if _safe_to_csv(pbp_df, f"data/pbp_{season}.csv"):
                         pbp_rows = len(pbp_df)
                         wrote_any = True
-                        notes.append(f"nfl_data_py pbp rows={pbp_rows}")
+                        notes.append(
+                            f"nfl_data_py pbp rows={pbp_rows} (season {season})"
+                        )
                 except Exception as e:
                     notes.append(f"nfl_data_py pbp: {type(e).__name__}: {e}")
 
@@ -130,7 +139,9 @@ def run_nflverse(season: int, date: str | None) -> dict:
                     if _safe_to_csv(sch_df, f"data/schedules_{season}.csv"):
                         sch_rows = len(sch_df)
                         wrote_any = True
-                        notes.append(f"nfl_data_py schedules rows={sch_rows}")
+                        notes.append(
+                            f"nfl_data_py schedules rows={sch_rows} (season {season})"
+                        )
                 except Exception as e:
                     notes.append(f"nfl_data_py schedules: {type(e).__name__}: {e}")
 
