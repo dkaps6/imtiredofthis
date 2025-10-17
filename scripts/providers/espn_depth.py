@@ -9,10 +9,39 @@ from bs4 import BeautifulSoup
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; DepthBot/1.0)"}
 TEAM_ESPN = {
-    "ARI":"ari","ATL":"atl","BAL":"bal","BUF":"buf","CAR":"car","CHI":"chi","CIN":"cin","CLE":"cle","DAL":"dal",
-    "DEN":"den","DET":"det","GB":"gnb","HOU":"hou","IND":"ind","JAX":"jac","KC":"kan","LV":"lv","LAC":"lac","LAR":"lar",
-    "MIA":"mia","MIN":"min","NE":"nwe","NO":"nor","NYG":"nyg","NYJ":"nyj","PHI":"phi","PIT":"pit","SEA":"sea","SF":"sfo",
-    "TB":"tam","TEN":"ten","WAS":"was",
+    # ESPN uses its own short codes which differ slightly from PFR/nflverse
+    "ARI": "ari",
+    "ATL": "atl",
+    "BAL": "bal",
+    "BUF": "buf",
+    "CAR": "car",
+    "CHI": "chi",
+    "CIN": "cin",
+    "CLE": "cle",
+    "DAL": "dal",
+    "DEN": "den",
+    "DET": "det",
+    "GB": "gb",
+    "HOU": "hou",
+    "IND": "ind",
+    "JAX": "jax",
+    "KC": "kc",
+    "LV": "lv",
+    "LAC": "lac",
+    "LAR": "lar",
+    "MIA": "mia",
+    "MIN": "min",
+    "NE": "ne",
+    "NO": "no",
+    "NYG": "nyg",
+    "NYJ": "nyj",
+    "PHI": "phi",
+    "PIT": "pit",
+    "SEA": "sea",
+    "SF": "sf",
+    "TB": "tb",
+    "TEN": "ten",
+    "WAS": "wsh",
 }
 
 def _fetch_team(team: str) -> list[dict]:
