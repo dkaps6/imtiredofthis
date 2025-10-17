@@ -93,6 +93,27 @@ def _load_cached_csv(kind: str, season: int) -> Tuple[pd.DataFrame, str]:
     return pd.DataFrame(), ""
 
 
+def _validate_season(df: pd.DataFrame, season: int, label: str) -> None:
+    """Ensure a dataframe only contains the requested ``season``."""
+    if df.empty or "season" not in df.columns:
+        return
+    try:
+        seasons = (
+            pd.to_numeric(df["season"], errors="coerce")
+            .dropna()
+            .astype(int)
+            .unique()
+        )
+    except Exception:
+        return
+    if len(seasons) == 0:
+        return
+    if any(int(s) != int(season) for s in seasons):
+        raise RuntimeError(
+            f"{label} spans seasons {sorted(map(int, seasons))}; expected {season}"
+        )
+
+
 def zscore(df: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
     for c in cols:
         if c in df and df[c].notna().sum() >= 8:
@@ -292,9 +313,12 @@ def load_pbp(season: int) -> pd.DataFrame:
         return cached
 
     if NFL_PKG == "nflreadpy":
-        pbp = NFLV.load_pbp(seasons=[season])
+        pbp = NFLV.load_pbp(seasons=[season], season_type="REG")
     else:
-        pbp = NFLV.import_pbp_data([season], downcast=True)  # type: ignore
+        try:
+            pbp = NFLV.import_pbp_data([season], downcast=True, season_type="REG")  # type: ignore
+        except TypeError:  # older nfl_data_py builds
+            pbp = NFLV.import_pbp_data([season], downcast=True)  # type: ignore
     # Normalize column names we rely on
     pbp.columns = [c.lower() for c in pbp.columns]
     return pbp
@@ -313,11 +337,14 @@ def load_participation(season: int) -> pd.DataFrame:
         return cached
     try:
         if NFL_PKG == "nflreadpy":
-            part = NFLV.load_participation(seasons=[season])
+            part = NFLV.load_participation(seasons=[season], season_type="REG")
         else:
-            # nfl_data_py has limited/older participation; skip if missing
-            return pd.DataFrame()
+            try:
+                part = NFLV.import_participation([season])  # type: ignore[attr-defined]
+            except Exception:
+                return pd.DataFrame()
         part.columns = [c.lower() for c in part.columns]
+        _validate_season(part, season, "participation cache")
         return part
     except Exception:
         return pd.DataFrame()
@@ -327,6 +354,7 @@ def _load_required_pbp(season: int) -> tuple[pd.DataFrame, int]:
     """Load play-by-play strictly for ``season`` or raise."""
     cached, cache_path = _load_cached_csv("pbp", season)
     if not cached.empty:
+        _validate_season(cached, season, "cached pbp")
         print(
             f"[make_team_form] ℹ️ Loaded cached pbp_{season}.csv from {cache_path}"
         )
@@ -336,6 +364,10 @@ def _load_required_pbp(season: int) -> tuple[pd.DataFrame, int]:
     try:
         pbp = load_pbp(season)
     except Exception as err:
+        errors.append(f"{type(err).__name__}: {err}")
+    else:
+        if not pbp.empty:
+            _validate_season(pbp, season, "pbp feed")
         errors.append(str(err))
     else:
         if not pbp.empty:
@@ -478,35 +510,64 @@ def compute_pace_and_proe(pbp: pd.DataFrame) -> pd.DataFrame:
 
     # Pace proxy: plays per minute → seconds per play
     dfn["_one"] = 1
-    pace_grp = dfn.groupby(off_col, dropna=False)["_one"].sum().rename("neutral_plays").reset_index()
-    # Estimate elapsed neutral time: use quarter clock if available; otherwise approximate by #plays * 24 sec
-    if "game_seconds_remaining" in dfn and "game_seconds_remaining".lower() in dfn:
-        # It's already lowercase; above check is redundant but harmless.
-        pass
-    # Use a crude baseline of 24s per neutral play if timing columns aren't reliable
-    pace_grp["pace_neutral"] = np.where(
-        pace_grp["neutral_plays"] > 0,
-        24.0,  # conservative neutral pace (seconds per snap)
-        np.nan
+    pace_grp = (
+        dfn.groupby(off_col, dropna=False)["_one"]
+        .sum()
+        .rename("neutral_plays")
+        .reset_index()
     )
 
-    # PROE: need pass rate minus expected pass rate.
-    # If xp pass prob exists (xpass or pass_probability), use it; else use league-average neutral pass rate.
-    is_pass = dfn.get("pass", pd.Series(False, index=dfn.index)).astype(bool)
-    prate = dfn.groupby(off_col, dropna=False)["pass"].mean() if "pass" in dfn else pd.Series(dtype=float)
+    if {"game_seconds_remaining", "game_id"}.issubset(dfn.columns):
+        sort_cols = [
+            col
+            for col in [off_col, "game_id", "qtr", "game_seconds_remaining", "play_id"]
+            if col in dfn.columns
+        ]
+        ordered = dfn.sort_values(sort_cols, ignore_index=True)
+        grp = ordered.groupby([off_col, "game_id"], dropna=False)[
+            "game_seconds_remaining"
+        ]
+        # diff(-1) gives next - current; multiply by -1 to get positive elapsed seconds
+        deltas = (grp.diff(-1) * -1).clip(lower=0)
+        ordered["_sec_delta"] = deltas
+        pace_seconds = (
+            ordered.groupby(off_col, dropna=False)["_sec_delta"]
+            .mean()
+            .rename("pace_neutral")
+            .reset_index()
+        )
+        pace_grp = pace_grp.merge(pace_seconds, on=off_col, how="left")
+    else:
+        pace_grp["pace_neutral"] = np.nan
 
-    if "xpass" in dfn:
+    if "pace_neutral" in pace_grp.columns:
+        pace_grp.loc[pace_grp["pace_neutral"].isna() & (pace_grp["neutral_plays"] > 0), "pace_neutral"] = 24.0
+
+    pass_col = "pass" if "pass" in dfn.columns else None
+    if pass_col is None:
+        return pace_grp.rename(columns={off_col: "team"})[["team", "pace_neutral"]].assign(proe=np.nan)
+
+    dfn["_is_pass"] = dfn[pass_col].astype(float)
+    prate = (
+        dfn.groupby(off_col, dropna=False)["_is_pass"]
+        .mean()
+        .rename("pass_rate")
+    )
+
+    if "xpass" in dfn.columns:
         xpass = dfn.groupby(off_col, dropna=False)["xpass"].mean()
         proe = prate - xpass
-    elif "pass_probability" in dfn:
+    elif "pass_probability" in dfn.columns:
         xp = dfn.groupby(off_col, dropna=False)["pass_probability"].mean()
         proe = prate - xp
     else:
         league_neutral_pass = prate.mean() if len(prate) else 0.55
         proe = prate - league_neutral_pass
 
-    out = pace_grp.merge(proe.rename("proe"), left_on=off_col, right_index=True, how="left")
-    out = out.rename(columns={off_col: "team"})
+    out = (
+        pace_grp.merge(proe.rename("proe"), left_on=off_col, right_index=True, how="left")
+        .rename(columns={off_col: "team"})
+    )
     return out[["team", "pace_neutral", "proe"]]
 
 
@@ -737,6 +798,8 @@ def _write_weekly_outputs(
 
 def build_team_form(season: int) -> tuple[pd.DataFrame, pd.DataFrame, int]:
     """Return team-form dataframe, the PBP used, and the source season."""
+    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
+    pbp, source_season = _load_required_pbp(season)
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
     pbp, source_season = _load_required_pbp(season)
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")

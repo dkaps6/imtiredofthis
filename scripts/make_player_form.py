@@ -54,15 +54,42 @@ def _load_cached_csv(kind: str, season: int) -> Tuple[pd.DataFrame, str]:
     return pd.DataFrame(), ""
 
 
+def _validate_season(df: pd.DataFrame, season: int, label: str) -> None:
+    if df.empty or "season" not in df.columns:
+        return
+    try:
+        seasons = (
+            pd.to_numeric(df["season"], errors="coerce")
+            .dropna()
+            .astype(int)
+            .unique()
+        )
+    except Exception:
+        return
+    if len(seasons) == 0:
+        return
+    if any(int(s) != int(season) for s in seasons):
+        raise RuntimeError(
+            f"{label} spans seasons {sorted(map(int, seasons))}; expected {season}"
+        )
+
+
+def load_pbp(season:int)->pd.DataFrame:
+    cached, source_path = _load_cached_csv("pbp", season)
+    if not cached.empty:
+        _validate_season(cached, season, "cached pbp")
 def load_pbp(season:int)->pd.DataFrame:
     cached, source_path = _load_cached_csv("pbp", season)
     if not cached.empty:
         print(f"[make_player_form] ℹ️ Using cached pbp_{season}.csv from {source_path}")
         return cached
     if NFLPKG=="nflreadpy":
-        df = NFLV.load_pbp(seasons=[season])
+        df = NFLV.load_pbp(seasons=[season], season_type="REG")
     else:
-        df = NFLV.import_pbp_data([season], downcast=True)
+        try:
+            df = NFLV.import_pbp_data([season], downcast=True, season_type="REG")
+        except TypeError:
+            df = NFLV.import_pbp_data([season], downcast=True)
     df.columns = [c.lower() for c in df.columns]
     return df
 
@@ -71,6 +98,7 @@ def _load_required_pbp(season: int) -> tuple[pd.DataFrame, int]:
     """Load play-by-play strictly for ``season`` or raise."""
     cached, cache_path = _load_cached_csv("pbp", season)
     if not cached.empty:
+        _validate_season(cached, season, "cached pbp")
         print(
             f"[make_player_form] ℹ️ Loaded cached pbp_{season}.csv from {cache_path}"
         )
@@ -80,6 +108,10 @@ def _load_required_pbp(season: int) -> tuple[pd.DataFrame, int]:
     try:
         df = load_pbp(season)
     except Exception as err:
+        errors.append(f"{type(err).__name__}: {err}")
+    else:
+        if not df.empty:
+            _validate_season(df, season, "pbp feed")
         errors.append(str(err))
     else:
         if not df.empty:
@@ -139,16 +171,21 @@ def _load_pbp_with_fallback(season: int, max_lookback: int = 5) -> tuple[pd.Data
 def load_participation(season:int)->pd.DataFrame:
     cached, source_path = _load_cached_csv("participation", season)
     if not cached.empty:
+        _validate_season(cached, season, "participation cache")
         print(
             f"[make_player_form] ℹ️ Using cached participation_{season}.csv from {source_path}"
         )
         return cached
     try:
         if NFLPKG=="nflreadpy":
-            p = NFLV.load_participation(seasons=[season])
+            p = NFLV.load_participation(seasons=[season], season_type="REG")
         else:
-            return pd.DataFrame()
+            try:
+                p = NFLV.import_participation([season])  # type: ignore[attr-defined]
+            except Exception:
+                return pd.DataFrame()
         p.columns = [c.lower() for c in p.columns]
+        _validate_season(p, season, "participation feed")
         return p
     except Exception:
         return pd.DataFrame()

@@ -37,6 +37,15 @@ def _run(cmd: str, check: bool = True) -> int:
     return result.returncode
 
 
+def _run_optional(cmd: str) -> int:
+    """Run a helper command but do not raise if it exits non-zero."""
+    try:
+        return _run(cmd, check=False)
+    except Exception as exc:  # pragma: no cover - extremely defensive
+        print(f"[ENGINE] ⚠️ optional step wrapper failed unexpectedly: {exc}")
+        return 1
+
+
 def _safe_mkdir(path: str):
     if not os.path.exists(path):
         os.makedirs(path, exist_ok=True)
@@ -203,6 +212,24 @@ def run_pipeline(season: int = 2025,
             fetch_cmd = " ".join(shlex.quote(p) for p in fetch_parts)
             _run(fetch_cmd)
 
+            depth_cmds = [
+                "python scripts/providers/espn_depth.py",
+                "python scripts/providers/ourlads_depth.py",
+            ]
+            for cmd in depth_cmds:
+                _run_optional(cmd)
+
+            provider_scripts = [
+                "scripts/providers/espn_pull.py",
+                "scripts/providers/msf_pull.py",
+                "scripts/providers/gsis_pull.py",
+                "scripts/providers/apisports_pull.py",
+                "scripts/providers/pfr_pull.py",
+                "scripts/providers/injuries.py",
+            ]
+            for script in provider_scripts:
+                env_cmd = f"SEASON={season} python {script}"
+                _run_optional(env_cmd)
             _run("python scripts/providers/espn_depth.py || true")
             _run("python scripts/providers/ourlads_depth.py || true")
             _run("python scripts/providers/injuries.py || true")
