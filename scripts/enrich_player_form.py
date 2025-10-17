@@ -275,6 +275,77 @@ def main():
 
         # Fill route_rate and yprr proxies if still missing
         pf = fill_route_rate_and_yprr(pf)
+        # --- A) Participation shares (non-destructive; optional) ---
+        try:
+            # pick a season for the query (fallback to 2025 if unknown)
+            season_guess = int(pf["season"].dropna().iloc[0]) if "season" in pf.columns and pf["season"].notna().any() else 2025
+
+            import nflreadpy as _nflv   # will be used if installed; otherwise we silently skip
+            part = _nflv.load_participation(seasons=[season_guess])
+            part.columns = [c.lower() for c in part.columns]
+
+            team_col = "posteam" if "posteam" in part.columns else ("offense_team" if "offense_team" in part.columns else None)
+            if team_col is not None and "player_name" in part.columns:
+                p = part.rename(columns={team_col: "team", "player_name": "player"})
+                p["team"]   = p["team"].astype(str).str.upper().str.strip()
+                p["player"] = p["player"].astype(str).str.replace(".", "", regex=False).str.strip()
+
+                # sum snaps/routes across the season (or available rows)
+                g = p.groupby(["team","player"], dropna=False).agg(
+                    off_snaps=("offense", "sum") if "offense" in p.columns else ("onfield", "sum"),
+                    routes   =("route",   "sum") if "route"   in p.columns else ("routes",  "sum") if "routes" in p.columns else ("onfield","sum")
+                ).reset_index()
+
+                # team totals for shares
+                tt = g.groupby("team", dropna=False).agg(team_off_snaps=("off_snaps","sum"),
+                                                         team_routes   =("routes","sum")).reset_index()
+                g = g.merge(tt, on="team", how="left")
+                g["snap_share"] = np.where(g["team_off_snaps"] > 0, g["off_snaps"] / g["team_off_snaps"], np.nan)
+                g["route_rate"] = np.where(g["team_routes"]   > 0, g["routes"]    / g["team_routes"],   np.nan)
+
+                # merge into pf without overwriting existing non-null values
+                pf = pf.merge(g[["team","player","snap_share","route_rate"]],
+                              on=["team","player"], how="left", suffixes=("","_part"))
+                for col in ["snap_share","route_rate"]:
+                    ext = col + "_part"
+                    if ext in pf.columns:
+                        pf[col] = pf[col].combine_first(pf[ext])
+                        pf.drop(columns=[ext], inplace=True)
+        except Exception:
+            # optional; never fail on participation fetch
+            pass
+        # --- END A ---
+        # --- B) Resolve placeholder roles like WR1/RB1/TE1/QB1 to actual names (optional) ---
+        try:
+            if "role" in pf.columns:
+                tmp = pf.copy()
+                for c in ["snap_share","route_rate","target_share"]:
+                    if c not in tmp.columns:
+                        tmp[c] = np.nan
+                # ranking signal to pick WR1/WR2... etc
+                tmp["rk"] = tmp["route_rate"].fillna(0)*1.0 + tmp["snap_share"].fillna(0)*0.7 + tmp["target_share"].fillna(0)*0.5
+                tmp["posu"] = tmp.get("position", np.nan).astype(str).str.upper()
+
+                mask = tmp["role"].astype(str).str.fullmatch(r"(WR|RB|TE|QB)\d", case=False, na=False)
+                for idx, row in tmp.loc[mask].iterrows():
+                    fam = str(row["role"])[:2].upper()   # WR/RB/TE/QB
+                    try:
+                        k = int(str(row["role"])[2:])    # the number (1/2/3…)
+                    except Exception:
+                        k = 1
+                    sub = tmp[tmp["team"] == row["team"]]
+                    if fam in ("WR","TE","RB","QB"):
+                        sub = sub[sub["posu"].str.startswith(fam)]
+                    sub = sub.sort_values("rk", ascending=False)
+                    if len(sub) > 0:
+                        name = sub["player"].iloc[min(k-1, len(sub)-1)]
+                        # only set when current player is missing or still a placeholder
+                        if pd.isna(pf.at[idx, "player"]) or str(pf.at[idx, "player"]).upper().startswith((fam)):
+                            pf.at[idx, "player"] = name
+        except Exception:
+            # optional; never fail on mapping
+            pass
+        # --- END B ---
 
         # Final tidy: keep unique player-team-season rows
         pf = pf.drop_duplicates(subset=["player","team","season"], keep="first")
