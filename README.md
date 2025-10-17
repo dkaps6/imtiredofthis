@@ -55,6 +55,15 @@ python run_model.py --date today --season 2025 --write outputs
 > CI (`pandas 2.2.2+`, `numpy 1.26.4+`, `scipy 1.11+`, `statsmodels 0.14.2+`)
 > while relaxing the upper bounds to `<2.0` so the resolver no longer trips over
 > version conflicts during “Install dependencies”.
+
+> Optional packages like `nflreadpy` (and its `polars` dependency) remain in the
+> list for Python 3.11-and-earlier environments so the builders can hit the live
+> 2025 nflverse feeds. PyPI’s latest `nflreadpy` release is **0.1.3**, which ships
+> wheels through Python 3.11; the requirements pin that exact version so installs
+> succeed. On Python 3.12, `pip` skips the package and the scripts fall back to
+> `nfl_data_py>=0.3.3`. When new wheels arrive (or you install a forked wheel
+> manually) the builders automatically pick them up and log which provider
+> handled the pull.
 > CI (`pandas 2.1.4+`, `numpy 1.26.4+`, `scipy 1.11+`, `statsmodels 0.14.2+`)
 > while relaxing the upper bounds to `<2.0`/`<2.2` so the resolver no longer
 > trips over version conflicts during “Install dependencies”.
