@@ -39,17 +39,62 @@ export ODDS_API_KEY=YOUR_KEY_HERE
 python run_model.py --date today --season 2025 --write outputs
 ```
 
+> **Heads-up:** `requirements.txt` now targets Python 3.12 by pinning
+> `pandas==2.2.2`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`,
+> `statsmodels==0.14.2`, `pyarrow==15.0.2`, and `pandas-datareader==0.10.0`.
+> Statsmodels 0.14.2 advertises support through pandas 2.2, so the resolver
+> stops complaining even when other steps request `pandas-datareader` during
+> CI setup. If your
+> environment cached older wheels (especially on GitHub Actions), run
+> `pip install --upgrade pip` first so compatible builds resolve cleanly.
+>
+> We also install `nflreadpy` (plus its `polars` dependency) so the builders can pull the
+> live 2025 nflverse feeds. Should `nflreadpy` be missing, the scripts fall back to
+> `nfl_data_py` — ensure you have `nfl_data_py>=0.3.4` available so the shared
+> `original_mlq` helper exists.
+
 Artifacts:
 - `outputs/game_lines.csv` — H2H / spreads / totals (normalized)
 - `outputs/props_priced.csv` — Player props (with alternates), model μ/σ, blended probabilities, fair odds, **edge%**, **kelly** and **tier**.
 [Uploading README.md…]()
 
+### What to do next
+
+1. **Prime the data folders.** Drop any external scouting or share tables into `data/`. The builders now auto-detect both the `*_form.csv` files *and* the raw `espn_*.csv`, `msf_*.csv`, `apisports_*.csv`, `gsis_*.csv`, and `pfr_*` exports that already ship in this repo.
+2. **Build team context:** `python scripts/make_team_form.py --season 2025`
+   *The builder reuses any cached `data/pbp_2025.csv` (or `external/nflverse_bundle/pbp_2025.csv`) before hitting nflverse. If 2025 PBP cannot be reached the script halts so you never blend in older seasons.*
+3. **Build player usage:** `python scripts/make_player_form.py --season 2025`
+   *Same guarantee: only 2025 play-by-play and participation are accepted. Older seasons trigger an explicit failure instead of a silent fallback.*
+4. **Run the full engine (optional while debugging):** `python -m engine --season 2025 --debug`
+   *The engine now enforces the same 2025-only constraint and surfaces a clear error when live pulls fail.*
+
+After each builder runs you should see `data/team_form.csv`, `data/team_form_weekly.csv`, and `data/player_form.csv` populated. They’ll report the `source_season` column so you can verify which year powered the current projections.
+
+---
+
+## Inspecting run summaries
+
+Every invocation of `python -m engine` now appends a compact JSON line to `logs/actions_summary.log` and writes a detailed copy to `logs/daily/run_<RUN_ID>.json`. Each record captures:
+
+- which steps succeeded/failed (fetch, team/player builders, metrics join, pricing, predictors, export)
+- the row/column counts for critical CSVs (team_form, player_form, metrics_ready, props_priced)
+- the `source_season` recorded by the builders (should read 2025 once live data lands)
+- run timing metadata (`run_id`, `started_at`, `duration_s`, etc.)
+
+Use it on GitHub Actions to confirm a slate ran cleanly, or locally via:
+
+```bash
+tail -n 1 logs/actions_summary.log | jq
+```
+
+This surfaces the most recent run without downloading the full artifact bundle.
+
 ---
 
 ## What’s inside (modules)
 
-- `scripts/odds_api.py` → pulls **game lines** and **player props** (event endpoint) from The Odds API.  
-- `scripts/features_external.py` → free features via **nfl_data_py**: schedules, IDs, weekly stats, injuries, depth, plus **rolling L4** team EPA/SR and player form.  
+- `scripts/odds_api.py` → pulls **game lines** and **player props** (event endpoint) from The Odds API.
+- `scripts/features_external.py` → free features via **nfl_data_py**: schedules, IDs, weekly stats, injuries, depth, plus **rolling L4** team EPA/SR and player form.
 - `scripts/id_map.py` → robust **player name → GSIS ID** resolver with a small cache file (`inputs/player_id_cache.csv`).  
 - `scripts/model_core.py` → μ/σ scaffolding and the **post‑mortem rules** hooks (pressure, funnels, volatility widening, etc.).  
 - `scripts/pricing.py` → **de‑vig**, probability/odds converters, **65/35 market blend**, **edge%**, **kelly**, **tiering**.  
