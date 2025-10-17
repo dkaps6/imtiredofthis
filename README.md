@@ -43,6 +43,9 @@ python run_model.py --date today --season 2025 --write outputs
 > `pandas==2.2.2`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`,
 > `pyarrow==15.0.2`, and explicitly requiring `statsmodels>=0.14.1` so pandas 2.x
 > resolves cleanly. If your
+> `pandas==2.2.2`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`, and
+> explicitly requiring `statsmodels>=0.14.1` so pandas 2.x resolves cleanly. If your
+> `pandas==2.2.2`, `numpy==1.26.4`, `scipy==1.12.0`, and `scikit-learn==1.4.2`. If your
 > environment cached older wheels (especially on GitHub Actions), run
 > `pip install --upgrade pip` first so compatible builds resolve cleanly.
 >
@@ -50,6 +53,15 @@ python run_model.py --date today --season 2025 --write outputs
 > live 2025 nflverse feeds. Should `nflreadpy` be missing, the scripts fall back to
 > `nfl_data_py` — ensure you have `nfl_data_py>=0.3.4` available so the shared
 > `original_mlq` helper exists.
+> **Heads-up:** `requirements.txt` now installs `nflreadpy` (plus its `polars` dependency) so
+> the builders can pull the live 2025 nflverse feeds. If your environment pinned an older
+> dependency cache, run `pip install --upgrade pip` first so wheels for `polars` can be
+> resolved correctly on GitHub Actions.
+>
+> **New requirement:** `nflreadpy` now expects `nfl_data_py` to expose the helper
+> `original_mlq`. We pin `nfl_data_py>=0.3.4` in `requirements.txt`; if you maintain a
+> custom environment make sure that upgrade lands, otherwise the builders will fall back to
+> the older `nfl_data_py` interface and warn you in stderr.
 
 Artifacts:
 - `outputs/game_lines.csv` — H2H / spreads / totals (normalized)
