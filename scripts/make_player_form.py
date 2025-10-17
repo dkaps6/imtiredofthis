@@ -41,6 +41,29 @@ def load_pbp(season:int)->pd.DataFrame:
     df.columns = [c.lower() for c in df.columns]
     return df
 
+
+def _load_pbp_with_fallback(season: int, max_lookback: int = 5) -> tuple[pd.DataFrame, int]:
+    """Return the first available season ≤ ``season`` with play-by-play data."""
+    errors: list[str] = []
+    for offset in range(0, max_lookback + 1):
+        candidate = season - offset
+        if candidate < 2000:
+            break
+        try:
+            df = load_pbp(candidate)
+        except Exception as err:
+            errors.append(f"season {candidate}: {err}")
+            continue
+        if not df.empty:
+            if candidate != season:
+                print(f"[make_player_form] ⚠️ No PBP for {season}; using {candidate} instead")
+            return df, candidate
+        errors.append(f"season {candidate}: empty dataframe")
+    raise RuntimeError(
+        "PBP unavailable for requested season and fallbacks. "
+        + "; ".join(errors) if errors else ""
+    )
+
 def load_participation(season:int)->pd.DataFrame:
     try:
         if NFLPKG=="nflreadpy":
@@ -177,20 +200,32 @@ def fallback_from_external(base: pd.DataFrame) -> pd.DataFrame:
 
 def build_player_form(season:int)->pd.DataFrame:
     print(f"[make_player_form] Loading PBP for {season} ({NFLPKG}) ...")
-    pbp = load_pbp(season)
+    pbp, source_season = _load_pbp_with_fallback(season)
     if pbp.empty:
         raise RuntimeError("Empty PBP.")
     base = compute_player_usage(pbp)
-    if base.empty:
-        # Try prior season as a safety net (preseason weeks often sparse)
-        prev = load_pbp(season-1)
-        if not prev.empty:
-            base = compute_player_usage(prev)
-    part = load_participation(season)
+    if base.empty and source_season > 2000:
+        # Try progressively earlier seasons when usage extraction fails (rare)
+        for fallback in range(source_season - 1, max(source_season - 5, 1999), -1):
+            try:
+                alt_pbp = load_pbp(fallback)
+            except Exception:
+                continue
+            if alt_pbp.empty:
+                continue
+            tmp = compute_player_usage(alt_pbp)
+            if not tmp.empty:
+                print(f"[make_player_form] ⚠️ Usage empty; falling back to {fallback}")
+                base = tmp
+                source_season = fallback
+                pbp = alt_pbp
+                break
+    part = load_participation(source_season)
     base = enrich_with_participation(base, part)
     base = fallback_from_external(base)
     base["season"] = season
-    order = ["player","team","season","target_share","rush_share","rz_tgt_share","rz_carry_share","ypt","ypc","yprr_proxy","route_rate"]
+    base["source_season"] = source_season
+    order = ["player","team","season","source_season","target_share","rush_share","rz_tgt_share","rz_carry_share","ypt","ypc","yprr_proxy","route_rate"]
     for c in order:
         if c not in base.columns:
             base[c] = np.nan
@@ -206,7 +241,7 @@ def main():
         df = build_player_form(args.season)
     except Exception as e:
         print(f"[make_player_form] ERROR: {e}", file=sys.stderr)
-        df = pd.DataFrame(columns=["player","team","season","target_share","rush_share","rz_tgt_share","rz_carry_share","ypt","ypc","yprr_proxy","route_rate"])
+        df = pd.DataFrame(columns=["player","team","season","source_season","target_share","rush_share","rz_tgt_share","rz_carry_share","ypt","ypc","yprr_proxy","route_rate"])
     df.to_csv(OUTPATH, index=False)
     print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH}")
 

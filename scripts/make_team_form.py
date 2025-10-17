@@ -204,6 +204,35 @@ def load_participation(season: int) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def _load_pbp_with_fallback(season: int, max_lookback: int = 5) -> tuple[pd.DataFrame, int]:
+    """
+    Attempt to load play-by-play data for ``season``. If unavailable (future season
+    or network restriction), fall back to the most recent prior season that returns
+    data. Returns the dataframe and the season actually used.
+    """
+    errors: list[str] = []
+    for offset in range(0, max_lookback + 1):
+        candidate = season - offset
+        if candidate < 2000:
+            break
+        try:
+            pbp = load_pbp(candidate)
+        except Exception as err:
+            errors.append(f"season {candidate}: {err}")
+            continue
+        if not pbp.empty:
+            if candidate != season:
+                print(
+                    f"[make_team_form] ⚠️ No PBP for {season}; using {candidate} as fallback"
+                )
+            return pbp, candidate
+        errors.append(f"season {candidate}: empty dataframe")
+    raise RuntimeError(
+        "PBP unavailable for requested season and fallbacks. "
+        + "; ".join(errors) if errors else ""
+    )
+
+
 def load_schedules(season: int) -> pd.DataFrame:
     try:
         if NFL_PKG == "nflreadpy":
@@ -440,9 +469,10 @@ def merge_slot_rate_from_roles(df: pd.DataFrame) -> pd.DataFrame:
 # Main builder
 # -----------------------------
 
-def build_team_form(season: int) -> pd.DataFrame:
+def build_team_form(season: int) -> tuple[pd.DataFrame, pd.DataFrame, int]:
+    """Return team-form dataframe, the PBP used, and the source season."""
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp = load_pbp(season)
+    pbp, source_season = _load_pbp_with_fallback(season)
     if pbp.empty:
         raise RuntimeError("PBP is empty; cannot compute team form.")
 
@@ -456,7 +486,7 @@ def build_team_form(season: int) -> pd.DataFrame:
     rz_ay_tbl = compute_red_zone_and_airyards(pbp)
 
     print("[make_team_form] Loading participation/personnel (optional) ...")
-    part = load_participation(season)
+    part = load_participation(source_season)
     pers_tbl = compute_personnel_rates(pbp, part)
 
     print("[make_team_form] Merging components ...")
@@ -469,6 +499,7 @@ def build_team_form(season: int) -> pd.DataFrame:
 
     # attach season and enforce dtypes
     out["season"] = int(season)
+    out["source_season"] = int(source_season)
 
     # Z-score useful continuous features
     z_cols = [
@@ -493,7 +524,7 @@ def build_team_form(season: int) -> pd.DataFrame:
     })
 
     # Sort and reset
-    cols_first = ["team", "season", "games_played",
+    cols_first = ["team", "season", "source_season", "games_played",
                   "def_pass_epa", "def_rush_epa", "def_sack_rate",
                   "pace", "proe", "rz_rate", "12p_rate", "slot_rate", "ay_per_att",
                   "light_box_rate", "heavy_box_rate"]
@@ -501,7 +532,7 @@ def build_team_form(season: int) -> pd.DataFrame:
     ordered = [c for c in cols_first if c in out.columns] + [c for c in out.columns if c not in cols_first]
     out = out[ordered].sort_values(["team"]).reset_index(drop=True)
 
-    return out
+    return out, pbp, source_season
 
 
 def main():
@@ -511,8 +542,16 @@ def main():
 
     _safe_mkdir(DATA_DIR)
 
+    success = True
+    pbp_used = pd.DataFrame()
+    source_season = args.season
+
     try:
-        df = build_team_form(args.season)
+        df, pbp_used, source_season = build_team_form(args.season)
+        if source_season != args.season:
+            print(
+                f"[make_team_form] ℹ️ Using {source_season} metrics as proxy for {args.season}"
+            )
 
         # --- ADD: plays-weighted season roll-up of weekly pace/proe (non-destructive) ---
         df = _rollup_weekly_pace_proe(df)
@@ -520,7 +559,7 @@ def main():
 
         # --- Weekly writer (your original logic, kept verbatim) ---
         try:
-            pbp = load_pbp(args.season)
+            pbp = pbp_used.copy()
             if not pbp.empty:
                 w = pbp.copy()
                 # neutral-ish filter to avoid garbage-time skew
@@ -555,7 +594,10 @@ def main():
                         wk = pd.concat([plays, pace], axis=1).reset_index().rename(columns={team_col: 'team'})
                         wk['proe'] = np.nan
 
-                    wk[['team', 'week', 'plays_est', 'pace', 'proe']].to_csv(os.path.join(DATA_DIR, 'team_form_weekly.csv'), index=False)
+                    wk_out = wk[['team', 'week', 'plays_est', 'pace', 'proe']].copy()
+                    if source_season != args.season:
+                        wk_out['source_season'] = source_season
+                    wk_out.to_csv(os.path.join(DATA_DIR, 'team_form_weekly.csv'), index=False)
                 else:
                     # schema-only so downstream won’t crash if weekly isn’t computable
                     pd.DataFrame(columns=['team', 'week', 'plays_est', 'pace', 'proe']).to_csv(os.path.join(DATA_DIR, 'team_form_weekly.csv'), index=False)
@@ -571,14 +613,18 @@ def main():
 
     except Exception as e:
         print(f"[make_team_form] ERROR: {e}", file=sys.stderr)
-        # write empty but schema-like csv to avoid downstream crashes
-        empty = pd.DataFrame(columns=[
-            "team","season","games_played","def_pass_epa","def_rush_epa","def_sack_rate",
+        success = False
+        df = pd.DataFrame(columns=[
+            "team","season","source_season","games_played","def_pass_epa","def_rush_epa","def_sack_rate",
             "pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
             "light_box_rate","heavy_box_rate"
         ])
-        empty.to_csv(OUTPATH, index=False)
-        sys.exit(1)
+        pbp_used = pd.DataFrame()
+        source_season = args.season
+        try:
+            pd.DataFrame(columns=['team', 'week', 'plays_est', 'pace', 'proe']).to_csv(os.path.join(DATA_DIR, 'team_form_weekly.csv'), index=False)
+        except Exception:
+            pass
 
     # --- ADDED: optional external enrichers; fill only missing values ---
     try:
@@ -591,6 +637,9 @@ def main():
         # enrichment is optional; never crash
         pass
     # --- END ADDED ---
+
+    if not success:
+        print("[make_team_form] ⚠️ Wrote placeholder team_form.csv (no PBP available)")
 
     df.to_csv(OUTPATH, index=False)
     print(f"[make_team_form] Wrote {len(df)} rows → {OUTPATH}")
