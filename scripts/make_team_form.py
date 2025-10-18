@@ -71,6 +71,13 @@ def _safe_mkdir(p: str):
     if not os.path.exists(p):
         os.makedirs(p, exist_ok=True)
 
+def _is_empty(obj) -> bool:
+    """Robust emptiness check that does not rely on .empty existing."""
+    try:
+        return (obj is None) or (not hasattr(obj, "__len__")) or (len(obj) == 0)
+    except Exception:
+        return True
+
 
 def zscore(df: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
     for c in cols:
@@ -103,15 +110,15 @@ def _neutral_mask(pbp: pd.DataFrame) -> pd.Series:
 
 
 def safe_div(n, d):
-    n = n.astype(float)
-    d = d.astype(float)
+    n = pd.to_numeric(n, errors="coerce").astype(float)
+    d = pd.to_numeric(d, errors="coerce").astype(float)
     with np.errstate(divide="ignore", invalid="ignore"):
         out = np.where(d == 0, np.nan, n / d)
     return out
 
 
 def _read_csv_safe(path: str) -> pd.DataFrame:
-    if not os.path.exists(path): 
+    if not os.path.exists(path):
         return pd.DataFrame()
     try:
         df = pd.read_csv(path)
@@ -125,7 +132,7 @@ def _non_destructive_team_merge(base: pd.DataFrame, add: pd.DataFrame) -> pd.Dat
     Merge team-level enrichers without overwriting existing non-null values.
     Fills only the following columns when they are missing in `base`.
     """
-    if add.empty or "team" not in add.columns:
+    if _is_empty(add) or "team" not in add.columns:
         return base
     add = add.copy()
     add.columns = [c.lower() for c in add.columns]
@@ -138,7 +145,7 @@ def _non_destructive_team_merge(base: pd.DataFrame, add: pd.DataFrame) -> pd.Dat
     add = add[keep].drop_duplicates()
     out = base.merge(add, on="team", how="left", suffixes=("","_ext"))
     for c in keep:
-        if c == "team": 
+        if c == "team":
             continue
         ext = f"{c}_ext"
         if ext in out.columns:
@@ -160,8 +167,8 @@ def load_pbp(season: int) -> pd.DataFrame:
         pbp = NFLV.load_pbp(seasons=[season])
     else:
         pbp = NFLV.import_pbp_data([season], downcast=True)  # type: ignore
-    # Normalize column names we rely on
-    pbp.columns = [c.lower() for c in pbp.columns]
+    if hasattr(pbp, "columns"):
+        pbp.columns = [c.lower() for c in pbp.columns]
     return pbp
 
 
@@ -176,7 +183,8 @@ def load_participation(season: int) -> pd.DataFrame:
         else:
             # nfl_data_py has limited/older participation; skip if missing
             return pd.DataFrame()
-        part.columns = [c.lower() for c in part.columns]
+        if hasattr(part, "columns"):
+            part.columns = [c.lower() for c in part.columns]
         return part
     except Exception:
         return pd.DataFrame()
@@ -188,7 +196,8 @@ def load_schedules(season: int) -> pd.DataFrame:
             sch = NFLV.load_schedules(seasons=[season])
         else:
             sch = NFLV.import_schedules([season])  # type: ignore
-        sch.columns = [c.lower() for c in sch.columns]
+        if hasattr(sch, "columns"):
+            sch.columns = [c.lower() for c in sch.columns]
         return sch
     except Exception:
         return pd.DataFrame()
@@ -362,7 +371,7 @@ def compute_personnel_rates(pbp: pd.DataFrame, participation: pd.DataFrame) -> p
 
     # Box counts from participation (optional)
     light = heavy = None
-    if not participation.empty:
+    if not _is_empty(participation):
         p = participation.copy()
         # Try common box fields
         box_col = None
@@ -429,7 +438,7 @@ def merge_slot_rate_from_roles(df: pd.DataFrame) -> pd.DataFrame:
 def build_team_form(season: int) -> pd.DataFrame:
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
     pbp = load_pbp(season)
-    if pbp.empty:
+    if _is_empty(pbp):
         raise RuntimeError("PBP is empty; cannot compute team form.")
 
     print("[make_team_form] Computing defensive EPA & sack rate ...")
@@ -478,6 +487,11 @@ def build_team_form(season: int) -> pd.DataFrame:
         "personnel_12_rate": "12p_rate"
     })
 
+    # Ensure expected columns exist (validator decides pass/fail if NaN remains)
+    for need in ["rz_rate","12p_rate","slot_rate","ay_per_att","light_box_rate","heavy_box_rate"]:
+        if need not in out.columns:
+            out[need] = np.nan
+
     # Sort and reset
     cols_first = ["team", "season", "games_played",
                   "def_pass_epa", "def_rush_epa", "def_sack_rate",
@@ -502,7 +516,7 @@ def main():
         # --- Also emit per-team, per-week environment safely (optional) ---
         try:
             pbp = load_pbp(args.season)
-            if not pbp.empty:
+            if not _is_empty(pbp):
                 w = pbp.copy()
                 # neutral-ish filter to avoid garbage-time skew
                 if 'down' in w.columns:
@@ -565,7 +579,7 @@ def main():
     try:
         for fn in ["espn_team_form.csv", "msf_team_form.csv", "apisports_team_form.csv", "nflgsis_team_form.csv"]:
             ext = _read_csv_safe(os.path.join(DATA_DIR, fn))
-            if not ext.empty and "team" in ext.columns:
+            if not _is_empty(ext) and "team" in ext.columns:
                 ext["team"] = ext["team"].astype(str).str.upper().str.strip()
                 df = _non_destructive_team_merge(df, ext)
     except Exception:
