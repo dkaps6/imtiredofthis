@@ -428,6 +428,39 @@ def _load_required_pbp(season: int) -> tuple[pd.DataFrame, int]:
     )
 
 
+def _load_pbp_with_optional_fallback(
+    season: int, allow_fallback: bool
+) -> tuple[pd.DataFrame, int]:
+    """Load PBP for ``season``; optionally fall back to prior seasons."""
+
+    if not allow_fallback:
+        return _load_required_pbp(season)
+
+    earliest_season = 1999
+    candidates = list(range(season, earliest_season - 1, -1))
+    errors: list[str] = []
+    for candidate in candidates:
+        try:
+            pbp, source_season = _load_required_pbp(candidate)
+        except RuntimeError as err:
+            errors.append(f"{candidate}: {err}")
+            continue
+
+        if candidate != season:
+            print(
+                "[make_team_form] ⚠️ Requested season "
+                f"{season} unavailable; falling back to {candidate}."
+            )
+        return pbp, source_season
+
+    tried = ", ".join(str(s) for s in candidates)
+    suffix = "; ".join(errors)
+    message = f"PBP unavailable for requested season; tried {tried}."
+    if suffix:
+        message += f" {suffix}"
+    raise RuntimeError(message)
+
+
 def load_schedules(season: int) -> pd.DataFrame:
     try:
         if NFL_PKG == "nflreadpy":
@@ -792,10 +825,12 @@ def _write_weekly_outputs(
 # Main builder
 # -----------------------------
 
-def build_team_form(season: int) -> tuple[pd.DataFrame, pd.DataFrame, int]:
+def build_team_form(
+    season: int, allow_fallback: bool = False
+) -> tuple[pd.DataFrame, pd.DataFrame, int]:
     """Return team-form dataframe, the PBP used, and the source season."""
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp, source_season = _load_required_pbp(season)
+    pbp, source_season = _load_pbp_with_optional_fallback(season, allow_fallback)
     if pbp.empty:
         raise RuntimeError("PBP is empty; cannot compute team form.")
 
@@ -879,7 +914,8 @@ def main():
 
     try:
         df, pbp_used, source_season = build_team_form(
-            args.season
+            args.season,
+            allow_fallback=args.allow_fallback,
         )
 
         # --- ADD: plays-weighted season roll-up of weekly pace/proe (non-destructive) ---
