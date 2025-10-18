@@ -298,23 +298,51 @@ def _standardize_team_enricher(df: pd.DataFrame) -> pd.DataFrame:
     return df[keep].drop_duplicates()
 
 # --- ADD: helper to roll up weekly pace/proe (plays-weighted), non-destructive ---
+def _safe_weighted_average(values: pd.Series, weights: pd.Series) -> float:
+    """Return a weighted mean that tolerates empty/zero-weight inputs."""
+
+    if values.empty:
+        return float("nan")
+
+    vals = pd.to_numeric(values, errors="coerce")
+    wts = pd.to_numeric(weights, errors="coerce")
+
+    mask = vals.notna() & wts.notna() & (wts > 0)
+    if not mask.any():
+        return float("nan")
+
+    try:
+        return float(np.average(vals[mask], weights=wts[mask]))
+    except ZeroDivisionError:
+        return float("nan")
+
+
 def _rollup_weekly_pace_proe(df: pd.DataFrame) -> pd.DataFrame:
     try:
         tfw_path = os.path.join(DATA_DIR, "team_form_weekly.csv")
         if os.path.exists(tfw_path):
             tfw = pd.read_csv(tfw_path)
             tfw.columns = [c.lower() for c in tfw.columns]
-            if {"team","plays_est","pace","proe"}.issubset(tfw.columns) and not tfw.empty:
+            if {"team", "plays_est", "pace", "proe"}.issubset(tfw.columns) and not tfw.empty:
                 grp = tfw.groupby("team", dropna=False)
-                pace_w = grp.apply(lambda g: np.average(g["pace"], weights=np.clip(g["plays_est"], 1, None))).rename("pace_season")
-                proe_w = grp.apply(lambda g: np.average(g["proe"], weights=np.clip(g["plays_est"], 1, None))).rename("proe_season")
-                roll = pd.concat([pace_w, proe_w], axis=1).reset_index()
+                pace_w = grp.apply(lambda g: _safe_weighted_average(g["pace"], g["plays_est"]))
+                proe_w = grp.apply(lambda g: _safe_weighted_average(g["proe"], g["plays_est"]))
+                roll = pd.concat(
+                    [
+                        pace_w.rename("pace_season"),
+                        proe_w.rename("proe_season"),
+                    ],
+                    axis=1,
+                ).reset_index()
                 df = df.merge(roll, on="team", how="left")
                 if "pace" in df.columns and "pace_season" in df.columns:
                     df["pace"] = df["pace"].where(df["pace"].notna(), df["pace_season"])
                 if "proe" in df.columns and "proe_season" in df.columns:
                     df["proe"] = df["proe"].where(df["proe"].notna(), df["proe_season"])
-                df.drop(columns=[c for c in ["pace_season","proe_season"] if c in df.columns], inplace=True)
+                df.drop(
+                    columns=[c for c in ["pace_season", "proe_season"] if c in df.columns],
+                    inplace=True,
+                )
     except Exception:
         pass
     return df
@@ -391,66 +419,11 @@ def _load_required_pbp(season: int) -> tuple[pd.DataFrame, int]:
     else:
         if not pbp.empty:
             _validate_season(pbp, season, "pbp feed")
-        errors.append(str(err))
-    else:
-        if not pbp.empty:
             return pbp, season
         errors.append("empty dataframe")
 
     raise RuntimeError(
         "PBP unavailable for requested season. "
-def _load_pbp_with_fallback(
-    season: int,
-    *,
-    allow_prior_seasons: bool,
-    max_lookback: int = 5,
-) -> tuple[pd.DataFrame, int]:
-    """
-    Attempt to load play-by-play data for ``season``. If unavailable (future season
-    or network restriction), optionally fall back to the most recent prior season
-    that returns data. Returns the dataframe and the season actually used.
-
-    When ``allow_prior_seasons`` is False, the function will raise if it can only
-    source data from seasons earlier than the requested one – ensuring we never
-    silently populate 2025 projections with 2024 (or older) metrics.
-def _load_pbp_with_fallback(season: int, max_lookback: int = 5) -> tuple[pd.DataFrame, int]:
-    """
-    Attempt to load play-by-play data for ``season``. If unavailable (future season
-    or network restriction), fall back to the most recent prior season that returns
-    data. Returns the dataframe and the season actually used.
-    """
-    errors: list[str] = []
-    for offset in range(0, max_lookback + 1):
-        candidate = season - offset
-        if candidate < 2000:
-            break
-        try:
-            pbp = load_pbp(candidate)
-        except Exception as err:
-            errors.append(f"season {candidate}: {err}")
-            continue
-        if not pbp.empty:
-            if candidate == season:
-                return pbp, candidate
-
-            if allow_prior_seasons:
-                print(
-                    f"[make_team_form] ⚠️ No PBP for {season}; using {candidate} as fallback"
-                )
-                return pbp, candidate
-
-            errors.append(
-                f"season {candidate}: available but fallback disabled"
-            )
-            continue
-            if candidate != season:
-                print(
-                    f"[make_team_form] ⚠️ No PBP for {season}; using {candidate} as fallback"
-                )
-            return pbp, candidate
-        errors.append(f"season {candidate}: empty dataframe")
-    raise RuntimeError(
-        "PBP unavailable for requested season and fallbacks. "
         + "; ".join(errors) if errors else ""
     )
 
@@ -565,29 +538,6 @@ def compute_pace_and_proe(pbp: pd.DataFrame) -> pd.DataFrame:
 
     if "pace_neutral" in pace_grp.columns:
         pace_grp.loc[pace_grp["pace_neutral"].isna() & (pace_grp["neutral_plays"] > 0), "pace_neutral"] = 24.0
-
-
-
-
-
-
-
-
-
-    pass_col = "pass" if "pass" in dfn.columns else None
-    if pass_col is None:
-        return pace_grp.rename(columns={off_col: "team"})[["team", "pace_neutral"]].assign(proe=np.nan)
-
-
-    pass_col = "pass" if "pass" in dfn.columns else None
-    if pass_col is None:
-        return pace_grp.rename(columns={off_col: "team"})[["team", "pace_neutral"]].assign(proe=np.nan)
-
-
-    pass_col = "pass" if "pass" in dfn.columns else None
-    if pass_col is None:
-        return pace_grp.rename(columns={off_col: "team"})[["team", "pace_neutral"]].assign(proe=np.nan)
-
 
     pass_col = "pass" if "pass" in dfn.columns else None
     if pass_col is None:
@@ -846,52 +796,6 @@ def build_team_form(season: int) -> tuple[pd.DataFrame, pd.DataFrame, int]:
     """Return team-form dataframe, the PBP used, and the source season."""
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
     pbp, source_season = _load_required_pbp(season)
-    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp, source_season = _load_required_pbp(season)
-    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp, source_season = _load_required_pbp(season)
-    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp, source_season = _load_required_pbp(season)
-    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp, source_season = _load_required_pbp(season)
-    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp, source_season = _load_required_pbp(season)
-    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp, source_season = _load_required_pbp(season)
-    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp, source_season = _load_required_pbp(season)
-    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp, source_season = _load_required_pbp(season)
-    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp, source_season = _load_required_pbp(season)
-    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp, source_season = _load_required_pbp(season)
-    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp, source_season = _load_required_pbp(season)
-    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp, source_season = _load_required_pbp(season)
-    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp, source_season = _load_required_pbp(season)
-    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp, source_season = _load_required_pbp(season)
-    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp, source_season = _load_required_pbp(season)
-    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp, source_season = _load_required_pbp(season)
-    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp, source_season = _load_required_pbp(season)
-    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp, source_season = _load_required_pbp(season)
-def build_team_form(season: int, *, allow_fallback: bool) -> tuple[pd.DataFrame, pd.DataFrame, int]:
-    """Return team-form dataframe, the PBP used, and the source season."""
-    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp, source_season = _load_pbp_with_fallback(
-        season, allow_prior_seasons=allow_fallback
-    )
-def build_team_form(season: int) -> tuple[pd.DataFrame, pd.DataFrame, int]:
-    """Return team-form dataframe, the PBP used, and the source season."""
-    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
-    pbp, source_season = _load_pbp_with_fallback(season)
     if pbp.empty:
         raise RuntimeError("PBP is empty; cannot compute team form.")
 
@@ -977,13 +881,6 @@ def main():
         df, pbp_used, source_season = build_team_form(
             args.season
         )
-            args.season, allow_fallback=args.allow_fallback
-        )
-        df, pbp_used, source_season = build_team_form(args.season)
-        if source_season != args.season:
-            print(
-                f"[make_team_form] ℹ️ Using {source_season} metrics as proxy for {args.season}"
-            )
 
         # --- ADD: plays-weighted season roll-up of weekly pace/proe (non-destructive) ---
         df = _rollup_weekly_pace_proe(df)
@@ -992,58 +889,6 @@ def main():
         # --- Weekly writer (persist results or an empty schema) ---
         weekly_path = os.path.join(DATA_DIR, "team_form_weekly.csv")
         _write_weekly_outputs(pbp_used, source_season, args.season, weekly_path)
-        # --- Weekly writer (your original logic, kept verbatim) ---
-        try:
-            pbp = pbp_used.copy()
-            if not pbp.empty:
-                w = pbp.copy()
-                # neutral-ish filter to avoid garbage-time skew
-                if 'down' in w.columns:
-                    w = w[w['down'].isin([1, 2])]
-                if 'wp' in w.columns:
-                    w = w[w['wp'].between(0.2, 0.8, inclusive='both')]
-
-                # offense team column available in pbp
-                team_col = 'posteam' if 'posteam' in w.columns else ('offense_team' if 'offense_team' in w.columns else None)
-                if team_col is not None and 'week' in w.columns:
-                    # plays per team-week
-                    plays = w.groupby([team_col, 'week'], dropna=False)['play_id'].size().rename('plays_est')
-
-                    # pace proxy: seconds between snaps if available, else NaN
-                    if 'game_seconds_remaining' in w.columns:
-                        w = w.sort_values([team_col, 'game_id', 'qtr', 'play_id'])
-                        w['gsr_diff'] = w.groupby([team_col, 'game_id'])['game_seconds_remaining'].diff(-1).abs()
-                        pace = w.groupby([team_col, 'week'])['gsr_diff'].mean().rename('pace')
-                    else:
-                        pace = plays * 0 + np.nan
-
-                    # PROE: pass rate minus league weekly pass rate
-                    is_pass = w['play_type'].isin(['pass', 'no_play']) if 'play_type' in w.columns else pd.Series(False, index=w.index)
-                    if len(is_pass) > 0:
-                        pr = is_pass.groupby([w[team_col], w['week']]).mean().rename('pass_rate')
-                        lg = is_pass.groupby(w['week']).mean().rename('lg_pass_rate_week')
-                        wk = pd.concat([plays, pace, pr], axis=1).reset_index().rename(columns={team_col: 'team'})
-                        wk = wk.merge(lg.reset_index(), on='week', how='left')
-                        wk['proe'] = wk['pass_rate'] - wk['lg_pass_rate_week']
-                    else:
-                        wk = pd.concat([plays, pace], axis=1).reset_index().rename(columns={team_col: 'team'})
-                        wk['proe'] = np.nan
-
-                    wk_out = wk[['team', 'week', 'plays_est', 'pace', 'proe']].copy()
-                    if source_season != args.season:
-                        wk_out['source_season'] = source_season
-                    wk_out.to_csv(os.path.join(DATA_DIR, 'team_form_weekly.csv'), index=False)
-                else:
-                    # schema-only so downstream won’t crash if weekly isn’t computable
-                    pd.DataFrame(columns=['team', 'week', 'plays_est', 'pace', 'proe']).to_csv(os.path.join(DATA_DIR, 'team_form_weekly.csv'), index=False)
-            else:
-                pd.DataFrame(columns=['team', 'week', 'plays_est', 'pace', 'proe']).to_csv(os.path.join(DATA_DIR, 'team_form_weekly.csv'), index=False)
-        except Exception:
-            # never fail the run on weekly export
-            try:
-                pd.DataFrame(columns=['team', 'week', 'plays_est', 'pace', 'proe']).to_csv(os.path.join(DATA_DIR, 'team_form_weekly.csv'), index=False)
-            except Exception:
-                pass
         # --- END Weekly writer ---
 
     except Exception as e:
