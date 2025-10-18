@@ -403,6 +403,14 @@ def main():
         action="store_true",
         help="Permit using prior seasons when requested season data is unavailable",
     )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help=(
+            "Compatibility flag used by CI. "
+            "Player form already clamps to the requested season, so this is ignored."
+        ),
+    )
     args = parser.parse_args()
     _safe_mkdir(DATA_DIR)
     _safe_mkdir(METRICS_DIR)
