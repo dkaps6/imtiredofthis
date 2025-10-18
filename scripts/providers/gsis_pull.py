@@ -12,6 +12,11 @@ Writes:
   - data/gsis_team_rankings_<season>.csv         (bonus: +/- and simple ranks)
 
 All metrics are computed from real nflverse data (GSIS-derived) — no scraping.
+
+NEW:
+  --box-backfill-prev   If current-season participation is empty, backfill ONLY
+                        box counts (light_box_rate / heavy_box_rate) from the
+                        previous season.
 """
 
 from __future__ import annotations
@@ -370,6 +375,9 @@ def player_efficiency_basics(pbp: pd.DataFrame) -> pd.DataFrame:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("season", type=int, help="Season year, e.g., 2025")
+    # NEW flag: optional prior-season backfill for box counts if current season participation is empty
+    parser.add_argument("--box-backfill-prev", action="store_true",
+                        help="Backfill ONLY light/heavy box counts from previous season if current-season participation is empty.")
     args = parser.parse_args()
 
     season = int(args.season)
@@ -394,7 +402,19 @@ def main():
     def_tbl   = team_def_epa_sacks(pbp)
     pace_tbl  = team_pace_proe(pbp)
     rz_tbl    = team_rz_ay(pbp)
-    part      = load_participation(season)
+
+    # Participation & box counts, with optional prior-season backfill
+    part = load_participation(season)
+    if (part is None or part.empty) and args.box_backfill_prev:
+        prev = season - 1
+        try:
+            prev_part = load_participation(prev)
+            if prev_part is not None and not prev_part.empty:
+                print(f"[gsis_pull] participation {season} empty; backfilling box counts from {prev}")
+                part = prev_part
+        except Exception as e:
+            print(f"[gsis_pull] backfill attempt failed: {e}", file=sys.stderr)
+
     box_tbl   = team_box_counts(part)
     ranks_tbl = team_points_rankings(pbp)
 
