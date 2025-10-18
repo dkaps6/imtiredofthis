@@ -13,19 +13,18 @@ Columns written (many with *_z standardized versions):
 - def_sack_rate
 - pace_neutral              # seconds per snap in neutral situations
 - proe                      # pass rate over expectation
-- rz_rate                   # share of offensive plays run inside opp 20
+- rz_rate                   # share of offensive plays inside opp 20
 - personnel_12_rate         # 12 personnel usage rate (offense)
 - slot_rate                 # proxy from roles.csv (optional)
 - ay_per_att                # air yards per pass attempt (offense)
 - light_box_rate            # % snaps vs light boxes (if participation present)
 - heavy_box_rate            # % snaps vs heavy boxes (if participation present)
 
-Safe behavior:
-- If a source is missing (e.g., participation or air yards), we write NaN and proceed.
-- Z-scores only computed for columns that exist and have >= 8 non-null values.
+Default behavior now FAILS the run if required metrics are missing.
+Use --allow-missing-box to ignore missing box-count rates only.
 
 Usage:
-    python scripts/make_team_form.py --season 2025
+    python scripts/make_team_form.py --season 2025 [--allow-missing-box]
 """
 
 from __future__ import annotations
@@ -34,7 +33,7 @@ import argparse
 import os
 import sys
 import warnings
-from typing import List
+from typing import List, Any
 
 import pandas as pd
 import numpy as np
@@ -78,6 +77,29 @@ def _is_empty(obj) -> bool:
     except Exception:
         return True
 
+def _to_pandas(obj: Any) -> pd.DataFrame:
+    """
+    Normalize any tabular object (Polars, PyArrow, Pandas, list of batches) to pandas.DataFrame.
+    Fixes CI cases where nflreadpy returns Polars (no .copy()).
+    """
+    if isinstance(obj, pd.DataFrame):
+        return obj
+    # Polars / PyArrow both usually expose .to_pandas()
+    if hasattr(obj, "to_pandas") and callable(getattr(obj, "to_pandas")):
+        try:
+            return obj.to_pandas()
+        except Exception:
+            pass
+    # List/tuple of arrow batches
+    if isinstance(obj, (list, tuple)) and len(obj) and hasattr(obj[0], "to_pandas"):
+        try:
+            return pd.concat([b.to_pandas() for b in obj], ignore_index=True)
+        except Exception:
+            pass
+    try:
+        return pd.DataFrame(obj)
+    except Exception:
+        raise RuntimeError("Could not convert object to pandas.DataFrame")
 
 def zscore(df: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
     for c in cols:
@@ -85,12 +107,11 @@ def zscore(df: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
             m = df[c].mean()
             s = df[c].std(ddof=0)
             if s and not np.isclose(s, 0):
-                df[c] = df[c].astype(float)
+                df[c] = pd.to_numeric(df[c], errors="coerce")
                 df[c + "_z"] = (df[c] - m) / s
             else:
                 df[c + "_z"] = np.nan
     return df
-
 
 def _neutral_mask(pbp: pd.DataFrame) -> pd.Series:
     """
@@ -108,14 +129,12 @@ def _neutral_mask(pbp: pd.DataFrame) -> pd.Series:
         m &= pbp["qtr"] <= 3
     return m
 
-
 def safe_div(n, d):
     n = pd.to_numeric(n, errors="coerce").astype(float)
     d = pd.to_numeric(d, errors="coerce").astype(float)
     with np.errstate(divide="ignore", invalid="ignore"):
         out = np.where(d == 0, np.nan, n / d)
     return out
-
 
 def _read_csv_safe(path: str) -> pd.DataFrame:
     if not os.path.exists(path):
@@ -154,7 +173,7 @@ def _non_destructive_team_merge(base: pd.DataFrame, add: pd.DataFrame) -> pd.Dat
     return out
 
 # -----------------------------
-# Loaders (abstract across libs)
+# Loaders (normalize to pandas)
 # -----------------------------
 
 def load_pbp(season: int) -> pd.DataFrame:
@@ -164,13 +183,12 @@ def load_pbp(season: int) -> pd.DataFrame:
     nfl_data_py: nfl_data_py.import_pbp_data([season], downcast=True)
     """
     if NFL_PKG == "nflreadpy":
-        pbp = NFLV.load_pbp(seasons=[season])
+        pbp_raw = NFLV.load_pbp(seasons=[season])
     else:
-        pbp = NFLV.import_pbp_data([season], downcast=True)  # type: ignore
-    if hasattr(pbp, "columns"):
-        pbp.columns = [c.lower() for c in pbp.columns]
+        pbp_raw = NFLV.import_pbp_data([season], downcast=True)  # type: ignore
+    pbp = _to_pandas(pbp_raw)
+    pbp.columns = [c.lower() for c in pbp.columns]
     return pbp
-
 
 def load_participation(season: int) -> pd.DataFrame:
     """
@@ -179,29 +197,27 @@ def load_participation(season: int) -> pd.DataFrame:
     """
     try:
         if NFL_PKG == "nflreadpy":
-            part = NFLV.load_participation(seasons=[season])
+            part_raw = NFLV.load_participation(seasons=[season])
         else:
             # nfl_data_py has limited/older participation; skip if missing
             return pd.DataFrame()
-        if hasattr(part, "columns"):
-            part.columns = [c.lower() for c in part.columns]
+        part = _to_pandas(part_raw)
+        part.columns = [c.lower() for c in part.columns]
         return part
     except Exception:
         return pd.DataFrame()
 
-
 def load_schedules(season: int) -> pd.DataFrame:
     try:
         if NFL_PKG == "nflreadpy":
-            sch = NFLV.load_schedules(seasons=[season])
+            sch_raw = NFLV.load_schedules(seasons=[season])
         else:
-            sch = NFLV.import_schedules([season])  # type: ignore
-        if hasattr(sch, "columns"):
-            sch.columns = [c.lower() for c in sch.columns]
+            sch_raw = NFLV.import_schedules([season])  # type: ignore
+        sch = _to_pandas(sch_raw)
+        sch.columns = [c.lower() for c in sch.columns]
         return sch
     except Exception:
         return pd.DataFrame()
-
 
 # -----------------------------
 # Feature builders
@@ -252,7 +268,6 @@ def compute_def_epa_and_sacks(pbp: pd.DataFrame) -> pd.DataFrame:
 
     agg["def_sack_rate"] = safe_div(agg["def_sacks"], agg["opp_dropbacks"])
     return agg
-
 
 def compute_pace_and_proe(pbp: pd.DataFrame) -> pd.DataFrame:
     """
@@ -310,7 +325,6 @@ def compute_pace_and_proe(pbp: pd.DataFrame) -> pd.DataFrame:
 
     return out[["team", "pace_neutral", "proe"]]
 
-
 def compute_red_zone_and_airyards(pbp: pd.DataFrame) -> pd.DataFrame:
     """
     RZ rate (offense): share of offensive plays inside opp 20.
@@ -346,7 +360,6 @@ def compute_red_zone_and_airyards(pbp: pd.DataFrame) -> pd.DataFrame:
 
     out = pd.concat([rz, ay_per_att], axis=1).reset_index().rename(columns={off_col: "team"})
     return out
-
 
 def compute_personnel_rates(pbp: pd.DataFrame, participation: pd.DataFrame) -> pd.DataFrame:
     """
@@ -399,7 +412,6 @@ def compute_personnel_rates(pbp: pd.DataFrame, participation: pd.DataFrame) -> p
 
     return out
 
-
 def merge_slot_rate_from_roles(df: pd.DataFrame) -> pd.DataFrame:
     """
     Optional: derive a team-level slot rate proxy from roles.csv (player-level slot usage).
@@ -429,7 +441,6 @@ def merge_slot_rate_from_roles(df: pd.DataFrame) -> pd.DataFrame:
     rate = (grp["is_slot"].sum() / grp.size()).rename("slot_rate").reset_index()
     out = df.merge(rate, on="team", how="left")
     return out
-
 
 # -----------------------------
 # Main builder
@@ -487,7 +498,7 @@ def build_team_form(season: int) -> pd.DataFrame:
         "personnel_12_rate": "12p_rate"
     })
 
-    # Ensure expected columns exist (validator decides pass/fail if NaN remains)
+    # Ensure expected columns exist (they may still be NaN; we'll validate below)
     for need in ["rz_rate","12p_rate","slot_rate","ay_per_att","light_box_rate","heavy_box_rate"]:
         if need not in out.columns:
             out[need] = np.nan
@@ -502,16 +513,46 @@ def build_team_form(season: int) -> pd.DataFrame:
 
     return out
 
+def _validate_required(df: pd.DataFrame, allow_missing_box: bool = False):
+    """Fail the run if any required metrics are missing (NaN) for any team."""
+    required = [
+        "def_pass_epa", "def_rush_epa", "def_sack_rate",
+        "pace", "proe", "rz_rate", "ay_per_att",
+    ]
+    box_cols = ["light_box_rate", "heavy_box_rate"]
+    if not allow_missing_box:
+        required += box_cols
+
+    missing = {}
+    for col in required:
+        if col not in df.columns:
+            missing[col] = "MISSING COLUMN"
+        else:
+            bad = df[df[col].isna()]["team"].tolist()
+            if bad:
+                missing[col] = bad
+
+    if missing:
+        # Pretty-print missing details and exit(1)
+        print("[make_team_form] REQUIRED METRICS MISSING:", file=sys.stderr)
+        for k, v in missing.items():
+            print(f"  - {k}: {v}", file=sys.stderr)
+        raise RuntimeError("Required team_form metrics missing; failing per strict policy.")
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--season", type=int, default=2025)
+    parser.add_argument("--allow-missing-box", action="store_true",
+                        help="Do not fail if light/heavy box rates are missing (participation feed unavailable).")
     args = parser.parse_args()
 
     _safe_mkdir(DATA_DIR)
 
     try:
         df = build_team_form(args.season)
+
+        # --- STRICT VALIDATION (default on) ---
+        _validate_required(df, allow_missing_box=args.allow_missing_box)
 
         # --- Also emit per-team, per-week environment safely (optional) ---
         try:
@@ -566,7 +607,7 @@ def main():
 
     except Exception as e:
         print(f"[make_team_form] ERROR: {e}", file=sys.stderr)
-        # write empty but schema-like csv to allow validator to decide pass/fail
+        # write empty but schema-like csv to allow the pipeline to surface the failure cleanly
         empty = pd.DataFrame(columns=[
             "team","season","games_played","def_pass_epa","def_rush_epa","def_sack_rate",
             "pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
@@ -588,7 +629,6 @@ def main():
 
     df.to_csv(OUTPATH, index=False)
     print(f"[make_team_form] Wrote {len(df)} rows → {OUTPATH}")
-
 
 if __name__ == "__main__":
     # Silence noisy pandas warnings in CI
