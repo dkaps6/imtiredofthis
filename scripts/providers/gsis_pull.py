@@ -39,6 +39,23 @@ PLAYER_COLS = [
     "rz_share","rz_tgt_share","rz_rush_share",
 ]
 
+# ------------------------
+# Canonical team mapping (fixes LA/JAC/WSH, etc.)
+# ------------------------
+CANON = {
+    "OAK":"LV","SD":"LAC","STL":"LAR","JAC":"JAX","WSH":"WAS","LA":"LAR",
+    "LAS":"LV","LOS ANGELES":"LAR","LOS ANGELES RAMS":"LAR","LOS ANGELES CHARGERS":"LAC",
+    "WASHINGTON":"WAS","NEW YORK GIANTS":"NYG","NEW YORK JETS":"NYJ"
+}
+VALID = {"ARI","ATL","BAL","BUF","CAR","CHI","CIN","CLE","DAL","DEN","DET","GB","HOU",
+         "IND","JAX","KC","LAC","LAR","LV","MIA","MIN","NE","NO","NYG","NYJ",
+         "PHI","PIT","SEA","SF","TB","TEN","WAS"}
+
+def canon_team(x: str) -> str:
+    if x is None: return ""
+    s = str(x).strip().upper()
+    s = CANON.get(s, s)
+    return s if s in VALID else ""
 
 # ------------------------
 # Helpers
@@ -84,13 +101,11 @@ def _neutral_mask(df: pd.DataFrame) -> pd.Series:
 def _norm_team(s) -> str:
     return str(s).upper().strip() if s is not None else ""
 
-
 # ------------------------
 # Loads
 # ------------------------
 
 def _import_sources():
-    # Prefer nflreadpy (fast; returns Polars/Arrow sometimes), fallback to nfl_data_py
     try:
         import nflreadpy as nflv
         return {"pkg": "nflreadpy", "nflv": nflv, "nfl": None}
@@ -101,7 +116,6 @@ def _import_sources():
         except Exception as e:
             raise RuntimeError("Install nflreadpy or nfl_data_py") from e
 
-
 def load_pbp(season: int) -> pd.DataFrame:
     src = _import_sources()
     if src["pkg"] == "nflreadpy":
@@ -111,7 +125,6 @@ def load_pbp(season: int) -> pd.DataFrame:
     df = _to_pd(raw)
     df.columns = [c.lower() for c in df.columns]
     return df
-
 
 def load_participation(season: int) -> pd.DataFrame:
     try:
@@ -126,11 +139,9 @@ def load_participation(season: int) -> pd.DataFrame:
     except Exception:
         return pd.DataFrame()
 
-
 def load_weekly(season: int) -> pd.DataFrame:
     src = _import_sources()
     if src["pkg"] == "nflreadpy":
-        # nflreadpy weekly not standardized everywhere; fallback to nfl_data_py if needed
         try:
             raw = src["nflv"].load_player_stats(seasons=[season], stat_type="weekly")
             df = _to_pd(raw)
@@ -142,7 +153,6 @@ def load_weekly(season: int) -> pd.DataFrame:
         df = df[df["season"] == season]
     df.columns = [c.lower() for c in df.columns]
     return df
-
 
 # ------------------------
 # Aggregations (TEAM)
@@ -172,9 +182,9 @@ def team_def_epa_sacks(pbp: pd.DataFrame) -> pd.DataFrame:
         "def_rush_epa": def_rush_epa.values,
         "def_sack_rate": np.where(db.values > 0, sacks.values / db.values, np.nan),
     })
-    out["team"] = out["team"].map(_norm_team)
+    out["team"] = out["team"].map(_norm_team).map(canon_team)
+    out = out[out["team"] != ""]
     return out
-
 
 def team_pace_proe(pbp: pd.DataFrame) -> pd.DataFrame:
     df = pbp.copy()
@@ -194,7 +204,6 @@ def team_pace_proe(pbp: pd.DataFrame) -> pd.DataFrame:
     else:
         pace = pd.Series(index=dn[off].unique(), data=np.nan)
 
-    # PROE
     if "pass" in dn.columns:
         prate = dn.groupby(off, dropna=False)["pass"].mean()
     else:
@@ -212,9 +221,9 @@ def team_pace_proe(pbp: pd.DataFrame) -> pd.DataFrame:
         proe = prate - league
 
     out = pd.DataFrame({"team": proe.index.astype(str), "pace": pace.reindex(proe.index).values, "proe": proe.values})
-    out["team"] = out["team"].map(_norm_team)
+    out["team"] = out["team"].map(_norm_team).map(canon_team)
+    out = out[out["team"] != ""]
     return out
-
 
 def team_rz_ay(personnel_pbp: pd.DataFrame) -> pd.DataFrame:
     df = personnel_pbp.copy()
@@ -225,12 +234,10 @@ def team_rz_ay(personnel_pbp: pd.DataFrame) -> pd.DataFrame:
     yd = pd.to_numeric(df.get("yardline_100"), errors="coerce")
     df["rz_flag"] = (yd <= 20).astype(float)
 
-    # air yards per attempt — real only if air_yards is present
     is_pass = df.get("pass", pd.Series(False, index=df.index)).astype(bool)
     ay = pd.to_numeric(df.get("air_yards"), errors="coerce")
     ay_per_att = df.loc[is_pass].groupby(off)["air_yards"].mean()
 
-    # 12 personnel
     per = df.get("personnel_offense")
     if per is not None:
         per_codes = per.astype(str).str.extract(r"(\d\d)")[0]
@@ -247,9 +254,9 @@ def team_rz_ay(personnel_pbp: pd.DataFrame) -> pd.DataFrame:
         "ay_per_att": ay_per_att.reindex(rz.index).values,
         "12p_rate": p12.reindex(rz.index).values,
     })
-    out["team"] = out["team"].map(_norm_team)
+    out["team"] = out["team"].map(_norm_team).map(canon_team)
+    out = out[out["team"] != ""]
     return out
-
 
 def team_box_counts(part: pd.DataFrame) -> pd.DataFrame:
     if part is None or not isinstance(part, pd.DataFrame) or part.empty:
@@ -275,18 +282,13 @@ def team_box_counts(part: pd.DataFrame) -> pd.DataFrame:
     light = g["_box"].apply(lambda s: (s <= 6).mean()).rename("light_box_rate")
     heavy = g["_box"].apply(lambda s: (s >= 8).mean()).rename("heavy_box_rate")
     out = pd.concat([light, heavy], axis=1).reset_index().rename(columns={team_col:"team"})
-    out["team"] = out["team"].map(_norm_team)
+    out["team"] = out["team"].map(_norm_team).map(canon_team)
+    out = out[out["team"] != ""]
     return out
 
-
 def team_points_rankings(pbp: pd.DataFrame) -> pd.DataFrame:
-    # Points for/against per team (season totals); +/- ; simple ranks
     df = pbp.copy()
-    # Home/away points per game_id are in schedules, but PBP carries final scores too.
-    # Use game-level aggregation of score events from PBP:
     g = df.groupby("game_id")
-    # derive final scores if columns exist
-    # Fallback: use last known score_home/score_away if present
     if {"total_home_score","total_away_score"}.issubset(df.columns):
         game_scores = g[["total_home_score","total_away_score"]].max().reset_index()
     elif {"home_score","away_score"}.issubset(df.columns):
@@ -294,29 +296,19 @@ def team_points_rankings(pbp: pd.DataFrame) -> pd.DataFrame:
             columns={"home_score":"total_home_score","away_score":"total_away_score"}
         )
     else:
-        # If PBP lacks these in current mirror, leave empty
         return pd.DataFrame(columns=["team","points_for","points_against","point_diff","rank_point_diff"])
 
-    # map teams per game
-    # We can get home/away abbreviations from first row of each game
-    first = g[["posteam","defteam"]].first().reset_index()
-    # try to fetch home/away teams from available cols
-    # (nflverse schedules is more reliable; skipping to keep this as a single-source)
-    # Build team +/- by summing games where the team was home or away
     recs = []
     for _, row in game_scores.iterrows():
         gid = row["game_id"]
         try:
             sub = df[df["game_id"] == gid]
-            home = sub["home_team"].iloc[0] if "home_team" in sub.columns else None
-            away = sub["away_team"].iloc[0] if "away_team" in sub.columns else None
-            th = _norm_team(home)
-            ta = _norm_team(away)
+            home = _norm_team(sub["home_team"].iloc[0]) if "home_team" in sub.columns else ""
+            away = _norm_team(sub["away_team"].iloc[0]) if "away_team" in sub.columns else ""
+            th, ta = canon_team(home), canon_team(away)
             hs = row["total_home_score"]; as_ = row["total_away_score"]
-            if th:
-                recs.append({"team": th, "points_for": hs, "points_against": as_})
-            if ta:
-                recs.append({"team": ta, "points_for": as_, "points_against": hs})
+            if th: recs.append({"team": th, "points_for": hs, "points_against": as_})
+            if ta: recs.append({"team": ta, "points_for": as_, "points_against": hs})
         except Exception:
             continue
     pts = pd.DataFrame(recs)
@@ -325,46 +317,44 @@ def team_points_rankings(pbp: pd.DataFrame) -> pd.DataFrame:
 
     agg = pts.groupby("team", dropna=False)[["points_for","points_against"]].sum().reset_index()
     agg["point_diff"] = agg["points_for"] - agg["points_against"]
-    agg["rank_point_diff"] = (-agg["point_diff"]).rank(method="min")  # lower number = better
+    agg["rank_point_diff"] = (-agg["point_diff"]).rank(method="min")
     return agg
-
 
 # ------------------------
 # Aggregations (PLAYER basics)
 # ------------------------
 
 def player_efficiency_basics(pbp: pd.DataFrame) -> pd.DataFrame:
-    # Just ypa/ypc from PBP; other player-form shares remain NaN for this enricher
     df = pbp.copy()
     off = "posteam" if "posteam" in df.columns else ("offense_team" if "offense_team" in df.columns else None)
     if off is None:
         return pd.DataFrame(columns=["player","team","ypa","ypc"])
 
-    # Passers
     qb_name = "passer_player_name" if "passer_player_name" in df.columns else ("passer" if "passer" in df.columns else None)
     pass_df = df[df.get("pass", pd.Series(False, index=df.index)).astype(bool)].copy()
     if qb_name is not None and not pass_df.empty:
         pass_df["player"] = pass_df[qb_name].astype(str).str.replace(".","", regex=False).str.strip()
-        pass_df["team"] = pass_df[off].astype(str).str.upper().str.strip()
+        pass_df["team"] = pass_df[off].astype(str).str.upper().str.strip().map(canon_team)
         qb = pass_df.groupby(["team","player"]).agg(
             pass_yards=("yards_gained","sum"),
             pass_att=("pass_attempt","sum") if "pass_attempt" in pass_df.columns else (qb_name,"size")
         ).reset_index()
+        qb = qb[qb["team"] != ""]
         qb["ypa"] = np.where(qb["pass_att"]>0, qb["pass_yards"]/qb["pass_att"], np.nan)
         qb = qb[["team","player","ypa"]]
     else:
         qb = pd.DataFrame(columns=["team","player","ypa"])
 
-    # Rushers
     ru = df[df.get("rush", pd.Series(False, index=df.index)).astype(bool)].copy()
     rusher_name = "rusher_player_name" if "rusher_player_name" in ru.columns else ("rusher" if "rusher" in ru.columns else None)
     if rusher_name is not None and not ru.empty:
         ru["player"] = ru[rusher_name].astype(str).str.replace(".","", regex=False).str.strip()
-        ru["team"] = ru[off].astype(str).str.upper().str.strip()
+        ru["team"] = ru[off].astype(str).str.upper().str.strip().map(canon_team)
         rb = ru.groupby(["team","player"]).agg(
             rush_yards=("yards_gained","sum"),
             rush_att=("rush_attempt","sum") if "rush_attempt" in ru.columns else (rusher_name,"size")
         ).reset_index()
+        rb = rb[rb["team"] != ""]
         rb["ypc"] = np.where(rb["rush_att"]>0, rb["rush_yards"]/rb["rush_att"], np.nan)
         rb = rb[["team","player","ypc"]]
     else:
@@ -373,20 +363,18 @@ def player_efficiency_basics(pbp: pd.DataFrame) -> pd.DataFrame:
     out = pd.merge(qb, rb, on=["team","player"], how="outer")
     return out
 
-
 # ------------------------
 # Main
 # ------------------------
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("season", type:int, help="Season year, e.g., 2025")
+    parser.add_argument("season", type=int, help="Season year, e.g., 2025")
     args = parser.parse_args()
 
     season = int(args.season)
     _safe_mkdir(DATA_DIR)
 
-    # Load
     pbp = load_pbp(season)
     if pbp.empty:
         print("[gsis_pull] PBP empty; writing schema-only files", file=sys.stderr)
@@ -394,7 +382,7 @@ def main():
         _write_csv_with_schema(os.path.join(DATA_DIR,"nflgsis_player_form.csv"), pd.DataFrame(), PLAYER_COLS)
         return 0
 
-    # Keep a weekly dump for auditing if you want (best-effort)
+    # Weekly (audit)
     try:
         weekly = load_weekly(season)
         if not weekly.empty:
@@ -402,7 +390,7 @@ def main():
     except Exception as e:
         print(f"[gsis_pull] weekly dump failed: {e}", file=sys.stderr)
 
-    # TEAM metrics
+    # TEAM metrics (canonize before merge)
     def_tbl   = team_def_epa_sacks(pbp)
     pace_tbl  = team_pace_proe(pbp)
     rz_tbl    = team_rz_ay(pbp)
@@ -414,9 +402,7 @@ def main():
                   .merge(rz_tbl,   on="team", how="left") \
                   .merge(box_tbl,  on="team", how="left")
 
-    # slot_rate can be derived by your depth mergers (roles.csv). Do not overwrite here.
-
-    # Emit the TEAM enricher
+    # Emit TEAM enricher
     team_out = _write_csv_with_schema(os.path.join(DATA_DIR,"nflgsis_team_form.csv"), team, TEAM_COLS)
     print(f"[gsis_pull] wrote team enricher rows={len(team_out)} → data/nflgsis_team_form.csv")
 
@@ -424,17 +410,14 @@ def main():
     ply_eff = player_efficiency_basics(pbp)
     player_enricher = ply_eff.copy()
     player_enricher.columns = [c.lower() for c in player_enricher.columns]
-    # Keep only allowed columns; schema writer will add the rest as NaN
     player_out = _write_csv_with_schema(os.path.join(DATA_DIR,"nflgsis_player_form.csv"), player_enricher, PLAYER_COLS)
     print(f"[gsis_pull] wrote player enricher rows={len(player_out)} → data/nflgsis_player_form.csv")
 
     # Bonus: propensity / rankings
     try:
-        # propensity
         df = pbp.copy()
         off = "posteam" if "posteam" in df.columns else ("offense_team" if "offense_team" in df.columns else None)
         if off is not None:
-            # overall pass rate
             if "pass" in df.columns:
                 pr_all = df.groupby(off)["pass"].mean().rename("pass_rate_all")
             else:
@@ -459,12 +442,12 @@ def main():
             else:
                 pr_early = pd.Series(dtype=float)
 
-            # PROE (reuse pace_tbl merge by offense team)
             proe = pace_tbl.set_index("team")["proe"]
             pace = pace_tbl.set_index("team")["pace"]
 
             prop = pd.concat([pr_all, pr_neutral, pr_early], axis=1).reset_index().rename(columns={off:"team"})
-            prop["team"] = prop["team"].map(_norm_team)
+            prop["team"] = prop["team"].map(_norm_team).map(canon_team)
+            prop = prop[prop["team"] != ""]
             prop = prop.merge(proe.rename("proe"), left_on="team", right_index=True, how="left")
             prop = prop.merge(pace.rename("pace"), left_on="team", right_index=True, how="left")
             prop.to_csv(os.path.join(DATA_DIR, f"gsis_team_propensity_{season}.csv"), index=False)
@@ -481,11 +464,8 @@ def main():
 
     return 0
 
-
 if __name__ == "__main__":
-    # Keep the positional CLI you already use in Actions: `python scripts/providers/gsis_pull.py 2025`
     try:
         sys.exit(main())
     except TypeError:
-        # Fallback if invoked without arg:
         sys.exit(main())
