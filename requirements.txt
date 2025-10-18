@@ -1,4 +1,5 @@
 # Core scientific stack (Python 3.11 runners)
+# Core
 pandas==2.1.4
 numpy==1.26.4
 scipy==1.12.0
@@ -17,4 +18,6 @@ lxml==4.9.4   # 5.x causes trouble with some stacks
 
 # nflverse (python)
 nfl_data_py==0.3.4
+# nflverse
+nfl_data_py>=0.3,<0.4
 nflreadpy==0.1.3   # latest wheel on PyPI; supports Py3.11
