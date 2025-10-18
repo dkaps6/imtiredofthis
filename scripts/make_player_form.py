@@ -11,26 +11,87 @@ Columns written:
 - receptions_per_target
 - rz_share, rz_tgt_share, rz_rush_share
 
-Notes
-- Route participation is proxied from targets/dropbacks if true routes aren’t available;
-  enrich_player_form.py may overwrite with better participation.
-- Red-zone shares: receiving inside 20; rushing inside 10 (goal-line signal).
-- Writes schema-correct CSV and exits(1) on fatal errors so strict validator can fail the run.
+Behavior:
+- Primary build from nflverse PBP.
+- Fallback sweep (non-destructive merges) BEFORE strict validation:
+    espn_player_form.csv, msf_player_form.csv, apisports_player_form.csv, nflgsis_player_form.csv
+- Strict validator then fails if key per-position metrics are still missing.
 """
 
 from __future__ import annotations
 import os, sys, warnings
-from typing import Tuple
+from typing import Tuple, Any, List, Dict
 import pandas as pd
 import numpy as np
 
 DATA_DIR = "data"
 OUTPATH = os.path.join(DATA_DIR, "player_form.csv")
 
+# ---------------------------
+# Utils
+# ---------------------------
 def _safe_mkdir(p: str):
     if not os.path.exists(p):
         os.makedirs(p, exist_ok=True)
 
+def _is_empty(obj) -> bool:
+    try:
+        return (obj is None) or (not hasattr(obj, "__len__")) or (len(obj) == 0)
+    except Exception:
+        return True
+
+def _to_pandas(obj: Any) -> pd.DataFrame:
+    if isinstance(obj, pd.DataFrame):
+        return obj
+    if hasattr(obj, "to_pandas") and callable(getattr(obj, "to_pandas")):
+        try:
+            return obj.to_pandas()
+        except Exception:
+            pass
+    if isinstance(obj, (list, tuple)) and obj and hasattr(obj[0], "to_pandas"):
+        try:
+            return pd.concat([b.to_pandas() for b in obj], ignore_index=True)
+        except Exception:
+            pass
+    try:
+        return pd.DataFrame(obj)
+    except Exception:
+        raise RuntimeError("Could not convert object to pandas.DataFrame")
+
+def _read_csv_safe(path: str) -> pd.DataFrame:
+    if not os.path.exists(path):
+        return pd.DataFrame()
+    try:
+        df = pd.read_csv(path)
+        df.columns = [c.lower() for c in df.columns]
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+def _non_destructive_player_merge(base: pd.DataFrame, add: pd.DataFrame, keys: List[str] = None) -> pd.DataFrame:
+    if _is_empty(add):
+        return base
+    add = add.copy()
+    add.columns = [c.lower() for c in add.columns]
+    if keys is None:
+        keys = ["player", "team"]
+    if not set(keys).issubset(add.columns):
+        return base
+    for k in keys:
+        add[k] = add[k].astype(str).str.strip()
+    out = base.merge(add, on=keys, how="left", suffixes=("", "_ext"))
+    for c in add.columns:
+        if c in keys:
+            continue
+        ext = f"{c}_ext"
+        if ext in out.columns:
+            out[c] = out[c].combine_first(out[ext])
+            out.drop(columns=[ext], inplace=True)
+    return out
+
+# ---------------------------
+# nflverse
+# ---------------------------
 def _import_nflverse():
     try:
         import nflreadpy as nflv
@@ -48,15 +109,18 @@ NFLV, NFL_PKG = _import_nflverse()
 
 def load_pbp_2025() -> pd.DataFrame:
     if NFL_PKG == "nflreadpy":
-        pbp = NFLV.load_pbp(seasons=[2025])
+        raw = NFLV.load_pbp(seasons=[2025])
     else:
-        pbp = NFLV.import_pbp_data([2025], downcast=True)  # type: ignore
+        raw = NFLV.import_pbp_data([2025], downcast=True)  # type: ignore
+    pbp = _to_pandas(raw)
     pbp.columns = [c.lower() for c in pbp.columns]
     return pbp
 
+# ---------------------------
+# Build
+# ---------------------------
 def _norm_name(s: pd.Series) -> pd.Series:
-    out = s.astype(str).str.replace(".", "", regex=False).str.strip()
-    return out
+    return s.astype(str).str.replace(".", "", regex=False).str.strip()
 
 def _ensure_cols(df: pd.DataFrame, cols) -> pd.DataFrame:
     for c in cols:
@@ -69,46 +133,38 @@ def build_player_form() -> pd.DataFrame:
     if pbp.empty:
         raise RuntimeError("PBP empty; cannot compute player form for 2025.")
 
-    # Identify team columns
     off_col = "posteam" if "posteam" in pbp.columns else ("offense_team" if "offense_team" in pbp.columns else None)
     if off_col is None:
         raise RuntimeError("No offense team column in PBP.")
 
-    # RECEIVING (targets, yards, receptions)
+    # RECEIVING
     is_pass = pbp.get("pass", pd.Series(False, index=pbp.index)).astype(bool)
     rec = pbp.loc[is_pass].copy()
     rcv_name_col = "receiver_player_name" if "receiver_player_name" in rec.columns else ("receiver" if "receiver" in rec.columns else None)
     if rcv_name_col is None:
         rec["receiver_player_name"] = np.nan
         rcv_name_col = "receiver_player_name"
-
     rec["player"] = _norm_name(rec[rcv_name_col].fillna(""))
     rec["team"] = rec[off_col].astype(str).str.upper().str.strip()
 
-    # Team totals
     team_targets = rec.groupby("team", dropna=False).size().rename("team_targets").astype(float)
     if "qb_dropback" in rec.columns:
         team_dropbacks = rec.groupby("team", dropna=False)["qb_dropback"].sum(min_count=1).rename("team_dropbacks")
     else:
         team_dropbacks = rec.groupby("team", dropna=False).size().rename("team_dropbacks").astype(float)
 
-    # Player receiving
     rply = rec.groupby(["team","player"], dropna=False).agg(
         targets=("pass_attempt","sum") if "pass_attempt" in rec.columns else ("player","size"),
         rec_yards=("yards_gained","sum"),
         receptions=("complete_pass","sum") if "complete_pass" in rec.columns else ("passer_player_name","size")
     ).reset_index()
 
-    # Merge team totals
     rply = rply.merge(team_targets.reset_index(), on="team", how="left")
     rply = rply.merge(team_dropbacks.reset_index(), on="team", how="left")
-    # Rates / efficiency
     rply["tgt_share"] = np.where(rply["team_targets"]>0, rply["targets"]/rply["team_targets"], np.nan)
     rply["route_rate"] = np.where(rply["team_dropbacks"]>0, rply["targets"]/rply["team_dropbacks"], np.nan).clip(0.05, 0.95)
     rply["ypt"] = np.where(rply["targets"]>0, rply["rec_yards"]/rply["targets"], np.nan)
     rply["receptions_per_target"] = np.where(rply["targets"]>0, rply["receptions"]/rply["targets"], np.nan)
-
-    # routes_proxy -> yprr
     routes_proxy = (rply["team_dropbacks"] * rply["route_rate"]).replace(0, np.nan)
     rply["yprr"] = np.where(routes_proxy>0, rply["rec_yards"]/routes_proxy, np.nan)
 
@@ -122,14 +178,13 @@ def build_player_form() -> pd.DataFrame:
     rply = rply.merge(rz_tgt_tm.reset_index(), on="team", how="left")
     rply["rz_tgt_share"] = np.where(rply["rz_team_targets"]>0, rply["rz_targets"]/rply["rz_team_targets"], np.nan)
 
-    # RUSHING (carries, yards)
+    # RUSHING
     is_rush = pbp.get("rush", pd.Series(False, index=pbp.index)).astype(bool)
     ru = pbp.loc[is_rush].copy()
     rush_name_col = "rusher_player_name" if "rusher_player_name" in ru.columns else ("rusher" if "rusher" in ru.columns else None)
     if rush_name_col is None:
         ru["rusher_player_name"] = np.nan
         rush_name_col = "rusher_player_name"
-
     ru["player"] = _norm_name(ru[rush_name_col].fillna(""))
     ru["team"] = ru[off_col].astype(str).str.upper().str.strip()
 
@@ -152,7 +207,7 @@ def build_player_form() -> pd.DataFrame:
     rru = rru.merge(rz_ru_tm.reset_index(), on="team", how="left")
     rru["rz_rush_share"] = np.where(rru["rz_team_rushes"]>0, rru["rz_rushes"]/rru["rz_team_rushes"], np.nan)
 
-    # QUARTERBACK (ypa)
+    # QUARTERBACK
     qb_name_col = "passer_player_name" if "passer_player_name" in pbp.columns else ("passer" if "passer" in pbp.columns else None)
     qb_df = pd.DataFrame(columns=["team","player","ypa"])
     if qb_name_col is not None:
@@ -167,13 +222,10 @@ def build_player_form() -> pd.DataFrame:
         qb_df = gb[["team","player","ypa"]]
 
     # Merge all
-    base = pd.merge(rply, rru, on=["team","player"], how="outer", suffixes=("",""))
+    base = pd.merge(rply, rru, on=["team","player"], how="outer")
     base = pd.merge(base, qb_df, on=["team","player"], how="left")
-
-    # Unified RZ share
     base["rz_share"] = base[["rz_tgt_share","rz_rush_share"]].max(axis=1)
 
-    # Compose final schema; leave position/role blank to be filled later by enrich step
     base["season"] = 2025
     base["position"] = np.nan
     base["role"] = np.nan
@@ -185,20 +237,103 @@ def build_player_form() -> pd.DataFrame:
         "receptions_per_target",
         "rz_share","rz_tgt_share","rz_rush_share"
     ]
-    # Ensure presence
     base = _ensure_cols(base, final_cols)
     out = base[final_cols].drop_duplicates(subset=["player","team","season"]).reset_index(drop=True)
     return out
 
+# ---------------------------
+# Fallback sweep + validation
+# ---------------------------
+def _apply_fallback_enrichers_player(df: pd.DataFrame) -> pd.DataFrame:
+    candidates = [
+        "espn_player_form.csv",
+        "msf_player_form.csv",
+        "apisports_player_form.csv",
+        "nflgsis_player_form.csv",
+    ]
+    out = df.copy()
+    for fn in candidates:
+        try:
+            ext = _read_csv_safe(os.path.join(DATA_DIR, fn))
+            if not _is_empty(ext):
+                if "player" not in ext.columns and "player_name" in ext.columns:
+                    ext = ext.rename(columns={"player_name": "player"})
+                if not {"player","team"}.issubset(ext.columns):
+                    continue
+                ext["player"] = ext["player"].astype(str).str.strip()
+                ext["team"] = ext["team"].astype(str).str.upper().str.strip()
+                out = _non_destructive_player_merge(out, ext, keys=["player","team"])
+        except Exception:
+            continue
+    return out
+
+def _validate_required_player(df: pd.DataFrame):
+    """
+    Strict checks by position-family:
+    - WR/TE: route_rate, tgt_share, yprr
+    - RB: rush_share, ypc
+    - QB: ypa
+    """
+    pos = df.get("position", pd.Series(index=df.index, dtype=object)).astype(str).str.upper()
+    role = df.get("role", pd.Series(index=df.index, dtype=object)).astype(str).str.upper()
+
+    is_wrte = pos.isin(["WR","TE"]) | role.str.contains("WR|TE", na=False)
+    is_rb   = pos.eq("RB") | role.str.contains("RB", na=False)
+    is_qb   = pos.eq("QB") | role.str.contains("QB", na=False)
+
+    missing = {}
+
+    def _collect(mask, cols: List[str], label: str):
+        if not mask.any():
+            return
+        sub = df.loc[mask]
+        for c in cols:
+            bad = sub.index[sub[c].isna()].tolist() if c in sub.columns else list(sub.index)
+            if bad:
+                names = sub.loc[bad, "player"].tolist()
+                if names:
+                    missing[f"{label}:{c}"] = names
+
+    _collect(is_wrte, ["route_rate", "tgt_share", "yprr"], "WR/TE")
+    _collect(is_rb,   ["rush_share", "ypc"], "RB")
+    _collect(is_qb,   ["ypa"], "QB")
+
+    if missing:
+        print("[make_player_form] REQUIRED PLAYER METRICS MISSING:", file=sys.stderr)
+        for k, v in missing.items():
+            print(f"  - {k}: {v[:12]}{'...' if len(v)>12 else ''}", file=sys.stderr)
+        raise RuntimeError("Required player_form metrics missing; failing per strict policy.")
+
+# ---------------------------
+# Main
+# ---------------------------
 def main():
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         _safe_mkdir(DATA_DIR)
         try:
             df = build_player_form()
+
+            # 🔁 NEW: fallback sweep BEFORE strict validation
+            before = df.copy()
+            df = _apply_fallback_enrichers_player(df)
+            try:
+                filled: Dict[str, List[str]] = {}
+                for col in ["route_rate","tgt_share","rush_share","yprr","ypc","ypa","rz_share"]:
+                    if col in df.columns:
+                        was_na = before[col].isna() if col in before.columns else pd.Series(True, index=df.index)
+                        now_ok = was_na & df[col].notna()
+                        if now_ok.any():
+                            filled[col] = df.loc[now_ok, "player"].tolist()
+                if any(filled.values()):
+                    print("[make_player_form] Fallbacks filled:", {k: len(v) for k, v in filled.items() if v})
+            except Exception:
+                pass
+
+            _validate_required_player(df)
+
         except Exception as e:
             print(f"[make_player_form] ERROR: {e}", file=sys.stderr)
-            # still write an empty schema so validator controls fail/pass
             empty = pd.DataFrame(columns=[
                 "player","team","season","position","role",
                 "tgt_share","route_rate","rush_share",
@@ -207,6 +342,7 @@ def main():
             ])
             empty.to_csv(OUTPATH, index=False)
             sys.exit(1)
+
         df.to_csv(OUTPATH, index=False)
         print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH}")
 
