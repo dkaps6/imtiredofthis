@@ -1,85 +1,84 @@
-name: Run full slate
+name: Full Slate
 
 on:
   workflow_dispatch:
     inputs:
       season:
-        description: "Season year"
-        required: true
+        description: "Season (e.g. 2025)"
+        required: false
         default: "2025"
       date:
-        description: 'Slate date (YYYY-MM-DD). Leave blank "" for upcoming.'
+        description: "Slate date (YYYY-MM-DD) or blank for latest"
         required: false
         default: ""
-      bookmakers:
-        description: 'Comma list (e.g. "draftkings,fanduel,betmgm,caesars"). Use "" for ALL books.'
-        required: false
-        default: "draftkings,fanduel,betmgm,caesars"
 
 jobs:
-  run:
+  full_slate:
     runs-on: ubuntu-latest
     env:
       ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-      ESPN_COOKIE: ${{ secrets.ESPN_COOKIE }}
+      ESPN_COOKIE: ${{ secrets.ESPN_COOKIE }}   # optional
       NFL_FORM_STRICT: "1"
       MC_TRIALS: "25000"
       PYTHONUNBUFFERED: "1"
 
     steps:
-      - name: Check out repo
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
 
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-
-      - name: Install dependencies
+      # --- Install dependencies BEFORE running the engine ---
+      - name: Install requirements
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip cache purge || true
-          python -m pip install -r requirements.txt
+          pip install --prefer-binary -r requirements.txt
 
-      - name: Build team & player features (2025 only)
+      # Replace the old duplicate "Install deps" with this quick import check
+      - name: Verify deps (nfl_data_py / pyarrow)
         run: |
-          python -m scripts.providers.gsis_pull 2025 || true
-          python -m scripts.providers.espn_pull || true
-          python -m scripts.providers.apisports_pull 2025 || true
-          python -m scripts.providers.msf_pull 2025 || true
-          python -m scripts.providers.ourlads_depth || true
-          python -m scripts.providers.injuries 2025 || true
-          python -m scripts.make_team_form --season 2025 --strict
-          python -m scripts.make_player_form --season 2025 --strict
-          python -m scripts.enrich_team_form --season 2025 || true
-          python -m scripts.enrich_player_form --season 2025 || true
+          python - <<'PY'
+          import sys, importlib
+          def check(mod):
+              m = importlib.import_module(mod)
+              path = getattr(m, "__file__", "(builtin)")
+              ok_path = ("site-packages" in (path or "")) or ("dist-packages" in (path or ""))
+              print(f"{mod}: path={path}")
+              if mod == "nfl_data_py":
+                  if not hasattr(m, "import_pbp_data"):
+                      print("nfl_data_py present but missing import_pbp_data() — wrong module")
+                      sys.exit(1)
+                  if not ok_path:
+                      print("nfl_data_py not from site/dist-packages — likely shadowed")
+                      sys.exit(1)
+          for mod in ["nfl_data_py","pyarrow","pandas","numpy"]:
+              check(mod)
+          PY
 
-      - name: Fetch props + H2H from Odds API
+      - name: Prepare dirs
         run: |
-          python -m scripts.fetch_props_oddsapi \
-            --season "${{ github.event.inputs.season }}" \
-            --date   "${{ github.event.inputs.date }}" \
-            --bookmakers "${{ github.event.inputs.bookmakers }}"
+          mkdir -p data outputs outputs/metrics logs
 
-      - name: Price + export
+      - name: Add repo to PYTHONPATH
+        run: echo "PYTHONPATH=$PWD" >> $GITHUB_ENV
+
+      - name: Run pipeline
         run: |
-          python -m scripts.pricing --season 2025 --write outputs
-          python -m scripts.export_excel --season 2025 --out runs/props_2025_${{ github.run_id }}.xlsx || true
+          python -m engine --season "2025" --date "" --bookmakers=""
 
-      - name: Upload run artifacts
-        if: always()
+      # Always ship artifacts (snapshots, logs, partial CSVs) even if the run fails
+      - name: Upload artifacts (always)
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: run-artifacts
+          name: run-${{ github.run_id }}
           path: |
-            runs/**/*.xlsx
+            runs/**/*.zip
+            runs/**/*
             outputs/**
             data/**
             logs/**
-          if-no-files-found: warn
