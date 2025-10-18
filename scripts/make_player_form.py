@@ -79,6 +79,8 @@ OUTPATH = os.path.join(DATA_DIR, "player_form.csv")
 METRICS_DIR = "metrics"
 METRICS_OUTPATH = os.path.join(METRICS_DIR, "player_form.csv")
 
+METRICS_DIR = "metrics"
+METRICS_OUTPATH = os.path.join(METRICS_DIR, "player_form.csv")
 _CACHE_DIRS = [
     DATA_DIR,
     os.path.join("external", "nflverse_bundle"),
