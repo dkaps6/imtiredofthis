@@ -1,606 +1,358 @@
-# scripts/make_player_form.py
+# scripts/enrich_player_form.py
 """
-Create ``player_form.csv``: per-player usage & efficiency metrics.
+Enrich player_form.csv with depth-chart roles, positions, and safe fallbacks.
 
-Inputs
-======
-* Play-by-play via ``nflreadpy`` (preferred) with automatic fallbacks to
-  ``nfl_data_py`` when the lightweight mirror is unavailable.
-* Optional enrichers (ESPN, MySportsFeeds, API-Sports, NFLGSIS) seeded in
-  ``data/``.
+Goals
+- Guarantee player_form.csv is non-empty and has the expected schema
+- Add/repair team, position, and role (WR1/WR2/SLOT/RB1/TE1, etc.)
+- Fill missing route_rate / yprr_proxy when possible
+- Never overwrite a non-null value with a fallback (non-destructive)
 
-Outputs
-=======
-* ``data/player_form.csv`` (legacy location for downstream joins)
-* ``metrics/player_form.csv`` (mirrors the legacy location so newer jobs read
-  from the metrics folder first)
+Inputs (best-effort, all optional except player_form.csv):
+- data/player_form.csv                  # base built by make_player_form.py
+- outputs/props_raw.csv                 # bootstrap if player_form is empty
+- data/roles.csv                        # user-maintained roles (preferred)
+- data/depth_chart_espn.csv             # ESP(N) depth charts
+- data/depth_chart_ourlads.csv          # OurLads depth charts
+- data/pfr_player_positions.csv         # fallback positions (if present)
 
-Key features
-============
-* Robust handling of the nflverse helpers.  Different versions of
-  ``nflreadpy`` (and its dependency ``nfl_data_py``) expose slightly different
-  keyword signatures.  The loader now retries with progressively smaller
-  argument sets and gracefully removes unsupported keywords so that both the
-  2025 mirrors and older cached wheels succeed.
-* Automatic CSV caching.  Whenever we successfully pull play-by-play or
-  participation we persist copies to ``data/`` and ``external/nflverse_bundle``
-  (including ``…/outputs``).  Subsequent runs read these cached mirrors so the
-  pipeline can operate in offline environments such as GitHub Actions
-  reruns.
+Output:
+- data/player_form.csv                  # enriched in-place
 """
 
 from __future__ import annotations
-
-import argparse
-import os
-import re
-import sys
-import warnings
-from typing import Tuple
-
-import numpy as np
-import pandas as pd
-
-def _import_nflverse():
-    try:
-        import nflreadpy as nflv
-        return nflv, "nflreadpy"
-    except ModuleNotFoundError:
-        print(
-            "[make_player_form] ⚠️ nflreadpy missing; falling back to nfl_data_py. "
-            "Install nflreadpy so the 2025 feeds remain available.",
-            file=sys.stderr,
-        )
-    except ImportError as exc:
-        if "original_mlq" in str(exc):
-            print(
-                "[make_player_form] ⚠️ nflreadpy requires nfl_data_py>=0.3.4 (missing `original_mlq`). "
-                "Upgrade nfl_data_py to keep using the nflreadpy mirror. Falling back to nfl_data_py.",
-                file=sys.stderr,
-            )
-        else:
-            print(
-                f"[make_player_form] ⚠️ nflreadpy import failed ({exc}); falling back to nfl_data_py.",
-                file=sys.stderr,
-            )
-    except Exception as exc:
-        print(
-            f"[make_player_form] ⚠️ nflreadpy import failed ({exc}); falling back to nfl_data_py.",
-            file=sys.stderr,
-        )
-    import nfl_data_py as nflv  # fallback
-    return nflv, "nfl_data_py"
-
-NFLV, NFLPKG = _import_nflverse()
+import os, sys, warnings
+import pandas as pd, numpy as np
 
 DATA_DIR = "data"
-OUTPATH = os.path.join(DATA_DIR, "player_form.csv")
+OUTPATH   = os.path.join(DATA_DIR, "player_form.csv")
 
-METRICS_DIR = "metrics"
-METRICS_OUTPATH = os.path.join(METRICS_DIR, "player_form.csv")
-
-METRICS_DIR = "metrics"
-METRICS_OUTPATH = os.path.join(METRICS_DIR, "player_form.csv")
-_CACHE_DIRS = [
-    DATA_DIR,
-    os.path.join("external", "nflverse_bundle"),
-    os.path.join("external", "nflverse_bundle", "outputs"),
+BASE_COLS = [
+    "player","team","season",
+    "target_share","rush_share","rz_tgt_share","rz_carry_share",
+    "ypt","ypc","yprr_proxy","route_rate",
+    "position","role"
 ]
 
-def _safe_mkdir(p: str):
-    os.makedirs(p, exist_ok=True)
-
-
-def _ensure_pandas(obj) -> pd.DataFrame:
-    """Coerce any tabular object returned by nflverse helpers into pandas."""
-
-    if isinstance(obj, pd.DataFrame):
-        return obj
-    if hasattr(obj, "to_pandas"):
-        try:
-            return obj.to_pandas()
-        except Exception:
-            pass
-    try:
-        return pd.DataFrame(obj)
-    except Exception:
+def _read_csv(path: str) -> pd.DataFrame:
+    if not os.path.exists(path):
         return pd.DataFrame()
-
-
-def _cache_csv(kind: str, df: pd.DataFrame, season: int) -> None:
-    """Persist successfully fetched tables so future runs can reuse them."""
-
-    if df.empty:
-        return
-    for base in _CACHE_DIRS:
-        if not base:
-            continue
-        try:
-            os.makedirs(base, exist_ok=True)
-            path = os.path.join(base, f"{kind}_{season}.csv")
-            df.to_csv(path, index=False)
-        except Exception:
-            continue
-
-
-def _call_nflverse(func, **kwargs):
-    """Invoke an nflverse helper while stripping unsupported kwargs on the fly."""
-
-    attempt = {k: v for k, v in kwargs.items() if v is not None}
-    while True:
-        try:
-            return func(**attempt)
-        except TypeError as exc:
-            match = re.search(r"unexpected keyword argument '([^']+)'", str(exc))
-            if match:
-                bad = match.group(1)
-                if bad in attempt:
-                    attempt.pop(bad)
-                    if attempt:
-                        continue
-            raise
-
-def safe_div(n, d):
-    n = n.astype(float); d = d.astype(float)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        return np.where(d == 0, np.nan, n / d)
-
-def _load_cached_csv(kind: str, season: int) -> Tuple[pd.DataFrame, str]:
-    for base in _CACHE_DIRS:
-        path = os.path.join(base, f"{kind}_{season}.csv")
-        if not os.path.exists(path):
-            continue
-        try:
-            df = pd.read_csv(path)
-        except Exception:
-            continue
-        if df.empty:
-            continue
+    try:
+        df = pd.read_csv(path)
         df.columns = [c.lower() for c in df.columns]
-        return df, path
-    return pd.DataFrame(), ""
-
-
-def _validate_season(df: pd.DataFrame, season: int, label: str) -> None:
-    if df.empty or "season" not in df.columns:
-        return
-    try:
-        seasons = (
-            pd.to_numeric(df["season"], errors="coerce")
-            .dropna()
-            .astype(int)
-            .unique()
-        )
-    except Exception:
-        return
-    if len(seasons) == 0:
-        return
-    if any(int(s) != int(season) for s in seasons):
-        raise RuntimeError(
-            f"{label} spans seasons {sorted(map(int, seasons))}; expected {season}"
-        )
-
-
-def load_pbp(season:int)->pd.DataFrame:
-    cached, source_path = _load_cached_csv("pbp", season)
-    if not cached.empty:
-        _validate_season(cached, season, "cached pbp")
-        print(f"[make_player_form] ℹ️ Using cached pbp_{season}.csv from {source_path}")
-        return cached
-    df = pd.DataFrame()
-    errors: list[str] = []
-
-    if NFLPKG == "nflreadpy":
-        load_fn = getattr(NFLV, "load_pbp", None)
-        if load_fn is None:
-            errors.append("nflreadpy.load_pbp missing")
-        else:
-            variants = [
-                {"seasons": [season], "season_type": "REG"},
-                {"seasons": [season], "season_types": ["REG"]},
-                {"seasons": [season]},
-            ]
-            for kwargs in variants:
-                try:
-                    df = _ensure_pandas(_call_nflverse(load_fn, **kwargs))
-                except Exception as exc:  # pragma: no cover - dependency specific
-                    errors.append(str(exc))
-                    continue
-                if not df.empty:
-                    break
-
-    if df.empty:
-        try:
-            df = _ensure_pandas(
-                NFLV.import_pbp_data([season], downcast=True, season_type="REG")
-            )
-        except TypeError as exc:
-            # older nfl_data_py builds expose ``season_type`` as ``season_types``
-            try:
-                df = _ensure_pandas(
-                    NFLV.import_pbp_data([season], downcast=True, season_types=["REG"])
-                )
-            except Exception:
-                errors.append(str(exc))
-                df = _ensure_pandas(NFLV.import_pbp_data([season], downcast=True))
-        except Exception as exc:  # pragma: no cover - dependency specific
-            errors.append(str(exc))
-
-    df = _ensure_pandas(df)
-    df.columns = [c.lower() for c in df.columns]
-    if df.empty and errors:
-        raise RuntimeError("; ".join(errors))
-
-    _cache_csv("pbp", df, season)
-    return df
-
-
-def _load_required_pbp(season: int) -> tuple[pd.DataFrame, int]:
-    """Load play-by-play strictly for ``season`` or raise."""
-    cached, cache_path = _load_cached_csv("pbp", season)
-    if not cached.empty:
-        _validate_season(cached, season, "cached pbp")
-        print(
-            f"[make_player_form] ℹ️ Loaded cached pbp_{season}.csv from {cache_path}"
-        )
-        return cached, season
-
-    errors: list[str] = []
-    try:
-        df = load_pbp(season)
-    except Exception as err:
-        errors.append(f"{type(err).__name__}: {err}")
-    else:
-        if not df.empty:
-            _validate_season(df, season, "pbp feed")
-            return df, season
-        errors.append("empty dataframe")
-
-    raise RuntimeError(
-        "PBP unavailable for requested season. "
-        + "; ".join(errors) if errors else ""
-    )
-
-
-def _load_pbp_with_optional_fallback(
-    season: int, allow_fallback: bool
-) -> tuple[pd.DataFrame, int]:
-    """Load PBP for ``season``; optionally walk back to prior seasons."""
-
-    if not allow_fallback:
-        return _load_required_pbp(season)
-
-    earliest_season = 1999
-    candidates = list(range(season, earliest_season - 1, -1))
-    errors: list[str] = []
-    for candidate in candidates:
-        try:
-            pbp, source_season = _load_required_pbp(candidate)
-        except RuntimeError as err:
-            errors.append(f"{candidate}: {err}")
-            continue
-
-        if candidate != season:
-            print(
-                "[make_player_form] ⚠️ Requested season "
-                f"{season} unavailable; falling back to {candidate}."
-            )
-        return pbp, source_season
-
-    tried = ", ".join(str(s) for s in candidates)
-    suffix = "; ".join(errors)
-    message = f"PBP unavailable for requested season; tried {tried}."
-    if suffix:
-        message += f" {suffix}"
-    raise RuntimeError(message)
-
-
-def load_participation(season:int)->pd.DataFrame:
-    cached, source_path = _load_cached_csv("participation", season)
-    if not cached.empty:
-        _validate_season(cached, season, "participation cache")
-        print(
-            f"[make_player_form] ℹ️ Using cached participation_{season}.csv from {source_path}"
-        )
-        return cached
-    try:
-        p = pd.DataFrame()
-        if NFLPKG == "nflreadpy":
-            part_fn = getattr(NFLV, "load_participation", None)
-            if part_fn is not None:
-                variants = [
-                    {"seasons": [season], "season_type": "REG"},
-                    {"seasons": [season], "season_types": ["REG"]},
-                    {"seasons": [season]},
-                ]
-                for kwargs in variants:
-                    try:
-                        p = _ensure_pandas(_call_nflverse(part_fn, **kwargs))
-                    except AttributeError:
-                        break
-                    except Exception:
-                        continue
-                    if not p.empty:
-                        break
-        if p.empty:
-            try:
-                p = _ensure_pandas(NFLV.import_participation([season]))  # type: ignore[attr-defined]
-            except Exception:
-                p = pd.DataFrame()
-        p.columns = [c.lower() for c in p.columns]
-        _validate_season(p, season, "participation feed")
-        _cache_csv("participation", p, season)
-        return p
+        return df
     except Exception:
         return pd.DataFrame()
 
-def _first_present(df: pd.DataFrame, candidates: list[str]) -> str | None:
-    for c in candidates:
-        if c in df.columns:
-            return c
-    return None
+def _write_csv(path: str, df: pd.DataFrame):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    df.to_csv(path, index=False)
 
-def compute_player_usage(pbp: pd.DataFrame) -> pd.DataFrame:
-    """Compute target/rush shares, RZ shares, and simple efficiency."""
-    df = pbp.copy()
-    df.columns = [c.lower() for c in df.columns]
+def ensure_schema(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    for c in BASE_COLS:
+        if c not in out.columns:
+            out[c] = np.nan
+    return out[BASE_COLS]
 
-    # require an offense team column
-    off_col = "posteam" if "posteam" in df else ("offense_team" if "offense_team" in df else None)
-    if off_col is None:
-        return pd.DataFrame()
-
-    # col variants we see in mirrors
-    rec_name_col = _first_present(df, ["receiver_player_name", "receiver", "receiver_name"])
-    rush_name_col = _first_present(df, ["rusher_player_name", "rusher", "rusher_name"])
-    if rec_name_col is None and rush_name_col is None:
-        # nothing to aggregate
-        return pd.DataFrame()
-
-    is_pass = df.get("pass", pd.Series(False, index=df.index)).astype(bool)
-    is_rush = df.get("rush", pd.Series(False, index=df.index)).astype(bool)
-
-    # Receiving: targets, RZ targets, YPT
-    rec = pd.DataFrame()
-    if rec_name_col is not None:
-        rec = df.loc[is_pass & df[rec_name_col].notna(),
-                     [off_col, rec_name_col, "yardline_100", "yards_gained"]].copy()
-        rec["is_rz"] = pd.to_numeric(rec["yardline_100"], errors="coerce") <= 20
-        tgt = rec.groupby([off_col, rec_name_col]).size().rename("targets")
-        rz_tgt = rec.loc[rec["is_rz"]].groupby([off_col, rec_name_col]).size().rename("rz_targets")
-        ypt = rec.groupby([off_col, rec_name_col])["yards_gained"].mean().rename("ypt")
-        rec_tbl = pd.concat([tgt, rz_tgt, ypt], axis=1).reset_index().rename(
-            columns={off_col:"team", rec_name_col:"player"}
-        )
-    else:
-        rec_tbl = pd.DataFrame(columns=["team","player","targets","rz_targets","ypt"])
-
-    # Rushing: attempts, RZ carries, YPC
-    rush = pd.DataFrame()
-    if rush_name_col is not None:
-        rush = df.loc[is_rush & df[rush_name_col].notna(),
-                      [off_col, rush_name_col, "yardline_100", "yards_gained"]].copy()
-        rush["is_rz"] = pd.to_numeric(rush["yardline_100"], errors="coerce") <= 20
-        att = rush.groupby([off_col, rush_name_col]).size().rename("rush_att")
-        rz_carry = rush.loc[rush["is_rz"]].groupby([off_col, rush_name_col]).size().rename("rz_carries")
-        ypc = rush.groupby([off_col, rush_name_col])["yards_gained"].mean().rename("ypc")
-        rush_tbl = pd.concat([att, rz_carry, ypc], axis=1).reset_index().rename(
-            columns={off_col:"team", rush_name_col:"player"}
-        )
-    else:
-        rush_tbl = pd.DataFrame(columns=["team","player","rush_att","rz_carries","ypc"])
-
-    # combine
-    if rec_tbl.empty and rush_tbl.empty:
-        return pd.DataFrame()
-
-    if "rush_att" not in rec_tbl: rec_tbl["rush_att"] = 0
-    if "targets" not in rush_tbl: rush_tbl["targets"] = 0
-    base = pd.concat([rec_tbl, rush_tbl], axis=0, ignore_index=True)
-    base = base.groupby(["team","player"], dropna=False).sum().reset_index()
-
-    # shares (team denominators)
-    base["target_share"]   = safe_div(base["targets"],   base.groupby("team")["targets"].transform("sum").fillna(0))
-    base["rush_share"]     = safe_div(base["rush_att"],  base.groupby("team")["rush_att"].transform("sum").fillna(0))
-    base["rz_tgt_share"]   = safe_div(base["rz_targets"],base.groupby("team")["rz_targets"].transform("sum").fillna(0))
-    base["rz_carry_share"] = safe_div(base["rz_carries"],base.groupby("team")["rz_carries"].transform("sum").fillna(0))
-
-    # simple efficiency
-    base["yprr_proxy"] = np.where(base["targets"] > 0, base.get("ypt", np.nan), np.nan)
-    base["route_rate"] = np.nan  # to be enriched later
-    return base
-
-def enrich_with_participation(base: pd.DataFrame, part: pd.DataFrame) -> pd.DataFrame:
-    """Add route_rate from participation if available."""
-    if part.empty:
+def non_destructive_merge(base: pd.DataFrame, add: pd.DataFrame, on, mapping=None) -> pd.DataFrame:
+    """
+    Merge 'add' into 'base' without overwriting existing non-null values.
+    mapping: optional dict {base_col: add_col}
+    """
+    if add.empty:
         return base
-    p = part.copy()
-    p.columns = [c.lower() for c in p.columns]
-    team_col = "offense_team" if "offense_team" in p.columns else ("posteam" if "posteam" in p.columns else None)
-    if team_col is None or "player" not in p.columns:
-        return base
-    if "routes_run" in p.columns and "plays" in p.columns:
-        rr = (
-            p.groupby([team_col, "player"])
-             .apply(lambda x: safe_div(x["routes_run"].sum(), x["plays"].sum()))
-             .rename("route_rate")
-             .reset_index()
-             .rename(columns={team_col: "team"})
-        )
-        base = base.merge(rr, on=["team","player"], how="left", suffixes=("","_part"))
-        base["route_rate"] = base["route_rate"].combine_first(base.get("route_rate_part"))
-        if "route_rate_part" in base.columns:
-            base.drop(columns=["route_rate_part"], inplace=True)
-    return base
-
-def _player_enricher_paths() -> list[str]:
-    """Return candidate CSV filenames that may contain player usage enrichments."""
-    return [
-        "espn_player_form.csv",
-        "espn_player.csv",
-        "msf_player_form.csv",
-        "msf_player.csv",
-        "apisports_player_form.csv",
-        "apisports_player.csv",
-        "nflgsis_player_form.csv",
-        "gsis_player.csv",
-        "pfr_player_enrich.csv",
-    ]
-
-
-_PLAYER_COLUMN_ALIASES = {
-    "player_name": "player",
-    "name": "player",
-    "athlete": "player",
-    "athlete_display_name": "player",
-    "full_name": "player",
-    "team_abbr": "team",
-    "team_code": "team",
-    "posteam": "team",
-    "offense_team": "team",
-    "team_name": "team",
-    "target_pct": "target_share",
-    "targets_share": "target_share",
-    "tgt_share": "target_share",
-    "rush_pct": "rush_share",
-    "rushing_share": "rush_share",
-    "carry_share": "rush_share",
-    "routes_share": "route_rate",
-    "route_pct": "route_rate",
-    "routes": "route_rate",
-    "routes_run_share": "route_rate",
-    "yards_per_target": "ypt",
-    "ypt_avg": "ypt",
-    "yards_per_carry": "ypc",
-    "rushing_yards_per_attempt": "ypc",
-    "yprr": "yprr_proxy",
-    "yards_per_route_run": "yprr_proxy",
-}
-
-
-def _standardize_player_enricher(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize column names so they align with player_form expectations."""
-    df = df.copy()
-    df.columns = [c.lower() for c in df.columns]
-
-    # apply alias map where canonical column missing
-    for src, dest in _PLAYER_COLUMN_ALIASES.items():
-        if src in df.columns and dest not in df.columns:
-            df = df.rename(columns={src: dest})
-
-    # ensure required keys exist
-    if "team" not in df.columns:
-        for cand in ["team", "team_abbreviation", "team_short", "club"]:
-            if cand in df.columns:
-                df["team"] = df[cand]
-                break
-    if "player" not in df.columns:
-        for cand in ["player", "player_short", "player_id", "gsis_name"]:
-            if cand in df.columns:
-                df["player"] = df[cand]
-                break
-
-    if not {"team", "player"}.issubset(df.columns):
-        return pd.DataFrame()
-
-    df["team"] = df["team"].astype(str).str.upper().str.strip()
-    df["player"] = df["player"].astype(str).str.strip()
-
-    keep_cols = [
-        c
-        for c in [
-            "team",
-            "player",
-            "target_share",
-            "rush_share",
-            "route_rate",
-            "ypt",
-            "ypc",
-            "yprr_proxy",
-            "rz_tgt_share",
-            "rz_carry_share",
-        ]
-        if c in df.columns
-    ]
-    if not keep_cols:
-        return pd.DataFrame()
-    return df[keep_cols].drop_duplicates()
-
-
-def fallback_from_external(base: pd.DataFrame) -> pd.DataFrame:
-    """Merge optional enrichers without overwriting existing values."""
-    for filename in _player_enricher_paths():
-        path = os.path.join(DATA_DIR, filename)
-        if not os.path.exists(path):
+    if mapping is None:
+        mapping = {}
+    add = add.copy()
+    add.columns = [c.lower() for c in add.columns]
+    # standardize keys
+    if isinstance(on, str):
+        on = [on]
+    for k in on:
+        if k not in base.columns or k not in add.columns:
+            return base
+    # select only needed columns
+    add_cols = on + list(mapping.values() if mapping else [])
+    add = add[[c for c in add_cols if c in add.columns]].drop_duplicates()
+    merged = base.merge(add, on=on, how="left", suffixes=("","_new"))
+    # fill
+    for bcol, acol in mapping.items():
+        if acol not in merged.columns:
             continue
-        try:
-            enrich = pd.read_csv(path)
-        except Exception:
-            continue
-        std = _standardize_player_enricher(enrich)
-        if std.empty:
-            continue
-        base = base.merge(std, on=["team", "player"], how="left", suffixes=("", "_ext"))
-        for col in [c for c in std.columns if c not in {"team", "player"}]:
-            ext_col = f"{col}_ext"
-            if ext_col in base.columns:
-                base[col] = base[col].combine_first(base[ext_col])
-                base.drop(columns=[ext_col], inplace=True)
-    return base
+        newcol = f"{acol}"
+        fillcol = f"{acol}"
+        # write into base column bcol, but only when base is null
+        merged[bcol] = merged[bcol].combine_first(merged[fillcol])
+        if fillcol in merged.columns and fillcol not in BASE_COLS:
+            # keep the base schema; drop extra
+            pass
+    # drop any *_new suffix artifacts
+    drop_cols = [c for c in merged.columns if c.endswith("_new") and c not in BASE_COLS]
+    if drop_cols:
+        merged.drop(columns=drop_cols, inplace=True, errors="ignore")
+    return merged
 
-def build_player_form(season:int, allow_fallback: bool=False)->tuple[pd.DataFrame, int]:
-    print(f"[make_player_form] Loading PBP for {season} ({NFLPKG}) ...")
-    pbp, source_season = _load_pbp_with_optional_fallback(season, allow_fallback)
-    if pbp.empty:
-        raise RuntimeError("Empty PBP.")
-    base = compute_player_usage(pbp)
-    part = load_participation(source_season)
-    base = enrich_with_participation(base, part)
-    base = fallback_from_external(base)
-    base["season"] = season
-    base["source_season"] = source_season
-    order = ["player","team","season","source_season","target_share","rush_share","rz_tgt_share","rz_carry_share","ypt","ypc","yprr_proxy","route_rate"]
-    for c in order:
-        if c not in base.columns:
-            base[c] = np.nan
-    base = base[order].sort_values(["team","player"]).reset_index(drop=True)
-    return base, source_season
+def bootstrap_from_props_if_empty(df: pd.DataFrame) -> pd.DataFrame:
+    if not df.empty and df["player"].notna().any():
+        return df
+    props = _read_csv(os.path.join("outputs","props_raw.csv"))
+    if props.empty:
+        # nothing to bootstrap with
+        return df
+    # Try to infer player/team from props_raw
+    candidates = []
+    # unified player column from receiver/rusher/passer fields
+    for pcol in ["player","receiver","rusher","passer","name"]:
+        if pcol in props.columns:
+            candidates.append(pcol)
+    if not candidates:
+        return df
+    # heuristics: pick first present as "player"
+    pcol = candidates[0]
+    team_col = None
+    for tcol in ["team","posteam","home_team","away_team","team_name"]:
+        if tcol in props.columns:
+            team_col = tcol; break
+    boot = props[[c for c in [pcol,team_col] if c]].dropna().copy()
+    boot = boot.rename(columns={pcol:"player", team_col:"team"}) if team_col else boot.rename(columns={pcol:"player"})
+    boot["player"] = boot["player"].astype(str)
+    if "team" in boot:
+        boot["team"] = boot["team"].astype(str)
+    boot = boot.drop_duplicates(subset=["player"] if "team" not in boot else ["player","team"])
+    # minimal schema
+    boot["season"] = boot.get("season", pd.Series(np.nan, index=boot.index))
+    for c in ["target_share","rush_share","rz_tgt_share","rz_carry_share","ypt","ypc","yprr_proxy","route_rate","position","role"]:
+        boot[c] = np.nan
+    boot = boot[BASE_COLS]
+    return boot
+
+def load_roles_priority() -> pd.DataFrame:
+    """
+    Load roles from most trustworthy source to least:
+    1) data/roles.csv               (user-authored)
+    2) data/depth_chart_espn.csv    (parsed from ESPN depth)
+    3) data/depth_chart_ourlads.csv (parsed from OurLads)
+    Returns: DataFrame with columns at least ['player','team','position','role']
+    """
+    # 1) roles.csv
+    roles = _read_csv(os.path.join(DATA_DIR,"roles.csv"))
+    if not roles.empty and {"player","team","role"}.issubset(roles.columns):
+        # try to keep a 'position' column if present
+        if "position" not in roles.columns:
+            roles["position"] = np.nan
+        # normalize role strings
+        roles["role"] = roles["role"].astype(str).str.upper()
+        return roles[["player","team","position","role"]].drop_duplicates()
+
+    # 2) espn depth
+    espn = _read_csv(os.path.join(DATA_DIR,"depth_chart_espn.csv"))
+    if not espn.empty:
+        # expected columns: player, team, position, depth, slot_flag?
+        # Construct a role from position + depth (heuristic)
+        espn["position"] = espn.get("position", np.nan)
+        espn["depth"] = espn.get("depth", np.nan)
+        def _role_from_row(r):
+            pos = str(r.get("position") or "").upper()
+            dep = r.get("depth")
+            if pos.startswith("WR"):
+                if dep == 1: return "WR1"
+                if dep == 2: return "WR2"
+                if dep == 3: return "WR3"
+                return "WR"
+            if pos.startswith("RB"):
+                if dep == 1: return "RB1"
+                if dep == 2: return "RB2"
+                return "RB"
+            if pos.startswith("TE"):
+                if dep == 1: return "TE1"
+                if dep == 2: return "TE2"
+                return "TE"
+            if pos.startswith("QB"):
+                return "QB1" if dep == 1 else "QB"
+            return pos or np.nan
+        espn["role"] = espn.apply(_role_from_row, axis=1)
+        espn["role"] = espn["role"].astype(str).str.upper()
+        espn = espn[["player","team","position","role"]].drop_duplicates()
+        return espn
+
+    # 3) ourlads
+    ol = _read_csv(os.path.join(DATA_DIR,"depth_chart_ourlads.csv"))
+    if not ol.empty:
+        ol["position"] = ol.get("position", np.nan)
+        ol["depth"] = ol.get("depth", np.nan)
+        ol["role"] = ol.apply(lambda r: (str(r.get("position") or "").upper() + str(r.get("depth") or "")), axis=1)
+        # normalize to common roles
+        def _normalize(role):
+            role = str(role).upper()
+            if role.startswith("WR1"): return "WR1"
+            if role.startswith("WR2"): return "WR2"
+            if role.startswith("WR3"): return "WR3"
+            if role.startswith("RB1"): return "RB1"
+            if role.startswith("RB2"): return "RB2"
+            if role.startswith("TE1"): return "TE1"
+            if role.startswith("TE2"): return "TE2"
+            if role.startswith("QB1"): return "QB1"
+            if role.startswith("WR"):  return "WR"
+            if role.startswith("RB"):  return "RB"
+            if role.startswith("TE"):  return "TE"
+            if role.startswith("QB"):  return "QB"
+            return role
+        ol["role"] = ol["role"].apply(_normalize)
+        ol = ol[["player","team","position","role"]].drop_duplicates()
+        return ol
+
+    # empty
+    return pd.DataFrame(columns=["player","team","position","role"])
+
+def fill_route_rate_and_yprr(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    When route_rate is missing:
+    - WR/TE: estimate from target share as a crude proxy (cap 0.95)
+    - RB: use min(target_share*0.6, 0.65)
+    - QB: ignore
+    Fill yprr_proxy from ypt for receivers if missing.
+    """
+    out = df.copy()
+
+    # normalize position for logic
+    pos = out.get("position", pd.Series(np.nan, index=out.index)).astype(str).str.upper()
+
+    # route_rate rules
+    rr = out.get("route_rate", pd.Series(np.nan, index=out.index)).astype(float)
+    tshare = out.get("target_share", pd.Series(0.0, index=out.index)).astype(float)
+
+    # WR/TE heuristic
+    mask_wrte = pos.str.startswith("WR") | pos.str.startswith("TE")
+    rr_wrte = np.minimum(np.maximum(tshare * 1.15, 0.05), 0.95)  # 5%–95% clamp
+    rr = np.where(mask_wrte & rr.isna(), rr_wrte, rr)
+
+    # RB heuristic
+    mask_rb = pos.str.startswith("RB")
+    rr_rb = np.minimum(tshare * 0.6, 0.65)
+    rr = np.where(mask_rb & rr.isna(), rr_rb, rr)
+
+    out["route_rate"] = rr
+
+    # yprr_proxy fallback for WR/TE if missing but ypt exists
+    yprr = out.get("yprr_proxy", pd.Series(np.nan, index=out.index)).astype(float)
+    ypt   = out.get("ypt", pd.Series(np.nan, index=out.index)).astype(float)
+    yprr  = np.where(mask_wrte & yprr.isna() & ypt.notna(), ypt, yprr)
+    out["yprr_proxy"] = yprr
+
+    return out
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--season", type=int, default=2025)
-    parser.add_argument(
-        "--allow-fallback",
-        action="store_true",
-        help="Permit using prior seasons when requested season data is unavailable",
-    )
-    parser.add_argument(
-        "--strict",
-        action="store_true",
-        help=(
-            "Compatibility flag used by CI. "
-            "Player form already clamps to the requested season, so this is ignored."
-        ),
-    )
-    args = parser.parse_args()
-    _safe_mkdir(DATA_DIR)
-    _safe_mkdir(METRICS_DIR)
-    try:
-        df, source_season = build_player_form(
-            args.season,
-            allow_fallback=args.allow_fallback,
-        )
-    except Exception as e:
-        print(f"[make_player_form] ERROR: {e}", file=sys.stderr)
-        df = pd.DataFrame(columns=["player","team","season","source_season","target_share","rush_share","rz_tgt_share","rz_carry_share","ypt","ypc","yprr_proxy","route_rate"])
-        source_season = args.season
-    df.to_csv(OUTPATH, index=False)
-    df.to_csv(METRICS_OUTPATH, index=False)
-    print(
-        f"[make_player_form] Wrote {len(df)} rows → {OUTPATH} and {METRICS_OUTPATH}"
-    )
-
-if __name__ == "__main__":
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        main()
+
+        pf = _read_csv(OUTPATH)
+        if pf.empty or pf["player"].dropna().empty:
+            print("[enrich_player_form] player_form empty → bootstrapping from props_raw.csv ...")
+            pf = bootstrap_from_props_if_empty(pf)
+
+        # Ensure base schema
+        pf = ensure_schema(pf)
+
+        # Merge roles/positions from priority sources (non-destructive)
+        roles = load_roles_priority()
+        if not roles.empty:
+            pf = non_destructive_merge(
+                pf, roles, on=["player","team"],
+                mapping={
+                    "position":"position",
+                    "role":"role"
+                }
+            )
+
+        # Fallback positions from PFR if present
+        pfr_pos = _read_csv(os.path.join(DATA_DIR,"pfr_player_positions.csv"))
+        if not pfr_pos.empty and {"player","position"}.issubset(pfr_pos.columns):
+            pf = non_destructive_merge(
+                pf, pfr_pos, on=["player"],
+                mapping={"position":"position"}
+            )
+
+        # Fill route_rate and yprr proxies if still missing
+        pf = fill_route_rate_and_yprr(pf)
+        # --- A) Participation shares (non-destructive; optional) ---
+        try:
+            # pick a season for the query (fallback to 2025 if unknown)
+            season_guess = int(pf["season"].dropna().iloc[0]) if "season" in pf.columns and pf["season"].notna().any() else 2025
+
+            import nflreadpy as _nflv   # will be used if installed; otherwise we silently skip
+            part = _nflv.load_participation(seasons=[season_guess])
+            part.columns = [c.lower() for c in part.columns]
+
+            team_col = "posteam" if "posteam" in part.columns else ("offense_team" if "offense_team" in part.columns else None)
+            if team_col is not None and "player_name" in part.columns:
+                p = part.rename(columns={team_col: "team", "player_name": "player"})
+                p["team"]   = p["team"].astype(str).str.upper().str.strip()
+                p["player"] = p["player"].astype(str).str.replace(".", "", regex=False).str.strip()
+
+                # sum snaps/routes across the season (or available rows)
+                g = p.groupby(["team","player"], dropna=False).agg(
+                    off_snaps=("offense", "sum") if "offense" in p.columns else ("onfield", "sum"),
+                    routes   =("route",   "sum") if "route"   in p.columns else ("routes",  "sum") if "routes" in p.columns else ("onfield","sum")
+                ).reset_index()
+
+                # team totals for shares
+                tt = g.groupby("team", dropna=False).agg(team_off_snaps=("off_snaps","sum"),
+                                                         team_routes   =("routes","sum")).reset_index()
+                g = g.merge(tt, on="team", how="left")
+                g["snap_share"] = np.where(g["team_off_snaps"] > 0, g["off_snaps"] / g["team_off_snaps"], np.nan)
+                g["route_rate"] = np.where(g["team_routes"]   > 0, g["routes"]    / g["team_routes"],   np.nan)
+
+                # merge into pf without overwriting existing non-null values
+                pf = pf.merge(g[["team","player","snap_share","route_rate"]],
+                              on=["team","player"], how="left", suffixes=("","_part"))
+                for col in ["snap_share","route_rate"]:
+                    ext = col + "_part"
+                    if ext in pf.columns:
+                        pf[col] = pf[col].combine_first(pf[ext])
+                        pf.drop(columns=[ext], inplace=True)
+        except Exception:
+            # optional; never fail on participation fetch
+            pass
+        # --- END A ---
+        # --- B) Resolve placeholder roles like WR1/RB1/TE1/QB1 to actual names (optional) ---
+        try:
+            if "role" in pf.columns:
+                tmp = pf.copy()
+                for c in ["snap_share","route_rate","target_share"]:
+                    if c not in tmp.columns:
+                        tmp[c] = np.nan
+                # ranking signal to pick WR1/WR2... etc
+                tmp["rk"] = tmp["route_rate"].fillna(0)*1.0 + tmp["snap_share"].fillna(0)*0.7 + tmp["target_share"].fillna(0)*0.5
+                tmp["posu"] = tmp.get("position", np.nan).astype(str).str.upper()
+
+                mask = tmp["role"].astype(str).str.fullmatch(r"(WR|RB|TE|QB)\d", case=False, na=False)
+                for idx, row in tmp.loc[mask].iterrows():
+                    fam = str(row["role"])[:2].upper()   # WR/RB/TE/QB
+                    try:
+                        k = int(str(row["role"])[2:])    # the number (1/2/3…)
+                    except Exception:
+                        k = 1
+                    sub = tmp[tmp["team"] == row["team"]]
+                    if fam in ("WR","TE","RB","QB"):
+                        sub = sub[sub["posu"].str.startswith(fam)]
+                    sub = sub.sort_values("rk", ascending=False)
+                    if len(sub) > 0:
+                        name = sub["player"].iloc[min(k-1, len(sub)-1)]
+                        # only set when current player is missing or still a placeholder
+                        if pd.isna(pf.at[idx, "player"]) or str(pf.at[idx, "player"]).upper().startswith((fam)):
+                            pf.at[idx, "player"] = name
+        except Exception:
+            # optional; never fail on mapping
+            pass
+        # --- END B ---
+
+        # Final tidy: keep unique player-team-season rows
+        pf = pf.drop_duplicates(subset=["player","team","season"], keep="first")
+
+        # Write back
+        _write_csv(OUTPATH, pf)
+        print(f"[enrich_player_form] Wrote {len(pf)} rows → {OUTPATH}")
+
+if __name__ == "__main__":
+    main()
