@@ -299,11 +299,11 @@ def compute_pace_and_proe(pbp: pd.DataFrame) -> pd.DataFrame:
         dfn["__gsr_diff"] = grp["game_seconds_remaining"].diff(-1).abs()
         pace_per_game = dfn.groupby([off_col, "game_id"], dropna=False)["__gsr_diff"].mean()
         pace_team = pace_per_game.groupby(level=0).mean().rename("pace_neutral").reset_index()
-        # ensure 'team' exists for downstream merges
         pace_team = pace_team.rename(columns={off_col: "team"})
     else:
         neutral_plays = grp.size().groupby(level=0).sum().rename("neutral_plays").reset_index()
-        pace_team = neutral_plays.assign(pace_neutral=np.where(neutral_plays["neutral_plays"] > 0, 24.0, np.nan))
+        # strict: do NOT invent pace — leave NaN when we can't compute from clock
+        pace_team = neutral_plays.assign(pace_neutral=np.nan)
         pace_team = pace_team.rename(columns={off_col: "team"})
 
     # --- PROE ---
@@ -348,6 +348,7 @@ def compute_red_zone_and_airyards(pbp: pd.DataFrame) -> pd.DataFrame:
     is_pass = df.get("pass", pd.Series(False, index=df.index)).astype(bool)
     pass_df = df.loc[is_pass].copy()
     ay = pd.to_numeric(pass_df.get("air_yards"), errors="coerce")
+    # strict: do NOT invent AY; leave NaN if not present in PBP
     ay_per_att = (
         pass_df.assign(air_yards=ay)
                .groupby(off_col, dropna=False)["air_yards"]
