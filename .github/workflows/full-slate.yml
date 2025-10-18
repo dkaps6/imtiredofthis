@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       season:
-        description: "Season (e.g. 2025)"
+        description: "Season (e.g., 2025)"
         required: false
         default: "2025"
       date:
@@ -12,9 +12,29 @@ on:
         required: false
         default: ""
 
+concurrency:
+  group: full-slate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   full_slate:
-...
+    runs-on: ubuntu-latest
+
+    env:
+      # Expose your provider secrets (only if they’re set in repo settings)
+      APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
+      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+      ESPN_COOKIE: ${{ secrets.ESPN_COOKIE }}
+      MSF_KEY: ${{ secrets.MSF_KEY }}
+      MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
+      NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
+      NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
+
+    steps:
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -23,60 +43,40 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
-      # --- Install dependencies BEFORE running the engine ---
       - name: Install requirements
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install --prefer-binary -r requirements.txt
 
-      # Replace the old duplicate "Install deps" with this quick import check
-      - name: Verify deps (nfl_data_py / pyarrow)
-        run: |
-          python - <<'PY'
-          import sys, importlib
-          def check(mod):
-              m = importlib.import_module(mod)
-              path = getattr(m, "__file__", "(builtin)")
-              ok_path = ("site-packages" in (path or "")) or ("dist-packages" in (path or ""))
-              print(f"{mod}: path={path}")
-              if mod == "nfl_data_py":
-                  if not hasattr(m, "import_pbp_data"):
-                      print("nfl_data_py present but missing import_pbp_data() — wrong module")
-                      sys.exit(1)
-                  if not ok_path:
-                      print("nfl_data_py not from site/dist-packages — likely shadowed")
-                      sys.exit(1)
-          for mod in ["nfl_data_py","pyarrow","pandas","numpy"]:
-              check(mod)
-          PY
-
       - name: Prepare dirs
         run: |
-          mkdir -p data outputs outputs/metrics logs
+          mkdir -p data outputs outputs/metrics logs runs
+          echo "PYTHONPATH=$PWD" >> $GITHUB_ENV
 
-      - name: Add repo to PYTHONPATH
-        run: echo "PYTHONPATH=$PWD" >> $GITHUB_ENV
-
-      # --- NEW: providers that must run BEFORE team form so fallbacks exist ---
+      # ---------------- Providers that must run BEFORE team_form ----------------
+      # GSIS (nflverse) aggregates; allows prior-season box-count backfill
       - name: GSIS (nflverse) aggregates
-        run: python scripts/providers/gsis_pull.py ${{ inputs.season || '2025' }} --box-backfill-prev
+        run: |
+          python scripts/providers/gsis_pull.py "${{ inputs.season || '2025' }}" --box-backfill-prev
 
+      # Sharp Football: writes data/sharp_team_form.csv + other sharp_*.csv fallbacks
       - name: Sharp Football team metrics
-        run: python scripts/providers/sharpfootball_pull.py ${{ inputs.season || '2025' }}
+        run: |
+          python scripts/providers/sharpfootball_pull.py "${{ inputs.season || '2025' }}"
 
+      # ---------------- Run the pipeline (engine calls team_form, player_form, pricing) ----------------
       - name: Run pipeline
         run: |
           python -m engine --season "${{ inputs.season || '2025' }}" --date "${{ inputs.date || '' }}" --bookmakers=""
 
-      # Always ship artifacts (snapshots, logs, partial CSVs) even if the run fails
+      # Always upload artifacts (even on failure) so you can inspect logs/CSVs
       - name: Upload artifacts (always)
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: run-${{ github.run_id }}
           path: |
-            runs/**/*.zip
-            runs/**/*
+            runs/**
             outputs/**
             data/**
             logs/**
