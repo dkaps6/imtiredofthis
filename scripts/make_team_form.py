@@ -320,7 +320,7 @@ def compute_pace_and_proe(pbp: pd.DataFrame) -> pd.DataFrame:
         league_neutral_pass = prate.mean() if len(prate) else 0.55
         proe = prate - league_neutral_pass
 
-    out = pace_team.merge(proe.rename("proe"), on="team", how="left")
+    out = pace_team.merge(proe.rename("proe"), left_on="team", right_index=True, how="left")
     out = _force_team_col(out, off_col)
     out = out[["team", "pace_neutral", "proe"]]
     return out
