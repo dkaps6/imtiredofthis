@@ -864,6 +864,11 @@ def build_team_form(season: int) -> tuple[pd.DataFrame, pd.DataFrame, int]:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--season", type=int, default=2025)
+    parser.add_argument(
+        "--allow-fallback",
+        action="store_true",
+        help="Permit using prior seasons when the requested season is unavailable",
+    )
     args = parser.parse_args()
 
     _safe_mkdir(DATA_DIR)
@@ -897,6 +902,10 @@ def main():
         pbp_used = pd.DataFrame()
         source_season = args.season
         _write_weekly_outputs(pd.DataFrame(), args.season, args.season, os.path.join(DATA_DIR, "team_form_weekly.csv"))
+        try:
+            pd.DataFrame(columns=['team', 'week', 'plays_est', 'pace', 'proe']).to_csv(os.path.join(DATA_DIR, 'team_form_weekly.csv'), index=False)
+        except Exception:
+            pass
 
     # --- ADDED: optional external enrichers; fill only missing values ---
     try:

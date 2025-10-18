@@ -396,6 +396,11 @@ def build_player_form(season:int)->tuple[pd.DataFrame, int]:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--season", type=int, default=2025)
+    parser.add_argument(
+        "--allow-fallback",
+        action="store_true",
+        help="Permit using prior seasons when requested season data is unavailable",
+    )
     args = parser.parse_args()
     _safe_mkdir(DATA_DIR)
     try:
