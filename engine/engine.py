@@ -71,9 +71,10 @@ def run_pipeline(season: int = 2025,
     Execute the full model pipeline:
       1) Fetch odds and external data
       2) Build metrics (team/player)
-      3) Price props
-      4) (Optional) Predictive models
-      5) Export & snapshot
+      3) Validate completeness (strict)
+      4) Price props
+      5) (Optional) Predictive models
+      6) Export & snapshot
     """
 
     # Normalize books/bookmakers arg
@@ -123,7 +124,21 @@ def run_pipeline(season: int = 2025,
         raise  # hard fail; pricing without metrics is pointless
 
     # -------------------------
-    # STEP 3: Price props (REQUIRED)
+    # STEP 3: Validate completeness (STRICT)
+    # -------------------------
+    try:
+        strict_flag = os.getenv("STRICT_VALIDATION", "1")
+        if strict_flag == "1":
+            print("\n[ENGINE] ✅ Validating 2025 completeness (strict)…")
+            _run("python scripts/validate_metrics.py")
+        else:
+            print("\n[ENGINE] ⚠️ STRICT_VALIDATION=0 → skipping strict validator.")
+    except Exception as e:
+        print(f"[ENGINE] ❌ Validation failed: {e}")
+        raise
+
+    # -------------------------
+    # STEP 4: Price props (REQUIRED)
     # -------------------------
     try:
         # pricing.py expects props path (not --season). Do NOT change your fetcher.
@@ -135,7 +150,7 @@ def run_pipeline(season: int = 2025,
         raise
 
     # -------------------------
-    # STEP 4: Predictive models (optional; keep soft-fail while wiring)
+    # STEP 5: Predictive models (optional; keep soft-fail while wiring)
     # -------------------------
     try:
         # Run model modules to avoid relative-import errors.
@@ -147,7 +162,7 @@ def run_pipeline(season: int = 2025,
         print(f"[ENGINE] ⚠️ Predictor step failed (soft): {e}")
 
     # -------------------------
-    # STEP 5: Export & archive
+    # STEP 6: Export & archive
     # -------------------------
     try:
         for f in [
@@ -176,7 +191,7 @@ def run_pipeline(season: int = 2025,
         print(f"[ENGINE] ⚠️ Export step failed: {e}")
 
     # -------------------------
-    # STEP 6: Debug snapshot (optional)
+    # STEP 7: Debug snapshot (optional)
     # -------------------------
     if debug:
         for path in [
