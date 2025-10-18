@@ -17,6 +17,13 @@ from typing import Optional
 
 import pandas as pd
 
+TEAM_CODES_2025 = [
+    "ARI", "ATL", "BAL", "BUF", "CAR", "CHI", "CIN", "CLE",
+    "DAL", "DEN", "DET", "GB", "HOU", "IND", "JAC", "KC",
+    "LV", "LAC", "LAR", "MIA", "MIN", "NE", "NO", "NYG",
+    "NYJ", "PHI", "PIT", "SEA", "SF", "TB", "TEN", "WAS",
+]
+
 # Optional: nfl_data_py as a fallback when you want to compute base fields locally.
 try:
     import nfl_data_py as nfl
@@ -63,26 +70,47 @@ def _fallback_from_nfl_data_py(season: int) -> pd.DataFrame:
     Produces a row per team-season with generic placeholders where needed.
     """
     if nfl is None:
-        # Return an empty shell; pipeline remains alive
-        return pd.DataFrame(
-            columns=[
-                "team", "season",
-                "def_pressure_rate", "def_sack_rate",
-                "def_pass_epa", "def_rush_epa",
-                "pace_neutral",
-                "light_box_rate", "heavy_box_rate",
-                "ay_per_att",
-                "pass_rate_neutral",
-            ]
-        )
+        base = pd.DataFrame({"team": TEAM_CODES_2025})
+        base["season"] = int(season)
+        for col in [
+            "def_pressure_rate", "def_sack_rate",
+            "def_pass_epa", "def_rush_epa",
+            "pace_neutral",
+            "light_box_rate", "heavy_box_rate",
+            "ay_per_att",
+            "pass_rate_neutral",
+        ]:
+            base[col] = pd.NA
+        base["pace_neutral"] = 27.5
+        base["pass_rate_neutral"] = 0.55
+        print("[make_team_form] ⚠️ nfl_data_py unavailable; using static team shell")
+        return base
 
-    teams = nfl.import_team_desc()  # team metadata
-    schedule = nfl.import_schedules([season])
+    teams = pd.DataFrame()
+    schedule = pd.DataFrame()
+
+    try:
+        teams = nfl.import_team_desc()
+    except Exception as exc:  # pragma: no cover - network dependent
+        print(f"[make_team_form] ⚠️ import_team_desc failed: {exc}")
+
+    try:
+        schedule = nfl.import_schedules([season])
+    except Exception as exc:  # pragma: no cover - network dependent
+        print(f"[make_team_form] ⚠️ import_schedules failed: {exc}")
 
     # Derive simple team list for the season
-    teams_played = pd.unique(
-        pd.concat([schedule["home_team"], schedule["away_team"]], ignore_index=True)
-    )
+    teams_played = []
+    if not schedule.empty:
+        teams_played = pd.unique(
+            pd.concat([schedule["home_team"], schedule["away_team"]], ignore_index=True)
+        ).tolist()
+    elif not teams.empty and "team_abbr" in teams.columns:
+        teams_played = teams["team_abbr"].dropna().astype(str).str.upper().unique().tolist()
+    if not teams_played:
+        teams_played = TEAM_CODES_2025
+        print("[make_team_form] ⚠️ using static 2025 team list fallback")
+
     base = pd.DataFrame({"team": teams_played})
     base["season"] = int(season)
 

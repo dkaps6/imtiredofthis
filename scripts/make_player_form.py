@@ -1,18 +1,45 @@
 # scripts/make_player_form.py
 """
-Create player_form.csv: per-player usage & efficiency metrics.
+Create ``player_form.csv``: per-player usage & efficiency metrics.
 
-Inputs:
-- Play-by-play via nflreadpy (preferred) or nfl_data_py (fallback)
-- Optional enrichers (ESPN, MySportsFeeds, API-Sports, NFLGSIS)
-Output:
-- data/player_form.csv
+Inputs
+======
+* Play-by-play via ``nflreadpy`` (preferred) with automatic fallbacks to
+  ``nfl_data_py`` when the lightweight mirror is unavailable.
+* Optional enrichers (ESPN, MySportsFeeds, API-Sports, NFLGSIS) seeded in
+  ``data/``.
+
+Outputs
+=======
+* ``data/player_form.csv`` (legacy location for downstream joins)
+* ``metrics/player_form.csv`` (mirrors the legacy location so newer jobs read
+  from the metrics folder first)
+
+Key features
+============
+* Robust handling of the nflverse helpers.  Different versions of
+  ``nflreadpy`` (and its dependency ``nfl_data_py``) expose slightly different
+  keyword signatures.  The loader now retries with progressively smaller
+  argument sets and gracefully removes unsupported keywords so that both the
+  2025 mirrors and older cached wheels succeed.
+* Automatic CSV caching.  Whenever we successfully pull play-by-play or
+  participation we persist copies to ``data/`` and ``external/nflverse_bundle``
+  (including ``…/outputs``).  Subsequent runs read these cached mirrors so the
+  pipeline can operate in offline environments such as GitHub Actions
+  reruns.
 """
 
 from __future__ import annotations
-import argparse, os, sys, warnings
-import pandas as pd, numpy as np
+
+import argparse
+import os
+import re
+import sys
+import warnings
 from typing import Tuple
+
+import numpy as np
+import pandas as pd
 
 def _import_nflverse():
     try:
@@ -45,17 +72,73 @@ def _import_nflverse():
     return nflv, "nfl_data_py"
 
 NFLV, NFLPKG = _import_nflverse()
+
 DATA_DIR = "data"
 OUTPATH = os.path.join(DATA_DIR, "player_form.csv")
+
+METRICS_DIR = "metrics"
+METRICS_OUTPATH = os.path.join(METRICS_DIR, "player_form.csv")
+
 METRICS_DIR = "metrics"
 METRICS_OUTPATH = os.path.join(METRICS_DIR, "player_form.csv")
 _CACHE_DIRS = [
     DATA_DIR,
     os.path.join("external", "nflverse_bundle"),
+    os.path.join("external", "nflverse_bundle", "outputs"),
 ]
 
 def _safe_mkdir(p: str):
     os.makedirs(p, exist_ok=True)
+
+
+def _ensure_pandas(obj) -> pd.DataFrame:
+    """Coerce any tabular object returned by nflverse helpers into pandas."""
+
+    if isinstance(obj, pd.DataFrame):
+        return obj
+    if hasattr(obj, "to_pandas"):
+        try:
+            return obj.to_pandas()
+        except Exception:
+            pass
+    try:
+        return pd.DataFrame(obj)
+    except Exception:
+        return pd.DataFrame()
+
+
+def _cache_csv(kind: str, df: pd.DataFrame, season: int) -> None:
+    """Persist successfully fetched tables so future runs can reuse them."""
+
+    if df.empty:
+        return
+    for base in _CACHE_DIRS:
+        if not base:
+            continue
+        try:
+            os.makedirs(base, exist_ok=True)
+            path = os.path.join(base, f"{kind}_{season}.csv")
+            df.to_csv(path, index=False)
+        except Exception:
+            continue
+
+
+def _call_nflverse(func, **kwargs):
+    """Invoke an nflverse helper while stripping unsupported kwargs on the fly."""
+
+    attempt = {k: v for k, v in kwargs.items() if v is not None}
+    while True:
+        try:
+            return func(**attempt)
+        except TypeError as exc:
+            match = re.search(r"unexpected keyword argument '([^']+)'", str(exc))
+            if match:
+                bad = match.group(1)
+                if bad in attempt:
+                    attempt.pop(bad)
+                    if attempt:
+                        continue
+            raise
 
 def safe_div(n, d):
     n = n.astype(float); d = d.astype(float)
@@ -104,14 +187,51 @@ def load_pbp(season:int)->pd.DataFrame:
         _validate_season(cached, season, "cached pbp")
         print(f"[make_player_form] ℹ️ Using cached pbp_{season}.csv from {source_path}")
         return cached
-    if NFLPKG=="nflreadpy":
-        df = NFLV.load_pbp(seasons=[season], season_type="REG")
-    else:
+    df = pd.DataFrame()
+    errors: list[str] = []
+
+    if NFLPKG == "nflreadpy":
+        load_fn = getattr(NFLV, "load_pbp", None)
+        if load_fn is None:
+            errors.append("nflreadpy.load_pbp missing")
+        else:
+            variants = [
+                {"seasons": [season], "season_type": "REG"},
+                {"seasons": [season], "season_types": ["REG"]},
+                {"seasons": [season]},
+            ]
+            for kwargs in variants:
+                try:
+                    df = _ensure_pandas(_call_nflverse(load_fn, **kwargs))
+                except Exception as exc:  # pragma: no cover - dependency specific
+                    errors.append(str(exc))
+                    continue
+                if not df.empty:
+                    break
+
+    if df.empty:
         try:
-            df = NFLV.import_pbp_data([season], downcast=True, season_type="REG")
-        except TypeError:
-            df = NFLV.import_pbp_data([season], downcast=True)
+            df = _ensure_pandas(
+                NFLV.import_pbp_data([season], downcast=True, season_type="REG")
+            )
+        except TypeError as exc:
+            # older nfl_data_py builds expose ``season_type`` as ``season_types``
+            try:
+                df = _ensure_pandas(
+                    NFLV.import_pbp_data([season], downcast=True, season_types=["REG"])
+                )
+            except Exception:
+                errors.append(str(exc))
+                df = _ensure_pandas(NFLV.import_pbp_data([season], downcast=True))
+        except Exception as exc:  # pragma: no cover - dependency specific
+            errors.append(str(exc))
+
+    df = _ensure_pandas(df)
     df.columns = [c.lower() for c in df.columns]
+    if df.empty and errors:
+        raise RuntimeError("; ".join(errors))
+
+    _cache_csv("pbp", df, season)
     return df
 
 
@@ -150,15 +270,32 @@ def load_participation(season:int)->pd.DataFrame:
         )
         return cached
     try:
-        if NFLPKG=="nflreadpy":
-            p = NFLV.load_participation(seasons=[season], season_type="REG")
-        else:
+        p = pd.DataFrame()
+        if NFLPKG == "nflreadpy":
+            part_fn = getattr(NFLV, "load_participation", None)
+            if part_fn is not None:
+                variants = [
+                    {"seasons": [season], "season_type": "REG"},
+                    {"seasons": [season], "season_types": ["REG"]},
+                    {"seasons": [season]},
+                ]
+                for kwargs in variants:
+                    try:
+                        p = _ensure_pandas(_call_nflverse(part_fn, **kwargs))
+                    except AttributeError:
+                        break
+                    except Exception:
+                        continue
+                    if not p.empty:
+                        break
+        if p.empty:
             try:
-                p = NFLV.import_participation([season])  # type: ignore[attr-defined]
+                p = _ensure_pandas(NFLV.import_participation([season]))  # type: ignore[attr-defined]
             except Exception:
-                return pd.DataFrame()
+                p = pd.DataFrame()
         p.columns = [c.lower() for c in p.columns]
         _validate_season(p, season, "participation feed")
+        _cache_csv("participation", p, season)
         return p
     except Exception:
         return pd.DataFrame()

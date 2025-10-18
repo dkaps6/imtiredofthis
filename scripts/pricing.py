@@ -64,14 +64,20 @@ def _maybe_csv(path) -> pd.DataFrame:
     return pd.DataFrame()
 
 
-def _load_props() -> pd.DataFrame:
-    for p in PROP_CANDIDATES:
+def _load_props(primary: Optional[str] = None) -> pd.DataFrame:
+    candidates: List[str] = []
+    if primary:
+        candidates.append(primary)
+    candidates.extend(PROP_CANDIDATES)
+
+    for p in candidates:
+        if not p:
+            continue
         if os.path.exists(p):
             try:
-                df = pd.read_csv(p)
-                return df
+                return pd.read_csv(p)
             except Exception:
-                pass
+                continue
     return pd.DataFrame()
 
 
@@ -278,11 +284,11 @@ def _default_sigma_for_market(market: str) -> float:
     return 20.0
 
 
-def price(season: int):
+def price(season: int, props_path: Optional[str] = None):
     _ensure_dir(OUT_DIR)
 
     # Base frames
-    props = _load_props()
+    props = _load_props(props_path)
     team = _maybe_csv(TEAM_FORM)
     player = _maybe_csv(PLAYER_FORM)
     cov = _maybe_csv(COVERAGE)
@@ -304,7 +310,9 @@ def price(season: int):
         player = player[player["season"].astype(int) == 2025].copy()
 
     if props.empty:
-        print("[pricing] No props file found. Expected one of:", PROP_CANDIDATES, file=sys.stderr)
+        cand = [props_path] if props_path else []
+        cand.extend(PROP_CANDIDATES)
+        print("[pricing] No props file found. Expected one of:", cand, file=sys.stderr)
         # write empty output to keep pipeline predictable
         pd.DataFrame().to_csv(OUT_FILE, index=False)
         return
@@ -482,10 +490,16 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--season", type=int, default=2025)
     parser.add_argument("--write", type=str, default="outputs", help="Output directory (kept for compatibility)")
+    parser.add_argument(
+        "--props",
+        type=str,
+        default="",
+        help="Primary props CSV (defaults to outputs/props_raw.csv)",
+    )
     args = parser.parse_args()
 
     try:
-        price(args.season)
+        price(args.season, props_path=args.props or None)
     except Exception as e:
         print(f"[pricing] ERROR: {e}", file=sys.stderr)
         raise
