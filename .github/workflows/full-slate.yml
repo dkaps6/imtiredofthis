@@ -14,16 +14,7 @@ on:
 
 jobs:
   full_slate:
-    runs-on: ubuntu-latest
-    env:
-      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-      ESPN_COOKIE: ${{ secrets.ESPN_COOKIE }}   # optional
-      NFL_FORM_STRICT: "1"
-      MC_TRIALS: "25000"
-      PYTHONUNBUFFERED: "1"
-
-    steps:
-      - name: Checkout
+...
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -66,9 +57,16 @@ jobs:
       - name: Add repo to PYTHONPATH
         run: echo "PYTHONPATH=$PWD" >> $GITHUB_ENV
 
+      # --- NEW: providers that must run BEFORE team form so fallbacks exist ---
+      - name: GSIS (nflverse) aggregates
+        run: python scripts/providers/gsis_pull.py ${{ inputs.season || '2025' }} --box-backfill-prev
+
+      - name: Sharp Football team metrics
+        run: python scripts/providers/sharpfootball_pull.py ${{ inputs.season || '2025' }}
+
       - name: Run pipeline
         run: |
-          python -m engine --season "2025" --date "" --bookmakers=""
+          python -m engine --season "${{ inputs.season || '2025' }}" --date "${{ inputs.date || '' }}" --bookmakers=""
 
       # Always ship artifacts (snapshots, logs, partial CSVs) even if the run fails
       - name: Upload artifacts (always)
