@@ -24,8 +24,8 @@ from math import erf, sqrt
 OUT_DIR = "outputs"
 OUT_FILE = os.path.join(OUT_DIR, "props_priced_clean.csv")
 
-TEAM_FORM = "metrics/team_form.csv"
-PLAYER_FORM = "metrics/player_form.csv"
+TEAM_FORM = ["metrics/team_form.csv", "data/team_form.csv"]
+PLAYER_FORM = ["metrics/player_form.csv", "data/player_form.csv"]
 COVERAGE = "data/coverage.csv"
 CB_ASSIGN = "data/cb_assignments.csv"
 INJURIES = "data/injuries.csv"
@@ -44,12 +44,24 @@ def _ensure_dir(path: str):
     os.makedirs(path, exist_ok=True)
 
 
-def _maybe_csv(path: str) -> pd.DataFrame:
-    try:
-        df = pd.read_csv(path)
-        return df
-    except Exception:
-        return pd.DataFrame()
+def _maybe_csv(path) -> pd.DataFrame:
+    """Return the first readable CSV among one or many candidate paths."""
+    paths: List[str]
+    if isinstance(path, (list, tuple)):
+        paths = [p for p in path if p]
+    else:
+        paths = [path]
+
+    for pth in paths:
+        if not pth:
+            continue
+        try:
+            df = pd.read_csv(pth)
+        except Exception:
+            continue
+        else:
+            return df
+    return pd.DataFrame()
 
 
 def _load_props() -> pd.DataFrame:
