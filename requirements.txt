@@ -13,5 +13,5 @@ polars==0.20.5
 beautifulsoup4==4.12.3
 lxml==4.9.4
 
-nfl_data_py==0.3.4
+nfl_data_py==0.3.3
 nflreadpy==0.1.3
