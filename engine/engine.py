@@ -258,8 +258,6 @@ def run_pipeline(season: int = 2025,
         try:
             print("\n[ENGINE] 🧮 Building TEAM metrics…")
             team_cmd = f"python scripts/make_team_form.py --season {season}"
-            if allow_fallback:
-                team_cmd += " --allow-fallback"
             _run(team_cmd)
             team_info = _assert_nonempty_csv(
                 "data/team_form.csv",
@@ -273,11 +271,9 @@ def run_pipeline(season: int = 2025,
 
             print("\n[ENGINE] 🧮 Building PLAYER metrics…")
             player_cmd = f"python scripts/make_player_form.py --season {season}"
-            _run(player_cmd)
             if allow_fallback:
                 player_cmd += " --allow-fallback"
             _run(player_cmd)
-            _run(f"python scripts/make_player_form.py --season {season}")
             _run("python scripts/enrich_player_form.py || true")
             player_info = _assert_nonempty_csv(
                 "data/player_form.csv",
