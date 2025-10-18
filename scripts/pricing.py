@@ -4,9 +4,10 @@
 """
 Price player props using model multipliers + market anchoring and write outputs/props_priced_clean.csv.
 
-Adds:
+Adds (non-breaking):
 - Weather merge + weather multiplier
 - Strict 2025 handling via merged dataframes from metrics
+- Volume × Efficiency blend via scripts/volume.py with env VOLUME_BLEND (default 0.40)
 
 If any optional file is missing, pipeline continues with safe defaults.
 """
@@ -20,6 +21,12 @@ import numpy as np
 import pandas as pd
 from math import erf, sqrt
 
+# --- NEW: volume × efficiency helpers ---
+try:
+    from scripts.volume import team_volume, player_volume, player_efficiency, volume_mu
+except Exception:
+    # allow pricing to run without volume.py present
+    team_volume = player_volume = player_efficiency = volume_mu = None
 
 OUT_DIR = "outputs"
 OUT_FILE = os.path.join(OUT_DIR, "props_priced_clean.csv")
@@ -95,12 +102,7 @@ def _load_weather() -> pd.DataFrame:
 
 def _inv_norm_cdf(p: float) -> float:
     """Approx inverse CDF for Normal via erfinv-like approach."""
-    # Clamp p to (0,1)
     p = min(max(p, 1e-9), 1 - 1e-9)
-    # Rational approximation (Beasley-Springer/Moro or simpler).
-    # Use scipy if available; here we keep it dependency-free.
-    # For pricing we mostly need CDF rather than inv; keep this if you back out mean from line & prob.
-    # Placeholder:
     return sqrt(2) * 0.5 * np.log(p / (1 - p))
 
 
@@ -183,10 +185,8 @@ def _apply_multipliers(row: pd.Series, mk: str, mu_base: float, sigma_base: floa
     rush_epa_z = row.get("def_rush_epa_z")
 
     if mk in {"rush_yards", "rush_att"} and pd.notna(rush_epa_z) and pd.notna(pass_epa_z):
-        # pass-funnel (bad vs pass, good vs run) -> small nudge down for rush volume
         if float(pass_epa_z) >= 0.6 and float(rush_epa_z) <= -0.4:
             mu_mult *= 0.97
-        # run-funnel (bad vs run, good vs pass) -> small nudge up
         if float(rush_epa_z) >= 0.6 and float(pass_epa_z) <= -0.4:
             mu_mult *= 1.03
 
@@ -208,7 +208,6 @@ def _apply_multipliers(row: pd.Series, mk: str, mu_base: float, sigma_base: floa
         mu_mult *= (1.0 + 0.5 * float(pace_z) * 0.02)  # very modest
 
     # --- Game script (win prob) primary RB escalator ---
-    # rows need either team alignment or a direct column with win prob; we try generic:
     wp = row.get("team_win_prob")
     if pd.notna(wp):
         try:
@@ -220,7 +219,7 @@ def _apply_multipliers(row: pd.Series, mk: str, mu_base: float, sigma_base: floa
         except Exception:
             pass
 
-    # --- Coverage/CB / slot/TE boosts (if your pipeline adds flags) ---
+    # --- Coverage/CB / slot/TE boosts ---
     tag = str(row.get("coverage_tag") or "").lower()
     if tag:
         if mk in {"rec_yards"}:
@@ -303,7 +302,7 @@ def price(season: int, props_path: Optional[str] = None):
         if not df.empty:
             df.columns = [c.strip().lower() for c in df.columns]
 
-    # Clamp season in team/player
+    # Clamp season in team/player to 2025
     if "season" in team.columns:
         team = team[team["season"].astype(int) == 2025].copy()
     if "season" in player.columns:
@@ -320,8 +319,7 @@ def price(season: int, props_path: Optional[str] = None):
     # Merge contextuals
     df = props.copy()
 
-    # Optional: standardize keys
-    # expected columns in props: player, team, opponent, event_id, market, line, over_odds, under_odds
+    # ensure expected columns exist
     for need in ("player", "team", "opponent", "market", "line"):
         if need not in df.columns:
             df[need] = pd.NA
@@ -331,33 +329,19 @@ def price(season: int, props_path: Optional[str] = None):
         df = df.merge(roles, on=["player", "team"], how="left")
     if not inj.empty:
         df = df.merge(inj[["player", "status"]], on="player", how="left")
-        # example: clamp WR1 if "Limited" etc. (kept simple here)
 
     if not player.empty:
-        # Bring through anything useful like priors (yprr/ypc etc.) if present; left join on player/team
         df = df.merge(player.drop_duplicates(subset=["player", "team"]), on=["player", "team"], how="left")
 
-    # Join team form by DEF side using opponent mapping if your props rows are offense-centric
-    # If your props already carry 'defense_team' column use that instead of opponent
+    # Join team form: opponent defense context (opp_*) and own offense context (plays_est/proe)
     if not team.empty:
-        # opponent defense context
         opp = team.add_prefix("opp_")
         if "opponent" in df.columns and "opp_team" in opp.columns:
-            df = df.merge(
-                opp,
-                left_on="opponent",
-                right_on="opp_team",
-                how="left",
-                suffixes=("", "")
-            )
-
-        # own offense context (for plays_est/proe if you want)
+            df = df.merge(opp, left_on="opponent", right_on="opp_team", how="left", suffixes=("", ""))
         if "team" in df.columns and "team" in team.columns:
-            df = df.merge(
-                team[["team", "plays_est", "proe"]],
-                on="team",
-                how="left"
-            )
+            df = df.merge(team[["team", "plays_est", "proe", "pace", "def_pass_epa_z", "def_rush_epa_z",
+                                "light_box_rate", "heavy_box_rate", "ay_per_att"]],
+                          on="team", how="left")
 
     # coverage tags (defense level)
     if not cov.empty:
@@ -367,10 +351,7 @@ def price(season: int, props_path: Optional[str] = None):
 
     # CB assignments (receiver-specific)
     if not cba.empty:
-        # assume columns: defense_team, receiver, cb, penalty or quality
-        # unify to penalty in [0..0.25]
         if "penalty" not in cba.columns and "quality" in cba.columns:
-            # map quality->penalty light heuristic
             qmap = {"elite": 0.08, "good": 0.05, "avg": 0.0}
             cba["penalty"] = cba["quality"].map(qmap).fillna(0.0)
         cba = cba.rename(columns={"receiver": "player", "penalty": "cb_penalty"})
@@ -385,21 +366,26 @@ def price(season: int, props_path: Optional[str] = None):
     # game lines (get win prob etc.)
     if not lines.empty and "event_id" in df.columns and "event_id" in lines.columns:
         df = df.merge(lines, on="event_id", how="left")
-        # Build a single win-prob column from home/away depending on team alignment if you have sides:
         if "home_team" in lines.columns and "away_team" in lines.columns and "team" in df.columns:
             df["team_win_prob"] = np.where(
                 df["team"].eq(df["home_team"]), df.get("home_wp", np.nan),
                 np.where(df["team"].eq(df["away_team"]), df.get("away_wp", np.nan), np.nan)
             )
 
-    # Weather (added)
-    wx = _load_weather()
+    # Weather
     if "event_id" in df.columns and not wx.empty:
         df = df.merge(wx, on="event_id", how="left")
     else:
         if "wind_mph" not in df.columns: df["wind_mph"] = np.nan
         if "temp_f" not in df.columns: df["temp_f"] = np.nan
         if "precip" not in df.columns: df["precip"] = np.nan
+
+    # --- Volume × Efficiency blend weight (0..1), default 0.40 ---
+    try:
+        VOLUME_BLEND = float(os.getenv("VOLUME_BLEND", "0.40"))
+        VOLUME_BLEND = max(0.0, min(1.0, VOLUME_BLEND))
+    except Exception:
+        VOLUME_BLEND = 0.40
 
     # Pricing
     out_rows: List[Dict[str, Any]] = []
@@ -428,8 +414,75 @@ def price(season: int, props_path: Optional[str] = None):
         # let base_mu equal line for neutral start; multipliers push it off
         mu0 = float(L)
 
-        mu, sigma = _apply_multipliers(row, mk, mu0, sigma0)
-        p_model_over = _prob_over_at_line(mu, sigma, L)
+        # Apply your existing multipliers (pressure/sack/funnel/coverage/AY/weather/script/etc.)
+        # NOTE: We want the opponent context columns to be plain (not opp_*) for the multiplier.
+        # If opp_* exist, create pass-throughs so _apply_multipliers can read them.
+        # (No change if they already exist without opp_.)
+        if pd.isna(row.get("def_pressure_rate_z")) and not pd.isna(row.get("opp_def_pressure_rate_z")):
+            row["def_pressure_rate_z"] = row.get("opp_def_pressure_rate_z")
+        if pd.isna(row.get("def_sack_rate_z")) and not pd.isna(row.get("opp_def_sack_rate_z")):
+            row["def_sack_rate_z"] = row.get("opp_def_sack_rate_z")
+        if pd.isna(row.get("def_pass_epa_z")) and not pd.isna(row.get("opp_def_pass_epa_z")):
+            row["def_pass_epa_z"] = row.get("opp_def_pass_epa_z")
+        if pd.isna(row.get("def_rush_epa_z")) and not pd.isna(row.get("opp_def_rush_epa_z")):
+            row["def_rush_epa_z"] = row.get("opp_def_rush_epa_z")
+        if pd.isna(row.get("light_box_rate_z")) and not pd.isna(row.get("opp_light_box_rate_z")):
+            row["light_box_rate_z"] = row.get("opp_light_box_rate_z")
+        if pd.isna(row.get("heavy_box_rate_z")) and not pd.isna(row.get("opp_heavy_box_rate_z")):
+            row["heavy_box_rate_z"] = row.get("opp_heavy_box_rate_z")
+        if pd.isna(row.get("ay_per_att_z")) and not pd.isna(row.get("opp_ay_per_att_z")):
+            row["ay_per_att_z"] = row.get("opp_ay_per_att_z")
+
+        mu_anchor, sigma = _apply_multipliers(row, mk, mu0, sigma0)
+
+        # --- NEW: Volume × Efficiency μ and blend ---
+        mu_model = mu_anchor  # default if volume.py not available or returns 0
+        if all([team_volume, player_volume, player_efficiency, volume_mu]):
+            # Build team/opp dicts for helpers
+            team_row = {
+                "plays_est": row.get("plays_est"),
+                "pace": row.get("pace"),
+                "proe": row.get("proe"),
+                "def_pass_epa_z": row.get("def_pass_epa_z"),
+                "def_rush_epa_z": row.get("def_rush_epa_z"),
+                "light_box_rate": row.get("light_box_rate"),
+                "heavy_box_rate": row.get("heavy_box_rate"),
+                "ay_per_att": row.get("ay_per_att"),
+            }
+            # Opponent context for efficiency mods: prefer opp_* if present
+            opp_row = {
+                "def_pass_epa_z": row.get("opp_def_pass_epa_z", row.get("def_pass_epa_z")),
+                "def_rush_epa_z": row.get("opp_def_rush_epa_z", row.get("def_rush_epa_z")),
+                "light_box_rate": row.get("opp_light_box_rate", row.get("light_box_rate")),
+                "heavy_box_rate": row.get("opp_heavy_box_rate", row.get("heavy_box_rate")),
+            }
+            script_wp = row.get("team_win_prob")
+            tv = team_volume(team_row, script_wp=script_wp)
+
+            player_row = {
+                "player": row.get("player"),
+                "team": row.get("team"),
+                "role": row.get("role"),
+                "position": row.get("position"),
+                "tgt_share": row.get("tgt_share"),
+                "route_rate": row.get("route_rate"),
+                "rush_share": row.get("rush_share"),
+                "yprr": row.get("yprr"),
+                "ypt": row.get("ypt"),
+                "ypc": row.get("ypc"),
+                "ypa": row.get("ypa"),
+                "receptions_per_target": row.get("receptions_per_target"),
+                "rz_share": row.get("rz_share"),
+            }
+            eff = player_efficiency(player_row, opp_row, mk)
+            mu_vol = volume_mu(mk, row, tv, player_row if isinstance(player_row, dict) else {}, eff)
+
+            # If helper returned 0 (unknown market), keep anchor; else blend
+            if isinstance(mu_vol, (int, float)) and not np.isnan(mu_vol) and mu_vol != 0.0:
+                mu_model = (1.0 - VOLUME_BLEND) * mu_anchor + VOLUME_BLEND * mu_vol
+
+        # Price at line using blended μ
+        p_model_over = _prob_over_at_line(mu_model, sigma, L)
         p_blend = _blend_probs(p_model_over, p_market_fair)
         fair_over_odds = _fair_odds_from_prob(p_blend)
 
@@ -447,7 +500,7 @@ def price(season: int, props_path: Optional[str] = None):
         elif abs_edge >= 0.01:
             tier = "AMBER"
 
-        # Bet side (simple)
+        # Bet side
         bet_side = "OVER" if p_blend >= 0.5 else "UNDER"
 
         out = {
@@ -459,7 +512,7 @@ def price(season: int, props_path: Optional[str] = None):
             "vegas_over_odds": over_odds,
             "vegas_under_odds": under_odds,
             "vegas_over_fair_pct": p_market_fair,
-            "model_proj": mu,
+            "model_proj": mu_model,
             "model_sd": sigma,
             "model_over_pct": p_model_over,
             "blended_over_pct": p_blend,
