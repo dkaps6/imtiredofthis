@@ -47,6 +47,8 @@ def _import_nflverse():
 NFLV, NFLPKG = _import_nflverse()
 DATA_DIR = "data"
 OUTPATH = os.path.join(DATA_DIR, "player_form.csv")
+METRICS_DIR = "metrics"
+METRICS_OUTPATH = os.path.join(METRICS_DIR, "player_form.csv")
 _CACHE_DIRS = [
     DATA_DIR,
     os.path.join("external", "nflverse_bundle"),
@@ -403,6 +405,7 @@ def main():
     )
     args = parser.parse_args()
     _safe_mkdir(DATA_DIR)
+    _safe_mkdir(METRICS_DIR)
     try:
         df, source_season = build_player_form(
             args.season
@@ -412,7 +415,10 @@ def main():
         df = pd.DataFrame(columns=["player","team","season","source_season","target_share","rush_share","rz_tgt_share","rz_carry_share","ypt","ypc","yprr_proxy","route_rate"])
         source_season = args.season
     df.to_csv(OUTPATH, index=False)
-    print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH}")
+    df.to_csv(METRICS_OUTPATH, index=False)
+    print(
+        f"[make_player_form] Wrote {len(df)} rows → {OUTPATH} and {METRICS_OUTPATH}"
+    )
 
 if __name__ == "__main__":
     with warnings.catch_warnings():
