@@ -7,6 +7,7 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
+DATA_DIR = "data"
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; DepthBot/1.0)"}
 TEAM_OL = {
     "ARI":"arizona-cardinals","ATL":"atlanta-falcons","BAL":"baltimore-ravens","BUF":"buffalo-bills",
@@ -37,19 +38,35 @@ def _fetch_team(team: str) -> list[dict]:
                 if not nm or nm.lower() in ("nan","none"): continue
                 role = f"{pos}1" if j == 0 else (f"{pos}2" if j == 1 else f"{pos}{j+1}")
                 if pos == "WR" and j == 2: role = "SLOT"
-                rows.append({"team": team, "position": pos, "player": nm, "role": role})
+                rows.append({"team": team, "position": pos, "player": nm.replace(".",""), "role": role})
     return rows
 
 def main():
-    Path("data").mkdir(exist_ok=True)
+    Path(DATA_DIR).mkdir(exist_ok=True)
     all_rows = []
     for t in TEAM_OL:
         try:
             all_rows += _fetch_team(t); time.sleep(0.5)
         except Exception as e:
             print(f"[ourlads_depth] {t}: {e}")
-    pd.DataFrame(all_rows).to_csv("data/depth_chart_ourlads.csv", index=False)
-    print(f"[ourlads_depth] wrote rows={len(all_rows)} → data/depth_chart_ourlads.csv"); return 0
+    df = pd.DataFrame(all_rows)
+    df.to_csv(f"{DATA_DIR}/depth_chart_ourlads.csv", index=False)
+    df[["player","team","role"]].to_csv(f"{DATA_DIR}/roles_ourlads.csv", index=False)
+
+    # Merge/update roles.csv if ESPN hasn't run yet
+    try:
+        try:
+            espn = pd.read_csv(f"{DATA_DIR}/roles_espn.csv")
+        except Exception:
+            espn = pd.DataFrame(columns=["player","team","role"])
+        merged = pd.concat([espn, df[["player","team","role"]]], ignore_index=True)
+        merged = merged.drop_duplicates(subset=["player","team"], keep="first")
+        merged.to_csv(f"{DATA_DIR}/roles.csv", index=False)
+    except Exception:
+        pass
+
+    print(f"[ourlads_depth] wrote rows={len(df)} → data/depth_chart_ourlads.csv + roles_ourlads.csv (and roles.csv)")
+    return 0
 
 if __name__ == "__main__":
     raise SystemExit(main())
