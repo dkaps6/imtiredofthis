@@ -26,6 +26,10 @@ except Exception:
 
 OUT_DIR = "metrics"
 OUT_FILE = os.path.join(OUT_DIR, "team_form.csv")
+# Keep a compatibility copy in data/ so downstream joins (make_metrics, engine snapshot)
+# continue to find the table at the historical location.
+DATA_DIR = "data"
+DATA_OUT_FILE = os.path.join(DATA_DIR, "team_form.csv")
 
 
 def _ensure_dir(path: str):
@@ -152,6 +156,7 @@ def _zscore_cols(df: pd.DataFrame, cols) -> pd.DataFrame:
 
 def build_team_form(season: int, strict: bool):
     _ensure_dir(OUT_DIR)
+    _ensure_dir(DATA_DIR)
 
     df = _read_existing_inputs()
     if df is None:
@@ -190,7 +195,10 @@ def build_team_form(season: int, strict: bool):
 
     # Persist (do not drop any extra columns user already had)
     df.to_csv(OUT_FILE, index=False)
-    print(f"[make_team_form] wrote {OUT_FILE} rows={len(df)}")
+    df.to_csv(DATA_OUT_FILE, index=False)
+    print(
+        f"[make_team_form] wrote {OUT_FILE} and {DATA_OUT_FILE} rows={len(df)}"
+    )
 
 
 def main():
