@@ -155,6 +155,43 @@ def _add_plays_est_and_proe(df: pd.DataFrame) -> pd.DataFrame:
                 neutral_pass_col = cand
                 break
 
+def _load_pbp_with_optional_fallback(
+    season: int, allow_fallback: bool
+) -> tuple[pd.DataFrame, int]:
+    """Load PBP for ``season``; optionally fall back to prior seasons."""
+
+    if not allow_fallback:
+        return _load_required_pbp(season)
+
+    earliest_season = 1999
+    candidates = list(range(season, earliest_season - 1, -1))
+    errors: list[str] = []
+    for candidate in candidates:
+        try:
+            pbp, source_season = _load_required_pbp(candidate)
+        except RuntimeError as err:
+            errors.append(f"{candidate}: {err}")
+            continue
+
+        if candidate != season:
+            print(
+                "[make_team_form] ⚠️ Requested season "
+                f"{season} unavailable; falling back to {candidate}."
+            )
+        return pbp, source_season
+
+    tried = ", ".join(str(s) for s in candidates)
+    suffix = "; ".join(errors)
+    message = f"PBP unavailable for requested season; tried {tried}."
+    if suffix:
+        message += f" {suffix}"
+    raise RuntimeError(message)
+
+
+def load_schedules(season: int) -> pd.DataFrame:
+    try:
+        if NFL_PKG == "nflreadpy":
+            sch = NFLV.load_schedules(seasons=[season])
         if neutral_pass_col is not None:
             league_mean = float(pd.to_numeric(df[neutral_pass_col], errors="coerce").mean())
             df["proe"] = (pd.to_numeric(df[neutral_pass_col], errors="coerce") - league_mean).round(4)
@@ -208,6 +245,144 @@ def build_team_form(season: int, strict: bool):
 
     df = _add_plays_est_and_proe(df)
 
+def _empty_weekly_frame() -> pd.DataFrame:
+    return pd.DataFrame(columns=WEEKLY_COLUMNS)
+
+
+def _write_weekly_stub(path: str) -> None:
+    _empty_weekly_frame().to_csv(path, index=False)
+
+
+def _write_weekly_outputs(
+    pbp: pd.DataFrame,
+    source_season: int,
+    requested_season: int,
+    path: str,
+) -> None:
+    """Persist the team/week pace + PROE table or a schema-only placeholder."""
+
+    if pbp.empty:
+        _write_weekly_stub(path)
+        return
+
+    try:
+        w = pbp.copy()
+
+        # neutral-ish filter to avoid garbage-time skew
+        if "down" in w.columns:
+            w = w[w["down"].isin([1, 2])]
+        if "wp" in w.columns:
+            w = w[w["wp"].between(0.2, 0.8, inclusive="both")]
+
+        team_col = "posteam" if "posteam" in w.columns else (
+            "offense_team" if "offense_team" in w.columns else None
+        )
+        if team_col is None or "week" not in w.columns:
+            _write_weekly_stub(path)
+            return
+
+        # plays per team-week
+        plays = (
+            w.groupby([team_col, "week"], dropna=False)["play_id"].size().rename("plays_est")
+        )
+
+        # pace proxy: seconds between snaps if available, else NaN
+        if "game_seconds_remaining" in w.columns:
+            w = w.sort_values([team_col, "game_id", "qtr", "play_id"])
+            gsr_diff = (
+                w.groupby([team_col, "game_id"])["game_seconds_remaining"].diff(-1).abs()
+            )
+            w["gsr_diff"] = gsr_diff
+            pace = (
+                w.groupby([team_col, "week"], dropna=False)["gsr_diff"].mean().rename("pace")
+            )
+        else:
+            pace = plays * 0 + np.nan
+
+        # PROE: pass rate minus league weekly pass rate
+        if "play_type" in w.columns:
+            is_pass = w["play_type"].isin(["pass", "no_play"])
+        else:
+            is_pass = pd.Series(False, index=w.index)
+
+        if len(is_pass) > 0:
+            pass_frame = pd.DataFrame({
+                "is_pass": is_pass,
+                "team": w[team_col].values,
+                "week": w["week"].values,
+            })
+            grouped = (
+                pass_frame.groupby(["team", "week"], dropna=False)["is_pass"]
+                .mean()
+                .rename("pass_rate")
+            )
+            league = (
+                pass_frame.groupby("week", dropna=False)["is_pass"]
+                .mean()
+                .rename("lg_pass_rate_week")
+            )
+            wk = pd.concat([plays, pace, grouped], axis=1).reset_index().rename(
+                columns={team_col: "team"}
+            )
+            wk = wk.merge(league.reset_index(), on="week", how="left")
+            wk["proe"] = wk["pass_rate"] - wk["lg_pass_rate_week"]
+        else:
+            wk = pd.concat([plays, pace], axis=1).reset_index().rename(
+                columns={team_col: "team"}
+            )
+            wk["proe"] = np.nan
+
+        wk_out = wk[["team", "week", "plays_est", "pace", "proe"]].copy()
+        if source_season != requested_season:
+            wk_out["source_season"] = source_season
+
+        wk_out.to_csv(path, index=False)
+    except Exception:
+        _write_weekly_stub(path)
+
+
+# -----------------------------
+# Main builder
+# -----------------------------
+
+def build_team_form(
+    season: int, allow_fallback: bool = False
+) -> tuple[pd.DataFrame, pd.DataFrame, int]:
+    """Return team-form dataframe, the PBP used, and the source season."""
+    print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
+    pbp, source_season = _load_pbp_with_optional_fallback(season, allow_fallback)
+    if pbp.empty:
+        raise RuntimeError("PBP is empty; cannot compute team form.")
+
+    print("[make_team_form] Computing defensive EPA & sack rate ...")
+    def_tbl = compute_def_epa_and_sacks(pbp)
+
+    print("[make_team_form] Computing pace & PROE ...")
+    pace_tbl = compute_pace_and_proe(pbp)
+
+    print("[make_team_form] Computing RZ rate & air yards per att ...")
+    rz_ay_tbl = compute_red_zone_and_airyards(pbp)
+
+    print("[make_team_form] Loading participation/personnel (optional) ...")
+    part = load_participation(source_season)
+    pers_tbl = compute_personnel_rates(pbp, part)
+
+    print("[make_team_form] Merging components ...")
+    out = (
+        def_tbl
+        .merge(pace_tbl, on="team", how="left")
+        .merge(rz_ay_tbl, on="team", how="left")
+        .merge(pers_tbl, on="team", how="left")
+    )
+
+    # add slot rate proxy from roles.csv if present
+    out = merge_slot_rate_from_roles(out)
+
+    # attach season and enforce dtypes
+    out["season"] = int(season)
+    out["source_season"] = int(source_season)
+
+    # Z-score useful continuous features
     # Add z-scores for downstream usage if raw present
     z_cols = [
         "def_pressure_rate",
@@ -236,6 +411,20 @@ def main():
     args = parser.parse_args()
 
     try:
+        df, pbp_used, source_season = build_team_form(
+            args.season,
+            allow_fallback=args.allow_fallback,
+        )
+
+        # --- ADD: plays-weighted season roll-up of weekly pace/proe (non-destructive) ---
+        df = _rollup_weekly_pace_proe(df)
+        # --- END ADD ---
+
+        # --- Weekly writer (persist results or an empty schema) ---
+        weekly_path = os.path.join(DATA_DIR, "team_form_weekly.csv")
+        _write_weekly_outputs(pbp_used, source_season, args.season, weekly_path)
+        # --- END Weekly writer ---
+
         build_team_form(season=args.season, strict=args.strict)
     except Exception as e:
         print(f"[make_team_form] ERROR: {e}", file=sys.stderr)
