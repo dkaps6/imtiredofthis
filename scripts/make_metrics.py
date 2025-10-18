@@ -84,6 +84,9 @@ def _normalize_player_name(x: pd.Series | str) -> pd.Series | str:
     if isinstance(x, pd.Series):
         return x.map(_one)
     return _one(x)
+# --- ADD (utils): stable player key for robust joins ---
+def _player_key_series(s: pd.Series) -> pd.Series:
+    return s.fillna("").astype(str).str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
 
 # --- ADD (utils): stable player key for robust joins ---
 def _player_key_series(s: pd.Series) -> pd.Series:
@@ -127,6 +130,23 @@ def load_props() -> pd.DataFrame:
     # Deduplicate
     keep = ["event_id","player","team","market","line","over_odds","under_odds"]
     df = df[keep + [c for c in df.columns if c not in keep]].drop_duplicates()
+# --- ADD: pivot side rows into over_odds/under_odds if present ---
+    if "side" in df.columns and "price_american" in df.columns:
+        keycols = [c for c in ["event_id","player","team","market","line"] if c in df.columns]
+        if keycols:
+            tmp = df[keycols + ["side","price_american"]].copy()
+            tmp["side"] = tmp["side"].str.upper().str.strip()
+            pvt = tmp.pivot_table(index=keycols, columns="side", values="price_american", aggfunc="first").reset_index()
+            pvt.columns = [("over_odds" if c=="OVER" else "under_odds" if c=="UNDER" else c) for c in pvt.columns]
+            for c in ["over_odds","under_odds"]:
+                if c not in pvt.columns:
+                    pvt[c] = np.nan
+            df = df.merge(pvt, on=keycols, how="left", suffixes=("","_pvt"))
+            for c in ["over_odds","under_odds"]:
+                c_p = c + "_pvt"
+                if c_p in df.columns:
+                    df[c] = df[c].combine_first(df[c_p])
+                    df.drop(columns=[c_p], inplace=True)
 
     # --- ADD: pivot side rows into over_odds/under_odds if present ---
     if "side" in df.columns and "price_american" in df.columns:
@@ -148,7 +168,6 @@ def load_props() -> pd.DataFrame:
                     df[c] = df[c].combine_first(df[c_p])
                     df.drop(columns=[c_p], inplace=True)
     # --- END ADD ---
-
     return df
 
 def load_team_form() -> pd.DataFrame:
@@ -276,37 +295,49 @@ def build_metrics(season: int) -> pd.DataFrame:
     inj = load_injuries()
     wx = load_weather()
     gl = load_game_lines()
-
-    # --- FIX: ensure a 'week' on props (works for Series or NumPy array) ---
-    need_week = ("week" not in props.columns) or pd.isna(props["week"]).all()
+# --- ADD: ensure a 'week' on props (if missing) ---
+    need_week = ("week" not in props.columns) or props["week"].isna().all()
     if need_week and "commence_time" in props.columns:
         props["week"] = pd.to_datetime(
             props["commence_time"], errors="coerce", utc=True
         ).dt.isocalendar().week.astype("Int64")
-    else:
-        # fallback via game_lines if necessary
-        gl_raw = _read_csv(os.path.join("outputs", "game_lines.csv"))
-        if (
-            ("week" not in props.columns or props["week"].isna().all())
-            and not gl_raw.empty and {"event_id","commence_time"}.issubset(gl_raw.columns)
-            and "event_id" in props.columns
-        ):
-            wk_src = gl_raw[["event_id","commence_time"]].dropna().copy()
-            wk_src["week"] = pd.to_datetime(
-                wk_src["commence_time"], errors="coerce", utc=True
+# --- END ADD ---
+
+# --- ADD: build robust player keys on both sides for merges ---
+props["player_key"] = _player_key_series(props.get("player", pd.Series(dtype=object)))
+if not pf.empty:
+    pf["player_key"] = _player_key_series(pf.get("player", pd.Series(dtype=object)))
+# --- END ADD ---
+
+    # --- ADD: ensure a 'week' on props to allow weekly opponent env attach ---
+    need_week = ("week" not in props.columns) or props["week"].isna().all()
+
+    if need_week:
+        # 1) Best: derive from props.commence_time if present
+        if "commence_time" in props.columns:
+            props["week"] = pd.to_datetime(
+                props["commence_time"], errors="coerce", utc=True
             ).dt.isocalendar().week.astype("Int64")
-            props = props.merge(wk_src[["event_id","week"]], on="event_id", how="left", suffixes=("", "_gl"))
-            if "week_gl" in props.columns:
-                props["week"] = props["week"].combine_first(props["week_gl"])
-                props.drop(columns=["week_gl"], inplace=True, errors="ignore")
+        else:
+            # 2) Fallback: raw read of game_lines to grab commence_time → week by event_id
+            gl_raw = _read_csv(os.path.join("outputs", "game_lines.csv"))
+            if not gl_raw.empty and {"event_id","commence_time"}.issubset(gl_raw.columns) and "event_id" in props.columns:
+                wk_src = gl_raw[["event_id","commence_time"]].dropna().copy()
+                wk_src["week"] = pd.to_datetime(
+                    wk_src["commence_time"], errors="coerce", utc=True
+                ).dt.isocalendar().week.astype("Int64")
+                props = props.merge(wk_src[["event_id","week"]], on="event_id", how="left", suffixes=("", "_gl"))
+                if "week_gl" in props.columns:
+                    props["week"] = props["week"].combine_first(props["week_gl"])
+                    props.drop(columns=["week_gl"], inplace=True, errors="ignore")
+
     if "week" not in props.columns:
         props["week"] = pd.Series(pd.array([], dtype="Int64"))
-    # --- END FIX ---
+    # --- END ADD ---
 
-    # --- ADD: robust player keys for merges ---
+    # --- ADD: build robust player keys on both sides for merges ---
     props["player_key"] = _player_key_series(props.get("player", pd.Series(dtype=object)))
-    if not pf.empty:
-        pf["player_key"] = _player_key_series(pf.get("player", pd.Series(dtype=object)))
+    pf["player_key"]    = _player_key_series(pf.get("player", pd.Series(dtype=object))) if not pf.empty else pd.Series([], dtype=object)
     # --- END ADD ---
 
     # if props.team missing entirely, try to backfill from player_form first
@@ -332,6 +363,10 @@ def build_metrics(season: int) -> pd.DataFrame:
         keep_pf = ["player","team","target_share","rush_share","route_rate","yprr_proxy","ypt","ypc",
                    "rz_tgt_share","rz_carry_share","position","role","season","player_key"]
         keep_pf = [c for c in keep_pf if c in pf.columns]
+
+        base = base.merge(pf[keep_pf].drop_duplicates(), on=["player_key"], how="left", suffixes=("","_pf"))
+
+        # 1) robust merge using player_key (non-destructive)
         base = base.merge(pf[keep_pf].drop_duplicates(), on=["player_key"], how="left", suffixes=("","_pf"))
         # backfill props.team if empty
         if "team" in base.columns and "team_pf" in base.columns:
