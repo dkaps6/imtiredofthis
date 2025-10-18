@@ -38,7 +38,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          pip install -r requirements.txt
+          python -m pip cache purge || true
+          python -m pip install -r requirements.txt
+
+      - name: Inspect available nfl_data_py wheels
+        run: |
+          python -m pip index versions nfl_data_py || true
 
       # Optional: show which "engine" Python would import (for debugging only)
       - name: "Diagnostic: which engine would be imported?"

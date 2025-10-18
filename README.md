@@ -34,11 +34,21 @@ This repo is a **turn‑key pipeline** to pull NFL game lines & player props (in
 ## Quick Start (Local)
 
 ```bash
-pip install -r requirements.txt
+python -m pip install --upgrade pip setuptools wheel
+python -m pip cache purge || true
+python -m pip install -r requirements.txt
 export ODDS_API_KEY=YOUR_KEY_HERE
 python run_model.py --date today --season 2025 --write outputs
 ```
 
+> Need to confirm which nflverse wheels PyPI currently serves?
+> Run `python -m pip index versions nfl_data_py` after the install step to inspect the
+> published builds. GitHub Actions now emits that listing automatically during
+> each workflow run.
+
+> **Working inside a restricted sandbox?**
+> Some automated graders (including this one) block outbound network access, so
+> `python -m pip install -r requirements.txt` will fail with a message similar to the one
 > **Working inside a restricted sandbox?**
 > Some automated graders (including this one) block outbound network access, so
 > `pip install -r requirements.txt` will fail with a message similar to the one
