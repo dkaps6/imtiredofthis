@@ -3,7 +3,12 @@
 Build team-level context features for pricing & modeling.
 
 Outputs: data/team_form.csv
-(…docstring unchanged…)
+
+Notes:
+- Computes core team metrics from nflverse (via nflreadpy or nfl_data_py).
+- Supports strict validation (fail if required fields are missing).
+- Fallback sweep merges provider CSVs (ESPN/MSF/APISports/GSIS/Sharp Football).
+- Box counts: if 2025 participation is empty, can backfill ONLY box-rate from prior season (e.g., 2024) with --box-backfill-prev.
 """
 
 from __future__ import annotations
@@ -111,18 +116,39 @@ def _read_csv_safe(path: str) -> pd.DataFrame:
     except Exception:
         return pd.DataFrame()
 
+# NEW: allow a broader set of fallback metrics (incl. Sharp Football)
+MERGE_WHITELIST = set([
+    # core model columns you already use
+    "team","pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
+    "def_pass_epa","def_rush_epa","def_sack_rate","light_box_rate","heavy_box_rate",
+    # extra Sharp Football columns you asked to fallback on:
+    "blitz_rate","sub_package_rate",
+    "motion_rate","play_action_rate","shotgun_rate","no_huddle_rate",
+    "ypt_allowed","wr_ypt_allowed","te_ypt_allowed","rb_ypt_allowed","outside_ypt_allowed","slot_ypt_allowed",
+    "dl_pressure_rate","dl_no_blitz_pressure_rate","dl_ybc_per_rush","dl_stuff_rate",
+    "seconds_per_play","plays_per_game",
+    # alternate naming we map onto existing names:
+    "air_yards_per_att",  # will map to ay_per_att
+])
+
 def _non_destructive_team_merge(base: pd.DataFrame, add: pd.DataFrame) -> pd.DataFrame:
+    """Merge 'add' into 'base' by team without overwriting non-null base values."""
     if _is_empty(add) or "team" not in add.columns: return base
     add = add.copy(); add.columns = [c.lower() for c in add.columns]
-    if "team" in add.columns:
-        add["team"] = add["team"].map(canon_team)
-        add = add[add["team"] != ""]
-    keep = [c for c in [
-        "team","pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
-        "def_pass_epa","def_rush_epa","def_sack_rate","light_box_rate","heavy_box_rate"
-    ] if c in add.columns]
-    if not keep: return base
+
+    # map alternate label to your canonical name
+    if "air_yards_per_att" in add.columns and "ay_per_att" not in add.columns:
+        add["ay_per_att"] = add["air_yards_per_att"]
+
+    # canonicalize team
+    add["team"] = add["team"].map(canon_team)
+    add = add[add["team"] != ""]
+
+    # keep only whitelisted columns that exist in 'add'
+    keep = [c for c in MERGE_WHITELIST if c in add.columns]
+    if "team" not in keep: keep = ["team"] + keep
     add = add[keep].drop_duplicates()
+
     out = base.merge(add, on="team", how="left", suffixes=("","_ext"))
     for c in keep:
         if c == "team": continue
@@ -342,14 +368,13 @@ def _apply_fallback_enrichers(df: pd.DataFrame) -> pd.DataFrame:
         "msf_team_form.csv",
         "apisports_team_form.csv",
         "nflgsis_team_form.csv",
+        "sharp_team_form.csv",  # NEW: Sharp Football multi-table fallback
     ]
     out = df.copy()
     for fn in candidates:
         try:
             ext = _read_csv_safe(os.path.join(DATA_DIR, fn))
             if not _is_empty(ext) and "team" in ext.columns:
-                ext["team"] = ext["team"].astype(str).str.upper().str.strip().map(canon_team)
-                ext = ext[ext["team"] != ""]
                 out = _non_destructive_team_merge(out, ext)
         except Exception:
             continue
@@ -358,7 +383,7 @@ def _apply_fallback_enrichers(df: pd.DataFrame) -> pd.DataFrame:
 # -----------------------------
 # Main builder
 # -----------------------------
-def build_team_form(season: int) -> pd.DataFrame:
+def build_team_form(season: int, box_backfill_prev: bool = False) -> pd.DataFrame:
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
     pbp = load_pbp(season)
     if _is_empty(pbp): raise RuntimeError("PBP is empty; cannot compute team form.")
@@ -374,7 +399,20 @@ def build_team_form(season: int) -> pd.DataFrame:
 
     print("[make_team_form] Loading participation/personnel (optional) ...")
     part = load_participation(season)
-    pers_tbl = compute_personnel_rates(pbp, part)
+
+    # Backfill ONLY for box counts if current season is empty and flag is on
+    part_for_box = part
+    if (part is None or part.empty) and box_backfill_prev:
+        prev = season - 1
+        try:
+            prev_part = load_participation(prev)
+            if prev_part is not None and not prev_part.empty:
+                print(f"[make_team_form] participation {season} empty; backfilling LIGHT/HEAVY box from {prev}")
+                part_for_box = prev_part
+        except Exception:
+            pass
+
+    pers_tbl = compute_personnel_rates(pbp, part_for_box)
 
     print("[make_team_form] Merging components ...")
     # Canonicalize keys BEFORE merge
@@ -433,31 +471,45 @@ def main():
     parser.add_argument("--season", type=int, default=2025)
     parser.add_argument("--allow-missing-box", action="store_true",
                         help="Do not fail if light/heavy box rates are missing (participation feed unavailable).")
+    parser.add_argument("--box-backfill-prev", action="store_true",
+                        help="If current-season participation is empty, backfill box counts from prior season only.")
     args = parser.parse_args()
 
     _safe_mkdir(DATA_DIR)
 
     try:
-        df = build_team_form(args.season)
+        df = build_team_form(args.season, box_backfill_prev=args.box_backfill_prev)
 
-        # Fallback sweep BEFORE strict validation
+        # Fallback sweep BEFORE strict validation (now includes Sharp Football)
         before = df.copy()
         df = _apply_fallback_enrichers(df)
+
+        # Informative log of fills
         try:
             filled = {}
-            for col in ["def_pass_epa","def_rush_epa","def_sack_rate","pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att","light_box_rate","heavy_box_rate"]:
+            track_cols = [
+                "def_pass_epa","def_rush_epa","def_sack_rate","pace","proe",
+                "rz_rate","12p_rate","slot_rate","ay_per_att","light_box_rate","heavy_box_rate",
+                # Sharp extras
+                "blitz_rate","sub_package_rate",
+                "motion_rate","play_action_rate","shotgun_rate","no_huddle_rate",
+                "ypt_allowed","wr_ypt_allowed","te_ypt_allowed","rb_ypt_allowed","outside_ypt_allowed","slot_ypt_allowed",
+                "dl_pressure_rate","dl_no_blitz_pressure_rate","dl_ybc_per_rush","dl_stuff_rate",
+                "seconds_per_play","plays_per_game",
+            ]
+            for col in track_cols:
                 if col in df.columns:
                     was_na = before[col].isna() if col in before.columns else pd.Series(True, index=df.index)
                     now_ok = was_na & df[col].notna()
                     if now_ok.any(): filled[col] = df.loc[now_ok, "team"].tolist()
             if any(filled.values()):
-                print("[make_team_form] Fallbacks filled:", {k: len(v) for k, v in filled.items() if v})
+                print("[make_team_form] Fallbacks filled (counts):", {k: len(v) for k, v in filled.items() if v})
         except Exception:
             pass
 
         _validate_required(df, allow_missing_box=args.allow_missing_box)
 
-        # weekly export (unchanged)
+        # weekly export (unchanged core)
         try:
             pbp = load_pbp(args.season)
             if not _is_empty(pbp):
