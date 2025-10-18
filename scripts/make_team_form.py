@@ -434,6 +434,31 @@ def merge_slot_rate_from_roles(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 # -----------------------------
+# Fallback sweep (NEW)
+# -----------------------------
+def _apply_fallback_enrichers(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Try every known team-form enricher CSV and fill ONLY missing values.
+    Returns a new DataFrame; does not throw.
+    """
+    candidates = [
+        "espn_team_form.csv",
+        "msf_team_form.csv",
+        "apisports_team_form.csv",
+        "nflgsis_team_form.csv",
+    ]
+    out = df.copy()
+    for fn in candidates:
+        try:
+            ext = _read_csv_safe(os.path.join(DATA_DIR, fn))
+            if not _is_empty(ext) and "team" in ext.columns:
+                ext["team"] = ext["team"].astype(str).str.upper().str.strip()
+                out = _non_destructive_team_merge(out, ext)
+        except Exception:
+            continue
+    return out
+
+# -----------------------------
 # Main builder
 # -----------------------------
 
@@ -547,7 +572,24 @@ def main():
     try:
         df = build_team_form(args.season)
 
-        # --- STRICT VALIDATION (default on) ---
+        # 🔁 NEW: fallback sweep BEFORE strict validation
+        before = df.copy()
+        df = _apply_fallback_enrichers(df)
+        try:
+            # small debug summary of what was filled
+            filled = {}
+            for col in ["def_pass_epa","def_rush_epa","def_sack_rate","pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att","light_box_rate","heavy_box_rate"]:
+                if col in df.columns:
+                    was_na = before[col].isna() if col in before.columns else pd.Series(True, index=df.index)
+                    now_ok = was_na & df[col].notna()
+                    if now_ok.any():
+                        filled[col] = df.loc[now_ok, "team"].tolist()
+            if any(filled.values()):
+                print("[make_team_form] Fallbacks filled:", {k: len(v) for k, v in filled.items() if v})
+        except Exception:
+            pass
+
+        # --- STRICT VALIDATION after fallbacks ---
         _validate_required(df, allow_missing_box=args.allow_missing_box)
 
         # --- Also emit per-team, per-week environment safely (optional) ---
@@ -602,16 +644,6 @@ def main():
         ])
         empty.to_csv(OUTPATH, index=False)
         sys.exit(1)
-
-    # --- Optional external enrichers; fill only missing values, never overwrite non-null ---
-    try:
-        for fn in ["espn_team_form.csv", "msf_team_form.csv", "apisports_team_form.csv", "nflgsis_team_form.csv"]:
-            ext = _read_csv_safe(os.path.join(DATA_DIR, fn))
-            if not _is_empty(ext) and "team" in ext.columns:
-                ext["team"] = ext["team"].astype(str).str.upper().str.strip()
-                df = _non_destructive_team_merge(df, ext)
-    except Exception:
-        pass
 
     df.to_csv(OUTPATH, index=False)
     print(f"[make_team_form] Wrote {len(df)} rows → {OUTPATH}")
