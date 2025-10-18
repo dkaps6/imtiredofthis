@@ -56,8 +56,7 @@ jobs:
       # ---------------- Providers that must run BEFORE team_form ----------------
       # GSIS (nflverse) aggregates; allows prior-season box-count backfill
       - name: GSIS (nflverse) aggregates
-        run: |
-          python scripts/providers/gsis_pull.py "${{ inputs.season || '2025' }}" --box-backfill-prev
+        run: python scripts/providers/gsis_pull.py ${{ inputs.season || '2025' }} --box-backfill-prev
 
       # Sharp Football: writes data/sharp_team_form.csv + other sharp_*.csv fallbacks
       - name: Sharp Football team metrics
