@@ -78,6 +78,7 @@ def zscore(df: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
             m = df[c].mean()
             s = df[c].std(ddof=0)
             if s and not np.isclose(s, 0):
+                df[c] = df[c].astype(float)
                 df[c + "_z"] = (df[c] - m) / s
             else:
                 df[c + "_z"] = np.nan
@@ -218,8 +219,7 @@ def compute_def_epa_and_sacks(pbp: pd.DataFrame) -> pd.DataFrame:
     if def_team_col is None or off_team_col is None:
         # Best-effort: try to construct def team from matchup logic if missing
         # If we can't, gracefully return empty.
-        g = pd.DataFrame()
-        return g
+        return pd.DataFrame(columns=["team","def_pass_epa","def_rush_epa","def_sack_rate","games_played"])
 
     # Sacks: many data sets mark with sack == 1 (or qb_hit/sack columns)
     sack_flag = df.get("sack", pd.Series(0, index=df.index)).fillna(0).astype(int)
@@ -227,12 +227,18 @@ def compute_def_epa_and_sacks(pbp: pd.DataFrame) -> pd.DataFrame:
 
     # Aggregate defensive splits
     grp = df.groupby(def_team_col, dropna=False)
+    def_pass = grp.apply(lambda x: x.loc[is_pass.reindex(x.index, fill_value=False), "epa"].mean())
+    def_rush = grp.apply(lambda x: x.loc[is_rush.reindex(x.index, fill_value=False), "epa"].mean())
+    sacks = grp[sack_flag.name].sum()
+    opp_db = grp[dropbacks.name].sum()
+    games = grp["game_id"].nunique() if "game_id" in df.columns else grp.size()
+
     agg = pd.DataFrame({
-        "def_pass_epa": grp.apply(lambda x: x.loc[is_pass.reindex(x.index, fill_value=False), "epa"].mean()),
-        "def_rush_epa": grp.apply(lambda x: x.loc[is_rush.reindex(x.index, fill_value=False), "epa"].mean()),
-        "def_sacks": grp[sack_flag.name].sum(),
-        "opp_dropbacks": grp[dropbacks.name].sum(),
-        "games_played": grp["game_id"].nunique() if "game_id" in df else grp.size()
+        "def_pass_epa": def_pass,
+        "def_rush_epa": def_rush,
+        "def_sacks": sacks,
+        "opp_dropbacks": opp_db,
+        "games_played": games
     }).reset_index().rename(columns={def_team_col: "team"})
 
     agg["def_sack_rate"] = safe_div(agg["def_sacks"], agg["opp_dropbacks"])
@@ -255,26 +261,26 @@ def compute_pace_and_proe(pbp: pd.DataFrame) -> pd.DataFrame:
     # Group by offense team (posteam)
     off_col = "posteam" if "posteam" in dfn else ("offense_team" if "offense_team" in dfn else None)
     if off_col is None:
-        return pd.DataFrame()
+        return pd.DataFrame(columns=["team","pace_neutral","proe"])
 
-    # Pace proxy: plays per minute → seconds per play
-    dfn["_one"] = 1
-    pace_grp = dfn.groupby(off_col, dropna=False)["_one"].sum().rename("neutral_plays").reset_index()
-    # Estimate elapsed neutral time: use quarter clock if available; otherwise approximate by #plays * 24 sec
-    if "game_seconds_remaining" in dfn and "game_seconds_remaining".lower() in dfn:
-        # It's already lowercase; above check is redundant but harmless.
-        pass
-    # Use a crude baseline of 24s per neutral play if timing columns aren't reliable
-    pace_grp["pace_neutral"] = np.where(
-        pace_grp["neutral_plays"] > 0,
-        24.0,  # conservative neutral pace (seconds per snap)
-        np.nan
-    )
+    # --- Pace: try real seconds/snap (delta of game_seconds_remaining); fallback to conservative 24s ---
+    dfn = dfn.sort_values([off_col, "game_id", "qtr", "play_id"], kind="mergesort")
+    grp = dfn.groupby([off_col, "game_id"], dropna=False)
+    if "game_seconds_remaining" in dfn.columns:
+        dfn["__gsr_diff"] = grp["game_seconds_remaining"].diff(-1).abs()
+        pace_per_game = dfn.groupby([off_col, "game_id"], dropna=False)["__gsr_diff"].mean()
+        pace_team = pace_per_game.groupby(level=0).mean().rename("pace_neutral").reset_index()
+    else:
+        neutral_plays = grp.size().groupby(level=0).sum().rename("neutral_plays").reset_index()
+        pace_team = neutral_plays.assign(pace_neutral=np.where(neutral_plays["neutral_plays"] > 0, 24.0, np.nan))
+        pace_team = pace_team.rename(columns={off_col: "team"})
 
-    # PROE: need pass rate minus expected pass rate.
-    # If xp pass prob exists (xpass or pass_probability), use it; else use league-average neutral pass rate.
+    # PROE: need pass rate minus expected pass rate (xpass if available)
     is_pass = dfn.get("pass", pd.Series(False, index=dfn.index)).astype(bool)
-    prate = dfn.groupby(off_col, dropna=False)["pass"].mean() if "pass" in dfn else pd.Series(dtype=float)
+    if "pass" in dfn.columns:
+        prate = dfn.groupby(off_col, dropna=False)["pass"].mean()
+    else:
+        prate = pd.Series(dtype=float)
 
     if "xpass" in dfn:
         xpass = dfn.groupby(off_col, dropna=False)["xpass"].mean()
@@ -286,8 +292,13 @@ def compute_pace_and_proe(pbp: pd.DataFrame) -> pd.DataFrame:
         league_neutral_pass = prate.mean() if len(prate) else 0.55
         proe = prate - league_neutral_pass
 
-    out = pace_grp.merge(proe.rename("proe"), left_on=off_col, right_index=True, how="left")
-    out = out.rename(columns={off_col: "team"})
+    if "team" in pace_team.columns:
+        out = pace_team.merge(proe.rename("proe"), left_on="team", right_index=True, how="left")
+    else:
+        out = prate.reset_index().rename(columns={off_col:"team", "pass":"_tmp"}).drop(columns=["_tmp"])
+        out["pace_neutral"] = np.nan
+        out = out.merge(proe.rename("proe"), on="team", how="left")
+
     return out[["team", "pace_neutral", "proe"]]
 
 
@@ -302,12 +313,13 @@ def compute_red_zone_and_airyards(pbp: pd.DataFrame) -> pd.DataFrame:
     # choose offense team column
     off_col = "posteam" if "posteam" in df.columns else ("offense_team" if "offense_team" in df.columns else None)
     if off_col is None:
-        return pd.DataFrame()
+        return pd.DataFrame(columns=["team","rz_rate","ay_per_att"])
 
     # --- Red-zone rate (snaps inside opp 20) ---
+    yardline = pd.to_numeric(df.get("yardline_100"), errors="coerce")
     rz = (
-        df.assign(yardline_100=pd.to_numeric(df.get("yardline_100"), errors="coerce"))
-          .assign(rz_flag=lambda x: (x["yardline_100"] <= 20).astype(int))
+        df.assign(yardline_100=yardline,
+                  rz_flag=lambda x: (x["yardline_100"] <= 20).astype(int))
           .groupby(off_col, dropna=False)["rz_flag"].mean()
           .rename("rz_rate")
     )
@@ -315,20 +327,17 @@ def compute_red_zone_and_airyards(pbp: pd.DataFrame) -> pd.DataFrame:
     # --- Air yards per attempt (passing plays only) ---
     is_pass = df.get("pass", pd.Series(False, index=df.index)).astype(bool)
     pass_df = df.loc[is_pass].copy()
+    ay = pd.to_numeric(pass_df.get("air_yards"), errors="coerce")
     ay_per_att = (
-        pass_df.assign(air_yards=pd.to_numeric(pass_df.get("air_yards"), errors="coerce"))
+        pass_df.assign(air_yards=ay)
                .groupby(off_col, dropna=False)["air_yards"]
                .mean()
                .rename("ay_per_att")
     )
 
-    # --- Combine outputs ---
-    out = (
-        pd.concat([rz, ay_per_att], axis=1)
-          .reset_index()
-          .rename(columns={off_col: "team"})
-    )
+    out = pd.concat([rz, ay_per_att], axis=1).reset_index().rename(columns={off_col: "team"})
     return out
+
 
 def compute_personnel_rates(pbp: pd.DataFrame, participation: pd.DataFrame) -> pd.DataFrame:
     """
@@ -367,8 +376,8 @@ def compute_personnel_rates(pbp: pd.DataFrame, participation: pd.DataFrame) -> p
                 team_col = cand
                 break
         if box_col and team_col:
-            p["_light"] = (p[box_col].astype(float) <= 6).astype(float)
-            p["_heavy"] = (p[box_col].astype(float) >= 8).astype(float)
+            p["_light"] = (pd.to_numeric(p[box_col], errors="coerce") <= 6).astype(float)
+            p["_heavy"] = (pd.to_numeric(p[box_col], errors="coerce") >= 8).astype(float)
             g = p.groupby(team_col, dropna=False)
             light = g["_light"].mean().rename("light_box_rate")
             heavy = g["_heavy"].mean().rename("heavy_box_rate")
@@ -386,7 +395,7 @@ def merge_slot_rate_from_roles(df: pd.DataFrame) -> pd.DataFrame:
     """
     Optional: derive a team-level slot rate proxy from roles.csv (player-level slot usage).
     roles.csv columns expected: player, team, role (SLOT, WR1, WR2, ...)
-    We count % of WR routes tagged as SLOT to estimate team slot lean.
+    We count % of WR roles labeled SLOT among WR roles.
     """
     roles_path = os.path.join(DATA_DIR, "roles.csv")
     if not os.path.exists(roles_path):
@@ -405,7 +414,7 @@ def merge_slot_rate_from_roles(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
     # crude proxy: fraction of WR roles labeled SLOT among WR roles
-    wr = r[r["role"].isin(["WR1", "WR2", "WR3", "SLOT", "slot", "Wr1", "Wr2", "Wr3"])].copy()
+    wr = r[r["role"].astype(str).str.upper().isin(["WR1", "WR2", "WR3", "SLOT"])].copy()
     wr["is_slot"] = wr["role"].astype(str).str.upper().eq("SLOT").astype(int)
     grp = wr.groupby("team", dropna=False)
     rate = (grp["is_slot"].sum() / grp.size()).rename("slot_rate").reset_index()
@@ -463,7 +472,7 @@ def build_team_form(season: int) -> pd.DataFrame:
     ]
     out = zscore(out, z_cols)
 
-    # rename to match your existing naming expectations where helpful
+    # rename to match your pricing expectations
     out = out.rename(columns={
         "pace_neutral": "pace",
         "personnel_12_rate": "12p_rate"
@@ -474,7 +483,6 @@ def build_team_form(season: int) -> pd.DataFrame:
                   "def_pass_epa", "def_rush_epa", "def_sack_rate",
                   "pace", "proe", "rz_rate", "12p_rate", "slot_rate", "ay_per_att",
                   "light_box_rate", "heavy_box_rate"]
-    # preserve if missing
     ordered = [c for c in cols_first if c in out.columns] + [c for c in out.columns if c not in cols_first]
     out = out[ordered].sort_values(["team"]).reset_index(drop=True)
 
@@ -490,7 +498,8 @@ def main():
 
     try:
         df = build_team_form(args.season)
-                # --- ADDED: also emit per-team, per-week environment safely ---
+
+        # --- Also emit per-team, per-week environment safely (optional) ---
         try:
             pbp = load_pbp(args.season)
             if not pbp.empty:
@@ -516,8 +525,8 @@ def main():
                         pace = plays * 0 + np.nan
 
                     # PROE: pass rate minus league weekly pass rate
-                    is_pass = w['play_type'].isin(['pass', 'no_play']) if 'play_type' in w.columns else pd.Series(False, index=w.index)
-                    if len(is_pass) > 0:
+                    if 'play_type' in w.columns:
+                        is_pass = w['play_type'].isin(['pass', 'no_play'])
                         pr = is_pass.groupby([w[team_col], w['week']]).mean().rename('pass_rate')
                         lg = is_pass.groupby(w['week']).mean().rename('lg_pass_rate_week')
                         wk = pd.concat([plays, pace, pr], axis=1).reset_index().rename(columns={team_col: 'team'})
@@ -539,11 +548,11 @@ def main():
                 pd.DataFrame(columns=['team', 'week', 'plays_est', 'pace', 'proe']).to_csv(os.path.join(DATA_DIR, 'team_form_weekly.csv'), index=False)
             except Exception:
                 pass
-        # --- END ADDED ---
+        # --- END weekly export ---
 
     except Exception as e:
         print(f"[make_team_form] ERROR: {e}", file=sys.stderr)
-        # write empty but schema-like csv to avoid downstream crashes
+        # write empty but schema-like csv to allow validator to decide pass/fail
         empty = pd.DataFrame(columns=[
             "team","season","games_played","def_pass_epa","def_rush_epa","def_sack_rate",
             "pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
@@ -551,7 +560,8 @@ def main():
         ])
         empty.to_csv(OUTPATH, index=False)
         sys.exit(1)
-    # --- ADDED: optional external enrichers; fill only missing values ---
+
+    # --- Optional external enrichers; fill only missing values, never overwrite non-null ---
     try:
         for fn in ["espn_team_form.csv", "msf_team_form.csv", "apisports_team_form.csv", "nflgsis_team_form.csv"]:
             ext = _read_csv_safe(os.path.join(DATA_DIR, fn))
@@ -561,7 +571,6 @@ def main():
     except Exception:
         # enrichment is optional; never crash
         pass
-    # --- END ADDED ---
 
     df.to_csv(OUTPATH, index=False)
     print(f"[make_team_form] Wrote {len(df)} rows → {OUTPATH}")
