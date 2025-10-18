@@ -139,6 +139,40 @@ def _load_required_pbp(season: int) -> tuple[pd.DataFrame, int]:
         + "; ".join(errors) if errors else ""
     )
 
+
+def _load_pbp_with_optional_fallback(
+    season: int, allow_fallback: bool
+) -> tuple[pd.DataFrame, int]:
+    """Load PBP for ``season``; optionally walk back to prior seasons."""
+
+    if not allow_fallback:
+        return _load_required_pbp(season)
+
+    earliest_season = 1999
+    candidates = list(range(season, earliest_season - 1, -1))
+    errors: list[str] = []
+    for candidate in candidates:
+        try:
+            pbp, source_season = _load_required_pbp(candidate)
+        except RuntimeError as err:
+            errors.append(f"{candidate}: {err}")
+            continue
+
+        if candidate != season:
+            print(
+                "[make_player_form] ⚠️ Requested season "
+                f"{season} unavailable; falling back to {candidate}."
+            )
+        return pbp, source_season
+
+    tried = ", ".join(str(s) for s in candidates)
+    suffix = "; ".join(errors)
+    message = f"PBP unavailable for requested season; tried {tried}."
+    if suffix:
+        message += f" {suffix}"
+    raise RuntimeError(message)
+
+
 def load_participation(season:int)->pd.DataFrame:
     cached, source_path = _load_cached_csv("participation", season)
     if not cached.empty:
@@ -375,9 +409,9 @@ def fallback_from_external(base: pd.DataFrame) -> pd.DataFrame:
                 base.drop(columns=[ext_col], inplace=True)
     return base
 
-def build_player_form(season:int)->tuple[pd.DataFrame, int]:
+def build_player_form(season:int, allow_fallback: bool=False)->tuple[pd.DataFrame, int]:
     print(f"[make_player_form] Loading PBP for {season} ({NFLPKG}) ...")
-    pbp, source_season = _load_required_pbp(season)
+    pbp, source_season = _load_pbp_with_optional_fallback(season, allow_fallback)
     if pbp.empty:
         raise RuntimeError("Empty PBP.")
     base = compute_player_usage(pbp)
@@ -405,7 +439,8 @@ def main():
     _safe_mkdir(DATA_DIR)
     try:
         df, source_season = build_player_form(
-            args.season
+            args.season,
+            allow_fallback=args.allow_fallback,
         )
     except Exception as e:
         print(f"[make_player_form] ERROR: {e}", file=sys.stderr)
