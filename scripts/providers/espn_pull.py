@@ -1,19 +1,42 @@
 #!/usr/bin/env python3
 """
-ESPN (unofficial) pull — conservative.
-No key required; endpoints can change. We fetch rosters + a few season stats
-to compute only ypc/ypa where available. Route/targets are typically not provided here.
-
-Outputs:
-  data/espn_team.csv    (team codes)
-  data/espn_player.csv  with: player, team, ypc?, ypa? (others NaN)
+ESPN pull (conservative, unauth endpoints).
+Writes:
+  data/espn_team_form.csv
+  data/espn_player_form.csv
+Schema matches team/player enrichers. Unknown fields remain NaN.
 """
+
 import sys, requests
 from pathlib import Path
 import pandas as pd
 import numpy as np
 
+DATA_DIR = "data"
 TEAMS_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams"
+
+TEAM_COLS = [
+    "team","def_pass_epa","def_rush_epa","def_sack_rate",
+    "pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
+    "light_box_rate","heavy_box_rate"
+]
+PLAYER_COLS = [
+    "player","team",
+    "tgt_share","route_rate","rush_share",
+    "yprr","ypt","ypc","ypa",
+    "receptions_per_target",
+    "rz_share","rz_tgt_share","rz_rush_share",
+]
+
+def _write_csv(path: str, df: pd.DataFrame, cols):
+    out = (df.copy() if isinstance(df, pd.DataFrame) else pd.DataFrame())
+    out.columns = [c.lower() for c in out.columns]
+    for c in cols:
+        if c not in out.columns:
+            out[c] = np.nan
+    out = out[cols]
+    out.to_csv(path, index=False)
+    return out
 
 def _get(url, params=None):
     r = requests.get(url, params=params or {}, timeout=20)
@@ -21,6 +44,9 @@ def _get(url, params=None):
     return r.json()
 
 def main():
+    Path(DATA_DIR).mkdir(exist_ok=True)
+
+    # ---- team list
     teams = []
     try:
         js = _get(TEAMS_URL)
@@ -31,13 +57,11 @@ def main():
     except Exception as e:
         print("[espn_pull] team list failed:", e)
 
-    Path("data").mkdir(exist_ok=True)
-    if teams:
-        pd.DataFrame(teams)[["team"]].drop_duplicates().to_csv("data/espn_team.csv", index=False)
-    else:
-        pd.DataFrame(columns=["team"]).to_csv("data/espn_team.csv", index=False)
+    # write team_form with schema (ESPN doesn't provide these metrics directly)
+    team_df = pd.DataFrame(teams)[["team"]] if teams else pd.DataFrame(columns=["team"])
+    _write_csv(f"{DATA_DIR}/espn_team_form.csv", team_df, TEAM_COLS)
 
-    # Try rosters and per-player simple rushing/passing rates (ypc/ypa)
+    # ---- per-player ypc/ypa if present in roster JSON
     rows = []
     for t in teams:
         tid = t["id"]
@@ -47,37 +71,30 @@ def main():
             for grp in rr:
                 for a in grp.get("items", []):
                     name = a.get("displayName")
-                    pos  = a.get("position", {}).get("abbreviation", "")
-                    # Season stats may or may not be embedded; keep conservative
                     ypc = np.nan; ypa = np.nan
                     try:
                         stats = a.get("statistics", {}).get("splits", {}).get("categories", [])
-                        # heuristic parse
                         for cat in stats:
-                            if cat.get("name","").lower().startswith("rushing"):
+                            nm = (cat.get("name") or "").lower()
+                            if nm.startswith("rushing"):
                                 for stat in cat.get("stats", []):
                                     if stat.get("name") == "yardsPerRushAttempt":
                                         ypc = float(stat.get("value"))
-                            if cat.get("name","").lower().startswith("passing"):
+                            if nm.startswith("passing"):
                                 for stat in cat.get("stats", []):
                                     if stat.get("name") == "yardsPerPassAttempt":
                                         ypa = float(stat.get("value"))
                     except Exception:
                         pass
-                    rows.append({
-                        "player": name, "team": t["team"],
-                        "route_rate": np.nan, "target_share": np.nan, "rush_share": np.nan,
-                        "yprr": np.nan, "ypc": ypc, "ypa": ypa
-                    })
+                    rows.append({"player": name, "team": t["team"], "ypc": ypc, "ypa": ypa})
         except Exception as e:
             print(f"[espn_pull] roster for team {t['team']} failed:", e)
 
-    if rows:
-        pd.DataFrame(rows).to_csv("data/espn_player.csv", index=False)
-        print(f"[espn_pull] wrote data/espn_player.csv rows={len(rows)}")
-    else:
-        pd.DataFrame(columns=["player","team"]).to_csv("data/espn_player.csv", index=False)
-        print("[espn_pull] no players found; wrote empty data/espn_player.csv")
+    ply = pd.DataFrame(rows)
+    _write_csv(f"{DATA_DIR}/espn_player_form.csv", ply, PLAYER_COLS)
+
+    print(f"[espn_pull] wrote team rows={len(team_df)} → data/espn_team_form.csv")
+    print(f"[espn_pull] wrote player rows={len(ply)} → data/espn_player_form.csv")
     return 0
 
 if __name__ == "__main__":
