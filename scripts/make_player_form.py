@@ -13,6 +13,10 @@ Columns written:
 
 Behavior:
 - Primary build from nflverse PBP (real data only).
+- NEW (surgical):
+    * Fill missing POSITION via weekly rosters (2025) from nflreadpy/nfl_data_py.
+    * Infer ROLE if still missing (QB1 / RB1 / RB2 / WR1 / WR2 / TE1 via usage).
+    * Optional override from data/roles.csv (non-destructive).
 - Fallback sweep (non-destructive merges) BEFORE strict validation:
     data/espn_player_form.csv,
     data/msf_player_form.csv,
@@ -28,6 +32,7 @@ import os
 import sys
 import warnings
 from typing import Any, Dict, List
+import re  # added for forgiving team-name normalization
 
 import numpy as np
 import pandas as pd
@@ -124,6 +129,58 @@ def _non_destructive_merge(base: pd.DataFrame, add: pd.DataFrame, keys: List[str
 
 
 # ---------------------------
+# Team canonicalizer (for rosters merge; forgiving)
+# ---------------------------
+VALID = {"ARI","ATL","BAL","BUF","CAR","CHI","CIN","CLE","DAL","DEN","DET","GB","HOU",
+         "IND","JAX","KC","LAC","LAR","LV","MIA","MIN","NE","NO","NYG","NYJ",
+         "PHI","PIT","SEA","SF","TB","TEN","WAS"}
+
+TEAM_NAME_TO_ABBR = {
+    # Abbreviations / historical variants
+    "ARI":"ARI","ARZ":"ARI","ATL":"ATL","BAL":"BAL","BUF":"BUF","CAR":"CAR","CHI":"CHI","CIN":"CIN","CLE":"CLE",
+    "DAL":"DAL","DEN":"DEN","DET":"DET","GB":"GB","GNB":"GB","HOU":"HOU","IND":"IND","JAX":"JAX","JAC":"JAX",
+    "KC":"KC","KCC":"KC","LAC":"LAC","LAR":"LAR","LA":"LAR","LV":"LV","OAK":"LV","LAS":"LV","MIA":"MIA",
+    "MIN":"MIN","NE":"NE","NWE":"NE","NO":"NO","NOR":"NO","NYG":"NYG","NYJ":"NYJ","PHI":"PHI","PIT":"PIT",
+    "SEA":"SEA","SF":"SF","SFO":"SF","TB":"TB","TAM":"TB","TEN":"TEN","WAS":"WAS","WSH":"WAS","WFT":"WAS",
+    # Full names
+    "ARIZONA CARDINALS":"ARI","ATLANTA FALCONS":"ATL","BALTIMORE RAVENS":"BAL","BUFFALO BILLS":"BUF",
+    "CAROLINA PANTHERS":"CAR","CHICAGO BEARS":"CHI","CINCINNATI BENGALS":"CIN","CLEVELAND BROWNS":"CLE",
+    "DALLAS COWBOYS":"DAL","DENVER BRONCOS":"DEN","DETROIT LIONS":"DET","GREEN BAY PACKERS":"GB",
+    "HOUSTON TEXANS":"HOU","INDIANAPOLIS COLTS":"IND","JACKSONVILLE JAGUARS":"JAX","KANSAS CITY CHIEFS":"KC",
+    "LOS ANGELES CHARGERS":"LAC","LOS ANGELES RAMS":"LAR","LAS VEGAS RAIDERS":"LV",
+    "MIAMI DOLPHINS":"MIA","MINNESOTA VIKINGS":"MIN","NEW ENGLAND PATRIOTS":"NE",
+    "NEW ORLEANS SAINTS":"NO","NEW YORK GIANTS":"NYG","NEW YORK JETS":"NYJ","PHILADELPHIA EAGLES":"PHI",
+    "PITTSBURGH STEELERS":"PIT","SEATTLE SEAHAWKS":"SEA","SAN FRANCISCO 49ERS":"SF",
+    "TAMPA BAY BUCCANEERS":"TB","TENNESSEE TITANS":"TEN","WASHINGTON COMMANDERS":"WAS",
+    "WASHINGTON FOOTBALL TEAM":"WAS",
+    # Cities & nicknames
+    "ARIZONA":"ARI","CARDINALS":"ARI","ATLANTA":"ATL","FALCONS":"ATL","BALTIMORE":"BAL","RAVENS":"BAL",
+    "BUFFALO":"BUF","BILLS":"BUF","CAROLINA":"CAR","PANTHERS":"CAR","CHICAGO":"CHI","BEARS":"CHI",
+    "CINCINNATI":"CIN","BENGALS":"CIN","CLEVELAND":"CLE","BROWNS":"CLE","DALLAS":"DAL","COWBOYS":"DAL",
+    "DENVER":"DEN","BRONCOS":"DEN","DETROIT":"DET","LIONS":"DET","GREEN BAY":"GB","PACKERS":"GB",
+    "HOUSTON":"HOU","TEXANS":"HOU","INDIANAPOLIS":"IND","COLTS":"IND","JACKSONVILLE":"JAX","JAGUARS":"JAX",
+    "KANSAS CITY":"KC","CHIEFS":"KC","CHARGERS":"LAC","RAMS":"LAR","LOS ANGELES":"LAR","LAS VEGAS":"LV","RAIDERS":"LV",
+    "MIAMI":"MIA","DOLPHINS":"MIA","MINNESOTA":"MIN","VIKINGS":"MIN","NEW ENGLAND":"NE","PATRIOTS":"NE",
+    "NEW ORLEANS":"NO","SAINTS":"NO","GIANTS":"NYG","JETS":"NYJ","PHILADELPHIA":"PHI","EAGLES":"PHI",
+    "PITTSBURGH":"PIT","STEELERS":"PIT","SEATTLE":"SEA","SEAHAWKS":"SEA","SAN FRANCISCO":"SF","49ERS":"SF",
+    "TAMPA BAY":"TB","BUCCANEERS":"TB","TENNESSEE":"TEN","TITANS":"TEN","WASHINGTON":"WAS","COMMANDERS":"WAS",
+}
+
+def _canon_team(x: str) -> str:
+    if x is None:
+        return ""
+    s = str(x).strip().upper()
+    if s in TEAM_NAME_TO_ABBR:
+        abbr = TEAM_NAME_TO_ABBR[s]
+        return abbr if abbr in VALID else ""
+    s2 = re.sub(r"[^A-Z0-9 ]+", "", s).strip()
+    if s2 in TEAM_NAME_TO_ABBR:
+        abbr = TEAM_NAME_TO_ABBR[s2]
+        return abbr if abbr in VALID else ""
+    return ""
+
+
+# ---------------------------
 # nflverse loader
 # ---------------------------
 
@@ -150,6 +207,106 @@ def load_pbp(season: int) -> pd.DataFrame:
     pbp = _to_pandas(raw)
     pbp.columns = [c.lower() for c in pbp.columns]
     return pbp
+
+def _load_weekly_rosters(season: int) -> pd.DataFrame:
+    """Load weekly rosters and reduce to (player, team, position) with team canon."""
+    try:
+        if NFL_PKG == "nflreadpy":
+            ro = NFLV.load_weekly_rosters(seasons=[season])
+        else:
+            ro = NFLV.import_weekly_rosters([season])  # type: ignore
+        df = _to_pandas(ro)
+    except Exception:
+        return pd.DataFrame()
+    if df is None or df.empty:
+        return pd.DataFrame()
+    df.columns = [c.lower() for c in df.columns]
+    # normalize names & team
+    name_col = "player_name" if "player_name" in df.columns else ("name" if "name" in df.columns else None)
+    if name_col is None:
+        return pd.DataFrame()
+    df["player"] = _norm_name(df[name_col].fillna(""))
+    team_col = "team" if "team" in df.columns else ("recent_team" if "recent_team" in df.columns else None)
+    if team_col is None:
+        return pd.DataFrame()
+    df["team"] = df[team_col].astype(str).str.strip().str.upper().map(_canon_team)
+    df = df[df["team"].isin(VALID)]
+    pos_col = "position" if "position" in df.columns else None
+    if pos_col is None:
+        df["position"] = np.nan
+    else:
+        df["position"] = df[pos_col].astype(str).str.upper().str.strip()
+    # keep latest per player+team if week exists
+    if "week" in df.columns:
+        df = df.sort_values(["player", "team", "week"]).drop_duplicates(["player", "team"], keep="last")
+    return df[["player","team","position"]].drop_duplicates()
+
+def _merge_roles_csv(df: pd.DataFrame) -> pd.DataFrame:
+    """Optional non-destructive override for role from data/roles.csv if present."""
+    roles_path = os.path.join(DATA_DIR, "roles.csv")
+    if not os.path.exists(roles_path):
+        return df
+    try:
+        r = pd.read_csv(roles_path)
+    except Exception:
+        return df
+    r.columns = [c.lower() for c in r.columns]
+    if "player" not in r.columns and "player_name" in r.columns:
+        r = r.rename(columns={"player_name": "player"})
+    need = {"player","team","role"}
+    if not need.issubset(r.columns):
+        return df
+    r["player"] = _norm_name(r["player"].astype(str))
+    r["team"] = r["team"].astype(str).str.upper().str.strip().map(_canon_team)
+    r = r[r["team"].isin(VALID)]
+    # non-destructive: fill only when missing
+    out = df.merge(r[["player","team","role"]], on=["player","team"], how="left", suffixes=("","_roles"))
+    if "role_roles" in out.columns:
+        out["role"] = out["role"].combine_first(out["role_roles"])
+        out.drop(columns=["role_roles"], inplace=True)
+    return out
+
+def _infer_roles_minimal(pf: pd.DataFrame) -> pd.DataFrame:
+    """Fill role if missing using usage-based heuristics within team."""
+    pf = pf.copy()
+    if "role" not in pf.columns:
+        pf["role"] = np.nan
+    # Helper to apply top-2 / top-1 tagging
+    def rank_and_tag(g: pd.DataFrame, mask: pd.Series, score_col: str, tags: List[str]):
+        g = g.copy()
+        idx = g.index[mask]
+        if len(idx) == 0 or score_col not in g.columns:
+            return g
+        scores = g.loc[idx, score_col].astype(float)
+        order = scores.rank(method="first", ascending=False)
+        if len(tags) >= 1:
+            g.loc[idx[order == 1], "role"] = g.loc[idx[order == 1], "role"].fillna(tags[0])
+        if len(tags) >= 2:
+            g.loc[idx[order == 2], "role"] = g.loc[idx[order == 2], "role"].fillna(tags[1])
+        return g
+
+    # Ensure position present for grouping
+    if "position" not in pf.columns:
+        pf["position"] = np.nan
+    pf["position"] = pf["position"].astype(str).str.upper().str.strip()
+
+    out = []
+    for team, g in pf.groupby("team", dropna=False):
+        g = g.copy()
+        # QB1 by dropbacks (fallback: ypa or route_rate if no dropbacks column)
+        if "dropbacks" in g.columns and g["dropbacks"].notna().any():
+            g = rank_and_tag(g, g["position"].eq("QB"), "dropbacks", ["QB1"])
+        elif "ypa" in g.columns and g["ypa"].notna().any():
+            g = rank_and_tag(g, g["position"].eq("QB"), "ypa", ["QB1"])
+        # RB1/RB2 by rush_share
+        if "rush_share" in g.columns and g["rush_share"].notna().any():
+            g = rank_and_tag(g, g["position"].eq("RB"), "rush_share", ["RB1","RB2"])
+        # WR1/WR2 by route_rate
+        if "route_rate" in g.columns and g["route_rate"].notna().any():
+            g = rank_and_tag(g, g["position"].eq("WR"), "route_rate", ["WR1","WR2"])
+            g = rank_and_tag(g, g["position"].eq("TE"), "route_rate", ["TE1"])
+        out.append(g)
+    return pd.concat(out, ignore_index=True) if out else pf
 
 
 # ---------------------------
@@ -182,7 +339,6 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         raise RuntimeError("No offense team column in PBP (posteam/offense_team).")
 
     # ---------------- RECEIVING ----------------
-    # robust pass flag (real schema only)
     is_pass = pbp.get("pass")
     if is_pass is None:
         pt = pbp.get("play_type")
@@ -210,12 +366,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         if "qb_dropback" in rec.columns:
             team_dropbacks = rec.groupby("team", dropna=False)["qb_dropback"].sum(min_count=1).rename("team_dropbacks")
         else:
-            team_dropbacks = (
-                rec.groupby("team", dropna=False)
-                .size()
-                .rename("team_dropbacks")
-                .astype(float)
-            )
+            team_dropbacks = rec.groupby("team", dropna=False).size().rename("team_dropbacks").astype(float)
 
         rply = rec.groupby(["team", "player"], dropna=False).agg(
             targets=("pass_attempt", "sum") if "pass_attempt" in rec.columns else ("player", "size"),
@@ -355,9 +506,10 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         gb = qb.groupby(["team", "player"], dropna=False).agg(
             pass_yards=("yards_gained", "sum"),
             pass_att=("pass_attempt", "sum") if "pass_attempt" in qb.columns else (qb_name_col, "size"),
+            dropbacks=("qb_dropback", "sum") if "qb_dropback" in qb.columns else (qb_name_col, "size"),
         ).reset_index()
         gb["ypa"] = np.where(gb["pass_att"] > 0, gb["pass_yards"] / gb["pass_att"], np.nan)
-        qb_df = gb[["team", "player", "ypa"]]
+        qb_df = gb[["team", "player", "ypa", "dropbacks"]]
 
     # Merge all
     base = pd.merge(rply, rru, on=["team", "player"], how="outer")
@@ -368,6 +520,24 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     base["season"] = int(season)
     base["position"] = np.nan
     base["role"] = np.nan
+
+    # --- NEW: Enrich POSITION from weekly rosters; unify team codes to match base (posteam-style) ---
+    ro = _load_weekly_rosters(season)
+    if not ro.empty:
+        # bring teams to same canon for both sides
+        base["team"] = base["team"].astype(str).str.upper().str.strip().map(_canon_team)
+        ro["team"] = ro["team"].astype(str).str.upper().str.strip().map(_canon_team)
+        base["player"] = _norm_name(base["player"].astype(str))
+        ro["player"]  = _norm_name(ro["player"].astype(str))
+        base = base.merge(ro, on=["player","team"], how="left", suffixes=("","_ro"))
+        if "position_ro" in base.columns:
+            base["position"] = base["position"].combine_first(base["position_ro"])
+            base.drop(columns=["position_ro"], inplace=True, errors="ignore")
+
+    # Optional: merge roles.csv (non-destructive), then infer remaining roles
+    base = _merge_roles_csv(base)
+    if base.get("role", pd.Series(dtype=object)).isna().all():
+        base = _infer_roles_minimal(base)
 
     base = _ensure_cols(base, FINAL_COLS)
     out = (
@@ -400,8 +570,9 @@ def _apply_fallback_enrichers(df: pd.DataFrame) -> pd.DataFrame:
                 ext = ext.rename(columns={"player_name": "player"})
             if not {"player", "team"}.issubset(ext.columns):
                 continue
-            ext["player"] = ext["player"].astype(str).str.strip()
-            ext["team"] = ext["team"].astype(str).str.upper().str.strip()
+            ext["player"] = _norm_name(ext["player"].astype(str))
+            ext["team"] = ext["team"].astype(str).str.upper().str.strip().map(_canon_team)
+            ext = ext[ext["team"].isin(VALID)]
             out = _non_destructive_merge(out, ext, keys=["player", "team"])
         except Exception:
             # best-effort; keep going
