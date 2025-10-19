@@ -9,6 +9,14 @@ Notes:
 - Supports strict validation (fail if required fields are missing).
 - Fallback sweep merges provider CSVs (ESPN/MSF/APISports/GSIS/Sharp Football).
 - Box counts: if 2025 participation is empty, can backfill ONLY box-rate from prior season (e.g., 2024) with --box-backfill-prev.
+
+Patched (surgical, no nukes):
+- Accept external sources that use `team_abbr`/`team_name` by normalizing to `team`.
+- Normalize percent-like columns (e.g., "61%") into floats; convert 0–100 to 0–1 if needed.
+- Make Sharp Football (`sharp_team_form.csv`) run FIRST in the fallback sweep so its
+  `light_box_rate`/`heavy_box_rate` seed the frame; nflverse/nflreadpy fills the rest.
+- Add `_prefer_boxes_from_sharp` post-merge safeguard so Sharp box rates win when present.
+- Add log lines to confirm non-null counts for box rates in CI logs.
 """
 
 from __future__ import annotations
@@ -130,6 +138,38 @@ MERGE_WHITELIST = set([
     # alternate naming we map onto existing names:
     "air_yards_per_att",  # will map to ay_per_att
 ])
+
+# ✨ NEW: external key/percent normalizer (handles team_abbr, team_name, % columns)
+PERCENTY_COLS = {
+    "light_box_rate","heavy_box_rate","neutral_db_rate","neutral_db_rate_last_5",
+    "blitz_rate","sub_package_rate","motion_rate","play_action_rate","shotgun_rate","no_huddle_rate"
+}
+
+def _prep_team_key_and_rates(ext: pd.DataFrame) -> pd.DataFrame:
+    if _is_empty(ext):
+        return ext
+    df = ext.copy()
+    df.columns = [c.strip().lower() for c in df.columns]
+    # team key promotion
+    if "team" not in df.columns:
+        for cand in ("team_abbr","team_name","club_code","offense_team","posteam"):
+            if cand in df.columns:
+                df = df.rename(columns={cand: "team"})
+                break
+    if "team" in df.columns:
+        df["team"] = df["team"].astype(str).str.strip().str.upper().map(canon_team)
+        df = df[df["team"] != ""]
+    # percent-like normalization ("61%" -> 0.61; 61 -> 0.61)
+    for c in [col for col in PERCENTY_COLS if col in df.columns]:
+        ser = df[c].astype(str).str.replace("%","", regex=False).str.strip()
+        ser = pd.to_numeric(ser, errors="coerce")
+        if ser.notna().any() and ser.max(skipna=True) and ser.max(skipna=True) > 1:
+            ser = ser / 100.0
+        df[c] = ser
+    # alias mapping for air yards per attempt
+    if "air_yards_per_att" in df.columns and "ay_per_att" not in df.columns:
+        df["ay_per_att"] = pd.to_numeric(df["air_yards_per_att"], errors="coerce")
+    return df
 
 def _non_destructive_team_merge(base: pd.DataFrame, add: pd.DataFrame) -> pd.DataFrame:
     """Merge 'add' into 'base' by team without overwriting non-null base values."""
@@ -399,24 +439,52 @@ def merge_slot_rate_from_roles(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 # -----------------------------
-# Fallback sweep
+# Fallback sweep (Sharp FIRST) + prefer Sharp boxes
 # -----------------------------
 def _apply_fallback_enrichers(df: pd.DataFrame) -> pd.DataFrame:
     candidates = [
+        "sharp_team_form.csv",        # << Sharp first so box rates seed the frame
         "espn_team_form.csv",
         "msf_team_form.csv",
         "apisports_team_form.csv",
         "nflgsis_team_form.csv",
-        "sharp_team_form.csv",  # NEW: Sharp Football multi-table fallback
     ]
     out = df.copy()
     for fn in candidates:
         try:
-            ext = _read_csv_safe(os.path.join(DATA_DIR, fn))
-            if not _is_empty(ext) and "team" in ext.columns:
+            ext_path = os.path.join(DATA_DIR, fn)
+            ext = _read_csv_safe(ext_path)
+            if _is_empty(ext):
+                continue
+            ext = _prep_team_key_and_rates(ext)  # normalize `team` + percent columns
+            if "team" in ext.columns:
                 out = _non_destructive_team_merge(out, ext)
-        except Exception:
+            else:
+                print(f"[make_team_form] skip {fn}: no team key", file=sys.stderr)
+        except Exception as e:
+            print(f"[make_team_form] enrich {fn} error: {e}", file=sys.stderr)
             continue
+    # hard preference for Sharp box rates when present
+    out = _prefer_boxes_from_sharp(out)
+    return out
+
+# NEW: explicitly prefer Sharp's box rates after all merges
+def _prefer_boxes_from_sharp(base: pd.DataFrame) -> pd.DataFrame:
+    shp_path = os.path.join(DATA_DIR, "sharp_team_form.csv")
+    shp = _read_csv_safe(shp_path)
+    if _is_empty(shp):
+        return base
+    shp = _prep_team_key_and_rates(shp)
+    cols = [c for c in ["team","light_box_rate","heavy_box_rate"] if c in shp.columns]
+    if len(cols) < 2:
+        return base
+    shp = shp[cols].drop_duplicates()
+    out = base.merge(shp, on="team", how="left", suffixes=("","_sharp"))
+    for c in ["light_box_rate","heavy_box_rate"]:
+        sc = f"{c}_sharp"
+        if sc in out.columns:
+            out[c] = np.where(out[sc].notna(), out[sc], out.get(c))
+            out.drop(columns=[sc], inplace=True)
     return out
 
 # -----------------------------
@@ -524,6 +592,9 @@ def _validate_required(df: pd.DataFrame, allow_missing_box: bool = False):
             print(f"  - {k}: {v}", file=sys.stderr)
         raise RuntimeError("Required team_form metrics missing; failing per strict policy.")
 
+# -----------------------------
+# Main
+# -----------------------------
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--season", type=int, default=2025)
@@ -538,7 +609,7 @@ def main():
     try:
         df = build_team_form(args.season, box_backfill_prev=args.box_backfill_prev)
 
-        # Fallback sweep BEFORE strict validation (now includes Sharp Football)
+        # Fallback sweep BEFORE strict validation (now includes Sharp Football first)
         before = df.copy()
         df = _apply_fallback_enrichers(df)
 
@@ -567,7 +638,7 @@ def main():
 
         _validate_required(df, allow_missing_box=args.allow_missing_box)
 
-        # weekly export (unchanged core)
+        # Weekly export (unchanged core)
         try:
             pbp = load_pbp(args.season)
             if not _is_empty(pbp):
@@ -599,7 +670,7 @@ def main():
                         wk['team'] = wk['team'].map(canon_team); wk = wk[wk['team'] != ""]
                         wk['proe'] = np.nan
 
-                    wk[['team', 'week', 'plays_est', 'pace', 'proe']].to_csv(os.path.join(DATA_DIR, 'team_form_weekly.csv'), index=False)
+                    pd.DataFrame(wk[['team', 'week', 'plays_est', 'pace', 'proe']]).to_csv(os.path.join(DATA_DIR, 'team_form_weekly.csv'), index=False)
                 else:
                     pd.DataFrame(columns=['team', 'week', 'plays_est', 'pace', 'proe']).to_csv(os.path.join(DATA_DIR, 'team_form_weekly.csv'), index=False)
             else:
@@ -619,6 +690,14 @@ def main():
         ])
         empty.to_csv(OUTPATH, index=False)
         sys.exit(1)
+
+    # CI log: ensure we actually captured Sharp box rates
+    try:
+        for col in ["light_box_rate","heavy_box_rate"]:
+            nn = int(df[col].notna().sum()) if col in df.columns else 0
+            print(f"[make_team_form] {col}: non-null teams = {nn}/32")
+    except Exception:
+        pass
 
     df.to_csv(OUTPATH, index=False)
     print(f"[make_team_form] Wrote {len(df)} rows → {OUTPATH}")
