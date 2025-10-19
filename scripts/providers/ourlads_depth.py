@@ -2,7 +2,7 @@
 # scripts/providers/ourlads_depth.py
 from __future__ import annotations
 from pathlib import Path
-import time, re
+import time, re, os
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
@@ -30,40 +30,69 @@ def _fetch_team(team: str) -> list[dict]:
         heading = table.find_previous("h2")
         pos = (heading.get_text(strip=True).upper() if heading else "UNK")
         dfs = pd.read_html(str(table))
-        if not dfs: continue
+        if not dfs: 
+            continue
         df = dfs[0]
         for i, col in enumerate(df.columns):
-            for j, cell in enumerate(df[col].astype(str).tolist()):
+            col_vals = df[col].astype(str).tolist()
+            for j, cell in enumerate(col_vals):
                 nm = re.sub(r"\s*\(.*?\)", "", cell).strip()
-                if not nm or nm.lower() in ("nan","none"): continue
+                if not nm or nm.lower() in ("nan","none"): 
+                    continue
+                player = nm.replace(".","").strip()
                 role = f"{pos}1" if j == 0 else (f"{pos}2" if j == 1 else f"{pos}{j+1}")
-                if pos == "WR" and j == 2: role = "SLOT"
-                rows.append({"team": team, "position": pos, "player": nm.replace(".",""), "role": role})
+                if pos == "WR" and j == 2: 
+                    role = "SLOT"
+                rows.append({"team": team, "position": pos, "player": player, "role": role})
     return rows
+
+def _normalize_roles_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    out = df.copy()
+    for col in ("player","team","role"):
+        if col not in out.columns:
+            out[col] = pd.NA
+    out["player"] = out["player"].astype(str).str.replace(".","", regex=False).str.strip()
+    out["team"]   = out["team"].astype(str).str.upper().str.strip()
+    out["role"]   = out["role"].astype(str).str.upper().str.strip()
+    out = out[["player","team","role"]]
+    out = out.dropna(subset=["player","team","role"])
+    out = out[out["player"].str.len() > 0]
+    out = out.drop_duplicates(subset=["player","team"], keep="first")
+    return out
 
 def main():
     Path(DATA_DIR).mkdir(exist_ok=True)
     all_rows = []
     for t in TEAM_OL:
         try:
-            all_rows += _fetch_team(t); time.sleep(0.5)
+            all_rows += _fetch_team(t); time.sleep(0.4)
         except Exception as e:
             print(f"[ourlads_depth] {t}: {e}")
     df = pd.DataFrame(all_rows)
     df.to_csv(f"{DATA_DIR}/depth_chart_ourlads.csv", index=False)
-    df[["player","team","role"]].to_csv(f"{DATA_DIR}/roles_ourlads.csv", index=False)
 
-    # Merge/update roles.csv if ESPN hasn't run yet
+    # roles_ourlads.csv
+    try:
+        roles = _normalize_roles_df(df[["player","team","role"]])
+        roles.to_csv(f"{DATA_DIR}/roles_ourlads.csv", index=False)
+    except Exception as e:
+        print(f"[ourlads_depth] roles_ourlads write failed: {e}")
+        roles = pd.DataFrame(columns=["player","team","role"])
+
+    # Merge/update roles.csv (prefer ESPN, but seed roles.csv if ESPN missing)
     try:
         try:
             espn = pd.read_csv(f"{DATA_DIR}/roles_espn.csv")
+            espn = _normalize_roles_df(espn)
         except Exception:
             espn = pd.DataFrame(columns=["player","team","role"])
-        merged = pd.concat([espn, df[["player","team","role"]]], ignore_index=True)
+        merged = pd.concat([espn, roles], ignore_index=True)
         merged = merged.drop_duplicates(subset=["player","team"], keep="first")
         merged.to_csv(f"{DATA_DIR}/roles.csv", index=False)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[ourlads_depth] roles merge failed: {e}")
 
     print(f"[ourlads_depth] wrote rows={len(df)} → data/depth_chart_ourlads.csv + roles_ourlads.csv (and roles.csv)")
     return 0
