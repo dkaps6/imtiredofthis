@@ -26,13 +26,15 @@ import re
 import sys
 import time
 import random
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 import pandas as pd
 import numpy as np
 import requests
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter, Retry
+
+DUMPED_HTML_PATHS: List[str] = []
 
 DATA_DIR = "data"
 
@@ -92,8 +94,10 @@ def _session() -> requests.Session:
 def _dump_html(name: str, html: str):
     try:
         _safe_mkdir(DATA_DIR)
-        with open(os.path.join(DATA_DIR, f"_sharp_dump_{name}.html"), "w", encoding="utf-8") as f:
+        path = os.path.join(DATA_DIR, f"_sharp_dump_{name}.html")
+        with open(path, "w", encoding="utf-8") as f:
             f.write(html or "")
+        DUMPED_HTML_PATHS.append(path)
     except Exception:
         pass
 
@@ -301,25 +305,33 @@ def merge_non_destructive(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFra
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("season", type=int, help="Season (e.g., 2025)")
+    ap.add_argument("season", type=int, nargs="?", default=None, help="Season (e.g., 2025)")
+    ap.add_argument("--season", dest="season_opt", type=int, help="Season (e.g., 2025)")
     args = ap.parse_args()
-    season = int(args.season)
+    season_val = args.season if args.season is not None else args.season_opt
+    if season_val is None:
+        ap.error("season is required (positional or --season)")
+    season = int(season_val)
 
     _safe_mkdir(DATA_DIR)
 
-    def attempt(parse_fn, base_url):
+    parse_status: Dict[str, bool] = {}
+
+    def attempt(key: str, parse_fn, base_url):
         # try base + seasonized candidates
         for u in _maybe_season_url(base_url, season):
             df = parse_fn(u)
             if df is not None and not df.empty:
+                parse_status[key] = True
                 return df
+        parse_status[key] = False
         return pd.DataFrame()
 
-    def_t = attempt(parse_def_tend, URLS["def_tend"])
-    off_t = attempt(parse_off_tend, URLS["off_tend"])
-    cov_p = attempt(parse_coverage_pos, URLS["coverage_pos"])
-    dl    = attempt(parse_dl, URLS["dl"])
-    pace  = attempt(parse_pace, URLS["pace"])
+    def_t = attempt("def_tend", parse_def_tend, URLS["def_tend"])
+    off_t = attempt("off_tend", parse_off_tend, URLS["off_tend"])
+    cov_p = attempt("coverage_pos", parse_coverage_pos, URLS["coverage_pos"])
+    dl    = attempt("dl", parse_dl, URLS["dl"])
+    pace  = attempt("pace", parse_pace, URLS["pace"])
 
     # Write individual CSVs (seasoned)
     if not def_t.empty:  def_t.to_csv(os.path.join(DATA_DIR, f"sharp_def_tend_{season}.csv"), index=False)
@@ -351,9 +363,33 @@ def main():
     ]:
         if c not in sharp.columns: sharp[c] = np.nan
 
+    errors = []
+    if sharp.empty:
+        errors.append("no team rows parsed")
+
+    light_all_null = not sharp["light_box_rate"].notna().any()
+    heavy_all_null = not sharp["heavy_box_rate"].notna().any()
+    if light_all_null:
+        errors.append("light_box_rate column is entirely null")
+    if heavy_all_null:
+        errors.append("heavy_box_rate column is entirely null")
+
+    if errors:
+        status_bits = ", ".join(f"{k}={'ok' if v else 'empty'}" for k, v in sorted(parse_status.items()))
+        dump_bits = ", ".join(sorted(set(DUMPED_HTML_PATHS))) or "none"
+        raise RuntimeError(
+            " ; ".join(errors)
+            + f" | seasonal tables: {status_bits or 'none'}"
+            + f" | html dumps: {dump_bits}"
+        )
+
     sharp.to_csv(os.path.join(DATA_DIR, "sharp_team_form.csv"), index=False)
     print(f"[sharp] wrote {len(sharp)} rows → data/sharp_team_form.csv")
     return 0
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except RuntimeError as exc:
+        print(f"[sharp] abort: {exc}", file=sys.stderr)
+        sys.exit(1)
