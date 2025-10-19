@@ -9,8 +9,15 @@ Writes (seasoned file names):
   data/sharp_def_tend_{season}.csv            # defensive tendencies (blitz/sub + light/heavy box if present)
   data/sharp_off_tend_{season}.csv            # offensive tendencies (motion/PA/shotgun/no-huddle + AY/Att)
   data/sharp_coverage_pos_{season}.csv        # YPT allowed by position/align
-  data/sharp_dl_{season}.csv                  # DL pressure/YBC/stuff
-  data/sharp_pace_{season}.csv                # seconds/play, plays/game
+  data/sharp_dl_{season}.csv                  # DL pressure/YBC/stuff (if available)
+  data/sharp_pace_{season}.csv                # seconds/play, plays/game (if available)
+
+Debug (optional --dump-html):
+  data/_sharp_dump_def_tend_{season}.html
+  data/_sharp_dump_off_tend_{season}.html
+  data/_sharp_dump_coverage_pos_{season}.html
+  data/_sharp_dump_dl_{season}.html
+  data/_sharp_dump_pace_{season}.html
 """
 
 from __future__ import annotations
@@ -19,7 +26,7 @@ import argparse
 import os
 import sys
 import random
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -74,18 +81,20 @@ def _session() -> requests.Session:
     return s
 
 def _maybe_season_url(url: str, season: int) -> list[str]:
+    # Try “as-is”, then ?season=, ?year= patterns
     cands = [url]
     for q in (f"season={season}", f"year={season}", f"Season={season}"):
         sep = "&" if "?" in url else "?"
         cands.append(f"{url}{sep}{q}")
     return cands
 
-def _read_tables_url(url: str) -> List[pd.DataFrame]:
-    """Try multiple ways to get tables; never raise."""
+def _read_tables_url(url: str, dump_path: Optional[str] = None) -> List[pd.DataFrame]:
+    """Try multiple ways to get tables; never raise. Optionally dump HTML for debugging."""
     # A) direct read_html
     try:
         dfs = pd.read_html(url)
-        if dfs: return dfs
+        if dfs:
+            return dfs
     except Exception:
         pass
 
@@ -94,6 +103,12 @@ def _read_tables_url(url: str) -> List[pd.DataFrame]:
     try:
         r = _session().get(url, timeout=25)
         html = r.text
+        if dump_path:
+            try:
+                with open(dump_path, "w", encoding="utf-8") as f:
+                    f.write(html)
+            except Exception:
+                pass
         if r.status_code == 200 and "<table" in html.lower():
             try:
                 dfs = pd.read_html(html)
@@ -160,8 +175,8 @@ def _pick_rate(df: pd.DataFrame, keys: list[str]) -> pd.Series:
             return _clean_pct_or_num(df[c])
     return pd.Series(dtype="float64")
 
-def parse_def_tend(url: str) -> pd.DataFrame:
-    base = _team_abbr_col(_first_team_table(_read_tables_url(url)))
+def parse_def_tend(url: str, dump: Optional[str]) -> pd.DataFrame:
+    base = _team_abbr_col(_first_team_table(_read_tables_url(url, dump)))
     if base.empty:
         return pd.DataFrame(columns=["team","blitz_rate","sub_package_rate","light_box_rate","heavy_box_rate"])
     out = pd.DataFrame({"team": base["team"]})
@@ -180,8 +195,8 @@ def parse_def_tend(url: str) -> pd.DataFrame:
     out["light_box_rate"] = light
     return out.drop_duplicates(subset=["team"])
 
-def parse_off_tend(url: str) -> pd.DataFrame:
-    base = _team_abbr_col(_first_team_table(_read_tables_url(url)))
+def parse_off_tend(url: str, dump: Optional[str]) -> pd.DataFrame:
+    base = _team_abbr_col(_first_team_table(_read_tables_url(url, dump)))
     if base.empty:
         return pd.DataFrame(columns=["team","motion_rate","play_action_rate","shotgun_rate","no_huddle_rate","air_yards_per_att"])
     out = pd.DataFrame({"team": base["team"]})
@@ -198,8 +213,8 @@ def parse_off_tend(url: str) -> pd.DataFrame:
         out["air_yards_per_att"] = np.nan
     return out.drop_duplicates(subset=["team"])
 
-def parse_coverage_pos(url: str) -> pd.DataFrame:
-    base = _team_abbr_col(_first_team_table(_read_tables_url(url)))
+def parse_coverage_pos(url: str, dump: Optional[str]) -> pd.DataFrame:
+    base = _team_abbr_col(_first_team_table(_read_tables_url(url, dump)))
     if base.empty:
         return pd.DataFrame(columns=[
             "team","ypt_allowed","wr_ypt_allowed","te_ypt_allowed","rb_ypt_allowed",
@@ -215,8 +230,8 @@ def parse_coverage_pos(url: str) -> pd.DataFrame:
     out["slot_ypt_allowed"]    = pick("slot","yards","target")
     return out.drop_duplicates(subset=["team"])
 
-def parse_dl(url: str) -> pd.DataFrame:
-    base = _team_abbr_col(_first_team_table(_read_tables_url(url)))
+def parse_dl(url: str, dump: Optional[str]) -> pd.DataFrame:
+    base = _team_abbr_col(_first_team_table(_read_tables_url(url, dump)))
     if base.empty:
         return pd.DataFrame(columns=["team","dl_pressure_rate","dl_no_blitz_pressure_rate","dl_ybc_per_rush","dl_stuff_rate"])
     out = pd.DataFrame({"team": base["team"]})
@@ -231,8 +246,8 @@ def parse_dl(url: str) -> pd.DataFrame:
     out["dl_stuff_rate"]   = _pick_rate(base, ["stuff"])
     return out.drop_duplicates(subset=["team"])
 
-def parse_pace(url: str) -> pd.DataFrame:
-    base = _team_abbr_col(_first_team_table(_read_tables_url(url)))
+def parse_pace(url: str, dump: Optional[str]) -> pd.DataFrame:
+    base = _team_abbr_col(_first_team_table(_read_tables_url(url, dump)))
     if base.empty:
         return pd.DataFrame(columns=["team","seconds_per_play","plays_per_game"])
     def pick_num(keys: list[str]) -> pd.Series:
@@ -263,14 +278,22 @@ def _log_count(name: str, df: pd.DataFrame):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("season", type=int, help="Season (e.g., 2025)")
+    # support both --season and positional
+    ap.add_argument("--season", type=int, help="Season (e.g., 2025)")
+    ap.add_argument("season_pos", nargs="?", type=int, help="Season positional (e.g., 2025)")
+    ap.add_argument("--dump-html", action="store_true", help="Dump fetched HTML to data/_sharp_dump_*.html")
     args = ap.parse_args()
-    season = int(args.season)
+
+    season = args.season if args.season is not None else args.season_pos
+    if season is None:
+        ap.error("season is required (use --season 2025 or positional 2025)")
+
     _safe_mkdir(DATA_DIR)
 
     def attempt(parse_fn, base_url, label):
-        for u in _maybe_season_url(base_url, season):
-            df = parse_fn(u)
+        dump_path = os.path.join(DATA_DIR, f"_sharp_dump_{label}_{season}.html") if args.dump_html else None
+        for u in _maybe_season_url(base_url, int(season)):
+            df = parse_fn(u, dump_path)
             if df is not None and not df.empty:
                 _log_count(label, df)
                 return df
