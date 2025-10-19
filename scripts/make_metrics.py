@@ -11,13 +11,14 @@ Inputs (best-effort; missing inputs won’t crash):
 - data/injuries.csv
 - data/weather.csv
 - outputs/game_lines.csv (preferred) or outputs/odds_game.csv (fallback)
+- (optional) data/team_form_weekly.csv (for opponent week-specific env)
 
 Output:
 - data/metrics_ready.csv
 """
 
 from __future__ import annotations
-import argparse, os, sys, warnings, re
+import argparse, os, sys, warnings, re, traceback
 import pandas as pd
 import numpy as np
 
@@ -54,7 +55,7 @@ def _normalize_team_names(s: pd.Series) -> pd.Series:
     aliases = {
         # books ↔ nflverse
         "WSH": "WAS", "WDC": "WAS",
-        "JAX": "JAC",
+        "JAX": "JAX", "JAC": "JAX",
         "ARZ": "ARI", "AZ": "ARI",
         "LA":  "LAR", "STL": "LAR",
         "LVR": "LV",  "OAK": "LV",
@@ -84,14 +85,10 @@ def _normalize_player_name(x: pd.Series | str) -> pd.Series | str:
     if isinstance(x, pd.Series):
         return x.map(_one)
     return _one(x)
-# --- ADD (utils): stable player key for robust joins ---
-def _player_key_series(s: pd.Series) -> pd.Series:
-    return s.fillna("").astype(str).str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
 
-# --- ADD (utils): stable player key for robust joins ---
 def _player_key_series(s: pd.Series) -> pd.Series:
+    """Stable key for joins; lowercase, alnum only."""
     return s.fillna("").astype(str).str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
-# --- END ADD ---
 
 # ----------------------------
 # Core loaders
@@ -130,12 +127,13 @@ def load_props() -> pd.DataFrame:
     # Deduplicate
     keep = ["event_id","player","team","market","line","over_odds","under_odds"]
     df = df[keep + [c for c in df.columns if c not in keep]].drop_duplicates()
-# --- ADD: pivot side rows into over_odds/under_odds if present ---
+
+    # Pivot side rows into over/under odds if present
     if "side" in df.columns and "price_american" in df.columns:
         keycols = [c for c in ["event_id","player","team","market","line"] if c in df.columns]
         if keycols:
             tmp = df[keycols + ["side","price_american"]].copy()
-            tmp["side"] = tmp["side"].str.upper().str.strip()
+            tmp["side"] = tmp["side"].astype(str).str.upper().str.strip()
             pvt = tmp.pivot_table(index=keycols, columns="side", values="price_american", aggfunc="first").reset_index()
             pvt.columns = [("over_odds" if c=="OVER" else "under_odds" if c=="UNDER" else c) for c in pvt.columns]
             for c in ["over_odds","under_odds"]:
@@ -148,26 +146,6 @@ def load_props() -> pd.DataFrame:
                     df[c] = df[c].combine_first(df[c_p])
                     df.drop(columns=[c_p], inplace=True)
 
-    # --- ADD: pivot side rows into over_odds/under_odds if present ---
-    if "side" in df.columns and "price_american" in df.columns:
-        keycols = [c for c in ["event_id","player","team","market","line"] if c in df.columns]
-        if keycols:
-            tmp = df[keycols + ["side","price_american"]].copy()
-            tmp["side"] = tmp["side"].str.upper().str.strip()
-            pvt = tmp.pivot_table(index=keycols, columns="side", values="price_american", aggfunc="first").reset_index()
-            # normalize column names
-            pvt.columns = [("over_odds" if c=="OVER" else "under_odds" if c=="UNDER" else c) for c in pvt.columns]
-            for c in ["over_odds","under_odds"]:
-                if c not in pvt.columns:
-                    pvt[c] = np.nan
-            # merge back non-destructively
-            df = df.merge(pvt, on=keycols, how="left", suffixes=("","_pvt"))
-            for c in ["over_odds","under_odds"]:
-                c_p = c + "_pvt"
-                if c_p in df.columns:
-                    df[c] = df[c].combine_first(df[c_p])
-                    df.drop(columns=[c_p], inplace=True)
-    # --- END ADD ---
     return df
 
 def load_team_form() -> pd.DataFrame:
@@ -285,60 +263,40 @@ def build_metrics(season: int) -> pd.DataFrame:
             "pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
             "def_pass_epa_opp","def_rush_epa_opp","def_sack_rate_opp","light_box_rate_opp","heavy_box_rate_opp",
             "coverage_top_shadow_opp","coverage_heavy_man_opp","coverage_heavy_zone_opp",
-            "cb_penalty","injury_status","wind_mph","temp_f","precip","team_wp","season"
+            "cb_penalty","injury_status","wind_mph","temp_f","precip","team_wp","season",
+            "week","opp_plays_wk","opp_pace_wk","opp_proe_wk"
         ])
 
-    pf = load_player_form()
-    tf = load_team_form()
+    pf  = load_player_form()
+    tf  = load_team_form()
     cov = load_coverage()
     cba = load_cb_assignments()
     inj = load_injuries()
-    wx = load_weather()
-    gl = load_game_lines()
-# --- ADD: ensure a 'week' on props (if missing) ---
-    need_week = ("week" not in props.columns) or props["week"].isna().all()
-    if need_week and "commence_time" in props.columns:
-        props["week"] = pd.to_datetime(
-            props["commence_time"], errors="coerce", utc=True
-        ).dt.isocalendar().week.astype("Int64")
-# --- END ADD ---
+    wx  = load_weather()
+    gl  = load_game_lines()
 
-# --- ADD: build robust player keys on both sides for merges ---
-props["player_key"] = _player_key_series(props.get("player", pd.Series(dtype=object)))
-if not pf.empty:
-    pf["player_key"] = _player_key_series(pf.get("player", pd.Series(dtype=object)))
-# --- END ADD ---
-
-    # --- ADD: ensure a 'week' on props to allow weekly opponent env attach ---
-    need_week = ("week" not in props.columns) or props["week"].isna().all()
-
-    if need_week:
-        # 1) Best: derive from props.commence_time if present
+    # Week inference for props (if missing)
+    if "week" not in props.columns or props["week"].isna().all():
         if "commence_time" in props.columns:
-            props["week"] = pd.to_datetime(
-                props["commence_time"], errors="coerce", utc=True
-            ).dt.isocalendar().week.astype("Int64")
+            props["week"] = pd.to_datetime(props["commence_time"], errors="coerce", utc=True)\
+                                .dt.isocalendar().week.astype("Int64")
         else:
-            # 2) Fallback: raw read of game_lines to grab commence_time → week by event_id
             gl_raw = _read_csv(os.path.join("outputs", "game_lines.csv"))
             if not gl_raw.empty and {"event_id","commence_time"}.issubset(gl_raw.columns) and "event_id" in props.columns:
                 wk_src = gl_raw[["event_id","commence_time"]].dropna().copy()
-                wk_src["week"] = pd.to_datetime(
-                    wk_src["commence_time"], errors="coerce", utc=True
-                ).dt.isocalendar().week.astype("Int64")
+                wk_src["week"] = pd.to_datetime(wk_src["commence_time"], errors="coerce", utc=True)\
+                                    .dt.isocalendar().week.astype("Int64")
                 props = props.merge(wk_src[["event_id","week"]], on="event_id", how="left", suffixes=("", "_gl"))
                 if "week_gl" in props.columns:
                     props["week"] = props["week"].combine_first(props["week_gl"])
                     props.drop(columns=["week_gl"], inplace=True, errors="ignore")
-
     if "week" not in props.columns:
         props["week"] = pd.Series(pd.array([], dtype="Int64"))
-    # --- END ADD ---
 
-    # --- ADD: build robust player keys on both sides for merges ---
+    # Stable player keys for joins
     props["player_key"] = _player_key_series(props.get("player", pd.Series(dtype=object)))
-    pf["player_key"]    = _player_key_series(pf.get("player", pd.Series(dtype=object))) if not pf.empty else pd.Series([], dtype=object)
-    # --- END ADD ---
+    if not pf.empty:
+        pf["player_key"] = _player_key_series(pf.get("player", pd.Series(dtype=object)))
 
     # if props.team missing entirely, try to backfill from player_form first
     if "team" in props.columns and props["team"].isna().all() and not pf.empty:
@@ -351,29 +309,23 @@ if not pf.empty:
     if "event_id" not in props.columns:
         props["event_id"] = np.nan
 
-    # Base: props + player_form
+    # Base: props + player_form (non-destructive)
     base = props.copy()
-
-    # carry week into base explicitly (safety)
-    if "week" not in base.columns and "week" in props.columns:
-        base["week"] = props["week"]
-
     if not pf.empty:
-        # robust merge using player_key (non-destructive)
         keep_pf = ["player","team","target_share","rush_share","route_rate","yprr_proxy","ypt","ypc",
                    "rz_tgt_share","rz_carry_share","position","role","season","player_key"]
         keep_pf = [c for c in keep_pf if c in pf.columns]
-
         base = base.merge(pf[keep_pf].drop_duplicates(), on=["player_key"], how="left", suffixes=("","_pf"))
-
-        # 1) robust merge using player_key (non-destructive)
-        base = base.merge(pf[keep_pf].drop_duplicates(), on=["player_key"], how="left", suffixes=("","_pf"))
-        # backfill props.team if empty
+        # backfill props.team from pf if missing
         if "team" in base.columns and "team_pf" in base.columns:
             base["team"] = base["team"].combine_first(base["team_pf"])
             base.drop(columns=[c for c in ["team_pf"] if c in base.columns], inplace=True)
 
-    # Attach our team env (pace/proe/rz/12p/slot/ay) — left join, never drop rows
+    # carry week explicitly
+    if "week" not in base.columns and "week" in props.columns:
+        base["week"] = props["week"]
+
+    # Attach team env (pace/proe/rz/12p/slot/ay + boxes)
     if not tf.empty:
         keep_tf = ["team","def_pass_epa","def_rush_epa","def_sack_rate",
                    "pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
@@ -381,17 +333,18 @@ if not pf.empty:
         keep_tf = [c for c in keep_tf if c in tf.columns]
         base = base.merge(tf[keep_tf].drop_duplicates(), on=["team"], how="left")
 
-    # Infer opponent using game lines if possible (keep NaN otherwise)
+    # Infer opponent via game_lines
     base["opponent"] = np.nan
-    base["team_wp"] = np.nan
+    base["team_wp"]  = np.nan
     if "event_id" in base.columns and not gl.empty:
         tmp = base.merge(gl, on="event_id", how="left")
         opp = np.where(tmp.get("team").eq(tmp.get("home_team")), tmp.get("away_team"),
                np.where(tmp.get("team").eq(tmp.get("away_team")), tmp.get("home_team"), np.nan))
         base["opponent"] = _normalize_team_names(pd.Series(opp, index=base.index))
-        base["team_wp"] = np.where(tmp.get("team").eq(tmp.get("home_team")), tmp.get("home_wp"),
-                            np.where(tmp.get("team").eq(tmp.get("away_team")), tmp.get("away_wp"), np.nan))
+        base["team_wp"]  = np.where(tmp.get("team").eq(tmp.get("home_team")), tmp.get("home_wp"),
+                             np.where(tmp.get("team").eq(tmp.get("away_team")), tmp.get("away_wp"), np.nan))
 
+    # Attach opponent defenses (EPA/sacks/boxes)
     if not tf.empty:
         opp_tf = tf.rename(columns={
             "team":"opponent",
@@ -408,6 +361,7 @@ if not pf.empty:
             if c not in base.columns:
                 base[c] = np.nan
 
+    # Coverage tags (opponent defense)
     if not cov.empty and "defense_team" in cov.columns:
         cov2 = cov.rename(columns={"defense_team":"opponent"})
         for c in ["coverage_top_shadow","coverage_heavy_man","coverage_heavy_zone"]:
@@ -439,13 +393,14 @@ if not pf.empty:
         base["injury_status"] = np.nan
 
     # Weather via event_id (keep rows without event_id)
-    wx_keep = ["event_id","wind_mph","temp_f","precip"]
-    if not _read_csv(os.path.join(DATA_DIR,"weather.csv")).empty:
-        w = load_weather()
-        base = base.merge(w[[c for c in wx_keep if c in w.columns]].drop_duplicates(), on="event_id", how="left")
+    w = load_weather()
+    if not w.empty and "event_id" in base.columns:
+        wx_keep = [c for c in ["event_id","wind_mph","temp_f","precip"] if c in w.columns]
+        base = base.merge(w[wx_keep].drop_duplicates(), on="event_id", how="left")
     else:
         for c in ["wind_mph","temp_f","precip"]:
-            base[c] = np.nan
+            if c not in base.columns:
+                base[c] = np.nan
 
     # stamp season explicitly
     base["season"] = season
@@ -476,6 +431,8 @@ def main():
         df = build_metrics(args.season)
     except Exception as e:
         print(f"[make_metrics] ERROR: {e}", file=sys.stderr)
+        traceback.print_exc()
+        # emit empty but schema-correct file so pipeline continues
         df = pd.DataFrame(columns=[
             "event_id","player","team","opponent","market","line","over_odds","under_odds",
             "target_share","rush_share","route_rate","yprr_proxy","ypt","ypc","rz_tgt_share","rz_carry_share","position","role",
@@ -486,9 +443,9 @@ def main():
             "week","opp_plays_wk","opp_pace_wk","opp_proe_wk"
         ])
 
-    # optional: add opponent weekly env (pace/proe/plays_est) if present
+    # Optional: add opponent weekly env (pace/proe/plays_est) if present
     try:
-        tfw = _read_csv(os.path.join("data", "team_form_weekly.csv"))
+        tfw = _read_csv(os.path.join(DATA_DIR, "team_form_weekly.csv"))
         if (
             not df.empty
             and not tfw.empty
