@@ -211,17 +211,44 @@ def _pull_one(kind: str, url: str, season: int) -> Tuple[str, int, Optional[pd.D
 def merge_team_form(season: int, pieces: Dict[str, pd.DataFrame]) -> int:
     """
     Merge available pieces on team_abbr. We only merge what we actually parsed.
+    - Ensures no duplicate 'team_abbr' column
+    - Ensures one row per team_abbr per piece before merging
+    - Deduplicates columns defensively
     """
     base = None
     for k in ("def_tend", "off_tend", "pace", "coverage_pos", "dl", "ol"):
         df = pieces.get(k)
         if df is None or df.empty:
             continue
-        cols = [c for c in df.columns if c not in ("team",)]
-        take = df[["team_abbr"] + cols].copy()
-        base = take if base is None else base.merge(take, on="team_abbr", how="outer")
+
+        df = df.copy()
+        # Make sure we have a single 'team_abbr' key column
+        if "team_abbr" not in df.columns:
+            if "team" in df.columns:
+                df["team_abbr"] = df["team"]
+            else:
+                # nothing to join on; skip this piece
+                continue
+
+        # Drop any duplicate columns by name (including accidental dup 'team_abbr')
+        df = df.loc[:, ~df.columns.duplicated()]
+
+        # Keep only value columns (exclude keys)
+        value_cols = [c for c in df.columns if c not in ("team", "team_abbr")]
+
+        # Select once; ensure single row per team
+        take = df[["team_abbr"] + value_cols].drop_duplicates(subset=["team_abbr"])
+
+        # Merge non-destructively
+        if base is None:
+            base = take
+        else:
+            base = base.merge(take, on="team_abbr", how="outer")
+
     if base is None or base.empty:
         return 0
+
+    # Write merged output
     out_path = os.path.join(DATA_DIR, "sharp_team_form.csv")
     base.to_csv(out_path, index=False)
     return len(base)
