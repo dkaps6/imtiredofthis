@@ -90,6 +90,10 @@ def run_pipeline(season: int = 2025,
     # STEP 1: Fetch data (props + optional providers)
     # -------------------------
     try:
+        # Sharp Football pull must succeed before we fetch props.
+        _run(f"python scripts/providers/sharpfootball_pull.py --season {season}")
+        _assert_nonempty_csv("data/sharp_team_form.csv", "sharp_team_form")
+
         # Your props fetcher is stable—leave it untouched.
         _run("python scripts/fetch_props_oddsapi.py")
 
@@ -101,6 +105,7 @@ def run_pipeline(season: int = 2025,
 
     except Exception as e:
         print(f"[ENGINE] ⚠️ Data fetch step failed: {e}")
+        raise
 
     # -------------------------
     # STEP 2: Build metrics (REQUIRED)

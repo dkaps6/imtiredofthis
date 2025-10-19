@@ -301,9 +301,13 @@ def merge_non_destructive(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFra
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("season", type=int, help="Season (e.g., 2025)")
+    ap.add_argument("season", nargs="?", type=int, help="Season (e.g., 2025)")
+    ap.add_argument("--season", dest="season_flag", type=int, help="Season (e.g., 2025)")
     args = ap.parse_args()
-    season = int(args.season)
+    season = args.season_flag if args.season_flag is not None else args.season
+    if season is None:
+        ap.error("Season is required (pass 2025 or --season 2025)")
+    season = int(season)
 
     _safe_mkdir(DATA_DIR)
 
