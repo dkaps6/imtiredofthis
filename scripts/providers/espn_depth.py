@@ -2,7 +2,7 @@
 # scripts/providers/espn_depth.py
 from __future__ import annotations
 from pathlib import Path
-import re, time
+import re, time, os
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
@@ -24,43 +24,70 @@ def _fetch_team(team: str) -> list[dict]:
     for sec in soup.select("section div.Table__Title"):
         pos = sec.get_text(strip=True).upper()
         table = sec.find_parent("section").select_one("table.Table")
-        if not table: continue
+        if not table: 
+            continue
         dfs = pd.read_html(str(table))
-        if not dfs: continue
+        if not dfs: 
+            continue
         df = dfs[0]
         for col in df.columns:
-            for i, cell in enumerate(df[col].astype(str).tolist()):
+            col_vals = df[col].astype(str).tolist()
+            for i, cell in enumerate(col_vals):
                 nm = re.sub(r"\s*\(.*?\)", "", cell).strip()
-                if not nm or nm.lower() in ("nan", "none"): continue
+                if not nm or nm.lower() in ("nan", "none"): 
+                    continue
+                # normalize
+                player = nm.replace(".","").strip()
                 role = f"{pos}1" if i == 0 else (f"{pos}2" if i == 1 else f"{pos}{i+1}")
-                if pos == "WR" and i == 2: role = "SLOT"
-                rows.append({"team": team, "position": pos, "player": nm.replace(".",""), "role": role})
+                if pos == "WR" and i == 2: 
+                    role = "SLOT"
+                rows.append({"team": team, "position": pos, "player": player, "role": role})
     return rows
+
+def _normalize_roles_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    out = df.copy()
+    for col in ("player","team","role"):
+        if col not in out.columns:
+            out[col] = pd.NA
+    out["player"] = out["player"].astype(str).str.replace(".","", regex=False).str.strip()
+    out["team"]   = out["team"].astype(str).str.upper().str.strip()
+    out["role"]   = out["role"].astype(str).str.upper().str.strip()
+    out = out[["player","team","role"]]
+    out = out.dropna(subset=["player","team","role"])
+    out = out[out["player"].str.len() > 0]
+    out = out.drop_duplicates(subset=["player","team"], keep="first")
+    return out
 
 def main():
     Path(DATA_DIR).mkdir(exist_ok=True)
     all_rows = []
     for t in TEAM_ESPN:
         try:
-            all_rows += _fetch_team(t); time.sleep(0.5)
+            all_rows += _fetch_team(t); time.sleep(0.4)
         except Exception as e:
             print(f"[espn_depth] {t}: {e}")
     df = pd.DataFrame(all_rows)
+    # write raw depth dump
     df.to_csv(f"{DATA_DIR}/depth_chart_espn.csv", index=False)
-    # also emit roles_espn.csv and update merged roles.csv (prefer ESPN over others)
-    df[["player","team","role"]].to_csv(f"{DATA_DIR}/roles_espn.csv", index=False)
+
+    # roles_espn.csv and merged roles.csv (prefer ESPN)
     try:
-        # merge preference: ESPN first, then ourlads
-        espn = pd.read_csv(f"{DATA_DIR}/roles_espn.csv")
+        roles = _normalize_roles_df(df[["player","team","role"]])
+        roles.to_csv(f"{DATA_DIR}/roles_espn.csv", index=False)
+        # merge preference: ESPN first, then ourlads (if present)
         try:
             ol = pd.read_csv(f"{DATA_DIR}/roles_ourlads.csv")
+            ol = _normalize_roles_df(ol)
         except Exception:
-            ol = pd.DataFrame(columns=espn.columns)
-        merged = pd.concat([espn, ol], ignore_index=True)
+            ol = pd.DataFrame(columns=roles.columns)
+        merged = pd.concat([roles, ol], ignore_index=True)
         merged = merged.drop_duplicates(subset=["player","team"], keep="first")
         merged.to_csv(f"{DATA_DIR}/roles.csv", index=False)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[espn_depth] roles merge failed: {e}")
+
     print(f"[espn_depth] wrote rows={len(df)} → data/depth_chart_espn.csv + roles_espn.csv (and roles.csv)")
     return 0
 
