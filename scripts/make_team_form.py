@@ -20,6 +20,7 @@ import os
 import sys
 import warnings
 from typing import List, Any
+import re  # added for robust team-name normalization
 
 import pandas as pd
 import numpy as np
@@ -57,27 +58,55 @@ DATA_DIR = "data"
 OUTPATH = os.path.join(DATA_DIR, "team_form.csv")
 
 # -----------------------------
-# Canonical team mapping
+# Canonical team mapping (expanded + forgiving)
 # -----------------------------
-CANON = {
-    "OAK": "LV", "SD": "LAC", "STL": "LAR", "JAC": "JAX", "WSH": "WAS", "LA": "LAR",
-    "LAS": "LV", "LOS ANGELES": "LAR", "LOS ANGELES RAMS": "LAR", "LOS ANGELES CHARGERS": "LAC",
-    "WASHINGTON": "WAS", "NEW YORK GIANTS": "NYG", "NEW YORK JETS": "NYJ",
-    # occasional alternates you might see in externals:
-    "KCC": "KC", "ARZ": "ARI", "TAM": "TB", "SFO": "SF", "NWE": "NE", "GNB": "GB",
-}
 VALID = {"ARI","ATL","BAL","BUF","CAR","CHI","CIN","CLE","DAL","DEN","DET","GB","HOU",
          "IND","JAX","KC","LAC","LAR","LV","MIA","MIN","NE","NO","NYG","NYJ",
          "PHI","PIT","SEA","SF","TB","TEN","WAS"}
 
+TEAM_NAME_TO_ABBR = {
+    # Abbreviations / historical variants
+    "ARI":"ARI","ARZ":"ARI","ATL":"ATL","BAL":"BAL","BUF":"BUF","CAR":"CAR","CHI":"CHI","CIN":"CIN","CLE":"CLE",
+    "DAL":"DAL","DEN":"DEN","DET":"DET","GB":"GB","GNB":"GB","HOU":"HOU","IND":"IND","JAX":"JAX","JAC":"JAX",
+    "KC":"KC","KCC":"KC","LAC":"LAC","LAR":"LAR","LA":"LAR","LV":"LV","OAK":"LV","LAS":"LV","MIA":"MIA",
+    "MIN":"MIN","NE":"NE","NWE":"NE","NO":"NO","NOR":"NO","NYG":"NYG","NYJ":"NYJ","PHI":"PHI","PIT":"PIT",
+    "SEA":"SEA","SF":"SF","SFO":"SF","TB":"TB","TAM":"TB","TEN":"TEN","WAS":"WAS","WSH":"WAS","WFT":"WAS",
+    # Full official names
+    "ARIZONA CARDINALS":"ARI","ATLANTA FALCONS":"ATL","BALTIMORE RAVENS":"BAL","BUFFALO BILLS":"BUF",
+    "CAROLINA PANTHERS":"CAR","CHICAGO BEARS":"CHI","CINCINNATI BENGALS":"CIN","CLEVELAND BROWNS":"CLE",
+    "DALLAS COWBOYS":"DAL","DENVER BRONCOS":"DEN","DETROIT LIONS":"DET","GREEN BAY PACKERS":"GB",
+    "HOUSTON TEXANS":"HOU","INDIANAPOLIS COLTS":"IND","JACKSONVILLE JAGUARS":"JAX","KANSAS CITY CHIEFS":"KC",
+    "LOS ANGELES CHARGERS":"LAC","LOS ANGELES RAMS":"LAR","LAS VEGAS RAIDERS":"LV",
+    "MIAMI DOLPHINS":"MIA","MINNESOTA VIKINGS":"MIN","NEW ENGLAND PATRIOTS":"NE",
+    "NEW ORLEANS SAINTS":"NO","NEW YORK GIANTS":"NYG","NEW YORK JETS":"NYJ","PHILADELPHIA EAGLES":"PHI",
+    "PITTSBURGH STEELERS":"PIT","SEATTLE SEAHAWKS":"SEA","SAN FRANCISCO 49ERS":"SF",
+    "TAMPA BAY BUCCANEERS":"TB","TENNESSEE TITANS":"TEN","WASHINGTON COMMANDERS":"WAS",
+    "WASHINGTON FOOTBALL TEAM":"WAS",
+    # City-only & nicknames (common scraped variants)
+    "ARIZONA":"ARI","CARDINALS":"ARI","ATLANTA":"ATL","FALCONS":"ATL","BALTIMORE":"BAL","RAVENS":"BAL",
+    "BUFFALO":"BUF","BILLS":"BUF","CAROLINA":"CAR","PANTHERS":"CAR","CHICAGO":"CHI","BEARS":"CHI",
+    "CINCINNATI":"CIN","BENGALS":"CIN","CLEVELAND":"CLE","BROWNS":"CLE","DALLAS":"DAL","COWBOYS":"DAL",
+    "DENVER":"DEN","BRONCOS":"DEN","DETROIT":"DET","LIONS":"DET","GREEN BAY":"GB","PACKERS":"GB",
+    "HOUSTON":"HOU","TEXANS":"HOU","INDIANAPOLIS":"IND","COLTS":"IND","JACKSONVILLE":"JAX","JAGUARS":"JAX",
+    "KANSAS CITY":"KC","CHIEFS":"KC","CHARGERS":"LAC","RAMS":"LAR","LOS ANGELES":"LAR","LAS VEGAS":"LV","RAIDERS":"LV",
+    "MIAMI":"MIA","DOLPHINS":"MIA","MINNESOTA":"MIN","VIKINGS":"MIN","NEW ENGLAND":"NE","PATRIOTS":"NE",
+    "NEW ORLEANS":"NO","SAINTS":"NO","GIANTS":"NYG","JETS":"NYJ","PHILADELPHIA":"PHI","EAGLES":"PHI",
+    "PITTSBURGH":"PIT","STEELERS":"PIT","SEATTLE":"SEA","SEAHAWKS":"SEA","SAN FRANCISCO":"SF","49ERS":"SF",
+    "TAMPA BAY":"TB","BUCCANEERS":"TB","TENNESSEE":"TEN","TITANS":"TEN","WASHINGTON":"WAS","COMMANDERS":"WAS",
+}
 
 def canon_team(x: str) -> str:
     if x is None:
         return ""
     s = str(x).strip().upper()
-    s = CANON.get(s, s)
-    return s if s in VALID else ""
-
+    if s in TEAM_NAME_TO_ABBR:
+        abbr = TEAM_NAME_TO_ABBR[s]
+        return abbr if abbr in VALID else ""
+    s2 = re.sub(r"[^A-Z0-9 ]+", "", s).strip()
+    if s2 in TEAM_NAME_TO_ABBR:
+        abbr = TEAM_NAME_TO_ABBR[s2]
+        return abbr if abbr in VALID else ""
+    return ""
 
 # -----------------------------
 # Helpers
@@ -190,9 +219,25 @@ def _prep_team_key_and_rates(ext: pd.DataFrame) -> pd.DataFrame:
                 df = df.rename(columns={cand: "team"})
                 break
 
+    # attempt strict → forgiving map
+    drop_guard = False
     if "team" in df.columns:
-        df["team"] = df["team"].astype(str).str.strip().str.upper().map(canon_team)
+        raw_team = df["team"].astype(str)
+        df["team"] = raw_team.str.strip().str.upper().map(canon_team)
+        before = len(df)
         df = df[df["team"] != ""]
+        if len(df) == 0 and before > 0:
+            # Rescue path: rebuild team codes from original strings using forgiving map
+            drop_guard = True
+            src = raw_team.str.strip().str.upper()
+            codes = src.map(lambda t: TEAM_NAME_TO_ABBR.get(
+                t,
+                TEAM_NAME_TO_ABBR.get(re.sub(r"[^A-Z0-9 ]+", "", t).strip(), "")
+            ))
+            df = ext.copy()
+            df.columns = [c.strip().lower() for c in df.columns]
+            df["team"] = codes
+            df = df[df["team"].isin(VALID)]
 
     # percent-like normalization ("61%" -> 0.61; "61" -> 0.61)
     for c in [col for col in PERCENTY_COLS if col in df.columns]:
@@ -217,6 +262,9 @@ def _prep_team_key_and_rates(ext: pd.DataFrame) -> pd.DataFrame:
         if k in df.columns and "plays_per_game" not in df.columns:
             df["plays_per_game"] = pd.to_numeric(df[k], errors="coerce")
 
+    if drop_guard:
+        print("[make_team_form] NOTE: Sharp team strings were non-standard; applied forgiving map and rescued codes.")
+
     return df
 
 
@@ -234,8 +282,13 @@ def _non_destructive_team_merge(base: pd.DataFrame, add: pd.DataFrame) -> pd.Dat
     if "airyardsatt" in add.columns and "ay_per_att" not in add.columns:
         add["ay_per_att"] = add["airyardsatt"]
 
-    add["team"] = add["team"].map(canon_team)
-    add = add[add["team"] != ""]
+    # incoming may already be canonical now; still normalize defensively
+    add["team"] = add["team"].astype(str).str.strip().str.upper()
+    add["team"] = add["team"].map(lambda s: TEAM_NAME_TO_ABBR.get(
+        s,
+        TEAM_NAME_TO_ABBR.get(re.sub(r"[^A-Z0-9 ]+", "", s).strip(), s)
+    ))
+    add = add[add["team"].isin(VALID)]
 
     keep = [c for c in MERGE_WHITELIST if c in add.columns]
     if "team" not in keep:
