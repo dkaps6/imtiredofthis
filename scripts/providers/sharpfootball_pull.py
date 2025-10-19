@@ -18,6 +18,12 @@ Debug (optional --dump-html):
   data/_sharp_dump_coverage_pos_{season}.html
   data/_sharp_dump_dl_{season}.html
   data/_sharp_dump_pace_{season}.html
+
+Proxy support (optional):
+  - Env: SHARP_PROXY_BASE (e.g. https://your-proxy.example/fetch?url=)
+         SHARP_PROXY_AUTH_HEADER (e.g. X-Api-Key) [optional]
+         SHARP_PROXY_AUTH_TOKEN  (e.g. abc123)    [optional]
+  - CLI: --proxy-base "https://your-proxy.example/fetch?url="
 """
 
 from __future__ import annotations
@@ -27,6 +33,7 @@ import os
 import sys
 import random
 from typing import List, Optional
+from urllib.parse import quote, urljoin
 
 import numpy as np
 import pandas as pd
@@ -57,7 +64,7 @@ UAS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
 ]
-HEADERS = {
+BASE_HEADERS = {
     "User-Agent": random.choice(UAS),
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/*,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
@@ -76,11 +83,44 @@ URLS = {
 def _safe_mkdir(p: str) -> None:
     os.makedirs(p, exist_ok=True)
 
-def _session() -> requests.Session:
+# ---------- Proxy wiring ----------
+class ProxyCfg:
+    def __init__(self, base: Optional[str], auth_header: Optional[str], auth_token: Optional[str]):
+        self.base = (base or "").strip()
+        self.auth_header = (auth_header or "").strip()
+        self.auth_token = (auth_token or "").strip()
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.base)
+
+    def wrap(self, url: str) -> str:
+        # Accept either style:
+        #   1) base already contains ?url= (e.g., https://proxy/fetch?url=)
+        #   2) base is a path (e.g., https://proxy/fetch/) → append ?url=
+        if "?" in self.base and self.base.endswith("url="):
+            return f"{self.base}{quote(url, safe='')}"
+        if self.base.endswith("?"):
+            return f"{self.base}url={quote(url, safe='')}"
+        # default: ensure trailing slash and append ?url=
+        b = self.base if self.base.endswith("/") else self.base + "/"
+        return f"{b}?url={quote(url, safe='')}"
+
+def _load_proxy_from_env_and_args(args) -> ProxyCfg:
+    base = args.proxy_base or os.getenv("SHARP_PROXY_BASE", "").strip()
+    hdr  = os.getenv("SHARP_PROXY_AUTH_HEADER", "").strip()
+    tok  = os.getenv("SHARP_PROXY_AUTH_TOKEN", "").strip()
+    return ProxyCfg(base, hdr, tok)
+# ----------------------------------
+
+def _session(extra_headers: Optional[dict] = None) -> requests.Session:
     s = requests.Session()
     retries = Retry(total=4, backoff_factor=0.8, status_forcelist=[429, 500, 502, 503, 504])
     s.mount("https://", HTTPAdapter(max_retries=retries))
-    s.headers.update(HEADERS)
+    headers = BASE_HEADERS.copy()
+    if extra_headers:
+        headers.update({k: v for k, v in extra_headers.items() if v})
+    s.headers.update(headers)
     return s
 
 def _maybe_season_url(url: str, season: int) -> list[str]:
@@ -92,8 +132,11 @@ def _maybe_season_url(url: str, season: int) -> list[str]:
     return cands
 
 # === Robust table reading with verbose logging + optional HTML dumps ===
-def _read_tables_url(url: str, dump_path: Optional[str] = None) -> List[pd.DataFrame]:
-    """Try multiple ways to get tables; never raise. Optionally dump HTML for debugging."""
+def _read_tables_url(url: str, dump_path: Optional[str] = None, proxy: Optional[ProxyCfg] = None) -> List[pd.DataFrame]:
+    """Try multiple ways to get tables; never raise. Optionally dump HTML for debugging.
+       If proxy is provided, this function expects the incoming url to already be
+       a proxy-wrapped URL (we'll just request it).
+    """
 
     # A) direct read_html
     try:
@@ -109,7 +152,11 @@ def _read_tables_url(url: str, dump_path: Optional[str] = None) -> List[pd.DataF
     # B) requests + read_html(html)
     html = ""
     try:
-        sess = _session()
+        extra = {}
+        if proxy and proxy.enabled and proxy.auth_header and proxy.auth_token:
+            extra[proxy.auth_header] = proxy.auth_token
+
+        sess = _session(extra_headers=extra)
         r = sess.get(url, timeout=25)
         html = r.text or ""
         print(f"[sharp][requests] status={r.status_code} len={len(html)} :: {url}")
@@ -192,8 +239,8 @@ def _pick_rate(df: pd.DataFrame, keys: list[str]) -> pd.Series:
     return pd.Series(dtype="float64")
 
 # === Page parsers ===
-def parse_def_tend(url: str, dump: Optional[str]) -> pd.DataFrame:
-    base = _team_abbr_col(_first_team_table(_read_tables_url(url, dump)))
+def parse_def_tend(url: str, dump: Optional[str], proxy: Optional[ProxyCfg]) -> pd.DataFrame:
+    base = _team_abbr_col(_first_team_table(_read_tables_url(url, dump, proxy)))
     if base.empty:
         return pd.DataFrame(columns=["team","blitz_rate","sub_package_rate","light_box_rate","heavy_box_rate"])
     out = pd.DataFrame({"team": base["team"]})
@@ -212,8 +259,8 @@ def parse_def_tend(url: str, dump: Optional[str]) -> pd.DataFrame:
     out["light_box_rate"] = light
     return out.drop_duplicates(subset=["team"])
 
-def parse_off_tend(url: str, dump: Optional[str]) -> pd.DataFrame:
-    base = _team_abbr_col(_first_team_table(_read_tables_url(url, dump)))
+def parse_off_tend(url: str, dump: Optional[str], proxy: Optional[ProxyCfg]) -> pd.DataFrame:
+    base = _team_abbr_col(_first_team_table(_read_tables_url(url, dump, proxy)))
     if base.empty:
         return pd.DataFrame(columns=["team","motion_rate","play_action_rate","shotgun_rate","no_huddle_rate","air_yards_per_att"])
     out = pd.DataFrame({"team": base["team"]})
@@ -229,8 +276,8 @@ def parse_off_tend(url: str, dump: Optional[str]) -> pd.DataFrame:
         out["air_yards_per_att"] = np.nan
     return out.drop_duplicates(subset=["team"])
 
-def parse_coverage_pos(url: str, dump: Optional[str]) -> pd.DataFrame:
-    base = _team_abbr_col(_first_team_table(_read_tables_url(url, dump)))
+def parse_coverage_pos(url: str, dump: Optional[str], proxy: Optional[ProxyCfg]) -> pd.DataFrame:
+    base = _team_abbr_col(_first_team_table(_read_tables_url(url, dump, proxy)))
     if base.empty:
         return pd.DataFrame(columns=[
             "team","ypt_allowed","wr_ypt_allowed","te_ypt_allowed","rb_ypt_allowed",
@@ -246,8 +293,8 @@ def parse_coverage_pos(url: str, dump: Optional[str]) -> pd.DataFrame:
     out["slot_ypt_allowed"]    = pick("slot","yards","target")
     return out.drop_duplicates(subset=["team"])
 
-def parse_dl(url: str, dump: Optional[str]) -> pd.DataFrame:
-    base = _team_abbr_col(_first_team_table(_read_tables_url(url, dump)))
+def parse_dl(url: str, dump: Optional[str], proxy: Optional[ProxyCfg]) -> pd.DataFrame:
+    base = _team_abbr_col(_first_team_table(_read_tables_url(url, dump, proxy)))
     if base.empty:
         return pd.DataFrame(columns=["team","dl_pressure_rate","dl_no_blitz_pressure_rate","dl_ybc_per_rush","dl_stuff_rate"])
     out = pd.DataFrame({"team": base["team"]})
@@ -262,8 +309,8 @@ def parse_dl(url: str, dump: Optional[str]) -> pd.DataFrame:
     out["dl_stuff_rate"]   = _pick_rate(base, ["stuff"])
     return out.drop_duplicates(subset=["team"])
 
-def parse_pace(url: str, dump: Optional[str]) -> pd.DataFrame:
-    base = _team_abbr_col(_first_team_table(_read_tables_url(url, dump)))
+def parse_pace(url: str, dump: Optional[str], proxy: Optional[ProxyCfg]) -> pd.DataFrame:
+    base = _team_abbr_col(_first_team_table(_read_tables_url(url, dump, proxy)))
     if base.empty:
         return pd.DataFrame(columns=["team","seconds_per_play","plays_per_game"])
     def pick_num(keys: list[str]) -> pd.Series:
@@ -293,6 +340,18 @@ def merge_non_destructive(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFra
 def _log_count(name: str, df: pd.DataFrame):
     print(f"[sharp] {name:16s} rows={0 if df is None else len(df)}")
 
+# ---------- Candidate URL expansion (proxy-first if configured) ----------
+def _expand_candidates(base_url: str, season: int, proxy: ProxyCfg) -> List[str]:
+    # season variants
+    raw = _maybe_season_url(base_url, season)
+    out: List[str] = []
+    for u in raw:
+        if proxy.enabled:
+            out.append(proxy.wrap(u))  # proxy-first
+        out.append(u)                  # then direct
+    return out
+# ------------------------------------------------------------------------
+
 # === CLI ===
 def main():
     ap = argparse.ArgumentParser()
@@ -300,18 +359,23 @@ def main():
     ap.add_argument("--season", type=int, help="Season (e.g., 2025)")
     ap.add_argument("season_pos", nargs="?", type=int, help="Season positional (e.g., 2025)")
     ap.add_argument("--dump-html", action="store_true", help="Dump fetched HTML to data/_sharp_dump_*.html")
+    ap.add_argument("--proxy-base", type=str, default=None, help="Proxy base (e.g., https://proxy/fetch?url=)")
     args = ap.parse_args()
 
     season = args.season if args.season is not None else args.season_pos
     if season is None:
         ap.error("season is required (use --season 2025 or positional 2025)")
 
+    proxy = _load_proxy_from_env_and_args(args)
+
     _safe_mkdir(DATA_DIR)
 
     def attempt(parse_fn, base_url, label):
+        # generate proxy-first candidates
+        cands = _expand_candidates(base_url, int(season), proxy)
         dump_path = os.path.join(DATA_DIR, f"_sharp_dump_{label}_{season}.html") if args.dump_html else None
-        for u in _maybe_season_url(base_url, int(season)):
-            df = parse_fn(u, dump_path)
+        for u in cands:
+            df = parse_fn(u, dump_path, proxy if u.startswith(proxy.base) and proxy.enabled else None)
             if df is not None and not df.empty:
                 _log_count(label, df)
                 return df
