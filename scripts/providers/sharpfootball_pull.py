@@ -156,6 +156,19 @@ def _normalize_team_col(df: pd.DataFrame) -> pd.DataFrame:
     cols = {c: _slug(c) for c in df.columns}
     df = df.rename(columns=cols)
 
+    # Explicit post-slug rename for known rate fields whose trailing spaces
+    # turn into dangling underscores ("light_box_", "heavy_box_") so the
+    # downstream consumers see canonical names.
+    rate_aliases = {
+        "light_box": "light_box_rate",
+        "light_box_": "light_box_rate",
+        "heavy_box": "heavy_box_rate",
+        "heavy_box_": "heavy_box_rate",
+    }
+    intersect = {k: v for k, v in rate_aliases.items() if k in df.columns}
+    if intersect:
+        df = df.rename(columns=intersect)
+
     # find team column by fuzzy name
     team_col = None
     for cand in df.columns:

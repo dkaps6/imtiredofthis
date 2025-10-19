@@ -154,6 +154,16 @@ def _prep_team_key_and_rates(ext: pd.DataFrame) -> pd.DataFrame:
         return ext
     df = ext.copy()
     df.columns = [c.strip().lower() for c in df.columns]
+    # alias slugged Sharp Football headers before the whitelist filter
+    box_aliases = {
+        "light_box": "light_box_rate",
+        "light_box_": "light_box_rate",
+        "heavy_box": "heavy_box_rate",
+        "heavy_box_": "heavy_box_rate",
+    }
+    rename_cols = {k: v for k, v in box_aliases.items() if k in df.columns and v not in df.columns}
+    if rename_cols:
+        df = df.rename(columns=rename_cols)
     # team key promotion
     if "team" not in df.columns:
         for cand in ("team_abbr","team_name","club_code","offense_team","posteam"):
