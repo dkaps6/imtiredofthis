@@ -1,101 +1,118 @@
 #!/usr/bin/env python3
-# scripts/providers/ourlads_depth.py
-from __future__ import annotations
-from pathlib import Path
-import time, re, os
+# -*- coding: utf-8 -*-
+"""
+Ourlads depth charts → data/roles_ourlads.csv
+
+Surgical changes:
+- Normalize player names (strip suffixes, periods).
+- Guarantee output columns: player, team, role.
+- Defensive coding around their table structure changes.
+"""
+
+import os, sys, re, time
+import warnings
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+from typing import Dict
 
 DATA_DIR = "data"
-HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; DepthBot/1.0)"}
-TEAM_OL = {
-    "ARI":"arizona-cardinals","ATL":"atlanta-falcons","BAL":"baltimore-ravens","BUF":"buffalo-bills",
-    "CAR":"carolina-panthers","CHI":"chicago-bears","CIN":"cincinnati-bengals","CLE":"cleveland-browns",
-    "DAL":"dallas-cowboys","DEN":"denver-broncos","DET":"detroit-lions","GB":"green-bay-packers",
-    "HOU":"houston-texans","IND":"indianapolis-colts","JAX":"jacksonville-jaguars","KC":"kansas-city-chiefs",
-    "LV":"las-vegas-raiders","LAC":"los-angeles-chargers","LAR":"los-angeles-rams",
-    "MIA":"miami-dolphins","MIN":"minnesota-vikings","NE":"new-england-patriots","NO":"new-orleans-saints",
-    "NYG":"new-york-giants","NYJ":"new-york-jets","PHI":"philadelphia-eagles","PIT":"pittsburgh-steelers",
-    "SEA":"seattle-seahawks","SF":"san-francisco-49ers","TB":"tampa-bay-buccaneers","TEN":"tennessee-titans",
-    "WAS":"washington-commanders"
+OUT_ROLES = os.path.join(DATA_DIR, "roles_ourlads.csv")
+
+TEAM_URLS: Dict[str, str] = {
+    "ARI": "https://www.ourlads.com/nfldepthcharts/depthchart/ARI",
+    "ATL": "https://www.ourlads.com/nfldepthcharts/depthchart/ATL",
+    "BAL": "https://www.ourlads.com/nfldepthcharts/depthchart/BAL",
+    "BUF": "https://www.ourlads.com/nfldepthcharts/depthchart/BUF",
+    "CAR": "https://www.ourlads.com/nfldepthcharts/depthchart/CAR",
+    "CHI": "https://www.ourlads.com/nfldepthcharts/depthchart/CHI",
+    "CIN": "https://www.ourlads.com/nfldepthcharts/depthchart/CIN",
+    "CLE": "https://www.ourlads.com/nfldepthcharts/depthchart/CLE",
+    "DAL": "https://www.ourlads.com/nfldepthcharts/depthchart/DAL",
+    "DEN": "https://www.ourlads.com/nfldepthcharts/depthchart/DEN",
+    "DET": "https://www.ourlads.com/nfldepthcharts/depthchart/DET",
+    "GB":  "https://www.ourlads.com/nfldepthcharts/depthchart/GB",
+    "HOU": "https://www.ourlads.com/nfldepthcharts/depthchart/HOU",
+    "IND": "https://www.ourlads.com/nfldepthcharts/depthchart/IND",
+    "JAX": "https://www.ourlads.com/nfldepthcharts/depthchart/JAX",
+    "KC":  "https://www.ourlads.com/nfldepthcharts/depthchart/KC",
+    "LAC": "https://www.ourlads.com/nfldepthcharts/depthchart/LAC",
+    "LAR": "https://www.ourlads.com/nfldepthcharts/depthchart/LAR",
+    "LV":  "https://www.ourlads.com/nfldepthcharts/depthchart/LV",
+    "MIA": "https://www.ourlads.com/nfldepthcharts/depthchart/MIA",
+    "MIN": "https://www.ourlads.com/nfldepthcharts/depthchart/MIN",
+    "NE":  "https://www.ourlads.com/nfldepthcharts/depthchart/NE",
+    "NO":  "https://www.ourlads.com/nfldepthcharts/depthchart/NO",
+    "NYG": "https://www.ourlads.com/nfldepthcharts/depthchart/NYG",
+    "NYJ": "https://www.ourlads.com/nfldepthcharts/depthchart/NYJ",
+    "PHI": "https://www.ourlads.com/nfldepthcharts/depthchart/PHI",
+    "PIT": "https://www.ourlads.com/nfldepthcharts/depthchart/PIT",
+    "SEA": "https://www.ourlads.com/nfldepthcharts/depthchart/SEA",
+    "SF":  "https://www.ourlads.com/nfldepthcharts/depthchart/SF",
+    "TB":  "https://www.ourlads.com/nfldepthcharts/depthchart/TB",
+    "TEN": "https://www.ourlads.com/nfldepthcharts/depthchart/TEN",
+    "WAS": "https://www.ourlads.com/nfldepthcharts/depthchart/WAS",
 }
 
-def _fetch_team(team: str) -> list[dict]:
-    url = f"https://www.ourlads.com/nfldepthcharts/depthchart/{TEAM_OL[team]}"
-    r = requests.get(url, headers=HEADERS, timeout=25); r.raise_for_status()
-    soup = BeautifulSoup(r.text, "lxml")
-    rows = []
-    for table in soup.select("table.dc-table"):
-        heading = table.find_previous("h2")
-        pos = (heading.get_text(strip=True).upper() if heading else "UNK")
-        dfs = pd.read_html(str(table))
-        if not dfs: 
-            continue
-        df = dfs[0]
-        for i, col in enumerate(df.columns):
-            col_vals = df[col].astype(str).tolist()
-            for j, cell in enumerate(col_vals):
-                nm = re.sub(r"\s*\(.*?\)", "", cell).strip()
-                if not nm or nm.lower() in ("nan","none"): 
-                    continue
-                player = nm.replace(".","").strip()
-                role = f"{pos}1" if j == 0 else (f"{pos}2" if j == 1 else f"{pos}{j+1}")
-                if pos == "WR" and j == 2: 
-                    role = "SLOT"
-                rows.append({"team": team, "position": pos, "player": player, "role": role})
-    return rows
+SUFFIX_RE = re.compile(r"\s+(JR|SR|II|III|IV|V)\.?$", flags=re.IGNORECASE)
 
-def _normalize_roles_df(df: pd.DataFrame) -> pd.DataFrame:
-    if df.empty:
-        return df
-    out = df.copy()
-    for col in ("player","team","role"):
-        if col not in out.columns:
-            out[col] = pd.NA
-    out["player"] = out["player"].astype(str).str.replace(".","", regex=False).str.strip()
-    out["team"]   = out["team"].astype(str).str.upper().str.strip()
-    out["role"]   = out["role"].astype(str).str.upper().str.strip()
-    out = out[["player","team","role"]]
-    out = out.dropna(subset=["player","team","role"])
-    out = out[out["player"].str.len() > 0]
-    out = out.drop_duplicates(subset=["player","team"], keep="first")
-    return out
+def _norm_player(name: str) -> str:
+    if not isinstance(name, str):
+        return ""
+    s = name.replace(".", "").strip()
+    s = SUFFIX_RE.sub("", s)
+    s = re.sub(r"\s+", " ", s)
+    return s
+
+def fetch_team_roles(team: str) -> pd.DataFrame:
+    url = TEAM_URLS[team]
+    r = requests.get(url, timeout=20)
+    r.raise_for_status()
+    soup = BeautifulSoup(r.text, "lxml")
+
+    rows = []
+    # Ourlads has rows: <tr><td>Pos</td><td>Player1</td><td>Player2</td>...</tr>
+    for tr in soup.select("table tbody tr"):
+        tds = tr.find_all("td")
+        if len(tds) < 2:
+            continue
+        pos = tds[0].get_text(" ", strip=True).upper()
+        # standardized positions we care about
+        if pos not in {"QB","RB","WR","TE"}:
+            continue
+        for i, td in enumerate(tds[1:], start=1):
+            a = td.find("a")
+            text = a.get_text(" ", strip=True) if a else td.get_text(" ", strip=True)
+            player = _norm_player(text)
+            if not player:
+                continue
+            role = f"{pos}{i}"
+            rows.append({"team": team, "player": player, "role": role})
+
+    return pd.DataFrame(rows)
 
 def main():
-    Path(DATA_DIR).mkdir(exist_ok=True)
-    all_rows = []
-    for t in TEAM_OL:
+    warnings.simplefilter("ignore")
+    os.makedirs(DATA_DIR, exist_ok=True)
+
+    all_roles = []
+    for tm in sorted(TEAM_URLS.keys()):
         try:
-            all_rows += _fetch_team(t); time.sleep(0.4)
+            df = fetch_team_roles(tm)
+            if not df.empty:
+                all_roles.append(df)
         except Exception as e:
-            print(f"[ourlads_depth] {t}: {e}")
-    df = pd.DataFrame(all_rows)
-    df.to_csv(f"{DATA_DIR}/depth_chart_ourlads.csv", index=False)
+            print(f"[ourlads_depth] WARN: failed {tm}: {e}", file=sys.stderr)
+        time.sleep(0.4)
 
-    # roles_ourlads.csv
-    try:
-        roles = _normalize_roles_df(df[["player","team","role"]])
-        roles.to_csv(f"{DATA_DIR}/roles_ourlads.csv", index=False)
-    except Exception as e:
-        print(f"[ourlads_depth] roles_ourlads write failed: {e}")
-        roles = pd.DataFrame(columns=["player","team","role"])
+    if not all_roles:
+        pd.DataFrame(columns=["team","player","role"]).to_csv(OUT_ROLES, index=False)
+        print(f"[ourlads_depth] wrote rows=0 → {OUT_ROLES}")
+        return
 
-    # Merge/update roles.csv (prefer ESPN, but seed roles.csv if ESPN missing)
-    try:
-        try:
-            espn = pd.read_csv(f"{DATA_DIR}/roles_espn.csv")
-            espn = _normalize_roles_df(espn)
-        except Exception:
-            espn = pd.DataFrame(columns=["player","team","role"])
-        merged = pd.concat([espn, roles], ignore_index=True)
-        merged = merged.drop_duplicates(subset=["player","team"], keep="first")
-        merged.to_csv(f"{DATA_DIR}/roles.csv", index=False)
-    except Exception as e:
-        print(f"[ourlads_depth] roles merge failed: {e}")
-
-    print(f"[ourlads_depth] wrote rows={len(df)} → data/depth_chart_ourlads.csv + roles_ourlads.csv (and roles.csv)")
-    return 0
+    roles = pd.concat(all_roles, ignore_index=True).drop_duplicates()
+    roles.to_csv(OUT_ROLES, index=False)
+    print(f"[ourlads_depth] wrote rows={len(roles)} → {OUT_ROLES}")
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
