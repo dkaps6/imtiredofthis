@@ -36,6 +36,7 @@ from requests.adapters import HTTPAdapter, Retry
 
 DATA_DIR = "data"
 
+# === Team normalization ===
 TEAM_NAME_TO_ABBR = {
     "ARIZONA CARDINALS":"ARI","ATLANTA FALCONS":"ATL","BALTIMORE RAVENS":"BAL",
     "BUFFALO BILLS":"BUF","CAROLINA PANTHERS":"CAR","CHICAGO BEARS":"CHI",
@@ -50,6 +51,7 @@ TEAM_NAME_TO_ABBR = {
     "TENNESSEE TITANS":"TEN","WASHINGTON COMMANDERS":"WAS",
 }
 
+# === HTTP session with retries + rotated UA ===
 UAS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
@@ -71,7 +73,8 @@ URLS = {
     "pace": "https://www.sharpfootballanalysis.com/stats-nfl/nfl-team-pace-stats/",
 }
 
-def _safe_mkdir(p: str): os.makedirs(p, exist_ok=True)
+def _safe_mkdir(p: str) -> None:
+    os.makedirs(p, exist_ok=True)
 
 def _session() -> requests.Session:
     s = requests.Session()
@@ -88,35 +91,47 @@ def _maybe_season_url(url: str, season: int) -> list[str]:
         cands.append(f"{url}{sep}{q}")
     return cands
 
+# === Robust table reading with verbose logging + optional HTML dumps ===
 def _read_tables_url(url: str, dump_path: Optional[str] = None) -> List[pd.DataFrame]:
     """Try multiple ways to get tables; never raise. Optionally dump HTML for debugging."""
+
     # A) direct read_html
     try:
         dfs = pd.read_html(url)
         if dfs:
+            print(f"[sharp][read_html(url)] OK tables={len(dfs)} :: {url}")
             return dfs
-    except Exception:
-        pass
+        else:
+            print(f"[sharp][read_html(url)] 0 tables :: {url}")
+    except Exception as e:
+        print(f"[sharp][read_html(url)] error: {e}")
 
     # B) requests + read_html(html)
     html = ""
     try:
-        r = _session().get(url, timeout=25)
-        html = r.text
+        sess = _session()
+        r = sess.get(url, timeout=25)
+        html = r.text or ""
+        print(f"[sharp][requests] status={r.status_code} len={len(html)} :: {url}")
         if dump_path:
             try:
                 with open(dump_path, "w", encoding="utf-8") as f:
                     f.write(html)
-            except Exception:
-                pass
+                print(f"[sharp][dump] wrote {dump_path}")
+            except Exception as de:
+                print(f"[sharp][dump] error: {de}")
+
         if r.status_code == 200 and "<table" in html.lower():
             try:
                 dfs = pd.read_html(html)
+                print(f"[sharp][read_html(html)] tables={len(dfs)} :: {url}")
                 if dfs: return dfs
-            except Exception:
-                pass
-    except Exception:
-        pass
+            except Exception as e2:
+                print(f"[sharp][read_html(html)] error: {e2}")
+        else:
+            print("[sharp] no <table> tag detected in HTML body (blocked or JS-only table?)")
+    except Exception as e:
+        print(f"[sharp][requests] error: {e}")
 
     # C) BeautifulSoup per-table extraction
     try:
@@ -128,10 +143,11 @@ def _read_tables_url(url: str, dump_path: Optional[str] = None) -> List[pd.DataF
                 if d: out.extend(d)
             except Exception:
                 continue
+        print(f"[sharp][bs4 per-table] tables={len(out)} :: {url}")
         if out:
             return out
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[sharp][bs4] error: {e}")
     return []
 
 def _first_team_table(dfs: List[pd.DataFrame]) -> pd.DataFrame:
@@ -175,6 +191,7 @@ def _pick_rate(df: pd.DataFrame, keys: list[str]) -> pd.Series:
             return _clean_pct_or_num(df[c])
     return pd.Series(dtype="float64")
 
+# === Page parsers ===
 def parse_def_tend(url: str, dump: Optional[str]) -> pd.DataFrame:
     base = _team_abbr_col(_first_team_table(_read_tables_url(url, dump)))
     if base.empty:
@@ -204,7 +221,6 @@ def parse_off_tend(url: str, dump: Optional[str]) -> pd.DataFrame:
     out["play_action_rate"] = _pick_rate(base, ["play","action"])
     out["shotgun_rate"]     = _pick_rate(base, ["shotgun"])
     out["no_huddle_rate"]   = _pick_rate(base, ["no","huddle"])
-    # AY/Att (if present on page)
     for c in base.columns:
         if "air" in c.lower() and "att" in c.lower():
             out["air_yards_per_att"] = pd.to_numeric(base[c], errors="coerce")
@@ -261,6 +277,7 @@ def parse_pace(url: str, dump: Optional[str]) -> pd.DataFrame:
     out["plays_per_game"]   = pick_num(["plays","game"])
     return out.drop_duplicates(subset=["team"])
 
+# === Merge helper ===
 def merge_non_destructive(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
     if right is None or right.empty or "team" not in right.columns: return left
     r = right.copy()
@@ -276,6 +293,7 @@ def merge_non_destructive(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFra
 def _log_count(name: str, df: pd.DataFrame):
     print(f"[sharp] {name:16s} rows={0 if df is None else len(df)}")
 
+# === CLI ===
 def main():
     ap = argparse.ArgumentParser()
     # support both --season and positional
