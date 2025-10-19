@@ -16,6 +16,7 @@ Surgical changes:
 - Do NOT coerce NaN to literal "NAN" prior to inference.
 - Infer ROLE even when exact position is missing (uses family from usage).
 - roles.csv remains an optional, non-destructive override.
+- VALIDATOR: only enforce required metrics for players present in outputs/props_raw.csv.
 """
 
 from __future__ import annotations
@@ -612,20 +613,98 @@ def _apply_fallback_enrichers(df: pd.DataFrame) -> pd.DataFrame:
             continue
     return out
 
-def _validate_required(df: pd.DataFrame):
-    pos = df.get("position", pd.Series(index=df.index, dtype=object)).astype(str).str.upper()
-    role = df.get("role", pd.Series(index=df.index, dtype=object)).astype(str).str.upper()
+# ---------------------------
+# PROPS-SCOPED VALIDATION
+# ---------------------------
 
-    is_wrte = pos.isin(["WR","TE"]) | role.str.contains("WR|TE", na=False)
-    is_rb   = pos.eq("RB") | role.str.contains("RB", na=False)
-    is_qb   = pos.eq("QB") | role.str.contains("QB", na=False)
+def _load_props_players() -> pd.DataFrame:
+    """
+    Read outputs/props_raw.csv to get the set of players (and teams) we actually need to validate.
+    Returns DataFrame with columns: player, team, player_key (stable).
+    """
+    path = os.path.join("outputs", "props_raw.csv")
+    if not os.path.exists(path):
+        return pd.DataFrame(columns=["player","team","player_key"])
+    try:
+        pr = pd.read_csv(path)
+    except Exception:
+        return pd.DataFrame(columns=["player","team","player_key"])
+
+    pr.columns = [c.lower() for c in pr.columns]
+    if "player" not in pr.columns:
+        if "player_name" in pr.columns:
+            pr = pr.rename(columns={"player_name": "player"})
+        elif "name" in pr.columns:
+            pr = pr.rename(columns={"name": "player"})
+        else:
+            pr["player"] = np.nan
+    pr["player"] = _norm_name(pr.get("player", pd.Series([], dtype=object)).astype(str))
+
+    if "team" not in pr.columns:
+        pr["team"] = np.nan
+    else:
+        pr["team"] = pr["team"].astype(str).str.upper().str.strip().map(_canon_team)
+
+    pr["player_key"] = pr["player"].fillna("").astype(str).str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
+    return pr[["player","team","player_key"]].drop_duplicates()
+
+def _validate_required(df: pd.DataFrame):
+    """
+    Strict checks by position-family:
+      WR/TE: route_rate, tgt_share, yprr
+      RB:    rush_share, ypc
+      QB:    ypa
+
+    Validate **only** players that appear in outputs/props_raw.csv.
+    Skip rows where we cannot determine a family (no position/role and no usage signal).
+    """
+    props_players = _load_props_players()
+    if props_players.empty:
+        return
+
+    df = df.copy()
+    df["player_key"] = df["player"].fillna("").astype(str).str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
+    need = df.merge(props_players[["player_key"]].drop_duplicates(), on="player_key", how="inner")
+    if need.empty:
+        return
+
+    pos  = need.get("position", pd.Series(index=need.index, dtype=object)).astype(str).str.upper()
+    role = need.get("role",     pd.Series(index=need.index, dtype=object)).astype(str).str.upper()
+
+    fam = pos.where(~pos.isin(["", "NAN", "NONE"]), np.nan)
+
+    qb_mask = pd.Series(False, index=need.index)
+    if "dropbacks" in need.columns:
+        qb_mask |= (need["dropbacks"].fillna(0) >= 15)
+    if "ypa" in need.columns:
+        qb_mask |= (need["ypa"].notna() & (need["ypa"] > 6.0))
+
+    rb_mask = (need.get("rush_share", pd.Series(0, index=need.index)).fillna(0) >= 0.20)
+    wr_mask = (need.get("route_rate", pd.Series(0, index=need.index)).fillna(0) >= 0.20) | \
+              (need.get("tgt_share",   pd.Series(0, index=need.index)).fillna(0) >= 0.15)
+
+    fam = fam.where(fam.notna(), np.where(qb_mask, "QB",
+                                  np.where(rb_mask, "RB",
+                                  np.where(wr_mask, "WR", np.nan))))
+
+    has_wr_hint = role.str.contains("WR|TE", na=False)
+    has_rb_hint = role.str.contains("RB",    na=False)
+    has_qb_hint = role.str.contains("QB",    na=False)
+
+    is_wrte = fam.isin(["WR","TE"]) | has_wr_hint
+    is_rb   = fam.eq("RB") | has_rb_hint
+    is_qb   = fam.eq("QB") | has_qb_hint
+
+    to_check = need.loc[is_wrte | is_rb | is_qb].copy()
+    if to_check.empty:
+        return
 
     missing: Dict[str, List[str]] = {}
 
     def _need(mask, cols: List[str], label: str):
         if not mask.any():
             return
-        sub = df.loc[mask]
+        sub = to_check.loc[mask]
         for c in cols:
             if c not in sub.columns:
                 bad = sub.index.tolist()
@@ -634,9 +713,9 @@ def _validate_required(df: pd.DataFrame):
             if bad:
                 missing[f"{label}:{c}"] = sub.loc[bad, "player"].astype(str).tolist()
 
-    _need(is_wrte, ["route_rate","tgt_share","yprr"], "WR/TE")
-    _need(is_rb,   ["rush_share","ypc"],              "RB")
-    _need(is_qb,   ["ypa"],                           "QB")
+    _need(is_wrte.loc[to_check.index], ["route_rate","tgt_share","yprr"], "WR/TE")
+    _need(is_rb.loc[to_check.index],   ["rush_share","ypc"],              "RB")
+    _need(is_qb.loc[to_check.index],   ["ypa"],                           "QB")
 
     if missing:
         print("[make_player_form] REQUIRED PLAYER METRICS MISSING:", file=sys.stderr)
