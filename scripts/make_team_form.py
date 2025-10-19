@@ -170,12 +170,16 @@ def _force_team_col(df: pd.DataFrame, off_col: str | None) -> pd.DataFrame:
 # Loaders
 # -----------------------------
 def load_pbp(season: int) -> pd.DataFrame:
-    if NFL_PKG == "nflreadpy":
-        pbp_raw = NFLV.load_pbp(seasons=[season])
-    else:
-        pbp_raw = NFLV.import_pbp_data([season], downcast=True)  # type: ignore
-    pbp = _to_pandas(pbp_raw); pbp.columns = [c.lower() for c in pbp.columns]
-    return pbp
+    try:
+        if NFL_PKG == "nflreadpy":
+            pbp_raw = NFLV.load_pbp(seasons=[season])
+        else:
+            pbp_raw = NFLV.import_pbp_data([season], downcast=True)  # type: ignore
+        pbp = _to_pandas(pbp_raw); pbp.columns = [c.lower() for c in pbp.columns]
+        return pbp
+    except Exception as e:
+        print(f"[make_team_form] WARNING: failed to load play-by-play for {season}: {e}", file=sys.stderr)
+        return pd.DataFrame()
 
 def load_participation(season: int) -> pd.DataFrame:
     try:
@@ -203,6 +207,11 @@ def load_schedules(season: int) -> pd.DataFrame:
 # Feature builders
 # -----------------------------
 def compute_def_epa_and_sacks(pbp: pd.DataFrame) -> pd.DataFrame:
+    if _is_empty(pbp):
+        return pd.DataFrame(
+            columns=["team", "def_pass_epa", "def_rush_epa", "def_sack_rate", "games_played"]
+        )
+
     df = pbp.copy()
     if "epa" not in df: df["epa"] = np.nan
 
@@ -239,6 +248,9 @@ def compute_def_epa_and_sacks(pbp: pd.DataFrame) -> pd.DataFrame:
     return agg
 
 def compute_pace_and_proe(pbp: pd.DataFrame) -> pd.DataFrame:
+    if _is_empty(pbp):
+        return pd.DataFrame(columns=["team", "pace_neutral", "proe"])
+
     df = pbp.copy(); df.columns = [c.lower() for c in df.columns]
     neutral = _neutral_mask(df); dfn = df.loc[neutral].copy()
 
@@ -276,6 +288,9 @@ def compute_pace_and_proe(pbp: pd.DataFrame) -> pd.DataFrame:
     return out
 
 def compute_red_zone_and_airyards(pbp: pd.DataFrame) -> pd.DataFrame:
+    if _is_empty(pbp):
+        return pd.DataFrame(columns=["team", "rz_rate", "ay_per_att"])
+
     df = pbp.copy(); df.columns = [c.lower() for c in df.columns]
     off_col = "posteam" if "posteam" in df.columns else ("offense_team" if "offense_team" in df.columns else None)
     if off_col is None:
@@ -297,9 +312,12 @@ def compute_red_zone_and_airyards(pbp: pd.DataFrame) -> pd.DataFrame:
     return out
 
 def compute_personnel_rates(pbp: pd.DataFrame, participation: pd.DataFrame) -> pd.DataFrame:
-    df = pbp.copy()
+    if _is_empty(pbp) and _is_empty(participation):
+        return pd.DataFrame(columns=["team", "personnel_12_rate", "light_box_rate", "heavy_box_rate"])
+
+    df = _to_pandas(pbp).copy()
     off_col = "posteam" if "posteam" in df else ("offense_team" if "offense_team" in df else None)
-    if off_col is None:
+    if _is_empty(df) or off_col is None:
         base = pd.DataFrame(columns=["team", "personnel_12_rate"])
     else:
         per = df.get("personnel_offense", pd.Series(np.nan, index=df.index)).astype(str).str.extract(r"(\d\d)").rename(columns={0: "personnel"})
@@ -307,7 +325,22 @@ def compute_personnel_rates(pbp: pd.DataFrame, participation: pd.DataFrame) -> p
         grp = df.groupby(off_col, dropna=False)
         p12 = grp.apply(lambda x: (x["_per"] == "12").mean() if len(x) else np.nan).rename("personnel_12_rate")
         base = p12.reset_index().rename(columns={off_col: "team"})
-    base["team"] = base["team"].map(canon_team); base = base[base["team"] != ""]
+    if "team" in base.columns:
+        base["team"] = base["team"].map(canon_team)
+        base = base[base["team"] != ""]
+
+    if base.empty and not _is_empty(participation):
+        team_col = None
+        for cand in ["offense_team", "posteam", "team", "club_code"]:
+            if cand in participation.columns:
+                team_col = cand
+                break
+        if team_col:
+            teams = participation[team_col].map(canon_team)
+            teams = teams[teams != ""].drop_duplicates()
+            if not teams.empty:
+                base = pd.DataFrame({"team": teams.sort_values().tolist()})
+                base["personnel_12_rate"] = np.nan
 
     light = heavy = None
     if not _is_empty(participation):
@@ -316,26 +349,32 @@ def compute_personnel_rates(pbp: pd.DataFrame, participation: pd.DataFrame) -> p
         for cand in ["box", "men_in_box", "in_box", "defenders_in_box"]:
             if cand in p.columns: box_col = cand; break
         team_col = None
-        for cand in ["offense_team", "posteam", "team"]:
+        for cand in ["offense_team", "posteam", "team", "club_code"]:
             if cand in p.columns: team_col = cand; break
         if box_col and team_col:
-            p["_light"] = (pd.to_numeric(p[box_col], errors="coerce") <= 6).astype(float)
-            p["_heavy"] = (pd.to_numeric(p[box_col], errors="coerce") >= 8).astype(float)
-            g = p.groupby(team_col, dropna=False)
-            light = g["_light"].mean().rename("light_box_rate")
-            heavy = g["_heavy"].mean().rename("heavy_box_rate")
+            p["_team"] = p[team_col].map(canon_team)
+            p = p[p["_team"] != ""]
+            if not p.empty:
+                p["_light"] = (pd.to_numeric(p[box_col], errors="coerce") <= 6).astype(float)
+                p["_heavy"] = (pd.to_numeric(p[box_col], errors="coerce") >= 8).astype(float)
+                g = p.groupby("_team", dropna=False)
+                light = g["_light"].mean().rename("light_box_rate")
+                heavy = g["_heavy"].mean().rename("heavy_box_rate")
 
     out = base.copy()
     if light is not None:
         t = light.reset_index().rename(columns={light.index.name or "index": "team"})
         t["team"] = t["team"].map(canon_team); t = t[t["team"] != ""]
-        out = out.merge(t, on="team", how="left")
+        out = out.merge(t, on="team", how="left") if not out.empty else t
     if heavy is not None:
         t = heavy.reset_index().rename(columns={heavy.index.name or "index": "team"})
         t["team"] = t["team"].map(canon_team); t = t[t["team"] != ""]
-        out = out.merge(t, on="team", how="left")
+        out = out.merge(t, on="team", how="left") if not out.empty else t
 
-    return out
+    if "personnel_12_rate" not in out.columns:
+        out["personnel_12_rate"] = np.nan
+
+    return out.reset_index(drop=True)
 
 def merge_slot_rate_from_roles(df: pd.DataFrame) -> pd.DataFrame:
     roles_path = os.path.join(DATA_DIR, "roles.csv")
@@ -386,7 +425,26 @@ def _apply_fallback_enrichers(df: pd.DataFrame) -> pd.DataFrame:
 def build_team_form(season: int, box_backfill_prev: bool = False) -> pd.DataFrame:
     print(f"[make_team_form] Loading PBP for {season} via {NFL_PKG} ...")
     pbp = load_pbp(season)
-    if _is_empty(pbp): raise RuntimeError("PBP is empty; cannot compute team form.")
+    if _is_empty(pbp):
+        print("[make_team_form] WARNING: PBP feed returned no rows; falling back to external providers only.")
+        skeleton = pd.DataFrame({"team": sorted(VALID)})
+        skeleton["season"] = int(season)
+        skeleton["games_played"] = np.nan
+        for col in [
+            "def_pass_epa",
+            "def_rush_epa",
+            "def_sack_rate",
+            "pace",
+            "proe",
+            "rz_rate",
+            "12p_rate",
+            "slot_rate",
+            "ay_per_att",
+            "light_box_rate",
+            "heavy_box_rate",
+        ]:
+            skeleton[col] = np.nan
+        return skeleton
 
     print("[make_team_form] Computing defensive EPA & sack rate ...")
     def_tbl = compute_def_epa_and_sacks(pbp)
