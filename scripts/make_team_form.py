@@ -34,15 +34,6 @@ import numpy as np
 VERSION_TAG = "make_team_form PATCH v2025-10-19 22:10 ET"
 print(f"[make_team_form] {VERSION_TAG}")
 
-# inside _apply_fallback_enrichers(), before the loop:
-print("[make_team_form] Fallback order = ['sharp_team_form.csv','espn_team_form.csv','msf_team_form.csv','apisports_team_form.csv','nflgsis_team_form.csv']")
-
-# inside _apply_fallback_enrichers(), just before merging each candidate:
-print(f"[make_team_form] trying {fn} ...")
-
-# still inside the loop, immediately after ext = _prep_team_key_and_rates(ext):
-print(f"[make_team_form] {fn} rows={len(ext)} cols={[c for c in ext.columns if c in ['team','team_abbr','light_box_rate','heavy_box_rate']]} sample_team={ext['team'].head(1).to_list() if 'team' in ext.columns else 'NA'}")
-
 # -----------------------------
 # Imports: prefer nflreadpy
 # -----------------------------
@@ -462,6 +453,7 @@ def _apply_fallback_enrichers(df: pd.DataFrame) -> pd.DataFrame:
         "apisports_team_form.csv",
         "nflgsis_team_form.csv",
     ]
+    print("[make_team_form] Fallback order = ['sharp_team_form.csv','espn_team_form.csv','msf_team_form.csv','apisports_team_form.csv','nflgsis_team_form.csv']")
     out = df.copy()
     for fn in candidates:
         try:
