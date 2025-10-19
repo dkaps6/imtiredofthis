@@ -35,6 +35,25 @@ import pandas as pd
 DATA_DIR = "data"
 OUTPATH = os.path.join(DATA_DIR, "player_form.csv")
 
+FINAL_COLS = [
+    "player",
+    "team",
+    "season",
+    "position",
+    "role",
+    "tgt_share",
+    "route_rate",
+    "rush_share",
+    "yprr",
+    "ypt",
+    "ypc",
+    "ypa",
+    "receptions_per_target",
+    "rz_share",
+    "rz_tgt_share",
+    "rz_rush_share",
+]
+
 
 # ---------------------------
 # Utilities
@@ -138,9 +157,24 @@ def load_pbp(season: int) -> pd.DataFrame:
 # ---------------------------
 
 def build_player_form(season: int = 2025) -> pd.DataFrame:
-    pbp = load_pbp(season)
+    try:
+        pbp = load_pbp(season)
+    except Exception as err:
+        warnings.warn(
+            f"Failed to load play-by-play for season {season}: {err}; proceeding with empty data frame.",
+            RuntimeWarning,
+        )
+        pbp = pd.DataFrame()
     if pbp.empty:
-        raise RuntimeError("PBP empty; cannot compute player form.")
+        warnings.warn(
+            f"No play-by-play data available for season {season}; returning empty base for fallback hydration.",
+            RuntimeWarning,
+        )
+        base = pd.DataFrame(columns=["player", "team"])
+        base["season"] = int(season)
+        base = _ensure_cols(base, FINAL_COLS)
+        base = base[FINAL_COLS].drop_duplicates(subset=["player", "team", "season"]).reset_index(drop=True)
+        return base
 
     # offense team col
     off_col = "posteam" if "posteam" in pbp.columns else ("offense_team" if "offense_team" in pbp.columns else None)
@@ -157,48 +191,91 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         is_pass = is_pass.astype(bool)
 
     rec = pbp.loc[is_pass].copy()
-    rcv_name_col = (
-        "receiver_player_name"
-        if "receiver_player_name" in rec.columns
-        else ("receiver" if "receiver" in rec.columns else None)
-    )
-    if rcv_name_col is None:
-        rec["receiver_player_name"] = np.nan
-        rcv_name_col = "receiver_player_name"
-
-    rec["player"] = _norm_name(rec[rcv_name_col].fillna(""))
-    rec["team"] = rec[off_col].astype(str).str.upper().str.strip()
-
-    team_targets = rec.groupby("team", dropna=False).size().rename("team_targets").astype(float)
-    if "qb_dropback" in rec.columns:
-        team_dropbacks = rec.groupby("team", dropna=False)["qb_dropback"].sum(min_count=1).rename("team_dropbacks")
+    if rec.empty:
+        rply = pd.DataFrame(columns=["team", "player"])
     else:
-        team_dropbacks = rec.groupby("team", dropna=False).size().rename("team_dropbacks").astype(float)
+        rcv_name_col = (
+            "receiver_player_name"
+            if "receiver_player_name" in rec.columns
+            else ("receiver" if "receiver" in rec.columns else None)
+        )
+        if rcv_name_col is None:
+            rec["receiver_player_name"] = np.nan
+            rcv_name_col = "receiver_player_name"
 
-    rply = rec.groupby(["team", "player"], dropna=False).agg(
-        targets=("pass_attempt", "sum") if "pass_attempt" in rec.columns else ("player", "size"),
-        rec_yards=("yards_gained", "sum"),
-        receptions=("complete_pass", "sum") if "complete_pass" in rec.columns else (rcv_name_col, "size"),
-    ).reset_index()
+        rec["player"] = _norm_name(rec[rcv_name_col].fillna(""))
+        rec["team"] = rec[off_col].astype(str).str.upper().str.strip()
 
-    rply = rply.merge(team_targets.reset_index(), on="team", how="left")
-    rply = rply.merge(team_dropbacks.reset_index(), on="team", how="left")
-    rply["tgt_share"] = np.where(rply["team_targets"] > 0, rply["targets"] / rply["team_targets"], np.nan)
-    rply["route_rate"] = np.where(rply["team_dropbacks"] > 0, rply["targets"] / rply["team_dropbacks"], np.nan).clip(0.05, 0.95)
-    rply["ypt"] = np.where(rply["targets"] > 0, rply["rec_yards"] / rply["targets"], np.nan)
-    rply["receptions_per_target"] = np.where(rply["targets"] > 0, rply["receptions"] / rply["targets"], np.nan)
-    routes_proxy = (rply["team_dropbacks"] * rply["route_rate"]).replace(0, np.nan)
-    rply["yprr"] = np.where(routes_proxy > 0, rply["rec_yards"] / routes_proxy, np.nan)
+        team_targets = rec.groupby("team", dropna=False).size().rename("team_targets").astype(float)
+        if "qb_dropback" in rec.columns:
+            team_dropbacks = rec.groupby("team", dropna=False)["qb_dropback"].sum(min_count=1).rename("team_dropbacks")
+        else:
+            team_dropbacks = (
+                rec.groupby("team", dropna=False)
+                .size()
+                .rename("team_dropbacks")
+                .astype(float)
+            )
 
-    # RZ receiving (inside 20)
-    inside20 = rec.copy()
-    inside20["yardline_100"] = pd.to_numeric(inside20.get("yardline_100"), errors="coerce")
-    rz_rec = inside20.loc[inside20["yardline_100"] <= 20]
-    rz_tgt_ply = rz_rec.groupby(["team", "player"]).size().rename("rz_targets")
-    rz_tgt_tm = rz_rec.groupby("team").size().rename("rz_team_targets")
-    rply = rply.merge(rz_tgt_ply.reset_index(), on=["team", "player"], how="left")
-    rply = rply.merge(rz_tgt_tm.reset_index(), on="team", how="left")
-    rply["rz_tgt_share"] = np.where(rply["rz_team_targets"] > 0, rply["rz_targets"] / rply["rz_team_targets"], np.nan)
+        rply = rec.groupby(["team", "player"], dropna=False).agg(
+            targets=("pass_attempt", "sum") if "pass_attempt" in rec.columns else ("player", "size"),
+            rec_yards=("yards_gained", "sum"),
+            receptions=("complete_pass", "sum") if "complete_pass" in rec.columns else (rcv_name_col, "size"),
+        ).reset_index()
+
+        rply = rply.merge(team_targets.reset_index(), on="team", how="left")
+        rply = rply.merge(team_dropbacks.reset_index(), on="team", how="left")
+        rply["tgt_share"] = np.where(
+            rply["team_targets"] > 0, rply["targets"] / rply["team_targets"], np.nan
+        )
+        rply["route_rate"] = (
+            np.where(
+                rply["team_dropbacks"] > 0,
+                rply["targets"] / rply["team_dropbacks"],
+                np.nan,
+            )
+            .clip(0.05, 0.95)
+        )
+        rply["ypt"] = np.where(rply["targets"] > 0, rply["rec_yards"] / rply["targets"], np.nan)
+        rply["receptions_per_target"] = np.where(
+            rply["targets"] > 0, rply["receptions"] / rply["targets"], np.nan
+        )
+        routes_proxy = (rply["team_dropbacks"] * rply["route_rate"]).replace(0, np.nan)
+        rply["yprr"] = np.where(routes_proxy > 0, rply["rec_yards"] / routes_proxy, np.nan)
+
+        # RZ receiving (inside 20)
+        inside20 = rec.copy()
+        inside20["yardline_100"] = pd.to_numeric(inside20.get("yardline_100"), errors="coerce")
+        rz_rec = inside20.loc[inside20["yardline_100"] <= 20]
+        if not rz_rec.empty:
+            rz_tgt_ply = rz_rec.groupby(["team", "player"]).size().rename("rz_targets")
+            rz_tgt_tm = rz_rec.groupby("team").size().rename("rz_team_targets")
+            rply = rply.merge(rz_tgt_ply.reset_index(), on=["team", "player"], how="left")
+            rply = rply.merge(rz_tgt_tm.reset_index(), on="team", how="left")
+            rply["rz_tgt_share"] = np.where(
+                rply["rz_team_targets"] > 0,
+                rply["rz_targets"] / rply["rz_team_targets"],
+                np.nan,
+            )
+
+    rply = _ensure_cols(
+        rply,
+        [
+            "targets",
+            "rec_yards",
+            "receptions",
+            "team_targets",
+            "team_dropbacks",
+            "tgt_share",
+            "route_rate",
+            "ypt",
+            "receptions_per_target",
+            "yprr",
+            "rz_targets",
+            "rz_team_targets",
+            "rz_tgt_share",
+        ],
+    )
 
     # ---------------- RUSHING ----------------
     is_rush = pbp.get("rush")
@@ -209,36 +286,60 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         is_rush = is_rush.astype(bool)
 
     ru = pbp.loc[is_rush].copy()
-    rush_name_col = (
-        "rusher_player_name"
-        if "rusher_player_name" in ru.columns
-        else ("rusher" if "rusher" in ru.columns else None)
+    if ru.empty:
+        rru = pd.DataFrame(columns=["team", "player"])
+    else:
+        rush_name_col = (
+            "rusher_player_name"
+            if "rusher_player_name" in ru.columns
+            else ("rusher" if "rusher" in ru.columns else None)
+        )
+        if rush_name_col is None:
+            ru["rusher_player_name"] = np.nan
+            rush_name_col = "rusher_player_name"
+
+        ru["player"] = _norm_name(ru[rush_name_col].fillna(""))
+        ru["team"] = ru[off_col].astype(str).str.upper().str.strip()
+
+        team_rushes = ru.groupby("team", dropna=False).size().rename("team_rushes").astype(float)
+        rru = ru.groupby(["team", "player"], dropna=False).agg(
+            rushes=("rush_attempt", "sum") if "rush_attempt" in ru.columns else ("player", "size"),
+            rush_yards=("yards_gained", "sum"),
+        ).reset_index()
+        rru = rru.merge(team_rushes.reset_index(), on="team", how="left")
+        rru["rush_share"] = np.where(
+            rru["team_rushes"] > 0, rru["rushes"] / rru["team_rushes"], np.nan
+        )
+        rru["ypc"] = np.where(rru["rushes"] > 0, rru["rush_yards"] / rru["rushes"], np.nan)
+
+        # RZ rushing (inside 10)
+        inside10 = ru.copy()
+        inside10["yardline_100"] = pd.to_numeric(inside10.get("yardline_100"), errors="coerce")
+        rz_ru = inside10.loc[inside10["yardline_100"] <= 10]
+        if not rz_ru.empty:
+            rz_ru_ply = rz_ru.groupby(["team", "player"]).size().rename("rz_rushes")
+            rz_ru_tm = rz_ru.groupby("team").size().rename("rz_team_rushes")
+            rru = rru.merge(rz_ru_ply.reset_index(), on=["team", "player"], how="left")
+            rru = rru.merge(rz_ru_tm.reset_index(), on="team", how="left")
+            rru["rz_rush_share"] = np.where(
+                rru["rz_team_rushes"] > 0,
+                rru["rz_rushes"] / rru["rz_team_rushes"],
+                np.nan,
+            )
+
+    rru = _ensure_cols(
+        rru,
+        [
+            "rushes",
+            "rush_yards",
+            "team_rushes",
+            "rush_share",
+            "ypc",
+            "rz_rushes",
+            "rz_team_rushes",
+            "rz_rush_share",
+        ],
     )
-    if rush_name_col is None:
-        ru["rusher_player_name"] = np.nan
-        rush_name_col = "rusher_player_name"
-
-    ru["player"] = _norm_name(ru[rush_name_col].fillna(""))
-    ru["team"] = ru[off_col].astype(str).str.upper().str.strip()
-
-    team_rushes = ru.groupby("team", dropna=False).size().rename("team_rushes").astype(float)
-    rru = ru.groupby(["team", "player"], dropna=False).agg(
-        rushes=("rush_attempt", "sum") if "rush_attempt" in ru.columns else ("player", "size"),
-        rush_yards=("yards_gained", "sum"),
-    ).reset_index()
-    rru = rru.merge(team_rushes.reset_index(), on="team", how="left")
-    rru["rush_share"] = np.where(rru["team_rushes"] > 0, rru["rushes"] / rru["team_rushes"], np.nan)
-    rru["ypc"] = np.where(rru["rushes"] > 0, rru["rush_yards"] / rru["rushes"], np.nan)
-
-    # RZ rushing (inside 10)
-    inside10 = ru.copy()
-    inside10["yardline_100"] = pd.to_numeric(inside10.get("yardline_100"), errors="coerce")
-    rz_ru = inside10.loc[inside10["yardline_100"] <= 10]
-    rz_ru_ply = rz_ru.groupby(["team", "player"]).size().rename("rz_rushes")
-    rz_ru_tm = rz_ru.groupby("team").size().rename("rz_team_rushes")
-    rru = rru.merge(rz_ru_ply.reset_index(), on=["team", "player"], how="left")
-    rru = rru.merge(rz_ru_tm.reset_index(), on="team", how="left")
-    rru["rz_rush_share"] = np.where(rru["rz_team_rushes"] > 0, rru["rz_rushes"] / rru["rz_team_rushes"], np.nan)
 
     # ---------------- QUARTERBACK ----------------
     qb_name_col = (
@@ -268,15 +369,12 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     base["position"] = np.nan
     base["role"] = np.nan
 
-    final_cols = [
-        "player", "team", "season", "position", "role",
-        "tgt_share", "route_rate", "rush_share",
-        "yprr", "ypt", "ypc", "ypa",
-        "receptions_per_target",
-        "rz_share", "rz_tgt_share", "rz_rush_share",
-    ]
-    base = _ensure_cols(base, final_cols)
-    out = base[final_cols].drop_duplicates(subset=["player", "team", "season"]).reset_index(drop=True)
+    base = _ensure_cols(base, FINAL_COLS)
+    out = (
+        base[FINAL_COLS]
+        .drop_duplicates(subset=["player", "team", "season"])
+        .reset_index(drop=True)
+    )
     return out
 
 
