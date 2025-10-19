@@ -224,6 +224,7 @@ Artifacts:
    *Same guarantee: only 2025 play-by-play and participation are accepted. Older seasons trigger an explicit failure instead of a silent fallback.*
 4. **Run the full engine (optional while debugging):** `python -m engine --season 2025 --debug`
    *The engine now enforces the same 2025-only constraint and surfaces a clear error when live pulls fail.*
+   *It also verifies `data/sharp_team_form.csv` exists with rows before touching The Odds API, so Sharp Football outages halt the run early.*
 
 After each builder runs you should see `data/team_form.csv`, `data/team_form_weekly.csv`, and `data/player_form.csv` populated. They’ll report the `source_season` column so you can verify which year powered the current projections.
 
