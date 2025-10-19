@@ -305,16 +305,10 @@ def merge_non_destructive(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFra
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("season", type=int, nargs="?", default=None, help="Season (e.g., 2025)")
-    ap.add_argument("--season", dest="season_opt", type=int, help="Season (e.g., 2025)")
-    args = ap.parse_args()
-    season_val = args.season if args.season is not None else args.season_opt
-    if season_val is None:
-        ap.error("season is required (positional or --season)")
-    season = int(season_val)
     ap.add_argument("season", nargs="?", type=int, help="Season (e.g., 2025)")
     ap.add_argument("--season", dest="season_flag", type=int, help="Season (e.g., 2025)")
     args = ap.parse_args()
+
     season = args.season_flag if args.season_flag is not None else args.season
     if season is None:
         ap.error("Season is required (pass 2025 or --season 2025)")
@@ -382,6 +376,13 @@ def main():
         errors.append("heavy_box_rate column is entirely null")
 
     if errors:
+        stale_path = os.path.join(DATA_DIR, "sharp_team_form.csv")
+        try:
+            if os.path.exists(stale_path):
+                os.remove(stale_path)
+        except Exception:
+            pass
+
         status_bits = ", ".join(f"{k}={'ok' if v else 'empty'}" for k, v in sorted(parse_status.items()))
         dump_bits = ", ".join(sorted(set(DUMPED_HTML_PATHS))) or "none"
         raise RuntimeError(
