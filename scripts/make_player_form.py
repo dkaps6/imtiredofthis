@@ -162,24 +162,58 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
         .drop(columns=["_rank"])
     )
 
-    
-    # --- JOIN CHANGE: prefer ourlads 'player_key_concat' (e.g., DJohnson) when available ---
-    # Normalize PF player key lightly to avoid stray punctuation mismatches
-    pf["player"] = pf["player"].astype(str).str.replace(r"[^A-Za-z]", "", regex=True)
+# --- JOIN CHANGE (fixed): prefer ourlads 'player_key_concat' WITHOUT creating duplicate 'player' columns ---
 
-    # If roles has our deterministic key, use it as the join 'player'
-    if "player_key_concat" in roles.columns:
-        roles_join = roles.rename(columns={"player_key_concat": "player"})
-    else:
-        roles_join = roles.copy()
+# Light-normalize PF key to avoid stray punctuation mismatches
+pf["player_join"] = pf["player"].astype(str).str.replace(r"[^A-Za-z]", "", regex=True)
 
-    pf = pf.merge(roles_join, on=["player", "team"], how="left", suffixes=("", "_depth"))
+# Build a roles frame with a single join key column and no duplicate 'player' field
+roles_join = roles.copy()
 
-    if "position_depth" in pf.columns:
-        pf["position"] = pf["position"].combine_first(pf["position_depth"])
-    if "role_depth" in pf.columns:
-        pf["role"] = pf["role"].combine_first(pf["role_depth"])
-    pf.drop(columns=[c for c in pf.columns if c.endswith("_depth")], inplace=True, errors="ignore")
+# Use the deterministic key if present; else fall back to roles['player']
+if "player_key_concat" in roles_join.columns:
+    roles_join = roles_join.rename(columns={"player_key_concat": "player_join"})
+else:
+    roles_join["player_join"] = roles_join["player"].astype(str).str.replace(r"[^A-Za-z]", "", regex=True)
+
+# Rename the roles’ human-readable player column so it doesn't collide with PF's 'player'
+if "player" in roles_join.columns:
+    roles_join = roles_join.rename(columns={"player": "player_depth_name"})
+
+# Now merge on the explicit join key + team
+pf = pf.merge(
+    roles_join,
+    left_on=["player_join", "team"],
+    right_on=["player_join", "team"],
+    how="left",
+    suffixes=("", "_depth"),
+)
+
+# Clean up helper column
+pf.drop(columns=["player_join"], inplace=True, errors="ignore")
+
+# Combine depth-driven columns into PF where missing
+if "position_depth" in pf.columns:
+    pf["position"] = pf["position"].combine_first(pf["position_depth"])
+if "role_depth" in pf.columns:
+    pf["role"] = pf["role"].combine_first(pf["role_depth"])
+
+# Drop any _depth extras and ensure no duplicate column names linger
+drop_cols = [c for c in pf.columns if c.endswith("_depth")]
+if drop_cols:
+    pf.drop(columns=drop_cols, inplace=True, errors="ignore")
+pf = pf.loc[:, ~pf.columns.duplicated()]
+
+# Optional audit: write rows that still have no role after the merge
+try:
+    miss = pf[pf["role"].isna()][["player","team"]].copy()
+    if not miss.empty:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        miss.to_csv(os.path.join(DATA_DIR, "unmatched_roles_merge.csv"), index=False)
+        print(f"[make_player_form] unmatched after roles merge: {len(miss)} → {os.path.join(DATA_DIR, 'unmatched_roles_merge.csv')}")
+except Exception:
+    pass
+
 
     try:
         cov = pf["position"].notna().mean()
