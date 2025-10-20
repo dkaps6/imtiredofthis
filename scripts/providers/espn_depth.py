@@ -59,6 +59,29 @@ VALID = set(TEAM_URLS.keys())
 SUFFIX_RE = re.compile(r"\s+(JR|SR|II|III|IV|V)\.?$", flags=re.IGNORECASE)
 LEADING_NUM_RE = re.compile(r"^\s*(?:#\s*)?\d+\s*[-–—:]?\s*", re.UNICODE)
 
+# === BEGIN: SURGICAL GUARDS FOR ESPN OUTPUT ===
+def _clean_roles_espn(df):
+    import pandas as pd, re
+    if df is None or getattr(df,"empty",True):
+        return df
+    df = df.copy()
+    if "player" in df.columns:
+        df["player"] = df["player"].astype(str)
+        df["player"] = df["player"].str.replace(r"^\s*(?:#\s*)?\d+\s*[-–—:]?\s*", "", regex=True)
+        df = df[~df["player"].str.fullmatch(r"\d+")]
+    return df
+
+def _safe_write_roles_espn(path, df):
+    import os, pandas as pd
+    df = _clean_roles_espn(df)
+    if df is None or df.empty:
+        # keep prior good file if exists
+        if os.path.exists(path):
+            print("[espn_depth] EMPTY roles today; kept prior file:", path)
+            return
+    df.to_csv(path, index=False)
+# === END: SURGICAL GUARDS FOR ESPN OUTPUT ===
+
 def _norm_player(name: str) -> str:
     if not isinstance(name, str):
         return ""
@@ -145,7 +168,7 @@ def main():
             kept = True
             print("[espn_depth] 403/empty today — keeping previously generated roles files.")
         else:
-            pd.DataFrame(columns=["team","player","position","role"]).to_csv(OUT_ROLES, index=False)
+            pd.DataFrame(columns=["team","player","position","role"]) ; _safe_write_roles_espn(OUT_ROLES, roles)
             pd.DataFrame(columns=["team"]).to_csv(OUT_WIDE, index=False)
         print(f"[espn_depth] wrote rows=0 (kept_prior={kept}) → {OUT_WIDE} / {OUT_ROLES}")
         return
@@ -173,7 +196,7 @@ def main():
     wide = wide[["team"] + wanted_cols]
 
     wide.to_csv(OUT_WIDE, index=False)
-    roles[["team","player","role"]].to_csv(OUT_ROLES, index=False)
+    roles[["team","player","role"]] ; _safe_write_roles_espn(OUT_ROLES, roles)
     print(f"[espn_depth] wrote rows={len(wide)} → {OUT_WIDE} and rows={len(roles)} → {OUT_ROLES}")
 
 if __name__ == "__main__":
