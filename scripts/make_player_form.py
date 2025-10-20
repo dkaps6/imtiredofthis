@@ -332,6 +332,33 @@ def _derive_opponent(df: pd.DataFrame) -> pd.Series:
     mapped = mapped.replace("", np.nan)
     return mapped
 
+
+def _normalize_props_opponent(df: pd.DataFrame) -> pd.Series:
+    """Derive and canonicalize opponent abbreviations for props payloads."""
+
+    if df.empty:
+        return pd.Series(np.nan, index=df.index, dtype=object)
+
+    base = pd.Series(np.nan, index=df.index, dtype=object)
+    opp_col = next((c for c in DEFENSE_TEAM_CANDIDATES if c in df.columns), None)
+    if opp_col is None:
+        return base
+
+    try:
+        derived = _derive_opponent(df)
+    except Exception:
+        derived = base
+
+    if isinstance(derived, pd.Series) and len(derived) == len(df) and derived.notna().any():
+        return derived.reindex(df.index)
+
+    raw = df[opp_col]
+    if not isinstance(raw, pd.Series):
+        return base
+    opp_norm = raw.where(raw.notna(), "").astype(str).str.upper().str.strip()
+    mapped = opp_norm.map(_canon_team).replace("", np.nan)
+    return mapped.reindex(df.index)
+
 # ---------------------------
 # nflverse loader
 # ---------------------------
@@ -857,6 +884,7 @@ def _load_props_players() -> pd.DataFrame:
     else:
         pr["team"] = pr["team"].astype(str).str.upper().str.strip().map(_canon_team)
 
+    pr["opponent"] = _normalize_props_opponent(pr)
     opp_col = next((c for c in DEFENSE_TEAM_CANDIDATES if c in pr.columns), None)
     if opp_col is not None:
         try:
@@ -1050,7 +1078,7 @@ if __name__ == "__main__":
 
 
 def _enrich_team_and_opponent_from_props(df: pd.DataFrame) -> pd.DataFrame:
-    import os, re
+    import os
     path = os.path.join("outputs", "props_raw.csv")
     if not os.path.exists(path):
         return df
@@ -1061,16 +1089,13 @@ def _enrich_team_and_opponent_from_props(df: pd.DataFrame) -> pd.DataFrame:
     pr.columns = [c.lower() for c in pr.columns]
     name_col = next((c for c in ["player","player_name","name"] if c in pr.columns), None)
     team_col = next((c for c in ["team","team_abbr","posteam"] if c in pr.columns), None)
-    opp_col  = next((c for c in ["opponent","opp","opp_team","opp_abbr","defteam","defense_team"] if c in pr.columns), None)
     if not name_col:
         return df
     pr["player"] = _norm_name(pr[name_col].astype(str))
     if team_col:
         pr["team"] = pr[team_col].astype(str).str.upper().str.strip().map(_canon_team)
         pr.loc[~pr["team"].isin(VALID), "team"] = np.nan
-    if opp_col:
-        pr["opponent"] = pr[opp_col].astype(str).str.upper().str.strip().map(_canon_team)
-        pr.loc[~pr["opponent"].isin(VALID), "opponent"] = np.nan
+    pr["opponent"] = _normalize_props_opponent(pr)
     out = df.copy()
     if "team" in pr.columns:
         out = out.merge(pr[["player","team","opponent"]].drop_duplicates(), on=["player","team"], how="left", suffixes=("","_pr1"))
