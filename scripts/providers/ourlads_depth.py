@@ -333,7 +333,7 @@ def main():
                     # ensure correct team if any discrepancy
                     merged["team"] = tm
                     merged.drop(columns=["player_join"], inplace=True, errors="ignore")
-                    df_team = merged[["team","player","role","orig_depth","slot_order"]].copy()
+                    df_team = merged[["team","player","role","orig_depth","slot_order","pos_roster"]].copy()
                 else:
                     # only roster available → no roles
                     df_team = r[["team","player"]].copy()
@@ -356,7 +356,12 @@ def main():
         if all_dfs else pd.DataFrame(columns=["team","player","role"])
     )
     roles_all = _postprocess_roles_df_ourlads(roles_all)
-    roles_all.to_csv(OUT_ROLES, index=False)
+# --- surgical: add 'position' derived from role, fallback to roster pos ---
+if "position" not in roles_all.columns:
+    roles_all["position"] = roles_all["role"].astype(str).str.extract(r"([A-Z]+)")
+if "pos_roster" in roles_all.columns:
+    roles_all["position"] = roles_all["position"].fillna(roles_all["pos_roster"])
+roles_all.to_csv(OUT_ROLES, index=False)
     print(f"[ourlads_depth] wrote rows={len(roles_all)} → {OUT_ROLES}")
 
 if __name__ == "__main__":
