@@ -106,7 +106,6 @@ def _norm_player(name: str) -> str:
         return ""
     return s
 
-
 # For splitting multi-name cells (co-starters)
 SPLIT_RE = re.compile(r"(?:<br\s*/?>|/| & | and )", flags=re.I)
 
@@ -123,15 +122,20 @@ def _split_candidates(cell_text: str) -> List[str]:
             out.append(nm)
     return out
 
-# Optional: standardize some position variants to stable buckets
-# POS_MAP = {
-#     "WR-X":"WR","WR-Z":"WR","WR-Y":"TE","SL":"WR","FB":"RB",
-#     "LEO":"EDGE","JACK":"EDGE","STAR":"NB"
-# }
-
 def _role_rank(role: str) -> int:
     m = re.search(r"(\d+)$", str(role))
     return int(m.group(1)) if m else 999
+
+def _normalize_pos(p: str) -> str:
+    p = (p or "").upper()
+    if p.startswith("WR") or p in {"SL","SLOT"}:
+        return "WR"
+    if p == "FB":
+        return "RB"
+    # treat 'Y' as TE in many OurLads schemes
+    if p in {"Y"}:
+        return "TE"
+    return p
 
 # ----------------------------
 # Scrape & parse
@@ -157,8 +161,8 @@ def fetch_team_roles(team: str) -> pd.DataFrame:
         if len(tds) < 2:
             continue
 
-        pos = tds[0].get_text(" ", strip=True).upper()
-        # pos = POS_MAP.get(pos, pos)  # enable if you decide to standardize
+        pos_raw = tds[0].get_text(" ", strip=True).upper()
+        pos = _normalize_pos(pos_raw)
         if pos not in {"QB","RB","WR","TE"}:
             continue
 
