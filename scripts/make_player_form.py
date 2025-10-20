@@ -580,21 +580,22 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         base = pd.DataFrame(columns=["player", "team"])
         base["season"] = int(season)
         base = _ensure_cols(base, FINAL_COLS)
-        base = base[FINAL_COLS].drop_duplicates(subset=["player","team",
-    "opponent","season"]).reset_index(drop=True)
+        base = base[FINAL_COLS].drop_duplicates(subset=["player","team","opponent","season"]).reset_index(drop=True)
+        return base
     
     off_col = "posteam" if "posteam" in pbp.columns else ("offense_team" if "offense_team" in pbp.columns else None)
     if off_col is None:
         if pbp.empty:
             return base
+        else:
+            raise RuntimeError("No offense team column in PBP (posteam/offense_team).")
 
-# Determine opponent (defense) column
-opp_col = "defteam" if "defteam" in pbp.columns else ("defense_team" if "defense_team" in pbp.columns else None)
-if opp_col is None:
-    pbp["opponent"] = np.nan
-else:
-    pbp["opponent"] = pbp[opp_col].astype(str).str.upper().str.strip()
-        raise RuntimeError("No offense team column in PBP (posteam/offense_team).")
+    # Determine opponent (defense) column
+    opp_col = "defteam" if "defteam" in pbp.columns else ("defense_team" if "defense_team" in pbp.columns else None)
+    if opp_col is None:
+        pbp["opponent"] = np.nan
+    else:
+        pbp["opponent"] = pbp[opp_col].astype(str).str.upper().str.strip()
 
     # RECEIVING
     is_pass = pbp.get("pass")
@@ -719,11 +720,8 @@ else:
         qb["player"] = _norm_name(qb[qb_name_col].fillna(""))
         qb["team"] = qb[off_col].astype(str).str.upper().str.strip().map(_canon_team)
         qb["team"] = qb["team"].replace("", np.nan)
-        gb = qb.groupby(["team","opponent","player"], dropna=False).agg(
-        qb["team"] = qb[off_col].astype(str).str.upper().str.strip()
         qb["opponent"] = qb["opponent"].astype(str).str.upper().str.strip() if "opponent" in qb.columns else np.nan
-        gb = qb.groupby(["team",
-    "opponent","player"], dropna=False).agg(
+        gb = qb.groupby(["team", "opponent", "player"], dropna=False).agg(
             pass_yards=("yards_gained","sum"),
             pass_att=("pass_attempt","sum") if "pass_attempt" in qb.columns else (qb_name_col,"size"),
             dropbacks=("qb_dropback","sum") if "qb_dropback" in qb.columns else (qb_name_col,"size"),
@@ -745,13 +743,11 @@ else:
     base["role"] = np.nan
 
     # Normalize keys
+    base = _ensure_cols(base, ["opponent"])
     base["player"] = _norm_name(base["player"].astype(str))
     base["team"] = base["team"].astype(str).str.upper().str.strip().map(_canon_team)
     base["opponent"] = base["opponent"].astype(str).str.upper().str.strip().map(_canon_team)
     base["opponent"] = base["opponent"].replace("", np.nan)
-    base["opponent"] = base.get("opponent", np.nan)
-    if "opponent" in base.columns:
-        base["opponent"] = base["opponent"].astype(str).str.upper().str.strip().map(_canon_team)
 
     # POSITION ENRICHMENT: weekly rosters → players master → usage family
     ro = _load_weekly_rosters(season)
@@ -930,40 +926,45 @@ def _validate_required(df: pd.DataFrame):
     _need(is_qb.loc[to_check.index],   ["ypa"],                           "QB")
 
     if missing:
-
-            print("[make_player_form] REQUIRED PLAYER METRICS MISSING:", file=sys.stderr)
+        print("[make_player_form] REQUIRED PLAYER METRICS MISSING:", file=sys.stderr)
         for k, v in missing.items():
-        preview = ", ".join(v[:10]) + ("..." if len(v) > 10 else "")
-        print(f"  - {k}: {preview}", file=sys.stderr)
+            preview = ", ".join(v[:10]) + ("..." if len(v) > 10 else "")
+            print(f"  - {k}: {preview}", file=sys.stderr)
 
         # Write a CSV report for diagnostics
         try:
-        rows = []
-        fam_map = {"WR/TE": is_wrte, "RB": is_rb, "QB": is_qb}
-        for fam, names in missing.items():
-            mask = fam_map.get(fam, pd.Series(False, index=df.index))
-            # build a small lookup subset
-            sub = to_check[mask.loc[to_check.index].fillna(False)][["player","team","position","role"]].copy()
-            for nm in names:
-                rows.append({
-                    "player": nm,
-                    "family": fam,
-                    "team": (sub.loc[sub["player"].str.lower().str.replace(r"[^a-z0-9]","",regex=True) == nm, "team"].head(1).item()
-                             if not sub.empty else None),
-                    "missing_for_family": fam
-                })
-        os.makedirs(DATA_DIR, exist_ok=True)
-        pd.DataFrame(rows).to_csv(os.path.join(DATA_DIR, "validation_player_missing.csv"), index=False)
-        print(f"[make_player_form] wrote report → {os.path.join(DATA_DIR, 'validation_player_missing.csv')}")
+            rows = []
+            fam_map = {"WR/TE": is_wrte, "RB": is_rb, "QB": is_qb}
+            for fam, names in missing.items():
+                mask = fam_map.get(fam, pd.Series(False, index=df.index))
+                # build a small lookup subset
+                sub = to_check[mask.loc[to_check.index].fillna(False)][["player","team","position","role"]].copy()
+                for nm in names:
+                    rows.append({
+                        "player": nm,
+                        "family": fam,
+                        "team": (
+                            sub.loc[
+                                sub["player"].str.lower().str.replace(r"[^a-z0-9]", "", regex=True) == nm,
+                                "team",
+                            ].head(1).item()
+                            if not sub.empty
+                            else None
+                        ),
+                        "missing_for_family": fam,
+                    })
+            os.makedirs(DATA_DIR, exist_ok=True)
+            pd.DataFrame(rows).to_csv(os.path.join(DATA_DIR, "validation_player_missing.csv"), index=False)
+            print(f"[make_player_form] wrote report → {os.path.join(DATA_DIR, 'validation_player_missing.csv')}")
         except Exception as e:
-        print(f"[make_player_form] WARN could not write missing report: {e}", file=sys.stderr)
+            print(f"[make_player_form] WARN could not write missing report: {e}", file=sys.stderr)
 
         # Env-gated strictness
         if os.getenv("STRICT_VALIDATE", "1") != "0":
-        raise RuntimeError("Required player_form metrics missing; failing per strict policy.")
+            raise RuntimeError("Required player_form metrics missing; failing per strict policy.")
         else:
-        print("[make_player_form] STRICT_VALIDATE=0 → continue despite missing required metrics", file=sys.stderr)
-        return
+            print("[make_player_form] STRICT_VALIDATE=0 → continue despite missing required metrics", file=sys.stderr)
+            return
 
 
 # ---------------------------
