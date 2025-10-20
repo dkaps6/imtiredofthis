@@ -122,13 +122,36 @@ def main():
         time.sleep(0.4)
 
     if not all_roles:
-        pd.DataFrame(columns=["team","player","role"]).to_csv(OUT_ROLES, index=False)
-        print(f"[ourlads_depth] wrote rows=0 → {OUT_ROLES}")
+        pd.DataFrame(columns=["team","player","role"]) = _postprocess_roles_df_ourlads(roles)
+roles.to_csv(OUT_ROLES, index=False)
+print(f"[ourlads_depth] wrote rows=0 → {OUT_ROLES}")
         return
 
     roles = pd.concat(all_roles, ignore_index=True).drop_duplicates()
-    roles.to_csv(OUT_ROLES, index=False)
-    print(f"[ourlads_depth] wrote rows={len(roles)} → {OUT_ROLES}")
+    roles = _postprocess_roles_df_ourlads(roles)
+roles.to_csv(OUT_ROLES, index=False)
+print(f"[ourlads_depth] wrote rows={len(roles)} → {OUT_ROLES}")
 
 if __name__ == "__main__":
     main()
+
+
+# === BEGIN: SURGICAL POSTPROCESS (idempotent) ===
+def _postprocess_roles_df_ourlads(df):
+    import pandas as pd, re
+    if df is None or getattr(df, "empty", True):
+        return df
+    if "player" not in df.columns: 
+        return df
+    # strip jersey prefixes / digits-only rows
+    df = df.copy()
+    df["player"] = df["player"].astype(str)
+    df["player"] = df["player"].str.replace(r"^\s*(?:#\s*)?\d+\s*[-–—:]?\s*", "", regex=True)
+    df = df[~df["player"].str.fullmatch(r"\d+")]
+    # keep best depth per (team, player)
+    if "role" in df.columns:
+        rk = df["role"].astype(str).str.extract(r"(\d+)$", expand=False).astype(float).fillna(999).astype(int)
+        df = df.assign(_rk=rk).sort_values(["team","player","_rk"]).drop_duplicates(["team","player"], keep="first").drop(columns=["_rk"])
+    return df
+# === END: SURGICAL POSTPROCESS ===
+
