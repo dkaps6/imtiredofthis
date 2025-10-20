@@ -34,7 +34,24 @@ import pandas as pd
 DATA_DIR = "data"
 OUTPATH = os.path.join(DATA_DIR, "player_form.csv")
 
-FINAL_COLS = []
+FINAL_COLS = [
+    "player",
+    "team",
+    "season",
+    "position",
+    "role",
+    "tgt_share",
+    "route_rate",
+    "rush_share",
+    "yprr",
+    "ypt",
+    "ypc",
+    "ypa",
+    "receptions_per_target",
+    "rz_share",
+    "rz_tgt_share",
+    "rz_rush_share",
+]
 # === BEGIN: SURGICAL NAME NORMALIZATION HELPERS (idempotent) ===
 try:
     _NAME_HELPERS_DEFINED
@@ -95,6 +112,9 @@ def _read_csv_safe(path: str) -> pd.DataFrame:
     try:
         df = pd.read_csv(path)
         df.columns = [c.lower() for c in df.columns]
+        return df
+    except Exception:
+        return pd.DataFrame()
 
 # === SURGICAL ADDITION: merge roles from ESPN and Ourlads (clean placement) ===
 def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
@@ -119,8 +139,8 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
 
     # normalize player/team
     roles["player"] = roles["player"].astype(str).str.replace(".", "", regex=False).str.strip()
-    roles["team"]   = roles["team"].astype(str).str.upper().str.strip()
-    roles["role"]   = roles["role"].astype(str).str.upper().str.strip()
+    roles["team"] = roles["team"].astype(str).str.upper().str.strip()
+    roles["role"] = roles["role"].astype(str).str.upper().str.strip()
     roles["position"] = roles["role"].str.replace(r"\d+$", "", regex=True)
 
     # cleanup: strip jersey prefixes; drop numeric-only rows
@@ -129,14 +149,17 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
 
     # prefer best depth per (team,player)
     def _rank(r):
-        m = re.search(r"(\d+)$", str(r)); 
+        m = re.search(r"(\d+)$", str(r))
         return int(m.group(1)) if m else 999
-    roles["_rank"] = roles["role"].map(_rank)
-    roles = (roles.sort_values(["team","player","_rank"])
-                  .drop_duplicates(["team","player"], keep="first")
-                  .drop(columns=["_rank"]))
 
-    pf = pf.merge(roles, on=["player","team"], how="left", suffixes=("", "_depth"))
+    roles["_rank"] = roles["role"].map(_rank)
+    roles = (
+        roles.sort_values(["team", "player", "_rank"])
+        .drop_duplicates(["team", "player"], keep="first")
+        .drop(columns=["_rank"])
+    )
+
+    pf = pf.merge(roles, on=["player", "team"], how="left", suffixes=("", "_depth"))
     if "position_depth" in pf.columns:
         pf["position"] = pf["position"].combine_first(pf["position_depth"])
     if "role_depth" in pf.columns:
@@ -150,9 +173,6 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
         pass
     return pf
 # === END ADDITION ===
-        return df
-    except Exception:
-        return pd.DataFrame()
 
 def _norm_name(s: pd.Series) -> pd.Series:
     return s.astype(str).str.replace(".", "", regex=False).str.strip()
