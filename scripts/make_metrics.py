@@ -251,6 +251,45 @@ def load_game_lines() -> pd.DataFrame:
     return og[["event_id","home_team","away_team","home_wp","away_wp"]].drop_duplicates()
 
 # ----------------------------
+# NEW: schedule fallback (surgical)
+# ----------------------------
+
+def _load_schedule_long(season: int) -> pd.DataFrame:
+    """
+    Returns (team, opponent, week) long form for the given season.
+    Only used as a fallback when event_id-based opponent inference is missing.
+    """
+    try:
+        try:
+            import nflreadpy as nflv  # preferred
+            sch = nflv.load_schedules(seasons=[season])
+        except Exception:
+            import nfl_data_py as nflv  # fallback
+            sch = nflv.import_schedules([season])  # type: ignore
+    except Exception:
+        return pd.DataFrame(columns=["team","opponent","week"])
+
+    df = pd.DataFrame(sch)
+    if df.empty:
+        return pd.DataFrame(columns=["team","opponent","week"])
+
+    df.columns = [c.lower() for c in df.columns]
+    # normalize team codes
+    for col in ["home_team","away_team"]:
+        if col in df.columns:
+            df[col] = _normalize_team_names(df[col])
+
+    if {"home_team","away_team","week"}.issubset(df.columns):
+        h = df[["home_team","away_team","week"]].rename(columns={"home_team":"team","away_team":"opponent"})
+        a = df[["away_team","home_team","week"]].rename(columns={"away_team":"team","home_team":"opponent"})
+        long = pd.concat([h, a], ignore_index=True).dropna()
+        long["team"] = _normalize_team_names(long["team"])
+        long["opponent"] = _normalize_team_names(long["opponent"])
+        # dedupe in case feeds have duplicates
+        return long.drop_duplicates()
+    return pd.DataFrame(columns=["team","opponent","week"])
+
+# ----------------------------
 # Assembler
 # ----------------------------
 
@@ -313,7 +352,7 @@ def build_metrics(season: int) -> pd.DataFrame:
     base = props.copy()
     if not pf.empty:
         keep_pf = ["player","team","target_share","rush_share","route_rate","yprr_proxy","ypt","ypc",
-                   "rz_tgt_share","rz_carry_share","position","role","season","player_key"]
+                   "rz_tgt_share","rz_carry_share","position","role","season","player_key","week","opponent"]
         keep_pf = [c for c in keep_pf if c in pf.columns]
         base = base.merge(pf[keep_pf].drop_duplicates(), on=["player_key"], how="left", suffixes=("","_pf"))
         # backfill props.team from pf if missing
@@ -342,7 +381,35 @@ def build_metrics(season: int) -> pd.DataFrame:
                np.where(tmp.get("team").eq(tmp.get("away_team")), tmp.get("home_team"), np.nan))
         base["opponent"] = _normalize_team_names(pd.Series(opp, index=base.index))
         base["team_wp"]  = np.where(tmp.get("team").eq(tmp.get("home_team")), tmp.get("home_wp"),
-                             np.where(tmp.get("team").eq(tmp.get("away_team")), tmp.get("away_wp"), np.nan))
+                             np.where(tmp.get("team").eq(tmp.get("away_team")), tmp.get("home_wp"), np.nan))
+
+    # --- NEW: Fallback 1: schedule long-form if opponent still missing and we have team+week ---
+    if base.get("opponent").isna().any():
+        missing_mask = base["opponent"].isna() & base.get("team").notna() & base.get("week").notna()
+        if missing_mask.any():
+            sched = _load_schedule_long(season)
+            if not sched.empty:
+                base = base.merge(
+                    sched.rename(columns={"week":"week_sched"}),
+                    left_on=["team","week"], right_on=["team","week_sched"],
+                    how="left", suffixes=("","_sched")
+                )
+                if "opponent_sched" in base.columns:
+                    base.loc[base["opponent"].isna(), "opponent"] = base.loc[base["opponent"].isna(), "opponent_sched"]
+                base.drop(columns=[c for c in ["week_sched","opponent_sched"] if c in base.columns], inplace=True)
+
+    # --- NEW: Fallback 2: if still missing, backfill opponent from player_form (by player_key [+ week if both present]) ---
+    if base.get("opponent").isna().any() and not pf.empty and "opponent" in pf.columns:
+        # prefer week-aware backfill
+        if "week" in pf.columns and "week" in base.columns:
+            join_cols = ["player_key","week"]
+        else:
+            join_cols = ["player_key"]
+        pf_opp = pf[join_cols + ["opponent"]].drop_duplicates()
+        base = base.merge(pf_opp, on=join_cols, how="left", suffixes=("","_pfopp"))
+        if "opponent_pfopp" in base.columns:
+            base["opponent"] = base["opponent"].combine_first(base["opponent_pfopp"])
+            base.drop(columns=["opponent_pfopp"], inplace=True)
 
     # Attach opponent defenses (EPA/sacks/boxes)
     if not tf.empty:
