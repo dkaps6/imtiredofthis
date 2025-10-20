@@ -162,7 +162,19 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
         .drop(columns=["_rank"])
     )
 
-    pf = pf.merge(roles, on=["player", "team"], how="left", suffixes=("", "_depth"))
+    
+    # --- JOIN CHANGE: prefer ourlads 'player_key_concat' (e.g., DJohnson) when available ---
+    # Normalize PF player key lightly to avoid stray punctuation mismatches
+    pf["player"] = pf["player"].astype(str).str.replace(r"[^A-Za-z]", "", regex=True)
+
+    # If roles has our deterministic key, use it as the join 'player'
+    if "player_key_concat" in roles.columns:
+        roles_join = roles.rename(columns={"player_key_concat": "player"})
+    else:
+        roles_join = roles.copy()
+
+    pf = pf.merge(roles_join, on=["player", "team"], how="left", suffixes=("", "_depth"))
+
     if "position_depth" in pf.columns:
         pf["position"] = pf["position"].combine_first(pf["position_depth"])
     if "role_depth" in pf.columns:
