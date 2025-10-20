@@ -30,7 +30,7 @@ OUT_ROLES = os.path.join(DATA_DIR, "roles_ourlads.csv")
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; DepthBot/1.0; +https://example.com)"}
 
 TEAM_URLS: Dict[str, str] = {
-    "ARI":"https://www.ourlads.com/nfldepthcharts/depthchart/ARI",
+    "ARI":\1ARZ\2,
     "ATL":"https://www.ourlads.com/nfldepthcharts/depthchart/ATL",
     "BAL":"https://www.ourlads.com/nfldepthcharts/depthchart/BAL",
     "BUF":"https://www.ourlads.com/nfldepthcharts/depthchart/BUF",
@@ -73,6 +73,13 @@ DATE_FRACTION_RE = re.compile(r"\b\d{1,2}/\d{1,2}\b")
 def _norm_player(name: str) -> str:
     if not isinstance(name, str):
         return ""
+
+# Ourlads-specific team code override for HTTP endpoints
+OURLADS_CODE = {"ARI": "ARZ"}
+
+def _ol_code(team: str) -> str:
+    t = (team or "").upper().strip()
+    return OURLADS_CODE.get(t, t)
     s = name.strip()
     s = LEADING_NUM_RE.sub("", s)
     if "," in s:
@@ -227,7 +234,7 @@ def fetch_team_roster(team: str, soup_depth: BeautifulSoup) -> pd.DataFrame:
                 break
         if roster_link is None:
             # deterministic fallback
-            roster_link = f"https://www.ourlads.com/nfldepthcharts/roster/{team}"
+            roster_link = f"https://www.ourlads.com/nfldepthcharts/roster/{_ol_code(team)}"
         html = _get_html(roster_link)
         soup = BeautifulSoup(html, "lxml")
         table = soup.find("table")
