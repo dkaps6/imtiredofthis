@@ -3,10 +3,11 @@
 """
 Ourlads depth charts → data/roles_ourlads.csv
 
-Surgical changes:
-- Normalize player names (strip suffixes, periods).
-- Guarantee output columns: player, team, role.
-- Defensive coding around their table structure changes.
+Fixes:
+- Extract player names robustly (prefer <a> text).
+- Strip leading jersey numbers (e.g., "8 Kyle Pitts" → "Kyle Pitts").
+- Drop numeric-only "players" (accidental jersey-only captures).
+- Deduplicate: if a player appears in multiple depth slots, keep the best (e.g., TE1 over TE2).
 """
 
 import os, sys, re, time
@@ -54,15 +55,22 @@ TEAM_URLS: Dict[str, str] = {
     "WAS": "https://www.ourlads.com/nfldepthcharts/depthchart/WAS",
 }
 
-SUFFIX_RE = re.compile(r"\s+(JR|SR|II|III|IV|V)\.?$", flags=re.IGNORECASE)
+SUFFIX_RE = re.compile(r"\s+(JR|SR|II|III|IV|V)\.?$", re.IGNORECASE)
+LEADING_NUM_RE = re.compile(r"^\s*(?:#\s*)?\d+\s*[-–—:]?\s*", re.UNICODE)  # strips "8", "#8", "8-", "8 –", etc.
 
 def _norm_player(name: str) -> str:
     if not isinstance(name, str):
         return ""
     s = name.replace(".", "").strip()
-    s = SUFFIX_RE.sub("", s)
-    s = re.sub(r"\s+", " ", s)
-    return s
+    s = LEADING_NUM_RE.sub("", s)            # remove any leading jersey number fragments
+    s = SUFFIX_RE.sub("", s)                 # drop suffixes
+    s = re.sub(r"\s+", " ", s)               # collapse spaces
+    return s.strip()
+
+def _role_rank(role: str) -> int:
+    """Return numeric rank (QB1->1, WR3->3); unknown → big number."""
+    m = re.search(r"(\d+)$", str(role))
+    return int(m.group(1)) if m else 999
 
 def fetch_team_roles(team: str) -> pd.DataFrame:
     url = TEAM_URLS[team]
@@ -71,25 +79,39 @@ def fetch_team_roles(team: str) -> pd.DataFrame:
     soup = BeautifulSoup(r.text, "lxml")
 
     rows = []
-    # Ourlads has rows: <tr><td>Pos</td><td>Player1</td><td>Player2</td>...</tr>
+    # Table rows: first cell = position (QB/RB/WR/TE), following cells = depth slots.
     for tr in soup.select("table tbody tr"):
         tds = tr.find_all("td")
         if len(tds) < 2:
             continue
+
         pos = tds[0].get_text(" ", strip=True).upper()
-        # standardized positions we care about
         if pos not in {"QB","RB","WR","TE"}:
             continue
+
         for i, td in enumerate(tds[1:], start=1):
+            # Prefer anchor text (player link)
             a = td.find("a")
-            text = a.get_text(" ", strip=True) if a else td.get_text(" ", strip=True)
-            player = _norm_player(text)
-            if not player:
+            raw = a.get_text(" ", strip=True) if a else td.get_text(" ", strip=True)
+            player = _norm_player(raw)
+
+            # Ignore junk rows that are just numbers (jersey-only)
+            if not player or player.isdigit():
                 continue
+
             role = f"{pos}{i}"
             rows.append({"team": team, "player": player, "role": role})
 
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+
+    # Deduplicate per (team, player) keeping the BEST role (smallest rank)
+    df["rank"] = df["role"].map(_role_rank)
+    df = (df.sort_values(["team", "player", "rank"])
+            .drop_duplicates(["team","player"], keep="first")
+            .drop(columns=["rank"]))
+    return df
 
 def main():
     warnings.simplefilter("ignore")
