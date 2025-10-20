@@ -116,9 +116,6 @@ def _read_csv_safe(path: str) -> pd.DataFrame:
     except Exception:
         return pd.DataFrame()
 
-def _safe_mkdir(path: str) -> None:
-    os.makedirs(path, exist_ok=True)
-
 # === SURGICAL ADDITION: merge roles from ESPN and Ourlads (clean placement) ===
 def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
     """
@@ -497,17 +494,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         base["season"] = int(season)
         base = _ensure_cols(base, FINAL_COLS)
         base = base[FINAL_COLS].drop_duplicates(subset=["player","team","season"]).reset_index(drop=True)
-    # merge depth roles (non-destructive)
-    try:
-        base = _merge_depth_roles(base)
-    except Exception:
-        try:
-            pf = _merge_depth_roles(pf)
-        except Exception:
-            pass
-
-        return base
-
+    
     off_col = "posteam" if "posteam" in pbp.columns else ("offense_team" if "offense_team" in pbp.columns else None)
     if off_col is None:
         raise RuntimeError("No offense team column in PBP (posteam/offense_team).")
