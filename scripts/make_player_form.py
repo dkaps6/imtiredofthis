@@ -58,9 +58,22 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
 
     # normalize player/team
     roles["player"] = roles["player"].astype(str).str.replace(".", "", regex=False).str.strip()
-    roles["team"] = roles["team"].astype(str).str.upper().str.strip()
-    roles["role"] = roles["role"].astype(str).str.upper().str.strip()
+    roles["team"]   = roles["team"].astype(str).str.upper().str.strip()
+    roles["role"]   = roles["role"].astype(str).str.upper().str.strip()
     roles["position"] = roles["role"].str.replace(r"\d+$", "", regex=True)
+
+    # >>> ADD THESE TWO LINES <<<
+    roles["player"] = roles["player"].str.replace(r"^\s*(?:#\s*)?\d+\s*[-–—:]?\s*", "", regex=True)  # strip jersey prefix again
+    roles = roles[~roles["player"].str.fullmatch(r"\d+")]  # drop rows that are just numbers
+   
+    # keep best depth slot per (team, player)
+    def _rank(r): 
+        m = re.search(r"(\d+)$", str(r)); 
+        return int(m.group(1)) if m else 999
+    roles["_rank"] = roles["role"].map(_rank)
+    roles = (roles.sort_values(["team","player","_rank"])
+                  .drop_duplicates(["team","player"], keep="first")
+                  .drop(columns=["_rank"]))
 
     # merge: prefer existing position/role if already populated
     pf = pf.merge(
