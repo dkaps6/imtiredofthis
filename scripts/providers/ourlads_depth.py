@@ -8,6 +8,10 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
+VALID = {"ARI","ATL","BAL","BUF","CAR","CHI","CIN","CLE","DAL","DEN","DET","GB","HOU",
+         "IND","JAX","KC","LAC","LAR","LV","MIA","MIN","NE","NO","NYG","NYJ",
+         "PHI","PIT","SEA","SF","TB","TEN","WAS"}
+
 DATA_DIR = "data"
 OUT_ROLES = os.path.join(DATA_DIR, "roles_ourlads.csv")
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; DepthBot/1.0)"}
@@ -64,6 +68,7 @@ def _norm_player(name: str) -> str:
     Normalize OurLads player strings:
     - Swap 'Last, First' -> 'First Last'
     - Remove jersey numbers, dots, suffixes, parentheses, and debris tags (e.g., 'SF23', 'U/Min', '22/5')
+    - Remove standalone numbers anywhere (e.g., 'Kyle 21 Pitts' -> 'Kyle Pitts')
     - Collapse whitespace; Title Case for readability
     """
     if not isinstance(name, str):
@@ -90,10 +95,19 @@ def _norm_player(name: str) -> str:
     # Normalize punctuation/spaces
     s = s.replace(".", " ")
     s = re.sub(r"[^\w\s'\-]", " ", s)
+    # Remove any standalone numbers that survived (e.g., 'Kyle 21 Pitts')
+    s = re.sub(r"\b\d+\b", "", s)
     s = re.sub(r"\s+", " ", s).strip()
 
     # Title-case for consistent human-readable text
-    return s.title()
+    s = s.title()
+    # Guard against 'U' artifact (from 'U/Min' partial strip)
+    if s == "U":
+        return ""
+    return s
+
+
+# For splitting multi-name cells
 
 # For splitting multi-name cells (co-starters)
 SPLIT_RE = re.compile(r"(?:<br\s*/?>|/| & | and )", flags=re.I)
@@ -106,9 +120,13 @@ def _split_candidates(cell_text: str) -> List[str]:
     for p in parts:
         txt = BeautifulSoup(p, "lxml").get_text(" ", strip=True)
         nm = _norm_player(txt)
-        if nm and not nm.isdigit():
+        # Require at least First + Last and exclude team-abbreviation artifacts
+        if nm and len(nm.split()) >= 2 and nm.upper() not in VALID:
             out.append(nm)
     return out
+
+
+# Optional: standardize some position variants
 
 # Optional: standardize some position variants to stable buckets
 # POS_MAP = {
@@ -169,6 +187,20 @@ def fetch_team_roles(team: str) -> pd.DataFrame:
     )
     return df
 
+def _reassign_sequential_depth(df: pd.DataFrame) -> pd.DataFrame:
+    """Ensure unique depth numbers per (team, position). Keeps relative column-order by original depth."""
+    if df is None or getattr(df, "empty", True):
+        return df
+    df = df.copy()
+    df["pos"] = df["role"].str.extract(r"([A-Z]+)")
+    df["orig_depth"] = df["role"].str.extract(r"(\d+)").astype(int)
+    def assign(g: pd.DataFrame) -> pd.DataFrame:
+        g = g.sort_values(["orig_depth", "player"]).copy()
+        g["depth"] = range(1, len(g) + 1)
+        g["role"] = g["pos"].iloc[0] + g["depth"].astype(str)
+        return g.drop(columns=["depth"])
+    return df.groupby(["team", "pos"], group_keys=False).apply(assign)
+
 # ----------------------------
 # Post-processing & join keys
 # ----------------------------
@@ -219,6 +251,9 @@ def _postprocess_roles_df_ourlads(df: pd.DataFrame) -> pd.DataFrame:
               .drop_duplicates(["team","player"], keep="first")
               .drop(columns=["_rk"])
         )
+
+    # NEW: ensure unique sequential depths per (team, pos)
+    df = _reassign_sequential_depth(df)
 
     # NEW: deterministic join keys for your merges
     df["player_key_filast"] = df["player"].map(_fi_last)        # e.g., 'd johnson'
