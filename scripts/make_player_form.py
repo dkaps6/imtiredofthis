@@ -34,7 +34,39 @@ import pandas as pd
 DATA_DIR = "data"
 OUTPATH = os.path.join(DATA_DIR, "player_form.csv")
 
-FINAL_COLS = [
+FINAL_COLS = []
+# === BEGIN: SURGICAL NAME NORMALIZATION HELPERS (idempotent) ===
+try:
+    _NAME_HELPERS_DEFINED
+except NameError:
+    import re as _re_nh
+    import unicodedata as _ud_nh
+    _NAME_HELPERS_DEFINED = True
+
+    _SUFFIX_RE_NH = _re_nh.compile(r"\b(JR|SR|II|III|IV|V)\b\.?", _re_nh.IGNORECASE)
+    _LEADING_NUM_RE_NH = _re_nh.compile(r"^\s*(?:#\s*)?\d+\s*[-–—:]?\s*", _re_nh.UNICODE)
+
+    def _deaccent_nh(s: str) -> str:
+        try:
+            return _ud_nh.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
+        except Exception:
+            return s
+
+    def _clean_person_name_nh(s: str) -> str:
+        s = (s or "").replace("\xa0"," ").strip()
+        s = _LEADING_NUM_RE_NH.sub("", s)
+        s = s.replace(".", "")
+        s = _SUFFIX_RE_NH.sub("", s)
+        s = _re_nh.sub(r"\s+", " ", s)
+        s = _deaccent_nh(s)
+        return s.strip()
+
+    def _player_key_from_name_nh(s: str) -> str:
+        s = _clean_person_name_nh(s)
+        return _re_nh.sub(r"[^a-z0-9]", "", s.lower())
+# === END: SURGICAL NAME NORMALIZATION HELPERS ===
+
+
 
 def _is_empty(obj) -> bool:
     try:
@@ -442,6 +474,15 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         base["season"] = int(season)
         base = _ensure_cols(base, FINAL_COLS)
         base = base[FINAL_COLS].drop_duplicates(subset=["player","team","season"]).reset_index(drop=True)
+    # merge depth roles (non-destructive)
+    try:
+        base = _merge_depth_roles(base)
+    except Exception:
+        try:
+            pf = _merge_depth_roles(pf)
+        except Exception:
+            pass
+
         return base
 
     off_col = "posteam" if "posteam" in pbp.columns else ("offense_team" if "offense_team" in pbp.columns else None)
