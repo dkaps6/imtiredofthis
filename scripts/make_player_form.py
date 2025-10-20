@@ -356,8 +356,7 @@ def _load_weekly_rosters(season: int) -> pd.DataFrame:
 
     # team — accept any column that looks like a team key
     team_col = None
-    for c in ["team",
-    "opponent","recent_team","club_code","team_abbr","posteam"]:
+    for c in ["team","opponent","recent_team","club_code","team_abbr","posteam"]:
         if c in df.columns:
             team_col = c
             break
@@ -375,11 +374,9 @@ def _load_weekly_rosters(season: int) -> pd.DataFrame:
     df["position"] = np.where(pos_col is not None, df[pos_col].astype(str).str.upper().str.strip(), np.nan)
 
     if "week" in df.columns:
-        df = df.sort_values(["player","team",
-    "opponent","week"]).drop_duplicates(["player","team"], keep="last")
+        df = df.sort_values(["player","team","opponent","week"]).drop_duplicates(["player","team"], keep="last")
 
-    return df[["player","team",
-    "opponent","position"]].drop_duplicates()
+    return df[["player","team","opponent","position"]].drop_duplicates()
 
 def _load_players_master() -> pd.DataFrame:
     """Fallback: (player -> position) without team join."""
@@ -427,15 +424,13 @@ def _merge_roles_csv(df: pd.DataFrame) -> pd.DataFrame:
     r.columns = [c.lower() for c in r.columns]
     if "player" not in r.columns and "player_name" in r.columns:
         r = r.rename(columns={"player_name": "player"})
-    need = {"player","team",
-    "opponent","role"}
+    need = {"player","team","opponent","role"}
     if not need.issubset(r.columns):
         return df
     r["player"] = _norm_name(r["player"].astype(str))
     r["team"] = r["team"].astype(str).str.upper().str.strip().map(_canon_team)
     r = r[r["team"].isin(VALID)]
-    out = df.merge(r[["player","team",
-    "opponent","role"]], on=["player","team"], how="left", suffixes=("","_roles"))
+    out = df.merge(r[["player","team","opponent","role"]], on=["player","team"], how="left", suffixes=("","_roles"))
     if "role_roles" in out.columns:
         out["role"] = out["role"].combine_first(out["role_roles"])
         out.drop(columns=["role_roles"], inplace=True)
@@ -526,215 +521,6 @@ def _infer_roles_minimal(pf: pd.DataFrame) -> pd.DataFrame:
     return pd.concat(out, ignore_index=True) if out else pf
 
 # ---------------------------
-# Build from PBP
-# ---------------------------
-
-def build_player_form(season: int = 2025) -> pd.DataFrame:
-    try:
-        pbp = load_pbp(season)
-    except Exception as err:
-        warnings.warn(
-            f"Failed to load play-by-play for season {season}: {err}; proceeding with empty data frame.",
-            RuntimeWarning,
-        )
-        pbp = pd.DataFrame()
-    if pbp.empty:
-        warnings.warn(
-            f"No play-by-play data available for season {season}; returning empty base for fallback hydration.",
-            RuntimeWarning,
-        )
-        base = pd.DataFrame(columns=["player", "team"])
-        base["season"] = int(season)
-        base = _ensure_cols(base, FINAL_COLS)
-        base = base[FINAL_COLS].drop_duplicates(subset=["player","team",
-    "opponent","season"]).reset_index(drop=True)
-    
-    off_col = "posteam" if "posteam" in pbp.columns else ("offense_team" if "offense_team" in pbp.columns else None)
-    if off_col is None:
-        raise RuntimeError("No offense team column in PBP (posteam/offense_team).")
-
-    # RECEIVING
-    is_pass = pbp.get("pass")
-    if is_pass is None:
-        pt = pbp.get("play_type")
-        is_pass = pt.isin(["pass","no_play"]) if pt is not None else pd.Series(False, index=pbp.index)
-    else:
-        is_pass = is_pass.astype(bool)
-
-    rec = pbp.loc[is_pass].copy()
-    if rec.empty:
-        rply = pd.DataFrame(columns=["team",
-    "opponent","player"])
-    else:
-        rcv_name_col = "receiver_player_name" if "receiver_player_name" in rec.columns else ("receiver" if "receiver" in rec.columns else None)
-        if rcv_name_col is None:
-            rec["receiver_player_name"] = np.nan
-            rcv_name_col = "receiver_player_name"
-        rec["player"] = _norm_name(rec[rcv_name_col].fillna(""))
-        rec["team"] = rec[off_col].astype(str).str.upper().str.strip()
-
-        team_targets = rec.groupby(["team","opponent"], dropna=False).size().rename("team_targets").astype(float)
-        if "qb_dropback" in rec.columns:
-            team_dropbacks = rec.groupby(["team","opponent"], dropna=False)["qb_dropback"].sum(min_count=1).rename("team_dropbacks")
-        else:
-            team_dropbacks = rec.groupby(["team","opponent"], dropna=False).size().rename("team_dropbacks").astype(float)
-
-        rply = rec.groupby(["team",
-    "opponent","player"], dropna=False).agg(
-            targets=("pass_attempt","sum") if "pass_attempt" in rec.columns else ("player","size"),
-            rec_yards=("yards_gained","sum"),
-            receptions=("complete_pass","sum") if "complete_pass" in rec.columns else (rcv_name_col,"size"),
-        ).reset_index()
-        rply = rply.merge(team_targets.reset_index(), on=["team","opponent"], how="left")
-        rply = rply.merge(team_dropbacks.reset_index(), on=["team","opponent"], how="left")
-        rply["tgt_share"] = np.where(rply["team_targets"]>0, rply["targets"]/rply["team_targets"], np.nan)
-        rply["route_rate"] = np.where(rply["team_dropbacks"]>0, rply["targets"]/rply["team_dropbacks"], np.nan).clip(0.05, 0.95)
-        rply["ypt"] = np.where(rply["targets"]>0, rply["rec_yards"]/rply["targets"], np.nan)
-        rply["receptions_per_target"] = np.where(rply["targets"]>0, rply["receptions"]/rply["targets"], np.nan)
-        routes_proxy = (rply["team_dropbacks"] * rply["route_rate"]).replace(0, np.nan)
-        rply["yprr"] = np.where(routes_proxy>0, rply["rec_yards"]/routes_proxy, np.nan)
-
-        inside20 = rec.copy()
-        inside20["yardline_100"] = pd.to_numeric(inside20.get("yardline_100"), errors="coerce")
-        rz_rec = inside20.loc[inside20["yardline_100"] <= 20]
-        if not rz_rec.empty:
-            rz_tgt_ply = rz_rec.groupby(["team",
-    "opponent","player"]).size().rename("rz_targets")
-            rz_tgt_tm  = rz_rec.groupby("team").size().rename("rz_team_targets")
-            rply = rply.merge(rz_tgt_ply.reset_index(), on=["team",
-    "opponent","player"], how="left")
-            rply = rply.merge(rz_tgt_tm.reset_index(),  on=["team","opponent"],          how="left")
-            rply["rz_tgt_share"] = np.where(rply["rz_team_targets"]>0, rply["rz_targets"]/rply["rz_team_targets"], np.nan)
-
-    rply = _ensure_cols(rply, [
-        "targets","rec_yards","receptions","team_targets","team_dropbacks",
-        "tgt_share","route_rate","ypt","receptions_per_target","yprr",
-        "rz_targets","rz_team_targets","rz_tgt_share",
-    ])
-
-    # RUSHING
-    is_rush = pbp.get("rush")
-    if is_rush is None:
-        pt = pbp.get("play_type")
-        is_rush = pt.eq("run") if pt is not None else pd.Series(False, index=pbp.index)
-    else:
-        is_rush = is_rush.astype(bool)
-
-    ru = pbp.loc[is_rush].copy()
-    if ru.empty:
-        rru = pd.DataFrame(columns=["team",
-    "opponent","player"])
-    else:
-        rush_name_col = "rusher_player_name" if "rusher_player_name" in ru.columns else ("rusher" if "rusher" in ru.columns else None)
-        if rush_name_col is None:
-            ru["rusher_player_name"] = np.nan
-            rush_name_col = "rusher_player_name"
-
-        ru["player"] = _norm_name(ru[rush_name_col].fillna(""))
-        ru["team"] = ru[off_col].astype(str).str.upper().str.strip()
-
-        team_rushes = ru.groupby(["team","opponent"], dropna=False).size().rename("team_rushes").astype(float)
-        rru = ru.groupby(["team",
-    "opponent","player"], dropna=False).agg(
-            rushes=("rush_attempt","sum") if "rush_attempt" in ru.columns else ("player","size"),
-            rush_yards=("yards_gained","sum"),
-        ).reset_index()
-        rru = rru.merge(team_rushes.reset_index(), on=["team","opponent"], how="left")
-        rru["rush_share"] = np.where(rru["team_rushes"]>0, rru["rushes"]/rru["team_rushes"], np.nan)
-        rru["ypc"] = np.where(rru["rushes"]>0, rru["rush_yards"]/rru["rushes"], np.nan)
-
-        inside10 = ru.copy()
-        inside10["yardline_100"] = pd.to_numeric(inside10.get("yardline_100"), errors="coerce")
-        rz_ru = inside10.loc[inside10["yardline_100"] <= 10]
-        if not rz_ru.empty:
-            rz_ru_ply = rz_ru.groupby(["team",
-    "opponent","player"]).size().rename("rz_rushes")
-            rz_ru_tm  = rz_ru.groupby("team").size().rename("rz_team_rushes")
-            rru = rru.merge(rz_ru_ply.reset_index(), on=["team",
-    "opponent","player"], how="left")
-            rru = rru.merge(rz_ru_tm.reset_index(),  on=["team","opponent"],          how="left")
-            rru["rz_rush_share"] = np.where(rru["rz_team_rushes"]>0, rru["rz_rushes"]/rru["rz_team_rushes"], np.nan)
-
-    rru = _ensure_cols(rru, [
-        "rushes","rush_yards","team_rushes","rush_share","ypc",
-        "rz_rushes","rz_team_rushes","rz_rush_share",
-    ])
-
-    # QUARTERBACK
-    qb_df = pd.DataFrame(columns=["team",
-    "opponent","player","ypa","dropbacks"])
-    qb_name_col = "passer_player_name" if "passer_player_name" in pbp.columns else ("passer" if "passer" in pbp.columns else None)
-    if qb_name_col is not None:
-        qb = pbp.copy()
-        qb["player"] = _norm_name(qb[qb_name_col].fillna(""))
-        qb["team"] = qb[off_col].astype(str).str.upper().str.strip()
-        gb = qb.groupby(["team",
-    "opponent","player"], dropna=False).agg(
-            pass_yards=("yards_gained","sum"),
-            pass_att=("pass_attempt","sum") if "pass_attempt" in qb.columns else (qb_name_col,"size"),
-            dropbacks=("qb_dropback","sum") if "qb_dropback" in qb.columns else (qb_name_col,"size"),
-        ).reset_index()
-        gb["ypa"] = np.where(gb["pass_att"]>0, gb["pass_yards"]/gb["pass_att"], np.nan)
-        qb_df = gb[["team",
-    "opponent","player","ypa","dropbacks"]]
-
-    # Merge all
-    base = pd.merge(rply, rru, on=["team",
-    "opponent","player"], how="outer")
-    base = pd.merge(base, qb_df, on=["team",
-    "opponent","player"], how="left")
-    base["rz_share"] = base[["rz_tgt_share","rz_rush_share"]].max(axis=1)
-    base["season"] = int(season)
-
-    # Initialize position/role as NaN (do not uppercase yet)
-    base["position"] = np.nan
-    base["role"] = np.nan
-
-    # Normalize keys
-    base["player"] = _norm_name(base["player"].astype(str))
-    base["team"] = base["team"].astype(str).str.upper().str.strip().map(_canon_team)
-
-    # POSITION ENRICHMENT: weekly rosters → players master → usage family
-    ro = _load_weekly_rosters(season)
-    if not ro.empty:
-        ro["player"] = _norm_name(ro["player"].astype(str))
-        ro["team"] = ro["team"].astype(str).str.upper().str.strip().map(_canon_team)
-        ro = ro[ro["team"].isin(VALID)]
-        base = base.merge(ro, on=["player","team"], how="left", suffixes=("","_ro"))
-        if "position_ro" in base.columns:
-            base["position"] = base["position"].combine_first(base["position_ro"])
-            base.drop(columns=["position_ro"], inplace=True, errors="ignore")
-
-    # Fallback: players master (merge by player only)
-    if base["position"].isna().all():
-        pm = _load_players_master()
-        if not pm.empty:
-            pm["player"] = _norm_name(pm["player"].astype(str))
-            base = base.merge(pm, on="player", how="left", suffixes=("","_pm"))
-            if "position_pm" in base.columns:
-                base["position"] = base["position"].combine_first(base["position_pm"])
-                base.drop(columns=["position_pm"], inplace=True, errors="ignore")
-
-    # Final fallback: usage-based family inference → write into position when still missing
-    if base["position"].isna().any():
-        fam = _infer_position_family_from_usage(base)
-        base["position"] = base["position"].where(base["position"].notna(), fam)
-
-    # Only uppercase non-null positions (avoid turning NaN into "NAN")
-    base.loc[base["position"].notna(), "position"] = base.loc[base["position"].notna(), "position"].astype(str).str.upper().str.strip()
-
-    # roles.csv (non-destructive) then infer roles
-    base = _merge_depth_roles(base)
-    base = _merge_roles_csv(base)
-    if base.get("role", pd.Series(dtype=object)).isna().all():
-        base = _infer_roles_minimal(base)
-
-    base = _ensure_cols(base, FINAL_COLS)
-    out = base[FINAL_COLS].drop_duplicates(subset=["player","team","opponent","season"]).reset_index(drop=True)
-    out = _enrich_team_and_opponent_from_props(out)
-    return out
-
-# ---------------------------
 # Fallback enrichers (optional CSVs)
 # ---------------------------
 
@@ -774,13 +560,11 @@ def _load_props_players() -> pd.DataFrame:
     """
     path = os.path.join("outputs", "props_raw.csv")
     if not os.path.exists(path):
-        return pd.DataFrame(columns=["player","team",
-    "opponent","player_key"])
+        return pd.DataFrame(columns=["player","team","opponent","player_key"])
     try:
         pr = pd.read_csv(path)
     except Exception:
-        return pd.DataFrame(columns=["player","team",
-    "opponent","player_key"])
+        return pd.DataFrame(columns=["player","team","opponent","player_key"])
 
     pr.columns = [c.lower() for c in pr.columns]
     if "player" not in pr.columns:
@@ -798,8 +582,7 @@ def _load_props_players() -> pd.DataFrame:
         pr["team"] = pr["team"].astype(str).str.upper().str.strip().map(_canon_team)
 
     pr["player_key"] = pr["player"].fillna("").astype(str).str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
-    return pr[["player","team",
-    "opponent","player_key"]].drop_duplicates()
+    return pr[["player","team","opponent","player_key"]].drop_duplicates()
 
 def _validate_required(df: pd.DataFrame):
     """
@@ -871,41 +654,280 @@ def _validate_required(df: pd.DataFrame):
     _need(is_qb.loc[to_check.index],   ["ypa"],                           "QB")
 
     if missing:
-
-            print("[make_player_form] REQUIRED PLAYER METRICS MISSING:", file=sys.stderr)
+        # --- fixed indentation below ---
+        print("[make_player_form] REQUIRED PLAYER METRICS MISSING:", file=sys.stderr)
         for k, v in missing.items():
-        preview = ", ".join(v[:10]) + ("..." if len(v) > 10 else "")
-        print(f"  - {k}: {preview}", file=sys.stderr)
+            preview = ", ".join(v[:10]) + ("..." if len(v) > 10 else "")
+            print(f"  - {k}: {preview}", file=sys.stderr)
 
         # Write a CSV report for diagnostics
         try:
-        rows = []
-        fam_map = {"WR/TE": is_wrte, "RB": is_rb, "QB": is_qb}
-        for fam, names in missing.items():
-            mask = fam_map.get(fam, pd.Series(False, index=df.index))
-            # build a small lookup subset
-            sub = to_check[mask.loc[to_check.index].fillna(False)][["player","team","position","role"]].copy()
-            for nm in names:
-                rows.append({
-                    "player": nm,
-                    "family": fam,
-                    "team": (sub.loc[sub["player"].str.lower().str.replace(r"[^a-z0-9]","",regex=True) == nm, "team"].head(1).item()
-                             if not sub.empty else None),
-                    "missing_for_family": fam
-                })
-        os.makedirs(DATA_DIR, exist_ok=True)
-        pd.DataFrame(rows).to_csv(os.path.join(DATA_DIR, "validation_player_missing.csv"), index=False)
-        print(f"[make_player_form] wrote report → {os.path.join(DATA_DIR, 'validation_player_missing.csv')}")
+            rows = []
+            fam_map = {"WR/TE": is_wrte, "RB": is_rb, "QB": is_qb}
+            for fam_label, names in missing.items():
+                mask = fam_map.get(fam_label, pd.Series(False, index=df.index))
+                sub = to_check[mask.loc[to_check.index].fillna(False)][["player","team","position","role"]].copy()
+                for nm in names:
+                    rows.append({
+                        "player": nm,
+                        "family": fam_label,
+                        "team": (sub.loc[sub["player"].str.lower().str.replace(r"[^a-z0-9]","",regex=True) == nm, "team"].head(1).item()
+                                 if not sub.empty else None),
+                        "missing_for_family": fam_label
+                    })
+            os.makedirs(DATA_DIR, exist_ok=True)
+            pd.DataFrame(rows).to_csv(os.path.join(DATA_DIR, "validation_player_missing.csv"), index=False)
+            print(f"[make_player_form] wrote report → {os.path.join(DATA_DIR, 'validation_player_missing.csv')}")
         except Exception as e:
-        print(f"[make_player_form] WARN could not write missing report: {e}", file=sys.stderr)
+            print(f"[make_player_form] WARN could not write missing report: {e}", file=sys.stderr)
 
         # Env-gated strictness
         if os.getenv("STRICT_VALIDATE", "1") != "0":
-        raise RuntimeError("Required player_form metrics missing; failing per strict policy.")
+            raise RuntimeError("Required player_form metrics missing; failing per strict policy.")
         else:
-        print("[make_player_form] STRICT_VALIDATE=0 → continue despite missing required metrics", file=sys.stderr)
-        return
+            print("[make_player_form] STRICT_VALIDATE=0 → continue despite missing required metrics", file=sys.stderr)
+            return
 
+# ---------------------------
+# Enrich team/opponent from props (MOVED ABOVE cli to avoid NameError)
+# ---------------------------
+
+def _enrich_team_and_opponent_from_props(df: pd.DataFrame) -> pd.DataFrame:
+    import os, re
+    path = os.path.join("outputs", "props_raw.csv")
+    if not os.path.exists(path):
+        return df
+    try:
+        pr = pd.read_csv(path)
+    except Exception:
+        return df
+    pr.columns = [c.lower() for c in pr.columns]
+    name_col = next((c for c in ["player","player_name","name"] if c in pr.columns), None)
+    team_col = next((c for c in ["team","team_abbr","posteam"] if c in pr.columns), None)
+    opp_col  = next((c for c in ["opponent","opp","opp_team","opp_abbr","defteam","defense_team"] if c in pr.columns), None)
+    if not name_col:
+        return df
+    pr["player"] = _norm_name(pr[name_col].astype(str))
+    if team_col:
+        pr["team"] = pr[team_col].astype(str).str.upper().str.strip().map(_canon_team)
+        pr.loc[~pr["team"].isin(VALID), "team"] = np.nan
+    if opp_col:
+        pr["opponent"] = pr[opp_col].astype(str).str.upper().str.strip().map(_canon_team)
+        pr.loc[~pr["opponent"].isin(VALID), "opponent"] = np.nan
+    out = df.copy()
+    if "team" in pr.columns:
+        out = out.merge(pr[["player","team","opponent"]].drop_duplicates(), on=["player","team"], how="left", suffixes=("","_pr1"))
+        if "opponent_pr1" in out.columns:
+            out["opponent"] = out["opponent"].combine_first(out.pop("opponent_pr1"))
+        need_team = out["team"].isna() | (out["team"] == "")
+        if need_team.any():
+            fallback = pr[["player","team","opponent"]].dropna(how="all").drop_duplicates()
+            out = out.merge(fallback, on="player", how="left", suffixes=("","_pr2"))
+            if "team_pr2" in out.columns:
+                out["team"] = out["team"].combine_first(out.pop("team_pr2"))
+            if "opponent_pr2" in out.columns:
+                out["opponent"] = out["opponent"].combine_first(out.pop("opponent_pr2"))
+    else:
+        if "opponent" in pr.columns:
+            out = out.merge(pr[["player","opponent"]].drop_duplicates(), on="player", how="left", suffixes=("","_pr"))
+            if "opponent_pr" in out.columns:
+                out["opponent"] = out["opponent"].combine_first(out.pop("opponent_pr"))
+    return out
+
+# ---------------------------
+# Build from PBP
+# ---------------------------
+
+def build_player_form(season: int = 2025) -> pd.DataFrame:
+    try:
+        pbp = load_pbp(season)
+    except Exception as err:
+        warnings.warn(
+            f"Failed to load play-by-play for season {season}: {err}; proceeding with empty data frame.",
+            RuntimeWarning,
+        )
+        pbp = pd.DataFrame()
+    if pbp.empty:
+        warnings.warn(
+            f"No play-by-play data available for season {season}; returning empty base for fallback hydration.",
+            RuntimeWarning,
+        )
+        base = pd.DataFrame(columns=["player", "team"])
+        base["season"] = int(season)
+        base = _ensure_cols(base, FINAL_COLS)
+        base = base[FINAL_COLS].drop_duplicates(subset=["player","team","opponent","season"]).reset_index(drop=True)
+        # Continue; base will be enriched below
+    off_col = "posteam" if "posteam" in pbp.columns else ("offense_team" if "offense_team" in pbp.columns else None)
+    if off_col is None:
+        raise RuntimeError("No offense team column in PBP (posteam/offense_team).")
+
+    # RECEIVING
+    is_pass = pbp.get("pass")
+    if is_pass is None:
+        pt = pbp.get("play_type")
+        is_pass = pt.isin(["pass","no_play"]) if pt is not None else pd.Series(False, index=pbp.index)
+    else:
+        is_pass = is_pass.astype(bool)
+
+    rec = pbp.loc[is_pass].copy()
+    if rec.empty:
+        rply = pd.DataFrame(columns=["team","opponent","player"])
+    else:
+        rcv_name_col = "receiver_player_name" if "receiver_player_name" in rec.columns else ("receiver" if "receiver" in rec.columns else None)
+        if rcv_name_col is None:
+            rec["receiver_player_name"] = np.nan
+            rcv_name_col = "receiver_player_name"
+        rec["player"] = _norm_name(rec[rcv_name_col].fillna(""))
+        rec["team"] = rec[off_col].astype(str).str.upper().str.strip()
+
+        team_targets = rec.groupby(["team","opponent"], dropna=False).size().rename("team_targets").astype(float)
+        if "qb_dropback" in rec.columns:
+            team_dropbacks = rec.groupby(["team","opponent"], dropna=False)["qb_dropback"].sum(min_count=1).rename("team_dropbacks")
+        else:
+            team_dropbacks = rec.groupby(["team","opponent"], dropna=False).size().rename("team_dropbacks").astype(float)
+
+        rply = rec.groupby(["team","opponent","player"], dropna=False).agg(
+            targets=("pass_attempt","sum") if "pass_attempt" in rec.columns else ("player","size"),
+            rec_yards=("yards_gained","sum"),
+            receptions=("complete_pass","sum") if "complete_pass" in rec.columns else (rcv_name_col,"size"),
+        ).reset_index()
+        rply = rply.merge(team_targets.reset_index(), on=["team","opponent"], how="left")
+        rply = rply.merge(team_dropbacks.reset_index(), on=["team","opponent"], how="left")
+        rply["tgt_share"] = np.where(rply["team_targets"]>0, rply["targets"]/rply["team_targets"], np.nan)
+        rply["route_rate"] = np.where(rply["team_dropbacks"]>0, rply["targets"]/rply["team_dropbacks"], np.nan).clip(0.05, 0.95)
+        rply["ypt"] = np.where(rply["targets"]>0, rply["rec_yards"]/rply["targets"], np.nan)
+        rply["receptions_per_target"] = np.where(rply["targets"]>0, rply["receptions"]/rply["targets"], np.nan)
+        routes_proxy = (rply["team_dropbacks"] * rply["route_rate"]).replace(0, np.nan)
+        rply["yprr"] = np.where(routes_proxy>0, rply["rec_yards"]/routes_proxy, np.nan)
+
+        inside20 = rec.copy()
+        inside20["yardline_100"] = pd.to_numeric(inside20.get("yardline_100"), errors="coerce")
+        rz_rec = inside20.loc[inside20["yardline_100"] <= 20]
+        if not rz_rec.empty:
+            rz_tgt_ply = rz_rec.groupby(["team","opponent","player"]).size().rename("rz_targets")
+            rz_tgt_tm  = rz_rec.groupby("team").size().rename("rz_team_targets")
+            rply = rply.merge(rz_tgt_ply.reset_index(), on=["team","opponent","player"], how="left")
+            rply = rply.merge(rz_tgt_tm.reset_index(),  on=["team","opponent"],          how="left")
+            rply["rz_tgt_share"] = np.where(rply["rz_team_targets"]>0, rply["rz_targets"]/rply["rz_team_targets"], np.nan)
+
+    rply = _ensure_cols(rply, [
+        "targets","rec_yards","receptions","team_targets","team_dropbacks",
+        "tgt_share","route_rate","ypt","receptions_per_target","yprr",
+        "rz_targets","rz_team_targets","rz_tgt_share",
+    ])
+
+    # RUSHING
+    is_rush = pbp.get("rush")
+    if is_rush is None:
+        pt = pbp.get("play_type")
+        is_rush = pt.eq("run") if pt is not None else pd.Series(False, index=pbp.index)
+    else:
+        is_rush = is_rush.astype(bool)
+
+    ru = pbp.loc[is_rush].copy()
+    if ru.empty:
+        rru = pd.DataFrame(columns=["team","opponent","player"])
+    else:
+        rush_name_col = "rusher_player_name" if "rusher_player_name" in ru.columns else ("rusher" if "rusher" in ru.columns else None)
+        if rush_name_col is None:
+            ru["rusher_player_name"] = np.nan
+            rush_name_col = "rusher_player_name"
+
+        ru["player"] = _norm_name(ru[rush_name_col].fillna(""))
+        ru["team"] = ru[off_col].astype(str).str.upper().str.strip()
+
+        team_rushes = ru.groupby(["team","opponent"], dropna=False).size().rename("team_rushes").astype(float)
+        rru = ru.groupby(["team","opponent","player"], dropna=False).agg(
+            rushes=("rush_attempt","sum") if "rush_attempt" in ru.columns else ("player","size"),
+            rush_yards=("yards_gained","sum"),
+        ).reset_index()
+        rru = rru.merge(team_rushes.reset_index(), on=["team","opponent"], how="left")
+        rru["rush_share"] = np.where(rru["team_rushes"]>0, rru["rushes"]/rru["team_rushes"], np.nan)
+        rru["ypc"] = np.where(rru["rushes"]>0, rru["rush_yards"]/rru["rushes"], np.nan)
+
+        inside10 = ru.copy()
+        inside10["yardline_100"] = pd.to_numeric(inside10.get("yardline_100"), errors="coerce")
+        rz_ru = inside10.loc[inside10["yardline_100"] <= 10]
+        if not rz_ru.empty:
+            rz_ru_ply = rz_ru.groupby(["team","opponent","player"]).size().rename("rz_rushes")
+            rz_ru_tm  = rz_ru.groupby("team").size().rename("rz_team_rushes")
+            rru = rru.merge(rz_ru_ply.reset_index(), on=["team","opponent","player"], how="left")
+            rru = rru.merge(rz_ru_tm.reset_index(),  on=["team","opponent"],          how="left")
+            rru["rz_rush_share"] = np.where(rru["rz_team_rushes"]>0, rru["rz_rushes"]/rru["rz_team_rushes"], np.nan)
+
+    rru = _ensure_cols(rru, [
+        "rushes","rush_yards","team_rushes","rush_share","ypc",
+        "rz_rushes","rz_team_rushes","rz_rush_share",
+    ])
+
+    # QUARTERBACK
+    qb_df = pd.DataFrame(columns=["team","opponent","player","ypa","dropbacks"])
+    qb_name_col = "passer_player_name" if "passer_player_name" in pbp.columns else ("passer" if "passer" in pbp.columns else None)
+    if qb_name_col is not None:
+        qb = pbp.copy()
+        qb["player"] = _norm_name(qb[qb_name_col].fillna(""))
+        qb["team"] = qb[off_col].astype(str).str.upper().str.strip()
+        gb = qb.groupby(["team","opponent","player"], dropna=False).agg(
+            pass_yards=("yards_gained","sum"),
+            pass_att=("pass_attempt","sum") if "pass_attempt" in qb.columns else (qb_name_col,"size"),
+            dropbacks=("qb_dropback","sum") if "qb_dropback" in qb.columns else (qb_name_col,"size"),
+        ).reset_index()
+        gb["ypa"] = np.where(gb["pass_att"]>0, gb["pass_yards"]/gb["pass_att"], np.nan)
+        qb_df = gb[["team","opponent","player","ypa","dropbacks"]]
+
+    # Merge all
+    base = pd.merge(rply, rru, on=["team","opponent","player"], how="outer")
+    base = pd.merge(base, qb_df, on=["team","opponent","player"], how="left")
+    base["rz_share"] = base[["rz_tgt_share","rz_rush_share"]].max(axis=1)
+    base["season"] = int(season)
+
+    # Initialize position/role as NaN (do not uppercase yet)
+    base["position"] = np.nan
+    base["role"] = np.nan
+
+    # Normalize keys
+    base["player"] = _norm_name(base["player"].astype(str))
+    base["team"] = base["team"].astype(str).str.upper().str.strip().map(_canon_team)
+
+    # POSITION ENRICHMENT: weekly rosters → players master → usage family
+    ro = _load_weekly_rosters(season)
+    if not ro.empty:
+        ro["player"] = _norm_name(ro["player"].astype(str))
+        ro["team"] = ro["team"].astype(str).str.upper().str.strip().map(_canon_team)
+        ro = ro[ro["team"].isin(VALID)]
+        base = base.merge(ro, on=["player","team"], how="left", suffixes=("","_ro"))
+        if "position_ro" in base.columns:
+            base["position"] = base["position"].combine_first(base["position_ro"])
+            base.drop(columns=["position_ro"], inplace=True, errors="ignore")
+
+    # Fallback: players master (merge by player only)
+    if base["position"].isna().all():
+        pm = _load_players_master()
+        if not pm.empty:
+            pm["player"] = _norm_name(pm["player"].astype(str))
+            base = base.merge(pm, on="player", how="left", suffixes=("","_pm"))
+            if "position_pm" in base.columns:
+                base["position"] = base["position"].combine_first(base["position_pm"])
+                base.drop(columns=["position_pm"], inplace=True, errors="ignore")
+
+    # Final fallback: usage-based family inference → write into position when still missing
+    if base["position"].isna().any():
+        fam = _infer_position_family_from_usage(base)
+        base["position"] = base["position"].where(base["position"].notna(), fam)
+
+    # Only uppercase non-null positions (avoid turning NaN into "NAN")
+    base.loc[base["position"].notna(), "position"] = base.loc[base["position"].notna(), "position"].astype(str).str.upper().str.strip()
+
+    # roles.csv (non-destructive) then infer roles
+    base = _merge_depth_roles(base)
+    base = _merge_roles_csv(base)
+    if base.get("role", pd.Series(dtype=object)).isna().all():
+        base = _infer_roles_minimal(base)
+
+    base = _ensure_cols(base, FINAL_COLS)
+    out = base[FINAL_COLS].drop_duplicates(subset=["player","team","opponent","season"]).reset_index(drop=True)
+    out = _enrich_team_and_opponent_from_props(out)
+    return out
 
 # ---------------------------
 # CLI
@@ -952,46 +974,3 @@ if __name__ == "__main__":
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         cli()
-
-
-def _enrich_team_and_opponent_from_props(df: pd.DataFrame) -> pd.DataFrame:
-    import os, re
-    path = os.path.join("outputs", "props_raw.csv")
-    if not os.path.exists(path):
-        return df
-    try:
-        pr = pd.read_csv(path)
-    except Exception:
-        return df
-    pr.columns = [c.lower() for c in pr.columns]
-    name_col = next((c for c in ["player","player_name","name"] if c in pr.columns), None)
-    team_col = next((c for c in ["team","team_abbr","posteam"] if c in pr.columns), None)
-    opp_col  = next((c for c in ["opponent","opp","opp_team","opp_abbr","defteam","defense_team"] if c in pr.columns), None)
-    if not name_col:
-        return df
-    pr["player"] = _norm_name(pr[name_col].astype(str))
-    if team_col:
-        pr["team"] = pr[team_col].astype(str).str.upper().str.strip().map(_canon_team)
-        pr.loc[~pr["team"].isin(VALID), "team"] = np.nan
-    if opp_col:
-        pr["opponent"] = pr[opp_col].astype(str).str.upper().str.strip().map(_canon_team)
-        pr.loc[~pr["opponent"].isin(VALID), "opponent"] = np.nan
-    out = df.copy()
-    if "team" in pr.columns:
-        out = out.merge(pr[["player","team","opponent"]].drop_duplicates(), on=["player","team"], how="left", suffixes=("","_pr1"))
-        if "opponent_pr1" in out.columns:
-            out["opponent"] = out["opponent"].combine_first(out.pop("opponent_pr1"))
-        need_team = out["team"].isna() | (out["team"] == "")
-        if need_team.any():
-            fallback = pr[["player","team","opponent"]].dropna(how="all").drop_duplicates()
-            out = out.merge(fallback, on="player", how="left", suffixes=("","_pr2"))
-            if "team_pr2" in out.columns:
-                out["team"] = out["team"].combine_first(out.pop("team_pr2"))
-            if "opponent_pr2" in out.columns:
-                out["opponent"] = out["opponent"].combine_first(out.pop("opponent_pr2"))
-    else:
-        if "opponent" in pr.columns:
-            out = out.merge(pr[["player","opponent"]].drop_duplicates(), on="player", how="left", suffixes=("","_pr"))
-            if "opponent_pr" in out.columns:
-                out["opponent"] = out["opponent"].combine_first(out.pop("opponent_pr"))
-    return out
