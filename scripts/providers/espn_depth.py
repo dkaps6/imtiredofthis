@@ -1,15 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-ESPN depth charts → data/depth_chart_espn.csv and data/roles_espn.csv
-
-Surgical upgrades:
-- Robust name extraction from nested <a>/<span>.
-- Strip jersey-number prefixes just in case.
-- Deduplicate to best role per (team, player).
-- Session with browser headers, retries, jitter, rotating Referer to decrease 403s.
-- Keep prior good outputs when blocked (don't overwrite with empty files).
-"""
+# scripts/providers/espn_depth.py (corrected, non-destructive outputs)
 import os, time, re, sys, random, warnings
 from typing import Dict, List
 import pandas as pd
@@ -59,29 +50,6 @@ VALID = set(TEAM_URLS.keys())
 SUFFIX_RE = re.compile(r"\s+(JR|SR|II|III|IV|V)\.?$", flags=re.IGNORECASE)
 LEADING_NUM_RE = re.compile(r"^\s*(?:#\s*)?\d+\s*[-–—:]?\s*", re.UNICODE)
 
-# === BEGIN: SURGICAL GUARDS FOR ESPN OUTPUT ===
-def _clean_roles_espn(df):
-    import pandas as pd, re
-    if df is None or getattr(df,"empty",True):
-        return df
-    df = df.copy()
-    if "player" in df.columns:
-        df["player"] = df["player"].astype(str)
-        df["player"] = df["player"].str.replace(r"^\s*(?:#\s*)?\d+\s*[-–—:]?\s*", "", regex=True)
-        df = df[~df["player"].str.fullmatch(r"\d+")]
-    return df
-
-def _safe_write_roles_espn(path, df):
-    import os, pandas as pd
-    df = _clean_roles_espn(df)
-    if df is None or df.empty:
-        # keep prior good file if exists
-        if os.path.exists(path):
-            print("[espn_depth] EMPTY roles today; kept prior file:", path)
-            return
-    df.to_csv(path, index=False)
-# === END: SURGICAL GUARDS FOR ESPN OUTPUT ===
-
 def _norm_player(name: str) -> str:
     if not isinstance(name, str):
         return ""
@@ -97,7 +65,7 @@ def _role_rank(role: str) -> int:
 
 SESSION = requests.Session()
 SESSION.headers.update({
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
     "Connection": "keep-alive",
@@ -111,21 +79,21 @@ def _extract_table_names(soup: BeautifulSoup) -> pd.DataFrame:
         ths = tb.select("thead tr th")
         if not ths:
             continue
+        pos_label = ths[0].get_text(" ", strip=True).upper()
+        if pos_label not in {"QB","RB","WR","TE"}:
+            continue
         for tr in tb.select("tbody tr"):
             tds = tr.find_all("td")
             if not tds:
                 continue
-            pos_label = tds[0].get_text(" ", strip=True).upper()
-            if pos_label not in {"QB","RB","WR","TE"}:
-                continue
-            # ESPN tables are usually clean; we can index by column position
             for i, td in enumerate(tds[1:], start=1):
                 a = td.find("a")
                 text = a.get_text(" ", strip=True) if a else td.get_text(" ", strip=True)
                 player = _norm_player(text)
                 if not player or player.isdigit():
                     continue
-                rows.append({"position_role": f"{pos_label}{i}", "player": player})
+                role = f"{pos_label}{i}"
+                rows.append({"position_role": role, "player": player})
     return pd.DataFrame(rows)
 
 def fetch_team(team: str) -> pd.DataFrame:
@@ -163,41 +131,31 @@ def main():
         time.sleep(0.4)
 
     if not all_long:
-        kept = False
-        if os.path.exists(OUT_ROLES) or os.path.exists(OUT_WIDE):
-            kept = True
-            print("[espn_depth] 403/empty today — keeping previously generated roles files.")
-        else:
-            pd.DataFrame(columns=["team","player","position","role"]) ; _safe_write_roles_espn(OUT_ROLES, roles)
+        # keep prior outputs if they exist; otherwise create minimal headers once
+        if not os.path.exists(OUT_ROLES):
+            pd.DataFrame(columns=["team","player","role"]).to_csv(OUT_ROLES, index=False)
+        if not os.path.exists(OUT_WIDE):
             pd.DataFrame(columns=["team"]).to_csv(OUT_WIDE, index=False)
-        print(f"[espn_depth] wrote rows=0 (kept_prior={kept}) → {OUT_WIDE} / {OUT_ROLES}")
+        print("[espn_depth] 0 rows; kept prior outputs.")
         return
 
     long_df = pd.concat(all_long, ignore_index=True)
-    roles = long_df.assign(
-        role=lambda d: d["position_role"].astype(str).str.upper().str.strip(),
-        position=lambda d: d["position_role"].astype(str).str.replace(r"\d+$", "", regex=True)
-    )[["team","player","role","position"]]
 
-    roles["_rank"] = roles["role"].map(_role_rank)
-    roles = (roles.sort_values(["team","player","_rank"])
-             .drop_duplicates(["team","player"], keep="first")
-             .drop(columns=["_rank"])
-             .reset_index(drop=True))
+    long_df["_rank"] = long_df["position_role"].str.extract(r"(\d+)$", expand=False).astype(float).fillna(999).astype(int)
+    roles = (long_df.sort_values(["team","player","_rank"])
+                    .drop_duplicates(["team","player"], keep="first")
+                    .assign(role=lambda d: d["position_role"].str.replace(r"[^A-Z]+", "", regex=True))
+                    [["team","player","role"]])
+    roles.to_csv(OUT_ROLES, index=False)
 
-    wide = (roles.assign(val=roles["player"])
-                 .pivot_table(index="team", columns="role", values="val", aggfunc="first")
-                 .reset_index())
-
-    wanted_cols = ["QB1","RB1","RB2","WR1","WR2","WR3","TE1","TE2"]
-    for c in wanted_cols:
-        if c not in wide.columns:
-            wide[c] = pd.NA
-    wide = wide[["team"] + wanted_cols]
-
-    wide.to_csv(OUT_WIDE, index=False)
-    roles[["team","player","role"]] ; _safe_write_roles_espn(OUT_ROLES, roles)
-    print(f"[espn_depth] wrote rows={len(wide)} → {OUT_WIDE} and rows={len(roles)} → {OUT_ROLES}")
+    wide = long_df.copy()
+    wide["pos"]  = wide["position_role"].str.replace(r"\d+$", "", regex=True)
+    wide["slot"] = wide["position_role"].str.extract(r"(\d+)$", expand=False).astype(float).fillna(1).astype(int)
+    pivot = (wide.pivot_table(index="team", columns=["pos","slot"], values="player", aggfunc="first")
+                   .sort_index(axis=1))
+    pivot.columns = [f"{p}{s}" for p,s in pivot.columns]
+    pivot.reset_index().to_csv(OUT_WIDE, index=False)
+    print(f"[espn_depth] wrote roles={len(roles)} → {OUT_ROLES}; wide={len(pivot)} → {OUT_WIDE}")
 
 if __name__ == "__main__":
     main()
