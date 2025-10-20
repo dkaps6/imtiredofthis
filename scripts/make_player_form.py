@@ -390,8 +390,7 @@ def _load_weekly_rosters(season: int) -> pd.DataFrame:
 
     # team — accept any column that looks like a team key
     team_col = None
-    for c in ["team",
-    "opponent","recent_team","club_code","team_abbr","posteam"]:
+    for c in ["team","recent_team","club_code","team_abbr","posteam"]:
         if c in df.columns:
             team_col = c
             break
@@ -409,11 +408,9 @@ def _load_weekly_rosters(season: int) -> pd.DataFrame:
     df["position"] = np.where(pos_col is not None, df[pos_col].astype(str).str.upper().str.strip(), np.nan)
 
     if "week" in df.columns:
-        df = df.sort_values(["player","team",
-    "opponent","week"]).drop_duplicates(["player","team"], keep="last")
+        df = df.sort_values(["player","team","week"]).drop_duplicates(["player","team"], keep="last")
 
-    return df[["player","team",
-    "opponent","position"]].drop_duplicates()
+    return df[["player","team","position"]].drop_duplicates()
 
 def _load_players_master() -> pd.DataFrame:
     """Fallback: (player -> position) without team join."""
@@ -585,10 +582,18 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     
     off_col = "posteam" if "posteam" in pbp.columns else ("offense_team" if "offense_team" in pbp.columns else None)
     if off_col is None:
+        raise RuntimeError("No offense team column in PBP (posteam/offense_team).")
         if pbp.empty:
             return base
         else:
             raise RuntimeError("No offense team column in PBP (posteam/offense_team).")
+
+    # Determine opponent (defense) column
+    opp_col = "defteam" if "defteam" in pbp.columns else ("defense_team" if "defense_team" in pbp.columns else None)
+    if opp_col is None:
+        pbp["opponent"] = np.nan
+    else:
+        pbp["opponent"] = pbp[opp_col].astype(str).str.upper().str.strip()
 
     # Determine opponent (defense) column
     opp_col = "defteam" if "defteam" in pbp.columns else ("defense_team" if "defense_team" in pbp.columns else None)
@@ -852,9 +857,11 @@ def _load_props_players() -> pd.DataFrame:
     else:
         pr["team"] = pr["team"].astype(str).str.upper().str.strip().map(_canon_team)
 
+    if "opponent" not in pr.columns:
+        pr["opponent"] = np.nan
+
     pr["player_key"] = pr["player"].fillna("").astype(str).str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
-    return pr[["player","team",
-    "opponent","player_key"]].drop_duplicates()
+    return pr[["player","team","opponent","player_key"]].drop_duplicates()
 
 def _validate_required(df: pd.DataFrame):
     """
