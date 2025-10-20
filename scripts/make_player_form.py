@@ -36,136 +36,6 @@ OUTPATH = os.path.join(DATA_DIR, "player_form.csv")
 
 FINAL_COLS = [
 
-# === SURGICAL ADDITION: merge roles from ESPN and Ourlads ===
-def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
-    """
-    Merge depth chart roles from ESPN and Ourlads into player_form.
-    Keeps your original position/role if already present.
-    """
-    try:
-        roles_espn = pd.read_csv(os.path.join(DATA_DIR, "roles_espn.csv"))
-    except Exception:
-        roles_espn = pd.DataFrame(columns=["team","player","role"])
-    try:
-        roles_ourlads = pd.read_csv(os.path.join(DATA_DIR, "roles_ourlads.csv"))
-    except Exception:
-        roles_ourlads = pd.DataFrame(columns=["team","player","role"])
-
-    roles = pd.concat([roles_espn, roles_ourlads], ignore_index=True)
-    if roles.empty:
-        print("[make_player_form] No roles_espn or roles_ourlads found, skipping merge.")
-        return pf
-
-    # normalize player/team
-    roles["player"] = roles["player"].astype(str).str.replace(".", "", regex=False).str.strip()
-    roles["team"]   = roles["team"].astype(str).str.upper().str.strip()
-    roles["role"]   = roles["role"].astype(str).str.upper().str.strip()
-    roles["position"] = roles["role"].str.replace(r"\d+$", "", regex=True)
-
-    # >>> ADD THESE TWO LINES <<<
-    roles["player"] = roles["player"].str.replace(r"^\s*(?:#\s*)?\d+\s*[-–—:]?\s*", "", regex=True)  # strip jersey prefix again
-    roles = roles[~roles["player"].str.fullmatch(r"\d+")]  # drop rows that are just numbers
-   
-    # keep best depth slot per (team, player)
-    def _rank(r): 
-        m = re.search(r"(\d+)$", str(r)); 
-        return int(m.group(1)) if m else 999
-    roles["_rank"] = roles["role"].map(_rank)
-    roles = (roles.sort_values(["team","player","_rank"])
-                  .drop_duplicates(["team","player"], keep="first")
-                  .drop(columns=["_rank"]))
-
-    # merge: prefer existing position/role if already populated
-    pf = pf.merge(
-        roles,
-        on=["player","team"],
-        how="left",
-        suffixes=("", "_depth")
-    )
-    if "position_depth" in pf.columns:
-        pf["position"] = pf["position"].fillna(pf["position_depth"])
-    if "role_depth" in pf.columns:
-        pf["role"] = pf["role"].fillna(pf["role_depth"])
-    pf = pf.drop(columns=[c for c in pf.columns if c.endswith("_depth")], errors="ignore")
-
-    try:
-        cov = pf["position"].notna().mean()
-        print(f"[make_player_form] merged depth roles → coverage now {cov:.2%}")
-    except Exception:
-        pass
-    return pf
-# === END ADDITION ===
-
-def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
-    """
-    Merge depth chart roles from ESPN and Ourlads into player_form.
-    Keeps your original position/role if already present.
-    """
-    try:
-        roles_espn = pd.read_csv(os.path.join(DATA_DIR, "roles_espn.csv"))
-    except Exception:
-        roles_espn = pd.DataFrame(columns=["team","player","role"])
-    try:
-        roles_ourlads = pd.read_csv(os.path.join(DATA_DIR, "roles_ourlads.csv"))
-    except Exception:
-        roles_ourlads = pd.DataFrame(columns=["team","player","role"])
-
-    roles = pd.concat([roles_espn, roles_ourlads], ignore_index=True)
-    if roles.empty:
-        print("[make_player_form] No roles_espn or roles_ourlads found, skipping merge.")
-        return pf
-
-    # normalize player/team
-    roles["player"] = roles["player"].astype(str).str.replace(".", "", regex=False).str.strip()
-    roles["team"] = roles["team"].astype(str).str.upper().str.strip()
-    roles["role"] = roles["role"].astype(str).str.upper().str.strip()
-    roles["position"] = roles["role"].str.replace(r"\d+$", "", regex=True)
-
-    # merge: prefer existing position/role if already populated
-    pf = pf.merge(
-        roles,
-        on=["player","team"],
-        how="left",
-        suffixes=("", "_depth")
-    )
-    if "position_depth" in pf.columns:
-        pf["position"] = pf["position"].fillna(pf["position_depth"])
-    if "role_depth" in pf.columns:
-        pf["role"] = pf["role"].fillna(pf["role_depth"])
-    pf = pf.drop(columns=[c for c in pf.columns if c.endswith("_depth")], errors="ignore")
-    try:
-        cov = pf["position"].notna().mean()
-        print(f"[make_player_form] merged depth roles → coverage now {cov:.2%}")
-    except Exception:
-        pass
-    return pf
-
-    "player",
-    "team",
-    "season",
-    "position",
-    "role",
-    "tgt_share",
-    "route_rate",
-    "rush_share",
-    "yprr",
-    "ypt",
-    "ypc",
-    "ypa",
-    "receptions_per_target",
-    "rz_share",
-    "rz_tgt_share",
-    "rz_rush_share",
-]
-
-# ---------------------------
-# Utilities
-# ---------------------------
-
-def _safe_mkdir(path: str):
-    if not os.path.exists(path):
-        os.makedirs(path, exist_ok=True)
-
 def _is_empty(obj) -> bool:
     try:
         return obj is None or (hasattr(obj, "__len__") and len(obj) == 0)
@@ -193,6 +63,61 @@ def _read_csv_safe(path: str) -> pd.DataFrame:
     try:
         df = pd.read_csv(path)
         df.columns = [c.lower() for c in df.columns]
+
+# === SURGICAL ADDITION: merge roles from ESPN and Ourlads (clean placement) ===
+def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
+    """
+    Merge depth chart roles from ESPN and Ourlads into player_form.
+    Keeps your original position/role if already present.
+    """
+    import re
+    try:
+        roles_espn = pd.read_csv(os.path.join(DATA_DIR, "roles_espn.csv"))
+    except Exception:
+        roles_espn = pd.DataFrame(columns=["team","player","role"])
+    try:
+        roles_ourlads = pd.read_csv(os.path.join(DATA_DIR, "roles_ourlads.csv"))
+    except Exception:
+        roles_ourlads = pd.DataFrame(columns=["team","player","role"])
+
+    roles = pd.concat([roles_espn, roles_ourlads], ignore_index=True)
+    if roles.empty:
+        print("[make_player_form] No roles_espn or roles_ourlads found, skipping merge.")
+        return pf
+
+    # normalize player/team
+    roles["player"] = roles["player"].astype(str).str.replace(".", "", regex=False).str.strip()
+    roles["team"]   = roles["team"].astype(str).str.upper().str.strip()
+    roles["role"]   = roles["role"].astype(str).str.upper().str.strip()
+    roles["position"] = roles["role"].str.replace(r"\d+$", "", regex=True)
+
+    # cleanup: strip jersey prefixes; drop numeric-only rows
+    roles["player"] = roles["player"].str.replace(r"^\s*(?:#\s*)?\d+\s*[-–—:]?\s*", "", regex=True)
+    roles = roles[~roles["player"].str.fullmatch(r"\d+")]
+
+    # prefer best depth per (team,player)
+    def _rank(r):
+        m = re.search(r"(\d+)$", str(r)); 
+        return int(m.group(1)) if m else 999
+    roles["_rank"] = roles["role"].map(_rank)
+    roles = (roles.sort_values(["team","player","_rank"])
+                  .drop_duplicates(["team","player"], keep="first")
+                  .drop(columns=["_rank"]))
+
+    pf = pf.merge(roles, on=["player","team"], how="left", suffixes=("", "_depth"))
+    if "position_depth" in pf.columns:
+        pf["position"] = pf["position"].combine_first(pf["position_depth"])
+    if "role_depth" in pf.columns:
+        pf["role"] = pf["role"].combine_first(pf["role_depth"])
+    pf.drop(columns=[c for c in pf.columns if c.endswith("_depth")], inplace=True, errors="ignore")
+
+    try:
+        cov = pf["position"].notna().mean()
+        print(f"[make_player_form] merged depth roles → coverage now {cov:.2%}")
+    except Exception:
+        pass
+    return pf
+# === END ADDITION ===
         return df
     except Exception:
         return pd.DataFrame()
