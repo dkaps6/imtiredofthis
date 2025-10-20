@@ -857,7 +857,10 @@ def _load_props_players() -> pd.DataFrame:
     else:
         pr["team"] = pr["team"].astype(str).str.upper().str.strip().map(_canon_team)
 
-    if "opponent" not in pr.columns:
+    opp_col = next((c for c in DEFENSE_TEAM_CANDIDATES if c in pr.columns), None)
+    if opp_col is not None:
+        pr["opponent"] = _derive_opponent(pr)
+    else:
         pr["opponent"] = np.nan
 
     pr["player_key"] = pr["player"].fillna("").astype(str).str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
