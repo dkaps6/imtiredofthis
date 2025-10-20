@@ -107,8 +107,6 @@ def _norm_player(name: str) -> str:
     return s
 
 
-# For splitting multi-name cells
-
 # For splitting multi-name cells (co-starters)
 SPLIT_RE = re.compile(r"(?:<br\s*/?>|/| & | and )", flags=re.I)
 
@@ -124,9 +122,6 @@ def _split_candidates(cell_text: str) -> List[str]:
         if nm and len(nm.split()) >= 2 and nm.upper() not in VALID:
             out.append(nm)
     return out
-
-
-# Optional: standardize some position variants
 
 # Optional: standardize some position variants to stable buckets
 # POS_MAP = {
@@ -148,7 +143,16 @@ def fetch_team_roles(team: str) -> pd.DataFrame:
     soup = BeautifulSoup(r.text, "lxml")
 
     rows = []
-    for tr in soup.select("table tbody tr"):
+
+    # Only parse the OFFENSE depth-chart table (avoid historical/other tables)
+    off = soup.find(lambda tag: tag.name in ["h2","h3"] and "OFFENSE" in tag.get_text().upper())
+    if not off:
+        return pd.DataFrame(columns=["team","player","role"])
+    table = off.find_next("table")
+    if not table:
+        return pd.DataFrame(columns=["team","player","role"])
+
+    for tr in table.find_all("tr"):
         tds = tr.find_all("td")
         if len(tds) < 2:
             continue
@@ -158,27 +162,31 @@ def fetch_team_roles(team: str) -> pd.DataFrame:
         if pos not in {"QB","RB","WR","TE"}:
             continue
 
-        depth_idx = 1
-        for td in tds[1:]:
+        # Enumerate columns as depth slots; keep left-to-right order of co-starters
+        for depth_idx, td in enumerate(tds[1:], start=1):
             a = td.find("a")
             raw = a.get_text(" ", strip=True) if a else td.get_text(" ", strip=True)
             raw = re.sub(r"\s*\(.*?\)\s*$", "", raw).strip()
 
-            # NEW: split multi-name cells → each candidate becomes its own row at the same depth
             candidates = _split_candidates(raw)
             if not candidates:
                 continue
 
-            for player in candidates:
+            for slot_order, player in enumerate(candidates, start=1):
                 role = f"{pos}{depth_idx}"
-                rows.append({"team": team, "player": player, "role": role})
-
-            depth_idx += 1
+                rows.append({
+                    "team": team,
+                    "player": player,
+                    "role": role,
+                    "orig_depth": depth_idx,   # which column
+                    "slot_order": slot_order,  # order within the cell
+                })
 
     df = pd.DataFrame(rows)
     if df.empty:
         return df
 
+    # prefer lowest numeric depth per (team,player) if same guy shows up twice
     df["rank"] = df["role"].map(_role_rank)
     df = (
         df.sort_values(["team","player","rank"])
@@ -188,14 +196,20 @@ def fetch_team_roles(team: str) -> pd.DataFrame:
     return df
 
 def _reassign_sequential_depth(df: pd.DataFrame) -> pd.DataFrame:
-    """Ensure unique depth numbers per (team, position). Keeps relative column-order by original depth."""
+    """Ensure unique depth numbers per (team, position). Keeps column order by original depth & slot order."""
     if df is None or getattr(df, "empty", True):
         return df
     df = df.copy()
     df["pos"] = df["role"].str.extract(r"([A-Z]+)")
-    df["orig_depth"] = df["role"].str.extract(r"(\d+)").astype(int)
+    # if orig_depth/slot_order are missing (old rows), try to recover from role
+    if "orig_depth" not in df.columns:
+        df["orig_depth"] = df["role"].str.extract(r"(\d+)").astype(int)
+    if "slot_order" not in df.columns:
+        df["slot_order"] = 1
+
     def assign(g: pd.DataFrame) -> pd.DataFrame:
-        g = g.sort_values(["orig_depth", "player"]).copy()
+        # preserve left-to-right column order then within-cell order
+        g = g.sort_values(["orig_depth", "slot_order"], na_position="last").copy()
         g["depth"] = range(1, len(g) + 1)
         g["role"] = g["pos"].iloc[0] + g["depth"].astype(str)
         return g.drop(columns=["depth"])
@@ -252,12 +266,12 @@ def _postprocess_roles_df_ourlads(df: pd.DataFrame) -> pd.DataFrame:
               .drop(columns=["_rk"])
         )
 
-    # NEW: ensure unique sequential depths per (team, pos)
+    # Ensure unique sequential depths per (team, pos) using orig_depth + slot_order
     df = _reassign_sequential_depth(df)
 
-    # NEW: deterministic join keys for your merges
-    df["player_key_filast"] = df["player"].map(_fi_last)        # e.g., 'd johnson'
-    df["player_key_concat"] = df["player"].map(_fi_last_concat) # e.g., 'DJohnson'
+    # Deterministic join keys for your merges
+    df["player_key_filast"]  = df["player"].map(_fi_last)        # e.g., 'd johnson'
+    df["player_key_concat"]  = df["player"].map(_fi_last_concat) # e.g., 'DJohnson'
 
     return df
 
