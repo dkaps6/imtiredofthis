@@ -859,7 +859,32 @@ def _load_props_players() -> pd.DataFrame:
 
     opp_col = next((c for c in DEFENSE_TEAM_CANDIDATES if c in pr.columns), None)
     if opp_col is not None:
-        pr["opponent"] = _derive_opponent(pr)
+        try:
+            derived = _derive_opponent(pr)
+        except Exception:
+            derived = pd.Series(np.nan, index=pr.index, dtype=object)
+        if not isinstance(derived, pd.Series) or derived.shape[0] != len(pr):
+            derived = pd.Series(np.nan, index=pr.index, dtype=object)
+        if derived.notna().any():
+            opp_norm = (
+                derived.where(derived.notna(), "")
+                .astype(str)
+                .str.upper()
+                .str.strip()
+            )
+            pr["opponent"] = opp_norm.map(_canon_team).replace("", np.nan)
+        else:
+            opp_raw = pr[opp_col]
+            if isinstance(opp_raw, pd.Series):
+                opp_norm = (
+                    opp_raw.where(opp_raw.notna(), "")
+                    .astype(str)
+                    .str.upper()
+                    .str.strip()
+                )
+                pr["opponent"] = opp_norm.map(_canon_team).replace("", np.nan)
+            else:
+                pr["opponent"] = np.nan
     else:
         pr["opponent"] = np.nan
 
