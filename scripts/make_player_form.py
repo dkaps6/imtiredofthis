@@ -580,8 +580,8 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         base = pd.DataFrame(columns=["player", "team"])
         base["season"] = int(season)
         base = _ensure_cols(base, FINAL_COLS)
-        base = base[FINAL_COLS].drop_duplicates(subset=["player","team",
-    "opponent","season"]).reset_index(drop=True)
+        base = base[FINAL_COLS].drop_duplicates(subset=["player","team","opponent","season"]).reset_index(drop=True)
+        return base
     
     off_col = "posteam" if "posteam" in pbp.columns else ("offense_team" if "offense_team" in pbp.columns else None)
     if off_col is None:
@@ -743,13 +743,11 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     base["role"] = np.nan
 
     # Normalize keys
+    base = _ensure_cols(base, ["opponent"])
     base["player"] = _norm_name(base["player"].astype(str))
     base["team"] = base["team"].astype(str).str.upper().str.strip().map(_canon_team)
     base["opponent"] = base["opponent"].astype(str).str.upper().str.strip().map(_canon_team)
     base["opponent"] = base["opponent"].replace("", np.nan)
-    base["opponent"] = base.get("opponent", np.nan)
-    if "opponent" in base.columns:
-        base["opponent"] = base["opponent"].astype(str).str.upper().str.strip().map(_canon_team)
 
     # POSITION ENRICHMENT: weekly rosters → players master → usage family
     ro = _load_weekly_rosters(season)
