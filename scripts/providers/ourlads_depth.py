@@ -4,10 +4,12 @@
 Ourlads depth charts → data/roles_ourlads.csv
 
 Fixes:
-- Extract player names robustly (prefer <a> text).
+- Extract player names robustly (prefer <a> text, fallback to visible text).
 - Strip leading jersey numbers (e.g., "8 Kyle Pitts" → "Kyle Pitts").
+- **Only increment depth slot when a valid player name is captured** (prevents TE1→TE2 shift).
 - Drop numeric-only "players" (accidental jersey-only captures).
 - Deduplicate: if a player appears in multiple depth slots, keep the best (e.g., TE1 over TE2).
+- Polite delay between requests.
 """
 
 import os, sys, re, time
@@ -89,18 +91,20 @@ def fetch_team_roles(team: str) -> pd.DataFrame:
         if pos not in {"QB","RB","WR","TE"}:
             continue
 
-        for i, td in enumerate(tds[1:], start=1):
+        depth_idx = 1  # IMPORTANT: increment only when we capture a valid player name
+        for td in tds[1:]:
             # Prefer anchor text (player link)
             a = td.find("a")
             raw = a.get_text(" ", strip=True) if a else td.get_text(" ", strip=True)
             player = _norm_player(raw)
 
-            # Ignore junk rows that are just numbers (jersey-only)
+            # If this cell is just a number or empty (jersey-only), skip WITHOUT advancing slot
             if not player or player.isdigit():
                 continue
 
-            role = f"{pos}{i}"
+            role = f"{pos}{depth_idx}"
             rows.append({"team": team, "player": player, "role": role})
+            depth_idx += 1  # advance only for real player names
 
     df = pd.DataFrame(rows)
     if df.empty:
