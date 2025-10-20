@@ -499,8 +499,7 @@ def _infer_roles_minimal(pf: pd.DataFrame) -> pd.DataFrame:
         return g
 
     out = []
-    for team, g in pf.groupby("team",
-    "opponent", dropna=False):
+    for team, g in pf.groupby(["team","opponent"], dropna=False):
         g = g.copy()
         g_fam = fam.loc[g.index].astype(str)
 
@@ -574,14 +573,11 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         rec["player"] = _norm_name(rec[rcv_name_col].fillna(""))
         rec["team"] = rec[off_col].astype(str).str.upper().str.strip()
 
-        team_targets = rec.groupby("team",
-    "opponent", dropna=False).size().rename("team_targets").astype(float)
+        team_targets = rec.groupby(["team","opponent"], dropna=False).size().rename("team_targets").astype(float)
         if "qb_dropback" in rec.columns:
-            team_dropbacks = rec.groupby("team",
-    "opponent", dropna=False)["qb_dropback"].sum(min_count=1).rename("team_dropbacks")
+            team_dropbacks = rec.groupby(["team","opponent"], dropna=False)["qb_dropback"].sum(min_count=1).rename("team_dropbacks")
         else:
-            team_dropbacks = rec.groupby("team",
-    "opponent", dropna=False).size().rename("team_dropbacks").astype(float)
+            team_dropbacks = rec.groupby(["team","opponent"], dropna=False).size().rename("team_dropbacks").astype(float)
 
         rply = rec.groupby(["team",
     "opponent","player"], dropna=False).agg(
@@ -589,10 +585,8 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
             rec_yards=("yards_gained","sum"),
             receptions=("complete_pass","sum") if "complete_pass" in rec.columns else (rcv_name_col,"size"),
         ).reset_index()
-        rply = rply.merge(team_targets.reset_index(), on="team",
-    "opponent", how="left")
-        rply = rply.merge(team_dropbacks.reset_index(), on="team",
-    "opponent", how="left")
+        rply = rply.merge(team_targets.reset_index(), on=["team","opponent"], how="left")
+        rply = rply.merge(team_dropbacks.reset_index(), on=["team","opponent"], how="left")
         rply["tgt_share"] = np.where(rply["team_targets"]>0, rply["targets"]/rply["team_targets"], np.nan)
         rply["route_rate"] = np.where(rply["team_dropbacks"]>0, rply["targets"]/rply["team_dropbacks"], np.nan).clip(0.05, 0.95)
         rply["ypt"] = np.where(rply["targets"]>0, rply["rec_yards"]/rply["targets"], np.nan)
@@ -640,15 +634,13 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         ru["player"] = _norm_name(ru[rush_name_col].fillna(""))
         ru["team"] = ru[off_col].astype(str).str.upper().str.strip()
 
-        team_rushes = ru.groupby("team",
-    "opponent", dropna=False).size().rename("team_rushes").astype(float)
+        team_rushes = ru.groupby(["team","opponent"], dropna=False).size().rename("team_rushes").astype(float)
         rru = ru.groupby(["team",
     "opponent","player"], dropna=False).agg(
             rushes=("rush_attempt","sum") if "rush_attempt" in ru.columns else ("player","size"),
             rush_yards=("yards_gained","sum"),
         ).reset_index()
-        rru = rru.merge(team_rushes.reset_index(), on="team",
-    "opponent", how="left")
+        rru = rru.merge(team_rushes.reset_index(), on=["team","opponent"], how="left")
         rru["rush_share"] = np.where(rru["team_rushes"]>0, rru["rushes"]/rru["team_rushes"], np.nan)
         rru["ypc"] = np.where(rru["rushes"]>0, rru["rush_yards"]/rru["rushes"], np.nan)
 
@@ -881,11 +873,40 @@ def _validate_required(df: pd.DataFrame):
     _need(is_qb.loc[to_check.index],   ["ypa"],                           "QB")
 
     if missing:
-        print("[make_player_form] REQUIRED PLAYER METRICS MISSING:", file=sys.stderr)
-        for k, v in missing.items():
-            preview = ", ".join(v[:10]) + ("..." if len(v) > 10 else "")
-            print(f"  - {k}: {preview}", file=sys.stderr)
+    print("[make_player_form] REQUIRED PLAYER METRICS MISSING:", file=sys.stderr)
+    for k, v in missing.items():
+        preview = ", ".join(v[:10]) + ("..." if len(v) > 10 else "")
+        print(f"  - {k}: {preview}", file=sys.stderr)
+
+    # Write a CSV report for diagnostics
+    try:
+        rows = []
+        fam_map = {"WR/TE": is_wrte, "RB": is_rb, "QB": is_qb}
+        for fam, names in missing.items():
+            mask = fam_map.get(fam, pd.Series(False, index=df.index))
+            # build a small lookup subset
+            sub = to_check[mask.loc[to_check.index].fillna(False)][["player","team","position","role"]].copy()
+            for nm in names:
+                rows.append({
+                    "player": nm,
+                    "family": fam,
+                    "team": (sub.loc[sub["player"].str.lower().str.replace(r"[^a-z0-9]","",regex=True) == nm, "team"].head(1).item()
+                             if not sub.empty else None),
+                    "missing_for_family": fam
+                })
+        os.makedirs(DATA_DIR, exist_ok=True)
+        pd.DataFrame(rows).to_csv(os.path.join(DATA_DIR, "validation_player_missing.csv"), index=False)
+        print(f"[make_player_form] wrote report → {os.path.join(DATA_DIR, 'validation_player_missing.csv')}")
+    except Exception as e:
+        print(f"[make_player_form] WARN could not write missing report: {e}", file=sys.stderr)
+
+    # Env-gated strictness
+    if os.getenv("STRICT_VALIDATE", "1") != "0":
         raise RuntimeError("Required player_form metrics missing; failing per strict policy.")
+    else:
+        print("[make_player_form] STRICT_VALIDATE=0 → continue despite missing required metrics", file=sys.stderr)
+        return
+
 
 # ---------------------------
 # CLI
