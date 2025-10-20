@@ -885,6 +885,36 @@ def _load_props_players() -> pd.DataFrame:
         pr["team"] = pr["team"].astype(str).str.upper().str.strip().map(_canon_team)
 
     pr["opponent"] = _normalize_props_opponent(pr)
+    opp_col = next((c for c in DEFENSE_TEAM_CANDIDATES if c in pr.columns), None)
+    if opp_col is not None:
+        try:
+            derived = _derive_opponent(pr)
+        except Exception:
+            derived = pd.Series(np.nan, index=pr.index, dtype=object)
+        if not isinstance(derived, pd.Series) or derived.shape[0] != len(pr):
+            derived = pd.Series(np.nan, index=pr.index, dtype=object)
+        if derived.notna().any():
+            opp_norm = (
+                derived.where(derived.notna(), "")
+                .astype(str)
+                .str.upper()
+                .str.strip()
+            )
+            pr["opponent"] = opp_norm.map(_canon_team).replace("", np.nan)
+        else:
+            opp_raw = pr[opp_col]
+            if isinstance(opp_raw, pd.Series):
+                opp_norm = (
+                    opp_raw.where(opp_raw.notna(), "")
+                    .astype(str)
+                    .str.upper()
+                    .str.strip()
+                )
+                pr["opponent"] = opp_norm.map(_canon_team).replace("", np.nan)
+            else:
+                pr["opponent"] = np.nan
+    else:
+        pr["opponent"] = np.nan
 
     pr["player_key"] = pr["player"].fillna("").astype(str).str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
     return pr[["player","team","opponent","player_key"]].drop_duplicates()
