@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# scripts/providers/ourlads_depth.py  (surgically patched)
+# scripts/providers/ourlads_depth.py  (hardened: retries + robust selectors + roster URL fallback)
 
-import os, re, time, warnings
-from typing import Dict, List
+import os, re, time, warnings, sys
+from typing import Dict, List, Optional
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
@@ -12,7 +12,6 @@ VALID = {"ARI","ATL","BAL","BUF","CAR","CHI","CIN","CLE","DAL","DEN","DET","GB",
          "IND","JAX","KC","LAC","LAR","LV","MIA","MIN","NE","NO","NYG","NYJ",
          "PHI","PIT","SEA","SF","TB","TEN","WAS"}
 
-# ---- Team aliases (canonicalization) ----
 TEAM_ALIASES = {
     "ARZ": "ARI",
     "JAC": "JAX",
@@ -28,7 +27,7 @@ def _canon_team(code: str) -> str:
 
 DATA_DIR = "data"
 OUT_ROLES = os.path.join(DATA_DIR, "roles_ourlads.csv")
-HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; DepthBot/1.0)"}
+HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; DepthBot/1.0; +https://example.com)"}
 
 TEAM_URLS: Dict[str, str] = {
     "ARI":"https://www.ourlads.com/nfldepthcharts/depthchart/ARI",
@@ -65,22 +64,17 @@ TEAM_URLS: Dict[str, str] = {
     "WAS":"https://www.ourlads.com/nfldepthcharts/depthchart/WAS",
 }
 
-# ----------------------------
-# Normalization helpers (improved)
-# ----------------------------
-
 SUFFIX_RE = re.compile(r"\s+(JR|SR|II|III|IV|V)\.?$", re.IGNORECASE)
 LEADING_NUM_RE = re.compile(r"^\s*(?:#\s*)?\d+\s*[-–—:]?\s*", re.UNICODE)
-TAG_CODE_RE = re.compile(r"\b[A-Z]{1,3}\d{2}\b")       # SF23, CF25, RS22...
-UDFA_SCHOOL_RE = re.compile(r"\b[Uu]/[A-Za-z]{2,4}\b") # U/Min, U/Mia...
-DATE_FRACTION_RE = re.compile(r"\b\d{1,2}/\d{1,2}\b")  # 22/5
+TAG_CODE_RE = re.compile(r"\b[A-Z]{1,3}\d{2}\b")
+UDFA_SCHOOL_RE = re.compile(r"\b[Uu]/[A-Za-z]{2,4}\b")
+DATE_FRACTION_RE = re.compile(r"\b\d{1,2}/\d{1,2}\b")
 
 def _norm_player(name: str) -> str:
-    """Normalize OurLads player strings to 'First Last' (title case) free of debris."""
     if not isinstance(name, str):
         return ""
     s = name.strip()
-    s = LEADING_NUM_RE.sub("", s)  # strip jersey numbers like "#17 -", "12—"
+    s = LEADING_NUM_RE.sub("", s)
     if "," in s:
         parts = [p.strip() for p in s.split(",", 1)]
         if len(parts) == 2 and parts[0] and parts[1]:
@@ -116,34 +110,69 @@ def _role_rank(role: str) -> int:
 
 def _normalize_pos(p: str) -> str:
     p = (p or "").upper().strip()
-    # WR aliases → WR (this is what your screenshot shows: LWR/RWR/SWR)
-    if ("WR" in p) or p in {"SL","SLOT","FL","SE","SWR","LWR","RWR"}:
+    if ("WR" in p) or p in {"SL","SLOT","FL","SE","SWR","LWR","RWR","WR-X","WR-Y","WR-Z"}:
         return "WR"
-    # RB aliases → RB
     if p in {"RB","HB","TB","FB"}:
         return "RB"
-    # TE aliases → TE (Y/H frequently used)
     if p in {"TE","Y","H"}:
         return "TE"
     return p
 
 # ----------------------------
-# Scrape & parse (depth chart)
+# Robust fetch with retries
 # ----------------------------
+def _get_html(url: str, max_tries: int = 3, backoff: float = 0.8) -> str:
+    last = None
+    for i in range(1, max_tries+1):
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=25)
+            if r.status_code == 200 and r.text:
+                return r.text
+            last = f"{r.status_code}"
+        except Exception as e:
+            last = str(e)
+        time.sleep(backoff * i)
+    raise RuntimeError(f"GET failed for {url} → {last}")
 
 def _get_depth_soup(team: str) -> BeautifulSoup:
     url = TEAM_URLS[team]
-    r = requests.get(url, headers=HEADERS, timeout=25); r.raise_for_status()
-    return BeautifulSoup(r.text, "lxml")
+    html = _get_html(url)
+    return BeautifulSoup(html, "lxml")
+
+# ----------------------------
+# OFFENSE table detection
+# ----------------------------
+def _find_offense_table(soup: BeautifulSoup) -> Optional[BeautifulSoup]:
+    # 1) Preferred: header "OFFENSE" then first table
+    off = soup.find(lambda tag: tag.name in ["h1","h2","h3","h4"] and "OFFENSE" in tag.get_text().upper())
+    if off:
+        tbl = off.find_next("table")
+        if tbl:
+            return tbl
+    # 2) Fall back: any table whose first column looks like positions
+    pos_like = {"QB","RB","WR","TE","HB","TB","FB","FL","SE","SLOT","SL","Y","H"}
+    for tbl in soup.find_all("table"):
+        rows = tbl.find_all("tr")
+        if not rows:
+            continue
+        # examine up to first 6 body rows
+        score, seen = 0, 0
+        for tr in rows[:6]:
+            tds = tr.find_all(["td","th"])
+            if not tds:
+                continue
+            col0 = BeautifulSoup(tds[0].decode_contents(), "lxml").get_text(" ", strip=True).upper()
+            if col0 in pos_like or col0.startswith("WR"):
+                score += 1
+            seen += 1
+        if seen and score >= max(2, seen//2):  # at least half of sampled rows look like positions
+            return tbl
+    return None
 
 def fetch_team_roles(team: str, soup: BeautifulSoup) -> pd.DataFrame:
     rows: List[dict] = []
 
-    # Only parse the OFFENSE depth-chart table
-    off = soup.find(lambda tag: tag.name in ["h2","h3"] and "OFFENSE" in tag.get_text().upper())
-    if not off:
-        return pd.DataFrame(columns=["team","player","role"])
-    table = off.find_next("table")
+    table = _find_offense_table(soup)
     if not table:
         return pd.DataFrame(columns=["team","player","role"])
 
@@ -152,15 +181,13 @@ def fetch_team_roles(team: str, soup: BeautifulSoup) -> pd.DataFrame:
         if len(tds) < 2:
             continue
 
-        pos_raw = tds[0].get_text(" ", strip=True).upper()
+        pos_raw = BeautifulSoup(tds[0].decode_contents(), "lxml").get_text(" ", strip=True).upper()
         pos = _normalize_pos(pos_raw)
         if pos not in {"QB","RB","WR","TE"}:
             continue
 
-        # Columns = 1,2,3,... → WR1/WR2/WR3 etc; keep in-cell order for co-starters
         for depth_idx, td in enumerate(tds[1:], start=1):
-            a = td.find("a")
-            raw = a.get_text(" ", strip=True) if a else td.get_text(" ", strip=True)
+            raw = BeautifulSoup(td.decode_contents(), "lxml").get_text(" ", strip=True)
             raw = re.sub(r"\s*\(.*?\)\s*$", "", raw).strip()
             candidates = _split_candidates(raw)
             if not candidates:
@@ -178,7 +205,6 @@ def fetch_team_roles(team: str, soup: BeautifulSoup) -> pd.DataFrame:
     if df.empty:
         return df
 
-    # Prefer lowest numeric depth per (team,player) if duplicated
     df["rank"] = df["role"].map(_role_rank)
     df = (
         df.sort_values(["team","player","rank"])
@@ -188,14 +214,9 @@ def fetch_team_roles(team: str, soup: BeautifulSoup) -> pd.DataFrame:
     return df
 
 # ----------------------------
-# Scrape roster (fallback coverage)
+# Roster (fallback)
 # ----------------------------
-
 def fetch_team_roster(team: str, soup_depth: BeautifulSoup) -> pd.DataFrame:
-    """
-    Follow the 'Roster' link from the team's depth-chart page and parse the roster table.
-    We keep only offense positions QB/RB/WR/TE and normalize player names.
-    """
     try:
         roster_link = None
         for a in soup_depth.find_all("a", href=True):
@@ -204,11 +225,11 @@ def fetch_team_roster(team: str, soup_depth: BeautifulSoup) -> pd.DataFrame:
             if "ROSTER" in t and "/nfldepthcharts/roster/" in h:
                 roster_link = h if h.startswith("http") else f"https://www.ourlads.com{h}"
                 break
-        if not roster_link:
-            return pd.DataFrame(columns=["team","player","pos_roster"])
-
-        r = requests.get(roster_link, headers=HEADERS, timeout=25); r.raise_for_status()
-        soup = BeautifulSoup(r.text, "lxml")
+        if roster_link is None:
+            # deterministic fallback
+            roster_link = f"https://www.ourlads.com/nfldepthcharts/roster/{team}"
+        html = _get_html(roster_link)
+        soup = BeautifulSoup(html, "lxml")
         table = soup.find("table")
         if not table:
             return pd.DataFrame(columns=["team","player","pos_roster"])
@@ -218,7 +239,6 @@ def fetch_team_roster(team: str, soup_depth: BeautifulSoup) -> pd.DataFrame:
             tds = tr.find_all("td")
             if len(tds) < 2:
                 continue
-            # Guess first two cols as position and player (site is consistent here)
             pos_txt = BeautifulSoup(tds[0].decode_contents(), "lxml").get_text(" ", strip=True).upper()
             name_txt = BeautifulSoup(tds[1].decode_contents(), "lxml").get_text(" ", strip=True)
             pos = _normalize_pos(pos_txt)
@@ -233,11 +253,9 @@ def fetch_team_roster(team: str, soup_depth: BeautifulSoup) -> pd.DataFrame:
         return pd.DataFrame(columns=["team","player","pos_roster"])
 
 # ----------------------------
-# Depth post-processing
+# Post-process
 # ----------------------------
-
 def _reassign_sequential_depth(df: pd.DataFrame) -> pd.DataFrame:
-    """Ensure unique depth numbers per (team, position) using (orig_depth, slot_order)."""
     if df is None or getattr(df, "empty", True):
         return df
     df = df.copy()
@@ -301,26 +319,19 @@ def _postprocess_roles_df_ourlads(df: pd.DataFrame) -> pd.DataFrame:
 # ----------------------------
 # Main
 # ----------------------------
-
 def main():
     warnings.simplefilter("ignore")
     os.makedirs(DATA_DIR, exist_ok=True)
 
     all_dfs = []
-
     for tm in sorted(TEAM_URLS.keys()):
         try:
             soup = _get_depth_soup(tm)
 
-            # 1) depth chart roles
             roles = fetch_team_roles(tm, soup)
-
-            # 2) roster fallback (offense only)
             roster = fetch_team_roster(tm, soup)
 
-            # 3) union: keep all roster players; overlay roles where present
             if not roster.empty:
-                # left-merge on normalized player name
                 r = roster.copy()
                 r["player_join"] = r["player"].str.replace(r"[^A-Za-z]", "", regex=True)
                 if not roles.empty:
@@ -330,38 +341,40 @@ def main():
                         d[["team","player_join","role","orig_depth","slot_order"]],
                         on=["player_join"], how="left", suffixes=("","_d")
                     )
-                    # ensure correct team if any discrepancy
                     merged["team"] = tm
                     merged.drop(columns=["player_join"], inplace=True, errors="ignore")
                     df_team = merged[["team","player","role","orig_depth","slot_order","pos_roster"]].copy()
                 else:
-                    # only roster available → no roles
-                    df_team = r[["team","player"]].copy()
+                    df_team = r[["team","player","pos_roster"]].copy()
                     df_team["role"] = pd.NA
                     df_team["orig_depth"] = pd.NA
                     df_team["slot_order"] = pd.NA
             else:
                 df_team = roles
 
-            if df_team is not None and not df_team.empty:
+            if df_team is None or df_team.empty:
+                print(f"[ourlads_depth] NOTE: 0 rows for {tm}", file=sys.stderr)
+            else:
                 all_dfs.append(df_team)
 
         except Exception as e:
             print(f"[ourlads_depth] WARN: failed {tm}: {e}", flush=True)
 
-        time.sleep(0.4)  # be polite
+        time.sleep(0.5)  # polite
 
     roles_all = (
         pd.concat(all_dfs, ignore_index=True).drop_duplicates()
         if all_dfs else pd.DataFrame(columns=["team","player","role"])
     )
     roles_all = _postprocess_roles_df_ourlads(roles_all)
-# --- surgical: add 'position' derived from role, fallback to roster pos ---
-if "position" not in roles_all.columns:
-    roles_all["position"] = roles_all["role"].astype(str).str.extract(r"([A-Z]+)")
-if "pos_roster" in roles_all.columns:
-    roles_all["position"] = roles_all["position"].fillna(roles_all["pos_roster"])
-roles_all.to_csv(OUT_ROLES, index=False)
+
+    # Position fallback: from role letters; else use roster pos
+    if "position" not in roles_all.columns:
+        roles_all["position"] = roles_all["role"].astype(str).str.extract(r"([A-Z]+)")
+    if "pos_roster" in roles_all.columns:
+        roles_all["position"] = roles_all["position"].fillna(roles_all["pos_roster"])
+
+    roles_all.to_csv(OUT_ROLES, index=False)
     print(f"[ourlads_depth] wrote rows={len(roles_all)} → {OUT_ROLES}")
 
 if __name__ == "__main__":
