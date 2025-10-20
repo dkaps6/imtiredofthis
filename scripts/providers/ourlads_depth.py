@@ -11,7 +11,6 @@ Fixes:
 - Deduplicate: if a player appears in multiple depth slots, keep the best (e.g., TE1 over TE2).
 - Polite delay between requests.
 """
-
 import os, sys, re, time
 import warnings
 import pandas as pd
@@ -58,19 +57,18 @@ TEAM_URLS: Dict[str, str] = {
 }
 
 SUFFIX_RE = re.compile(r"\s+(JR|SR|II|III|IV|V)\.?$", re.IGNORECASE)
-LEADING_NUM_RE = re.compile(r"^\s*(?:#\s*)?\d+\s*[-–—:]?\s*", re.UNICODE)  # strips "8", "#8", "8-", "8 –", etc.
+LEADING_NUM_RE = re.compile(r"^\s*(?:#\s*)?\d+\s*[-–—:]?\s*", re.UNICODE)
 
 def _norm_player(name: str) -> str:
     if not isinstance(name, str):
         return ""
     s = name.replace(".", "").strip()
-    s = LEADING_NUM_RE.sub("", s)            # remove any leading jersey number fragments
-    s = SUFFIX_RE.sub("", s)                 # drop suffixes
-    s = re.sub(r"\s+", " ", s)               # collapse spaces
+    s = LEADING_NUM_RE.sub("", s)
+    s = SUFFIX_RE.sub("", s)
+    s = re.sub(r"\s+", " ", s)
     return s.strip()
 
 def _role_rank(role: str) -> int:
-    """Return numeric rank (QB1->1, WR3->3); unknown → big number."""
     m = re.search(r"(\d+)$", str(role))
     return int(m.group(1)) if m else 999
 
@@ -81,38 +79,30 @@ def fetch_team_roles(team: str) -> pd.DataFrame:
     soup = BeautifulSoup(r.text, "lxml")
 
     rows = []
-    # Table rows: first cell = position (QB/RB/WR/TE), following cells = depth slots.
     for tr in soup.select("table tbody tr"):
         tds = tr.find_all("td")
         if len(tds) < 2:
             continue
-
         pos = tds[0].get_text(" ", strip=True).upper()
         if pos not in {"QB","RB","WR","TE"}:
             continue
-
-        depth_idx = 1  # IMPORTANT: increment only when we capture a valid player name
+        depth_idx = 1
         for td in tds[1:]:
-            # Prefer anchor text (player link)
             a = td.find("a")
             raw = a.get_text(" ", strip=True) if a else td.get_text(" ", strip=True)
             player = _norm_player(raw)
-
-            # If this cell is just a number or empty (jersey-only), skip WITHOUT advancing slot
             if not player or player.isdigit():
                 continue
-
             role = f"{pos}{depth_idx}"
             rows.append({"team": team, "player": player, "role": role})
-            depth_idx += 1  # advance only for real player names
+            depth_idx += 1
 
     df = pd.DataFrame(rows)
     if df.empty:
         return df
 
-    # Deduplicate per (team, player) keeping the BEST role (smallest rank)
     df["rank"] = df["role"].map(_role_rank)
-    df = (df.sort_values(["team", "player", "rank"])
+    df = (df.sort_values(["team","player","rank"])
             .drop_duplicates(["team","player"], keep="first")
             .drop(columns=["rank"]))
     return df
