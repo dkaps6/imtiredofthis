@@ -34,6 +34,9 @@ import pandas as pd
 DATA_DIR = "data"
 OUTPATH = os.path.join(DATA_DIR, "player_form.csv")
 
+def _safe_mkdir(path: str) -> None:
+    os.makedirs(path, exist_ok=True)
+
 FINAL_COLS = [
     "player",
     "team",
