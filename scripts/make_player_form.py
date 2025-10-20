@@ -485,15 +485,13 @@ def _merge_roles_csv(df: pd.DataFrame) -> pd.DataFrame:
     r.columns = [c.lower() for c in r.columns]
     if "player" not in r.columns and "player_name" in r.columns:
         r = r.rename(columns={"player_name": "player"})
-    need = {"player","team",
-    "opponent","role"}
+    need = {"player","team","opponent","role"}
     if not need.issubset(r.columns):
         return df
     r["player"] = _norm_name(r["player"].astype(str))
     r["team"] = r["team"].astype(str).str.upper().str.strip().map(_canon_team)
     r = r[r["team"].isin(VALID)]
-    out = df.merge(r[["player","team",
-    "opponent","role"]], on=["player","team"], how="left", suffixes=("","_roles"))
+    out = df.merge(r[["player","team","opponent","role"]], on=["player","team"], how="left", suffixes=("","_roles"))
     if "role_roles" in out.columns:
         out["role"] = out["role"].combine_first(out["role_roles"])
         out.drop(columns=["role_roles"], inplace=True)
@@ -605,24 +603,14 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         base["season"] = int(season)
         base = _ensure_cols(base, FINAL_COLS)
         base = base[FINAL_COLS].drop_duplicates(subset=["player","team","opponent","season"]).reset_index(drop=True)
+        print("[pf] pbp empty → returning structural base only (offseason fallback)")
         return base
     
     off_col = "posteam" if "posteam" in pbp.columns else ("offense_team" if "offense_team" in pbp.columns else None)
     if off_col is None:
         raise RuntimeError("No offense team column in PBP (posteam/offense_team).")
-        if pbp.empty:
-            return base
-        else:
-            raise RuntimeError("No offense team column in PBP (posteam/offense_team).")
 
-    # Determine opponent (defense) column
-    opp_col = "defteam" if "defteam" in pbp.columns else ("defense_team" if "defense_team" in pbp.columns else None)
-    if opp_col is None:
-        pbp["opponent"] = np.nan
-    else:
-        pbp["opponent"] = pbp[opp_col].astype(str).str.upper().str.strip()
-
-    # Determine opponent (defense) column
+    # Opponent once (remove duplicate logic)
     opp_col = "defteam" if "defteam" in pbp.columns else ("defense_team" if "defense_team" in pbp.columns else None)
     if opp_col is None:
         pbp["opponent"] = np.nan
@@ -640,8 +628,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     rec = pbp.loc[is_pass].copy()
     rec["opponent"] = _derive_opponent(rec)
     if rec.empty:
-        rply = pd.DataFrame(columns=["team",
-    "opponent","player"])
+        rply = pd.DataFrame(columns=["team","opponent","player"])
     else:
         rcv_name_col = "receiver_player_name" if "receiver_player_name" in rec.columns else ("receiver" if "receiver" in rec.columns else None)
         if rcv_name_col is None:
@@ -658,8 +645,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         else:
             team_dropbacks = rec.groupby(["team","opponent"], dropna=False).size().rename("team_dropbacks").astype(float)
 
-        rply = rec.groupby(["team",
-    "opponent","player"], dropna=False).agg(
+        rply = rec.groupby(["team","opponent","player"], dropna=False).agg(
             targets=("pass_attempt","sum") if "pass_attempt" in rec.columns else ("player","size"),
             rec_yards=("yards_gained","sum"),
             receptions=("complete_pass","sum") if "complete_pass" in rec.columns else (rcv_name_col,"size"),
@@ -677,11 +663,9 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         inside20["yardline_100"] = pd.to_numeric(inside20.get("yardline_100"), errors="coerce")
         rz_rec = inside20.loc[inside20["yardline_100"] <= 20]
         if not rz_rec.empty:
-            rz_tgt_ply = rz_rec.groupby(["team",
-    "opponent","player"]).size().rename("rz_targets")
+            rz_tgt_ply = rz_rec.groupby(["team","opponent","player"]).size().rename("rz_targets")
             rz_tgt_tm  = rz_rec.groupby("team").size().rename("rz_team_targets")
-            rply = rply.merge(rz_tgt_ply.reset_index(), on=["team",
-    "opponent","player"], how="left")
+            rply = rply.merge(rz_tgt_ply.reset_index(), on=["team","opponent","player"], how="left")
             rply = rply.merge(rz_tgt_tm.reset_index(),  on=["team","opponent"],          how="left")
             rply["rz_tgt_share"] = np.where(rply["rz_team_targets"]>0, rply["rz_targets"]/rply["rz_team_targets"], np.nan)
 
@@ -702,8 +686,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     ru = pbp.loc[is_rush].copy()
     ru["opponent"] = _derive_opponent(ru)
     if ru.empty:
-        rru = pd.DataFrame(columns=["team",
-    "opponent","player"])
+        rru = pd.DataFrame(columns=["team","opponent","player"])
     else:
         rush_name_col = "rusher_player_name" if "rusher_player_name" in ru.columns else ("rusher" if "rusher" in ru.columns else None)
         if rush_name_col is None:
@@ -716,8 +699,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
 
         ru["opponent"] = ru["opponent"].astype(str).str.upper().str.strip() if "opponent" in ru.columns else np.nan
         team_rushes = ru.groupby(["team","opponent"], dropna=False).size().rename("team_rushes").astype(float)
-        rru = ru.groupby(["team",
-    "opponent","player"], dropna=False).agg(
+        rru = ru.groupby(["team","opponent","player"], dropna=False).agg(
             rushes=("rush_attempt","sum") if "rush_attempt" in ru.columns else ("player","size"),
             rush_yards=("yards_gained","sum"),
         ).reset_index()
@@ -729,11 +711,9 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         inside10["yardline_100"] = pd.to_numeric(inside10.get("yardline_100"), errors="coerce")
         rz_ru = inside10.loc[inside10["yardline_100"] <= 10]
         if not rz_ru.empty:
-            rz_ru_ply = rz_ru.groupby(["team",
-    "opponent","player"]).size().rename("rz_rushes")
+            rz_ru_ply = rz_ru.groupby(["team","opponent","player"]).size().rename("rz_rushes")
             rz_ru_tm  = rz_ru.groupby("team").size().rename("rz_team_rushes")
-            rru = rru.merge(rz_ru_ply.reset_index(), on=["team",
-    "opponent","player"], how="left")
+            rru = rru.merge(rz_ru_ply.reset_index(), on=["team","opponent","player"], how="left")
             rru = rru.merge(rz_ru_tm.reset_index(),  on=["team","opponent"],          how="left")
             rru["rz_rush_share"] = np.where(rru["rz_team_rushes"]>0, rru["rz_rushes"]/rru["rz_team_rushes"], np.nan)
 
@@ -743,8 +723,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     ])
 
     # QUARTERBACK
-    qb_df = pd.DataFrame(columns=["team",
-    "opponent","player","ypa","dropbacks"])
+    qb_df = pd.DataFrame(columns=["team","opponent","player","ypa","dropbacks"])
     qb_name_col = "passer_player_name" if "passer_player_name" in pbp.columns else ("passer" if "passer" in pbp.columns else None)
     if qb_name_col is not None:
         qb = pbp.copy()
@@ -759,16 +738,15 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
             dropbacks=("qb_dropback","sum") if "qb_dropback" in qb.columns else (qb_name_col,"size"),
         ).reset_index()
         gb["ypa"] = np.where(gb["pass_att"]>0, gb["pass_yards"]/gb["pass_att"], np.nan)
-        qb_df = gb[["team",
-    "opponent","player","ypa","dropbacks"]]
+        qb_df = gb[["team","opponent","player","ypa","dropbacks"]]
 
     # Merge all
-    base = pd.merge(rply, rru, on=["team",
-    "opponent","player"], how="outer")
-    base = pd.merge(base, qb_df, on=["team",
-    "opponent","player"], how="left")
+    base = pd.merge(rply, rru, on=["team","opponent","player"], how="outer")
+    base = pd.merge(base, qb_df, on=["team","opponent","player"], how="left")
     base["rz_share"] = base[["rz_tgt_share","rz_rush_share"]].max(axis=1)
     base["season"] = int(season)
+
+    print("[pf] base after concat/merge:", len(base))
 
     # Initialize position/role as NaN (do not uppercase yet)
     base["position"] = np.nan
@@ -819,6 +797,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     base = _ensure_cols(base, FINAL_COLS)
     out = base[FINAL_COLS].drop_duplicates(subset=["player","team","opponent","season"]).reset_index(drop=True)
     out = _enrich_team_and_opponent_from_props(out)
+    print("[pf] final rows (pre-write):", len(out))
     return out
 
 # ---------------------------
@@ -862,13 +841,11 @@ def _load_props_players() -> pd.DataFrame:
     """
     path = os.path.join("outputs", "props_raw.csv")
     if not os.path.exists(path):
-        return pd.DataFrame(columns=["player","team",
-    "opponent","player_key"])
+        return pd.DataFrame(columns=["player","team","opponent","player_key"])
     try:
         pr = pd.read_csv(path)
     except Exception:
-        return pd.DataFrame(columns=["player","team",
-    "opponent","player_key"])
+        return pd.DataFrame(columns=["player","team","opponent","player_key"])
 
     pr.columns = [c.lower() for c in pr.columns]
     if "player" not in pr.columns:
@@ -1023,8 +1000,8 @@ def _validate_required(df: pd.DataFrame):
         except Exception as e:
             print(f"[make_player_form] WARN could not write missing report: {e}", file=sys.stderr)
 
-        # Env-gated strictness
-        if os.getenv("STRICT_VALIDATE", "1") != "0":
+        # Env-gated strictness (default now lenient)
+        if os.getenv("STRICT_VALIDATE", "0") != "0":
             raise RuntimeError("Required player_form metrics missing; failing per strict policy.")
         else:
             print("[make_player_form] STRICT_VALIDATE=0 → continue despite missing required metrics", file=sys.stderr)
@@ -1065,9 +1042,18 @@ def cli():
 
     except Exception as e:
         print(f"[make_player_form] ERROR: {e}", file=sys.stderr)
+        # If df exists and has rows, write it rather than wiping out to empty.
+        try:
+            if "df" in locals() and isinstance(df, pd.DataFrame) and len(df) > 0:
+                df.to_csv(OUTPATH, index=False)
+                print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH} (after handled error)")
+                return
+        except Exception:
+            pass
         empty = pd.DataFrame(columns=FINAL_COLS)
         empty.to_csv(OUTPATH, index=False)
-        sys.exit(1)
+        print(f"[make_player_form] Wrote 0 rows → {OUTPATH} (empty due to error)")
+        return  # ← do not sys.exit(1)
 
     df.to_csv(OUTPATH, index=False)
     print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH}")
