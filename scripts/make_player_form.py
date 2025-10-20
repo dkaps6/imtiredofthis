@@ -583,6 +583,17 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     off_col = "posteam" if "posteam" in pbp.columns else ("offense_team" if "offense_team" in pbp.columns else None)
     if off_col is None:
         raise RuntimeError("No offense team column in PBP (posteam/offense_team).")
+        if pbp.empty:
+            return base
+        else:
+            raise RuntimeError("No offense team column in PBP (posteam/offense_team).")
+
+    # Determine opponent (defense) column
+    opp_col = "defteam" if "defteam" in pbp.columns else ("defense_team" if "defense_team" in pbp.columns else None)
+    if opp_col is None:
+        pbp["opponent"] = np.nan
+    else:
+        pbp["opponent"] = pbp[opp_col].astype(str).str.upper().str.strip()
 
     # Determine opponent (defense) column
     opp_col = "defteam" if "defteam" in pbp.columns else ("defense_team" if "defense_team" in pbp.columns else None)
