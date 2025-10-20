@@ -257,6 +257,20 @@ VALID = {"ARI","ATL","BAL","BUF","CAR","CHI","CIN","CLE","DAL","DEN","DET","GB",
          "IND","JAX","KC","LAC","LAR","LV","MIA","MIN","NE","NO","NYG","NYJ",
          "PHI","PIT","SEA","SF","TB","TEN","WAS"}
 
+DEFENSE_TEAM_CANDIDATES = [
+    "defteam",
+    "defense_team",
+    "def_team",
+    "defense",
+    "defteam_abbr",
+    "defense_abbr",
+    "opp_team",
+    "opp_team_abbr",
+    "opp",
+    "opp_abbr",
+    "opponent",
+]
+
 TEAM_NAME_TO_ABBR = {
     "ARI":"ARI","ARZ":"ARI","ATL":"ATL","BAL":"BAL","BUF":"BUF","CAR":"CAR","CHI":"CHI","CIN":"CIN","CLE":"CLE",
     "DAL":"DAL","DEN":"DEN","DET":"DET","GB":"GB","GNB":"GB","HOU":"HOU","IND":"IND","JAX":"JAX","JAC":"JAX",
@@ -297,6 +311,26 @@ def _canon_team(x: str) -> str:
         abbr = TEAM_NAME_TO_ABBR[s2]
         return abbr if abbr in VALID else ""
     return ""
+
+
+def _derive_opponent(df: pd.DataFrame) -> pd.Series:
+    """Return canonical opponent abbreviations for a play-by-play frame."""
+
+    if df.empty:
+        return pd.Series(np.nan, index=df.index, dtype=object)
+
+    col = next((c for c in DEFENSE_TEAM_CANDIDATES if c in df.columns), None)
+    if col is None:
+        return pd.Series(np.nan, index=df.index, dtype=object)
+
+    opp = df[col]
+    if not isinstance(opp, pd.Series):
+        return pd.Series(np.nan, index=df.index, dtype=object)
+    opp = opp.where(opp.notna(), "")
+    opp = opp.astype(str).str.upper().str.strip()
+    mapped = opp.map(_canon_team)
+    mapped = mapped.replace("", np.nan)
+    return mapped
 
 # ---------------------------
 # nflverse loader
@@ -551,6 +585,8 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     
     off_col = "posteam" if "posteam" in pbp.columns else ("offense_team" if "offense_team" in pbp.columns else None)
     if off_col is None:
+        if pbp.empty:
+            return base
 
 # Determine opponent (defense) column
 opp_col = "defteam" if "defteam" in pbp.columns else ("defense_team" if "defense_team" in pbp.columns else None)
@@ -569,6 +605,7 @@ else:
         is_pass = is_pass.astype(bool)
 
     rec = pbp.loc[is_pass].copy()
+    rec["opponent"] = _derive_opponent(rec)
     if rec.empty:
         rply = pd.DataFrame(columns=["team",
     "opponent","player"])
@@ -578,7 +615,8 @@ else:
             rec["receiver_player_name"] = np.nan
             rcv_name_col = "receiver_player_name"
         rec["player"] = _norm_name(rec[rcv_name_col].fillna(""))
-        rec["team"] = rec[off_col].astype(str).str.upper().str.strip()
+        rec["team"] = rec[off_col].astype(str).str.upper().str.strip().map(_canon_team)
+        rec["team"] = rec["team"].replace("", np.nan)
 
         rec["opponent"] = rec["opponent"].astype(str).str.upper().str.strip() if "opponent" in rec.columns else np.nan
         team_targets = rec.groupby(["team","opponent"], dropna=False).size().rename("team_targets").astype(float)
@@ -629,6 +667,7 @@ else:
         is_rush = is_rush.astype(bool)
 
     ru = pbp.loc[is_rush].copy()
+    ru["opponent"] = _derive_opponent(ru)
     if ru.empty:
         rru = pd.DataFrame(columns=["team",
     "opponent","player"])
@@ -639,7 +678,8 @@ else:
             rush_name_col = "rusher_player_name"
 
         ru["player"] = _norm_name(ru[rush_name_col].fillna(""))
-        ru["team"] = ru[off_col].astype(str).str.upper().str.strip()
+        ru["team"] = ru[off_col].astype(str).str.upper().str.strip().map(_canon_team)
+        ru["team"] = ru["team"].replace("", np.nan)
 
         ru["opponent"] = ru["opponent"].astype(str).str.upper().str.strip() if "opponent" in ru.columns else np.nan
         team_rushes = ru.groupby(["team","opponent"], dropna=False).size().rename("team_rushes").astype(float)
@@ -675,7 +715,11 @@ else:
     qb_name_col = "passer_player_name" if "passer_player_name" in pbp.columns else ("passer" if "passer" in pbp.columns else None)
     if qb_name_col is not None:
         qb = pbp.copy()
+        qb["opponent"] = _derive_opponent(qb)
         qb["player"] = _norm_name(qb[qb_name_col].fillna(""))
+        qb["team"] = qb[off_col].astype(str).str.upper().str.strip().map(_canon_team)
+        qb["team"] = qb["team"].replace("", np.nan)
+        gb = qb.groupby(["team","opponent","player"], dropna=False).agg(
         qb["team"] = qb[off_col].astype(str).str.upper().str.strip()
         qb["opponent"] = qb["opponent"].astype(str).str.upper().str.strip() if "opponent" in qb.columns else np.nan
         gb = qb.groupby(["team",
@@ -703,6 +747,8 @@ else:
     # Normalize keys
     base["player"] = _norm_name(base["player"].astype(str))
     base["team"] = base["team"].astype(str).str.upper().str.strip().map(_canon_team)
+    base["opponent"] = base["opponent"].astype(str).str.upper().str.strip().map(_canon_team)
+    base["opponent"] = base["opponent"].replace("", np.nan)
     base["opponent"] = base.get("opponent", np.nan)
     if "opponent" in base.columns:
         base["opponent"] = base["opponent"].astype(str).str.upper().str.strip().map(_canon_team)
