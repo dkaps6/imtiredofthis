@@ -603,8 +603,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
             rz_tgt_tm  = rz_rec.groupby("team").size().rename("rz_team_targets")
             rply = rply.merge(rz_tgt_ply.reset_index(), on=["team",
     "opponent","player"], how="left")
-            rply = rply.merge(rz_tgt_tm.reset_index(),  on="team",
-    "opponent",          how="left")
+            rply = rply.merge(rz_tgt_tm.reset_index(),  on=["team","opponent"],          how="left")
             rply["rz_tgt_share"] = np.where(rply["rz_team_targets"]>0, rply["rz_targets"]/rply["rz_team_targets"], np.nan)
 
     rply = _ensure_cols(rply, [
@@ -653,8 +652,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
             rz_ru_tm  = rz_ru.groupby("team").size().rename("rz_team_rushes")
             rru = rru.merge(rz_ru_ply.reset_index(), on=["team",
     "opponent","player"], how="left")
-            rru = rru.merge(rz_ru_tm.reset_index(),  on="team",
-    "opponent",          how="left")
+            rru = rru.merge(rz_ru_tm.reset_index(),  on=["team","opponent"],          how="left")
             rru["rz_rush_share"] = np.where(rru["rz_team_rushes"]>0, rru["rz_rushes"]/rru["rz_team_rushes"], np.nan)
 
     rru = _ensure_cols(rru, [
@@ -873,13 +871,14 @@ def _validate_required(df: pd.DataFrame):
     _need(is_qb.loc[to_check.index],   ["ypa"],                           "QB")
 
     if missing:
-    print("[make_player_form] REQUIRED PLAYER METRICS MISSING:", file=sys.stderr)
-    for k, v in missing.items():
+
+            print("[make_player_form] REQUIRED PLAYER METRICS MISSING:", file=sys.stderr)
+        for k, v in missing.items():
         preview = ", ".join(v[:10]) + ("..." if len(v) > 10 else "")
         print(f"  - {k}: {preview}", file=sys.stderr)
 
-    # Write a CSV report for diagnostics
-    try:
+        # Write a CSV report for diagnostics
+        try:
         rows = []
         fam_map = {"WR/TE": is_wrte, "RB": is_rb, "QB": is_qb}
         for fam, names in missing.items():
@@ -897,13 +896,13 @@ def _validate_required(df: pd.DataFrame):
         os.makedirs(DATA_DIR, exist_ok=True)
         pd.DataFrame(rows).to_csv(os.path.join(DATA_DIR, "validation_player_missing.csv"), index=False)
         print(f"[make_player_form] wrote report → {os.path.join(DATA_DIR, 'validation_player_missing.csv')}")
-    except Exception as e:
+        except Exception as e:
         print(f"[make_player_form] WARN could not write missing report: {e}", file=sys.stderr)
 
-    # Env-gated strictness
-    if os.getenv("STRICT_VALIDATE", "1") != "0":
+        # Env-gated strictness
+        if os.getenv("STRICT_VALIDATE", "1") != "0":
         raise RuntimeError("Required player_form metrics missing; failing per strict policy.")
-    else:
+        else:
         print("[make_player_form] STRICT_VALIDATE=0 → continue despite missing required metrics", file=sys.stderr)
         return
 
