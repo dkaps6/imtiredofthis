@@ -833,6 +833,7 @@ def _apply_fallback_enrichers(df: pd.DataFrame) -> pd.DataFrame:
         "nflgsis_player_form.csv",
     ]
     out = df.copy()
+    out = _ensure_cols(out, ["opponent"])
     for fn in candidates:
         try:
             ext = _read_csv_safe(os.path.join(DATA_DIR, fn))
@@ -1097,10 +1098,17 @@ def _enrich_team_and_opponent_from_props(df: pd.DataFrame) -> pd.DataFrame:
         pr.loc[~pr["team"].isin(VALID), "team"] = np.nan
     pr["opponent"] = _normalize_props_opponent(pr)
     out = df.copy()
+    out = _ensure_cols(out, ["opponent"])
     if "team" in pr.columns:
         out = out.merge(pr[["player","team","opponent"]].drop_duplicates(), on=["player","team"], how="left", suffixes=("","_pr1"))
         if "opponent_pr1" in out.columns:
-            out["opponent"] = out["opponent"].combine_first(out.pop("opponent_pr1"))
+            # Guard combine_first so future refactors that drop the ensure above don't KeyError.
+            base_opponent = out.get("opponent")
+            out["opponent"] = (
+                base_opponent.combine_first(out.pop("opponent_pr1"))
+                if base_opponent is not None
+                else out.pop("opponent_pr1")
+            )
         need_team = out["team"].isna() | (out["team"] == "")
         if need_team.any():
             fallback = pr[["player","team","opponent"]].dropna(how="all").drop_duplicates()
@@ -1108,10 +1116,20 @@ def _enrich_team_and_opponent_from_props(df: pd.DataFrame) -> pd.DataFrame:
             if "team_pr2" in out.columns:
                 out["team"] = out["team"].combine_first(out.pop("team_pr2"))
             if "opponent_pr2" in out.columns:
-                out["opponent"] = out["opponent"].combine_first(out.pop("opponent_pr2"))
+                base_opponent = out.get("opponent")
+                out["opponent"] = (
+                    base_opponent.combine_first(out.pop("opponent_pr2"))
+                    if base_opponent is not None
+                    else out.pop("opponent_pr2")
+                )
     else:
         if "opponent" in pr.columns:
             out = out.merge(pr[["player","opponent"]].drop_duplicates(), on="player", how="left", suffixes=("","_pr"))
             if "opponent_pr" in out.columns:
-                out["opponent"] = out["opponent"].combine_first(out.pop("opponent_pr"))
+                base_opponent = out.get("opponent")
+                out["opponent"] = (
+                    base_opponent.combine_first(out.pop("opponent_pr"))
+                    if base_opponent is not None
+                    else out.pop("opponent_pr")
+                )
     return out
