@@ -116,6 +116,9 @@ def _read_csv_safe(path: str) -> pd.DataFrame:
     except Exception:
         return pd.DataFrame()
 
+def _safe_mkdir(path: str) -> None:
+    os.makedirs(path, exist_ok=True)
+
 # === SURGICAL ADDITION: merge roles from ESPN and Ourlads (clean placement) ===
 def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
     """
