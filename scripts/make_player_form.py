@@ -159,7 +159,7 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
             roles[col] = roles[col].astype(str)
     if "player" in roles.columns:
         roles["player"] = roles["player"].map(_clean_name)
-    roles["team"] = roles.get("team","").astype(str).str.upper().str.strip()
+    roles["team"] = roles.get("team","").astype(str).map(_canon_team)
     roles["role"] = roles.get("role","").astype(str).str.upper().str.strip()
     if "position" not in roles.columns and "role" in roles.columns:
         roles["position"] = roles["role"].str.extract(r"([A-Z]+)")
@@ -171,7 +171,7 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
         roles = (roles.sort_values(["team","player","_rk"])
                       .drop_duplicates(["team","player"], keep="first")
                       .drop(columns=["_rk"]))
-    pf["team"] = pf["team"].astype(str).str.upper().str.strip()
+    pf["team"] = pf["team"].astype(str).map(_canon_team)
     pf["player_join"] = pf["player"].astype(str).str.replace(r"[^A-Za-z]", "", regex=True)
     roles_join = roles.copy()
     if "player_key_concat" in roles_join.columns:
@@ -180,7 +180,7 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
         roles_join["player_join"] = roles_join["player"].astype(str).str.replace(r"[^A-Za-z]", "", regex=True)
     if "player" in roles_join.columns:
         roles_join = roles_join.rename(columns={"player":"player_depth_name"})
-    roles_join["team"] = roles_join["team"].astype(str).str.upper().str.strip()
+    roles_join["team"] = roles_join["team"].astype(str).map(_canon_team)
     roles_join = roles_join.loc[:, ~roles_join.columns.duplicated()].copy()
     try:
         pf = pf.merge(
@@ -740,8 +740,8 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         base = _infer_roles_minimal(base)
 
     base = _ensure_cols(base, FINAL_COLS)
-    out = base[FINAL_COLS].drop_duplicates(subset=["player","team",
-    "opponent","season"]).reset_index(drop=True)
+    out = base[FINAL_COLS].drop_duplicates(subset=["player","team","opponent","season"]).reset_index(drop=True)
+    out = _enrich_team_and_opponent_from_props(out)
     return out
 
 # ---------------------------
