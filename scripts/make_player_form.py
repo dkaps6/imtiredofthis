@@ -902,6 +902,8 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         .str.strip()
     )
     sentinel_mask = opp_norm.eq(CONSENSUS_OPPONENT_SENTINEL) | opp_norm.eq("")
+    opp_norm = base["opponent"].astype(str).str.upper().str.strip()
+    sentinel_mask = opp_norm.eq(CONSENSUS_OPPONENT_SENTINEL)
     base["opponent"] = opp_norm.map(_canon_team)
     if sentinel_mask.any():
         base.loc[sentinel_mask, "opponent"] = CONSENSUS_OPPONENT_SENTINEL
