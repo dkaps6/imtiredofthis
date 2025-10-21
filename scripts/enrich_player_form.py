@@ -1,3 +1,28 @@
+# scripts/enrich_player_form.py
+"""
+Enrich player_form.csv with depth-chart roles, positions, and safe fallbacks.
+
+Goals
+- Guarantee player_form.csv is non-empty and has the expected schema
+- Add/repair team, position, and role (WR1/WR2/SLOT/RB1/TE1, etc.)
+- Fill missing route_rate / yprr_proxy when possible
+- Never overwrite a non-null value with a fallback (non-destructive)
+
+Inputs (best-effort, all optional except player_form.csv):
+- data/player_form.csv                  # base built by make_player_form.py
+- outputs/props_raw.csv                 # bootstrap if player_form is empty
+- data/roles.csv                        # user-maintained roles (preferred)
+- data/depth_chart_espn.csv             # ESP(N) depth charts
+- data/depth_chart_ourlads.csv          # OurLads depth charts
+- data/pfr_player_positions.csv         # fallback positions (if present)
+
+Output:
+- data/player_form.csv                  # enriched in-place
+"""
+
+from __future__ import annotations
+import os, sys, warnings
+import pandas as pd, numpy as np
 
 def _try_load_weekly_rosters(season: int = 2025) -> pd.DataFrame:
     """
@@ -26,32 +51,6 @@ def _try_load_weekly_rosters(season: int = 2025) -> pd.DataFrame:
         return out.drop_duplicates(subset=["player","team"]).reset_index(drop=True)
     except Exception:
         return pd.DataFrame()
-
-# scripts/enrich_player_form.py
-"""
-Enrich player_form.csv with depth-chart roles, positions, and safe fallbacks.
-
-Goals
-- Guarantee player_form.csv is non-empty and has the expected schema
-- Add/repair team, position, and role (WR1/WR2/SLOT/RB1/TE1, etc.)
-- Fill missing route_rate / yprr_proxy when possible
-- Never overwrite a non-null value with a fallback (non-destructive)
-
-Inputs (best-effort, all optional except player_form.csv):
-- data/player_form.csv                  # base built by make_player_form.py
-- outputs/props_raw.csv                 # bootstrap if player_form is empty
-- data/roles.csv                        # user-maintained roles (preferred)
-- data/depth_chart_espn.csv             # ESP(N) depth charts
-- data/depth_chart_ourlads.csv          # OurLads depth charts
-- data/pfr_player_positions.csv         # fallback positions (if present)
-
-Output:
-- data/player_form.csv                  # enriched in-place
-"""
-
-from __future__ import annotations
-import os, sys, warnings
-import pandas as pd, numpy as np
 
 DATA_DIR = "data"
 OUTPATH   = os.path.join(DATA_DIR, "player_form.csv")
@@ -391,6 +390,17 @@ def main():
 # --- END ADD ---
 
         # Write back
+    # Persist a stable player_key for robust downstream joins
+    try:
+        pf["player_key"] = (
+            pf.get("player", pd.Series([], dtype=object))
+              .fillna("").astype(str)
+              .str.lower()
+              .str.replace(r"[^a-z0-9]", "", regex=True)
+        )
+    except Exception:
+        pass
+
         _write_csv(OUTPATH, pf)
         print(f"[enrich_player_form] Wrote {len(pf)} rows → {OUTPATH}")
 
