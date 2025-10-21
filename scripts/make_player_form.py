@@ -335,8 +335,32 @@ def _derive_opponent(df: pd.DataFrame) -> pd.Series:
     mapped = opp.map(_canon_team)
     mapped = mapped.replace("", np.nan)
     return mapped
+    # --- schedule-based fallback (only if still missing) ---
+    try:
+        if "game_id" in df.columns:
+            season_guess = None
+            if "season" in df.columns and df["season"].notna().any():
+                try:
+                    season_guess = int(pd.to_numeric(df["season"], errors="coerce").dropna().iloc[0])
+                except Exception:
+                    season_guess = None
+            if season_guess is None:
+                season_guess = 2025
+            sched = _load_schedule_map(season_guess)
+            if not sched.empty:
+                merged = df[["game_id"]].copy().merge(sched, on="game_id", how="left")
+                if "posteam" in df.columns and {"home_team","away_team"}.issubset(merged.columns):
+                    posteam = df["posteam"].astype(str).str.upper().str.strip().map(_canon_team)
+                    home = merged["home_team"]
+                    away = merged["away_team"]
+                    opp = np.where(posteam.eq(home), away, home)
+                    opp = pd.Series(opp, index=df.index)
+                    opp = opp.map(_canon_team).replace("", np.nan)
+                    return opp
+    except Exception:
+        pass
 
-
+    return pd.Series(np.nan, index=df.index, dtype=object)
 def _normalize_props_opponent(df: pd.DataFrame) -> pd.Series:
     """Derive and canonicalize opponent abbreviations for props payloads."""
 
@@ -381,6 +405,30 @@ def _import_nflverse():
             ) from e
 
 NFLV, NFL_PKG = _import_nflverse()
+
+def _load_schedule_map(season: int) -> pd.DataFrame:
+    """Return schedule map (game_id -> home_team, away_team) for the season, canonized to abbrs."""
+    try:
+        if NFL_PKG == "nflreadpy":
+            sched = NFLV.load_schedules(seasons=[season])
+        else:
+            # nfl_data_py
+            if hasattr(NFLV, "import_schedules"):
+                sched = NFLV.import_schedules([season])  # type: ignore
+            else:
+                return pd.DataFrame()
+        df = _to_pandas(sched)
+    except Exception:
+        return pd.DataFrame()
+    if df is None or len(df) == 0:
+        return pd.DataFrame()
+    df.columns = [c.lower() for c in df.columns]
+    if not {"game_id","home_team","away_team"}.issubset(df.columns):
+        return pd.DataFrame()
+    df["home_team"] = df["home_team"].astype(str).str.upper().str.strip().map(_canon_team)
+    df["away_team"] = df["away_team"].astype(str).str.upper().str.strip().map(_canon_team)
+    return df[["game_id","home_team","away_team"]].drop_duplicates()
+
 
 def load_pbp(season: int) -> pd.DataFrame:
     # explicit, version-safe loader with diagnostics
