@@ -1205,3 +1205,19 @@ if __name__ == "__main__":
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         cli()
+
+
+
+def _ensure_opponent_column(df: pd.DataFrame, default_season: int = 2025) -> pd.DataFrame:
+    """If 'opponent' is missing or all-null, derive it safely and return the frame (non-destructive)."""
+    if df is None or not isinstance(df, pd.DataFrame):
+        return df
+    if "opponent" not in df.columns or df["opponent"].isna().all():
+        try:
+            df = df.copy()
+            df["opponent"] = _derive_opponent(df)
+        except Exception:
+            # keep schema, never raise
+            df["opponent"] = np.nan
+    return df
+
