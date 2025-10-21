@@ -318,34 +318,50 @@ def _canon_team(x: str) -> str:
 
 
 def _derive_opponent(df: pd.DataFrame) -> pd.Series:
-    """Return canonical opponent abbreviations for a play-by-play frame."""
+    """Return canonical opponent abbreviations for a play-by-play frame.
 
+    Order:
+      1) direct defensive columns (defteam/defense_team/etc)
+      2) home/away vs posteam (if available)
+      3) schedules via game_id (fallback)
+    Never raises; always returns a Series aligned to df.index.
+    """
     if df.empty:
         return pd.Series(np.nan, index=df.index, dtype=object)
 
+    # 1) direct defensive columns
     col = next((c for c in DEFENSE_TEAM_CANDIDATES if c in df.columns), None)
-    if col is None:
-        return pd.Series(np.nan, index=df.index, dtype=object)
+    if col is not None:
+        opp = df[col]
+        if isinstance(opp, pd.Series):
+            opp_norm = opp.where(opp.notna(), "").astype(str).str.upper().str.strip()
+            mapped = opp_norm.map(_canon_team).replace("", np.nan)
+            # If we got any valid opponents, return them
+            if mapped.notna().any():
+                return mapped.reindex(df.index)
 
-    opp = df[col]
-    if not isinstance(opp, pd.Series):
-        return pd.Series(np.nan, index=df.index, dtype=object)
-    opp = opp.where(opp.notna(), "")
-    opp = opp.astype(str).str.upper().str.strip()
-    mapped = opp.map(_canon_team)
-    mapped = mapped.replace("", np.nan)
-    return mapped
-    # --- schedule-based fallback (only if still missing) ---
+    # 2) home/away vs posteam
     try:
+        if {"posteam","home_team","away_team"}.issubset(df.columns):
+            posteam = df["posteam"].astype(str).str.upper().str.strip().map(_canon_team)
+            home = df["home_team"].astype(str).str.upper().str.strip().map(_canon_team)
+            away = df["away_team"].astype(str).str.upper().str.strip().map(_canon_team)
+            opp = np.where(posteam.eq(home), away, home)
+            opp = pd.Series(opp, index=df.index).map(_canon_team).replace("", np.nan)
+            if opp.notna().any():
+                return opp
+    except Exception:
+        pass
+
+    # 3) schedule-based fallback
+    try:
+        season_guess = 2025
+        if "season" in df.columns and df["season"].notna().any():
+            try:
+                season_guess = int(pd.to_numeric(df["season"], errors="coerce").dropna().iloc[0])
+            except Exception:
+                pass
         if "game_id" in df.columns:
-            season_guess = None
-            if "season" in df.columns and df["season"].notna().any():
-                try:
-                    season_guess = int(pd.to_numeric(df["season"], errors="coerce").dropna().iloc[0])
-                except Exception:
-                    season_guess = None
-            if season_guess is None:
-                season_guess = 2025
             sched = _load_schedule_map(season_guess)
             if not sched.empty:
                 merged = df[["game_id"]].copy().merge(sched, on="game_id", how="left")
@@ -354,12 +370,13 @@ def _derive_opponent(df: pd.DataFrame) -> pd.Series:
                     home = merged["home_team"]
                     away = merged["away_team"]
                     opp = np.where(posteam.eq(home), away, home)
-                    opp = pd.Series(opp, index=df.index)
-                    opp = opp.map(_canon_team).replace("", np.nan)
-                    return opp
+                    opp = pd.Series(opp, index=df.index).map(_canon_team).replace("", np.nan)
+                    if opp.notna().any():
+                        return opp
     except Exception:
         pass
 
+    # Final: could not derive
     return pd.Series(np.nan, index=df.index, dtype=object)
 def _normalize_props_opponent(df: pd.DataFrame) -> pd.Series:
     """Derive and canonicalize opponent abbreviations for props payloads."""
