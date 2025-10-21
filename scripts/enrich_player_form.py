@@ -1,3 +1,32 @@
+
+def _try_load_weekly_rosters(season: int = 2025) -> pd.DataFrame:
+    """
+    Best-effort weekly roster loader using nflreadpy (preferred) or nfl_data_py.
+    Returns normalized columns: player, team, season
+    """
+    try:
+        try:
+            import nflreadpy as nflv
+            df = nflv.load_weekly_rosters(seasons=[season])
+        except Exception:
+            import nfl_data_py as nflv  # type: ignore
+            df = nflv.import_weekly_rosters([season])  # type: ignore
+        if df is None:
+            return pd.DataFrame()
+        pdf = pd.DataFrame(df).copy()
+        pdf.columns = [c.lower() for c in pdf.columns]
+        name_col = "player_name" if "player_name" in pdf.columns else ("name" if "name" in pdf.columns else None)
+        team_col = "team" if "team" in pdf.columns else ("team_abbr" if "team_abbr" in pdf.columns else None)
+        if not name_col or not team_col:
+            return pd.DataFrame()
+        out = pdf[[name_col, team_col]].rename(columns={name_col: "player", team_col: "team"}).dropna()
+        out["player"] = out["player"].astype(str).str.replace(".", "", regex=False).str.strip()
+        out["team"]   = out["team"].astype(str).str.upper().str.strip()
+        out["season"] = int(season)
+        return out.drop_duplicates(subset=["player","team"]).reset_index(drop=True)
+    except Exception:
+        return pd.DataFrame()
+
 # scripts/enrich_player_form.py
 """
 Enrich player_form.csv with depth-chart roles, positions, and safe fallbacks.
