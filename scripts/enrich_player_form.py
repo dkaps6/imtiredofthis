@@ -252,20 +252,20 @@ def fill_route_rate_and_yprr(df: pd.DataFrame) -> pd.DataFrame:
 
     # WR/TE heuristic
     mask_wrte = pos.str.startswith("WR") | pos.str.startswith("TE")
-    rr_wrte = np.minimum(np.maximum(tshare * 1.15, 0.05), 0.95)  # 5%–95% clamp
-    rr = np.where(mask_wrte & rr.isna(), rr_wrte, rr)
+    rr_wrte = tshare.mul(1.15).clip(lower=0.05, upper=0.95)  # 5%–95% clamp
+    rr = rr.mask(mask_wrte & rr.isna(), rr_wrte)
 
     # RB heuristic
     mask_rb = pos.str.startswith("RB")
-    rr_rb = np.minimum(tshare * 0.6, 0.65)
-    rr = np.where(mask_rb & rr.isna(), rr_rb, rr)
+    rr_rb = tshare.mul(0.6).clip(upper=0.65)
+    rr = rr.mask(mask_rb & rr.isna(), rr_rb)
 
     out["route_rate"] = rr
 
     # yprr_proxy fallback for WR/TE if missing but ypt exists
     yprr = out.get("yprr_proxy", pd.Series(np.nan, index=out.index)).astype(float)
     ypt   = out.get("ypt", pd.Series(np.nan, index=out.index)).astype(float)
-    yprr  = np.where(mask_wrte & yprr.isna() & ypt.notna(), ypt, yprr)
+    yprr  = yprr.mask(mask_wrte & yprr.isna() & ypt.notna(), ypt)
     out["yprr_proxy"] = yprr
 
     return out
