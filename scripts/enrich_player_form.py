@@ -375,8 +375,31 @@ def main():
             pass
         # --- END B ---
 
+        # Final tidy: ensure ALL-opponent consensus rows survive de-duplication
+        if {"player","team","season"}.issubset(pf.columns) and "opponent" in pf.columns:
+            try:
+                pf["_opp_priority"] = (
+                    ~pf["opponent"].fillna("").astype(str).str.upper().eq("ALL")
+                ).astype(int)
+                pf["_orig_order"] = np.arange(len(pf))
+                sort_keys = [
+                    c for c in ["player", "team", "season", "_opp_priority", "_orig_order"] if c in pf.columns
+                ]
+                pf = pf.sort_values(sort_keys, kind="mergesort")
+            except Exception:
+                pf.drop(columns=[c for c in ["_opp_priority", "_orig_order"] if c in pf.columns], inplace=True, errors="ignore")
         # Final tidy: keep unique player-team-season rows
         pf = pf.drop_duplicates(subset=["player","team","season"], keep="first")
+        if "_opp_priority" in pf.columns:
+            try:
+                mask_all = pf["_opp_priority"].eq(0)
+                if mask_all.any() and "opponent" in pf.columns:
+                    pf.loc[mask_all, "opponent"] = "ALL"
+            except Exception:
+                pass
+            pf.drop(columns=["_opp_priority"], inplace=True, errors="ignore")
+        if "_orig_order" in pf.columns:
+            pf.drop(columns=["_orig_order"], inplace=True, errors="ignore")
 # --- ADD: persist a stable player_key for robust downstream joins ---
         try:
             pf["player_key"] = (
