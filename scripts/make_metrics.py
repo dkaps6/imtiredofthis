@@ -25,6 +25,8 @@ import numpy as np
 DATA_DIR = "data"
 OUTPATH  = os.path.join(DATA_DIR, "metrics_ready.csv")
 
+PLAYER_FORM_CONSENSUS_OPPONENT = "ALL"
+
 # ----------------------------
 # Utilities
 # ----------------------------
@@ -89,6 +91,13 @@ def _normalize_player_name(x: pd.Series | str) -> pd.Series | str:
 def _player_key_series(s: pd.Series) -> pd.Series:
     """Stable key for joins; lowercase, alnum only."""
     return s.fillna("").astype(str).str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
+
+
+def _player_form_consensus_mask(series: pd.Series) -> pd.Series:
+    if series is None:
+        return pd.Series(dtype=bool)
+    norm = series.fillna("").astype(str).str.upper().str.strip()
+    return norm.eq("") | norm.eq(PLAYER_FORM_CONSENSUS_OPPONENT)
 
 # ----------------------------
 # Core loaders
@@ -334,12 +343,31 @@ def build_metrics(season: int) -> pd.DataFrame:
 
     # Stable player keys for joins
     props["player_key"] = _player_key_series(props.get("player", pd.Series(dtype=object)))
+    pf_consensus = pd.DataFrame()
+    pf_by_opponent = pd.DataFrame()
     if not pf.empty:
         pf["player_key"] = _player_key_series(pf.get("player", pd.Series(dtype=object)))
+        if "opponent" in pf.columns:
+            consensus_mask = _player_form_consensus_mask(pf["opponent"])
+        else:
+            consensus_mask = pd.Series(True, index=pf.index)
+        pf_consensus = pf.loc[consensus_mask].copy()
+        pf_by_opponent = pf.loc[~consensus_mask].copy()
+        if pf_consensus.empty:
+            pf_consensus = pf.copy()
+    else:
+        pf_consensus = pf.copy()
+        pf_by_opponent = pd.DataFrame(columns=pf.columns)
 
     # if props.team missing entirely, try to backfill from player_form first
-    if "team" in props.columns and props["team"].isna().all() and not pf.empty:
-        props = props.merge(pf[["player","team"]].drop_duplicates(), on="player", how="left", suffixes=("","_pf"))
+    team_fill_source = pf_consensus if not pf_consensus.empty else pf
+    if (
+        "team" in props.columns
+        and props["team"].isna().all()
+        and not team_fill_source.empty
+        and {"player", "team"}.issubset(team_fill_source.columns)
+    ):
+        props = props.merge(team_fill_source[["player","team"]].drop_duplicates(), on="player", how="left", suffixes=("","_pf"))
         props["team"] = props["team"].combine_first(props.get("team_pf"))
         if "team_pf" in props.columns:
             props = props.drop(columns=["team_pf"])
@@ -350,11 +378,12 @@ def build_metrics(season: int) -> pd.DataFrame:
 
     # Base: props + player_form (non-destructive)
     base = props.copy()
-    if not pf.empty:
+    if not pf_consensus.empty:
         keep_pf = ["player","team","target_share","rush_share","route_rate","yprr_proxy","ypt","ypc",
                    "rz_tgt_share","rz_carry_share","position","role","season","player_key","week","opponent"]
-        keep_pf = [c for c in keep_pf if c in pf.columns]
-        base = base.merge(pf[keep_pf].drop_duplicates(), on=["player_key"], how="left", suffixes=("","_pf"))
+        keep_pf = [c for c in keep_pf if c in pf_consensus.columns]
+        if keep_pf:
+            base = base.merge(pf_consensus[keep_pf].drop_duplicates(), on=["player_key"], how="left", suffixes=("","_pf"))
         # backfill props.team from pf if missing
         if "team" in base.columns and "team_pf" in base.columns:
             base["team"] = base["team"].combine_first(base["team_pf"])
@@ -399,17 +428,19 @@ def build_metrics(season: int) -> pd.DataFrame:
                 base.drop(columns=[c for c in ["week_sched","opponent_sched"] if c in base.columns], inplace=True)
 
     # --- NEW: Fallback 2: if still missing, backfill opponent from player_form (by player_key [+ week if both present]) ---
-    if base.get("opponent").isna().any() and not pf.empty and "opponent" in pf.columns:
+    if base.get("opponent").isna().any() and not pf_by_opponent.empty and "opponent" in pf_by_opponent.columns:
         # prefer week-aware backfill
-        if "week" in pf.columns and "week" in base.columns:
+        if "week" in pf_by_opponent.columns and "week" in base.columns:
             join_cols = ["player_key","week"]
         else:
             join_cols = ["player_key"]
-        pf_opp = pf[join_cols + ["opponent"]].drop_duplicates()
-        base = base.merge(pf_opp, on=join_cols, how="left", suffixes=("","_pfopp"))
-        if "opponent_pfopp" in base.columns:
-            base["opponent"] = base["opponent"].combine_first(base["opponent_pfopp"])
-            base.drop(columns=["opponent_pfopp"], inplace=True)
+        available_cols = [c for c in join_cols + ["opponent"] if c in pf_by_opponent.columns]
+        if set(join_cols).issubset(pf_by_opponent.columns) and "opponent" in pf_by_opponent.columns:
+            pf_opp = pf_by_opponent[available_cols].drop_duplicates()
+            base = base.merge(pf_opp, on=join_cols, how="left", suffixes=("","_pfopp"))
+            if "opponent_pfopp" in base.columns:
+                base["opponent"] = base["opponent"].combine_first(base["opponent_pfopp"])
+                base.drop(columns=["opponent_pfopp"], inplace=True)
 
     # Attach opponent defenses (EPA/sacks/boxes)
     if not tf.empty:

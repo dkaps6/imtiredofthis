@@ -56,6 +56,8 @@ FINAL_COLS = [
     "rz_tgt_share",
     "rz_rush_share",
 ]
+
+CONSENSUS_OPPONENT_SENTINEL = "ALL"
 # === BEGIN: SURGICAL NAME NORMALIZATION HELPERS (idempotent) ===
 try:
     _NAME_HELPERS_DEFINED
@@ -891,7 +893,11 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     base = _ensure_cols(base, ["opponent"])
     base["player"] = _norm_name(base["player"].astype(str))
     base["team"] = base["team"].astype(str).str.upper().str.strip().map(_canon_team)
-    base["opponent"] = base["opponent"].astype(str).str.upper().str.strip().map(_canon_team)
+    opp_norm = base["opponent"].astype(str).str.upper().str.strip()
+    sentinel_mask = opp_norm.eq(CONSENSUS_OPPONENT_SENTINEL)
+    base["opponent"] = opp_norm.map(_canon_team)
+    if sentinel_mask.any():
+        base.loc[sentinel_mask, "opponent"] = CONSENSUS_OPPONENT_SENTINEL
     base["opponent"] = base["opponent"].replace("", np.nan)
 
     # POSITION ENRICHMENT: weekly rosters → players master → usage family
@@ -1215,6 +1221,11 @@ def _enrich_team_and_opponent_from_props(df: pd.DataFrame) -> pd.DataFrame:
     pr["opponent"] = _normalize_props_opponent(pr)
     out = df.copy()
     out = _ensure_cols(out, ["opponent"])
+    sentinel_mask = pd.Series(False, index=out.index)
+    if "opponent" in out.columns and len(out.index) > 0:
+        sentinel_mask = (
+            out["opponent"].fillna("").astype(str).str.upper().str.strip().eq(CONSENSUS_OPPONENT_SENTINEL)
+        )
     if "team" in pr.columns:
         out = out.merge(pr[["player","team","opponent"]].drop_duplicates(), on=["player","team"], how="left", suffixes=("","_pr1"))
         if "opponent_pr1" in out.columns:
@@ -1248,6 +1259,8 @@ def _enrich_team_and_opponent_from_props(df: pd.DataFrame) -> pd.DataFrame:
                     if base_opponent is not None
                     else out.pop("opponent_pr")
                 )
+    if "opponent" in out.columns and sentinel_mask.any():
+        out.loc[sentinel_mask, "opponent"] = CONSENSUS_OPPONENT_SENTINEL
     return out
 
 if __name__ == "__main__":

@@ -2,6 +2,8 @@
 import sys
 import pandas as pd
 
+PLAYER_FORM_CONSENSUS_OPPONENT = "ALL"
+
 REQUIRED_TEAM_COLS = [
     "team","season","def_pass_epa","def_rush_epa","def_sack_rate",
     "pace","proe","light_box_rate","heavy_box_rate","ay_per_att"
@@ -13,6 +15,13 @@ REQUIRED_PLAYER_COLS = [
 SEASON = 2025
 TEAM_MIN_COVERAGE = 1.00  # 100%
 PLAYER_MIN_COVERAGE = 1.00
+
+
+def _consensus_opponent_mask(series: pd.Series) -> pd.Series:
+    if series is None:
+        return pd.Series(dtype=bool)
+    norm = series.fillna("").astype(str).str.upper().str.strip()
+    return norm.eq("") | norm.eq(PLAYER_FORM_CONSENSUS_OPPONENT)
 
 def coverage(df: pd.DataFrame, cols):
     if df.empty: return 0.0
@@ -26,6 +35,12 @@ def main():
     # enforce season
     if "season" in tf.columns: tf = tf[tf["season"] == SEASON]
     if "season" in pf.columns: pf = pf[pf["season"] == SEASON]
+
+    pf_consensus = pf
+    if "opponent" in pf.columns:
+        mask = _consensus_opponent_mask(pf["opponent"])
+        if mask.any():
+            pf_consensus = pf.loc[mask].copy()
 
     # missing columns?
     missing_t = [c for c in REQUIRED_TEAM_COLS if c not in tf.columns]
@@ -41,13 +56,13 @@ def main():
         sys.exit(1)
 
     team_cov = coverage(tf, REQUIRED_TEAM_COLS)
-    plyr_cov = coverage(pf, REQUIRED_PLAYER_COLS)
+    plyr_cov = coverage(pf_consensus, REQUIRED_PLAYER_COLS)
 
     if team_cov < TEAM_MIN_COVERAGE or plyr_cov < PLAYER_MIN_COVERAGE:
         print(f"[validate_metrics] ❌ Coverage too low. team={team_cov:.3f}, player={plyr_cov:.3f}", file=sys.stderr)
         # optional: print examples of bad rows
         bad_t = tf[~tf[REQUIRED_TEAM_COLS].notna().all(axis=1)].head(10)
-        bad_p = pf[~pf[REQUIRED_PLAYER_COLS].notna().all(axis=1)].head(10)
+        bad_p = pf_consensus[~pf_consensus[REQUIRED_PLAYER_COLS].notna().all(axis=1)].head(10)
         print("[validate_metrics] team bad rows (sample):\n", bad_t, file=sys.stderr)
         print("[validate_metrics] player bad rows (sample):\n", bad_p, file=sys.stderr)
         sys.exit(1)
