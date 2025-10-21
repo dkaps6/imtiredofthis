@@ -749,10 +749,26 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         inside20["yardline_100"] = pd.to_numeric(inside20.get("yardline_100"), errors="coerce")
         rz_rec = inside20.loc[inside20["yardline_100"] <= 20]
         if not rz_rec.empty:
-            rz_tgt_ply = rz_rec.groupby(["team","opponent","player"]).size().rename("rz_targets")
-            rz_tgt_tm  = rz_rec.groupby("team").size().rename("rz_team_targets")
-            rply = rply.merge(rz_tgt_ply.reset_index(), on=["team","opponent","player"], how="left")
-            rply = rply.merge(rz_tgt_tm.reset_index(),  on=["team","opponent"],          how="left")
+            rz_tgt_ply = (
+                rz_rec.groupby(["team", "opponent", "player"], dropna=False)
+                .size()
+                .rename("rz_targets")
+            )
+            rz_tgt_tm = (
+                rz_rec.groupby(["team", "opponent"], dropna=False)
+                .size()
+                .rename("rz_team_targets")
+            )
+            rply = rply.merge(
+                rz_tgt_ply.reset_index(),
+                on=["team", "opponent", "player"],
+                how="left",
+            )
+            rply = rply.merge(
+                rz_tgt_tm.reset_index(),
+                on=["team", "opponent"],
+                how="left",
+            )
             rply["rz_tgt_share"] = np.where(rply["rz_team_targets"]>0, rply["rz_targets"]/rply["rz_team_targets"], np.nan)
 
     rply = _ensure_cols(rply, [
@@ -797,10 +813,26 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         inside10["yardline_100"] = pd.to_numeric(inside10.get("yardline_100"), errors="coerce")
         rz_ru = inside10.loc[inside10["yardline_100"] <= 10]
         if not rz_ru.empty:
-            rz_ru_ply = rz_ru.groupby(["team","opponent","player"]).size().rename("rz_rushes")
-            rz_ru_tm  = rz_ru.groupby("team").size().rename("rz_team_rushes")
-            rru = rru.merge(rz_ru_ply.reset_index(), on=["team","opponent","player"], how="left")
-            rru = rru.merge(rz_ru_tm.reset_index(),  on=["team","opponent"],          how="left")
+            rz_ru_ply = (
+                rz_ru.groupby(["team", "opponent", "player"], dropna=False)
+                .size()
+                .rename("rz_rushes")
+            )
+            rz_ru_tm = (
+                rz_ru.groupby(["team", "opponent"], dropna=False)
+                .size()
+                .rename("rz_team_rushes")
+            )
+            rru = rru.merge(
+                rz_ru_ply.reset_index(),
+                on=["team", "opponent", "player"],
+                how="left",
+            )
+            rru = rru.merge(
+                rz_ru_tm.reset_index(),
+                on=["team", "opponent"],
+                how="left",
+            )
             rru["rz_rush_share"] = np.where(rru["rz_team_rushes"]>0, rru["rz_rushes"]/rru["rz_team_rushes"], np.nan)
 
     rru = _ensure_cols(rru, [
