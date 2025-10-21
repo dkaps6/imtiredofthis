@@ -299,6 +299,10 @@ TEAM_NAME_TO_ABBR = {
     "TAMPA BAY":"TB","BUCCANEERS":"TB","TENNESSEE":"TEN","TITANS":"TEN","WASHINGTON":"WAS","COMMANDERS":"WAS",
 }
 
+# defensively add lowercase variants for mapping
+TEAM_NAME_TO_ABBR.update({k.lower(): v for k, v in TEAM_NAME_TO_ABBR.items()})
+
+
 def _canon_team(x: str) -> str:
     if x is None:
         return ""
@@ -379,18 +383,29 @@ def _import_nflverse():
 NFLV, NFL_PKG = _import_nflverse()
 
 def load_pbp(season: int) -> pd.DataFrame:
-    if NFL_PKG == "nflreadpy":
-        raw = NFLV.load_pbp(seasons=[season])
-    else:
-        raw = NFLV.import_pbp_data([season], downcast=True)  # type: ignore
-    pbp = _to_pandas(raw)
-    pbp.columns = [c.lower() for c in pbp.columns]
-    return pbp
-
-# ---------------------------
-# Position sources
-# ---------------------------
-
+    # explicit, version-safe loader with diagnostics
+    rows = -1
+    try:
+        if NFL_PKG == "nflreadpy":
+            raw = NFLV.load_pbp(seasons=[season])
+        else:
+            # nfl_data_py has had both names in the wild
+            if hasattr(NFLV, "import_pbp_data"):
+                raw = NFLV.import_pbp_data([season], downcast=True)  # type: ignore
+            elif hasattr(NFLV, "import_pbp"):
+                raw = NFLV.import_pbp([season])  # type: ignore
+            else:
+                raise RuntimeError("nfl_data_py missing import_pbp(_data) functions")
+        pbp = _to_pandas(raw)
+        pbp.columns = [c.lower() for c in pbp.columns]
+        rows = len(pbp)
+        print(f"[pf] PBP loaded for {season}: rows={rows}, sample_cols={list(pbp.columns[:10])}")
+        if rows == 0:
+            raise RuntimeError("PBP returned 0 rows (unexpected for active season).")
+        return pbp
+    except Exception as e:
+        print(f"[pf] ERROR loading PBP {season}: {type(e).__name__}: {e}", file=sys.stderr)
+        return pd.DataFrame()
 def _load_weekly_rosters(season: int) -> pd.DataFrame:
     """(player, team, position), forgiving team keys."""
     try:
@@ -595,15 +610,16 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         )
         pbp = pd.DataFrame()
     if pbp.empty:
-        warnings.warn(
-            f"No play-by-play data available for season {season}; returning empty base for fallback hydration.",
-            RuntimeWarning,
-        )
+        allow_offseason = os.getenv("ALLOW_OFFSEASON_FALLBACK", "0") != "0"
+        msg = f"No play-by-play data available for season {season}."
+        if not allow_offseason:
+            raise RuntimeError(msg + " Set ALLOW_OFFSEASON_FALLBACK=1 to write structural base.")
+        warnings.warn(msg + " Writing structural base due to ALLOW_OFFSEASON_FALLBACK.", RuntimeWarning)
         base = pd.DataFrame(columns=["player", "team"])
         base["season"] = int(season)
         base = _ensure_cols(base, FINAL_COLS)
         base = base[FINAL_COLS].drop_duplicates(subset=["player","team","opponent","season"]).reset_index(drop=True)
-        print("[pf] pbp empty → returning structural base only (offseason fallback)")
+        print("[pf] pbp empty → structural base only")
         return base
     
     off_col = "posteam" if "posteam" in pbp.columns else ("offense_team" if "offense_team" in pbp.columns else None)
@@ -616,6 +632,28 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         pbp["opponent"] = np.nan
     else:
         pbp["opponent"] = pbp[opp_col].astype(str).str.upper().str.strip()
+
+
+    # Ensure counting columns exist and are numeric to avoid groupby collapse
+    for col in ["pass_attempt","complete_pass","qb_dropback","rush_attempt","yards_gained"]:
+        if col in pbp.columns:
+            pbp[col] = pd.to_numeric(pbp[col], errors="coerce").fillna(0)
+            # boolean/int flags should be ints
+            if col != "yards_gained":
+                pbp[col] = pbp[col].astype(int)
+
+    # Derive robust is_pass / is_rush flags
+    pt = pbp.get("play_type")
+    is_pass = pbp.get("pass")
+    if is_pass is None:
+        is_pass = pt.isin(["pass","no_play"]) if pt is not None else pd.Series(False, index=pbp.index)
+    else:
+        is_pass = pd.Series(is_pass).astype(bool)
+    is_rush = pbp.get("rush")
+    if is_rush is None:
+        is_rush = pt.eq("run") if pt is not None else pd.Series(False, index=pbp.index)
+    else:
+        is_rush = pd.Series(is_rush).astype(bool)
 
     # RECEIVING
     is_pass = pbp.get("pass")
