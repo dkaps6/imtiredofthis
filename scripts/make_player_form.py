@@ -893,6 +893,15 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     base = _ensure_cols(base, ["opponent"])
     base["player"] = _norm_name(base["player"].astype(str))
     base["team"] = base["team"].astype(str).str.upper().str.strip().map(_canon_team)
+
+    opp_raw = base.get("opponent")
+    opp_norm = (
+        opp_raw.where(opp_raw.notna(), "")
+        .astype(str)
+        .str.upper()
+        .str.strip()
+    )
+    sentinel_mask = opp_norm.eq(CONSENSUS_OPPONENT_SENTINEL) | opp_norm.eq("")
     opp_norm = base["opponent"].astype(str).str.upper().str.strip()
     sentinel_mask = opp_norm.eq(CONSENSUS_OPPONENT_SENTINEL)
     base["opponent"] = opp_norm.map(_canon_team)
