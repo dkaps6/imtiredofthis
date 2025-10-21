@@ -399,19 +399,8 @@ def load_pbp(season: int) -> pd.DataFrame:
         pbp = _to_pandas(raw)
         pbp.columns = [c.lower() for c in pbp.columns]
         rows = len(pbp)
-        \1
-print(f"[pf] pass_cols_present: receiver_player_name={ 'receiver_player_name' in pbp.columns }, receiver={ 'receiver' in pbp.columns }")
-print(f"[pf] rush_cols_present: rusher_player_name={ 'rusher_player_name' in pbp.columns }, rusher={ 'rusher' in pbp.columns }")
-try:
-    pass_series = pbp.get('pass')
-    rush_series = pbp.get('rush')
-    pt = pbp.get('play_type')
-    pass_rows = int(pass_series.sum()) if pass_series is not None else (int((pt=='pass').sum()) if pt is not None else 0)
-    rush_rows = int(rush_series.sum()) if rush_series is not None else (int((pt=='run').sum()) if pt is not None else 0)
-    print(f"[pf] pass_rows={pass_rows}, rush_rows={rush_rows}")
-except Exception:
-    pass
-if rows == 0:
+        print(f"[pf] PBP loaded for {season}: rows={rows}, sample_cols={list(pbp.columns[:10])}")
+        if rows == 0:
             raise RuntimeError("PBP returned 0 rows (unexpected for active season).")
         return pbp
     except Exception as e:
@@ -1107,65 +1096,6 @@ def cli():
     df.to_csv(OUTPATH, index=False)
     print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH}")
 
-def _enrich_team_and_opponent_from_props(df: pd.DataFrame) -> pd.DataFrame:
-    import os
-    path = os.path.join("outputs", "props_raw.csv")
-    if not os.path.exists(path):
-        return df
-    try:
-        pr = pd.read_csv(path)
-    except Exception:
-        return df
-
-    pr.columns = [c.lower() for c in pr.columns]
-    name_col = next((c for c in ["player","player_name","name"] if c in pr.columns), None)
-    team_col = next((c for c in ["team","team_abbr","posteam"] if c in pr.columns), None)
-    if not name_col:
-        return df
-
-    pr["player"] = _norm_name(pr[name_col].astype(str))
-    if team_col:
-        pr["team"] = pr[team_col].astype(str).str.upper().str.strip().map(_canon_team)
-        pr.loc[~pr["team"].isin(VALID), "team"] = np.nan
-
-    # Normalize opponent from props if present
-    if "opponent" in pr.columns:
-        pr["opponent"] = _normalize_props_opponent(pr["opponent"])
-        pr["opponent"] = pr["opponent"].map(_canon_team)
-        pr["opponent"] = pr["opponent"].replace("", np.nan)
-    else:
-        pr["opponent"] = np.nan
-
-    out = df.copy()
-    out = _ensure_cols(out, ["opponent","team","player"])
-
-    # Fill opponent for existing (player, team) rows
-    if "team" in pr.columns and "opponent" in pr.columns:
-        pr_pto = pr[["player","team","opponent"]].drop_duplicates()
-        out = out.merge(pr_pto, on=["player","team"], how="left", suffixes=("","_pr1"))
-        if "opponent_pr1" in out.columns:
-            out["opponent"] = out["opponent"].combine_first(out["opponent_pr1"])
-            out.drop(columns=["opponent_pr1"], inplace=True, errors="ignore")
-
-    # If team is missing in out, try to backfill from props by player only
-    need_team_mask = out["team"].isna() | (out["team"] == "")
-    if need_team_mask.any():
-        pr_by_player = pr[["player","team"]].dropna().drop_duplicates()
-        out = out.merge(pr_by_player, on=["player"], how="left", suffixes=("","_pr2"))
-        if "team_pr2" in out.columns:
-            # Only fill where team is missing
-            out.loc[need_team_mask, "team"] = out.loc[need_team_mask, "team"].combine_first(out.loc[need_team_mask, "team_pr2"])
-            out.drop(columns=["team_pr2"], inplace=True, errors="ignore")
-
-    return out
-
-
-
-if __name__ == '__main__':
-with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        cli()
-
 
 def _enrich_team_and_opponent_from_props(df: pd.DataFrame) -> pd.DataFrame:
     import os
@@ -1222,3 +1152,9 @@ def _enrich_team_and_opponent_from_props(df: pd.DataFrame) -> pd.DataFrame:
                     else out.pop("opponent_pr")
                 )
     return out
+
+if __name__ == "__main__":
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        cli()
+
