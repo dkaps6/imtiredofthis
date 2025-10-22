@@ -166,7 +166,10 @@ def load_team_form() -> pd.DataFrame:
     return df
 
 def load_player_form() -> pd.DataFrame:
-    df = _read_csv(os.path.join(DATA_DIR, "player_form.csv"))
+    # prefer consensus if present
+    consensus_path = os.path.join(DATA_DIR, "player_form_consensus.csv")
+    base_path = os.path.join(DATA_DIR, "player_form.csv")
+    df = _read_csv(consensus_path if os.path.exists(consensus_path) else base_path)
     if df.empty:
         return df
     if "team" in df.columns:
@@ -179,6 +182,15 @@ def load_player_form() -> pd.DataFrame:
     if "player" not in df.columns:
         df["player"] = np.nan
     df["player"] = _normalize_player_name(df["player"])
+
+    # --- alias column names for compatibility with make_player_form ---
+    if "target_share" not in df.columns and "tgt_share" in df.columns:
+        df["target_share"] = df["tgt_share"]
+    if "yprr_proxy" not in df.columns and "yprr" in df.columns:
+        df["yprr_proxy"] = df["yprr"]
+    if "rz_carry_share" not in df.columns and "rz_rush_share" in df.columns:
+        df["rz_carry_share"] = df["rz_rush_share"]
+
     return df
 
 def load_coverage() -> pd.DataFrame:
