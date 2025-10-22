@@ -170,6 +170,7 @@ def bootstrap_from_props_if_empty(df: pd.DataFrame) -> pd.DataFrame:
     if "team" in boot:
         boot["team"] = boot["team"].astype(str)
     boot = boot.drop_duplicates(subset=["player"] if "team" not in boot else ["player","team"])
+    # minimal schema
     boot["season"] = boot.get("season", pd.Series(np.nan, index=boot.index))
     for c in ["target_share","rush_share","rz_tgt_share","rz_carry_share","ypt","ypc","yprr_proxy","route_rate","position","role"]:
         boot[c] = np.nan
@@ -184,6 +185,7 @@ def load_roles_priority() -> pd.DataFrame:
     3) data/depth_chart_ourlads.csv
     Returns: ['player','team','position','role']
     """
+    # 1) roles.csv
     roles = _read_csv(os.path.join(DATA_DIR,"roles.csv"))
     if not roles.empty and {"player","team","role"}.issubset(roles.columns):
         if "position" not in roles.columns:
@@ -191,6 +193,7 @@ def load_roles_priority() -> pd.DataFrame:
         roles["role"] = roles["role"].astype(str).str.upper()
         return roles[["player","team","position","role"]].drop_duplicates()
 
+    # 2) espn depth
     espn = _read_csv(os.path.join(DATA_DIR,"depth_chart_espn.csv"))
     if not espn.empty:
         espn["position"] = espn.get("position", np.nan)
@@ -219,11 +222,13 @@ def load_roles_priority() -> pd.DataFrame:
         espn = espn[["player","team","position","role"]].drop_duplicates()
         return espn
 
+    # 3) ourlads
     ol = _read_csv(os.path.join(DATA_DIR,"depth_chart_ourlads.csv"))
     if not ol.empty:
         ol["position"] = ol.get("position", np.nan)
         ol["depth"] = ol.get("depth", np.nan)
         ol["role"] = ol.apply(lambda r: (str(r.get("position") or "").upper() + str(r.get("depth") or "")), axis=1)
+        # normalize to common roles
         def _normalize(role):
             role = str(role).upper()
             if role.startswith("WR1"): return "WR1"
@@ -243,25 +248,39 @@ def load_roles_priority() -> pd.DataFrame:
         ol = ol[["player","team","position","role"]].drop_duplicates()
         return ol
 
+    # empty
     return pd.DataFrame(columns=["player","team","position","role"])
 
 def fill_route_rate_and_yprr(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    When route_rate is missing:
+    - WR/TE: estimate from target share as a crude proxy (cap 0.95)
+    - RB: use min(target_share*0.6, 0.65)
+    - QB: ignore
+    Fill yprr_proxy from ypt for receivers if missing.
+    """
     out = df.copy()
+
+    # normalize position for logic
     pos = out.get("position", pd.Series(np.nan, index=out.index)).astype(str).str.upper()
 
+    # route_rate rules
     rr = out.get("route_rate", pd.Series(np.nan, index=out.index)).astype(float)
     tshare = out.get("target_share", pd.Series(0.0, index=out.index)).astype(float)
 
+    # WR/TE heuristic
     mask_wrte = pos.str.startswith("WR") | pos.str.startswith("TE")
-    rr_wrte = tshare.mul(1.15).clip(lower=0.05, upper=0.95)
+    rr_wrte = tshare.mul(1.15).clip(lower=0.05, upper=0.95)  # 5%–95% clamp
     rr = rr.mask(mask_wrte & rr.isna(), rr_wrte)
 
+    # RB heuristic
     mask_rb = pos.str.startswith("RB")
     rr_rb = tshare.mul(0.6).clip(upper=0.65)
     rr = rr.mask(mask_rb & rr.isna(), rr_rb)
 
     out["route_rate"] = rr
 
+    # yprr_proxy fallback for WR/TE if missing but ypt exists
     yprr = out.get("yprr_proxy", pd.Series(np.nan, index=out.index)).astype(float)
     ypt   = out.get("ypt", pd.Series(np.nan, index=out.index)).astype(float)
     yprr  = yprr.mask(mask_wrte & yprr.isna() & ypt.notna(), ypt)
@@ -278,6 +297,7 @@ def main():
             print("[enrich_player_form] player_form empty → bootstrapping from props_raw.csv ...")
             pf = bootstrap_from_props_if_empty(pf)
 
+        # Ensure base schema
         pf = ensure_schema(pf)
 
     # harmonize names with make_player_form (no nukes)
@@ -287,6 +307,21 @@ def main():
         pf["yprr_proxy"] = pf["yprr"]
     if "rz_carry_share" not in pf.columns and "rz_rush_share" in pf.columns:
         pf["rz_carry_share"] = pf["rz_rush_share"]
+
+    # --- validator-friendly aliases (keep originals too) ---
+    if "tgt_share" not in pf.columns and "target_share" in pf.columns:
+        pf["tgt_share"] = pd.to_numeric(pf["target_share"], errors="coerce")
+    if "yprr" not in pf.columns:
+        if "yprr_proxy" in pf.columns:
+            pf["yprr"] = pd.to_numeric(pf["yprr_proxy"], errors="coerce")
+        elif "ypt" in pf.columns:
+            pf["yprr"] = pd.to_numeric(pf["ypt"], errors="coerce")
+        else:
+            pf["yprr"] = np.nan
+    if "rz_rush_share" not in pf.columns and "rz_carry_share" in pf.columns:
+        pf["rz_rush_share"] = pd.to_numeric(pf["rz_carry_share"], errors="coerce")
+    if "rz_carry_share" not in pf.columns and "rz_rush_share" in pf.columns:
+        pf["rz_carry_share"] = pd.to_numeric(pf["rz_rush_share"], errors="coerce")
 
     # Default RZ fields to 0.0 when no RZ events occurred
     pf = _enforce_rz_zero(pf)
@@ -305,64 +340,75 @@ def main():
     # Fallback positions from PFR if present
     pfr_pos = _read_csv(os.path.join(DATA_DIR,"pfr_player_positions.csv"))
     if not pfr_pos.empty and {"player","position"}.issubset(pfr_pos.columns):
-        pf = non_destructive_merge(pf, pfr_pos, on=["player"], mapping={"position":"position"})
+        pf = non_destructive_merge(
+            pf, pfr_pos, on=["player"],
+            mapping={"position":"position"}
+        )
 
     # Fill route_rate and yprr proxies if still missing
     pf = fill_route_rate_and_yprr(pf)
 
-    # optional participation enrichment (safe, non-fatal)
+    # --- optional: participation enrichment (safe, non-fatal on failure) ---
     try:
         season_guess = int(pf["season"].dropna().iloc[0]) if "season" in pf.columns and pf["season"].notna().any() else 2025
-        import nflreadpy as _nflv
+        import nflreadpy as _nflv   # will be used if installed; otherwise we silently skip
         part = _nflv.load_participation(seasons=[season_guess])
         part.columns = [c.lower() for c in part.columns]
+
         team_col = "posteam" if "posteam" in part.columns else ("offense_team" if "offense_team" in part.columns else None)
         if team_col is not None and "player_name" in part.columns:
             p = part.rename(columns={team_col: "team", "player_name": "player"})
             p["team"]   = p["team"].astype(str).str.upper().str.strip()
             p["player"] = p["player"].astype(str).str.replace(".", "", regex=False).str.strip()
+
+            # sum snaps/routes across the season (or available rows)
             g = p.groupby(["team","player"], dropna=False).agg(
                 off_snaps=("offense", "sum") if "offense" in p.columns else ("onfield", "sum"),
                 routes   =("route",   "sum") if "route"   in p.columns else ("routes",  "sum") if "routes" in p.columns else ("onfield","sum")
             ).reset_index()
+
+            # team totals for shares
             tt = g.groupby("team", dropna=False).agg(team_off_snaps=("off_snaps","sum"),
                                                      team_routes   =("routes","sum")).reset_index()
             g = g.merge(tt, on="team", how="left")
             g["snap_share"] = np.where(g["team_off_snaps"] > 0, g["off_snaps"] / g["team_off_snaps"], 0.0)
             g["route_rate"] = np.where(g["team_routes"]   > 0, g["routes"]    / g["team_routes"],   g["routes"]*0.0)
+
+            # merge into pf without overwriting existing non-null values
             pf = pf.merge(g[["team","player","snap_share","route_rate"]],
                           on=["team","player"], how="left", suffixes=("","_part"))
             for col in ["snap_share","route_rate"]:
                 ext = col + "_part"
                 if ext in pf.columns:
-                    pf[col] = pd.to_numeric(pf[col], errors="coerce").fillna(0.0).combine_first(pd.to_numeric(pf[ext], errors="coerce").fillna(0.0))
+                    pf[col] = pd.to_numeric(pf[col], errors="coerce").fillna(0.0).combine_first(
+                        pd.to_numeric(pf[ext], errors="coerce").fillna(0.0)
+                    )
                     pf.drop(columns=[ext], inplace=True)
     except Exception:
+        # optional; never fail on participation fetch
         pass
+    # --- END optional ---
 
-    # Keep consensus ("ALL") rows stable if present
+    # --- Preserve opponent dimension; only drop exact dups INCLUDING opponent ---
     if {"player","team","season"}.issubset(pf.columns) and "opponent" in pf.columns:
         try:
-            opp = pf["opponent"].fillna("").astype(str).str.strip()
-            cons = opp.eq("") | opp.str.upper().eq("ALL")
-            pf["_opp_priority"] = (~cons).astype(int)
             pf["_orig_order"] = np.arange(len(pf))
-            pf = pf.sort_values(["player","team","season","_opp_priority","_orig_order"], kind="mergesort")
-        except Exception:
-            pf.drop(columns=[c for c in ["_opp_priority", "_orig_order"] if c in pf.columns], inplace=True, errors="ignore")
+            pf = pf.sort_values(["player","team","season","opponent","_orig_order"], kind="mergesort")
+            pf = pf.drop_duplicates(subset=["player","team","season","opponent"], keep="first")
+            pf.drop(columns=["_orig_order"], inplace=True, errors="ignore")
 
-    pf = pf.drop_duplicates(subset=["player","team","season"], keep="first")
-    if "opponent" in pf.columns:
-        try:
-            opp = pf["opponent"].fillna("").astype(str).str.strip()
-            cons = opp.eq("") | opp.str.upper().eq("ALL")
-            if cons.any():
-                pf.loc[cons, "opponent"] = "ALL"
+            # Normalize obvious missing opponent markers to "ALL" ONLY when unknown
+            pf["opponent"] = (
+                pf["opponent"]
+                .astype(str)
+                .str.strip()
+                .replace({"": "ALL", "nan": "ALL", "None": "ALL", "...": "ALL"})
+                .str.upper()
+            )
         except Exception:
-            pass
-    for c in ["_opp_priority","_orig_order"]:
-        if c in pf.columns:
-            pf.drop(columns=[c], inplace=True, errors="ignore")
+            for c in ["_orig_order"]:
+                if c in pf.columns:
+                    pf.drop(columns=[c], inplace=True, errors="ignore")
 
     # Stable player_key for joins
     try:
