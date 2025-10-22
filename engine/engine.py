@@ -101,7 +101,7 @@ def run_pipeline(season: int = 2025,
         _run("python scripts/providers/espn_depth.py || true")
         _run("python scripts/providers/ourlads_depth.py || true")
         _run("python scripts/providers/injuries.py || true")
-        _run("python scripts/providers/pfr_team.py || true")
+        _run("python scripts/providers/pfr_pull.py || true")
 
     except Exception as e:
         print(f"[ENGINE] ⚠️ Data fetch step failed: {e}")
