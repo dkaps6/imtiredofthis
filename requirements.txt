@@ -14,6 +14,7 @@ pytz==2024.1
 polars==0.20.5
 beautifulsoup4==4.12.3
 lxml==4.9.4
+html5lib==1.1
 
 # --- nflverse + companion ---
 nfl_data_py==0.3.3
