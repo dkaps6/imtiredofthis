@@ -388,8 +388,7 @@ def main():
         # Final tidy: ensure ALL-opponent consensus rows survive de-duplication
         if {"player","team","season"}.issubset(pf.columns) and "opponent" in pf.columns:
             try:
-                opp_series = pf["opponent"]
-                consensus_mask = opp_series.isna() | opp_series.fillna("").astype(str).str.upper().eq("ALL")
+                consensus_mask = pf["opponent"].isna() | pf["opponent"].fillna("").str.upper().eq("ALL")
                 pf["_opp_priority"] = (~consensus_mask).astype(int)
                 pf["_orig_order"] = np.arange(len(pf))
                 sort_keys = [
@@ -402,8 +401,7 @@ def main():
         pf = pf.drop_duplicates(subset=["player","team","season"], keep="first")
         if "opponent" in pf.columns:
             try:
-                opp_series = pf["opponent"]
-                consensus_mask = opp_series.isna() | opp_series.fillna("").astype(str).str.upper().eq("ALL")
+                consensus_mask = pf["opponent"].isna() | pf["opponent"].fillna("").str.upper().eq("ALL")
                 if consensus_mask.any():
                     pf.loc[consensus_mask, "opponent"] = "ALL"
             except Exception:
