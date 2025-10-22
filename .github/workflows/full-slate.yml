@@ -48,8 +48,7 @@ jobs:
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           fi
-          # Ensure pandas HTML parsing works in the runner
-          pip install --upgrade pandas lxml html5lib beautifulsoup4 requests
+          # HTML parser dependencies are pinned in requirements.txt; no blanket upgrades here
 
       # ----- your other provider pulls (keep as-is) -----
       # Example:
