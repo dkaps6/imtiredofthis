@@ -386,13 +386,11 @@ def main():
         # --- END B ---
 
         # Final tidy: ensure ALL-opponent consensus rows survive de-duplication
-        mask_all_idx = None
         if {"player","team","season"}.issubset(pf.columns) and "opponent" in pf.columns:
             try:
-                opp_norm = pf["opponent"].fillna("").astype(str).str.strip()
-                mask_all = pf["opponent"].isna() | opp_norm.eq("") | opp_norm.str.upper().eq("ALL")
-                pf["_opp_priority"] = (~mask_all).astype(int)
-                mask_all_idx = mask_all[mask_all].index
+                opp_series = pf["opponent"]
+                consensus_mask = opp_series.isna() | opp_series.fillna("").astype(str).str.upper().eq("ALL")
+                pf["_opp_priority"] = (~consensus_mask).astype(int)
                 pf["_orig_order"] = np.arange(len(pf))
                 sort_keys = [
                     c for c in ["player", "team", "season", "_opp_priority", "_orig_order"] if c in pf.columns
@@ -402,14 +400,15 @@ def main():
                 pf.drop(columns=[c for c in ["_opp_priority", "_orig_order"] if c in pf.columns], inplace=True, errors="ignore")
         # Final tidy: keep unique player-team-season rows
         pf = pf.drop_duplicates(subset=["player","team","season"], keep="first")
-        if "_opp_priority" in pf.columns:
+        if "opponent" in pf.columns:
             try:
-                if mask_all_idx is not None and "opponent" in pf.columns:
-                    idx = [i for i in pf.index if i in mask_all_idx]
-                    if idx:
-                        pf.loc[idx, "opponent"] = "ALL"
+                opp_series = pf["opponent"]
+                consensus_mask = opp_series.isna() | opp_series.fillna("").astype(str).str.upper().eq("ALL")
+                if consensus_mask.any():
+                    pf.loc[consensus_mask, "opponent"] = "ALL"
             except Exception:
                 pass
+        if "_opp_priority" in pf.columns:
             pf.drop(columns=["_opp_priority"], inplace=True, errors="ignore")
         if "_orig_order" in pf.columns:
             pf.drop(columns=["_orig_order"], inplace=True, errors="ignore")
