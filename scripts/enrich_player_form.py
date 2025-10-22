@@ -388,13 +388,10 @@ def main():
         # Final tidy: ensure ALL-opponent consensus rows survive de-duplication
         if {"player","team","season"}.issubset(pf.columns) and "opponent" in pf.columns:
             try:
-                normalized_opp = (
-                    pf.get("opponent", pd.Series([], dtype=object))
-                      .fillna("")
-                      .astype(str)
-                      .str.strip()
-                )
-                consensus_mask = normalized_opp.eq("") | normalized_opp.str.upper().eq("ALL")
+                opp_series = pf.get("opponent", pd.Series(pd.NA, index=pf.index, dtype=object))
+                normalized_opp = opp_series.fillna("").astype(str).str.strip()
+                normalized_upper = normalized_opp.str.upper()
+                consensus_mask = opp_series.isna() | normalized_opp.eq("") | normalized_upper.eq("ALL")
                 pf["_opp_priority"] = (~consensus_mask).astype(int)
                 pf["_orig_order"] = np.arange(len(pf))
                 sort_keys = [
@@ -407,13 +404,10 @@ def main():
         pf = pf.drop_duplicates(subset=["player","team","season"], keep="first")
         if "opponent" in pf.columns:
             try:
-                normalized_opp = (
-                    pf.get("opponent", pd.Series([], dtype=object))
-                      .fillna("")
-                      .astype(str)
-                      .str.strip()
-                )
-                consensus_mask = normalized_opp.eq("") | normalized_opp.str.upper().eq("ALL")
+                opp_series = pf.get("opponent", pd.Series(pd.NA, index=pf.index, dtype=object))
+                normalized_opp = opp_series.fillna("").astype(str).str.strip()
+                normalized_upper = normalized_opp.str.upper()
+                consensus_mask = opp_series.isna() | normalized_opp.eq("") | normalized_upper.eq("ALL")
                 if consensus_mask.any():
                     pf.loc[consensus_mask, "opponent"] = "ALL"
             except Exception:
