@@ -81,9 +81,8 @@ def ensure_schema(df: pd.DataFrame) -> pd.DataFrame:
     for c in BASE_COLS:
         if c not in out.columns:
             out[c] = np.nan
-    return out[BASE_COLS]
-
-def non_destructive_merge(base: pd.DataFrame, add: pd.DataFrame, on, mapping=None) -> pd.DataFrame:
+    # preserve additional columns (denominators, etc.)
+    return outdef non_destructive_merge(base: pd.DataFrame, add: pd.DataFrame, on, mapping=None) -> pd.DataFrame:
     """
     Merge 'add' into 'base' without overwriting existing non-null values.
     mapping: optional dict {base_col: add_col}
@@ -281,6 +280,14 @@ def main():
 
         # Ensure base schema
         pf = ensure_schema(pf)
+
+    # harmonize names with make_player_form (no nukes)
+    if "target_share" not in pf.columns and "tgt_share" in pf.columns:
+        pf["target_share"] = pf["tgt_share"]
+    if "yprr_proxy" not in pf.columns and "yprr" in pf.columns:
+        pf["yprr_proxy"] = pf["yprr"]
+    if "rz_carry_share" not in pf.columns and "rz_rush_share" in pf.columns:
+        pf["rz_carry_share"] = pf["rz_rush_share"]
 
         # Merge roles/positions from priority sources (non-destructive)
         roles = load_roles_priority()
