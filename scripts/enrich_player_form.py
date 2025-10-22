@@ -388,7 +388,13 @@ def main():
         # Final tidy: ensure ALL-opponent consensus rows survive de-duplication
         if {"player","team","season"}.issubset(pf.columns) and "opponent" in pf.columns:
             try:
-                consensus_mask = pf["opponent"].isna() | pf["opponent"].fillna("").str.upper().eq("ALL")
+                normalized_opp = (
+                    pf.get("opponent", pd.Series([], dtype=object))
+                      .fillna("")
+                      .astype(str)
+                      .str.strip()
+                )
+                consensus_mask = normalized_opp.eq("") | normalized_opp.str.upper().eq("ALL")
                 pf["_opp_priority"] = (~consensus_mask).astype(int)
                 pf["_orig_order"] = np.arange(len(pf))
                 sort_keys = [
@@ -401,7 +407,13 @@ def main():
         pf = pf.drop_duplicates(subset=["player","team","season"], keep="first")
         if "opponent" in pf.columns:
             try:
-                consensus_mask = pf["opponent"].isna() | pf["opponent"].fillna("").str.upper().eq("ALL")
+                normalized_opp = (
+                    pf.get("opponent", pd.Series([], dtype=object))
+                      .fillna("")
+                      .astype(str)
+                      .str.strip()
+                )
+                consensus_mask = normalized_opp.eq("") | normalized_opp.str.upper().eq("ALL")
                 if consensus_mask.any():
                     pf.loc[consensus_mask, "opponent"] = "ALL"
             except Exception:
