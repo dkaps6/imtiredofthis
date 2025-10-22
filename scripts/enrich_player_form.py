@@ -82,7 +82,10 @@ def ensure_schema(df: pd.DataFrame) -> pd.DataFrame:
         if c not in out.columns:
             out[c] = np.nan
     # preserve additional columns (denominators, etc.)
-    return outdef non_destructive_merge(base: pd.DataFrame, add: pd.DataFrame, on, mapping=None) -> pd.DataFrame:
+    return out
+
+
+def non_destructive_merge(base: pd.DataFrame, add: pd.DataFrame, on, mapping=None) -> pd.DataFrame:
     """
     Merge 'add' into 'base' without overwriting existing non-null values.
     mapping: optional dict {base_col: add_col}
@@ -383,11 +386,13 @@ def main():
         # --- END B ---
 
         # Final tidy: ensure ALL-opponent consensus rows survive de-duplication
+        mask_all_idx = None
         if {"player","team","season"}.issubset(pf.columns) and "opponent" in pf.columns:
             try:
-                pf["_opp_priority"] = (
-                    ~pf["opponent"].fillna("").astype(str).str.upper().eq("ALL")
-                ).astype(int)
+                opp_norm = pf["opponent"].fillna("").astype(str).str.strip()
+                mask_all = pf["opponent"].isna() | opp_norm.eq("") | opp_norm.str.upper().eq("ALL")
+                pf["_opp_priority"] = (~mask_all).astype(int)
+                mask_all_idx = mask_all[mask_all].index
                 pf["_orig_order"] = np.arange(len(pf))
                 sort_keys = [
                     c for c in ["player", "team", "season", "_opp_priority", "_orig_order"] if c in pf.columns
@@ -399,9 +404,10 @@ def main():
         pf = pf.drop_duplicates(subset=["player","team","season"], keep="first")
         if "_opp_priority" in pf.columns:
             try:
-                mask_all = pf["_opp_priority"].eq(0)
-                if mask_all.any() and "opponent" in pf.columns:
-                    pf.loc[mask_all, "opponent"] = "ALL"
+                if mask_all_idx is not None and "opponent" in pf.columns:
+                    idx = [i for i in pf.index if i in mask_all_idx]
+                    if idx:
+                        pf.loc[idx, "opponent"] = "ALL"
             except Exception:
                 pass
             pf.drop(columns=["_opp_priority"], inplace=True, errors="ignore")
