@@ -57,6 +57,87 @@ FINAL_COLS = [
     "rz_rush_share",
 ]
 
+# === Weighted season consensus helper (surgical add) ===
+def _build_season_consensus(base: pd.DataFrame) -> pd.DataFrame:
+    """Weighted season consensus per (player, team, season). Requires denominators if available."""
+    if base is None or base.empty:
+        return pd.DataFrame()
+    df = base.copy()
+    df.columns = [c.lower() for c in df.columns]
+
+    # numeric coercion for denominators (when present)
+    for c in ["targets","team_targets","team_dropbacks","receptions","rec_yards",
+              "rushes","team_rushes","rush_yards",
+              "rz_targets","rz_team_targets","rz_rushes","rz_team_rushes",
+              "pass_yards","pass_att"]:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    keys = [k for k in ["player","team","season"] if k in df.columns]
+    if not keys:
+        return pd.DataFrame()
+
+    sums = df.groupby(keys, dropna=False).agg({
+        c: "sum" for c in [
+            "targets","team_targets","team_dropbacks","receptions","rec_yards",
+            "rushes","team_rushes","rush_yards",
+            "rz_targets","rz_team_targets","rz_rushes","rz_team_rushes",
+            "pass_yards","pass_att"
+        ] if c in df.columns
+    }).reset_index()
+
+    out = sums.copy()
+    # receiving
+    if {"targets","team_targets"}.issubset(out.columns):
+        out["tgt_share"] = out["targets"] / out["team_targets"]
+    if {"targets","team_dropbacks"}.issubset(out.columns):
+        out["route_rate"] = out["targets"] / out["team_dropbacks"]
+    if {"rec_yards","targets"}.issubset(out.columns):
+        out["ypt"] = out["rec_yards"] / out["targets"]
+        out["yprr"] = out["rec_yards"] / out["targets"]
+    if {"receptions","targets"}.issubset(out.columns):
+        out["receptions_per_target"] = out["receptions"] / out["targets"]
+    if {"rz_targets","rz_team_targets"}.issubset(out.columns):
+        out["rz_tgt_share"] = out["rz_targets"] / out["rz_team_targets"]
+    # rushing
+    if {"rushes","team_rushes"}.issubset(out.columns):
+        out["rush_share"] = out["rushes"] / out["team_rushes"]
+    if {"rush_yards","rushes"}.issubset(out.columns):
+        out["ypc"] = out["rush_yards"] / out["rushes"]
+    if {"rz_rushes","rz_team_rushes"}.issubset(out.columns):
+        out["rz_rush_share"] = out["rz_rushes"] / out["rz_team_rushes"]
+    # qb
+    if {"pass_yards","pass_att"}.issubset(out.columns):
+        out["ypa"] = out["pass_yards"] / out["pass_att"]
+
+    # combined RZ share
+    out["rz_share"] = np.nan
+    if "rz_tgt_share" in out.columns or "rz_rush_share" in out.columns:
+        t = out.get("rz_tgt_share", pd.Series(np.nan, index=out.index))
+        r = out.get("rz_rush_share", pd.Series(np.nan, index=out.index))
+        out["rz_share"] = np.fmax(t, r)
+
+    # carry role/position mode from base
+    def _mode(series: pd.Series):
+        s = series.dropna().astype(str)
+        if s.empty: return np.nan
+        m = s.mode()
+        return m.iloc[0] if not m.empty else s.iloc[0]
+    for lab in ["position","role"]:
+        if lab in df.columns:
+            m = df.groupby(keys, dropna=False)[lab].apply(_mode).reset_index()
+            out = out.merge(m, on=keys, how="left")
+
+    # games
+    games = df.groupby(keys, dropna=False).size().rename("games").reset_index()
+    out = out.merge(games, on=keys, how="left")
+
+    # mark as consensus row
+    out["opponent"] = "ALL"
+    return out
+
+
+
 CONSENSUS_OPPONENT_SENTINEL = "ALL"
 # === BEGIN: SURGICAL NAME NORMALIZATION HELPERS (idempotent) ===
 try:
