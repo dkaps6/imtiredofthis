@@ -19,14 +19,6 @@ def main():
     if df.empty:
         print("[enrich_team_form] team_form.csv empty; nothing to enrich"); return 0
 
-    # (Optional) merge PFR team dropbacks for diagnostics
-    pfrt = _safe_read_csv("data/pfr_team_enrich.csv")
-    if not pfrt.empty:
-        pfrt = pfrt.rename(columns={"team_abbr":"team"})
-        pfrt["team"] = pfrt["team"].astype(str).str.upper()
-        df = df.merge(pfrt[["team","team_dropbacks"]], on="team", how="left")
-        print("[enrich_team_form] merged PFR team_dropbacks (diagnostic)")
-
     df.to_csv("data/team_form.csv", index=False)
     print("[enrich_team_form] updated data/team_form.csv rows={}".format(len(df))); return 0
 
