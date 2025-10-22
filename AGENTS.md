@@ -14,7 +14,7 @@ This playbook is written for an *automation agent* (LLM/runner) to execute tasks
    - Sharp Football tendencies & pace (HTML parsing)
    - Depth charts (OurLads; ESPN fallback if available)
    - Injuries (if configured)
-   - nflverse / GSIS / PFR / API‑Sports / MySportsFeeds (best‑effort)
+   - nflverse / GSIS / API‑Sports / MySportsFeeds (best‑effort)
    - Sportsbook props via Odds API (v4)
 2. **Build features**:
    - `team_form` (seed with Sharp, then fall back/merge others)
@@ -103,12 +103,11 @@ python scripts/providers/ourlads_depth.py --season 2025 --date YYYY-MM-DD
 python scripts/providers/injuries.py --season 2025 --date YYYY-MM-DD
 ```
 
-**nflverse / GSIS / PFR / API‑Sports / MSF** (best‑effort; run all, ignore failures):
+**nflverse / GSIS / API‑Sports / MSF** (best‑effort; run all, ignore failures):
 
 ```bash
 python scripts/providers/gsis_pull.py --season 2025
 python scripts/providers/espn_pull.py --season 2025
-python scripts/providers/pfr_pull.py  --season 2025
 python scripts/providers/apisports_pull.py --season 2025
 python scripts/providers/msf_pull.py --season 2025
 ```
@@ -268,7 +267,7 @@ Expected: `data/team_form.csv`, `data/player_form.csv`, `outputs/props_raw.csv`,
 
 ```
 [RUN] 2025-10-19T00:00Z
-- providers: sharp=OK ourlads=OK injuries=SKIP espn=EMPTY gsis=OK pfr=OK apisports=SKIP msf=SKIP
+- providers: sharp=OK ourlads=OK injuries=SKIP espn=EMPTY gsis=OK apisports=SKIP msf=SKIP
 - props: 3 markets, 2 books → 412 rows
 - features: team_form=32 rows, player_form=~600 rows
 - metrics: 400 joined rows (12 columns added)
