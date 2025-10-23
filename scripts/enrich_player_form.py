@@ -29,6 +29,7 @@ import pandas as pd
 
 DATA_DIR = "data"
 OUTPATH = os.path.join(DATA_DIR, "player_form.csv")
+CONSENSUS_OUTPATH = os.path.join(DATA_DIR, "player_form_consensus.csv")
 
 BASE_COLS = [
     "player", "team", "season",
@@ -51,6 +52,9 @@ def _read_csv(path: str) -> pd.DataFrame:
 
 def _write_csv(path: str, df: pd.DataFrame):
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    if os.path.abspath(path) == os.path.abspath(CONSENSUS_OUTPATH):
+        # Never overwrite the consensus export; leave it to make_player_form.
+        return
     df.to_csv(path, index=False)
 
 def ensure_schema(df: pd.DataFrame) -> pd.DataFrame:

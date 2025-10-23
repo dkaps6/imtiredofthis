@@ -2,7 +2,7 @@
 """
 Build player-level shares and efficiency for the 2025 season.
 
-Outputs: data/player_form.csv
+Outputs: data/player_form.csv, data/player_form_consensus.csv
 
 Columns written:
 - player, team, season, position, role
@@ -33,6 +33,7 @@ import pandas as pd
 
 DATA_DIR = "data"
 OUTPATH = os.path.join(DATA_DIR, "player_form.csv")
+CONSENSUS_OUTPATH = os.path.join(DATA_DIR, "player_form_consensus.csv")
 
 def _safe_mkdir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
@@ -1167,10 +1168,12 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     base = _ensure_cols(base, FINAL_COLS)
 
     consensus = _build_season_consensus(base)
+    consensus_export = pd.DataFrame(columns=FINAL_COLS)
     frames: List[pd.DataFrame] = [base[FINAL_COLS]]
     if consensus is not None and not consensus.empty:
         consensus = _ensure_cols(consensus, FINAL_COLS)
-        frames.append(consensus[FINAL_COLS])
+        consensus_export = consensus[FINAL_COLS].copy()
+        frames.append(consensus_export)
 
     out = (
         pd.concat(frames, ignore_index=True)
@@ -1212,6 +1215,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         missing_mask = original.isna() | out["role"].isin(["", "NAN", "NONE"])
         out.loc[missing_mask, "role"] = "UNK"
 
+    out.attrs["consensus"] = consensus_export.copy()
     print("[pf] final rows (pre-write):", len(out))
     return out
 
@@ -1436,6 +1440,7 @@ def cli():
 
     try:
         df = build_player_form(args.season)
+        consensus_df = df.attrs.get("consensus", pd.DataFrame(columns=FINAL_COLS)).copy()
 
         # Fallback sweep BEFORE strict validation
         before = df.copy()
@@ -1462,16 +1467,31 @@ def cli():
             if "df" in locals() and isinstance(df, pd.DataFrame) and len(df) > 0:
                 df.to_csv(OUTPATH, index=False)
                 print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH} (after handled error)")
+                if "consensus_df" in locals() and isinstance(consensus_df, pd.DataFrame):
+                    consensus_df.to_csv(CONSENSUS_OUTPATH, index=False)
+                else:
+                    pd.DataFrame(columns=FINAL_COLS).to_csv(CONSENSUS_OUTPATH, index=False)
                 return
         except Exception:
             pass
         empty = pd.DataFrame(columns=FINAL_COLS)
         empty.to_csv(OUTPATH, index=False)
+        empty.to_csv(CONSENSUS_OUTPATH, index=False)
         print(f"[make_player_form] Wrote 0 rows → {OUTPATH} (empty due to error)")
         return  # ← do not sys.exit(1)
 
     df.to_csv(OUTPATH, index=False)
     print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH}")
+
+    try:
+        if "consensus_df" not in locals() or not isinstance(consensus_df, pd.DataFrame):
+            consensus_df = pd.DataFrame(columns=FINAL_COLS)
+        consensus_df = consensus_df[FINAL_COLS] if not consensus_df.empty else consensus_df
+    except Exception:
+        consensus_df = pd.DataFrame(columns=FINAL_COLS)
+
+    consensus_df.to_csv(CONSENSUS_OUTPATH, index=False)
+    print(f"[make_player_form] Wrote {len(consensus_df)} rows → {CONSENSUS_OUTPATH}")
 
 
 def _enrich_team_and_opponent_from_props(df: pd.DataFrame) -> pd.DataFrame:
