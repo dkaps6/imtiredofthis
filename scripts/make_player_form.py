@@ -46,9 +46,11 @@ FINAL_COLS = [
     "role",
     "player_key",
     "tgt_share",
+    "target_share",
     "route_rate",
     "rush_share",
     "yprr",
+    "yprr_proxy",
     "ypt",
     "ypc",
     "ypa",
@@ -56,6 +58,7 @@ FINAL_COLS = [
     "rz_share",
     "rz_tgt_share",
     "rz_rush_share",
+    "rz_carry_share",
 ]
 
 # === Weighted season consensus helper (surgical add) ===
@@ -91,11 +94,13 @@ def _build_season_consensus(base: pd.DataFrame) -> pd.DataFrame:
     # receiving
     if {"targets","team_targets"}.issubset(out.columns):
         out["tgt_share"] = out["targets"] / out["team_targets"]
+        out["target_share"] = out["tgt_share"]
     if {"targets","team_dropbacks"}.issubset(out.columns):
         out["route_rate"] = out["targets"] / out["team_dropbacks"]
     if {"rec_yards","targets"}.issubset(out.columns):
         out["ypt"] = out["rec_yards"] / out["targets"]
         out["yprr"] = out["rec_yards"] / out["targets"]
+        out["yprr_proxy"] = out["yprr"]
     if {"receptions","targets"}.issubset(out.columns):
         out["receptions_per_target"] = out["receptions"] / out["targets"]
     if {"rz_targets","rz_team_targets"}.issubset(out.columns):
@@ -107,6 +112,12 @@ def _build_season_consensus(base: pd.DataFrame) -> pd.DataFrame:
         out["ypc"] = out["rush_yards"] / out["rushes"]
     if {"rz_rushes","rz_team_rushes"}.issubset(out.columns):
         out["rz_rush_share"] = out["rz_rushes"] / out["rz_team_rushes"]
+        out["rz_carry_share"] = out["rz_rush_share"]
+
+    # ensure alias columns exist even if upstream inputs were missing
+    for alias, source in [("target_share", "tgt_share"), ("yprr_proxy", "yprr"), ("rz_carry_share", "rz_rush_share")]:
+        if alias not in out.columns:
+            out[alias] = out[source] if source in out.columns else np.nan
     # qb
     if {"pass_yards","pass_att"}.issubset(out.columns):
         out["ypa"] = out["pass_yards"] / out["pass_att"]
@@ -987,6 +998,14 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     base = pd.merge(base, qb_df, on=["team","opponent","player"], how="left")
     base["rz_share"] = base[["rz_tgt_share","rz_rush_share"]].max(axis=1)
     base["season"] = int(season)
+
+    # Validator-friendly aliases expected downstream
+    for alias, source in [("target_share", "tgt_share"), ("yprr_proxy", "yprr"), ("rz_carry_share", "rz_rush_share")]:
+        if alias not in base.columns:
+            base[alias] = base[source] if source in base.columns else np.nan
+        else:
+            if source in base.columns:
+                base[alias] = base[alias].combine_first(base[source])
 
     print("[pf] base after concat/merge:", len(base))
 
