@@ -591,6 +591,10 @@ def main():
     except Exception:
         pass
 
+    df.replace({'NAN': np.nan, 'nan': np.nan, 'NaN': np.nan, 'None': np.nan, '': np.nan}, inplace=True)
+    # FINAL_OPPONENT_SANITY: drop literal 'NAN' and empty strings
+    if 'opponent' in df.columns:
+        df['opponent'] = df['opponent'].replace({'NAN': np.nan, 'nan': np.nan, 'NaN': np.nan, '': np.nan})
     df.to_csv(OUTPATH, index=False)
     print(f"[make_metrics] Wrote {len(df)} rows → {OUTPATH}")
 
