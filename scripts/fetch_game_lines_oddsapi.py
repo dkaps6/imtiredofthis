@@ -1,12 +1,7 @@
 #!/usr/bin/env python3
 # scripts/fetch_game_lines_oddsapi.py
-# Optional helper that hits The Odds API (https://the-odds-api.com/) to fetch moneylines/totals/spreads
-# Requires env var ODDS_API_KEY. Writes outputs/odds_game.csv
-# This script is optional; use build_game_lines_from_schedule.py if you prefer to avoid external APIs.
-
-import os, sys, json, time
-import pandas as pd
-import numpy as np
+import os, sys, json
+import pandas as pd, numpy as np
 import urllib.request
 from urllib.parse import urlencode
 
@@ -16,7 +11,9 @@ def _normalize_team_names(s: pd.Series) -> pd.Series:
     if s is None:
         return s
     norm = s.astype(str).str.upper().str.strip()
-    aliases = {"WSH":"WAS","WDC":"WAS","JAC":"JAX","ARZ":"ARI","AZ":"ARI","LA":"LAR","LVR":"LV","OAK":"LV","SFO":"SF","TAM":"TB","GBP":"GB","KAN":"KC","NOS":"NO","SD":"LAC"}
+    aliases = {"WSH":"WAS","WDC":"WAS","JAC":"JAX","ARZ":"ARI","AZ":"ARI",
+               "LA":"LAR","LVR":"LV","OAK":"LV","SFO":"SF","TAM":"TB",
+               "GBP":"GB","KAN":"KC","NOS":"NO","SD":"LAC"}
     return norm.replace(aliases)
 
 def american_to_prob(odds):
@@ -44,20 +41,30 @@ def fetch_json(url):
 def main():
     api_key = os.environ.get("ODDS_API_KEY")
     if not api_key:
-        print("[oddsapi] ODDS_API_KEY env var not set; skipping", file=sys.stderr)
-        sys.exit(0)
+        print("[oddsapi] ODDS_API_KEY not set; skipping", file=sys.stderr)
+        sys.exit(0)  # don’t fail pipeline
 
-    # Fetch upcoming events for NFL
-    params = {"apiKey": api_key, "sport": "americanfootball_nfl", "region": "us", "mkt": "h2h,spreads,totals", "dateFormat": "iso"}
-    base = "https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds"
-    url = base + "?" + urlencode(params)
+    # Correct param names: regions + markets
+    params = {
+        "apiKey": api_key,
+        "regions": "us",
+        "markets": "h2h,spreads,totals",
+        "oddsFormat": "american",
+        "dateFormat": "iso",
+    }
+    url = "https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds?" + urlencode(params)
+
     try:
         data = fetch_json(url)
     except Exception as e:
         print(f"[oddsapi] fetch failed: {e}", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(0)  # soft-fail
 
-    # Parse
+    if not isinstance(data, list) or not data:
+        print("[oddsapi] no data returned; writing empty file", file=sys.stderr)
+        pd.DataFrame().to_csv(OUT, index=False)
+        sys.exit(0)
+
     rows = []
     for game in data:
         eid = game.get("id")
@@ -65,31 +72,24 @@ def main():
         home = game.get("home_team")
         away = game.get("away_team")
         bm = game.get("bookmakers", [])
-        # Take first bookmaker as reference
-        h2h, spread, total = None, None, None
-        if bm:
-            for mk in bm[0].get("markets", []):
-                key = mk.get("key")
-                if key == "h2h": h2h = mk
-                elif key == "spreads": spread = mk
-                elif key == "totals": total = mk
+        h2h = next((m for m in bm[0].get("markets", []) if m.get("key")=="h2h"), None) if bm else None
+        spreads = next((m for m in bm[0].get("markets", []) if m.get("key")=="spreads"), None) if bm else None
+        totals  = next((m for m in bm[0].get("markets", []) if m.get("key")=="totals"), None) if bm else None
+
         row = {"event_id": eid, "home_team": home, "away_team": away, "commence_time": commence,
                "home_moneyline": np.nan, "away_moneyline": np.nan, "home_spread": np.nan, "total": np.nan}
 
-        # Moneyline
         if h2h and h2h.get("outcomes"):
             for oc in h2h["outcomes"]:
                 if oc.get("name") == home: row["home_moneyline"] = oc.get("price")
-                elif oc.get("name") == away: row["away_moneyline"] = oc.get("price")
+                if oc.get("name") == away: row["away_moneyline"] = oc.get("price")
 
-        # Spread
-        if spread and spread.get("outcomes"):
-            for oc in spread["outcomes"]:
+        if spreads and spreads.get("outcomes"):
+            for oc in spreads["outcomes"]:
                 if oc.get("name") == home: row["home_spread"] = oc.get("point")
-        # Total
-        if total and total.get("outcomes"):
-            # totals list 'Over' and 'Under'; we just store the point
-            pts = total["outcomes"][0].get("point")
+
+        if totals and totals.get("outcomes"):
+            pts = totals["outcomes"][0].get("point")
             row["total"] = pts
 
         rows.append(row)
@@ -98,12 +98,11 @@ def main():
     if not df.empty:
         df["home_team"] = _normalize_team_names(df["home_team"])
         df["away_team"] = _normalize_team_names(df["away_team"])
-        # implied win probs
         p_home = df["home_moneyline"].map(american_to_prob)
         p_away = df["away_moneyline"].map(american_to_prob)
         df["home_wp"], df["away_wp"] = zip(*[devig_two_way(h, a) for h,a in zip(p_home, p_away)])
 
-    os.makedirs(os.path.dirname(OUT), exist_ok=True)
+    os.makedirs("outputs", exist_ok=True)
     df.to_csv(OUT, index=False)
     print(f"[oddsapi] wrote {OUT} rows={len(df)}")
 
