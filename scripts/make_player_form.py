@@ -268,7 +268,9 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
         roles = (roles.sort_values(["team","player","_rk"])
                       .drop_duplicates(["team","player"], keep="first")
                       .drop(columns=["_rk"]))
-    pf["team"] = pf["team"].astype(str).map(_canon_team)
+    pf_team_raw = pf["team"].astype(str).str.upper().str.strip()
+    pf_team_canon = pf_team_raw.map(_canon_team)
+    pf["team"] = np.where(pf_team_canon == "", pf_team_raw, pf_team_canon)
     pf["player_key_full"] = pf["player"].astype(str).map(_player_key_from_name_nh)
     pf["player_key_initial_last"] = pf["player"].astype(str).map(_player_initial_last_key_nh)
     roles_join = roles.copy()
@@ -276,7 +278,10 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
         roles_join = roles_join.rename(columns={"player": "player_depth_name"})
     if "player_depth_name" not in roles_join.columns:
         roles_join["player_depth_name"] = roles_join.get("player_join", "")
-    roles_join["team"] = roles_join["team"].astype(str).map(_canon_team)
+    roles_team_raw = roles_join["team"].astype(str).str.upper().str.strip()
+    roles_team_canon = roles_team_raw.map(_canon_team)
+    roles_join["team"] = np.where(roles_team_canon == "", roles_team_raw, roles_team_canon)
+    roles_join = roles_join[roles_join["team"] != ""].copy()
     roles_join["player_key_full"] = roles_join.get("player_depth_name", "").astype(str).map(_player_key_from_name_nh)
     roles_join["player_key_initial_last"] = roles_join.get("player_depth_name", "").astype(str).map(_player_initial_last_key_nh)
     roles_join = roles_join.loc[:, ~roles_join.columns.duplicated()].copy()
@@ -348,6 +353,42 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
         pf["role"] = pf["role"].combine_first(pf["role_depth"])
     if "role_depth_alias" in pf.columns:
         pf["role"] = pf["role"].combine_first(pf["role_depth_alias"])
+
+    # Key-only fallbacks when the depth charts have unique names
+    unmatched_mask = pf["role"].isna()
+    if unmatched_mask.any():
+        unique_full = roles_join[["player_key_full", "role", "position"]].copy()
+        unique_full = unique_full[unique_full["player_key_full"].notna() & (unique_full["player_key_full"] != "")]
+        dup_full = unique_full["player_key_full"].duplicated(keep=False)
+        unique_full = unique_full[~dup_full].drop_duplicates("player_key_full")
+        if not unique_full.empty:
+            role_map_full = unique_full.set_index("player_key_full")["role"].to_dict()
+            pos_map_full = unique_full.set_index("player_key_full")["position"].to_dict()
+            pf.loc[unmatched_mask, "role"] = pf.loc[unmatched_mask, "role"].fillna(
+                pf.loc[unmatched_mask, "player_key_full"].map(role_map_full)
+            )
+            pf.loc[unmatched_mask, "position"] = pf.loc[unmatched_mask, "position"].fillna(
+                pf.loc[unmatched_mask, "player_key_full"].map(pos_map_full)
+            )
+            unmatched_mask = pf["role"].isna()
+
+    if unmatched_mask.any():
+        unique_alias = roles_join[["player_key_initial_last", "role", "position"]].copy()
+        unique_alias = unique_alias[
+            unique_alias["player_key_initial_last"].notna()
+            & (unique_alias["player_key_initial_last"] != "")
+        ]
+        dup_alias = unique_alias["player_key_initial_last"].duplicated(keep=False)
+        unique_alias = unique_alias[~dup_alias].drop_duplicates("player_key_initial_last")
+        if not unique_alias.empty:
+            role_map_alias = unique_alias.set_index("player_key_initial_last")["role"].to_dict()
+            pos_map_alias = unique_alias.set_index("player_key_initial_last")["position"].to_dict()
+            pf.loc[unmatched_mask, "role"] = pf.loc[unmatched_mask, "role"].fillna(
+                pf.loc[unmatched_mask, "player_key_initial_last"].map(role_map_alias)
+            )
+            pf.loc[unmatched_mask, "position"] = pf.loc[unmatched_mask, "position"].fillna(
+                pf.loc[unmatched_mask, "player_key_initial_last"].map(pos_map_alias)
+            )
     drop_cols = [
         c
         for c in pf.columns

@@ -68,10 +68,12 @@ def _should_backfill(df: pd.DataFrame, target: str, source: str) -> bool:
     if target not in df.columns:
         return True
     try:
-        series = df[target]
+        series = pd.to_numeric(df[target], errors="coerce")
     except KeyError:
         return False
-    return series.isna().all()
+    if series.notna().any() and (series.abs() > 0).any():
+        return False
+    return True
 
 
 def _apply_alias_backfills(df: pd.DataFrame) -> pd.DataFrame:
