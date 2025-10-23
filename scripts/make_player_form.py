@@ -33,6 +33,7 @@ import pandas as pd
 
 DATA_DIR = "data"
 OUTPATH = os.path.join(DATA_DIR, "player_form.csv")
+CONSENSUS_OUTPATH = os.path.join(DATA_DIR, "player_form_consensus.csv")
 
 def _safe_mkdir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
@@ -1167,10 +1168,20 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     base = _ensure_cols(base, FINAL_COLS)
 
     consensus = _build_season_consensus(base)
+    consensus_to_write = _ensure_cols(pd.DataFrame(), FINAL_COLS)
+    if consensus is not None and not _is_empty(consensus):
+        consensus_to_write = _ensure_cols(consensus.copy(), FINAL_COLS)
+
+    try:
+        _safe_mkdir(DATA_DIR)
+        consensus_to_write[FINAL_COLS].to_csv(CONSENSUS_OUTPATH, index=False)
+        print(f"[pf] consensus rows: {len(consensus_to_write)} → {CONSENSUS_OUTPATH}")
+    except Exception as exc:
+        print(f"[pf] WARN failed to write consensus → {CONSENSUS_OUTPATH}: {exc}", file=sys.stderr)
+
     frames: List[pd.DataFrame] = [base[FINAL_COLS]]
-    if consensus is not None and not consensus.empty:
-        consensus = _ensure_cols(consensus, FINAL_COLS)
-        frames.append(consensus[FINAL_COLS])
+    if not consensus_to_write.empty:
+        frames.append(consensus_to_write[FINAL_COLS])
 
     out = (
         pd.concat(frames, ignore_index=True)
