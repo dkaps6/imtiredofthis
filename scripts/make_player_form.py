@@ -168,6 +168,20 @@ except NameError:
     def _player_key_from_name_nh(s: str) -> str:
         s = _clean_person_name_nh(s)
         return _re_nh.sub(r"[^a-z0-9]", "", s.lower())
+
+    def _player_initial_last_key_nh(s: str) -> str:
+        s = _clean_person_name_nh(s)
+        if not s:
+            return ""
+        parts = s.split()
+        if not parts:
+            return ""
+        first = parts[0]
+        last = parts[-1] if len(parts) > 1 else parts[0]
+        if not first:
+            return ""
+        key = f"{first[0]}{last}".lower()
+        return _re_nh.sub(r"[^a-z0-9]", "", key)
 # === END: SURGICAL NAME NORMALIZATION HELPERS ===
 
 
@@ -255,38 +269,93 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
                       .drop_duplicates(["team","player"], keep="first")
                       .drop(columns=["_rk"]))
     pf["team"] = pf["team"].astype(str).map(_canon_team)
-    pf["player_join"] = pf["player"].astype(str).str.replace(r"[^A-Za-z]", "", regex=True)
+    pf["player_key_full"] = pf["player"].astype(str).map(_player_key_from_name_nh)
+    pf["player_key_initial_last"] = pf["player"].astype(str).map(_player_initial_last_key_nh)
     roles_join = roles.copy()
-    if "player_key_concat" in roles_join.columns:
-        roles_join = roles_join.rename(columns={"player_key_concat": "player_join"})
-    else:
-        roles_join["player_join"] = roles_join["player"].astype(str).str.replace(r"[^A-Za-z]", "", regex=True)
     if "player" in roles_join.columns:
-        roles_join = roles_join.rename(columns={"player":"player_depth_name"})
+        roles_join = roles_join.rename(columns={"player": "player_depth_name"})
+    if "player_depth_name" not in roles_join.columns:
+        roles_join["player_depth_name"] = roles_join.get("player_join", "")
     roles_join["team"] = roles_join["team"].astype(str).map(_canon_team)
+    roles_join["player_key_full"] = roles_join.get("player_depth_name", "").astype(str).map(_player_key_from_name_nh)
+    roles_join["player_key_initial_last"] = roles_join.get("player_depth_name", "").astype(str).map(_player_initial_last_key_nh)
     roles_join = roles_join.loc[:, ~roles_join.columns.duplicated()].copy()
+    roles_full = roles_join[[
+        col for col in ["team", "player_key_full", "role", "position", "player_depth_name"]
+        if col in roles_join.columns
+    ]].copy()
+    roles_full = roles_full.loc[roles_full["player_key_full"].notna() & (roles_full["player_key_full"] != "")]
+    roles_full = roles_full.sort_values(["team", "player_key_full"]).drop_duplicates(["team", "player_key_full"], keep="first")
+    roles_full = roles_full.rename(
+        columns={
+            "role": "role_depth",
+            "position": "position_depth",
+            "player_depth_name": "player_depth_name_full",
+        }
+    )
     try:
         pf = pf.merge(
-            roles_join[["team","player_join","role","position"]],
-            on=["team","player_join"],
+            roles_full,
+            on=["team", "player_key_full"],
             how="left",
-            suffixes=("", "_depth"),
             validate="many_to_one",
         )
     except Exception as e:
-        print(f"[make_player_form] WARN roles merge issue: {e}")
+        print(f"[make_player_form] WARN roles merge (full key) issue: {e}")
         pf = pf.merge(
-            roles_join[["team","player_join","role","position"]],
-            on=["team","player_join"],
+            roles_full,
+            on=["team", "player_key_full"],
             how="left",
-            suffixes=("", "_depth"),
         )
-    pf.drop(columns=["player_join"], inplace=True, errors="ignore")
+
+    roles_alias = roles_join[[
+        col for col in ["team", "player_key_initial_last", "role", "position", "player_depth_name"]
+        if col in roles_join.columns
+    ]].copy()
+    roles_alias = roles_alias.loc[
+        roles_alias["player_key_initial_last"].notna() & (roles_alias["player_key_initial_last"] != "")
+    ]
+    roles_alias = roles_alias.sort_values(["team", "player_key_initial_last"]).drop_duplicates(
+        ["team", "player_key_initial_last"], keep="first"
+    )
+    roles_alias = roles_alias.rename(
+        columns={
+            "role": "role_depth_alias",
+            "position": "position_depth_alias",
+            "player_depth_name": "player_depth_name_alias",
+        }
+    )
+    try:
+        pf = pf.merge(
+            roles_alias,
+            on=["team", "player_key_initial_last"],
+            how="left",
+            validate="many_to_one",
+        )
+    except Exception as e:
+        print(f"[make_player_form] WARN roles merge (alias key) issue: {e}")
+        pf = pf.merge(
+            roles_alias,
+            on=["team", "player_key_initial_last"],
+            how="left",
+        )
+
     if "position_depth" in pf.columns:
         pf["position"] = pf["position"].combine_first(pf["position_depth"])
+    if "position_depth_alias" in pf.columns:
+        pf["position"] = pf["position"].combine_first(pf["position_depth_alias"])
     if "role_depth" in pf.columns:
         pf["role"] = pf["role"].combine_first(pf["role_depth"])
-    drop_cols = [c for c in pf.columns if c.endswith("_depth")]
+    if "role_depth_alias" in pf.columns:
+        pf["role"] = pf["role"].combine_first(pf["role_depth_alias"])
+    drop_cols = [
+        c
+        for c in pf.columns
+        if c.endswith("_depth")
+        or c.endswith("_depth_alias")
+        or c in {"player_key_full", "player_key_initial_last"}
+        or c.startswith("player_depth_name_")
+    ]
     if drop_cols:
         pf.drop(columns=drop_cols, inplace=True, errors="ignore")
     pf = pf.loc[:, ~pf.columns.duplicated()]
