@@ -60,6 +60,30 @@ def ensure_schema(df: pd.DataFrame) -> pd.DataFrame:
             out[c] = np.nan
     return out
 
+
+def _should_backfill(df: pd.DataFrame, target: str, source: str) -> bool:
+    """Return True when an alias backfill should run."""
+    if source not in df.columns:
+        return False
+    if target not in df.columns:
+        return True
+    try:
+        series = df[target]
+    except KeyError:
+        return False
+    return series.isna().all()
+
+
+def _apply_alias_backfills(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    if _should_backfill(out, "target_share", "tgt_share"):
+        out["target_share"] = pd.to_numeric(out["tgt_share"], errors="coerce")
+    if _should_backfill(out, "yprr_proxy", "yprr"):
+        out["yprr_proxy"] = pd.to_numeric(out["yprr"], errors="coerce")
+    if _should_backfill(out, "rz_carry_share", "rz_rush_share"):
+        out["rz_carry_share"] = pd.to_numeric(out["rz_rush_share"], errors="coerce")
+    return out
+
 # -------------------- Bootstrap if empty --------------------
 
 def bootstrap_from_props_if_empty(df: pd.DataFrame) -> pd.DataFrame:
@@ -314,15 +338,8 @@ def main():
             print("[enrich_player_form] player_form empty → bootstrapping from props_raw.csv ...")
             pf = bootstrap_from_props_if_empty(pf)
 
+        pf = _apply_alias_backfills(pf)
         pf = ensure_schema(pf)
-
-    # aliasing without nukes
-    if "target_share" not in pf.columns and "tgt_share" in pf.columns:
-        pf["target_share"] = pf["tgt_share"]
-    if "yprr_proxy" not in pf.columns and "yprr" in pf.columns:
-        pf["yprr_proxy"] = pf["yprr"]
-    if "rz_carry_share" not in pf.columns and "rz_rush_share" in pf.columns:
-        pf["rz_carry_share"] = pf["rz_rush_share"]
 
     # validator-friendly aliases kept alongside originals
     if "tgt_share" not in pf.columns and "target_share" in pf.columns:
