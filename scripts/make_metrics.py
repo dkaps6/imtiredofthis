@@ -53,6 +53,7 @@ def _normalize_team_names(s: pd.Series) -> pd.Series:
     """Map common sportsbook aliases to nflverse team codes (best effort)."""
     if s is None:
         return s
+    original_null_mask = s.isna()
     norm = s.astype(str).str.upper().str.strip()
     aliases = {
         # books ↔ nflverse
@@ -70,7 +71,12 @@ def _normalize_team_names(s: pd.Series) -> pd.Series:
         # occasional typos seen in feeds
         "CLV": "CLE",
     }
-    return norm.replace(aliases)
+    norm = norm.replace(aliases)
+
+    empty_sentinels = {"", "NAN", "NONE", "NULL", "NA", "N/A"}
+    norm = norm.mask(norm.isin(empty_sentinels))
+    norm = norm.mask(original_null_mask)
+    return norm
 
 _SUFFIX_RE = re.compile(r"\s+(JR|SR|II|III|IV|V)\.?$", flags=re.IGNORECASE)
 
