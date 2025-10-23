@@ -257,18 +257,6 @@ def _blend_probs(p_model: float, p_market_fair: float) -> float:
     return 0.65 * p_model + 0.35 * p_market_fair
 
 
-def _edge_to_tier(abs_edge: float) -> str:
-    if pd.isna(abs_edge):
-        return "RED"
-    if abs_edge >= 0.06:
-        return "ELITE"
-    if abs_edge >= 0.04:
-        return "GREEN"
-    if abs_edge >= 0.01:
-        return "AMBER"
-    return "RED"
-
-
 def _fair_odds_from_prob(p: float) -> float:
     p = min(max(p, 1e-9), 1 - 1e-9)
     if p >= 0.5:
@@ -415,28 +403,11 @@ def price(season: int, props_path: Optional[str] = None):
         p_over_vig = _implied_prob_from_american(over_odds)
         p_under_vig = _implied_prob_from_american(under_odds)
 
-        p_market_over = np.nan
-        p_market_under = np.nan
+        p_market_fair = np.nan
         if not pd.isna(p_over_vig) and not pd.isna(p_under_vig):
-            total = p_over_vig + p_under_vig
-            if total > 0:
-                p_market_over = p_over_vig / total
-                p_market_under = p_under_vig / total
-
-        if pd.isna(p_market_over) and not pd.isna(p_over_vig):
-            p_market_over = p_over_vig
-            if pd.isna(p_market_under):
-                p_market_under = 1.0 - p_over_vig
-
-        if pd.isna(p_market_under) and not pd.isna(p_under_vig):
-            p_market_under = p_under_vig
-            if pd.isna(p_market_over):
-                p_market_over = 1.0 - p_under_vig
-
-        if not pd.isna(p_market_over):
-            p_market_over = min(max(p_market_over, 0.0), 1.0)
-        if not pd.isna(p_market_under):
-            p_market_under = min(max(p_market_under, 0.0), 1.0)
+            p_market_fair = _devig_two_way(p_over_vig, p_under_vig)
+        elif not pd.isna(p_over_vig):
+            p_market_fair = p_over_vig  # one-sided anchor
 
         # Model base: start at market line with default sigma, then apply multipliers
         sigma0 = _default_sigma_for_market(mk)
@@ -512,37 +483,27 @@ def price(season: int, props_path: Optional[str] = None):
 
         # Price at line using blended μ
         p_model_over = _prob_over_at_line(mu_model, sigma, L)
-        p_model_under = 1.0 - p_model_over if not pd.isna(p_model_over) else np.nan
+        p_blend = _blend_probs(p_model_over, p_market_fair)
+        fair_over_odds = _fair_odds_from_prob(p_blend)
 
-        p_blend_over = _blend_probs(p_model_over, p_market_over)
-        p_blend_under = _blend_probs(p_model_under, p_market_under)
+        edge = np.nan
+        if not pd.isna(p_market_fair):
+            edge = p_blend - p_market_fair
 
-        fair_over_odds = _fair_odds_from_prob(p_blend_over)
-        fair_under_odds = _fair_odds_from_prob(p_blend_under)
+        # Tiering
+        tier = "RED"
+        abs_edge = abs(edge) if not pd.isna(edge) else 0.0
+        if abs_edge >= 0.06:
+            tier = "ELITE"
+        elif abs_edge >= 0.04:
+            tier = "GREEN"
+        elif abs_edge >= 0.01:
+            tier = "AMBER"
 
-        edge_over = np.nan
-        if not pd.isna(p_market_over):
-            edge_over = p_blend_over - p_market_over
+        # Bet side
+        bet_side = "OVER" if p_blend >= 0.5 else "UNDER"
 
-        edge_under = np.nan
-        if not pd.isna(p_market_under):
-            edge_under = p_blend_under - p_market_under
-
-        abs_edge_over = abs(edge_over) if not pd.isna(edge_over) else 0.0
-        abs_edge_under = abs(edge_under) if not pd.isna(edge_under) else 0.0
-
-        # Bet side recommendation: choose larger positive edge when available
-        rec_over = edge_over if not pd.isna(edge_over) else -np.inf
-        rec_under = edge_under if not pd.isna(edge_under) else -np.inf
-        if rec_over == -np.inf and rec_under == -np.inf:
-            prob = p_blend_over if not pd.isna(p_blend_over) else np.nan
-            if pd.isna(prob):
-                prob = 0.5
-            bet_side = "OVER" if prob >= 0.5 else "UNDER"
-        else:
-            bet_side = "OVER" if rec_over >= rec_under else "UNDER"
-
-        base_out = {
+        out = {
             "player": row.get("player"),
             "team": row.get("team"),
             "opponent": row.get("opponent"),
@@ -550,17 +511,15 @@ def price(season: int, props_path: Optional[str] = None):
             "vegas_line": L,
             "vegas_over_odds": over_odds,
             "vegas_under_odds": under_odds,
-            "vegas_over_fair_pct": p_market_over,
-            "vegas_under_fair_pct": p_market_under,
+            "vegas_over_fair_pct": p_market_fair,
             "model_proj": mu_model,
             "model_sd": sigma,
             "model_over_pct": p_model_over,
-            "model_under_pct": p_model_under,
-            "blended_over_pct": p_blend_over,
-            "blended_under_pct": p_blend_under,
+            "blended_over_pct": p_blend,
             "fair_over_odds": fair_over_odds,
-            "fair_under_odds": fair_under_odds,
+            "edge_abs": abs_edge,
             "bet_side": bet_side,
+            "tier": tier,
             # traceability
             "wind_mph": row.get("wind_mph"),
             "precip": row.get("precip"),
@@ -573,48 +532,7 @@ def price(season: int, props_path: Optional[str] = None):
             "coverage_tag": row.get("coverage_tag"),
             "cb_penalty": row.get("cb_penalty"),
         }
-
-        for side_name, metrics in (
-            (
-                "OVER",
-                {
-                    "odds": over_odds,
-                    "market_prob": p_market_over,
-                    "model_prob": p_model_over,
-                    "blend_prob": p_blend_over,
-                    "fair_odds": fair_over_odds,
-                    "edge": edge_over,
-                    "edge_abs": abs_edge_over,
-                },
-            ),
-            (
-                "UNDER",
-                {
-                    "odds": under_odds,
-                    "market_prob": p_market_under,
-                    "model_prob": p_model_under,
-                    "blend_prob": p_blend_under,
-                    "fair_odds": fair_under_odds,
-                    "edge": edge_under,
-                    "edge_abs": abs_edge_under,
-                },
-            ),
-        ):
-            out = base_out.copy()
-            out.update(
-                {
-                    "side": side_name,
-                    "vegas_side_odds": metrics["odds"],
-                    "vegas_side_fair_pct": metrics["market_prob"],
-                    "model_side_pct": metrics["model_prob"],
-                    "blended_side_pct": metrics["blend_prob"],
-                    "fair_side_odds": metrics["fair_odds"],
-                    "edge": metrics["edge"],
-                    "edge_abs": metrics["edge_abs"],
-                    "tier": _edge_to_tier(metrics["edge_abs"]),
-                }
-            )
-            out_rows.append(out)
+        out_rows.append(out)
 
     out_df = pd.DataFrame(out_rows)
     out_df.to_csv(OUT_FILE, index=False)
