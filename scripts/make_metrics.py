@@ -166,10 +166,31 @@ def load_team_form() -> pd.DataFrame:
     return df
 
 def load_player_form() -> pd.DataFrame:
+    """Load player form, preferring consensus with a hard fallback.
+
+    When the consensus export is present but empty (historically caused by
+    partial upstream failures) pandas will raise ``EmptyDataError`` or produce
+    an empty frame. We immediately fall back to the underlying ``player_form``
+    CSV so downstream joins still receive data. Keep the normalization/backfill
+    below in sync with both variants.
+    """
+
     # prefer consensus if present
     consensus_path = os.path.join(DATA_DIR, "player_form_consensus.csv")
     base_path = os.path.join(DATA_DIR, "player_form.csv")
-    df = _read_csv(consensus_path if os.path.exists(consensus_path) else base_path)
+
+    df = pd.DataFrame()
+    if os.path.exists(consensus_path):
+        try:
+            df = pd.read_csv(consensus_path)
+            df.columns = [c.lower() for c in df.columns]
+        except pd.errors.EmptyDataError:
+            df = pd.DataFrame()
+        except Exception:
+            df = pd.DataFrame()
+
+    if df.empty:
+        df = _read_csv(base_path)
     if df.empty:
         return df
     if "team" in df.columns:
