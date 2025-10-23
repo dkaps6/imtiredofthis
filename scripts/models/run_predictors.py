@@ -241,6 +241,15 @@ def run(season: int):
     pf=_read_csv('data/player_form.csv', ['player','team','position'])
     tf=_read_csv('data/team_form.csv', ['team'])
     props=_read_csv(str(props_path), ['player','team','opp_team','market','line','over_odds','under_odds','book','commence_time','event_id','position'])
+
+    if 'side' in props.columns:
+        props['side'] = props['side'].astype(str).str.upper()
+        order_map = {'OVER': 0, 'UNDER': 1}
+        props['_side_order'] = props['side'].map(order_map).fillna(2)
+        subset = [c for c in ['event_id','player','team','market','line','book'] if c in props.columns]
+        if subset:
+            props = props.sort_values(by=['_side_order'], kind='mergesort').drop_duplicates(subset=subset, keep='first')
+        props.drop(columns=['_side_order'], inplace=True)
     odds_game=_read_csv('outputs/odds_game.csv', ['event_id','commence_time','sport_key','home_team','away_team','market','point','book'])
 
     # --- try to normalize the key column names coming from pricing
