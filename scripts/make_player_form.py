@@ -44,10 +44,13 @@ FINAL_COLS = [
     "season",
     "position",
     "role",
+    "player_key",
     "tgt_share",
+    "target_share",
     "route_rate",
     "rush_share",
     "yprr",
+    "yprr_proxy",
     "ypt",
     "ypc",
     "ypa",
@@ -55,6 +58,7 @@ FINAL_COLS = [
     "rz_share",
     "rz_tgt_share",
     "rz_rush_share",
+    "rz_carry_share",
 ]
 
 # === Weighted season consensus helper (surgical add) ===
@@ -90,11 +94,13 @@ def _build_season_consensus(base: pd.DataFrame) -> pd.DataFrame:
     # receiving
     if {"targets","team_targets"}.issubset(out.columns):
         out["tgt_share"] = out["targets"] / out["team_targets"]
+        out["target_share"] = out["tgt_share"]
     if {"targets","team_dropbacks"}.issubset(out.columns):
         out["route_rate"] = out["targets"] / out["team_dropbacks"]
     if {"rec_yards","targets"}.issubset(out.columns):
         out["ypt"] = out["rec_yards"] / out["targets"]
         out["yprr"] = out["rec_yards"] / out["targets"]
+        out["yprr_proxy"] = out["yprr"]
     if {"receptions","targets"}.issubset(out.columns):
         out["receptions_per_target"] = out["receptions"] / out["targets"]
     if {"rz_targets","rz_team_targets"}.issubset(out.columns):
@@ -106,6 +112,12 @@ def _build_season_consensus(base: pd.DataFrame) -> pd.DataFrame:
         out["ypc"] = out["rush_yards"] / out["rushes"]
     if {"rz_rushes","rz_team_rushes"}.issubset(out.columns):
         out["rz_rush_share"] = out["rz_rushes"] / out["rz_team_rushes"]
+        out["rz_carry_share"] = out["rz_rush_share"]
+
+    # ensure alias columns exist even if upstream inputs were missing
+    for alias, source in [("target_share", "tgt_share"), ("yprr_proxy", "yprr"), ("rz_carry_share", "rz_rush_share")]:
+        if alias not in out.columns:
+            out[alias] = out[source] if source in out.columns else np.nan
     # qb
     if {"pass_yards","pass_att"}.issubset(out.columns):
         out["ypa"] = out["pass_yards"] / out["pass_att"]
@@ -165,9 +177,9 @@ except NameError:
         s = _deaccent_nh(s)
         return s.strip()
 
-    def _player_key_from_name_nh(s: str) -> str:
-        s = _clean_person_name_nh(s)
-        return _re_nh.sub(r"[^a-z0-9]", "", s.lower())
+def _player_key_from_name_nh(s: str) -> str:
+    s = _clean_person_name_nh(s)
+    return _re_nh.sub(r"[^a-z0-9]", "", s.lower())
 # === END: SURGICAL NAME NORMALIZATION HELPERS ===
 
 
@@ -313,6 +325,29 @@ def _ensure_cols(df: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
         if c not in df.columns:
             df[c] = np.nan
     return df
+
+
+def _player_key_series_from(df: pd.Series) -> pd.Series:
+    if df is None:
+        return pd.Series(dtype=object)
+    try:
+        return df.fillna("").astype(str).map(_player_key_from_name_nh)
+    except Exception:
+        return pd.Series(dtype=object, index=df.index if df is not None else None)
+
+
+def _ensure_player_key_column(df: pd.DataFrame) -> pd.DataFrame:
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        return df
+    out = df.copy()
+    derived = _player_key_series_from(out.get("player", pd.Series(dtype=object)))
+    if "player_key" in out.columns:
+        mask = out["player_key"].fillna("").astype(str).eq("")
+        if isinstance(derived, pd.Series) and not derived.empty:
+            out.loc[mask, "player_key"] = derived.loc[mask]
+    else:
+        out["player_key"] = derived
+    return out
 
 def _non_destructive_merge(base: pd.DataFrame, add: pd.DataFrame, keys: List[str]) -> pd.DataFrame:
     if _is_empty(add):
@@ -964,6 +999,14 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     base["rz_share"] = base[["rz_tgt_share","rz_rush_share"]].max(axis=1)
     base["season"] = int(season)
 
+    # Validator-friendly aliases expected downstream
+    for alias, source in [("target_share", "tgt_share"), ("yprr_proxy", "yprr"), ("rz_carry_share", "rz_rush_share")]:
+        if alias not in base.columns:
+            base[alias] = base[source] if source in base.columns else np.nan
+        else:
+            if source in base.columns:
+                base[alias] = base[alias].combine_first(base[source])
+
     print("[pf] base after concat/merge:", len(base))
 
     # Initialize position/role as NaN (do not uppercase yet)
@@ -1027,6 +1070,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
 
     base = _ensure_cols(base, FINAL_COLS)
     out = base[FINAL_COLS].drop_duplicates(subset=["player","team","opponent","season"]).reset_index(drop=True)
+    out = _ensure_player_key_column(out)
     out = _enrich_team_and_opponent_from_props(out)
     print("[pf] final rows (pre-write):", len(out))
     return out
@@ -1300,55 +1344,100 @@ def _enrich_team_and_opponent_from_props(df: pd.DataFrame) -> pd.DataFrame:
     except Exception:
         return df
     pr.columns = [c.lower() for c in pr.columns]
-    name_col = next((c for c in ["player","player_name","name"] if c in pr.columns), None)
-    team_col = next((c for c in ["team","team_abbr","posteam"] if c in pr.columns), None)
+    name_col = next((c for c in ["player", "player_name", "name"] if c in pr.columns), None)
+    team_col = next((c for c in ["team", "team_abbr", "posteam"] if c in pr.columns), None)
     if not name_col:
         return df
+
     pr["player"] = _norm_name(pr[name_col].astype(str))
+    pr["player_key"] = _player_key_series_from(pr.get("player", pd.Series(dtype=object)))
     if team_col:
         pr["team"] = pr[team_col].astype(str).str.upper().str.strip().map(_canon_team)
         pr.loc[~pr["team"].isin(VALID), "team"] = np.nan
     pr["opponent"] = _normalize_props_opponent(pr)
-    out = df.copy()
-    out = _ensure_cols(out, ["opponent"])
+
+    identity_cols = [c for c in ["player", "team", "opponent", "player_key"] if c in pr.columns]
+    pr_identity = pr[identity_cols].copy()
+    if "team" in pr_identity.columns:
+        pr_identity["team"] = pr_identity["team"].astype(str).str.upper().str.strip()
+        pr_identity.loc[~pr_identity["team"].isin(VALID), "team"] = np.nan
+    if "player_key" in pr_identity.columns:
+        pr_identity["player_key"] = pr_identity["player_key"].fillna("").astype(str)
+
+    out = _ensure_player_key_column(df)
+    out = _ensure_cols(out, ["opponent", "player_key"])
+
     sentinel_mask = pd.Series(False, index=out.index)
     if "opponent" in out.columns and len(out.index) > 0:
         sentinel_mask = (
             out["opponent"].fillna("").astype(str).str.upper().str.strip().eq(CONSENSUS_OPPONENT_SENTINEL)
         )
-    if "team" in pr.columns:
-        out = out.merge(pr[["player","team","opponent"]].drop_duplicates(), on=["player","team"], how="left", suffixes=("","_pr1"))
+
+    # Backfill missing player names via stable player_key from props
+    if {"player_key", "player"}.issubset(out.columns) and "player_key" in pr_identity.columns:
+        key_names = (
+            pr_identity[["player_key", "player"]]
+            .dropna(subset=["player_key"])
+            .loc[lambda d: d["player"].astype(str).str.strip() != ""]
+            .drop_duplicates(subset=["player_key"], keep="first")
+        )
+        if not key_names.empty:
+            out = out.merge(key_names, on="player_key", how="left", suffixes=("", "_props_name"))
+            if "player_props_name" in out.columns:
+                base_player = out.get("player")
+                if base_player is None:
+                    out.rename(columns={"player_props_name": "player"}, inplace=True)
+                else:
+                    mask = base_player.fillna("").astype(str).str.strip().eq("")
+                    out.loc[mask, "player"] = out.loc[mask, "player_props_name"]
+                    out.drop(columns=["player_props_name"], inplace=True)
+
+    # Primary merge on (player, team)
+    if {"player", "team"}.issubset(pr_identity.columns):
+        pt = pr_identity[["player", "team", "opponent"]].drop_duplicates()
+        out = out.merge(pt, on=["player", "team"], how="left", suffixes=("", "_pr1"))
         if "opponent_pr1" in out.columns:
-            # Guard combine_first so future refactors that drop the ensure above don't KeyError.
             base_opponent = out.get("opponent")
-            out["opponent"] = (
-                base_opponent.combine_first(out.pop("opponent_pr1"))
-                if base_opponent is not None
-                else out.pop("opponent_pr1")
-            )
-        need_team = out["team"].isna() | (out["team"] == "")
+            fallback = out.pop("opponent_pr1")
+            out["opponent"] = base_opponent.combine_first(fallback) if base_opponent is not None else fallback
+
+        need_team = out["team"].fillna("").eq("")
         if need_team.any():
-            fallback = pr[["player","team","opponent"]].dropna(how="all").drop_duplicates()
-            out = out.merge(fallback, on="player", how="left", suffixes=("","_pr2"))
+            fallback = pt.dropna(how="all")
+            out = out.merge(fallback, on="player", how="left", suffixes=("", "_pr2"))
             if "team_pr2" in out.columns:
-                out["team"] = out["team"].combine_first(out.pop("team_pr2"))
+                out.loc[need_team, "team"] = out.loc[need_team, "team_pr2"]
+                out.drop(columns=["team_pr2"], inplace=True)
             if "opponent_pr2" in out.columns:
                 base_opponent = out.get("opponent")
-                out["opponent"] = (
-                    base_opponent.combine_first(out.pop("opponent_pr2"))
-                    if base_opponent is not None
-                    else out.pop("opponent_pr2")
-                )
+                fallback = out.pop("opponent_pr2")
+                out["opponent"] = base_opponent.combine_first(fallback) if base_opponent is not None else fallback
     else:
-        if "opponent" in pr.columns:
-            out = out.merge(pr[["player","opponent"]].drop_duplicates(), on="player", how="left", suffixes=("","_pr"))
+        if "player" in pr_identity.columns and "opponent" in pr_identity.columns:
+            po = pr_identity[["player", "opponent"]].drop_duplicates()
+            out = out.merge(po, on="player", how="left", suffixes=("", "_pr"))
             if "opponent_pr" in out.columns:
                 base_opponent = out.get("opponent")
-                out["opponent"] = (
-                    base_opponent.combine_first(out.pop("opponent_pr"))
-                    if base_opponent is not None
-                    else out.pop("opponent_pr")
-                )
+                fallback = out.pop("opponent_pr")
+                out["opponent"] = base_opponent.combine_first(fallback) if base_opponent is not None else fallback
+
+    # Final backfill via player_key for any lingering team/opponent gaps
+    if "player_key" in out.columns and "player_key" in pr_identity.columns:
+        key_team = (
+            pr_identity[["player_key", "team", "opponent"]]
+            .dropna(subset=["player_key"])
+            .drop_duplicates(subset=["player_key"], keep="first")
+        )
+        out = out.merge(key_team, on="player_key", how="left", suffixes=("", "_pk"))
+        if "team_pk" in out.columns:
+            mask = out["team"].fillna("").eq("")
+            out.loc[mask, "team"] = out.loc[mask, "team_pk"]
+            out.drop(columns=["team_pk"], inplace=True)
+        if "opponent_pk" in out.columns:
+            base_opponent = out.get("opponent")
+            fallback = out.pop("opponent_pk")
+            out["opponent"] = base_opponent.combine_first(fallback) if base_opponent is not None else fallback
+
     if "opponent" in out.columns and sentinel_mask.any():
         out.loc[sentinel_mask, "opponent"] = CONSENSUS_OPPONENT_SENTINEL
     return out
