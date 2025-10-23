@@ -1078,7 +1078,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     ])
 
     # QUARTERBACK
-    qb_df = pd.DataFrame(columns=["team","opponent","player","ypa","dropbacks"])
+    qb_df = pd.DataFrame(columns=["team","opponent","player","pass_yards","pass_att","ypa","dropbacks"])
     qb_name_col = "passer_player_name" if "passer_player_name" in pbp.columns else ("passer" if "passer" in pbp.columns else None)
     if qb_name_col is not None:
         qb = pbp.copy()
@@ -1095,7 +1095,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
                 dropbacks=("qb_dropback","sum") if "qb_dropback" in qb.columns else (qb_name_col,"size"),
             ).reset_index()
             gb["ypa"] = np.where(gb["pass_att"]>0, gb["pass_yards"]/gb["pass_att"], np.nan)
-            qb_df = gb[["team","opponent","player","ypa","dropbacks"]]
+            qb_df = gb[["team","opponent","player","pass_yards","pass_att","ypa","dropbacks"]]
 
     # Merge all
     base = pd.merge(rply, rru, on=["team","opponent","player"], how="outer")
