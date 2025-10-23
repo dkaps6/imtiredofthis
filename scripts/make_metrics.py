@@ -10,7 +10,7 @@ Inputs (best-effort; missing inputs won’t crash):
 - data/cb_assignments.csv
 - data/injuries.csv
 - data/weather.csv
-- outputs/game_lines.csv (preferred) or outputs/odds_game.csv (fallback)
+- outputs/odds_game.csv (preferred) or outputs/game_lines.csv (fallback)
 - (optional) data/team_form_weekly.csv (for opponent week-specific env)
 
 Output:
@@ -263,30 +263,47 @@ def load_weather() -> pd.DataFrame:
     df = _read_csv(os.path.join(DATA_DIR, "weather.csv"))
     return df
 
-def load_game_lines() -> pd.DataFrame:
-    gl = _read_csv(os.path.join("outputs","game_lines.csv"))
-    if not gl.empty:
-        for tcol in ["home_team","away_team"]:
-            if tcol in gl.columns:
-                gl[tcol] = _normalize_team_names(gl[tcol])
-        if "home_wp" in gl.columns and "away_wp" in gl.columns:
-            return gl[["event_id","home_team","away_team","home_wp","away_wp"]]
+# Preferred game-lines: Odds API file, then fallback to schedule
+def _read_csv_any(paths):
+    for p in paths:
+        if os.path.exists(p):
+            try:
+                df = pd.read_csv(p)
+                df.columns = [c.lower() for c in df.columns]
+                if not df.empty:
+                    return df.assign(_source=p)
+            except Exception:
+                pass
+    return pd.DataFrame()
 
-    og = _read_csv(os.path.join("outputs","odds_game.csv"))
-    if og.empty:
-        return pd.DataFrame(columns=["event_id","home_team","away_team","home_wp","away_wp"])
+def load_game_lines_preferring_odds() -> pd.DataFrame:
+    og = _read_csv_any(["outputs/odds_game.csv"])
+    if not og.empty and {"home_team","away_team"}.issubset(og.columns):
+        gl = og.copy()
+    else:
+        gl = _read_csv_any(["outputs/game_lines.csv"])
 
-    for tcol in ["home_team","away_team"]:
-        if tcol in og.columns:
-            og[tcol] = _normalize_team_names(og[tcol])
-    if "home_wp" not in og.columns or "away_wp" not in og.columns:
-        if "home_implied" in og.columns and "away_implied" in og.columns:
-            og["home_wp"] = og["home_implied"].astype(float)
-            og["away_wp"] = og["away_implied"].astype(float)
-        else:
-            og["home_wp"] = np.nan
-            og["away_wp"] = np.nan
-    return og[["event_id","home_team","away_team","home_wp","away_wp"]].drop_duplicates()
+    if gl.empty:
+        return gl
+
+    # Normalize teams
+    for col in ["home_team","away_team"]:
+        if col in gl.columns:
+            gl[col] = _normalize_team_names(gl[col])
+
+    # Ensure event_id
+    if "event_id" not in gl.columns:
+        gl["event_id"] = (gl.get("season", np.nan).astype(str) + "_" +
+                          gl.get("week", np.nan).astype(str) + "_" +
+                          gl.get("home_team", "").astype(str) + "_" +
+                          gl.get("away_team", "").astype(str))
+
+    # Derive week from commence_time if missing
+    if ("week" not in gl.columns or gl["week"].isna().all()) and "commence_time" in gl.columns:
+        gl["week"] = pd.to_datetime(gl["commence_time"], errors="coerce", utc=True).dt.isocalendar().week.astype("Int64")
+
+    keep = [c for c in ["event_id","home_team","away_team","week","season","commence_time","home_wp","away_wp"] if c in gl.columns]
+    return gl[keep].drop_duplicates()
 
 # ----------------------------
 # NEW: schedule fallback (surgical)
@@ -333,25 +350,6 @@ def _load_schedule_long(season: int) -> pd.DataFrame:
 
 def build_metrics(season: int) -> pd.DataFrame:
     props = load_props()
-gl = load_game_lines()
-## OPPONENT_FROM_GAME_LINES
-try:
-    if not gl.empty:
-        if 'event_id' in props.columns and 'event_id' in gl.columns:
-            tmp = props.merge(gl[['event_id','home_team','away_team','week']], on='event_id', how='left')
-            opp = _np.where(tmp.get('team').eq(tmp.get('home_team')), tmp.get('away_team'),
-                     _np.where(tmp.get('team').eq(tmp.get('away_team')), tmp.get('home_team'), _np.nan))
-            props['opponent'] = opp
-            if 'week' not in props.columns:
-                props['week'] = tmp.get('week')
-        elif {'team','week'}.issubset(props.columns) and {'home_team','away_team','week'}.issubset(gl.columns):
-            left = props.copy()
-            left = left.merge(gl[['home_team','away_team','week']], on='week', how='left')
-            opp = _np.where(left.get('team').eq(left.get('home_team')), left.get('away_team'),
-                     _np.where(left.get('team').eq(left.get('away_team')), left.get('home_team'), _np.nan))
-            props['opponent'] = opp
-except Exception as _e:
-    print('[make_metrics] opponent derive skipped:', _e)
     if props.empty:
         return pd.DataFrame(columns=[
             "event_id","player","team","opponent","market","line","over_odds","under_odds",
@@ -369,42 +367,21 @@ except Exception as _e:
     cba = load_cb_assignments()
     inj = load_injuries()
     wx  = load_weather()
-    gl  = load_game_lines()
+    gl  = load_game_lines_preferring_odds()
 
     # Week inference for props (if missing)
     if "week" not in props.columns or props["week"].isna().all():
         if "commence_time" in props.columns:
             props["week"] = pd.to_datetime(props["commence_time"], errors="coerce", utc=True)\
                                 .dt.isocalendar().week.astype("Int64")
-        else:
-            gl_raw = _read_csv(os.path.join("outputs", "game_lines.csv"))
-            if not gl_raw.empty and {"event_id","commence_time"}.issubset(gl_raw.columns) and "event_id" in props.columns:
-                wk_src = gl_raw[["event_id","commence_time"]].dropna().copy()
-                wk_src["week"] = pd.to_datetime(wk_src["commence_time"], errors="coerce", utc=True)\
-                                    .dt.isocalendar().week.astype("Int64")
-                props = props.merge(wk_src[["event_id","week"]], on="event_id", how="left", suffixes=("", "_gl"))
-gl = load_game_lines()
-## OPPONENT_FROM_GAME_LINES
-try:
-    if not gl.empty:
-        if 'event_id' in props.columns and 'event_id' in gl.columns:
-            tmp = props.merge(gl[['event_id','home_team','away_team','week']], on='event_id', how='left')
-            opp = _np.where(tmp.get('team').eq(tmp.get('home_team')), tmp.get('away_team'),
-                     _np.where(tmp.get('team').eq(tmp.get('away_team')), tmp.get('home_team'), _np.nan))
-            props['opponent'] = opp
-            if 'week' not in props.columns:
-                props['week'] = tmp.get('week')
-        elif {'team','week'}.issubset(props.columns) and {'home_team','away_team','week'}.issubset(gl.columns):
-            left = props.copy()
-            left = left.merge(gl[['home_team','away_team','week']], on='week', how='left')
-            opp = _np.where(left.get('team').eq(left.get('home_team')), left.get('away_team'),
-                     _np.where(left.get('team').eq(left.get('away_team')), left.get('home_team'), _np.nan))
-            props['opponent'] = opp
-except Exception as _e:
-    print('[make_metrics] opponent derive skipped:', _e)
-                if "week_gl" in props.columns:
-                    props["week"] = props["week"].combine_first(props["week_gl"])
-                    props.drop(columns=["week_gl"], inplace=True, errors="ignore")
+        elif not gl.empty and {"event_id","commence_time"}.issubset(gl.columns) and "event_id" in props.columns:
+            wk_src = gl[["event_id","commence_time"]].dropna().copy()
+            wk_src["week"] = pd.to_datetime(wk_src["commence_time"], errors="coerce", utc=True)\
+                                .dt.isocalendar().week.astype("Int64")
+            props = props.merge(wk_src[["event_id","week"]], on="event_id", how="left", suffixes=("", "_gl"))
+            if "week_gl" in props.columns:
+                props["week"] = props["week"].combine_first(props["week_gl"])
+                props.drop(columns=["week_gl"], inplace=True, errors="ignore")
     if "week" not in props.columns:
         props["week"] = pd.Series(pd.array([], dtype="Int64"))
 
@@ -426,7 +403,7 @@ except Exception as _e:
         pf_consensus = pf.copy()
         pf_by_opponent = pd.DataFrame(columns=pf.columns)
 
-    # if props.team missing entirely, try to backfill from player_form first
+    # Backfill team from player_form if all missing
     team_fill_source = pf_consensus if not pf_consensus.empty else pf
     if (
         "team" in props.columns
@@ -435,51 +412,40 @@ except Exception as _e:
         and {"player", "team"}.issubset(team_fill_source.columns)
     ):
         props = props.merge(team_fill_source[["player","team"]].drop_duplicates(), on="player", how="left", suffixes=("","_pf"))
-gl = load_game_lines()
-## OPPONENT_FROM_GAME_LINES
-try:
-    if not gl.empty:
-        if 'event_id' in props.columns and 'event_id' in gl.columns:
-            tmp = props.merge(gl[['event_id','home_team','away_team','week']], on='event_id', how='left')
-            opp = _np.where(tmp.get('team').eq(tmp.get('home_team')), tmp.get('away_team'),
-                     _np.where(tmp.get('team').eq(tmp.get('away_team')), tmp.get('home_team'), _np.nan))
-            props['opponent'] = opp
-            if 'week' not in props.columns:
-                props['week'] = tmp.get('week')
-        elif {'team','week'}.issubset(props.columns) and {'home_team','away_team','week'}.issubset(gl.columns):
-            left = props.copy()
-            left = left.merge(gl[['home_team','away_team','week']], on='week', how='left')
-            opp = _np.where(left.get('team').eq(left.get('home_team')), left.get('away_team'),
-                     _np.where(left.get('team').eq(left.get('away_team')), left.get('home_team'), _np.nan))
-            props['opponent'] = opp
-except Exception as _e:
-    print('[make_metrics] opponent derive skipped:', _e)
         props["team"] = props["team"].combine_first(props.get("team_pf"))
         if "team_pf" in props.columns:
             props = props.drop(columns=["team_pf"])
-gl = load_game_lines()
-## OPPONENT_FROM_GAME_LINES
-try:
-    if not gl.empty:
-        if 'event_id' in props.columns and 'event_id' in gl.columns:
-            tmp = props.merge(gl[['event_id','home_team','away_team','week']], on='event_id', how='left')
-            opp = _np.where(tmp.get('team').eq(tmp.get('home_team')), tmp.get('away_team'),
-                     _np.where(tmp.get('team').eq(tmp.get('away_team')), tmp.get('home_team'), _np.nan))
-            props['opponent'] = opp
-            if 'week' not in props.columns:
-                props['week'] = tmp.get('week')
-        elif {'team','week'}.issubset(props.columns) and {'home_team','away_team','week'}.issubset(gl.columns):
-            left = props.copy()
-            left = left.merge(gl[['home_team','away_team','week']], on='week', how='left')
-            opp = _np.where(left.get('team').eq(left.get('home_team')), left.get('away_team'),
-                     _np.where(left.get('team').eq(left.get('away_team')), left.get('home_team'), _np.nan))
-            props['opponent'] = opp
-except Exception as _e:
-    print('[make_metrics] opponent derive skipped:', _e)
 
     # a few sources don't carry event_id; keep NaN and we still keep the rows
     if "event_id" not in props.columns:
         props["event_id"] = np.nan
+
+    # ---- Opponent mapping
+    if not gl.empty:
+        if "event_id" in props.columns and "event_id" in gl.columns:
+            tmp = props.merge(gl[["event_id","home_team","away_team","week","home_wp","away_wp"]], on="event_id", how="left")
+            opp = np.where(tmp.get("team").eq(tmp.get("home_team")), tmp.get("away_team"),
+                   np.where(tmp.get("team").eq(tmp.get("away_team")), tmp.get("home_team"), np.nan))
+            props["opponent"] = _normalize_team_names(pd.Series(opp, index=props.index))
+            # carry week from gl if needed
+            if "week" not in props.columns or props["week"].isna().all():
+                props["week"] = tmp.get("week")
+            # team win prob
+            props["team_wp"] = np.where(
+                tmp.get("team").eq(tmp.get("home_team")),
+                tmp.get("home_wp"),
+                np.where(tmp.get("team").eq(tmp.get("away_team")), tmp.get("away_wp"), np.nan),
+            )
+        elif {"team","week"}.issubset(props.columns) and {"home_team","away_team","week"}.issubset(gl.columns):
+            left = props.merge(gl[["home_team","away_team","week","home_wp","away_wp"]], on="week", how="left")
+            opp = np.where(left.get("team").eq(left.get("home_team")), left.get("away_team"),
+                   np.where(left.get("team").eq(left.get("away_team")), left.get("home_team"), np.nan))
+            props["opponent"] = _normalize_team_names(pd.Series(opp, index=props.index))
+            props["team_wp"] = np.where(
+                left.get("team").eq(left.get("home_team")),
+                left.get("home_wp"),
+                np.where(left.get("team").eq(left.get("away_team")), left.get("away_wp"), np.nan),
+            )
 
     # Base: props + player_form (non-destructive)
     base = props.copy()
@@ -506,54 +472,6 @@ except Exception as _e:
         keep_tf = [c for c in keep_tf if c in tf.columns]
         base = base.merge(tf[keep_tf].drop_duplicates(), on=["team"], how="left")
 
-    # Infer opponent via game_lines
-    base["opponent"] = np.nan
-    base["team_wp"]  = np.nan
-    if "event_id" in base.columns and not gl.empty:
-        tmp = base.merge(gl, on="event_id", how="left")
-        opp = np.where(tmp.get("team").eq(tmp.get("home_team")), tmp.get("away_team"),
-               np.where(tmp.get("team").eq(tmp.get("away_team")), tmp.get("home_team"), np.nan))
-        base["opponent"] = _normalize_team_names(pd.Series(opp, index=base.index))
-        base["team_wp"]  = np.where(
-            tmp.get("team").eq(tmp.get("home_team")),
-            tmp.get("home_wp"),
-            np.where(
-                tmp.get("team").eq(tmp.get("away_team")),
-                tmp.get("away_wp"),
-                np.nan,
-            ),
-        )
-
-    # --- NEW: Fallback 1: schedule long-form if opponent still missing and we have team+week ---
-    if base.get("opponent").isna().any():
-        missing_mask = base["opponent"].isna() & base.get("team").notna() & base.get("week").notna()
-        if missing_mask.any():
-            sched = _load_schedule_long(season)
-            if not sched.empty:
-                base = base.merge(
-                    sched.rename(columns={"week":"week_sched"}),
-                    left_on=["team","week"], right_on=["team","week_sched"],
-                    how="left", suffixes=("","_sched")
-                )
-                if "opponent_sched" in base.columns:
-                    base.loc[base["opponent"].isna(), "opponent"] = base.loc[base["opponent"].isna(), "opponent_sched"]
-                base.drop(columns=[c for c in ["week_sched","opponent_sched"] if c in base.columns], inplace=True)
-
-    # --- NEW: Fallback 2: if still missing, backfill opponent from player_form (by player_key [+ week if both present]) ---
-    if base.get("opponent").isna().any() and not pf_by_opponent.empty and "opponent" in pf_by_opponent.columns:
-        # prefer week-aware backfill
-        if "week" in pf_by_opponent.columns and "week" in base.columns:
-            join_cols = ["player_key","week"]
-        else:
-            join_cols = ["player_key"]
-        available_cols = [c for c in join_cols + ["opponent"] if c in pf_by_opponent.columns]
-        if set(join_cols).issubset(pf_by_opponent.columns) and "opponent" in pf_by_opponent.columns:
-            pf_opp = pf_by_opponent[available_cols].drop_duplicates()
-            base = base.merge(pf_opp, on=join_cols, how="left", suffixes=("","_pfopp"))
-            if "opponent_pfopp" in base.columns:
-                base["opponent"] = base["opponent"].combine_first(base["opponent_pfopp"])
-                base.drop(columns=["opponent_pfopp"], inplace=True)
-
     # Attach opponent defenses (EPA/sacks/boxes)
     if not tf.empty:
         opp_tf = tf.rename(columns={
@@ -572,6 +490,7 @@ except Exception as _e:
                 base[c] = np.nan
 
     # Coverage tags (opponent defense)
+    cov = load_coverage()
     if not cov.empty and "defense_team" in cov.columns:
         cov2 = cov.rename(columns={"defense_team":"opponent"})
         for c in ["coverage_top_shadow","coverage_heavy_man","coverage_heavy_zone"]:
@@ -615,7 +534,7 @@ except Exception as _e:
     # stamp season explicitly
     base["season"] = season
 
-    # Default QB YPA prior if missing (keeps QB pass-yards modeling alive when source is blank)
+    # Default QB YPA prior if missing
     if "ypa_prior" in base.columns:
         pos_col = base.get("position") if "position" in base.columns else None
         if pos_col is not None:
@@ -682,7 +601,7 @@ def main():
         pass
 
     df.replace({'NAN': np.nan, 'nan': np.nan, 'NaN': np.nan, 'None': np.nan, '': np.nan}, inplace=True)
-    # FINAL_OPPONENT_SANITY: drop literal 'NAN' and empty strings
+    # FINAL_OPPONENT_SANITY
     if 'opponent' in df.columns:
         df['opponent'] = df['opponent'].replace({'NAN': np.nan, 'nan': np.nan, 'NaN': np.nan, '': np.nan})
     df.to_csv(OUTPATH, index=False)
