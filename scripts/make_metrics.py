@@ -438,8 +438,15 @@ def build_metrics(season: int) -> pd.DataFrame:
         opp = np.where(tmp.get("team").eq(tmp.get("home_team")), tmp.get("away_team"),
                np.where(tmp.get("team").eq(tmp.get("away_team")), tmp.get("home_team"), np.nan))
         base["opponent"] = _normalize_team_names(pd.Series(opp, index=base.index))
-        base["team_wp"]  = np.where(tmp.get("team").eq(tmp.get("home_team")), tmp.get("home_wp"),
-                             np.where(tmp.get("team").eq(tmp.get("away_team")), tmp.get("home_wp"), np.nan))
+        base["team_wp"]  = np.where(
+            tmp.get("team").eq(tmp.get("home_team")),
+            tmp.get("home_wp"),
+            np.where(
+                tmp.get("team").eq(tmp.get("away_team")),
+                tmp.get("away_wp"),
+                np.nan,
+            ),
+        )
 
     # --- NEW: Fallback 1: schedule long-form if opponent still missing and we have team+week ---
     if base.get("opponent").isna().any():
