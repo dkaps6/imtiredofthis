@@ -284,6 +284,39 @@ def _default_sigma_for_market(market: str) -> float:
 
 
 def price(season: int, props_path: Optional[str] = None):
+    # Anytime TD probability from team totals + red-zone share (Bernoulli)
+    def _anytime_td_prob(row: pd.Series, tv: dict) -> float:
+        team_pts = row.get('team_total_pts')
+        if pd.isna(team_pts):
+            # fallback to home/away totals if present on lines
+            if 'home_total' in row and 'away_total' in row:
+                if row.get('team') == row.get('home_team'):
+                    team_pts = row.get('home_total')
+                elif row.get('team') == row.get('away_team'):
+                    team_pts = row.get('away_total')
+        if pd.isna(team_pts):
+            return np.nan
+        try:
+            team_pts = float(team_pts)
+        except Exception:
+            return np.nan
+        # Convert points to expected TDs (FGs exist; 6.7 pts/TD heuristic)
+        exp_tds = max(0.0, team_pts / 6.7)
+        role = str(row.get('role') or '').upper()
+        rz_tgt = row.get('rz_tgt_share'); rz_carry = row.get('rz_carry_share')
+        pass_rate = float(tv.get('pass_rate_est', np.nan)); rush_rate = float(tv.get('rush_rate_est', np.nan))
+        share = np.nan
+        if role.startswith('RB') and not pd.isna(rz_carry):
+            share = float(rz_carry) * max(0.30, rush_rate if not pd.isna(rush_rate) else 0.45)
+        elif role.startswith('TE') or role.startswith('WR'):
+            if not pd.isna(rz_tgt):
+                share = float(rz_tgt) * max(0.30, pass_rate if not pd.isna(pass_rate) else 0.55)
+        if pd.isna(share) or share <= 0:
+            return np.nan
+        lam = exp_tds * share
+        p = 1.0 - np.exp(-max(0.0, lam))
+        return float(np.clip(p, 1e-6, 1-1e-6))
+
     _ensure_dir(OUT_DIR)
 
     # Base frames
@@ -395,8 +428,12 @@ def price(season: int, props_path: Optional[str] = None):
         try:
             L = float(line)
         except Exception:
-            # if no line we can’t price
-            continue
+            # Allow Anytime TD (Yes) with a dummy line
+            if mk in {"anytime_td","anytime_touchdown","atd"}:
+                L = 0.0
+            else:
+                continue
+
 
         over_odds = row.get("over_odds")
         under_odds = row.get("under_odds")
@@ -482,7 +519,22 @@ def price(season: int, props_path: Optional[str] = None):
                 mu_model = (1.0 - VOLUME_BLEND) * mu_anchor + VOLUME_BLEND * mu_vol
 
         # Price at line using blended μ
-        p_model_over = _prob_over_at_line(mu_model, sigma, L)
+        if mk in {"anytime_td","anytime_touchdown","atd"}:
+            # Build a local team volume context (soft dep on scripts.volume)
+            try:
+                tv_local = team_volume({
+                    'plays_est': row.get('plays_est'),
+                    'pace': row.get('pace'),
+                    'proe': row.get('proe'),
+                    'def_pass_epa_z': row.get('def_pass_epa_z'),
+                    'def_rush_epa_z': row.get('def_rush_epa_z'),
+                }, script_wp=row.get('team_win_prob')) if team_volume else {}
+            except Exception:
+                tv_local = {}
+            p_yes_model = _anytime_td_prob(row, tv_local) if tv_local else np.nan
+            p_model_over = p_market_fair if pd.isna(p_yes_model) else p_yes_model
+        else:
+            p_model_over = _prob_over_at_line(mu_model, sigma, L)
         p_blend = _blend_probs(p_model_over, p_market_fair)
         fair_over_odds = _fair_odds_from_prob(p_blend)
 
