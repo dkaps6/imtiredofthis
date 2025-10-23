@@ -6,6 +6,29 @@
 
 import os, sys, pandas as pd, numpy as np
 
+def _autodetect_week(df):
+    import pandas as _pd
+    import numpy as _np
+    from datetime import datetime, timezone
+    if df.empty or 'commence_time' not in df.columns or 'week' not in df.columns:
+        return None
+    times = _pd.to_datetime(df['commence_time'], errors='coerce', utc=True)
+    df = df.assign(_ct=times)
+    grp = df.groupby('week', dropna=True)['_ct'].agg(['min','max']).dropna()
+    if grp.empty:
+        return None
+    now = datetime.now(timezone.utc)
+    within = grp[(grp['min'] <= now) & (grp['max'] >= now)]
+    if not within.empty:
+        return int(within.index[0])
+    upcoming = grp[grp['min'] > now].sort_values('min')
+    if not upcoming.empty:
+        return int(upcoming.index[0])
+    past = grp[grp['max'] < now].sort_values('max', ascending=False)
+    if not past.empty:
+        return int(past.index[0])
+    return None
+
 OUT = "outputs/game_lines.csv"
 
 def _normalize_team_names(s: pd.Series) -> pd.Series:
