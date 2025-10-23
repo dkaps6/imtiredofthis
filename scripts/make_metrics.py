@@ -22,6 +22,42 @@ import argparse, os, sys, warnings, re, traceback
 import pandas as pd
 import numpy as np
 
+
+
+def _inj_load_lines_preferring_odds():
+    for p in ["outputs/odds_game.csv", "outputs/game_lines.csv"]:
+        if os.path.exists(p):
+            try:
+                gl = pd.read_csv(p)
+                gl.columns = [c.lower() for c in gl.columns]
+                for c in ["home_team","away_team"]:
+                    if c in gl.columns:
+                        gl[c] = _inj_normalize_team(gl[c])
+                return gl
+            except Exception:
+                pass
+    return pd.DataFrame()
+# --- injected helper utilities (surgical, idempotent) ---
+import re as _re_inj
+
+def _inj_normalize_player(s):
+    suf = _re_inj.compile(r"\s+(JR|SR|II|III|IV|V)\.?$", flags=_re_inj.I)
+    return (s.astype(str)
+              .str.replace(r"\.", "", regex=True)
+              .str.replace(suf, "", regex=True)
+              .str.replace(r"\s+", " ", regex=True)
+              .str.strip())
+
+def _inj_normalize_team(s):
+    aliases = {
+        "WSH":"WAS","WDC":"WAS","JAC":"JAX","ARZ":"ARI","AZ":"ARI","LA":"LAR",
+        "LVR":"LV","OAK":"LV","SFO":"SF","TAM":"TB","GBP":"GB","KAN":"KC",
+        "NOS":"NO","SD":"LAC","CLV":"CLE"
+    }
+    return s.astype(str).str.upper().str.strip().replace(aliases)
+
+def _inj_player_key(s):
+    return s.fillna("").astype(str).str.lower().str.replace(r"[^a-z0-9]","",regex=True)
 DATA_DIR = "data"
 OUTPATH  = os.path.join(DATA_DIR, "metrics_ready.csv")
 
