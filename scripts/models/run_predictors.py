@@ -243,6 +243,16 @@ def run(season: int):
     props=_read_csv(str(props_path), ['player','team','opp_team','market','line','over_odds','under_odds','book','commence_time','event_id','position'])
     odds_game=_read_csv('outputs/odds_game.csv', ['event_id','commence_time','sport_key','home_team','away_team','market','point','book'])
 
+    # Collapse two-sided pricing rows (OVER/UNDER) back to one record per prop
+    if 'side' in props.columns:
+        props['side'] = props['side'].astype(str).str.upper()
+        over_mask = props['side'] == 'OVER'
+        if over_mask.any():
+            props = props.loc[over_mask].copy()
+        else:
+            props = props.copy()
+        props.drop(columns=['side'], inplace=True, errors='ignore')
+
     # --- try to normalize the key column names coming from pricing
     if 'vegas_line' in props.columns and 'line' not in props.columns:
         props['line'] = props['vegas_line']

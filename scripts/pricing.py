@@ -266,6 +266,25 @@ def _fair_odds_from_prob(p: float) -> float:
         return (1.0 - p) * 100.0 / p
 
 
+def _edge_value(prob: float, market_prob: float) -> float:
+    if pd.isna(prob) or pd.isna(market_prob):
+        return np.nan
+    return float(prob) - float(market_prob)
+
+
+def _tier_from_edge(edge: float) -> str:
+    if pd.isna(edge):
+        return "RED"
+    abs_edge = abs(edge)
+    if abs_edge >= 0.06:
+        return "ELITE"
+    if abs_edge >= 0.04:
+        return "GREEN"
+    if abs_edge >= 0.01:
+        return "AMBER"
+    return "RED"
+
+
 def _default_sigma_for_market(market: str) -> float:
     mk = str(market).lower()
     if mk in {"rec_yards"}:
@@ -536,26 +555,20 @@ def price(season: int, props_path: Optional[str] = None):
         else:
             p_model_over = _prob_over_at_line(mu_model, sigma, L)
         p_blend = _blend_probs(p_model_over, p_market_fair)
-        fair_over_odds = _fair_odds_from_prob(p_blend)
+        p_model_under = np.nan if pd.isna(p_model_over) else 1.0 - float(p_model_over)
+        p_blend_under = np.nan if pd.isna(p_blend) else 1.0 - float(p_blend)
+        p_market_fair_under = np.nan if pd.isna(p_market_fair) else 1.0 - float(p_market_fair)
 
-        edge = np.nan
-        if not pd.isna(p_market_fair):
-            edge = p_blend - p_market_fair
+        fair_over_odds = np.nan if pd.isna(p_blend) else _fair_odds_from_prob(float(p_blend))
+        fair_under_odds = np.nan if pd.isna(p_blend_under) else _fair_odds_from_prob(float(p_blend_under))
 
-        # Tiering
-        tier = "RED"
-        abs_edge = abs(edge) if not pd.isna(edge) else 0.0
-        if abs_edge >= 0.06:
-            tier = "ELITE"
-        elif abs_edge >= 0.04:
-            tier = "GREEN"
-        elif abs_edge >= 0.01:
-            tier = "AMBER"
+        edge_over = _edge_value(p_blend, p_market_fair)
+        edge_under = _edge_value(p_blend_under, p_market_fair_under)
+        over_strength = abs(edge_over) if not pd.isna(edge_over) else -np.inf
+        under_strength = abs(edge_under) if not pd.isna(edge_under) else -np.inf
+        bet_side = "OVER" if over_strength >= under_strength else "UNDER"
 
-        # Bet side
-        bet_side = "OVER" if p_blend >= 0.5 else "UNDER"
-
-        out = {
+        common_out = {
             "player": row.get("player"),
             "team": row.get("team"),
             "opponent": row.get("opponent"),
@@ -564,14 +577,16 @@ def price(season: int, props_path: Optional[str] = None):
             "vegas_over_odds": over_odds,
             "vegas_under_odds": under_odds,
             "vegas_over_fair_pct": p_market_fair,
+            "vegas_under_fair_pct": p_market_fair_under,
             "model_proj": mu_model,
             "model_sd": sigma,
             "model_over_pct": p_model_over,
+            "model_under_pct": p_model_under,
             "blended_over_pct": p_blend,
+            "blended_under_pct": p_blend_under,
             "fair_over_odds": fair_over_odds,
-            "edge_abs": abs_edge,
+            "fair_under_odds": fair_under_odds,
             "bet_side": bet_side,
-            "tier": tier,
             # traceability
             "wind_mph": row.get("wind_mph"),
             "precip": row.get("precip"),
@@ -584,7 +599,41 @@ def price(season: int, props_path: Optional[str] = None):
             "coverage_tag": row.get("coverage_tag"),
             "cb_penalty": row.get("cb_penalty"),
         }
-        out_rows.append(out)
+
+        side_map = {
+            "OVER": {
+                "prob": p_blend,
+                "market_prob": p_market_fair,
+                "book_odds": over_odds,
+                "fair_odds": fair_over_odds,
+            },
+            "UNDER": {
+                "prob": p_blend_under,
+                "market_prob": p_market_fair_under,
+                "book_odds": under_odds,
+                "fair_odds": fair_under_odds,
+            },
+        }
+
+        for side, info in side_map.items():
+            row_out = dict(common_out)
+            side_prob = info["prob"]
+            market_prob_side = info["market_prob"]
+            fair_odds_side = info["fair_odds"]
+            vegas_odds_side = info["book_odds"]
+            edge_side = _edge_value(side_prob, market_prob_side)
+
+            row_out.update({
+                "side": side,
+                "fair_prob": side_prob,
+                "market_prob": market_prob_side,
+                "vegas_odds": vegas_odds_side,
+                "fair_odds": fair_odds_side,
+                "edge_pct": edge_side,
+                "edge_abs": abs(edge_side) if not pd.isna(edge_side) else np.nan,
+                "tier": _tier_from_edge(edge_side),
+            })
+            out_rows.append(row_out)
 
     out_df = pd.DataFrame(out_rows)
     out_df.to_csv(OUT_FILE, index=False)
