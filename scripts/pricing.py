@@ -41,7 +41,7 @@ GAME_LINES = "outputs/game_lines.csv"
 WEATHER = "data/weather.csv"
 
 PROP_CANDIDATES = [
-    "outputs/props_raw.csv",
+    'data/metrics_ready.csv', 'outputs/metrics_ready.csv', "outputs/props_raw.csv",
     "data/props_raw.csv",
     "outputs/props_aggregated.csv",
 ]
@@ -285,6 +285,12 @@ def _tier_from_edge(edge: float) -> str:
     return "RED"
 
 
+MARKET_ALIASES = {
+    'player_pass_yds':'pass_yards','player_rush_yds':'rush_yards','player_rec_yds':'rec_yards',
+    'player_receptions':'receptions','player_rush_att':'rush_att','player_rush_rec_yds':'rush_rec_yards',
+    'anytime_touchdown':'anytime_td','atd':'anytime_td'
+}
+
 def _default_sigma_for_market(market: str) -> float:
     mk = str(market).lower()
     if mk in {"rec_yards"}:
@@ -370,6 +376,8 @@ def price(season: int, props_path: Optional[str] = None):
 
     # Merge contextuals
     df = props.copy()
+    # normalize placeholder strings to real NaN so merges work
+    df = df.replace({'NAN': np.nan, 'nan': np.nan, 'NaN': np.nan, 'None': np.nan, '': np.nan})
 
     # ensure expected columns exist
     for need in ("player", "team", "opponent", "market", "line"):
@@ -384,6 +392,24 @@ def price(season: int, props_path: Optional[str] = None):
 
     if not player.empty:
         df = df.merge(player.drop_duplicates(subset=["player", "team"]), on=["player", "team"], how="left")
+
+            # Backfill from player_form_consensus if team/opponent still missing
+            try:
+                _pfc_paths = ['data/player_form_consensus.csv','outputs/player_form_consensus.csv']
+                for _p in _pfc_paths:
+                    if os.path.exists(_p):
+                        _pfc = pd.read_csv(_p)
+                        _pfc.columns = [c.lower() for c in _pfc.columns]
+                        # normalize player & team
+                        if 'player' in _pfc.columns:
+                            _pfc['player'] = _pfc['player'].astype(str)
+                        keep = [c for c in ['player','team','opponent','position','role','target_share','tgt_share','route_rate','rush_share','rz_tgt_share','rz_carry_share','yprr_proxy','ypt','ypc','ypa_prior'] if c in _pfc.columns]
+                        if keep:
+                            df = df.merge(_pfc[keep].drop_duplicates('player'), on='player', how='left', suffixes=('','_pfc'))
+                        break
+            except Exception as _e:
+                print(f"[pricing] consensus backfill skipped: {_e}", file=sys.stderr)
+    
 
     # Join team form: opponent defense context (opp_*) and own offense context (plays_est/proe)
     if not team.empty:
@@ -442,7 +468,8 @@ def price(season: int, props_path: Optional[str] = None):
     # Pricing
     out_rows: List[Dict[str, Any]] = []
     for _, row in df.iterrows():
-        mk = str(row.get("market") or "").lower()
+        mk_raw = str(row.get("market") or "").lower()
+        mk = MARKET_ALIASES.get(mk_raw, mk_raw)
         line = row.get("line")
         try:
             L = float(line)
