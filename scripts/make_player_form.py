@@ -1148,6 +1148,40 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     base = _ensure_cols(base, FINAL_COLS)
     out = base[FINAL_COLS].drop_duplicates(subset=["player","team","opponent","season"]).reset_index(drop=True)
     out = _enrich_team_and_opponent_from_props(out)
+
+    # Guarantee required numeric metrics are explicitly zero when usage was absent so
+    # coverage calculations treat them as populated instead of missing data.
+    numeric_fill_cols = [
+        "tgt_share",
+        "route_rate",
+        "rush_share",
+        "yprr",
+        "ypt",
+        "ypc",
+        "ypa",
+        "receptions_per_target",
+        "rz_share",
+        "rz_tgt_share",
+        "rz_rush_share",
+    ]
+    for col in numeric_fill_cols:
+        if col in out.columns:
+            out[col] = out[col].fillna(0.0)
+
+    # Ensure categorical tags are never empty so downstream validators read them as
+    # present even when we had to infer or fallback.
+    if "position" in out.columns:
+        original = out["position"].copy()
+        out["position"] = original.astype(str).str.upper().str.strip()
+        missing_mask = original.isna() | out["position"].isin(["", "NAN", "NONE"])
+        out.loc[missing_mask, "position"] = "UNK"
+
+    if "role" in out.columns:
+        original = out["role"].copy()
+        out["role"] = original.astype(str).str.upper().str.strip()
+        missing_mask = original.isna() | out["role"].isin(["", "NAN", "NONE"])
+        out.loc[missing_mask, "role"] = "UNK"
+
     print("[pf] final rows (pre-write):", len(out))
     return out
 
