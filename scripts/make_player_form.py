@@ -1165,7 +1165,18 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         base = _infer_roles_minimal(base)
 
     base = _ensure_cols(base, FINAL_COLS)
-    out = base[FINAL_COLS].drop_duplicates(subset=["player","team","opponent","season"]).reset_index(drop=True)
+
+    consensus = _build_season_consensus(base)
+    frames: List[pd.DataFrame] = [base[FINAL_COLS]]
+    if consensus is not None and not consensus.empty:
+        consensus = _ensure_cols(consensus, FINAL_COLS)
+        frames.append(consensus[FINAL_COLS])
+
+    out = (
+        pd.concat(frames, ignore_index=True)
+        .drop_duplicates(subset=["player", "team", "opponent", "season"])
+        .reset_index(drop=True)
+    )
     out = _enrich_team_and_opponent_from_props(out)
 
     # Guarantee required numeric metrics are explicitly zero when usage was absent so

@@ -199,6 +199,29 @@ MERGE_WHITELIST = set([
     "airyardsatt",        # -> ay_per_att
 ])
 
+
+def _ensure_plays_est_column(df: pd.DataFrame) -> pd.DataFrame:
+    """Guarantee that pricing downstream can rely on a plays_est column."""
+    if df is None or not isinstance(df, pd.DataFrame):
+        return df
+
+    out = df.copy()
+    if "plays_est" in out.columns:
+        out["plays_est"] = pd.to_numeric(out["plays_est"], errors="coerce")
+    else:
+        out["plays_est"] = np.nan
+
+    if "plays_per_game" in out.columns:
+        plays_pg = pd.to_numeric(out["plays_per_game"], errors="coerce")
+        out["plays_est"] = out["plays_est"].combine_first(plays_pg)
+
+    if "seconds_per_play" in out.columns:
+        sec = pd.to_numeric(out["seconds_per_play"], errors="coerce")
+        derived = pd.Series(np.where(sec > 0, 3600.0 / sec, np.nan), index=out.index)
+        out["plays_est"] = out["plays_est"].combine_first(derived)
+
+    return out
+
 PERCENTY_COLS = {
     "light_box_rate", "heavy_box_rate", "neutral_db_rate", "neutral_db_rate_last_5",
     "blitz_rate", "sub_package_rate", "motion_rate", "play_action_rate",
@@ -743,6 +766,7 @@ def main():
         # Fallback sweep BEFORE strict validation (includes Sharp-first merge)
         before = df.copy()
         df = _apply_fallback_enrichers(df)
+        df = _ensure_plays_est_column(df)
 
         # Log what got filled by fallbacks (for quick triage)
         try:
