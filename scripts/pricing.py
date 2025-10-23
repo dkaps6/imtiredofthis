@@ -37,7 +37,7 @@ COVERAGE = "data/coverage.csv"
 CB_ASSIGN = "data/cb_assignments.csv"
 INJURIES = "data/injuries.csv"
 ROLES = "data/roles.csv"
-GAME_LINES = "outputs/game_lines.csv"
+GAME_LINES = ["outputs/odds_game.csv", "outputs/game_lines.csv"]  # prefer odds file; fallback to schedule
 WEATHER = "data/weather.csv"
 
 PROP_CANDIDATES = [
@@ -472,6 +472,21 @@ def price(season: int, props_path: Optional[str] = None):
     # game lines (get win prob etc.)
     if not lines.empty and "event_id" in df.columns and "event_id" in lines.columns:
         df = df.merge(lines, on="event_id", how="left")
+
+    # If opponent is still missing but we have home/away from lines, derive it
+    if "opponent" in df.columns and df["opponent"].isna().all():
+        if {"event_id","home_team","away_team","team"}.issubset(df.columns):
+            try:
+                import numpy as _np
+                df["opponent"] = _np.where(
+                    df["team"].eq(df["home_team"]), df["away_team"],
+                    _np.where(df["team"].eq(df["away_team"]), df["home_team"], _np.nan)
+                )
+            except Exception:
+                df["opponent"] = df.apply(
+                    lambda r: r["away_team"] if r["team"] == r.get("home_team") else (r["home_team"] if r["team"] == r.get("away_team") else pd.NA),
+                    axis=1
+                )
         if "home_team" in lines.columns and "away_team" in lines.columns and "team" in df.columns:
             df["team_win_prob"] = np.where(
                 df["team"].eq(df["home_team"]), df.get("home_wp", np.nan),
