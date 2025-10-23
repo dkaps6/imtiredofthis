@@ -336,7 +336,7 @@ def build_metrics(season: int) -> pd.DataFrame:
     if props.empty:
         return pd.DataFrame(columns=[
             "event_id","player","team","opponent","market","line","over_odds","under_odds",
-            "target_share","rush_share","route_rate","yprr_proxy","ypt","ypc","rz_tgt_share","rz_carry_share","position","role",
+            "target_share","rush_share","route_rate","yprr_proxy","ypt","ypc","ypa_prior","rz_tgt_share","rz_carry_share","position","role",
             "pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
             "def_pass_epa_opp","def_rush_epa_opp","def_sack_rate_opp","light_box_rate_opp","heavy_box_rate_opp",
             "coverage_top_shadow_opp","coverage_heavy_man_opp","coverage_heavy_zone_opp",
@@ -409,7 +409,7 @@ def build_metrics(season: int) -> pd.DataFrame:
     base = props.copy()
     if not pf_consensus.empty:
         keep_pf = ["player","team","target_share","rush_share","route_rate","yprr_proxy","ypt","ypc",
-                   "rz_tgt_share","rz_carry_share","position","role","season","player_key","week","opponent"]
+                   "rz_tgt_share","rz_carry_share","position","role","season","player_key","week","opponent","ypa_prior"]
         keep_pf = [c for c in keep_pf if c in pf_consensus.columns]
         if keep_pf:
             base = base.merge(pf_consensus[keep_pf].drop_duplicates(), on=["player_key"], how="left", suffixes=("","_pf"))
@@ -539,10 +539,17 @@ def build_metrics(season: int) -> pd.DataFrame:
     # stamp season explicitly
     base["season"] = season
 
+    # Default QB YPA prior if missing (keeps QB pass-yards modeling alive when source is blank)
+    if "ypa_prior" in base.columns:
+        pos_col = base.get("position") if "position" in base.columns else None
+        if pos_col is not None:
+            qb_mask = pos_col.astype(str).str.upper().str.startswith("QB")
+            base.loc[qb_mask & base["ypa_prior"].isna(), "ypa_prior"] = 6.8
+
     # Final tidy and order
     want = [
         "event_id","player","team","opponent","market","line","over_odds","under_odds",
-        "target_share","rush_share","route_rate","yprr_proxy","ypt","ypc","rz_tgt_share","rz_carry_share","position","role",
+        "target_share","rush_share","route_rate","yprr_proxy","ypt","ypc","ypa_prior","rz_tgt_share","rz_carry_share","position","role",
         "pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
         "def_pass_epa_opp","def_rush_epa_opp","def_sack_rate_opp","light_box_rate_opp","heavy_box_rate_opp",
         "coverage_top_shadow_opp","coverage_heavy_man_opp","coverage_heavy_zone_opp",
@@ -569,7 +576,7 @@ def main():
         # emit empty but schema-correct file so pipeline continues
         df = pd.DataFrame(columns=[
             "event_id","player","team","opponent","market","line","over_odds","under_odds",
-            "target_share","rush_share","route_rate","yprr_proxy","ypt","ypc","rz_tgt_share","rz_carry_share","position","role",
+            "target_share","rush_share","route_rate","yprr_proxy","ypt","ypc","ypa_prior","rz_tgt_share","rz_carry_share","position","role",
             "pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
             "def_pass_epa_opp","def_rush_epa_opp","def_sack_rate_opp","light_box_rate_opp","heavy_box_rate_opp",
             "coverage_top_shadow_opp","coverage_heavy_man_opp","coverage_heavy_zone_opp",
