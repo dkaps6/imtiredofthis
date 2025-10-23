@@ -106,6 +106,33 @@ def _player_form_consensus_mask(series: pd.Series) -> pd.Series:
     return norm.eq("") | norm.eq(PLAYER_FORM_CONSENSUS_OPPONENT)
 
 # ----------------------------
+def load_roles() -> pd.DataFrame:
+    """
+    Load roles from roles_ourlads.csv or roles.csv to backfill team/role/position.
+    """
+    paths = [os.path.join(DATA_DIR, 'roles_ourlads.csv'), os.path.join(DATA_DIR, 'roles.csv')]
+    for p in paths:
+        if os.path.exists(p):
+            try:
+                df = pd.read_csv(p)
+                df.columns = [c.lower() for c in df.columns]
+                if df.empty:
+                    continue
+                if 'team' in df.columns:
+                    df['team'] = _normalize_team_names(df['team'])
+                for pcol in ['player','player_name','name']:
+                    if pcol in df.columns:
+                        df = df.rename(columns={pcol:'player'})
+                        break
+                if 'player' not in df.columns:
+                    continue
+                df['player'] = _normalize_player_name(df['player'])
+                df['player_key'] = _player_key_series(df['player'])
+                keep = [c for c in ['player_key','player','team','role','position'] if c in df.columns]
+                return df[keep].drop_duplicates()
+            except Exception:
+                continue
+    return pd.DataFrame()
 # Core loaders
 # ----------------------------
 
@@ -344,6 +371,51 @@ def _load_schedule_long(season: int) -> pd.DataFrame:
         return long.drop_duplicates()
     return pd.DataFrame(columns=["team","opponent","week"])
 
+def _correct_wr_roles(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Re-rank WRs within each team (and week if present) by route_rate (primary) then target_share.
+    Assign WR1/WR2/WR3 accordingly. Only overwrite if role is missing or disagrees with rank.
+    """
+    if df.empty:
+        return df
+    keys = []
+    if 'team' in df.columns: keys.append('team')
+    if 'week' in df.columns: keys.append('week')
+    if not keys:
+        return df
+    poscol = 'position' if 'position' in df.columns else None
+    if poscol is None:
+        return df
+    wr_mask = df[poscol].fillna('').astype(str).str.upper().str.startswith('WR')
+    if not wr_mask.any():
+        return df
+    rr = df.get('route_rate')
+    ts = df.get('target_share')
+    if rr is None:
+        df['route_rate'] = 0.0
+        rr = df['route_rate']
+    if ts is None:
+        df['target_share'] = 0.0
+        ts = df['target_share']
+    df['_wr_sort_rr'] = rr.fillna(0).astype(float)
+    df['_wr_sort_ts'] = ts.fillna(0).astype(float)
+    def assign_role(g):
+        g = g.sort_values(by=['_wr_sort_rr','_wr_sort_ts'], ascending=[False, False]).copy()
+        new_roles = []
+        for i, idx in enumerate(g.index, start=1):
+            tag = f'WR{i}' if i <= 5 else 'WR5+'
+            new_roles.append(tag)
+        g['_wr_new_role'] = new_roles
+        return g
+    df_wr = df[wr_mask].copy()
+    df_wr = df_wr.groupby(keys, dropna=False, group_keys=False).apply(assign_role)
+    df = df.merge(df_wr[['_wr_new_role']], left_index=True, right_index=True, how='left')
+    if 'role' not in df.columns:
+        df['role'] = np.nan
+    need_fix = df['_wr_new_role'].notna() & (df['role'].isna() | (~df['role'].astype(str).str.upper().eq(df['_wr_new_role'])))
+    df.loc[need_fix, 'role'] = df.loc[need_fix, '_wr_new_role']
+    df.drop(columns=['_wr_new_role','_wr_sort_rr','_wr_sort_ts'], inplace=True, errors='ignore')
+    return df
 # ----------------------------
 # Assembler
 # ----------------------------
@@ -420,6 +492,26 @@ def build_metrics(season: int) -> pd.DataFrame:
     if "event_id" not in props.columns:
         props["event_id"] = np.nan
 
+    # Backfill team/role/position from roles files if still missing
+    try:
+        roles_df = load_roles()
+        if not roles_df.empty:
+            props = props.merge(roles_df, on='player_key', how='left', suffixes=('', '_roles'))
+            if 'team' in props.columns and 'team_roles' in props.columns:
+                props['team'] = props['team'].combine_first(props['team_roles'])
+                props.drop(columns=['team_roles'], inplace=True)
+            if 'role' in props.columns and 'role_roles' in props.columns:
+                props['role'] = props['role'].combine_first(props['role_roles'])
+                props.drop(columns=['role_roles'], inplace=True)
+            elif 'role_roles' in props.columns:
+                props.rename(columns={'role_roles':'role'}, inplace=True)
+            if 'position' in props.columns and 'position_roles' in props.columns:
+                props['position'] = props['position'].combine_first(props['position_roles'])
+                props.drop(columns=['position_roles'], inplace=True)
+            elif 'position_roles' in props.columns:
+                props.rename(columns={'position_roles':'position'}, inplace=True)
+    except Exception as _e:
+        print('[make_metrics] roles fill skipped:', _e)
     # ---- Opponent mapping
     if not gl.empty:
         if "event_id" in props.columns and "event_id" in gl.columns:
@@ -464,6 +556,8 @@ def build_metrics(season: int) -> pd.DataFrame:
     if "week" not in base.columns and "week" in props.columns:
         base["week"] = props["week"]
 
+    # Fix WR roles by usage (route_rate then target_share)
+    base = _correct_wr_roles(base)
     # Attach team env (pace/proe/rz/12p/slot/ay + boxes)
     if not tf.empty:
         keep_tf = ["team","def_pass_epa","def_rush_epa","def_sack_rate",
