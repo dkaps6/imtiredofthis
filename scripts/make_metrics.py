@@ -333,6 +333,25 @@ def _load_schedule_long(season: int) -> pd.DataFrame:
 
 def build_metrics(season: int) -> pd.DataFrame:
     props = load_props()
+gl = load_game_lines()
+## OPPONENT_FROM_GAME_LINES
+try:
+    if not gl.empty:
+        if 'event_id' in props.columns and 'event_id' in gl.columns:
+            tmp = props.merge(gl[['event_id','home_team','away_team','week']], on='event_id', how='left')
+            opp = _np.where(tmp.get('team').eq(tmp.get('home_team')), tmp.get('away_team'),
+                     _np.where(tmp.get('team').eq(tmp.get('away_team')), tmp.get('home_team'), _np.nan))
+            props['opponent'] = opp
+            if 'week' not in props.columns:
+                props['week'] = tmp.get('week')
+        elif {'team','week'}.issubset(props.columns) and {'home_team','away_team','week'}.issubset(gl.columns):
+            left = props.copy()
+            left = left.merge(gl[['home_team','away_team','week']], on='week', how='left')
+            opp = _np.where(left.get('team').eq(left.get('home_team')), left.get('away_team'),
+                     _np.where(left.get('team').eq(left.get('away_team')), left.get('home_team'), _np.nan))
+            props['opponent'] = opp
+except Exception as _e:
+    print('[make_metrics] opponent derive skipped:', _e)
     if props.empty:
         return pd.DataFrame(columns=[
             "event_id","player","team","opponent","market","line","over_odds","under_odds",
@@ -364,6 +383,25 @@ def build_metrics(season: int) -> pd.DataFrame:
                 wk_src["week"] = pd.to_datetime(wk_src["commence_time"], errors="coerce", utc=True)\
                                     .dt.isocalendar().week.astype("Int64")
                 props = props.merge(wk_src[["event_id","week"]], on="event_id", how="left", suffixes=("", "_gl"))
+gl = load_game_lines()
+## OPPONENT_FROM_GAME_LINES
+try:
+    if not gl.empty:
+        if 'event_id' in props.columns and 'event_id' in gl.columns:
+            tmp = props.merge(gl[['event_id','home_team','away_team','week']], on='event_id', how='left')
+            opp = _np.where(tmp.get('team').eq(tmp.get('home_team')), tmp.get('away_team'),
+                     _np.where(tmp.get('team').eq(tmp.get('away_team')), tmp.get('home_team'), _np.nan))
+            props['opponent'] = opp
+            if 'week' not in props.columns:
+                props['week'] = tmp.get('week')
+        elif {'team','week'}.issubset(props.columns) and {'home_team','away_team','week'}.issubset(gl.columns):
+            left = props.copy()
+            left = left.merge(gl[['home_team','away_team','week']], on='week', how='left')
+            opp = _np.where(left.get('team').eq(left.get('home_team')), left.get('away_team'),
+                     _np.where(left.get('team').eq(left.get('away_team')), left.get('home_team'), _np.nan))
+            props['opponent'] = opp
+except Exception as _e:
+    print('[make_metrics] opponent derive skipped:', _e)
                 if "week_gl" in props.columns:
                     props["week"] = props["week"].combine_first(props["week_gl"])
                     props.drop(columns=["week_gl"], inplace=True, errors="ignore")
@@ -397,9 +435,47 @@ def build_metrics(season: int) -> pd.DataFrame:
         and {"player", "team"}.issubset(team_fill_source.columns)
     ):
         props = props.merge(team_fill_source[["player","team"]].drop_duplicates(), on="player", how="left", suffixes=("","_pf"))
+gl = load_game_lines()
+## OPPONENT_FROM_GAME_LINES
+try:
+    if not gl.empty:
+        if 'event_id' in props.columns and 'event_id' in gl.columns:
+            tmp = props.merge(gl[['event_id','home_team','away_team','week']], on='event_id', how='left')
+            opp = _np.where(tmp.get('team').eq(tmp.get('home_team')), tmp.get('away_team'),
+                     _np.where(tmp.get('team').eq(tmp.get('away_team')), tmp.get('home_team'), _np.nan))
+            props['opponent'] = opp
+            if 'week' not in props.columns:
+                props['week'] = tmp.get('week')
+        elif {'team','week'}.issubset(props.columns) and {'home_team','away_team','week'}.issubset(gl.columns):
+            left = props.copy()
+            left = left.merge(gl[['home_team','away_team','week']], on='week', how='left')
+            opp = _np.where(left.get('team').eq(left.get('home_team')), left.get('away_team'),
+                     _np.where(left.get('team').eq(left.get('away_team')), left.get('home_team'), _np.nan))
+            props['opponent'] = opp
+except Exception as _e:
+    print('[make_metrics] opponent derive skipped:', _e)
         props["team"] = props["team"].combine_first(props.get("team_pf"))
         if "team_pf" in props.columns:
             props = props.drop(columns=["team_pf"])
+gl = load_game_lines()
+## OPPONENT_FROM_GAME_LINES
+try:
+    if not gl.empty:
+        if 'event_id' in props.columns and 'event_id' in gl.columns:
+            tmp = props.merge(gl[['event_id','home_team','away_team','week']], on='event_id', how='left')
+            opp = _np.where(tmp.get('team').eq(tmp.get('home_team')), tmp.get('away_team'),
+                     _np.where(tmp.get('team').eq(tmp.get('away_team')), tmp.get('home_team'), _np.nan))
+            props['opponent'] = opp
+            if 'week' not in props.columns:
+                props['week'] = tmp.get('week')
+        elif {'team','week'}.issubset(props.columns) and {'home_team','away_team','week'}.issubset(gl.columns):
+            left = props.copy()
+            left = left.merge(gl[['home_team','away_team','week']], on='week', how='left')
+            opp = _np.where(left.get('team').eq(left.get('home_team')), left.get('away_team'),
+                     _np.where(left.get('team').eq(left.get('away_team')), left.get('home_team'), _np.nan))
+            props['opponent'] = opp
+except Exception as _e:
+    print('[make_metrics] opponent derive skipped:', _e)
 
     # a few sources don't carry event_id; keep NaN and we still keep the rows
     if "event_id" not in props.columns:
