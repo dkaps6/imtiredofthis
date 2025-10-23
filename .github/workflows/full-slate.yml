@@ -63,6 +63,15 @@ jobs:
       # ----- your remaining providers / lines / odds pulls (keep as-is) -----
 
       # >>> make sure the team form builder comes AFTER Sharp so it can use the merged fallback
+      - name: Build Game Lines
+        run: python scripts/build_game_lines_from_schedule.py --season 2025
+   
+      - name: Fetch Odds (Odds API)
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        run: python scripts/fetch_game_lines_oddsapi.py
+        continue-on-error: true  # don’t fail the whole run if the API is down/rate-limited
+        
       - name: Run pipeline
         run: |
           python -m engine --season "${{ github.event.inputs.season }}" --date "" --bookmakers=""
