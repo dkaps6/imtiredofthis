@@ -1,1 +1,9 @@
-
+player,team,opponent,season,position,role,tgt_share,route_rate,rush_share,yprr,ypt,ypc,ypa,receptions_per_target,rz_share,rz_tgt_share,rz_rush_share
+Isiah Pacheco,KC,DEN,2025,RB,RB1,0.25,0.25,0.6666666666666666,5.0,5.0,6.0,0.0,1.0,0.0,0.0,0.0
+Marquez Valdes-Scantling,KC,DEN,2025,WR,WR1,0.25,0.25,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+Travis Kelce,KC,DEN,2025,TE,UNK,0.5,0.5,0.0,12.5,12.5,0.0,0.0,1.0,0.0,0.0,0.0
+Patrick Mahomes,KC,DEN,2025,QB,QB1,0.0,0.0,0.3333333333333333,0.0,0.0,3.0,7.5,0.0,0.0,0.0,0.0
+Isiah Pacheco,KC,ALL,2025,RB,RB1,0.25,0.25,0.6666666666666666,5.0,5.0,6.0,0.0,1.0,0.0,0.0,0.0
+Marquez Valdes-Scantling,KC,ALL,2025,WR,WR1,0.25,0.25,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+Patrick Mahomes,KC,ALL,2025,QB,QB1,0.0,0.0,0.3333333333333333,0.0,0.0,3.0,7.5,0.0,0.0,0.0,0.0
+Travis Kelce,KC,ALL,2025,TE,UNK,0.5,0.5,0.0,12.5,12.5,0.0,0.0,1.0,0.0,0.0,0.0
