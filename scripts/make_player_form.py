@@ -178,6 +178,16 @@ except NameError:
             return ""
         first = parts[0]
         last = parts[-1] if len(parts) > 1 else parts[0]
+        if len(parts) == 1:
+            token = parts[0]
+            match = _re_nh.search(r"(?<=[A-Z])([A-Z][a-z])", token)
+            if match:
+                start_idx = match.start(1)
+                leading = token[:start_idx]
+                surname = token[start_idx:]
+                if leading and surname:
+                    first = leading
+                    last = surname
         if not first:
             return ""
         key = f"{first[0]}{last}".lower()
