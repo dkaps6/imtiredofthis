@@ -393,22 +393,50 @@ def price(season: int, props_path: Optional[str] = None):
     if not player.empty:
         df = df.merge(player.drop_duplicates(subset=["player", "team"]), on=["player", "team"], how="left")
 
-            # Backfill from player_form_consensus if team/opponent still missing
-            try:
-                _pfc_paths = ['data/player_form_consensus.csv','outputs/player_form_consensus.csv']
-                for _p in _pfc_paths:
-                    if os.path.exists(_p):
-                        _pfc = pd.read_csv(_p)
-                        _pfc.columns = [c.lower() for c in _pfc.columns]
-                        # normalize player & team
-                        if 'player' in _pfc.columns:
-                            _pfc['player'] = _pfc['player'].astype(str)
-                        keep = [c for c in ['player','team','opponent','position','role','target_share','tgt_share','route_rate','rush_share','rz_tgt_share','rz_carry_share','yprr_proxy','ypt','ypc','ypa_prior'] if c in _pfc.columns]
-                        if keep:
-                            df = df.merge(_pfc[keep].drop_duplicates('player'), on='player', how='left', suffixes=('','_pfc'))
-                        break
-            except Exception as _e:
-                print(f"[pricing] consensus backfill skipped: {_e}", file=sys.stderr)
+        # Backfill from player_form_consensus if team/opponent still missing
+        try:
+            _pfc_paths = [
+                "data/player_form_consensus.csv",
+                "outputs/player_form_consensus.csv",
+            ]
+            for _p in _pfc_paths:
+                if os.path.exists(_p):
+                    _pfc = pd.read_csv(_p)
+                    _pfc.columns = [c.lower() for c in _pfc.columns]
+                    # normalize player & team
+                    if "player" in _pfc.columns:
+                        _pfc["player"] = _pfc["player"].astype(str)
+                    keep = [
+                        c
+                        for c in [
+                            "player",
+                            "team",
+                            "opponent",
+                            "position",
+                            "role",
+                            "target_share",
+                            "tgt_share",
+                            "route_rate",
+                            "rush_share",
+                            "rz_tgt_share",
+                            "rz_carry_share",
+                            "yprr_proxy",
+                            "ypt",
+                            "ypc",
+                            "ypa_prior",
+                        ]
+                        if c in _pfc.columns
+                    ]
+                    if keep:
+                        df = df.merge(
+                            _pfc[keep].drop_duplicates("player"),
+                            on="player",
+                            how="left",
+                            suffixes=("", "_pfc"),
+                        )
+                    break
+        except Exception as _e:
+            print(f"[pricing] consensus backfill skipped: {_e}", file=sys.stderr)
     
 
     # Join team form: opponent defense context (opp_*) and own offense context (plays_est/proe)
@@ -625,6 +653,44 @@ def price(season: int, props_path: Optional[str] = None):
             "heavy_box_rate_z": row.get("opp_heavy_box_rate_z") or row.get("heavy_box_rate_z"),
             "coverage_tag": row.get("coverage_tag"),
             "cb_penalty": row.get("cb_penalty"),
+            # key usage/efficiency signals copied through to output
+            "tgt_share": row.get("tgt_share"),
+            "route_rate": row.get("route_rate"),
+            "rush_share": row.get("rush_share"),
+            "yprr": row.get("yprr"),
+            "ypt": row.get("ypt"),
+            "ypc": row.get("ypc"),
+            "rz_tgt_share": row.get("rz_tgt_share"),
+            "rz_carry_share": row.get("rz_carry_share"),
+            "plays_est": row.get("plays_est"),
+            "pace": row.get("pace"),
+            "proe": row.get("proe"),
+            # defensive splits (prefer opponent context when available)
+            "def_pass_epa": (
+                row.get("opp_def_pass_epa")
+                or row.get("def_pass_epa_opp")
+                or row.get("def_pass_epa")
+            ),
+            "def_rush_epa": (
+                row.get("opp_def_rush_epa")
+                or row.get("def_rush_epa_opp")
+                or row.get("def_rush_epa")
+            ),
+            "def_sack_rate": (
+                row.get("opp_def_sack_rate")
+                or row.get("def_sack_rate_opp")
+                or row.get("def_sack_rate")
+            ),
+            "light_box_rate": (
+                row.get("opp_light_box_rate")
+                or row.get("light_box_rate_opp")
+                or row.get("light_box_rate")
+            ),
+            "heavy_box_rate": (
+                row.get("opp_heavy_box_rate")
+                or row.get("heavy_box_rate_opp")
+                or row.get("heavy_box_rate")
+            ),
         }
 
         side_map = {
