@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # scripts/make_metrics.py
 """
 Build a single, pricing-ready table that joins props with all context metrics.
@@ -560,8 +561,8 @@ def build_metrics(season: int) -> pd.DataFrame:
                 props["week"] = tmp.get("week")
             # team win prob
             props["team_wp"] = np.where(
-                tmp.get("team").eq(tmp.get("home_team")),
-                tmp.get("home_wp"),
+                tmp.get("team").eq(tmp.get("home_team")), 
+                tmp.get("home_wp"), 
                 np.where(tmp.get("team").eq(tmp.get("away_team")), tmp.get("away_wp"), np.nan),
             )
         elif {"team","week"}.issubset(props.columns) and {"home_team","away_team","week"}.issubset(gl.columns):
@@ -570,8 +571,8 @@ def build_metrics(season: int) -> pd.DataFrame:
                    np.where(left.get("team").eq(left.get("away_team")), left.get("home_team"), np.nan))
             props["opponent"] = _normalize_team_names(pd.Series(opp, index=props.index))
             props["team_wp"] = np.where(
-                left.get("team").eq(left.get("home_team")),
-                left.get("home_wp"),
+                left.get("team").eq(left.get("home_team")), 
+                left.get("home_wp"), 
                 np.where(left.get("team").eq(left.get("away_team")), left.get("away_wp"), np.nan),
             )
 
