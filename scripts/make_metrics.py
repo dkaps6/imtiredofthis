@@ -89,6 +89,9 @@ def _nm_add_fallback_keys_df(df, player_col="player"):
         f,l = _nm_initial_last(nm); fi.append(f); ln.append(l)
     df["first_initial"] = fi; df["last_name_u"] = ln
     return df
+def _tm_norm(s):
+    return _normalize_team_names(s.astype(str).str.upper().str.strip())
+
 # ----------------------------
 # Utilities
 # ----------------------------
@@ -768,6 +771,58 @@ def build_metrics(season: int) -> pd.DataFrame:
             base.loc[qb_mask & base["ypa_prior"].isna(), "ypa_prior"] = 6.8
 
     # Final tidy and order
+    # --- injected: attach coverage (opponent-level flags) and CB assignments (player-level) ---
+    try:
+        _cov_df = load_coverage()
+    except Exception:
+        _cov_df = pd.DataFrame()
+    if not _cov_df.empty:
+        _cov2 = _cov_df.rename(columns={"defense_team":"opponent"})
+        for _c in ["coverage_top_shadow","coverage_heavy_man","coverage_heavy_zone"]:
+            if _c not in _cov2.columns:
+                _cov2[_c] = 0
+        base = base.merge(
+            _cov2[["opponent","coverage_top_shadow","coverage_heavy_man","coverage_heavy_zone"]].drop_duplicates(),
+            on="opponent", how="left"
+        )
+        for _c in ["coverage_top_shadow","coverage_heavy_man","coverage_heavy_zone"]:
+            if _c + "_opp" not in base.columns:
+                base[_c + "_opp"] = base[_c]
+        if "coverage_top_shadow_opp" in base.columns:
+            base["has_cb_shadow"] = (base["coverage_top_shadow_opp"].fillna(0).astype(int) == 1).astype(int)
+        else:
+            base["has_cb_shadow"] = 0
+
+    try:
+        _cba_df = load_cb_assignments()
+    except Exception:
+        _cba_df = pd.DataFrame()
+    if not _cba_df.empty:
+        _cba2 = _cba_df.rename(columns={"opp_def_team":"opponent"})
+        base = base.merge(_cba2, on=["player","opponent"], how="left", suffixes=("","_cba"))
+        need_fb = base["penalty"].isna().mean() > 0.80 if "penalty" in base.columns else True
+        if need_fb:
+            if "first_initial" not in base.columns or "last_name_u" not in base.columns:
+                fi, ln = _player_init_last(base["player"])
+                base["first_initial"] = base.get("first_initial", fi)
+                base["last_name_u"] = base.get("last_name_u", ln)
+            _cba2["fi"], _cba2["ln"] = _player_init_last(_cba2["player"] if "player" in _cba2.columns else pd.Series([], dtype=object))
+            join_left = ["first_initial","last_name_u","opponent"]
+            join_right= ["fi","ln","opponent"]
+            fb_cols = ["penalty"]
+            _t = base[join_left].merge(_cba2[join_right+fb_cols].drop_duplicates(), left_on=join_left, right_on=join_right, how="left")
+            if "penalty" in _t.columns:
+                if "penalty" not in base.columns:
+                    base["penalty"] = np.nan
+                base["penalty"] = base["penalty"].combine_first(_t["penalty"])
+        base["cb_penalty"] = base.get("penalty")
+        if "penalty" in base.columns:
+            base.drop(columns=["penalty"], inplace=True, errors="ignore")
+    else:
+        if "cb_penalty" not in base.columns:
+            base["cb_penalty"] = np.nan
+
+
     want = [
         "event_id","player","team","opponent","market","line","over_odds","under_odds",
         "target_share","rush_share","route_rate","yprr_proxy","ypt","ypc","ypa_prior","rz_tgt_share","rz_carry_share","position","role",
