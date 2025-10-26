@@ -135,6 +135,19 @@ def _normalize_team_names(s: pd.Series) -> pd.Series:
     }
     norm = norm.replace(aliases)
 
+    # add full-name -> code mapping (fix odds_game full names)
+    full_to_code = {
+        "ARIZONA CARDINALS":"ARI","ATLANTA FALCONS":"ATL","BALTIMORE RAVENS":"BAL","BUFFALO BILLS":"BUF",
+        "CAROLINA PANTHERS":"CAR","CHICAGO BEARS":"CHI","CINCINNATI BENGALS":"CIN","CLEVELAND BROWNS":"CLE",
+        "DALLAS COWBOYS":"DAL","DENVER BRONCOS":"DEN","DETROIT LIONS":"DET","GREEN BAY PACKERS":"GB",
+        "HOUSTON TEXANS":"HOU","INDIANAPOLIS COLTS":"IND","JACKSONVILLE JAGUARS":"JAX","KANSAS CITY CHIEFS":"KC",
+        "LAS VEGAS RAIDERS":"LV","LOS ANGELES CHARGERS":"LAC","LOS ANGELES RAMS":"LAR","MIAMI DOLPHINS":"MIA",
+        "MINNESOTA VIKINGS":"MIN","NEW ENGLAND PATRIOTS":"NE","NEW ORLEANS SAINTS":"NO","NEW YORK GIANTS":"NYG",
+        "NEW YORK JETS":"NYJ","PHILADELPHIA EAGLES":"PHI","PITTSBURGH STEELERS":"PIT","SAN FRANCISCO 49ERS":"SF",
+        "SEATTLE SEAHAWKS":"SEA","TAMPA BAY BUCCANEERS":"TB","TENNESSEE TITANS":"TEN","WASHINGTON COMMANDERS":"WAS"
+    }
+    norm = norm.replace(full_to_code)
+
     empty_sentinels = {"", "NAN", "NONE", "NULL", "NA", "N/A"}
     norm = norm.mask(norm.isin(empty_sentinels))
     norm = norm.mask(original_null_mask)
@@ -602,7 +615,8 @@ def build_metrics(season: int) -> pd.DataFrame:
     # ---- Opponent mapping
     if not gl.empty:
         if "event_id" in props.columns and "event_id" in gl.columns:
-            tmp = props.merge(gl[["event_id","home_team","away_team","week","home_wp","away_wp"]], on="event_id", how="left")
+            cols_have = [c for c in ["event_id","home_team","away_team","week","home_wp","away_wp"] if c in gl.columns]
+            tmp = props.merge(gl[cols_have], on="event_id", how="left")
             opp = np.where(tmp.get("team").eq(tmp.get("home_team")), tmp.get("away_team"),
                    np.where(tmp.get("team").eq(tmp.get("away_team")), tmp.get("home_team"), np.nan))
             props["opponent"] = _normalize_team_names(pd.Series(opp, index=props.index))
@@ -610,21 +624,27 @@ def build_metrics(season: int) -> pd.DataFrame:
             if "week" not in props.columns or props["week"].isna().all():
                 props["week"] = tmp.get("week")
             # team win prob
-            props["team_wp"] = np.where(
-                tmp.get("team").eq(tmp.get("home_team")), 
-                tmp.get("home_wp"), 
-                np.where(tmp.get("team").eq(tmp.get("away_team")), tmp.get("away_wp"), np.nan),
-            )
+            if {"home_wp","away_wp"}.issubset(tmp.columns):
+                props["team_wp"] = np.where(
+                    tmp.get("team").eq(tmp.get("home_team")),
+                    tmp.get("home_wp"),
+                    np.where(tmp.get("team").eq(tmp.get("away_team")), tmp.get("away_wp"), np.nan),
+                )
+            else:
+                if "team_wp" not in props.columns:
+                    props["team_wp"] = np.nan
         elif {"team","week"}.issubset(props.columns) and {"home_team","away_team","week"}.issubset(gl.columns):
-            left = props.merge(gl[["home_team","away_team","week","home_wp","away_wp"]], on="week", how="left")
+            cols_have_w = [c for c in ["home_team","away_team","week","home_wp","away_wp"] if c in gl.columns]
+            left = props.merge(gl[cols_have_w], on="week", how="left")
             opp = np.where(left.get("team").eq(left.get("home_team")), left.get("away_team"),
                    np.where(left.get("team").eq(left.get("away_team")), left.get("home_team"), np.nan))
             props["opponent"] = _normalize_team_names(pd.Series(opp, index=props.index))
-            props["team_wp"] = np.where(
-                left.get("team").eq(left.get("home_team")), 
-                left.get("home_wp"), 
-                np.where(left.get("team").eq(left.get("away_team")), left.get("away_wp"), np.nan),
-            )
+            if {"home_wp","away_wp"}.issubset(left.columns):
+                props["team_wp"] = np.where(
+                    left.get("team").eq(left.get("home_team")),
+                    left.get("home_wp"),
+                    np.where(left.get("team").eq(left.get("away_team")), left.get("away_wp"), np.nan),
+                )
 
     # Base: props + player_form (non-destructive)
     base = props.copy()
