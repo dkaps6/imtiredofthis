@@ -658,6 +658,31 @@ def build_metrics(season: int) -> pd.DataFrame:
         if "team" in base.columns and "team_pf" in base.columns:
             base["team"] = base["team"].combine_first(base["team_pf"])
             base.drop(columns=[c for c in ["team_pf"] if c in base.columns], inplace=True)
+    # --- fallback usage merge on (team, position, first_initial, last_name_u) ---
+    try:
+        # ensure initials/last exist
+        base = _nm_add_fallback_keys_df(base, "player")
+        pf_fb = pf_consensus.copy()
+        pf_fb = _nm_add_fallback_keys_df(pf_fb, "player")
+        cols_key = [c for c in ["team","position","first_initial","last_name_u"] if c in base.columns and c in pf_fb.columns]
+        fb_cols = [c for c in ["target_share","route_rate","rush_share","yprr_proxy","ypt","ypc","ypa_prior","rz_tgt_share","rz_carry_share","role","position"] if c in pf_fb.columns]
+        if len(cols_key) == 4 and fb_cols:
+            # choose best candidate per key (highest route_rate then target_share)
+            sort_cols = [c for c in ["route_rate","target_share"] if c in pf_fb.columns]
+            if sort_cols:
+                pf_fb = pf_fb.sort_values(cols_key + sort_cols, ascending=[True,True,True,True] + [False]*len(sort_cols))
+            pf_fb = pf_fb.drop_duplicates(subset=cols_key, keep="first")
+            miss_mask = base.get("target_share").isna() if "target_share" in base.columns else base.get("route_rate").isna()
+            if miss_mask is None:
+                miss_mask = base.index == -1  # no-op
+            if miss_mask.any():
+                fill = base.loc[miss_mask, cols_key].merge(pf_fb[cols_key + fb_cols], on=cols_key, how="left")
+                for c in fb_cols:
+                    if c in base.columns and c in fill.columns:
+                        base.loc[miss_mask, c] = base.loc[miss_mask, c].combine_first(fill[c])
+    except Exception as _e:
+        print("[make_metrics] fallback usage merge skipped:", _e)
+
 
     # carry week explicitly
     if "week" not in base.columns and "week" in props.columns:
