@@ -791,6 +791,101 @@ def main():
     _safe_mkdir(DATA_DIR)
     try:
         df = build_metrics(args.season)
+        # ## -- injected: final odds rejoin (idempotent) --
+        try:
+            props_raw = pd.read_csv(os.path.join("outputs","props_raw.csv"))
+            props_raw.columns = [c.lower() for c in props_raw.columns]
+            if {"side","price_american"}.issubset(props_raw.columns):
+                k = [c for c in ["event_id","player","market","line"] if c in props_raw.columns]
+                if k:
+                    tmp = props_raw[k + ["side","price_american"]].copy()
+                    tmp["side"] = tmp["side"].astype(str).str.upper().str.strip()
+                    pvt = tmp.pivot_table(index=k, columns="side", values="price_american", aggfunc="first").reset_index()
+                    pvt = pvt.rename(columns={"OVER":"over_odds","UNDER":"under_odds"})
+                    join_key = [c for c in ["event_id","player","market","line"] if c in df.columns and c in pvt.columns]
+                    if join_key:
+                        df = df.merge(pvt[join_key+["over_odds","under_odds"]], on=join_key, how="left", suffixes=("","_fromprops"))
+                        for c in ["over_odds","under_odds"]:
+                            alt = f"{c}_fromprops"
+                            if alt in df.columns:
+                                df[c] = df[c].combine_first(df[alt])
+                                df.drop(columns=[alt], inplace=True)
+        except Exception as _e:
+            print("[make_metrics] final odds rejoin skipped:", _e)
+
+        # ## -- injected: final player_form_consensus backfill (idempotent) --
+        try:
+            pfc = pd.read_csv(os.path.join("data","player_form_consensus.csv"))
+            pfc.columns = [c.lower() for c in pfc.columns]
+            # normalize expected columns
+            rename_map = {
+                "tgt_share": "target_share",
+                "yprr": "yprr_proxy",
+                "rz_rush_share": "rz_carry_share",
+            }
+            for k,v in rename_map.items():
+                if k in pfc.columns and v not in pfc.columns:
+                    pfc[v] = pfc[k]
+
+            # initials+last on both sides
+            def _mk_init_last(series):
+                import re as _re
+                fi, ln = [], []
+                for nm in series.astype(str):
+                    n = nm.replace("."," ").strip()
+                    if n and " " not in n:
+                        caps = [i for i,ch in enumerate(n) if ch.isupper()]
+                        if len(caps) >= 2:
+                            fi.append(n[caps[0]].upper()); ln.append(n[caps[1]:].upper()); continue
+                    toks = _re.split(r"\\s+", n)
+                    if toks and toks[0]:
+                        fi.append(toks[0][0].upper()); ln.append(toks[-1].upper())
+                    else:
+                        fi.append(""); ln.append("")
+                return fi, ln
+
+            if "first_initial" not in df.columns or "last_name_u" not in df.columns:
+                fi, ln = _mk_init_last(df["player"] if "player" in df.columns else pd.Series([]))
+                df["first_initial"] = df.get("first_initial", pd.Series(fi))
+                df["last_name_u"]   = df.get("last_name_u",  pd.Series(ln))
+
+            if "first_initial" not in pfc.columns or "last_name_u" not in pfc.columns:
+                fi2, ln2 = _mk_init_last(pfc["player"] if "player" in pfc.columns else pd.Series([]))
+                pfc["first_initial"] = fi2
+                pfc["last_name_u"] = ln2
+
+            # choose keys: prefer (team, position, initial, last); otherwise (team, initial, last)
+            keys_full = [k for k in ["team","position","first_initial","last_name_u"] if k in df.columns and k in pfc.columns]
+            keys_lo   = [k for k in ["team","first_initial","last_name_u"] if k in df.columns and k in pfc.columns]
+            use_keys = keys_full if len(keys_full)==4 else (keys_lo if len(keys_lo)==3 else None)
+
+            if use_keys:
+                use_cols = [c for c in [
+                    "target_share","route_rate","rush_share","yprr_proxy","ypt","ypc","ypa","ypa_prior",
+                    "rz_share","rz_tgt_share","rz_carry_share","role","position"
+                ] if c in pfc.columns]
+
+                if use_cols:
+                    sort_cols = [c for c in ["route_rate","target_share"] if c in pfc.columns]
+                    pf_fb = pfc.sort_values(use_keys + sort_cols, ascending=[True]*len(use_keys) + [False]*len(sort_cols))\
+                               .drop_duplicates(subset=use_keys, keep="first")
+
+                    # only fill rows that lack usage currently
+                    if set(["target_share","route_rate","rush_share"]).issubset(df.columns):
+                        miss_mask = (~df[["target_share","route_rate","rush_share"]].notna().any(axis=1))
+                    else:
+                        miss_mask = pd.Series([True]*len(df))
+
+                    fill = df.loc[miss_mask, use_keys].merge(pf_fb[use_keys + use_cols], on=use_keys, how="left")
+                    for c in use_cols:
+                        if c not in df.columns:
+                            df[c] = np.nan
+                        if c in fill.columns:
+                            df.loc[miss_mask, c] = df.loc[miss_mask, c].combine_first(fill[c])
+
+        except Exception as _e:
+            print("[make_metrics] final pf_consensus backfill skipped:", _e)
+    
         # ## -- injected: final odds rejoin --
         try:
             props_raw = pd.read_csv(os.path.join("outputs","props_raw.csv"))
