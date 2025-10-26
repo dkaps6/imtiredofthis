@@ -666,7 +666,7 @@ def build_metrics(season: int) -> pd.DataFrame:
         pf_fb = _nm_add_fallback_keys_df(pf_fb, "player")
         cols_key = [c for c in ["team","position","first_initial","last_name_u"] if c in base.columns and c in pf_fb.columns]
         fb_cols = [c for c in ["target_share","route_rate","rush_share","yprr_proxy","ypt","ypc","ypa_prior","rz_tgt_share","rz_carry_share","role","position"] if c in pf_fb.columns]
-        if len(cols_key) == 4 and fb_cols:
+        if fb_cols and len(cols_key) >= 3:
             # choose best candidate per key (highest route_rate then target_share)
             sort_cols = [c for c in ["route_rate","target_share"] if c in pf_fb.columns]
             if sort_cols:
@@ -791,6 +791,29 @@ def main():
     _safe_mkdir(DATA_DIR)
     try:
         df = build_metrics(args.season)
+        # ## -- injected: final odds rejoin --
+        try:
+            props_raw = pd.read_csv(os.path.join("outputs","props_raw.csv"))
+            props_raw.columns = [c.lower() for c in props_raw.columns]
+            if {"side","price_american"}.issubset(props_raw.columns):
+                key = [c for c in ["event_id","player","market","line"] if c in props_raw.columns]
+                if key:
+                    tmp = props_raw[key + ["side","price_american"]].copy()
+                    tmp["side"] = tmp["side"].astype(str).str.upper().str.strip()
+                    pvt = tmp.pivot_table(index=key, columns="side", values="price_american", aggfunc="first").reset_index()
+                    pvt = pvt.rename(columns={"OVER":"over_odds","UNDER":"under_odds"})
+                    # attach where missing
+                    join_key = [c for c in ["event_id","player","market","line"] if c in df.columns and c in pvt.columns]
+                    if join_key:
+                        df = df.merge(pvt[join_key+["over_odds","under_odds"]], on=join_key, how="left", suffixes=("","_fromprops"))
+                        for c in ["over_odds","under_odds"]:
+                            alt = f"{c}_fromprops"
+                            if alt in df.columns:
+                                df[c] = df[c].combine_first(df[alt])
+                                df.drop(columns=[alt], inplace=True)
+        except Exception as _e:
+            print("[make_metrics] final odds rejoin skipped:", _e)
+
     except Exception as e:
         print(f"[make_metrics] ERROR: {e}", file=sys.stderr)
         traceback.print_exc()
