@@ -64,6 +64,31 @@ OUTPATH  = os.path.join(DATA_DIR, "metrics_ready.csv")
 
 PLAYER_FORM_CONSENSUS_OPPONENT = "ALL"
 
+
+# --- fallback name helpers for compact forms like "DSwift", "GKittle" ---
+def _nm_initial_last(name: str) -> tuple[str,str]:
+    import re as _re_nm
+    if not isinstance(name, str): 
+        return ("","")
+    n = name.replace(".", " ").strip()
+    if n and " " not in n:
+        caps = [i for i,ch in enumerate(n) if ch.isupper()]
+        if len(caps) >= 2:
+            return (n[caps[0]].upper(), n[caps[1]:].upper())
+    toks = _re_nm.split(r"\s+", n)
+    if not toks or not toks[0]:
+        return ("","")
+    return (toks[0][0].upper(), toks[-1].upper())
+
+def _nm_add_fallback_keys(df: pd.DataFrame, player_col: str = "player") -> pd.DataFrame:
+    if player_col not in df.columns:
+        df["first_initial"] = ""; df["last_name_u"] = ""
+        return df
+    fi, ln = [], []
+    for nm in df[player_col].astype(str):
+        f,l = _nm_initial_last(nm); fi.append(f); ln.append(l)
+    df["first_initial"] = fi; df["last_name_u"] = ln
+    return df
 # ----------------------------
 # Utilities
 # ----------------------------
@@ -86,29 +111,19 @@ def safe_div(n, d):
     with np.errstate(divide="ignore", invalid="ignore"):
         return np.where(d == 0, np.nan, n / d)
 
-def _normalize_team_names(s: pd.Series) -> pd.Series:
-    """Map common sportsbook aliases to nflverse team codes (best effort)."""
-    if s is None:
-        return s
-    original_null_mask = s.isna()
-    norm = s.astype(str).str.upper().str.strip()
-    aliases = {
-        # books ↔ nflverse
-        "WSH": "WAS", "WDC": "WAS",
-        "JAX": "JAX", "JAC": "JAX",
-        "ARZ": "ARI", "AZ": "ARI",
-        "LA":  "LAR", "STL": "LAR",
-        "LVR": "LV",  "OAK": "LV",
-        "SFO": "SF",
-        "TAM": "TB",
-        "GBP": "GB",
-        "KAN": "KC",
-        "NOS": "NO", "N.O.": "NO",
-        "SD":  "LAC",
-        # occasional typos seen in feeds
-        "CLV": "CLE",
+\1
+    # map full team names -> codes (critical for odds_game joins)
+    full_to_code = {
+        "ARIZONA CARDINALS":"ARI","ATLANTA FALCONS":"ATL","BALTIMORE RAVENS":"BAL","BUFFALO BILLS":"BUF",
+        "CAROLINA PANTHERS":"CAR","CHICAGO BEARS":"CHI","CINCINNATI BENGALS":"CIN","CLEVELAND BROWNS":"CLE",
+        "DALLAS COWBOYS":"DAL","DENVER BRONCOS":"DEN","DETROIT LIONS":"DET","GREEN BAY PACKERS":"GB",
+        "HOUSTON TEXANS":"HOU","INDIANAPOLIS COLTS":"IND","JACKSONVILLE JAGUARS":"JAX","KANSAS CITY CHIEFS":"KC",
+        "LAS VEGAS RAIDERS":"LV","LOS ANGELES CHARGERS":"LAC","LOS ANGELES RAMS":"LAR","MIAMI DOLPHINS":"MIA",
+        "MINNESOTA VIKINGS":"MIN","NEW ENGLAND PATRIOTS":"NE","NEW ORLEANS SAINTS":"NO","NEW YORK GIANTS":"NYG",
+        "NEW YORK JETS":"NYJ","PHILADELPHIA EAGLES":"PHI","PITTSBURGH STEELERS":"PIT","SAN FRANCISCO 49ERS":"SF",
+        "SEATTLE SEAHAWKS":"SEA","TAMPA BAY BUCCANEERS":"TB","TENNESSEE TITANS":"TEN","WASHINGTON COMMANDERS":"WAS"
     }
-    norm = norm.replace(aliases)
+    norm = norm.replace(full_to_code)
 
     empty_sentinels = {"", "NAN", "NONE", "NULL", "NA", "N/A"}
     norm = norm.mask(norm.isin(empty_sentinels))
@@ -494,6 +509,17 @@ def build_metrics(season: int) -> pd.DataFrame:
     if "week" not in props.columns:
         props["week"] = pd.Series(pd.array([], dtype="Int64"))
 
+
+    # build fallback keys for name-mismatch cases (e.g., "DSwift" vs "DeAndre Swift")
+    try:
+        props = _nm_add_fallback_keys(props, "player")
+    except Exception:
+        pass
+    if not pf.empty:
+        try:
+            pf = _nm_add_fallback_keys(pf, "player")
+        except Exception:
+            pass
     # Stable player keys for joins
     props["player_key"] = _player_key_series(props.get("player", pd.Series(dtype=object)))
     pf_consensus = pd.DataFrame()
@@ -589,7 +615,27 @@ def build_metrics(season: int) -> pd.DataFrame:
             base["team"] = base["team"].combine_first(base["team_pf"])
             base.drop(columns=[c for c in ["team_pf"] if c in base.columns], inplace=True)
 
-    # carry week explicitly
+    
+        # fallback join for compact names using (team, position, first_initial, last_name_u)
+        try:
+            cols_key = ["team","position","first_initial","last_name_u"]
+            if all(c in base.columns for c in cols_key) and all(c in pf_consensus.columns for c in cols_key):
+                pf_fb = pf_consensus.drop_duplicates(subset=cols_key).copy()
+                if "route_rate" in pf_fb.columns:
+                    pf_fb = pf_fb.sort_values(cols_key + ["route_rate","target_share"], ascending=[True,True,True,True,False,False])\
+                                 .drop_duplicates(subset=cols_key, keep="first")
+                fb_cols = [c for c in ["target_share","route_rate","rush_share","yprr_proxy","ypt","ypc","ypa","ypa_prior","rz_share","rz_tgt_share","rz_carry_share","role","position"] if c in pf_fb.columns]
+                sentinel = "target_share" if "target_share" in base.columns else ("route_rate" if "route_rate" in base.columns else None)
+                if sentinel:
+                    miss = base[sentinel].isna()
+                    if miss.any() and fb_cols:
+                        fill = base.loc[miss, cols_key].merge(pf_fb[cols_key + fb_cols], on=cols_key, how="left")
+                        for c in fb_cols:
+                            if c in base.columns and c in fill.columns:
+                                base.loc[miss, c] = base.loc[miss, c].combine_first(fill[c])
+        except Exception as _e:
+            print("[make_metrics] fallback name join skipped:", _e)
+# carry week explicitly
     if "week" not in base.columns and "week" in props.columns:
         base["week"] = props["week"]
 
