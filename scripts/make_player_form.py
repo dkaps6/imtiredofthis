@@ -1465,16 +1465,47 @@ def cli():
             pass
 
         _validate_required(df)
+        # Ensure opponent/team mapping is applied on the final frame (idempotent)
+        try:
+            df = _enrich_team_and_opponent_from_props(df)
+        except Exception as _enr_e:
+            print(f"[make_player_form] WARN opponent enrichment skipped in cli(): {_enr_e}", file=sys.stderr)
 
-except Exception as e:
-    print(f"[make_player_form] ERROR: {e}", file=sys.stderr)
+        # Defensive visibility
+        try:
+            print("[make_player_form] final df shape:", df.shape, "cols:", list(df.columns)[:12], "…")
+        except Exception:
+            pass
 
-    # If df exists and has rows, write it rather than wiping out to empty.
-    try:
-        if "df" in locals() and isinstance(df, pd.DataFrame) and len(df) > 0:
-            df.to_csv(OUTPATH, index=False)
-            print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH} (after handled error)")
-            return
+        # Normal save path
+        df = df[FINAL_COLS]
+        df.to_csv(OUTPATH, index=False)
+        print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH}")
+        return
+
+    except Exception as e:
+        print(f"[make_player_form] ERROR: {e}", file=sys.stderr)
+
+        # If df exists and has rows, enrich opponents and write it rather than wiping to empty.
+        try:
+            if "df" in locals() and isinstance(df, pd.DataFrame) and len(df) > 0:
+                try:
+                    df = _enrich_team_and_opponent_from_props(df)
+                except Exception as _enr_e:
+                    print(f"[make_player_form] WARN enrichment skipped in error path: {_enr_e}", file=sys.stderr)
+                df = _ensure_cols(df, FINAL_COLS)[FINAL_COLS]
+                df.to_csv(OUTPATH, index=False)
+                print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH} (after handled error)")
+                return
+        except Exception as _w:
+            print(f"[make_player_form] WARN could not write partial df in error path: {_w}", file=sys.stderr)
+
+        # If nothing to write, emit a structured empty (last resort)
+        empty = pd.DataFrame(columns=FINAL_COLS)
+        empty.to_csv(OUTPATH, index=False)
+        print(f"[make_player_form] Wrote 0 rows → {OUTPATH} (empty due to error)")
+        return
+
     except Exception:
         pass
 
