@@ -1,0 +1,21 @@
+paths:
+  props: data/props_raw.csv
+  players: data/player_form_consensus.csv
+  teams: data/team_form.csv
+  coverage: data/coverage_cb.csv
+  lines: data/game_lines.csv
+  sharp_off: data/sharp_off_metrics_2025.csv
+  sharp_def: data/sharp_def_metrics_2025.csv
+  sharp_def_tend: data/sharp_def_tend_2025.csv
+  sharp_team_form: data/sharp_team_form.csv
+
+outputs:
+  dir: outputs/
+  bet_slip: bet_slip_elite_green.csv
+  full: full_model_elite.csv
+
+toggles:
+  use_weather: false
+  use_qb_mobility: false
+  use_wr_cb_exposure: false
+  enable_sgp: false
