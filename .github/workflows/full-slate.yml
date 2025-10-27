@@ -71,7 +71,28 @@ jobs:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
         run: python scripts/fetch_game_lines_oddsapi.py
         continue-on-error: true  # don’t fail the whole run if the API is down/rate-limited
-        
+              # --- ELITE MODEL: install + run + upload artifacts ---
+      - name: Elite model | Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Elite model | Run pricing
+        run: |
+          python -m model.cli --config config.yaml
+        env:
+          PYTHONUNBUFFERED: "1"
+
+      - name: Elite model | Upload outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: elite-model-outputs-${{ github.run_id }}
+          path: |
+            outputs/full_model_elite.csv
+            outputs/bet_slip_elite_green.csv
+          if-no-files-found: warn
+          retention-days: 7
+      # --- /ELITE MODEL ---
       - name: Run pipeline
         run: |
           python -m engine --season "${{ github.event.inputs.season }}" --date "" --bookmakers=""
