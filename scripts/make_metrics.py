@@ -18,6 +18,7 @@ Output:
 - data/metrics_ready.csv
 """
 
+from scripts._opponent_map import attach_opponent
 from __future__ import annotations
 import argparse, os, sys, warnings, re, traceback
 import pandas as pd
