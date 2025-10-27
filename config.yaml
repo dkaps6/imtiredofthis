@@ -8,6 +8,10 @@ paths:
   sharp_def: data/sharp_def_metrics_2025.csv
   sharp_def_tend: data/sharp_def_tend_2025.csv
   sharp_team_form: data/sharp_team_form.csv
+  weather: data/weather.csv               # event_id, wind_mph, temp_f, precip, surface, dome
+  qb_mobility: data/qb_mobility.csv       # player, team, scramble_rate, designed_rush_share
+  wr_cb_exposure: data/wr_cb_exposure.csv # team, player_pf, slot_pct, wide_pct, vs_man_z, vs_zone_z, shadow_flag
+  proe_splits: data/proe_splits.csv       # team, proe_neutral, proe_trailing, proe_leading, sec_per_snap_neutral
 
 outputs:
   dir: outputs/
@@ -18,4 +22,8 @@ toggles:
   use_weather: false
   use_qb_mobility: false
   use_wr_cb_exposure: false
+  enable_sgp: false
+  use_weather: true
+  use_qb_mobility: true
+  use_wr_cb_exposure: true
   enable_sgp: false
