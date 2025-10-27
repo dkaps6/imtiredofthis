@@ -22,6 +22,7 @@ Output:
 """
 
 from __future__ import annotations
+from scripts._opponent_map import attach_opponent
 import os
 import warnings
 import numpy as np
@@ -438,6 +439,9 @@ def main():
 
     # ---- FINALIZE (coerce types, fillna 0.0, clamp shares) ----
     pf = finalize_player_form(pf)
+
+    # NEW: fill opponent from coverage schedule when missing/ALL
+    df = attach_opponent(df, team_col="team", coverage_path="data/coverage_cb.csv")
 
     _write_csv(OUTPATH, pf)
     print(f"[enrich_player_form] Wrote {len(pf)} rows → {OUTPATH}")
