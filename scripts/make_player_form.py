@@ -1466,20 +1466,35 @@ def cli():
 
         _validate_required(df)
 
-    except Exception as e:
-        print(f"[make_player_form] ERROR: {e}", file=sys.stderr)
-        # If df exists and has rows, write it rather than wiping out to empty.
-        try:
-            if "df" in locals() and isinstance(df, pd.DataFrame) and len(df) > 0:
-                df.to_csv(OUTPATH, index=False)
-                print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH} (after handled error)")
-                return
-        except Exception:
-            pass
-        empty = pd.DataFrame(columns=FINAL_COLS)
-        empty.to_csv(OUTPATH, index=False)
-        print(f"[make_player_form] Wrote 0 rows → {OUTPATH} (empty due to error)")
-        return  # ← do not sys.exit(1)
+except Exception as e:
+    print(f"[make_player_form] ERROR: {e}", file=sys.stderr)
+
+    # If df exists and has rows, write it rather than wiping out to empty.
+    try:
+        if "df" in locals() and isinstance(df, pd.DataFrame) and len(df) > 0:
+            df.to_csv(OUTPATH, index=False)
+            print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH} (after handled error)")
+            return
+    except Exception:
+        pass
+
+    # --- NEW LOGIC: attach opponent + team from props for ANY missing opponent ---
+    try:
+        df = _enrich_team_and_opponent_from_props(df)
+    except Exception as _enr_e:
+        print(f"[make_player_form] WARN opponent enrichment skipped: {_enr_e}", file=sys.stderr)
+
+    # Write enriched (or un-enriched) df out
+    df.to_csv(OUTPATH, index=False)
+    print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH}")
+    return
+
+# If no df at all, write empty
+empty = pd.DataFrame(columns=FINAL_COLS)
+empty.to_csv(OUTPATH, index=False)
+print(f"[make_player_form] Wrote 0 rows → {OUTPATH} (empty due to error)")
+return
+
 
     df.to_csv(OUTPATH, index=False)
     print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH}")
