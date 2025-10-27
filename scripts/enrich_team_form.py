@@ -2,6 +2,7 @@
 # scripts/enrich_team_form.py
 from __future__ import annotations
 from pathlib import Path
+from scripts._opponent_map import attach_opponent
 import pandas as pd
 
 def _safe_read_csv(p: str) -> pd.DataFrame:
@@ -18,7 +19,7 @@ def main():
     df = _safe_read_csv("data/team_form.csv")
     if df.empty:
         print("[enrich_team_form] team_form.csv empty; nothing to enrich"); return 0
-
+    df = attach_opponent(df, team_col="team", coverage_path="data/coverage_cb.csv")
     df.to_csv("data/team_form.csv", index=False)
     print("[enrich_team_form] updated data/team_form.csv rows={}".format(len(df))); return 0
 
