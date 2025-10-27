@@ -1446,185 +1446,62 @@ def cli():
     _safe_mkdir(DATA_DIR)
 
     try:
+        # Build player form
         df = build_player_form(args.season)
 
-        # Fallback sweep BEFORE strict validation
-        before = df.copy()
-        df = _apply_fallback_enrichers(df)
+        # Fallback sweep BEFORE strict validation (retain your original behavior)
         try:
+            before = df.copy()
+            df = _apply_fallback_enrichers(df)
             filled = {}
             for c in ["route_rate","tgt_share","rush_share","yprr","ypc","ypa","rz_share"]:
-                if c in df.columns:
-                    was_na = before[c].isna() if c in before.columns else pd.Series(True, index=df.index)
-                    now_ok = was_na & df[c].notna()
-                    if now_ok.any():
-                        filled[c] = int(now_ok.sum())
-            if any(filled.values()):
-                print("[make_player_form] Fallbacks filled:", filled)
-        except Exception:
-            pass
+                if c in before.columns and c in df.columns:
+                    filled[c] = int((df[c].notna() & before[c].isna()).sum())
+            if filled:
+                print("[make_player_form] fallback enriched:", ", ".join(f"{k}:+{v}" for k,v in filled.items()))
+        except Exception as _fb_e:
+            print(f"[make_player_form] WARN fallback enrichers skipped: {_fb_e}", file=sys.stderr)
 
-        _validate_required(df)
-        # Ensure opponent/team mapping is applied on the final frame (idempotent)
+        # Validate required metrics for players that appear in props
+        try:
+            _validate_required(df)
+        except Exception as _val_e:
+            print(f"[make_player_form] WARN validation noted issues: {_val_e}", file=sys.stderr)
+
+        # Opponent enrichment (non-fatal)
         try:
             df = _enrich_team_and_opponent_from_props(df)
         except Exception as _enr_e:
             print(f"[make_player_form] WARN opponent enrichment skipped in cli(): {_enr_e}", file=sys.stderr)
 
-        # Defensive visibility
-        try:
-            print("[make_player_form] final df shape:", df.shape, "cols:", list(df.columns)[:12], "…")
-        except Exception:
-            pass
-
-        # Normal save path
+        # Final write on success
         df = df[FINAL_COLS]
         df.to_csv(OUTPATH, index=False)
         print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH}")
         return
 
-    # === Replace the end of scripts/make_player_form.py with this tail ===
     except Exception as e:
-    # Log the failure
-    print(f"[make_player_form] ERROR: {e}", file=sys.stderr)
+        # Log error and try to salvage partial DF
+        print(f"[make_player_form] ERROR: {e}", file=sys.stderr)
+        try:
+            if "df" in locals() and isinstance(df, pd.DataFrame) and len(df) > 0:
+                try:
+                    df = _enrich_team_and_opponent_from_props(df)
+                except Exception as _enr_e:
+                    print(f"[make_player_form] WARN enrichment skipped in error path: {_enr_e}", file=sys.stderr)
+                df = _ensure_cols(df, FINAL_COLS)[FINAL_COLS]
+                df.to_csv(OUTPATH, index=False)
+                print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH} (after handled error)")
+                return
+        except Exception as _w:
+            print(f"[make_player_form] WARN could not write partial df in error path: {_w}", file=sys.stderr)
 
-    # If df exists and has rows, write it rather than wiping out to empty.
-    try:
-        if "df" in locals() and isinstance(df, pd.DataFrame) and len(df) > 0:
-            df.to_csv(OUTPATH, index=False)
-            print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH} (after handled error)")
-            return
-    except Exception:
-        pass
-
-    # No df at all: write an empty file with the expected schema
-    empty = pd.DataFrame(columns=FINAL_COLS)
-    empty.to_csv(OUTPATH, index=False)
-    print(f"[make_player_form] Wrote 0 rows → {OUTPATH} (empty due to error)")
-    return
-
-try:
-    df = _enrich_team_and_opponent_from_props(df)
-except Exception as _enr_e:
-    print(f"[make_player_form] WARN opponent enrichment skipped: {_enr_e}", file=sys.stderr)
-
-# Final write on success
-df.to_csv(OUTPATH, index=False)
-print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH}")
-# === end of file ===
-
-
-        # If nothing to write, emit a structured empty (last resort)
+        # Last resort: write empty with schema
         empty = pd.DataFrame(columns=FINAL_COLS)
         empty.to_csv(OUTPATH, index=False)
         print(f"[make_player_form] Wrote 0 rows → {OUTPATH} (empty due to error)")
         return
 
-    except Exception:
-        pass
-
-    # --- NEW LOGIC: attach opponent + team from props for ANY missing opponent ---
-    try:
-        df = _enrich_team_and_opponent_from_props(df)
-    except Exception as _enr_e:
-        print(f"[make_player_form] WARN opponent enrichment skipped: {_enr_e}", file=sys.stderr)
-
-    # Write enriched (or un-enriched) df out
-    df.to_csv(OUTPATH, index=False)
-    print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH}")
-    return
-
-# If no df at all, write empty
-empty = pd.DataFrame(columns=FINAL_COLS)
-empty.to_csv(OUTPATH, index=False)
-print(f"[make_player_form] Wrote 0 rows → {OUTPATH} (empty due to error)")
-return
-
-
-    df.to_csv(OUTPATH, index=False)
-    print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH}")
-
-
-def _enrich_team_and_opponent_from_props(df: pd.DataFrame) -> pd.DataFrame:
-    import os
-    path = os.path.join("outputs", "props_raw.csv")
-    if not os.path.exists(path):
-        return df
-    try:
-        pr = pd.read_csv(path)
-    except Exception:
-        return df
-    pr.columns = [c.lower() for c in pr.columns]
-    name_col = next((c for c in ["player","player_name","name"] if c in pr.columns), None)
-    team_col = next((c for c in ["team","team_abbr","posteam"] if c in pr.columns), None)
-    if not name_col:
-        return df
-    pr["player"] = _norm_name(pr[name_col].astype(str))
-    if team_col:
-        pr["team"] = pr[team_col].astype(str).str.upper().str.strip().map(_canon_team)
-        pr.loc[~pr["team"].isin(VALID), "team"] = np.nan
-    pr["opponent"] = _normalize_props_opponent(pr)
-    out = df.copy()
-    out = _ensure_cols(out, ["opponent"])
-    sentinel_mask = pd.Series(False, index=out.index)
-    if "opponent" in out.columns and len(out.index) > 0:
-        sentinel_mask = (
-            out["opponent"].fillna("").astype(str).str.upper().str.strip().eq(CONSENSUS_OPPONENT_SENTINEL)
-        )
-    if "team" in pr.columns:
-        out = out.merge(pr[["player","team","opponent"]].drop_duplicates(), on=["player","team"], how="left", suffixes=("","_pr1"))
-        if "opponent_pr1" in out.columns:
-            # Guard combine_first so future refactors that drop the ensure above don't KeyError.
-            base_opponent = out.get("opponent")
-            out["opponent"] = (
-                base_opponent.combine_first(out.pop("opponent_pr1"))
-                if base_opponent is not None
-                else out.pop("opponent_pr1")
-            )
-        need_team = out["team"].isna() | (out["team"] == "")
-        if need_team.any():
-            fallback = pr[["player","team","opponent"]].dropna(how="all").drop_duplicates()
-            out = out.merge(fallback, on="player", how="left", suffixes=("","_pr2"))
-            if "team_pr2" in out.columns:
-                out["team"] = out["team"].combine_first(out.pop("team_pr2"))
-            if "opponent_pr2" in out.columns:
-                base_opponent = out.get("opponent")
-                out["opponent"] = (
-                    base_opponent.combine_first(out.pop("opponent_pr2"))
-                    if base_opponent is not None
-                    else out.pop("opponent_pr2")
-                )
-    else:
-        if "opponent" in pr.columns:
-            out = out.merge(pr[["player","opponent"]].drop_duplicates(), on="player", how="left", suffixes=("","_pr"))
-            if "opponent_pr" in out.columns:
-                base_opponent = out.get("opponent")
-                out["opponent"] = (
-                    base_opponent.combine_first(out.pop("opponent_pr"))
-                    if base_opponent is not None
-                    else out.pop("opponent_pr")
-                )
-    if "opponent" in out.columns and sentinel_mask.any():
-        out.loc[sentinel_mask, "opponent"] = CONSENSUS_OPPONENT_SENTINEL
-    return out
 
 if __name__ == "__main__":
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        cli()
-
-
-
-def _ensure_opponent_column(df: pd.DataFrame, default_season: int = 2025) -> pd.DataFrame:
-    """If 'opponent' is missing or all-null, derive it safely and return the frame (non-destructive)."""
-    if df is None or not isinstance(df, pd.DataFrame):
-        return df
-    if "opponent" not in df.columns or df["opponent"].isna().all():
-        try:
-            df = df.copy()
-            df["opponent"] = _derive_opponent(df)
-        except Exception:
-            # keep schema, never raise
-            df["opponent"] = np.nan
-    return df
-
+    cli()
