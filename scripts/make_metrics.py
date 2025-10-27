@@ -519,6 +519,8 @@ def build_metrics(season: int) -> pd.DataFrame:
     inj = load_injuries()
     wx  = load_weather()
     gl  = load_game_lines_preferring_odds()
+    pf = attach_opponent(pf, team_col="team", coverage_path="data/coverage_cb.csv")
+    tf = attach_opponent(tf, team_col="team", coverage_path="data/coverage_cb.csv")
 
     # Week inference for props (if missing)
     if "week" not in props.columns or props["week"].isna().all():
