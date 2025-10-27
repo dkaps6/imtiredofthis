@@ -1483,22 +1483,36 @@ def cli():
         print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH}")
         return
 
+    # === Replace the end of scripts/make_player_form.py with this tail ===
     except Exception as e:
-        print(f"[make_player_form] ERROR: {e}", file=sys.stderr)
+    # Log the failure
+    print(f"[make_player_form] ERROR: {e}", file=sys.stderr)
 
-        # If df exists and has rows, enrich opponents and write it rather than wiping to empty.
-        try:
-            if "df" in locals() and isinstance(df, pd.DataFrame) and len(df) > 0:
-                try:
-                    df = _enrich_team_and_opponent_from_props(df)
-                except Exception as _enr_e:
-                    print(f"[make_player_form] WARN enrichment skipped in error path: {_enr_e}", file=sys.stderr)
-                df = _ensure_cols(df, FINAL_COLS)[FINAL_COLS]
-                df.to_csv(OUTPATH, index=False)
-                print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH} (after handled error)")
-                return
-        except Exception as _w:
-            print(f"[make_player_form] WARN could not write partial df in error path: {_w}", file=sys.stderr)
+    # If df exists and has rows, write it rather than wiping out to empty.
+    try:
+        if "df" in locals() and isinstance(df, pd.DataFrame) and len(df) > 0:
+            df.to_csv(OUTPATH, index=False)
+            print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH} (after handled error)")
+            return
+    except Exception:
+        pass
+
+    # No df at all: write an empty file with the expected schema
+    empty = pd.DataFrame(columns=FINAL_COLS)
+    empty.to_csv(OUTPATH, index=False)
+    print(f"[make_player_form] Wrote 0 rows → {OUTPATH} (empty due to error)")
+    return
+
+try:
+    df = _enrich_team_and_opponent_from_props(df)
+except Exception as _enr_e:
+    print(f"[make_player_form] WARN opponent enrichment skipped: {_enr_e}", file=sys.stderr)
+
+# Final write on success
+df.to_csv(OUTPATH, index=False)
+print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH}")
+# === end of file ===
+
 
         # If nothing to write, emit a structured empty (last resort)
         empty = pd.DataFrame(columns=FINAL_COLS)
