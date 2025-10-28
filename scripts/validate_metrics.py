@@ -51,6 +51,21 @@ def main():
     if missing_p:
         errs.append(f"player_form.csv missing columns: {missing_p}")
 
+    alias_checks = {
+        "target_share": "tgt_share",
+        "yprr_proxy": "yprr",
+        "rz_carry_share": "rz_rush_share",
+    }
+    for dest, src in alias_checks.items():
+        if dest in pf.columns and src in pf.columns:
+            dest_series = pd.to_numeric(pf[dest], errors="coerce")
+            src_series = pd.to_numeric(pf[src], errors="coerce")
+            if src_series.notna().any() and src_series.abs().max() > 0:
+                if not dest_series.notna().any() or dest_series.abs().max() == 0:
+                    errs.append(
+                        f"player_form.csv column '{dest}' failed alias guard despite non-zero '{src}'"
+                    )
+
     if errs:
         print("[validate_metrics] ❌ Column errors:\n  - " + "\n  - ".join(errs), file=sys.stderr)
         sys.exit(1)

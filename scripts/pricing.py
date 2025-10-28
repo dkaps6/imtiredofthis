@@ -37,11 +37,11 @@ COVERAGE = "data/coverage.csv"
 CB_ASSIGN = "data/cb_assignments.csv"
 INJURIES = "data/injuries.csv"
 ROLES = "data/roles.csv"
-GAME_LINES = "outputs/game_lines.csv"
+GAME_LINES = ["outputs/odds_game.csv", "outputs/game_lines.csv"]  # prefer odds file; fallback to schedule
 WEATHER = "data/weather.csv"
 
 PROP_CANDIDATES = [
-    "outputs/props_raw.csv",
+    'data/metrics_ready.csv', 'outputs/metrics_ready.csv', "outputs/props_raw.csv",
     "data/props_raw.csv",
     "outputs/props_aggregated.csv",
 ]
@@ -266,6 +266,31 @@ def _fair_odds_from_prob(p: float) -> float:
         return (1.0 - p) * 100.0 / p
 
 
+def _edge_value(prob: float, market_prob: float) -> float:
+    if pd.isna(prob) or pd.isna(market_prob):
+        return np.nan
+    return float(prob) - float(market_prob)
+
+
+def _tier_from_edge(edge: float) -> str:
+    if pd.isna(edge):
+        return "RED"
+    abs_edge = abs(edge)
+    if abs_edge >= 0.06:
+        return "ELITE"
+    if abs_edge >= 0.04:
+        return "GREEN"
+    if abs_edge >= 0.01:
+        return "AMBER"
+    return "RED"
+
+
+MARKET_ALIASES = {
+    'player_pass_yds':'pass_yards','player_rush_yds':'rush_yards','player_rec_yds':'rec_yards',
+    'player_receptions':'receptions','player_rush_att':'rush_att','player_rush_rec_yds':'rush_rec_yards',
+    'anytime_touchdown':'anytime_td','atd':'anytime_td'
+}
+
 def _default_sigma_for_market(market: str) -> float:
     mk = str(market).lower()
     if mk in {"rec_yards"}:
@@ -284,6 +309,39 @@ def _default_sigma_for_market(market: str) -> float:
 
 
 def price(season: int, props_path: Optional[str] = None):
+    # Anytime TD probability from team totals + red-zone share (Bernoulli)
+    def _anytime_td_prob(row: pd.Series, tv: dict) -> float:
+        team_pts = row.get('team_total_pts')
+        if pd.isna(team_pts):
+            # fallback to home/away totals if present on lines
+            if 'home_total' in row and 'away_total' in row:
+                if row.get('team') == row.get('home_team'):
+                    team_pts = row.get('home_total')
+                elif row.get('team') == row.get('away_team'):
+                    team_pts = row.get('away_total')
+        if pd.isna(team_pts):
+            return np.nan
+        try:
+            team_pts = float(team_pts)
+        except Exception:
+            return np.nan
+        # Convert points to expected TDs (FGs exist; 6.7 pts/TD heuristic)
+        exp_tds = max(0.0, team_pts / 6.7)
+        role = str(row.get('role') or '').upper()
+        rz_tgt = row.get('rz_tgt_share'); rz_carry = row.get('rz_carry_share')
+        pass_rate = float(tv.get('pass_rate_est', np.nan)); rush_rate = float(tv.get('rush_rate_est', np.nan))
+        share = np.nan
+        if role.startswith('RB') and not pd.isna(rz_carry):
+            share = float(rz_carry) * max(0.30, rush_rate if not pd.isna(rush_rate) else 0.45)
+        elif role.startswith('TE') or role.startswith('WR'):
+            if not pd.isna(rz_tgt):
+                share = float(rz_tgt) * max(0.30, pass_rate if not pd.isna(pass_rate) else 0.55)
+        if pd.isna(share) or share <= 0:
+            return np.nan
+        lam = exp_tds * share
+        p = 1.0 - np.exp(-max(0.0, lam))
+        return float(np.clip(p, 1e-6, 1-1e-6))
+
     _ensure_dir(OUT_DIR)
 
     # Base frames
@@ -318,6 +376,8 @@ def price(season: int, props_path: Optional[str] = None):
 
     # Merge contextuals
     df = props.copy()
+    # normalize placeholder strings to real NaN so merges work
+    df = df.replace({'NAN': np.nan, 'nan': np.nan, 'NaN': np.nan, 'None': np.nan, '': np.nan})
 
     # ensure expected columns exist
     for need in ("player", "team", "opponent", "market", "line"):
@@ -332,6 +392,52 @@ def price(season: int, props_path: Optional[str] = None):
 
     if not player.empty:
         df = df.merge(player.drop_duplicates(subset=["player", "team"]), on=["player", "team"], how="left")
+
+        # Backfill from player_form_consensus if team/opponent still missing
+        try:
+            _pfc_paths = [
+                "data/player_form_consensus.csv",
+                "outputs/player_form_consensus.csv",
+            ]
+            for _p in _pfc_paths:
+                if os.path.exists(_p):
+                    _pfc = pd.read_csv(_p)
+                    _pfc.columns = [c.lower() for c in _pfc.columns]
+                    # normalize player & team
+                    if "player" in _pfc.columns:
+                        _pfc["player"] = _pfc["player"].astype(str)
+                    keep = [
+                        c
+                        for c in [
+                            "player",
+                            "team",
+                            "opponent",
+                            "position",
+                            "role",
+                            "target_share",
+                            "tgt_share",
+                            "route_rate",
+                            "rush_share",
+                            "rz_tgt_share",
+                            "rz_carry_share",
+                            "yprr_proxy",
+                            "ypt",
+                            "ypc",
+                            "ypa_prior",
+                        ]
+                        if c in _pfc.columns
+                    ]
+                    if keep:
+                        df = df.merge(
+                            _pfc[keep].drop_duplicates("player"),
+                            on="player",
+                            how="left",
+                            suffixes=("", "_pfc"),
+                        )
+                    break
+        except Exception as _e:
+            print(f"[pricing] consensus backfill skipped: {_e}", file=sys.stderr)
+    
 
     # Join team form: opponent defense context (opp_*) and own offense context (plays_est/proe)
     if not team.empty:
@@ -366,6 +472,21 @@ def price(season: int, props_path: Optional[str] = None):
     # game lines (get win prob etc.)
     if not lines.empty and "event_id" in df.columns and "event_id" in lines.columns:
         df = df.merge(lines, on="event_id", how="left")
+
+    # If opponent is still missing but we have home/away from lines, derive it
+    if "opponent" in df.columns and df["opponent"].isna().all():
+        if {"event_id","home_team","away_team","team"}.issubset(df.columns):
+            try:
+                import numpy as _np
+                df["opponent"] = _np.where(
+                    df["team"].eq(df["home_team"]), df["away_team"],
+                    _np.where(df["team"].eq(df["away_team"]), df["home_team"], _np.nan)
+                )
+            except Exception:
+                df["opponent"] = df.apply(
+                    lambda r: r["away_team"] if r["team"] == r.get("home_team") else (r["home_team"] if r["team"] == r.get("away_team") else pd.NA),
+                    axis=1
+                )
         if "home_team" in lines.columns and "away_team" in lines.columns and "team" in df.columns:
             df["team_win_prob"] = np.where(
                 df["team"].eq(df["home_team"]), df.get("home_wp", np.nan),
@@ -390,13 +511,18 @@ def price(season: int, props_path: Optional[str] = None):
     # Pricing
     out_rows: List[Dict[str, Any]] = []
     for _, row in df.iterrows():
-        mk = str(row.get("market") or "").lower()
+        mk_raw = str(row.get("market") or "").lower()
+        mk = MARKET_ALIASES.get(mk_raw, mk_raw)
         line = row.get("line")
         try:
             L = float(line)
         except Exception:
-            # if no line we can’t price
-            continue
+            # Allow Anytime TD (Yes) with a dummy line
+            if mk in {"anytime_td","anytime_touchdown","atd"}:
+                L = 0.0
+            else:
+                continue
+
 
         over_odds = row.get("over_odds")
         under_odds = row.get("under_odds")
@@ -482,28 +608,37 @@ def price(season: int, props_path: Optional[str] = None):
                 mu_model = (1.0 - VOLUME_BLEND) * mu_anchor + VOLUME_BLEND * mu_vol
 
         # Price at line using blended μ
-        p_model_over = _prob_over_at_line(mu_model, sigma, L)
+        if mk in {"anytime_td","anytime_touchdown","atd"}:
+            # Build a local team volume context (soft dep on scripts.volume)
+            try:
+                tv_local = team_volume({
+                    'plays_est': row.get('plays_est'),
+                    'pace': row.get('pace'),
+                    'proe': row.get('proe'),
+                    'def_pass_epa_z': row.get('def_pass_epa_z'),
+                    'def_rush_epa_z': row.get('def_rush_epa_z'),
+                }, script_wp=row.get('team_win_prob')) if team_volume else {}
+            except Exception:
+                tv_local = {}
+            p_yes_model = _anytime_td_prob(row, tv_local) if tv_local else np.nan
+            p_model_over = p_market_fair if pd.isna(p_yes_model) else p_yes_model
+        else:
+            p_model_over = _prob_over_at_line(mu_model, sigma, L)
         p_blend = _blend_probs(p_model_over, p_market_fair)
-        fair_over_odds = _fair_odds_from_prob(p_blend)
+        p_model_under = np.nan if pd.isna(p_model_over) else 1.0 - float(p_model_over)
+        p_blend_under = np.nan if pd.isna(p_blend) else 1.0 - float(p_blend)
+        p_market_fair_under = np.nan if pd.isna(p_market_fair) else 1.0 - float(p_market_fair)
 
-        edge = np.nan
-        if not pd.isna(p_market_fair):
-            edge = p_blend - p_market_fair
+        fair_over_odds = np.nan if pd.isna(p_blend) else _fair_odds_from_prob(float(p_blend))
+        fair_under_odds = np.nan if pd.isna(p_blend_under) else _fair_odds_from_prob(float(p_blend_under))
 
-        # Tiering
-        tier = "RED"
-        abs_edge = abs(edge) if not pd.isna(edge) else 0.0
-        if abs_edge >= 0.06:
-            tier = "ELITE"
-        elif abs_edge >= 0.04:
-            tier = "GREEN"
-        elif abs_edge >= 0.01:
-            tier = "AMBER"
+        edge_over = _edge_value(p_blend, p_market_fair)
+        edge_under = _edge_value(p_blend_under, p_market_fair_under)
+        over_strength = abs(edge_over) if not pd.isna(edge_over) else -np.inf
+        under_strength = abs(edge_under) if not pd.isna(edge_under) else -np.inf
+        bet_side = "OVER" if over_strength >= under_strength else "UNDER"
 
-        # Bet side
-        bet_side = "OVER" if p_blend >= 0.5 else "UNDER"
-
-        out = {
+        common_out = {
             "player": row.get("player"),
             "team": row.get("team"),
             "opponent": row.get("opponent"),
@@ -512,14 +647,16 @@ def price(season: int, props_path: Optional[str] = None):
             "vegas_over_odds": over_odds,
             "vegas_under_odds": under_odds,
             "vegas_over_fair_pct": p_market_fair,
+            "vegas_under_fair_pct": p_market_fair_under,
             "model_proj": mu_model,
             "model_sd": sigma,
             "model_over_pct": p_model_over,
+            "model_under_pct": p_model_under,
             "blended_over_pct": p_blend,
+            "blended_under_pct": p_blend_under,
             "fair_over_odds": fair_over_odds,
-            "edge_abs": abs_edge,
+            "fair_under_odds": fair_under_odds,
             "bet_side": bet_side,
-            "tier": tier,
             # traceability
             "wind_mph": row.get("wind_mph"),
             "precip": row.get("precip"),
@@ -531,8 +668,80 @@ def price(season: int, props_path: Optional[str] = None):
             "heavy_box_rate_z": row.get("opp_heavy_box_rate_z") or row.get("heavy_box_rate_z"),
             "coverage_tag": row.get("coverage_tag"),
             "cb_penalty": row.get("cb_penalty"),
+            # key usage/efficiency signals copied through to output
+            "tgt_share": row.get("tgt_share"),
+            "route_rate": row.get("route_rate"),
+            "rush_share": row.get("rush_share"),
+            "yprr": row.get("yprr"),
+            "ypt": row.get("ypt"),
+            "ypc": row.get("ypc"),
+            "rz_tgt_share": row.get("rz_tgt_share"),
+            "rz_carry_share": row.get("rz_carry_share"),
+            "plays_est": row.get("plays_est"),
+            "pace": row.get("pace"),
+            "proe": row.get("proe"),
+            # defensive splits (prefer opponent context when available)
+            "def_pass_epa": (
+                row.get("opp_def_pass_epa")
+                or row.get("def_pass_epa_opp")
+                or row.get("def_pass_epa")
+            ),
+            "def_rush_epa": (
+                row.get("opp_def_rush_epa")
+                or row.get("def_rush_epa_opp")
+                or row.get("def_rush_epa")
+            ),
+            "def_sack_rate": (
+                row.get("opp_def_sack_rate")
+                or row.get("def_sack_rate_opp")
+                or row.get("def_sack_rate")
+            ),
+            "light_box_rate": (
+                row.get("opp_light_box_rate")
+                or row.get("light_box_rate_opp")
+                or row.get("light_box_rate")
+            ),
+            "heavy_box_rate": (
+                row.get("opp_heavy_box_rate")
+                or row.get("heavy_box_rate_opp")
+                or row.get("heavy_box_rate")
+            ),
         }
-        out_rows.append(out)
+
+        side_map = {
+            "OVER": {
+                "prob": p_blend,
+                "market_prob": p_market_fair,
+                "book_odds": over_odds,
+                "fair_odds": fair_over_odds,
+            },
+            "UNDER": {
+                "prob": p_blend_under,
+                "market_prob": p_market_fair_under,
+                "book_odds": under_odds,
+                "fair_odds": fair_under_odds,
+            },
+        }
+
+        for side, info in side_map.items():
+            row_out = dict(common_out)
+            side_prob = info["prob"]
+            market_prob_side = info["market_prob"]
+            fair_odds_side = info["fair_odds"]
+            vegas_odds_side = info["book_odds"]
+            edge_side = _edge_value(side_prob, market_prob_side)
+
+            row_out.update({
+                "side": side,
+                "fair_prob": side_prob,
+                "market_prob": market_prob_side,
+                "vegas_odds": vegas_odds_side,
+                "fair_odds": fair_odds_side,
+                "edge_pct": edge_side,
+                "edge_abs": abs(edge_side) if not pd.isna(edge_side) else np.nan,
+                "tier": _tier_from_edge(edge_side),
+            })
+            out_rows.append(row_out)
 
     out_df = pd.DataFrame(out_rows)
     out_df.to_csv(OUT_FILE, index=False)

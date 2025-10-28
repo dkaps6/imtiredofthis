@@ -8,13 +8,15 @@ statsmodels==0.14.2
 # --- IO / utils ---
 pyarrow==12.0.1
 requests==2.32.3
-openpyxl==3.1.5
+openpyxl
 python-dateutil==2.9.0.post0
 pytz==2024.1
 polars==0.20.5
 beautifulsoup4==4.12.3
 lxml==4.9.4
+html5lib==1.1
 
 # --- nflverse + companion ---
 nfl_data_py==0.3.3
 nflreadpy==0.1.3
+
