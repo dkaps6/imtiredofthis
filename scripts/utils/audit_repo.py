@@ -31,8 +31,8 @@ EXPECTED_SCRIPTS = [
     'scripts/utils/merge_opponent_into_player_form.py','scripts/utils/io_utils.py',
 ]
 
-def headline(msg): print('
-' + '='*8 + ' ' + msg + ' ' + '='*8)
+def headline(msg):
+    print("\n" + "="*8 + " " + msg + " " + "="*8)
 
 def warn(msg): print(f"[WARN] {msg}")
 
