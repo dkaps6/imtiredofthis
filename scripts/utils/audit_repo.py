@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, sys, ast, importlib.utils, json, re, glob
+import os, sys, ast, importlib.util, json, re, glob
 from typing import List, Dict, Tuple
 
 try:
@@ -96,8 +96,8 @@ def import_check(py_path: str) -> Tuple[bool, str]:
     if not safe_importable(py_path):
         return True, ""
     try:
-        spec = importlib.utils.spec_from_file_location("audit_tmp_module", py_path)
-        mod = importlib.utils.module_from_spec(spec)
+        spec = importlib.util.spec_from_file_location("audit_tmp_module", py_path)
+        mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)  # type: ignore
         return True, ""
     except Exception as e:
