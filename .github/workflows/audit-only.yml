@@ -1,0 +1,35 @@
+name: Audit Only
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit_only:
+    name: Audit Only
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install audit deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas pyyaml
+
+      - name: Run Repo Audit
+        run: |
+          python scripts/util/audit_repo.py | tee audit_report.txt
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-report-only-${{ github.run_id }}
+          path: audit_report.txt
