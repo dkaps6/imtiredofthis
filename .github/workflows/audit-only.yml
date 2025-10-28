@@ -1,0 +1,50 @@
+name: Audit Only
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit_only:
+    name: Audit Only
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install audit deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas pyyaml openpyxl requests nflreadpy nfl_data_py
+
+      - name: Run Repo Audit
+        run: |
+          set -o pipefail
+          echo "=== STARTING AUDIT ==="
+          echo "CWD: $(pwd)"
+          ls -la scripts/utils || true
+          echo ""
+          echo "=== Running audit_repo.py ==="
+          python scripts/utils/audit_repo.py 2>&1 | tee audit_report.txt || true
+          echo ""
+          echo "=== AUDIT COMPLETE ==="
+
+          if [ ! -s audit_report.txt ]; then
+            echo "[ERROR] audit produced no output. Verify scripts/utils/audit_repo.py and dependencies." > audit_report.txt
+          fi
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-report-${{ github.run_id }}
+          path: audit_report.txt
