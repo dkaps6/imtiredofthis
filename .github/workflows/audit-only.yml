@@ -30,16 +30,16 @@ jobs:
           set -o pipefail
           echo "=== STARTING AUDIT ==="
           echo "CWD: $(pwd)"
-          ls -la scripts/util || true
+          ls -la scripts/utils || true
           echo ""
           echo "=== Running audit_repo.py ==="
-          python scripts/util/audit_repo.py 2>&1 | tee audit_report.txt
+          python scripts/utils/audit_repo.py 2>&1 | tee audit_report.txt
           echo ""
           echo "=== AUDIT COMPLETE ==="
 
           # safety net — ensure file isn’t empty
           if [ ! -s audit_report.txt ]; then
-            echo "[ERROR] audit produced no output. Check that pandas/pyyaml are installed and the path scripts/util/audit_repo.py exists." > audit_report.txt
+            echo "[ERROR] audit produced no output. Check that pandas/pyyaml are installed and the path scripts/utils/audit_repo.py exists." > audit_report.txt
           fi
 
       - name: Upload audit report
