@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, sys, ast, importlib.util, json, re, glob
+import os, sys, ast, importlib.utils, json, re, glob
 from typing import List, Dict, Tuple
 
 try:
@@ -53,7 +53,7 @@ EXPECTED_SCRIPTS = [
     "scripts/build/build_coverage_penalties.py",
     "scripts/build/build_script_escalators.py",
     "scripts/build/build_opponent_map_from_props.py",
-    "scripts/util/merge_opponent_into_player_form.py",
+    "scripts/utils/merge_opponent_into_player_form.py",
     "scripts/run_all_builds.py",
 ]
 
@@ -96,8 +96,8 @@ def import_check(py_path: str) -> Tuple[bool, str]:
     if not safe_importable(py_path):
         return True, ""
     try:
-        spec = importlib.util.spec_from_file_location("audit_tmp_module", py_path)
-        mod = importlib.util.module_from_spec(spec)
+        spec = importlib.utils.spec_from_file_location("audit_tmp_module", py_path)
+        mod = importlib.utils.module_from_spec(spec)
         spec.loader.exec_module(mod)  # type: ignore
         return True, ""
     except Exception as e:
