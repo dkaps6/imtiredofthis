@@ -10,6 +10,7 @@ jobs:
   audit_only:
     name: Audit Only
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,10 +27,23 @@ jobs:
 
       - name: Run Repo Audit
         run: |
-          python scripts/util/audit_repo.py | tee audit_report.txt
+          set -o pipefail
+          echo "=== STARTING AUDIT ==="
+          echo "CWD: $(pwd)"
+          ls -la scripts/util || true
+          echo ""
+          echo "=== Running audit_repo.py ==="
+          python scripts/util/audit_repo.py 2>&1 | tee audit_report.txt
+          echo ""
+          echo "=== AUDIT COMPLETE ==="
+
+          # safety net — ensure file isn’t empty
+          if [ ! -s audit_report.txt ]; then
+            echo "[ERROR] audit produced no output. Check that pandas/pyyaml are installed and the path scripts/util/audit_repo.py exists." > audit_report.txt
+          fi
 
       - name: Upload audit report
         uses: actions/upload-artifact@v4
         with:
-          name: audit-report-only-${{ github.run_id }}
+          name: audit-report-${{ github.run_id }}
           path: audit_report.txt
