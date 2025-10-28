@@ -115,11 +115,11 @@ jobs:
         run: |
           if [[ -f model/features/build.py ]]; then
             python - << 'PY'
-from model.features.build import build_matchup_frame
-df = build_matchup_frame()
-df.to_csv('outputs/matchup_features.csv', index=False)
-print(df.shape, '-> outputs/matchup_features.csv')
-PY
+          from model.features.build import build_matchup_frame
+          df = build_matchup_frame()
+          df.to_csv('outputs/matchup_features.csv', index=False)
+          print(df.shape, '-> outputs/matchup_features.csv')
+          PY
           else
             echo "Skipping matchup_features: model/features/build.py not present"
           fi
