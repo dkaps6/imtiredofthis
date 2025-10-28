@@ -65,13 +65,70 @@ jobs:
       # >>> make sure the team form builder comes AFTER Sharp so it can use the merged fallback
       - name: Build Game Lines
         run: python scripts/build_game_lines_from_schedule.py --season 2025
-   
+
       - name: Fetch Odds (Odds API)
         env:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
         run: python scripts/fetch_game_lines_oddsapi.py
         continue-on-error: true  # don’t fail the whole run if the API is down/rate-limited
-              # --- ELITE MODEL: install + run + upload artifacts ---
+
+      # ---------------------------------------------------------------------
+      # 🧠 NEW SECTION: Data Builders + Opponent Merge + Audit
+      # ---------------------------------------------------------------------
+
+      - name: Install build+audit deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas pyyaml
+
+      - name: Ensure folders
+        run: |
+          mkdir -p data
+          mkdir -p outputs
+
+      - name: Build data inputs
+        run: |
+          python scripts/build/build_cb_coverage_team.py || true
+          python scripts/build/build_cb_coverage_player.py || true
+          python scripts/build/build_weather_week.py || true
+          python scripts/build/build_injuries_weekly.py || true
+          python scripts/build/build_qb_run_metrics.py || true
+          python scripts/build/build_wr_cb_exposure.py || true
+          python scripts/build/build_play_volume_splits.py || true
+          python scripts/build/build_volatility_widening.py || true
+          python scripts/build/build_run_pass_funnel.py || true
+          python scripts/build/build_coverage_penalties.py || true
+          python scripts/build/build_script_escalators.py || true
+          python scripts/build/build_opponent_map_from_props.py || true
+
+      - name: Merge opponents into player_form_consensus (fixes "ALL")
+        run: |
+          if [[ -f data/opponent_map_from_props.csv && -f data/player_form_consensus.csv ]]; then
+            python scripts/util/merge_opponent_into_player_form.py
+          else
+            echo "Skipping merge: missing data/opponent_map_from_props.csv or data/player_form_consensus.csv"
+          fi
+
+      - name: Build unified matchup features (optional)
+        run: |
+          if [[ -f model/features/build.py ]]; then
+            python - << 'PY'
+from model.features.build import build_matchup_frame
+df = build_matchup_frame()
+df.to_csv('outputs/matchup_features.csv', index=False)
+print(df.shape, '-> outputs/matchup_features.csv')
+PY
+          else
+            echo "Skipping matchup_features: model/features/build.py not present"
+          fi
+
+      - name: Repo Audit (syntax/import/yaml/data schema)
+        run: |
+          python scripts/util/audit_repo.py | tee audit_report.txt
+
+      # ---------------------------------------------------------------------
+      # --- ELITE MODEL: install + run + upload artifacts ---
+      # ---------------------------------------------------------------------
       - name: Elite model | Install deps
         run: |
           python -m pip install --upgrade pip
@@ -94,6 +151,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
       # --- /ELITE MODEL ---
+
       - name: Run pipeline
         run: |
           python -m engine --season "${{ github.event.inputs.season }}" --date "" --bookmakers=""
@@ -103,9 +161,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: run_${{ github.run_id }}
-          # Note: the sharp dump files have specific names now; this glob is safe
           path: |
             outputs/**
             data/*.csv
             data/_sharp_dump_*.html
+            audit_report.txt
           if-no-files-found: warn
