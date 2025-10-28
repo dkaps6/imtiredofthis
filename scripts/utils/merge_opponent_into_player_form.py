@@ -3,12 +3,12 @@ import pandas as pd
 
 PF = "data/player_form_consensus.csv"
 OM = "data/opponent_map_from_props.csv"
-OUT = PF  # overwrite in place
+OUT = PF
 
 def norm(s):
     return (s.astype(str)
-              .str.replace(r"[^A-Za-z\-\.\' ]", "", regex=True)
-              .str.replace(r"\s+", " ", regex=True)
+              .str.replace(r"[^A-Za-z\\-\\.\\' ]", "", regex=True)
+              .str.replace(r"\\s+", " ", regex=True)
               .str.strip()
               .str.lower())
 
@@ -22,7 +22,6 @@ for c in ("player","team","opponent"):
 pf["player_key"] = norm(pf["player"] if "player" in pf.columns else pd.Series([]))
 om["player_key"] = norm(om["player"] if "player" in om.columns else pd.Series([]))
 
-# prefer (player, team, week) then fallback (player, week)
 keys1 = [k for k in ["player_key","team","week"] if k in pf.columns and (k in om.columns or k=="player_key")]
 keys2 = [k for k in ["player_key","week"] if k in pf.columns and k in om.columns]
 
