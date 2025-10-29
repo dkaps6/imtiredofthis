@@ -153,12 +153,12 @@ def scan_workflows() -> List[str]:
 def simple_schema_hints() -> Dict[str, List[str]]:
     return {
         "player_form_consensus.csv": ["player", "team", "week"],
-        "opponent_map_from_props.csv": ["player", "team", "week", "opponent"],
+        "opponent_map_from_props.csv": ["player", "team", "opponent", "week"],
         "cb_coverage_team.csv": ["team"],
         "weather_week.csv": ["team", "opponent", "week"],
         "injuries_weekly.csv": ["player", "team", "week"],
         "qb_designed_runs.csv": ["player", "week"],
-        "wr_cb_exposure.csv": ["player", "opponent", "week"],
+        "wr_cb_exposure.csv": ["player", "player_pf", "team", "opponent"],
         "play_volume_splits.csv": ["team", "week"],
         "volatility_widening.csv": ["team", "week"],
         "run_pass_funnel.csv": ["team", "week"],
