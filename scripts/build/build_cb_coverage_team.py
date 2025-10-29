@@ -52,7 +52,8 @@ def fetch_sharp_coverage() -> pd.DataFrame:
         try:
             resp = requests.get(SHARP_URL, headers=HDRS, timeout=45)
             resp.raise_for_status()
-            tables = pd.read_html(resp.text)
+            html = resp.text
+            tables = pd.read_html(html)
             if not tables:
                 raise ValueError("no tables returned")
             target = tables[0]
@@ -84,20 +85,27 @@ def fetch_sharp_coverage() -> pd.DataFrame:
                     df[col] = pd.to_numeric(cleaned, errors="coerce") / 100.0
             df["team"] = df.get("team_name", "").map(TEAM_NAME_TO_ABBR)
             df = df.dropna(subset=["team"])
-            return df[["team", "man_rate", "zone_rate"]]
-        except Exception:
-            if attempt == 2:
-                break
+            df = df[["team", "man_rate", "zone_rate"]]
+            if df.empty:
+                debug_dir = Path("data/_debug")
+                debug_dir.mkdir(parents=True, exist_ok=True)
+                debug_path = debug_dir / "_build_cb_coverage_team.py.html"
+                debug_path.write_text(html, encoding="utf-8")
+                raise RuntimeError("Coverage table parsed empty. Inspect DOM selectors.")
+            return df
+        except Exception as exc:
+            if isinstance(exc, RuntimeError) or attempt == 2:
+                raise
             time.sleep(2 * (attempt + 1))
-    return pd.DataFrame(columns=OUTPUT_COLS)
+    raise RuntimeError("Failed to fetch coverage table from Sharp Football Analysis after 3 attempts.")
 
 
 def main(out_path: str | None = None) -> None:
     df = fetch_sharp_coverage()
     if df.empty:
-        df = pd.DataFrame(columns=OUTPUT_COLS)
-    else:
-        df = df.drop_duplicates(subset=["team"]).sort_values("team").reset_index(drop=True)
+        raise RuntimeError("Coverage table parsed empty. Inspect DOM selectors.")
+
+    df = df.drop_duplicates(subset=["team"]).sort_values("team").reset_index(drop=True)
 
     target = Path(out_path or "data/cb_coverage_team.csv")
     target.parent.mkdir(parents=True, exist_ok=True)
