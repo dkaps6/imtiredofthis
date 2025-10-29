@@ -2,61 +2,71 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Iterable
+from typing import List
 
 import pandas as pd
-import requests
-
-PBP_MIRRORS: Iterable[str] = (
-    "https://github.com/nflverse/nflverse-data/releases/download/pbp/pbp_2025.csv.gz",
-    "https://raw.githubusercontent.com/nflverse/nflfastR-data/master/data/play_by_play/pbp_2025.csv.gz",
-    "https://github.com/nflverse/nflfastR-data/raw/master/data/play_by_play/pbp_2025.csv.gz",
-)
-
-CACHE_PATH = Path("data/_cache/pbp_2025.csv.gz")
-_MIN_BYTES = 1_000_000
-_CHUNK_SIZE = 65536
 
 
-def _ensure_cache_dir(path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+def _load_pbp_with_nfl_data_py(seasons: List[int]) -> pd.DataFrame:
+    try:
+        from nfl_data_py import import_pbp
+    except Exception as e:  # pragma: no cover - import guard
+        raise RuntimeError(f"nfl_data_py not available: {e}")
+    df = import_pbp(seasons)
+    if df is None or df.empty:
+        raise RuntimeError("nfl_data_py.import_pbp returned empty DataFrame")
+    return df
 
 
-def _download_to_cache(url: str, path: Path) -> None:
-    with requests.get(url, stream=True, timeout=120) as response:
-        response.raise_for_status()
-        with open(path, "wb") as handle:
-            for chunk in response.iter_content(chunk_size=_CHUNK_SIZE):
-                if chunk:
-                    handle.write(chunk)
+def _load_pbp_with_nflreadpy(seasons: List[int]) -> pd.DataFrame:
+    try:
+        from nflreadpy import load_pbp
+    except Exception as e:  # pragma: no cover - import guard
+        raise RuntimeError(f"nflreadpy not available: {e}")
+    df = load_pbp(seasons)
+    try:
+        import polars as pl  # type: ignore
+
+        if isinstance(df, pl.DataFrame):
+            df = df.to_pandas()
+    except Exception:
+        pass
+    if df is None or len(df) == 0:
+        raise RuntimeError("nflreadpy.load_pbp returned empty DataFrame")
+    return df
 
 
-def get_pbp_2025() -> pd.DataFrame:
-    """Fetch the 2025 nflverse play-by-play file with fallbacks.
+def get_pbp_2025(min_rows: int = 100000) -> pd.DataFrame:
+    """Load the 2025 play-by-play data via maintained libraries.
 
-    Downloads each mirror sequentially until one succeeds, streaming to disk to
-    avoid loading large responses into memory. The cached file is validated to
-    exceed 1 MB before being parsed.
+    The loader prioritizes :mod:`nfl_data_py` with :mod:`nflreadpy` as a
+    fallback. A minimum row threshold is enforced to avoid propagating partial
+    or empty results through downstream builders.
     """
 
-    _ensure_cache_dir(CACHE_PATH)
-    last_error: Exception | None = None
+    seasons = [2025]
+    errors = []
 
-    for url in PBP_MIRRORS:
-        try:
-            _download_to_cache(url, CACHE_PATH)
-            if CACHE_PATH.stat().st_size <= _MIN_BYTES:
-                last_error = RuntimeError(f"Downloaded file from {url} is too small")
-                CACHE_PATH.unlink(missing_ok=True)
-                continue
-            df = pd.read_csv(CACHE_PATH, compression="gzip", low_memory=False)
-            return df
-        except Exception as err:  # noqa: PERF203 - we want the last error message
-            last_error = err
-            CACHE_PATH.unlink(missing_ok=True)
-            continue
+    try:
+        df = _load_pbp_with_nfl_data_py(seasons)
+        if len(df) < min_rows:
+            raise RuntimeError(
+                f"nfl_data_py PBP rows too small: {len(df)} < {min_rows}"
+            )
+        return df.reset_index(drop=True)
+    except Exception as e:
+        errors.append(f"nfl_data_py: {e}")
+
+    try:
+        df = _load_pbp_with_nflreadpy(seasons)
+        if len(df) < min_rows:
+            raise RuntimeError(
+                f"nflreadpy PBP rows too small: {len(df)} < {min_rows}"
+            )
+        return df.reset_index(drop=True)
+    except Exception as e:
+        errors.append(f"nflreadpy: {e}")
 
     raise RuntimeError(
-        f"Unable to fetch 2025 pbp from mirrors. Last error: {last_error}"
+        "Unable to fetch 2025 PBP via libraries. Errors: " + " | ".join(errors)
     )
