@@ -16,19 +16,21 @@ if str(REPO_ROOT) not in sys.path:
 from scripts.config import FILES, ROOT
 
 
-def _check(path: str, cols: list[str]):
+def _check(path: str, cols: list[str] | None = None):
     if not os.path.exists(path):
         raise RuntimeError(f"Missing required file: {path}")
     df = pd.read_csv(path)
     if df.empty:
         raise RuntimeError(f"{path} exists but is empty")
-    missing = [c for c in cols if c not in df.columns]
-    if missing:
-        raise RuntimeError(f"{path} missing required columns: {missing}")
+    if cols:
+        missing = [c for c in cols if c not in df.columns]
+        if missing:
+            raise RuntimeError(f"{path} missing required columns: {missing}")
     return df
 
 
 # Required core inputs
+_check("data/roles_ourlads.csv")
 pf = _check("data/player_form_consensus.csv", ["player", "team", "week", "opponent"])
 om = _check("data/opponent_map_from_props.csv", ["team", "opponent", "week"])
 

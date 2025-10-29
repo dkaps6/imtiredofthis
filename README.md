@@ -217,7 +217,7 @@ Artifacts:
 
 ### What to do next
 
-1. **Prime the data folders.** Drop any external scouting or share tables into `data/`. The builders now auto-detect both the `*_form.csv` files *and* the raw `espn_*.csv`, `msf_*.csv`, `apisports_*.csv`, and `gsis_*.csv` exports that already ship in this repo.
+1. **Prime the data folders.** Drop any external scouting or share tables into `data/`. The builders now auto-detect both the `*_form.csv` files *and* the raw `msf_*.csv`, `apisports_*.csv`, and `gsis_*.csv` exports that already ship in this repo.
 2. **Build team context:** `python scripts/make_team_form.py --season 2025`
    *The builder reuses any cached `data/pbp_2025.csv` (or `external/nflverse_bundle/pbp_2025.csv`) before hitting nflverse. If 2025 PBP cannot be reached the script halts so you never blend in older seasons.*
 3. **Build player usage:** `python scripts/make_player_form.py --season 2025`

@@ -376,20 +376,18 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
         s = re.sub(r"\s+", " ", s).strip().title()
         return "" if s == "U" else s
 
-    try:
-        roles_espn = pd.read_csv(os.path.join(data_dir, "roles_espn.csv"))
-    except Exception:
-        roles_espn = pd.DataFrame(columns=["team", "player", "role"])
-    try:
-        roles_ourlads = pd.read_csv(os.path.join(data_dir, "roles_ourlads.csv"))
-    except Exception:
-        roles_ourlads = pd.DataFrame(columns=["team", "player", "role"])
-    roles = pd.concat([roles_espn, roles_ourlads], ignore_index=True, sort=False)
-    if roles.empty:
-        print(
-            "[make_player_form] No roles_espn or roles_ourlads found, skipping merge."
+    roles_path = os.path.join(data_dir, "roles_ourlads.csv")
+    if not os.path.exists(roles_path):
+        raise RuntimeError(
+            "roles_ourlads.csv missing. Run build_depth_charts_ourlads.py before make_player_form.py"
         )
-        return pf
+
+    roles = pd.read_csv(roles_path)
+    if roles.empty:
+        raise RuntimeError(
+            "roles_ourlads.csv is empty. Check Ourlads scraper/selectors."
+        )
+
     for col in ("team", "player", "role"):
         if col in roles.columns:
             roles[col] = roles[col].astype(str)

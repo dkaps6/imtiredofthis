@@ -44,7 +44,6 @@ def ensure_dirs() -> None:
 # These are read at runtime; do NOT hardcode values here.
 ENV = {
     "ODDS_API_KEY": os.getenv("ODDS_API_KEY", "").strip(),
-    "ESPN_COOKIE": os.getenv("ESPN_COOKIE", "").strip(),              # "SWID={...}; espn_s2=..."
     "NFLGSIS_USER": os.getenv("NFLGSIS_USER", "").strip(),
     "NFLGSIS_PASS": os.getenv("NFLGSIS_PASS", "").strip(),
     "MSF_API_KEY": os.getenv("MSF_API_KEY", "").strip(),

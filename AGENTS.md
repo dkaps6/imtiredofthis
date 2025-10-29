@@ -34,7 +34,6 @@ This playbook is written for an *automation agent* (LLM/runner) to execute tasks
 - **Install**: `pip install -r requirements.txt` (if present). If not, install standard libs used here: `pandas`, `requests`, `numpy`, `pyyaml`, etc.
 - **Environment variables / Secrets** (GitHub Actions uses these):
 - `APISPORTS_KEY`
-- `ESPN_COOKIE`
 - `MSF_KEY`
 - `MSF_PASSWORD`
 - `NFLGSIS_PASSWORD`
@@ -48,7 +47,6 @@ This playbook is written for an *automation agent* (LLM/runner) to execute tasks
 ```env
 APISPORTS_KEY=...
 ODDS_API_KEY=...
-ESPN_COOKIE=...
 MSF_KEY=...
 MSF_PASSWORD=...
 NFLGSIS_USERNAME=...
@@ -107,7 +105,6 @@ python scripts/providers/injuries.py --season 2025 --date YYYY-MM-DD
 
 ```bash
 python scripts/providers/gsis_pull.py --season 2025
-python scripts/providers/espn_pull.py --season 2025
 python scripts/providers/apisports_pull.py --season 2025
 python scripts/providers/msf_pull.py --season 2025
 ```
@@ -197,8 +194,6 @@ The agent should use config defaults when CLI flags are omitted.
 
 - **OurLads HTML artifacts**: Names may include suffix numerals or spacing. Always strip to canonical `player` and preserve `position`. Log examples to `logs/ourlads_*.log`.
 
-- **ESPN depth chart empty**: Not fatal; keep running other providers.
-
 - **Sharp pages 403/structure shifts**: The Sharp puller renders HTML locally and selects tables by header signature. If zero rows, retry once; then continue.
 
 - **Odds API rate‑limits**: Back off and retry with exponential wait; if still failing, proceed with whatever markets are cached or skip to feature building.
@@ -220,7 +215,7 @@ Workflow: `/mnt/data/repo/imtiredofthis-main/.github/workflows/full-slate.yml` (
 
 - Dispatch inputs: `season`, `date`
 
-- Env secrets: APISPORTS_KEY, ESPN_COOKIE, MSF_KEY, MSF_PASSWORD, NFLGSIS_PASSWORD, NFLGSIS_USERNAME, ODDS_API_KEY
+- Env secrets: APISPORTS_KEY, MSF_KEY, MSF_PASSWORD, NFLGSIS_PASSWORD, NFLGSIS_USERNAME, ODDS_API_KEY
 
 - Typical job: setup → providers → features → pricing → artifacts upload
 
@@ -267,7 +262,7 @@ Expected: `data/team_form.csv`, `data/player_form.csv`, `outputs/props_raw.csv`,
 
 ```
 [RUN] 2025-10-19T00:00Z
-- providers: sharp=OK ourlads=OK injuries=SKIP espn=EMPTY gsis=OK apisports=SKIP msf=SKIP
+- providers: sharp=OK ourlads=OK injuries=SKIP gsis=OK apisports=SKIP msf=SKIP
 - props: 3 markets, 2 books → 412 rows
 - features: team_form=32 rows, player_form=~600 rows
 - metrics: 400 joined rows (12 columns added)
