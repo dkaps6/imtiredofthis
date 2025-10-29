@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import re
-import sys
 import time
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 import requests
@@ -11,6 +11,7 @@ HDRS = {"User-Agent": "FullSlate/CI (+github-actions)"}
 ROTOWIRE_URL = "https://www.rotowire.com/football/player-alignment.php"
 SHARP_URL = "https://www.sharpfootballanalysis.com/stats-nfl/nfl-coverage-schemes/"
 ROTOBALLER_URL = "https://www.rotoballer.com/wr-cb-matchups"
+DEBUG_HTML_PATH = Path("data") / "_debug" / "_build_cb_coverage_player.py.html"
 
 TEAM_NAME_TO_ABBR = {
     "Arizona Cardinals": "ARI",
@@ -76,18 +77,38 @@ def fetch_tables(url: str) -> list[pd.DataFrame]:
 
 
 def fetch_rotowire_alignment() -> pd.DataFrame:
-    tables = fetch_tables(ROTOWIRE_URL)
-    if not tables:
-        return pd.DataFrame(columns=["player", "team", "slot_pct", "wide_pct"])
-
-    target = tables[0]
-    for table in tables:
-        cols = [str(c).lower() for c in table.columns]
-        if any("player" in c for c in cols) and any("slot" in c for c in cols) and (
-            any("outside" in c for c in cols) or any("wide" in c for c in cols)
-        ) and any("team" in c for c in cols):
-            target = table
+    last_html: Optional[str] = None
+    last_exc: Optional[Exception] = None
+    target: Optional[pd.DataFrame] = None
+    for attempt in range(3):
+        try:
+            resp = requests.get(ROTOWIRE_URL, headers=HDRS, timeout=45)
+            resp.raise_for_status()
+            last_html = resp.text
+            tables = pd.read_html(last_html)
+            if not tables:
+                raise ValueError("no tables found in Rotowire alignment page")
+            target = tables[0]
+            for table in tables:
+                cols = [str(c).lower() for c in table.columns]
+                if any("player" in c for c in cols) and any("slot" in c for c in cols) and (
+                    any("outside" in c for c in cols) or any("wide" in c for c in cols)
+                ) and any("team" in c for c in cols):
+                    target = table
+                    break
             break
+        except Exception as exc:  # pragma: no cover - network/HTML shifts
+            last_exc = exc
+            if attempt < 2:
+                time.sleep(2 * (attempt + 1))
+
+    if target is None:
+        if last_html:
+            DEBUG_HTML_PATH.parent.mkdir(parents=True, exist_ok=True)
+            DEBUG_HTML_PATH.write_text(last_html)
+        if last_exc:
+            raise last_exc
+        return pd.DataFrame(columns=["player", "team", "slot_pct", "wide_pct"])
 
     df = target.loc[:, ~target.columns.duplicated()].copy()
     colmap = {}
@@ -217,13 +238,9 @@ def build_cb_coverage_player() -> pd.DataFrame:
 def main() -> None:
     out_path = Path("data") / "cb_coverage_player.csv"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        df = build_cb_coverage_player()
-    except Exception as exc:  # pragma: no cover - defensive fallback
-        print(f"[build_cb_coverage_player] ERROR: {exc}")
-        df = pd.DataFrame(columns=OUTPUT_COLS)
+    df = build_cb_coverage_player()
     if df.empty:
-        df = pd.DataFrame(columns=OUTPUT_COLS)
+        raise RuntimeError("Coverage table parsed empty. Inspect DOM selectors.")
     df.to_csv(out_path, index=False)
     print(f"[build_cb_coverage_player] wrote {out_path} with {len(df)} rows.")
 
