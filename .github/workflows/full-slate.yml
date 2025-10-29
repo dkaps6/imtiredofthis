@@ -112,11 +112,31 @@ jobs:
           python scripts/build/build_script_escalators.py || true
           python scripts/build/build_opponent_map_from_props.py || true
 
+      - name: Ensure header stubs (pre-merge)
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import csv
+
+          def ensure_header(path, cols):
+              p = Path(path)
+              p.parent.mkdir(parents=True, exist_ok=True)
+              if not p.exists() or p.stat().st_size == 0:
+                  with p.open("w", newline="") as f:
+                      csv.writer(f).writerow(cols)
+
+          ensure_header("data/player_form_consensus.csv", ["player","team","week","opponent"])
+          ensure_header(
+              "data/opponent_map_from_props.csv",
+              ["player","team","opponent","week","season","game_timestamp"],
+          )
+          print("[full-slate] header stubs ensured")
+          PY
+
       - name: Merge opponents into player_form_consensus (fixes "ALL")
         run: |
           if [[ -f data/opponent_map_from_props.csv && -f data/player_form_consensus.csv ]]; then
             python scripts/utils/merge_opponent_into_player_form.py
-            python scripts/util/merge_opponent_into_player_form.py
           else
             echo "Skipping merge: missing data/opponent_map_from_props.csv or data/player_form_consensus.csv"
           fi
