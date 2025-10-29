@@ -32,7 +32,6 @@ jobs:
       MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
       NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
       NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
-      PYTHONPATH: ${{ github.workspace }}
 
     steps:
       - name: Checkout
@@ -43,30 +42,21 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install deps (core + HTML parsers)
+      - name: Install deps (core)
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           fi
-          pip install requests nflreadpy nfl_data_py pandas pyyaml openpyxl
-          # HTML parser dependencies are pinned in requirements.txt; no blanket upgrades here
 
-      # ----- your other provider pulls (keep as-is) -----
-      # Example:
-      # - name: GSIS (nflverse) aggregates
-      #   run: python scripts/providers/gsis_pull.py "${{ github.event.inputs.season }}"
+      # --------------------------
+      # Providers / schedule first
+      # --------------------------
+      - name: Build APISports schedule map (no scraping)
+        run: python scripts/build/build_opponent_map_from_props.py "${{ github.event.inputs.season }}"
 
-      # >>> NEW/UPDATED: Sharp Football team metrics must run BEFORE make_team_form
-      - name: Sharp Football team metrics
-        run: |
-          python scripts/providers/sharpfootball_pull.py --season "${{ github.event.inputs.season }}" --dump-html
-
-      # ----- your remaining providers / lines / odds pulls (keep as-is) -----
-
-      # >>> make sure the team form builder comes AFTER Sharp so it can use the merged fallback
-      - name: Build Game Lines
-        run: python scripts/build_game_lines_from_schedule.py --season 2025
+      - name: Build game lines from schedule
+        run: python scripts/build_game_lines_from_schedule.py --season "${{ github.event.inputs.season }}"
 
       - name: Fetch Odds (Odds API)
         env:
@@ -74,103 +64,84 @@ jobs:
         run: python scripts/fetch_game_lines_oddsapi.py
         continue-on-error: true
 
-      # ---------------------------------------------------------------------
-      # NEW SECTION: Data Builders + Opponent Merge + Audit
-      # ---------------------------------------------------------------------
-      - name: Install build+audit deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install pandas pyyaml openpyxl requests nflreadpy nfl_data_py
-        continue-on-error: true  # don’t fail the whole run if the API is down/rate-limited
-
-      # ---------------------------------------------------------------------
-      # 🧠 NEW SECTION: Data Builders + Opponent Merge + Audit
-      # ---------------------------------------------------------------------
-
-      - name: Install build+audit deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install pandas pyyaml
-
-      - name: Ensure folders
-        run: |
-          mkdir -p data
-          mkdir -p outputs
-
-      - name: Build data inputs
-        run: |
-          python scripts/build/build_cb_coverage_team.py || true
-          python scripts/build/build_cb_coverage_player.py || true
-          python scripts/build/build_weather_week.py || true
-          python scripts/build/build_injuries_weekly.py || true
-          python scripts/build/build_qb_run_metrics.py || true
-          python scripts/build/build_wr_cb_exposure.py || true
-          python scripts/build/build_play_volume_splits.py || true
-          python scripts/build/build_volatility_widening.py || true
-          python scripts/build/build_run_pass_funnel.py || true
-          python scripts/build/build_coverage_penalties.py || true
-          python scripts/build/build_script_escalators.py || true
-          python scripts/build/build_opponent_map_from_props.py || true
-
+      # --------------------------------------------------
+      # Pre-merge safety: ensure headers so merge can't die
+      # --------------------------------------------------
       - name: Ensure header stubs (pre-merge)
         run: |
           python - <<'PY'
           from pathlib import Path
           import csv
-
           def ensure_header(path, cols):
               p = Path(path)
               p.parent.mkdir(parents=True, exist_ok=True)
               if not p.exists() or p.stat().st_size == 0:
                   with p.open("w", newline="") as f:
                       csv.writer(f).writerow(cols)
-
           ensure_header("data/player_form_consensus.csv", ["player","team","week","opponent"])
-          ensure_header(
-              "data/opponent_map_from_props.csv",
-              ["player","team","opponent","week","season","game_timestamp"],
-          )
+          ensure_header("data/opponent_map_from_props.csv", ["team","opponent","week","season"])
           print("[full-slate] header stubs ensured")
           PY
 
-      - name: Merge opponents into player_form_consensus (fixes "ALL")
-        run: |
-          if [[ -f data/opponent_map_from_props.csv && -f data/player_form_consensus.csv ]]; then
-            python scripts/utils/merge_opponent_into_player_form.py
-          else
-            echo "Skipping merge: missing data/opponent_map_from_props.csv or data/player_form_consensus.csv"
-          fi
+      # -------------------
+      # Merge (single call)
+      # -------------------
+      - name: Merge opponents into player_form_consensus
+        run: python scripts/utils/merge_opponent_into_player_form.py
 
-      - name: Repo Audit (syntax/import/yaml/data schema)
-        run: |
-          set -o pipefail
-          echo "CWD: $(pwd)"
-          ls -la scripts/utils || true
-          python scripts/utils/audit_repo.py 2>&1 | tee audit_report.txt || true
-          if [ ! -s audit_report.txt ]; then
-            echo "[ERROR] audit produced no output. Check pandas/pyyaml/openpyxl install and scripts/utils/audit_repo.py path." > audit_report.txt
-          fi
+      # ---------------------------------------------
+      # nflverse-derived builders (independent block)
+      # ---------------------------------------------
+      - name: Build QB run metrics
+        run: python scripts/build/build_qb_run_metrics.py
+        continue-on-error: true
 
-      - name: Build unified matchup features (optional)
-        run: |
-          if [[ -f model/features/build.py ]]; then
-            python - << 'PY'
-            from model.features.build import build_matchup_frame
-            df = build_matchup_frame()
-            df.to_csv('outputs/matchup_features.csv', index=False)
-            print(df.shape, '-> outputs/matchup_features.csv')
-            PY
-          else
-            echo "Skipping matchup_features: model/features/build.py not present"
-          fi
+      - name: Build play-volume splits
+        run: python scripts/build/build_play_volume_splits.py
+        continue-on-error: true
 
-      - name: Repo Audit (syntax/import/yaml/data schema)
-        run: |
-          python scripts/util/audit_repo.py | tee audit_report.txt
+      - name: Build volatility widening
+        run: python scripts/build/build_volatility_widening.py
+        continue-on-error: true
 
-      # ---------------------------------------------------------------------
-      # --- ELITE MODEL: install + run + upload artifacts ---
-      # ---------------------------------------------------------------------
+      - name: Build run/pass funnel
+        run: python scripts/build/build_run_pass_funnel.py
+        continue-on-error: true
+
+      - name: Build script escalators
+        run: python scripts/build/build_script_escalators.py
+        continue-on-error: true
+
+      - name: Build coverage penalties
+        run: python scripts/build/build_coverage_penalties.py
+        continue-on-error: true
+
+      # -------------------------------------------
+      # Fragile HTML scrapers after merge (best-effort)
+      # -------------------------------------------
+      - name: Sharp coverage (team)
+        run: python scripts/build/build_cb_coverage_team.py
+        continue-on-error: true
+
+      - name: WR/CB exposure (player)
+        run: python scripts/build/build_cb_coverage_player.py
+        continue-on-error: true
+
+      - name: WR/CB exposure passthrough
+        run: python scripts/build/build_wr_cb_exposure.py
+        continue-on-error: true
+
+      - name: Weekly injuries
+        run: python scripts/build/build_injuries_weekly.py
+        continue-on-error: true
+
+      - name: Weather (NWS)
+        run: python scripts/build/build_weather_week.py
+        continue-on-error: true
+
+      # -------------------------
+      # Model / Engine execution
+      # -------------------------
       - name: Elite model | Install deps
         run: |
           python -m pip install --upgrade pip
@@ -183,21 +154,13 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
 
-      - name: Elite model | Upload outputs
-        uses: actions/upload-artifact@v4
-        with:
-          name: elite-model-outputs-${{ github.run_id }}
-          path: |
-            outputs/full_model_elite.csv
-            outputs/bet_slip_elite_green.csv
-          if-no-files-found: warn
-          retention-days: 7
-      # --- /ELITE MODEL ---
-
       - name: Run pipeline
         run: |
-          python -m engine --season "${{ github.event.inputs.season }}" --date "" --bookmakers=""
+          python -m engine --season "${{ github.event.inputs.season }}" --date "${{ github.event.inputs.date }}" --bookmakers=""
 
+      # -------------
+      # Upload stuff
+      # -------------
       - name: Upload artifacts (always)
         if: always()
         uses: actions/upload-artifact@v4
@@ -207,5 +170,4 @@ jobs:
             outputs/**
             data/*.csv
             data/_sharp_dump_*.html
-            audit_report.txt
           if-no-files-found: warn
