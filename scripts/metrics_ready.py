@@ -15,6 +15,29 @@ if str(REPO_ROOT) not in sys.path:
 
 from scripts.config import FILES, ROOT
 
+
+def _check(path: str, cols: list[str]):
+    if not os.path.exists(path):
+        raise RuntimeError(f"Missing required file: {path}")
+    df = pd.read_csv(path)
+    if df.empty:
+        raise RuntimeError(f"{path} exists but is empty")
+    missing = [c for c in cols if c not in df.columns]
+    if missing:
+        raise RuntimeError(f"{path} missing required columns: {missing}")
+    return df
+
+
+# Required core inputs
+pf = _check("data/player_form_consensus.csv", ["player", "team", "week", "opponent"])
+om = _check("data/opponent_map_from_props.csv", ["team", "opponent", "week"])
+
+# Optional: assert minimum unique weeks for a weekly slate (uncomment if desired)
+# if om['week'].nunique() != 1:
+#     raise RuntimeError(f"Expected a single-week slate in opponent_map; found weeks: {sorted(om['week'].unique().tolist())}")
+
+print("[metrics_ready] ✅ core inputs present and valid")
+
 REQUIRED: dict[str, Sequence[str]] = {
     os.path.join("data", "player_form_consensus.csv"): (
         "player",
