@@ -8,40 +8,49 @@ import pandas as pd
 
 
 def _load_pbp_with_nfl_data_py(seasons: List[int]) -> pd.DataFrame:
+    # Try both import names across versions
     try:
         from nfl_data_py import import_pbp
-    except Exception as e:  # pragma: no cover - import guard
-        raise RuntimeError(f"nfl_data_py not available: {e}")
-    df = import_pbp(seasons)
-    if df is None or df.empty:
-        raise RuntimeError("nfl_data_py.import_pbp returned empty DataFrame")
+        df = import_pbp(seasons)
+    except Exception:
+        try:
+            from nfl_data_py import import_pbp_data
+            df = import_pbp_data(seasons)
+        except Exception as e:
+            raise RuntimeError(f"nfl_data_py unavailable: {e}")
+    if df is None or len(df) == 0:
+        raise RuntimeError("nfl_data_py returned empty PBP")
     return df
 
 
 def _load_pbp_with_nflreadpy(seasons: List[int]) -> pd.DataFrame:
+    # nflreadpy API differences accounted for
     try:
         from nflreadpy import load_pbp
-    except Exception as e:  # pragma: no cover - import guard
-        raise RuntimeError(f"nflreadpy not available: {e}")
-    df = load_pbp(seasons)
+        df = load_pbp(seasons)
+    except Exception:
+        try:
+            from nflreadpy import import_pbp
+            df = import_pbp(season=seasons[0] if len(seasons) == 1 else seasons)
+        except Exception as e:
+            raise RuntimeError(f"nflreadpy unavailable: {e}")
+    # Convert Polars → pandas if needed
     try:
-        import polars as pl  # type: ignore
+        import polars as pl
 
         if isinstance(df, pl.DataFrame):
             df = df.to_pandas()
     except Exception:
         pass
     if df is None or len(df) == 0:
-        raise RuntimeError("nflreadpy.load_pbp returned empty DataFrame")
+        raise RuntimeError("nflreadpy returned empty PBP")
     return df
 
 
-def get_pbp_2025(min_rows: int = 100000) -> pd.DataFrame:
-    """Load the 2025 play-by-play data via maintained libraries.
-
-    The loader prioritizes :mod:`nfl_data_py` with :mod:`nflreadpy` as a
-    fallback. A minimum row threshold is enforced to avoid propagating partial
-    or empty results through downstream builders.
+def get_pbp_2025(min_rows: int = 80000) -> pd.DataFrame:
+    """
+    Load 2025 PBP using maintained libraries (multiple fallbacks).
+    Enforce a minimum row threshold; raise RuntimeError on failure.
     """
 
     seasons = [2025]

@@ -49,7 +49,7 @@ def choose_qb_name(row, qb_names) -> str:
 
 
 def main():
-    pbp = get_pbp_2025()
+    pbp = get_pbp_2025(min_rows=80000)
     if "season" in pbp.columns:
         pbp = pbp[pbp["season"] == 2025].copy()
     if len(pbp) <= 1000:
