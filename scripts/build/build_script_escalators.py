@@ -17,76 +17,92 @@
 # - nflverse/nflfastR 2025 PBP (public GitHub release asset): https://github.com/nflverse/nflverse-data/releases/download/pbp/pbp_2025.csv.gz
 # - PBP field dictionary (qtr, score_differential, posteam, qb_dropback, rush_attempt): https://nflreadr.nflverse.com/articles/dictionary_pbp.html
 #
-import sys, io
+import sys
+
 import pandas as pd
 import numpy as np
-import requests
 
-PBP_URLS = [
-    "https://github.com/nflverse/nflverse-data/releases/download/pbp/pbp_2025.csv.gz",
-    "https://raw.githubusercontent.com/nflverse/nflfastR-data/master/data/play_by_play/pbp_2025.csv.gz",
-    "https://github.com/nflverse/nflfastR-data/raw/master/data/play_by_play/pbp_2025.csv.gz",
-]
+from scripts.utils.nflverse_fetch import get_pbp_2025
 
-def fetch_pbp_2025() -> pd.DataFrame:
-    last_err = None
-    for url in PBP_URLS:
-        try:
-            r = requests.get(url, timeout=120)
-            r.raise_for_status()
-            df = pd.read_csv(io.BytesIO(r.content), compression="gzip", low_memory=False)
-            if "season" in df.columns:
-                df = df[df["season"]==2025].copy()
-            return df
-        except Exception as e:
-            last_err = e
-    raise RuntimeError(f"Failed to fetch 2025 PBP. Last error: {last_err}")
 
-def main(out_csv: str="script_escalators.csv"):
-    pbp = fetch_pbp_2025()
+def main(out_csv: str = "script_escalators.csv"):
+    pbp = get_pbp_2025()
+    if "season" in pbp.columns:
+        pbp = pbp[pbp["season"] == 2025].copy()
+    if len(pbp) <= 1000:
+        raise RuntimeError("PBP fetch failed")
 
-    needed = ["week","qtr","score_differential","posteam","qb_dropback","rush_attempt"]
+    needed = [
+        "week",
+        "qtr",
+        "score_differential",
+        "posteam",
+        "qb_dropback",
+        "rush_attempt",
+    ]
     for c in needed:
         if c not in pbp.columns:
             raise RuntimeError(f"Required column missing: {c}")
     # Normalize
     pbp["qtr"] = pd.to_numeric(pbp["qtr"], errors="coerce").fillna(0).astype(int)
-    pbp["score_differential"] = pd.to_numeric(pbp["score_differential"], errors="coerce")
-    for col in ["qb_dropback","rush_attempt"]:
+    pbp["score_differential"] = pd.to_numeric(
+        pbp["score_differential"], errors="coerce"
+    )
+    for col in ["qb_dropback", "rush_attempt"]:
         pbp[col] = pd.to_numeric(pbp[col], errors="coerce").fillna(0).astype(int)
 
     # Offensive snaps
-    off = pbp[(pbp["qb_dropback"]==1) | (pbp["rush_attempt"]==1)].copy()
-    off = off.dropna(subset=["posteam","week"])
+    off = pbp[(pbp["qb_dropback"] == 1) | (pbp["rush_attempt"] == 1)].copy()
+    off = off.dropna(subset=["posteam", "week"])
 
     # Flags
-    off["is_garbage"] = ((off["qtr"]==4) & (off["score_differential"].abs() > 16)).astype(int)
+    off["is_garbage"] = (
+        (off["qtr"] == 4) & (off["score_differential"].abs() > 16)
+    ).astype(int)
     # Exclude garbage when tagging lead/trail/neutral
     non_garb = off["is_garbage"] == 0
     off["is_lead"] = ((off["score_differential"] > 7) & non_garb).astype(int)
     off["is_trail"] = ((off["score_differential"] < -7) & non_garb).astype(int)
-    off["is_neutral"] = ((off["score_differential"].abs() <= 7) & (off["qtr"].isin([1,2,3])) & non_garb).astype(int)
+    off["is_neutral"] = (
+        (off["score_differential"].abs() <= 7) & (off["qtr"].isin([1, 2, 3])) & non_garb
+    ).astype(int)
 
     rows = []
-    for (team, wk), dfw in off.groupby(["posteam","week"]):
+    for (team, wk), dfw in off.groupby(["posteam", "week"]):
         n = len(dfw)
         lead = dfw["is_lead"].mean() if n else np.nan
         trail = dfw["is_trail"].mean() if n else np.nan
         neutral = dfw["is_neutral"].mean() if n else np.nan
         garbage = dfw["is_garbage"].mean() if n else np.nan
-        rows.append({
-            "team": team,
-            "week": int(wk),
-            "lead_script_pct": None if pd.isna(lead) else round(float(lead),4),
-            "trail_script_pct": None if pd.isna(trail) else round(float(trail),4),
-            "neutral_script_pct": None if pd.isna(neutral) else round(float(neutral),4),
-            "garbage_time_pct": None if pd.isna(garbage) else round(float(garbage),4),
-        })
+        rows.append(
+            {
+                "team": team,
+                "week": int(wk),
+                "lead_script_pct": None if pd.isna(lead) else round(float(lead), 4),
+                "trail_script_pct": None if pd.isna(trail) else round(float(trail), 4),
+                "neutral_script_pct": (
+                    None if pd.isna(neutral) else round(float(neutral), 4)
+                ),
+                "garbage_time_pct": (
+                    None if pd.isna(garbage) else round(float(garbage), 4)
+                ),
+            }
+        )
 
-    out = pd.DataFrame(rows, columns=["team","week","lead_script_pct","trail_script_pct","neutral_script_pct","garbage_time_pct"]) \
-            .sort_values(["team","week"])
+    out = pd.DataFrame(
+        rows,
+        columns=[
+            "team",
+            "week",
+            "lead_script_pct",
+            "trail_script_pct",
+            "neutral_script_pct",
+            "garbage_time_pct",
+        ],
+    ).sort_values(["team", "week"])
     out.to_csv(out_csv, index=False)
     print(f"Wrote {out_csv} with {len(out)} rows.")
+
 
 if __name__ == "__main__":
     out = "script_escalators.csv" if len(sys.argv) < 2 else sys.argv[1]
