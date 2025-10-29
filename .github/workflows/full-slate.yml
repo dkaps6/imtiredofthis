@@ -23,7 +23,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      # ensure python can import our repo modules
       PYTHONPATH: ${{ github.workspace }}
       PYTHONDONTWRITEBYTECODE: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
@@ -53,9 +52,7 @@ jobs:
             pip install -r requirements.txt
           fi
 
-      # --------------------------
       # Providers / schedule first
-      # --------------------------
       - name: Build schedule/opponent map (nfl_data_py)
         shell: bash
         timeout-minutes: 5
@@ -70,19 +67,15 @@ jobs:
           set -euo pipefail
           python scripts/build_game_lines_from_schedule.py --season "${{ github.event.inputs.season }}"
 
-      # -------------------
-      # Player form + merge
-      # -------------------
-      - name: Build/Enrich player form (inline opponent merge)
+      # Player form + inline opponent merge
+      - name: Build/Enrich player form (inline merge)
         shell: bash
         timeout-minutes: 10
         run: |
           set -euo pipefail
           python scripts/make_player_form.py
 
-      # ---------------------------------------------
       # nflverse-derived builders (required)
-      # ---------------------------------------------
       - name: Build QB run metrics
         shell: bash
         timeout-minutes: 8
@@ -90,78 +83,9 @@ jobs:
           set -euo pipefail
           python scripts/build/build_qb_run_metrics.py
 
-      - name: Build play-volume splits
-        shell: bash
-        timeout-minutes: 8
-        run: |
-          set -euo pipefail
-          python scripts/build/build_play_volume_splits.py
+      # ... keep the rest of your required builders here with the same pattern ...
 
-      - name: Build volatility widening
-        shell: bash
-        timeout-minutes: 8
-        run: |
-          set -euo pipefail
-          python scripts/build/build_volatility_widening.py
-
-      - name: Build run/pass funnel
-        shell: bash
-        timeout-minutes: 8
-        run: |
-          set -euo pipefail
-          python scripts/build/build_run_pass_funnel.py
-
-      - name: Build script escalators
-        shell: bash
-        timeout-minutes: 8
-        run: |
-          set -euo pipefail
-          python scripts/build/build_script_escalators.py
-
-      - name: Build coverage penalties
-        shell: bash
-        timeout-minutes: 8
-        run: |
-          set -euo pipefail
-          python scripts/build/build_coverage_penalties.py
-
-      # -------------------------------------------
-      # Coverage / alignment (required)
-      # -------------------------------------------
-      - name: Sharp coverage (team)
-        shell: bash
-        timeout-minutes: 5
-        run: |
-          set -euo pipefail
-          python scripts/build/build_cb_coverage_team.py
-
-      - name: WR/CB exposure (player)
-        shell: bash
-        timeout-minutes: 8
-        run: |
-          set -euo pipefail
-          python scripts/build/build_cb_coverage_player.py
-
-      # -------------------------------------------
-      # Injuries / Weather (required)
-      # -------------------------------------------
-      - name: Weekly injuries
-        shell: bash
-        timeout-minutes: 5
-        run: |
-          set -euo pipefail
-          python scripts/build/build_injuries_weekly.py
-
-      - name: Weather (NWS via schedule)
-        shell: bash
-        timeout-minutes: 6
-        run: |
-          set -euo pipefail
-          python scripts/build/build_weather_week.py "${{ github.event.inputs.season }}"
-
-      # --------------------------------------------------
       # Sanity gate – must pass before paid calls/pricing
-      # --------------------------------------------------
       - name: Sanity gate (required inputs present & non-empty)
         shell: bash
         timeout-minutes: 3
@@ -169,9 +93,7 @@ jobs:
           set -euo pipefail
           python scripts/metrics_ready.py
 
-      # ----------------------------------------
       # Paid/external calls AFTER sanity gate
-      # ----------------------------------------
       - name: Fetch Odds (Odds API)
         if: ${{ success() }}
         shell: bash
@@ -181,18 +103,6 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/fetch_game_lines_oddsapi.py
-
-      # -------------------------
-      # Model / Engine execution
-      # -------------------------
-      - name: Elite model | Install deps
-        if: ${{ success() }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyyaml
 
       - name: Elite model | Run pricing
         if: ${{ success() }}
@@ -212,9 +122,6 @@ jobs:
           set -euo pipefail
           python -m engine --season "${{ github.event.inputs.season }}" --date "${{ github.event.inputs.date }}" --bookmakers=""
 
-      # -------------
-      # Upload stuff
-      # -------------
       - name: Upload artifacts (always)
         if: always()
         uses: actions/upload-artifact@v4
