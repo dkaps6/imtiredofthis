@@ -25,6 +25,7 @@ jobs:
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PYTHONPATH: ${{ github.workspace }}
       APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
       ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
       ESPN_COOKIE: ${{ secrets.ESPN_COOKIE }}
@@ -82,12 +83,6 @@ jobs:
           ensure_header("data/opponent_map_from_props.csv", ["team","opponent","week","season"])
           print("[full-slate] header stubs ensured")
           PY
-
-      # -------------------
-      # Merge (single call)
-      # -------------------
-      - name: Merge opponents into player_form_consensus
-        run: python scripts/utils/merge_opponent_into_player_form.py
 
       # ---------------------------------------------
       # nflverse-derived builders (independent block)
