@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-import os
 import sys
-import time
 from pathlib import Path
+
+from io import BytesIO
 
 import pandas as pd
 import requests
 
-APISPORTS_KEY = os.environ.get("APISPORTS_KEY")
 UA = {"User-Agent": "FullSlate/CI (+github-actions)"}
+SCHEDULE_URL = (
+    "https://github.com/nflverse/nflverse-data/releases/download/schedules/schedules.csv"
+)
 
 TEAM_NAME_TO_ABBR = {
     "Arizona Cardinals": "ARI",
@@ -46,65 +48,98 @@ TEAM_NAME_TO_ABBR = {
 }
 
 
-def fetch_games_apisports(season: int) -> pd.DataFrame:
-    """Fetch NFL games for a season using the API-Sports American Football endpoint."""
-    columns = ["away_abbr", "home_abbr", "week", "season", "game_timestamp"]
-    if not APISPORTS_KEY:
-        return pd.DataFrame(columns=columns)
+def get_nfl_schedule(season: int) -> pd.DataFrame:
+    """Fetch nflverse schedule CSV and return rows for the requested season."""
 
-    url = "https://v1.american-football.api-sports.io/games"
-    params = {"league": "NFL", "season": season}
+    resp = requests.get(SCHEDULE_URL, headers=UA, timeout=60)
+    resp.raise_for_status()
 
-    for attempt in range(3):
-        try:
-            resp = requests.get(
-                url,
-                params=params,
-                headers={**UA, "x-apisports-key": APISPORTS_KEY},
-                timeout=45,
+    schedule = pd.read_csv(BytesIO(resp.content))
+    if "season" not in schedule.columns:
+        raise RuntimeError("nflverse schedules.csv is missing the 'season' column")
+
+    season_schedule = schedule[schedule["season"] == season].copy()
+    if season_schedule.empty:
+        raise RuntimeError(
+            f"nflverse schedules.csv returned no games for season={season}"
+        )
+
+    return season_schedule
+
+
+def expand_to_team_opp(schedule: pd.DataFrame) -> pd.DataFrame:
+    """Expand schedule rows to team/opponent rows using nflverse data."""
+
+    if schedule is None or schedule.empty:
+        raise RuntimeError("nflverse schedule returned no games to expand")
+
+    home_col = next(
+        (col for col in ["team_home", "home_team", "home"] if col in schedule.columns),
+        None,
+    )
+    away_col = next(
+        (col for col in ["team_away", "away_team", "away"] if col in schedule.columns),
+        None,
+    )
+    if not home_col or not away_col:
+        raise RuntimeError("nflverse schedule is missing home/away team columns")
+
+    if "week" not in schedule.columns:
+        raise RuntimeError("nflverse schedule is missing the 'week' column")
+
+    timestamp_col = next(
+        (
+            col
+            for col in [
+                "gameday",
+                "gamedate",
+                "game_day",
+                "game_date",
+                "kickoff",
+                "game_time",
+                "gametime",
+            ]
+            if col in schedule.columns
+        ),
+        None,
+    )
+
+    games = schedule[[away_col, home_col, "week", "season"]].copy()
+    games.rename(columns={away_col: "away_abbr", home_col: "home_abbr"}, inplace=True)
+
+    for col in ["away_abbr", "home_abbr"]:
+        games[col] = games[col].apply(
+            lambda val: TEAM_NAME_TO_ABBR.get(
+                str(val).strip(), str(val).strip().upper()
             )
-            resp.raise_for_status()
-            rows = []
-            for game in resp.json().get("response", []):
-                away_name = game.get("teams", {}).get("away", {}).get("name")
-                home_name = game.get("teams", {}).get("home", {}).get("name")
-                week_raw = game.get("week") or game.get("round") or 0
-                try:
-                    week_val = int(week_raw)
-                except (TypeError, ValueError):
-                    week_val = 0
-                game_timestamp = game.get("date") or game.get("game") or ""
-                away = TEAM_NAME_TO_ABBR.get(away_name)
-                home = TEAM_NAME_TO_ABBR.get(home_name)
-                if away and home and week_val:
-                    rows.append(
-                        {
-                            "away_abbr": away,
-                            "home_abbr": home,
-                            "week": week_val,
-                            "season": season,
-                            "game_timestamp": game_timestamp,
-                        }
-                    )
-            return pd.DataFrame(rows, columns=columns)
-        except Exception:
-            time.sleep(2 * (attempt + 1))
-    return pd.DataFrame(columns=columns)
+            if pd.notna(val)
+            else val
+        )
 
+    games["week"] = pd.to_numeric(games["week"], errors="coerce")
+    games = games.dropna(subset=["week"]).astype({"week": int})
 
-def expand_to_team_opp(games: pd.DataFrame) -> pd.DataFrame:
-    """Expand away/home games to team/opponent rows."""
+    if timestamp_col:
+        games["game_timestamp"] = (
+            schedule.loc[games.index, timestamp_col].fillna("").astype(str)
+        )
+    else:
+        games["game_timestamp"] = ""
+
     columns = ["team", "opponent", "week", "season", "game_timestamp"]
-    if games is None or games.empty:
-        return pd.DataFrame(columns=columns)
-
     away = games.rename(
         columns={"away_abbr": "team", "home_abbr": "opponent"}
     )[["team", "opponent", "week", "season", "game_timestamp"]]
     home = games.rename(
         columns={"home_abbr": "team", "away_abbr": "opponent"}
     )[["team", "opponent", "week", "season", "game_timestamp"]]
-    return pd.concat([away, home], ignore_index=True).drop_duplicates(subset=columns)
+
+    team_map = pd.concat([away, home], ignore_index=True).drop_duplicates(subset=columns)
+
+    if team_map.empty:
+        raise RuntimeError("expanded nflverse schedule produced no team/opponent rows")
+
+    return team_map
 
 
 def infer_default_season() -> int:
@@ -125,20 +160,19 @@ def main() -> None:
     if season is None:
         season = infer_default_season()
 
-    games = fetch_games_apisports(season)
-    team_map = expand_to_team_opp(games)
+    schedule = get_nfl_schedule(season)
+    team_map = expand_to_team_opp(schedule)
 
     cols = ["player", "team", "opponent", "week", "season", "game_timestamp"]
-    if team_map.empty:
-        out_df = pd.DataFrame(columns=cols)
-    else:
-        team_map.insert(0, "player", "")
-        if "game_timestamp" not in team_map:
-            team_map["game_timestamp"] = ""
-        out_df = team_map[cols]
+    team_map.insert(0, "player", "")
+    if "game_timestamp" not in team_map:
+        team_map["game_timestamp"] = ""
+    out_df = team_map[cols]
 
     out_path = Path("data") / "opponent_map_from_props.csv"
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    if out_df.empty:
+        raise RuntimeError("opponent map DataFrame is empty; refusing to write CSV")
     out_df.to_csv(out_path, index=False)
     print(
         f"[build_opponent_map_from_props] wrote {out_path} with {len(out_df)} rows (season={season})."
