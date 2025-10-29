@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 from typing import Iterable, List, Sequence
@@ -13,6 +14,75 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.config import FILES, ROOT
+
+REQUIRED: dict[str, Sequence[str]] = {
+    os.path.join("data", "player_form_consensus.csv"): (
+        "player",
+        "team",
+        "opponent",
+        "season",
+        "position",
+        "role",
+        "tgt_share",
+        "route_rate",
+        "rush_share",
+        "yprr",
+        "ypt",
+        "ypc",
+        "ypa",
+        "receptions_per_target",
+        "rz_share",
+        "rz_tgt_share",
+        "rz_rush_share",
+        "week",
+    ),
+    os.path.join("data", "team_form.csv"): (
+        "team",
+        "season",
+        "def_pass_epa",
+        "def_rush_epa",
+        "def_sack_rate",
+        "pace",
+        "proe",
+        "light_box_rate",
+        "heavy_box_rate",
+        "ay_per_att",
+    ),
+    os.path.join("data", "opponent_map_from_props.csv"): (
+        "player",
+        "team",
+        "opponent",
+        "week",
+        "season",
+        "game_timestamp",
+    ),
+    os.path.join("data", "qb_designed_runs.csv"): (
+        "player",
+        "week",
+        "designed_run_rate",
+        "designed_runs",
+        "snaps",
+    ),
+    os.path.join("data", "qb_scramble_rates.csv"): (
+        "player",
+        "week",
+        "scramble_rate",
+        "scrambles",
+        "dropbacks",
+    ),
+    os.path.join("data", "weather_week.csv"): (
+        "team",
+        "opponent",
+        "week",
+        "stadium",
+        "roof",
+        "forecast_summary",
+        "temp_f",
+        "wind_mph",
+        "precip_prob",
+        "forecast_datetime_utc",
+    ),
+}
 
 DEFAULT_REQUIRED_KEYS: Sequence[str] = (
     "team_form",
@@ -76,6 +146,27 @@ def _check_csv(path: Path) -> str | None:
 def check_required_inputs(required: Iterable[str | Path] | None = None) -> None:
     """Validate that each required CSV exists and has at least one row."""
 
+    schema_failures: List[str] = []
+    for item, expected_cols in REQUIRED.items():
+        csv_path = _resolve_item(str(item))
+        pretty = _pretty_path(csv_path)
+        if not csv_path.exists():
+            schema_failures.append(f"{pretty} (missing)")
+            continue
+        try:
+            sample = pd.read_csv(csv_path, nrows=5)
+        except pd.errors.EmptyDataError:
+            schema_failures.append(f"{pretty} (empty)")
+            continue
+        except Exception as exc:  # pragma: no cover - guard rails for runtime issues
+            schema_failures.append(f"{pretty} (error reading: {exc})")
+            continue
+
+        missing_cols = [col for col in expected_cols if col not in sample.columns]
+        if missing_cols:
+            joined = ", ".join(missing_cols)
+            schema_failures.append(f"{pretty} missing columns: {joined}")
+
     items = list(required) if required is not None else list(DEFAULT_REQUIRED_KEYS)
     resolved_paths = _dedupe_paths(_resolve_item(str(item)) for item in items)
 
@@ -88,10 +179,12 @@ def check_required_inputs(required: Iterable[str | Path] | None = None) -> None:
         else:
             print(f"[metrics_ready] ✓ {_pretty_path(csv_path)}")
 
-    if failures:
-        raise Exception(f"Missing inputs: {', '.join(failures)}")
+    all_failures = schema_failures + failures
+    if all_failures:
+        details = "\n".join(f"  - {msg}" for msg in all_failures)
+        raise RuntimeError(f"Missing or incomplete inputs:\n{details}")
 
-    print("[metrics_ready] ✅ all required inputs present")
+    print("[metrics_ready] ✅ All required inputs present.")
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
