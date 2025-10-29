@@ -19,47 +19,18 @@
 # - "Snaps" proxy = dropbacks + all QB rush attempts (scrambles + designed). This aligns with QB involvement on offensive plays.
 # - Designed runs exclude scrambles and kneels: rush_attempt==1 & qb_scramble!=1 & qb_kneel!=1 & rusher is QB.
 #
-import sys, io, gzip
 import pandas as pd
 import numpy as np
-import requests
 
-PBP_URLS = [
-    # Primary: nflverse-data releases (season file)
-    "https://github.com/nflverse/nflverse-data/releases/download/pbp/pbp_2025.csv.gz",
-    # Fallback mirrors (historical layout; kept for robustness)
-    "https://raw.githubusercontent.com/nflverse/nflfastR-data/master/data/play_by_play/pbp_2025.csv.gz",
-    "https://github.com/nflverse/nflfastR-data/raw/master/data/play_by_play/pbp_2025.csv.gz",
-]
+from scripts.utils.nflverse_fetch import get_pbp_2025
 
-def fetch_pbp_2025() -> pd.DataFrame:
-    last_err = None
-    for url in PBP_URLS:
-        try:
-            r = requests.get(url, timeout=60)
-            r.raise_for_status()
-            data = r.content
-            # handle gzip
-            try:
-                df = pd.read_csv(io.BytesIO(data), compression="gzip", low_memory=False)
-            except Exception:
-                # if not gzip, try plain read
-                df = pd.read_csv(io.BytesIO(data), low_memory=False)
-            # basic sanity
-            if "season" in df.columns and int(df["season"].max()) >= 2025:
-                return df
-            if "week" in df.columns and len(df) > 100000:
-                return df
-        except Exception as e:
-            last_err = e
-            continue
-    raise RuntimeError(f"Unable to fetch 2025 pbp from nflverse mirrors. Last error: {last_err}")
 
 def compute_qb_sets(df: pd.DataFrame) -> set:
     # Names that appear as passers in 2025
     qb_names = set(df["passer_player_name"].dropna().unique().tolist())
     # Also some plays record qb_name in a different field; rusher could be QB with no pass that season (rare). Keep it simple.
     return qb_names
+
 
 def choose_qb_name(row, qb_names) -> str:
     # For dropbacks, passer is the QB when present; sacks sometimes lack passer, then rusher name may be NaN—leave blank
@@ -76,14 +47,16 @@ def choose_qb_name(row, qb_names) -> str:
     # Else unknown
     return np.nan
 
+
 def main():
-    pbp = fetch_pbp_2025()
-    # Keep 2025 season rows only (safety)
+    pbp = get_pbp_2025()
     if "season" in pbp.columns:
         pbp = pbp[pbp["season"] == 2025].copy()
+    if len(pbp) <= 1000:
+        raise RuntimeError("PBP fetch failed")
 
     # Ensure numeric flags are numeric (0/1)
-    for col in ["qb_scramble","qb_dropback","qb_kneel","rush_attempt","sack"]:
+    for col in ["qb_scramble", "qb_dropback", "qb_kneel", "rush_attempt", "sack"]:
         if col in pbp.columns:
             pbp[col] = pd.to_numeric(pbp[col], errors="coerce").fillna(0).astype(int)
 
@@ -92,36 +65,57 @@ def main():
     pbp["qb_name"] = pbp.apply(lambda r: choose_qb_name(r, qb_names), axis=1)
 
     # ---------- A) Scramble rates ----------
-    scrambles = pbp[(pbp["qb_scramble"] == 1) & pd.notna(pbp["qb_name"])].groupby(["qb_name","week"]).size().rename("scrambles")
-    dropbacks = pbp[(pbp["qb_dropback"] == 1) & pd.notna(pbp["qb_name"])].groupby(["qb_name","week"]).size().rename("dropbacks")
+    scrambles = (
+        pbp[(pbp["qb_scramble"] == 1) & pd.notna(pbp["qb_name"])]
+        .groupby(["qb_name", "week"])
+        .size()
+        .rename("scrambles")
+    )
+    dropbacks = (
+        pbp[(pbp["qb_dropback"] == 1) & pd.notna(pbp["qb_name"])]
+        .groupby(["qb_name", "week"])
+        .size()
+        .rename("dropbacks")
+    )
     a = pd.concat([scrambles, dropbacks], axis=1).fillna(0)
-    a["scramble_rate"] = (a["scrambles"] / a["dropbacks"]).replace([np.inf, -np.inf], np.nan)
-    a = a.reset_index().rename(columns={"qb_name":"player"})
+    a["scramble_rate"] = (a["scrambles"] / a["dropbacks"]).replace(
+        [np.inf, -np.inf], np.nan
+    )
+    a = a.reset_index().rename(columns={"qb_name": "player"})
     # Reorder columns and round
     a["scramble_rate"] = a["scramble_rate"].round(4)
-    a = a[["player","week","scramble_rate","scrambles","dropbacks"]].sort_values(["player","week"])
+    a = a[["player", "week", "scramble_rate", "scrambles", "dropbacks"]].sort_values(
+        ["player", "week"]
+    )
 
     # ---------- B) Designed QB runs ----------
     # QB rush attempts overall
     qb_rush = pbp[(pbp["rush_attempt"] == 1) & pd.notna(pbp["qb_name"])]
     # Designed = QB rushes that are NOT scrambles and NOT kneels
     designed = qb_rush[(qb_rush["qb_scramble"] == 0) & (qb_rush["qb_kneel"] == 0)]
-    designed_runs = designed.groupby(["qb_name","week"]).size().rename("designed_runs")
+    designed_runs = designed.groupby(["qb_name", "week"]).size().rename("designed_runs")
     # Snaps proxy = dropbacks + all QB rush attempts (scramble + designed)
-    qb_rush_counts = qb_rush.groupby(["qb_name","week"]).size().rename("qb_rushes")
+    qb_rush_counts = qb_rush.groupby(["qb_name", "week"]).size().rename("qb_rushes")
     snaps = pd.concat([dropbacks, qb_rush_counts], axis=1).fillna(0)
     snaps["snaps"] = snaps["dropbacks"] + snaps["qb_rushes"]
     snaps = snaps["snaps"]
     b = pd.concat([designed_runs, snaps], axis=1).fillna(0)
-    b["designed_run_rate"] = (b["designed_runs"] / b["snaps"]).replace([np.inf, -np.inf], np.nan)
-    b = b.reset_index().rename(columns={"qb_name":"player"})
+    b["designed_run_rate"] = (b["designed_runs"] / b["snaps"]).replace(
+        [np.inf, -np.inf], np.nan
+    )
+    b = b.reset_index().rename(columns={"qb_name": "player"})
     b["designed_run_rate"] = b["designed_run_rate"].round(4)
-    b = b[["player","week","designed_run_rate","designed_runs","snaps"]].sort_values(["player","week"])
+    b = b[
+        ["player", "week", "designed_run_rate", "designed_runs", "snaps"]
+    ].sort_values(["player", "week"])
 
     # Write outputs
     a.to_csv("qb_scramble_rates.csv", index=False)
     b.to_csv("qb_designed_runs.csv", index=False)
-    print(f"Wrote qb_scramble_rates.csv ({len(a)} rows) and qb_designed_runs.csv ({len(b)} rows).")
+    print(
+        f"Wrote qb_scramble_rates.csv ({len(a)} rows) and qb_designed_runs.csv ({len(b)} rows)."
+    )
+
 
 if __name__ == "__main__":
     main()
