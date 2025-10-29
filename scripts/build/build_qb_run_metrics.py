@@ -19,10 +19,49 @@
 # - "Snaps" proxy = dropbacks + all QB rush attempts (scrambles + designed). This aligns with QB involvement on offensive plays.
 # - Designed runs exclude scrambles and kneels: rush_attempt==1 & qb_scramble!=1 & qb_kneel!=1 & rusher is QB.
 #
+from pathlib import Path
+
 import pandas as pd
 import numpy as np
 
 from scripts.utils.nflverse_fetch import get_pbp_2025
+
+
+def _dynamic_min_rows(
+    schedule_csv: str = "data/opponent_map_from_props.csv",
+    full_season_cap: int = 80000,
+    per_week_rows: int = 2500,
+    floor: int = 15000,
+) -> int:
+    """
+    Compute a reasonable minimum PBP row threshold based on the current slate week.
+    - Reads the max 'week' from opponent_map_from_props.csv (already built in workflow).
+    - Uses: threshold = clamp(max(floor, week * per_week_rows), upper=full_season_cap)
+    Defaults give ~20k rows at week 8 and cap at 80k for full season.
+    """
+    try:
+        p = Path(schedule_csv)
+        if not p.exists() or p.stat().st_size == 0:
+            print(f"[qb_run_metrics] WARN: {schedule_csv} missing/empty. Using floor={floor}.")
+            return floor
+        om = pd.read_csv(p)
+        if "week" not in om.columns or om["week"].dropna().empty:
+            print(f"[qb_run_metrics] WARN: no 'week' column in {schedule_csv}. Using floor={floor}.")
+            return floor
+        wk = pd.to_numeric(om["week"], errors="coerce").max()
+        if pd.isna(wk):
+            print(f"[qb_run_metrics] WARN: cannot parse week from {schedule_csv}. Using floor={floor}.")
+            return floor
+        wk = int(max(1, min(int(wk), 18)))  # clamp to [1,18]
+        est = max(floor, wk * per_week_rows)
+        dyn = min(est, full_season_cap)
+        print(
+            f"[qb_run_metrics] dynamic min_rows = {dyn} (week={wk}, per_week_rows={per_week_rows}, cap={full_season_cap})"
+        )
+        return dyn
+    except Exception as e:
+        print(f"[qb_run_metrics] WARN: dynamic min_rows fallback due to error: {e}. Using floor={floor}.")
+        return floor
 
 
 def compute_qb_sets(df: pd.DataFrame) -> set:
@@ -49,7 +88,9 @@ def choose_qb_name(row, qb_names) -> str:
 
 
 def main():
-    pbp = get_pbp_2025(min_rows=80000)
+    min_rows = _dynamic_min_rows()
+    pbp = get_pbp_2025(min_rows=min_rows)
+    print(f"[qb_run_metrics] PBP loaded rows: {len(pbp)} (min_rows required: {min_rows})")
     if "season" in pbp.columns:
         pbp = pbp[pbp["season"] == 2025].copy()
     if len(pbp) <= 1000:
