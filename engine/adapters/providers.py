@@ -156,35 +156,6 @@ def run_nflverse(season: int, date: str | None) -> dict:
 
     return {"ok": True, "source": source, "notes": notes}
 
-# ESPN (depth charts + optional normalized player sheet)
-def run_espn(season: int, date: str | None) -> dict:
-    source = "ESPN"
-    notes: List[str] = []
-    try:
-        # 1) Depth chart (roles/positions)
-        if Path("scripts/providers/espn_depth.py").exists():
-            rc = _run("python scripts/providers/espn_depth.py")
-            if rc != 0:
-                notes.append(f"espn_depth rc={rc}")
-        else:
-            notes.append("scripts/providers/espn_depth.py missing")
-
-        # 2) Optional normalizer to data/espn_player.csv (if you maintain it)
-        if Path("scripts/providers/espn_pull.py").exists():
-            rc = _run("python scripts/providers/espn_pull.py")
-            if rc != 0:
-                notes.append(f"espn_pull rc={rc}")
-        else:
-            notes.append("espn_pull.py missing (depth-only)")
-
-        ok = (_rows("data/depth_chart_espn.csv") > 0) or (_rows("data/espn_player.csv") > 0)
-        if not ok:
-            notes.append("no rows in depth_chart_espn.csv or espn_player.csv")
-        return _ok(source, notes) if ok else _fail(source, None, notes)
-    except Exception as e:
-        notes.append(traceback.format_exc())
-        return _fail(source, e, notes)
-
 # NFLGSIS via nfl_data_py → data/gsis_player.csv
 def run_nflgsis(season: int, date: str | None) -> dict:
     source = "NFLGSIS"

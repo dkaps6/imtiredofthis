@@ -27,26 +27,6 @@ def run_nflverse(season: int, date: str | None):
     # We just mark this stage as best-effort and non-fatal.
     return {"source":"nflverse","ok":False,"notes":["nflverse adapter missing"]}
 
-def run_espn(season: int, date: str | None):
-    src = "ESPN"
-    team_csv   = "data/espn_team.csv"
-    player_csv = "data/espn_player.csv"
-
-    ok_existing, notes = _skip_if_present(team_csv, player_csv)
-    if ok_existing:
-        return {"source":src,"ok":True,"notes":notes}
-
-    cookie = os.getenv("ESPN_COOKIE", "")
-    if not cookie:
-        return {"source":src,"ok":False,"notes":["ESPN_COOKIE missing; skip"]}
-
-    try:
-        # Minimal stub: expect you might have a separate scraper populating CSVs.
-        # If you want me to wire a real ESPN puller next, I can add scripts/providers/espn_pull.py.
-        return {"source":src,"ok":False,"notes":["ESPN adapter present but no fetcher wired (provide endpoints or allow me to add scraper)"]}
-    except Exception as e:
-        return {"source":src,"ok":False,"notes":[f"{type(e).__name__}: {e}"]}
-
 def run_nflgsis(season: int, date: str | None):
     src = "NFLGSIS"
     team_csv   = "data/gsis_team.csv"
