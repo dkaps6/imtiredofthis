@@ -25,6 +25,7 @@ import argparse
 import os
 import sys
 import warnings
+from pathlib import Path
 from typing import Any, Dict, List
 import re
 
@@ -33,7 +34,8 @@ import pandas as pd
 
 DATA_DIR = "data"
 OUTPATH = os.path.join(DATA_DIR, "player_form.csv")
-CONSENSUS_OUTPATH = os.path.join(DATA_DIR, "player_form_consensus.csv")
+CONS_PATH = Path(DATA_DIR) / "player_form_consensus.csv"
+OM_PATH = Path(DATA_DIR) / "opponent_map_from_props.csv"
 
 
 def _safe_mkdir(path: str) -> None:
@@ -174,6 +176,94 @@ def _build_season_consensus(base: pd.DataFrame) -> pd.DataFrame:
 
 
 CONSENSUS_OPPONENT_SENTINEL = "ALL"
+
+
+def _ensure_week_column(df: pd.DataFrame, om: pd.DataFrame) -> pd.DataFrame:
+    """
+    Guarantees df has an integer 'week' column.
+    Tries common aliases, regex on game_id, and finally a single-week slate fallback using opponent_map.
+    """
+
+    if "week" in df.columns:
+        df["week"] = pd.to_numeric(df["week"], errors="coerce").astype("Int64")
+        if df["week"].isna().any():
+            raise RuntimeError(
+                "player_form_consensus has a 'week' column but some rows are NaN. Please fix at source."
+            )
+        return df
+
+    for cand in ("season_week", "week_num", "wk"):
+        if cand in df.columns:
+            df["week"] = pd.to_numeric(df[cand], errors="coerce").astype("Int64")
+            if df["week"].isna().any():
+                raise RuntimeError(
+                    f"Derived week from '{cand}', but values are NaN for some rows."
+                )
+            return df
+
+    if "game_id" in df.columns:
+        wk = df["game_id"].astype(str).str.extract(r"(\d{1,2})$")[0]
+        wk = pd.to_numeric(wk, errors="coerce").astype("Int64")
+        if wk.notna().any():
+            df["week"] = wk
+            if df["week"].isna().any():
+                raise RuntimeError(
+                    "Derived 'week' from game_id, but some rows are NaN — ambiguous game_id format."
+                )
+            return df
+
+    if not om.empty and "week" in om.columns and om["week"].dropna().nunique() == 1:
+        single_week = int(om["week"].dropna().unique()[0])
+        df["week"] = pd.Series([single_week] * len(df), dtype="Int64")
+        return df
+
+    raise RuntimeError(
+        "player_form_consensus is missing 'week' and cannot infer it. "
+        f"Available columns: {list(df.columns)}. "
+        "Provide a week-like column (season_week/week_num/wk) or ensure game_id encodes week."
+    )
+
+
+def _merge_opponent_inline(cons: pd.DataFrame, om: pd.DataFrame) -> pd.DataFrame:
+    """
+    Merge opponent using reliable keys.
+    Primary key: ['team','week'] → each team maps to one opponent per week.
+    If a 'player' column exists, do not rely on it for the join (can be name-variant noisy).
+    """
+
+    required_om = {"team", "opponent", "week"}
+    missing_om = required_om - set(om.columns)
+    if missing_om:
+        raise RuntimeError(
+            f"opponent_map_from_props.csv missing columns: {sorted(missing_om)}"
+        )
+
+    if "team" in cons.columns:
+        cons["team"] = cons["team"].astype(str).str.strip()
+    if "team" in om.columns:
+        om["team"] = om["team"].astype(str).str.strip()
+
+    cons = _ensure_week_column(cons, om)
+
+    merged = cons.merge(
+        om[["team", "week", "opponent"]].drop_duplicates(),
+        on=["team", "week"],
+        how="left",
+        validate="m:1",
+    )
+
+    if merged["opponent"].isna().any():
+        miss = (
+            merged.loc[merged["opponent"].isna(), ["player", "team", "week"]].head(25)
+            if "player" in merged.columns
+            else merged.loc[merged["opponent"].isna(), ["team", "week"]].head(25)
+        )
+        raise RuntimeError(
+            f"Opponent merge unresolved for {merged['opponent'].isna().sum()} rows. "
+            f"Examples:\n{miss.to_string(index=False)}"
+        )
+
+    return merged
 # === BEGIN: SURGICAL NAME NORMALIZATION HELPERS (idempotent) ===
 try:
     _NAME_HELPERS_DEFINED
@@ -1688,13 +1778,23 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
 
     try:
         _safe_mkdir(DATA_DIR)
-        consensus_to_write[FINAL_COLS].to_csv(CONSENSUS_OUTPATH, index=False)
-        print(f"[pf] consensus rows: {len(consensus_to_write)} → {CONSENSUS_OUTPATH}")
+        if not OM_PATH.exists():
+            raise RuntimeError(
+                f"{OM_PATH} not found. Build opponent_map_from_props before make_player_form."
+            )
+        _opponent_map = pd.read_csv(OM_PATH)
+        consensus_to_write = _merge_opponent_inline(consensus_to_write, _opponent_map)
+        consensus_to_write.to_csv(CONS_PATH, index=False)
+        print(f"[pf] consensus rows: {len(consensus_to_write)} → {CONS_PATH}")
+        print(
+            f"[make_player_form] opponent merge complete — {len(consensus_to_write)} rows with non-null opponent"
+        )
     except Exception as exc:
         print(
-            f"[pf] WARN failed to write consensus → {CONSENSUS_OUTPATH}: {exc}",
+            f"[pf] WARN failed to write consensus → {CONS_PATH}: {exc}",
             file=sys.stderr,
         )
+        raise
 
     frames: List[pd.DataFrame] = [base[FINAL_COLS]]
     if not consensus_to_write.empty:
@@ -1897,150 +1997,6 @@ def _enrich_team_and_opponent_from_props(df: pd.DataFrame) -> pd.DataFrame:
         )
 
     return enriched
-
-
-def _merge_consensus_with_opponent_map() -> None:
-    """Inline opponent merge for the consensus output so downstream steps reuse it."""
-
-    if not os.path.exists(CONSENSUS_OUTPATH):
-        return
-
-    try:
-        consensus = pd.read_csv(CONSENSUS_OUTPATH)
-    except pd.errors.EmptyDataError:
-        print(
-            "[make_player_form] opponent merge skipped: consensus file empty",
-            file=sys.stderr,
-        )
-        return
-    except Exception as exc:  # pragma: no cover - defensive guard
-        raise RuntimeError(
-            f"player_form_consensus opponent merge failed to read {CONSENSUS_OUTPATH}: {exc}"
-        ) from exc
-
-    if consensus.empty:
-        print(
-            "[make_player_form] opponent merge skipped: consensus file empty",
-            file=sys.stderr,
-        )
-        return
-
-    opponent_map_path = os.path.join(DATA_DIR, "opponent_map_from_props.csv")
-    if not os.path.exists(opponent_map_path):
-        raise RuntimeError(
-            "player_form_consensus opponent merge failed: "
-            f"missing {opponent_map_path}"
-        )
-
-    try:
-        opponent_map = pd.read_csv(opponent_map_path)
-    except Exception as exc:  # pragma: no cover - defensive guard
-        raise RuntimeError(
-            "player_form_consensus opponent merge failed to read "
-            f"{opponent_map_path}: {exc}"
-        ) from exc
-
-    if opponent_map.empty:
-        raise RuntimeError(
-            "player_form_consensus opponent merge failed: opponent map empty"
-        )
-
-    column_order = [c.lower() for c in consensus.columns]
-    consensus.columns = column_order
-    opponent_map.columns = [c.lower() for c in opponent_map.columns]
-
-    required_cols = {"team", "week"}
-    missing_consensus = required_cols.difference(consensus.columns)
-    if missing_consensus:
-        missing_str = ", ".join(sorted(missing_consensus))
-        raise RuntimeError(
-            "player_form_consensus opponent merge failed: "
-            f"missing columns {missing_str} in consensus"
-        )
-
-    missing_map = required_cols.difference(opponent_map.columns)
-    if missing_map:
-        missing_str = ", ".join(sorted(missing_map))
-        raise RuntimeError(
-            "player_form_consensus opponent merge failed: "
-            f"missing columns {missing_str} in opponent map"
-        )
-
-    consensus["_team_merge"] = (
-        consensus["team"].where(consensus["team"].notna(), "")
-        .astype(str)
-        .str.upper()
-        .str.strip()
-        .map(_canon_team)
-    )
-    consensus["_week_merge"] = pd.to_numeric(
-        consensus["week"], errors="coerce"
-    )
-
-    opponent_map["_team_merge"] = (
-        opponent_map["team"].where(opponent_map["team"].notna(), "")
-        .astype(str)
-        .str.upper()
-        .str.strip()
-        .map(_canon_team)
-    )
-    opponent_map["_week_merge"] = pd.to_numeric(
-        opponent_map["week"], errors="coerce"
-    )
-
-    opponent_map["opponent"] = (
-        opponent_map["opponent"]
-        .where(opponent_map["opponent"].notna(), "")
-        .astype(str)
-        .str.upper()
-        .str.strip()
-    )
-    sentinel_mask = opponent_map["opponent"].eq(CONSENSUS_OPPONENT_SENTINEL)
-    opponent_map["opponent"] = opponent_map["opponent"].map(_canon_team)
-    opponent_map.loc[sentinel_mask, "opponent"] = CONSENSUS_OPPONENT_SENTINEL
-    opponent_map["opponent"] = opponent_map["opponent"].replace("", np.nan)
-
-    mapping_subset = opponent_map[
-        ["_team_merge", "_week_merge", "opponent"]
-    ].drop_duplicates(["_team_merge", "_week_merge"])
-
-    merged = consensus.merge(
-        mapping_subset,
-        on=["_team_merge", "_week_merge"],
-        how="left",
-        validate="m:1",
-        suffixes=("", "_map"),
-    )
-
-    if "opponent_map" in merged.columns:
-        merged["opponent"] = merged["opponent"].where(
-            merged["opponent"].notna(), merged["opponent_map"]
-        )
-        merged.drop(columns=["opponent_map"], inplace=True)
-
-    missing_mask = merged["opponent"].isna()
-    if missing_mask.any():
-        preview_cols = [c for c in ["player", "team", "week"] if c in merged.columns]
-        preview_df = merged.loc[missing_mask, preview_cols]
-        preview_rows = []
-        for _, row in preview_df.head(20).iterrows():
-            player = row.get("player", "?")
-            team = row.get("team", "?")
-            week = row.get("week", "?")
-            preview_rows.append(f"{player} ({team}, week {week})")
-        summary = ", ".join(preview_rows)
-        raise RuntimeError(
-            "player_form_consensus opponent merge incomplete: "
-            f"{missing_mask.sum()} rows missing opponents → {summary}"
-        )
-
-    merged.drop(columns=["_team_merge", "_week_merge"], inplace=True)
-    merged = merged[column_order]
-
-    merged.to_csv(CONSENSUS_OUTPATH, index=False)
-    print(
-        f"[make_player_form] opponent merge complete with {len(merged)} rows"
-    )
 
 
 # ---------------------------
@@ -2365,7 +2321,6 @@ def cli():
         # Final write on success
         df = df[FINAL_COLS]
         df.to_csv(OUTPATH, index=False)
-        _merge_consensus_with_opponent_map()
         print(f"[make_player_form] Wrote {len(df)} rows → {OUTPATH}")
         return
 
