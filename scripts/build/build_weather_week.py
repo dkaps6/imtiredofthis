@@ -29,8 +29,7 @@ from urllib.parse import quote
 
 import pandas as pd
 import requests
-
-from scripts.build._schedule_utils import get_nfl_schedule
+from nfl_data_py import import_schedules
 
 
 DEFAULT_UA = "FullSlate/Weather (+https://github.com/imtiredofthis)"
@@ -41,11 +40,92 @@ MAX_GAME_WAIT_SECONDS = 45.0
 OUTPUT_PATH = Path("data") / "weather_week.csv"
 
 
+def get_nfl_schedule(season: int) -> pd.DataFrame:
+    df = import_schedules([season])
+    if "game_type" in df.columns:
+        df = df[df["game_type"].isin(["REG"])]
+    rename_map = {
+        "home_team": "team_home",
+        "away_team": "team_away",
+        "game_date": "gameday",
+        "venue": "stadium",
+        "site_city": "location",
+    }
+    for k, v in rename_map.items():
+        if k in df.columns:
+            df = df.rename(columns={k: v})
+    required = ["week", "team_home", "team_away"]
+    missing = [c for c in required if c not in df.columns]
+    if missing or df.empty:
+        raise RuntimeError(
+            f"Schedule missing columns {missing} or empty for season {season}"
+        )
+    keep = [
+        "week",
+        "team_home",
+        "team_away",
+    ] + [c for c in ["game_id", "gameday", "stadium", "location"] if c in df.columns]
+    return df[keep].reset_index(drop=True)
+
+
 def infer_default_season(now: Optional[pd.Timestamp] = None) -> int:
     """Return a reasonable season for schedule lookups."""
 
     now = now or pd.Timestamp.utcnow()
     return now.year if now.month >= 3 else now.year - 1
+
+
+def _normalize_schedule_for_weather(
+    schedule: pd.DataFrame, season: int
+) -> pd.DataFrame:
+    if schedule is None or schedule.empty:
+        raise RuntimeError("Schedule DataFrame is empty; cannot build weather slate")
+
+    df = schedule.copy()
+    if "team_home" not in df.columns or "team_away" not in df.columns:
+        raise RuntimeError("Schedule missing team_home/team_away columns")
+
+    df["season"] = season
+    df["home"] = df["team_home"].astype(str).str.upper().str.strip()
+    df["away"] = df["team_away"].astype(str).str.upper().str.strip()
+
+    kickoff = pd.Series(pd.NaT, index=df.index)
+    if "gameday" in df.columns:
+        kickoff = pd.to_datetime(df["gameday"], utc=True, errors="coerce")
+
+    if kickoff.isna().all():
+        raise RuntimeError("Schedule missing usable gameday values for kickoff inference")
+
+    df["kickoff_utc"] = kickoff
+
+    for column in ("stadium", "location", "city", "state"):
+        if column not in df.columns:
+            df[column] = ""
+        df[column] = df[column].fillna("").astype(str).str.strip()
+
+    df["state"] = df["state"].str.upper()
+    df["week"] = pd.to_numeric(df["week"], errors="coerce")
+    df = df[df["week"].notna()]
+    df = df[df["kickoff_utc"].notna()]
+
+    if df.empty:
+        raise RuntimeError("Normalized schedule produced no usable rows")
+
+    result = df[
+        [
+            "season",
+            "week",
+            "home",
+            "away",
+            "kickoff_utc",
+            "stadium",
+            "location",
+            "city",
+            "state",
+        ]
+    ].reset_index(drop=True)
+
+    return result
 
 
 def request_json_with_retry(
@@ -297,10 +377,11 @@ def upcoming_week_games(games: pd.DataFrame) -> pd.DataFrame:
 def main(out_csv: str | Path = OUTPUT_PATH) -> None:
     season = infer_default_season()
 
-    with requests.Session() as session:
-        games = get_nfl_schedule(season, session=session)
-        week_games = upcoming_week_games(games)
+    schedule = get_nfl_schedule(season)
+    games = _normalize_schedule_for_weather(schedule, season)
+    week_games = upcoming_week_games(games)
 
+    with requests.Session() as session:
         stadiums = load_stadium_metadata(Path("data") / "stadiums.csv")
         merged = week_games.merge(
             stadiums,

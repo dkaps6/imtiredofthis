@@ -2,15 +2,8 @@
 import sys
 from pathlib import Path
 
-from io import BytesIO
-
 import pandas as pd
-import requests
-
-UA = {"User-Agent": "FullSlate/CI (+github-actions)"}
-SCHEDULE_URL = (
-    "https://github.com/nflverse/nflverse-data/releases/download/schedules/schedules.csv"
-)
+from nfl_data_py import import_schedules
 
 TEAM_NAME_TO_ABBR = {
     "Arizona Cardinals": "ARI",
@@ -49,22 +42,31 @@ TEAM_NAME_TO_ABBR = {
 
 
 def get_nfl_schedule(season: int) -> pd.DataFrame:
-    """Fetch nflverse schedule CSV and return rows for the requested season."""
-
-    resp = requests.get(SCHEDULE_URL, headers=UA, timeout=60)
-    resp.raise_for_status()
-
-    schedule = pd.read_csv(BytesIO(resp.content))
-    if "season" not in schedule.columns:
-        raise RuntimeError("nflverse schedules.csv is missing the 'season' column")
-
-    season_schedule = schedule[schedule["season"] == season].copy()
-    if season_schedule.empty:
+    df = import_schedules([season])
+    if "game_type" in df.columns:
+        df = df[df["game_type"].isin(["REG"])]
+    rename_map = {
+        "home_team": "team_home",
+        "away_team": "team_away",
+        "game_date": "gameday",
+        "venue": "stadium",
+        "site_city": "location",
+    }
+    for k, v in rename_map.items():
+        if k in df.columns:
+            df = df.rename(columns={k: v})
+    required = ["week", "team_home", "team_away"]
+    missing = [c for c in required if c not in df.columns]
+    if missing or df.empty:
         raise RuntimeError(
-            f"nflverse schedules.csv returned no games for season={season}"
+            f"Schedule missing columns {missing} or empty for season {season}"
         )
-
-    return season_schedule
+    keep = [
+        "week",
+        "team_home",
+        "team_away",
+    ] + [c for c in ["game_id", "gameday", "stadium", "location"] if c in df.columns]
+    return df[keep].reset_index(drop=True)
 
 
 def expand_to_team_opp(schedule: pd.DataFrame) -> pd.DataFrame:
@@ -161,6 +163,8 @@ def main() -> None:
         season = infer_default_season()
 
     schedule = get_nfl_schedule(season)
+    schedule = schedule.copy()
+    schedule["season"] = season
     team_map = expand_to_team_opp(schedule)
 
     cols = ["player", "team", "opponent", "week", "season", "game_timestamp"]
