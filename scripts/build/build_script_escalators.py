@@ -23,10 +23,13 @@ import pandas as pd
 import numpy as np
 
 from scripts.utils.nflverse_fetch import get_pbp_2025
+from scripts.utils.pbp_threshold import get_dynamic_min_rows
 
 
 def main(out_csv: str = "script_escalators.csv"):
-    pbp = get_pbp_2025()
+    min_rows = get_dynamic_min_rows()
+    pbp = get_pbp_2025(min_rows=min_rows)
+    print(f"[script_escalators] PBP rows: {len(pbp)} (min_rows={min_rows})")
     if "season" in pbp.columns:
         pbp = pbp[pbp["season"] == 2025].copy()
     if len(pbp) <= 1000:
