@@ -22,6 +22,7 @@ import pandas as pd
 import numpy as np
 
 from scripts.utils.nflverse_fetch import get_pbp_2025
+from scripts.utils.pbp_threshold import get_dynamic_min_rows
 
 
 def compute_pace_std(df: pd.DataFrame) -> float:
@@ -62,7 +63,9 @@ def compute_score_margin_volatility(df: pd.DataFrame) -> float:
 
 
 def main(out_csv: str = "volatility_widening.csv"):
-    pbp = get_pbp_2025()
+    min_rows = get_dynamic_min_rows()
+    pbp = get_pbp_2025(min_rows=min_rows)
+    print(f"[volatility_widening] PBP rows: {len(pbp)} (min_rows={min_rows})")
     if "season" in pbp.columns:
         pbp = pbp[pbp["season"] == 2025].copy()
     if len(pbp) <= 1000:
