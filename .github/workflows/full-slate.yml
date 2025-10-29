@@ -71,7 +71,13 @@ jobs:
         timeout-minutes: 5
         run: |
           set -euo pipefail
-          python scripts/build/build_depth_charts_ourlads.py
+          python scripts/providers/ourlads_depth.py
+
+      - name: Validate Ourlads roles CSV
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s data/roles_ourlads.csv || (echo "roles_ourlads.csv missing or empty" >&2; exit 1)
 
       # Player form depends on depth chart roles
       - name: Build/Enrich player form (after roles are available)
