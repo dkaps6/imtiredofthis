@@ -25,7 +25,10 @@ import pandas as pd
 import numpy as np
 
 from scripts.utils.nflverse_fetch import get_pbp_2025
-from scripts.utils.pbp_threshold import get_dynamic_min_rows
+from scripts.utils.pbp_threshold import (
+    enforce_min_rows,
+    get_dynamic_min_rows,
+)
 
 
 def compute_seconds_per_play(off_df: pd.DataFrame) -> float:
@@ -48,9 +51,10 @@ def compute_seconds_per_play(off_df: pd.DataFrame) -> float:
 
 
 def main(out_csv: str = "play_volume_splits.csv"):
-    min_rows = get_dynamic_min_rows()
-    pbp = get_pbp_2025(min_rows=min_rows)
-    print(f"[play_volume_splits] PBP rows: {len(pbp)} (min_rows={min_rows})")
+    min_rows_target = get_dynamic_min_rows()
+    pbp = get_pbp_2025(min_rows=20000)
+    print(f"[play_volume_splits] PBP rows: {len(pbp)} (soft target {min_rows_target})")
+    enforce_min_rows(pbp, min_rows_target)
     if "season" in pbp.columns:
         pbp = pbp[pbp["season"] == 2025].copy()
     if len(pbp) <= 1000:
