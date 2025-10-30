@@ -71,10 +71,40 @@ TAG_CODE_RE = re.compile(r"\b[A-Z]{1,3}\d{2}\b")
 UDFA_SCHOOL_RE = re.compile(r"\b[Uu]/[A-Za-z]{2,4}\b")
 DATE_FRACTION_RE = re.compile(r"\b\d{1,2}/\d{1,2}\b")
 
+def clean_ourlads_name(raw: str) -> str:
+    """
+    Convert 'Allen, Josh 18/1' -> 'Josh Allen'.
+    Strip draft/UDFA markers like '18/1', 'CF23', 'U/LAC', etc.
+    Keep only letters, spaces, periods, hyphens in the final name.
+    """
+    if not isinstance(raw, str):
+        return ""
+
+    parts = [p.strip() for p in raw.split(",", 1)]
+    if len(parts) == 2:
+        last, first_and_junk = parts[0], parts[1]
+        base = f"{first_and_junk} {last}"
+    else:
+        base = raw
+
+    tokens = []
+    for tok in re.split(r"\s+", base):
+        if re.search(r"[\d/]", tok):
+            continue
+        tokens.append(tok)
+
+    clean = " ".join(tokens).strip()
+    clean = re.sub(r"\s+", " ", clean)
+    clean = clean.replace(",", "").strip()
+    clean = re.sub(r"[^A-Za-z.\-\s]", "", clean)
+    clean = re.sub(r"\s+", " ", clean).strip()
+
+    return clean
+
 def _norm_player(name: str) -> str:
     if not isinstance(name, str):
         return ""
-    s = name.strip()
+    s = clean_ourlads_name(name)
     s = LEADING_NUM_RE.sub("", s)
     if "," in s:
         parts = [p.strip() for p in s.split(",", 1)]
@@ -100,7 +130,8 @@ def _split_candidates(cell_text: str) -> List[str]:
     out: List[str] = []
     for p in parts:
         txt = BeautifulSoup(p, "lxml").get_text(" ", strip=True)
-        nm = _norm_player(txt)
+        nm = clean_ourlads_name(txt)
+        nm = _norm_player(nm)
         if nm and len(nm.split()) >= 2 and nm.upper() not in VALID:
             out.append(nm)
     return out
@@ -250,7 +281,10 @@ def fetch_team_roles(team: str, soup: BeautifulSoup) -> List[dict]:
         if not candidates:
             continue
 
-        player_name = candidates[0]
+        player_name = clean_ourlads_name(candidates[0])
+        if not player_name:
+            continue
+        player_name = _norm_player(player_name)
         role = map_role(base_pos, depth_slot_label)
         if not role:
             continue
@@ -296,6 +330,8 @@ def main():
 
     roles_all = roles_all.dropna(subset=["player", "role"])
     if not roles_all.empty:
+        roles_all["player"] = roles_all["player"].map(clean_ourlads_name)
+        roles_all = roles_all[roles_all["player"] != ""]
         roles_all["player"] = roles_all["player"].map(_norm_player)
         roles_all = roles_all[roles_all["player"] != ""]
         roles_all["team"] = roles_all["team"].astype(str).str.upper().str.strip().map(_canon_team)

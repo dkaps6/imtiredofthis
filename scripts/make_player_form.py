@@ -205,29 +205,44 @@ def _inject_week_opponent_and_roles(
         if col not in out.columns:
             out[col] = pd.NA
 
-    out["player"] = out["player"].astype(str).str.strip().str.lower()
-    out["team"] = out["team"].astype(str).str.strip().str.upper()
-
     existing_week = out["week"].copy() if "week" in out.columns else None
     existing_opponent = out["opponent"].copy() if "opponent" in out.columns else None
 
     opp = pd.read_csv(OPP_PATH)
+
+    required_cols = {"player", "team", "week", "opponent"}
+    missing_cols = required_cols - set(opp.columns)
+    if missing_cols:
+        raise RuntimeError(
+            f"[make_player_form] opponent_map_from_props.csv missing {sorted(missing_cols)}"
+        )
+
     opp = opp.copy()
+    opp["player_key"] = (
+        opp["player"]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+    opp["team_key"] = (
+        opp["team"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
 
-    def _norm_team_key(series: pd.Series) -> pd.Series:
-        base = series.fillna("").astype(str)
-        mapped = base.map(_canon_team)
-        raw = base.str.strip().str.upper()
-        return mapped.where(mapped.notna() & mapped.ne(""), raw)
-
-    def _norm_player_key(series: pd.Series) -> pd.Series:
-        return series.fillna("").astype(str).map(_player_key_from_name_nh)
-
-    opp["player_key"] = _norm_player_key(opp.get("player", pd.Series(dtype=str)))
-    opp["team_key"] = _norm_team_key(opp.get("team", pd.Series(dtype=str)))
-
-    out["player_key"] = _norm_player_key(out.get("player", pd.Series(dtype=str)))
-    out["team_key"] = _norm_team_key(out.get("team", pd.Series(dtype=str)))
+    out["player_key"] = (
+        out["player"]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+    out["team_key"] = (
+        out["team"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
 
     out = out.drop(columns=["week", "opponent"], errors="ignore")
 
@@ -246,23 +261,47 @@ def _inject_week_opponent_and_roles(
             out["opponent"] = pd.NA
         out["opponent"] = existing_opponent.combine_first(out["opponent"])
 
-    if "week" not in out.columns or out["week"].isna().all():
+    week_missing = "week" not in out.columns or out["week"].isna().all()
+    opponent_missing = "opponent" not in out.columns or out["opponent"].isna().all()
+
+    if require_week and week_missing:
+        print("[make_player_form] ERROR: cannot assign week/opponent (post-merge check)")
+        raise RuntimeError("cannot assign week/opponent")
+    if require_opponent and opponent_missing:
         print("[make_player_form] ERROR: cannot assign week/opponent (post-merge check)")
         raise RuntimeError("cannot assign week/opponent")
 
-    out = out.drop(columns=["player_key", "team_key"], errors="ignore")
+    if not require_week and week_missing:
+        out["week"] = pd.NA
+    if not require_opponent and opponent_missing:
+        out["opponent"] = pd.NA
 
     roles = pd.read_csv(ROLES_OURLADS_PATH)
     if roles.empty:
         raise RuntimeError("[make_player_form] roles_ourlads.csv is empty. Ourlads scrape failed.")
 
     roles = roles.copy()
-    roles["player"] = roles.get("player", pd.Series(dtype=str)).astype(str).str.strip().str.lower()
-    roles["team"] = roles.get("team", pd.Series(dtype=str)).astype(str).str.strip().str.upper()
+    roles["player_key"] = (
+        roles.get("player", pd.Series(dtype=str))
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+    roles["team_key"] = (
+        roles.get("team", pd.Series(dtype=str))
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
 
     pf_before = len(out)
-    roles_subset = roles[["team", "player", "role", "position"]].drop_duplicates()
-    out = out.merge(roles_subset, on=["team", "player"], how="left", suffixes=("", "_ourlads"))
+    roles_subset = roles[["team_key", "player_key", "role", "position"]].drop_duplicates()
+    out = out.merge(
+        roles_subset,
+        on=["team_key", "player_key"],
+        how="left",
+        suffixes=("", "_ourlads"),
+    )
 
     if "role_ourlads" in out.columns:
         out["role"] = out["role"].where(out["role"].notna(), out["role_ourlads"])
@@ -278,6 +317,8 @@ def _inject_week_opponent_and_roles(
     print(
         f"[make_player_form] merged roles_ourlads coverage={coverage:.2f}% base_before={pf_before} base_after={len(out)}"
     )
+
+    out = out.drop(columns=["player_key", "team_key"], errors="ignore")
 
     if "week" in out.columns:
         out["week"] = pd.to_numeric(out["week"], errors="coerce")
