@@ -167,27 +167,44 @@ def main() -> None:
     schedule["season"] = season
     team_map = expand_to_team_opp(schedule)
 
-    cols = ["player", "team", "opponent", "week", "season", "game_timestamp"]
-    team_map.insert(0, "player", "")
-    if "game_timestamp" not in team_map:
-        team_map["game_timestamp"] = ""
-    out_df = team_map[cols]
+    roles_path = Path("data") / "roles_ourlads.csv"
+    players = None
+    if roles_path.exists():
+        try:
+            players = pd.read_csv(roles_path)
+            if not {"team", "player"}.issubset(players.columns):
+                players = None
+        except Exception as e:
+            print(f"[build_opponent_map_from_props] failed to load roles_ourlads.csv: {e}")
+            players = None
+
+    # Build player → team mapping if available
+    if players is not None and not players.empty:
+        print(f"[build_opponent_map_from_props] expanding per-player opponent map using roles_ourlads.csv ({len(players)} players)")
+        players = players.loc[:, ["team", "player"]].dropna(subset=["team", "player"])
+        players["team"] = players["team"].astype(str).str.upper().str.strip()
+        team_map["team"] = team_map["team"].astype(str).str.upper().str.strip()
+
+        merged = team_map.merge(players, on="team", how="left")
+        merged = merged.loc[:, ["player", "team", "opponent", "week", "season", "game_timestamp"]]
+    else:
+        print("[build_opponent_map_from_props] WARNING: roles_ourlads.csv not found or empty — writing team-only mapping")
+        team_map.insert(0, "player", "")
+        merged = team_map.loc[:, ["player", "team", "opponent", "week", "season", "game_timestamp"]]
+
+    out_df = merged.dropna(subset=["team", "opponent"]).reset_index(drop=True)
 
     out_path = Path("data") / "opponent_map_from_props.csv"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    if out_df.empty:
-        raise RuntimeError("opponent map DataFrame is empty; refusing to write CSV")
     out_df.to_csv(out_path, index=False)
-    print(
-        f"[build_opponent_map_from_props] wrote {out_path} with {len(out_df)} rows (season={season})."
-    )
+    print(f"[build_opponent_map_from_props] wrote {len(out_df)} player/opponent rows → {out_path}")
 
+    # Optional debug sample
     debug_dir = out_path.parent / "_debug"
     debug_dir.mkdir(parents=True, exist_ok=True)
     debug_path = debug_dir / "opponent_sample.csv"
     out_df.head(50).to_csv(debug_path, index=False)
     print(f"[build_opponent_map_from_props] wrote debug sample → {debug_path}")
-
 
 if __name__ == "__main__":
     main()
