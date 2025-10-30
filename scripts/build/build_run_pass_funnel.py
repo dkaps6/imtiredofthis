@@ -35,7 +35,9 @@ from scripts.utils.pbp_threshold import (
 def main(out_csv: str = "run_pass_funnel.csv"):
     min_rows_target = get_dynamic_min_rows()
     pbp = get_pbp_2025(min_rows=20000)
-    print(f"[run_pass_funnel] PBP rows: {len(pbp)} (soft target {min_rows_target})")
+    print(
+        f"[run_pass_funnel] PBP loaded rows: {len(pbp)} (soft target {min_rows_target})"
+    )
     enforce_min_rows(pbp, min_rows_target)
     if "season" in pbp.columns:
         pbp = pbp[pbp["season"] == 2025].copy()

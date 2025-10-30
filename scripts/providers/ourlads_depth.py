@@ -4,12 +4,6 @@
 
 import os, re, time, warnings, sys
 
-# Ourlads-specific team code override for HTTP endpoints
-OURLADS_CODE = {"ARI": "ARZ"}
-
-def _ol_code(team: str) -> str:
-    t = (team or "").upper().strip()
-    return OURLADS_CODE.get(t, t)
 from typing import Dict, List, Optional
 import pandas as pd
 import requests
@@ -111,19 +105,25 @@ def _split_candidates(cell_text: str) -> List[str]:
             out.append(nm)
     return out
 
-def _role_rank(role: str) -> int:
-    m = re.search(r"(\d+)$", str(role))
-    return int(m.group(1)) if m else 999
 
-def _normalize_pos(p: str) -> str:
-    p = (p or "").upper().strip()
-    if ("WR" in p) or p in {"SL","SLOT","FL","SE","SWR","LWR","RWR","WR-X","WR-Y","WR-Z"}:
-        return "WR"
-    if p in {"RB","HB","TB","FB"}:
-        return "RB"
-    if p in {"TE","Y","H"}:
-        return "TE"
-    return p
+OL_POSITIONS = {"LT", "LG", "C", "RG", "RT"}
+
+ROLE_SLOT_MAPPING = {
+    ("LWR", "player 1"): "WR1",
+    ("RWR", "player 1"): "WR2",
+    ("SWR", "player 1"): "WR3",
+    ("QB", "player 1"): "QB1",
+    ("RB", "player 1"): "RB1",
+    ("TB", "player 1"): "RB1",
+    ("HB", "player 1"): "RB1",
+    ("TE", "player 1"): "TE1",
+}
+
+
+def map_role(base_pos: str, depth_slot: str) -> Optional[str]:
+    base = (base_pos or "").upper().strip()
+    slot = re.sub(r"\s+", " ", (depth_slot or "").strip().lower())
+    return ROLE_SLOT_MAPPING.get((base, slot))
 
 # ----------------------------
 # Robust fetch with retries
@@ -176,152 +176,97 @@ def _find_offense_table(soup: BeautifulSoup) -> Optional[BeautifulSoup]:
             return tbl
     return None
 
-def fetch_team_roles(team: str, soup: BeautifulSoup) -> pd.DataFrame:
-    rows: List[dict] = []
+def _extract_table_structure(table: BeautifulSoup) -> (List[str], List[BeautifulSoup]):
+    rows = table.find_all("tr")
+    if not rows:
+        return [], []
 
+    def _cell_text(cell: BeautifulSoup) -> str:
+        return BeautifulSoup(cell.decode_contents(), "lxml").get_text(" ", strip=True)
+
+    header_cells = rows[0].find_all(["th", "td"])
+    header_has_th = any(cell.name == "th" for cell in header_cells)
+
+    if header_has_th:
+        header = []
+        for idx, cell in enumerate(header_cells):
+            text = _cell_text(cell)
+            if not text:
+                text = "Position" if idx == 0 else f"Player {idx}"
+            else:
+                match = re.match(r"player\s*(\d+)", text, flags=re.I)
+                if match:
+                    text = f"Player {match.group(1)}"
+            header.append(text.strip())
+        data_rows = rows[1:]
+    else:
+        header = ["Position"]
+        header.extend(f"Player {idx}" for idx in range(1, len(header_cells)))
+        data_rows = rows
+
+    return header, data_rows
+
+
+def fetch_team_roles(team: str, soup: BeautifulSoup) -> List[dict]:
     table = _find_offense_table(soup)
     if not table:
-        return pd.DataFrame(columns=["team","player","role"])
+        return []
 
-    for tr in table.find_all("tr"):
+    header, data_rows = _extract_table_structure(table)
+    if not data_rows:
+        return []
+
+    try:
+        player1_idx = next(
+            idx
+            for idx, label in enumerate(header)
+            if idx > 0 and re.sub(r"\s+", " ", label.strip()).lower() == "player 1"
+        )
+    except StopIteration:
+        player1_idx = 1 if len(header) > 1 else None
+
+    if player1_idx is None:
+        return []
+
+    records: List[dict] = []
+    team_code = _canon_team(team)
+
+    for tr in data_rows:
         tds = tr.find_all("td")
-        if len(tds) < 2:
+        if len(tds) <= player1_idx:
             continue
 
         pos_raw = BeautifulSoup(tds[0].decode_contents(), "lxml").get_text(" ", strip=True).upper()
-        pos = _normalize_pos(pos_raw)
-        if pos not in {"QB","RB","WR","TE"}:
+        base_pos = pos_raw.strip().upper()
+        if not base_pos or base_pos in OL_POSITIONS:
             continue
 
-        for depth_idx, td in enumerate(tds[1:], start=1):
-            raw = BeautifulSoup(td.decode_contents(), "lxml").get_text(" ", strip=True)
-            raw = re.sub(r"\s*\(.*?\)\s*$", "", raw).strip()
-            candidates = _split_candidates(raw)
-            if not candidates:
-                continue
-            for slot_order, player in enumerate(candidates, start=1):
-                rows.append({
-                    "team": team,
-                    "player": player,
-                    "role": f"{pos}{depth_idx}",
-                    "orig_depth": depth_idx,
-                    "slot_order": slot_order,
-                })
+        depth_slot_label = header[player1_idx] if player1_idx < len(header) else "Player 1"
+        depth_slot_label = re.sub(r"\s+", " ", depth_slot_label).strip() or "Player 1"
 
-    df = pd.DataFrame(rows)
-    if df.empty:
-        return df
+        cell_text = BeautifulSoup(tds[player1_idx].decode_contents(), "lxml").get_text(" ", strip=True)
+        cell_text = re.sub(r"\s*\(.*?\)\s*$", "", cell_text).strip()
+        candidates = _split_candidates(cell_text)
+        if not candidates:
+            continue
 
-    df["rank"] = df["role"].map(_role_rank)
-    df = (
-        df.sort_values(["team","player","rank"])
-          .drop_duplicates(["team","player"], keep="first")
-          .drop(columns=["rank"])
-    )
-    return df
+        player_name = candidates[0]
+        role = map_role(base_pos, depth_slot_label)
+        if not role:
+            continue
 
-# ----------------------------
-# Roster (fallback)
-# ----------------------------
-def fetch_team_roster(team: str, soup_depth: BeautifulSoup) -> pd.DataFrame:
-    try:
-        roster_link = None
-        for a in soup_depth.find_all("a", href=True):
-            h = a.get("href","")
-            t = a.get_text(" ", strip=True).upper()
-            if "ROSTER" in t and "/nfldepthcharts/roster/" in h:
-                roster_link = h if h.startswith("http") else f"https://www.ourlads.com{h}"
-                break
-        if roster_link is None:
-            # deterministic fallback
-            roster_link = f"https://www.ourlads.com/nfldepthcharts/roster/{_ol_code(team)}"
-        html = _get_html(roster_link)
-        soup = BeautifulSoup(html, "lxml")
-        table = soup.find("table")
-        if not table:
-            return pd.DataFrame(columns=["team","player","pos_roster"])
-
-        rows = []
-        for tr in table.find_all("tr"):
-            tds = tr.find_all("td")
-            if len(tds) < 2:
-                continue
-            pos_txt = BeautifulSoup(tds[0].decode_contents(), "lxml").get_text(" ", strip=True).upper()
-            name_txt = BeautifulSoup(tds[1].decode_contents(), "lxml").get_text(" ", strip=True)
-            pos = _normalize_pos(pos_txt)
-            if pos not in {"QB","RB","WR","TE"}:
-                continue
-            player = _norm_player(name_txt)
-            if not player:
-                continue
-            rows.append({"team": team, "player": player, "pos_roster": pos})
-        return pd.DataFrame(rows)
-    except Exception:
-        return pd.DataFrame(columns=["team","player","pos_roster"])
-
-# ----------------------------
-# Post-process
-# ----------------------------
-def _reassign_sequential_depth(df: pd.DataFrame) -> pd.DataFrame:
-    if df is None or getattr(df, "empty", True):
-        return df
-    df = df.copy()
-    df["pos"] = df["role"].str.extract(r"([A-Z]+)")
-    if "orig_depth" not in df.columns:
-        df["orig_depth"] = df["role"].str.extract(r"(\d+)").astype(int)
-    if "slot_order" not in df.columns:
-        df["slot_order"] = 1
-
-    def assign(g: pd.DataFrame) -> pd.DataFrame:
-        g = g.sort_values(["orig_depth", "slot_order"], na_position="last").copy()
-        g["depth"] = range(1, len(g) + 1)
-        g["role"] = g["pos"].iloc[0] + g["depth"].astype(str)
-        return g.drop(columns=["depth"])
-    return df.groupby(["team", "pos"], group_keys=False).apply(assign)
-
-def _fi_last(s: str) -> str:
-    toks = s.strip().split()
-    if not toks:
-        return ""
-    first, last = toks[0], toks[-1]
-    return f"{first[0].lower()} {last.lower()}" if last else s.lower()
-
-def _fi_last_concat(s: str) -> str:
-    toks = s.strip().split()
-    if not toks:
-        return ""
-    first, last = toks[0], toks[-1]
-    return f"{first[0].upper()}{last.title().replace(' ', '')}"
-
-def _postprocess_roles_df_ourlads(df: pd.DataFrame) -> pd.DataFrame:
-    if df is None or getattr(df, "empty", True):
-        return df.copy()
-
-    df = df.copy()
-    df["team"] = df["team"].map(_canon_team)
-    df = df[df["team"].isin(VALID)]
-
-    df["player"] = df["player"].astype(str)
-    df["player"] = df["player"].str.replace(r"^\s*(?:#\s*)?\d+\s*[-–—:]?\s*", "", regex=True)
-    df = df[~df["player"].str.fullmatch(r"\d+")]
-
-    if "role" in df.columns:
-        rk = (
-            df["role"].astype(str).str.extract(r"(\d+)$", expand=False)
-              .astype(float).fillna(999).astype(int)
-        )
-        df = (
-            df.assign(_rk=rk)
-              .sort_values(["team","player","_rk"])
-              .drop_duplicates(["team","player"], keep="first")
-              .drop(columns=["_rk"])
+        records.append(
+            {
+                "team": team_code,
+                "player": player_name,
+                "position": base_pos,
+                "depth_slot": "Player 1",
+                "role": role,
+            }
         )
 
-    df = _reassign_sequential_depth(df)
+    return records
 
-    df["player_key_filast"]  = df["player"].map(_fi_last)
-    df["player_key_concat"]  = df["player"].map(_fi_last_concat)
-    return df
 
 # ----------------------------
 # Main
@@ -330,59 +275,35 @@ def main():
     warnings.simplefilter("ignore")
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    all_dfs = []
+    all_rows: List[dict] = []
     for tm in sorted(TEAM_URLS.keys()):
         try:
             soup = _get_depth_soup(tm)
-
-            roles = fetch_team_roles(tm, soup)
-            roster = fetch_team_roster(tm, soup)
-
-            if not roster.empty:
-                r = roster.copy()
-                r["player_join"] = r["player"].str.replace(r"[^A-Za-z]", "", regex=True)
-                if not roles.empty:
-                    d = roles.copy()
-                    d["player_join"] = d["player"].str.replace(r"[^A-Za-z]", "", regex=True)
-                    merged = r.merge(
-                        d[["team","player_join","role","orig_depth","slot_order"]],
-                        on=["player_join"], how="left", suffixes=("","_d")
-                    )
-                    merged["team"] = tm
-                    merged.drop(columns=["player_join"], inplace=True, errors="ignore")
-                    df_team = merged[["team","player","role","orig_depth","slot_order","pos_roster"]].copy()
-                else:
-                    df_team = r[["team","player","pos_roster"]].copy()
-                    df_team["role"] = pd.NA
-                    df_team["orig_depth"] = pd.NA
-                    df_team["slot_order"] = pd.NA
+            team_rows = fetch_team_roles(tm, soup)
+            if not team_rows:
+                print(f"[ourlads_depth] NOTE: 0 Player 1 rows for {tm}", file=sys.stderr)
             else:
-                df_team = roles
-
-            if df_team is None or df_team.empty:
-                print(f"[ourlads_depth] NOTE: 0 rows for {tm}", file=sys.stderr)
-            else:
-                all_dfs.append(df_team)
-
+                all_rows.extend(team_rows)
         except Exception as e:
             print(f"[ourlads_depth] WARN: failed {tm}: {e}", flush=True)
 
         time.sleep(0.5)  # polite
 
-    roles_all = (
-        pd.concat(all_dfs, ignore_index=True).drop_duplicates()
-        if all_dfs else pd.DataFrame(columns=["team","player","role"])
-    )
-    roles_all = _postprocess_roles_df_ourlads(roles_all)
+    if all_rows:
+        roles_all = pd.DataFrame(all_rows)
+    else:
+        roles_all = pd.DataFrame(columns=["team", "player", "position", "depth_slot", "role"])
 
-    # Position fallback: from role letters; else use roster pos
-    if "position" not in roles_all.columns:
-        roles_all["position"] = roles_all["role"].astype(str).str.extract(r"([A-Z]+)")
-    if "pos_roster" in roles_all.columns:
-        roles_all["position"] = roles_all["position"].fillna(roles_all["pos_roster"])
+    roles_all = roles_all.dropna(subset=["player", "role"])
+    if not roles_all.empty:
+        roles_all["team"] = roles_all["team"].astype(str).str.upper().str.strip().map(_canon_team)
+        roles_all = roles_all[roles_all["team"].isin(VALID)]
+        roles_all = roles_all.drop_duplicates(subset=["team", "player", "role"])
+        roles_all = roles_all.sort_values(["team", "role", "player"])
 
-    roles_all.to_csv(OUT_ROLES, index=False)
-    print(f"[ourlads_depth] wrote rows={len(roles_all)} → {OUT_ROLES}")
+    output_df = roles_all[["team", "player", "role", "position"]].copy()
+    output_df.to_csv(OUT_ROLES, index=False)
+    print(f"[ourlads_depth] wrote rows={len(output_df)} → {OUT_ROLES}")
 
 if __name__ == "__main__":
     main()

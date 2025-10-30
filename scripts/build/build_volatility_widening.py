@@ -68,7 +68,9 @@ def compute_score_margin_volatility(df: pd.DataFrame) -> float:
 def main(out_csv: str = "volatility_widening.csv"):
     min_rows_target = get_dynamic_min_rows()
     pbp = get_pbp_2025(min_rows=20000)
-    print(f"[volatility_widening] PBP rows: {len(pbp)} (soft target {min_rows_target})")
+    print(
+        f"[volatility_widening] PBP loaded rows: {len(pbp)} (soft target {min_rows_target})"
+    )
     enforce_min_rows(pbp, min_rows_target)
     if "season" in pbp.columns:
         pbp = pbp[pbp["season"] == 2025].copy()
