@@ -1,44 +1,150 @@
 #!/usr/bin/env python3
+import os
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from nfl_data_py import import_schedules
 
-TEAM_NAME_TO_ABBR = {
-    "Arizona Cardinals": "ARI",
-    "Atlanta Falcons": "ATL",
-    "Baltimore Ravens": "BAL",
-    "Buffalo Bills": "BUF",
-    "Carolina Panthers": "CAR",
-    "Chicago Bears": "CHI",
-    "Cincinnati Bengals": "CIN",
-    "Cleveland Browns": "CLE",
-    "Dallas Cowboys": "DAL",
-    "Denver Broncos": "DEN",
-    "Detroit Lions": "DET",
-    "Green Bay Packers": "GB",
-    "Houston Texans": "HOU",
-    "Indianapolis Colts": "IND",
-    "Jacksonville Jaguars": "JAX",
-    "Kansas City Chiefs": "KC",
-    "Las Vegas Raiders": "LV",
-    "Los Angeles Chargers": "LAC",
-    "Los Angeles Rams": "LAR",
-    "Miami Dolphins": "MIA",
-    "Minnesota Vikings": "MIN",
-    "New England Patriots": "NE",
-    "New Orleans Saints": "NO",
-    "New York Giants": "NYG",
-    "New York Jets": "NYJ",
-    "Philadelphia Eagles": "PHI",
-    "Pittsburgh Steelers": "PIT",
-    "Seattle Seahawks": "SEA",
-    "San Francisco 49ers": "SF",
-    "Tampa Bay Buccaneers": "TB",
-    "Tennessee Titans": "TEN",
-    "Washington Commanders": "WAS",
+VALID = {
+    "ARI","ATL","BAL","BUF","CAR","CHI","CIN","CLE","DAL","DEN","DET","GB",
+    "HOU","IND","JAX","KC","LAC","LAR","LV","MIA","MIN","NE","NO","NYG","NYJ",
+    "PHI","PIT","SEA","SF","TB","TEN","WAS"
 }
+
+TEAM_NAME_TO_ABBR = {
+    "ARI":"ARI","ARZ":"ARI","ATL":"ATL","BAL":"BAL","BUF":"BUF","CAR":"CAR",
+    "CHI":"CHI","CIN":"CIN","CLE":"CLE","DAL":"DAL","DEN":"DEN","DET":"DET",
+    "GB":"GB","GNB":"GB","HOU":"HOU","IND":"IND","JAX":"JAX","JAC":"JAX",
+    "KC":"KC","KCC":"KC","LAC":"LAC","LAR":"LAR","LA":"LAR","LV":"LV","OAK":"LV",
+    "LAS":"LV","MIA":"MIA","MIN":"MIN","NE":"NE","NWE":"NE","NO":"NO","NOR":"NO",
+    "NYG":"NYG","NYJ":"NYJ","PHI":"PHI","PIT":"PIT","SEA":"SEA","SF":"SF",
+    "SFO":"SF","TB":"TB","TAM":"TB","TEN":"TEN","WAS":"WAS","WSH":"WAS","WFT":"WAS",
+    "ARIZONA CARDINALS":"ARI","ATLANTA FALCONS":"ATL","BALTIMORE RAVENS":"BAL",
+    "BUFFALO BILLS":"BUF","CAROLINA PANTHERS":"CAR","CHICAGO BEARS":"CHI",
+    "CINCINNATI BENGALS":"CIN","CLEVELAND BROWNS":"CLE","DALLAS COWBOYS":"DAL",
+    "DENVER BRONCOS":"DEN","DETROIT LIONS":"DET","GREEN BAY PACKERS":"GB",
+    "HOUSTON TEXANS":"HOU","INDIANAPOLIS COLTS":"IND","JACKSONVILLE JAGUARS":"JAX",
+    "KANSAS CITY CHIEFS":"KC","LOS ANGELES CHARGERS":"LAC","LOS ANGELES RAMS":"LAR",
+    "LAS VEGAS RAIDERS":"LV","MIAMI DOLPHINS":"MIA","MINNESOTA VIKINGS":"MIN",
+    "NEW ENGLAND PATRIOTS":"NE","NEW ORLEANS SAINTS":"NO","NEW YORK GIANTS":"NYG",
+    "NEW YORK JETS":"NYJ","PHILADELPHIA EAGLES":"PHI","PITTSBURGH STEELERS":"PIT",
+    "SEATTLE SEAHAWKS":"SEA","SAN FRANCISCO 49ERS":"SF","TAMPA BAY BUCCANEERS":"TB",
+    "TENNESSEE TITANS":"TEN","WASHINGTON COMMANDERS":"WAS","WASHINGTON FOOTBALL TEAM":"WAS",
+    "ARIZONA":"ARI","CARDINALS":"ARI","ATLANTA":"ATL","FALCONS":"ATL","BALTIMORE":"BAL",
+    "RAVENS":"BAL","BUFFALO":"BUF","BILLS":"BUF","CAROLINA":"CAR","PANTHERS":"CAR",
+    "CHICAGO":"CHI","BEARS":"CHI","CINCINNATI":"CIN","BENGALS":"CIN","CLEVELAND":"CLE",
+    "BROWNS":"CLE","DALLAS":"DAL","COWBOYS":"DAL","DENVER":"DEN","BRONCOS":"DEN",
+    "DETROIT":"DET","LIONS":"DET","GREEN BAY":"GB","PACKERS":"GB","HOUSTON":"HOU",
+    "TEXANS":"HOU","INDIANAPOLIS":"IND","COLTS":"IND","JACKSONVILLE":"JAX",
+    "JAGUARS":"JAX","KANSAS CITY":"KC","CHIEFS":"KC","CHARGERS":"LAC","RAMS":"LAR",
+    "LOS ANGELES":"LAR","LAS VEGAS":"LV","RAIDERS":"LV","MIAMI":"MIA","DOLPHINS":"MIA",
+    "MINNESOTA":"MIN","VIKINGS":"MIN","NEW ENGLAND":"NE","PATRIOTS":"NE",
+    "NEW ORLEANS":"NO","SAINTS":"NO","GIANTS":"NYG","JETS":"NYJ","PHILADELPHIA":"PHI",
+    "EAGLES":"PHI","PITTSBURGH":"PIT","STEELERS":"PIT","SEATTLE":"SEA",
+    "SEAHAWKS":"SEA","SAN FRANCISCO":"SF","49ERS":"SF","TAMPA BAY":"TB",
+    "BUCCANEERS":"TB","TENNESSEE":"TEN","TITANS":"TEN","WASHINGTON":"WAS",
+    "COMMANDERS":"WAS"
+}
+TEAM_NAME_TO_ABBR.update({k.lower(): v for k, v in TEAM_NAME_TO_ABBR.items()})
+
+import re as _re_nh
+import unicodedata as _ud_nh
+
+_SUFFIX_RE_NH = _re_nh.compile(r"\b(JR|SR|II|III|IV|V)\b\.?", _re_nh.IGNORECASE)
+_LEADING_NUM_RE_NH = _re_nh.compile(r"^\s*(?:#\s*)?\d+\s*[-–—:]?\s*", _re_nh.UNICODE)
+
+
+def _deaccent_nh(s: str) -> str:
+    try:
+        return _ud_nh.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
+    except Exception:
+        return s
+
+
+def _clean_person_name_nh(s: str) -> str:
+    s = (s or "").replace("\xa0", " ").strip()
+    s = _LEADING_NUM_RE_NH.sub("", s)
+    s = s.replace(".", " ")
+    s = _SUFFIX_RE_NH.sub("", s)
+    s = _re_nh.sub(r"\s+", " ", s)
+    s = _deaccent_nh(s)
+    return s.strip()
+
+
+def _player_key_from_name_nh(s: str) -> str:
+    s = _clean_person_name_nh(s)
+    return _re_nh.sub(r"[^a-z0-9]", "", s.lower())
+
+
+def _canon_team(x: str) -> str:
+    if x is None:
+        return ""
+    s = str(x).strip().upper()
+    if s in TEAM_NAME_TO_ABBR:
+        abbr = TEAM_NAME_TO_ABBR[s]
+        return abbr if abbr in VALID else ""
+    s2 = _re_nh.sub(r"[^A-Z0-9 ]+", "", s).strip()
+    if s2 in TEAM_NAME_TO_ABBR:
+        abbr = TEAM_NAME_TO_ABBR[s2]
+        return abbr if abbr in VALID else ""
+    return ""
+
+
+def build_name_canonical_map_from_inputs(df_list):
+    """
+    df_list: list of DataFrames that have at least ['team','player'].
+    Returns dict[team_abbr][name_variant_lower] = canonical_full_name
+    """
+
+    rows = []
+    for df in df_list:
+        if df is None or df.empty:
+            continue
+        for _, r in df.iterrows():
+            team = str(r.get("team", "")).strip().upper()
+            full = str(r.get("player", "")).strip()
+            if not team or not full:
+                continue
+            parts = full.split()
+            if len(parts) < 2:
+                continue
+            first = parts[0]
+            last = parts[-1]
+            key_full = f"{first} {last}".lower()
+            key_init_dot = f"{first[0]}. {last}".lower()
+            key_init_nodot = f"{first[0]} {last}".lower()
+            if team not in VALID:
+                continue
+            rows.append((team, full, key_full, key_init_dot, key_init_nodot))
+    out = {}
+    for team, full, k1, k2, k3 in rows:
+        out.setdefault(team, {})
+        out[team][k1] = full
+        out[team][k2] = full
+        out[team][k3] = full
+    return out
+
+
+def apply_name_canonicalization_local(df, canon_map):
+    df = df.copy()
+    for idx, row in df.iterrows():
+        t = str(row.get("team", "")).strip().upper()
+        p = str(row.get("player", "")).strip()
+        if not t or not p:
+            continue
+        key1 = p.lower()
+        key2 = key1.replace(".", "")
+        fixed = None
+        if t in canon_map:
+            if key1 in canon_map[t]:
+                fixed = canon_map[t][key1]
+            elif key2 in canon_map[t]:
+                fixed = canon_map[t][key2]
+        if fixed:
+            df.at[idx, "player"] = fixed
+    return df
 
 
 def get_nfl_schedule(season: int) -> pd.DataFrame:
@@ -109,24 +215,13 @@ def expand_to_team_opp(schedule: pd.DataFrame) -> pd.DataFrame:
     games = schedule[[away_col, home_col, "week", "season"]].copy()
     games.rename(columns={away_col: "away_abbr", home_col: "home_abbr"}, inplace=True)
 
-    for col in ["away_abbr", "home_abbr"]:
-        games[col] = games[col].apply(
-            lambda val: TEAM_NAME_TO_ABBR.get(
-                str(val).strip(), str(val).strip().upper()
-            )
-            if pd.notna(val)
-            else val
-        )
-
     games["week"] = pd.to_numeric(games["week"], errors="coerce")
     games = games.dropna(subset=["week"]).astype({"week": int})
 
     if timestamp_col:
-        games["game_timestamp"] = (
-            schedule.loc[games.index, timestamp_col].fillna("").astype(str)
-        )
+        games["game_timestamp"] = schedule.loc[games.index, timestamp_col]
     else:
-        games["game_timestamp"] = ""
+        games["game_timestamp"] = np.nan
 
     columns = ["team", "opponent", "week", "season", "game_timestamp"]
     away = games.rename(
@@ -168,88 +263,78 @@ def main() -> None:
     team_map = expand_to_team_opp(schedule)
 
     roles_path = Path("data") / "roles_ourlads.csv"
-    players = None
+    players_df = pd.DataFrame()
     if roles_path.exists():
         try:
-            players = pd.read_csv(roles_path)
-        except Exception as e:
-            print(f"[build_opponent_map_from_props] failed to load roles_ourlads.csv: {e}")
-            players = None
+            tmp = pd.read_csv(roles_path)
+        except Exception as exc:
+            print(
+                "[build_opponent_map_from_props] failed to load roles_ourlads.csv: "
+                f"{exc}"
+            )
+            tmp = pd.DataFrame()
+        if not tmp.empty and {"team", "player"}.issubset(tmp.columns):
+            tmp = tmp[["team", "player"]].dropna(subset=["team", "player"]).copy()
+            tmp["team"] = tmp["team"].astype(str).str.upper().str.strip().map(_canon_team)
+            tmp = tmp[tmp["team"].isin(VALID)]
+            tmp["player"] = tmp["player"].astype(str).str.strip()
+            players_df = tmp.drop_duplicates()
 
-    if (
-        players is not None
-        and not players.empty
-        and {"team", "player"}.issubset(players.columns)
-    ):
-        print(
-            "[build_opponent_map_from_props] expanding per-player opponent map using roles_ourlads.csv "
-            f"({len(players)} players)"
+    if players_df.empty:
+        players_df = players_df.reindex(columns=["team", "player"])
+
+    team_map = team_map.copy()
+    team_map["team"] = team_map["team"].astype(str).str.upper().str.strip().map(_canon_team)
+    team_map["opponent"] = team_map["opponent"].astype(str).str.upper().str.strip().map(_canon_team)
+    team_map = team_map[
+        team_map["team"].isin(VALID) & team_map["opponent"].isin(VALID)
+    ]
+
+    merged = team_map.merge(players_df, on="team", how="left")
+
+    canon_map = build_name_canonical_map_from_inputs([merged])
+    merged = apply_name_canonicalization_local(merged, canon_map)
+
+    merged["player_key"] = merged["player"].astype(str).map(_player_key_from_name_nh)
+    merged["team_key"] = merged["team"].astype(str).str.upper().str.strip()
+
+    out_df = merged.loc[
+        merged["player"].notna()
+        & (merged["player"].astype(str).str.strip() != "")
+        & merged["team"].notna()
+        & (merged["team"].astype(str).str.strip() != ""),
+        [
+            "player",
+            "team",
+            "opponent",
+            "week",
+            "season",
+            "game_timestamp",
+            "player_key",
+            "team_key",
+        ],
+    ].copy()
+
+    if "week" not in out_df.columns or out_df["week"].isna().all():
+        raise RuntimeError(
+            "[build_opponent_map_from_props] no usable week mapping for any player"
         )
 
-        # keep just team + player, normalize team code
-        players = (
-            players.loc[:, ["team", "player"]]
-            .dropna(subset=["team", "player"])
-            .copy()
-        )
-        players["team"] = (
-            players["team"]
-            .astype(str)
-            .str.upper()
-            .str.strip()
-        )
-
-        # normalize team/opponent/week on the schedule side before merge
-        team_map["team"] = (
-            team_map["team"]
-            .astype(str)
-            .str.upper()
-            .str.strip()
-        )
-        team_map["opponent"] = (
-            team_map["opponent"]
-            .astype(str)
-            .str.upper()
-            .str.strip()
-        )
-
-        # explode schedule per player
-        merged = team_map.merge(players, on="team", how="left")
-
-        # keep week, do NOT drop it
-        out_df = merged.loc[
-            :,
-            ["player", "team", "opponent", "week", "season", "game_timestamp"],
-        ].copy()
-
-    else:
-        print(
-            "[build_opponent_map_from_props] WARNING: roles_ourlads.csv missing or invalid, writing team-only mapping"
-        )
-        team_only = team_map.loc[
-            :, ["team", "opponent", "week", "season", "game_timestamp"]
-        ].copy()
-        team_only.insert(0, "player", "")
-        out_df = team_only
-
-    # final cleanup
-    out_df = out_df.dropna(subset=["team", "opponent", "week"]).reset_index(drop=True)
-
-    out_path = Path("data") / "opponent_map_from_props.csv"
+    out_path = Path(os.path.join("data", "opponent_map_from_props.csv"))
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_df.to_csv(out_path, index=False)
     print(
-        f"[build_opponent_map_from_props] wrote {len(out_df)} player/opponent rows → {out_path}"
+        f"[build_opponent_map_from_props] wrote {len(out_df)} rows → {out_path}"
     )
 
-    # debug sample
-    debug_dir = out_path.parent / "_debug"
+    debug_dir = Path(os.path.join("data", "_debug"))
     debug_dir.mkdir(parents=True, exist_ok=True)
-    (debug_dir / "opponent_sample.csv").write_text(
-        out_df.head(50).to_csv(index=False)
-    )
+    out_df.head(50).to_csv(debug_dir / "opponent_sample.csv", index=False)
     print(
-        f"[build_opponent_map_from_props] wrote debug sample → {debug_dir/'opponent_sample.csv'}"
+        "[build_opponent_map_from_props] wrote debug sample → "
+        f"{debug_dir / 'opponent_sample.csv'}"
     )
+
 
 if __name__ == "__main__":
     main()
