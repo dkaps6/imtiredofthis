@@ -14,7 +14,7 @@
 #     RWR -> WR2
 #     SWR -> WR3
 #     QB  -> QB1
-#     RB/HB/TB -> RB1
+#     RB -> RB1
 #     TE  -> TE1
 # - Cleans names to sportsbook style:
 #     "Allen, Josh 18/1 cc" -> "Josh Allen"
@@ -93,21 +93,21 @@ TEAM_URLS: Dict[str, str] = {
     "WAS":"https://www.ourlads.com/nfldepthcharts/depthchart/WAS",
 }
 
-# tokens we consider "not part of the name" even though they are letters
 BAD_TOKENS = {
-    "cc","ps","ir","pup","rs","na","out","doubtful","questionable","inactive",
-    "probable","act","act.","actv","res","res.","p-sq",
-    "(r)","(ir)","(ps)","(pup)"
+    "cc", "ps", "ir", "pup", "rs", "na", "out", "doubtful", "questionable",
+    "inactive", "probable", "act", "act.", "actv", "res", "res.", "p-sq",
+    "(r)", "(ir)", "(ps)", "(pup)"
 }
+
 
 def clean_ourlads_name(raw: str) -> str:
     """
-    Convert stuff like:
+    Convert Ourlads depth text like:
       'Allen, Josh 18/1 cc'
       'Kelce, Travis CF23'
-      'Pacheco, Isiah U/LAC'
+      'Pacheco, Isiah 22/5'
       'Brown, Amon-Ra (R)'
-    into:
+    into canonical sportsbook-style:
       'Josh Allen'
       'Travis Kelce'
       'Isiah Pacheco'
@@ -115,14 +115,15 @@ def clean_ourlads_name(raw: str) -> str:
 
     Rules:
     - Flip 'Last, First ...' -> 'First Last'
-    - Drop tokens w/ digits or '/' (draft/UDFA flags like '18/1', 'U/LAC', 'CF23')
-    - Drop common junk tokens ('cc','ps','ir','pup','(R)', etc.)
-    - Strip commas/parentheses, collapse whitespace
+    - Drop tokens that contain digits or '/' (draft/UDFA markers like '22/5', 'CF23', 'U/LAC')
+    - Drop common junk/status tokens like 'cc', 'ps', 'ir', '(R)', 'pup', etc.
+    - Strip commas/parentheses and collapse whitespace.
     """
+
     if not isinstance(raw, str):
         return ""
 
-    # Flip "Last, First ..." to "First Last ..."
+    # 1. Flip "Last, First ..." -> "First Last ..."
     parts = [p.strip() for p in raw.split(",", 1)]
     if len(parts) == 2:
         last, first_rest = parts[0], parts[1]
@@ -130,26 +131,27 @@ def clean_ourlads_name(raw: str) -> str:
     else:
         candidate = raw
 
-    cleaned_tokens: List[str] = []
+    # 2. Token clean
+    cleaned_tokens = []
     for tok in re.split(r"\s+", candidate):
-        base = tok.strip(",() ").lower()
+        tnorm = tok.lower().strip(",()")
 
-        # nuke tokens with obvious metadata / digits / slashes
+        # Drop obvious garbage:
+        # - numeric or slash tokens (draft round, UDFA markers)
+        # - bad status/junk tokens (cc, ps, ir, pup, etc.)
         if re.search(r"[\d/]", tok):
             continue
-
-        # nuke known garbage tokens
-        if base in BAD_TOKENS:
+        if tnorm in BAD_TOKENS:
             continue
 
-        # drop lone punctuation leftovers / blanks
-        if base in {"", "-", "--"}:
+        # Drop lone punctuation leftovers
+        if tnorm in {"", "-", "--"}:
             continue
 
-        cleaned_tokens.append(tok.strip(",() "))
+        cleaned_tokens.append(tok.strip(",()"))
 
+    # 3. Rebuild "Firstname Lastname" string
     name = " ".join(cleaned_tokens)
-    # collapse multi-space and trim
     name = re.sub(r"\s+", " ", name).strip()
 
     return name
@@ -158,6 +160,7 @@ def clean_ourlads_name(raw: str) -> str:
 # regex to split multi-player cells
 SPLIT_RE = re.compile(r"(?:<br\s*/?>|/| & | and )", flags=re.I)
 
+
 def _split_candidates(cell_text: str) -> List[str]:
     if not cell_text:
         return []
@@ -165,10 +168,8 @@ def _split_candidates(cell_text: str) -> List[str]:
     out: List[str] = []
     for p in parts:
         txt = BeautifulSoup(p, "lxml").get_text(" ", strip=True)
-        nm = clean_ourlads_name(txt)
-        # accept only if it looks like an actual first+last name
-        if nm and len(nm.split()) >= 2 and nm.upper() not in VALID:
-            out.append(nm)
+        if txt:
+            out.append(txt)
     return out
 
 
@@ -176,21 +177,28 @@ def _split_candidates(cell_text: str) -> List[str]:
 OL_POSITIONS = {"LT","LG","C","RG","RT"}
 
 # how we convert Ourlads position column + "Player 1" slot into fantasy role
-ROLE_SLOT_MAPPING = {
-    ("LWR","player 1"): "WR1",
-    ("RWR","player 1"): "WR2",
-    ("SWR","player 1"): "WR3",
-    ("QB","player 1"):  "QB1",
-    ("RB","player 1"):  "RB1",
-    ("TB","player 1"):  "RB1",
-    ("HB","player 1"):  "RB1",
-    ("TE","player 1"):  "TE1",
+POSITION_ALIASES = {
+    "HB": "RB",
+    "TB": "RB",
 }
+
+ROLE_SLOT_MAPPING = {
+    "LWR": "WR1",
+    "RWR": "WR2",
+    "SWR": "WR3",
+    "QB": "QB1",
+    "RB": "RB1",
+    "TE": "TE1",
+}
+
 
 def map_role(base_pos: str, depth_slot: str) -> Optional[str]:
     base = (base_pos or "").upper().strip()
     slot = re.sub(r"\s+", " ", (depth_slot or "").strip().lower())
-    return ROLE_SLOT_MAPPING.get((base, slot))
+    base = POSITION_ALIASES.get(base, base)
+    if slot != "player 1":
+        return None
+    return ROLE_SLOT_MAPPING.get(base)
 
 
 # --- HTTP fetch with retries -------------------------------------------------
@@ -322,33 +330,33 @@ def fetch_team_roles(team: str, soup: BeautifulSoup) -> List[dict]:
 
         # The column header for this slot ("Player 1", etc.)
         depth_slot_label = header[player1_idx] if player1_idx < len(header) else "Player 1"
-        depth_slot_label = re.sub(r"\s+"," ",depth_slot_label).strip() or "Player 1"
+        depth_slot_label = re.sub(r"\s+", " ", depth_slot_label).strip() or "Player 1"
 
         # Grab the text from the Player 1 cell
         cell_text = BeautifulSoup(
             tds[player1_idx].decode_contents(), "lxml"
         ).get_text(" ", strip=True)
-        # Strip trailing paren notes like "(R)" that we nuke anyway
-        cell_text = re.sub(r"\s*\(.*?\)\s*$","",cell_text).strip()
 
         # Some cells contain multiple slash/and separated names -> split and take first
         candidates = _split_candidates(cell_text)
         if not candidates:
             continue
 
-        player_clean = clean_ourlads_name(candidates[0])
-        if not player_clean:
+        raw_player_name = candidates[0]
+        player_clean = clean_ourlads_name(raw_player_name)
+        if not player_clean or len(player_clean.split()) < 2:
             continue
 
         role = map_role(base_pos, depth_slot_label)
         if not role:
             continue
 
+        position_out = POSITION_ALIASES.get(base_pos, base_pos)
         records.append(
             {
                 "team": team_code,
                 "player": player_clean,
-                "position": base_pos,
+                "position": position_out,
                 "depth_slot": "Player 1",
                 "role": role,
             }
