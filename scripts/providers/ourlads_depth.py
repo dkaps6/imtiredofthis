@@ -66,60 +66,41 @@ TEAM_URLS: Dict[str, str] = {
 }
 
 SUFFIX_RE = re.compile(r"\s+(JR|SR|II|III|IV|V)\.?$", re.IGNORECASE)
-LEADING_NUM_RE = re.compile(r"^\s*(?:#\s*)?\d+\s*[-–—:]?\s*", re.UNICODE)
-TAG_CODE_RE = re.compile(r"\b[A-Z]{1,3}\d{2}\b")
-UDFA_SCHOOL_RE = re.compile(r"\b[Uu]/[A-Za-z]{2,4}\b")
-DATE_FRACTION_RE = re.compile(r"\b\d{1,2}/\d{1,2}\b")
+
 
 def clean_ourlads_name(raw: str) -> str:
-    """
-    Convert 'Allen, Josh 18/1' -> 'Josh Allen'.
-    Strip draft/UDFA markers like '18/1', 'CF23', 'U/LAC', etc.
-    Keep only letters, spaces, periods, hyphens in the final name.
-    """
+    """Normalize Ourlads player strings to "Firstname Lastname"."""
+
     if not isinstance(raw, str):
         return ""
 
     parts = [p.strip() for p in raw.split(",", 1)]
     if len(parts) == 2:
-        last, first_and_junk = parts[0], parts[1]
-        base = f"{first_and_junk} {last}"
+        last, first_plus = parts[0], parts[1]
+        candidate = f"{first_plus} {last}"
     else:
-        base = raw
+        candidate = raw
 
-    tokens = []
-    for tok in re.split(r"\s+", base):
+    candidate = re.sub(r"\(.*?\)", " ", candidate)
+
+    cleaned_tokens = []
+    for tok in re.split(r"\s+", candidate):
+        if not tok:
+            continue
         if re.search(r"[\d/]", tok):
             continue
-        tokens.append(tok)
+        cleaned_tokens.append(tok)
 
-    clean = " ".join(tokens).strip()
-    clean = re.sub(r"\s+", " ", clean)
-    clean = clean.replace(",", "").strip()
-    clean = re.sub(r"[^A-Za-z.\-\s]", "", clean)
-    clean = re.sub(r"\s+", " ", clean).strip()
-
-    return clean
-
-def _norm_player(name: str) -> str:
-    if not isinstance(name, str):
+    name = " ".join(cleaned_tokens)
+    name = re.sub(r"[,;]", " ", name)
+    name = name.replace(".", " ")
+    name = re.sub(r"\s+", " ", name).strip()
+    if not name or name.upper() == "U":
         return ""
-    s = clean_ourlads_name(name)
-    s = LEADING_NUM_RE.sub("", s)
-    if "," in s:
-        parts = [p.strip() for p in s.split(",", 1)]
-        if len(parts) == 2 and parts[0] and parts[1]:
-            s = f"{parts[1]} {parts[0]}"
-    s = re.sub(r"\(.*?\)", "", s)
-    s = TAG_CODE_RE.sub("", s)
-    s = UDFA_SCHOOL_RE.sub("", s)
-    s = DATE_FRACTION_RE.sub("", s)
-    s = SUFFIX_RE.sub("", s)
-    s = s.replace(".", " ")
-    s = re.sub(r"[^\w\s'\-]", " ", s)
-    s = re.sub(r"\b\d+\b", "", s)
-    s = re.sub(r"\s+", " ", s).strip().title()
-    return "" if s == "U" else s
+
+    name = SUFFIX_RE.sub("", name)
+    name = re.sub(r"\s+", " ", name).strip()
+    return name
 
 SPLIT_RE = re.compile(r"(?:<br\s*/?>|/| & | and )", flags=re.I)
 
@@ -131,7 +112,6 @@ def _split_candidates(cell_text: str) -> List[str]:
     for p in parts:
         txt = BeautifulSoup(p, "lxml").get_text(" ", strip=True)
         nm = clean_ourlads_name(txt)
-        nm = _norm_player(nm)
         if nm and len(nm.split()) >= 2 and nm.upper() not in VALID:
             out.append(nm)
     return out
@@ -281,10 +261,9 @@ def fetch_team_roles(team: str, soup: BeautifulSoup) -> List[dict]:
         if not candidates:
             continue
 
-        player_name = clean_ourlads_name(candidates[0])
-        if not player_name:
+        player_clean = clean_ourlads_name(candidates[0])
+        if not player_clean:
             continue
-        player_name = _norm_player(player_name)
         role = map_role(base_pos, depth_slot_label)
         if not role:
             continue
@@ -292,7 +271,7 @@ def fetch_team_roles(team: str, soup: BeautifulSoup) -> List[dict]:
         records.append(
             {
                 "team": team_code,
-                "player": player_name,
+                "player": player_clean,
                 "position": base_pos,
                 "depth_slot": "Player 1",
                 "role": role,
@@ -331,8 +310,6 @@ def main():
     roles_all = roles_all.dropna(subset=["player", "role"])
     if not roles_all.empty:
         roles_all["player"] = roles_all["player"].map(clean_ourlads_name)
-        roles_all = roles_all[roles_all["player"] != ""]
-        roles_all["player"] = roles_all["player"].map(_norm_player)
         roles_all = roles_all[roles_all["player"] != ""]
         roles_all["team"] = roles_all["team"].astype(str).str.upper().str.strip().map(_canon_team)
         roles_all = roles_all[roles_all["team"].isin(VALID)]
