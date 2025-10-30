@@ -182,6 +182,12 @@ def main() -> None:
         f"[build_opponent_map_from_props] wrote {out_path} with {len(out_df)} rows (season={season})."
     )
 
+    debug_dir = out_path.parent / "_debug"
+    debug_dir.mkdir(parents=True, exist_ok=True)
+    debug_path = debug_dir / "opponent_sample.csv"
+    out_df.head(50).to_csv(debug_path, index=False)
+    print(f"[build_opponent_map_from_props] wrote debug sample → {debug_path}")
+
 
 if __name__ == "__main__":
     main()
