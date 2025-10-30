@@ -5,7 +5,7 @@ Build player-level shares and efficiency for the 2025 season.
 Outputs: data/player_form.csv
 
 Columns written:
-- player, team, season, position, role
+- player, team, week, opponent, season, position, role
 - tgt_share, route_rate, rush_share
 - yprr, ypt, ypc, ypa
 - receptions_per_target
@@ -36,9 +36,6 @@ DATA_DIR = "data"
 OUTPATH = Path(DATA_DIR) / "player_form.csv"
 CONS_PATH = Path("data") / "player_form_consensus.csv"
 OPP_PATH = Path("data") / "opponent_map_from_props.csv"
-ROLES_OURLADS_PATH = Path("data") / "roles_ourlads.csv"
-
-
 def _safe_mkdir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
@@ -46,6 +43,7 @@ def _safe_mkdir(path: str) -> None:
 FINAL_COLS = [
     "player",
     "team",
+    "week",
     "opponent",
     "season",
     "position",
@@ -179,34 +177,17 @@ def _build_season_consensus(base: pd.DataFrame) -> pd.DataFrame:
 CONSENSUS_OPPONENT_SENTINEL = "ALL"
 
 
-def _inject_week_opponent_and_roles(
-    pf: pd.DataFrame,
-    *,
-    require_week: bool = True,
-    require_opponent: bool = True,
-) -> pd.DataFrame:
-    """Inject week/opponent from opponent_map and merge Ourlads roles."""
+def _inject_week_opponent_and_roles(out: pd.DataFrame) -> pd.DataFrame:
+    """
+    Enrich `out` (player_form dataframe) with `week` and `opponent`
+    using opponent_map_from_props.csv.
 
-    if pf is None or pf.empty:
-        raise RuntimeError("[make_player_form] pf ended empty before enrichment")
-
-    if "player" not in pf.columns or "team" not in pf.columns:
-        raise RuntimeError("[make_player_form] pf missing player/team columns before enrichment")
+    We merge using normalized player/team keys so slight formatting
+    differences in names don't break the join.
+    """
 
     if not OPP_PATH.exists():
-        raise RuntimeError("[make_player_form] opponent_map_from_props.csv not found.")
-    if not ROLES_OURLADS_PATH.exists():
-        raise RuntimeError(
-            "[make_player_form] roles_ourlads.csv not found (Ourlads scrape must run first)."
-        )
-
-    out = pf.copy()
-    for col in ["position", "role", "week", "opponent"]:
-        if col not in out.columns:
-            out[col] = pd.NA
-
-    existing_week = out["week"].copy() if "week" in out.columns else None
-    existing_opponent = out["opponent"].copy() if "opponent" in out.columns else None
+        raise RuntimeError("[make_player_form] opponent_map_from_props.csv not found")
 
     opp = pd.read_csv(OPP_PATH)
 
@@ -214,10 +195,10 @@ def _inject_week_opponent_and_roles(
     missing_cols = required_cols - set(opp.columns)
     if missing_cols:
         raise RuntimeError(
-            f"[make_player_form] opponent_map_from_props.csv missing {sorted(missing_cols)}"
+            f"[make_player_form] opponent_map_from_props.csv missing required columns: {sorted(missing_cols)}"
         )
 
-    opp = opp.copy()
+    # --- Build normalized keys on opponent map ---
     opp["player_key"] = (
         opp["player"]
         .astype(str)
@@ -231,6 +212,8 @@ def _inject_week_opponent_and_roles(
         .str.upper()
     )
 
+    # --- Build normalized keys on the player_form dataframe (`out`) ---
+    out = out.copy()
     out["player_key"] = (
         out["player"]
         .astype(str)
@@ -244,91 +227,24 @@ def _inject_week_opponent_and_roles(
         .str.upper()
     )
 
+    # Drop existing matchup columns so the normalized merge wins
     out = out.drop(columns=["week", "opponent"], errors="ignore")
 
+    # --- Merge using normalized keys, not raw player/team text ---
     out = out.merge(
         opp[["player_key", "team_key", "week", "opponent"]].drop_duplicates(),
         on=["player_key", "team_key"],
-        how="left",
+        how="left"
     )
 
-    if existing_week is not None:
-        if "week" not in out.columns:
-            out["week"] = pd.NA
-        out["week"] = existing_week.combine_first(out["week"])
-    if existing_opponent is not None:
-        if "opponent" not in out.columns:
-            out["opponent"] = pd.NA
-        out["opponent"] = existing_opponent.combine_first(out["opponent"])
-
-    week_missing = "week" not in out.columns or out["week"].isna().all()
-    opponent_missing = "opponent" not in out.columns or out["opponent"].isna().all()
-
-    if require_week and week_missing:
-        print("[make_player_form] ERROR: cannot assign week/opponent (post-merge check)")
-        raise RuntimeError("cannot assign week/opponent")
-    if require_opponent and opponent_missing:
+    # --- Hard validation ---
+    # We *must* have usable matchup context or we stop the entire pipeline.
+    if "week" not in out.columns or out["week"].isna().all():
         print("[make_player_form] ERROR: cannot assign week/opponent (post-merge check)")
         raise RuntimeError("cannot assign week/opponent")
 
-    if not require_week and week_missing:
-        out["week"] = pd.NA
-    if not require_opponent and opponent_missing:
-        out["opponent"] = pd.NA
-
-    roles = pd.read_csv(ROLES_OURLADS_PATH)
-    if roles.empty:
-        raise RuntimeError("[make_player_form] roles_ourlads.csv is empty. Ourlads scrape failed.")
-
-    roles = roles.copy()
-    roles["player_key"] = (
-        roles.get("player", pd.Series(dtype=str))
-        .astype(str)
-        .str.strip()
-        .str.lower()
-    )
-    roles["team_key"] = (
-        roles.get("team", pd.Series(dtype=str))
-        .astype(str)
-        .str.strip()
-        .str.upper()
-    )
-
-    pf_before = len(out)
-    roles_subset = roles[["team_key", "player_key", "role", "position"]].drop_duplicates()
-    out = out.merge(
-        roles_subset,
-        on=["team_key", "player_key"],
-        how="left",
-        suffixes=("", "_ourlads"),
-    )
-
-    if "role_ourlads" in out.columns:
-        out["role"] = out["role"].where(out["role"].notna(), out["role_ourlads"])
-        out.drop(columns=["role_ourlads"], inplace=True)
-    if "position_ourlads" in out.columns:
-        out["position"] = out["position"].where(out["position"].notna(), out["position_ourlads"])
-        out.drop(columns=["position_ourlads"], inplace=True)
-
-    coverage = 100.0 * (1 - (out["role"].isna().sum() / max(1, out.shape[0])))
-    unmatched = out[out["role"].isna()][[c for c in ["player", "team", "week"] if c in out.columns]].head(200)
-    Path(DATA_DIR).mkdir(exist_ok=True)
-    unmatched.to_csv(Path(DATA_DIR) / "unmatched_roles_merge.csv", index=False)
-    print(
-        f"[make_player_form] merged roles_ourlads coverage={coverage:.2f}% base_before={pf_before} base_after={len(out)}"
-    )
-
+    # Drop helper columns before returning
     out = out.drop(columns=["player_key", "team_key"], errors="ignore")
-
-    if "week" in out.columns:
-        out["week"] = pd.to_numeric(out["week"], errors="coerce")
-
-    if "opponent" in out.columns:
-        out["opponent"] = out["opponent"].astype(str).str.strip().str.upper()
-        out.loc[out["opponent"].isin(["", "NAN"]), "opponent"] = np.nan
-
-    if out.empty:
-        raise RuntimeError("[make_player_form] pf ended empty after merges, aborting")
 
     return out
 # === BEGIN: SURGICAL NAME NORMALIZATION HELPERS (idempotent) ===
@@ -1834,20 +1750,23 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         base = _infer_roles_minimal(base)
 
     base = _ensure_cols(base, FINAL_COLS)
+    base = _inject_week_opponent_and_roles(base)
+    if "week" in base.columns:
+        base["week"] = pd.to_numeric(base["week"], errors="coerce")
+    if "opponent" in base.columns:
+        base["opponent"] = base["opponent"].astype(str).str.strip().str.upper()
+        base.loc[base["opponent"].isin(["", "NAN"]), "opponent"] = np.nan
 
     consensus = _build_season_consensus(base)
     consensus_to_write = _ensure_cols(pd.DataFrame(), FINAL_COLS)
     if consensus is not None and not _is_empty(consensus):
         consensus_to_write = _ensure_cols(consensus.copy(), FINAL_COLS)
+        if not consensus_to_write.empty:
+            consensus_to_write = _inject_week_opponent_and_roles(consensus_to_write)
+            consensus_to_write["week"] = pd.NA
+            consensus_to_write["opponent"] = CONSENSUS_OPPONENT_SENTINEL
 
     _safe_mkdir(DATA_DIR)
-
-    if not consensus_to_write.empty:
-        consensus_to_write = _inject_week_opponent_and_roles(
-            consensus_to_write,
-            require_week=False,
-            require_opponent=False,
-        )
     consensus_to_write.to_csv(CONS_PATH, index=False)
     print(f"[pf] consensus rows: {len(consensus_to_write)} → {CONS_PATH}")
 
@@ -1861,7 +1780,8 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         .reset_index(drop=True)
     )
     out = _enrich_team_and_opponent_from_props(out)
-    out = _inject_week_opponent_and_roles(out)
+    if "week" in out.columns:
+        out["week"] = pd.to_numeric(out["week"], errors="coerce")
 
     # Guarantee required numeric metrics are explicitly zero when usage was absent so
     # coverage calculations treat them as populated instead of missing data.

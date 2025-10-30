@@ -65,12 +65,16 @@ TEAM_URLS: Dict[str, str] = {
     "WAS":"https://www.ourlads.com/nfldepthcharts/depthchart/WAS",
 }
 
-SUFFIX_RE = re.compile(r"\s+(JR|SR|II|III|IV|V)\.?$", re.IGNORECASE)
-
-
 def clean_ourlads_name(raw: str) -> str:
-    """Normalize Ourlads player strings to "Firstname Lastname"."""
+    """
+    Take something like 'Allen, Josh 18/1' or 'Kelce, Travis CF23'
+    and turn it into 'Josh Allen' / 'Travis Kelce'.
 
+    Steps:
+    - Flip 'Last, First ...' to 'First Last'
+    - Strip tokens that contain digits or '/' (draft round markers, UDFA markers)
+    - Remove commas and collapse whitespace
+    """
     if not isinstance(raw, str):
         return ""
 
@@ -81,25 +85,16 @@ def clean_ourlads_name(raw: str) -> str:
     else:
         candidate = raw
 
-    candidate = re.sub(r"\(.*?\)", " ", candidate)
-
     cleaned_tokens = []
     for tok in re.split(r"\s+", candidate):
-        if not tok:
-            continue
+        # Drop tokens like '18/1', '24/2', 'CF23', 'U/LAC'
         if re.search(r"[\d/]", tok):
             continue
         cleaned_tokens.append(tok)
 
     name = " ".join(cleaned_tokens)
-    name = re.sub(r"[,;]", " ", name)
-    name = name.replace(".", " ")
-    name = re.sub(r"\s+", " ", name).strip()
-    if not name or name.upper() == "U":
-        return ""
-
-    name = SUFFIX_RE.sub("", name)
-    name = re.sub(r"\s+", " ", name).strip()
+    name = re.sub(r"\s+", " ", name)
+    name = name.replace(",", "").strip()
     return name
 
 SPLIT_RE = re.compile(r"(?:<br\s*/?>|/| & | and )", flags=re.I)
