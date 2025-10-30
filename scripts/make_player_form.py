@@ -200,19 +200,47 @@ def _inject_week_opponent_and_roles(
             "[make_player_form] roles_ourlads.csv not found (Ourlads scrape must run first)."
         )
 
-    pf = pf.copy()
+    out = pf.copy()
     for col in ["position", "role", "week", "opponent"]:
-        if col not in pf.columns:
-            pf[col] = pd.NA
+        if col not in out.columns:
+            out[col] = pd.NA
 
-    pf["player"] = pf["player"].astype(str).str.strip().str.lower()
-    pf["team"] = pf["team"].astype(str).str.strip().str.upper()
+    out["player"] = out["player"].astype(str).str.strip().str.lower()
+    out["team"] = out["team"].astype(str).str.strip().str.upper()
+
+    existing_week = out["week"].copy() if "week" in out.columns else None
+    existing_opponent = out["opponent"].copy() if "opponent" in out.columns else None
 
     opp = pd.read_csv(OPP_PATH)
     opp = opp.copy()
-    if not opp.empty:
-        opp["player"] = opp.get("player", pd.Series(dtype=str)).astype(str).str.strip().str.lower()
-        opp["team"] = opp.get("team", pd.Series(dtype=str)).astype(str).str.strip().str.upper()
+    opp["player_key"] = opp["player"].astype(str).str.strip().str.lower()
+    opp["team_key"] = opp["team"].astype(str).str.strip().str.upper()
+
+    out["player_key"] = out["player"].astype(str).str.strip().str.lower()
+    out["team_key"] = out["team"].astype(str).str.strip().str.upper()
+
+    out = out.drop(columns=["week", "opponent"], errors="ignore")
+
+    out = out.merge(
+        opp[["player_key", "team_key", "week", "opponent"]].drop_duplicates(),
+        on=["player_key", "team_key"],
+        how="left",
+    )
+
+    if existing_week is not None:
+        if "week" not in out.columns:
+            out["week"] = pd.NA
+        out["week"] = existing_week.combine_first(out["week"])
+    if existing_opponent is not None:
+        if "opponent" not in out.columns:
+            out["opponent"] = pd.NA
+        out["opponent"] = existing_opponent.combine_first(out["opponent"])
+
+    if "week" not in out.columns or out["week"].isna().all():
+        print("[make_player_form] ERROR: cannot assign week/opponent (post-merge check)")
+        raise RuntimeError("cannot assign week/opponent")
+
+    out = out.drop(columns=["player_key", "team_key"], errors="ignore")
 
     roles = pd.read_csv(ROLES_OURLADS_PATH)
     if roles.empty:
@@ -222,66 +250,36 @@ def _inject_week_opponent_and_roles(
     roles["player"] = roles.get("player", pd.Series(dtype=str)).astype(str).str.strip().str.lower()
     roles["team"] = roles.get("team", pd.Series(dtype=str)).astype(str).str.strip().str.upper()
 
-    if "week" not in pf.columns or pf["week"].isna().all():
-        opp_subset = opp[[c for c in ["player", "team", "week", "opponent"] if c in opp.columns]].drop_duplicates()
-        pf = pf.merge(opp_subset, on=["player", "team"], how="left", suffixes=("", "_opp"))
-        if "week_opp" in pf.columns:
-            pf["week"] = pf["week"].where(pf["week"].notna(), pf["week_opp"])
-            pf.drop(columns=["week_opp"], inplace=True)
-        if "opponent_opp" in pf.columns:
-            pf["opponent"] = pf["opponent"].where(
-                pf["opponent"].notna() & pf["opponent"].astype(str).str.strip().ne(""),
-                pf["opponent_opp"],
-            )
-            pf.drop(columns=["opponent_opp"], inplace=True)
-        if require_week and pf["week"].isna().all():
-            raise RuntimeError("cannot assign week/opponent")
-
-    if ("opponent" not in pf.columns or pf["opponent"].isna().all()) and not opp.empty:
-        opp_subset = opp[[c for c in ["player", "team", "week", "opponent"] if c in opp.columns]].drop_duplicates()
-        merge_keys = ["player", "team"]
-        if "week" in pf.columns and "week" in opp_subset.columns:
-            merge_keys.append("week")
-        pf = pf.merge(opp_subset, on=merge_keys, how="left", suffixes=("", "_opp"))
-        if "opponent_opp" in pf.columns:
-            pf["opponent"] = pf["opponent"].where(
-                pf["opponent"].notna() & pf["opponent"].astype(str).str.strip().ne(""),
-                pf["opponent_opp"],
-            )
-            pf.drop(columns=["opponent_opp"], inplace=True)
-        if require_opponent and (pf["opponent"].isna().all()):
-            raise RuntimeError("cannot assign week/opponent")
-
-    pf_before = len(pf)
+    pf_before = len(out)
     roles_subset = roles[["team", "player", "role", "position"]].drop_duplicates()
-    pf = pf.merge(roles_subset, on=["team", "player"], how="left", suffixes=("", "_ourlads"))
+    out = out.merge(roles_subset, on=["team", "player"], how="left", suffixes=("", "_ourlads"))
 
-    if "role_ourlads" in pf.columns:
-        pf["role"] = pf["role"].where(pf["role"].notna(), pf["role_ourlads"])
-        pf.drop(columns=["role_ourlads"], inplace=True)
-    if "position_ourlads" in pf.columns:
-        pf["position"] = pf["position"].where(pf["position"].notna(), pf["position_ourlads"])
-        pf.drop(columns=["position_ourlads"], inplace=True)
+    if "role_ourlads" in out.columns:
+        out["role"] = out["role"].where(out["role"].notna(), out["role_ourlads"])
+        out.drop(columns=["role_ourlads"], inplace=True)
+    if "position_ourlads" in out.columns:
+        out["position"] = out["position"].where(out["position"].notna(), out["position_ourlads"])
+        out.drop(columns=["position_ourlads"], inplace=True)
 
-    coverage = 100.0 * (1 - (pf["role"].isna().sum() / max(1, pf.shape[0])))
-    unmatched = pf[pf["role"].isna()][[c for c in ["player", "team", "week"] if c in pf.columns]].head(200)
+    coverage = 100.0 * (1 - (out["role"].isna().sum() / max(1, out.shape[0])))
+    unmatched = out[out["role"].isna()][[c for c in ["player", "team", "week"] if c in out.columns]].head(200)
     Path(DATA_DIR).mkdir(exist_ok=True)
     unmatched.to_csv(Path(DATA_DIR) / "unmatched_roles_merge.csv", index=False)
     print(
-        f"[make_player_form] merged roles_ourlads coverage={coverage:.2f}% base_before={pf_before} base_after={len(pf)}"
+        f"[make_player_form] merged roles_ourlads coverage={coverage:.2f}% base_before={pf_before} base_after={len(out)}"
     )
 
-    if "week" in pf.columns:
-        pf["week"] = pd.to_numeric(pf["week"], errors="coerce")
+    if "week" in out.columns:
+        out["week"] = pd.to_numeric(out["week"], errors="coerce")
 
-    if "opponent" in pf.columns:
-        pf["opponent"] = pf["opponent"].astype(str).str.strip().str.upper()
-        pf.loc[pf["opponent"].isin(["", "NAN"]), "opponent"] = np.nan
+    if "opponent" in out.columns:
+        out["opponent"] = out["opponent"].astype(str).str.strip().str.upper()
+        out.loc[out["opponent"].isin(["", "NAN"]), "opponent"] = np.nan
 
-    if pf.empty:
+    if out.empty:
         raise RuntimeError("[make_player_form] pf ended empty after merges, aborting")
 
-    return pf
+    return out
 # === BEGIN: SURGICAL NAME NORMALIZATION HELPERS (idempotent) ===
 try:
     _NAME_HELPERS_DEFINED
