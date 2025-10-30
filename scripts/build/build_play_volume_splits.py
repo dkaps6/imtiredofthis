@@ -53,7 +53,9 @@ def compute_seconds_per_play(off_df: pd.DataFrame) -> float:
 def main(out_csv: str = "play_volume_splits.csv"):
     min_rows_target = get_dynamic_min_rows()
     pbp = get_pbp_2025(min_rows=20000)
-    print(f"[play_volume_splits] PBP rows: {len(pbp)} (soft target {min_rows_target})")
+    print(
+        f"[play_volume_splits] PBP loaded rows: {len(pbp)} (soft target {min_rows_target})"
+    )
     enforce_min_rows(pbp, min_rows_target)
     if "season" in pbp.columns:
         pbp = pbp[pbp["season"] == 2025].copy()
