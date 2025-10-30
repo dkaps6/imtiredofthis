@@ -172,39 +172,84 @@ def main() -> None:
     if roles_path.exists():
         try:
             players = pd.read_csv(roles_path)
-            if not {"team", "player"}.issubset(players.columns):
-                players = None
         except Exception as e:
             print(f"[build_opponent_map_from_props] failed to load roles_ourlads.csv: {e}")
             players = None
 
-    # Build player → team mapping if available
-    if players is not None and not players.empty:
-        print(f"[build_opponent_map_from_props] expanding per-player opponent map using roles_ourlads.csv ({len(players)} players)")
-        players = players.loc[:, ["team", "player"]].dropna(subset=["team", "player"])
-        players["team"] = players["team"].astype(str).str.upper().str.strip()
-        team_map["team"] = team_map["team"].astype(str).str.upper().str.strip()
+    if (
+        players is not None
+        and not players.empty
+        and {"team", "player"}.issubset(players.columns)
+    ):
+        print(
+            "[build_opponent_map_from_props] expanding per-player opponent map using roles_ourlads.csv "
+            f"({len(players)} players)"
+        )
 
+        # keep just team + player, normalize team code
+        players = (
+            players.loc[:, ["team", "player"]]
+            .dropna(subset=["team", "player"])
+            .copy()
+        )
+        players["team"] = (
+            players["team"]
+            .astype(str)
+            .str.upper()
+            .str.strip()
+        )
+
+        # normalize team/opponent/week on the schedule side before merge
+        team_map["team"] = (
+            team_map["team"]
+            .astype(str)
+            .str.upper()
+            .str.strip()
+        )
+        team_map["opponent"] = (
+            team_map["opponent"]
+            .astype(str)
+            .str.upper()
+            .str.strip()
+        )
+
+        # explode schedule per player
         merged = team_map.merge(players, on="team", how="left")
-        merged = merged.loc[:, ["player", "team", "opponent", "week", "season", "game_timestamp"]]
-    else:
-        print("[build_opponent_map_from_props] WARNING: roles_ourlads.csv not found or empty — writing team-only mapping")
-        team_map.insert(0, "player", "")
-        merged = team_map.loc[:, ["player", "team", "opponent", "week", "season", "game_timestamp"]]
 
-    out_df = merged.dropna(subset=["team", "opponent"]).reset_index(drop=True)
+        # keep week, do NOT drop it
+        out_df = merged.loc[
+            :,
+            ["player", "team", "opponent", "week", "season", "game_timestamp"],
+        ].copy()
+
+    else:
+        print(
+            "[build_opponent_map_from_props] WARNING: roles_ourlads.csv missing or invalid, writing team-only mapping"
+        )
+        team_only = team_map.loc[
+            :, ["team", "opponent", "week", "season", "game_timestamp"]
+        ].copy()
+        team_only.insert(0, "player", "")
+        out_df = team_only
+
+    # final cleanup
+    out_df = out_df.dropna(subset=["team", "opponent", "week"]).reset_index(drop=True)
 
     out_path = Path("data") / "opponent_map_from_props.csv"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_df.to_csv(out_path, index=False)
-    print(f"[build_opponent_map_from_props] wrote {len(out_df)} player/opponent rows → {out_path}")
+    print(
+        f"[build_opponent_map_from_props] wrote {len(out_df)} player/opponent rows → {out_path}"
+    )
 
-    # Optional debug sample
+    # debug sample
     debug_dir = out_path.parent / "_debug"
     debug_dir.mkdir(parents=True, exist_ok=True)
-    debug_path = debug_dir / "opponent_sample.csv"
-    out_df.head(50).to_csv(debug_path, index=False)
-    print(f"[build_opponent_map_from_props] wrote debug sample → {debug_path}")
+    (debug_dir / "opponent_sample.csv").write_text(
+        out_df.head(50).to_csv(index=False)
+    )
+    print(
+        f"[build_opponent_map_from_props] wrote debug sample → {debug_dir/'opponent_sample.csv'}"
+    )
 
 if __name__ == "__main__":
     main()
