@@ -30,9 +30,9 @@ def _check(path: str, cols: list[str] | None = None):
 
 
 # Required core inputs
-_check("data/roles_ourlads.csv")
-pf = _check("data/player_form_consensus.csv", ["player", "team", "week", "opponent"])
-om = _check("data/opponent_map_from_props.csv", ["team", "opponent", "week"])
+pf = _check("data/player_form.csv", ["player", "team", "week", "opponent"])
+oppmap = _check("data/opponent_map_from_props.csv", ["team", "week", "opponent"])
+roles = _check("data/roles_ourlads.csv", ["player", "team"])
 
 # Optional: assert minimum unique weeks for a weekly slate (uncomment if desired)
 # if om['week'].nunique() != 1:
