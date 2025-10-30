@@ -213,11 +213,21 @@ def _inject_week_opponent_and_roles(
 
     opp = pd.read_csv(OPP_PATH)
     opp = opp.copy()
-    opp["player_key"] = opp["player"].astype(str).str.strip().str.lower()
-    opp["team_key"] = opp["team"].astype(str).str.strip().str.upper()
 
-    out["player_key"] = out["player"].astype(str).str.strip().str.lower()
-    out["team_key"] = out["team"].astype(str).str.strip().str.upper()
+    def _norm_team_key(series: pd.Series) -> pd.Series:
+        base = series.fillna("").astype(str)
+        mapped = base.map(_canon_team)
+        raw = base.str.strip().str.upper()
+        return mapped.where(mapped.notna() & mapped.ne(""), raw)
+
+    def _norm_player_key(series: pd.Series) -> pd.Series:
+        return series.fillna("").astype(str).map(_player_key_from_name_nh)
+
+    opp["player_key"] = _norm_player_key(opp.get("player", pd.Series(dtype=str)))
+    opp["team_key"] = _norm_team_key(opp.get("team", pd.Series(dtype=str)))
+
+    out["player_key"] = _norm_player_key(out.get("player", pd.Series(dtype=str)))
+    out["team_key"] = _norm_team_key(out.get("team", pd.Series(dtype=str)))
 
     out = out.drop(columns=["week", "opponent"], errors="ignore")
 

@@ -296,6 +296,8 @@ def main():
 
     roles_all = roles_all.dropna(subset=["player", "role"])
     if not roles_all.empty:
+        roles_all["player"] = roles_all["player"].map(_norm_player)
+        roles_all = roles_all[roles_all["player"] != ""]
         roles_all["team"] = roles_all["team"].astype(str).str.upper().str.strip().map(_canon_team)
         roles_all = roles_all[roles_all["team"].isin(VALID)]
         roles_all = roles_all.drop_duplicates(subset=["team", "player", "role"])
