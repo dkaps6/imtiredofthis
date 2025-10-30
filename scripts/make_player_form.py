@@ -36,6 +36,98 @@ DATA_DIR = "data"
 OUTPATH = Path(DATA_DIR) / "player_form.csv"
 CONS_PATH = Path("data") / "player_form_consensus.csv"
 OPP_PATH = Path("data") / "opponent_map_from_props.csv"
+ROLES_PATH = Path("data") / "roles_ourlads.csv"
+
+
+def build_name_canonical_map() -> dict:
+    """
+    Build a per-team map of possible short name variants → canonical full name.
+    For example, for KC:
+      'travis kelce' -> 'Travis Kelce'
+      't. kelce'     -> 'Travis Kelce'
+      't kelce'      -> 'Travis Kelce'
+    We build this using BOTH roles_ourlads.csv (cleaned names)
+    and opponent_map_from_props.csv (sportsbook names).
+    """
+
+    def explode(df: pd.DataFrame):
+        rows = []
+        for _, r in df.iterrows():
+            team = str(r.get("team", "")).strip().upper()
+            full = str(r.get("player", "")).strip()
+            if not team or not full:
+                continue
+            parts = full.split()
+            if len(parts) < 2:
+                continue
+            first = parts[0]
+            last = parts[-1]
+            rows.append((team, first, last, full))
+        return rows
+
+    dfs = []
+    if ROLES_PATH.exists():
+        dfs.append(pd.read_csv(ROLES_PATH))
+    if OPP_PATH.exists():
+        dfs.append(pd.read_csv(OPP_PATH))
+    if not dfs:
+        return {}
+
+    combined = pd.concat(dfs, ignore_index=True)
+
+    canon = {}
+    for team, first, last, full in explode(combined):
+        first_clean = first.strip()
+        last_clean = last.strip()
+        if not first_clean or not last_clean:
+            continue
+
+        # keys we want to resolve:
+        # "josh allen"
+        # "j. allen"
+        # "j allen"   (for cases missing the period)
+        key_full = f"{first_clean} {last_clean}".lower()
+        key_init_dot = f"{first_clean[0]}. {last_clean}".lower()
+        key_init_nodot = f"{first_clean[0]} {last_clean}".lower()
+
+        canon.setdefault(team, {})
+        canon[team][key_full] = full
+        canon[team][key_init_dot] = full
+        canon[team][key_init_nodot] = full
+
+    return canon
+
+
+def apply_name_canonicalization(df: pd.DataFrame, canon_map: dict) -> pd.DataFrame:
+    """
+    For each row in df, replace df['player'] with the canonical full name
+    if we can resolve it using team + (player variations).
+    This upgrades things like 'J. Allen' or 'J Allen' to 'Josh Allen'.
+    """
+
+    out = df.copy()
+    for idx, row in out.iterrows():
+        raw_team = str(row.get("team", "")).strip().upper()
+        raw_player = str(row.get("player", "")).strip()
+
+        if not raw_team or not raw_player:
+            continue
+
+        key1 = raw_player.lower()
+        key2 = key1.replace(".", "")  # handle "t kelce" vs "t. kelce"
+
+        fixed = None
+        if raw_team in canon_map:
+            team_map = canon_map[raw_team]
+            if key1 in team_map:
+                fixed = team_map[key1]
+            elif key2 in team_map:
+                fixed = team_map[key2]
+
+        if fixed:
+            out.at[idx, "player"] = fixed
+
+    return out
 def _safe_mkdir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
@@ -179,11 +271,9 @@ CONSENSUS_OPPONENT_SENTINEL = "ALL"
 
 def _inject_week_opponent_and_roles(out: pd.DataFrame) -> pd.DataFrame:
     """
-    Enrich `out` (player_form dataframe) with `week` and `opponent`
-    using opponent_map_from_props.csv.
-
-    We merge using normalized player/team keys so slight formatting
-    differences in names don't break the join.
+    Enrich 'out' with 'week' and 'opponent' from opponent_map_from_props.csv,
+    after canonicalizing player names/team codes.
+    We then merge on normalized keys.
     """
 
     if not OPP_PATH.exists():
@@ -192,58 +282,57 @@ def _inject_week_opponent_and_roles(out: pd.DataFrame) -> pd.DataFrame:
     opp = pd.read_csv(OPP_PATH)
 
     required_cols = {"player", "team", "week", "opponent"}
-    missing_cols = required_cols - set(opp.columns)
-    if missing_cols:
+    missing = required_cols - set(opp.columns)
+    if missing:
         raise RuntimeError(
-            f"[make_player_form] opponent_map_from_props.csv missing required columns: {sorted(missing_cols)}"
+            f"[make_player_form] opponent_map_from_props.csv missing columns: {sorted(missing)}"
         )
 
-    # --- Build normalized keys on opponent map ---
-    opp["player_key"] = (
-        opp["player"]
-        .astype(str)
-        .str.strip()
-        .str.lower()
-    )
-    opp["team_key"] = (
-        opp["team"]
-        .astype(str)
-        .str.strip()
-        .str.upper()
-    )
+    # --- 1. Build canonical map from roles_ourlads + opponent_map ---
+    canon_map = build_name_canonical_map()
 
-    # --- Build normalized keys on the player_form dataframe (`out`) ---
-    out = out.copy()
+    # --- 2. Canonicalize 'out' player names (fix 'J. Allen' -> 'Josh Allen', etc.)
+    out = apply_name_canonicalization(out, canon_map)
+
+    # --- 3. Canonicalize 'opp' player names too (defensive, just in case)
+    opp = apply_name_canonicalization(opp, canon_map)
+
+    # --- 4. Create normalized join keys for both sides ---
     out["player_key"] = (
-        out["player"]
-        .astype(str)
-        .str.strip()
-        .str.lower()
+        out["player"].astype(str).str.strip().str.lower()
     )
     out["team_key"] = (
-        out["team"]
-        .astype(str)
-        .str.strip()
-        .str.upper()
+        out["team"].astype(str).str.strip().str.upper()
     )
 
-    # Drop existing matchup columns so the normalized merge wins
-    out = out.drop(columns=["week", "opponent"], errors="ignore")
+    opp["player_key"] = (
+        opp["player"].astype(str).str.strip().str.lower()
+    )
+    opp["team_key"] = (
+        opp["team"].astype(str).str.strip().str.upper()
+    )
 
-    # --- Merge using normalized keys, not raw player/team text ---
+    # --- 5. Merge in week/opponent using these keys ---
     out = out.merge(
         opp[["player_key", "team_key", "week", "opponent"]].drop_duplicates(),
         on=["player_key", "team_key"],
         how="left"
     )
 
-    # --- Hard validation ---
-    # We *must* have usable matchup context or we stop the entire pipeline.
+    # --- 6. Debug preview for troubleshooting ---
+    try:
+        os.makedirs("data/_debug", exist_ok=True)
+        merged_preview = out[~out["week"].isna()].head(50)
+        merged_preview.to_csv("data/_debug/opponent_merge_preview.csv", index=False)
+    except Exception as e:
+        print(f"[make_player_form] debug preview failed: {e}")
+
+    # --- 7. Hard validation ---
     if "week" not in out.columns or out["week"].isna().all():
         print("[make_player_form] ERROR: cannot assign week/opponent (post-merge check)")
         raise RuntimeError("cannot assign week/opponent")
 
-    # Drop helper columns before returning
+    # --- 8. Cleanup helper columns ---
     out = out.drop(columns=["player_key", "team_key"], errors="ignore")
 
     return out
