@@ -51,27 +51,27 @@ jobs:
             pip install -r requirements.txt
           fi
 
+      - name: Build depth chart (Ourlads)
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          python scripts/providers/ourlads_depth.py
+
       # Providers / schedule first
-      - name: Build schedule/opponent map (nfl_data_py)
+      - name: Build opponent map from props
         shell: bash
         timeout-minutes: 5
         run: |
           set -euo pipefail
           python scripts/build/build_opponent_map_from_props.py "${{ github.event.inputs.season }}"
 
-      - name: Build game lines from schedule
+      - name: Build Game Lines
         shell: bash
         timeout-minutes: 5
         run: |
           set -euo pipefail
           python scripts/build_game_lines_from_schedule.py --season "${{ github.event.inputs.season }}"
-
-      - name: Build Ourlads Depth Charts
-        shell: bash
-        timeout-minutes: 5
-        run: |
-          set -euo pipefail
-          python scripts/providers/ourlads_depth.py
 
       - name: Validate Ourlads roles CSV
         shell: bash
@@ -80,7 +80,7 @@ jobs:
           test -s data/roles_ourlads.csv || (echo "roles_ourlads.csv missing or empty" >&2; exit 1)
 
       # Player form depends on depth chart roles
-      - name: Build/Enrich player form (after roles are available)
+      - name: Build player form (usage, roles, matchups)
         shell: bash
         timeout-minutes: 10
         run: |
