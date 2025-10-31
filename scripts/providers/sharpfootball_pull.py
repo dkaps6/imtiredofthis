@@ -637,6 +637,75 @@ def merge_team_form(season: int, pieces: Dict[str, pd.DataFrame]) -> int:
                     base[c] = base[c].combine_first(base[aux])
                     base.drop(columns=[aux], inplace=True)
 
+    merged = base
+
+    # === FINAL CANONICAL NORMALIZATION BEFORE VALIDATION ===
+
+    rename_final = {}
+
+    # 1. neutral pace
+    # Our downstream code expects a column called 'neutral_pace'.
+    # Sharp gives us neutral tempo as something like 'neutralpaces1' or 'secplay'
+    # (seconds per play in neutral script; lower = faster).
+    # Rule:
+    #   - if 'neutralpaces1' exists, that's our neutral_pace
+    #   - else if 'secplay' exists, that's our neutral_pace
+    if "neutral_pace" not in merged.columns:
+        if "neutralpaces1" in merged.columns:
+            merged["neutral_pace"] = merged["neutralpaces1"]
+        elif "secplay" in merged.columns:
+            merged["neutral_pace"] = merged["secplay"]
+
+    # Coerce to numeric (strip weird strings like "29.1s")
+    if "neutral_pace" in merged.columns:
+        merged["neutral_pace"] = (
+            merged["neutral_pace"]
+            .astype(str)
+            .str.replace("s", "", regex=False)
+            .str.replace("sec", "", regex=False)
+            .str.replace("seconds", "", regex=False)
+            .str.strip()
+        )
+        merged["neutral_pace"] = pd.to_numeric(merged["neutral_pace"], errors="coerce")
+
+    # 2. coverage columns
+    # Downstream expects coverage_man_rate and coverage_zone_rate.
+    # Our scrape produced 'coveragemanrate' and 'coveragezonerate'.
+    if "coveragemanrate" in merged.columns and "coverage_man_rate" not in merged.columns:
+        merged = merged.rename(columns={"coveragemanrate": "coverage_man_rate"})
+
+    if "coveragezonerate" in merged.columns and "coverage_zone_rate" not in merged.columns:
+        merged = merged.rename(columns={"coveragezonerate": "coverage_zone_rate"})
+
+    # Normalize those coverage rates to numeric (drop '%' etc.)
+    for col in ["coverage_man_rate", "coverage_zone_rate"]:
+        if col in merged.columns:
+            merged[col] = (
+                merged[col]
+                .astype(str)
+                .str.replace("%", "", regex=False)
+                .str.strip()
+            )
+            merged[col] = pd.to_numeric(merged[col], errors="coerce")
+
+    # === REQUIRED COLUMNS CHECK (keep or update existing logic) ===
+    required_cols = [
+        "neutral_pace",
+        "coverage_man_rate",
+        "coverage_zone_rate",
+    ]
+
+    missing = [c for c in required_cols if c not in merged.columns]
+    if missing:
+        raise RuntimeError(
+            "[sharpfootball_pull] still missing required column(s) in merged team form. "
+            f"Missing={missing} Available cols={sorted(list(merged.columns))}"
+        )
+
+    # === END FINAL CANONICAL NORMALIZATION ===
+
+    base = merged
+
     required_cols = ["neutral_pace", "coverage_man_rate", "coverage_zone_rate"]
     for col in required_cols:
         if col not in base.columns:
