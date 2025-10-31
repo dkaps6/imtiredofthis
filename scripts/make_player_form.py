@@ -312,14 +312,22 @@ def _inject_week_opponent_and_roles(out: pd.DataFrame) -> pd.DataFrame:
         opp["team"].astype(str).str.strip().str.upper()
     )
 
-    # --- 5. Merge in week/opponent using these keys ---
+    # --- 5. Remove placeholder matchup columns before merge ---
+    # `_ensure_cols` seeds `week`/`opponent` with NaNs earlier in the pipeline to
+    # guarantee their presence. After canonicalization, we need the merge below to
+    # populate those canonical columns directly; otherwise pandas will suffix the
+    # names (e.g., `week_x`, `week_y`). Drop them pre-merge so the joined values land
+    # in the expected column names.
+    out = out.drop(columns=["week", "opponent"], errors="ignore")
+
+    # --- 6. Merge in week/opponent using these keys ---
     out = out.merge(
         opp[["player_key", "team_key", "week", "opponent"]].drop_duplicates(),
         on=["player_key", "team_key"],
         how="left"
     )
 
-    # --- 6. Debug preview for troubleshooting ---
+    # --- 7. Debug preview for troubleshooting ---
     try:
         os.makedirs("data/_debug", exist_ok=True)
         merged_preview = out[~out["week"].isna()].head(50)
@@ -327,12 +335,12 @@ def _inject_week_opponent_and_roles(out: pd.DataFrame) -> pd.DataFrame:
     except Exception as e:
         print(f"[make_player_form] debug preview failed: {e}")
 
-    # --- 7. Hard validation ---
+    # --- 8. Hard validation ---
     if "week" not in out.columns or out["week"].isna().all():
         print("[make_player_form] ERROR: cannot assign week/opponent (post-merge check)")
         raise RuntimeError("cannot assign week/opponent")
 
-    # --- 8. Cleanup helper columns ---
+    # --- 9. Cleanup helper columns ---
     out = out.drop(columns=["player_key", "team_key"], errors="ignore")
 
     return out
