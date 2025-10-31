@@ -942,6 +942,16 @@ def _non_destructive_merge(
     return out
 
 
+def inject_week_opponent_and_roles(out: pd.DataFrame) -> pd.DataFrame:
+    """Public wrapper around :func:`_inject_week_opponent_and_roles`.
+
+    Some callers expect a non-underscored helper; expose a stable alias so we
+    can gradually migrate without breaking imports.
+    """
+
+    return _inject_week_opponent_and_roles(out)
+
+
 # ---------------------------
 # Team canonicalizer
 # ---------------------------
