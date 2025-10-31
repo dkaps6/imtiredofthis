@@ -59,12 +59,14 @@ DATA_DIR = "data"
 OUTPATH = Path(DATA_DIR) / "team_form.csv"
 TEAM_FORM_OUTPUT_COLUMNS = [
     "team",
+    "team_abbr",
     "season",
     "games_played",
     "def_pass_epa",
     "def_rush_epa",
     "def_sack_rate",
     "pace",
+    "pass_rate_over_expected",
     "proe",
     "rz_rate",
     "12p_rate",
@@ -267,6 +269,71 @@ def _ensure_plays_est_column(df: pd.DataFrame) -> pd.DataFrame:
         out["plays_est"] = out["plays_est"].combine_first(derived)
 
     return out
+
+
+def _compute_team_proe_from_pbp(pbp_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Approximate pass rate over expected (PROE) at the team level using only data
+    we already loaded from nflverse/nflreadr.
+
+    Steps:
+    - Define 'neutral situations' = whatever logic we already consider for neutral pace
+      (score differential small, early downs, etc.). Reuse that same mask if it exists.
+      If no mask exists yet, approximate:
+         offense_is_team = pbp_df['posteam'].notna()
+         neutral_score   = pbp_df['score_differential'].between(-7,7, inclusive='both')
+         early_downs     = pbp_df['down'].isin([1,2])
+         neutral = offense_is_team & neutral_score & early_downs
+    - For each team in those rows:
+        team_pass_rate = mean(qb_dropback == 1)  (or pass_attempt == 1 if dropback not present)
+    - Compute league_pass_rate = overall mean of team_pass_rate weighted by snaps.
+    - PROE = team_pass_rate - league_pass_rate.
+    Returns DataFrame with columns:
+        team_abbr, pass_rate_over_expected
+    """
+
+    df = pbp_df.copy()
+
+    # If we already build something like neutral mask elsewhere, try to reuse.
+    # Otherwise construct a fallback neutral mask here:
+    if "posteam" not in df.columns:
+        return pd.DataFrame(columns=["team_abbr", "pass_rate_over_expected"])
+
+    neutral = df["posteam"].notna()
+    if "down" in df.columns:
+        neutral &= df["down"].isin([1, 2])
+    if "score_differential" in df.columns:
+        neutral &= df["score_differential"].between(-7, 7, inclusive="both")
+
+    neutral_df = df.loc[neutral].copy()
+
+    # prefer qb_dropback if present, else pass_attempt
+    pass_flag_col = "qb_dropback" if "qb_dropback" in neutral_df.columns else (
+        "pass_attempt" if "pass_attempt" in neutral_df.columns else None
+    )
+    if pass_flag_col is None:
+        # if we truly have neither, bail out with empty
+        return pd.DataFrame(columns=["team_abbr", "pass_rate_over_expected"])
+
+    # snaps per team
+    grp = neutral_df.groupby("posteam", as_index=False).agg(
+        snaps=("posteam", "size"),
+        pass_snaps=(pass_flag_col, "sum"),
+    )
+    grp["team_pass_rate"] = grp["pass_snaps"] / grp["snaps"]
+
+    # league avg baseline (weighted by snaps)
+    total_snaps = grp["snaps"].sum()
+    if total_snaps > 0:
+        league_pass_rate = (grp["pass_snaps"].sum() / total_snaps)
+    else:
+        league_pass_rate = np.nan
+
+    grp["pass_rate_over_expected"] = grp["team_pass_rate"] - league_pass_rate
+
+    # rename posteam -> team_abbr to match downstream merges
+    grp = grp.rename(columns={"posteam": "team_abbr"})
+    return grp[["team_abbr", "pass_rate_over_expected"]]
 
 PERCENTY_COLS = {
     "light_box_rate", "heavy_box_rate", "neutral_db_rate", "neutral_db_rate_last_5",
@@ -702,11 +769,14 @@ def build_team_form(season: int, box_backfill_prev: bool = False) -> pd.DataFram
         skeleton["games_played"] = np.nan
         for col in [
             "def_pass_epa", "def_rush_epa", "def_sack_rate",
-            "pace", "proe", "rz_rate", "12p_rate", "slot_rate", "ay_per_att",
+            "pace", "pass_rate_over_expected", "proe", "rz_rate", "12p_rate", "slot_rate", "ay_per_att",
             "light_box_rate", "heavy_box_rate",
         ]:
             skeleton[col] = np.nan
+        skeleton["team_abbr"] = skeleton["team"]
         return skeleton
+
+    proe_df = _compute_team_proe_from_pbp(pbp)
 
     print("[make_team_form] Computing defensive EPA & sack rate ...")
     def_tbl = compute_def_epa_and_sacks(pbp)
@@ -749,6 +819,10 @@ def build_team_form(season: int, box_backfill_prev: bool = False) -> pd.DataFram
                  .merge(rz_ay_tbl, on="team", how="left") \
                  .merge(pers_tbl, on="team", how="left")
 
+    out["team_abbr"] = out["team"]
+    if not proe_df.empty:
+        out = out.merge(proe_df, on="team_abbr", how="left")
+
     out = merge_slot_rate_from_roles(out)
     out["season"] = int(season)
 
@@ -757,13 +831,15 @@ def build_team_form(season: int, box_backfill_prev: bool = False) -> pd.DataFram
     out = zscore(out, z_cols)
 
     out = out.rename(columns={"pace_neutral": "pace", "personnel_12_rate": "12p_rate"})
+    if "pass_rate_over_expected" not in out.columns:
+        out["pass_rate_over_expected"] = np.nan
     for need in ["rz_rate", "12p_rate", "slot_rate", "ay_per_att", "light_box_rate", "heavy_box_rate"]:
         if need not in out.columns:
             out[need] = np.nan
 
-    cols_first = ["team","season","games_played",
+    cols_first = ["team","team_abbr","season","games_played",
                   "def_pass_epa","def_rush_epa","def_sack_rate",
-                  "pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
+                  "pace","pass_rate_over_expected","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
                   "light_box_rate","heavy_box_rate"]
     ordered = [c for c in cols_first if c in out.columns] + [c for c in out.columns if c not in cols_first]
     out = out[ordered].sort_values(["team"]).reset_index(drop=True)
@@ -868,6 +944,28 @@ def main():
             suffixes=("", "_sharp")
         )
 
+        # after merging sharp_team_form columns in:
+        if "pass_rate_over_expected_x" in team_form.columns and "pass_rate_over_expected_y" in team_form.columns:
+            # prefer our computed one (x), fill NA from Sharp (y)
+            team_form["pass_rate_over_expected"] = team_form["pass_rate_over_expected_x"].where(
+                team_form["pass_rate_over_expected_x"].notna(),
+                team_form["pass_rate_over_expected_y"]
+            )
+            team_form.drop(columns=["pass_rate_over_expected_x", "pass_rate_over_expected_y"], inplace=True)
+        elif "pass_rate_over_expected_sharp" in team_form.columns:
+            if "pass_rate_over_expected" in team_form.columns:
+                team_form["pass_rate_over_expected"] = team_form["pass_rate_over_expected"].where(
+                    team_form["pass_rate_over_expected"].notna(),
+                    team_form["pass_rate_over_expected_sharp"]
+                )
+            else:
+                team_form.rename(columns={"pass_rate_over_expected_sharp": "pass_rate_over_expected"}, inplace=True)
+            if "pass_rate_over_expected_sharp" in team_form.columns:
+                team_form.drop(columns=["pass_rate_over_expected_sharp"], inplace=True)
+        elif "pass_rate_over_expected_y" in team_form.columns and "pass_rate_over_expected" not in team_form.columns:
+            # fallback if we didn't build proe_df for some reason
+            team_form.rename(columns={"pass_rate_over_expected_y": "pass_rate_over_expected"}, inplace=True)
+
         # Basic sanity: pick a few must-have Sharp stats and make sure at least
         # one of them actually populated for at least one team.
         required_sharp_cols = [
@@ -878,16 +976,13 @@ def main():
             "coverage_man_rate",
             "coverage_zone_rate",
         ]
-        missing_all = []
+        missing_cols = []
         for col in required_sharp_cols:
-            if col not in team_form.columns:
-                missing_all.append(col)
-            else:
-                if team_form[col].isna().all():
-                    missing_all.append(col)
+            if col not in team_form.columns or team_form[col].isna().all():
+                missing_cols.append(col)
 
-        if len(missing_all) == len(required_sharp_cols):
-            raise RuntimeError(f"[make_team_form] Sharp merge appears empty for all required cols: {missing_all}. Check sharpfootball_pull.py output.")
+        if missing_cols:
+            raise RuntimeError(f"[make_team_form] Sharp merge appears empty for required cols: {missing_cols}. Check sharpfootball_pull.py output.")
 
         # Log what got filled by fallbacks (for quick triage)
         try:
