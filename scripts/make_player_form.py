@@ -272,9 +272,16 @@ CONSENSUS_OPPONENT_SENTINEL = "ALL"
 def _inject_week_opponent_and_roles(out: pd.DataFrame) -> pd.DataFrame:
     """
     Enrich 'out' with 'week' and 'opponent' from data/opponent_map_from_props.csv.
-    We canonicalize player names and team codes on both sides, then merge.
-    If we still can't assign any week/opponent for anyone, we raise RuntimeError.
+
+    This function:
+    - Loads opponent_map_from_props.csv (already built earlier in the workflow).
+    - Canonicalizes player names and team codes on BOTH sides.
+    - Merges using (player, team, week) instead of just (player, team),
+      because the same player/team appears in multiple different weeks.
+    - Raises RuntimeError if we still can't map opponent/week for anyone,
+      and drops debug previews in data/_debug for inspection.
     """
+
     OPP_PATH = Path("data") / "opponent_map_from_props.csv"
 
     if not OPP_PATH.exists():
@@ -289,51 +296,46 @@ def _inject_week_opponent_and_roles(out: pd.DataFrame) -> pd.DataFrame:
             f"[make_player_form] opponent_map_from_props.csv missing columns: {sorted(missing)}"
         )
 
-    # --- helper cleaners (local, lightweight, self-contained) ---
     import re
     import unicodedata
 
     def _deaccent_local(s: str) -> str:
         try:
-            return unicodedata.normalize("NFKD", s).encode("ascii","ignore").decode("ascii")
+            return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
         except Exception:
             return s
 
     def _clean_player_name_key(raw: str) -> str:
         """
-        Turn variants like 'DAK PRESCOTT', 'Dak Prescott', 'D. Prescott', 'Javonte U Williams'
-        into a canonical merge key 'dakprescott' or 'javontewilliams'.
+        Normalize names like:
+        'DAK PRESCOTT', 'Dak Prescott', 'D. Prescott', 'Javonte U Williams'
+        -> 'dakprescott' / 'javontewilliams'
+
         Strategy:
-          - strip accents
-          - drop commas, slashes, extra whitespace
-          - remove obvious draft/suffix junk (JR, SR, II, etc.)
-          - split into tokens, keep first and last token as the "core" name,
-            and also keep all tokens stitched together as fallback
-        We'll just smash everything down to [a-z0-9] and lowercase.
+        - strip accents
+        - drop punctuation / jersey numbers / obvious suffixes (JR, SR, II, etc.)
+        - smash to [a-z0-9] lowercase using first+last fallback
         """
         s = str(raw or "").strip()
         s = _deaccent_local(s)
-        # remove jersey numbers or leading "#" etc.
+        # remove leading jersey/# fragments
         s = re.sub(r"^[0-9#\-\:\s]+", "", s)
-        # remove commas and multiple spaces
+        # normalize spacing/punctuation
         s = s.replace(",", " ")
         s = re.sub(r"\s+", " ", s).strip()
-        # remove obvious suffix tokens like JR, SR, II, III, IV
-        tokens = [t for t in s.split() if t.upper() not in ("JR","SR","II","III","IV","V")]
+        # remove suffix tokens
+        tokens = [t for t in s.split() if t.upper() not in ("JR", "SR", "II", "III", "IV", "V")]
         if not tokens:
             tokens = [s]
-        # We'll build two forms:
-        #   1. full join of all tokens (e.g. ["Javonte","U","Williams"] -> "javonteuwilliams")
-        #   2. just first + last token (e.g. "javontewilliams")
         all_joined = re.sub(r"[^a-z0-9]", "", "".join(tokens).lower())
         core_joined = re.sub(r"[^a-z0-9]", "", (tokens[0] + tokens[-1]).lower())
-        # prefer core_joined but fall back to all_joined if core becomes empty
         return core_joined or all_joined
 
     def _clean_team_key(raw: str) -> str:
         """
-        Normalize team codes so that 'DAL', 'Dallas', 'Dallas Cowboys' all become 'DAL'.
-        We'll try exact 2-3 letter codes first. If that fails, fall back to a lookup map.
+        Normalize team strings like:
+        'DAL', 'Dallas', 'Dallas Cowboys', 'Cowboys'
+        -> 'DAL'
         """
         TEAM_MAP = {
             "ARI":"ARI","ARIZONA":"ARI","CARDINALS":"ARI","ARIZONA CARDINALS":"ARI",
@@ -369,18 +371,26 @@ def _inject_week_opponent_and_roles(out: pd.DataFrame) -> pd.DataFrame:
             "TEN":"TEN","TENNESSEE":"TEN","TITANS":"TEN","TENNESSEE TITANS":"TEN",
             "WAS":"WAS","WSH":"WAS","WASHINGTON":"WAS","COMMANDERS":"WAS","WASHINGTON COMMANDERS":"WAS"
         }
-        raw = str(raw or "").strip().upper()
-        # direct
-        if raw in TEAM_MAP:
-            return TEAM_MAP[raw]
-        # strip punctuation and retry
-        raw2 = re.sub(r"[^A-Z0-9 ]+", "", raw).strip().upper()
-        if raw2 in TEAM_MAP:
-            return TEAM_MAP[raw2]
-        return raw  # fallback, best effort
+        raw_up = str(raw or "").strip().upper()
+        if raw_up in TEAM_MAP:
+            return TEAM_MAP[raw_up]
+        raw_stripped = re.sub(r"[^A-Z0-9 ]+", "", raw_up).strip().upper()
+        if raw_stripped in TEAM_MAP:
+            return TEAM_MAP[raw_stripped]
+        return raw_up
 
-    # --- build keys on 'out' (the base player_form-like frame) ---
+    # --- build keys on 'out' (the base frame we were passed in) ---
     enriched = out.copy()
+
+    # we REQUIRE that 'week' already exists in base;
+    # if it doesn't, we can't safely match week-specific opponents
+    if "week" not in enriched.columns:
+        debug_dir = Path("data") / "_debug"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        enriched.head(50).to_csv(debug_dir / "merge_failure_no_week_in_base.csv", index=False)
+        raise RuntimeError("[make_player_form] base/out frame has no 'week' column before matchup merge")
+
+    enriched["__week_key"] = pd.to_numeric(enriched["week"], errors="coerce")
     enriched["__player_clean_key"] = (
         enriched["player"]
         .astype(str)
@@ -392,7 +402,7 @@ def _inject_week_opponent_and_roles(out: pd.DataFrame) -> pd.DataFrame:
         .map(_clean_team_key)
     )
 
-    # --- build keys on the opponent map ---
+    # --- build keys on the opponent map side ---
     opp = opp.copy()
     opp["__player_clean_key"] = (
         opp["player"]
@@ -404,32 +414,57 @@ def _inject_week_opponent_and_roles(out: pd.DataFrame) -> pd.DataFrame:
         .astype(str)
         .map(_clean_team_key)
     )
+    opp["__week_key"] = pd.to_numeric(opp["week"], errors="coerce")
 
-    # --- do the merge ---
-    merged = enriched.merge(
+    # We need the merge to be one-week-specific: (player, team, week).
+    # Dedupe opp on that triple key so pandas is OK with many_to_one.
+    right_subset = (
         opp[
             [
                 "__player_clean_key",
                 "__team_clean_key",
+                "__week_key",
                 "week",
-                "opponent"
+                "opponent",
             ]
-        ].drop_duplicates(),
-        how="left",
-        on=["__player_clean_key","__team_clean_key"],
-        validate="many_to_one"
+        ]
+        .drop_duplicates(
+            subset=["__player_clean_key", "__team_clean_key", "__week_key"],
+            keep="last",
+        )
     )
 
-    # after merge, if literally nobody got a week, hard stop
-    if "week" not in merged.columns or merged["week"].isna().all():
-        # write a debug preview to help with diagnostics
+    merged = enriched.merge(
+        right_subset,
+        how="left",
+        left_on=["__player_clean_key", "__team_clean_key", "__week_key"],
+        right_on=["__player_clean_key", "__team_clean_key", "__week_key"],
+        validate="many_to_one",
+    )
+
+    # Sanity check: if literally nobody got an opponent, that's still a fatal data error.
+    if "opponent" not in merged.columns or merged["opponent"].isna().all():
         debug_dir = Path("data") / "_debug"
         debug_dir.mkdir(parents=True, exist_ok=True)
-        merged.head(50).to_csv(debug_dir / "merge_failure_preview.csv", index=False)
-        raise RuntimeError("[make_player_form] cannot assign week/opponent (post-merge check)")
+        merged[
+            [
+                "player",
+                "team",
+                "week",
+                "__player_clean_key",
+                "__team_clean_key",
+                "__week_key",
+                "opponent",
+            ]
+        ].head(100).to_csv(debug_dir / "merge_failure_preview.csv", index=False)
+        raise RuntimeError("[make_player_form] cannot assign opponent/week after keyed merge (player, team, week)")
 
-    # clean up helper cols
-    merged.drop(columns=["__player_clean_key","__team_clean_key"], inplace=True, errors="ignore")
+    # cleanup helper columns
+    merged.drop(
+        columns=["__player_clean_key", "__team_clean_key", "__week_key"],
+        inplace=True,
+        errors="ignore",
+    )
 
     return merged
 # === BEGIN: SURGICAL NAME NORMALIZATION HELPERS (idempotent) ===
