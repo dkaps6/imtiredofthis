@@ -688,6 +688,47 @@ def merge_team_form(season: int, pieces: Dict[str, pd.DataFrame]) -> int:
             )
             merged[col] = pd.to_numeric(merged[col], errors="coerce")
 
+    # === FINAL CANONICAL NORMALIZATION ===
+
+    # 1️⃣ Neutral pace normalization
+    if "neutral_pace" not in merged.columns:
+        if "neutral_pace_score" in merged.columns:
+            merged["neutral_pace"] = merged["neutral_pace_score"]
+        elif "secplay" in merged.columns:
+            merged["neutral_pace"] = merged["secplay"]
+        else:
+            print("[sharpfootball_pull] WARNING: could not find neutral_pace_score or secplay")
+
+    # 2️⃣ Convert to numeric
+    merged["neutral_pace"] = pd.to_numeric(merged["neutral_pace"], errors="coerce")
+
+    # 3️⃣ Coverage normalization
+    if "coveragemanrate" in merged.columns and "coverage_man_rate" not in merged.columns:
+        merged = merged.rename(columns={"coveragemanrate": "coverage_man_rate"})
+
+    if "coveragezonerate" in merged.columns and "coverage_zone_rate" not in merged.columns:
+        merged = merged.rename(columns={"coveragezonerate": "coverage_zone_rate"})
+
+    for col in ["coverage_man_rate", "coverage_zone_rate"]:
+        if col in merged.columns:
+            merged[col] = (
+                merged[col]
+                .astype(str)
+                .str.replace("%", "", regex=False)
+                .str.strip()
+            )
+            merged[col] = pd.to_numeric(merged[col], errors="coerce")
+
+    # 4️⃣ Required columns guard
+    required_cols = ["neutral_pace", "coverage_man_rate", "coverage_zone_rate"]
+    missing = [c for c in required_cols if c not in merged.columns]
+    if missing:
+        raise RuntimeError(
+            f"[sharpfootball_pull] missing required columns: {missing}\nAvailable: {list(merged.columns)}"
+        )
+
+    # === END CANONICAL NORMALIZATION ===
+
     # === REQUIRED COLUMNS CHECK (keep or update existing logic) ===
     required_cols = [
         "neutral_pace",
