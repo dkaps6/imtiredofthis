@@ -2124,152 +2124,112 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
 # ---------------------------
 
 
-def _enrich_team_and_opponent_from_props(df: pd.DataFrame) -> pd.DataFrame:
-    """Fill missing team/opponent assignments using data/opponent_map_from_props.csv."""
+def _enrich_team_and_opponent_from_props(out: pd.DataFrame) -> pd.DataFrame:
+    """
+    Take the partially built player_form `out`, attach opponent/week via
+    inject_week_opponent_and_roles(), normalize, and enforce data quality.
 
-    if df is None or _is_empty(df):
-        return df
+    Behavior change:
+    - We will NOT kill the entire pipeline just because some depth players
+      (WR4, RB3, etc.) don't have props-derived opponent info.
+    - We WILL still hard-stop if the enrichment basically failed for everyone.
+    - We ALWAYS write a debug CSV of who is missing opponents.
+    """
 
-    out = df.copy()
-    out = _ensure_cols(out, ["player", "team", "opponent"])
+    # 1. inject matchup info (week, opponent) using our canonical merge logic
+    enriched = inject_week_opponent_and_roles(out)
 
-    path = os.path.join(DATA_DIR, "opponent_map_from_props.csv")
-    try:
-        mapping = pd.read_csv(path)
-    except FileNotFoundError:
-        mapping = pd.DataFrame(columns=["player", "team", "opponent"])
-    except Exception as exc:
-        raise RuntimeError(f"failed to read opponent map: {exc}") from exc
-
-    if mapping is None or mapping.empty:
-        mapping = pd.DataFrame(columns=["player", "team", "opponent"])
-
-    mapping.columns = [c.lower() for c in mapping.columns]
-    if "player" not in mapping.columns:
-        if "player_name" in mapping.columns:
-            mapping = mapping.rename(columns={"player_name": "player"})
-        elif "name" in mapping.columns:
-            mapping = mapping.rename(columns={"name": "player"})
-        else:
-            mapping["player"] = np.nan
-
-    mapping["player"] = _norm_name(
-        mapping.get("player", pd.Series([], dtype=object)).astype(str)
-    )
-    mapping = mapping[
-        mapping["player"].notna() & mapping["player"].astype(str).str.strip().ne("")
-    ]
-
-    merge_keys: List[str] = ["player"]
-    if "team" in mapping.columns:
-        mapping["team"] = (
-            mapping["team"]
-            .where(mapping["team"].notna(), "")
+    # 2. clean opponent to uppercase and strip empties
+    if "opponent" in enriched.columns:
+        enriched["opponent"] = (
+            enriched["opponent"]
             .astype(str)
-            .str.upper()
             .str.strip()
+            .str.upper()
         )
-        mapping["team"] = mapping["team"].map(_canon_team)
-        mapping.loc[mapping["team"].isin(["", None]), "team"] = np.nan
-        if mapping["team"].notna().any():
-            mapping = mapping.dropna(subset=["team"])
-            merge_keys.append("team")
-        else:
-            mapping = mapping.drop(columns=["team"])
+        # normalize empty strings to NaN
+        enriched.loc[enriched["opponent"].isin(["", "NAN", "NONE", "NULL"]), "opponent"] = pd.NA
 
-    if "opponent" not in mapping.columns:
-        mapping["opponent"] = np.nan
+    # 3. basic sanity checks
+    total_rows = len(enriched)
+    if total_rows == 0:
+        raise RuntimeError("[make_player_form] no rows in enriched dataframe after opponent merge")
 
-    opp_norm = (
-        mapping["opponent"]
-        .where(mapping["opponent"].notna(), "")
-        .astype(str)
-        .str.upper()
-        .str.strip()
+    if "opponent" not in enriched.columns:
+        # This should never happen now that inject_week_opponent_and_roles stabilizes columns,
+        # but guard anyway:
+        raise RuntimeError("[make_player_form] opponent column missing after merge")
+
+    missing_mask = enriched["opponent"].isna()
+    missing_rows = enriched.loc[missing_mask, ["player", "team"]].drop_duplicates()
+    missing_count = len(missing_rows)
+    coverage_rate = 1.0 - (missing_count / max(total_rows, 1))
+
+    # 4. ALWAYS emit debug so we can inspect who didn't get mapped
+    debug_dir = Path("data") / "_debug"
+    debug_dir.mkdir(parents=True, exist_ok=True)
+
+    # sample of who is missing
+    preview_cols = []
+    for c in ["player", "team", "week", "opponent"]:
+        if c in enriched.columns and c not in preview_cols:
+            preview_cols.append(c)
+    # Add cleaned merge keys if present (useful for matching later)
+    for c in ["__player_clean_key", "__team_clean_key", "__week_key"]:
+        if c in enriched.columns and c not in preview_cols:
+            preview_cols.append(c)
+
+    # write the missing list
+    missing_rows.head(200).to_csv(
+        debug_dir / "missing_opponent_players.csv",
+        index=False
     )
-    sentinel_mask = opp_norm.eq(CONSENSUS_OPPONENT_SENTINEL)
-    mapping["opponent"] = opp_norm.map(_canon_team)
-    mapping.loc[sentinel_mask, "opponent"] = CONSENSUS_OPPONENT_SENTINEL
-    mapping["opponent"] = mapping["opponent"].replace("", np.nan)
 
-    mapping = mapping[merge_keys + ["opponent"]].drop_duplicates(merge_keys)
+    # write a small overall preview of enriched (not just missing),
+    # in case we need to see successful matches too:
+    enriched[preview_cols].head(200).to_csv(
+        debug_dir / "opponent_enrichment_preview.csv",
+        index=False
+    )
 
-    if "team" in out.columns:
-        out["team"] = out["team"].astype(str).str.upper().str.strip().map(_canon_team)
-
-    if mapping.empty:
-        opponents = out.get("opponent", pd.Series(index=out.index, dtype=object))
-        opp_norm = (
-            opponents.where(opponents.notna(), "").astype(str).str.upper().str.strip()
+    # 5. make the "should we hard-stop?" decision
+    #
+    # If basically NOTHING got an opponent (coverage < 0.10),
+    # then we assume the upstream scrape / schedule map blew up,
+    # so we keep the hard fail to avoid burning downstream API calls.
+    #
+    # Otherwise: we warn but continue the pipeline.
+    if coverage_rate < 0.10:
+        example_names = (
+            missing_rows
+            .head(10)
+            .apply(lambda r: f"{r['player']} ({r['team']})", axis=1)
+            .tolist()
         )
-        missing_mask = opp_norm.eq("")
-        missing_mask &= ~opp_norm.eq(CONSENSUS_OPPONENT_SENTINEL)
-        if missing_mask.any():
-            preview_df = out.loc[missing_mask, ["player", "team"]].head(10)
-            preview = ", ".join(
-                preview_df.apply(
-                    lambda row: (
-                        f"{row['player']} ({row['team']})"
-                        if row.get("team")
-                        else str(row["player"])
-                    ),
-                    axis=1,
-                )
-            )
-            count = int(missing_mask.sum())
-            raise RuntimeError(
-                "opponent enrichment incomplete: opponent_map_from_props.csv had no assignments "
-                f"and {count} players remain without opponents: {preview}"
-            )
-        return out
-
-    enriched = out.merge(mapping, on=merge_keys, how="left", suffixes=("", "_props"))
-
-    current = enriched.get("opponent", pd.Series(index=enriched.index, dtype=object))
-    current_norm = (
-        current.where(current.notna(), "").astype(str).str.upper().str.strip()
-    )
-    current_sentinel = current_norm.eq(CONSENSUS_OPPONENT_SENTINEL)
-    fill_mask = current_norm.eq("") & ~current_sentinel
-
-    enriched.loc[fill_mask, "opponent"] = enriched.loc[fill_mask, "opponent_props"]
-    enriched.drop(columns=["opponent_props"], inplace=True, errors="ignore")
-
-    opp_final = (
-        enriched["opponent"]
-        .where(enriched["opponent"].notna(), "")
-        .astype(str)
-        .str.upper()
-        .str.strip()
-    )
-    final_sentinel = opp_final.eq(CONSENSUS_OPPONENT_SENTINEL)
-    enriched["opponent"] = opp_final.map(_canon_team)
-    enriched.loc[final_sentinel, "opponent"] = CONSENSUS_OPPONENT_SENTINEL
-    enriched["opponent"] = enriched["opponent"].replace("", np.nan)
-
-    missing_mask = enriched["opponent"].isna() | enriched["opponent"].astype(
-        str
-    ).str.strip().eq("")
-    missing_mask &= (
-        ~enriched["opponent"].astype(str).str.upper().eq(CONSENSUS_OPPONENT_SENTINEL)
-    )
-
-    if missing_mask.any():
-        preview_df = enriched.loc[missing_mask, ["player", "team"]].head(10)
-        preview = ", ".join(
-            preview_df.apply(
-                lambda row: (
-                    f"{row['player']} ({row['team']})"
-                    if row.get("team")
-                    else str(row["player"])
-                ),
-                axis=1,
-            )
-        )
-        count = int(missing_mask.sum())
         raise RuntimeError(
-            f"opponent enrichment incomplete: {count} players without opponents: {preview}"
+            "[make_player_form] opponent enrichment FAILED for almost everyone: "
+            f"{missing_count} / {total_rows} rows missing. Examples: {', '.join(example_names)}"
         )
+    else:
+        # soft fail -> just log to stdout so we see it in Actions
+        example_names = (
+            missing_rows
+            .head(10)
+            .apply(lambda r: f"{r['player']} ({r['team']})", axis=1)
+            .tolist()
+        )
+        print(
+            f"[make_player_form] WARNING: opponent enrichment incomplete: "
+            f"{missing_count} players without opponents. Examples: {', '.join(example_names)}"
+        )
+
+    # 6. Drop any helper columns we don't want leaking downstream
+    # (If inject_week_opponent_and_roles already dropped them, this is harmless.)
+    for c in ["__player_clean_key", "__team_clean_key", "__week_key",
+              "week_x", "week_y", "opponent_x", "opponent_y",
+              "week_final_raw", "week_final", "opponent_final"]:
+        if c in enriched.columns:
+            enriched.drop(columns=[c], inplace=True, errors="ignore")
 
     return enriched
 
