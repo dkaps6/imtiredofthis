@@ -28,6 +28,7 @@ jobs:
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
       APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
       ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+      OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
       MSF_KEY: ${{ secrets.MSF_KEY }}
       MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
       NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
@@ -109,13 +110,6 @@ jobs:
           set -euo pipefail
           python scripts/build/build_qb_run_metrics.py
 
-      - name: Build weather week
-        shell: bash
-        timeout-minutes: 10
-        run: |
-          set -euo pipefail
-          python scripts/build/build_weather_week.py
-
       - name: Build play volume splits
         shell: bash
         timeout-minutes: 8
@@ -160,6 +154,12 @@ jobs:
       - name: Run pipeline
         run: |
           python -m engine --season "${{ github.event.inputs.season }}" --date "" --bookmakers=""
+
+      - name: Build weather (upcoming slate)
+        env:
+          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+        run: |
+          python scripts/build_weather_week.py
 
       - name: Sanity gate | Metrics ready
         run: |
