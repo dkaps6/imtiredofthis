@@ -279,6 +279,158 @@ def _slug(s: str) -> str:
     return s
 
 
+def _normalize_pace_table(df: pd.DataFrame) -> pd.DataFrame:
+    pace_df = df.copy()
+
+    raw_cols = {c.strip().upper(): c for c in pace_df.columns}
+
+    candidates = [
+        "NEUTRAL DB RATE",
+        "NEUTRAL DB RATE LAST 5",
+        "NEUTRAL PACE",
+        "SITUATION NEUTRAL PACE",
+        "NEUTRAL SECS/PLAY",
+    ]
+    neutral_col = None
+    for cand in candidates:
+        if cand in raw_cols:
+            neutral_col = raw_cols[cand]
+            break
+
+    if neutral_col is None:
+        raise RuntimeError(
+            "[sharpfootball_pull] could not find neutral pace col in pace_df. "
+            f"Available cols: {list(pace_df.columns)}"
+        )
+
+    rename_map: Dict[str, str] = {}
+    for possible_team in ["TEAM", "Team", "team"]:
+        if possible_team in pace_df.columns:
+            rename_map[possible_team] = "team"
+            break
+
+    rename_map[neutral_col] = "neutral_pace"
+
+    last5_candidates = [
+        "NEUTRAL DB RATE LAST 5",
+        "NEUTRAL PACE LAST 5",
+        "LAST 5 NEUTRAL",
+        "NEUTRAL SECS/PLAY LAST 5",
+    ]
+    for last5_cand in last5_candidates:
+        if last5_cand in raw_cols:
+            rename_map[raw_cols[last5_cand]] = "neutral_pace_last5"
+            break
+
+    pace_df = pace_df.rename(columns=rename_map)
+
+    for col in ["neutral_pace", "neutral_pace_last5"]:
+        if col in pace_df.columns:
+            pace_df[col] = (
+                pace_df[col]
+                .astype(str)
+                .str.replace("%", "", regex=False)
+                .str.strip()
+            )
+            pace_df[col] = pd.to_numeric(pace_df[col], errors="coerce")
+
+    if "neutral_pace" not in pace_df.columns:
+        raise RuntimeError(
+            "[sharpfootball_pull] pace_df missing neutral_pace after normalization. "
+            f"Available cols: {list(pace_df.columns)}"
+        )
+
+    if "team" not in pace_df.columns:
+        raise RuntimeError(
+            "[sharpfootball_pull] pace_df missing team column after normalization. "
+            f"Available cols: {list(pace_df.columns)}"
+        )
+
+    return pace_df
+
+
+def _normalize_coverage_scheme_table(df: pd.DataFrame) -> pd.DataFrame:
+    coverage_df = df.copy()
+
+    raw_cols = {c.strip().upper(): c for c in coverage_df.columns}
+
+    rename_map: Dict[str, str] = {}
+    for possible_team in ["TEAM", "Team", "team"]:
+        if possible_team in coverage_df.columns:
+            rename_map[possible_team] = "team"
+            break
+
+    man_candidates = [
+        "MAN %",
+        "MAN%",
+        "MAN RATE",
+        "MAN COVERAGE %",
+        "MAN COVERAGE",
+        "MAN COVERAGE RATE",
+    ]
+    man_col = None
+    for cand in man_candidates:
+        if cand in raw_cols:
+            man_col = raw_cols[cand]
+            break
+    if man_col is None:
+        for col in coverage_df.columns:
+            if "MAN" in str(col).upper():
+                man_col = col
+                break
+    if man_col is None:
+        raise RuntimeError(
+            "[sharpfootball_pull] could not find coverage man rate column. "
+            f"Available cols: {list(coverage_df.columns)}"
+        )
+    rename_map[man_col] = "coverage_man_rate"
+
+    zone_candidates = [
+        "ZONE %",
+        "ZONE%",
+        "ZONE RATE",
+        "ZONE COVERAGE %",
+        "ZONE COVERAGE",
+        "ZONE COVERAGE RATE",
+    ]
+    zone_col = None
+    for cand in zone_candidates:
+        if cand in raw_cols:
+            zone_col = raw_cols[cand]
+            break
+    if zone_col is None:
+        for col in coverage_df.columns:
+            if "ZONE" in str(col).upper():
+                zone_col = col
+                break
+    if zone_col is None:
+        raise RuntimeError(
+            "[sharpfootball_pull] could not find coverage zone rate column. "
+            f"Available cols: {list(coverage_df.columns)}"
+        )
+    rename_map[zone_col] = "coverage_zone_rate"
+
+    coverage_df = coverage_df.rename(columns=rename_map)
+
+    for col in ["coverage_man_rate", "coverage_zone_rate"]:
+        if col in coverage_df.columns:
+            coverage_df[col] = (
+                coverage_df[col]
+                .astype(str)
+                .str.replace("%", "", regex=False)
+                .str.strip()
+            )
+            coverage_df[col] = pd.to_numeric(coverage_df[col], errors="coerce")
+
+    if "team" not in coverage_df.columns:
+        raise RuntimeError(
+            "[sharpfootball_pull] coverage_df missing team column after normalization. "
+            f"Available cols: {list(coverage_df.columns)}"
+        )
+
+    return coverage_df
+
+
 COLUMN_ALIAS_PATTERNS: Dict[str, Dict[str, Iterable[str]]] = {
     "off_tend": {
         "pass_rate_over_expected": {
@@ -424,6 +576,11 @@ def _pull_one(kind: str, url: str, season: int) -> Tuple[str, int, Optional[pd.D
     if df is None or df.empty:
         return kind, 0, None
 
+    if kind == "pace":
+        df = _normalize_pace_table(df)
+    elif kind == "coverage_scheme":
+        df = _normalize_coverage_scheme_table(df)
+
     df = _normalize_team_col(df)
     df = _rename_expected_cols(kind, df)
 
@@ -483,12 +640,19 @@ def merge_team_form(season: int, pieces: Dict[str, pd.DataFrame]) -> int:
     required_cols = ["neutral_pace", "coverage_man_rate", "coverage_zone_rate"]
     for col in required_cols:
         if col not in base.columns:
-            raise RuntimeError(f"[sharpfootball_pull] missing required column {col} in merged team form")
+            raise RuntimeError(
+                f"[sharpfootball_pull] missing required column {col} in merged team form. "
+                f"Available cols: {sorted(list(base.columns))}"
+            )
         if base[col].isna().all():
             raise RuntimeError(f"[sharpfootball_pull] missing or empty required col {col}")
 
     out_path = os.path.join(DATA_DIR, "sharp_team_form.csv")
     base.to_csv(out_path, index=False)
+    print(
+        "[sharpfootball_pull] wrote data/sharp_team_form.csv with cols:",
+        sorted(list(base.columns)),
+    )
     return len(base)
 
 def main():
