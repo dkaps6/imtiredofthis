@@ -331,9 +331,10 @@ def _compute_team_proe_from_pbp(pbp_df: pd.DataFrame) -> pd.DataFrame:
 
     grp["pass_rate_over_expected"] = grp["team_pass_rate"] - league_pass_rate
 
-    # rename posteam -> team_abbr to match downstream merges
-    grp = grp.rename(columns={"posteam": "team_abbr"})
-    return grp[["team_abbr", "pass_rate_over_expected"]]
+    grp = grp.rename(columns={"posteam": "team"})
+    grp["team"] = grp["team"].map(canon_team)
+    grp = grp[grp["team"].isin(VALID)]
+    return grp[["team", "pass_rate_over_expected"]]
 
 PERCENTY_COLS = {
     "light_box_rate", "heavy_box_rate", "neutral_db_rate", "neutral_db_rate_last_5",
@@ -821,7 +822,7 @@ def build_team_form(season: int, box_backfill_prev: bool = False) -> pd.DataFram
 
     out["team_abbr"] = out["team"]
     if not proe_df.empty:
-        out = out.merge(proe_df, on="team_abbr", how="left")
+        out = out.merge(proe_df, on="team", how="left")
 
     out = merge_slot_rate_from_roles(out)
     out["season"] = int(season)
@@ -903,56 +904,48 @@ def main():
             raise RuntimeError("[make_team_form] sharp_team_form.csv is empty. Sharp pull failed or returned no usable rows.")
 
         # Normalize join keys
-        # sharpfootball_pull.py writes column 'team_abbr' (e.g. KC, BUF, SF)
-        if "team_abbr" not in sharp_df.columns:
-            # Fallback: if it only has 'team', promote that -> team_abbr
-            if "team" in sharp_df.columns:
-                sharp_df["team_abbr"] = sharp_df["team"].astype(str)
+        if "team" not in sharp_df.columns:
+            if "team_abbr" in sharp_df.columns:
+                sharp_df["team"] = sharp_df["team_abbr"].astype(str)
             else:
-                raise RuntimeError("[make_team_form] sharp_team_form.csv has no team_abbr/team column")
+                raise RuntimeError("[make_team_form] sharp_team_form.csv has no team column")
 
-        sharp_df["team_abbr"] = sharp_df["team_abbr"].astype(str).str.upper().str.strip()
+        sharp_df["team"] = sharp_df["team"].astype(str).str.upper().str.strip().map(canon_team)
+        sharp_df = sharp_df[sharp_df["team"].isin(VALID)]
+        sharp_df = sharp_df.loc[:, ~sharp_df.columns.duplicated()]
+        if "team_abbr" in sharp_df.columns:
+            sharp_df.drop(columns=["team_abbr"], inplace=True)
 
-        # Ensure our local frame also has a compatible team key.
-        # If we already have 'team_abbr', normalize it. Otherwise
-        # try to derive one from 'team', 'defteam', etc.
         if team_form is None:
             team_form = df.copy()
-        if "team_abbr" not in team_form.columns:
+        if "team" not in team_form.columns:
             if "team_abbr" in team_form.columns:
-                pass
-            elif "team" in team_form.columns:
-                team_form["team_abbr"] = team_form["team"]
+                team_form["team"] = team_form["team_abbr"]
             elif "defteam" in team_form.columns:
-                team_form["team_abbr"] = team_form["defteam"]
+                team_form["team"] = team_form["defteam"]
             elif "off_team" in team_form.columns:
-                team_form["team_abbr"] = team_form["off_team"]
+                team_form["team"] = team_form["off_team"]
             else:
-                raise RuntimeError("[make_team_form] cannot infer team_abbr key for merge")
+                raise RuntimeError("[make_team_form] cannot infer team key for merge")
 
-        team_form["team_abbr"] = team_form["team_abbr"].astype(str).str.upper().str.strip()
+        team_form["team"] = team_form["team"].astype(str).str.upper().str.strip().map(canon_team)
+        team_form = team_form[team_form["team"].isin(VALID)]
+        team_form["team_abbr"] = team_form["team"]
 
-        # Drop duplicate columns before merge
         sharp_df = sharp_df.loc[:, ~sharp_df.columns.duplicated()]
         team_form = team_form.loc[:, ~team_form.columns.duplicated()]
 
-        # Merge Sharp columns in
         team_form = team_form.merge(
             sharp_df,
-            on="team_abbr",
+            on="team",
             how="left",
             suffixes=("", "_sharp")
         )
 
-        # after merging sharp_team_form columns in:
-        if "pass_rate_over_expected_x" in team_form.columns and "pass_rate_over_expected_y" in team_form.columns:
-            # prefer our computed one (x), fill NA from Sharp (y)
-            team_form["pass_rate_over_expected"] = team_form["pass_rate_over_expected_x"].where(
-                team_form["pass_rate_over_expected_x"].notna(),
-                team_form["pass_rate_over_expected_y"]
-            )
-            team_form.drop(columns=["pass_rate_over_expected_x", "pass_rate_over_expected_y"], inplace=True)
-        elif "pass_rate_over_expected_sharp" in team_form.columns:
+        if "team_abbr_sharp" in team_form.columns:
+            team_form.drop(columns=["team_abbr_sharp"], inplace=True)
+
+        if "pass_rate_over_expected_sharp" in team_form.columns:
             if "pass_rate_over_expected" in team_form.columns:
                 team_form["pass_rate_over_expected"] = team_form["pass_rate_over_expected"].where(
                     team_form["pass_rate_over_expected"].notna(),
@@ -962,27 +955,26 @@ def main():
                 team_form.rename(columns={"pass_rate_over_expected_sharp": "pass_rate_over_expected"}, inplace=True)
             if "pass_rate_over_expected_sharp" in team_form.columns:
                 team_form.drop(columns=["pass_rate_over_expected_sharp"], inplace=True)
-        elif "pass_rate_over_expected_y" in team_form.columns and "pass_rate_over_expected" not in team_form.columns:
-            # fallback if we didn't build proe_df for some reason
-            team_form.rename(columns={"pass_rate_over_expected_y": "pass_rate_over_expected"}, inplace=True)
 
         # Basic sanity: pick a few must-have Sharp stats and make sure at least
         # one of them actually populated for at least one team.
         required_sharp_cols = [
-            # NOTE: these are generic; they MUST match real columns in sharp_team_form.csv.
-            # Update names here based on actual sharp_team_form.csv columns if needed.
             "pass_rate_over_expected",
             "neutral_pace",
             "coverage_man_rate",
             "coverage_zone_rate",
         ]
-        missing_cols = []
+        team_key = "team" if "team" in team_form.columns else "team_abbr"
         for col in required_sharp_cols:
-            if col not in team_form.columns or team_form[col].isna().all():
-                missing_cols.append(col)
+            if col not in team_form.columns:
+                raise RuntimeError(f"[make_team_form] sharp merge missing {col} (column absent)")
 
-        if missing_cols:
-            raise RuntimeError(f"[make_team_form] Sharp merge appears empty for required cols: {missing_cols}. Check sharpfootball_pull.py output.")
+            mask = team_form[col].isna()
+            if mask.all():
+                missing_teams = sorted(team_form.loc[mask, team_key].dropna().unique().tolist())
+                raise RuntimeError(
+                    f"[make_team_form] sharp merge missing {col} for teams {missing_teams}"
+                )
 
         # Log what got filled by fallbacks (for quick triage)
         try:
