@@ -32,6 +32,11 @@ import re
 import numpy as np
 import pandas as pd
 
+from scripts.utils.canonical_names import (
+    canonicalize_player_name,
+    log_unmapped_variant,
+)
+
 DATA_DIR = "data"
 OUTPATH = Path(DATA_DIR) / "player_form.csv"
 CONS_PATH = Path("data") / "player_form_consensus.csv"
@@ -130,13 +135,6 @@ def apply_name_canonicalization(df: pd.DataFrame, canon_map: dict) -> pd.DataFra
     return out
 
 
-def _normalize_name(n: str) -> str:
-    if n is None:
-        return ""
-    n = str(n)
-    n = n.replace(".", " ").replace(",", " ")
-    n = " ".join(n.split())
-    return n.upper().strip()
 def _safe_mkdir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
@@ -149,6 +147,11 @@ FINAL_COLS = [
     "season",
     "position",
     "role",
+    "player_canonical",
+    "player_clean_key",
+    "team_key",
+    "week_key",
+    "unmatched_flag",
     "tgt_share",
     "route_rate",
     "rush_share",
@@ -555,67 +558,6 @@ def _inject_week_opponent_and_roles(out: pd.DataFrame) -> pd.DataFrame:
             merged.drop(columns=[col], inplace=True, errors="ignore")
 
     return merged
-# === BEGIN: SURGICAL NAME NORMALIZATION HELPERS (idempotent) ===
-try:
-    _NAME_HELPERS_DEFINED
-except NameError:
-    import re as _re_nh
-    import unicodedata as _ud_nh
-
-    _NAME_HELPERS_DEFINED = True
-
-    _SUFFIX_RE_NH = _re_nh.compile(r"\b(JR|SR|II|III|IV|V)\b\.?", _re_nh.IGNORECASE)
-    _LEADING_NUM_RE_NH = _re_nh.compile(
-        r"^\s*(?:#\s*)?\d+\s*[-–—:]?\s*", _re_nh.UNICODE
-    )
-
-    def _deaccent_nh(s: str) -> str:
-        try:
-            return _ud_nh.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
-        except Exception:
-            return s
-
-    def _clean_person_name_nh(s: str) -> str:
-        s = (s or "").replace("\xa0", " ").strip()
-        s = _LEADING_NUM_RE_NH.sub("", s)
-        s = s.replace(".", "")
-        s = _SUFFIX_RE_NH.sub("", s)
-        s = _re_nh.sub(r"\s+", " ", s)
-        s = _deaccent_nh(s)
-        return s.strip()
-
-    def _player_key_from_name_nh(s: str) -> str:
-        s = _clean_person_name_nh(s)
-        return _re_nh.sub(r"[^a-z0-9]", "", s.lower())
-
-    def _player_initial_last_key_nh(s: str) -> str:
-        s = _clean_person_name_nh(s)
-        if not s:
-            return ""
-        parts = s.split()
-        if not parts:
-            return ""
-        first = parts[0]
-        last = parts[-1] if len(parts) > 1 else parts[0]
-        if len(parts) == 1:
-            token = parts[0]
-            match = _re_nh.search(r"(?<=[A-Z])([A-Z][a-z])", token)
-            if match:
-                start_idx = match.start(1)
-                leading = token[:start_idx]
-                surname = token[start_idx:]
-                if leading and surname:
-                    first = leading
-                    last = surname
-        if not first:
-            return ""
-        key = f"{first[0]}{last}".lower()
-        return _re_nh.sub(r"[^a-z0-9]", "", key)
-
-
-# === END: SURGICAL NAME NORMALIZATION HELPERS ===
-
-
 def _is_empty(obj) -> bool:
     try:
         return obj is None or (hasattr(obj, "__len__") and len(obj) == 0)
@@ -652,7 +594,8 @@ def _read_csv_safe(path: str) -> pd.DataFrame:
 
 # === SURGICAL ADDITION: merge roles from Ourlads depth charts (clean placement) ===
 def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
-    import os, re
+    import os
+    import re
 
     data_dir = globals().get("DATA_DIR", "data")
     pf = pf.loc[:, ~pf.columns.duplicated()].copy()
@@ -697,204 +640,80 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
     if "position" not in roles.columns and "role" in roles.columns:
         roles["position"] = roles["role"].str.extract(r"([A-Z]+)")
 
-    def _rank(r):
-        m = re.search(r"(\d+)$", str(r))
-        return int(m.group(1)) if m else 999
-
-    if {"team", "player", "role"}.issubset(roles.columns):
-        roles["_rk"] = roles["role"].map(_rank)
-        roles = (
-            roles.sort_values(["team", "player", "_rk"])
-            .drop_duplicates(["team", "player"], keep="first")
-            .drop(columns=["_rk"])
+    def _canonicalize_roles_row(row):
+        raw = row.get("player_name") or row.get("player") or ""
+        canonical, clean_key = canonicalize_player_name(raw)
+        return pd.Series(
+            {
+                "player_canonical": canonical,
+                "player_clean_key": clean_key,
+            }
         )
-    pf_team_raw = pf["team"].astype(str).str.upper().str.strip()
-    pf_team_canon = pf_team_raw.map(_canon_team)
-    pf["team"] = np.where(pf_team_canon == "", pf_team_raw, pf_team_canon)
-    pf["player_key_full"] = pf["player"].astype(str).map(_player_key_from_name_nh)
-    pf["player_key_initial_last"] = (
-        pf["player"].astype(str).map(_player_initial_last_key_nh)
-    )
-    roles_join = roles.copy()
-    if "player" in roles_join.columns:
-        roles_join = roles_join.rename(columns={"player": "player_depth_name"})
-    if "player_depth_name" not in roles_join.columns:
-        roles_join["player_depth_name"] = roles_join.get("player_join", "")
-    roles_team_raw = roles_join["team"].astype(str).str.upper().str.strip()
-    roles_team_canon = roles_team_raw.map(_canon_team)
-    roles_join["team"] = np.where(
-        roles_team_canon == "", roles_team_raw, roles_team_canon
-    )
-    roles_join = roles_join[roles_join["team"] != ""].copy()
-    roles_join["player_key_full"] = (
-        roles_join.get("player_depth_name", "")
+
+    canon_roles = roles.apply(_canonicalize_roles_row, axis=1)
+    roles = pd.concat([roles, canon_roles], axis=1)
+
+    roles["team_key"] = (
+        roles["team"]
         .astype(str)
-        .map(_player_key_from_name_nh)
+        .str.upper()
+        .str.strip()
     )
-    roles_join["player_key_initial_last"] = (
-        roles_join.get("player_depth_name", "")
-        .astype(str)
-        .map(_player_initial_last_key_nh)
+
+    merge_cols = ["player_clean_key", "team_key"]
+    for extra in ["role", "position", "position_guess"]:
+        if extra in roles.columns:
+            merge_cols.append(extra)
+
+    roles_subset = roles[merge_cols].drop_duplicates(
+        ["player_clean_key", "team_key"], keep="first"
     )
-    roles_join = roles_join.loc[:, ~roles_join.columns.duplicated()].copy()
-    roles_full = roles_join[
-        [
-            col
-            for col in [
-                "team",
-                "player_key_full",
-                "role",
-                "position",
-                "player_depth_name",
-            ]
-            if col in roles_join.columns
-        ]
-    ].copy()
-    roles_full = roles_full.loc[
-        roles_full["player_key_full"].notna() & (roles_full["player_key_full"] != "")
-    ]
-    roles_full = roles_full.sort_values(["team", "player_key_full"]).drop_duplicates(
-        ["team", "player_key_full"], keep="first"
+
+    pf = pf.merge(
+        roles_subset,
+        on=["player_clean_key", "team_key"],
+        how="left",
+        suffixes=("", "_roles"),
     )
-    roles_full = roles_full.rename(
-        columns={
-            "role": "role_depth",
-            "position": "position_depth",
-            "player_depth_name": "player_depth_name_full",
-        }
-    )
+
+    if "role_roles" in pf.columns:
+        pf["role"] = pf["role"].combine_first(pf["role_roles"])
+        pf.drop(columns=["role_roles"], inplace=True)
+    if "position_roles" in pf.columns:
+        pf["position"] = pf["position"].combine_first(pf["position_roles"])
+        pf.drop(columns=["position_roles"], inplace=True)
+    if "position_guess" in pf.columns:
+        pf["position"] = pf["position"].combine_first(pf["position_guess"])
+
+    pf["unmatched_flag"] = pf["role"].isna()
+
     try:
-        pf = pf.merge(
-            roles_full,
-            on=["team", "player_key_full"],
-            how="left",
-            validate="many_to_one",
-        )
-    except Exception as e:
-        print(f"[make_player_form] WARN roles merge (full key) issue: {e}")
-        pf = pf.merge(
-            roles_full,
-            on=["team", "player_key_full"],
-            how="left",
-        )
-
-    roles_alias = roles_join[
-        [
-            col
-            for col in [
-                "team",
-                "player_key_initial_last",
-                "role",
-                "position",
-                "player_depth_name",
-            ]
-            if col in roles_join.columns
-        ]
-    ].copy()
-    roles_alias = roles_alias.loc[
-        roles_alias["player_key_initial_last"].notna()
-        & (roles_alias["player_key_initial_last"] != "")
-    ]
-    roles_alias = roles_alias.sort_values(
-        ["team", "player_key_initial_last"]
-    ).drop_duplicates(["team", "player_key_initial_last"], keep="first")
-    roles_alias = roles_alias.rename(
-        columns={
-            "role": "role_depth_alias",
-            "position": "position_depth_alias",
-            "player_depth_name": "player_depth_name_alias",
-        }
-    )
-    try:
-        pf = pf.merge(
-            roles_alias,
-            on=["team", "player_key_initial_last"],
-            how="left",
-            validate="many_to_one",
-        )
-    except Exception as e:
-        print(f"[make_player_form] WARN roles merge (alias key) issue: {e}")
-        pf = pf.merge(
-            roles_alias,
-            on=["team", "player_key_initial_last"],
-            how="left",
-        )
-
-    if "position_depth" in pf.columns:
-        pf["position"] = pf["position"].combine_first(pf["position_depth"])
-    if "position_depth_alias" in pf.columns:
-        pf["position"] = pf["position"].combine_first(pf["position_depth_alias"])
-    if "role_depth" in pf.columns:
-        pf["role"] = pf["role"].combine_first(pf["role_depth"])
-    if "role_depth_alias" in pf.columns:
-        pf["role"] = pf["role"].combine_first(pf["role_depth_alias"])
-
-    # Key-only fallbacks when the depth charts have unique names
-    unmatched_mask = pf["role"].isna()
-    if unmatched_mask.any():
-        unique_full = roles_join[["player_key_full", "role", "position"]].copy()
-        unique_full = unique_full[
-            unique_full["player_key_full"].notna()
-            & (unique_full["player_key_full"] != "")
-        ]
-        dup_full = unique_full["player_key_full"].duplicated(keep=False)
-        unique_full = unique_full[~dup_full].drop_duplicates("player_key_full")
-        if not unique_full.empty:
-            role_map_full = unique_full.set_index("player_key_full")["role"].to_dict()
-            pos_map_full = unique_full.set_index("player_key_full")[
-                "position"
-            ].to_dict()
-            pf.loc[unmatched_mask, "role"] = pf.loc[unmatched_mask, "role"].fillna(
-                pf.loc[unmatched_mask, "player_key_full"].map(role_map_full)
-            )
-            pf.loc[unmatched_mask, "position"] = pf.loc[
-                unmatched_mask, "position"
-            ].fillna(pf.loc[unmatched_mask, "player_key_full"].map(pos_map_full))
-            unmatched_mask = pf["role"].isna()
-
-    if unmatched_mask.any():
-        unique_alias = roles_join[
-            ["player_key_initial_last", "role", "position"]
-        ].copy()
-        unique_alias = unique_alias[
-            unique_alias["player_key_initial_last"].notna()
-            & (unique_alias["player_key_initial_last"] != "")
-        ]
-        dup_alias = unique_alias["player_key_initial_last"].duplicated(keep=False)
-        unique_alias = unique_alias[~dup_alias].drop_duplicates(
-            "player_key_initial_last"
-        )
-        if not unique_alias.empty:
-            role_map_alias = unique_alias.set_index("player_key_initial_last")[
-                "role"
-            ].to_dict()
-            pos_map_alias = unique_alias.set_index("player_key_initial_last")[
-                "position"
-            ].to_dict()
-            pf.loc[unmatched_mask, "role"] = pf.loc[unmatched_mask, "role"].fillna(
-                pf.loc[unmatched_mask, "player_key_initial_last"].map(role_map_alias)
-            )
-            pf.loc[unmatched_mask, "position"] = pf.loc[
-                unmatched_mask, "position"
-            ].fillna(
-                pf.loc[unmatched_mask, "player_key_initial_last"].map(pos_map_alias)
-            )
-    drop_cols = [
-        c
-        for c in pf.columns
-        if c.endswith("_depth")
-        or c.endswith("_depth_alias")
-        or c in {"player_key_full", "player_key_initial_last"}
-        or c.startswith("player_depth_name_")
-    ]
-    if drop_cols:
-        pf.drop(columns=drop_cols, inplace=True, errors="ignore")
-    pf = pf.loc[:, ~pf.columns.duplicated()]
-    try:
-        miss = pf[pf["role"].isna()][["player", "team"]].copy()
+        miss = pf.loc[pf["unmatched_flag"]].copy()
         if not miss.empty:
+            team_set = set(roles["team_key"].dropna().unique())
+            miss["unmatched_class"] = np.where(
+                miss["player_clean_key"].eq(""),
+                "missing_player_key",
+                np.where(
+                    miss["team_key"].isin(team_set),
+                    "name_not_in_roles",
+                    "team_not_in_roles",
+                ),
+            )
+            unmatched_cols = [
+                c
+                for c in [
+                    "player",
+                    "team",
+                    "player_canonical",
+                    "player_clean_key",
+                    "team_key",
+                    "unmatched_class",
+                ]
+                if c in miss.columns
+            ]
             os.makedirs(data_dir, exist_ok=True)
-            miss.to_csv(
+            miss[unmatched_cols].drop_duplicates().to_csv(
                 os.path.join(data_dir, "unmatched_roles_merge.csv"), index=False
             )
             print(
@@ -902,11 +721,13 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
             )
     except Exception:
         pass
+
     try:
         cov = pf["position"].notna().mean()
         print(f"[make_player_form] merged depth roles → coverage now {cov:.2%}")
     except Exception:
         pass
+
     return pf
 
 
@@ -2052,6 +1873,33 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         .str.strip()
     )
 
+    # Canonicalize player names for stable identity across sources
+    def _canonicalize_and_attach(row):
+        raw = row.get("player_name") or row.get("player") or ""
+        canonical, clean_key = canonicalize_player_name(raw)
+        # log anything we couldn't confidently map to the dictionary
+        log_unmapped_variant(raw)
+        return pd.Series({
+            "player_canonical": canonical,
+            "player_clean_key": clean_key,
+        })
+
+    canon_blocks = base.apply(_canonicalize_and_attach, axis=1)
+    base = pd.concat([base, canon_blocks], axis=1)
+
+    # Normalize team and (optional) week the same way we did before:
+    base["team_key"] = (
+        base["team"]
+        .astype(str)
+        .str.upper()
+        .str.strip()
+    )
+
+    if "week" in base.columns:
+        base["week_key"] = base["week"].fillna(-1).astype(int)
+    else:
+        base["week_key"] = -1
+
     # roles.csv (non-destructive) then infer roles
     base = _merge_depth_roles(base)
     if base.get("role", pd.Series(dtype=object)).isna().all():
@@ -2065,10 +1913,24 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         base["opponent"] = base["opponent"].astype(str).str.strip().str.upper()
         base.loc[base["opponent"].isin(["", "NAN"]), "opponent"] = np.nan
 
+    if "team" in base.columns:
+        base["team_key"] = base["team"].astype(str).str.upper().str.strip()
+    if "week" in base.columns:
+        base["week_key"] = base["week"].fillna(-1).astype(int)
+    else:
+        base["week_key"] = -1
+
     out = base.copy()
     out = _enrich_team_and_opponent_from_props(out)
     if "week" in out.columns:
         out["week"] = pd.to_numeric(out["week"], errors="coerce")
+
+    if "team" in out.columns:
+        out["team_key"] = out["team"].astype(str).str.upper().str.strip()
+    if "week" in out.columns:
+        out["week_key"] = out["week"].fillna(-1).astype(int)
+    else:
+        out["week_key"] = -1
 
     # Guarantee required numeric metrics are explicitly zero when usage was absent so
     # coverage calculations treat them as populated instead of missing data.
@@ -2287,15 +2149,15 @@ def _apply_fallback_enrichers(df: pd.DataFrame) -> pd.DataFrame:
 def _load_props_players() -> pd.DataFrame:
     """
     Read outputs/props_raw.csv to get the set of players (and teams) we actually need to validate.
-    Returns DataFrame with columns: player, team, player_key (stable).
+    Returns DataFrame with columns: player, team, player_clean_key (stable).
     """
     path = os.path.join("outputs", "props_raw.csv")
     if not os.path.exists(path):
-        return pd.DataFrame(columns=["player", "team", "opponent", "player_key"])
+        return pd.DataFrame(columns=["player", "team", "opponent", "player_clean_key"])
     try:
         pr = pd.read_csv(path)
     except Exception:
-        return pd.DataFrame(columns=["player", "team", "opponent", "player_key"])
+        return pd.DataFrame(columns=["player", "team", "opponent", "player_clean_key"])
 
     pr.columns = [c.lower() for c in pr.columns]
     if "player" not in pr.columns:
@@ -2341,14 +2203,21 @@ def _load_props_players() -> pd.DataFrame:
     else:
         pr["opponent"] = np.nan
 
-    pr["player_key"] = (
-        pr["player"]
-        .fillna("")
-        .astype(str)
-        .str.lower()
-        .str.replace(r"[^a-z0-9]", "", regex=True)
-    )
-    return pr[["player", "team", "opponent", "player_key"]].drop_duplicates()
+    def _canon_props_row(row):
+        raw = row.get("player") or ""
+        canonical, clean_key = canonicalize_player_name(raw)
+        log_unmapped_variant(raw)
+        return pd.Series(
+            {
+                "player_canonical": canonical,
+                "player_clean_key": clean_key,
+            }
+        )
+
+    canon = pr.apply(_canon_props_row, axis=1)
+    pr = pd.concat([pr, canon], axis=1)
+
+    return pr[["player", "team", "opponent", "player_clean_key"]].drop_duplicates()
 
 
 def _validate_required(df: pd.DataFrame):
@@ -2366,15 +2235,25 @@ def _validate_required(df: pd.DataFrame):
         return
 
     df = df.copy()
-    df["player_key"] = (
-        df["player"]
-        .fillna("")
-        .astype(str)
-        .str.lower()
-        .str.replace(r"[^a-z0-9]", "", regex=True)
-    )
+    if "player_clean_key" not in df.columns:
+        def _canon_df_row(row):
+            raw = row.get("player") or ""
+            canonical, clean_key = canonicalize_player_name(raw)
+            log_unmapped_variant(raw)
+            return pd.Series(
+                {
+                    "player_canonical": canonical,
+                    "player_clean_key": clean_key,
+                }
+            )
+
+        canon_df = df.apply(_canon_df_row, axis=1)
+        df = pd.concat([df, canon_df], axis=1)
+
     need = df.merge(
-        props_players[["player_key"]].drop_duplicates(), on="player_key", how="inner"
+        props_players[["player_clean_key"]].drop_duplicates(),
+        on="player_clean_key",
+        how="inner",
     )
     if need.empty:
         return
@@ -2509,11 +2388,33 @@ def _attach_consensus_keys(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     if "player_name" not in out.columns:
         out["player_name"] = out.get("player", "")
-    out["player_key"] = out["player_name"].apply(_normalize_name)
-    if "team" in out.columns:
-        out["team_key"] = out["team"].astype(str).str.upper().str.strip()
+
+    if "player_canonical" not in out.columns or "player_clean_key" not in out.columns:
+        def _canon_row(row):
+            raw = row.get("player_name") or row.get("player") or ""
+            canonical, clean_key = canonicalize_player_name(raw)
+            return pd.Series(
+                {
+                    "player_canonical": canonical,
+                    "player_clean_key": clean_key,
+                }
+            )
+
+        canon = out.apply(_canon_row, axis=1)
+        out = pd.concat([out, canon], axis=1)
     else:
-        out["team_key"] = ""
+        out["player_canonical"] = out["player_canonical"].astype(str)
+        out["player_clean_key"] = out["player_clean_key"].astype(str)
+
+    if "team_key" not in out.columns:
+        out["team_key"] = (
+            out.get("team", "")
+            .astype(str)
+            .str.upper()
+            .str.strip()
+        )
+    else:
+        out["team_key"] = out["team_key"].astype(str).str.upper().str.strip()
     if "week" in out.columns:
         week_numeric = pd.to_numeric(out["week"], errors="coerce").fillna(-1)
         out["week_key"] = week_numeric.astype(int)
@@ -2572,14 +2473,7 @@ def _build_grouped_consensus(df: pd.DataFrame) -> pd.DataFrame:
         if col not in working.columns:
             working[col] = np.nan
 
-    group_cols = ["player_key", "team_key", "week_key"]
-
-    def _most_common_name(series: pd.Series) -> str:
-        counts = series.dropna().value_counts()
-        if not counts.empty:
-            return counts.index[0]
-        series = series.astype(str)
-        return series.iloc[0] if len(series) else ""
+    group_cols = ["player_canonical", "team_key", "week_key"]
 
     consensus = (
         working.groupby(group_cols, dropna=False)
@@ -2587,17 +2481,26 @@ def _build_grouped_consensus(df: pd.DataFrame) -> pd.DataFrame:
         .reset_index()
     )
 
+    def _mode_or_first(series: pd.Series) -> str:
+        counts = series.dropna().value_counts()
+        if not counts.empty:
+            return counts.index[0]
+        series = series.astype(str)
+        return series.iloc[0] if len(series) else ""
+
     name_lookup = (
-        working.groupby(group_cols)["player_name"].agg(_most_common_name).reset_index()
+        working.groupby(group_cols)["player_canonical"]
+        .agg(_mode_or_first)
+        .reset_index()
+        .rename(columns={"player_canonical": "display_name"})
     )
 
     consensus = consensus.merge(name_lookup, on=group_cols, how="left")
     consensus = consensus.rename(
         columns={
-            "player_key": "player",
+            "player_canonical": "player",
             "team_key": "team",
             "week_key": "week",
-            "player_name": "display_name",
         }
     )
 
