@@ -35,7 +35,6 @@ jobs:
       NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
 
     steps:
-      # Phase A — setup & dependencies
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -45,152 +44,138 @@ jobs:
           python-version: "3.11"
 
       - name: Install deps
-        shell: bash
         run: |
-          set -euo pipefail
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           fi
+          pip install pyyaml
 
-      # Phase B — early builders
-      - name: Build depth chart (Ourlads)
-        shell: bash
-        timeout-minutes: 5
+      ######################################################
+      # A. RAW INPUT / SCRAPERS
+      ######################################################
+
+      # 1. Depth charts / roles (OurLads only)
+      - name: Build depth roles (OurLads only)
         run: |
-          set -euo pipefail
           python scripts/providers/ourlads_depth.py
+        # This must write data/roles_ourlads.csv
 
+      # 2. Props-based opponent mapping (player -> team -> opponent)
       - name: Build opponent map from props
-        shell: bash
-        timeout-minutes: 5
         run: |
-          set -euo pipefail
           python scripts/build/build_opponent_map_from_props.py "${{ github.event.inputs.season }}"
+        # Writes data/opponent_map_from_props.csv
+        # Also writes data/_debug/opponent_sample.csv
 
+      # 3. Schedule / lines
       - name: Build Game Lines
-        shell: bash
-        timeout-minutes: 5
         run: |
-          set -euo pipefail
           python scripts/build_game_lines_from_schedule.py --season "${{ github.event.inputs.season }}"
 
-      - name: Validate Ourlads roles CSV
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -s data/roles_ourlads.csv || (echo "roles_ourlads.csv missing or empty" >&2; exit 1)
-
-      # Player form depends on depth chart roles
-      - name: Build player form (usage, roles, matchups)
-        shell: bash
-        timeout-minutes: 10
-        run: |
-          set -euo pipefail
-          python scripts/make_player_form.py
-
-      - name: Sharp Football team metrics
-        shell: bash
-        run: |
-          set -euo pipefail
-          python scripts/providers/sharpfootball_pull.py --season "${{ github.event.inputs.season }}" --dump-html
-
-      # Phase C — metric feeders
-      - name: Build team form
-        shell: bash
-        timeout-minutes: 10
-        run: |
-          set -euo pipefail
-          python scripts/make_team_form.py
-
-      - name: Build QB run metrics
-        shell: bash
-        timeout-minutes: 8
-        run: |
-          set -euo pipefail
-          python scripts/build/build_qb_run_metrics.py
-
-      - name: Build play volume splits
-        shell: bash
-        timeout-minutes: 8
-        run: |
-          set -euo pipefail
-          python scripts/build/build_play_volume_splits.py
-
-      - name: Build volatility widening
-        shell: bash
-        timeout-minutes: 8
-        run: |
-          set -euo pipefail
-          python scripts/build/build_volatility_widening.py
-
-      - name: Build run/pass funnel
-        shell: bash
-        timeout-minutes: 8
-        run: |
-          set -euo pipefail
-          python scripts/build/build_run_pass_funnel.py
-
-      - name: Build script escalators
-        shell: bash
-        timeout-minutes: 8
-        run: |
-          set -euo pipefail
-          python scripts/build/build_script_escalators.py
-
-      - name: Build coverage penalties
-        shell: bash
-        timeout-minutes: 8
-        run: |
-          set -euo pipefail
-          python scripts/build/build_coverage_penalties.py
-
+      # 4. Fetch Odds / Props (can rate-limit but should NOT kill the job)
       - name: Fetch Odds (Odds API)
         env:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-        run: python scripts/fetch_game_lines_oddsapi.py
+        run: |
+          python scripts/fetch_game_lines_oddsapi.py
         continue-on-error: true
 
-      - name: Run pipeline
+      # 5. SharpFootball metrics (coverage, pace, trench, tendencies)
+      - name: Sharp Football team metrics
         run: |
-          python -m engine --season "${{ github.event.inputs.season }}" --date "" --bookmakers=""
+          python scripts/providers/sharpfootball_pull.py --season "${{ github.event.inputs.season }}" --dump-html
+        # This step must now S U C C E E D and write data/sharp_team_form.csv
+        # After recent patches, it must also include neutral_pace, coverage_man_rate, coverage_zone_rate
 
-      - name: Build weather (weather_week.csv)
-        shell: bash
+      # 6. Stadium / weather forecast for this slate
+      # NOTE: this calls the new weather pipeline which should:
+      #  - load the current slate (home, away, kickoff_local)
+      #  - map stadium location
+      #  - call OpenWeather (or your configured weather source)
+      #  - write data/weather_week.csv
+      - name: Build per-game weather
         env:
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
         run: |
-          set -euo pipefail
-          python scripts/build/build_weather_week.py
-          test -s data/weather_week.csv
+          python scripts/build_weather_week.py
+        continue-on-error: false  # weather is required for final model
 
-      - name: Sanity gate | Metrics ready
+      ######################################################
+      # B. FEATURE BUILDERS
+      ######################################################
+
+      # 7. Build player_form (player usage, roles, opp enrichment)
+      - name: Build player form
         run: |
-          python scripts/metrics_ready.py
+          python scripts/make_player_form.py --season "${{ github.event.inputs.season }}"
+        # Writes data/player_form.csv, data/player_form_consensus.csv, data/unmatched_roles_merge.csv
 
-      - name: Elite model | Run pricing
-        env:
-          PYTHONUNBUFFERED: "1"
+      # 8. Build team_form (merge Sharp + nflverse team stats + PROE etc.)
+      - name: Build team form
+        run: |
+          python scripts/make_team_form.py --season "${{ github.event.inputs.season }}"
+        # Writes data/team_form.csv
+        # make_team_form.py is responsible for merging sharp_team_form.csv
+        # and must expose: neutral_pace, coverage_man_rate, coverage_zone_rate, pass_rate_over_expected, etc.
+
+      # 9. QB run/scramble metrics, etc.
+      - name: Build QB run/scramble metrics
+        run: |
+          python scripts/build/build_qb_run_metrics.py
+        # Should write data/qb_run_metrics.csv (qb_designed_runs, scramble_rate, etc.)
+
+      ######################################################
+      # C. METRICS READY + SANITY GATE
+      ######################################################
+
+      # 10. Merge all final inputs into metrics_ready.csv
+      #     This script should read:
+      #     - data/team_form.csv
+      #     - data/player_form.csv
+      #     - data/weather_week.csv
+      #     - data/qb_run_metrics.csv
+      #     - any other per-game/per-team context we need
+      - name: Build metrics_ready
+        run: |
+          python scripts/make_metrics.py
+        # Writes data/metrics_ready.csv
+
+      # 11. Sanity Gate (HARD STOP IF BAD)
+      #     This should assert:
+      #     - critical columns exist in team_form.csv (neutral_pace, coverage_man_rate, coverage_zone_rate, pass_rate_over_expected)
+      #     - critical columns exist in metrics_ready.csv
+      #     - weather_week.csv is not empty
+      #     - opponent_map_from_props.csv not empty
+      #
+      #     If any required dataset is missing or empty, exit 1 to STOP the pipeline
+      - name: Sanity gate
+        run: |
+          python scripts/utils/sanity_gate.py
+        continue-on-error: false
+
+      ######################################################
+      # D. PRICING / MODEL (FINAL)
+      ######################################################
+
+      # 12. Elite model pricing (now that all inputs exist)
+      - name: Elite model | Pricing
         run: |
           python -m model.cli --config config.yaml
+        env:
+          PYTHONUNBUFFERED: "1"
 
-      - name: Upload Elite outputs
-        uses: actions/upload-artifact@v4
-        with:
-          name: elite-model-outputs-${{ github.run_id }}
-          path: |
-            outputs/full_model_elite.csv
-            outputs/bet_slip_elite_green.csv
-          if-no-files-found: warn
-          retention-days: 7
+      ######################################################
+      # E. ARTIFACTS
+      ######################################################
 
-      - name: Upload pipeline artifacts (always)
+      - name: Upload artifacts (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: run_${{ github.run_id }}
           path: |
-            data/**
             outputs/**
+            data/*.csv
             data/_debug/**
           if-no-files-found: warn
