@@ -271,10 +271,11 @@ CONSENSUS_OPPONENT_SENTINEL = "ALL"
 
 def _inject_week_opponent_and_roles(out: pd.DataFrame) -> pd.DataFrame:
     """
-    Enrich 'out' with 'week' and 'opponent' from opponent_map_from_props.csv,
-    after canonicalizing player names/team codes.
-    We then merge on normalized keys.
+    Enrich 'out' with 'week' and 'opponent' from data/opponent_map_from_props.csv.
+    We canonicalize player names and team codes on both sides, then merge.
+    If we still can't assign any week/opponent for anyone, we raise RuntimeError.
     """
+    OPP_PATH = Path("data") / "opponent_map_from_props.csv"
 
     if not OPP_PATH.exists():
         raise RuntimeError("[make_player_form] opponent_map_from_props.csv not found")
@@ -288,54 +289,149 @@ def _inject_week_opponent_and_roles(out: pd.DataFrame) -> pd.DataFrame:
             f"[make_player_form] opponent_map_from_props.csv missing columns: {sorted(missing)}"
         )
 
-    # --- 1. Build canonical map from roles_ourlads + opponent_map ---
-    canon_map = build_name_canonical_map()
+    # --- helper cleaners (local, lightweight, self-contained) ---
+    import re
+    import unicodedata
 
-    # --- 2. Canonicalize 'out' player names (fix 'J. Allen' -> 'Josh Allen', etc.)
-    out = apply_name_canonicalization(out, canon_map)
+    def _deaccent_local(s: str) -> str:
+        try:
+            return unicodedata.normalize("NFKD", s).encode("ascii","ignore").decode("ascii")
+        except Exception:
+            return s
 
-    # --- 3. Canonicalize 'opp' player names too (defensive, just in case)
-    opp = apply_name_canonicalization(opp, canon_map)
+    def _clean_player_name_key(raw: str) -> str:
+        """
+        Turn variants like 'DAK PRESCOTT', 'Dak Prescott', 'D. Prescott', 'Javonte U Williams'
+        into a canonical merge key 'dakprescott' or 'javontewilliams'.
+        Strategy:
+          - strip accents
+          - drop commas, slashes, extra whitespace
+          - remove obvious draft/suffix junk (JR, SR, II, etc.)
+          - split into tokens, keep first and last token as the "core" name,
+            and also keep all tokens stitched together as fallback
+        We'll just smash everything down to [a-z0-9] and lowercase.
+        """
+        s = str(raw or "").strip()
+        s = _deaccent_local(s)
+        # remove jersey numbers or leading "#" etc.
+        s = re.sub(r"^[0-9#\-\:\s]+", "", s)
+        # remove commas and multiple spaces
+        s = s.replace(",", " ")
+        s = re.sub(r"\s+", " ", s).strip()
+        # remove obvious suffix tokens like JR, SR, II, III, IV
+        tokens = [t for t in s.split() if t.upper() not in ("JR","SR","II","III","IV","V")]
+        if not tokens:
+            tokens = [s]
+        # We'll build two forms:
+        #   1. full join of all tokens (e.g. ["Javonte","U","Williams"] -> "javonteuwilliams")
+        #   2. just first + last token (e.g. "javontewilliams")
+        all_joined = re.sub(r"[^a-z0-9]", "", "".join(tokens).lower())
+        core_joined = re.sub(r"[^a-z0-9]", "", (tokens[0] + tokens[-1]).lower())
+        # prefer core_joined but fall back to all_joined if core becomes empty
+        return core_joined or all_joined
 
-    # --- 4. Create normalized join keys for both sides ---
-    out["player_key"] = (
-        out["player"].astype(str).str.strip().str.lower()
+    def _clean_team_key(raw: str) -> str:
+        """
+        Normalize team codes so that 'DAL', 'Dallas', 'Dallas Cowboys' all become 'DAL'.
+        We'll try exact 2-3 letter codes first. If that fails, fall back to a lookup map.
+        """
+        TEAM_MAP = {
+            "ARI":"ARI","ARIZONA":"ARI","CARDINALS":"ARI","ARIZONA CARDINALS":"ARI",
+            "ATL":"ATL","ATLANTA":"ATL","FALCONS":"ATL","ATLANTA FALCONS":"ATL",
+            "BAL":"BAL","BALTIMORE":"BAL","RAVENS":"BAL","BALTIMORE RAVENS":"BAL",
+            "BUF":"BUF","BUFFALO":"BUF","BILLS":"BUF","BUFFALO BILLS":"BUF",
+            "CAR":"CAR","CAROLINA":"CAR","PANTHERS":"CAR","CAROLINA PANTHERS":"CAR",
+            "CHI":"CHI","CHICAGO":"CHI","BEARS":"CHI","CHICAGO BEARS":"CHI",
+            "CIN":"CIN","CINCINNATI":"CIN","BENGALS":"CIN","CINCINNATI BENGALS":"CIN",
+            "CLE":"CLE","CLEVELAND":"CLE","BROWNS":"CLE","CLEVELAND BROWNS":"CLE",
+            "DAL":"DAL","DALLAS":"DAL","COWBOYS":"DAL","DALLAS COWBOYS":"DAL",
+            "DEN":"DEN","DENVER":"DEN","BRONCOS":"DEN","DENVER BRONCOS":"DEN",
+            "DET":"DET","DETROIT":"DET","LIONS":"DET","DETROIT LIONS":"DET",
+            "GB":"GB","GNB":"GB","GREEN BAY":"GB","PACKERS":"GB","GREEN BAY PACKERS":"GB",
+            "HOU":"HOU","HOUSTON":"HOU","TEXANS":"HOU","HOUSTON TEXANS":"HOU",
+            "IND":"IND","INDIANAPOLIS":"IND","COLTS":"IND","INDIANAPOLIS COLTS":"IND",
+            "JAX":"JAX","JAC":"JAX","JACKSONVILLE":"JAX","JAGUARS":"JAX","JACKSONVILLE JAGUARS":"JAX",
+            "KC":"KC","KCC":"KC","KANSAS CITY":"KC","CHIEFS":"KC","KANSAS CITY CHIEFS":"KC",
+            "LAC":"LAC","CHARGERS":"LAC","LOS ANGELES CHARGERS":"LAC",
+            "LAR":"LAR","LA":"LAR","RAMS":"LAR","LOS ANGELES RAMS":"LAR",
+            "LV":"LV","LVR":"LV","RAIDERS":"LV","LAS VEGAS":"LV","LAS VEGAS RAIDERS":"LV",
+            "MIA":"MIA","MIAMI":"MIA","DOLPHINS":"MIA","MIAMI DOLPHINS":"MIA",
+            "MIN":"MIN","MINNESOTA":"MIN","VIKINGS":"MIN","MINNESOTA VIKINGS":"MIN",
+            "NE":"NE","NWE":"NE","NEW ENGLAND":"NE","PATRIOTS":"NE","NEW ENGLAND PATRIOTS":"NE",
+            "NO":"NO","NOR":"NO","NEW ORLEANS":"NO","SAINTS":"NO","NEW ORLEANS SAINTS":"NO",
+            "NYG":"NYG","NEW YORK GIANTS":"NYG","GIANTS":"NYG",
+            "NYJ":"NYJ","NEW YORK JETS":"NYJ","JETS":"NYJ",
+            "PHI":"PHI","PHILADELPHIA":"PHI","EAGLES":"PHI","PHILADELPHIA EAGLES":"PHI",
+            "PIT":"PIT","PITTSBURGH":"PIT","STEELERS":"PIT","PITTSBURGH STEELERS":"PIT",
+            "SEA":"SEA","SEATTLE":"SEA","SEAHAWKS":"SEA","SEATTLE SEAHAWKS":"SEA",
+            "SF":"SF","SFO":"SF","SAN FRANCISCO":"SF","49ERS":"SF","SAN FRANCISCO 49ERS":"SF",
+            "TB":"TB","TAM":"TB","TAMPA BAY":"TB","BUCCANEERS":"TB","TAMPA BAY BUCCANEERS":"TB",
+            "TEN":"TEN","TENNESSEE":"TEN","TITANS":"TEN","TENNESSEE TITANS":"TEN",
+            "WAS":"WAS","WSH":"WAS","WASHINGTON":"WAS","COMMANDERS":"WAS","WASHINGTON COMMANDERS":"WAS"
+        }
+        raw = str(raw or "").strip().upper()
+        # direct
+        if raw in TEAM_MAP:
+            return TEAM_MAP[raw]
+        # strip punctuation and retry
+        raw2 = re.sub(r"[^A-Z0-9 ]+", "", raw).strip().upper()
+        if raw2 in TEAM_MAP:
+            return TEAM_MAP[raw2]
+        return raw  # fallback, best effort
+
+    # --- build keys on 'out' (the base player_form-like frame) ---
+    enriched = out.copy()
+    enriched["__player_clean_key"] = (
+        enriched["player"]
+        .astype(str)
+        .map(_clean_player_name_key)
     )
-    out["team_key"] = (
-        out["team"].astype(str).str.strip().str.upper()
+    enriched["__team_clean_key"] = (
+        enriched["team"]
+        .astype(str)
+        .map(_clean_team_key)
     )
 
-    opp["player_key"] = (
-        opp["player"].astype(str).str.strip().str.lower()
+    # --- build keys on the opponent map ---
+    opp = opp.copy()
+    opp["__player_clean_key"] = (
+        opp["player"]
+        .astype(str)
+        .map(_clean_player_name_key)
     )
-    opp["team_key"] = (
-        opp["team"].astype(str).str.strip().str.upper()
+    opp["__team_clean_key"] = (
+        opp["team"]
+        .astype(str)
+        .map(_clean_team_key)
     )
 
-    # --- 5. Merge in week/opponent using these keys ---
-    out = out.merge(
-        opp[["player_key", "team_key", "week", "opponent"]].drop_duplicates(),
-        on=["player_key", "team_key"],
-        how="left"
+    # --- do the merge ---
+    merged = enriched.merge(
+        opp[
+            [
+                "__player_clean_key",
+                "__team_clean_key",
+                "week",
+                "opponent"
+            ]
+        ].drop_duplicates(),
+        how="left",
+        on=["__player_clean_key","__team_clean_key"],
+        validate="many_to_one"
     )
 
-    # --- 6. Debug preview for troubleshooting ---
-    try:
-        os.makedirs("data/_debug", exist_ok=True)
-        merged_preview = out[~out["week"].isna()].head(50)
-        merged_preview.to_csv("data/_debug/opponent_merge_preview.csv", index=False)
-    except Exception as e:
-        print(f"[make_player_form] debug preview failed: {e}")
+    # after merge, if literally nobody got a week, hard stop
+    if "week" not in merged.columns or merged["week"].isna().all():
+        # write a debug preview to help with diagnostics
+        debug_dir = Path("data") / "_debug"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        merged.head(50).to_csv(debug_dir / "merge_failure_preview.csv", index=False)
+        raise RuntimeError("[make_player_form] cannot assign week/opponent (post-merge check)")
 
-    # --- 7. Hard validation ---
-    if "week" not in out.columns or out["week"].isna().all():
-        print("[make_player_form] ERROR: cannot assign week/opponent (post-merge check)")
-        raise RuntimeError("cannot assign week/opponent")
+    # clean up helper cols
+    merged.drop(columns=["__player_clean_key","__team_clean_key"], inplace=True, errors="ignore")
 
-    # --- 8. Cleanup helper columns ---
-    out = out.drop(columns=["player_key", "team_key"], errors="ignore")
-
-    return out
+    return merged
 # === BEGIN: SURGICAL NAME NORMALIZATION HELPERS (idempotent) ===
 try:
     _NAME_HELPERS_DEFINED
