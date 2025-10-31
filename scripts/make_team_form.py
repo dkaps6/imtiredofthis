@@ -19,6 +19,7 @@ import argparse
 import os
 import sys
 import warnings
+from pathlib import Path
 from typing import List, Any
 import re  # added for robust team-name normalization
 
@@ -55,7 +56,7 @@ def _import_nflverse():
 NFLV, NFL_PKG = _import_nflverse()
 
 DATA_DIR = "data"
-OUTPATH = os.path.join(DATA_DIR, "team_form.csv")
+OUTPATH = Path(DATA_DIR) / "team_form.csv"
 TEAM_FORM_OUTPUT_COLUMNS = [
     "team",
     "season",
@@ -132,15 +133,16 @@ def _safe_mkdir(p: str):
         os.makedirs(p, exist_ok=True)
 
 
-def _write_team_form_csv(df: pd.DataFrame | None) -> pd.DataFrame:
+def _write_team_form_csv(df: pd.DataFrame | None, success: bool = False) -> pd.DataFrame:
     """Write ``df`` to ``OUTPATH`` ensuring headers exist."""
 
-    _safe_mkdir(DATA_DIR)
+    out_path = OUTPATH
+    out_path.parent.mkdir(parents=True, exist_ok=True)
 
     if df is None or df.empty:
         out_df = pd.DataFrame(columns=TEAM_FORM_OUTPUT_COLUMNS)
-        out_df.to_csv(OUTPATH, index=False)
-        print(f"[make_team_form] WARNING wrote headers only (0 rows) → {OUTPATH}")
+        out_df.to_csv(out_path, index=False)
+        print(f"[make_team_form] WARNING wrote headers only (0 rows) → {out_path}")
         return out_df
 
     out_df = df.copy()
@@ -152,8 +154,11 @@ def _write_team_form_csv(df: pd.DataFrame | None) -> pd.DataFrame:
         col for col in out_df.columns if col not in TEAM_FORM_OUTPUT_COLUMNS
     ]
     out_df = out_df[ordered]
-    out_df.to_csv(OUTPATH, index=False)
-    print(f"[make_team_form] Wrote {len(out_df)} rows → {OUTPATH}")
+    out_df.to_csv(out_path, index=False)
+    if success:
+        print(f"[make_team_form] wrote {out_path} rows={len(out_df)} with Sharp metrics merged OK")
+    else:
+        print(f"[make_team_form] Wrote {len(out_df)} rows → {out_path}")
     return out_df
 
 
@@ -801,6 +806,7 @@ def main():
 
     df_to_write: pd.DataFrame | None = None
     success = False
+    team_form: pd.DataFrame | None = None
 
     try:
         df = build_team_form(args.season, box_backfill_prev=args.box_backfill_prev)
@@ -809,6 +815,79 @@ def main():
         before = df.copy()
         df = _apply_fallback_enrichers(df)
         df = _ensure_plays_est_column(df)
+        team_form = df.copy()
+
+        # === Merge Sharp Football summary ===
+        sharp_path = Path("data") / "sharp_team_form.csv"
+        if not sharp_path.exists():
+            raise RuntimeError("[make_team_form] sharp_team_form.csv missing. sharpfootball_pull.py must run BEFORE make_team_form.py in the workflow.")
+
+        sharp_df = pd.read_csv(sharp_path)
+        if sharp_df.empty:
+            raise RuntimeError("[make_team_form] sharp_team_form.csv is empty. Sharp pull failed or returned no usable rows.")
+
+        # Normalize join keys
+        # sharpfootball_pull.py writes column 'team_abbr' (e.g. KC, BUF, SF)
+        if "team_abbr" not in sharp_df.columns:
+            # Fallback: if it only has 'team', promote that -> team_abbr
+            if "team" in sharp_df.columns:
+                sharp_df["team_abbr"] = sharp_df["team"].astype(str)
+            else:
+                raise RuntimeError("[make_team_form] sharp_team_form.csv has no team_abbr/team column")
+
+        sharp_df["team_abbr"] = sharp_df["team_abbr"].astype(str).str.upper().str.strip()
+
+        # Ensure our local frame also has a compatible team key.
+        # If we already have 'team_abbr', normalize it. Otherwise
+        # try to derive one from 'team', 'defteam', etc.
+        if team_form is None:
+            team_form = df.copy()
+        if "team_abbr" not in team_form.columns:
+            if "team_abbr" in team_form.columns:
+                pass
+            elif "team" in team_form.columns:
+                team_form["team_abbr"] = team_form["team"]
+            elif "defteam" in team_form.columns:
+                team_form["team_abbr"] = team_form["defteam"]
+            elif "off_team" in team_form.columns:
+                team_form["team_abbr"] = team_form["off_team"]
+            else:
+                raise RuntimeError("[make_team_form] cannot infer team_abbr key for merge")
+
+        team_form["team_abbr"] = team_form["team_abbr"].astype(str).str.upper().str.strip()
+
+        # Drop duplicate columns before merge
+        sharp_df = sharp_df.loc[:, ~sharp_df.columns.duplicated()]
+        team_form = team_form.loc[:, ~team_form.columns.duplicated()]
+
+        # Merge Sharp columns in
+        team_form = team_form.merge(
+            sharp_df,
+            on="team_abbr",
+            how="left",
+            suffixes=("", "_sharp")
+        )
+
+        # Basic sanity: pick a few must-have Sharp stats and make sure at least
+        # one of them actually populated for at least one team.
+        required_sharp_cols = [
+            # NOTE: these are generic; they MUST match real columns in sharp_team_form.csv.
+            # Update names here based on actual sharp_team_form.csv columns if needed.
+            "pass_rate_over_expected",
+            "neutral_pace",
+            "coverage_man_rate",
+            "coverage_zone_rate",
+        ]
+        missing_all = []
+        for col in required_sharp_cols:
+            if col not in team_form.columns:
+                missing_all.append(col)
+            else:
+                if team_form[col].isna().all():
+                    missing_all.append(col)
+
+        if len(missing_all) == len(required_sharp_cols):
+            raise RuntimeError(f"[make_team_form] Sharp merge appears empty for all required cols: {missing_all}. Check sharpfootball_pull.py output.")
 
         # Log what got filled by fallbacks (for quick triage)
         try:
@@ -824,9 +903,9 @@ def main():
             ]
             filled_counts = {}
             for col in track_cols:
-                if col in df.columns:
-                    was_na = before[col].isna() if col in before.columns else pd.Series(True, index=df.index)
-                    now_ok = was_na & df[col].notna()
+                if team_form is not None and col in team_form.columns:
+                    was_na = before[col].isna() if col in before.columns else pd.Series(True, index=team_form.index)
+                    now_ok = was_na & team_form[col].notna()
                     if now_ok.any():
                         filled_counts[col] = int(now_ok.sum())
             if filled_counts:
@@ -835,18 +914,22 @@ def main():
             pass
 
         # Strict validation (AFTER fallback)
-        _validate_required(df, allow_missing_box=args.allow_missing_box)
-        df_to_write = df
+        if team_form is None:
+            team_form = df.copy()
+        _validate_required(team_form, allow_missing_box=args.allow_missing_box)
+        df_to_write = team_form
         success = True
 
     except Exception as e:
         print(f"[make_team_form] ERROR: {e}", file=sys.stderr)
-        if "df" in locals() and isinstance(df, pd.DataFrame):
+        if isinstance(team_form, pd.DataFrame):
+            df_to_write = team_form
+        elif "df" in locals() and isinstance(df, pd.DataFrame):
             df_to_write = df
         else:
             df_to_write = pd.DataFrame(columns=TEAM_FORM_OUTPUT_COLUMNS)
 
-    written_df = _write_team_form_csv(df_to_write)
+    written_df = _write_team_form_csv(df_to_write, success=success)
 
     if success:
         # CI log: ensure we actually captured Sharp box rates
@@ -856,6 +939,8 @@ def main():
                 print(f"[make_team_form] {col}: non-null teams = {nn}/32")
         except Exception:
             pass
+    else:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
