@@ -155,11 +155,14 @@ jobs:
         run: |
           python -m engine --season "${{ github.event.inputs.season }}" --date "" --bookmakers=""
 
-      - name: Build weather (upcoming slate)
+      - name: Build weather (weather_week.csv)
+        shell: bash
         env:
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
         run: |
-          python scripts/build_weather_week.py
+          set -euo pipefail
+          python scripts/build/build_weather_week.py
+          test -s data/weather_week.csv
 
       - name: Sanity gate | Metrics ready
         run: |
