@@ -128,6 +128,15 @@ def apply_name_canonicalization(df: pd.DataFrame, canon_map: dict) -> pd.DataFra
             out.at[idx, "player"] = fixed
 
     return out
+
+
+def _normalize_name(n: str) -> str:
+    if n is None:
+        return ""
+    n = str(n)
+    n = n.replace(".", " ").replace(",", " ")
+    n = " ".join(n.split())
+    return n.upper().strip()
 def _safe_mkdir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
@@ -2056,28 +2065,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         base["opponent"] = base["opponent"].astype(str).str.strip().str.upper()
         base.loc[base["opponent"].isin(["", "NAN"]), "opponent"] = np.nan
 
-    consensus = _build_season_consensus(base)
-    consensus_to_write = _ensure_cols(pd.DataFrame(), FINAL_COLS)
-    if consensus is not None and not _is_empty(consensus):
-        consensus_to_write = _ensure_cols(consensus.copy(), FINAL_COLS)
-        if not consensus_to_write.empty:
-            consensus_to_write = _inject_week_opponent_and_roles(consensus_to_write)
-            consensus_to_write["week"] = pd.NA
-            consensus_to_write["opponent"] = CONSENSUS_OPPONENT_SENTINEL
-
-    _safe_mkdir(DATA_DIR)
-    consensus_to_write.to_csv(CONS_PATH, index=False)
-    print(f"[pf] consensus rows: {len(consensus_to_write)} → {CONS_PATH}")
-
-    frames: List[pd.DataFrame] = [base[FINAL_COLS]]
-    if not consensus_to_write.empty:
-        frames.append(consensus_to_write[FINAL_COLS])
-
-    out = (
-        pd.concat(frames, ignore_index=True)
-        .drop_duplicates(subset=["player", "team", "opponent", "season"])
-        .reset_index(drop=True)
-    )
+    out = base.copy()
     out = _enrich_team_and_opponent_from_props(out)
     if "week" in out.columns:
         out["week"] = pd.to_numeric(out["week"], errors="coerce")
@@ -2515,6 +2503,155 @@ def _validate_required(df: pd.DataFrame):
             return
 
 
+def _attach_consensus_keys(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    if "player_name" not in out.columns:
+        out["player_name"] = out.get("player", "")
+    out["player_key"] = out["player_name"].apply(_normalize_name)
+    if "team" in out.columns:
+        out["team_key"] = out["team"].astype(str).str.upper().str.strip()
+    else:
+        out["team_key"] = ""
+    if "week" in out.columns:
+        week_numeric = pd.to_numeric(out["week"], errors="coerce").fillna(-1)
+        out["week_key"] = week_numeric.astype(int)
+    else:
+        out["week_key"] = -1
+    return out
+
+
+def _build_grouped_consensus(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(
+            columns=[
+                "player",
+                "team",
+                "week",
+                "display_name",
+                "targets",
+                "carries",
+                "air_yards",
+                "redzone_tgts",
+                "routes",
+                "routes_share",
+                "target_share",
+                "carry_share",
+                "slot_rate",
+                "wide_rate",
+                "aDOT",
+                "team_snaps",
+                "role",
+                "opponent",
+            ]
+        )
+
+    working = df.copy()
+    if "player_name" not in working.columns:
+        working["player_name"] = working.get("player", "")
+
+    agg_map = {
+        "targets": "sum",
+        "carries": "sum",
+        "air_yards": "sum",
+        "redzone_tgts": "sum",
+        "routes": "sum",
+        "routes_share": "mean",
+        "target_share": "mean",
+        "carry_share": "mean",
+        "slot_rate": "mean",
+        "wide_rate": "mean",
+        "aDOT": "mean",
+        "team_snaps": "mean",
+        "role": "max",
+        "opponent": "first",
+    }
+
+    for col in agg_map.keys():
+        if col not in working.columns:
+            working[col] = np.nan
+
+    group_cols = ["player_key", "team_key", "week_key"]
+
+    def _most_common_name(series: pd.Series) -> str:
+        counts = series.dropna().value_counts()
+        if not counts.empty:
+            return counts.index[0]
+        series = series.astype(str)
+        return series.iloc[0] if len(series) else ""
+
+    consensus = (
+        working.groupby(group_cols, dropna=False)
+        .agg({col: agg_map[col] for col in agg_map.keys()})
+        .reset_index()
+    )
+
+    name_lookup = (
+        working.groupby(group_cols)["player_name"].agg(_most_common_name).reset_index()
+    )
+
+    consensus = consensus.merge(name_lookup, on=group_cols, how="left")
+    consensus = consensus.rename(
+        columns={
+            "player_key": "player",
+            "team_key": "team",
+            "week_key": "week",
+            "player_name": "display_name",
+        }
+    )
+
+    desired_order = [
+        "player",
+        "team",
+        "week",
+        "display_name",
+        "targets",
+        "carries",
+        "air_yards",
+        "redzone_tgts",
+        "routes",
+        "routes_share",
+        "target_share",
+        "carry_share",
+        "slot_rate",
+        "wide_rate",
+        "aDOT",
+        "team_snaps",
+        "role",
+        "opponent",
+    ]
+    existing = [c for c in desired_order if c in consensus.columns]
+    remaining = [c for c in consensus.columns if c not in existing]
+    return consensus[existing + remaining]
+
+
+def _write_player_form_outputs(df: pd.DataFrame) -> None:
+    if df is None or df.empty:
+        raise RuntimeError("[make_player_form] final player_form empty; aborting run")
+
+    working = df.copy()
+    if "player_name" not in working.columns:
+        working["player_name"] = working.get("player", "")
+
+    working = _attach_consensus_keys(working)
+    consensus = _build_grouped_consensus(working)
+
+    working = _ensure_cols(working, FINAL_COLS)
+    raw_output = working[FINAL_COLS]
+    if raw_output.empty:
+        raise RuntimeError("[make_player_form] final player_form empty; aborting run")
+
+    _safe_mkdir(DATA_DIR)
+    raw_output.to_csv(OUTPATH, index=False)
+    consensus.to_csv(CONS_PATH, index=False)
+
+    print(f"[make_player_form] wrote data/player_form.csv ({len(raw_output)} rows raw)")
+    print(
+        f"[make_player_form] wrote data/player_form_consensus.csv ({len(consensus)} rows grouped)"
+    )
+
+
 # ---------------------------
 # CLI
 # ---------------------------
@@ -2577,12 +2714,7 @@ def cli():
             )
 
         # Final write on success
-        df = df[FINAL_COLS]
-        if df.empty:
-            raise RuntimeError("[make_player_form] final player_form empty; aborting run")
-        df.to_csv(OUTPATH, index=False)
-        df.to_csv(CONS_PATH, index=False)
-        print(f"[make_player_form] wrote data/player_form.csv ({len(df)} rows)")
+        _write_player_form_outputs(df)
         return
 
     except Exception as e:
@@ -2599,14 +2731,7 @@ def cli():
                         f"[make_player_form] WARN enrichment skipped in error path: {_enr_e}",
                         file=sys.stderr,
                     )
-                df = _ensure_cols(df, FINAL_COLS)[FINAL_COLS]
-                if df.empty:
-                    raise RuntimeError("[make_player_form] final player_form empty; aborting run")
-                df.to_csv(OUTPATH, index=False)
-                df.to_csv(CONS_PATH, index=False)
-                print(
-                    f"[make_player_form] wrote data/player_form.csv ({len(df)} rows) (after handled error)"
-                )
+                _write_player_form_outputs(df)
                 return
         except Exception as _w:
             print(
