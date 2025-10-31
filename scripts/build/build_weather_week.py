@@ -38,6 +38,21 @@ NWS_HEADERS = {"User-Agent": DEFAULT_UA, "Accept": "application/geo+json"}
 MIN_SUCCESSFUL_FORECASTS = 16
 MAX_GAME_WAIT_SECONDS = 45.0
 OUTPUT_PATH = Path("data") / "weather_week.csv"
+WEATHER_COLUMNS = [
+    "team",
+    "opponent",
+    "week",
+    "stadium",
+    "location",
+    "city",
+    "state",
+    "roof",
+    "forecast_summary",
+    "temp_f",
+    "wind_mph",
+    "precip_prob",
+    "forecast_datetime_utc",
+]
 
 
 def get_nfl_schedule(season: int) -> pd.DataFrame:
@@ -355,6 +370,30 @@ def roof_normalize(roof: str) -> str:
     return "Open"
 
 
+def _write_weather_output(df: pd.DataFrame | None, out_path: Path) -> None:
+    """Write ``df`` to ``out_path`` ensuring headers exist."""
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if df is None or df.empty:
+        empty_df = pd.DataFrame(columns=WEATHER_COLUMNS)
+        empty_df.to_csv(out_path, index=False)
+        print(f"[builder WARNING] wrote headers only (0 rows) -> {out_path}")
+        return
+
+    out_df = df.copy()
+    missing = [col for col in WEATHER_COLUMNS if col not in out_df.columns]
+    for col in missing:
+        out_df[col] = pd.NA
+
+    ordered = WEATHER_COLUMNS + [
+        col for col in out_df.columns if col not in WEATHER_COLUMNS
+    ]
+    out_df = out_df[ordered]
+    out_df.to_csv(out_path, index=False)
+    print(f"[builder] wrote {len(out_df)} rows -> {out_path}")
+
+
 def upcoming_week_games(games: pd.DataFrame) -> pd.DataFrame:
     if games.empty:
         raise RuntimeError("No games available to determine an upcoming week")
@@ -524,9 +563,7 @@ def main(out_csv: str | Path = OUTPUT_PATH) -> None:
         )
 
     out_path = Path(out_csv)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_df.to_csv(out_path, index=False)
-    print(f"[builder] wrote {len(out_df)} rows -> {out_path}")
+    _write_weather_output(out_df, out_path)
 
 
 if __name__ == "__main__":
