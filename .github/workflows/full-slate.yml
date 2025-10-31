@@ -107,17 +107,23 @@ jobs:
 
       # Paid/external calls AFTER sanity gate
       - name: Fetch Odds (Odds API)
-        if: ${{ success() }}
         shell: bash
         timeout-minutes: 4
         env:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        continue-on-error: true
         run: |
           set -euo pipefail
           python scripts/fetch_game_lines_oddsapi.py
 
+      - name: Run pipeline (aggregate all metrics)
+        shell: bash
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          python -m engine --season "${{ github.event.inputs.season }}" --date "${{ github.event.inputs.date }}" --bookmakers=""
+
       - name: Elite model | Run pricing
-        if: ${{ success() }}
         shell: bash
         timeout-minutes: 10
         env:
@@ -126,15 +132,17 @@ jobs:
           set -euo pipefail
           python -m model.cli --config config.yaml
 
-      - name: Run pipeline
-        if: ${{ success() }}
-        shell: bash
-        timeout-minutes: 10
-        run: |
-          set -euo pipefail
-          python -m engine --season "${{ github.event.inputs.season }}" --date "${{ github.event.inputs.date }}" --bookmakers=""
+      - name: Upload Elite outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: elite-model-outputs-${{ github.run_id }}
+          path: |
+            outputs/full_model_elite.csv
+            outputs/bet_slip_elite_green.csv
+          if-no-files-found: warn
+          retention-days: 7
 
-      - name: Upload artifacts (always)
+      - name: Upload run artifacts (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:

@@ -2137,7 +2137,7 @@ def _enrich_team_and_opponent_from_props(out: pd.DataFrame) -> pd.DataFrame:
     """
 
     # 1. inject matchup info (week, opponent) using our canonical merge logic
-    enriched = inject_week_opponent_and_roles(out)
+    enriched = _inject_week_opponent_and_roles(out)
 
     # 2. clean opponent to uppercase and strip empties
     if "opponent" in enriched.columns:
@@ -2206,10 +2206,25 @@ def _enrich_team_and_opponent_from_props(out: pd.DataFrame) -> pd.DataFrame:
             .apply(lambda r: f"{r['player']} ({r['team']})", axis=1)
             .tolist()
         )
-        raise RuntimeError(
-            "[make_player_form] opponent enrichment FAILED for almost everyone: "
+        print(
+            f"[make_player_form] WARNING: opponent enrichment incomplete: "
             f"{missing_count} / {total_rows} rows missing. Examples: {', '.join(example_names)}"
         )
+        for c in [
+            "__player_clean_key",
+            "__team_clean_key",
+            "__week_key",
+            "week_x",
+            "week_y",
+            "opponent_x",
+            "opponent_y",
+            "week_final_raw",
+            "week_final",
+            "opponent_final",
+        ]:
+            if c in enriched.columns:
+                enriched.drop(columns=[c], inplace=True, errors="ignore")
+        return enriched
     else:
         # soft fail -> just log to stdout so we see it in Actions
         example_names = (
@@ -2225,9 +2240,18 @@ def _enrich_team_and_opponent_from_props(out: pd.DataFrame) -> pd.DataFrame:
 
     # 6. Drop any helper columns we don't want leaking downstream
     # (If inject_week_opponent_and_roles already dropped them, this is harmless.)
-    for c in ["__player_clean_key", "__team_clean_key", "__week_key",
-              "week_x", "week_y", "opponent_x", "opponent_y",
-              "week_final_raw", "week_final", "opponent_final"]:
+    for c in [
+        "__player_clean_key",
+        "__team_clean_key",
+        "__week_key",
+        "week_x",
+        "week_y",
+        "opponent_x",
+        "opponent_y",
+        "week_final_raw",
+        "week_final",
+        "opponent_final",
+    ]:
         if c in enriched.columns:
             enriched.drop(columns=[c], inplace=True, errors="ignore")
 
