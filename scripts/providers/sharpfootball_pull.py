@@ -58,6 +58,7 @@ URLS = {
     "def_tend": "https://www.sharpfootballanalysis.com/stats-nfl/nfl-defensive-tendencies/",
     "off_tend": "https://www.sharpfootballanalysis.com/stats-nfl/nfl-offensive-tendencies-stats/",
     "coverage_pos": "https://www.sharpfootballanalysis.com/stats-nfl/nfl-coverage-stats-by-position/",
+    "coverage_scheme": "https://www.sharpfootballanalysis.com/stats-nfl/nfl-coverage-schemes/",
     "dl": "https://www.sharpfootballanalysis.com/stats-nfl/nfl-defensive-line-stats/",
     "ol": "https://www.sharpfootballanalysis.com/stats-nfl/nfl-offensive-line-stats/",
     "pace": "https://www.sharpfootballanalysis.com/stats-nfl/nfl-team-pace-stats/",
@@ -185,6 +186,61 @@ def _to_numeric(df: pd.DataFrame) -> pd.DataFrame:
         df[c] = pd.to_numeric(ser, errors="coerce")
     return df
 
+def _rename_expected_cols(kind: str, df: pd.DataFrame) -> pd.DataFrame:
+    """"
+    Map Sharp's column headers (after slugging/to_numeric) to the canonical names
+    our downstream code expects in team_form.csv.
+
+    We only rename columns that actually exist. If a column isn't there, we skip.
+    """
+
+    # We'll build a dict of {old_col: new_col} per kind.
+
+    # For pace table we want neutral pace as `neutral_pace`
+    # Sharp may call it things like "neutral pace", "neutral_pace", "neutral pace %", etc.
+    pace_aliases = {
+        "neutral_pace": "neutral_pace",
+        "neutral_pace_": "neutral_pace",
+        "neutral_pace_percent": "neutral_pace",
+        "neutral_pace_pct": "neutral_pace",
+        "neutral_pace__seconds_per_play": "neutral_pace",  # fallback
+    }
+
+    # For off_tend we expect pass_rate_over_expected
+    off_tend_aliases = {
+        "pass_rate_over_expected": "pass_rate_over_expected",
+        "pass_rate_over_exp": "pass_rate_over_expected",
+        "proe": "pass_rate_over_expected",
+        "pass_rate_over_expected_pct": "pass_rate_over_expected",
+        "pass_rate_over_exp_pct": "pass_rate_over_expected",
+    }
+
+    # For coverage_scheme we expect coverage_man_rate, coverage_zone_rate
+    coverage_scheme_aliases = {
+        "man_coverage_rate": "coverage_man_rate",
+        "man_rate": "coverage_man_rate",
+        "man_pct": "coverage_man_rate",
+        "zone_coverage_rate": "coverage_zone_rate",
+        "zone_rate": "coverage_zone_rate",
+        "zone_pct": "coverage_zone_rate",
+    }
+
+    # Build final alias map for this kind
+    alias_map = {}
+    if kind == "pace":
+        alias_map.update(pace_aliases)
+    if kind == "off_tend":
+        alias_map.update(off_tend_aliases)
+    if kind == "coverage_scheme":
+        alias_map.update(coverage_scheme_aliases)
+
+    # Now apply the renames if present
+    for old_col, new_col in alias_map.items():
+        if old_col in df.columns and new_col not in df.columns:
+            df = df.rename(columns={old_col: new_col})
+
+    return df
+
 def _save_csv(df: Optional[pd.DataFrame], out_path: str) -> int:
     if df is None or df.empty:
         return 0
@@ -200,8 +256,9 @@ def _pull_one(kind: str, url: str, season: int) -> Tuple[str, int, Optional[pd.D
     df = _normalize_team_col(df)
 
     # simple, generic post-processing per kind (add more if/when we know exact col names)
-    if kind in ("def_tend", "off_tend", "pace", "coverage_pos", "dl", "ol"):
+    if kind in ("def_tend", "off_tend", "pace", "coverage_pos", "coverage_scheme", "dl", "ol"):
         df = _to_numeric(df)
+        df = _rename_expected_cols(kind, df)
 
     out_name = f"sharp_{kind}_{season}.csv"
     out_path = os.path.join(DATA_DIR, out_name)
@@ -216,7 +273,7 @@ def merge_team_form(season: int, pieces: Dict[str, pd.DataFrame]) -> int:
     - Deduplicates columns defensively
     """
     base = None
-    for k in ("def_tend", "off_tend", "pace", "coverage_pos", "dl", "ol"):
+    for k in ("def_tend", "off_tend", "pace", "coverage_pos", "coverage_scheme", "dl", "ol"):
         df = pieces.get(k)
         if df is None or df.empty:
             continue
@@ -272,6 +329,18 @@ def main():
 
     merged = merge_team_form(season, pieces)
     print(f"[sharp] wrote {merged} rows → {os.path.join(DATA_DIR, 'sharp_team_form.csv')}")
+    needed = ["pass_rate_over_expected", "neutral_pace", "coverage_man_rate", "coverage_zone_rate"]
+    print(
+        "[sharp] sanity check cols:",
+        {
+            col: (
+                col in pieces.get("off_tend", pd.DataFrame()).columns
+                or col in pieces.get("pace", pd.DataFrame()).columns
+                or col in pieces.get("coverage_scheme", pd.DataFrame()).columns
+            )
+            for col in needed
+        },
+    )
 
     # Non-zero exit if *everything* failed (lets the pipeline tell you)
     if merged == 0:
