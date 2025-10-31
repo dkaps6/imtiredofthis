@@ -442,29 +442,108 @@ def _inject_week_opponent_and_roles(out: pd.DataFrame) -> pd.DataFrame:
         validate="many_to_one",
     )
 
-    # Sanity check: if literally nobody got an opponent, that's still a fatal data error.
-    if "opponent" not in merged.columns or merged["opponent"].isna().all():
+    # --- extract matchup columns safely ---
+    #
+    # After the merge, pandas may have created columns like:
+    #   week_x (from enriched/base),   week_y (from opp)
+    #   opponent_x / opponent_y
+    #
+    # We want to:
+    #   1. derive 'week_final' and 'opponent_final' from the RIGHT side (opp),
+    #   2. copy them back into canonical 'week' and 'opponent' columns,
+    #   3. detect if we actually mapped ANY opponents. If not, dump debug and hard-stop.
+
+    # Helper to pick a column if it exists
+    def _pick_col(frame, primary, fallback=None):
+        if primary in frame.columns:
+            return frame[primary]
+        if fallback and fallback in frame.columns:
+            return frame[fallback]
+        # otherwise return a Series of NaN
+        return pd.Series([pd.NA] * len(frame), index=frame.index)
+
+    # opponent from the RIGHT side (opp)
+    merged["opponent_final"] = _pick_col(
+        merged,
+        "opponent_y",  # typical suffix when both sides have 'opponent'
+        fallback="opponent"
+    ).astype(str).str.strip()
+
+    # numeric-ish week from the RIGHT side (opp)
+    merged["week_final_raw"] = _pick_col(
+        merged,
+        "week_y",   # typical suffix when both sides have 'week'
+        fallback="week"
+    )
+
+    # coerce week_final_raw to numeric where possible
+    merged["week_final"] = pd.to_numeric(merged["week_final_raw"], errors="coerce")
+
+    # if week_final is entirely NaN, we might still have a usable
+    # left-side 'week_x' from enriched. Use that as a fallback.
+    if merged["week_final"].isna().all():
+        merged["week_final"] = pd.to_numeric(
+            _pick_col(merged, "week_x", fallback="week"),
+            errors="coerce"
+        )
+
+    # Copy stabilized values into canonical columns that downstream code expects.
+    # 'week' stays numeric, 'opponent' is uppercase string or NA.
+    merged["week"] = merged["week_final"]
+    merged["opponent"] = merged["opponent_final"].where(
+        merged["opponent_final"].str.len() > 0,
+        pd.NA
+    ).str.upper()
+
+    # --- determine if we successfully mapped anything ---
+    # If literally nobody got a non-null opponent, that's still a fatal data error.
+    if merged["opponent"].isna().all():
         debug_dir = Path("data") / "_debug"
         debug_dir.mkdir(parents=True, exist_ok=True)
-        merged[
-            [
-                "player",
-                "team",
-                "week",
-                "__player_clean_key",
-                "__team_clean_key",
-                "__week_key",
-                "opponent",
-            ]
-        ].head(100).to_csv(debug_dir / "merge_failure_preview.csv", index=False)
-        raise RuntimeError("[make_player_form] cannot assign opponent/week after keyed merge (player, team, week)")
 
-    # cleanup helper columns
-    merged.drop(
-        columns=["__player_clean_key", "__team_clean_key", "__week_key"],
-        inplace=True,
-        errors="ignore",
-    )
+        # write a debug preview that will ALWAYS work
+        debug_cols = []
+        for c in [
+            "player",
+            "team",
+            "week",
+            "opponent",
+            "__player_clean_key",
+            "__team_clean_key",
+            "__week_key",
+            "week_x",
+            "week_y",
+            "opponent_x",
+            "opponent_y",
+        ]:
+            if c in merged.columns and c not in debug_cols:
+                debug_cols.append(c)
+
+        merged[debug_cols].head(100).to_csv(
+            debug_dir / "merge_failure_preview.csv",
+            index=False
+        )
+        raise RuntimeError(
+            "[make_player_form] cannot assign opponent/week after keyed merge (player, team, week)"
+        )
+
+    # If we DID map at least someone, great. We can drop helper cols and continue.
+
+    cols_to_drop = [
+        "__player_clean_key",
+        "__team_clean_key",
+        "__week_key",
+        "week_x",
+        "week_y",
+        "opponent_x",
+        "opponent_y",
+        "week_final_raw",
+        "week_final",
+        "opponent_final",
+    ]
+    for col in cols_to_drop:
+        if col in merged.columns:
+            merged.drop(columns=[col], inplace=True, errors="ignore")
 
     return merged
 # === BEGIN: SURGICAL NAME NORMALIZATION HELPERS (idempotent) ===
