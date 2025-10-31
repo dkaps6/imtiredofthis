@@ -153,6 +153,54 @@ def _slug(s: str) -> str:
     s = re.sub(r"\s+", "_", s)
     return s
 
+
+OFF_TEND_ALIASES = {
+    "pass_rate_over_expected": "pass_rate_over_expected",
+    "pass_rate_over_expectation": "pass_rate_over_expected",
+    "pass_rate_over_exp": "pass_rate_over_expected",
+    "proe": "pass_rate_over_expected",
+    "pass_rate_vs_expected": "pass_rate_over_expected",
+    "neutral_pass_rate": "neutral_db_rate",
+    "neutral_pass_rate_last_5": "neutral_db_rate_last_5",
+}
+
+PACE_ALIASES = {
+    "neutral_pace": "neutral_pace",
+    "seconds_per_play": "seconds_per_play",
+    "seconds_per_play_last_5": "seconds_per_play_last5",
+    "plays_per_game": "plays_per_game",
+}
+
+COVERAGE_ALIASES = {
+    "man_coverage_rate": "coverage_man_rate",
+    "zone_coverage_rate": "coverage_zone_rate",
+    "man_coverage_pct": "coverage_man_rate",
+    "zone_coverage_pct": "coverage_zone_rate",
+}
+
+
+def _rename_expected_cols(kind: str, df: pd.DataFrame) -> pd.DataFrame:
+    alias_map = {}
+    if kind == "off_tend":
+        alias_map = OFF_TEND_ALIASES
+    elif kind == "pace":
+        alias_map = PACE_ALIASES
+    elif kind == "coverage_pos":
+        alias_map = COVERAGE_ALIASES
+
+    if not alias_map:
+        return df
+
+    rename_map = {}
+    for col in df.columns:
+        key = _slug(col)
+        if key in alias_map:
+            rename_map[col] = alias_map[key]
+
+    if rename_map:
+        df = df.rename(columns=rename_map)
+    return df
+
 def _normalize_team_col(df: pd.DataFrame) -> pd.DataFrame:
     cols = {c: _slug(c) for c in df.columns}
     df = df.rename(columns=cols)
@@ -254,6 +302,7 @@ def _pull_one(kind: str, url: str, season: int) -> Tuple[str, int, Optional[pd.D
         return kind, 0, None
 
     df = _normalize_team_col(df)
+    df = _rename_expected_cols(kind, df)
 
     # simple, generic post-processing per kind (add more if/when we know exact col names)
     if kind in ("def_tend", "off_tend", "pace", "coverage_pos", "coverage_scheme", "dl", "ol"):
