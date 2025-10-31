@@ -31,6 +31,13 @@ def _check(path: str, cols: list[str] | None = None):
 
 # Required core inputs
 pf = _check("data/player_form.csv", ["player", "team", "week", "opponent"])
+
+# debug duplicate rows for awareness
+dupes = pf[pf.duplicated(subset=["player", "team", "week"], keep=False)]
+if not dupes.empty:
+    print("[metrics_ready] WARNING duplicate player/team/week rows detected:")
+    print(dupes[["player", "team", "week"]].head(15).to_string(index=False))
+
 oppmap = _check("data/opponent_map_from_props.csv", ["team", "week", "opponent"])
 roles = _check("data/roles_ourlads.csv", ["player", "team"])
 
@@ -64,14 +71,17 @@ REQUIRED: dict[str, Sequence[str]] = {
     os.path.join("data", "team_form.csv"): (
         "team",
         "season",
+        "games_played",
         "def_pass_epa",
         "def_rush_epa",
         "def_sack_rate",
         "pace",
+        "neutral_pace",
+        "pass_rate_over_expected",
         "proe",
+        "ay_per_att",
         "light_box_rate",
         "heavy_box_rate",
-        "ay_per_att",
     ),
     os.path.join("data", "opponent_map_from_props.csv"): (
         "player",
@@ -94,18 +104,6 @@ REQUIRED: dict[str, Sequence[str]] = {
         "scramble_rate",
         "scrambles",
         "dropbacks",
-    ),
-    os.path.join("data", "weather_week.csv"): (
-        "team",
-        "opponent",
-        "week",
-        "stadium",
-        "roof",
-        "forecast_summary",
-        "temp_f",
-        "wind_mph",
-        "precip_prob",
-        "forecast_datetime_utc",
     ),
 }
 

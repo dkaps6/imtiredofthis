@@ -65,7 +65,9 @@ TEAM_FORM_OUTPUT_COLUMNS = [
     "def_pass_epa",
     "def_rush_epa",
     "def_sack_rate",
-    "pace",
+    "pace",                 # legacy tempo column
+    "neutral_pace",         # explicit neutral tempo from nflverse
+    "neutral_pace_score",   # Sharp blended speed index
     "pass_rate_over_expected",
     "proe",
     "rz_rate",
@@ -1015,6 +1017,50 @@ def main():
             df_to_write = df
         else:
             df_to_write = pd.DataFrame(columns=TEAM_FORM_OUTPUT_COLUMNS)
+
+    if isinstance(df_to_write, pd.DataFrame):
+        df = df_to_write.copy()
+
+        # Ensure pace fields are present and consistent
+        neutral = df.get("pace_neutral")
+        if neutral is None:
+            neutral = df.get("neutral_pace")
+        if neutral is None:
+            neutral = df.get("pace")
+        df["neutral_pace"] = neutral if neutral is not None else np.nan
+        df["pace"] = df["neutral_pace"]
+
+        # normalize proe numeric
+        if "proe" in df.columns:
+            df["proe"] = pd.to_numeric(df["proe"], errors="coerce")
+
+        # build neutral_pace_score using Sharp tempo data if available
+        if "seconds_per_play" in df.columns and "plays_per_game" in df.columns:
+            tempo = pd.to_numeric(df["seconds_per_play"], errors="coerce")
+            volume = pd.to_numeric(df["plays_per_game"], errors="coerce")
+
+            if tempo.notna().sum() and volume.notna().sum():
+                tempo_range = tempo.max() - tempo.min()
+                volume_range = volume.max() - volume.min()
+
+                tempo_norm = (
+                    (tempo.max() - tempo) / tempo_range
+                    if tempo_range and not np.isclose(tempo_range, 0)
+                    else pd.Series(np.nan, index=df.index)
+                )
+                volume_norm = (
+                    (volume - volume.min()) / volume_range
+                    if volume_range and not np.isclose(volume_range, 0)
+                    else pd.Series(np.nan, index=df.index)
+                )
+                combined = 0.7 * tempo_norm + 0.3 * volume_norm
+                df["neutral_pace_score"] = combined
+            else:
+                df["neutral_pace_score"] = np.nan
+        else:
+            df["neutral_pace_score"] = np.nan
+
+        df_to_write = df
 
     written_df = _write_team_form_csv(df_to_write, success=success)
 
