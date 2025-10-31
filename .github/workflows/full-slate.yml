@@ -34,6 +34,7 @@ jobs:
       NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
 
     steps:
+      # Phase A — setup & dependencies
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -51,6 +52,7 @@ jobs:
             pip install -r requirements.txt
           fi
 
+      # Phase B — early builders
       - name: Build depth chart (Ourlads)
         shell: bash
         timeout-minutes: 5
@@ -58,7 +60,6 @@ jobs:
           set -euo pipefail
           python scripts/providers/ourlads_depth.py
 
-      # Providers / schedule first
       - name: Build opponent map from props
         shell: bash
         timeout-minutes: 5
@@ -87,7 +88,14 @@ jobs:
           set -euo pipefail
           python scripts/make_player_form.py
 
-      # nflverse-derived builders (required)
+      # Phase C — metric feeders
+      - name: Build team form
+        shell: bash
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          python scripts/make_team_form.py
+
       - name: Build QB run metrics
         shell: bash
         timeout-minutes: 8
@@ -95,9 +103,49 @@ jobs:
           set -euo pipefail
           python scripts/build/build_qb_run_metrics.py
 
-      # ... keep the rest of your required builders here with the same pattern ...
+      - name: Build weather week
+        shell: bash
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          python scripts/build/build_weather_week.py
 
-      # Sanity gate – must pass before paid calls/pricing
+      - name: Build play volume splits
+        shell: bash
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          python scripts/build/build_play_volume_splits.py
+
+      - name: Build volatility widening
+        shell: bash
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          python scripts/build/build_volatility_widening.py
+
+      - name: Build run/pass funnel
+        shell: bash
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          python scripts/build/build_run_pass_funnel.py
+
+      - name: Build script escalators
+        shell: bash
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          python scripts/build/build_script_escalators.py
+
+      - name: Build coverage penalties
+        shell: bash
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          python scripts/build/build_coverage_penalties.py
+
+      # Phase D — sanity + merge
       - name: Sanity gate (required inputs present & non-empty)
         shell: bash
         timeout-minutes: 3
@@ -105,7 +153,7 @@ jobs:
           set -euo pipefail
           python scripts/metrics_ready.py
 
-      # Paid/external calls AFTER sanity gate
+      # Phase E — final modeling
       - name: Fetch Odds (Odds API)
         shell: bash
         timeout-minutes: 4
@@ -116,13 +164,6 @@ jobs:
           set -euo pipefail
           python scripts/fetch_game_lines_oddsapi.py
 
-      - name: Run pipeline (aggregate all metrics)
-        shell: bash
-        timeout-minutes: 10
-        run: |
-          set -euo pipefail
-          python -m engine --season "${{ github.event.inputs.season }}" --date "${{ github.event.inputs.date }}" --bookmakers=""
-
       - name: Elite model | Run pricing
         shell: bash
         timeout-minutes: 10
@@ -132,6 +173,14 @@ jobs:
           set -euo pipefail
           python -m model.cli --config config.yaml
 
+      - name: Run pipeline (aggregate all metrics)
+        shell: bash
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          python -m engine --season "${{ github.event.inputs.season }}" --date "${{ github.event.inputs.date }}" --bookmakers=""
+
+      # Phase F — upload artifacts
       - name: Upload Elite outputs
         uses: actions/upload-artifact@v4
         with:

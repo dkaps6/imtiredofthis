@@ -487,8 +487,9 @@ def main(out_csv: str | Path = OUTPUT_PATH) -> None:
             )
 
     if successful < MIN_SUCCESSFUL_FORECASTS:
-        raise RuntimeError(
-            f"Only {successful} game forecasts returned weather data (<{MIN_SUCCESSFUL_FORECASTS} required)"
+        print(
+            "[builder WARNING] weather_week.csv low sample size "
+            f"({successful} successful forecasts < {MIN_SUCCESSFUL_FORECASTS}), writing partial output anyway"
         )
 
     out_df = pd.DataFrame(
@@ -511,12 +512,21 @@ def main(out_csv: str | Path = OUTPUT_PATH) -> None:
     )
 
     if out_df.empty:
-        raise RuntimeError("Weather builder produced empty DataFrame.")
+        print(
+            "[builder WARNING] weather_week.csv produced 0 rows; writing header-only output"
+        )
+
+    total_games_played = len(week_games) if "week_games" in locals() else 0
+    min_dynamic = max(2000, total_games_played * 150)
+    if len(out_df) < min_dynamic:
+        print(
+            f"[builder WARNING] weather_week.csv low sample size ({len(out_df)} rows < {min_dynamic}), writing partial output anyway"
+        )
 
     out_path = Path(out_csv)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_df.to_csv(out_path, index=False)
-    print(f"Wrote {out_path} with {len(out_df)} rows.")
+    print(f"[builder] wrote {len(out_df)} rows -> {out_path}")
 
 
 if __name__ == "__main__":

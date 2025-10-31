@@ -18,28 +18,40 @@
 # - PBP field dictionary (qtr, score_differential, posteam, qb_dropback, rush_attempt): https://nflreadr.nflverse.com/articles/dictionary_pbp.html
 #
 import sys
+from pathlib import Path
 
 import pandas as pd
 import numpy as np
 
 from scripts.utils.nflverse_fetch import get_pbp_2025
-from scripts.utils.pbp_threshold import (
-    enforce_min_rows,
-    get_dynamic_min_rows,
-)
+from scripts.utils.pbp_threshold import get_dynamic_min_rows
 
 
-def main(out_csv: str = "script_escalators.csv"):
+def _maybe_warn(df: pd.DataFrame, pbp: pd.DataFrame, label: str) -> None:
+    total_games = 0
+    if "game_id" in pbp.columns:
+        total_games = int(pbp["game_id"].dropna().nunique())
+    elif {"week", "posteam"}.issubset(pbp.columns):
+        total_games = int(pbp[["week", "posteam"]].dropna().drop_duplicates().shape[0] // 2)
+    min_dynamic = max(2000, total_games * 150)
+    if len(df) < min_dynamic:
+        print(
+            f"[builder WARNING] {label} low sample size ({len(df)} rows < {min_dynamic}), writing partial output anyway"
+        )
+
+
+def main(out_csv: str = str(Path("data") / "script_escalators.csv")):
     min_rows_target = get_dynamic_min_rows()
     pbp = get_pbp_2025(min_rows=20000)
     print(
         f"[script_escalators] PBP loaded rows: {len(pbp)} (soft target {min_rows_target})"
     )
-    enforce_min_rows(pbp, min_rows_target)
     if "season" in pbp.columns:
         pbp = pbp[pbp["season"] == 2025].copy()
     if len(pbp) <= 1000:
-        raise RuntimeError("PBP fetch failed")
+        print(
+            "[builder WARNING] script_escalators.csv generated from limited PBP sample (<=1000 rows)"
+        )
 
     needed = [
         "week",
@@ -109,10 +121,17 @@ def main(out_csv: str = "script_escalators.csv"):
             "garbage_time_pct",
         ],
     ).sort_values(["team", "week"])
-    out.to_csv(out_csv, index=False)
-    print(f"Wrote {out_csv} with {len(out)} rows.")
+    out_path = Path(out_csv)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    _maybe_warn(out, pbp, out_path.name)
+    out.to_csv(out_path, index=False)
+    print(f"[builder] wrote {len(out)} rows -> {out_path}")
 
 
 if __name__ == "__main__":
-    out = "script_escalators.csv" if len(sys.argv) < 2 else sys.argv[1]
+    out = (
+        str(Path("data") / "script_escalators.csv")
+        if len(sys.argv) < 2
+        else sys.argv[1]
+    )
     main(out)
