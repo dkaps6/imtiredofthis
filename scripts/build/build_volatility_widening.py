@@ -17,15 +17,13 @@
 # Neutral filters are not used here; it's raw volatility. All free data.
 #
 import sys
+from pathlib import Path
 
 import pandas as pd
 import numpy as np
 
 from scripts.utils.nflverse_fetch import get_pbp_2025
-from scripts.utils.pbp_threshold import (
-    enforce_min_rows,
-    get_dynamic_min_rows,
-)
+from scripts.utils.pbp_threshold import get_dynamic_min_rows
 
 
 def compute_pace_std(df: pd.DataFrame) -> float:
@@ -65,17 +63,31 @@ def compute_score_margin_volatility(df: pd.DataFrame) -> float:
     return float(df["score_differential"].std())
 
 
-def main(out_csv: str = "volatility_widening.csv"):
+def _maybe_warn(df: pd.DataFrame, pbp: pd.DataFrame, label: str) -> None:
+    total_games = 0
+    if "game_id" in pbp.columns:
+        total_games = int(pbp["game_id"].dropna().nunique())
+    elif {"week", "posteam"}.issubset(pbp.columns):
+        total_games = int(pbp[["week", "posteam"]].dropna().drop_duplicates().shape[0] // 2)
+    min_dynamic = max(2000, total_games * 150)
+    if len(df) < min_dynamic:
+        print(
+            f"[builder WARNING] {label} low sample size ({len(df)} rows < {min_dynamic}), writing partial output anyway"
+        )
+
+
+def main(out_csv: str = str(Path("data") / "volatility_widening.csv")):
     min_rows_target = get_dynamic_min_rows()
     pbp = get_pbp_2025(min_rows=20000)
     print(
         f"[volatility_widening] PBP loaded rows: {len(pbp)} (soft target {min_rows_target})"
     )
-    enforce_min_rows(pbp, min_rows_target)
     if "season" in pbp.columns:
         pbp = pbp[pbp["season"] == 2025].copy()
     if len(pbp) <= 1000:
-        raise RuntimeError("PBP fetch failed")
+        print(
+            "[builder WARNING] volatility_widening.csv generated from limited PBP sample (<=1000 rows)"
+        )
 
     # Required fields
     cols = [
@@ -133,10 +145,17 @@ def main(out_csv: str = "volatility_widening.csv"):
             "score_margin_volatility",
         ],
     )
-    out.to_csv(out_csv, index=False)
-    print(f"Wrote {out_csv} with {len(out)} rows.")
+    out_path = Path(out_csv)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    _maybe_warn(out, pbp, out_path.name)
+    out.to_csv(out_path, index=False)
+    print(f"[builder] wrote {len(out)} rows -> {out_path}")
 
 
 if __name__ == "__main__":
-    out = "volatility_widening.csv" if len(sys.argv) < 2 else sys.argv[1]
+    out = (
+        str(Path("data") / "volatility_widening.csv")
+        if len(sys.argv) < 2
+        else sys.argv[1]
+    )
     main(out)

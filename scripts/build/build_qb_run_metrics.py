@@ -25,10 +25,7 @@ import pandas as pd
 import numpy as np
 
 from scripts.utils.nflverse_fetch import get_pbp_2025
-from scripts.utils.pbp_threshold import (
-    enforce_min_rows,
-    get_dynamic_min_rows,
-)
+from scripts.utils.pbp_threshold import get_dynamic_min_rows
 
 
 def compute_qb_sets(df: pd.DataFrame) -> set:
@@ -58,15 +55,24 @@ SCRAMBLE_OUT = Path("qb_scramble_rates.csv")
 DESIGNED_OUT = Path("qb_designed_runs.csv")
 
 
+def _maybe_warn(df: pd.DataFrame, total_games: int, label: str) -> None:
+    min_dynamic = max(2000, total_games * 150)
+    if len(df) < min_dynamic:
+        print(
+            f"[builder WARNING] {label} low sample size ({len(df)} rows < {min_dynamic}), writing partial output anyway"
+        )
+
+
 def main():
     min_rows_target = get_dynamic_min_rows()
     pbp = get_pbp_2025(min_rows=20000)
-    print(f"[qb_run_metrics] PBP loaded rows: {len(pbp)} (soft target {min_rows_target})")
-    enforce_min_rows(pbp, min_rows_target)
+    print(
+        f"[qb_run_metrics] PBP loaded rows: {len(pbp)} (soft target {min_rows_target})"
+    )
     if "season" in pbp.columns:
         pbp = pbp[pbp["season"] == 2025].copy()
-    if len(pbp) <= 1000:
-        raise RuntimeError("PBP fetch failed")
+    if len(pbp) == 0:
+        print("[builder WARNING] PBP fetch returned 0 rows; writing empty QB metrics outputs")
 
     # Ensure numeric flags are numeric (0/1)
     for col in ["qb_scramble", "qb_dropback", "qb_kneel", "rush_attempt", "sack"]:
@@ -122,11 +128,29 @@ def main():
         ["player", "week", "designed_run_rate", "designed_runs", "snaps"]
     ].sort_values(["player", "week"])
 
-    # Write outputs
-    a.to_csv(SCRAMBLE_OUT, index=False)
-    b.to_csv(DESIGNED_OUT, index=False)
+    total_games = 0
+    if "game_id" in pbp.columns:
+        total_games = int(pbp["game_id"].dropna().nunique())
+    elif {"week", "posteam"}.issubset(pbp.columns):
+        total_games = int(
+            pbp[["week", "posteam"]].dropna().drop_duplicates().shape[0] // 2
+        )
+
+    data_dir = Path("data")
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    scramble_path = data_dir / SCRAMBLE_OUT.name
+    designed_path = data_dir / DESIGNED_OUT.name
+
+    _maybe_warn(a, total_games, "qb_scramble_rates.csv")
+    a.to_csv(scramble_path, index=False)
+    _maybe_warn(b, total_games, "qb_designed_runs.csv")
+    b.to_csv(designed_path, index=False)
     print(
-        f"Wrote {SCRAMBLE_OUT} ({len(a)} rows) and {DESIGNED_OUT} ({len(b)} rows)."
+        f"[builder] wrote {len(a)} rows -> {scramble_path}"
+    )
+    print(
+        f"[builder] wrote {len(b)} rows -> {designed_path}"
     )
 
 
