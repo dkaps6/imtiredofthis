@@ -88,6 +88,12 @@ jobs:
           set -euo pipefail
           python scripts/make_player_form.py
 
+      - name: Sharp Football team metrics
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/providers/sharpfootball_pull.py --season "${{ github.event.inputs.season }}" --dump-html
+
       # Phase C — metric feeders
       - name: Build team form
         shell: bash
