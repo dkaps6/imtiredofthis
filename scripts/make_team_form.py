@@ -870,24 +870,41 @@ def main():
 
         # Basic sanity: pick a few must-have Sharp stats and make sure at least
         # one of them actually populated for at least one team.
-        required_sharp_cols = [
-            # NOTE: these are generic; they MUST match real columns in sharp_team_form.csv.
-            # Update names here based on actual sharp_team_form.csv columns if needed.
-            "pass_rate_over_expected",
-            "neutral_pace",
-            "coverage_man_rate",
-            "coverage_zone_rate",
-        ]
-        missing_all = []
-        for col in required_sharp_cols:
-            if col not in team_form.columns:
-                missing_all.append(col)
-            else:
-                if team_form[col].isna().all():
-                    missing_all.append(col)
+        required_sharp_cols = {
+            # canonical name -> acceptable column options in the merged Sharp frame
+            "pass_rate_over_expectation": (
+                "pass_rate_over_expectation",
+                "pass_rate_over_expected",
+            ),
+            "seconds_per_play_neutral": (
+                "seconds_per_play_neutral",
+                "neutral_pace",
+            ),
+            "man_coverage_rate": (
+                "man_coverage_rate",
+                "coverage_man_rate",
+            ),
+            "zone_coverage_rate": (
+                "zone_coverage_rate",
+                "coverage_zone_rate",
+            ),
+        }
 
-        if len(missing_all) == len(required_sharp_cols):
-            raise RuntimeError(f"[make_team_form] Sharp merge appears empty for all required cols: {missing_all}. Check sharpfootball_pull.py output.")
+        matched_cols = []
+        missing_cols = {}
+        for canonical, options in required_sharp_cols.items():
+            chosen = next((col for col in options if col in team_form.columns), None)
+            if chosen is not None and team_form[chosen].notna().any():
+                matched_cols.append((canonical, chosen))
+            else:
+                missing_cols[canonical] = options
+
+        if not matched_cols:
+            details = {k: list(v) for k, v in missing_cols.items()}
+            raise RuntimeError(
+                "[make_team_form] Sharp merge appears empty for all required cols. "
+                f"Checked candidates: {details}. Check sharpfootball_pull.py output."
+            )
 
         # Log what got filled by fallbacks (for quick triage)
         try:
