@@ -145,42 +145,26 @@ jobs:
           set -euo pipefail
           python scripts/build/build_coverage_penalties.py
 
-      # Phase D — sanity + merge
-      - name: Sanity gate (required inputs present & non-empty)
-        shell: bash
-        timeout-minutes: 3
-        run: |
-          set -euo pipefail
-          python scripts/metrics_ready.py
-
-      # Phase E — final modeling
       - name: Fetch Odds (Odds API)
-        shell: bash
-        timeout-minutes: 4
         env:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        run: python scripts/fetch_game_lines_oddsapi.py
         continue-on-error: true
+
+      - name: Run pipeline
         run: |
-          set -euo pipefail
-          python scripts/fetch_game_lines_oddsapi.py
+          python -m engine --season "${{ github.event.inputs.season }}" --date "" --bookmakers=""
+
+      - name: Sanity gate | Metrics ready
+        run: |
+          python scripts/metrics_ready.py
 
       - name: Elite model | Run pricing
-        shell: bash
-        timeout-minutes: 10
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          set -euo pipefail
           python -m model.cli --config config.yaml
 
-      - name: Run pipeline (aggregate all metrics)
-        shell: bash
-        timeout-minutes: 10
-        run: |
-          set -euo pipefail
-          python -m engine --season "${{ github.event.inputs.season }}" --date "${{ github.event.inputs.date }}" --bookmakers=""
-
-      # Phase F — upload artifacts
       - name: Upload Elite outputs
         uses: actions/upload-artifact@v4
         with:
@@ -191,13 +175,13 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      - name: Upload run artifacts (always)
+      - name: Upload pipeline artifacts (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: run_${{ github.run_id }}
           path: |
+            data/**
             outputs/**
-            data/*.csv
             data/_debug/**
           if-no-files-found: warn

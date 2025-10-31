@@ -18,6 +18,8 @@
 #     * A rusher is treated as a QB if their name appears in that passer set.
 # - "Snaps" proxy = dropbacks + all QB rush attempts (scrambles + designed). This aligns with QB involvement on offensive plays.
 # - Designed runs exclude scrambles and kneels: rush_attempt==1 & qb_scramble!=1 & qb_kneel!=1 & rusher is QB.
+
+from __future__ import annotations
 #
 from pathlib import Path
 
@@ -53,6 +55,51 @@ def choose_qb_name(row, qb_names) -> str:
 
 SCRAMBLE_OUT = Path("qb_scramble_rates.csv")
 DESIGNED_OUT = Path("qb_designed_runs.csv")
+
+SCRAMBLE_COLUMNS = [
+    "player",
+    "week",
+    "scramble_rate",
+    "scrambles",
+    "dropbacks",
+]
+DESIGNED_COLUMNS = [
+    "player",
+    "week",
+    "designed_run_rate",
+    "designed_runs",
+    "snaps",
+]
+
+
+def _write_with_schema(
+    df: pd.DataFrame | None,
+    out_path: Path,
+    *,
+    expected_columns: list[str],
+) -> int:
+    """Persist ``df`` to ``out_path`` with ``expected_columns`` headers."""
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if df is None or df.empty:
+        empty_df = pd.DataFrame(columns=expected_columns)
+        empty_df.to_csv(out_path, index=False)
+        print(f"[builder WARNING] wrote headers only (0 rows) -> {out_path}")
+        return 0
+
+    out_df = df.copy()
+    missing = [col for col in expected_columns if col not in out_df.columns]
+    for col in missing:
+        out_df[col] = np.nan
+
+    ordered = expected_columns + [
+        col for col in out_df.columns if col not in expected_columns
+    ]
+    out_df = out_df[ordered]
+    out_df.to_csv(out_path, index=False)
+    print(f"[builder] wrote {len(out_df)} rows -> {out_path}")
+    return len(out_df)
 
 
 def _maybe_warn(df: pd.DataFrame, total_games: int, label: str) -> None:
@@ -137,20 +184,21 @@ def main():
         )
 
     data_dir = Path("data")
-    data_dir.mkdir(parents=True, exist_ok=True)
-
     scramble_path = data_dir / SCRAMBLE_OUT.name
     designed_path = data_dir / DESIGNED_OUT.name
 
     _maybe_warn(a, total_games, "qb_scramble_rates.csv")
-    a.to_csv(scramble_path, index=False)
-    _maybe_warn(b, total_games, "qb_designed_runs.csv")
-    b.to_csv(designed_path, index=False)
-    print(
-        f"[builder] wrote {len(a)} rows -> {scramble_path}"
+    _write_with_schema(
+        a,
+        scramble_path,
+        expected_columns=SCRAMBLE_COLUMNS,
     )
-    print(
-        f"[builder] wrote {len(b)} rows -> {designed_path}"
+
+    _maybe_warn(b, total_games, "qb_designed_runs.csv")
+    _write_with_schema(
+        b,
+        designed_path,
+        expected_columns=DESIGNED_COLUMNS,
     )
 
 

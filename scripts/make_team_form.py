@@ -56,6 +56,22 @@ NFLV, NFL_PKG = _import_nflverse()
 
 DATA_DIR = "data"
 OUTPATH = os.path.join(DATA_DIR, "team_form.csv")
+TEAM_FORM_OUTPUT_COLUMNS = [
+    "team",
+    "season",
+    "games_played",
+    "def_pass_epa",
+    "def_rush_epa",
+    "def_sack_rate",
+    "pace",
+    "proe",
+    "rz_rate",
+    "12p_rate",
+    "slot_rate",
+    "ay_per_att",
+    "light_box_rate",
+    "heavy_box_rate",
+]
 
 # -----------------------------
 # Canonical team mapping (expanded + forgiving)
@@ -114,6 +130,31 @@ def canon_team(x: str) -> str:
 def _safe_mkdir(p: str):
     if not os.path.exists(p):
         os.makedirs(p, exist_ok=True)
+
+
+def _write_team_form_csv(df: pd.DataFrame | None) -> pd.DataFrame:
+    """Write ``df`` to ``OUTPATH`` ensuring headers exist."""
+
+    _safe_mkdir(DATA_DIR)
+
+    if df is None or df.empty:
+        out_df = pd.DataFrame(columns=TEAM_FORM_OUTPUT_COLUMNS)
+        out_df.to_csv(OUTPATH, index=False)
+        print(f"[make_team_form] WARNING wrote headers only (0 rows) → {OUTPATH}")
+        return out_df
+
+    out_df = df.copy()
+    missing = [col for col in TEAM_FORM_OUTPUT_COLUMNS if col not in out_df.columns]
+    for col in missing:
+        out_df[col] = pd.NA
+
+    ordered = TEAM_FORM_OUTPUT_COLUMNS + [
+        col for col in out_df.columns if col not in TEAM_FORM_OUTPUT_COLUMNS
+    ]
+    out_df = out_df[ordered]
+    out_df.to_csv(OUTPATH, index=False)
+    print(f"[make_team_form] Wrote {len(out_df)} rows → {OUTPATH}")
+    return out_df
 
 
 def _is_empty(obj) -> bool:
@@ -758,7 +799,8 @@ def main():
                         help="If current-season participation is empty, backfill ONLY box counts from prior season.")
     args = parser.parse_args()
 
-    _safe_mkdir(DATA_DIR)
+    df_to_write: pd.DataFrame | None = None
+    success = False
 
     try:
         df = build_team_form(args.season, box_backfill_prev=args.box_backfill_prev)
@@ -794,27 +836,26 @@ def main():
 
         # Strict validation (AFTER fallback)
         _validate_required(df, allow_missing_box=args.allow_missing_box)
+        df_to_write = df
+        success = True
 
     except Exception as e:
         print(f"[make_team_form] ERROR: {e}", file=sys.stderr)
-        empty = pd.DataFrame(columns=[
-            "team","season","games_played","def_pass_epa","def_rush_epa","def_sack_rate",
-            "pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
-            "light_box_rate","heavy_box_rate"
-        ])
-        empty.to_csv(OUTPATH, index=False)
-        sys.exit(1)
+        if "df" in locals() and isinstance(df, pd.DataFrame):
+            df_to_write = df
+        else:
+            df_to_write = pd.DataFrame(columns=TEAM_FORM_OUTPUT_COLUMNS)
 
-    # CI log: ensure we actually captured Sharp box rates
-    try:
-        for col in ["light_box_rate","heavy_box_rate"]:
-            nn = int(df[col].notna().sum()) if col in df.columns else 0
-            print(f"[make_team_form] {col}: non-null teams = {nn}/32")
-    except Exception:
-        pass
+    written_df = _write_team_form_csv(df_to_write)
 
-    df.to_csv(OUTPATH, index=False)
-    print(f"[make_team_form] Wrote {len(df)} rows → {OUTPATH}")
+    if success:
+        # CI log: ensure we actually captured Sharp box rates
+        try:
+            for col in ["light_box_rate","heavy_box_rate"]:
+                nn = int(written_df[col].notna().sum()) if col in written_df.columns else 0
+                print(f"[make_team_form] {col}: non-null teams = {nn}/32")
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
