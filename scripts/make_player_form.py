@@ -38,8 +38,6 @@ from scripts.utils.canonical_names import (
 )
 
 DATA_DIR = "data"
-OUTPATH = Path(DATA_DIR) / "player_form.csv"
-CONS_PATH = Path("data") / "player_form_consensus.csv"
 OPP_PATH = Path("data") / "opponent_map_from_props.csv"
 ROLES_PATH = Path("data") / "roles_ourlads.csv"
 
@@ -139,7 +137,27 @@ def _safe_mkdir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
 
-FINAL_COLS = [
+PLAYER_FORM_USAGE_COLS = [
+    "targets",
+    "routes",
+    "receptions",
+    "rec_yards",
+    "rushes",
+    "rush_yards",
+    "pass_att",
+    "pass_yards",
+    "dropbacks",
+    "team_targets",
+    "team_dropbacks",
+    "team_rushes",
+    "rz_targets",
+    "rz_team_targets",
+    "rz_rushes",
+    "rz_team_rushes",
+    "games",
+]
+
+PLAYER_FORM_REQUIRED_COLUMNS = [
     "player",
     "team",
     "week",
@@ -147,11 +165,7 @@ FINAL_COLS = [
     "season",
     "position",
     "role",
-    "player_canonical",
-    "player_clean_key",
-    "team_key",
-    "week_key",
-    "unmatched_flag",
+] + PLAYER_FORM_USAGE_COLS + [
     "tgt_share",
     "route_rate",
     "rush_share",
@@ -163,6 +177,14 @@ FINAL_COLS = [
     "rz_share",
     "rz_tgt_share",
     "rz_rush_share",
+]
+
+FINAL_COLS = PLAYER_FORM_REQUIRED_COLUMNS + [
+    "player_canonical",
+    "player_clean_key",
+    "team_key",
+    "week_key",
+    "unmatched_flag",
 ]
 
 
@@ -279,6 +301,14 @@ def _build_season_consensus(base: pd.DataFrame) -> pd.DataFrame:
 
 
 CONSENSUS_OPPONENT_SENTINEL = "ALL"
+
+CONSENSUS_REQUIRED_COLUMNS = [
+    "player",
+    "team",
+    "week",
+    "opponent",
+    "role",
+]
 
 
 def _inject_week_opponent_and_roles(out: pd.DataFrame) -> pd.DataFrame:
@@ -2529,6 +2559,124 @@ def _build_grouped_consensus(df: pd.DataFrame) -> pd.DataFrame:
     return consensus[existing + remaining]
 
 
+def _enforce_player_form_schema(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None:
+        return pd.DataFrame(columns=PLAYER_FORM_REQUIRED_COLUMNS)
+
+    out = df.copy()
+    for col in PLAYER_FORM_REQUIRED_COLUMNS:
+        if col not in out.columns:
+            out[col] = pd.NA
+
+    # ensure key identifier columns are strings (preserve pd.NA with pandas string dtype)
+    for col in ["player", "team", "opponent", "role"]:
+        if col in out.columns:
+            out[col] = out[col].astype("string")
+
+    if "team" in out.columns:
+        out["team"] = out["team"].str.strip().str.upper()
+
+    if "player" in out.columns:
+        out["player"] = out["player"].str.strip()
+
+    if "opponent" in out.columns:
+        out["opponent"] = (
+            out["opponent"].str.strip().str.upper()
+        )
+        out.loc[out["opponent"].isin(["", "NAN", "NONE", "NULL"]), "opponent"] = pd.NA
+
+    if "role" in out.columns:
+        out["role"] = out["role"].str.strip()
+
+    if "season" in out.columns:
+        out["season"] = pd.to_numeric(out["season"], errors="coerce")
+
+    out["week"] = pd.to_numeric(out.get("week"), errors="coerce")
+
+    # Try to backfill routes if missing but route_rate + team_dropbacks are available
+    if "routes" in out.columns and {"route_rate", "team_dropbacks"}.issubset(out.columns):
+        needs_routes = out["routes"].isna()
+        if needs_routes.any():
+            routes_estimate = (
+                pd.to_numeric(out["route_rate"], errors="coerce")
+                * pd.to_numeric(out["team_dropbacks"], errors="coerce")
+            )
+            out.loc[needs_routes, "routes"] = routes_estimate.loc[needs_routes]
+
+    numeric_cols = [
+        "targets",
+        "routes",
+        "receptions",
+        "rec_yards",
+        "rushes",
+        "rush_yards",
+        "pass_att",
+        "pass_yards",
+        "dropbacks",
+        "team_targets",
+        "team_dropbacks",
+        "team_rushes",
+        "rz_targets",
+        "rz_team_targets",
+        "rz_rushes",
+        "rz_team_rushes",
+        "games",
+        "tgt_share",
+        "route_rate",
+        "rush_share",
+        "yprr",
+        "ypt",
+        "ypc",
+        "ypa",
+        "receptions_per_target",
+        "rz_share",
+        "rz_tgt_share",
+        "rz_rush_share",
+    ]
+
+    for col in numeric_cols:
+        if col in out.columns:
+            out[col] = pd.to_numeric(out[col], errors="coerce")
+
+    ordered = PLAYER_FORM_REQUIRED_COLUMNS + [
+        c for c in out.columns if c not in PLAYER_FORM_REQUIRED_COLUMNS
+    ]
+    return out[ordered]
+
+
+def _enforce_consensus_schema(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=CONSENSUS_REQUIRED_COLUMNS)
+
+    out = df.copy()
+    for col in CONSENSUS_REQUIRED_COLUMNS:
+        if col not in out.columns:
+            if col == "week":
+                out[col] = pd.Series(pd.NA, index=out.index, dtype="Float64")
+            elif col == "opponent":
+                out[col] = CONSENSUS_OPPONENT_SENTINEL
+            else:
+                out[col] = pd.NA
+
+    out["player"] = out["player"].astype("string").str.strip()
+    out["team"] = out["team"].astype("string").str.strip().str.upper()
+    out["role"] = out["role"].astype("string").str.strip()
+
+    out["week"] = pd.to_numeric(out["week"], errors="coerce")
+    out["opponent"] = (
+        out["opponent"]
+        .astype("string")
+        .fillna(CONSENSUS_OPPONENT_SENTINEL)
+        .replace({"": CONSENSUS_OPPONENT_SENTINEL})
+        .str.upper()
+    )
+
+    ordered = CONSENSUS_REQUIRED_COLUMNS + [
+        c for c in out.columns if c not in CONSENSUS_REQUIRED_COLUMNS
+    ]
+    return out[ordered]
+
+
 def _write_player_form_outputs(df: pd.DataFrame) -> None:
     if df is None or df.empty:
         raise RuntimeError("[make_player_form] final player_form empty; aborting run")
@@ -2541,15 +2689,16 @@ def _write_player_form_outputs(df: pd.DataFrame) -> None:
     consensus = _build_grouped_consensus(working)
 
     working = _ensure_cols(working, FINAL_COLS)
-    raw_output = working[FINAL_COLS]
-    if raw_output.empty:
+    player_form = _enforce_player_form_schema(working)
+    if player_form.empty:
         raise RuntimeError("[make_player_form] final player_form empty; aborting run")
 
     _safe_mkdir(DATA_DIR)
-    raw_output.to_csv(OUTPATH, index=False)
-    consensus.to_csv(CONS_PATH, index=False)
+    player_form.to_csv("data/player_form.csv", index=False)
+    consensus = _enforce_consensus_schema(consensus)
+    consensus.to_csv("data/player_form_consensus.csv", index=False)
 
-    print(f"[make_player_form] wrote data/player_form.csv ({len(raw_output)} rows raw)")
+    print(f"[make_player_form] wrote data/player_form.csv ({len(player_form)} rows raw)")
     print(
         f"[make_player_form] wrote data/player_form_consensus.csv ({len(consensus)} rows grouped)"
     )
