@@ -4,34 +4,48 @@ on:
   workflow_dispatch:
     inputs:
       season:
-        description: "Season year (e.g. 2025)"
+        description: "Season (e.g., 2025)"
         required: false
         default: "2025"
-      week:
-        description: "Week number (e.g. 9)"
+      date:
+        description: "Slate date (YYYY-MM-DD) or blank for latest"
         required: false
-        default: "9"
+        default: ""
   schedule:
-    - cron: "0 * * * *"  # hourly
+    - cron: "0 * * * *"
 
 concurrency:
-  group: full-slate
+  group: full-slate-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
+# Global env inherits into every job
 env:
-  PYTHONPATH: .
+  PYTHONPATH: ${{ github.workspace }}
   PYTHONDONTWRITEBYTECODE: "1"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+  # external keys / creds
+  APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
+  ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+  OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+  MSF_KEY: ${{ secrets.MSF_KEY }}
+  MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
+  NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
+  NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
+
+  # dynamic inputs
+  SEASON: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.season != '' ? github.event.inputs.season : '2025' }}
+  SLATE_DATE: ${{ github.event_name == 'workflow_dispatch' ? github.event.inputs.date : '' }}
 
 jobs:
 
   setup:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -39,57 +53,53 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install deps
+      - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Prep dirs
+      - name: Prepare workspace directories
         run: |
           mkdir -p data data/_debug data/raw data/intermediate data/final outputs logs artifacts
 
   gather_inputs:
     runs-on: ubuntu-latest
     needs: setup
-    env:
-      APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
-      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-      OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
-      MSF_KEY: ${{ secrets.MSF_KEY }}
-      MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
-      NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
-      NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
-      PYTHONPATH: ${{ env.PYTHONPATH }}
-      PYTHONDONTWRITEBYTECODE: ${{ env.PYTHONDONTWRITEBYTECODE }}
-      PIP_DISABLE_PIP_VERSION_CHECK: ${{ env.PIP_DISABLE_PIP_VERSION_CHECK }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install deps
+
+      - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build opponent map
+      - name: Build opponent map from props
         run: |
-          python scripts/build/build_opponent_map_from_props.py --out data/opponent_map_from_props.csv || python scripts/build/build_opponent_map_from_props.py
+          python scripts/build/build_opponent_map_from_props.py "$SEASON"
 
-      - name: Build depth / roles
+      - name: Build depth / roles (OurLads)
         run: |
-          python scripts/build/build_depth_roles.py || true
+          python scripts/providers/ourlads_depth.py --season "$SEASON"
 
       - name: Build QB run metrics
         run: |
-          python scripts/build/build_qb_run_metrics.py --out data/qb_run_metrics.csv || python scripts/build/build_qb_run_metrics.py || true
+          python scripts/build/build_qb_run_metrics.py
 
-      - name: Build weather (with fallback)
+      - name: Build weather with fallback
         run: |
+          mkdir -p data
           python scripts/build/build_weather_week.py || true
           if [ ! -s data/weather_week.csv ]; then
-            echo "game_id,tempF,windMph,precipProb" > data/weather_week.csv
+            printf "game_id,tempF,windMph,precipProb\n" > data/weather_week.csv
           fi
 
-      - name: Upload step1-inputs
+      - name: Upload raw input artifacts
         uses: actions/upload-artifact@v4
         with:
           name: step1-inputs
@@ -100,27 +110,32 @@ jobs:
     runs-on: ubuntu-latest
     needs: gather_inputs
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install deps
+
+      - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build base player_form
+      - name: Build player form base
         run: |
-          python scripts/make_player_form.py
+          python scripts/make_player_form.py --season "$SEASON"
 
-      - name: Enrich player_form (roles/opponent/weather canonical merge)
+      - name: Enrich player form
         run: |
           python scripts/enrich_player_form.py
 
-      - name: Build team_form (neutral pace etc.)
+      - name: Build team form
         run: |
-          python scripts/build/build_team_form.py || true
+          python scripts/make_team_form.py --season "$SEASON"
 
-      - name: Upload step2-forms
+      - name: Upload form artifacts
         uses: actions/upload-artifact@v4
         with:
           name: step2-forms
@@ -134,23 +149,24 @@ jobs:
     runs-on: ubuntu-latest
     needs: build_forms
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install deps
+
+      - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build metrics_ready table
+      - name: Build metrics-ready dataset
         run: |
           python scripts/make_metrics.py
 
-      - name: Build enriched slate (pre-pricing)
-        run: |
-          python scripts/slipgen.py || true
-
-      - name: Upload step3-pipeline
+      - name: Upload pipeline artifacts
         uses: actions/upload-artifact@v4
         with:
           name: step3-pipeline
@@ -163,19 +179,24 @@ jobs:
     runs-on: ubuntu-latest
     needs: run_pipeline
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install deps
+
+      - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Validate metrics gate
+      - name: Validate metrics output
         run: |
           python scripts/validate_metrics.py
 
-      - name: Upload step4-validation
+      - name: Upload validation artifacts
         uses: actions/upload-artifact@v4
         with:
           name: step4-validation
@@ -185,22 +206,31 @@ jobs:
   pricing:
     runs-on: ubuntu-latest
     needs: metrics_ready
+    # only run pricing if metrics_ready didn't blow up
     if: ${{ needs.metrics_ready.result == 'success' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install deps
+
+      - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run pricing / model scoring
+      - name: Run pricing models
         run: |
-          python -m model.cli || true
-          python -m engine.slip_pricing || true
+          python -m model.cli --config config.yaml
 
-      - name: Upload step5-pricing
+      - name: Assemble slips and books
+        run: |
+          python -m engine --season "$SEASON" --date "$SLATE_DATE" --bookmakers=""
+
+      - name: Upload pricing artifacts
         uses: actions/upload-artifact@v4
         with:
           name: step5-pricing
@@ -219,16 +249,17 @@ jobs:
       - pricing
     if: always()
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Bundle all artifacts
+      - name: Bundle run artifacts
         run: |
           mkdir -p artifacts
           cp -r data artifacts/data || true
           cp -r outputs artifacts/outputs || true
           cp -r logs artifacts/logs || true
 
-      - name: Upload full-debug-bundle
+      - name: Upload full debug bundle
         uses: actions/upload-artifact@v4
         with:
           name: full-debug-bundle
