@@ -22,19 +22,24 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     env:
-      PYTHONPATH: ${{ github.workspace }}
       PYTHONDONTWRITEBYTECODE: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
       APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
       ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-      OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+      ESPN_COOKIE: ${{ secrets.ESPN_COOKIE }}
       MSF_KEY: ${{ secrets.MSF_KEY }}
       MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
       NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
       NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
+      SEASON: ${{ github.event.inputs.season }}
+      SLATE_DATE: ${{ github.event.inputs.date }}
 
     steps:
+      # ----------------------------
+      # 0. Checkout + Python setup
+      # ----------------------------
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -43,132 +48,160 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install deps
+      - name: Install deps (core + HTML parsers)
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           fi
-          pip install pyyaml
+          # if metrics_ready.py uses yaml or rapidfuzz etc and it's NOT in requirements.txt,
+          # make sure requirements.txt gets updated in repo. don't pip install ad-hoc here
+          # unless you're intentionally hot-patching.
 
-      ######################################################
-      # A. RAW INPUT / SCRAPERS
-      ######################################################
-
-      # 1. Depth charts / roles (OurLads only)
-      - name: Build depth roles (OurLads only)
+      # ----------------------------------------
+      # 1. Pull SharpFootball team metrics
+      # ----------------------------------------
+      # scrapes pace / neutral pace / box rates / tendencies / coverage / etc.
+      # outputs CSVs into data/ (e.g. sharp_pace_*.csv, sharp_coverage_*.csv ...)
+      - name: Pull SharpFootball metrics
         run: |
-          python scripts/providers/ourlads_depth.py
-        # This must write data/roles_ourlads.csv
+          python scripts/providers/sharpfootball_pull.py \
+            --season "${SEASON}" \
+            --dump-html
 
-      # 2. Props-based opponent mapping (player -> team -> opponent)
+      # ----------------------------------------
+      # 2. Build depth / roles (Ourlads)
+      # ----------------------------------------
+      # This should write depth/role info like roles_ourlads.csv
+      # plus whatever merged roles file player_form expects.
+      - name: Build depth / roles (Ourlads)
+        run: |
+          python scripts/providers/ourlads_depth.py \
+            --season "${SEASON}"
+
+      # ----------------------------------------
+      # 3. Build opponent map from props
+      # ----------------------------------------
+      # Uses sportsbook / props board scrape to infer each player's opponent
+      # for the current slate, writes data/opponent_map_from_props.csv
       - name: Build opponent map from props
         run: |
-          python scripts/build/build_opponent_map_from_props.py "${{ github.event.inputs.season }}"
-        # Writes data/opponent_map_from_props.csv
-        # Also writes data/_debug/opponent_sample.csv
+          python scripts/build_opponent_map_from_props.py \
+            --season "${SEASON}" \
+            --date "${SLATE_DATE}"
 
-      # 3. Schedule / lines
-      - name: Build Game Lines
-        run: |
-          python scripts/build_game_lines_from_schedule.py --season "${{ github.event.inputs.season }}"
-
-      # 4. Fetch Odds / Props (can rate-limit but should NOT kill the job)
-      - name: Fetch Odds (Odds API)
-        env:
-          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-        run: |
-          python scripts/fetch_game_lines_oddsapi.py
-        continue-on-error: true
-
-      # 5. SharpFootball metrics (coverage, pace, trench, tendencies)
-      - name: Sharp Football team metrics
-        run: |
-          python scripts/providers/sharpfootball_pull.py --season "${{ github.event.inputs.season }}" --dump-html
-        # This step must now S U C C E E D and write data/sharp_team_form.csv
-        # After recent patches, it must also include neutral_pace, coverage_man_rate, coverage_zone_rate
-
-      # 6. Stadium / weather forecast for this slate
-      # NOTE: this calls the new weather pipeline which should:
-      #  - load the current slate (home, away, kickoff_local)
-      #  - map stadium location
-      #  - call OpenWeather (or your configured weather source)
-      #  - write data/weather_week.csv
-      - name: Build per-game weather
+      # ----------------------------------------
+      # 4. Build weather for this slate
+      # ----------------------------------------
+      # This step should create data/weather_week.csv (or weather_slate.csv)
+      # using stadium/city mapping + forecast source.
+      # NOTE: if you're using an API key like OPENWEATHER_API_KEY, add it to secrets
+      # and expose it here in env.
+      - name: Build weather (per-game forecast)
         env:
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
         run: |
-          python scripts/build_weather_week.py
-        continue-on-error: false  # weather is required for final model
+          python scripts/build_weather_week.py \
+            --season "${SEASON}" \
+            --date "${SLATE_DATE}"
 
-      ######################################################
-      # B. FEATURE BUILDERS
-      ######################################################
-
-      # 7. Build player_form (player usage, roles, opp enrichment)
-      - name: Build player form
+      # ----------------------------------------
+      # 5. Build QB run/scramble metrics
+      # ----------------------------------------
+      # Generates qb_designed_runs.csv and qb_scramble_rates.csv from nflverse PBP.
+      # You already added row-count guards so it fails if data is totally empty.
+      - name: Build QB scramble / designed-run metrics
         run: |
-          python scripts/make_player_form.py --season "${{ github.event.inputs.season }}"
-        # Writes data/player_form.csv, data/player_form_consensus.csv, data/unmatched_roles_merge.csv
+          python scripts/build_qb_run_metrics.py \
+            --season "${SEASON}"
 
-      # 8. Build team_form (merge Sharp + nflverse team stats + PROE etc.)
-      - name: Build team form
+      # ----------------------------------------
+      # 6. Build team_form.csv
+      # ----------------------------------------
+      # make_team_form.py is responsible for merging:
+      # - SharpFootball (pace, neutral_pace, coverage tendencies, box rate, etc.)
+      # - nflverse / nflreadr data (EPA, PROE, etc.)
+      # and writing data/team_form.csv
+      - name: Build team_form
         run: |
-          python scripts/make_team_form.py --season "${{ github.event.inputs.season }}"
-        # Writes data/team_form.csv
-        # make_team_form.py is responsible for merging sharp_team_form.csv
-        # and must expose: neutral_pace, coverage_man_rate, coverage_zone_rate, pass_rate_over_expected, etc.
+          python scripts/make_team_form.py \
+            --season "${SEASON}"
 
-      # 9. QB run/scramble metrics, etc.
-      - name: Build QB run/scramble metrics
+      # ----------------------------------------
+      # 7. Build player_form + player_form_consensus
+      # ----------------------------------------
+      # make_player_form.py should:
+      # - merge roles_ourlads.csv
+      # - merge opponent_map_from_props.csv (and schedule fallback if you've added it)
+      # - canonicalize player names (strip middle initials, normalize "J.Fields" -> "Justin Fields")
+      # - output data/player_form.csv and data/player_form_consensus.csv
+      - name: Build player_form / consensus
         run: |
-          python scripts/build/build_qb_run_metrics.py
-        # Should write data/qb_run_metrics.csv (qb_designed_runs, scramble_rate, etc.)
+          python scripts/make_player_form.py \
+            --season "${SEASON}" \
+            --date "${SLATE_DATE}"
 
-      ######################################################
-      # C. METRICS READY + SANITY GATE
-      ######################################################
-
-      # 10. Merge all final inputs into metrics_ready.csv
-      #     This script should read:
-      #     - data/team_form.csv
-      #     - data/player_form.csv
-      #     - data/weather_week.csv
-      #     - data/qb_run_metrics.csv
-      #     - any other per-game/per-team context we need
-      - name: Build metrics_ready
+      # ----------------------------------------
+      # 8. Run pipeline (full metrics / slipgen prep)
+      # ----------------------------------------
+      # This stage assembles all derived features that pricing depends on.
+      # After this, the repo should have:
+      # - fully enriched per-player/per-team matchup features
+      # - slipgen output
+      - name: Run pipeline (full metrics + slipgen)
         run: |
-          python scripts/make_metrics.py
-        # Writes data/metrics_ready.csv
+          python scripts/make_metrics.py \
+            --season "${SEASON}" \
+            --mode full \
+            --date "${SLATE_DATE}"
+          python scripts/slipgen.py \
+            --season "${SEASON}" \
+            --date "${SLATE_DATE}"
 
-      # 11. Sanity Gate (HARD STOP IF BAD)
-      #     This should assert:
-      #     - critical columns exist in team_form.csv (neutral_pace, coverage_man_rate, coverage_zone_rate, pass_rate_over_expected)
-      #     - critical columns exist in metrics_ready.csv
-      #     - weather_week.csv is not empty
-      #     - opponent_map_from_props.csv not empty
-      #
-      #     If any required dataset is missing or empty, exit 1 to STOP the pipeline
-      - name: Sanity gate
+      # ----------------------------------------
+      # 9. metrics_ready sanity gate
+      # ----------------------------------------
+      # HARD FAIL GATE.
+      # metrics_ready.py should:
+      # - confirm required CSVs exist and are non-empty:
+      #   data/team_form.csv
+      #   data/player_form.csv
+      #   data/player_form_consensus.csv
+      #   data/qb_designed_runs.csv
+      #   data/qb_scramble_rates.csv
+      #   data/weather_week.csv   (or whatever weather file you write)
+      #   any other must-have inputs
+      # If anything is missing/empty -> raise RuntimeError -> nonzero exit -> job stops here.
+      - name: Validate metrics_ready (must pass before pricing)
         run: |
-          python scripts/utils/sanity_gate.py
-        continue-on-error: false
+          python scripts/metrics_ready.py \
+            --season "${SEASON}" \
+            --date "${SLATE_DATE}"
 
-      ######################################################
-      # D. PRICING / MODEL (FINAL)
-      ######################################################
-
-      # 12. Elite model pricing (now that all inputs exist)
-      - name: Elite model | Pricing
-        run: |
-          python -m model.cli --config config.yaml
+      # ----------------------------------------
+      # 10. Elite model | Run pricing
+      # ----------------------------------------
+      # ONLY after the sanity gate passes do we hit pricing.
+      # This is where Odds API credits and sportsbook calls happen.
+      # This step should generate final projection tables and bet slips.
+      - name: Elite model | Run pricing
         env:
-          PYTHONUNBUFFERED: "1"
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        run: |
+          python scripts/make_metrics.py \
+            --season "${SEASON}" \
+            --mode pricing \
+            --date "${SLATE_DATE}"
+          python scripts/pricing.py \
+            --season "${SEASON}" \
+            --date "${SLATE_DATE}"
 
-      ######################################################
-      # E. ARTIFACTS
-      ######################################################
-
+      # ----------------------------------------
+      # 11. Upload artifacts
+      # ----------------------------------------
+      # Always upload every CSV and output we care about,
+      # even if an earlier step failed. This lets us inspect
+      # partials like opponent_map_from_props.csv, player_form.csv, etc.
       - name: Upload artifacts (always)
         if: always()
         uses: actions/upload-artifact@v4
@@ -178,4 +211,6 @@ jobs:
             outputs/**
             data/*.csv
             data/_debug/**
+            data/_sharp_dump_*.html
           if-no-files-found: warn
+          retention-days: 7
