@@ -76,33 +76,32 @@ jobs:
             pip install -r requirements.txt
           fi
 
-      - name: Pull SharpFootball metrics
-        run: |
-          python scripts/providers/sharpfootball_pull.py \
-            --season "$SEASON" \
-            --dump-html
-
-      - name: Build opponent map from props
+      - name: Pull Sharp / pace / coverage / tendencies
         run: |
           mkdir -p data
-          python scripts/build/build_opponent_map_from_props.py "$SEASON" "$SLATE_DATE"
+          python scripts/providers/sharpfootball_pull.py "$SEASON" "$SLATE_DATE" --dump-html
+          # must emit data/sharp_team_form.csv with pace, coverage, tendencies, neutral_pace inputs
 
       - name: Build depth / roles (Ourlads)
         run: |
+          mkdir -p data
           python scripts/providers/ourlads_depth.py --season "$SEASON"
+          # must emit data/roles_ourlads.csv (player -> team -> WR1/WR2/Slot/RB1/etc.)
+
+      - name: Build weather for slate
+        run: |
+          mkdir -p data
+          python scripts/build/build_weather_week.py "$SEASON" "$SLATE_DATE" || true
+          if [ ! -s data/weather_week.csv ]; then
+            echo "game_id,tempF,windMph,precipProb" > data/weather_week.csv
+          fi
+          # must emit data/weather_week.csv
 
       - name: Build QB scramble / designed-run metrics
         run: |
           mkdir -p data
           python scripts/build/build_qb_run_metrics.py "$SEASON"
-
-      - name: Build weather with fallback
-        run: |
-          mkdir -p data
-          python scripts/build/build_weather_week.py "$SEASON" "$SLATE_DATE" || true
-          if [ ! -s data/weather_week.csv ]; then
-            printf "game_id,tempF,windMph,precipProb\n" > data/weather_week.csv
-          fi
+          # must emit data/qb_designed_runs.csv and data/qb_scramble_rates.csv
 
       - name: Upload raw input artifacts
         uses: actions/upload-artifact@v4
@@ -147,14 +146,25 @@ jobs:
 
       - name: Build team_form
         run: |
-          python scripts/make_team_form.py \
-            --season "$SEASON"
+          mkdir -p data
+          python scripts/make_team_form.py "$SEASON"
+          # must emit data/team_form.csv
+          # make_team_form.py assumes sharpfootball_pull already wrote neutral_pace data
 
-      - name: Build player_form / consensus
+      - name: Build opponent map from props
         run: |
-          python scripts/make_player_form.py \
-            --season "$SEASON" \
-            --date "$SLATE_DATE"
+          mkdir -p data
+          python scripts/build/build_opponent_map_from_props.py "$SEASON" "$SLATE_DATE"
+          # must emit data/opponent_map_from_props.csv
+          # this step is allowed to exit(1) if we cannot attach opponents.
+          # DO NOT wrap this in `|| true`. DO NOT swallow RuntimeError.
+
+      - name: Build player_form and consensus
+        run: |
+          mkdir -p data
+          python scripts/make_player_form.py "$SEASON" "$SLATE_DATE"
+          # must emit data/player_form.csv and data/player_form_consensus.csv
+          # make_player_form.py is responsible for canonicalizing names, merging roles_ourlads.csv, and attaching opponent per player.
 
   run_pipeline:
     runs-on: ubuntu-latest
@@ -192,13 +202,8 @@ jobs:
 
       - name: Run pipeline (full metrics + slipgen)
         run: |
-          python scripts/make_metrics.py \
-            --season "$SEASON" \
-            --mode full \
-            --date "$SLATE_DATE"
-          python scripts/slipgen.py \
-            --season "$SEASON" \
-            --date "$SLATE_DATE"
+          python scripts/make_metrics.py --mode full "$SEASON" "$SLATE_DATE"
+          python scripts/slipgen.py "$SEASON" "$SLATE_DATE"
 
   metrics_ready:
     runs-on: ubuntu-latest
@@ -236,9 +241,7 @@ jobs:
 
       - name: Validate metrics_ready (must pass before pricing)
         run: |
-          python scripts/metrics_ready.py \
-            --season "$SEASON" \
-            --date "$SLATE_DATE"
+          python scripts/metrics_ready.py "$SEASON" "$SLATE_DATE"
 
   pricing:
     runs-on: ubuntu-latest
@@ -277,13 +280,7 @@ jobs:
 
       - name: Elite model | Run pricing
         run: |
-          python scripts/make_metrics.py \
-            --season "$SEASON" \
-            --mode pricing \
-            --date "$SLATE_DATE"
-          python scripts/pricing.py \
-            --season "$SEASON" \
-            --date "$SLATE_DATE"
+          python scripts/pricing.py "$SEASON" "$SLATE_DATE"
 
   upload_artifacts:
     runs-on: ubuntu-latest
