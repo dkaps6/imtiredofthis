@@ -35,7 +35,10 @@ import unicodedata
 import numpy as np
 import pandas as pd
 
-from scripts.utils.canonical_names import log_unmapped_variant
+from scripts.utils.canonical_names import (
+    canonicalize_player_name as _canonicalize_with_utils,
+    log_unmapped_variant,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +186,33 @@ def _normalize_key(s: str) -> str:
     # remove punctuation and whitespace
     s = re.sub(r"[^a-z0-9]", "", s)
     return s
+
+
+def _canonical_identity_fields(raw: Any) -> Dict[str, str]:
+    """Return canonical name metadata using shared utils and log unmapped variants."""
+
+    raw_str = "" if raw is None else str(raw)
+    canonical, clean_key = _canonicalize_with_utils(raw_str)
+    canonical = (canonical or "").strip()
+    clean_key = (clean_key or "").strip()
+
+    if raw_str and canonical and canonical == clean_key:
+        try:
+            log_unmapped_variant(raw_str)
+        except Exception:
+            pass
+
+    if not canonical:
+        canonical = raw_str.upper().strip()
+
+    canonical_lower = re.sub(r"[^a-z0-9 ]+", "", canonical.lower()).strip()
+    player_clean_key = re.sub(r"\s+", "_", canonical_lower)
+
+    return {
+        "player_name_canonical": canonical,
+        "player_canonical": canonical_lower,
+        "player_clean_key": player_clean_key,
+    }
 
 
 def canonicalize_player_name(raw: str) -> str:
@@ -337,6 +367,7 @@ PLAYER_FORM_USAGE_COLS = [
 
 PLAYER_FORM_REQUIRED_COLUMNS = [
     "player",
+    "player_name_canonical",
     "team",
     "week",
     "opponent",
@@ -2490,14 +2521,14 @@ def _attach_consensus_keys(df: pd.DataFrame) -> pd.DataFrame:
     if "player_name" not in out.columns:
         out["player_name"] = out.get("player", "")
 
-    if "player_canonical" not in out.columns:
-        out["player_canonical"] = out["player_name"].apply(_canonicalize_player_name)
-    else:
-        out["player_canonical"] = out["player_canonical"].astype(str)
-    if "player_clean_key" not in out.columns:
-        out["player_clean_key"] = out["player_canonical"].apply(_normalize_key)
-    else:
-        out["player_clean_key"] = out["player_clean_key"].astype(str)
+    canonical_df = out["player_name"].apply(
+        lambda nm: pd.Series(_canonical_identity_fields(nm))
+    )
+    out["player_name_canonical"] = canonical_df["player_name_canonical"].astype(
+        str
+    )
+    out["player_canonical"] = canonical_df["player_canonical"].astype(str)
+    out["player_clean_key"] = canonical_df["player_clean_key"].astype(str)
 
     if "team_key" not in out.columns:
         out["team_key"] = (
@@ -2632,12 +2663,15 @@ def _enforce_player_form_schema(df: pd.DataFrame) -> pd.DataFrame:
             out[col] = pd.NA
 
     # ensure key identifier columns are strings (preserve pd.NA with pandas string dtype)
-    for col in ["player", "team", "opponent", "role"]:
+    for col in ["player", "team", "opponent", "role", "player_name_canonical"]:
         if col in out.columns:
             out[col] = out[col].astype("string")
 
     if "team" in out.columns:
         out["team"] = out["team"].str.strip().str.upper()
+
+    if "player_name_canonical" in out.columns:
+        out["player_name_canonical"] = out["player_name_canonical"].str.strip().str.upper()
 
     if "player" in out.columns:
         out["player"] = out["player"].str.strip()
