@@ -11,8 +11,6 @@ on:
         description: "Slate date (YYYY-MM-DD) or blank for latest"
         required: false
         default: ""
-  schedule:
-    - cron: "0 * * * *"
 
 concurrency:
   group: full-slate-${{ github.ref }}
