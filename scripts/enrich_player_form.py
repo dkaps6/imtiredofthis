@@ -23,7 +23,12 @@ Output:
 
 from __future__ import annotations
 from scripts._opponent_map import attach_opponent
+from scripts.utils.canonical_names import (
+    canonicalize_player_name as _canonicalize_with_utils,
+    log_unmapped_variant,
+)
 import os
+import re
 import warnings
 import numpy as np
 import pandas as pd
@@ -36,6 +41,23 @@ BASE_COLS = [
     "target_share", "rush_share", "rz_tgt_share", "rz_carry_share",
     "ypt", "ypc", "yprr_proxy", "route_rate",
     "position", "role"
+]
+
+CONSENSUS_RATE_COLUMNS = [
+    "tgt_share",
+    "target_share",
+    "route_rate",
+    "rush_share",
+    "yprr",
+    "yprr_proxy",
+    "ypt",
+    "ypc",
+    "ypa",
+    "rz_share",
+    "rz_tgt_share",
+    "rz_rush_share",
+    "receptions_per_target",
+    "snap_share",
 ]
 
 # -------------------- IO helpers --------------------
@@ -60,6 +82,210 @@ def ensure_schema(df: pd.DataFrame) -> pd.DataFrame:
         if c not in out.columns:
             out[c] = np.nan
     return out
+
+
+def _canonical_identity_fields(raw) -> dict:
+    raw_str = "" if raw is None else str(raw)
+    canonical, clean_key = _canonicalize_with_utils(raw_str)
+    canonical = (canonical or "").strip()
+    clean_key = (clean_key or "").strip()
+
+    if raw_str and canonical and canonical == clean_key:
+        try:
+            log_unmapped_variant(raw_str)
+        except Exception:
+            pass
+
+    if not canonical:
+        canonical = raw_str.upper().strip()
+
+    canonical_lower = re.sub(r"[^a-z0-9 ]+", "", canonical.lower()).strip()
+    clean_slug = re.sub(r"\s+", "_", canonical_lower)
+
+    return {
+        "player_name_canonical": canonical,
+        "player_canonical": canonical_lower,
+        "player_clean_key": clean_slug,
+    }
+
+
+def add_canonical_columns(df: pd.DataFrame, player_col: str = "player") -> pd.DataFrame:
+    if df is None:
+        return pd.DataFrame()
+    out = df.copy()
+    if player_col not in out.columns:
+        if "player_name_canonical" not in out.columns:
+            out["player_name_canonical"] = ""
+        if "player_canonical" not in out.columns:
+            out["player_canonical"] = ""
+        if "player_clean_key" not in out.columns:
+            out["player_clean_key"] = ""
+        return out
+
+    canonical_df = out[player_col].apply(
+        lambda nm: pd.Series(_canonical_identity_fields(nm))
+    )
+    out["player_name_canonical"] = (
+        canonical_df["player_name_canonical"].astype(str).str.strip().str.upper()
+    )
+    out["player_canonical"] = canonical_df["player_canonical"].astype(str)
+    out["player_clean_key"] = canonical_df["player_clean_key"].astype(str)
+    return out
+
+
+def merge_opponent_from_props(df: pd.DataFrame) -> pd.DataFrame:
+    om = _read_csv(os.path.join(DATA_DIR, "opponent_map_from_props.csv"))
+    if om.empty:
+        return df
+
+    om = add_canonical_columns(om)
+    if "team" in om.columns:
+        om["team"] = om["team"].astype(str).str.upper().str.strip()
+    if "week" in om.columns:
+        om["week"] = pd.to_numeric(om["week"], errors="coerce")
+    if "opponent" in om.columns:
+        om["opponent"] = om["opponent"].astype(str).str.upper().str.strip()
+
+    base = df.copy()
+    if "team" in base.columns:
+        base["team"] = base["team"].astype(str).str.upper().str.strip()
+    if "week" in base.columns:
+        base["week"] = pd.to_numeric(base["week"], errors="coerce")
+    if "opponent" not in base.columns:
+        base["opponent"] = pd.NA
+
+    merge_keys = ["player_name_canonical"]
+    if "team" in base.columns and "team" in om.columns:
+        merge_keys.append("team")
+    if "week" in base.columns and "week" in om.columns:
+        merge_keys.append("week")
+
+    merge_cols = merge_keys + [c for c in ["opponent"] if c in om.columns]
+    merge_cols = list(dict.fromkeys(merge_cols))
+
+    merged = base.merge(
+        om[merge_cols].drop_duplicates(),
+        on=merge_keys,
+        how="left",
+        suffixes=("", "_props"),
+    )
+
+    if "opponent_props" in merged.columns:
+        merged["opponent"] = merged.get("opponent").combine_first(
+            merged["opponent_props"]
+        )
+        merged = merged.drop(columns=["opponent_props"])
+
+    return merged
+
+
+def merge_weather_data(df: pd.DataFrame) -> pd.DataFrame:
+    weather = _read_csv(os.path.join(DATA_DIR, "weather_week.csv"))
+    if weather.empty:
+        return df
+
+    weather = weather.copy()
+    weather.columns = [c.lower() for c in weather.columns]
+
+    base = df.copy()
+    merge_keys: list[str] = []
+
+    if "game_id" in base.columns and "game_id" in weather.columns:
+        merge_keys.append("game_id")
+
+    if "team" in base.columns and "team" in weather.columns:
+        base["team"] = base["team"].astype(str).str.upper().str.strip()
+        weather["team"] = weather["team"].astype(str).str.upper().str.strip()
+        merge_keys.append("team")
+
+    if "week" in base.columns and "week" in weather.columns:
+        base["week"] = pd.to_numeric(base["week"], errors="coerce")
+        weather["week"] = pd.to_numeric(weather["week"], errors="coerce")
+        if "week" not in merge_keys:
+            merge_keys.append("week")
+
+    if not merge_keys:
+        return base
+
+    subset_cols = merge_keys + [c for c in weather.columns if c not in merge_keys]
+    subset = weather[subset_cols].drop_duplicates()
+
+    merged = base.merge(
+        subset,
+        on=merge_keys,
+        how="left",
+        suffixes=("", "_weather"),
+    )
+
+    weather_cols = [c for c in subset.columns if c not in merge_keys]
+    for col in weather_cols:
+        weather_col = f"{col}_weather"
+        if weather_col in merged.columns:
+            if col in merged.columns:
+                merged[col] = merged[col].combine_first(merged[weather_col])
+                merged.drop(columns=[weather_col], inplace=True)
+            else:
+                merged.rename(columns={weather_col: col}, inplace=True)
+
+    return merged
+
+
+def _first_non_empty(series: pd.Series) -> str:
+    if series is None:
+        return ""
+    for val in series:
+        if isinstance(val, str) and val.strip():
+            return val
+    cleaned = series.dropna()
+    if not cleaned.empty:
+        return str(cleaned.iloc[0])
+    return ""
+
+
+def build_player_form_consensus(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["player_name_canonical", "player"])
+
+    metrics = [col for col in CONSENSUS_RATE_COLUMNS if col in df.columns]
+    agg_map = {col: "mean" for col in metrics}
+
+    grouped = (
+        df.groupby("player_name_canonical", dropna=False)
+        .agg(agg_map)
+        .reset_index()
+    )
+
+    if "player" in df.columns:
+        first_player = (
+            df.groupby("player_name_canonical", dropna=False)["player"]
+            .agg(_first_non_empty)
+            .reset_index()
+        )
+        grouped = grouped.merge(first_player, on="player_name_canonical", how="left")
+
+    if "player_clean_key" in df.columns:
+        first_key = (
+            df.groupby("player_name_canonical", dropna=False)["player_clean_key"]
+            .agg(_first_non_empty)
+            .reset_index()
+        )
+        grouped = grouped.merge(first_key, on="player_name_canonical", how="left")
+
+    ordered = ["player_name_canonical"]
+    if "player" in grouped.columns:
+        ordered.append("player")
+    if "player_clean_key" in grouped.columns:
+        ordered.append("player_clean_key")
+    ordered.extend([col for col in metrics if col in grouped.columns])
+    remaining = [col for col in grouped.columns if col not in ordered]
+    consensus = grouped[ordered + remaining]
+
+    if metrics:
+        consensus[metrics] = (
+            consensus[metrics].apply(pd.to_numeric, errors="coerce").fillna(0.0)
+        )
+
+    return consensus
 
 
 def _should_backfill(df: pd.DataFrame, target: str, source: str) -> bool:
@@ -233,7 +459,7 @@ def _enforce_rz_zero(df: pd.DataFrame) -> pd.DataFrame:
 def _coerce_metric_zeros(df: pd.DataFrame) -> pd.DataFrame:
     """Zero-fill share/rate metrics; leave raw counts untouched."""
     metric_cols = [
-        "target_share", "route_rate", "yprr_proxy", "ypt", "receptions_per_target", "snap_share",
+        "target_share", "tgt_share", "route_rate", "yprr", "yprr_proxy", "ypt", "receptions_per_target", "snap_share",
         "rush_share", "ypc", "ypa",
         "rz_share", "rz_tgt_share", "rz_rush_share"
     ]
@@ -363,15 +589,38 @@ def main():
     pf = _enforce_rz_zero(pf)
     pf = _coerce_metric_zeros(pf)
 
+    pf = add_canonical_columns(pf)
+    if "team" in pf.columns:
+        pf["team"] = pf["team"].astype(str).str.upper().str.strip()
+    if "week" in pf.columns:
+        pf["week"] = pd.to_numeric(pf["week"], errors="coerce")
+
     # roles/positions
     roles = load_roles_priority()
     if not roles.empty:
-        pf = non_destructive_merge(pf, roles, on=["player", "team"], mapping={"position": "position", "role": "role"})
+        roles = add_canonical_columns(roles)
+        if "team" in roles.columns:
+            roles["team"] = roles["team"].astype(str).str.upper().str.strip()
+        merge_keys = ["player_name_canonical"]
+        if "team" in roles.columns and "team" in pf.columns:
+            merge_keys.append("team")
+        pf = non_destructive_merge(
+            pf,
+            roles,
+            on=merge_keys,
+            mapping={"position": "position", "role": "role"},
+        )
 
     # optional PFR position fallback
     pfr_pos = _read_csv(os.path.join(DATA_DIR, "pfr_player_positions.csv"))
     if not pfr_pos.empty and {"player", "position"}.issubset(pfr_pos.columns):
-        pf = non_destructive_merge(pf, pfr_pos, on=["player"], mapping={"position": "position"})
+        pfr_pos = add_canonical_columns(pfr_pos)
+        pf = non_destructive_merge(
+            pf,
+            pfr_pos,
+            on=["player_name_canonical"],
+            mapping={"position": "position"},
+        )
 
     # participation-derived proxies (best-effort; non-fatal if missing libs)
     try:
@@ -408,6 +657,9 @@ def main():
     except Exception:
         pass  # optional enrichment only
 
+    pf = merge_opponent_from_props(pf)
+    pf = merge_weather_data(pf)
+
     # preserve opponent dimension; only drop exact duplicates including opponent
     if {"player", "team", "season"}.issubset(pf.columns) and "opponent" in pf.columns:
         try:
@@ -438,13 +690,17 @@ def main():
         pass
 
     # ---- FINALIZE (coerce types, fillna 0.0, clamp shares) ----
+    pf = attach_opponent(pf, team_col="team", coverage_path="data/coverage_cb.csv")
     pf = finalize_player_form(pf)
 
-    # NEW: fill opponent from coverage schedule when missing/ALL
-    df = attach_opponent(df, team_col="team", coverage_path="data/coverage_cb.csv")
+    consensus = build_player_form_consensus(pf)
 
     _write_csv(OUTPATH, pf)
+    _write_csv(os.path.join(DATA_DIR, "player_form_consensus.csv"), consensus)
     print(f"[enrich_player_form] Wrote {len(pf)} rows → {OUTPATH}")
+    print(
+        f"[enrich_player_form] Wrote {len(consensus)} rows → {os.path.join(DATA_DIR, 'player_form_consensus.csv')}"
+    )
 
 if __name__ == "__main__":
     main()

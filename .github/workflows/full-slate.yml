@@ -1,4 +1,4 @@
-name: Full Slate
+name: full-slate
 
 on:
   workflow_dispatch:
@@ -11,6 +11,8 @@ on:
         description: "Slate date (YYYY-MM-DD) or blank for latest"
         required: false
         default: ""
+  schedule:
+    - cron: "0 * * * *"
 
 concurrency:
   group: full-slate-${{ github.ref }}
@@ -20,8 +22,29 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  setup:
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Prepare workspace directories
+        run: |
+          mkdir -p data data/_debug data/raw data/intermediate data/final outputs logs artifacts
+
+  gather_inputs:
+    runs-on: ubuntu-latest
+    needs: setup
     env:
       PYTHONPATH: ${{ github.workspace }}
       PYTHONDONTWRITEBYTECODE: "1"
@@ -33,7 +56,8 @@ jobs:
       MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
       NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
       NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
-
+      SEASON: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.season != '' ? github.event.inputs.season : '2025' }}
+      SLATE_DATE: ${{ github.event_name == 'workflow_dispatch' ? github.event.inputs.date : '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,113 +67,245 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install deps
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
-          pip install pyyaml
-
-      ######################################################
-      # A. RAW INPUT / SCRAPERS
-      ######################################################
-
-      - name: Pull SharpFootball (tendencies, pace, coverage, box rates)
-        run: |
-          python scripts/providers/sharpfootball_pull.py --season "${{ github.event.inputs.season }}" --dump-html
-        # This step must now succeed and write data/sharp_team_form.csv
-
-      - name: Build depth / roles (OurLads)
-        run: |
-          python scripts/providers/ourlads_depth.py --season "${{ github.event.inputs.season }}"
-        # This must write data/roles_ourlads.csv
+          pip install -r requirements.txt
 
       - name: Build opponent map from props
         run: |
-          python scripts/build/build_opponent_map_from_props.py "${{ github.event.inputs.season }}"
-        # Writes data/opponent_map_from_props.csv and data/_debug/opponent_sample.csv
+          python scripts/build/build_opponent_map_from_props.py "$SEASON"
 
-      - name: Build Game Lines
+      - name: Build depth / roles (OurLads)
         run: |
-          python scripts/build_game_lines_from_schedule.py --season "${{ github.event.inputs.season }}"
+          python scripts/providers/ourlads_depth.py --season "$SEASON"
 
-      - name: Fetch Odds (Odds API)
-        env:
-          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-        run: |
-          python scripts/fetch_game_lines_oddsapi.py
-        continue-on-error: true
-
-      ######################################################
-      # B. FEATURE BUILDERS
-      ######################################################
-
-      - name: Build team_form.csv (uses Sharp + nflverse)
-        run: |
-          python scripts/make_team_form.py --season "${{ github.event.inputs.season }}"
-        # Writes data/team_form.csv
-
-      - name: Build player_form + consensus
-        run: |
-          python scripts/make_player_form.py --season "${{ github.event.inputs.season }}"
-        # Writes data/player_form.csv, data/player_form_consensus.csv, data/unmatched_roles_merge.csv
-
-      - name: Build weather_week.csv
-        env:
-          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
-        run: |
-          python scripts/build/build_weather_week.py --season "${{ github.event.inputs.season }}"
-        continue-on-error: true
-
-      - name: Build QB run/scramble metrics
+      - name: Build QB run metrics
         run: |
           python scripts/build/build_qb_run_metrics.py
-        # Should write data/qb_run_metrics.csv (qb_designed_runs, scramble_rate, etc.)
 
-      ######################################################
-      # C. PRICING / ENGINE
-      ######################################################
-
-      - name: Build metrics_ready
+      - name: Build weather with fallback
         run: |
-          python scripts/make_metrics.py
-        # Writes data/metrics_ready.csv
+          mkdir -p data
+          python scripts/build/build_weather_week.py || true
+          if [ ! -s data/weather_week.csv ]; then
+            printf "game_id,tempF,windMph,precipProb\n" > data/weather_week.csv
+          fi
 
-      - name: Elite model | Run pricing
-        run: |
-          python -m model.cli --config config.yaml
-        env:
-          PYTHONUNBUFFERED: "1"
-
-      - name: Run pipeline (full metrics / slip gen)
-        run: |
-          python -m engine --season "${{ github.event.inputs.season }}" --date "${{ github.event.inputs.date }}" --bookmakers=""
-
-      ######################################################
-      # D. SANITY / VALIDATION
-      ######################################################
-
-      - name: Sanity gate
-        run: |
-          python scripts/utils/sanity_gate.py
-        continue-on-error: false
-
-      - name: Sanity gate (metrics_ready)
-        run: |
-          python scripts/metrics_ready.py
-
-      ######################################################
-      # E. ARTIFACTS
-      ######################################################
-
-      - name: Upload artifacts (always)
-        if: always()
+      - name: Upload raw input artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: run_${{ github.run_id }}
+          name: step1-inputs
+          path: data/*
+          if-no-files-found: warn
+
+  build_forms:
+    runs-on: ubuntu-latest
+    needs: gather_inputs
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      PYTHONDONTWRITEBYTECODE: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
+      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+      OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+      MSF_KEY: ${{ secrets.MSF_KEY }}
+      MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
+      NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
+      NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
+      SEASON: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.season != '' ? github.event.inputs.season : '2025' }}
+      SLATE_DATE: ${{ github.event_name == 'workflow_dispatch' ? github.event.inputs.date : '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build player form base
+        run: |
+          python scripts/make_player_form.py --season "$SEASON"
+
+      - name: Enrich player form
+        run: |
+          python scripts/enrich_player_form.py
+
+      - name: Build team form
+        run: |
+          python scripts/make_team_form.py --season "$SEASON"
+
+      - name: Upload form artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: step2-forms
+          path: |
+            data/player_form.csv
+            data/player_form_consensus.csv
+            data/team_form.csv
+          if-no-files-found: error
+
+  run_pipeline:
+    runs-on: ubuntu-latest
+    needs: build_forms
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      PYTHONDONTWRITEBYTECODE: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
+      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+      OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+      MSF_KEY: ${{ secrets.MSF_KEY }}
+      MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
+      NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
+      NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
+      SEASON: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.season != '' ? github.event.inputs.season : '2025' }}
+      SLATE_DATE: ${{ github.event_name == 'workflow_dispatch' ? github.event.inputs.date : '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build metrics ready dataset
+        run: |
+          python scripts/make_metrics.py
+
+      - name: Upload pipeline artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: step3-pipeline
+          path: |
+            data/*.csv
+            outputs/**
+          if-no-files-found: warn
+
+  metrics_ready:
+    runs-on: ubuntu-latest
+    needs: run_pipeline
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      PYTHONDONTWRITEBYTECODE: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
+      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+      OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+      MSF_KEY: ${{ secrets.MSF_KEY }}
+      MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
+      NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
+      NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
+      SEASON: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.season != '' ? github.event.inputs.season : '2025' }}
+      SLATE_DATE: ${{ github.event_name == 'workflow_dispatch' ? github.event.inputs.date : '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Validate metrics output
+        run: |
+          python scripts/validate_metrics.py
+
+      - name: Upload validation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: step4-validation
+          path: logs
+          if-no-files-found: warn
+
+  pricing:
+    runs-on: ubuntu-latest
+    needs: metrics_ready
+    if: ${{ needs.metrics_ready.result == 'success' }}
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      PYTHONDONTWRITEBYTECODE: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
+      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+      OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+      MSF_KEY: ${{ secrets.MSF_KEY }}
+      MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
+      NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
+      NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
+      SEASON: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.season != '' ? github.event.inputs.season : '2025' }}
+      SLATE_DATE: ${{ github.event_name == 'workflow_dispatch' ? github.event.inputs.date : '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run pricing models
+        run: |
+          python -m model.cli --config config.yaml
+
+      - name: Assemble slips and books
+        run: |
+          python -m engine --season "$SEASON" --date "$SLATE_DATE" --bookmakers=""
+
+      - name: Upload pricing artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: step5-pricing
           path: |
             outputs/**
             data/*.csv
-            data/_debug/**
+          if-no-files-found: warn
+
+  upload_artifacts:
+    runs-on: ubuntu-latest
+    needs:
+      - gather_inputs
+      - build_forms
+      - run_pipeline
+      - metrics_ready
+      - pricing
+    if: always()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Bundle run artifacts
+        run: |
+          mkdir -p artifacts
+          cp -r data artifacts/data || true
+          cp -r outputs artifacts/outputs || true
+          cp -r logs artifacts/logs || true
+
+      - name: Upload full debug bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-debug-bundle
+          path: artifacts
           if-no-files-found: warn
