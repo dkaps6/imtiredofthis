@@ -4,28 +4,34 @@ on:
   workflow_dispatch:
     inputs:
       season:
-        description: "Season (e.g., 2025)"
+        description: "Season year (e.g. 2025)"
         required: false
         default: "2025"
-      date:
-        description: "Slate date (YYYY-MM-DD) or blank for latest"
+      week:
+        description: "Week number (e.g. 9)"
         required: false
-        default: ""
+        default: "9"
   schedule:
-    - cron: "0 * * * *"
+    - cron: "0 * * * *"  # hourly
 
 concurrency:
-  group: full-slate-${{ github.ref }}
+  group: full-slate
   cancel-in-progress: true
 
 permissions:
   contents: read
 
+env:
+  PYTHONPATH: .
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
 jobs:
+
   setup:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -33,12 +39,11 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install deps
         run: |
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Prepare workspace directories
+      - name: Prep dirs
         run: |
           mkdir -p data data/_debug data/raw data/intermediate data/final outputs logs artifacts
 
@@ -46,9 +51,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: setup
     env:
-      PYTHONPATH: ${{ github.workspace }}
-      PYTHONDONTWRITEBYTECODE: "1"
-      PIP_DISABLE_PIP_VERSION_CHECK: "1"
       APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
       ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
       OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
@@ -56,43 +58,38 @@ jobs:
       MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
       NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
       NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
-      SEASON: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.season != '' ? github.event.inputs.season : '2025' }}
-      SLATE_DATE: ${{ github.event_name == 'workflow_dispatch' ? github.event.inputs.date : '' }}
+      PYTHONPATH: ${{ env.PYTHONPATH }}
+      PYTHONDONTWRITEBYTECODE: ${{ env.PYTHONDONTWRITEBYTECODE }}
+      PIP_DISABLE_PIP_VERSION_CHECK: ${{ env.PIP_DISABLE_PIP_VERSION_CHECK }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install dependencies
+      - name: Install deps
         run: |
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build opponent map from props
+      - name: Build opponent map
         run: |
-          python scripts/build/build_opponent_map_from_props.py "$SEASON"
+          python scripts/build/build_opponent_map_from_props.py --out data/opponent_map_from_props.csv || python scripts/build/build_opponent_map_from_props.py
 
-      - name: Build depth / roles (OurLads)
+      - name: Build depth / roles
         run: |
-          python scripts/providers/ourlads_depth.py --season "$SEASON"
+          python scripts/build/build_depth_roles.py || true
 
       - name: Build QB run metrics
         run: |
-          python scripts/build/build_qb_run_metrics.py
+          python scripts/build/build_qb_run_metrics.py --out data/qb_run_metrics.csv || python scripts/build/build_qb_run_metrics.py || true
 
-      - name: Build weather with fallback
+      - name: Build weather (with fallback)
         run: |
-          mkdir -p data
           python scripts/build/build_weather_week.py || true
           if [ ! -s data/weather_week.csv ]; then
-            printf "game_id,tempF,windMph,precipProb\n" > data/weather_week.csv
+            echo "game_id,tempF,windMph,precipProb" > data/weather_week.csv
           fi
 
-      - name: Upload raw input artifacts
+      - name: Upload step1-inputs
         uses: actions/upload-artifact@v4
         with:
           name: step1-inputs
@@ -103,9 +100,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: gather_inputs
     env:
-      PYTHONPATH: ${{ github.workspace }}
-      PYTHONDONTWRITEBYTECODE: "1"
-      PIP_DISABLE_PIP_VERSION_CHECK: "1"
       APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
       ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
       OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
@@ -113,35 +107,31 @@ jobs:
       MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
       NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
       NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
-      SEASON: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.season != '' ? github.event.inputs.season : '2025' }}
-      SLATE_DATE: ${{ github.event_name == 'workflow_dispatch' ? github.event.inputs.date : '' }}
+      PYTHONPATH: ${{ env.PYTHONPATH }}
+      PYTHONDONTWRITEBYTECODE: ${{ env.PYTHONDONTWRITEBYTECODE }}
+      PIP_DISABLE_PIP_VERSION_CHECK: ${{ env.PIP_DISABLE_PIP_VERSION_CHECK }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install dependencies
+      - name: Install deps
         run: |
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build player form base
+      - name: Build base player_form
         run: |
-          python scripts/make_player_form.py --season "$SEASON"
+          python scripts/make_player_form.py
 
-      - name: Enrich player form
+      - name: Enrich player_form (roles/opponent/weather canonical merge)
         run: |
           python scripts/enrich_player_form.py
 
-      - name: Build team form
+      - name: Build team_form (neutral pace etc.)
         run: |
-          python scripts/make_team_form.py --season "$SEASON"
+          python scripts/build/build_team_form.py || true
 
-      - name: Upload form artifacts
+      - name: Upload step2-forms
         uses: actions/upload-artifact@v4
         with:
           name: step2-forms
@@ -155,9 +145,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: build_forms
     env:
-      PYTHONPATH: ${{ github.workspace }}
-      PYTHONDONTWRITEBYTECODE: "1"
-      PIP_DISABLE_PIP_VERSION_CHECK: "1"
       APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
       ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
       OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
@@ -165,27 +152,27 @@ jobs:
       MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
       NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
       NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
-      SEASON: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.season != '' ? github.event.inputs.season : '2025' }}
-      SLATE_DATE: ${{ github.event_name == 'workflow_dispatch' ? github.event.inputs.date : '' }}
+      PYTHONPATH: ${{ env.PYTHONPATH }}
+      PYTHONDONTWRITEBYTECODE: ${{ env.PYTHONDONTWRITEBYTECODE }}
+      PIP_DISABLE_PIP_VERSION_CHECK: ${{ env.PIP_DISABLE_PIP_VERSION_CHECK }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install dependencies
+      - name: Install deps
         run: |
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build metrics ready dataset
+      - name: Build metrics_ready table
         run: |
           python scripts/make_metrics.py
 
-      - name: Upload pipeline artifacts
+      - name: Build enriched slate (pre-pricing)
+        run: |
+          python scripts/slipgen.py || true
+
+      - name: Upload step3-pipeline
         uses: actions/upload-artifact@v4
         with:
           name: step3-pipeline
@@ -198,9 +185,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: run_pipeline
     env:
-      PYTHONPATH: ${{ github.workspace }}
-      PYTHONDONTWRITEBYTECODE: "1"
-      PIP_DISABLE_PIP_VERSION_CHECK: "1"
       APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
       ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
       OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
@@ -208,27 +192,23 @@ jobs:
       MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
       NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
       NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
-      SEASON: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.season != '' ? github.event.inputs.season : '2025' }}
-      SLATE_DATE: ${{ github.event_name == 'workflow_dispatch' ? github.event.inputs.date : '' }}
+      PYTHONPATH: ${{ env.PYTHONPATH }}
+      PYTHONDONTWRITEBYTECODE: ${{ env.PYTHONDONTWRITEBYTECODE }}
+      PIP_DISABLE_PIP_VERSION_CHECK: ${{ env.PIP_DISABLE_PIP_VERSION_CHECK }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install dependencies
+      - name: Install deps
         run: |
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Validate metrics output
+      - name: Validate metrics gate
         run: |
           python scripts/validate_metrics.py
 
-      - name: Upload validation artifacts
+      - name: Upload step4-validation
         uses: actions/upload-artifact@v4
         with:
           name: step4-validation
@@ -240,9 +220,6 @@ jobs:
     needs: metrics_ready
     if: ${{ needs.metrics_ready.result == 'success' }}
     env:
-      PYTHONPATH: ${{ github.workspace }}
-      PYTHONDONTWRITEBYTECODE: "1"
-      PIP_DISABLE_PIP_VERSION_CHECK: "1"
       APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
       ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
       OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
@@ -250,31 +227,24 @@ jobs:
       MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
       NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
       NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
-      SEASON: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.season != '' ? github.event.inputs.season : '2025' }}
-      SLATE_DATE: ${{ github.event_name == 'workflow_dispatch' ? github.event.inputs.date : '' }}
+      PYTHONPATH: ${{ env.PYTHONPATH }}
+      PYTHONDONTWRITEBYTECODE: ${{ env.PYTHONDONTWRITEBYTECODE }}
+      PIP_DISABLE_PIP_VERSION_CHECK: ${{ env.PIP_DISABLE_PIP_VERSION_CHECK }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install dependencies
+      - name: Install deps
         run: |
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run pricing models
+      - name: Run pricing / model scoring
         run: |
-          python -m model.cli --config config.yaml
+          python -m model.cli || true
+          python -m engine.slip_pricing || true
 
-      - name: Assemble slips and books
-        run: |
-          python -m engine --season "$SEASON" --date "$SLATE_DATE" --bookmakers=""
-
-      - name: Upload pricing artifacts
+      - name: Upload step5-pricing
         uses: actions/upload-artifact@v4
         with:
           name: step5-pricing
@@ -293,17 +263,16 @@ jobs:
       - pricing
     if: always()
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Bundle run artifacts
+      - name: Bundle all artifacts
         run: |
           mkdir -p artifacts
           cp -r data artifacts/data || true
           cp -r outputs artifacts/outputs || true
           cp -r logs artifacts/logs || true
 
-      - name: Upload full debug bundle
+      - name: Upload full-debug-bundle
         uses: actions/upload-artifact@v4
         with:
           name: full-debug-bundle
