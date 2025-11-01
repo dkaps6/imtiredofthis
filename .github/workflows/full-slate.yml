@@ -81,10 +81,10 @@ jobs:
           mkdir -p data
           python scripts/providers/sharpfootball_pull.py \
             --season "$SEASON" \
-            --date "$SLATE_DATE" \
+            "$SLATE_DATE" \
             --dump-html
           # MUST emit data/sharp_team_form.csv with full per-team pace, coverage tendencies,
-          # neutral_pace / box rate, etc. for the CURRENT slate.
+          # neutral_pace / box rate / PROE context for the CURRENT slate.
 
       - name: Build depth / roles (Ourlads)
         run: |
@@ -154,7 +154,7 @@ jobs:
           python scripts/make_team_form.py \
             --season "$SEASON"
           # must emit data/team_form.csv for THIS SEASON ONLY
-          # no 2024/previous-year box/backfill allowed
+          # do not backfill from prior seasons
 
       - name: Build opponent map from props
         run: |
