@@ -33,6 +33,8 @@ jobs:
       MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
       NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
       NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
+      SEASON: ${{ github.event.inputs.season }}
+      SLATE_DATE: ${{ github.event.inputs.date }}
 
     steps:
       - name: Checkout
@@ -55,92 +57,61 @@ jobs:
       # A. RAW INPUT / SCRAPERS
       ######################################################
 
-      - name: Pull SharpFootball (tendencies, pace, coverage, box rates)
+      - name: Pull SharpFootball team metrics
         run: |
-          python scripts/providers/sharpfootball_pull.py --season "${{ github.event.inputs.season }}" --dump-html
-        # This step must now succeed and write data/sharp_team_form.csv
+          python scripts/providers/sharpfootball_pull.py --season "${{ env.SEASON }}" --dump-html
+        # Writes Sharp pace/coverage/box/def tendencies outputs (e.g., sharp_pace_*.csv)
 
       - name: Build depth / roles (OurLads)
         run: |
-          python scripts/providers/ourlads_depth.py --season "${{ github.event.inputs.season }}"
-        # This must write data/roles_ourlads.csv
+          python scripts/providers/ourlads_depth.py --season "${{ env.SEASON }}"
+        # Writes depth/roles outputs (e.g., roles_ourlads.csv)
 
       - name: Build opponent map from props
         run: |
-          python scripts/build/build_opponent_map_from_props.py "${{ github.event.inputs.season }}"
-        # Writes data/opponent_map_from_props.csv and data/_debug/opponent_sample.csv
-
-      - name: Build Game Lines
-        run: |
-          python scripts/build_game_lines_from_schedule.py --season "${{ github.event.inputs.season }}"
-
-      - name: Fetch Odds (Odds API)
-        env:
-          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-        run: |
-          python scripts/fetch_game_lines_oddsapi.py
-        continue-on-error: true
-
-      ######################################################
-      # B. FEATURE BUILDERS
-      ######################################################
-
-      - name: Build team_form.csv (uses Sharp + nflverse)
-        run: |
-          python scripts/make_team_form.py --season "${{ github.event.inputs.season }}"
-        # Writes data/team_form.csv
-
-      - name: Build player_form + consensus
-        run: |
-          python scripts/make_player_form.py --season "${{ github.event.inputs.season }}"
-        # Writes data/player_form.csv, data/player_form_consensus.csv, data/unmatched_roles_merge.csv
+          python scripts/build/build_opponent_map_from_props.py --season "${{ env.SEASON }}"
+        # Writes data/opponent_map_from_props.csv
 
       - name: Build weather_week.csv
         env:
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
         run: |
-          python scripts/build/build_weather_week.py --season "${{ github.event.inputs.season }}"
+          python scripts/build_weather_week.py --season "${{ env.SEASON }}"
         continue-on-error: true
 
       - name: Build QB run/scramble metrics
         run: |
-          python scripts/build/build_qb_run_metrics.py
-        # Should write data/qb_run_metrics.csv (qb_designed_runs, scramble_rate, etc.)
+          python scripts/build/build_qb_run_metrics.py --season "${{ env.SEASON }}"
+        # Writes data/qb_scramble_rates.csv and data/qb_designed_runs.csv
 
-      ######################################################
-      # C. PRICING / ENGINE
-      ######################################################
-
-      - name: Build metrics_ready
+      - name: Build team_form.csv (uses Sharp + nflverse)
         run: |
-          python scripts/make_metrics.py
-        # Writes data/metrics_ready.csv
+          python scripts/make_team_form.py --season "${{ env.SEASON }}"
+        # Writes data/team_form.csv; fails fast if Sharp coverage metrics missing
 
-      - name: Elite model | Run pricing
+      - name: Build player_form + consensus
         run: |
-          python -m model.cli --config config.yaml
-        env:
-          PYTHONUNBUFFERED: "1"
+          python scripts/make_player_form.py --season "${{ env.SEASON }}"
+        # Writes data/player_form.csv and data/player_form_consensus.csv
 
       - name: Run pipeline (full metrics / slip gen)
         run: |
-          python -m engine --season "${{ github.event.inputs.season }}" --date "${{ github.event.inputs.date }}" --bookmakers=""
+          python scripts/make_metrics.py --season "${{ env.SEASON }}" --mode full
+          python scripts/slipgen.py --season "${{ env.SEASON }}"
 
-      ######################################################
-      # D. SANITY / VALIDATION
-      ######################################################
-
-      - name: Sanity gate
-        run: |
-          python scripts/utils/sanity_gate.py
-        continue-on-error: false
-
-      - name: Sanity gate (metrics_ready)
+      - name: Build metrics_ready (validation gate)
         run: |
           python scripts/metrics_ready.py
 
+      - name: Elite model | Run pricing
+        run: |
+          python scripts/make_metrics.py --season "${{ env.SEASON }}" --mode pricing
+          python scripts/pricing.py --season "${{ env.SEASON }}"
+        env:
+          PYTHONUNBUFFERED: "1"
+
       ######################################################
-      # E. ARTIFACTS
+      # ARTIFACTS
       ######################################################
 
       - name: Upload artifacts (always)
