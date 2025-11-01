@@ -79,14 +79,14 @@ jobs:
       - name: Pull Sharp / pace / coverage / tendencies
         run: |
           mkdir -p data
-          python scripts/providers/sharpfootball_pull.py "$SEASON" "$SLATE_DATE" --dump-html
-          # must emit data/sharp_team_form.csv with pace, coverage, tendencies, neutral_pace inputs
+          python scripts/providers/sharpfootball_pull.py --season "$SEASON" --dump-html
+          # MUST emit data/sharp_team_form.csv with pace, coverage, tendencies, neutral_pace inputs
 
       - name: Build depth / roles (Ourlads)
         run: |
           mkdir -p data
-          python scripts/providers/ourlads_depth.py --season "$SEASON"
-          # must emit data/roles_ourlads.csv (player -> team -> WR1/WR2/Slot/RB1/etc.)
+          python scripts/providers/ourlads_depth.py
+          # MUST emit data/roles_ourlads.csv (player -> team -> WR1/WR2/Slot/RB1/etc.)
 
       - name: Build weather for slate
         run: |
