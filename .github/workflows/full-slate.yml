@@ -99,17 +99,6 @@ jobs:
   build_forms:
     runs-on: ubuntu-latest
     needs: gather_inputs
-    env:
-      APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
-      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-      OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
-      MSF_KEY: ${{ secrets.MSF_KEY }}
-      MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
-      NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
-      NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
-      PYTHONPATH: ${{ env.PYTHONPATH }}
-      PYTHONDONTWRITEBYTECODE: ${{ env.PYTHONDONTWRITEBYTECODE }}
-      PIP_DISABLE_PIP_VERSION_CHECK: ${{ env.PIP_DISABLE_PIP_VERSION_CHECK }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -144,17 +133,6 @@ jobs:
   run_pipeline:
     runs-on: ubuntu-latest
     needs: build_forms
-    env:
-      APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
-      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-      OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
-      MSF_KEY: ${{ secrets.MSF_KEY }}
-      MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
-      NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
-      NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
-      PYTHONPATH: ${{ env.PYTHONPATH }}
-      PYTHONDONTWRITEBYTECODE: ${{ env.PYTHONDONTWRITEBYTECODE }}
-      PIP_DISABLE_PIP_VERSION_CHECK: ${{ env.PIP_DISABLE_PIP_VERSION_CHECK }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -184,17 +162,6 @@ jobs:
   metrics_ready:
     runs-on: ubuntu-latest
     needs: run_pipeline
-    env:
-      APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
-      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-      OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
-      MSF_KEY: ${{ secrets.MSF_KEY }}
-      MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
-      NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
-      NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
-      PYTHONPATH: ${{ env.PYTHONPATH }}
-      PYTHONDONTWRITEBYTECODE: ${{ env.PYTHONDONTWRITEBYTECODE }}
-      PIP_DISABLE_PIP_VERSION_CHECK: ${{ env.PIP_DISABLE_PIP_VERSION_CHECK }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -219,17 +186,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: metrics_ready
     if: ${{ needs.metrics_ready.result == 'success' }}
-    env:
-      APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
-      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-      OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
-      MSF_KEY: ${{ secrets.MSF_KEY }}
-      MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
-      NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
-      NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
-      PYTHONPATH: ${{ env.PYTHONPATH }}
-      PYTHONDONTWRITEBYTECODE: ${{ env.PYTHONDONTWRITEBYTECODE }}
-      PIP_DISABLE_PIP_VERSION_CHECK: ${{ env.PIP_DISABLE_PIP_VERSION_CHECK }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
