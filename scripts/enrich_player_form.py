@@ -22,16 +22,23 @@ Output:
 """
 
 from __future__ import annotations
-from scripts._opponent_map import attach_opponent
-from scripts.utils.canonical_names import (
-    canonicalize_player_name as _canonicalize_with_utils,
-    log_unmapped_variant,
-)
 import os
 import re
 import warnings
 import numpy as np
 import pandas as pd
+
+from scripts._opponent_map import attach_opponent
+from scripts.make_player_form import (
+    CONSENSUS_REQUIRED_COLUMNS as BASE_CONSENSUS_REQUIRED_COLUMNS,
+    _attach_consensus_keys as attach_consensus_keys,
+    _build_grouped_consensus as build_grouped_consensus,
+    _enforce_consensus_schema as enforce_consensus_schema,
+)
+from scripts.utils.canonical_names import (
+    canonicalize_player_name as _canonicalize_with_utils,
+    log_unmapped_variant,
+)
 
 DATA_DIR = "data"
 OUTPATH = os.path.join(DATA_DIR, "player_form.csv")
@@ -59,6 +66,8 @@ CONSENSUS_RATE_COLUMNS = [
     "receptions_per_target",
     "snap_share",
 ]
+
+CONSENSUS_REQUIRED_COLUMNS = list(BASE_CONSENSUS_REQUIRED_COLUMNS)
 
 # -------------------- IO helpers --------------------
 
@@ -228,58 +237,20 @@ def merge_weather_data(df: pd.DataFrame) -> pd.DataFrame:
                 merged.rename(columns={weather_col: col}, inplace=True)
 
     return merged
-
-
-def _first_non_empty(series: pd.Series) -> str:
-    if series is None:
-        return ""
-    for val in series:
-        if isinstance(val, str) and val.strip():
-            return val
-    cleaned = series.dropna()
-    if not cleaned.empty:
-        return str(cleaned.iloc[0])
-    return ""
-
-
 def build_player_form_consensus(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
-        return pd.DataFrame(columns=["player_name_canonical", "player"])
+        empty = pd.DataFrame(columns=CONSENSUS_REQUIRED_COLUMNS)
+        return enforce_consensus_schema(empty)
 
-    metrics = [col for col in CONSENSUS_RATE_COLUMNS if col in df.columns]
-    agg_map = {col: "mean" for col in metrics}
+    working = df.copy()
+    if "player_name" not in working.columns:
+        working["player_name"] = working.get("player", "")
 
-    grouped = (
-        df.groupby("player_name_canonical", dropna=False)
-        .agg(agg_map)
-        .reset_index()
-    )
+    working = attach_consensus_keys(working)
+    consensus = build_grouped_consensus(working)
+    consensus = enforce_consensus_schema(consensus)
 
-    if "player" in df.columns:
-        first_player = (
-            df.groupby("player_name_canonical", dropna=False)["player"]
-            .agg(_first_non_empty)
-            .reset_index()
-        )
-        grouped = grouped.merge(first_player, on="player_name_canonical", how="left")
-
-    if "player_clean_key" in df.columns:
-        first_key = (
-            df.groupby("player_name_canonical", dropna=False)["player_clean_key"]
-            .agg(_first_non_empty)
-            .reset_index()
-        )
-        grouped = grouped.merge(first_key, on="player_name_canonical", how="left")
-
-    ordered = ["player_name_canonical"]
-    if "player" in grouped.columns:
-        ordered.append("player")
-    if "player_clean_key" in grouped.columns:
-        ordered.append("player_clean_key")
-    ordered.extend([col for col in metrics if col in grouped.columns])
-    remaining = [col for col in grouped.columns if col not in ordered]
-    consensus = grouped[ordered + remaining]
-
+    metrics = [col for col in CONSENSUS_RATE_COLUMNS if col in consensus.columns]
     if metrics:
         consensus[metrics] = (
             consensus[metrics].apply(pd.to_numeric, errors="coerce").fillna(0.0)

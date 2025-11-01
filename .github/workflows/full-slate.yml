@@ -129,6 +129,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Prepare workspace directories
+        run: |
+          mkdir -p data
+
+      - name: Restore gather input artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: step1-inputs
+          path: data
+
       - name: Build player form base
         run: |
           python scripts/make_player_form.py --season "$SEASON"
