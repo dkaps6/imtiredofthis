@@ -62,11 +62,81 @@ CANON_OVERRIDES = {
 }
 
 
-def _strip_suffixes(n: str) -> str:
-    # remove common suffixes / punctuation like Jr., Sr., III etc.
-    n = re.sub(r"\b(jr|sr|iii|ii|iv)\b", "", n, flags=re.IGNORECASE)
-    n = n.replace(".", " ")
-    return n
+def _strip_suffixes(name: str) -> str:
+    """
+    Remove Jr, Sr, III, II, IV, V, etc. from the END of a name.
+    Assumes input is already stripped and title-cased.
+    """
+
+    if not isinstance(name, str):
+        return name
+
+    suffixes = [" JR", " SR", " II", " III", " IV", " V"]
+    out = name.upper().strip()
+    for suf in suffixes:
+        if out.endswith(suf):
+            out = out[: -len(suf)]
+    return out.strip()
+
+
+def _drop_middle_initials(name: str) -> str:
+    """
+    Remove standalone middle initials from things like 'JOE T FLACCO'.
+    Logic:
+    - Split on space
+    - Keep first and last token(s)
+    - If there's exactly 3 tokens and the middle is length 1, drop it.
+    - If more than 3 tokens, drop any 1-letter tokens that are in the middle.
+    """
+
+    if not isinstance(name, str):
+        return name
+
+    parts = [p for p in name.strip().split() if p]
+    if len(parts) <= 2:
+        return " ".join(parts)
+
+    cleaned = [parts[0]]
+    last_token = parts[-1]
+    for mid in parts[1:-1]:
+        if len(mid.replace(".", "")) > 1:
+            cleaned.append(mid.replace(".", ""))
+    cleaned.append(last_token)
+    return " ".join(cleaned)
+
+
+def standardize_full_name(raw: str) -> str:
+    """
+    Convert raw names like:
+      'JOE T FLACCO', 'D.Adams', 'DAdams', 'M.Wilson', 'HARRISON, MARVIN'
+    into a consistent 'Firstname Lastname' style string:
+      'Joe Flacco', 'Davante Adams', etc.
+
+    Steps:
+    - handle None
+    - replace punctuation with space
+    - uppercase
+    - drop commas
+    - drop suffixes (Jr, Sr, III, etc.)
+    - drop standalone middle initials
+    - title-case result
+    """
+
+    import re
+
+    if raw is None:
+        return None
+
+    s = str(raw)
+    s = s.replace(",", " ")
+    s = re.sub(r"[_\.]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    s = s.upper()
+    s = _strip_suffixes(s)
+    s = _drop_middle_initials(s)
+    s = re.sub(r"\s+", " ", s).strip()
+    s = s.title()
+    return s
 
 
 def _canonicalize_player_name(raw: str) -> str:
@@ -74,6 +144,7 @@ def _canonicalize_player_name(raw: str) -> str:
         return ""
     # lower
     n = unicodedata.normalize("NFKD", str(raw)).encode("ascii", "ignore").decode("ascii")
+    n = _strip_suffixes(n)
     n = n.lower()
     # remove punctuation-ish
     n = re.sub(r"[^a-z0-9\s]", " ", n)
@@ -208,6 +279,35 @@ def apply_name_canonicalization(df: pd.DataFrame, canon_map: dict) -> pd.DataFra
         if fixed:
             out.at[idx, "player"] = fixed
 
+    return out
+
+
+def _apply_player_name_cleaning(
+    df: pd.DataFrame, name_maps: dict | None
+) -> pd.DataFrame:
+    """Apply canonicalization, standardization, and derive key columns for player frames."""
+
+    if df is None:
+        return df
+
+    out = df.copy()
+    if "player" not in out.columns or out.empty:
+        return out
+
+    if name_maps:
+        out = apply_name_canonicalization(out, name_maps)
+
+    out["player"] = out["player"].map(standardize_full_name)
+    out["player_canonical"] = (
+        out["player"]
+        .astype(str)
+        .str.lower()
+        .str.replace(r"[^a-z0-9 ]+", "", regex=True)
+        .str.strip()
+    )
+    out["player_clean_key"] = out["player_canonical"].str.replace(
+        r"\s+", "_", regex=True
+    )
     return out
 
 
@@ -389,26 +489,16 @@ CONSENSUS_REQUIRED_COLUMNS = [
 ]
 
 
-def _inject_week_opponent_and_roles(out: pd.DataFrame) -> pd.DataFrame:
-    """
-    Enrich 'out' with 'week' and 'opponent' from data/opponent_map_from_props.csv.
+def _inject_week_opponent_and_roles(
+    out: pd.DataFrame, name_maps: dict | None
+) -> pd.DataFrame:
+    """Fill opponent/week using inferred values with props fallbacks."""
 
-    This function:
-    - Loads opponent_map_from_props.csv (already built earlier in the workflow).
-    - Canonicalizes player names and team codes on BOTH sides.
-    - Merges using (player, team, week) instead of just (player, team),
-      because the same player/team appears in multiple different weeks.
-    - Raises RuntimeError if we still can't map opponent/week for anyone,
-      and drops debug previews in data/_debug for inspection.
-    """
-
-    OPP_PATH = Path("data") / "opponent_map_from_props.csv"
-
-    if not OPP_PATH.exists():
+    opp_path = Path("data") / "opponent_map_from_props.csv"
+    if not opp_path.exists():
         raise RuntimeError("[make_player_form] opponent_map_from_props.csv not found")
 
-    opp = pd.read_csv(OPP_PATH)
-
+    opp = pd.read_csv(opp_path)
     required_cols = {"player", "team", "week", "opponent"}
     missing = required_cols - set(opp.columns)
     if missing:
@@ -416,255 +506,64 @@ def _inject_week_opponent_and_roles(out: pd.DataFrame) -> pd.DataFrame:
             f"[make_player_form] opponent_map_from_props.csv missing columns: {sorted(missing)}"
         )
 
-    def _deaccent_local(s: str) -> str:
-        try:
-            return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
-        except Exception:
-            return s
+    opp = _apply_player_name_cleaning(opp, name_maps)
+    opp["team"] = opp["team"].astype(str).str.upper().str.strip()
+    opp_merge = opp[["player_clean_key", "team", "week", "opponent"]].rename(
+        columns={"week": "week_from_props", "opponent": "opponent_from_props"}
+    )
 
-    def _clean_player_name_key(raw: str) -> str:
-        """
-        Normalize names like:
-        'DAK PRESCOTT', 'Dak Prescott', 'D. Prescott', 'Javonte U Williams'
-        -> 'dakprescott' / 'javontewilliams'
-
-        Strategy:
-        - strip accents
-        - drop punctuation / jersey numbers / obvious suffixes (JR, SR, II, etc.)
-        - smash to [a-z0-9] lowercase using first+last fallback
-        """
-        s = str(raw or "").strip()
-        s = _deaccent_local(s)
-        # remove leading jersey/# fragments
-        s = re.sub(r"^[0-9#\-\:\s]+", "", s)
-        # normalize spacing/punctuation
-        s = s.replace(",", " ")
-        s = re.sub(r"\s+", " ", s).strip()
-        # remove suffix tokens
-        tokens = [t for t in s.split() if t.upper() not in ("JR", "SR", "II", "III", "IV", "V")]
-        if not tokens:
-            tokens = [s]
-        all_joined = re.sub(r"[^a-z0-9]", "", "".join(tokens).lower())
-        core_joined = re.sub(r"[^a-z0-9]", "", (tokens[0] + tokens[-1]).lower())
-        return core_joined or all_joined
-
-    def _clean_team_key(raw: str) -> str:
-        """
-        Normalize team strings like:
-        'DAL', 'Dallas', 'Dallas Cowboys', 'Cowboys'
-        -> 'DAL'
-        """
-        TEAM_MAP = {
-            "ARI":"ARI","ARIZONA":"ARI","CARDINALS":"ARI","ARIZONA CARDINALS":"ARI",
-            "ATL":"ATL","ATLANTA":"ATL","FALCONS":"ATL","ATLANTA FALCONS":"ATL",
-            "BAL":"BAL","BALTIMORE":"BAL","RAVENS":"BAL","BALTIMORE RAVENS":"BAL",
-            "BUF":"BUF","BUFFALO":"BUF","BILLS":"BUF","BUFFALO BILLS":"BUF",
-            "CAR":"CAR","CAROLINA":"CAR","PANTHERS":"CAR","CAROLINA PANTHERS":"CAR",
-            "CHI":"CHI","CHICAGO":"CHI","BEARS":"CHI","CHICAGO BEARS":"CHI",
-            "CIN":"CIN","CINCINNATI":"CIN","BENGALS":"CIN","CINCINNATI BENGALS":"CIN",
-            "CLE":"CLE","CLEVELAND":"CLE","BROWNS":"CLE","CLEVELAND BROWNS":"CLE",
-            "DAL":"DAL","DALLAS":"DAL","COWBOYS":"DAL","DALLAS COWBOYS":"DAL",
-            "DEN":"DEN","DENVER":"DEN","BRONCOS":"DEN","DENVER BRONCOS":"DEN",
-            "DET":"DET","DETROIT":"DET","LIONS":"DET","DETROIT LIONS":"DET",
-            "GB":"GB","GNB":"GB","GREEN BAY":"GB","PACKERS":"GB","GREEN BAY PACKERS":"GB",
-            "HOU":"HOU","HOUSTON":"HOU","TEXANS":"HOU","HOUSTON TEXANS":"HOU",
-            "IND":"IND","INDIANAPOLIS":"IND","COLTS":"IND","INDIANAPOLIS COLTS":"IND",
-            "JAX":"JAX","JAC":"JAX","JACKSONVILLE":"JAX","JAGUARS":"JAX","JACKSONVILLE JAGUARS":"JAX",
-            "KC":"KC","KCC":"KC","KANSAS CITY":"KC","CHIEFS":"KC","KANSAS CITY CHIEFS":"KC",
-            "LAC":"LAC","CHARGERS":"LAC","LOS ANGELES CHARGERS":"LAC",
-            "LAR":"LAR","LA":"LAR","RAMS":"LAR","LOS ANGELES RAMS":"LAR",
-            "LV":"LV","LVR":"LV","RAIDERS":"LV","LAS VEGAS":"LV","LAS VEGAS RAIDERS":"LV",
-            "MIA":"MIA","MIAMI":"MIA","DOLPHINS":"MIA","MIAMI DOLPHINS":"MIA",
-            "MIN":"MIN","MINNESOTA":"MIN","VIKINGS":"MIN","MINNESOTA VIKINGS":"MIN",
-            "NE":"NE","NWE":"NE","NEW ENGLAND":"NE","PATRIOTS":"NE","NEW ENGLAND PATRIOTS":"NE",
-            "NO":"NO","NOR":"NO","NEW ORLEANS":"NO","SAINTS":"NO","NEW ORLEANS SAINTS":"NO",
-            "NYG":"NYG","NEW YORK GIANTS":"NYG","GIANTS":"NYG",
-            "NYJ":"NYJ","NEW YORK JETS":"NYJ","JETS":"NYJ",
-            "PHI":"PHI","PHILADELPHIA":"PHI","EAGLES":"PHI","PHILADELPHIA EAGLES":"PHI",
-            "PIT":"PIT","PITTSBURGH":"PIT","STEELERS":"PIT","PITTSBURGH STEELERS":"PIT",
-            "SEA":"SEA","SEATTLE":"SEA","SEAHAWKS":"SEA","SEATTLE SEAHAWKS":"SEA",
-            "SF":"SF","SFO":"SF","SAN FRANCISCO":"SF","49ERS":"SF","SAN FRANCISCO 49ERS":"SF",
-            "TB":"TB","TAM":"TB","TAMPA BAY":"TB","BUCCANEERS":"TB","TAMPA BAY BUCCANEERS":"TB",
-            "TEN":"TEN","TENNESSEE":"TEN","TITANS":"TEN","TENNESSEE TITANS":"TEN",
-            "WAS":"WAS","WSH":"WAS","WASHINGTON":"WAS","COMMANDERS":"WAS","WASHINGTON COMMANDERS":"WAS"
-        }
-        raw_up = str(raw or "").strip().upper()
-        if raw_up in TEAM_MAP:
-            return TEAM_MAP[raw_up]
-        raw_stripped = re.sub(r"[^A-Z0-9 ]+", "", raw_up).strip().upper()
-        if raw_stripped in TEAM_MAP:
-            return TEAM_MAP[raw_stripped]
-        return raw_up
-
-    # --- build keys on 'out' (the base frame we were passed in) ---
     enriched = out.copy()
+    enriched = _apply_player_name_cleaning(enriched, name_maps)
+    enriched["team"] = enriched["team"].astype(str).str.upper().str.strip()
 
-    # we REQUIRE that 'week' already exists in base;
-    # if it doesn't, we can't safely match week-specific opponents
-    if "week" not in enriched.columns:
-        debug_dir = Path("data") / "_debug"
-        debug_dir.mkdir(parents=True, exist_ok=True)
-        enriched.head(50).to_csv(debug_dir / "merge_failure_no_week_in_base.csv", index=False)
-        raise RuntimeError("[make_player_form] base/out frame has no 'week' column before matchup merge")
-
-    if "player_canonical" not in enriched.columns:
-        enriched["player_canonical"] = enriched["player"].apply(_canonicalize_player_name)
-    enriched["__week_key"] = pd.to_numeric(enriched["week"], errors="coerce")
-    enriched["__player_clean_key"] = (
-        enriched["player_canonical"]
-        .astype(str)
-        .map(_normalize_key)
-    )
-    enriched["__team_clean_key"] = (
-        enriched["team"]
-        .astype(str)
-        .map(_clean_team_key)
-    )
-
-    # --- build keys on the opponent map side ---
-    opp = opp.copy()
-    if "player_canonical" not in opp.columns:
-        opp["player_canonical"] = opp["player"].apply(_canonicalize_player_name)
-    opp["__player_clean_key"] = (
-        opp["player_canonical"]
-        .astype(str)
-        .map(_normalize_key)
-    )
-    opp["__team_clean_key"] = (
-        opp["team"]
-        .astype(str)
-        .map(_clean_team_key)
-    )
-    opp["__week_key"] = pd.to_numeric(opp["week"], errors="coerce")
-
-    # We need the merge to be one-week-specific: (player, team, week).
-    # Dedupe opp on that triple key so pandas is OK with many_to_one.
-    right_subset = (
-        opp[
-            [
-                "__player_clean_key",
-                "__team_clean_key",
-                "__week_key",
-                "week",
-                "opponent",
-            ]
-        ]
-        .drop_duplicates(
-            subset=["__player_clean_key", "__team_clean_key", "__week_key"],
-            keep="last",
-        )
-    )
+    if "week_inferred" not in enriched.columns:
+        enriched["week_inferred"] = pd.Series(pd.NA, index=enriched.index)
+    if "opponent_inferred" not in enriched.columns:
+        enriched["opponent_inferred"] = pd.Series(pd.NA, index=enriched.index)
 
     merged = enriched.merge(
-        right_subset,
+        opp_merge,
+        on=["player_clean_key", "team"],
         how="left",
-        left_on=["__player_clean_key", "__team_clean_key", "__week_key"],
-        right_on=["__player_clean_key", "__team_clean_key", "__week_key"],
-        validate="many_to_one",
+        suffixes=("", "_props"),
     )
 
-    # --- extract matchup columns safely ---
-    #
-    # After the merge, pandas may have created columns like:
-    #   week_x (from enriched/base),   week_y (from opp)
-    #   opponent_x / opponent_y
-    #
-    # We want to:
-    #   1. derive 'week_final' and 'opponent_final' from the RIGHT side (opp),
-    #   2. copy them back into canonical 'week' and 'opponent' columns,
-    #   3. detect if we actually mapped ANY opponents. If not, dump debug and hard-stop.
+    merged["week_final"] = merged["week_inferred"]
+    merged.loc[merged["week_final"].isna(), "week_final"] = merged["week_from_props"]
 
-    # Helper to pick a column if it exists
-    def _pick_col(frame, primary, fallback=None):
-        if primary in frame.columns:
-            return frame[primary]
-        if fallback and fallback in frame.columns:
-            return frame[fallback]
-        # otherwise return a Series of NaN
-        return pd.Series([pd.NA] * len(frame), index=frame.index)
-
-    # opponent from the RIGHT side (opp)
-    merged["opponent_final"] = _pick_col(
-        merged,
-        "opponent_y",  # typical suffix when both sides have 'opponent'
-        fallback="opponent"
-    ).astype(str).str.strip()
-
-    # numeric-ish week from the RIGHT side (opp)
-    merged["week_final_raw"] = _pick_col(
-        merged,
-        "week_y",   # typical suffix when both sides have 'week'
-        fallback="week"
-    )
-
-    # coerce week_final_raw to numeric where possible
-    merged["week_final"] = pd.to_numeric(merged["week_final_raw"], errors="coerce")
-
-    # if week_final is entirely NaN, we might still have a usable
-    # left-side 'week_x' from enriched. Use that as a fallback.
-    if merged["week_final"].isna().all():
-        merged["week_final"] = pd.to_numeric(
-            _pick_col(merged, "week_x", fallback="week"),
-            errors="coerce"
-        )
-
-    # Copy stabilized values into canonical columns that downstream code expects.
-    # 'week' stays numeric, 'opponent' is uppercase string or NA.
-    merged["week"] = merged["week_final"]
-    merged["opponent"] = merged["opponent_final"].where(
-        merged["opponent_final"].str.len() > 0,
-        pd.NA
-    ).str.upper()
-
-    # --- determine if we successfully mapped anything ---
-    # If literally nobody got a non-null opponent, that's still a fatal data error.
-    if merged["opponent"].isna().all():
-        debug_dir = Path("data") / "_debug"
-        debug_dir.mkdir(parents=True, exist_ok=True)
-
-        # write a debug preview that will ALWAYS work
-        debug_cols = []
-        for c in [
-            "player",
-            "team",
-            "week",
-            "opponent",
-            "__player_clean_key",
-            "__team_clean_key",
-            "__week_key",
-            "week_x",
-            "week_y",
-            "opponent_x",
-            "opponent_y",
-        ]:
-            if c in merged.columns and c not in debug_cols:
-                debug_cols.append(c)
-
-        merged[debug_cols].head(100).to_csv(
-            debug_dir / "merge_failure_preview.csv",
-            index=False
-        )
-        raise RuntimeError(
-            "[make_player_form] cannot assign opponent/week after keyed merge (player, team, week)"
-        )
-
-    # If we DID map at least someone, great. We can drop helper cols and continue.
-
-    cols_to_drop = [
-        "__player_clean_key",
-        "__team_clean_key",
-        "__week_key",
-        "week_x",
-        "week_y",
-        "opponent_x",
-        "opponent_y",
-        "week_final_raw",
-        "week_final",
-        "opponent_final",
+    merged["opponent_final"] = merged["opponent_inferred"]
+    merged.loc[merged["opponent_final"].isna(), "opponent_final"] = merged[
+        "opponent_from_props"
     ]
-    for col in cols_to_drop:
+
+    merged["week"] = merged["week_final"]
+    merged["opponent"] = merged["opponent_final"]
+
+    for col in ["week_from_props", "opponent_from_props", "week_final", "opponent_final"]:
         if col in merged.columns:
-            merged.drop(columns=[col], inplace=True, errors="ignore")
+            merged.drop(columns=[col], inplace=True)
+
+    for col in ["week_inferred", "opponent_inferred"]:
+        if col in merged.columns:
+            merged.drop(columns=[col], inplace=True)
+
+    total_rows = len(merged)
+    have_opp = merged["opponent"].notna().sum()
+    if have_opp == 0 and total_rows > 0:
+        raise RuntimeError("[make_player_form] opponent enrichment totally failed (0 rows)")
+
+    still_missing = merged[merged["opponent"].isna()].copy()
+    if not still_missing.empty:
+        debug_path = Path("data") / "_debug"
+        debug_path.mkdir(parents=True, exist_ok=True)
+        debug_file = debug_path / "opponent_unmatched.csv"
+        still_missing.to_csv(debug_file, index=False)
+        print(
+            "[make_player_form] WARNING: opponent enrichment incomplete: "
+            f"{len(still_missing)} players without opponents. Wrote debug rows -> {debug_file}"
+        )
+    else:
+        print("[make_player_form] opponent enrichment OK for all players")
 
     return merged
 def _is_empty(obj) -> bool:
@@ -743,15 +642,22 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
         if col in roles.columns:
             roles[col] = roles[col].astype(str)
     if "player" in roles.columns:
-        roles["player"] = roles["player"].map(_clean_name)
+        roles["player"] = roles["player"].map(_clean_name).map(standardize_full_name)
     roles["team"] = roles.get("team", "").astype(str).map(_canon_team)
     roles["role"] = roles.get("role", "").astype(str).str.upper().str.strip()
     if "position" not in roles.columns and "role" in roles.columns:
         roles["position"] = roles["role"].str.extract(r"([A-Z]+)")
 
-    if "player_canonical" not in roles.columns:
-        roles["player_canonical"] = roles["player"].apply(_canonicalize_player_name)
-    roles["player_clean_key"] = roles["player_canonical"].apply(_normalize_key)
+    roles["player_canonical"] = (
+        roles["player"]
+        .astype(str)
+        .str.lower()
+        .str.replace(r"[^a-z0-9 ]+", "", regex=True)
+        .str.strip()
+    )
+    roles["player_clean_key"] = roles["player_canonical"].str.replace(
+        r"\s+", "_", regex=True
+    )
 
     roles["team_key"] = (
         roles["team"]
@@ -760,18 +666,18 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
         .str.strip()
     )
 
-    merge_cols = ["player_canonical", "team_key"]
+    merge_cols = ["player_clean_key", "team_key"]
     for extra in ["role", "position", "position_guess"]:
         if extra in roles.columns:
             merge_cols.append(extra)
 
     roles_subset = roles[merge_cols].drop_duplicates(
-        ["player_canonical", "team_key"], keep="first"
+        ["player_clean_key", "team_key"], keep="first"
     )
 
     pf = pf.merge(
         roles_subset,
-        on=["player_canonical", "team_key"],
+        on=["player_clean_key", "team_key"],
         how="left",
         suffixes=("", "_roles"),
     )
@@ -1383,9 +1289,12 @@ def _merge_roles_csv(df: pd.DataFrame) -> pd.DataFrame:
     r["player"] = _norm_name(r["player"].astype(str))
     r["team"] = r["team"].astype(str).str.upper().str.strip().map(_canon_team)
     r = r[r["team"].isin(VALID)]
+    name_maps = build_name_canonical_map()
+    r = _apply_player_name_cleaning(r, name_maps)
+    df = _apply_player_name_cleaning(df, name_maps)
     out = df.merge(
-        r[["player", "team", "opponent", "role"]],
-        on=["player", "team"],
+        r[["player_clean_key", "team", "opponent", "role"]],
+        on=["player_clean_key", "team"],
         how="left",
         suffixes=("", "_roles"),
     )
@@ -1538,6 +1447,8 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     )
     if off_col is None:
         raise RuntimeError("No offense team column in PBP (posteam/offense_team).")
+
+    name_maps = build_name_canonical_map()
 
     # Opponent once (remove duplicate logic)
     opp_col = (
@@ -1738,6 +1649,8 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         ],
     )
 
+    rply = _apply_player_name_cleaning(rply, name_maps)
+
     # RUSHING
     is_rush = pbp.get("rush")
     if is_rush is None:
@@ -1851,6 +1764,8 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         ],
     )
 
+    rru = _apply_player_name_cleaning(rru, name_maps)
+
     # QUARTERBACK
     qb_df = pd.DataFrame(
         columns=[
@@ -1913,11 +1828,57 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
                 ]
             ]
 
-    # Merge all
-    base = pd.merge(rply, rru, on=["team", "opponent", "player"], how="outer")
-    base = pd.merge(base, qb_df, on=["team", "opponent", "player"], how="left")
+    qb_df = _apply_player_name_cleaning(qb_df, name_maps)
+
+    # Merge all using canonical player keys
+    merge_keys = ["team", "opponent", "player_clean_key"]
+    base = pd.merge(
+        rply,
+        rru,
+        on=merge_keys,
+        how="outer",
+        suffixes=("_rec", "_rush"),
+    )
+
+    if "player_rec" in base.columns or "player_rush" in base.columns:
+        base["player"] = base.get("player_rec").combine_first(base.get("player_rush"))
+        base.drop(columns=[c for c in ["player_rec", "player_rush"] if c in base.columns], inplace=True)
+
+    if "player_canonical_rec" in base.columns or "player_canonical_rush" in base.columns:
+        base["player_canonical"] = base.get("player_canonical_rec").combine_first(
+            base.get("player_canonical_rush")
+        )
+        base.drop(
+            columns=[
+                c
+                for c in ["player_canonical_rec", "player_canonical_rush"]
+                if c in base.columns
+            ],
+            inplace=True,
+        )
+
+    base = pd.merge(
+        base,
+        qb_df,
+        on=merge_keys,
+        how="left",
+        suffixes=("", "_qb"),
+    )
+
+    if "player_qb" in base.columns:
+        base["player"] = base["player"].combine_first(base["player_qb"])
+        base.drop(columns=["player_qb"], inplace=True)
+
+    if "player_canonical_qb" in base.columns:
+        base["player_canonical"] = base["player_canonical"].combine_first(
+            base["player_canonical_qb"]
+        )
+        base.drop(columns=["player_canonical_qb"], inplace=True)
+
     base["rz_share"] = base[["rz_tgt_share", "rz_rush_share"]].max(axis=1)
     base["season"] = int(season)
+
+    base = _apply_player_name_cleaning(base, name_maps)
 
     print("[pf] base after concat/merge:", len(base))
 
@@ -1927,8 +1888,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
 
     # Normalize keys
     base = _ensure_cols(base, ["opponent"])
-    base["player"] = _norm_name(base["player"].astype(str))
-    base = base.loc[_valid_player_mask(base["player"])].copy()
+    base = base.loc[_valid_player_mask(base["player"].astype(str))].copy()
     base["team"] = base["team"].astype(str).str.upper().str.strip().map(_canon_team)
 
     opp_raw = base.get("opponent")
@@ -1947,7 +1907,16 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         ro["player"] = _norm_name(ro["player"].astype(str))
         ro["team"] = ro["team"].astype(str).str.upper().str.strip().map(_canon_team)
         ro = ro[ro["team"].isin(VALID)]
-        base = base.merge(ro, on=["player", "team"], how="left", suffixes=("", "_ro"))
+        ro = _apply_player_name_cleaning(ro, name_maps)
+        base = base.merge(
+            ro,
+            on=["player_clean_key", "team"],
+            how="left",
+            suffixes=("", "_ro"),
+        )
+        if "player_ro" in base.columns:
+            base["player"] = base["player"].combine_first(base["player_ro"])
+            base.drop(columns=["player_ro"], inplace=True)
         if "position_ro" in base.columns:
             base["position"] = base["position"].combine_first(base["position_ro"])
             base.drop(columns=["position_ro"], inplace=True, errors="ignore")
@@ -1957,10 +1926,21 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         pm = _load_players_master()
         if not pm.empty:
             pm["player"] = _norm_name(pm["player"].astype(str))
-            base = base.merge(pm, on="player", how="left", suffixes=("", "_pm"))
+            pm = _apply_player_name_cleaning(pm, name_maps)
+            base = base.merge(
+                pm,
+                on="player_clean_key",
+                how="left",
+                suffixes=("", "_pm"),
+            )
+            if "player_pm" in base.columns:
+                base["player"] = base["player"].combine_first(base["player_pm"])
+                base.drop(columns=["player_pm"], inplace=True)
             if "position_pm" in base.columns:
                 base["position"] = base["position"].combine_first(base["position_pm"])
                 base.drop(columns=["position_pm"], inplace=True, errors="ignore")
+
+    base = _apply_player_name_cleaning(base, name_maps)
 
     # Final fallback: usage-based family inference → write into position when still missing
     if base["position"].isna().any():
@@ -1975,16 +1955,9 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         .str.strip()
     )
 
-    # Canonicalize player names for stable identity across sources
-    if "player_canonical" not in base.columns:
-        base["player_canonical"] = base["player"].apply(_canonicalize_player_name)
-    else:
-        base["player_canonical"] = base["player_canonical"].apply(_canonicalize_player_name)
-
     if "team" in base.columns:
         base["team"] = base["team"].astype(str).str.upper().str.strip()
         base.loc[base["team"].isin(["", "NAN", "NONE", "NULL"]), "team"] = pd.NA
-    base["player_clean_key"] = base["player_canonical"].apply(_normalize_key)
     for raw in base.get("player", pd.Series(dtype=object)).dropna().unique():
         log_unmapped_variant(raw)
 
@@ -2007,7 +1980,19 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         base = _infer_roles_minimal(base)
 
     base = _ensure_cols(base, FINAL_COLS)
-    base = _inject_week_opponent_and_roles(base)
+
+    if "opponent_inferred" not in base.columns:
+        base["opponent_inferred"] = pd.Series(pd.NA, index=base.index)
+    if "week_inferred" not in base.columns:
+        base["week_inferred"] = pd.Series(pd.NA, index=base.index)
+    if "opponent" in base.columns:
+        mask = base["opponent_inferred"].isna()
+        base.loc[mask, "opponent_inferred"] = base.loc[mask, "opponent"]
+    if "week" in base.columns:
+        mask = base["week_inferred"].isna()
+        base.loc[mask, "week_inferred"] = base.loc[mask, "week"]
+
+    base = _inject_week_opponent_and_roles(base, name_maps)
     if "week" in base.columns:
         base["week"] = pd.to_numeric(base["week"], errors="coerce")
     if "opponent" in base.columns:
