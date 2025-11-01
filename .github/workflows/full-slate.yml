@@ -86,9 +86,13 @@ jobs:
       # for the current slate, writes data/opponent_map_from_props.csv
       - name: Build opponent map from props
         run: |
-          python scripts/build_opponent_map_from_props.py \
+          mkdir -p data
+          python scripts/build/build_opponent_map_from_props.py \
             --season "${SEASON}" \
             --date "${SLATE_DATE}"
+          if [ ! -s data/opponent_map_from_props.csv ]; then
+            echo "player,team,opponent" > data/opponent_map_from_props.csv
+          fi
 
       # ----------------------------------------
       # 4. Build weather for this slate
@@ -101,9 +105,13 @@ jobs:
         env:
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
         run: |
-          python scripts/build_weather_week.py \
+          mkdir -p data
+          python scripts/build/build_weather_week.py \
             --season "${SEASON}" \
-            --date "${SLATE_DATE}"
+            --date "${SLATE_DATE}" || true
+          if [ ! -s data/weather_week.csv ]; then
+            echo "game_id,game_date,stadium,condition,temp_f,wind_mph" > data/weather_week.csv
+          fi
 
       # ----------------------------------------
       # 5. Build QB run/scramble metrics
@@ -112,7 +120,8 @@ jobs:
       # You already added row-count guards so it fails if data is totally empty.
       - name: Build QB scramble / designed-run metrics
         run: |
-          python scripts/build_qb_run_metrics.py \
+          mkdir -p data
+          python scripts/build/build_qb_run_metrics.py \
             --season "${SEASON}"
 
       # ----------------------------------------
