@@ -1,4 +1,4 @@
-name: full-slate
+name: Full Slate
 
 on:
   workflow_dispatch:
@@ -19,29 +19,21 @@ concurrency:
 permissions:
   contents: read
 
-# Global env inherits into every job
-env:
-  PYTHONPATH: ${{ github.workspace }}
-  PYTHONDONTWRITEBYTECODE: "1"
-  PIP_DISABLE_PIP_VERSION_CHECK: "1"
-
-  # external keys / creds
-  APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
-  ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-  OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
-  MSF_KEY: ${{ secrets.MSF_KEY }}
-  MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
-  NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
-  NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
-
-  # dynamic inputs
-  SEASON: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.season != '' ? github.event.inputs.season : '2025' }}
-  SLATE_DATE: ${{ github.event_name == 'workflow_dispatch' ? github.event.inputs.date : '' }}
-
 jobs:
-
-  setup:
+  build:
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      PYTHONDONTWRITEBYTECODE: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
+      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+      OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+      MSF_KEY: ${{ secrets.MSF_KEY }}
+      MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
+      NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
+      NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -51,215 +43,139 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          pip install pyyaml
 
-      - name: Prepare workspace directories
+      ######################################################
+      # A. RAW INPUT / SCRAPERS
+      ######################################################
+
+      # 1. Depth charts / roles (OurLads only)
+      - name: Build depth roles (OurLads only)
         run: |
-          mkdir -p data data/_debug data/raw data/intermediate data/final outputs logs artifacts
+          python scripts/providers/ourlads_depth.py
+        # This must write data/roles_ourlads.csv
 
-  gather_inputs:
-    runs-on: ubuntu-latest
-    needs: setup
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
+      # 2. Props-based opponent mapping (player -> team -> opponent)
       - name: Build opponent map from props
         run: |
-          python scripts/build/build_opponent_map_from_props.py "$SEASON"
+          python scripts/build/build_opponent_map_from_props.py "${{ github.event.inputs.season }}"
+        # Writes data/opponent_map_from_props.csv
+        # Also writes data/_debug/opponent_sample.csv
 
-      - name: Build depth / roles (OurLads)
+      # 3. Schedule / lines
+      - name: Build Game Lines
         run: |
-          python scripts/providers/ourlads_depth.py --season "$SEASON"
+          python scripts/build_game_lines_from_schedule.py --season "${{ github.event.inputs.season }}"
 
-      - name: Build QB run metrics
+      # 4. Fetch Odds / Props (can rate-limit but should NOT kill the job)
+      - name: Fetch Odds (Odds API)
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
         run: |
-          python scripts/build/build_qb_run_metrics.py
+          python scripts/fetch_game_lines_oddsapi.py
+        continue-on-error: true
 
-      - name: Build weather with fallback
+      # 5. SharpFootball metrics (coverage, pace, trench, tendencies)
+      - name: Sharp Football team metrics
         run: |
-          mkdir -p data
-          python scripts/build/build_weather_week.py || true
-          if [ ! -s data/weather_week.csv ]; then
-            printf "game_id,tempF,windMph,precipProb\n" > data/weather_week.csv
-          fi
+          python scripts/providers/sharpfootball_pull.py --season "${{ github.event.inputs.season }}" --dump-html
+        # This step must now S U C C E E D and write data/sharp_team_form.csv
+        # After recent patches, it must also include neutral_pace, coverage_man_rate, coverage_zone_rate
 
-      - name: Upload raw input artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: step1-inputs
-          path: data/*
-          if-no-files-found: warn
-
-  build_forms:
-    runs-on: ubuntu-latest
-    needs: gather_inputs
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
+      # 6. Stadium / weather forecast for this slate
+      # NOTE: this calls the new weather pipeline which should:
+      #  - load the current slate (home, away, kickoff_local)
+      #  - map stadium location
+      #  - call OpenWeather (or your configured weather source)
+      #  - write data/weather_week.csv
+      - name: Build per-game weather
+        env:
+          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python scripts/build_weather_week.py
+        continue-on-error: false  # weather is required for final model
 
-      - name: Build player form base
+      ######################################################
+      # B. FEATURE BUILDERS
+      ######################################################
+
+      # 7. Build player_form (player usage, roles, opp enrichment)
+      - name: Build player form
         run: |
-          python scripts/make_player_form.py --season "$SEASON"
+          python scripts/make_player_form.py --season "${{ github.event.inputs.season }}"
+        # Writes data/player_form.csv, data/player_form_consensus.csv, data/unmatched_roles_merge.csv
 
-      - name: Enrich player form
-        run: |
-          python scripts/enrich_player_form.py
-
+      # 8. Build team_form (merge Sharp + nflverse team stats + PROE etc.)
       - name: Build team form
         run: |
-          python scripts/make_team_form.py --season "$SEASON"
+          python scripts/make_team_form.py --season "${{ github.event.inputs.season }}"
+        # Writes data/team_form.csv
+        # make_team_form.py is responsible for merging sharp_team_form.csv
+        # and must expose: neutral_pace, coverage_man_rate, coverage_zone_rate, pass_rate_over_expected, etc.
 
-      - name: Upload form artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: step2-forms
-          path: |
-            data/player_form.csv
-            data/player_form_consensus.csv
-            data/team_form.csv
-          if-no-files-found: error
-
-  run_pipeline:
-    runs-on: ubuntu-latest
-    needs: build_forms
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
+      # 9. QB run/scramble metrics, etc.
+      - name: Build QB run/scramble metrics
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python scripts/build/build_qb_run_metrics.py
+        # Should write data/qb_run_metrics.csv (qb_designed_runs, scramble_rate, etc.)
 
-      - name: Build metrics-ready dataset
+      ######################################################
+      # C. METRICS READY + SANITY GATE
+      ######################################################
+
+      # 10. Merge all final inputs into metrics_ready.csv
+      #     This script should read:
+      #     - data/team_form.csv
+      #     - data/player_form.csv
+      #     - data/weather_week.csv
+      #     - data/qb_run_metrics.csv
+      #     - any other per-game/per-team context we need
+      - name: Build metrics_ready
         run: |
           python scripts/make_metrics.py
+        # Writes data/metrics_ready.csv
 
-      - name: Upload pipeline artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: step3-pipeline
-          path: |
-            data/*.csv
-            outputs/**
-          if-no-files-found: warn
-
-  metrics_ready:
-    runs-on: ubuntu-latest
-    needs: run_pipeline
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
+      # 11. Sanity Gate (HARD STOP IF BAD)
+      #     This should assert:
+      #     - critical columns exist in team_form.csv (neutral_pace, coverage_man_rate, coverage_zone_rate, pass_rate_over_expected)
+      #     - critical columns exist in metrics_ready.csv
+      #     - weather_week.csv is not empty
+      #     - opponent_map_from_props.csv not empty
+      #
+      #     If any required dataset is missing or empty, exit 1 to STOP the pipeline
+      - name: Sanity gate
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python scripts/utils/sanity_gate.py
+        continue-on-error: false
 
-      - name: Validate metrics output
-        run: |
-          python scripts/validate_metrics.py
+      ######################################################
+      # D. PRICING / MODEL (FINAL)
+      ######################################################
 
-      - name: Upload validation artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: step4-validation
-          path: logs
-          if-no-files-found: warn
-
-  pricing:
-    runs-on: ubuntu-latest
-    needs: metrics_ready
-    # only run pricing if metrics_ready didn't blow up
-    if: ${{ needs.metrics_ready.result == 'success' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Run pricing models
+      # 12. Elite model pricing (now that all inputs exist)
+      - name: Elite model | Pricing
         run: |
           python -m model.cli --config config.yaml
+        env:
+          PYTHONUNBUFFERED: "1"
 
-      - name: Assemble slips and books
-        run: |
-          python -m engine --season "$SEASON" --date "$SLATE_DATE" --bookmakers=""
+      ######################################################
+      # E. ARTIFACTS
+      ######################################################
 
-      - name: Upload pricing artifacts
+      - name: Upload artifacts (always)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: step5-pricing
+          name: run_${{ github.run_id }}
           path: |
             outputs/**
             data/*.csv
-          if-no-files-found: warn
-
-  upload_artifacts:
-    runs-on: ubuntu-latest
-    needs:
-      - gather_inputs
-      - build_forms
-      - run_pipeline
-      - metrics_ready
-      - pricing
-    if: always()
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Bundle run artifacts
-        run: |
-          mkdir -p artifacts
-          cp -r data artifacts/data || true
-          cp -r outputs artifacts/outputs || true
-          cp -r logs artifacts/logs || true
-
-      - name: Upload full debug bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: full-debug-bundle
-          path: artifacts
+            data/_debug/**
           if-no-files-found: warn
