@@ -24,12 +24,12 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import re
 import sys
 import warnings
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-import re
 import unicodedata
 
 import numpy as np
@@ -45,9 +45,12 @@ logger = logging.getLogger(__name__)
 
 
 DATA_DIR = "data"
-OPP_PATH = Path("data") / "opponent_map_from_props.csv"
-ROLES_PATH = Path("data") / "roles_ourlads.csv"
-GAMES_PATH = Path("data") / "game_lines.csv"
+ROLES_PATH = Path("data/roles_ourlads.csv")
+OPPONENT_MAP_PATH = Path("data/opponent_map_from_props.csv")
+SCHEDULE_GAMES_PATH = Path("data/games.csv")
+PLAYER_FORM_OUT = Path("data/player_form.csv")
+PLAYER_FORM_CONSENSUS_OUT = Path("data/player_form_consensus.csv")
+DEBUG_MISSING_OPP = Path("data/_debug/player_missing_opponent.csv")
 
 
 CANON_OVERRIDES = {
@@ -107,6 +110,36 @@ def _drop_middle_initials(name: str) -> str:
             cleaned.append(mid.replace(".", ""))
     cleaned.append(last_token)
     return " ".join(cleaned)
+
+
+def normalize_player_name(raw: Optional[str]) -> Optional[str]:
+    """Normalize player names into a clean 'First Last' form."""
+
+    if not isinstance(raw, str):
+        return raw
+
+    cleaned = re.sub(r"[^A-Za-z\s]", " ", raw).strip()
+    cleaned = re.sub(r"\s+", " ", cleaned)
+
+    parts = cleaned.split()
+    if len(parts) >= 2:
+        first = parts[0]
+        last = parts[-1]
+
+        if len(first) == 1 and len(parts) >= 3:
+            first = parts[1]
+            last = parts[-1]
+
+        core_parts = [p for p in parts if len(p) > 1]
+        if len(core_parts) >= 2:
+            first = core_parts[0]
+            last = core_parts[-1]
+
+        final = f"{first.title()} {last.title()}".strip()
+    else:
+        final = cleaned.title()
+
+    return final
 
 
 def standardize_full_name(raw: str) -> str:
@@ -245,6 +278,20 @@ def ensure_canonical(
     return out
 
 
+def _apply_canonical_names(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    if "player" in df.columns:
+        df["player_canonical"] = df["player"].map(normalize_player_name)
+    elif "player_name" in df.columns:
+        df["player_canonical"] = df["player_name"].map(normalize_player_name)
+    else:
+        if "player_canonical" in df.columns:
+            df["player_canonical"] = df["player_canonical"].map(normalize_player_name)
+        else:
+            df["player_canonical"] = None
+    return df
+
+
 def assert_no_duplicate_columns(df: pd.DataFrame, label: str) -> None:
     """Raise if duplicate columns remain after a merge."""
 
@@ -336,8 +383,8 @@ def build_name_canonical_map() -> dict:
     dfs = []
     if ROLES_PATH.exists():
         dfs.append(pd.read_csv(ROLES_PATH))
-    if OPP_PATH.exists():
-        dfs.append(pd.read_csv(OPP_PATH))
+    if OPPONENT_MAP_PATH.exists():
+        dfs.append(pd.read_csv(OPPONENT_MAP_PATH))
     if not dfs:
         return {}
 
@@ -604,17 +651,23 @@ def _inject_week_opponent_and_roles(
 ) -> pd.DataFrame:
     """Fill opponent/week using inferred values with props fallbacks."""
 
-    opp_path = Path("data") / "opponent_map_from_props.csv"
-    if not opp_path.exists():
-        raise RuntimeError("[make_player_form] opponent_map_from_props.csv not found")
+    if not OPPONENT_MAP_PATH.exists():
+        print(
+            f"[make_player_form] WARN opponent map missing at {OPPONENT_MAP_PATH}; skipping props alignment",
+            file=sys.stderr,
+        )
+        return out
 
-    opp = pd.read_csv(opp_path)
+    opp = pd.read_csv(OPPONENT_MAP_PATH)
     required_cols = {"player", "team", "week", "opponent"}
     missing = required_cols - set(opp.columns)
     if missing:
-        raise RuntimeError(
-            f"[make_player_form] opponent_map_from_props.csv missing columns: {sorted(missing)}"
+        print(
+            "[make_player_form] WARN opponent_map_from_props.csv missing columns: "
+            f"{sorted(missing)}",
+            file=sys.stderr,
         )
+        return out
 
     opp = _apply_player_name_cleaning(opp, name_maps)
     opp = ensure_canonical(opp, player_col="player", team_col="team")
@@ -662,7 +715,10 @@ def _inject_week_opponent_and_roles(
     total_rows = len(merged)
     have_opp = merged["opponent"].notna().sum()
     if have_opp == 0 and total_rows > 0:
-        raise RuntimeError("[make_player_form] opponent enrichment totally failed (0 rows)")
+        print(
+            "[make_player_form] WARN opponent enrichment from props returned 0 opponents",
+            file=sys.stderr,
+        )
 
     still_missing = merged[merged["opponent"].isna()].copy()
     if not still_missing.empty:
@@ -678,6 +734,71 @@ def _inject_week_opponent_and_roles(
         print("[make_player_form] opponent enrichment OK for all players")
 
     return merged
+
+
+def _build_schedule_opponent_lookup() -> Dict[Tuple[str, int], str]:
+    """Create a lookup of (team_abbrev, week) -> opponent_abbrev from schedule CSV."""
+
+    if not SCHEDULE_GAMES_PATH.exists():
+        return {}
+
+    games = pd.read_csv(SCHEDULE_GAMES_PATH)
+    if games.empty:
+        return {}
+
+    lu: Dict[Tuple[str, int], str] = {}
+
+    for _, row in games.iterrows():
+        try:
+            wk = int(row["week"])
+        except Exception:
+            continue
+        home = str(row.get("home_team", "")).strip().upper()
+        away = str(row.get("away_team", "")).strip().upper()
+        if not home or not away:
+            continue
+        lu[(home, wk)] = away
+        lu[(away, wk)] = home
+
+    return lu
+
+
+def _assign_team_and_opp_via_schedule(
+    df: pd.DataFrame, sched_lu: Dict[Tuple[str, int], str]
+) -> pd.DataFrame:
+    """Use schedule lookup to backfill opponent when missing."""
+
+    if not sched_lu:
+        return df
+
+    df = df.copy()
+
+    if "week_inferred" in df.columns:
+        df["__wk"] = df["week_inferred"]
+    else:
+        df["__wk"] = df.get("week")
+
+    if "team" not in df.columns:
+        df["team"] = pd.NA
+    df["__team_key"] = df["team"].astype(str).str.upper().str.strip()
+
+    missing_mask = df["opponent"].isna() | (df["opponent"].astype(str).str.strip() == "")
+
+    def _lookup(row: pd.Series) -> Optional[str]:
+        team_key = row.get("__team_key")
+        week_val = row.get("__wk")
+        if pd.isna(team_key) or pd.isna(week_val):
+            return None
+        try:
+            week_int = int(float(week_val))
+        except (TypeError, ValueError):
+            return None
+        return sched_lu.get((str(team_key).upper().strip(), week_int))
+
+    df.loc[missing_mask, "opponent"] = df.loc[missing_mask].apply(_lookup, axis=1)
+
+    df = df.drop(columns=["__wk", "__team_key"], errors="ignore")
+    return df
 def _is_empty(obj) -> bool:
     try:
         return obj is None or (hasattr(obj, "__len__") and len(obj) == 0)
@@ -2019,6 +2140,7 @@ def build_player_form(season: int = 2025, slate_date: str | None = None) -> pd.D
     base["season"] = int(season)
 
     base = _apply_player_name_cleaning(base, name_maps)
+    base = _apply_canonical_names(base)
 
     print("[pf] base after concat/merge:", len(base))
 
@@ -2162,7 +2284,35 @@ def build_player_form(season: int = 2025, slate_date: str | None = None) -> pd.D
         base["week_key"] = -1
 
     out = base.copy()
+    out = _apply_canonical_names(out)
     out = _enrich_team_and_opponent_from_props(out, season)
+    sched_lu = _build_schedule_opponent_lookup()
+    out = _assign_team_and_opp_via_schedule(out, sched_lu)
+
+    if "opponent" not in out.columns:
+        out["opponent"] = pd.NA
+    if "team" not in out.columns:
+        out["team"] = pd.NA
+
+    missing_mask = (
+        out["opponent"].isna()
+        | out["opponent"].astype(str).str.strip().eq("")
+        | out["team"].isna()
+        | out["team"].astype(str).str.strip().eq("")
+    )
+
+    debug_rows = out.loc[missing_mask].copy()
+    if not debug_rows.empty:
+        DEBUG_MISSING_OPP.parent.mkdir(parents=True, exist_ok=True)
+        debug_rows.to_csv(DEBUG_MISSING_OPP, index=False)
+        print(
+            "[make_player_form] WARN missing team/opponent for",
+            len(debug_rows),
+            "players; wrote debug rows",
+            DEBUG_MISSING_OPP,
+            file=sys.stderr,
+        )
+
     if "week" in out.columns:
         out["week"] = pd.to_numeric(out["week"], errors="coerce")
 
@@ -2283,7 +2433,7 @@ def _aggregate_player_weeks(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _load_props_opponent_map() -> pd.DataFrame:
-    base = _read_csv_safe(str(OPP_PATH))
+    base = _read_csv_safe(str(OPPONENT_MAP_PATH))
     if base.empty:
         return pd.DataFrame(
             columns=[
@@ -2900,108 +3050,85 @@ def _attach_consensus_keys(df: pd.DataFrame) -> pd.DataFrame:
 
 def _build_grouped_consensus(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
-        return pd.DataFrame(
-            columns=[
-                "player",
-                "team",
-                "week",
-                "display_name",
-                "targets",
-                "carries",
-                "air_yards",
-                "redzone_tgts",
-                "routes",
-                "routes_share",
-                "target_share",
-                "carry_share",
-                "slot_rate",
-                "wide_rate",
-                "aDOT",
-                "team_snaps",
-                "role",
-                "opponent",
-            ]
-        )
+        return pd.DataFrame()
 
     working = df.copy()
-    if "player_name" not in working.columns:
-        working["player_name"] = working.get("player", "")
+    if "player" not in working.columns and "canonical_player_name" in working.columns:
+        working["player"] = working["canonical_player_name"]
 
-    agg_map = {
+    required_group_cols = ["player_canonical", "team", "opponent", "position"]
+    for col in required_group_cols:
+        if col not in working.columns:
+            working[col] = pd.NA
+
+    group_cols = required_group_cols
+
+    agg_spec: Dict[str, str] = {
+        "player": "first",
+        "role": "first",
+        "week": "max",
         "targets": "sum",
-        "carries": "sum",
-        "air_yards": "sum",
-        "redzone_tgts": "sum",
         "routes": "sum",
-        "routes_share": "mean",
-        "target_share": "mean",
-        "carry_share": "mean",
-        "slot_rate": "mean",
-        "wide_rate": "mean",
-        "aDOT": "mean",
-        "team_snaps": "mean",
-        "role": "max",
-        "opponent": "first",
+        "receptions": "sum",
+        "rec_yards": "sum",
+        "rushes": "sum",
+        "rush_yards": "sum",
+        "pass_att": "sum",
+        "pass_yards": "sum",
+        "dropbacks": "sum",
+        "team_targets": "mean",
+        "team_dropbacks": "mean",
+        "team_rushes": "mean",
+        "tgt_share": "mean",
+        "route_rate": "mean",
+        "rush_share": "mean",
+        "yprr": "mean",
+        "ypt": "mean",
+        "ypc": "mean",
+        "ypa": "mean",
+        "receptions_per_target": "mean",
+        "rz_share": "mean",
+        "rz_tgt_share": "mean",
+        "rz_rush_share": "mean",
     }
 
-    for col in agg_map.keys():
-        if col not in working.columns:
-            working[col] = np.nan
+    available_agg_spec = {
+        col: fn
+        for col, fn in agg_spec.items()
+        if col in working.columns and col not in group_cols
+    }
 
-    group_cols = ["player_canonical", "team_key", "week_key"]
+    if not available_agg_spec:
+        grouped = working[group_cols].drop_duplicates().reset_index(drop=True)
+    else:
+        grouped = (
+            working.groupby(group_cols, dropna=False)
+            .agg(available_agg_spec)
+            .reset_index()
+        )
 
-    consensus = (
-        working.groupby(group_cols, dropna=False)
-        .agg({col: agg_map[col] for col in agg_map.keys()})
-        .reset_index()
-    )
+    grouped = grouped.loc[:, ~grouped.columns.duplicated()]
 
-    def _mode_or_first(series: pd.Series) -> str:
-        counts = series.dropna().value_counts()
-        if not counts.empty:
-            return counts.index[0]
-        series = series.astype(str)
-        return series.iloc[0] if len(series) else ""
+    if "week" in grouped.columns:
+        grouped["week"] = (
+            pd.to_numeric(grouped["week"], errors="coerce").astype("Int64")
+        )
 
-    name_lookup = (
-        working.groupby(group_cols)["player_canonical"]
-        .agg(_mode_or_first)
-        .reset_index()
-        .rename(columns={"player_canonical": "display_name"})
-    )
+    if "player" in grouped.columns and "player_canonical" in grouped.columns:
+        grouped["player"] = grouped["player"].fillna(grouped["player_canonical"])
 
-    consensus = consensus.merge(name_lookup, on=group_cols, how="left")
-    consensus = consensus.rename(
-        columns={
-            "player_canonical": "player",
-            "team_key": "team",
-            "week_key": "week",
-        }
-    )
-
-    desired_order = [
+    ordered_prefix = [
+        "player_canonical",
         "player",
         "team",
-        "week",
-        "display_name",
-        "targets",
-        "carries",
-        "air_yards",
-        "redzone_tgts",
-        "routes",
-        "routes_share",
-        "target_share",
-        "carry_share",
-        "slot_rate",
-        "wide_rate",
-        "aDOT",
-        "team_snaps",
-        "role",
         "opponent",
+        "position",
+        "role",
+        "week",
     ]
-    existing = [c for c in desired_order if c in consensus.columns]
-    remaining = [c for c in consensus.columns if c not in existing]
-    return consensus[existing + remaining]
+    existing = [c for c in ordered_prefix if c in grouped.columns]
+    remaining = [c for c in grouped.columns if c not in existing]
+    return grouped[existing + remaining]
 
 
 def _enforce_player_form_schema(df: pd.DataFrame) -> pd.DataFrame:
@@ -3144,26 +3271,21 @@ def _write_player_form_outputs(df: pd.DataFrame) -> None:
 
     assert_no_duplicate_columns(df, "final player_form before write")
 
-    working = df.copy()
-    if "player_name" not in working.columns:
-        working["player_name"] = working.get("player", "")
-
-    working = _attach_consensus_keys(working)
-    consensus = _build_grouped_consensus(working)
-
-    working = _ensure_cols(working, FINAL_COLS)
-    player_form = _enforce_player_form_schema(working)
+    df_out = _ensure_cols(df.copy(), FINAL_COLS)
+    player_form = _enforce_player_form_schema(df_out)
     if player_form.empty:
         raise RuntimeError("[make_player_form] final player_form empty; aborting run")
 
-    _safe_mkdir(DATA_DIR)
-    player_form.to_csv("data/player_form.csv", index=False)
-    consensus = _enforce_consensus_schema(consensus)
-    consensus.to_csv("data/player_form_consensus.csv", index=False)
+    PLAYER_FORM_OUT.parent.mkdir(parents=True, exist_ok=True)
+    player_form.to_csv(PLAYER_FORM_OUT, index=False)
 
-    print(f"[make_player_form] wrote data/player_form.csv ({len(player_form)} rows raw)")
+    consensus = _build_grouped_consensus(player_form)
+    PLAYER_FORM_CONSENSUS_OUT.parent.mkdir(parents=True, exist_ok=True)
+    consensus.to_csv(PLAYER_FORM_CONSENSUS_OUT, index=False)
+
+    print(f"[make_player_form] wrote {len(player_form)} rows -> {PLAYER_FORM_OUT}")
     print(
-        f"[make_player_form] wrote data/player_form_consensus.csv ({len(consensus)} rows grouped)"
+        f"[make_player_form] wrote {len(consensus)} rows -> {PLAYER_FORM_CONSENSUS_OUT}"
     )
 
 
