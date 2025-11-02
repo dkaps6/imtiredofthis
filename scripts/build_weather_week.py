@@ -9,14 +9,21 @@
 # IMPORTANT:
 #   You MUST set OPENWEATHER_API_KEY via env in the workflow step that calls this script.
 
-import os
-import requests
-import pandas as pd
+import sys
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from scripts.stadium_locations import STADIUM_LOCATION
+import pandas as pd
+import requests
+
+from scripts.utils.stadium_locations import STADIUM_LOCATION
 
 OUT_PATH = Path("data") / "weather_week.csv"
 

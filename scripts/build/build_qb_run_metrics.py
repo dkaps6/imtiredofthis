@@ -19,9 +19,12 @@
 # - "Snaps" proxy = dropbacks + all QB rush attempts (scrambles + designed). This aligns with QB involvement on offensive plays.
 # - Designed runs exclude scrambles and kneels: rush_attempt==1 & qb_scramble!=1 & qb_kneel!=1 & rusher is QB.
 
-from __future__ import annotations
-#
+import sys
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 import pandas as pd
 import numpy as np

@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 import sys
-import time
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+import time
 
 import pandas as pd
 import requests

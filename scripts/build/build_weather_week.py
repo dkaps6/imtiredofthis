@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Build a weekly NFL weather dataset using nflverse schedules and NWS data.
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+__doc__ = """Build a weekly NFL weather dataset using nflverse schedules and NWS data.
 
 The script performs the following steps:
 
@@ -16,13 +23,9 @@ Output columns (CSV):
 team,opponent,week,stadium,location,city,state,roof,forecast_summary,temp_f,wind_mph,precip_prob,forecast_datetime_utc
 """
 
-from __future__ import annotations
-
 import re
-import sys
 import time
 from datetime import timezone
-from pathlib import Path
 from typing import Dict, Iterable, Optional
 
 from urllib.parse import quote
