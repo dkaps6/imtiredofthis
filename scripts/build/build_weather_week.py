@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import sys
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Iterable, Optional, Tuple
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -234,6 +234,58 @@ STADIUM_LOCATION: Dict[str, Dict[str, object]] = {
     },
 }
 
+FALLBACK_STADIUM_COORDS: Dict[str, Tuple[float, float]] = {
+    "BUF": (42.7738, -78.7869),
+    "MIA": (25.9579, -80.2389),
+    "NE": (42.0909, -71.2643),
+    "NYJ": (40.8135, -74.0745),
+    "CIN": (39.0954, -84.5161),
+    "CLE": (41.5061, -81.6995),
+    "PIT": (40.4468, -80.0158),
+    "BAL": (39.278, -76.6227),
+    "HOU": (29.6847, -95.4107),
+    "IND": (39.7601, -86.1639),
+    "JAX": (30.324, -81.6373),
+    "TEN": (36.1665, -86.7713),
+    "KC": (39.049, -94.4839),
+    "LAC": (33.9535, -118.3392),
+    "LV": (36.0909, -115.183),
+    "DEN": (39.7439, -105.0201),
+    "DAL": (32.7473, -97.0945),
+    "PHI": (39.9008, -75.1675),
+    "WSH": (38.9077, -76.8645),
+    "NYG": (40.8135, -74.0745),
+    "GB": (44.5013, -88.0622),
+    "DET": (42.3398, -83.0456),
+    "CHI": (41.8623, -87.6167),
+    "MIN": (44.974, -93.258),
+    "ATL": (33.7554, -84.4008),
+    "NO": (29.9509, -90.0814),
+    "TB": (27.9759, -82.5033),
+    "CAR": (35.2258, -80.8528),
+    "SF": (37.403, -121.969),
+    "SEA": (47.5952, -122.3316),
+    "LAR": (33.9535, -118.3392),
+    "ARI": (33.5277, -112.2626),
+}
+
+CITY_NORMALIZATION: Dict[Tuple[str, str], Tuple[str, str]] = {
+    ("Miami Gardens", "FL"): ("Miami", "FL"),
+    ("Orchard Park", "NY"): ("Buffalo", "NY"),
+    ("Foxborough", "MA"): ("Boston", "MA"),
+    ("East Rutherford", "NJ"): ("Newark", "NJ"),
+    ("Inglewood", "CA"): ("Los Angeles", "CA"),
+    ("Santa Clara", "CA"): ("San Jose", "CA"),
+    ("Glendale", "AZ"): ("Phoenix", "AZ"),
+    ("Landover", "MD"): ("Hyattsville", "MD"),
+    ("Arlington", "TX"): ("Dallas", "TX"),
+}
+
+
+class NotFoundError(RuntimeError):
+    """Raised when an upstream request returns HTTP 404."""
+
+
 __doc__ = """Build a weekly NFL weather dataset using nflverse schedules and NWS data.
 
 The script performs the following steps:
@@ -254,7 +306,6 @@ team,opponent,week,stadium,location,city,state,roof,forecast_summary,temp_f,wind
 import re
 import time
 from datetime import timezone
-from typing import Iterable, Optional
 from zoneinfo import ZoneInfo
 
 from urllib.parse import quote
@@ -402,13 +453,24 @@ def request_json_with_retry(
             )
             response.raise_for_status()
             return response.json()
+        except requests.HTTPError as exc:  # pragma: no cover - network
+            status = exc.response.status_code if exc.response is not None else None
+            if status == 404:
+                raise NotFoundError(
+                    f"NWS {label} request returned 404 for {url}"
+                ) from exc
+            last_error = exc
+            attempt += 1
         except requests.RequestException as exc:  # pragma: no cover - network
             last_error = exc
             attempt += 1
-            sleep_for = min(2**attempt, remaining)
-            if sleep_for <= 0:
-                break
-            time.sleep(sleep_for)
+        else:
+            continue
+
+        sleep_for = min(2**attempt, remaining)
+        if sleep_for <= 0:
+            break
+        time.sleep(sleep_for)
     error_detail = last_error or "deadline exceeded"
     raise RuntimeError(f"NWS {label} request failed after retries: {error_detail}")
 
@@ -678,23 +740,33 @@ def main(out_csv: str | Path = OUTPUT_PATH) -> None:
 
             if roof != "Dome/Fixed":
                 forecast = None
-                city_error: Optional[Exception] = None
+                city_error_msg: Optional[str] = None
+                latlon_error_msg: Optional[str] = None
 
                 if city_value and state_value:
+                    normalized_city, normalized_state = CITY_NORMALIZATION.get(
+                        (city_value, state_value),
+                        (city_value, state_value),
+                    )
                     try:
                         periods = get_forecast_for_city(
-                            city_value,
-                            state_value,
+                            normalized_city,
+                            normalized_state,
                             session=session,
                             deadline=time.monotonic() + MAX_GAME_WAIT_SECONDS,
                         )
                         forecast = _forecast_from_periods(periods, kickoff_utc)
                     except RuntimeError as exc:
-                        city_error = exc
+                        city_error_msg = str(exc)
 
                 if forecast is None:
                     lat = metadata.get("latitude")
                     lon = metadata.get("longitude")
+                    if lat is None or lon is None:
+                        coords = FALLBACK_STADIUM_COORDS.get(row.home)
+                        if coords:
+                            lat, lon = coords
+
                     if lat is not None and lon is not None:
                         try:
                             forecast = fetch_nws_forecast(
@@ -704,20 +776,22 @@ def main(out_csv: str | Path = OUTPUT_PATH) -> None:
                                 session=session,
                             )
                         except RuntimeError as exc:
-                            context = (
-                                f"; city/state lookup failed: {city_error}"
-                                if city_error
-                                else ""
-                            )
-                            raise RuntimeError(
-                                f"Failed to fetch NWS forecast for {row.home} at {stadium_name}{context}: {exc}"
-                            ) from exc
-                    elif city_error is not None:
-                        raise RuntimeError(
-                            f"Failed to fetch NWS forecast for {row.home} at {stadium_name}; city/state lookup failed: {city_error}"
-                        ) from city_error
+                            latlon_error_msg = str(exc)
+                    else:
+                        latlon_error_msg = (
+                            latlon_error_msg or "missing latitude/longitude fallback"
+                        )
 
-                if forecast is not None:
+                if forecast is None:
+                    details = "; ".join(
+                        msg for msg in [city_error_msg, latlon_error_msg] if msg
+                    )
+                    detail_suffix = f" ({details})" if details else ""
+                    print(
+                        "[builder WARNING] NWS forecast unavailable for "
+                        f"{row.home} at {stadium_name}{detail_suffix}"
+                    )
+                else:
                     weather_summary = str(forecast.get("forecast_summary", ""))
                     temp_f = forecast.get("temp_f")
                     wind_mph = forecast.get("wind_mph")

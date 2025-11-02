@@ -91,13 +91,84 @@ jobs:
             --date "${SLATE_DATE}"
 
       # ----------------------------------------
-      # 4. Build weather for this slate
+      # 4. Build QB run/scramble metrics
       # ----------------------------------------
-      # This step should create data/weather_week.csv (or weather_slate.csv)
-      # using stadium/city mapping + forecast source.
-      # NOTE: if you're using an API key like OPENWEATHER_API_KEY, add it to secrets
-      # and expose it here in env.
+      # Generates qb_designed_runs.csv and qb_scramble_rates.csv from nflverse PBP.
+      # You already added row-count guards so it fails if data is totally empty.
+      - name: Build QB scramble / designed-run metrics
+        run: |
+          python scripts/build/build_qb_run_metrics.py \
+            --season "${SEASON}"
+
+      # ----------------------------------------
+      # 5. Build team_form.csv
+      # ----------------------------------------
+      # make_team_form.py is responsible for merging:
+      # - SharpFootball (pace, neutral_pace, coverage tendencies, box rate, etc.)
+      # - nflverse / nflreadr data (EPA, PROE, etc.)
+      # and writing data/team_form.csv
+      - name: Build team_form
+        run: |
+          python scripts/make_team_form.py \
+            --season "${SEASON}"
+
+      # ----------------------------------------
+      # 6. Build player_form + player_form_consensus
+      # ----------------------------------------
+      # make_player_form.py should:
+      # - merge roles_ourlads.csv
+      # - merge opponent_map_from_props.csv (and schedule fallback if you've added it)
+      # - canonicalize player names (strip middle initials, normalize "J.Fields" -> "Justin Fields")
+      # - output data/player_form.csv and data/player_form_consensus.csv
+      - name: Build player_form / consensus
+        run: |
+          python scripts/make_player_form.py \
+            --season "${SEASON}" \
+            --date "${SLATE_DATE}"
+
+      # ----------------------------------------
+      # 7. Run pipeline (full metrics / slipgen prep)
+      # ----------------------------------------
+      # This stage assembles all derived features that pricing depends on.
+      # After this, the repo should have:
+      # - fully enriched per-player/per-team matchup features
+      # - slipgen output
+      - name: Run pipeline (full metrics + slipgen)
+        run: |
+          python scripts/make_metrics.py \
+            --season "${SEASON}" \
+            --mode full \
+            --date "${SLATE_DATE}"
+          python scripts/slipgen.py \
+            --season "${SEASON}" \
+            --date "${SLATE_DATE}"
+
+      # ----------------------------------------
+      # 8. metrics_ready sanity gate
+      # ----------------------------------------
+      # HARD FAIL GATE.
+      # metrics_ready.py should:
+      # - confirm required CSVs exist and are non-empty:
+      #   data/team_form.csv
+      #   data/player_form.csv
+      #   data/player_form_consensus.csv
+      #   data/qb_designed_runs.csv
+      #   data/qb_scramble_rates.csv
+      #   any other must-have inputs
+      # If anything is missing/empty -> raise RuntimeError -> nonzero exit -> job stops here.
+      - name: Validate metrics_ready (must pass before pricing)
+        run: |
+          python scripts/metrics_ready.py \
+            --season "${SEASON}" \
+            --date "${SLATE_DATE}"
+
+      # ----------------------------------------
+      # 9. Build weather for this slate
+      # ----------------------------------------
+      # Weather can be flaky; run it after the core data prep and continue even
+      # if the upstream provider returns partial data.
       - name: Build weather (per-game forecast)
+        continue-on-error: true
         env:
           # Make 'import scripts.xxx' work
           PYTHONPATH: ${{ github.workspace }}
@@ -124,79 +195,6 @@ jobs:
 
         run: |
           python scripts/build/build_weather_week.py \
-            --season "${SEASON}" \
-            --date "${SLATE_DATE}"
-
-      # ----------------------------------------
-      # 5. Build QB run/scramble metrics
-      # ----------------------------------------
-      # Generates qb_designed_runs.csv and qb_scramble_rates.csv from nflverse PBP.
-      # You already added row-count guards so it fails if data is totally empty.
-      - name: Build QB scramble / designed-run metrics
-        run: |
-          python scripts/build/build_qb_run_metrics.py \
-            --season "${SEASON}"
-
-      # ----------------------------------------
-      # 6. Build team_form.csv
-      # ----------------------------------------
-      # make_team_form.py is responsible for merging:
-      # - SharpFootball (pace, neutral_pace, coverage tendencies, box rate, etc.)
-      # - nflverse / nflreadr data (EPA, PROE, etc.)
-      # and writing data/team_form.csv
-      - name: Build team_form
-        run: |
-          python scripts/make_team_form.py \
-            --season "${SEASON}"
-
-      # ----------------------------------------
-      # 7. Build player_form + player_form_consensus
-      # ----------------------------------------
-      # make_player_form.py should:
-      # - merge roles_ourlads.csv
-      # - merge opponent_map_from_props.csv (and schedule fallback if you've added it)
-      # - canonicalize player names (strip middle initials, normalize "J.Fields" -> "Justin Fields")
-      # - output data/player_form.csv and data/player_form_consensus.csv
-      - name: Build player_form / consensus
-        run: |
-          python scripts/make_player_form.py \
-            --season "${SEASON}" \
-            --date "${SLATE_DATE}"
-
-      # ----------------------------------------
-      # 8. Run pipeline (full metrics / slipgen prep)
-      # ----------------------------------------
-      # This stage assembles all derived features that pricing depends on.
-      # After this, the repo should have:
-      # - fully enriched per-player/per-team matchup features
-      # - slipgen output
-      - name: Run pipeline (full metrics + slipgen)
-        run: |
-          python scripts/make_metrics.py \
-            --season "${SEASON}" \
-            --mode full \
-            --date "${SLATE_DATE}"
-          python scripts/slipgen.py \
-            --season "${SEASON}" \
-            --date "${SLATE_DATE}"
-
-      # ----------------------------------------
-      # 9. metrics_ready sanity gate
-      # ----------------------------------------
-      # HARD FAIL GATE.
-      # metrics_ready.py should:
-      # - confirm required CSVs exist and are non-empty:
-      #   data/team_form.csv
-      #   data/player_form.csv
-      #   data/player_form_consensus.csv
-      #   data/qb_designed_runs.csv
-      #   data/qb_scramble_rates.csv
-      #   data/weather_week.csv   (or whatever weather file you write)
-      #   any other must-have inputs
-      # If anything is missing/empty -> raise RuntimeError -> nonzero exit -> job stops here.
-      - name: Validate metrics_ready (must pass before pricing)
-        run: |
-          python scripts/metrics_ready.py \
             --season "${SEASON}" \
             --date "${SLATE_DATE}"
 
