@@ -1,13 +1,10 @@
 # scripts/build_weather_week.py
 #
 # Build per-game weather for this week's slate and write data/weather_week.csv.
-# - Uses stadium_locations.STADIUM_LOCATION to map home team -> stadium/city/state/outdoor.
-# - Uses OpenWeather (free tier) for hourly forecast.
+# - Uses stadium_locations.STADIUM_LOCATION to map home team -> stadium/city/state/outdoor/lat/lon.
+# - Uses National Weather Service (NWS) hourly forecasts via the points API.
 # - Summarizes temp/wind/precip around kickoff.
 # - Fails fast (RuntimeError) if we cannot generate at least 1 row.
-#
-# IMPORTANT:
-#   You MUST set OPENWEATHER_API_KEY via env in the workflow step that calls this script.
 
 import sys
 from pathlib import Path
@@ -16,7 +13,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+import logging
 import os
+import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -26,6 +25,14 @@ import requests
 from scripts.utils.stadium_locations import STADIUM_LOCATION
 
 OUT_PATH = Path("data") / "weather_week.csv"
+
+NWS_HEADERS = {
+    "User-Agent": "imtiredofthis-weather (+https://github.com/imtiredofthis)",
+    "Accept": "application/geo+json",
+}
+
+SESSION = requests.Session()
+logger = logging.getLogger(__name__)
 
 
 def build_slate_fallback() -> pd.DataFrame:
@@ -267,49 +274,77 @@ def _infer_tz_from_team(team: str) -> str:
     }
     return tz_map.get(team, "America/New_York")
 
-def _geocode_city_state(city: str, state: str, api_key: str):
-    """
-    Use OpenWeather geocoding API to get (lat, lon) from "City, State".
-    Raises if not found.
-    """
-    q = f"{city},{state},US"
-    url = "http://api.openweathermap.org/geo/1.0/direct"
-    params = {"q": q, "limit": 1, "appid": api_key}
-    r = requests.get(url, params=params, timeout=10)
-    r.raise_for_status()
-    data = r.json()
-    if not data:
-        raise RuntimeError(f"[weather] Could not geocode {q}")
-    return data[0]["lat"], data[0]["lon"]
+def _parse_wind_speed(raw: str):
+    if raw is None:
+        return None
 
-def _get_hourly_forecast(lat: float, lon: float, api_key: str) -> pd.DataFrame:
-    """
-    Pull ~5-day / 3-hour block forecast from OpenWeather.
-    Return as DataFrame with UTC timestamps and main weather fields.
-    """
-    url = "https://api.openweathermap.org/data/2.5/forecast"
-    params = {
-        "lat": lat,
-        "lon": lon,
-        "appid": api_key,
-        "units": "imperial",
-    }
-    r = requests.get(url, params=params, timeout=10)
-    r.raise_for_status()
-    data = r.json()
+    text = str(raw).strip()
+    if not text:
+        return None
 
+    numbers = [float(match) for match in re.findall(r"\d+(?:\.\d+)?", text)]
+    if not numbers:
+        return None
+
+    return sum(numbers) / len(numbers)
+
+
+def _get_hourly_forecast(lat: float, lon: float) -> pd.DataFrame:
+    """Fetch hourly forecast periods from the NWS API."""
+
+    points_url = f"https://api.weather.gov/points/{lat},{lon}"
+    points_resp = SESSION.get(points_url, headers=NWS_HEADERS, timeout=15)
+    points_resp.raise_for_status()
+    points_json = points_resp.json()
+
+    properties = points_json.get("properties", {})
+    forecast_url = properties.get("forecastHourly")
+    if not forecast_url:
+        raise RuntimeError(f"[weather] No forecastHourly URL for {lat},{lon}")
+
+    forecast_resp = SESSION.get(forecast_url, headers=NWS_HEADERS, timeout=15)
+    forecast_resp.raise_for_status()
+    forecast_json = forecast_resp.json()
+
+    periods = forecast_json.get("properties", {}).get("periods", [])
     rows = []
-    for block in data.get("list", []):
-        ts_utc = datetime.fromtimestamp(block["dt"], tz=ZoneInfo("UTC"))
+    for period in periods:
+        start_time = period.get("startTime")
+        if not start_time:
+            continue
+
+        try:
+            ts_utc = pd.to_datetime(start_time, utc=True)
+        except Exception:
+            continue
+
+        precip_raw = None
+        pop_obj = period.get("probabilityOfPrecipitation")
+        if isinstance(pop_obj, dict):
+            precip_raw = pop_obj.get("value")
+        elif pop_obj is not None:
+            precip_raw = pop_obj
+
+        pop_val = None
+        if precip_raw is not None:
+            try:
+                pop_val = float(precip_raw) / 100.0
+            except (TypeError, ValueError):
+                pop_val = None
+
         rows.append({
             "ts_utc": ts_utc,
-            "temp_F": block["main"]["temp"],
-            "wind_mph": block["wind"]["speed"],
-            "weather_main": block["weather"][0]["main"],
-            "weather_desc": block["weather"][0]["description"],
-            "pop_rain": block.get("pop", 0.0),
+            "temp_F": float(period.get("temperature")) if period.get("temperature") is not None else None,
+            "wind_mph": _parse_wind_speed(period.get("windSpeed")),
+            "weather_main": period.get("shortForecast"),
+            "weather_desc": period.get("detailedForecast") or period.get("shortForecast"),
+            "pop_rain": pop_val,
         })
-    return pd.DataFrame(rows)
+
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df["ts_utc"] = pd.to_datetime(df["ts_utc"], utc=True)
+    return df
 
 def _summarize_window(forecast_df: pd.DataFrame,
                       kickoff_local_dt: datetime,
@@ -348,83 +383,157 @@ def _summarize_window(forecast_df: pd.DataFrame,
         "conditions_desc": _mode(window["weather_desc"]),
     }
 
-def _weather_row_for_game(row: pd.Series, api_key: str) -> dict:
-    """
-    Build weather summary for a single game row with columns:
-      home, away, kickoff_local, local_tz
-    """
-    home_team = str(row["home"]).upper().strip()
-    away_team = str(row["away"]).upper().strip()
+def _kickoff_iso(value) -> str:
+    if isinstance(value, pd.Timestamp):
+        return value.isoformat()
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if pd.isna(value):
+        return ""
+    return str(value)
 
-    if home_team not in STADIUM_LOCATION:
-        raise RuntimeError(f"[weather] No stadium mapping for home team {home_team}")
 
-    meta = STADIUM_LOCATION[home_team]
-    city = meta["city"]
-    state = meta["state"]
-    indoor = not meta["outdoor"]
-    stadium = meta["stadium"]
+def _base_weather_row(home_team: str,
+                      away_team: str,
+                      meta: dict | None,
+                      kickoff_value) -> dict:
+    stadium = meta.get("stadium", "") if meta else ""
+    city = meta.get("city", "") if meta else ""
+    state = meta.get("state", "") if meta else ""
+    indoor = None if not meta else (not meta.get("outdoor", True))
 
-    lat, lon = _geocode_city_state(city, state, api_key)
-    fc_df = _get_hourly_forecast(lat, lon, api_key)
-
-    summary = _summarize_window(
-        fc_df,
-        kickoff_local_dt=row["kickoff_local"],
-        local_tz=row["local_tz"],
-    )
-
-    if not summary:
-        # still return a row so downstream doesn't explode, but mark forecast_ok=0
-        return {
-            "home": home_team,
-            "away": away_team,
-            "stadium": stadium,
-            "city": city,
-            "state": state,
-            "kickoff_local": row["kickoff_local"].isoformat(),
-            "indoor": indoor,
-            "forecast_ok": 0,
-        }
-
-    out = {
+    return {
         "home": home_team,
         "away": away_team,
         "stadium": stadium,
         "city": city,
         "state": state,
-        "kickoff_local": row["kickoff_local"].isoformat(),
+        "kickoff_local": _kickoff_iso(kickoff_value),
         "indoor": indoor,
-        "forecast_ok": 1,
-        **summary,
+        "forecast_ok": 0,
+        "temp_F_mean": None,
+        "temp_F_min": None,
+        "temp_F_max": None,
+        "wind_mph_mean": None,
+        "precip_prob_max": None,
+        "conditions_main": None,
+        "conditions_desc": None,
+        "cold_flag": None,
+        "wind_flag": None,
+        "rain_flag": None,
+        "blurb": "",
     }
 
-    # modeling-friendly flags
-    out["cold_flag"] = 1 if (out.get("temp_F_mean", 100) < 40) else 0
-    out["wind_flag"] = 1 if (out.get("wind_mph_mean", 0) >= 15) else 0
-    out["rain_flag"] = 1 if (out.get("precip_prob_max", 0) >= 0.4) else 0
 
-    # quick narrative
+def _weather_row_for_game(row: pd.Series) -> dict:
+    """Build weather summary for a single game row."""
+
+    home_team = str(row.get("home", "")).upper().strip()
+    away_team = str(row.get("away", "")).upper().strip()
+    kickoff_value = row.get("kickoff_local")
+
+    meta = STADIUM_LOCATION.get(home_team)
+    base_row = _base_weather_row(home_team, away_team, meta, kickoff_value)
+
+    if not meta:
+        logger.warning("[weather] No stadium mapping for home team %s", home_team)
+        return base_row
+
+    lat = meta.get("lat")
+    lon = meta.get("lon")
+    if lat is None or lon is None:
+        logger.warning(
+            "[weather] Missing coordinates for %s (%s)",
+            home_team,
+            meta.get("stadium", "unknown stadium"),
+        )
+        return base_row
+
+    kickoff_local_dt = kickoff_value
+    if isinstance(kickoff_local_dt, pd.Timestamp):
+        kickoff_local_dt = kickoff_local_dt.to_pydatetime()
+    elif not isinstance(kickoff_local_dt, datetime):
+        kickoff_local_ts = pd.to_datetime(kickoff_local_dt, errors="coerce")
+        if pd.isna(kickoff_local_ts):
+            logger.warning("[weather] Unusable kickoff_local for %s", home_team)
+            return base_row
+        tz_guess = row.get("local_tz") or _infer_tz_from_team(home_team)
+        try:
+            tzinfo = ZoneInfo(tz_guess)
+        except Exception:
+            tzinfo = ZoneInfo("UTC")
+        if kickoff_local_ts.tzinfo is None:
+            kickoff_local_ts = kickoff_local_ts.tz_localize(tzinfo)
+        else:
+            kickoff_local_ts = kickoff_local_ts.tz_convert(tzinfo)
+        kickoff_local_dt = kickoff_local_ts.to_pydatetime()
+
+    if kickoff_local_dt is None or kickoff_local_dt.tzinfo is None:
+        logger.warning("[weather] Kickoff datetime missing tz for %s", home_team)
+        return base_row
+
+    tz_name = row.get("local_tz")
+    if not tz_name:
+        tzinfo = kickoff_local_dt.tzinfo
+        tz_name = getattr(tzinfo, "key", None) or tzinfo.tzname(kickoff_local_dt) or "UTC"
+
+    try:
+        fc_df = _get_hourly_forecast(lat, lon)
+    except Exception as exc:
+        logger.warning(
+            "[weather] Forecast fetch failed for %s (%s,%s): %s",
+            home_team,
+            lat,
+            lon,
+            exc,
+        )
+        return base_row
+
+    summary = _summarize_window(
+        fc_df,
+        kickoff_local_dt=kickoff_local_dt,
+        local_tz=tz_name,
+    )
+
+    if not summary:
+        logger.warning("[weather] No forecast window data for %s", home_team)
+        return base_row
+
+    out = {**base_row, **summary}
+    out["forecast_ok"] = 1
+
+    temp_mean = out.get("temp_F_mean")
+    wind_mean = out.get("wind_mph_mean")
+    precip_max = out.get("precip_prob_max")
+
+    out["cold_flag"] = 1 if (pd.notna(temp_mean) and temp_mean < 40) else 0
+    out["wind_flag"] = 1 if (pd.notna(wind_mean) and wind_mean >= 15) else 0
+    out["rain_flag"] = 1 if (pd.notna(precip_max) and precip_max >= 0.4) else 0
+
+    indoor = out.get("indoor")
     if indoor:
         out["blurb"] = "Indoors/retractable - neutral conditions"
     else:
         bits = []
-        if "temp_F_mean" in out and pd.notna(out["temp_F_mean"]):
-            bits.append(f"{round(out['temp_F_mean'])}F avg")
-        if "wind_mph_mean" in out and pd.notna(out["wind_mph_mean"]):
-            bits.append(f"wind ~{round(out['wind_mph_mean'],1)} mph")
+        if pd.notna(temp_mean):
+            bits.append(f"{round(temp_mean)}F avg")
+        if pd.notna(wind_mean):
+            bits.append(f"wind ~{round(wind_mean, 1)} mph")
         if out["rain_flag"]:
             bits.append("rain risk")
-        if "conditions_desc" in out and out["conditions_desc"]:
+        if out.get("conditions_desc"):
             bits.append(str(out["conditions_desc"]))
         out["blurb"] = ", ".join(bits)
 
     return out
 
+
 def main():
-    api_key = os.getenv("OPENWEATHER_API_KEY", "").strip()
-    if not api_key:
-        raise RuntimeError("[weather] OPENWEATHER_API_KEY not set in env")
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     slate_df = _load_slate_from_repo()
 
@@ -435,48 +544,12 @@ def main():
 
     rows = []
     for _, game in slate_df.iterrows():
-        home_team = str(game.get("home", "")).upper().strip()
-        away_team = str(game.get("away", "")).upper().strip()
-
-        try:
-            wxrow = _weather_row_for_game(game, api_key)
-            rain_flag = wxrow.get("rain_flag")
-            wxrow["temp_f"] = wxrow.get("temp_F_mean")
-            wxrow["wind_mph"] = wxrow.get("wind_mph_mean")
-            wxrow["precip_flag"] = None if rain_flag is None else (1 if rain_flag else 0)
-            wxrow["notes"] = "weather_ok" if wxrow.get("forecast_ok") else "weather_unavailable"
-        except Exception:
-            meta = STADIUM_LOCATION.get(home_team, {})
-            kickoff_local_val = game.get("kickoff_local")
-            if isinstance(kickoff_local_val, datetime):
-                kickoff_iso = kickoff_local_val.isoformat()
-            else:
-                kickoff_iso = str(kickoff_local_val) if pd.notna(kickoff_local_val) else ""
-
-            wxrow = {
-                "home": home_team,
-                "away": away_team,
-                "stadium": meta.get("stadium", ""),
-                "city": meta.get("city", ""),
-                "state": meta.get("state", ""),
-                "kickoff_local": kickoff_iso,
-                "indoor": None if not meta else (not meta.get("outdoor", True)),
-                "forecast_ok": 0,
-                "temp_F_mean": None,
-                "temp_F_min": None,
-                "temp_F_max": None,
-                "wind_mph_mean": None,
-                "precip_prob_max": None,
-                "conditions_main": None,
-                "conditions_desc": None,
-                "cold_flag": None,
-                "wind_flag": None,
-                "rain_flag": None,
-                "temp_f": None,
-                "wind_mph": None,
-                "precip_flag": None,
-                "notes": "weather_unavailable",
-            }
+        wxrow = _weather_row_for_game(game)
+        rain_flag = wxrow.get("rain_flag")
+        wxrow["temp_f"] = wxrow.get("temp_F_mean")
+        wxrow["wind_mph"] = wxrow.get("wind_mph_mean")
+        wxrow["precip_flag"] = None if rain_flag is None else (1 if rain_flag else 0)
+        wxrow["notes"] = "weather_ok" if wxrow.get("forecast_ok") else "weather_unavailable"
 
         rows.append(wxrow)
 

@@ -1,1 +1,33 @@
-
+team,stadium,city,state,outdoor,lat,lon
+BUF,Highmark Stadium,Orchard Park,NY,True,42.7738,-78.7868
+MIA,Hard Rock Stadium,Miami Gardens,FL,True,25.958,-80.2389
+NE,Gillette Stadium,Foxborough,MA,True,42.0909,-71.2643
+NYJ,MetLife Stadium,East Rutherford,NJ,True,40.8136,-74.0745
+CIN,Paycor Stadium,Cincinnati,OH,True,39.0954,-84.516
+CLE,Cleveland Browns Stadium,Cleveland,OH,True,41.5061,-81.6995
+PIT,Acrisure Stadium,Pittsburgh,PA,True,40.4468,-80.0158
+BAL,M&T Bank Stadium,Baltimore,MD,True,39.2779,-76.6227
+HOU,NRG Stadium,Houston,TX,False,29.6847,-95.4107
+IND,Lucas Oil Stadium,Indianapolis,IN,False,39.7601,-86.1639
+JAX,EverBank Stadium,Jacksonville,FL,True,30.324,-81.6373
+TEN,Nissan Stadium,Nashville,TN,True,36.1665,-86.7713
+KC,GEHA Field at Arrowhead Stadium,Kansas City,MO,True,39.0489,-94.4839
+LAC,SoFi Stadium,Inglewood,CA,False,33.9535,-118.3391
+LV,Allegiant Stadium,Las Vegas,NV,False,36.0909,-115.1833
+DEN,Empower Field at Mile High,Denver,CO,True,39.7439,-105.0201
+DAL,AT&T Stadium,Arlington,TX,False,32.7473,-97.0945
+PHI,Lincoln Financial Field,Philadelphia,PA,True,39.9008,-75.1675
+WSH,FedEx Field,Landover,MD,True,38.9077,-76.8645
+NYG,MetLife Stadium,East Rutherford,NJ,True,40.8136,-74.0745
+GB,Lambeau Field,Green Bay,WI,True,44.5013,-88.0622
+DET,Ford Field,Detroit,MI,False,42.339,-83.0456
+CHI,Soldier Field,Chicago,IL,True,41.8623,-87.6167
+MIN,U.S. Bank Stadium,Minneapolis,MN,False,44.9737,-93.2577
+ATL,Mercedes-Benz Stadium,Atlanta,GA,False,33.7554,-84.4009
+NO,Caesars Superdome,New Orleans,LA,False,29.9509,-90.0814
+TB,Raymond James Stadium,Tampa,FL,True,27.9759,-82.5033
+CAR,Bank of America Stadium,Charlotte,NC,True,35.2251,-80.8528
+SF,Levi's Stadium,Santa Clara,CA,True,37.403,-121.9702
+SEA,Lumen Field,Seattle,WA,True,47.5952,-122.3316
+LAR,SoFi Stadium,Inglewood,CA,False,33.9535,-118.3391
+ARI,State Farm Stadium,Glendale,AZ,False,33.5277,-112.2626
