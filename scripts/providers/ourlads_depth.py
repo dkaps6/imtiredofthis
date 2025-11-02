@@ -99,6 +99,48 @@ BAD_TOKENS = {
     "(r)", "(ir)", "(ps)", "(pup)"
 }
 
+DROP_TOKENS = {
+    "U", "CC", "T",
+    "II", "III", "IV", "V", "VI", "VII",
+    "Sr", "Sr.", "Jr", "Jr.", "III",
+}
+
+
+def canonical_player_key(full_name: str) -> str:
+    """
+    "ZAY CC JONES"      -> "Zjones"
+    "Darnell U Mooney"  -> "Dmooney"
+    "JOE T FLACCO"      -> "Jflacco"
+    "Kyle Pitts Sr."    -> "Kpitts"
+    Behavior:
+    - strip '.' and "'"
+    - split on whitespace
+    - drop anything in DROP_TOKENS
+    - first remaining token = first name
+    - last remaining token = last name
+    - build key = first_initial + last_name
+    - lowercase then capitalize first char
+    """
+
+    if not isinstance(full_name, str):
+        return ""
+    cleaned = (
+        full_name.replace(".", "")
+        .replace("'", "")
+        .strip()
+    )
+    if not cleaned:
+        return ""
+    parts = [p for p in cleaned.split() if p and p not in DROP_TOKENS]
+    if not parts:
+        return ""
+    first = parts[0]
+    last = parts[-1]
+    if not first or not last:
+        return ""
+    key = (first[0] + last).lower()
+    return key[0].upper() + key[1:]
+
 
 def clean_ourlads_name(raw: str) -> str:
     """
@@ -401,7 +443,8 @@ def main():
         roles_all = roles_all.drop_duplicates(subset=["team","player","role"])
         roles_all = roles_all.sort_values(["team","role","player"])
 
-    output_df = roles_all[["team","player","role","position"]].copy()
+    roles_all["player_key"] = roles_all["player"].apply(canonical_player_key)
+    output_df = roles_all[["team","player","role","position","player_key"]].copy()
     output_df.to_csv(OUT_ROLES, index=False)
     print(f"[ourlads_depth] wrote rows={len(output_df)} → {OUT_ROLES}")
 

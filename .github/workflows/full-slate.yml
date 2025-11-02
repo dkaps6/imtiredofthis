@@ -91,6 +91,7 @@ jobs:
             --books "draftkings,fanduel,betmgm,caesars" \
             --markets "player_pass_yds,player_reception_yds,player_rush_yds,player_receptions,player_rush_reception_yds,player_anytime_td" \
             --region "us" \
+            --season "${SEASON}" \
             --date "${SLATE_DATE}" \
             --out "outputs/props_raw.csv" \
             --out_game "outputs/odds_game.csv"
@@ -160,7 +161,8 @@ jobs:
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/make_player_form.py \
-            --season "${SEASON}"
+            --season "${SEASON}" \
+            --date "${SLATE_DATE}"
 
       # ----------------------------------------
       # 8. Run pipeline (full metrics prep)
