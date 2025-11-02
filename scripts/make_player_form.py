@@ -391,6 +391,47 @@ def assert_no_duplicate_columns(df: pd.DataFrame, label: str) -> None:
         )
 
 
+def _dedupe_player_clean_key(df: pd.DataFrame) -> pd.DataFrame:
+    """Collapse player_clean_key columns created by fallback merges."""
+
+    if df is None or df.empty:
+        return df
+
+    working = df.copy()
+    has_x = "player_clean_key_x" in working.columns
+    has_y = "player_clean_key_y" in working.columns
+
+    combined = None
+    if has_x and has_y:
+        x = working["player_clean_key_x"].astype("string")
+        y = working["player_clean_key_y"].astype("string")
+        combined = x.copy()
+        prefer_x = combined.notna() & combined.str.strip().ne("")
+        combined = combined.where(prefer_x, y)
+    elif has_x:
+        combined = working["player_clean_key_x"].astype("string")
+    elif has_y:
+        combined = working["player_clean_key_y"].astype("string")
+
+    if combined is not None:
+        if "player_clean_key" in working.columns:
+            existing = working["player_clean_key"].astype("string")
+            keep_existing = existing.notna() & existing.str.strip().ne("")
+            combined = existing.where(keep_existing, combined)
+        working["player_clean_key"] = combined
+
+    drop_cols = [
+        c for c in ("player_clean_key_x", "player_clean_key_y") if c in working.columns
+    ]
+    if drop_cols:
+        working = working.drop(columns=drop_cols)
+
+    # Drop any duplicate column names introduced during merges (keep first occurrence).
+    working = working.loc[:, ~working.columns.duplicated()]
+
+    return working
+
+
 def _normalize_key(s: str) -> str:
     """Lowercase, remove punctuation/whitespace for canonical lookups."""
 
@@ -3623,6 +3664,15 @@ def _write_player_form_outputs(df: pd.DataFrame, slate_date: str | None = None) 
     if df is None or df.empty:
         raise RuntimeError("[make_player_form] final player_form empty; aborting run")
 
+    essential = {"player_clean_key", "team", "opponent", "week"}
+    essential.update(PLAYER_FORM_SHARE_COLS)
+    missing = [col for col in sorted(essential) if col not in df.columns]
+    if missing:
+        logger.warning(
+            "[make_player_form] player_form missing expected columns prior to write: %s",
+            ", ".join(missing),
+        )
+
     assert_no_duplicate_columns(df, "final player_form before write")
 
     df_out = _ensure_single_position_column(df.copy())
@@ -3957,6 +4007,7 @@ def cli():
             )
 
         # Final write on success
+        df = _dedupe_player_clean_key(df)
         _write_player_form_outputs(df, slate_date=args.date)
         return
 
@@ -3974,6 +4025,7 @@ def cli():
                         f"[make_player_form] WARN enrichment skipped in error path: {_enr_e}",
                         file=sys.stderr,
                     )
+                df = _dedupe_player_clean_key(df)
                 _write_player_form_outputs(df, slate_date=args.date)
                 return
         except Exception as _w:

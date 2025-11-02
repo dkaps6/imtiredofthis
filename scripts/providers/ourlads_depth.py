@@ -443,6 +443,21 @@ def main():
         roles_all = roles_all.drop_duplicates(subset=["team","player","role"])
         roles_all = roles_all.sort_values(["team","role","player"])
 
+        offense_roles = {"QB1", "RB1", "WR1", "WR2", "WR3", "TE1"}
+        offense_positions = {"QB", "RB", "WR", "TE"}
+        roles_all = roles_all[roles_all["role"].isin(offense_roles)].copy()
+        roles_all = roles_all[roles_all["position"].isin(offense_positions)].copy()
+
+        pos_priority = {"QB": 0, "RB": 1, "WR": 2, "TE": 3}
+        role_priority = {"QB1": 0, "RB1": 1, "WR1": 2, "WR2": 3, "WR3": 4, "TE1": 5}
+        roles_all["_pos_rank"] = roles_all["position"].map(pos_priority).fillna(99)
+        roles_all["_role_rank"] = roles_all["role"].map(role_priority).fillna(99)
+        roles_all = roles_all.sort_values(
+            ["team", "player", "_pos_rank", "_role_rank", "role", "position"]
+        )
+        roles_all = roles_all.drop_duplicates(subset=["team", "player"], keep="first")
+        roles_all = roles_all.drop(columns=["_pos_rank", "_role_rank"])
+
     roles_all["player_key"] = roles_all["player"].apply(canonical_player_key)
     output_df = roles_all[["team","player","role","position","player_key"]].copy()
     output_df.to_csv(OUT_ROLES, index=False)

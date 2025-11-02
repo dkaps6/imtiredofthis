@@ -136,6 +136,11 @@ def safe_div(n, d):
     with np.errstate(divide="ignore", invalid="ignore"):
         return np.where(d == 0, np.nan, n / d)
 
+def _drop_duplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None:
+        return df
+    return df.loc[:, ~df.columns.duplicated()]
+
 def _normalize_team_names(s: pd.Series) -> pd.Series:
     """Map common sportsbook aliases to nflverse team codes (best effort)."""
     if s is None:
@@ -228,7 +233,13 @@ def load_roles() -> pd.DataFrame:
                     continue
                 df['player'] = _normalize_player_name(df['player'])
                 df['player_key'] = _player_key_series(df['player'])
-                keep = [c for c in ['player_key','player','team','role','position'] if c in df.columns]
+                if 'position' in df.columns:
+                    df = df.rename(columns={'position': 'ourlads_position'})
+                keep = [
+                    c
+                    for c in ['player_key', 'player', 'team', 'role', 'ourlads_position']
+                    if c in df.columns
+                ]
                 return df[keep].drop_duplicates()
             except Exception:
                 continue
@@ -620,6 +631,7 @@ def build_metrics(season: int) -> pd.DataFrame:
             "week","opp_plays_wk","opp_pace_wk","opp_proe_wk"
         ])
         empty.attrs["row_counts"] = {"props_raw": 0, "player_form_consensus": 0, "team_form": 0, "joined": 0}
+        empty.attrs["upstream_empty"] = {"props_raw": True}
         return empty
 
     pf  = load_player_form()
@@ -629,6 +641,16 @@ def build_metrics(season: int) -> pd.DataFrame:
     inj = load_injuries()
     wx  = load_weather()
     gl  = load_game_lines_preferring_odds()
+    upstream_empty = {
+        "props_raw": False,
+        "player_form": pf.empty,
+        "team_form": tf.empty,
+        "coverage": cov.empty,
+        "cb_assignments": cba.empty,
+        "injuries": inj.empty,
+        "weather": wx.empty,
+        "odds_game": gl.empty,
+    }
     pf = attach_opponent(pf, team_col="team", coverage_path="data/coverage_cb.csv")
     tf = attach_opponent(tf, team_col="team", coverage_path="data/coverage_cb.csv")
 
@@ -662,9 +684,11 @@ def build_metrics(season: int) -> pd.DataFrame:
         pf_by_opponent = pf.loc[~consensus_mask].copy()
         if pf_consensus.empty:
             pf_consensus = pf.copy()
+        upstream_empty["player_form_consensus"] = pf_consensus.empty
     else:
         pf_consensus = pf.copy()
         pf_by_opponent = pd.DataFrame(columns=pf.columns)
+        upstream_empty["player_form_consensus"] = True
 
     # Backfill team from player_form if all missing
     team_fill_source = pf_consensus if not pf_consensus.empty else pf
@@ -696,11 +720,17 @@ def build_metrics(season: int) -> pd.DataFrame:
                 props.drop(columns=['role_roles'], inplace=True)
             elif 'role_roles' in props.columns:
                 props.rename(columns={'role_roles':'role'}, inplace=True)
-            if 'position' in props.columns and 'position_roles' in props.columns:
-                props['position'] = props['position'].combine_first(props['position_roles'])
-                props.drop(columns=['position_roles'], inplace=True)
-            elif 'position_roles' in props.columns:
-                props.rename(columns={'position_roles':'position'}, inplace=True)
+            if 'ourlads_position' in props.columns and 'ourlads_position_roles' in props.columns:
+                props['ourlads_position'] = props['ourlads_position'].combine_first(
+                    props['ourlads_position_roles']
+                )
+                props.drop(columns=['ourlads_position_roles'], inplace=True)
+            if 'ourlads_position' in props.columns:
+                if 'position' in props.columns:
+                    props['position'] = props['position'].combine_first(props['ourlads_position'])
+                else:
+                    props['position'] = props['ourlads_position']
+            props = _drop_duplicate_columns(props)
     except Exception as _e:
         print('[make_metrics] roles fill skipped:', _e)
 
@@ -714,7 +744,11 @@ def build_metrics(season: int) -> pd.DataFrame:
         if not roles_df.empty:
             roles_df = _nm_add_fallback_keys_df(roles_df, "player")
             cols_key = ["first_initial","last_name_u"]
-            fill_cols = [c for c in ["team","position","role"] if c in roles_df.columns]
+            fill_cols = [c for c in ["team", "role"] if c in roles_df.columns]
+            if "ourlads_position" in roles_df.columns:
+                fill_cols.append("ourlads_position")
+            if "position" in roles_df.columns and "position" not in fill_cols:
+                fill_cols.append("position")
             if fill_cols:
                 fb = roles_df[cols_key + fill_cols].drop_duplicates()
                 before_team_missing = props["team"].isna().sum() if "team" in props.columns else None
@@ -725,7 +759,12 @@ def build_metrics(season: int) -> pd.DataFrame:
                     props["position"] = props["position"].combine_first(props["position_fbroles"])
                 if "role" in props.columns and "role_fbroles" in props.columns:
                     props["role"] = props["role"].combine_first(props["role_fbroles"])
+                if "ourlads_position" in props.columns and "ourlads_position_fbroles" in props.columns:
+                    props["ourlads_position"] = props["ourlads_position"].combine_first(
+                        props["ourlads_position_fbroles"]
+                    )
                 props.drop(columns=[c for c in props.columns if c.endswith("_fbroles")], inplace=True, errors="ignore")
+                props = _drop_duplicate_columns(props)
     except Exception as _e:
         print("[make_metrics] roles initials/last fallback skipped:", _e)
     # ---- Opponent mapping
@@ -814,8 +853,7 @@ def build_metrics(season: int) -> pd.DataFrame:
                 base["opponent_abbr_pf"]
             )
             base.drop(columns=["opponent_abbr_pf"], inplace=True, errors="ignore")
-    player_metrics = base
-    player_metrics = player_metrics.loc[:, ~player_metrics.columns.duplicated()]
+    player_metrics = _drop_duplicate_columns(base)
     base = player_metrics
     # --- fallback usage merge on (team, position, first_initial, last_name_u) ---
     try:
@@ -1179,11 +1217,14 @@ def build_metrics(season: int) -> pd.DataFrame:
         "team_form": len(tf),
         "joined": len(base),
     }
+    base.attrs["upstream_empty"] = upstream_empty
     return base
 
 def _generate_metrics_dataframe(season: int) -> pd.DataFrame:
     try:
         df = build_metrics(season)
+        upstream_empty = getattr(df, "attrs", {}).get("upstream_empty", {})
+        row_counts = getattr(df, "attrs", {}).get("row_counts", {})
         # ## -- injected: final odds rejoin (idempotent) --
         try:
             props_raw = pd.read_csv(os.path.join("outputs", "props_raw.csv"))
@@ -1330,6 +1371,13 @@ def _generate_metrics_dataframe(season: int) -> pd.DataFrame:
         except Exception as _e:
             print("[make_metrics] final odds rejoin skipped:", _e)
 
+        df = _drop_duplicate_columns(df)
+        if row_counts:
+            row_counts = dict(row_counts)
+            row_counts["joined"] = len(df)
+        df.attrs["row_counts"] = row_counts
+        df.attrs["upstream_empty"] = upstream_empty
+
     except Exception as e:
         print(f"[make_metrics] ERROR: {e}", file=sys.stderr)
         traceback.print_exc()
@@ -1382,9 +1430,12 @@ def _generate_metrics_dataframe(season: int) -> pd.DataFrame:
                 "opp_proe_wk",
             ]
         )
+        df.attrs["row_counts"] = {}
+        df.attrs["upstream_empty"] = {}
 
     if df.empty:
         counts = getattr(df, 'attrs', {}).get('row_counts', {})
+        upstream_empty = getattr(df, 'attrs', {}).get('upstream_empty', {})
         if counts:
             print(
                 "[make_metrics] ERROR: metrics_ready empty after join (props_raw={props}, player_form={pf}, team_form={tf}, joined={joined})"
@@ -1397,6 +1448,16 @@ def _generate_metrics_dataframe(season: int) -> pd.DataFrame:
             )
         else:
             print("[make_metrics] ERROR: metrics_ready empty after join (no counts)")
+        if upstream_empty:
+            empty_sources = [name for name, flag in upstream_empty.items() if flag]
+            if empty_sources:
+                print(
+                    "[make_metrics] ERROR: upstream inputs empty → {}".format(
+                        ", ".join(sorted(empty_sources))
+                    )
+                )
+            else:
+                print("[make_metrics] INFO: upstream inputs all reported non-empty")
         raise RuntimeError("metrics_ready is empty after merge")
 
     # Optional: add opponent weekly env (pace/proe/plays_est) if present
@@ -1424,6 +1485,10 @@ def _generate_metrics_dataframe(season: int) -> pd.DataFrame:
     # FINAL_OPPONENT_SANITY
     if "opponent" in df.columns:
         df["opponent"] = df["opponent"].replace({"NAN": np.nan, "nan": np.nan, "NaN": np.nan, "": np.nan})
+    if 'row_counts' in locals() and isinstance(row_counts, dict):
+        df.attrs["row_counts"] = dict(row_counts)
+    if 'upstream_empty' in locals() and isinstance(upstream_empty, dict):
+        df.attrs["upstream_empty"] = dict(upstream_empty)
     return df
 
 
