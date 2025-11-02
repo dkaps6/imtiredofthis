@@ -36,7 +36,6 @@ import numpy as np
 import pandas as pd
 
 from scripts.utils.canonical_names import (
-    canonicalize_name,
     canonicalize_player_name as _canonicalize_with_utils,
     log_unmapped_variant,
 )
@@ -67,6 +66,82 @@ CANON_OVERRIDES = {
     "dadams": "davante adams",
     # ...add obvious skill guys, QBs, etc.
 }
+
+
+NAME_OVERRIDES = {
+    "JOE T FLACCO": "Joe Flacco",
+    "JOE T  FLACCO": "Joe Flacco",
+    "D.ADAMS": "Davante Adams",
+    "DADAMS": "Davante Adams",
+}
+
+
+def canonicalize_name(raw_name: str) -> str:
+    """Canonicalize raw player names into a stable "First Last" form."""
+
+    if raw_name is None:
+        return ""
+
+    raw_str = str(raw_name).strip()
+    if not raw_str:
+        return ""
+
+    override = NAME_OVERRIDES.get(raw_str)
+    if override:
+        return override
+
+    upper_key = raw_str.upper()
+    override = NAME_OVERRIDES.get(upper_key)
+    if override:
+        return override
+
+    lowered = raw_str.lower()
+    if lowered in CANON_OVERRIDES:
+        return canonicalize_name(CANON_OVERRIDES[lowered])
+
+    normalized = unicodedata.normalize("NFKD", raw_str)
+    normalized = normalized.encode("ascii", "ignore").decode("ascii")
+    normalized = normalized.lower()
+    normalized = re.sub(r"[^a-z0-9\s]", " ", normalized)
+    tokens = [tok for tok in normalized.split() if tok]
+
+    if not tokens:
+        return ""
+
+    suffix_tokens = {"jr", "sr", "ii", "iii", "iv", "v"}
+    tokens = [tok for tok in tokens if tok not in suffix_tokens]
+
+    if not tokens:
+        return ""
+
+    # Collapse leading consecutive single-letter initials ("c j" -> "cj")
+    collapsed: List[str] = []
+    idx = 0
+    while idx < len(tokens):
+        tok = tokens[idx]
+        if len(tok) == 1 and idx + 1 < len(tokens) and len(tokens[idx + 1]) == 1:
+            collapsed.append(tok + tokens[idx + 1])
+            idx += 2
+            continue
+        collapsed.append(tok)
+        idx += 1
+
+    tokens = collapsed
+
+    if len(tokens) > 2:
+        middle: List[str] = []
+        for tok in tokens[1:-1]:
+            if len(tok) == 1:
+                continue
+            middle.append(tok)
+        tokens = [tokens[0]] + middle + [tokens[-1]]
+
+    if len(tokens) == 1:
+        return tokens[0].title()
+
+    first = tokens[0].title()
+    last = tokens[-1].title()
+    return f"{first} {last}"
 
 
 def _strip_suffixes(name: str) -> str:
@@ -507,8 +582,10 @@ PLAYER_FORM_REQUIRED_COLUMNS = [
     "canonical_player_name",
     "player_name_canonical",
     "team",
+    "team_abbr",
     "week",
     "opponent",
+    "opponent_abbr",
     "season",
     "position",
     "role",
@@ -521,6 +598,108 @@ FINAL_COLS = PLAYER_FORM_REQUIRED_COLUMNS + [
     "week_key",
     "unmatched_flag",
 ]
+
+
+def _ensure_single_position_column(df: pd.DataFrame) -> pd.DataFrame:
+    """Coalesce duplicate position columns down to one canonical 'position'."""
+
+    if df is None or df.empty:
+        return df
+
+    out = df.copy()
+    position_cols = [c for c in out.columns if c.lower().startswith("position")]
+
+    if "position" not in out.columns:
+        if position_cols:
+            first_col = position_cols[0]
+            out["position"] = out[first_col]
+            if first_col != "position":
+                position_cols = [c for c in position_cols if c != first_col]
+        else:
+            out["position"] = pd.NA
+
+    for col in position_cols:
+        if col == "position":
+            continue
+        out["position"] = out["position"].combine_first(out[col])
+        out.drop(columns=[col], inplace=True)
+
+    out["position"] = out["position"].astype("string").str.strip()
+    return out
+
+
+def _build_team_to_opp_map_for_slate(
+    df: pd.DataFrame | None, slate_date: str | None
+) -> Dict[str, str]:
+    """Construct a team→opponent lookup using current data and cached schedule files."""
+
+    mapping: Dict[str, str] = {}
+
+    def _ingest(team_val: Any, opp_val: Any) -> None:
+        team_key = str(team_val).strip().upper() if team_val is not None else ""
+        opp_key = str(opp_val).strip().upper() if opp_val is not None else ""
+        if not team_key or not opp_key:
+            return
+        existing = mapping.get(team_key)
+        if existing and existing != opp_key:
+            if existing != opp_key:
+                logger.debug(
+                    "[make_player_form] team %s opponent conflict: keeping %s over %s",
+                    team_key,
+                    existing,
+                    opp_key,
+                )
+            return
+        mapping[team_key] = opp_key
+
+    if df is not None and not df.empty:
+        for _, row in df.iterrows():
+            _ingest(row.get("team"), row.get("opponent"))
+            _ingest(row.get("team_abbr"), row.get("opponent_abbr"))
+
+    if OPPONENT_MAP_PATH.exists():
+        try:
+            opp_df = pd.read_csv(OPPONENT_MAP_PATH)
+        except Exception as err:
+            logger.warning(
+                "[make_player_form] failed reading %s: %s",
+                OPPONENT_MAP_PATH,
+                err,
+            )
+        else:
+            if slate_date:
+                for col in ["slate_date", "date", "game_date"]:
+                    if col in opp_df.columns:
+                        opp_df = opp_df[opp_df[col].astype(str).str.startswith(str(slate_date))]
+                        break
+            for _, row in opp_df.iterrows():
+                _ingest(row.get("team"), row.get("opponent"))
+                _ingest(row.get("team_abbr"), row.get("opponent_abbr"))
+
+    if SCHEDULE_GAMES_PATH.exists():
+        try:
+            schedule_df = pd.read_csv(SCHEDULE_GAMES_PATH)
+        except Exception as err:
+            logger.warning(
+                "[make_player_form] failed reading %s: %s",
+                SCHEDULE_GAMES_PATH,
+                err,
+            )
+        else:
+            if slate_date:
+                for col in ["slate_date", "date", "game_date"]:
+                    if col in schedule_df.columns:
+                        schedule_df = schedule_df[
+                            schedule_df[col].astype(str).str.startswith(str(slate_date))
+                        ]
+                        break
+            for _, row in schedule_df.iterrows():
+                home = row.get("home_team") or row.get("home_abbr")
+                away = row.get("away_team") or row.get("away_abbr")
+                _ingest(home, away)
+                _ingest(away, home)
+
+    return mapping
 
 
 # === Weighted season consensus helper (surgical add) ===
@@ -639,9 +818,13 @@ CONSENSUS_OPPONENT_SENTINEL = "ALL"
 
 CONSENSUS_REQUIRED_COLUMNS = [
     "player",
+    "player_canonical",
     "team",
+    "team_abbr",
     "week",
     "opponent",
+    "opponent_abbr",
+    "position",
     "role",
 ]
 
@@ -3145,9 +3328,12 @@ def _enforce_player_form_schema(df: pd.DataFrame) -> pd.DataFrame:
         "player",
         "canonical_player_name",
         "team",
+        "team_abbr",
         "opponent",
+        "opponent_abbr",
         "role",
         "player_name_canonical",
+        "player_canonical",
     ]:
         if col in out.columns:
             out[col] = out[col].astype("string")
@@ -3161,17 +3347,39 @@ def _enforce_player_form_schema(df: pd.DataFrame) -> pd.DataFrame:
     if "team" in out.columns:
         out["team"] = out["team"].str.strip().str.upper()
 
-    if "player_name_canonical" in out.columns:
-        out["player_name_canonical"] = out["player_name_canonical"].str.strip().str.upper()
+    if "team_abbr" in out.columns:
+        out["team_abbr"] = out["team_abbr"].fillna(out.get("team"))
+        out["team_abbr"] = out["team_abbr"].str.strip().str.upper()
 
     if "player" in out.columns:
         out["player"] = out["player"].str.strip()
+
+    if "player_canonical" in out.columns:
+        out["player_canonical"] = out["player_canonical"].str.strip()
+        missing = out["player_canonical"].isna() | out["player_canonical"].eq("")
+        out.loc[missing, "player_canonical"] = (
+            out.loc[missing, "player"].apply(canonicalize_name)
+        )
+    else:
+        out["player_canonical"] = out.get("player", pd.Series(dtype="string")).apply(
+            canonicalize_name
+        )
+
+    if "player_name_canonical" in out.columns:
+        out["player_name_canonical"] = out["player_name_canonical"].str.strip().str.upper()
 
     if "opponent" in out.columns:
         out["opponent"] = (
             out["opponent"].str.strip().str.upper()
         )
         out.loc[out["opponent"].isin(["", "NAN", "NONE", "NULL"]), "opponent"] = pd.NA
+
+    if "opponent_abbr" in out.columns:
+        out["opponent_abbr"] = out["opponent_abbr"].fillna(out.get("opponent"))
+        out["opponent_abbr"] = out["opponent_abbr"].str.strip().str.upper()
+        out.loc[
+            out["opponent_abbr"].isin(["", "NAN", "NONE", "NULL"]), "opponent_abbr"
+        ] = pd.NA
 
     if "role" in out.columns:
         out["role"] = out["role"].str.strip()
@@ -3236,7 +3444,7 @@ def _enforce_consensus_schema(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame(columns=CONSENSUS_REQUIRED_COLUMNS)
 
-    out = df.copy()
+    out = _ensure_single_position_column(df.copy())
     for col in CONSENSUS_REQUIRED_COLUMNS:
         if col not in out.columns:
             if col == "week":
@@ -3247,8 +3455,17 @@ def _enforce_consensus_schema(df: pd.DataFrame) -> pd.DataFrame:
                 out[col] = pd.NA
 
     out["player"] = out["player"].astype("string").str.strip()
+    canonical_series = out.get("player_canonical").astype("string")
+    canonical_valid = canonical_series.notna() & canonical_series.str.strip().ne("")
+    canonical_series = canonical_series.where(canonical_valid, out["player"])
+    out["player_canonical"] = canonical_series.apply(canonicalize_name)
     out["team"] = out["team"].astype("string").str.strip().str.upper()
+    team_abbr_series = out.get("team_abbr").astype("string")
+    team_abbr_valid = team_abbr_series.notna() & team_abbr_series.str.strip().ne("")
+    team_abbr_series = team_abbr_series.where(team_abbr_valid, out["team"])
+    out["team_abbr"] = team_abbr_series.str.strip().str.upper()
     out["role"] = out["role"].astype("string").str.strip()
+    out["position"] = out["position"].astype("string").str.strip()
 
     out["week"] = pd.to_numeric(out["week"], errors="coerce")
     out["opponent"] = (
@@ -3258,6 +3475,10 @@ def _enforce_consensus_schema(df: pd.DataFrame) -> pd.DataFrame:
         .replace({"": CONSENSUS_OPPONENT_SENTINEL})
         .str.upper()
     )
+    opp_abbr_series = out.get("opponent_abbr").astype("string")
+    opp_abbr_valid = opp_abbr_series.notna() & opp_abbr_series.str.strip().ne("")
+    opp_abbr_series = opp_abbr_series.where(opp_abbr_valid, out["opponent"])
+    out["opponent_abbr"] = opp_abbr_series.str.strip().str.upper()
 
     ordered = CONSENSUS_REQUIRED_COLUMNS + [
         c for c in out.columns if c not in CONSENSUS_REQUIRED_COLUMNS
@@ -3265,14 +3486,62 @@ def _enforce_consensus_schema(df: pd.DataFrame) -> pd.DataFrame:
     return out[ordered]
 
 
-def _write_player_form_outputs(df: pd.DataFrame) -> None:
+def _write_player_form_outputs(df: pd.DataFrame, slate_date: str | None = None) -> None:
     if df is None or df.empty:
         raise RuntimeError("[make_player_form] final player_form empty; aborting run")
 
     assert_no_duplicate_columns(df, "final player_form before write")
 
-    df_out = _ensure_cols(df.copy(), FINAL_COLS)
+    df_out = _ensure_single_position_column(df.copy())
+    df_out = _ensure_cols(df_out, FINAL_COLS)
     player_form = _enforce_player_form_schema(df_out)
+
+    player_form["player_canonical"] = player_form["player_canonical"].apply(
+        canonicalize_name
+    )
+    player_form["team_abbr"] = (
+        player_form.get("team_abbr", pd.Series(dtype="string"))
+        .fillna(player_form.get("team"))
+        .astype("string")
+        .str.strip()
+        .str.upper()
+    )
+    player_form["opponent_abbr"] = (
+        player_form.get("opponent_abbr", pd.Series(dtype="string"))
+        .fillna(player_form.get("opponent"))
+        .astype("string")
+        .str.strip()
+        .str.upper()
+    )
+
+    team_to_opp = _build_team_to_opp_map_for_slate(player_form, slate_date)
+    missing_mask = player_form["opponent_abbr"].isna() | (
+        player_form["opponent_abbr"].astype(str).str.strip() == ""
+    )
+    if team_to_opp:
+        player_form.loc[missing_mask, "opponent_abbr"] = player_form.loc[
+            missing_mask, "team_abbr"
+        ].map(team_to_opp)
+
+    player_form["opponent_abbr"] = player_form["opponent_abbr"].replace("", pd.NA)
+    player_form["opponent"] = player_form["opponent"].fillna(player_form["opponent_abbr"])
+    player_form["opponent"] = player_form["opponent"].replace("", pd.NA)
+
+    still_missing = player_form["opponent_abbr"].isna()
+    if still_missing.any():
+        count = int(still_missing.sum())
+        logger.warning(
+            "[make_player_form] unable to resolve opponents for %d players", count
+        )
+        try:
+            DEBUG_MISSING_OPP.parent.mkdir(parents=True, exist_ok=True)
+            player_form.loc[still_missing].to_csv(DEBUG_MISSING_OPP, index=False)
+        except Exception as err:
+            logger.warning(
+                "[make_player_form] failed writing missing opponent debug rows: %s",
+                err,
+            )
+
     if player_form.empty:
         raise RuntimeError("[make_player_form] final player_form empty; aborting run")
 
@@ -3280,6 +3549,7 @@ def _write_player_form_outputs(df: pd.DataFrame) -> None:
     player_form.to_csv(PLAYER_FORM_OUT, index=False)
 
     consensus = _build_grouped_consensus(player_form)
+    consensus = _enforce_consensus_schema(consensus)
     PLAYER_FORM_CONSENSUS_OUT.parent.mkdir(parents=True, exist_ok=True)
     consensus.to_csv(PLAYER_FORM_CONSENSUS_OUT, index=False)
 
@@ -3357,7 +3627,7 @@ def cli():
             )
 
         # Final write on success
-        _write_player_form_outputs(df)
+        _write_player_form_outputs(df, slate_date=args.date)
         return
 
     except Exception as e:
@@ -3374,7 +3644,7 @@ def cli():
                         f"[make_player_form] WARN enrichment skipped in error path: {_enr_e}",
                         file=sys.stderr,
                     )
-                _write_player_form_outputs(df)
+                _write_player_form_outputs(df, slate_date=args.date)
                 return
         except Exception as _w:
             print(

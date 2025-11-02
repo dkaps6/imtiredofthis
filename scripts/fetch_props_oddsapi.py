@@ -8,6 +8,8 @@ from typing import List, Tuple, Optional, Any, Dict
 import requests
 import pandas as pd
 
+from scripts.make_player_form import canonicalize_name
+
 # ------------------------- CONFIG -------------------------
 
 SPORT = "americanfootball_nfl"
@@ -430,10 +432,16 @@ def fetch_odds(
         return
 
     props = pd.concat(frames, ignore_index=True)
+    if "player" in props.columns:
+        props["player_canonical"] = props["player"].apply(canonicalize_name)
+    else:
+        props["player_canonical"] = ""
     props.to_csv(out, index=False)
     log.info(f"wrote {out} rows={len(props)}")
 
     wide = _wide_over_under(props)
+    if not wide.empty and "player" in wide.columns:
+        wide["player_canonical"] = wide["player"].apply(canonicalize_name)
     wide_out = Path(out).with_name("props_raw_wide.csv")
     wide.to_csv(wide_out, index=False)
     log.info(f"wrote {wide_out} rows={len(wide)}")

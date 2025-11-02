@@ -15,38 +15,6 @@ if str(REPO_ROOT) not in sys.path:
 
 from scripts.config import FILES, ROOT
 
-
-def _check(path: str, cols: list[str] | None = None):
-    if not os.path.exists(path):
-        raise RuntimeError(f"Missing required file: {path}")
-    df = pd.read_csv(path)
-    if df.empty:
-        raise RuntimeError(f"{path} exists but is empty")
-    if cols:
-        missing = [c for c in cols if c not in df.columns]
-        if missing:
-            raise RuntimeError(f"{path} missing required columns: {missing}")
-    return df
-
-
-# Required core inputs
-pf = _check("data/player_form.csv", ["player", "team", "week", "opponent"])
-
-# debug duplicate rows for awareness
-dupes = pf[pf.duplicated(subset=["player", "team", "week"], keep=False)]
-if not dupes.empty:
-    print("[metrics_ready] WARNING duplicate player/team/week rows detected:")
-    print(dupes[["player", "team", "week"]].head(15).to_string(index=False))
-
-oppmap = _check("data/opponent_map_from_props.csv", ["team", "week", "opponent"])
-roles = _check("data/roles_ourlads.csv", ["player", "team"])
-
-# Optional: assert minimum unique weeks for a weekly slate (uncomment if desired)
-# if om['week'].nunique() != 1:
-#     raise RuntimeError(f"Expected a single-week slate in opponent_map; found weeks: {sorted(om['week'].unique().tolist())}")
-
-print("[metrics_ready] ✅ core inputs present and valid")
-
 REQUIRED: dict[str, Sequence[str]] = {
     os.path.join("data", "player_form_consensus.csv"): (
         "player",
@@ -210,6 +178,57 @@ def check_required_inputs(required: Iterable[str | Path] | None = None) -> None:
     print("[metrics_ready] ✅ All required inputs present.")
 
 
+def validate_metrics_ready_csv(path: Path) -> None:
+    """Ensure metrics_ready.csv exists with the required columns."""
+
+    if not path.exists():
+        raise RuntimeError(f"metrics_ready.csv missing at {path}")
+
+    try:
+        frame = pd.read_csv(path)
+    except pd.errors.EmptyDataError:
+        raise RuntimeError("metrics_ready.csv exists but is empty") from None
+
+    if frame.empty:
+        raise RuntimeError("metrics_ready.csv has 0 rows")
+
+    required_columns = {
+        "player",
+        "player_canonical",
+        "team",
+        "team_abbr",
+        "opponent",
+        "opponent_abbr",
+        "position",
+        "market",
+        "line",
+    }
+    missing = sorted(required_columns - set(frame.columns))
+    if missing:
+        raise RuntimeError(
+            "metrics_ready.csv missing required columns: " + ", ".join(missing)
+        )
+
+    usage_cols = ["target_share", "route_rate", "rush_share"]
+    missing_usage = [col for col in usage_cols if col not in frame.columns]
+    if missing_usage:
+        raise RuntimeError(
+            "metrics_ready.csv missing usage metrics: " + ", ".join(missing_usage)
+        )
+
+    odds_columns = [col for col in ["over_odds", "under_odds"] if col in frame.columns]
+    if not odds_columns:
+        raise RuntimeError(
+            "metrics_ready.csv must include at least one odds column (over_odds/under_odds)"
+        )
+
+    # TODO: enforce weather coverage once stadium lookups are fully stabilized.
+
+    print(
+        f"[metrics_ready] ✅ {len(frame)} rows validated with required metrics columns"
+    )
+
+
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -248,6 +267,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             required_items.extend(Path(item) for item in group)
 
     check_required_inputs(required_items)
+    validate_metrics_ready_csv(Path("data") / "metrics_ready.csv")
 
 
 if __name__ == "__main__":
