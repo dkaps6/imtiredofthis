@@ -123,7 +123,7 @@ jobs:
           SLATE_DATE: ${{ inputs.date || vars.SLATE_DATE }}
 
         run: |
-          python scripts/build_weather_week.py \
+          python scripts/build/build_weather_week.py \
             --season "${SEASON}" \
             --date "${SLATE_DATE}"
 
