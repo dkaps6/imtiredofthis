@@ -99,7 +99,29 @@ jobs:
       # and expose it here in env.
       - name: Build weather (per-game forecast)
         env:
+          # Make 'import scripts.xxx' work
+          PYTHONPATH: ${{ github.workspace }}
+
+          # Keep the same runtime knobs you use elsewhere
+          PYTHONDONTWRITEBYTECODE: 1
+          PIP_DISABLE_PIP_VERSION_CHECK: 1
+
+          # Keys other steps already rely on
+          APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          ESPN_COOKIE: ${{ secrets.ESPN_COOKIE }}
+          MSF_KEY: ${{ secrets.MSF_KEY }}
+          MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
+          NFLSGIS_USERNAME: ${{ secrets.NFLSGIS_USERNAME }}
+          NFLSGIS_PASSWORD: ${{ secrets.NFLSGIS_PASSWORD }}
+
+          # Weather API for forecast
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+
+          # Thread the same run context into the script
+          SEASON: ${{ inputs.season || vars.SEASON }}
+          SLATE_DATE: ${{ inputs.date || vars.SLATE_DATE }}
+
         run: |
           python scripts/build_weather_week.py \
             --season "${SEASON}" \
