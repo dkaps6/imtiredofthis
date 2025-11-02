@@ -30,7 +30,9 @@ jobs:
           fi
 
       - name: Run repo audit
-        run: python scripts/utils/audit_repo.py
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/utils/audit_repo.py
 
       - name: Upload audit artifacts (always)
         if: always()

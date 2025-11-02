@@ -7,6 +7,8 @@
 # and the values should be the official canonical player name in UPPERCASE
 # "FIRST LAST" form.
 
+import re
+
 CANONICAL_NAME_MAP = {
     # Davante Adams variants
     "DADAMS": "DAVANTE ADAMS",
@@ -108,6 +110,20 @@ def canonicalize_player_name(raw: str) -> tuple[str, str]:
     # Instead, just return the cleaned_key as-is. Downstream grouping will
     # still work because it's consistent.
     return clean_key, clean_key
+
+
+def canonicalize_name(raw: str) -> str:
+    """Return the repo-standard canonical token for a player name."""
+
+    canonical, _ = canonicalize_player_name(raw)
+    canonical = (canonical or "").strip()
+    if not canonical and raw:
+        canonical = str(raw)
+
+    lowered = canonical.lower()
+    lowered = re.sub(r"[^a-z0-9 ]+", "", lowered)
+    lowered = re.sub(r"\s+", " ", lowered).strip()
+    return lowered
 
 
 def log_unmapped_variant(raw: str, path: str = "data/unmapped_player_names.txt") -> None:
