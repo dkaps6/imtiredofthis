@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 from pathlib import Path
+from typing import Dict
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -253,7 +254,7 @@ team,opponent,week,stadium,location,city,state,roof,forecast_summary,temp_f,wind
 import re
 import time
 from datetime import timezone
-from typing import Dict, Iterable, Optional
+from typing import Iterable, Optional
 from zoneinfo import ZoneInfo
 
 from urllib.parse import quote
