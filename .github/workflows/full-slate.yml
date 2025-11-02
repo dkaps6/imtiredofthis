@@ -134,7 +134,7 @@ jobs:
       # You already added row-count guards so it fails if data is totally empty.
       - name: Build QB scramble / designed-run metrics
         run: |
-          python scripts/build_qb_run_metrics.py \
+          python scripts/build/build_qb_run_metrics.py \
             --season "${SEASON}"
 
       # ----------------------------------------
