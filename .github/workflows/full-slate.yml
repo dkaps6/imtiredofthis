@@ -124,7 +124,22 @@ jobs:
             --season "${SEASON}"
 
       # ----------------------------------------
-      # 6. Build weather for this slate
+      # 6. Build player_form + player_form_consensus
+      # ----------------------------------------
+      # make_player_form.py should:
+      # - merge roles_ourlads.csv
+      # - merge props_enriched.csv for team/opponent alignment
+      # - canonicalize player names (strip middle initials, normalize "J.Fields" -> "Justin Fields")
+      # - output data/player_form.csv and data/player_form_consensus.csv
+      - name: Build player_form / consensus
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/make_player_form.py \
+            --season "${SEASON}" \
+            --date "${SLATE_DATE}"
+
+      # ----------------------------------------
+      # 7. Build weather for this slate
       # ----------------------------------------
       # Weather needs to be in place before downstream metrics.
       - name: Build weather (per-game forecast)
@@ -146,21 +161,6 @@ jobs:
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/build/build_weather_week.py \
-            --season "${SEASON}" \
-            --date "${SLATE_DATE}"
-
-      # ----------------------------------------
-      # 7. Build player_form + player_form_consensus
-      # ----------------------------------------
-      # make_player_form.py should:
-      # - merge roles_ourlads.csv
-      # - merge props_enriched.csv for team/opponent alignment
-      # - canonicalize player names (strip middle initials, normalize "J.Fields" -> "Justin Fields")
-      # - output data/player_form.csv and data/player_form_consensus.csv
-      - name: Build player_form / consensus
-        run: |
-          export PYTHONPATH="${PWD}"
-          python scripts/make_player_form.py \
             --season "${SEASON}" \
             --date "${SLATE_DATE}"
 
