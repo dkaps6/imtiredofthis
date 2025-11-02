@@ -82,16 +82,21 @@ jobs:
             --season "${SEASON}"
 
       # ----------------------------------------
-      # 3. Build opponent map from props
+      # 3. Fetch player props / odds board (before player_form)
       # ----------------------------------------
-      # Uses sportsbook / props board scrape to infer each player's opponent
-      # for the current slate, writes data/opponent_map_from_props.csv
-      - name: Build opponent map from props
+      - name: Fetch player props / odds board
         run: |
           export PYTHONPATH="${PWD}"
-          python scripts/build/build_opponent_map_from_props.py \
-            --season "${SEASON}" \
-            --date "${SLATE_DATE}"
+          python scripts/fetch_props_oddsapi.py \
+            --books "draftkings,fanduel,betmgm,caesars" \
+            --markets "player_pass_yds,player_reception_yds,player_rush_yds,player_receptions,player_rush_reception_yds,player_anytime_td" \
+            --region "us" \
+            --date "${SLATE_DATE}" \
+            --out "outputs/props_raw.csv" \
+            --out_game "outputs/odds_game.csv"
+        shell: /usr/bin/bash -e {0}
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
 
       # ----------------------------------------
       # 4. Build QB run/scramble metrics
@@ -148,7 +153,7 @@ jobs:
       # ----------------------------------------
       # make_player_form.py should:
       # - merge roles_ourlads.csv
-      # - merge opponent_map_from_props.csv (and schedule fallback if you've added it)
+      # - merge props_enriched.csv for team/opponent alignment
       # - canonicalize player names (strip middle initials, normalize "J.Fields" -> "Justin Fields")
       # - output data/player_form.csv and data/player_form_consensus.csv
       - name: Build player_form / consensus
@@ -156,20 +161,6 @@ jobs:
           export PYTHONPATH="${PWD}"
           python scripts/make_player_form.py \
             --season "${SEASON}"
-
-      - name: Fetch player props / odds board
-        run: |
-          export PYTHONPATH="${PWD}"
-          python scripts/fetch_props_oddsapi.py \
-            --books "draftkings,fanduel,betmgm,caesars" \
-            --markets "player_pass_yds,player_reception_yds,player_rush_yds,player_receptions,player_rush_reception_yds,player_anytime_td" \
-            --region "us" \
-            --date "${SLATE_DATE}" \
-            --out "outputs/props_raw.csv" \
-            --out_game "outputs/odds_game.csv"
-        shell: /usr/bin/bash -e {0}
-        env:
-          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
 
       # ----------------------------------------
       # 8. Run pipeline (full metrics prep)

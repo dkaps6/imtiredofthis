@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import os, sys, time, argparse, logging
+import os, sys, time, argparse, logging, re
 from pathlib import Path
 from typing import List, Tuple, Optional, Any, Dict
 
 import requests
 import pandas as pd
 
-from scripts.make_player_form import canonicalize_name
+from scripts.make_player_form import canonicalize_name, TEAM_NAME_TO_ABBR, _canon_team
 
 # ------------------------- CONFIG -------------------------
 
@@ -18,6 +18,9 @@ REGION_DEFAULT = "us"
 TIMEOUT_S = 25
 BACKOFF_S = [0.6, 1.2, 2.0, 3.5, 5.0]
 GAME_MARKETS = ["h2h", "spreads", "totals"]  # bulk-only
+
+PROPS_ENRICHED_PATH = Path("data/props_enriched.csv")
+ROLES_PATH = Path("data/roles_ourlads.csv")
 
 # Known book keys for US (include alias keys we might see from the API)
 US_BOOK_KEYS = {
@@ -230,6 +233,193 @@ def _wide_over_under(df: pd.DataFrame) -> pd.DataFrame:
              .first()
              .rename(columns={"price_american": "under_odds"}))
     return over.merge(under, on=key, how="outer")
+
+
+def _normalize_team_abbr(team: Any) -> str:
+    raw = ("" if team is None else str(team)).strip()
+    if not raw:
+        return ""
+    upper = raw.upper()
+    if upper in TEAM_NAME_TO_ABBR:
+        return TEAM_NAME_TO_ABBR[upper]
+    lower = raw.lower()
+    if lower in TEAM_NAME_TO_ABBR:
+        return TEAM_NAME_TO_ABBR[lower]
+    cleaned = re.sub(r"[^A-Z0-9 ]+", "", upper)
+    if cleaned in TEAM_NAME_TO_ABBR:
+        return TEAM_NAME_TO_ABBR[cleaned]
+    if len(upper) == 3 and upper.isalpha():
+        return _canon_team(upper)
+    return _canon_team(upper)
+
+
+def _load_roster_map() -> dict[str, set[str]]:
+    if not ROLES_PATH.exists() or ROLES_PATH.stat().st_size == 0:
+        return {}
+    try:
+        roles = pd.read_csv(ROLES_PATH)
+    except Exception:
+        return {}
+    need = {"team", "player"}
+    if roles.empty or not need.issubset(set(roles.columns)):
+        return {}
+    roles = roles[list(need)].copy()
+    roles["team"] = roles["team"].apply(_canon_team)
+    roles["player_canonical"] = roles["player"].apply(canonicalize_name)
+    roster: dict[str, set[str]] = {}
+    for team, group in roles.dropna(subset=["team"]).groupby("team"):
+        names = {nm for nm in group["player_canonical"].astype(str) if nm}
+        if names:
+            roster[team] = names
+    return roster
+
+
+def _infer_player_team(row: pd.Series, roster: dict[str, set[str]]) -> str:
+    name = row.get("player_canonical", "")
+    if not isinstance(name, str) or not name:
+        return ""
+    home = row.get("home_team_abbr", "")
+    away = row.get("away_team_abbr", "")
+    for code in (home, away):
+        if code and code in roster and name in roster[code]:
+            return code
+    return ""
+
+
+def _infer_opponent(team: str, home: str, away: str) -> str:
+    team = (team or "").strip().upper()
+    home = (home or "").strip().upper()
+    away = (away or "").strip().upper()
+    if team and home and away:
+        if team == home:
+            return away
+        if team == away:
+            return home
+    return ""
+
+
+def _write_props_enriched(props: pd.DataFrame, out_game: str) -> None:
+    Path(PROPS_ENRICHED_PATH.parent).mkdir(parents=True, exist_ok=True)
+    event_cols = ["event_id", "commence_time", "home_team", "away_team", "kickoff_ts"]
+    try:
+        game_board = pd.read_csv(out_game)
+    except Exception:
+        game_board = pd.DataFrame(columns=event_cols)
+    if not game_board.empty:
+        game_board.columns = [c.lower() for c in game_board.columns]
+        if "kickoff_ts" not in game_board.columns and "commence_time" in game_board.columns:
+            game_board["kickoff_ts"] = game_board["commence_time"]
+        if "home_team" in game_board.columns:
+            game_board["home_team_abbr"] = game_board["home_team"].apply(_normalize_team_abbr)
+        else:
+            game_board["home_team_abbr"] = ""
+        if "away_team" in game_board.columns:
+            game_board["away_team_abbr"] = game_board["away_team"].apply(_normalize_team_abbr)
+        else:
+            game_board["away_team_abbr"] = ""
+        event_info = (
+            game_board[
+                [c for c in ["event_id", "kickoff_ts", "home_team_abbr", "away_team_abbr"] if c in game_board.columns]
+            ]
+            .drop_duplicates(subset=["event_id"])
+        )
+    else:
+        event_info = pd.DataFrame(columns=["event_id", "kickoff_ts", "home_team_abbr", "away_team_abbr"])
+
+    columns = [
+        "event_id",
+        "player",
+        "player_canonical",
+        "market",
+        "side",
+        "line",
+        "price_american",
+        "book",
+        "book_title",
+        "commence_time",
+    ]
+    if props.empty:
+        empty = pd.DataFrame(columns=[
+            "event_id",
+            "player_name_raw",
+            "player_canonical",
+            "player_market",
+            "stat_type",
+            "line",
+            "odds",
+            "kickoff_ts",
+            "player_team_abbr",
+            "opponent_team_abbr",
+            "home_team_abbr",
+            "away_team_abbr",
+        ])
+        empty.to_csv(PROPS_ENRICHED_PATH, index=False)
+        log.info(f"wrote empty {PROPS_ENRICHED_PATH}")
+        return
+
+    working = props[[c for c in columns if c in props.columns]].copy()
+    working["player_name_raw"] = working.get("player", "")
+    working["player_market"] = working.get("market", "")
+    working["stat_type"] = working.get("side", "")
+    working["odds"] = working.get("price_american", "")
+
+    if "player_canonical" not in working.columns:
+        working["player_canonical"] = working.get("player", "").apply(canonicalize_name)
+
+    enriched = working.merge(event_info, on="event_id", how="left")
+
+    roster_map = _load_roster_map()
+    if roster_map:
+        enriched["player_team_abbr"] = enriched.apply(
+            lambda row: _infer_player_team(row, roster_map), axis=1
+        )
+    else:
+        enriched["player_team_abbr"] = ""
+
+    if "home_team_abbr" in enriched.columns:
+        enriched["home_team_abbr"] = enriched["home_team_abbr"].apply(_normalize_team_abbr)
+    else:
+        enriched["home_team_abbr"] = ""
+    if "away_team_abbr" in enriched.columns:
+        enriched["away_team_abbr"] = enriched["away_team_abbr"].apply(_normalize_team_abbr)
+    else:
+        enriched["away_team_abbr"] = ""
+
+    fallback_series = pd.Series([""] * len(enriched)) if len(enriched) else pd.Series([], dtype=object)
+    enriched["opponent_team_abbr"] = [
+        _infer_opponent(team, home, away)
+        for team, home, away in zip(
+            enriched.get("player_team_abbr", fallback_series),
+            enriched.get("home_team_abbr", fallback_series),
+            enriched.get("away_team_abbr", fallback_series),
+        )
+    ]
+
+    if "kickoff_ts" not in enriched.columns:
+        enriched["kickoff_ts"] = enriched.get("commence_time")
+    else:
+        enriched["kickoff_ts"] = enriched["kickoff_ts"].fillna(enriched.get("commence_time"))
+
+    cols_out = [
+        "event_id",
+        "kickoff_ts",
+        "player_name_raw",
+        "player_canonical",
+        "player_market",
+        "stat_type",
+        "line",
+        "odds",
+        "book",
+        "book_title",
+        "player_team_abbr",
+        "opponent_team_abbr",
+        "home_team_abbr",
+        "away_team_abbr",
+    ]
+    extra_cols = [c for c in enriched.columns if c not in cols_out]
+    props_enriched = enriched[cols_out + extra_cols]
+    props_enriched.to_csv(PROPS_ENRICHED_PATH, index=False)
+    log.info(f"wrote {PROPS_ENRICHED_PATH} rows={len(props_enriched)}")
 
 # ------------------------- CORE FETCHERS ------------------
 
@@ -445,6 +635,11 @@ def fetch_odds(
     wide_out = Path(out).with_name("props_raw_wide.csv")
     wide.to_csv(wide_out, index=False)
     log.info(f"wrote {wide_out} rows={len(wide)}")
+
+    try:
+        _write_props_enriched(props, out_game)
+    except Exception as err:
+        log.info(f"failed to write props_enriched.csv: {err}")
 
 # ------------------------- CLI ----------------------------
 

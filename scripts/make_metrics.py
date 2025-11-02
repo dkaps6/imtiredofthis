@@ -312,6 +312,39 @@ def load_props() -> pd.DataFrame:
                     df[c] = df[c].combine_first(df[c_p])
                     df.drop(columns=[c_p], inplace=True)
 
+    enriched = _read_csv(os.path.join(DATA_DIR, "props_enriched.csv"))
+    if not enriched.empty:
+        if "player_canonical" not in df.columns:
+            df["player_canonical"] = df["player"].apply(canonicalize_name)
+        if "player_canonical" not in enriched.columns:
+            if "player_name_raw" in enriched.columns:
+                enriched["player_canonical"] = enriched["player_name_raw"].apply(canonicalize_name)
+            else:
+                enriched["player_canonical"] = enriched.get("player", "")
+        merge_keys = [c for c in ["event_id", "player_canonical"] if c in df.columns and c in enriched.columns]
+        if not merge_keys:
+            merge_keys = ["player_canonical"]
+        keep_cols = [c for c in ["player_canonical", "event_id", "player_team_abbr", "opponent_team_abbr", "kickoff_ts", "home_team_abbr", "away_team_abbr"] if c in enriched.columns]
+        subset = enriched[keep_cols].drop_duplicates(subset=merge_keys, keep="first")
+        df = df.merge(subset, on=merge_keys, how="left", suffixes=("", "_props_enriched"))
+        if "player_team_abbr" in df.columns:
+            df["team_abbr"] = df["team_abbr"].combine_first(df["player_team_abbr"])
+        if "opponent_team_abbr" in df.columns:
+            df["opponent_abbr"] = df.get("opponent_abbr", pd.Series(dtype=object)).combine_first(df["opponent_team_abbr"])
+            if "opp_abbr" in df.columns:
+                df["opp_abbr"] = df["opp_abbr"].combine_first(df["opponent_team_abbr"])
+            else:
+                df["opp_abbr"] = df["opponent_abbr"]
+        if "kickoff_ts" in df.columns and "kickoff_ts_props_enriched" in df.columns:
+            df["kickoff_ts"] = df["kickoff_ts"].combine_first(df["kickoff_ts_props_enriched"])
+        elif "kickoff_ts_props_enriched" in df.columns:
+            df["kickoff_ts"] = df["kickoff_ts_props_enriched"]
+        if "event_id_props_enriched" in df.columns:
+            df["event_id"] = df["event_id"].combine_first(df["event_id_props_enriched"])
+        for helper in ["player_team_abbr", "opponent_team_abbr", "kickoff_ts_props_enriched", "event_id_props_enriched", "home_team_abbr", "away_team_abbr"]:
+            if helper in df.columns:
+                df.drop(columns=[helper], inplace=True)
+
     return df
 
 def load_team_form() -> pd.DataFrame:
@@ -342,6 +375,8 @@ def load_player_form() -> pd.DataFrame:
         return df
     if "team" in df.columns:
         df["team"] = _normalize_team_names(df["team"])
+    if "team_abbr" in df.columns:
+        df["team_abbr"] = _normalize_team_names(df["team_abbr"])
     # normalize player column
     for pcol in ["player","player_name","name"]:
         if pcol in df.columns:
@@ -363,6 +398,13 @@ def load_player_form() -> pd.DataFrame:
         df["opponent_abbr"] = _normalize_team_names(df["opponent"])
     else:
         df["opponent_abbr"] = ""
+    if "opp_abbr" in df.columns:
+        df["opp_abbr"] = _normalize_team_names(df["opp_abbr"])
+        df["opponent_abbr"] = df["opponent_abbr"].combine_first(df["opp_abbr"])
+    else:
+        df["opp_abbr"] = df["opponent_abbr"]
+    if "kickoff_ts" not in df.columns:
+        df["kickoff_ts"] = pd.NA
 
     # --- alias column names for compatibility with make_player_form ---
     if "target_share" not in df.columns and "tgt_share" in df.columns:
@@ -568,7 +610,7 @@ def _correct_wr_roles(df: pd.DataFrame) -> pd.DataFrame:
 def build_metrics(season: int) -> pd.DataFrame:
     props = load_props()
     if props.empty:
-        return pd.DataFrame(columns=[
+        empty = pd.DataFrame(columns=[
             "event_id","player","team","opponent","market","line","over_odds","under_odds",
             "target_share","rush_share","route_rate","yprr_proxy","ypt","ypc","ypa_prior","rz_tgt_share","rz_carry_share","position","role",
             "pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
@@ -577,6 +619,8 @@ def build_metrics(season: int) -> pd.DataFrame:
             "cb_penalty","injury_status","wind_mph","temp_f","precip","team_wp","season",
             "week","opp_plays_wk","opp_pace_wk","opp_proe_wk"
         ])
+        empty.attrs["row_counts"] = {"props_raw": 0, "player_form_consensus": 0, "team_form": 0, "joined": 0}
+        return empty
 
     pf  = load_player_form()
     tf  = load_team_form()
@@ -823,6 +867,11 @@ def build_metrics(season: int) -> pd.DataFrame:
         base["opponent_abbr"] = _normalize_team_names(base["opponent"])
     else:
         base["opponent_abbr"] = pd.NA
+    if "opp_abbr" in base.columns:
+        base["opp_abbr"] = _normalize_team_names(base["opp_abbr"])
+        base["opponent_abbr"] = base["opponent_abbr"].combine_first(base["opp_abbr"])
+    else:
+        base["opp_abbr"] = base["opponent_abbr"]
 
     team_to_opp: dict[str, str] = {}
     teams_series = base.get("team_abbr", pd.Series(dtype=object))
@@ -850,24 +899,29 @@ def build_metrics(season: int) -> pd.DataFrame:
     unresolved_opponents = int(base["opponent_abbr"].isna().sum())
     # Attach team env (pace/proe/rz/12p/slot/ay + boxes)
     if not tf.empty:
-        keep_tf = ["team","def_pass_epa","def_rush_epa","def_sack_rate",
+        tf = tf.copy()
+        if "team_abbr" in tf.columns:
+            tf["team_abbr"] = _normalize_team_names(tf["team_abbr"])
+        else:
+            tf["team_abbr"] = _normalize_team_names(tf.get("team", pd.Series([], dtype=object)))
+        keep_tf = ["team_abbr","def_pass_epa","def_rush_epa","def_sack_rate",
                    "pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
                    "light_box_rate","heavy_box_rate","season"]
         keep_tf = [c for c in keep_tf if c in tf.columns]
-        base = base.merge(tf[keep_tf].drop_duplicates(), on=["team"], how="left")
+        base = base.merge(tf[keep_tf].drop_duplicates(subset=["team_abbr"]), on=["team_abbr"], how="left")
 
     # Attach opponent defenses (EPA/sacks/boxes)
     if not tf.empty:
         opp_tf = tf.rename(columns={
-            "team":"opponent",
-            "def_pass_epa":"def_pass_epa_opp",
-            "def_rush_epa":"def_rush_epa_opp",
-            "def_sack_rate":"def_sack_rate_opp",
-            "light_box_rate":"light_box_rate_opp",
-            "heavy_box_rate":"heavy_box_rate_opp",
+            "team_abbr": "opponent_abbr",
+            "def_pass_epa": "def_pass_epa_opp",
+            "def_rush_epa": "def_rush_epa_opp",
+            "def_sack_rate": "def_sack_rate_opp",
+            "light_box_rate": "light_box_rate_opp",
+            "heavy_box_rate": "heavy_box_rate_opp",
         })
-        keep_opp = ["opponent","def_pass_epa_opp","def_rush_epa_opp","def_sack_rate_opp","light_box_rate_opp","heavy_box_rate_opp"]
-        base = base.merge(opp_tf[keep_opp].drop_duplicates(), on="opponent", how="left")
+        keep_opp = ["opponent_abbr","def_pass_epa_opp","def_rush_epa_opp","def_sack_rate_opp","light_box_rate_opp","heavy_box_rate_opp"]
+        base = base.merge(opp_tf[keep_opp].drop_duplicates(subset=["opponent_abbr"]), on="opponent_abbr", how="left")
     else:
         for c in ["def_pass_epa_opp","def_rush_epa_opp","def_sack_rate_opp","light_box_rate_opp","heavy_box_rate_opp"]:
             if c not in base.columns:
@@ -1119,6 +1173,12 @@ def build_metrics(season: int) -> pd.DataFrame:
         print(f"[make_metrics] WARN: weather missing for {missing_weather} rows")
 
     base = base[want].drop_duplicates().reset_index(drop=True)
+    base.attrs["row_counts"] = {
+        "props_raw": len(props),
+        "player_form_consensus": len(pf_consensus),
+        "team_form": len(tf),
+        "joined": len(base),
+    }
     return base
 
 def _generate_metrics_dataframe(season: int) -> pd.DataFrame:
@@ -1324,6 +1384,19 @@ def _generate_metrics_dataframe(season: int) -> pd.DataFrame:
         )
 
     if df.empty:
+        counts = getattr(df, 'attrs', {}).get('row_counts', {})
+        if counts:
+            print(
+                "[make_metrics] ERROR: metrics_ready empty after join (props_raw={props}, player_form={pf}, team_form={tf}, joined={joined})"
+                .format(
+                    props=counts.get('props_raw', 0),
+                    pf=counts.get('player_form_consensus', 0),
+                    tf=counts.get('team_form', 0),
+                    joined=counts.get('joined', 0),
+                )
+            )
+        else:
+            print("[make_metrics] ERROR: metrics_ready empty after join (no counts)")
         raise RuntimeError("metrics_ready is empty after merge")
 
     # Optional: add opponent weekly env (pace/proe/plays_est) if present
