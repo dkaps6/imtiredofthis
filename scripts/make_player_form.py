@@ -3048,7 +3048,13 @@ def _write_player_form_outputs(df: pd.DataFrame) -> None:
 
 def cli():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--season", type=int, default=2025)
+    parser.add_argument("--season", type=int, required=True)
+    parser.add_argument(
+        "--date",
+        type=str,
+        required=False,
+        help="Slate date like YYYY-MM-DD (used for opponent mapping / props alignment)",
+    )
     args = parser.parse_args()
 
     _safe_mkdir(DATA_DIR)
