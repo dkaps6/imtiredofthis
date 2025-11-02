@@ -146,22 +146,17 @@ jobs:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
 
       # ----------------------------------------
-      # 7. Run pipeline (full metrics / slipgen prep)
+      # 7. Run pipeline (full metrics prep)
       # ----------------------------------------
       # This stage assembles all derived features that pricing depends on.
       # After this, the repo should have:
       # - fully enriched per-player/per-team matchup features
-      # - slipgen output
-      - name: Run pipeline (full metrics + slipgen)
+      - name: Run pipeline (full metrics)
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/make_metrics.py \
             --season "${SEASON}" \
             --mode full \
-            --date "${SLATE_DATE}"
-          export PYTHONPATH="${PWD}"
-          python scripts/slipgen.py \
-            --season "${SEASON}" \
             --date "${SLATE_DATE}"
 
       # ----------------------------------------
