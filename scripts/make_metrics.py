@@ -80,6 +80,7 @@ PLAYER_CONS_PATH = DATA_PATH / "player_form_consensus.csv"
 QB_SCRAMBLE_PATH = DATA_PATH / "qb_scramble_rates.csv"
 QB_DESIGNED_PATH = DATA_PATH / "qb_designed_runs.csv"
 QB_MOBILITY_PATH = DATA_PATH / "qb_mobility.csv"
+QB_RUN_METRICS_PATH = DATA_PATH / "qb_run_metrics.csv"
 WEATHER_PATH = DATA_PATH / "weather.csv"
 WEATHER_WEEK_PATH = DATA_PATH / "weather_week.csv"
 
@@ -488,6 +489,28 @@ def load_weather() -> pd.DataFrame:
     df = _read_csv(os.path.join(DATA_DIR, "weather.csv"))
     return df
 
+def load_qb_run_metrics() -> pd.DataFrame:
+    path = os.path.join(DATA_DIR, "qb_run_metrics.csv")
+    df = _read_csv(path)
+    if df.empty:
+        # Fallback: derive from individual components when combined file missing
+        scramble = _read_csv(os.path.join(DATA_DIR, "qb_scramble_rates.csv"))
+        designed = _read_csv(os.path.join(DATA_DIR, "qb_designed_runs.csv"))
+        if not scramble.empty or not designed.empty:
+            df = scramble.merge(designed, on=["player", "week"], how="outer")
+    if df.empty:
+        return df
+    # Normalize identifiers
+    if "player" in df.columns:
+        df["player"] = _normalize_player_name(df["player"])
+        df["player_canonical"] = df["player"].apply(canonicalize_name)
+    else:
+        df["player"] = ""
+        df["player_canonical"] = ""
+    if "week" in df.columns:
+        df["week"] = pd.to_numeric(df["week"], errors="coerce").astype("Int64")
+    return df
+
 # Preferred game-lines: Odds API file, then fallback to schedule
 def _read_csv_any(paths):
     for p in paths:
@@ -639,6 +662,7 @@ def build_metrics(season: int) -> pd.DataFrame:
     cov = load_coverage()
     cba = load_cb_assignments()
     inj = load_injuries()
+    qb_run = load_qb_run_metrics()
     wx  = load_weather()
     gl  = load_game_lines_preferring_odds()
     upstream_empty = {
@@ -648,6 +672,7 @@ def build_metrics(season: int) -> pd.DataFrame:
         "coverage": cov.empty,
         "cb_assignments": cba.empty,
         "injuries": inj.empty,
+        "qb_run_metrics": qb_run.empty,
         "weather": wx.empty,
         "odds_game": gl.empty,
     }
@@ -933,6 +958,52 @@ def build_metrics(season: int) -> pd.DataFrame:
         base["opponent"] = _normalize_team_names(base["opponent"])
     else:
         base["opponent"] = base["opponent_abbr"]
+
+    qb_feature_cols = [
+        "scramble_rate",
+        "scrambles",
+        "dropbacks",
+        "designed_run_rate",
+        "designed_runs",
+        "snaps",
+    ]
+    if not qb_run.empty:
+        qb = qb_run.copy()
+        join_cols = [
+            c
+            for c in ["player_canonical", "week"]
+            if c in qb.columns and c in base.columns
+        ]
+        if not join_cols:
+            join_cols = [
+                c
+                for c in ["player", "week"]
+                if c in qb.columns and c in base.columns
+            ]
+        keep_cols = [
+            c
+            for c in [
+                "player",
+                "player_canonical",
+                "week",
+                *qb_feature_cols,
+            ]
+            if c in qb.columns
+        ]
+        if join_cols and keep_cols:
+            qb_subset = qb[keep_cols].drop_duplicates(subset=join_cols)
+            base = base.merge(
+                qb_subset,
+                on=join_cols,
+                how="left",
+                suffixes=("", "_qb"),
+            )
+            for helper in ["player_qb", "player_canonical_qb"]:
+                if helper in base.columns:
+                    base.drop(columns=[helper], inplace=True)
+    for col in qb_feature_cols:
+        if col not in base.columns:
+            base[col] = np.nan
 
     unresolved_opponents = int(base["opponent_abbr"].isna().sum())
     # Attach team env (pace/proe/rz/12p/slot/ay + boxes)
@@ -1502,6 +1573,7 @@ OPTIONAL_INPUTS: dict[str, Path] = {
     "qb_scramble_rates": QB_SCRAMBLE_PATH,
     "qb_designed_runs": QB_DESIGNED_PATH,
     "qb_mobility": QB_MOBILITY_PATH,
+    "qb_run_metrics": QB_RUN_METRICS_PATH,
     "weather": WEATHER_PATH,
     "weather_week": WEATHER_WEEK_PATH,
 }

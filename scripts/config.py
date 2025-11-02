@@ -27,6 +27,8 @@ FILES = {
     "props_raw": DIR["outputs"] / "props_raw.csv",
     "props_raw_wide": DIR["outputs"] / "props_raw_wide.csv",
     "odds_game": DIR["outputs"] / "odds_game.csv",
+    "qb_run_metrics": DIR["data"] / "qb_run_metrics.csv",
+    "weather_week": DIR["data"] / "weather_week.csv",
     "props_priced": DIR["outputs"] / "props_priced_clean.csv",
     "slate_predictions": DIR["models_out"] / "slate_predictions.parquet",
     "slate_diagnostics": DIR["models_out"] / "slate_diagnostics.json",

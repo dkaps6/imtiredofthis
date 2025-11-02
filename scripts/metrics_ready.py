@@ -73,11 +73,25 @@ REQUIRED: dict[str, Sequence[str]] = {
         "scrambles",
         "dropbacks",
     ),
+    os.path.join("data", "qb_run_metrics.csv"): (
+        "player",
+        "week",
+        "scramble_rate",
+        "scrambles",
+        "dropbacks",
+        "designed_run_rate",
+        "designed_runs",
+        "snaps",
+    ),
 }
 
 DEFAULT_REQUIRED_KEYS: Sequence[str] = (
     "team_form",
     "player_form",
+    "qb_run_metrics",
+    "weather_week",
+    "props_raw",
+    "odds_game",
     "metrics_ready",
 )
 
