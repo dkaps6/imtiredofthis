@@ -19,7 +19,10 @@ TIMEOUT_S = 25
 BACKOFF_S = [0.6, 1.2, 2.0, 3.5, 5.0]
 GAME_MARKETS = ["h2h", "spreads", "totals"]  # bulk-only
 
-PROPS_ENRICHED_PATH = Path("data/props_enriched.csv")
+DATA_DIR = Path("data")
+PROPS_ENRICHED_PATH = DATA_DIR / "props_enriched.csv"
+PROPS_RAW_DATA_PATH = DATA_DIR / "props_raw.csv"
+OPPONENT_MAP_PATH = DATA_DIR / "opponent_map_from_props.csv"
 ROLES_PATH = Path("data/roles_ourlads.csv")
 
 # Known book keys for US (include alias keys we might see from the API)
@@ -83,6 +86,12 @@ BOOK_KEY_ALIASES: Dict[str, set[str]] = {
     "betrivers": {"betrivers", "barstool"},
 }
 
+DROP_TOKENS = {
+    "U", "CC", "T",
+    "II", "III", "IV", "V", "VI", "VII",
+    "Sr", "Sr.", "Jr", "Jr.", "III",
+}
+
 # ------------------------- LOGGING ------------------------
 
 log = logging.getLogger("oddsapi")
@@ -92,6 +101,27 @@ _handler.setFormatter(logging.Formatter("[oddsapi] %(message)s"))
 log.addHandler(_handler)
 
 # ------------------------- HELPERS ------------------------
+
+def _compact_player_id(full_name: Any) -> str:
+    if not isinstance(full_name, str):
+        return ""
+    cleaned = (
+        full_name.replace(".", "")
+        .replace("'", "")
+        .strip()
+    )
+    if not cleaned:
+        return ""
+    parts = cleaned.split()
+    parts = [p for p in parts if p and p not in DROP_TOKENS]
+    if not parts:
+        return ""
+    first = parts[0]
+    last = parts[-1]
+    if not first or not last:
+        return ""
+    key = (first[0] + last).lower()
+    return key[0].upper() + key[1:]
 
 def _expand_books_filter(books: Optional[List[str]]) -> Optional[set[str]]:
     """
@@ -298,7 +328,7 @@ def _infer_opponent(team: str, home: str, away: str) -> str:
     return ""
 
 
-def _write_props_enriched(props: pd.DataFrame, out_game: str) -> None:
+def _write_props_enriched(props: pd.DataFrame, out_game: str) -> pd.DataFrame:
     Path(PROPS_ENRICHED_PATH.parent).mkdir(parents=True, exist_ok=True)
     event_cols = ["event_id", "commence_time", "home_team", "away_team", "kickoff_ts"]
     try:
@@ -355,7 +385,7 @@ def _write_props_enriched(props: pd.DataFrame, out_game: str) -> None:
         ])
         empty.to_csv(PROPS_ENRICHED_PATH, index=False)
         log.info(f"wrote empty {PROPS_ENRICHED_PATH}")
-        return
+        return empty
 
     working = props[[c for c in columns if c in props.columns]].copy()
     working["player_name_raw"] = working.get("player", "")
@@ -420,6 +450,104 @@ def _write_props_enriched(props: pd.DataFrame, out_game: str) -> None:
     props_enriched = enriched[cols_out + extra_cols]
     props_enriched.to_csv(PROPS_ENRICHED_PATH, index=False)
     log.info(f"wrote {PROPS_ENRICHED_PATH} rows={len(props_enriched)}")
+    return props_enriched
+
+
+def _build_opponent_map(enriched: Optional[pd.DataFrame]) -> pd.DataFrame:
+    cols = ["player", "team", "opponent", "event_id"]
+    if enriched is None or enriched.empty:
+        return pd.DataFrame(columns=cols)
+
+    working = enriched.copy()
+    if "player_canonical" not in working.columns:
+        working["player_canonical"] = working.get("player", "")
+
+    team_series = working.get("player_team_abbr")
+    if team_series is None:
+        team_series = working.get("team")
+    working["team"] = (
+        team_series.fillna("")
+        .astype(str)
+        .str.upper()
+        .str.strip()
+    )
+
+    opp_series = working.get("opponent_team_abbr")
+    if opp_series is None:
+        fallback = [
+            _infer_opponent(team, home, away)
+            for team, home, away in zip(
+                working.get("team", pd.Series([], dtype=object)),
+                working.get("home_team_abbr", pd.Series([], dtype=object)),
+                working.get("away_team_abbr", pd.Series([], dtype=object)),
+            )
+        ]
+        opp_series = pd.Series(fallback, index=working.index)
+    working["opponent"] = (
+        opp_series.fillna("")
+        .astype(str)
+        .str.upper()
+        .str.strip()
+    )
+
+    working["player_compact"] = working["player_canonical"].apply(_compact_player_id)
+
+    out = (
+        working[["player_compact", "team", "opponent", "event_id"]]
+        .rename(columns={"player_compact": "player"})
+    )
+    out = out[out["player"].astype(str).str.strip().ne("")]
+    out = out.drop_duplicates(subset=["player", "team", "event_id"])
+    out = out.sort_values(["team", "player", "event_id"], kind="mergesort")
+
+    missing_team = out["team"].astype(str).str.strip().eq("")
+    if missing_team.any():
+        log.warning(
+            "opponent map missing team for %d players", int(missing_team.sum())
+        )
+    missing_opp = out["opponent"].astype(str).str.strip().eq("")
+    if missing_opp.any():
+        log.warning(
+            "opponent map missing opponent for %d players", int(missing_opp.sum())
+        )
+    return out
+
+
+def _write_data_exports(raw_props: pd.DataFrame, enriched: Optional[pd.DataFrame]) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    props_copy = raw_props.copy()
+    if not props_copy.empty and enriched is not None and not enriched.empty:
+        join_cols = [c for c in ["event_id", "player"] if c in props_copy.columns and c in enriched.columns]
+        extra_cols = [
+            c
+            for c in [
+                "event_id",
+                "player",
+                "player_team_abbr",
+                "opponent_team_abbr",
+                "home_team_abbr",
+                "away_team_abbr",
+            ]
+            if c in enriched.columns
+        ]
+        if join_cols:
+            props_copy = props_copy.merge(
+                enriched[extra_cols].drop_duplicates(subset=join_cols),
+                on=join_cols,
+                how="left",
+            )
+    if "player_team_abbr" in props_copy.columns:
+        props_copy.rename(columns={"player_team_abbr": "team"}, inplace=True)
+    if "opponent_team_abbr" in props_copy.columns:
+        props_copy.rename(columns={"opponent_team_abbr": "opponent"}, inplace=True)
+
+    props_copy.to_csv(PROPS_RAW_DATA_PATH, index=False)
+    log.info(f"wrote {PROPS_RAW_DATA_PATH} rows={len(props_copy)}")
+
+    opponent_map = _build_opponent_map(enriched)
+    opponent_map.to_csv(OPPONENT_MAP_PATH, index=False)
+    log.info(f"wrote {OPPONENT_MAP_PATH} rows={len(opponent_map)}")
 
 # ------------------------- CORE FETCHERS ------------------
 
@@ -566,6 +694,7 @@ def fetch_odds(
     markets: List[str],
     region: str = REGION_DEFAULT,
     date: str = "",
+    season: str | int | None = None,
     out: str = "outputs/props_raw.csv",
     out_game: str = "outputs/odds_game.csv",
 ) -> None:
@@ -573,6 +702,12 @@ def fetch_odds(
     if not api_key:
         log.info("ERROR: ODDS_API_KEY not set")
         sys.exit(2)
+
+    log.info(
+        "fetching Odds API props board (season=%s, date=%s)",
+        "" if season is None else season,
+        date,
+    )
 
     # Expand aliases first, then validate
     books_set: Optional[set[str]] = _expand_books_filter(books)
@@ -636,10 +771,15 @@ def fetch_odds(
     wide.to_csv(wide_out, index=False)
     log.info(f"wrote {wide_out} rows={len(wide)}")
 
+    enriched: Optional[pd.DataFrame] = None
     try:
-        _write_props_enriched(props, out_game)
+        enriched = _write_props_enriched(props, out_game)
     except Exception as err:
         log.info(f"failed to write props_enriched.csv: {err}")
+    try:
+        _write_data_exports(props, enriched)
+    except Exception as err:
+        log.info(f"failed to write data exports: {err}")
 
 # ------------------------- CLI ----------------------------
 
@@ -652,6 +792,7 @@ if __name__ == "__main__":
     ap.add_argument("--markets", default="player_pass_yds,player_reception_yds,player_rush_yds,player_receptions,player_rush_reception_yds,player_anytime_td")
     ap.add_argument("--region", default=REGION_DEFAULT)
     ap.add_argument("--date", nargs="?", default="", const="")
+    ap.add_argument("--season", default="")
     ap.add_argument("--out", default="outputs/props_raw.csv")
     ap.add_argument("--out_game", default="outputs/odds_game.csv")
     args = ap.parse_args()
@@ -665,6 +806,7 @@ if __name__ == "__main__":
         markets=[m.strip() for m in args.markets.split(",") if m.strip()],
         region=args.region,
         date=args.date,
+        season=args.season,
         out=args.out,
         out_game=args.out_game,
     )

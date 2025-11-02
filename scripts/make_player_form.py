@@ -50,6 +50,8 @@ SCHEDULE_GAMES_PATH = Path("data/games.csv")
 PLAYER_FORM_OUT = Path("data/player_form.csv")
 PLAYER_FORM_CONSENSUS_OUT = Path("data/player_form_consensus.csv")
 DEBUG_MISSING_OPP = Path("data/_debug/player_missing_opponent.csv")
+OPPONENT_MAP_PATH = Path("data/opponent_map_from_props.csv")
+UNMATCHED_ROLES_DEBUG_PATH = Path("data/unmatched_roles_merge.csv")
 
 
 CANON_OVERRIDES = {
@@ -142,6 +144,14 @@ def canonicalize_name(raw_name: str) -> str:
     first = tokens[0].title()
     last = tokens[-1].title()
     return f"{first} {last}"
+
+
+def normalize_pf_id(n: str) -> str:
+    # our player_form/player_form_consensus already uses compact names like Mharrison, Kpitts, Dmooney, etc.
+    # We just lowercase them for join safety.
+    if not isinstance(n, str):
+        return ""
+    return n.strip().lower()
 
 
 def _strip_suffixes(name: str) -> str:
@@ -3685,6 +3695,191 @@ def _write_player_form_outputs(df: pd.DataFrame, slate_date: str | None = None) 
 
     consensus = _build_grouped_consensus(player_form)
     consensus = _enforce_consensus_schema(consensus)
+
+    pf_consensus = consensus.copy()
+    if "player" not in pf_consensus.columns:
+        pf_consensus["player"] = pf_consensus.get("player_canonical", "")
+    pf_consensus["player"] = pf_consensus["player"].fillna("").astype(str)
+    pf_consensus["player_key"] = pf_consensus["player"].apply(normalize_pf_id)
+
+    if "team" in pf_consensus.columns:
+        pf_consensus["team"] = (
+            pf_consensus["team"].fillna("").astype(str).str.upper().str.strip()
+        )
+    else:
+        pf_consensus["team"] = ""
+
+    if "event_id" not in pf_consensus.columns:
+        pf_consensus["event_id"] = pd.NA
+
+    # --- merge opponent map from props ---
+    oppmap = pd.DataFrame()
+    try:
+        if OPPONENT_MAP_PATH.exists() and OPPONENT_MAP_PATH.stat().st_size > 0:
+            oppmap = pd.read_csv(OPPONENT_MAP_PATH)
+    except Exception as err:
+        logger.warning(
+            "[make_player_form] failed reading opponent map %s: %s",
+            OPPONENT_MAP_PATH,
+            err,
+        )
+        oppmap = pd.DataFrame()
+
+    if not oppmap.empty and {"player", "team"}.issubset(oppmap.columns):
+        oppmap = oppmap.copy()
+        oppmap["player"] = oppmap["player"].fillna("").astype(str)
+        oppmap["team"] = (
+            oppmap["team"].fillna("").astype(str).str.upper().str.strip()
+        )
+        oppmap["player_key"] = oppmap["player"].apply(normalize_pf_id)
+        available = [
+            c
+            for c in ["player_key", "team", "opponent", "event_id"]
+            if c in oppmap.columns
+        ]
+        if {"player_key", "team"}.issubset(available):
+            subset = oppmap[available].copy()
+            subset = subset.sort_values(
+                ["player_key", "team", "event_id"], kind="mergesort"
+            ).drop_duplicates(subset=["player_key", "team"], keep="first")
+            pf_consensus = pf_consensus.merge(
+                subset,
+                on=["player_key", "team"],
+                how="left",
+                suffixes=("", "_props"),
+            )
+            if "opponent_props" in pf_consensus.columns:
+                mask = pf_consensus["opponent"].isna() | (
+                    pf_consensus["opponent"].astype(str).str.strip() == ""
+                )
+                pf_consensus.loc[mask, "opponent"] = pf_consensus.loc[
+                    mask, "opponent_props"
+                ]
+                pf_consensus.drop(columns=["opponent_props"], inplace=True)
+            if "event_id_props" in pf_consensus.columns:
+                pf_consensus["event_id"] = pf_consensus["event_id"].combine_first(
+                    pf_consensus["event_id_props"]
+                )
+                pf_consensus.drop(columns=["event_id_props"], inplace=True)
+        else:
+            logger.warning(
+                "[make_player_form] opponent map missing required columns: %s",
+                sorted(set(["player", "team", "opponent", "event_id"]) - set(available)),
+            )
+    else:
+        if oppmap.empty:
+            logger.warning(
+                "[make_player_form] opponent_map_from_props.csv missing or empty; opponents/event_id may be null"
+            )
+
+    if "opponent" not in pf_consensus.columns:
+        pf_consensus["opponent"] = pd.NA
+    missing_opponent = pf_consensus["opponent"].isna() | (
+        pf_consensus["opponent"].astype(str).str.strip() == ""
+    )
+    if missing_opponent.any():
+        logger.warning(
+            "[make_player_form] opponent still missing for %d players",
+            int(missing_opponent.sum()),
+        )
+
+    if "event_id" not in pf_consensus.columns:
+        pf_consensus["event_id"] = pd.NA
+    missing_event = pf_consensus["event_id"].isna() | (
+        pf_consensus["event_id"].astype(str).str.strip() == ""
+    )
+    if missing_event.any():
+        logger.warning(
+            "[make_player_form] event_id missing for %d players",
+            int(missing_event.sum()),
+        )
+
+    # --- merge roles ---
+    roles_df = pd.DataFrame()
+    try:
+        if ROLES_PATH.exists() and ROLES_PATH.stat().st_size > 0:
+            roles_df = pd.read_csv(ROLES_PATH)
+    except Exception as err:
+        logger.warning(
+            "[make_player_form] failed reading roles %s: %s", ROLES_PATH, err
+        )
+        roles_df = pd.DataFrame()
+
+    if not roles_df.empty and {"team"}.issubset(roles_df.columns):
+        roles_df = roles_df.copy()
+        roles_df["team"] = (
+            roles_df["team"].fillna("").astype(str).str.upper().str.strip()
+        )
+        if "player_key" in roles_df.columns:
+            roles_df["player_key_norm"] = roles_df["player_key"].apply(normalize_pf_id)
+        else:
+            fallback_series = roles_df.get("player")
+            if fallback_series is None:
+                fallback_series = pd.Series([""] * len(roles_df), index=roles_df.index)
+            roles_df["player_key_norm"] = fallback_series.fillna("").astype(str).apply(
+                normalize_pf_id
+            )
+        available_roles = [
+            c
+            for c in ["team", "player_key_norm", "role", "position"]
+            if c in roles_df.columns
+        ]
+        if {"team", "player_key_norm"}.issubset(available_roles):
+            pf_consensus = pf_consensus.merge(
+                roles_df[available_roles],
+                left_on=["player_key", "team"],
+                right_on=["player_key_norm", "team"],
+                how="left",
+                suffixes=("", "_roles"),
+            )
+            if "role_roles" in pf_consensus.columns:
+                pf_consensus["role"] = pf_consensus["role"].combine_first(
+                    pf_consensus["role_roles"]
+                )
+                pf_consensus.drop(columns=["role_roles"], inplace=True)
+            if "position_roles" in pf_consensus.columns:
+                pf_consensus["position"] = pf_consensus["position"].combine_first(
+                    pf_consensus["position_roles"]
+                )
+                pf_consensus.drop(columns=["position_roles"], inplace=True)
+            pf_consensus.drop(columns=["player_key_norm"], inplace=True, errors="ignore")
+        else:
+            logger.warning(
+                "[make_player_form] roles merge missing required columns: %s",
+                sorted(set(["team", "player_key", "role", "position"]) - set(available_roles)),
+            )
+    else:
+        if roles_df.empty:
+            logger.warning(
+                "[make_player_form] roles_ourlads.csv missing or empty; role/position may be null"
+            )
+
+    desired_debug_cols = ["player", "team", "player_key"]
+    if "role" in pf_consensus.columns:
+        unmatched_mask = pf_consensus["role"].isna()
+    else:
+        unmatched_mask = pd.Series(False, index=pf_consensus.index)
+    debug_df = (
+        pf_consensus.reindex(columns=desired_debug_cols)
+        .loc[unmatched_mask]
+        .copy()
+    )
+    debug_df["note"] = "name_not_in_roles"
+    try:
+        UNMATCHED_ROLES_DEBUG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        debug_df.to_csv(UNMATCHED_ROLES_DEBUG_PATH, index=False)
+        if not debug_df.empty:
+            logger.warning(
+                "[make_player_form] unmatched roles rows=%d → %s",
+                len(debug_df),
+                UNMATCHED_ROLES_DEBUG_PATH,
+            )
+    except Exception as err:
+        logger.warning(
+            "[make_player_form] failed writing unmatched roles debug: %s", err
+        )
+
+    consensus = pf_consensus
     PLAYER_FORM_CONSENSUS_OUT.parent.mkdir(parents=True, exist_ok=True)
     consensus.to_csv(PLAYER_FORM_CONSENSUS_OUT, index=False)
 
