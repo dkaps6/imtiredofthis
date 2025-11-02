@@ -770,6 +770,9 @@ def build_metrics(season: int) -> pd.DataFrame:
                 base["opponent_abbr_pf"]
             )
             base.drop(columns=["opponent_abbr_pf"], inplace=True, errors="ignore")
+    player_metrics = base
+    player_metrics = player_metrics.loc[:, ~player_metrics.columns.duplicated()]
+    base = player_metrics
     # --- fallback usage merge on (team, position, first_initial, last_name_u) ---
     try:
         # ensure initials/last exist
