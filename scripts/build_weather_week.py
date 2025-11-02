@@ -20,6 +20,94 @@ from scripts.stadium_locations import STADIUM_LOCATION
 
 OUT_PATH = Path("data") / "weather_week.csv"
 
+
+def build_slate_fallback() -> pd.DataFrame:
+    """Build a minimal slate when the usual slate CSV is missing/empty."""
+    fallback_path = Path("data") / "opponent_map_from_props.csv"
+    if not fallback_path.exists():
+        return pd.DataFrame()
+
+    try:
+        props_df = pd.read_csv(fallback_path)
+    except (pd.errors.EmptyDataError, FileNotFoundError):
+        return pd.DataFrame()
+
+    if props_df.empty:
+        return pd.DataFrame()
+
+    cols = {col.lower(): col for col in props_df.columns}
+    team_col = next((cols[key] for key in cols if key in {"team", "team_abbr", "team_code", "team_name"}), None)
+    opp_col = next((cols[key] for key in cols if key in {"opponent", "opp", "opponent_abbr", "opp_team", "opp_name"}), None)
+
+    if not team_col or not opp_col:
+        return pd.DataFrame()
+
+    matchups = {}
+    for _, row in props_df.iterrows():
+        if pd.isna(row.get(team_col)) or pd.isna(row.get(opp_col)):
+            continue
+
+        team_val = str(row[team_col]).strip().upper()
+        opp_val = str(row[opp_col]).strip().upper()
+
+        if not team_val or not opp_val or team_val == "NAN" or opp_val == "NAN":
+            continue
+
+        pair_key = tuple(sorted([team_val, opp_val]))
+        if pair_key not in matchups:
+            matchups[pair_key] = {"home": team_val, "away": opp_val}
+
+    if not matchups:
+        return pd.DataFrame()
+
+    slate_date_raw = os.getenv("SLATE_DATE", "").strip()
+    date_obj = None
+    if slate_date_raw:
+        try:
+            date_obj = datetime.fromisoformat(slate_date_raw).date()
+        except ValueError:
+            date_obj = None
+    if date_obj is None:
+        date_obj = datetime.now(tz=ZoneInfo("UTC")).date()
+
+    rows = []
+    for _, teams in matchups.items():
+        home_team = teams["home"]
+        away_team = teams["away"]
+
+        local_tz = _infer_tz_from_team(home_team)
+        try:
+            tzinfo = ZoneInfo(local_tz)
+        except Exception:
+            tzinfo = ZoneInfo("UTC")
+            local_tz = "UTC"
+
+        kickoff_local = datetime(
+            year=date_obj.year,
+            month=date_obj.month,
+            day=date_obj.day,
+            hour=13,
+            minute=0,
+            tzinfo=tzinfo,
+        )
+
+        rows.append({
+            "home": home_team,
+            "away": away_team,
+            "kickoff_raw": kickoff_local.isoformat(),
+            "local_tz": local_tz,
+            "kickoff_utc": kickoff_local.astimezone(ZoneInfo("UTC")),
+            "kickoff_local": kickoff_local,
+            "game_date": date_obj.isoformat(),
+            "stadium": "",
+            "dome_flag": False,
+            "fallback_source": "opponent_map_from_props",
+        })
+
+    fallback_df = pd.DataFrame(rows).drop_duplicates(subset=["home", "away"])
+    fallback_df.attrs["fallback_used"] = True
+    return fallback_df
+
 def _load_slate_from_repo() -> pd.DataFrame:
     """
     Try to infer this week's slate from existing repo artifacts.
@@ -37,7 +125,10 @@ def _load_slate_from_repo() -> pd.DataFrame:
 
     for c in candidates:
         if c.exists():
-            df = pd.read_csv(c)
+            try:
+                df = pd.read_csv(c)
+            except (pd.errors.EmptyDataError, FileNotFoundError):
+                df = pd.DataFrame()
             # try to normalize columns -> home, away, kickoff_local, local_tz
             cols = {col.lower(): col for col in df.columns}
 
@@ -57,6 +148,9 @@ def _load_slate_from_repo() -> pd.DataFrame:
                     kickoff_col = v
                 if "tz" in k or "timezone" in k or "local_tz" in k:
                     tz_col = v
+
+            if df.empty:
+                continue
 
             if home_col and away_col and kickoff_col:
                 out = pd.DataFrame({
@@ -111,7 +205,12 @@ def _load_slate_from_repo() -> pd.DataFrame:
                 out["kickoff_utc"] = kickoff_utc
                 out["kickoff_local"] = kickoff_local
 
+                out.attrs["fallback_used"] = False
                 return out
+
+    fallback_df = build_slate_fallback()
+    if not fallback_df.empty:
+        return fallback_df
 
     raise RuntimeError(
         "[weather] Could not infer this week's slate from repo "
@@ -322,9 +421,56 @@ def main():
 
     slate_df = _load_slate_from_repo()
 
+    if slate_df.empty:
+        raise RuntimeError("[weather] Slate is empty even after fallback")
+
+    fallback_used = bool(slate_df.attrs.get("fallback_used", False))
+
     rows = []
     for _, game in slate_df.iterrows():
-        wxrow = _weather_row_for_game(game, api_key)
+        home_team = str(game.get("home", "")).upper().strip()
+        away_team = str(game.get("away", "")).upper().strip()
+
+        try:
+            wxrow = _weather_row_for_game(game, api_key)
+            rain_flag = wxrow.get("rain_flag")
+            wxrow["temp_f"] = wxrow.get("temp_F_mean")
+            wxrow["wind_mph"] = wxrow.get("wind_mph_mean")
+            wxrow["precip_flag"] = None if rain_flag is None else (1 if rain_flag else 0)
+            wxrow["notes"] = "weather_ok" if wxrow.get("forecast_ok") else "weather_unavailable"
+        except Exception:
+            meta = STADIUM_LOCATION.get(home_team, {})
+            kickoff_local_val = game.get("kickoff_local")
+            if isinstance(kickoff_local_val, datetime):
+                kickoff_iso = kickoff_local_val.isoformat()
+            else:
+                kickoff_iso = str(kickoff_local_val) if pd.notna(kickoff_local_val) else ""
+
+            wxrow = {
+                "home": home_team,
+                "away": away_team,
+                "stadium": meta.get("stadium", ""),
+                "city": meta.get("city", ""),
+                "state": meta.get("state", ""),
+                "kickoff_local": kickoff_iso,
+                "indoor": None if not meta else (not meta.get("outdoor", True)),
+                "forecast_ok": 0,
+                "temp_F_mean": None,
+                "temp_F_min": None,
+                "temp_F_max": None,
+                "wind_mph_mean": None,
+                "precip_prob_max": None,
+                "conditions_main": None,
+                "conditions_desc": None,
+                "cold_flag": None,
+                "wind_flag": None,
+                "rain_flag": None,
+                "temp_f": None,
+                "wind_mph": None,
+                "precip_flag": None,
+                "notes": "weather_unavailable",
+            }
+
         rows.append(wxrow)
 
     weather_df = pd.DataFrame(rows).drop_duplicates()
@@ -335,7 +481,7 @@ def main():
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     weather_df.to_csv(OUT_PATH, index=False)
-    print(f"[weather] wrote {OUT_PATH} rows={len(weather_df)} ok")
+    print(f"[weather] wrote {len(weather_df)} games -> {OUT_PATH} (fallback_used={fallback_used})")
 
 if __name__ == "__main__":
     main()
