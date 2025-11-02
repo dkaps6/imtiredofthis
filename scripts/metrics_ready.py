@@ -245,6 +245,16 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Additional config keys or paths to validate (defaults to core metrics inputs).",
     )
     parser.add_argument(
+        "--season",
+        required=False,
+        help="(ignored, workflow context only)",
+    )
+    parser.add_argument(
+        "--date",
+        required=False,
+        help="(ignored, workflow context only)",
+    )
+    parser.add_argument(
         "--extra",
         dest="extra",
         nargs="+",
