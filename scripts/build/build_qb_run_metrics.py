@@ -58,6 +58,7 @@ def choose_qb_name(row, qb_names) -> str:
 
 SCRAMBLE_OUT = Path("qb_scramble_rates.csv")
 DESIGNED_OUT = Path("qb_designed_runs.csv")
+RUN_METRICS_OUT = Path("qb_run_metrics.csv")
 
 SCRAMBLE_COLUMNS = [
     "player",
@@ -69,6 +70,16 @@ SCRAMBLE_COLUMNS = [
 DESIGNED_COLUMNS = [
     "player",
     "week",
+    "designed_run_rate",
+    "designed_runs",
+    "snaps",
+]
+RUN_METRICS_COLUMNS = [
+    "player",
+    "week",
+    "scramble_rate",
+    "scrambles",
+    "dropbacks",
     "designed_run_rate",
     "designed_runs",
     "snaps",
@@ -189,6 +200,7 @@ def main():
     data_dir = Path("data")
     scramble_path = data_dir / SCRAMBLE_OUT.name
     designed_path = data_dir / DESIGNED_OUT.name
+    run_metrics_path = data_dir / RUN_METRICS_OUT.name
 
     _maybe_warn(a, total_games, "qb_scramble_rates.csv")
     _write_with_schema(
@@ -202,6 +214,20 @@ def main():
         b,
         designed_path,
         expected_columns=DESIGNED_COLUMNS,
+    )
+
+    # Combined mobility table for downstream joins
+    combined = pd.merge(a, b, on=["player", "week"], how="outer", suffixes=("", "_des"))
+    for col in ["scrambles", "dropbacks", "designed_runs", "snaps"]:
+        if col in combined.columns:
+            combined[col] = pd.to_numeric(combined[col], errors="coerce")
+    if "snaps" not in combined.columns:
+        combined["snaps"] = np.nan
+    combined = combined[RUN_METRICS_COLUMNS]
+    _write_with_schema(
+        combined,
+        run_metrics_path,
+        expected_columns=RUN_METRICS_COLUMNS,
     )
 
 

@@ -3673,6 +3673,17 @@ def _write_player_form_outputs(df: pd.DataFrame, slate_date: str | None = None) 
             ", ".join(missing),
         )
 
+    def _prefer_suffix(frame: pd.DataFrame, base_col: str) -> pd.DataFrame:
+        x_col = f"{base_col}_x"
+        y_col = f"{base_col}_y"
+        if x_col in frame.columns and y_col in frame.columns:
+            frame[base_col] = frame[x_col].where(frame[x_col].notna(), frame[y_col])
+            frame = frame.drop(columns=[x_col, y_col])
+        return frame
+
+    df = _prefer_suffix(df, "player_clean_key")
+    df = df.loc[:, ~df.columns.duplicated(keep="first")]
+
     assert_no_duplicate_columns(df, "final player_form before write")
 
     df_out = _ensure_single_position_column(df.copy())
