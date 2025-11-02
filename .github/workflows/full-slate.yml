@@ -146,6 +146,7 @@ jobs:
             --season "${SEASON}" \
             --mode full \
             --date "${SLATE_DATE}"
+          export PYTHONPATH="${PWD}"
           python scripts/slipgen.py \
             --season "${SEASON}" \
             --date "${SLATE_DATE}"
@@ -222,6 +223,7 @@ jobs:
             --season "${SEASON}" \
             --mode pricing \
             --date "${SLATE_DATE}"
+          export PYTHONPATH="${PWD}"
           python scripts/pricing.py \
             --season "${SEASON}" \
             --date "${SLATE_DATE}"

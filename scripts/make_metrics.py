@@ -18,11 +18,20 @@ Output:
 - data/metrics_ready.csv
 """
 
-from scripts._opponent_map import attach_opponent
 from __future__ import annotations
-import argparse, os, sys, warnings, re, traceback
-import pandas as pd
+
+import argparse
+import os
+import re
+import sys
+import traceback
+import warnings
+from pathlib import Path
+
 import numpy as np
+import pandas as pd
+
+from scripts._opponent_map import attach_opponent
 
 
 
@@ -60,8 +69,19 @@ def _inj_normalize_team(s):
 
 def _inj_player_key(s):
     return s.fillna("").astype(str).str.lower().str.replace(r"[^a-z0-9]","",regex=True)
+
 DATA_DIR = "data"
-OUTPATH  = os.path.join(DATA_DIR, "metrics_ready.csv")
+DATA_PATH = Path(DATA_DIR)
+METRICS_OUT_PATH = DATA_PATH / "metrics_ready.csv"
+TEAM_FORM_PATH = DATA_PATH / "team_form.csv"
+PLAYER_FORM_PATH = DATA_PATH / "player_form.csv"
+PLAYER_CONS_PATH = DATA_PATH / "player_form_consensus.csv"
+QB_SCRAMBLE_PATH = DATA_PATH / "qb_scramble_rates.csv"
+QB_DESIGNED_PATH = DATA_PATH / "qb_designed_runs.csv"
+QB_MOBILITY_PATH = DATA_PATH / "qb_mobility.csv"
+WEATHER_PATH = DATA_PATH / "weather.csv"
+WEATHER_WEEK_PATH = DATA_PATH / "weather_week.csv"
+
 
 PLAYER_FORM_CONSENSUS_OPPONENT = "ALL"
 
@@ -842,38 +862,35 @@ def build_metrics(season: int) -> pd.DataFrame:
     base = base[want].drop_duplicates().reset_index(drop=True)
     return base
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--season", type=int, default=2025)
-    args = parser.parse_args()
-    _safe_mkdir(DATA_DIR)
+def _generate_metrics_dataframe(season: int) -> pd.DataFrame:
     try:
-        df = build_metrics(args.season)
+        df = build_metrics(season)
         # ## -- injected: final odds rejoin (idempotent) --
         try:
-            props_raw = pd.read_csv(os.path.join("outputs","props_raw.csv"))
+            props_raw = pd.read_csv(os.path.join("outputs", "props_raw.csv"))
             props_raw.columns = [c.lower() for c in props_raw.columns]
-            if {"side","price_american"}.issubset(props_raw.columns):
-                k = [c for c in ["event_id","player","market","line"] if c in props_raw.columns]
+            if {"side", "price_american"}.issubset(props_raw.columns):
+                k = [c for c in ["event_id", "player", "market", "line"] if c in props_raw.columns]
                 if k:
-                    tmp = props_raw[k + ["side","price_american"]].copy()
+                    tmp = props_raw[k + ["side", "price_american"]].copy()
                     tmp["side"] = tmp["side"].astype(str).str.upper().str.strip()
                     pvt = tmp.pivot_table(index=k, columns="side", values="price_american", aggfunc="first").reset_index()
-                    pvt = pvt.rename(columns={"OVER":"over_odds","UNDER":"under_odds"})
-                    join_key = [c for c in ["event_id","player","market","line"] if c in df.columns and c in pvt.columns]
-                    if join_key:
-                        df = df.merge(pvt[join_key+["over_odds","under_odds"]], on=join_key, how="left", suffixes=("","_fromprops"))
-                        for c in ["over_odds","under_odds"]:
-                            alt = f"{c}_fromprops"
-                            if alt in df.columns:
-                                df[c] = df[c].combine_first(df[alt])
-                                df.drop(columns=[alt], inplace=True)
+                    pvt.columns = [("over_odds" if c == "OVER" else "under_odds" if c == "UNDER" else c) for c in pvt.columns]
+                    for c in ["over_odds", "under_odds"]:
+                        if c not in pvt.columns:
+                            pvt[c] = np.nan
+                    df = df.merge(pvt, on=k, how="left", suffixes=("", "_pvt"))
+                    for c in ["over_odds", "under_odds"]:
+                        c_p = c + "_pvt"
+                        if c_p in df.columns:
+                            df[c] = df[c].combine_first(df[c_p])
+                            df.drop(columns=[c_p], inplace=True)
         except Exception as _e:
             print("[make_metrics] final odds rejoin skipped:", _e)
 
         # ## -- injected: final player_form_consensus backfill (idempotent) --
         try:
-            pfc = pd.read_csv(os.path.join("data","player_form_consensus.csv"))
+            pfc = pd.read_csv(os.path.join("data", "player_form_consensus.csv"))
             pfc.columns = [c.lower() for c in pfc.columns]
             # normalize expected columns
             rename_map = {
@@ -881,31 +898,36 @@ def main():
                 "yprr": "yprr_proxy",
                 "rz_rush_share": "rz_carry_share",
             }
-            for k,v in rename_map.items():
+            for k, v in rename_map.items():
                 if k in pfc.columns and v not in pfc.columns:
                     pfc[v] = pfc[k]
 
             # initials+last on both sides
             def _mk_init_last(series):
                 import re as _re
+
                 fi, ln = [], []
                 for nm in series.astype(str):
-                    n = nm.replace("."," ").strip()
+                    n = nm.replace(".", " ").strip()
                     if n and " " not in n:
-                        caps = [i for i,ch in enumerate(n) if ch.isupper()]
+                        caps = [i for i, ch in enumerate(n) if ch.isupper()]
                         if len(caps) >= 2:
-                            fi.append(n[caps[0]].upper()); ln.append(n[caps[1]:].upper()); continue
-                    toks = _re.split(r"\\s+", n)
+                            fi.append(n[caps[0]].upper())
+                            ln.append(n[caps[1]:].upper())
+                            continue
+                    toks = _re.split(r"\s+", n)
                     if toks and toks[0]:
-                        fi.append(toks[0][0].upper()); ln.append(toks[-1].upper())
+                        fi.append(toks[0][0].upper())
+                        ln.append(toks[-1].upper())
                     else:
-                        fi.append(""); ln.append("")
+                        fi.append("")
+                        ln.append("")
                 return fi, ln
 
             if "first_initial" not in df.columns or "last_name_u" not in df.columns:
                 fi, ln = _mk_init_last(df["player"] if "player" in df.columns else pd.Series([]))
                 df["first_initial"] = df.get("first_initial", pd.Series(fi))
-                df["last_name_u"]   = df.get("last_name_u",  pd.Series(ln))
+                df["last_name_u"] = df.get("last_name_u", pd.Series(ln))
 
             if "first_initial" not in pfc.columns or "last_name_u" not in pfc.columns:
                 fi2, ln2 = _mk_init_last(pfc["player"] if "player" in pfc.columns else pd.Series([]))
@@ -913,26 +935,43 @@ def main():
                 pfc["last_name_u"] = ln2
 
             # choose keys: prefer (team, position, initial, last); otherwise (team, initial, last)
-            keys_full = [k for k in ["team","position","first_initial","last_name_u"] if k in df.columns and k in pfc.columns]
-            keys_lo   = [k for k in ["team","first_initial","last_name_u"] if k in df.columns and k in pfc.columns]
-            use_keys = keys_full if len(keys_full)==4 else (keys_lo if len(keys_lo)==3 else None)
+            keys_full = [k for k in ["team", "position", "first_initial", "last_name_u"] if k in df.columns and k in pfc.columns]
+            keys_lo = [k for k in ["team", "first_initial", "last_name_u"] if k in df.columns and k in pfc.columns]
+            use_keys = keys_full if len(keys_full) == 4 else (keys_lo if len(keys_lo) == 3 else None)
 
             if use_keys:
-                use_cols = [c for c in [
-                    "target_share","route_rate","rush_share","yprr_proxy","ypt","ypc","ypa","ypa_prior",
-                    "rz_share","rz_tgt_share","rz_carry_share","role","position"
-                ] if c in pfc.columns]
+                use_cols = [
+                    c
+                    for c in [
+                        "target_share",
+                        "route_rate",
+                        "rush_share",
+                        "yprr_proxy",
+                        "ypt",
+                        "ypc",
+                        "ypa",
+                        "ypa_prior",
+                        "rz_share",
+                        "rz_tgt_share",
+                        "rz_carry_share",
+                        "role",
+                        "position",
+                    ]
+                    if c in pfc.columns
+                ]
 
                 if use_cols:
-                    sort_cols = [c for c in ["route_rate","target_share"] if c in pfc.columns]
-                    pf_fb = pfc.sort_values(use_keys + sort_cols, ascending=[True]*len(use_keys) + [False]*len(sort_cols))\
-                               .drop_duplicates(subset=use_keys, keep="first")
+                    sort_cols = [c for c in ["route_rate", "target_share"] if c in pfc.columns]
+                    pf_fb = (
+                        pfc.sort_values(use_keys + sort_cols, ascending=[True] * len(use_keys) + [False] * len(sort_cols))
+                        .drop_duplicates(subset=use_keys, keep="first")
+                    )
 
                     # only fill rows that lack usage currently
-                    if set(["target_share","route_rate","rush_share"]).issubset(df.columns):
-                        miss_mask = (~df[["target_share","route_rate","rush_share"]].notna().any(axis=1))
+                    if set(["target_share", "route_rate", "rush_share"]).issubset(df.columns):
+                        miss_mask = ~df[["target_share", "route_rate", "rush_share"]].notna().any(axis=1)
                     else:
-                        miss_mask = pd.Series([True]*len(df))
+                        miss_mask = pd.Series([True] * len(df))
 
                     fill = df.loc[miss_mask, use_keys].merge(pf_fb[use_keys + use_cols], on=use_keys, how="left")
                     for c in use_cols:
@@ -943,23 +982,28 @@ def main():
 
         except Exception as _e:
             print("[make_metrics] final pf_consensus backfill skipped:", _e)
-    
+
         # ## -- injected: final odds rejoin --
         try:
-            props_raw = pd.read_csv(os.path.join("outputs","props_raw.csv"))
+            props_raw = pd.read_csv(os.path.join("outputs", "props_raw.csv"))
             props_raw.columns = [c.lower() for c in props_raw.columns]
-            if {"side","price_american"}.issubset(props_raw.columns):
-                key = [c for c in ["event_id","player","market","line"] if c in props_raw.columns]
+            if {"side", "price_american"}.issubset(props_raw.columns):
+                key = [c for c in ["event_id", "player", "market", "line"] if c in props_raw.columns]
                 if key:
-                    tmp = props_raw[key + ["side","price_american"]].copy()
+                    tmp = props_raw[key + ["side", "price_american"]].copy()
                     tmp["side"] = tmp["side"].astype(str).str.upper().str.strip()
                     pvt = tmp.pivot_table(index=key, columns="side", values="price_american", aggfunc="first").reset_index()
-                    pvt = pvt.rename(columns={"OVER":"over_odds","UNDER":"under_odds"})
+                    pvt = pvt.rename(columns={"OVER": "over_odds", "UNDER": "under_odds"})
                     # attach where missing
-                    join_key = [c for c in ["event_id","player","market","line"] if c in df.columns and c in pvt.columns]
+                    join_key = [c for c in ["event_id", "player", "market", "line"] if c in df.columns and c in pvt.columns]
                     if join_key:
-                        df = df.merge(pvt[join_key+["over_odds","under_odds"]], on=join_key, how="left", suffixes=("","_fromprops"))
-                        for c in ["over_odds","under_odds"]:
+                        df = df.merge(
+                            pvt[join_key + ["over_odds", "under_odds"]],
+                            on=join_key,
+                            how="left",
+                            suffixes=("", "_fromprops"),
+                        )
+                        for c in ["over_odds", "under_odds"]:
                             alt = f"{c}_fromprops"
                             if alt in df.columns:
                                 df[c] = df[c].combine_first(df[alt])
@@ -971,15 +1015,54 @@ def main():
         print(f"[make_metrics] ERROR: {e}", file=sys.stderr)
         traceback.print_exc()
         # emit empty but schema-correct file so pipeline continues
-        df = pd.DataFrame(columns=[
-            "event_id","player","team","opponent","market","line","over_odds","under_odds",
-            "target_share","rush_share","route_rate","yprr_proxy","ypt","ypc","ypa_prior","rz_tgt_share","rz_carry_share","position","role",
-            "pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
-            "def_pass_epa_opp","def_rush_epa_opp","def_sack_rate_opp","light_box_rate_opp","heavy_box_rate_opp",
-            "coverage_top_shadow_opp","coverage_heavy_man_opp","coverage_heavy_zone_opp",
-            "cb_penalty","injury_status","wind_mph","temp_f","precip","team_wp","season",
-            "week","opp_plays_wk","opp_pace_wk","opp_proe_wk"
-        ])
+        df = pd.DataFrame(
+            columns=[
+                "event_id",
+                "player",
+                "team",
+                "opponent",
+                "market",
+                "line",
+                "over_odds",
+                "under_odds",
+                "target_share",
+                "rush_share",
+                "route_rate",
+                "yprr_proxy",
+                "ypt",
+                "ypc",
+                "ypa_prior",
+                "rz_tgt_share",
+                "rz_carry_share",
+                "position",
+                "role",
+                "pace",
+                "proe",
+                "rz_rate",
+                "12p_rate",
+                "slot_rate",
+                "ay_per_att",
+                "def_pass_epa_opp",
+                "def_rush_epa_opp",
+                "def_sack_rate_opp",
+                "light_box_rate_opp",
+                "heavy_box_rate_opp",
+                "coverage_top_shadow_opp",
+                "coverage_heavy_man_opp",
+                "coverage_heavy_zone_opp",
+                "cb_penalty",
+                "injury_status",
+                "wind_mph",
+                "temp_f",
+                "precip",
+                "team_wp",
+                "season",
+                "week",
+                "opp_plays_wk",
+                "opp_pace_wk",
+                "opp_proe_wk",
+            ]
+        )
 
     # Optional: add opponent weekly env (pace/proe/plays_est) if present
     try:
@@ -987,29 +1070,123 @@ def main():
         if (
             not df.empty
             and not tfw.empty
-            and {"opponent","week"}.issubset(df.columns)
-            and {"team","week"}.issubset(tfw.columns)
+            and {"opponent", "week"}.issubset(df.columns)
+            and {"team", "week"}.issubset(tfw.columns)
         ):
-            tfw = tfw.rename(columns={"team":"opponent"})
-            cols = [c for c in ["opponent","week","plays_est","pace","proe"] if c in tfw.columns]
-            tfw = tfw[cols].drop_duplicates().rename(columns={
-                "plays_est":"opp_plays_wk","pace":"opp_pace_wk","proe":"opp_proe_wk"
-            })
-            df = df.merge(tfw, on=["opponent","week"], how="left")
-            for c in ["opp_plays_wk","opp_pace_wk","opp_proe_wk"]:
+            tfw = tfw.rename(columns={"team": "opponent"})
+            cols = [c for c in ["opponent", "week", "plays_est", "pace", "proe"] if c in tfw.columns]
+            tfw = tfw[cols].drop_duplicates().rename(
+                columns={"plays_est": "opp_plays_wk", "pace": "opp_pace_wk", "proe": "opp_proe_wk"}
+            )
+            df = df.merge(tfw, on=["opponent", "week"], how="left")
+            for c in ["opp_plays_wk", "opp_pace_wk", "opp_proe_wk"]:
                 if c not in df.columns:
                     df[c] = np.nan
     except Exception:
         pass
 
-    df.replace({'NAN': np.nan, 'nan': np.nan, 'NaN': np.nan, 'None': np.nan, '': np.nan}, inplace=True)
+    df.replace({"NAN": np.nan, "nan": np.nan, "NaN": np.nan, "None": np.nan, "": np.nan}, inplace=True)
     # FINAL_OPPONENT_SANITY
-    if 'opponent' in df.columns:
-        df['opponent'] = df['opponent'].replace({'NAN': np.nan, 'nan': np.nan, 'NaN': np.nan, '': np.nan})
-    df.to_csv(OUTPATH, index=False)
-    print(f"[make_metrics] Wrote {len(df)} rows → {OUTPATH}")
+    if "opponent" in df.columns:
+        df["opponent"] = df["opponent"].replace({"NAN": np.nan, "nan": np.nan, "NaN": np.nan, "": np.nan})
+    return df
 
-if __name__ == "__main__":
+
+REQUIRED_INPUTS: dict[str, Path] = {
+    "team_form": TEAM_FORM_PATH,
+    "player_form": PLAYER_FORM_PATH,
+    "player_form_consensus": PLAYER_CONS_PATH,
+}
+
+OPTIONAL_INPUTS: dict[str, Path] = {
+    "qb_scramble_rates": QB_SCRAMBLE_PATH,
+    "qb_designed_runs": QB_DESIGNED_PATH,
+    "qb_mobility": QB_MOBILITY_PATH,
+    "weather": WEATHER_PATH,
+    "weather_week": WEATHER_WEEK_PATH,
+}
+
+
+def _validate_core_inputs() -> bool:
+    for label, path in REQUIRED_INPUTS.items():
+        try:
+            df = pd.read_csv(path)
+        except FileNotFoundError:
+            print(f"[make_metrics] FATAL: missing required input CSV: {path}")
+            return False
+        except pd.errors.EmptyDataError:
+            print(f"[make_metrics] FATAL: required input CSV is empty: {path}")
+            return False
+        except Exception as exc:
+            print(f"[make_metrics] FATAL: unable to load required input '{label}': {exc}")
+            return False
+
+        if df.empty:
+            print(f"[make_metrics] FATAL: required input '{label}' has no rows: {path}")
+            return False
+    return True
+
+
+def _log_optional_inputs() -> None:
+    for label, path in OPTIONAL_INPUTS.items():
+        if not path.exists() or path.stat().st_size == 0:
+            print(f"[make_metrics] WARN: optional input '{label}' missing or empty ({path})")
+
+
+def main(args: argparse.Namespace) -> int:
+    if not isinstance(args.season, int):
+        print("[make_metrics] FATAL: season must be an integer")
+        return 1
+
+    _safe_mkdir(DATA_DIR)
+
+    if not _validate_core_inputs():
+        return 1
+
+    _log_optional_inputs()
+
+    try:
+        df = _generate_metrics_dataframe(args.season)
+    except Exception as exc:
+        print(f"[make_metrics] FATAL: unhandled error building metrics: {exc}")
+        traceback.print_exc()
+        return 1
+
+    if df is None or df.empty:
+        print("[make_metrics] FATAL: merged metrics is empty, aborting")
+        return 1
+
+    METRICS_OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(METRICS_OUT_PATH, index=False)
+    print(f"[make_metrics] Wrote {len(df)} rows → {METRICS_OUT_PATH}")
+    return 0
+
+
+def cli() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--season",
+        type=int,
+        required=True,
+        help="Season year, e.g. 2025",
+    )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="full",
+        help="Run mode. Leave default = full.",
+    )
+    parser.add_argument(
+        "--date",
+        type=str,
+        default="",
+        help="Slate date (YYYY-MM-DD). May be empty.",
+    )
+    args = parser.parse_args()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        main()
+        return main(args)
+
+
+if __name__ == "__main__":
+    sys.exit(cli())
