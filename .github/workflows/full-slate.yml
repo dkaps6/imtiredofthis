@@ -65,6 +65,7 @@ jobs:
       # outputs CSVs into data/ (e.g. sharp_pace_*.csv, sharp_coverage_*.csv ...)
       - name: Pull SharpFootball metrics
         run: |
+          export PYTHONPATH="${PWD}"
           python scripts/providers/sharpfootball_pull.py \
             --season "${SEASON}" \
             --dump-html
@@ -76,6 +77,7 @@ jobs:
       # plus whatever merged roles file player_form expects.
       - name: Build depth / roles (Ourlads)
         run: |
+          export PYTHONPATH="${PWD}"
           python scripts/providers/ourlads_depth.py \
             --season "${SEASON}"
 
@@ -86,6 +88,7 @@ jobs:
       # for the current slate, writes data/opponent_map_from_props.csv
       - name: Build opponent map from props
         run: |
+          export PYTHONPATH="${PWD}"
           python scripts/build/build_opponent_map_from_props.py \
             --season "${SEASON}" \
             --date "${SLATE_DATE}"
@@ -97,6 +100,7 @@ jobs:
       # You already added row-count guards so it fails if data is totally empty.
       - name: Build QB scramble / designed-run metrics
         run: |
+          export PYTHONPATH="${PWD}"
           python scripts/build/build_qb_run_metrics.py \
             --season "${SEASON}"
 
@@ -109,6 +113,7 @@ jobs:
       # and writing data/team_form.csv
       - name: Build team_form
         run: |
+          export PYTHONPATH="${PWD}"
           python scripts/make_team_form.py \
             --season "${SEASON}"
 
@@ -122,6 +127,7 @@ jobs:
       # - output data/player_form.csv and data/player_form_consensus.csv
       - name: Build player_form / consensus
         run: |
+          export PYTHONPATH="${PWD}"
           python scripts/make_player_form.py \
             --season "${SEASON}" \
             --date "${SLATE_DATE}"
@@ -135,6 +141,7 @@ jobs:
       # - slipgen output
       - name: Run pipeline (full metrics + slipgen)
         run: |
+          export PYTHONPATH="${PWD}"
           python scripts/make_metrics.py \
             --season "${SEASON}" \
             --mode full \
@@ -158,6 +165,7 @@ jobs:
       # If anything is missing/empty -> raise RuntimeError -> nonzero exit -> job stops here.
       - name: Validate metrics_ready (must pass before pricing)
         run: |
+          export PYTHONPATH="${PWD}"
           python scripts/metrics_ready.py \
             --season "${SEASON}" \
             --date "${SLATE_DATE}"
@@ -194,6 +202,7 @@ jobs:
           SLATE_DATE: ${{ inputs.date || vars.SLATE_DATE }}
 
         run: |
+          export PYTHONPATH="${PWD}"
           python scripts/build/build_weather_week.py \
             --season "${SEASON}" \
             --date "${SLATE_DATE}"
@@ -208,6 +217,7 @@ jobs:
         env:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
         run: |
+          export PYTHONPATH="${PWD}"
           python scripts/make_metrics.py \
             --season "${SEASON}" \
             --mode pricing \

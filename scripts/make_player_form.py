@@ -27,7 +27,7 @@ import os
 import sys
 import warnings
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterable, List
 
 import re
 import unicodedata
@@ -142,6 +142,22 @@ def standardize_full_name(raw: str) -> str:
     return s
 
 
+def _format_canonical_player_name(raw: str) -> str:
+    """Format a canonical name string into Title Case with sensible spacing."""
+
+    if not isinstance(raw, str):
+        return ""
+
+    value = raw.strip()
+    if not value:
+        return ""
+
+    if " " not in value:
+        value = re.sub(r"(?<!^)([A-Z])", r" \1", value)
+
+    return standardize_full_name(value)
+
+
 def _canonicalize_player_name(raw: str) -> str:
     if raw is None:
         return ""
@@ -205,11 +221,12 @@ def _canonical_identity_fields(raw: Any) -> Dict[str, str]:
     if not canonical:
         canonical = raw_str.upper().strip()
 
-    canonical_lower = re.sub(r"[^a-z0-9 ]+", "", canonical.lower()).strip()
+    canonical_upper = canonical.upper()
+    canonical_lower = re.sub(r"[^a-z0-9 ]+", "", canonical_upper.lower()).strip()
     player_clean_key = re.sub(r"\s+", "_", canonical_lower)
 
     return {
-        "player_name_canonical": canonical,
+        "player_name_canonical": canonical_upper,
         "player_canonical": canonical_lower,
         "player_clean_key": player_clean_key,
     }
@@ -365,16 +382,7 @@ PLAYER_FORM_USAGE_COLS = [
     "games",
 ]
 
-PLAYER_FORM_REQUIRED_COLUMNS = [
-    "player",
-    "player_name_canonical",
-    "team",
-    "week",
-    "opponent",
-    "season",
-    "position",
-    "role",
-] + PLAYER_FORM_USAGE_COLS + [
+PLAYER_FORM_SHARE_COLS = [
     "tgt_share",
     "route_rate",
     "rush_share",
@@ -387,6 +395,18 @@ PLAYER_FORM_REQUIRED_COLUMNS = [
     "rz_tgt_share",
     "rz_rush_share",
 ]
+
+PLAYER_FORM_REQUIRED_COLUMNS = [
+    "player",
+    "canonical_player_name",
+    "player_name_canonical",
+    "team",
+    "week",
+    "opponent",
+    "season",
+    "position",
+    "role",
+] + PLAYER_FORM_USAGE_COLS + PLAYER_FORM_SHARE_COLS
 
 FINAL_COLS = PLAYER_FORM_REQUIRED_COLUMNS + [
     "player_canonical",
@@ -2038,7 +2058,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         base["week_key"] = -1
 
     out = base.copy()
-    out = _enrich_team_and_opponent_from_props(out)
+    out = _enrich_team_and_opponent_from_props(out, season)
     if "week" in out.columns:
         out["week"] = pd.to_numeric(out["week"], errors="coerce")
 
@@ -2091,166 +2111,373 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
 # ---------------------------
 
 
-def _build_schedule_opponent_lookup() -> pd.DataFrame:
-    """
-    Use game_lines.csv to figure out each team's opponent this week.
-    Expect columns like: home, away (team codes), maybe week.
-    Returns df with columns: ['team','opponent']
-    """
+def _aggregate_player_weeks(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=df.columns if isinstance(df, pd.DataFrame) else [])
 
-    if not GAMES_PATH.exists():
-        raise RuntimeError("[make_player_form] game_lines.csv not found")
+    working = df.copy()
 
-    games = pd.read_csv(GAMES_PATH)
-    # normalize team codes
-    for col in ["home", "away"]:
-        if col in games.columns:
-            games[col] = games[col].astype(str).str.upper().str.strip()
-    rows = []
-    for _, r in games.iterrows():
-        home = r.get("home")
-        away = r.get("away")
-        if pd.notna(home) and pd.notna(away):
-            rows.append({"team": home, "opponent": away})
-            rows.append({"team": away, "opponent": home})
-    sched_df = pd.DataFrame(rows).drop_duplicates()
-    return sched_df
+    group_cols = [
+        "player_clean_key",
+        "canonical_player_name",
+        "player_name_canonical",
+        "team",
+        "season",
+        "week",
+    ]
+
+    for col in ["season", "week"]:
+        if col in working.columns:
+            working[col] = pd.to_numeric(working[col], errors="coerce")
+
+    numeric_candidates = [
+        col for col in PLAYER_FORM_USAGE_COLS + PLAYER_FORM_SHARE_COLS if col in working.columns
+    ]
+    if "games" in working.columns:
+        numeric_candidates.append("games")
+
+    for col in numeric_candidates:
+        working[col] = pd.to_numeric(working[col], errors="coerce")
+
+    agg_spec: Dict[str, str] = {}
+
+    for col in PLAYER_FORM_USAGE_COLS:
+        if col not in working.columns:
+            continue
+        if col == "games":
+            agg_spec[col] = "max"
+        else:
+            agg_spec[col] = "sum"
+
+    for col in PLAYER_FORM_SHARE_COLS:
+        if col in working.columns and col not in agg_spec:
+            agg_spec[col] = "mean"
+
+    numeric_cols = [
+        col
+        for col in working.columns
+        if col not in group_cols and pd.api.types.is_numeric_dtype(working[col])
+    ]
+    for col in numeric_cols:
+        if col not in agg_spec:
+            agg_spec[col] = "mean"
+
+    for col in working.columns:
+        if col in group_cols or col in agg_spec:
+            continue
+        agg_spec[col] = "first"
+
+    grouped = (
+        working.groupby(group_cols, dropna=False)
+        .agg(agg_spec)
+        .reset_index()
+    )
+
+    return grouped
 
 
-def _build_fallback_player_opponents() -> pd.DataFrame:
-    """
-    Merge roles_ourlads (player->team) with schedule_opponent_lookup (team->opponent)
-    so we can infer opponent for any named depth chart player even if props had no line.
-    Output columns: ['player_canonical','team','opponent']
-    """
-
-    if not ROLES_PATH.exists():
-        raise RuntimeError("[make_player_form] roles_ourlads.csv not found")
-
-    roles = pd.read_csv(ROLES_PATH)
-    if not {"player", "team"}.issubset(roles.columns):
-        missing = sorted({"player", "team"} - set(roles.columns))
-        raise RuntimeError(
-            f"[make_player_form] roles_ourlads.csv missing columns: {missing}"
+def _load_props_opponent_map() -> pd.DataFrame:
+    base = _read_csv_safe(str(OPP_PATH))
+    if base.empty:
+        return pd.DataFrame(
+            columns=["player_clean_key", "team", "season", "week", "opponent", "canonical_player_name"]
         )
-    # expected columns in roles_ourlads.csv:
-    #   player (string), team (string), role (WR1/RB1/etc)
-    roles["team"] = roles["team"].astype(str).str.upper().str.strip()
-    roles["player_canonical"] = roles["player"].apply(_canonicalize_player_name)
 
-    sched_lu = _build_schedule_opponent_lookup()
-    merged = roles.merge(sched_lu, on="team", how="left")
+    df = base.copy()
+    if "player" not in df.columns:
+        if "player_name" in df.columns:
+            df = df.rename(columns={"player_name": "player"})
+        else:
+            return pd.DataFrame(
+                columns=[
+                    "player_clean_key",
+                    "team",
+                    "season",
+                    "week",
+                    "opponent",
+                    "canonical_player_name",
+                ]
+            )
 
-    fallback = merged[["player_canonical", "team", "opponent"]].dropna(subset=["opponent"])
-    fallback["team"] = fallback["team"].astype(str).str.upper().str.strip()
-    fallback["opponent"] = fallback["opponent"].astype(str).str.upper().str.strip()
-    fallback = fallback.drop_duplicates(["player_canonical", "team"])
-    return fallback
+    identity = df["player"].apply(lambda nm: pd.Series(_canonical_identity_fields(nm)))
+    df["player_clean_key"] = identity["player_clean_key"].astype(str)
+    df["canonical_player_name"] = identity["player_name_canonical"].astype(str)
+
+    if "team" in df.columns:
+        df["team"] = df["team"].astype(str).map(_canon_team)
+    else:
+        df["team"] = ""
+
+    if "opponent" in df.columns:
+        df["opponent"] = df["opponent"].astype(str).map(_canon_team)
+    else:
+        df["opponent"] = pd.NA
+
+    if "season" not in df.columns:
+        df["season"] = pd.NA
+    if "week" not in df.columns:
+        df["week"] = pd.NA
+
+    df["season"] = pd.to_numeric(df["season"], errors="coerce")
+    df["week"] = pd.to_numeric(df["week"], errors="coerce")
+
+    df = df.dropna(subset=["player_clean_key", "team"])
+    df = df[df["team"].isin(VALID)]
+
+    df.loc[df["opponent"].isin(["", "NAN", "NONE", "NULL"]), "opponent"] = pd.NA
+
+    return df[
+        [
+            "player_clean_key",
+            "team",
+            "season",
+            "week",
+            "opponent",
+            "canonical_player_name",
+        ]
+    ].drop_duplicates()
 
 
-def _build_props_player_opponents() -> pd.DataFrame:
-    """
-    Load opponent_map_from_props.csv (player, team, opponent from lines/props scrape),
-    canonicalize names and clean team/opponent.
-    Output columns: ['player_canonical','team','opponent']
-    """
+def _load_team_week_schedule_map(seasons: Iterable[int]) -> pd.DataFrame:
+    frames: List[pd.DataFrame] = []
+    season_set = {
+        int(s)
+        for s in seasons
+        if s is not None
+        and not (pd.isna(s))
+    }
 
-    if not OPP_PATH.exists():
-        raise RuntimeError("[make_player_form] opponent_map_from_props.csv not found")
+    for season in sorted(season_set):
+        try:
+            if NFL_PKG == "nflreadpy":
+                raw_sched = NFLV.load_schedules(seasons=[season])
+            else:
+                if hasattr(NFLV, "import_schedules"):
+                    raw_sched = NFLV.import_schedules([season])  # type: ignore
+                else:
+                    continue
+            sched = _to_pandas(raw_sched)
+        except Exception:
+            continue
 
-    opp = pd.read_csv(OPP_PATH)
-    # expected cols: player, team, opponent
-    for c in ["player", "team", "opponent"]:
-        if c not in opp.columns:
-            raise RuntimeError(f"[make_player_form] opponent_map_from_props.csv missing {c}")
-    opp["player_canonical"] = opp["player"].apply(_canonicalize_player_name)
-    opp["team"] = opp["team"].astype(str).str.upper().str.strip()
-    opp["opponent"] = opp["opponent"].astype(str).str.upper().str.strip()
-    opp = opp.drop_duplicates(["player_canonical", "team"])
-    return opp[["player_canonical", "team", "opponent"]]
+        if sched is None or sched.empty:
+            continue
+
+        sched.columns = [c.lower() for c in sched.columns]
+        if not {"week", "home_team", "away_team"}.issubset(sched.columns):
+            continue
+
+        subset = sched[["week", "home_team", "away_team"]].copy()
+        subset["season"] = season
+        subset["week"] = pd.to_numeric(subset["week"], errors="coerce")
+        subset["home_team"] = subset["home_team"].astype(str).map(_canon_team)
+        subset["away_team"] = subset["away_team"].astype(str).map(_canon_team)
+        subset = subset.dropna(subset=["home_team", "away_team", "week"])
+
+        home = subset.rename(columns={"home_team": "team", "away_team": "opponent"})
+        away = subset.rename(columns={"away_team": "team", "home_team": "opponent"})
+
+        combined = pd.concat([home, away], ignore_index=True)
+        combined = combined.loc[combined["team"].isin(VALID)]
+        combined.loc[~combined["opponent"].isin(VALID), "opponent"] = pd.NA
+
+        frames.append(combined[["team", "opponent", "season", "week"]])
+
+    if frames:
+        out = pd.concat(frames, ignore_index=True)
+        out["week"] = pd.to_numeric(out["week"], errors="coerce")
+        return out.drop_duplicates(["team", "season", "week"])
+
+    return pd.DataFrame(columns=["team", "opponent", "season", "week"])
 
 
-def _enrich_team_and_opponent_from_props(out: pd.DataFrame) -> pd.DataFrame:
-    """
-    Enrich 'out' with 'team' and 'opponent'.
-    Strategy:
-      1. canonicalize player names in 'out'
-      2. build props_map (from opponent_map_from_props.csv)
-      3. build fallback_map (roles_ourlads.csv x game_lines.csv)
-      4. union them and drop dups
-      5. merge onto 'out' by player_canonical (+ team when present)
-      6. require 0 missing opponents at the end or raise RuntimeError
-    """
+def _resolve_opponents(df: pd.DataFrame, season_hint: int | None = None) -> pd.DataFrame:
+    if df is None or df.empty:
+        base = df.copy() if isinstance(df, pd.DataFrame) else pd.DataFrame()
+        base["opponent"] = pd.NA
+        return base
+
+    working = df.copy()
+
+    if "opponent" not in working.columns:
+        working["opponent"] = pd.NA
+
+    for col in ["season", "week"]:
+        if col in working.columns:
+            working[col] = pd.to_numeric(working[col], errors="coerce")
+
+    props_map = _load_props_opponent_map()
+    if not props_map.empty:
+        props_map["season"] = pd.to_numeric(props_map["season"], errors="coerce")
+        props_map["week"] = pd.to_numeric(props_map["week"], errors="coerce")
+
+        merge_cols = ["player_clean_key", "team"]
+        if props_map["season"].notna().any():
+            merge_cols.append("season")
+        if props_map["week"].notna().any():
+            merge_cols.append("week")
+
+        props_subset = props_map[merge_cols + ["opponent"]].drop_duplicates()
+        working = working.merge(
+            props_subset,
+            on=merge_cols,
+            how="left",
+            suffixes=("", "_props"),
+        )
+        if "opponent_props" in working.columns:
+            working["opponent"] = working["opponent"].fillna(working["opponent_props"])
+            working.drop(columns=["opponent_props"], inplace=True)
+
+        team_cols = [c for c in ["team", "season", "week", "opponent"] if c in props_map.columns]
+        if {"team", "opponent"}.issubset(team_cols):
+            team_subset = props_map[team_cols].dropna(subset=["team"])
+            team_subset = team_subset.dropna(subset=["opponent"], how="any")
+            if "season" in team_subset.columns:
+                team_subset["season"] = pd.to_numeric(team_subset["season"], errors="coerce")
+            if "week" in team_subset.columns:
+                team_subset["week"] = pd.to_numeric(team_subset["week"], errors="coerce")
+            merge_team_cols = [c for c in ["team", "season", "week"] if c in team_subset.columns]
+            if merge_team_cols:
+                working = working.merge(
+                    team_subset[merge_team_cols + ["opponent"]].drop_duplicates(),
+                    on=merge_team_cols,
+                    how="left",
+                    suffixes=("", "_teamopp"),
+                )
+                if "opponent_teamopp" in working.columns:
+                    working["opponent"] = working["opponent"].fillna(working["opponent_teamopp"])
+                    working.drop(columns=["opponent_teamopp"], inplace=True)
+
+    seasons = working.get("season")
+    season_values = []
+    if seasons is not None:
+        season_values = [s for s in seasons.dropna().unique().tolist() if not pd.isna(s)]
+    if season_hint is not None:
+        season_values.append(season_hint)
+
+    schedule_map = _load_team_week_schedule_map(season_values)
+    if not schedule_map.empty and {"team", "season", "week"}.issubset(schedule_map.columns):
+        schedule_map["season"] = pd.to_numeric(schedule_map["season"], errors="coerce")
+        schedule_map["week"] = pd.to_numeric(schedule_map["week"], errors="coerce")
+        working = working.merge(
+            schedule_map.drop_duplicates(["team", "season", "week"]),
+            on=["team", "season", "week"],
+            how="left",
+            suffixes=("", "_schedule"),
+        )
+        if "opponent_schedule" in working.columns:
+            working["opponent"] = working["opponent"].fillna(working["opponent_schedule"])
+            working.drop(columns=["opponent_schedule"], inplace=True)
+
+    working["opponent"] = (
+        working["opponent"].astype("string").str.upper().str.strip()
+    )
+    working.loc[
+        working["opponent"].isin(["", "NAN", "NONE", "NULL"]),
+        "opponent",
+    ] = pd.NA
+
+    missing_mask = working["opponent"].isna()
+    if missing_mask.any():
+        debug_dir = Path(DATA_DIR) / "_debug"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        debug_path = debug_dir / "player_missing_opponent.csv"
+        cols = [
+            c
+            for c in [
+                "canonical_player_name",
+                "player_clean_key",
+                "team",
+                "season",
+                "week",
+            ]
+            if c in working.columns
+        ]
+        working.loc[missing_mask, cols].drop_duplicates().to_csv(
+            debug_path, index=False
+        )
+        print(
+            f"[make_player_form] WARN: {missing_mask.sum()} players missing opponent. "
+            f"Rows written to {debug_path}",
+            file=sys.stderr,
+        )
+
+    return working
+
+
+def _enrich_team_and_opponent_from_props(
+    out: pd.DataFrame, season: int | None = None
+) -> pd.DataFrame:
+    if out is None or out.empty:
+        return out
 
     df = out.copy()
+    df = df.loc[:, ~df.columns.duplicated()].copy()
 
-    # make sure df has player_canonical
-    if "player_canonical" not in df.columns:
-        df["player_canonical"] = df["player"].apply(_canonicalize_player_name)
-    else:
-        df["player_canonical"] = df["player_canonical"].apply(_canonicalize_player_name)
+    if "player" not in df.columns:
+        return df
 
-    # clean df.team just in case
-    if "team" in df.columns:
-        df["team"] = df["team"].astype(str).str.upper().str.strip()
+    raw_players = df["player"].copy()
+    for raw in raw_players.dropna().unique():
+        log_unmapped_variant(raw)
 
-    # props map
-    props_map = _build_props_player_opponents()
-
-    # fallback map from depth chart + schedule
-    fallback_map = _build_fallback_player_opponents()
-
-    # union maps
-    union_map = pd.concat([props_map, fallback_map], ignore_index=True)
-    union_map = union_map.drop_duplicates(["player_canonical", "team"])
-
-    # 1st pass merge on ['player_canonical','team'] when df already has team
-    if "team" in df.columns:
-        merged = df.merge(
-            union_map,
-            on=["player_canonical", "team"],
-            how="left",
-            suffixes=("", "_oppmap"),
-        )
-    else:
-        # if df didn't already have team (edge case), merge just on player_canonical
-        merged = df.merge(
-            union_map.drop_duplicates(["player_canonical"]),
-            on=["player_canonical"],
-            how="left",
-            suffixes=("", "_oppmap"),
-        )
-
-    # standardize columns: we want final columns 'team' and 'opponent' present
-    if "team_oppmap" in merged.columns:
-        merged["team"] = merged["team"].fillna(merged["team_oppmap"])
-    if "opponent_oppmap" in merged.columns:
-        merged["opponent"] = merged.get("opponent", pd.Series(index=merged.index, dtype=object))
-        merged["opponent"] = merged["opponent"].fillna(merged["opponent_oppmap"])
-
-    # final cleanup
-    merged["team"] = merged["team"].astype(str).str.upper().str.strip()
-    merged.loc[merged["team"].isin(["", "NAN", "NONE", "NULL"]), "team"] = pd.NA
-    merged["opponent"] = merged["opponent"].astype(str).str.upper().str.strip()
-
-    # NOW enforce perfection: if anyone still missing opponent, that's a hard fail
-    missing_mask = (
-        merged["opponent"].isna()
-        | (merged["opponent"] == "")
-        | (merged["opponent"].str.upper() == "NAN")
+    identity = raw_players.apply(lambda nm: pd.Series(_canonical_identity_fields(nm)))
+    df["player_name_canonical"] = identity["player_name_canonical"].astype(str)
+    df["player_canonical"] = identity["player_canonical"].astype(str)
+    df["player_clean_key"] = identity["player_clean_key"].astype(str)
+    df["canonical_player_name"] = df["player_name_canonical"].apply(
+        _format_canonical_player_name
     )
-    existing_cols = [c for c in ["player", "player_canonical", "team"] if c in merged.columns]
-    missing_rows = merged.loc[missing_mask, existing_cols].head(20)
-    n_missing = int(missing_mask.sum())
-    if n_missing > 0:
-        raise RuntimeError(
-            f"[make_player_form] opponent enrichment STILL incomplete after fallback: {n_missing} players "
-            f"without opponents. Examples: {missing_rows.to_dict('records')}"
+
+    df["player"] = df["canonical_player_name"]
+    df["player_name"] = df.get("player_name", df["canonical_player_name"])
+
+    if "team" in df.columns:
+        df["team"] = df["team"].astype(str).map(_canon_team)
+        df.loc[df["team"].isin(["", "NAN", "NONE", "NULL"]), "team"] = pd.NA
+
+    if "season" not in df.columns or df["season"].isna().all():
+        if season is not None:
+            df["season"] = season
+
+    df["season"] = pd.to_numeric(df.get("season"), errors="coerce")
+    df["week"] = pd.to_numeric(df.get("week"), errors="coerce")
+
+    if "opponent" in df.columns:
+        df.drop(columns=["opponent"], inplace=True)
+
+    aggregated = _aggregate_player_weeks(df)
+    if aggregated.empty:
+        aggregated["opponent"] = pd.NA
+        return aggregated
+
+    enriched = _resolve_opponents(aggregated, season_hint=season)
+
+    if "season" in enriched.columns:
+        enriched["season"] = pd.to_numeric(enriched["season"], errors="coerce").astype("Int64")
+    if "week" in enriched.columns:
+        enriched["week"] = pd.to_numeric(enriched["week"], errors="coerce").astype("Int64")
+
+    if "player_name_canonical" in enriched.columns:
+        enriched["player_name_canonical"] = (
+            enriched["player_name_canonical"].astype("string").str.upper().str.strip()
         )
 
-    merged.drop(columns=[c for c in ["team_oppmap", "opponent_oppmap"] if c in merged.columns], inplace=True)
+    enriched["canonical_player_name"] = (
+        enriched["canonical_player_name"].astype("string").str.strip()
+    )
+    enriched["player"] = enriched["canonical_player_name"]
+    enriched["player_name"] = enriched.get(
+        "player_name", enriched["canonical_player_name"]
+    )
 
-    return merged
+    if "team" in enriched.columns:
+        enriched["team"] = enriched["team"].astype("string").str.upper().str.strip()
+        enriched.loc[
+            enriched["team"].isin(["", "NAN", "NONE", "NULL"]), "team"
+        ] = pd.NA
+
+    return enriched
 
 
 # ---------------------------
@@ -2663,9 +2890,22 @@ def _enforce_player_form_schema(df: pd.DataFrame) -> pd.DataFrame:
             out[col] = pd.NA
 
     # ensure key identifier columns are strings (preserve pd.NA with pandas string dtype)
-    for col in ["player", "team", "opponent", "role", "player_name_canonical"]:
+    for col in [
+        "player",
+        "canonical_player_name",
+        "team",
+        "opponent",
+        "role",
+        "player_name_canonical",
+    ]:
         if col in out.columns:
             out[col] = out[col].astype("string")
+
+    if {"player", "canonical_player_name"}.issubset(out.columns):
+        mask = out["canonical_player_name"].isna() | out["canonical_player_name"].isin(
+            {"", "NAN", "NONE", "NULL"}
+        )
+        out.loc[mask, "canonical_player_name"] = out.loc[mask, "player"]
 
     if "team" in out.columns:
         out["team"] = out["team"].str.strip().str.upper()
@@ -2855,7 +3095,7 @@ def cli():
 
         # Opponent enrichment (non-fatal)
         try:
-            df = _enrich_team_and_opponent_from_props(df)
+            df = _enrich_team_and_opponent_from_props(df, args.season)
         except Exception as _enr_e:
             print(
                 f"[make_player_form] WARN opponent enrichment skipped in cli(): {_enr_e}",
@@ -2874,7 +3114,7 @@ def cli():
         try:
             if "df" in locals() and isinstance(df, pd.DataFrame) and len(df) > 0:
                 try:
-                    df = _enrich_team_and_opponent_from_props(df)
+                    df = _enrich_team_and_opponent_from_props(df, args.season)
                 except Exception as _enr_e:
                     print(
                         f"[make_player_form] WARN enrichment skipped in error path: {_enr_e}",
