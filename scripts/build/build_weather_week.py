@@ -128,6 +128,7 @@ def build_slate_fallback() -> pd.DataFrame:
                 "kickoff_utc": kickoff_local.astimezone(ZoneInfo("UTC")),
                 "kickoff_local": kickoff_local,
                 "game_date": date_obj.isoformat(),
+                "slate_date": date_obj.isoformat(),
                 "stadium": "",
                 "dome_flag": False,
                 "fallback_source": "opponent_map_from_props",
@@ -260,6 +261,10 @@ def _load_slate_from_repo() -> pd.DataFrame:
 
         out["kickoff_utc"] = kickoff_utc
         out["kickoff_local"] = kickoff_local
+        out["slate_date"] = [
+            dt.date().isoformat() if isinstance(dt, datetime) else ""
+            for dt in kickoff_local
+        ]
 
         out.attrs["fallback_used"] = False
         out.attrs["source"] = label
@@ -449,7 +454,9 @@ def _kickoff_iso(value) -> str:
     return str(value)
 
 
-def _base_weather_row(home_team: str, away_team: str, meta: dict | None, kickoff_value) -> dict:
+def _base_weather_row(
+    home_team: str, away_team: str, meta: dict | None
+) -> dict:
     stadium = meta.get("stadium", "") if meta else ""
     city = meta.get("city", "") if meta else ""
     state = meta.get("state", "") if meta else ""
@@ -457,11 +464,15 @@ def _base_weather_row(home_team: str, away_team: str, meta: dict | None, kickoff
 
     return {
         "home": home_team,
+        "home_team": home_team,
         "away": away_team,
+        "away_team": away_team,
         "stadium": stadium,
         "city": city,
         "state": state,
-        "kickoff_local": _kickoff_iso(kickoff_value),
+        "kickoff_local": "",
+        "kickoff_utc": "",
+        "slate_date": "",
         "indoor": indoor,
         "forecast_ok": 0,
         "temp_F_mean": None,
@@ -484,9 +495,12 @@ def _weather_row_for_game(row: pd.Series) -> dict:
     home_team = str(row.get("home", "")).upper().strip()
     away_team = str(row.get("away", "")).upper().strip()
     kickoff_value = row.get("kickoff_local")
+    slate_date_value = row.get("slate_date") or row.get("game_date")
+    if not slate_date_value:
+        slate_date_value = os.getenv("SLATE_DATE", "").strip()
 
     meta = STADIUM_LOCATION.get(home_team)
-    base_row = _base_weather_row(home_team, away_team, meta, kickoff_value)
+    base_row = _base_weather_row(home_team, away_team, meta)
 
     if not meta:
         logger.warning("[weather] No stadium mapping for home team %s", home_team)
@@ -495,9 +509,12 @@ def _weather_row_for_game(row: pd.Series) -> dict:
     lat = meta.get("lat")
     lon = meta.get("lon")
     if lat is None or lon is None:
-        raise RuntimeError(
-            f"[weather] Missing coordinates for {home_team} ({meta.get('stadium', 'unknown stadium')})"
+        logger.warning(
+            "[weather] Missing coordinates for %s (%s) — skipping forecast",
+            home_team,
+            meta.get("stadium", "unknown stadium"),
         )
+        return base_row
 
     kickoff_local_dt = kickoff_value
     if isinstance(kickoff_local_dt, pd.Timestamp):
@@ -517,6 +534,14 @@ def _weather_row_for_game(row: pd.Series) -> dict:
         else:
             kickoff_local_ts = kickoff_local_ts.tz_convert(tzinfo)
         kickoff_local_dt = kickoff_local_ts.to_pydatetime()
+
+    if kickoff_local_dt:
+        base_row["kickoff_local"] = kickoff_local_dt.isoformat()
+        base_row["kickoff_utc"] = kickoff_local_dt.astimezone(ZoneInfo("UTC")).isoformat()
+        if not slate_date_value:
+            slate_date_value = kickoff_local_dt.date().isoformat()
+
+    base_row["slate_date"] = str(slate_date_value or "")
 
     if kickoff_local_dt is None or kickoff_local_dt.tzinfo is None:
         logger.warning("[weather] Kickoff datetime missing tz for %s", home_team)
