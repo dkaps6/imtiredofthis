@@ -6,16 +6,243 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+STADIUM_LOCATION: Dict[str, Dict[str, object]] = {
+    "BUF": {
+        "stadium": "Highmark Stadium",
+        "city": "Orchard Park",
+        "state": "NY",
+        "outdoor": True,
+        "tz": "America/New_York",
+    },
+    "MIA": {
+        "stadium": "Hard Rock Stadium",
+        "city": "Miami Gardens",
+        "state": "FL",
+        "outdoor": True,
+        "tz": "America/New_York",
+    },
+    "NE": {
+        "stadium": "Gillette Stadium",
+        "city": "Foxborough",
+        "state": "MA",
+        "outdoor": True,
+        "tz": "America/New_York",
+    },
+    "NYJ": {
+        "stadium": "MetLife Stadium",
+        "city": "East Rutherford",
+        "state": "NJ",
+        "outdoor": True,
+        "tz": "America/New_York",
+    },
+    "CIN": {
+        "stadium": "Paycor Stadium",
+        "city": "Cincinnati",
+        "state": "OH",
+        "outdoor": True,
+        "tz": "America/New_York",
+    },
+    "CLE": {
+        "stadium": "Cleveland Browns Stadium",
+        "city": "Cleveland",
+        "state": "OH",
+        "outdoor": True,
+        "tz": "America/New_York",
+    },
+    "PIT": {
+        "stadium": "Acrisure Stadium",
+        "city": "Pittsburgh",
+        "state": "PA",
+        "outdoor": True,
+        "tz": "America/New_York",
+    },
+    "BAL": {
+        "stadium": "M&T Bank Stadium",
+        "city": "Baltimore",
+        "state": "MD",
+        "outdoor": True,
+        "tz": "America/New_York",
+    },
+    "HOU": {
+        "stadium": "NRG Stadium",
+        "city": "Houston",
+        "state": "TX",
+        "outdoor": False,
+        "tz": "America/Chicago",
+    },
+    "IND": {
+        "stadium": "Lucas Oil Stadium",
+        "city": "Indianapolis",
+        "state": "IN",
+        "outdoor": False,
+        "tz": "America/Indiana/Indianapolis",
+    },
+    "JAX": {
+        "stadium": "EverBank Stadium",
+        "city": "Jacksonville",
+        "state": "FL",
+        "outdoor": True,
+        "tz": "America/New_York",
+    },
+    "TEN": {
+        "stadium": "Nissan Stadium",
+        "city": "Nashville",
+        "state": "TN",
+        "outdoor": True,
+        "tz": "America/Chicago",
+    },
+    "KC": {
+        "stadium": "GEHA Field at Arrowhead Stadium",
+        "city": "Kansas City",
+        "state": "MO",
+        "outdoor": True,
+        "tz": "America/Chicago",
+    },
+    "LAC": {
+        "stadium": "SoFi Stadium",
+        "city": "Inglewood",
+        "state": "CA",
+        "outdoor": False,
+        "tz": "America/Los_Angeles",
+    },
+    "LV": {
+        "stadium": "Allegiant Stadium",
+        "city": "Las Vegas",
+        "state": "NV",
+        "outdoor": False,
+        "tz": "America/Los_Angeles",
+    },
+    "DEN": {
+        "stadium": "Empower Field at Mile High",
+        "city": "Denver",
+        "state": "CO",
+        "outdoor": True,
+        "tz": "America/Denver",
+    },
+    "DAL": {
+        "stadium": "AT&T Stadium",
+        "city": "Arlington",
+        "state": "TX",
+        "outdoor": False,
+        "tz": "America/Chicago",
+    },
+    "PHI": {
+        "stadium": "Lincoln Financial Field",
+        "city": "Philadelphia",
+        "state": "PA",
+        "outdoor": True,
+        "tz": "America/New_York",
+    },
+    "WSH": {
+        "stadium": "FedEx Field",
+        "city": "Landover",
+        "state": "MD",
+        "outdoor": True,
+        "tz": "America/New_York",
+    },
+    "NYG": {
+        "stadium": "MetLife Stadium",
+        "city": "East Rutherford",
+        "state": "NJ",
+        "outdoor": True,
+        "tz": "America/New_York",
+    },
+    "GB": {
+        "stadium": "Lambeau Field",
+        "city": "Green Bay",
+        "state": "WI",
+        "outdoor": True,
+        "tz": "America/Chicago",
+    },
+    "DET": {
+        "stadium": "Ford Field",
+        "city": "Detroit",
+        "state": "MI",
+        "outdoor": False,
+        "tz": "America/Detroit",
+    },
+    "CHI": {
+        "stadium": "Soldier Field",
+        "city": "Chicago",
+        "state": "IL",
+        "outdoor": True,
+        "tz": "America/Chicago",
+    },
+    "MIN": {
+        "stadium": "U.S. Bank Stadium",
+        "city": "Minneapolis",
+        "state": "MN",
+        "outdoor": False,
+        "tz": "America/Chicago",
+    },
+    "ATL": {
+        "stadium": "Mercedes-Benz Stadium",
+        "city": "Atlanta",
+        "state": "GA",
+        "outdoor": False,
+        "tz": "America/New_York",
+    },
+    "NO": {
+        "stadium": "Caesars Superdome",
+        "city": "New Orleans",
+        "state": "LA",
+        "outdoor": False,
+        "tz": "America/Chicago",
+    },
+    "TB": {
+        "stadium": "Raymond James Stadium",
+        "city": "Tampa",
+        "state": "FL",
+        "outdoor": True,
+        "tz": "America/New_York",
+    },
+    "CAR": {
+        "stadium": "Bank of America Stadium",
+        "city": "Charlotte",
+        "state": "NC",
+        "outdoor": True,
+        "tz": "America/New_York",
+    },
+    "SF": {
+        "stadium": "Levi's Stadium",
+        "city": "Santa Clara",
+        "state": "CA",
+        "outdoor": True,
+        "tz": "America/Los_Angeles",
+    },
+    "SEA": {
+        "stadium": "Lumen Field",
+        "city": "Seattle",
+        "state": "WA",
+        "outdoor": True,
+        "tz": "America/Los_Angeles",
+    },
+    "LAR": {
+        "stadium": "SoFi Stadium",
+        "city": "Inglewood",
+        "state": "CA",
+        "outdoor": False,
+        "tz": "America/Los_Angeles",
+    },
+    "ARI": {
+        "stadium": "State Farm Stadium",
+        "city": "Glendale",
+        "state": "AZ",
+        "outdoor": False,
+        "tz": "America/Phoenix",
+    },
+}
+
 __doc__ = """Build a weekly NFL weather dataset using nflverse schedules and NWS data.
 
 The script performs the following steps:
 
 1. Fetch the full-season schedule from nflverse releases (season-filtered).
 2. Identify the upcoming week based on kickoff timestamps.
-3. Merge the home team schedule with local stadium metadata (roof + lat/lon).
+3. Attach static stadium metadata (roof/outdoor + timezone) from an in-repo map.
 4. Request NWS forecasts (points → forecastHourly) with per-game retry logic
    capped at 45 seconds. Forecasts prefer the city/state location metadata and
-   fall back to latitude/longitude.
+   fall back to latitude/longitude when available.
 5. Require at least 16 games to return non-null weather readings; raise a
    RuntimeError if the threshold is not met or if any API step fails.
 
@@ -27,6 +254,7 @@ import re
 import time
 from datetime import timezone
 from typing import Dict, Iterable, Optional
+from zoneinfo import ZoneInfo
 
 from urllib.parse import quote
 
@@ -331,39 +559,6 @@ def get_forecast_for_city(
             sess.close()
 
 
-def load_stadium_metadata(path: Path) -> pd.DataFrame:
-    """Load stadium metadata with columns team/stadium/roof/latitude/longitude."""
-
-    if not path.exists():
-        raise RuntimeError(f"Stadium metadata file missing: {path}")
-    df = pd.read_csv(path)
-    if df.empty:
-        raise RuntimeError(f"Stadium metadata file {path} is empty")
-
-    required = {"team", "stadium", "roof"}
-    missing = required - set(df.columns)
-    if missing:
-        raise RuntimeError(
-            f"Stadium metadata missing columns: {', '.join(sorted(missing))}"
-        )
-
-    lat_col = None
-    lon_col = None
-    for candidate in df.columns:
-        lowered = candidate.lower()
-        if lowered in {"lat", "latitude"}:
-            lat_col = candidate
-        elif lowered in {"lon", "long", "longitude"}:
-            lon_col = candidate
-    if not lat_col or not lon_col:
-        raise RuntimeError("Stadium metadata requires latitude/longitude columns")
-
-    df = df.rename(columns={lat_col: "latitude", lon_col: "longitude"})
-    df = df.dropna(subset=["team", "stadium", "roof", "latitude", "longitude"])
-    df["team"] = df["team"].astype(str).str.upper()
-    return df[["team", "stadium", "roof", "latitude", "longitude"]]
-
-
 def roof_normalize(roof: str) -> str:
     value = str(roof).lower()
     if "retract" in value:
@@ -424,44 +619,61 @@ def main(out_csv: str | Path = OUTPUT_PATH) -> None:
     week_games = upcoming_week_games(games)
 
     with requests.Session() as session:
-        stadiums = load_stadium_metadata(Path("data") / "stadiums.csv")
-        merged = week_games.merge(
-            stadiums,
-            left_on="home",
-            right_on="team",
-            how="left",
-            validate="many_to_one",
-        )
-
-        if merged["stadium"].isna().any():
-            missing = merged[merged["stadium"].isna()]["home"].unique()
-            raise RuntimeError(
-                f"Missing stadium metadata for teams: {', '.join(sorted(missing))}"
-            )
-
-        for column in ("location", "city", "state"):
-            if column not in merged.columns:
-                merged[column] = ""
-
         out_rows = []
         successful = 0
 
-        for row in merged.itertuples(index=False):
-            roof = roof_normalize(row.roof)
+        for row in week_games.itertuples(index=False):
+            try:
+                metadata = STADIUM_LOCATION[row.home]
+            except KeyError as exc:  # pragma: no cover - configuration
+                raise RuntimeError(
+                    f"Missing stadium metadata for team: {row.home}"
+                ) from exc
+
+            schedule_stadium = (
+                "" if pd.isna(row.stadium) else str(row.stadium).strip()
+            )
+            schedule_location = (
+                "" if pd.isna(row.location) else str(row.location).strip()
+            )
+            schedule_city = "" if pd.isna(row.city) else str(row.city).strip()
+            schedule_state = (
+                "" if pd.isna(row.state) else str(row.state).strip().upper()
+            )
+
+            meta_stadium = str(metadata.get("stadium", "")).strip()
+            meta_city = str(metadata.get("city", "")).strip()
+            meta_state = str(metadata.get("state", "")).strip().upper()
+            meta_location = f"{meta_city}, {meta_state}".strip(", ")
+
+            stadium_name = schedule_stadium or meta_stadium
+            city_value = schedule_city or meta_city
+            state_value = schedule_state or meta_state
+            location_value = schedule_location or meta_location
+
+            roof_value = "Open" if metadata.get("outdoor") else "Dome/Fixed"
+            roof = roof_normalize(roof_value)
+
+            tz_name = str(metadata.get("tz", "")).strip() or None
+            tzinfo = None
+            if tz_name:
+                try:
+                    tzinfo = ZoneInfo(tz_name)
+                except Exception:  # pragma: no cover - invalid tz config
+                    tzinfo = None
+
             kickoff_ts = pd.Timestamp(row.kickoff_utc)
             if kickoff_ts.tzinfo is None:
-                kickoff_utc = kickoff_ts.tz_localize(timezone.utc)
+                if tzinfo is not None:
+                    kickoff_local = kickoff_ts.tz_localize(tzinfo)
+                    kickoff_utc = kickoff_local.tz_convert(timezone.utc)
+                else:
+                    kickoff_utc = kickoff_ts.tz_localize(timezone.utc)
             else:
                 kickoff_utc = kickoff_ts.tz_convert(timezone.utc)
+
             weather_summary = ""
             temp_f = wind_mph = precip_prob = None
-
-            raw_location = getattr(row, "location", "")
-            raw_city = getattr(row, "city", "")
-            raw_state = getattr(row, "state", "")
-            location_value = "" if pd.isna(raw_location) else str(raw_location).strip()
-            city_value = "" if pd.isna(raw_city) else str(raw_city).strip()
-            state_value = "" if pd.isna(raw_state) else str(raw_state).strip()
 
             if roof != "Dome/Fixed":
                 forecast = None
@@ -480,33 +692,41 @@ def main(out_csv: str | Path = OUTPUT_PATH) -> None:
                         city_error = exc
 
                 if forecast is None:
-                    try:
-                        forecast = fetch_nws_forecast(
-                            float(row.latitude),
-                            float(row.longitude),
-                            kickoff_utc,
-                            session=session,
-                        )
-                    except RuntimeError as exc:
-                        context = (
-                            f"; city/state lookup failed: {city_error}"
-                            if city_error
-                            else ""
-                        )
+                    lat = metadata.get("latitude")
+                    lon = metadata.get("longitude")
+                    if lat is not None and lon is not None:
+                        try:
+                            forecast = fetch_nws_forecast(
+                                float(lat),
+                                float(lon),
+                                kickoff_utc,
+                                session=session,
+                            )
+                        except RuntimeError as exc:
+                            context = (
+                                f"; city/state lookup failed: {city_error}"
+                                if city_error
+                                else ""
+                            )
+                            raise RuntimeError(
+                                f"Failed to fetch NWS forecast for {row.home} at {stadium_name}{context}: {exc}"
+                            ) from exc
+                    elif city_error is not None:
                         raise RuntimeError(
-                            f"Failed to fetch NWS forecast for {row.home} at {row.stadium}{context}: {exc}"
-                        ) from exc
+                            f"Failed to fetch NWS forecast for {row.home} at {stadium_name}; city/state lookup failed: {city_error}"
+                        ) from city_error
 
-                weather_summary = str(forecast.get("forecast_summary", ""))
-                temp_f = forecast.get("temp_f")
-                wind_mph = forecast.get("wind_mph")
-                precip_prob = forecast.get("precip_prob")
-                if (
-                    temp_f is not None
-                    or wind_mph is not None
-                    or precip_prob is not None
-                ):
-                    successful += 1
+                if forecast is not None:
+                    weather_summary = str(forecast.get("forecast_summary", ""))
+                    temp_f = forecast.get("temp_f")
+                    wind_mph = forecast.get("wind_mph")
+                    precip_prob = forecast.get("precip_prob")
+                    if (
+                        temp_f is not None
+                        or wind_mph is not None
+                        or precip_prob is not None
+                    ):
+                        successful += 1
             else:
                 weather_summary = ""
 
@@ -515,7 +735,7 @@ def main(out_csv: str | Path = OUTPUT_PATH) -> None:
                     "team": row.home,
                     "opponent": row.away,
                     "week": int(row.week),
-                    "stadium": row.stadium,
+                    "stadium": stadium_name,
                     "location": location_value,
                     "city": city_value,
                     "state": state_value,
