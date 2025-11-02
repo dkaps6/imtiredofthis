@@ -76,16 +76,6 @@ jobs:
             pip install -r requirements.txt
           fi
 
-      - name: Pull Sharp / pace / coverage / tendencies
-        run: |
-          mkdir -p data
-          python scripts/providers/sharpfootball_pull.py \
-            --season "$SEASON" \
-            "$SLATE_DATE" \
-            --dump-html
-          # MUST emit data/sharp_team_form.csv with full per-team pace, coverage tendencies,
-          # neutral_pace / box rate / PROE context for the CURRENT slate.
-
       - name: Build depth / roles (Ourlads)
         run: |
           mkdir -p data
@@ -148,13 +138,23 @@ jobs:
             pip install -r requirements.txt
           fi
 
+      - name: Pull Sharp / pace / coverage / tendencies
+        run: |
+          mkdir -p data
+          python scripts/providers/sharpfootball_pull.py \
+            --season "$SEASON" \
+            --dump-html
+          # This MUST create data/sharp_team_form.csv (with pace, neutral_pace, box rate,
+          # coverage tendencies, etc.) in the SAME job/container that will build team_form,
+          # so make_team_form.py can read it.
+
       - name: Build team_form
         run: |
           mkdir -p data
           python scripts/make_team_form.py \
             --season "$SEASON"
           # must emit data/team_form.csv for THIS SEASON ONLY
-          # do not backfill from prior seasons
+          # do not backfill from previous seasons
 
       - name: Build opponent map from props
         run: |
