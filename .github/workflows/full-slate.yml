@@ -86,7 +86,7 @@ jobs:
       # for the current slate, writes data/opponent_map_from_props.csv
       - name: Build opponent map from props
         run: |
-          python scripts/build_opponent_map_from_props.py \
+          python scripts/build/build_opponent_map_from_props.py \
             --season "${SEASON}" \
             --date "${SLATE_DATE}"
 
