@@ -223,6 +223,13 @@ def merge_opponent_map(base_df: pd.DataFrame) -> pd.DataFrame:
     print(f"[make_metrics] opponent map joined rows: {joined_rows}")
     print(f"[make_metrics] missing team/opponent after merge: {missing_count}")
 
+    opp_counts = (
+        merged.groupby("team", dropna=False)
+        .size()
+        .reset_index(name="rows")
+    )
+    opp_counts.to_csv("data/_debug_team_rows_after_opponent_join.csv", index=False)
+
     return merged
 DATA_DIR = "data"
 DATA_PATH = Path(DATA_DIR)

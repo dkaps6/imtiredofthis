@@ -39,7 +39,7 @@ from scripts.utils.canonical_names import (
     canonicalize_player_name as _canonicalize_with_utils,
     log_unmapped_variant,
 )
-from scripts.utils.name_clean import canonical_player, canonicalize
+from scripts.utils.name_clean import canonical_player, canonicalize, normalize_team
 
 logger = logging.getLogger(__name__)
 
@@ -2869,8 +2869,9 @@ def build_player_form(season: int = 2025, slate_date: str | None = None) -> pd.D
         .str.strip()
     )
 
+    # Make sure team columns are normalized before any joins
     if "team" in base.columns:
-        base["team"] = base["team"].astype(str).str.upper().str.strip()
+        base["team"] = base["team"].astype(str).map(normalize_team)
         base.loc[base["team"].isin(["", "NAN", "NONE", "NULL"]), "team"] = pd.NA
     for raw in base.get("player", pd.Series(dtype=object)).dropna().unique():
         log_unmapped_variant(raw)
@@ -2911,7 +2912,7 @@ def build_player_form(season: int = 2025, slate_date: str | None = None) -> pd.D
     if "week" in base.columns:
         base["week"] = pd.to_numeric(base["week"], errors="coerce")
     if "opponent" in base.columns:
-        base["opponent"] = base["opponent"].astype(str).str.strip().str.upper()
+        base["opponent"] = base["opponent"].astype(str).map(normalize_team)
         base.loc[base["opponent"].isin(["", "NAN"]), "opponent"] = np.nan
 
     if "team" in base.columns:

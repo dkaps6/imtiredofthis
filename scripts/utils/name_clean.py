@@ -7,6 +7,7 @@ from typing import Optional, Sequence
 
 import pandas as pd
 
+from scripts.utils.team_maps import TEAM_NAME_TO_ABBR
 
 _SUFFIX_RE = re.compile(r"\b(JR|SR|II|III|IV|V)\b\.?", re.IGNORECASE)
 _PUNCT_RE = re.compile(r"[^\w\s]")
@@ -34,6 +35,24 @@ def _title(value: str) -> str:
 
 def _snake(value: str) -> str:
     return _SPACES_RE.sub("_", value.strip().lower())
+
+
+TEAM_NORMALIZE = {k.upper(): v for k, v in TEAM_NAME_TO_ABBR.items()}
+TEAM_NORMALIZE.update({v.upper(): v for v in TEAM_NAME_TO_ABBR.values()})
+TEAM_NORMALIZE.update(
+    {
+        "BYE": "BYE",
+        # Cardinals aliases seen across books/APIs/historic sources
+        "ARZ": "ARI",
+        "AZ": "ARI",
+        "ARIZ": "ARI",
+        "ARIZONA": "ARI",
+        "CRD": "ARI",
+        "CARDINALS": "ARI",
+        "ARIZONA-CARDINALS": "ARI",
+        "ARI CARDINALS": "ARI",
+    }
+)
 
 
 def canonical_player(name: Optional[str]) -> str:
@@ -137,3 +156,10 @@ def canonicalize(
             out = working
 
     return out
+
+
+def normalize_team(x: str) -> str:
+    if not isinstance(x, str) or not x.strip():
+        return x
+    k = x.strip().upper().replace(".", "").replace("_", "-")
+    return TEAM_NORMALIZE.get(k, TEAM_NORMALIZE.get(k.replace(" ", ""), k))

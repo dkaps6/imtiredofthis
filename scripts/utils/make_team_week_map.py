@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from scripts.utils.team_maps import TEAM_NAME_TO_ABBR
+from scripts.utils.name_clean import normalize_team
 
 
 ODDS_PATH = Path("data/odds_game.csv")
@@ -65,14 +65,9 @@ def _read_first(paths: list[Path]) -> pd.DataFrame:
 def _norm_team(series: pd.Series) -> pd.Series:
     if series is None:
         return pd.Series(dtype="string")
-    upper = series.fillna("").astype("string").str.upper().str.strip()
-    mapped = upper.map(TEAM_NAME_TO_ABBR.get)
-    fallback = upper.where(upper.isin(TEAM_NAME_TO_ABBR.values()), "")
-    resolved = mapped.fillna(fallback)
-    bye_mask = upper.eq("BYE")
-    resolved = resolved.where(~bye_mask, "BYE")
-    resolved = resolved.replace("", pd.NA)
-    return resolved.astype("string")
+    normalized = series.fillna("").astype("string").map(normalize_team)
+    normalized = normalized.where(normalized.ne(""), pd.NA)
+    return normalized.astype("string")
 
 
 def build_map(season: int) -> pd.DataFrame:
