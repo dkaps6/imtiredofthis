@@ -18,7 +18,9 @@ OUT_PATH = Path("data/team_week_map.csv")
 def _first_thursday_on_or_after_sept1(season: int) -> pd.Timestamp:
     """Approximate NFL Week 1 anchor: first Thursday on/after Sept 1 (UTC)."""
 
-    d = pd.Timestamp(season, 9, 1, tz="UTC")
+    # Create Sept 1st as a timezone-aware timestamp in a single, unambiguous way.
+    # Using the string constructor avoids multiple tz pathways that can clash.
+    d = pd.Timestamp(f"{season}-09-01", tz="UTC")
     # Thursday = 3 (Mon=0)
     offset = (3 - d.weekday()) % 7
     return d + pd.Timedelta(days=offset)
@@ -67,6 +69,8 @@ def _norm_team(series: pd.Series) -> pd.Series:
     mapped = upper.map(TEAM_NAME_TO_ABBR.get)
     fallback = upper.where(upper.isin(TEAM_NAME_TO_ABBR.values()), "")
     resolved = mapped.fillna(fallback)
+    bye_mask = upper.eq("BYE")
+    resolved = resolved.where(~bye_mask, "BYE")
     resolved = resolved.replace("", pd.NA)
     return resolved.astype("string")
 
@@ -100,9 +104,18 @@ def build_map(season: int) -> pd.DataFrame:
         working["kickoff_utc"] = pd.to_datetime(working["kickoff_utc"], errors="coerce", utc=True)
 
     if "week" in working.columns:
-        working["week"] = pd.to_numeric(working["week"], errors="coerce").astype("Int64")
+        working["week"] = pd.to_numeric(working["week"], errors="coerce")
     else:
-        working["week"] = _infer_week_from_kickoff(season, working["kickoff_utc"]).astype("Int64")
+        inferred = _infer_week_from_kickoff(season, working["kickoff_utc"])
+        working["week"] = inferred
+
+    if working["week"].isna().any():
+        missing = int(working["week"].isna().sum())
+        raise ValueError(
+            f"Failed to determine week for {missing} rows in schedule source"
+        )
+
+    working["week"] = working["week"].astype(int)
 
     rename_map = {
         "home": "home_team",
@@ -156,7 +169,17 @@ def build_map(season: int) -> pd.DataFrame:
             + dupes.to_string(index=False)
         )
 
-    return tw
+    tw["is_bye"] = tw["opponent"].isna() | tw["opponent"].eq("BYE")
+    tw.loc[tw["is_bye"], "opponent"] = "BYE"
+    tw["is_bye"] = tw["is_bye"].fillna(False).astype(bool)
+
+    tw["game_id"] = tw["game_id"].astype("string").str.strip()
+    tw.loc[tw["game_id"].eq(""), "game_id"] = pd.NA
+    tw["kickoff_utc"] = pd.to_datetime(tw["kickoff_utc"], errors="coerce", utc=True)
+
+    out_cols = ["season", "week", "team", "opponent", "game_id", "kickoff_utc", "is_bye"]
+    out = tw.loc[:, out_cols].copy()
+    return out
 
 
 def main() -> None:

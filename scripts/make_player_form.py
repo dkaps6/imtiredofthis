@@ -39,7 +39,7 @@ from scripts.utils.canonical_names import (
     canonicalize_player_name as _canonicalize_with_utils,
     log_unmapped_variant,
 )
-from scripts.utils.name_clean import canonical_player
+from scripts.utils.name_clean import canonical_player, canonicalize
 
 logger = logging.getLogger(__name__)
 
@@ -3497,23 +3497,17 @@ def _enrich_team_and_opponent_from_props(
         if helper in enriched.columns:
             enriched.drop(columns=[helper], inplace=True)
 
-    if not TEAM_WEEK_MAP_PATH.exists() or TEAM_WEEK_MAP_PATH.stat().st_size == 0:
-        try:
-            from scripts.utils.make_team_week_map import build_map
+    tw_path = TEAM_WEEK_MAP_PATH
+    if not tw_path.exists():
+        raise RuntimeError(
+            "team_week_map.csv missing. Run make_team_week_map.py first."
+        )
+    if tw_path.stat().st_size == 0:
+        raise RuntimeError(
+            "team_week_map.csv is empty. Ensure make_team_week_map.py completed successfully before player_form."
+        )
 
-            tw = build_map(int(season))
-            TEAM_WEEK_MAP_PATH.parent.mkdir(parents=True, exist_ok=True)
-            tw.to_csv(TEAM_WEEK_MAP_PATH, index=False)
-            print(
-                f"[make_player_form] built team_week_map on the fly → {len(tw)} rows"
-            )
-        except Exception as exc:
-            raise RuntimeError(
-                "team_week_map.csv is empty or missing and auto-build failed. "
-                "Ensure make_team_week_map.py runs before make_player_form."
-            ) from exc
-
-    team_week = _read_csv_safe(str(TEAM_WEEK_MAP_PATH))
+    team_week = _read_csv_safe(str(tw_path))
     if team_week.empty:
         raise RuntimeError(
             "team_week_map.csv is empty. Ensure make_team_week_map.py completed successfully before player_form."
@@ -3523,7 +3517,12 @@ def _enrich_team_and_opponent_from_props(
     team_week.columns = [c.lower() for c in team_week.columns]
     for col in ("season", "week"):
         if col in team_week.columns:
-            team_week[col] = pd.to_numeric(team_week[col], errors="coerce").astype("Int64")
+            team_week[col] = pd.to_numeric(team_week[col], errors="coerce")
+            if team_week[col].isna().any():
+                raise RuntimeError(
+                    f"team_week_map missing {col} values required for join"
+                )
+            team_week[col] = team_week[col].astype(int)
     for col in ("team", "opponent"):
         if col in team_week.columns:
             team_week[col] = (
@@ -3535,7 +3534,7 @@ def _enrich_team_and_opponent_from_props(
                 .replace("", pd.NA)
             )
 
-    rename_tw = {"game_id": "teamweek_event_id", "kickoff_utc": "teamweek_kickoff_ts"}
+    rename_tw = {"game_id": "teamweek_game_id", "kickoff_utc": "teamweek_kickoff_ts", "is_bye": "teamweek_is_bye"}
     for src, dst in rename_tw.items():
         if src in team_week.columns and dst not in team_week.columns:
             team_week.rename(columns={src: dst}, inplace=True)
@@ -3555,8 +3554,9 @@ def _enrich_team_and_opponent_from_props(
         c
         for c in (
             "teamweek_opponent",
-            "teamweek_event_id",
+            "teamweek_game_id",
             "teamweek_kickoff_ts",
+            "teamweek_is_bye",
             "venue",
             "is_home",
         )
@@ -3578,12 +3578,12 @@ def _enrich_team_and_opponent_from_props(
     # --- Priority 1: join by (event_id, team) when available ---
     schedule_joined = enriched_base.copy()
     if {
-        "teamweek_event_id",
+        "teamweek_game_id",
         "team",
     }.issubset(team_week_subset.columns) and "event_id" in enriched_base.columns:
         event_cols = [
             "team",
-            "teamweek_event_id",
+            "teamweek_game_id",
         ] + [
             col
             for col in team_week_subset.columns
@@ -3594,21 +3594,21 @@ def _enrich_team_and_opponent_from_props(
         event_cols = [col for col in event_cols if not (col in seen or seen.add(col))]
         event_subset = (
             team_week_subset.loc[:, event_cols]
-            .dropna(subset=["teamweek_event_id"])
-            .drop_duplicates(subset=["team", "teamweek_event_id"], keep="last")
+            .dropna(subset=["teamweek_game_id"])
+            .drop_duplicates(subset=["team", "teamweek_game_id"], keep="last")
         )
         if not event_subset.empty:
             event_subset["team"] = (
                 event_subset["team"].astype("string").str.upper().str.strip()
             )
-            event_subset["teamweek_event_id"] = (
-                event_subset["teamweek_event_id"].astype("string").str.strip()
+            event_subset["teamweek_game_id"] = (
+                event_subset["teamweek_game_id"].astype("string").str.strip()
             )
             schedule_joined = enriched_base.merge(
                 event_subset,
                 how="left",
                 left_on=["team", "event_id"],
-                right_on=["team", "teamweek_event_id"],
+                right_on=["team", "teamweek_game_id"],
                 suffixes=("", "_sched"),
                 validate="m:1",
             )
@@ -3646,25 +3646,36 @@ def _enrich_team_and_opponent_from_props(
         enriched["opponent"] = enriched["opponent"].fillna(enriched["teamweek_opponent"])
         enriched["opponent_abbr"] = enriched["opponent_abbr"].fillna(enriched["teamweek_opponent"])
         enriched["opp_abbr"] = enriched["opp_abbr"].fillna(enriched["teamweek_opponent"])
-        enriched["is_bye"] = enriched["teamweek_opponent"].isna()
-        bye_mask = enriched["is_bye"].fillna(False)
+        if "teamweek_is_bye" in enriched.columns:
+            bye_mask = enriched["teamweek_is_bye"].fillna(False).astype(bool)
+        else:
+            bye_mask = enriched["teamweek_opponent"].isna()
+        enriched["is_bye"] = bye_mask
         enriched.loc[bye_mask, ["opponent", "opponent_abbr", "opp_abbr"]] = "BYE"
         enriched.drop(columns=["teamweek_opponent"], inplace=True)
+        if "teamweek_is_bye" in enriched.columns:
+            enriched.drop(columns=["teamweek_is_bye"], inplace=True)
     else:
         if "is_bye" not in enriched.columns:
             enriched["is_bye"] = False
 
-    if "teamweek_event_id" in enriched.columns:
-        enriched["teamweek_event_id"] = (
-            enriched["teamweek_event_id"].astype("string").str.strip()
+    if "teamweek_game_id" in enriched.columns:
+        enriched["teamweek_game_id"] = (
+            enriched["teamweek_game_id"].astype("string").str.strip()
         )
-        if "event_id" in enriched.columns:
-            enriched["event_id"] = enriched["event_id"].astype("string").combine_first(
-                enriched["teamweek_event_id"]
-            )
+        if "game_id" in enriched.columns:
+            enriched["game_id"] = (
+                enriched["game_id"].astype("string").str.strip().replace("", pd.NA)
+            ).fillna(enriched["teamweek_game_id"])
         else:
-            enriched["event_id"] = enriched["teamweek_event_id"]
-        enriched.drop(columns=["teamweek_event_id"], inplace=True)
+            enriched["game_id"] = enriched["teamweek_game_id"]
+        if "event_id" in enriched.columns:
+            enriched["event_id"] = (
+                enriched["event_id"].astype("string").str.strip().replace("", pd.NA)
+            ).combine_first(enriched["teamweek_game_id"])
+        else:
+            enriched["event_id"] = enriched["teamweek_game_id"]
+        enriched.drop(columns=["teamweek_game_id"], inplace=True)
 
     if "teamweek_kickoff_ts" in enriched.columns:
         kickoff_series = pd.to_datetime(
@@ -3703,12 +3714,9 @@ def _enrich_team_and_opponent_from_props(
                     validate="m:1",
                 )
                 if "event_id_live" in enriched.columns:
-                    if "event_id" in enriched.columns:
-                        enriched["event_id"] = enriched["event_id"].combine_first(
-                            enriched["event_id_live"]
-                        )
-                    else:
-                        enriched["event_id"] = enriched["event_id_live"]
+                    enriched["event_id"] = enriched["event_id_live"].combine_first(
+                        enriched.get("event_id")
+                    )
                     enriched.drop(columns=["event_id_live"], inplace=True)
 
     if "season" in enriched.columns:
@@ -4441,6 +4449,34 @@ def _write_player_form_outputs(
     )
     player_form = _reorder_identity_columns(player_form)
 
+    roster_map_for_names = None
+    roster_lookup = _build_roster_lookup()
+    if not roster_lookup.empty:
+        roster_base = roster_lookup.rename(columns={"team_abbr": "team"})
+        roster_base = canonicalize(
+            roster_base,
+            name_cols=["player_display"],
+            team_col="team",
+            roster_map=None,
+        )
+        roster_map_for_names = (
+            roster_base.loc[:, ["team", "player_key", "display_name"]]
+            .dropna(subset=["player_key"])
+            .drop_duplicates()
+        )
+
+    name_sources_pf = [
+        col
+        for col in ("display_name", "player", "player_name", "canonical_player_name")
+        if col in player_form.columns
+    ]
+    player_form = canonicalize(
+        player_form,
+        name_cols=name_sources_pf,
+        team_col="team",
+        roster_map=roster_map_for_names,
+    )
+
     if player_form.empty:
         raise RuntimeError("[make_player_form] final player_form empty; aborting run")
 
@@ -4520,8 +4556,8 @@ def _write_player_form_outputs(
                 ]
                 pf_consensus.drop(columns=["opponent_props"], inplace=True)
             if "event_id_props" in pf_consensus.columns:
-                pf_consensus["event_id"] = pf_consensus["event_id"].combine_first(
-                    pf_consensus["event_id_props"]
+                pf_consensus["event_id"] = pf_consensus["event_id_props"].combine_first(
+                    pf_consensus.get("event_id")
                 )
                 pf_consensus.drop(columns=["event_id_props"], inplace=True)
         else:
@@ -4642,6 +4678,18 @@ def _write_player_form_outputs(
         logger.warning(
             "[make_player_form] failed writing unmatched roles debug: %s", err
         )
+
+    name_sources_consensus = [
+        col
+        for col in ("display_name", "player", "player_name", "canonical_player_name")
+        if col in pf_consensus.columns
+    ]
+    pf_consensus = canonicalize(
+        pf_consensus,
+        name_cols=name_sources_consensus,
+        team_col="team",
+        roster_map=roster_map_for_names,
+    )
 
     pf_consensus = _attach_player_identity(
         pf_consensus, team_columns=("team_abbr", "team")
