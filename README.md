@@ -1,307 +1,175 @@
-# imtiredofthis Sharp Edge: Prop Intelligence System v3.0
+🧠 Sharp Edge: Prop Intelligence System v3.1
 
-Generated: 2025-10-09T19:28:16.314277Z
+Elite NFL Predictive Pipeline – Fully Automated
 
-## What this is
-A plug-and-play pipeline that:
-1) Fetches NFL data with failovers (nflverse → ESPN → NFLGSIS → API-Sports → MSF)
-2) Builds team & player feature tables
-3) Fetches sportsbook props
-4) Runs predictive models (MC/Bayes/Markov/ML with ABM adjustments)
-5) Outputs edges + fair odds
+Last updated: November 2025
 
-## Entry points
-- `run_model.py` — run everything end-to-end (local or CI)
-- `fetch_all.py` — compatibility wrapper that only runs the provider chain
-- `make_all.py` — compatibility wrapper that runs metrics + props + predictors
+🚀 Overview
 
-## Working dirs
-- `data/`    — ingested + engineered tables
-- `outputs/` — props + predictions
-- `logs/`    — per-run audit trail
+This repository powers an end-to-end NFL props modeling engine, designed to integrate multiple free data sources, live sportsbook odds, and a robust statistical modeling layer to output fair-value pricing, edges, and confidence tiers for every player prop.
 
-[README.md](https://github.com/user-attachments/files/22803928/README.md)
+It runs locally or on GitHub Actions through a single workflow:
+build → merge → price → export.
 
-# NFL Props Model — Turn‑Key (Odds API + Free Features)
+🧩 Architecture
+Core Pipeline
 
-This repo is a **turn‑key pipeline** to pull NFL game lines & player props (including alternates) from **The Odds API**, build **external features** from free sources (nfl_data_py), price markets with your **ELITE model spec** (μ/σ + post‑mortem rules), and export tidy CSVs. It runs **locally** or on **GitHub Actions**.
+Data ingestion
+Fetches and caches raw data from multiple redundant providers:
 
-> You provide one secret: `ODDS_API_KEY` (from https://the-odds-api.com/).  
-> Optional: later add other sources (e.g., authenticated dashboards) by extending `scripts/*.py`.
+nflverse → primary
 
----
+ESPN / NFLGSIS / API-Sports / MSF → failover
 
-## Quick Start (Local)
+The Odds API → game lines + player props
 
-```bash
+Feature engineering
+
+Builds team_form.csv and player_form.csv with rolling 4-game splits, EPA, success rate, pressure, coverage, etc.
+
+Produces metrics_ready.csv with combined player + team + opponent + weather context.
+
+Pricing & prediction
+
+Runs your ELITE μ/σ model (plays × team share × efficiency ± volatility)
+
+Applies post-mortem modifiers: pressure, coverage funnels, injury redistribution, pace smoothing
+
+Outputs: props_priced.csv with fair odds, edge %, Kelly, and tier
+
+Audit & logging
+Each run logs status + metrics in logs/actions_summary.log and detailed JSON under logs/daily/.
+
+📦 Working Directories
+data/        ← intermediate tables (team/player/metrics)
+outputs/     ← priced props, game lines, exports
+logs/        ← build + pricing run summaries
+scripts/     ← build + enrichment code
+.github/     ← GitHub Actions workflow
+
+🛠 Recent Additions (v3.1)
+Area	Update
+Opponent Mapping	Introduced build_opponent_map_from_props.py → joins props_raw + odds_game via event_id to resolve team/opponent for every player; >90 % coverage now.
+Name Canonicalization	Added scripts/utils/name_clean.py → standardizes player names (drops middle initials, suffixes, and punctuation) across all inputs for stable joins.
+Metrics Coverage Audit	make_metrics.py now runs core-coverage checks; writes data/metrics_missing_core.csv listing any player missing team/opponent/position.
+Workflow Ordering Fixes	Ensures props & odds fetch run before metrics build; pricing now uses --props data/metrics_ready.csv instead of invalid --date.
+Weather Integration	Weather data now imported before metrics, enriching environmental splits for each slate.
+Pricing CLI Fix	pricing.py now cleanly accepts --season, --props, and --write; removed deprecated --date arg.
+Improved Error Handling	All builders log row counts and missing-data warnings without aborting unless critical.
+Expanded Debug Outputs	Each builder now emits secondary CSVs (e.g., opponent_unmapped_debug.csv) for targeted QA.
+⚙️ Entry Points
+Script	Purpose
+run_model.py	End-to-end orchestrator; runs entire slate locally or on CI
+engine.py	Core sequence (fetch → build → metrics → pricing → export)
+fetch_props_oddsapi.py	Pulls props and game lines from The Odds API
+make_team_form.py	Builds team-level efficiency, EPA/SR, and situational metrics
+make_player_form.py	Compiles player-level usage, target/rush share, and route rates
+build_opponent_map_from_props.py	Derives player ↔ team ↔ opponent mapping via event_id
+make_metrics.py	Merges everything into metrics_ready.csv
+pricing.py	Calculates μ/σ, fair odds, edges, Kelly fractions, tiers
+calibration.py	CRPS/Brier calibration + μ shrinkage
+correlations.py	Experimental pairwise SGP correlations
+🧪 Quick Start (Local)
 python -m pip install --upgrade pip setuptools wheel
-python -m pip cache purge || true
-python -m pip install -r requirements.txt
+pip install -r requirements.txt
 export ODDS_API_KEY=YOUR_KEY_HERE
-python run_model.py --date today --season 2025 --write outputs
-```
 
-> Need to confirm which nflverse wheels PyPI currently serves?
-> Run `python -m pip index versions nfl_data_py` after the install step to inspect the
-> published builds. GitHub Actions now emits that listing automatically during
-> each workflow run.
+# Run full build + pricing
+python run_model.py --season 2025 --write outputs
 
-> **Working inside a restricted sandbox?**
-> Some automated graders (including this one) block outbound network access, so
-> `python -m pip install -r requirements.txt` will fail with a message similar to the one
-> **Working inside a restricted sandbox?**
-> Some automated graders (including this one) block outbound network access, so
-> `pip install -r requirements.txt` will fail with a message similar to the one
-> shown in the PR test log: `fails in this environment because PyPI access is
-> blocked by the sandbox proxy`. When you run the command locally or on GitHub
-> Actions the install succeeds, because those environments can reach PyPI.
-> If you ever need to work fully offline, build a local wheelhouse (``pip wheel``)
-> from an internet-connected machine and point `pip install` at that cache with
-> `--no-index --find-links /path/to/wheels`.
 
-> **Dependency note:** the refreshed `requirements.txt` now pins the exact
-> versions that run cleanly on the GitHub Actions Python 3.11 image:
-> `pandas==2.1.4`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`,
-> `statsmodels==0.14.2`, and `pyarrow==15.0.2`. Companion libraries are locked
-> as well (`requests==2.32.3`, `openpyxl==3.1.5`, `python-dateutil==2.9.0.post0`,
-> `pytz==2024.1`, `polars==0.20.5`, `beautifulsoup4==4.12.3`,
-> `lxml==4.9.4`). The nflverse stack mirrors production: `nfl_data_py==0.3.4`
-> and `nflreadpy==0.1.3` (the latest wheel on PyPI for Python 3.11). Keeping
-> these pins avoids the resolver conflicts you saw during the “Install
-> dependencies” stage while guaranteeing the builders talk to the live 2025
-> endpoints.
-> **Dependency note:** the refreshed `requirements.txt` sticks to *compatible
-> ranges* instead of exact pins so `pip` can choose wheels that exist for the
-> Python version in your environment. They keep the same lower bounds we used in
-> CI (`pandas 2.1.4+`, `numpy 1.26+`, `scipy 1.11+`, `statsmodels 0.14.2+`) while
-> removing the extra `<2.0` caps that were triggering resolver conflicts during
-> “Install dependencies”. We also lock `lxml` to **4.9.4.x** because that release
-> line is the sweet spot that satisfies `nflreadpy` while keeping BeautifulSoup
-> fast and reliable.
+Artifacts produced:
 
-> Optional packages like `nflreadpy` (and its `polars` dependency) remain in the
-> list for Python 3.11-and-earlier environments so the builders can hit the live
-> 2025 nflverse feeds. PyPI’s latest `nflreadpy` wheels live in the **0.1.x**
-> series (0.1.3 today), so the requirements file explicitly requests
-> `nflreadpy>=0.1,<0.2` to prevent the resolver from grabbing incompatible 0.2+
-> prereleases. The same idea applies to `nfl_data_py`: we keep a modest lower
-> bound (**0.3.0**) for the current API surface and otherwise allow the resolver
-> to downgrade if a newer release requests dependencies that are not yet
-> published. On Python 3.12, `pip` skips `nflreadpy` and the scripts fall back to
-> `nfl_data_py` alone, logging which provider handled each pull.
-> CI (`pandas 2.2.2+`, `numpy 1.26.4+`, `scipy 1.11+`, `statsmodels 0.14.2+`)
-> while relaxing the upper bounds to `<2.0` so the resolver no longer trips over
-> version conflicts during “Install dependencies”. We also lock `lxml` to
-> **4.9.4.x** because that release line is the sweet spot that satisfies
-> `nflreadpy==0.1.3` while keeping BeautifulSoup fast and reliable.
-> version conflicts during “Install dependencies”.
+outputs/game_lines.csv
+outputs/props_priced.csv
+data/metrics_ready.csv
+logs/actions_summary.log
 
-> Optional packages like `nflreadpy` (and its `polars` dependency) remain in the
-> list for Python 3.11-and-earlier environments so the builders can hit the live
-> 2025 nflverse feeds. PyPI’s latest `nflreadpy` release is **0.1.3**, which ships
-> wheels through Python 3.11, so the requirements file simply lists the package
-> name and lets `pip` pick whichever compatible version is available. The same
-> idea applies to `nfl_data_py`: we keep a modest lower bound (**0.3.0**) for the
-> current API surface and otherwise allow the resolver to downgrade if a newer
-> release requests dependencies that are not yet published. On Python 3.12, `pip`
-> skips `nflreadpy` and the scripts fall back to `nfl_data_py` alone, logging
-> which provider handled each pull.
-> wheels through Python 3.11. We keep that as the lower bound but drop the strict
-> upper pin so future wheels (0.2.x/0.3.x, etc.) can install automatically once
-> they appear. The same approach applies to `nfl_data_py`—it’s bounded from below
-> at `0.3.3` to preserve the APIs this pipeline expects, and otherwise left open
-> so Actions can resolve whichever compatible release exists. On Python 3.12,
-> `pip` skips `nflreadpy` and the scripts fall back to `nfl_data_py` alone,
-> logging which provider handled each pull.
-> wheels through Python 3.11. To unblock installs we now pin the companion
-> libraries to the last known compatible pairing: `nfl_data_py>=0.3.3,<0.3.4` and
-> `nflreadpy==0.1.3`. When newer wheels appear, bump both together after verifying
-> they install cleanly. On Python 3.12, `pip` skips `nflreadpy` and the scripts
-> fall back to `nfl_data_py` alone, logging which provider handled each pull.
-> wheels through Python 3.11; the requirements now accept that build **and any
-> future 0.2.x/0.3.x wheels** so GitHub Actions can resolve whichever version is
-> published. On Python 3.12, `pip` skips the package and the scripts fall back to
-> `nfl_data_py>=0.3.3`. When new wheels arrive (or you install a forked wheel
-> manually) the builders automatically pick them up and log which provider handled
-> the pull.
-> wheels through Python 3.11; the requirements now accept `0.1.3` **and newer
-> 0.2.x builds** (once they publish) so GitHub Actions can resolve whichever wheel
-> is available. On Python 3.12, `pip` skips the package and the scripts fall back
-> to `nfl_data_py>=0.3.3`. When new wheels arrive (or you install a forked wheel
-> manually) the builders automatically pick them up and log which provider handled
-> the pull.
-> wheels through Python 3.11; the requirements pin that exact version so installs
-> succeed. On Python 3.12, `pip` skips the package and the scripts fall back to
-> `nfl_data_py>=0.3.3`. When new wheels arrive (or you install a forked wheel
-> manually) the builders automatically pick them up and log which provider
-> handled the pull.
-> CI (`pandas 2.1.4+`, `numpy 1.26.4+`, `scipy 1.11+`, `statsmodels 0.14.2+`)
-> while relaxing the upper bounds to `<2.0`/`<2.2` so the resolver no longer
-> trips over version conflicts during “Install dependencies”.
+🔁 GitHub Actions Integration
 
-> Optional packages like `nflreadpy` (and its `polars` dependency) remain in the
-> list so the builders can hit the live 2025 nflverse feeds. If those packages
-> are absent, the scripts fall back to `nfl_data_py>=0.3.3`; make sure that
-> version is available so the shared `original_mlq` helper exists.
-> CI (`pandas 2.2.2+`, `numpy 1.26.4+`, `scipy 1.11+`, `statsmodels 0.14.2+`)
-> while relaxing the upper bounds to `<2.0`/`<2.3` so the resolver no longer
-> trips over version conflicts during “Install dependencies”.
-> CI (`pandas 2.1.4+`, `numpy 1.26.4+`, `scipy 1.11+`, etc.) while relaxing the
-> upper bounds to `<2.0`/`<2.3` so the resolver no longer trips over version
-> conflicts during “Install dependencies”.
+The workflow .github/workflows/full-slate.yml automates:
 
-> Optional packages like `nflreadpy` (and its `polars` dependency) remain in the
-> list so the builders can hit the live 2025 nflverse feeds. If those packages
-> are absent, the scripts fall back to `nfl_data_py>=0.3.4`; make sure that
-> version is available so the shared `original_mlq` helper exists.
-> **Heads-up:** `requirements.txt` now targets Python 3.12 by pinning
-> `pandas==2.1.4`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`,
-> `statsmodels==0.14.2`, and `pyarrow==15.0.2`.
-> Statsmodels 0.14.2 ships wheels built against `pandas<2.2`, so we pin
-> pandas to 2.1.4. If you decide to upgrade pandas later, bump statsmodels
-> at the same time to whatever release advertises compatibility with that
-> pandas series.
+Dependency setup (Python 3.11/3.12)
 
-> We removed `pandas-datareader` because its newest wheels currently depend on
-> `pandas<2.0`; installing it alongside pandas 2.1.4 would bring back the same
-> resolver error you saw in Actions. If you need `pandas-datareader`, install it
-> in a separate environment or adjust the rest of the stack accordingly.
-> `pandas==2.2.2`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`,
-> `statsmodels==0.14.2`, and `pyarrow==15.0.2`.
-> We removed `pandas-datareader` because its latest wheels cap
-> `pandas<2.2`, which is exactly why the GitHub Actions run aborted during
-> the **Install dependencies** step. If you later need `pandas-datareader`,
-> install it in a separate environment or adjust the pandas version accordingly.
+Data fetch + feature builds
 
-> The statsmodels wheels available today ship binaries that work with
-> pandas 2.2.x, so CI now stays on the same pandas version that GitHub Actions
-> preinstalls. If you bump pandas later, keep statsmodels at 0.14.2 or newer so
-> the resolver can still locate compatible wheels.
-> The statsmodels wheels available today still require `pandas<2.2`, so we
-> deliberately pin pandas to 2.1.4 to keep dependency resolution green in CI.
-> install it in a separate environment or downgrade pandas accordingly.
-> `statsmodels==0.14.2`, `pyarrow==15.0.2`, and `pandas-datareader==0.10.0`.
-> Statsmodels 0.14.2 advertises support through pandas 2.2, so the resolver
-> stops complaining even when other steps request `pandas-datareader` during
-> CI setup. If your
-> `pandas==2.1.4`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`,
-> `pyarrow==15.0.2`, and explicitly requiring `statsmodels>=0.14.1`. Pandas 2.1.x
-> keeps statsmodels happy (0.14.1 still caps support at `<2.2`). If your
-> `pandas==2.2.2`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`,
-> `pyarrow==15.0.2`, and explicitly requiring `statsmodels>=0.14.1` so pandas 2.x
-> resolves cleanly. If your
-> `pandas==2.2.2`, `numpy==1.26.4`, `scipy==1.12.0`, `scikit-learn==1.4.2`, and
-> explicitly requiring `statsmodels>=0.14.1` so pandas 2.x resolves cleanly. If your
-> `pandas==2.2.2`, `numpy==1.26.4`, `scipy==1.12.0`, and `scikit-learn==1.4.2`. If your
-> environment cached older wheels (especially on GitHub Actions), run
-> `pip install --upgrade pip` first so compatible builds resolve cleanly.
->
-> We also install `nflreadpy` (plus its `polars` dependency) so the builders can pull the
-> live 2025 nflverse feeds. Should `nflreadpy` be missing, the scripts fall back to
-> `nfl_data_py` — ensure you have `nfl_data_py>=0.3.4` available so the shared
-> `original_mlq` helper exists.
-> **Heads-up:** `requirements.txt` now installs `nflreadpy` (plus its `polars` dependency) so
-> the builders can pull the live 2025 nflverse feeds. If your environment pinned an older
-> dependency cache, run `pip install --upgrade pip` first so wheels for `polars` can be
-> resolved correctly on GitHub Actions.
->
-> **New requirement:** `nflreadpy` now expects `nfl_data_py` to expose the helper
-> `original_mlq`. We pin `nfl_data_py>=0.3.4` in `requirements.txt`; if you maintain a
-> custom environment make sure that upgrade lands, otherwise the builders will fall back to
-> the older `nfl_data_py` interface and warn you in stderr.
+Opponent mapping
 
-Artifacts:
-- `outputs/game_lines.csv` — H2H / spreads / totals (normalized)
-- `outputs/props_priced.csv` — Player props (with alternates), model μ/σ, blended probabilities, fair odds, **edge%**, **kelly** and **tier**.
-[Uploading README.md…]()
+Metrics join & coverage audit
 
-### What to do next
+Pricing and export
+→ Uploads outputs/ as artifact nfl-outputs
 
-1. **Prime the data folders.** Drop any external scouting or share tables into `data/`. The builders now auto-detect both the `*_form.csv` files *and* the raw `msf_*.csv`, `apisports_*.csv`, and `gsis_*.csv` exports that already ship in this repo.
-2. **Build team context:** `python scripts/make_team_form.py --season 2025`
-   *The builder reuses any cached `data/pbp_2025.csv` (or `external/nflverse_bundle/pbp_2025.csv`) before hitting nflverse. If 2025 PBP cannot be reached the script halts so you never blend in older seasons.*
-3. **Build player usage:** `python scripts/make_player_form.py --season 2025`
-   *Same guarantee: only 2025 play-by-play and participation are accepted. Older seasons trigger an explicit failure instead of a silent fallback.*
-4. **Run the full engine (optional while debugging):** `python -m engine --season 2025 --debug`
-   *The engine now enforces the same 2025-only constraint and surfaces a clear error when live pulls fail.*
-   *It also verifies `data/sharp_team_form.csv` exists with rows before touching The Odds API, so Sharp Football outages halt the run early.*
+Requires one secret:
 
-After each builder runs you should see `data/team_form.csv`, `data/team_form_weekly.csv`, and `data/player_form.csv` populated. They’ll report the `source_season` column so you can verify which year powered the current projections.
+ODDS_API_KEY = your API key from https://the-odds-api.com/
 
----
+🧮 Data Flow Summary
+fetch_props_oddsapi  →  props_raw.csv
+odds_game.csv        →  game lines
+↓
+build_opponent_map_from_props
+   ↳ opponent_map_from_props.csv
+↓
+make_team_form / make_player_form
+↓
+make_metrics
+   ↳ metrics_ready.csv
+↓
+pricing
+   ↳ props_priced.csv
 
-## Inspecting run summaries
+🧰 Developer Notes
 
-Every invocation of `python -m engine` now appends a compact JSON line to `logs/actions_summary.log` and writes a detailed copy to `logs/daily/run_<RUN_ID>.json`. Each record captures:
+Canonical Keys: player_clean_key, team_abbr, opponent_abbr, season, week
 
-- which steps succeeded/failed (fetch, team/player builders, metrics join, pricing, predictors, export)
-- the row/column counts for critical CSVs (team_form, player_form, metrics_ready, props_priced)
-- the `source_season` recorded by the builders (should read 2025 once live data lands)
-- run timing metadata (`run_id`, `started_at`, `duration_s`, etc.)
+Critical Files:
 
-Use it on GitHub Actions to confirm a slate ran cleanly, or locally via:
+data/player_form.csv
 
-```bash
-tail -n 1 logs/actions_summary.log | jq
-```
+data/team_form.csv
 
-This surfaces the most recent run without downloading the full artifact bundle.
+data/opponent_map_from_props.csv
 
----
+data/metrics_ready.csv
 
-## What’s inside (modules)
+Audit Files:
 
-- `scripts/odds_api.py` → pulls **game lines** and **player props** (event endpoint) from The Odds API.
-- `scripts/features_external.py` → free features via **nfl_data_py**: schedules, IDs, weekly stats, injuries, depth, plus **rolling L4** team EPA/SR and player form.
-- `scripts/id_map.py` → robust **player name → GSIS ID** resolver with a small cache file (`inputs/player_id_cache.csv`).  
-- `scripts/model_core.py` → μ/σ scaffolding and the **post‑mortem rules** hooks (pressure, funnels, volatility widening, etc.).  
-- `scripts/pricing.py` → **de‑vig**, probability/odds converters, **65/35 market blend**, **edge%**, **kelly**, **tiering**.  
-- `scripts/correlations.py` → simple pairwise **SGP** correlations (placeholders you can tune).  
-- `scripts/calibration.py` → **Brier/CRPS** scaffolding + μ shrinkage for next slate.  
-- `engine.py` → orchestration: fetch → features → pricing → write CSVs.  
-- `run_model.py` → small CLI wrapper.
+data/metrics_missing_core.csv
 
-> The μ calculation is intentionally modular: start with volume × efficiency; layer your rules (pressure, sacks, coverage, injuries, box counts, pace smoothing).
+data/opponent_unmapped_debug.csv
 
----
+Logs:
 
-## GitHub Actions (Scheduled)
+logs/actions_summary.log (compact)
 
-1. Add a repo Secret: **Settings ⇒ Secrets and variables ⇒ Actions ⇒ New repository secret**  
-   - Name: `ODDS_API_KEY`  
-   - Value: your API key.
+logs/daily/run_<timestamp>.json (full trace)
 
-2. Push repo. The workflow at `.github/workflows/full-slate.yml` can run manually or on schedule.  
-   It uploads the **outputs/** folder as an artifact (`nfl-outputs`).
+📊 Model Framework
 
----
+μ = volume × efficiency × contextual rules
 
-## Player name mapping (very important)
+σ = baseline variance × volatility factor
 
-Sportsbook names can differ from official IDs. We ship a resolver that:
-- Normalizes names, attempts a direct join to nfl_data_py IDs,
-- Falls back to fuzzy-ish normalization,
-- Persists the mapping in `inputs/player_id_cache.csv` so you only fix once.
+Edge = (book odds – fair odds) / book odds
 
-If a player doesn’t map automatically, the row appears with `gsis_id` empty; you can **add a row** to the cache file with columns: `player_name_raw,gsis_id`. Re‑run and the mapping will fill.
+Kelly = edge × (p – q) / odds
 
----
+Tiering = auto bucket by confidence percentile
 
-## Extending μ and σ to your full spec
+🧱 Roadmap (Next Up)
 
-Open `scripts/model_core.py` and the “TODO” sections in `engine.py`:
-- μ = **plays × team share × player share × efficiency**, then apply rules:  
-  **pressure/sacks**, **coverage funnel (run/pass)**, **injury redistribution**, **box counts**, **pace smoothing**.  
-- σ = market default × (1 ± volatility). Use widening when pressure mismatch or QB inconsistency flags appear.
+✅ Full event-ID opponent mapping (complete)
 
----
+🔄 Expanded player role inference (slot vs wide, committee splits)
 
-## Legal & ToS
+🌦️ Integrate weather into μ/σ context weighting
 
-Use The Odds API per its terms and rate limits. For any other data source, ensure you have permission. This template is for **personal analytics** and research.
+📈 Simulation harness for 10 k × Monte Carlo price validation
 
----
+⚡ Fast API microservice wrapper for dashboard deployment
 
-## License
+🪪 License
 
-MIT — do what you want, no warranty.
+MIT — free for research and personal use.
+Use The Odds API per its ToS & rate limits.
