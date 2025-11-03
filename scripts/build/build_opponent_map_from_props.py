@@ -10,7 +10,7 @@ from typing import Iterable
 
 import pandas as pd
 
-from scripts.utils.name_clean import canonical_player
+from scripts.utils.name_clean import canonical_player, normalize_team
 
 
 DEFAULT_OUT = Path("data/opponent_map_from_props.csv")
@@ -33,7 +33,8 @@ def _read_first(paths: Iterable[Path]) -> pd.DataFrame:
 
 
 def _norm_team(series: pd.Series) -> pd.Series:
-    return series.fillna("").astype("string").str.upper().str.strip()
+    series = series.fillna("").astype("string")
+    return series.map(normalize_team).astype("string")
 
 
 def _parse_commence(series: pd.Series) -> pd.Series:
