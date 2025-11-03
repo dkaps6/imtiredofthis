@@ -485,17 +485,23 @@ def _dedupe_player_clean_key(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _normalize_key(s: str) -> str:
-    """Lowercase, remove punctuation/whitespace for canonical lookups."""
+    """Normalize a name into a stable, space-normalized lowercase key."""
 
     if s is None:
         return ""
-    # strip accents
-    s = unicodedata.normalize("NFKD", str(s))
-    s = "".join(ch for ch in s if not unicodedata.combining(ch))
-    s = s.lower()
-    # remove punctuation and whitespace
-    s = re.sub(r"[^a-z0-9]", "", s)
-    return s
+
+    text = unicodedata.normalize("NFKD", str(s))
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = (
+        pd.Series([text], dtype="string")
+        .fillna("")
+        .iloc[0]
+    )
+    text = text.replace(".", " ")
+    text = re.sub(r"[^a-zA-Z ]+", "", text)
+    text = text.lower()
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
 
 
 def _standardize_optional_name(value: Any) -> Optional[str]:
@@ -3501,31 +3507,26 @@ def _enrich_team_and_opponent_from_props(
             enriched.drop(columns=[helper], inplace=True)
 
     tw_path = TEAM_WEEK_MAP_PATH
-    if not tw_path.exists():
+    if not tw_path.exists() or tw_path.stat().st_size == 0:
         raise RuntimeError(
-            "team_week_map.csv missing. Run make_team_week_map.py first."
-        )
-    if tw_path.stat().st_size == 0:
-        raise RuntimeError(
-            "team_week_map.csv is empty. Ensure make_team_week_map.py completed successfully before player_form."
+            "team_week_map.csv missing/empty. Run 'Build team-week map' before player_form."
         )
 
     team_week = _read_csv_safe(str(tw_path))
     if team_week.empty:
         raise RuntimeError(
-            "team_week_map.csv is empty. Ensure make_team_week_map.py completed successfully before player_form."
+            "team_week_map.csv missing/empty. Run 'Build team-week map' before player_form."
         )
 
     team_week = team_week.copy()
     team_week.columns = [c.lower() for c in team_week.columns]
     for col in ("season", "week"):
         if col in team_week.columns:
-            team_week[col] = pd.to_numeric(team_week[col], errors="coerce")
+            team_week[col] = pd.to_numeric(team_week[col], errors="coerce").astype("Int64")
             if team_week[col].isna().any():
                 raise RuntimeError(
                     f"team_week_map missing {col} values required for join"
                 )
-            team_week[col] = team_week[col].astype(int)
     for col in ("team", "opponent"):
         if col in team_week.columns:
             team_week[col] = (
@@ -3536,6 +3537,7 @@ def _enrich_team_and_opponent_from_props(
                 .map(_canon_team)
                 .replace("", pd.NA)
             )
+            team_week[col] = team_week[col].astype("string")
 
     rename_tw = {"game_id": "teamweek_game_id", "kickoff_utc": "teamweek_kickoff_ts", "is_bye": "teamweek_is_bye"}
     for src, dst in rename_tw.items():
@@ -3655,6 +3657,10 @@ def _enrich_team_and_opponent_from_props(
             bye_mask = enriched["teamweek_opponent"].isna()
         enriched["is_bye"] = bye_mask
         enriched.loc[bye_mask, ["opponent", "opponent_abbr", "opp_abbr"]] = "BYE"
+        for col in ("opponent", "opponent_abbr", "opp_abbr"):
+            enriched[col] = enriched[col].astype("string").fillna("BYE")
+        if "is_bye" in enriched.columns:
+            enriched["is_bye"] = enriched["is_bye"].fillna(False)
         enriched.drop(columns=["teamweek_opponent"], inplace=True)
         if "teamweek_is_bye" in enriched.columns:
             enriched.drop(columns=["teamweek_is_bye"], inplace=True)
@@ -4718,6 +4724,7 @@ def _write_player_form_outputs(
             "[make_player_form] opponent still missing for %d players",
             int(missing_opponent.sum()),
         )
+    pf_consensus["opponent"] = pf_consensus["opponent"].astype("string").fillna("BYE")
 
     if "event_id" not in pf_consensus.columns:
         pf_consensus["event_id"] = pd.NA
