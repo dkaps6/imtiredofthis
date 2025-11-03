@@ -414,6 +414,38 @@ def _normalize_player_clean_key_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _as_clean_series(obj: Any) -> pd.Series:
+    """Return a whitespace-stripped string Series from common merge artifacts."""
+
+    if isinstance(obj, pd.DataFrame):
+        if obj.shape[1] == 0:
+            return pd.Series(index=obj.index, dtype="string")
+        obj = obj.iloc[:, 0]
+
+    if not isinstance(obj, pd.Series):
+        obj = pd.Series(obj)
+
+    return obj.astype("string").fillna("").str.strip()
+
+
+def _coalesce_dupe_cols(
+    df: pd.DataFrame, bases: Iterable[str] = ("player_clean_key", "player", "team")
+) -> pd.DataFrame:
+    """Combine *_x/*_y columns left over from merges into a single column."""
+
+    if df is None:
+        return df
+
+    for base in bases:
+        x, y = f"{base}_x", f"{base}_y"
+        if x in df.columns and y in df.columns:
+            left = _as_clean_series(df[x]).replace("", pd.NA)
+            right = _as_clean_series(df[y]).replace("", pd.NA)
+            df[base] = left.combine_first(right).fillna("")
+            df.drop([x, y], axis=1, inplace=True)
+    return df
+
+
 def _dedupe_player_clean_key(df: pd.DataFrame) -> pd.DataFrame:
     """
     Guarantee a single 'player_clean_key' column.
@@ -430,16 +462,13 @@ def _dedupe_player_clean_key(df: pd.DataFrame) -> pd.DataFrame:
     if not key_cols:
         return df
 
-    def choose_key(row):
-        for kc in key_cols:
-            val = row.get(kc)
-            if pd.notna(val) and str(val).strip() != "":
-                return str(val).strip()
-        return ""
+    cleaned = pd.DataFrame({kc: _as_clean_series(df[kc]) for kc in key_cols})
+    cleaned = cleaned.replace({"": pd.NA})
 
-    df["player_clean_key"] = df.apply(choose_key, axis=1)
+    preferred = cleaned.bfill(axis=1)
+    first_col = preferred.columns[0]
+    df["player_clean_key"] = preferred[first_col].fillna("")
 
-    # Drop duplicates, keep only the canonical column
     drop_cols = [c for c in key_cols if c != "player_clean_key"]
     df = df.drop(columns=drop_cols, errors="ignore")
 
@@ -968,6 +997,7 @@ def _inject_week_opponent_and_roles(
     enriched = ensure_canonical(enriched, player_col="player", team_col="team")
 
     enriched = enriched.merge(props_merge, on="player_canonical", how="left")
+    enriched = _coalesce_dupe_cols(enriched)
     enriched = _normalize_player_clean_key_columns(enriched)
 
     if "team_abbr" in enriched.columns:
@@ -1186,6 +1216,7 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
         how="left",
         suffixes=("", "_roles"),
     )
+    pf = _coalesce_dupe_cols(pf)
 
     assert_no_duplicate_columns(pf, "roles merge")
 
@@ -1807,6 +1838,7 @@ def _merge_roles_csv(df: pd.DataFrame) -> pd.DataFrame:
         how="left",
         suffixes=("", "_roles"),
     )
+    out = _coalesce_dupe_cols(out)
     assert_no_duplicate_columns(out, "roles.csv merge")
     if "role_roles" in out.columns:
         out["role"] = out["role"].combine_first(out["role_roles"])
@@ -2371,6 +2403,7 @@ def build_player_form(season: int = 2025, slate_date: str | None = None) -> pd.D
         how="outer",
         suffixes=("_rec", "_rush"),
     )
+    base = _coalesce_dupe_cols(base)
     assert_no_duplicate_columns(base, "rec/rush merge")
 
     if "player_rec" in base.columns or "player_rush" in base.columns:
@@ -2412,6 +2445,7 @@ def build_player_form(season: int = 2025, slate_date: str | None = None) -> pd.D
         how="left",
         suffixes=("", "_qb"),
     )
+    base = _coalesce_dupe_cols(base)
     assert_no_duplicate_columns(base, "qb merge")
 
     if "player_qb" in base.columns:
@@ -2470,6 +2504,7 @@ def build_player_form(season: int = 2025, slate_date: str | None = None) -> pd.D
             how="left",
             suffixes=("", "_ro"),
         )
+        base = _coalesce_dupe_cols(base)
         assert_no_duplicate_columns(base, "weekly roster merge")
         if "player_ro" in base.columns:
             base["player"] = base["player"].combine_first(base["player_ro"])
@@ -2496,6 +2531,7 @@ def build_player_form(season: int = 2025, slate_date: str | None = None) -> pd.D
                 how="left",
                 suffixes=("", "_pm"),
             )
+            base = _coalesce_dupe_cols(base)
             assert_no_duplicate_columns(base, "players master merge")
             if "player_pm" in base.columns:
                 base["player"] = base["player"].combine_first(base["player_pm"])
@@ -2870,6 +2906,7 @@ def _resolve_opponents(df: pd.DataFrame, season_hint: int | None = None) -> pd.D
             how="left",
             suffixes=("", "_props"),
         )
+        working = _coalesce_dupe_cols(working)
         assert_no_duplicate_columns(working, "props opponent merge")
         if "opponent_props" in working.columns:
             working["opponent"] = working["opponent"].fillna(working["opponent_props"])
@@ -2893,6 +2930,7 @@ def _resolve_opponents(df: pd.DataFrame, season_hint: int | None = None) -> pd.D
                     how="left",
                     suffixes=("", "_teamopp"),
                 )
+                working = _coalesce_dupe_cols(working)
                 assert_no_duplicate_columns(working, "team-level opponent merge")
                 if "opponent_teamopp" in working.columns:
                     working["opponent"] = working["opponent"].fillna(working["opponent_teamopp"])
@@ -2915,6 +2953,7 @@ def _resolve_opponents(df: pd.DataFrame, season_hint: int | None = None) -> pd.D
             how="left",
             suffixes=("", "_schedule"),
         )
+        working = _coalesce_dupe_cols(working)
         assert_no_duplicate_columns(working, "schedule merge")
         if "opponent_schedule" in working.columns:
             working["opponent"] = working["opponent"].fillna(working["opponent_schedule"])
@@ -3028,6 +3067,7 @@ def _enrich_team_and_opponent_from_props(
             on="player_canonical",
             how="left",
         )
+        enriched = _coalesce_dupe_cols(enriched)
         enriched = _normalize_player_clean_key_columns(enriched)
     else:
         for col in ["props_team_abbr", "props_opponent_abbr", "props_kickoff_ts", "props_event_id"]:
@@ -3676,7 +3716,40 @@ def _enforce_consensus_schema(df: pd.DataFrame) -> pd.DataFrame:
     return out[ordered]
 
 
-def _write_player_form_outputs(df: pd.DataFrame, slate_date: str | None = None) -> None:
+def _write_player_form_outputs(
+    df: pd.DataFrame,
+    slate_date: str | None = None,
+    season: int | None = None,
+) -> None:
+    import os
+
+    def _resolve_season(
+        df: pd.DataFrame, slate_date: str | None, passed: int | None
+    ) -> int:
+        if passed is not None:
+            return int(passed)
+        env_val = os.environ.get("SEASON")
+        if env_val:
+            try:
+                return int(env_val)
+            except Exception:
+                pass
+        if "season" in df.columns and df["season"].notna().any():
+            try:
+                return int(
+                    pd.to_numeric(df["season"], errors="coerce").dropna().iloc[0]
+                )
+            except Exception:
+                pass
+        if slate_date:
+            try:
+                return pd.to_datetime(slate_date).year
+            except Exception:
+                pass
+        raise RuntimeError("season could not be resolved")
+
+    season = _resolve_season(df, slate_date, season)
+
     # Final safety: drop any duplicated column names
     df = df.loc[:, ~df.columns.duplicated(keep="first")]
 
@@ -3698,6 +3771,10 @@ def _write_player_form_outputs(df: pd.DataFrame, slate_date: str | None = None) 
     df_out = _ensure_single_position_column(df.copy())
     df_out = _ensure_cols(df_out, FINAL_COLS)
     player_form = _enforce_player_form_schema(df_out)
+    try:
+        player_form["season"] = int(season)
+    except Exception:
+        player_form["season"] = season
 
     player_form["player_canonical"] = player_form["player_canonical"].apply(
         canonicalize_name
@@ -3818,6 +3895,7 @@ def _write_player_form_outputs(df: pd.DataFrame, slate_date: str | None = None) 
                 how="left",
                 suffixes=("", "_props"),
             )
+            pf_consensus = _coalesce_dupe_cols(pf_consensus)
             if "opponent_props" in pf_consensus.columns:
                 mask = pf_consensus["opponent"].isna() | (
                     pf_consensus["opponent"].astype(str).str.strip() == ""
@@ -3902,6 +3980,7 @@ def _write_player_form_outputs(df: pd.DataFrame, slate_date: str | None = None) 
                 how="left",
                 suffixes=("", "_roles"),
             )
+            pf_consensus = _coalesce_dupe_cols(pf_consensus)
             if "role_roles" in pf_consensus.columns:
                 pf_consensus["role"] = pf_consensus["role"].combine_first(
                     pf_consensus["role_roles"]
@@ -3953,7 +4032,6 @@ def _write_player_form_outputs(df: pd.DataFrame, slate_date: str | None = None) 
     try:
         consensus["season"] = int(season)
     except Exception:
-        # Defensive: preserve original behavior if season cannot coerce.
         consensus["season"] = season
     PLAYER_FORM_CONSENSUS_OUT.parent.mkdir(parents=True, exist_ok=True)
     consensus.to_csv(PLAYER_FORM_CONSENSUS_OUT, index=False)
@@ -4033,7 +4111,7 @@ def cli():
 
         # Final write on success
         df = _dedupe_player_clean_key(df)
-        _write_player_form_outputs(df, slate_date=args.date)
+        _write_player_form_outputs(df, slate_date=args.date, season=args.season)
         return
 
     except Exception as e:
@@ -4051,7 +4129,9 @@ def cli():
                         file=sys.stderr,
                     )
                 df = _dedupe_player_clean_key(df)
-                _write_player_form_outputs(df, slate_date=args.date)
+                _write_player_form_outputs(
+                    df, slate_date=args.date, season=args.season
+                )
                 return
         except Exception as _w:
             print(
