@@ -320,10 +320,163 @@ def main() -> None:
         ],
     ].copy()
 
-    if "week" not in out_df.columns or out_df["week"].isna().all():
-        raise RuntimeError(
-            "[build_opponent_map_from_props] no usable week mapping for any player"
+    if "event_id" not in out_df.columns:
+        out_df["event_id"] = ""
+
+    props_path_candidates = [
+        Path("data") / "props_raw.csv",
+        Path("outputs") / "props_raw.csv",
+    ]
+    props_raw = pd.DataFrame()
+    for cand in props_path_candidates:
+        if cand.exists():
+            try:
+                props_raw = pd.read_csv(cand)
+            except Exception:
+                props_raw = pd.DataFrame()
+            if not props_raw.empty:
+                break
+
+    if not props_raw.empty:
+        props_work = props_raw.copy()
+        if "player" in props_work.columns:
+            props_work["player_key"] = props_work["player"].astype(str).map(
+                _player_key_from_name_nh
+            )
+        else:
+            props_work["player_key"] = ""
+
+        team_col = None
+        for col in ["team", "player_team_abbr", "team_abbr", "player_team"]:
+            if col in props_work.columns:
+                team_col = col
+                break
+        if team_col is not None:
+            props_work["team_key"] = props_work[team_col].astype(str).str.upper().str.strip().map(
+                _canon_team
+            )
+        else:
+            props_work["team_key"] = ""
+
+        if "event_id" in props_work.columns:
+            props_work["event_id"] = props_work["event_id"].astype(str)
+        else:
+            props_work["event_id"] = ""
+
+        event_map = props_work[
+            ["player_key", "team_key", "event_id"]
+        ].dropna(subset=["player_key"])
+        event_map = event_map[event_map["event_id"].astype(str).str.strip().ne("")]
+        if not event_map.empty:
+            out_df = out_df.merge(
+                event_map.drop_duplicates(subset=["player_key", "team_key"]),
+                on=["player_key", "team_key"],
+                how="left",
+                suffixes=("", "_props"),
+            )
+            if "event_id_props" in out_df.columns:
+                out_df["event_id"] = out_df["event_id_props"].combine_first(
+                    out_df.get("event_id")
+                )
+                out_df.drop(columns=["event_id_props"], inplace=True)
+
+    odds_candidates = [
+        Path("data") / "odds_game.csv",
+        Path("outputs") / "odds_game.csv",
+    ]
+    odds_df = pd.DataFrame()
+    for cand in odds_candidates:
+        if cand.exists():
+            try:
+                odds_df = pd.read_csv(cand)
+            except Exception:
+                odds_df = pd.DataFrame()
+            if not odds_df.empty:
+                break
+
+    if not odds_df.empty and "event_id" in odds_df.columns:
+        odds_work = odds_df.copy()
+        odds_work["event_id"] = odds_work["event_id"].astype(str)
+        ts_col = next(
+            (
+                col
+                for col in ["kickoff_ts", "commence_time", "game_timestamp"]
+                if col in odds_work.columns
+            ),
+            None,
         )
+        if ts_col:
+            odds_work["game_timestamp_odds"] = pd.to_datetime(
+                odds_work[ts_col], errors="coerce"
+            )
+        else:
+            odds_work["game_timestamp_odds"] = pd.NaT
+
+        if "week" in odds_work.columns:
+            odds_work["week_odds"] = pd.to_numeric(
+                odds_work["week"], errors="coerce"
+            )
+        else:
+            odds_work["week_odds"] = pd.NA
+
+        if "season" in odds_work.columns:
+            odds_work["season_odds"] = pd.to_numeric(
+                odds_work["season"], errors="coerce"
+            )
+        else:
+            odds_work["season_odds"] = pd.NA
+
+        odds_meta = odds_work[[
+            "event_id",
+            "game_timestamp_odds",
+            "week_odds",
+            "season_odds",
+        ]].drop_duplicates(subset=["event_id"])
+
+        out_df = out_df.merge(odds_meta, on="event_id", how="left")
+        if "game_timestamp_odds" in out_df.columns:
+            out_df["game_timestamp"] = out_df["game_timestamp_odds"].combine_first(
+                out_df.get("game_timestamp")
+            )
+            out_df.drop(columns=["game_timestamp_odds"], inplace=True)
+        if "week_odds" in out_df.columns:
+            out_df["week"] = out_df["week_odds"].combine_first(out_df.get("week"))
+            out_df.drop(columns=["week_odds"], inplace=True)
+        if "season_odds" in out_df.columns:
+            out_df["season"] = out_df["season_odds"].combine_first(
+                out_df.get("season")
+            )
+            out_df.drop(columns=["season_odds"], inplace=True)
+
+    if "event_id" not in out_df.columns:
+        out_df["event_id"] = ""
+
+    if out_df.get("season").isna().all():
+        out_df["season"] = int(season)
+
+    if out_df.get("week").isna().all():
+        print(
+            "[build_opponent_map_from_props] WARNING: week values missing; downstream may need schedule refresh"
+        )
+
+    missing_cols = {
+        col
+        for col in ["opponent", "week", "season", "game_timestamp"]
+        if col not in out_df.columns
+    }
+    for col in missing_cols:
+        out_df[col] = pd.NA
+
+    missing_mask = (
+        out_df["opponent"].astype(str).str.strip().eq("")
+        | out_df["opponent"].isna()
+        | out_df["week"].isna()
+        | out_df["season"].isna()
+        | out_df["game_timestamp"].isna()
+    )
+    if missing_mask.any():
+        for player in sorted(out_df.loc[missing_mask, "player"].dropna().unique()):
+            print(f"[opponent_map] missing mapping for {player}")
 
     out_path = Path(os.path.join("data", "opponent_map_from_props.csv"))
     out_path.parent.mkdir(parents=True, exist_ok=True)

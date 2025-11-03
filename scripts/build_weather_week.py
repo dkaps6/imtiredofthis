@@ -35,6 +35,64 @@ SESSION = requests.Session()
 logger = logging.getLogger(__name__)
 
 
+CITY_FALLBACK_COORDS = {
+    ("MIAMI GARDENS", "FL"): {
+        "city": "Miami",
+        "state": "FL",
+        "lat": 25.7617,
+        "lon": -80.1918,
+    },
+    ("ORCHARD PARK", "NY"): {
+        "city": "Buffalo",
+        "state": "NY",
+        "lat": 42.8864,
+        "lon": -78.8784,
+    },
+    ("FOXBOUROUGH", "MA"): {
+        "city": "Boston",
+        "state": "MA",
+        "lat": 42.3601,
+        "lon": -71.0589,
+    },
+    ("FOXBOROUGH", "MA"): {
+        "city": "Boston",
+        "state": "MA",
+        "lat": 42.3601,
+        "lon": -71.0589,
+    },
+}
+
+
+def request_json_with_retry(
+    url: str,
+    *,
+    headers: dict | None = None,
+    timeout: int = 15,
+    max_attempts: int = 3,
+) -> dict:
+    """Best-effort GET wrapper that bubbles errors for fallback handling."""
+
+    last_exc: Exception | None = None
+    for attempt in range(max_attempts):
+        try:
+            response = SESSION.get(url, headers=headers, timeout=timeout)
+            response.raise_for_status()
+            return response.json()
+        except requests.HTTPError as exc:
+            status = getattr(exc.response, "status_code", None)
+            if status in {500, 502, 503, 504} and attempt + 1 < max_attempts:
+                continue
+            last_exc = exc
+            break
+        except requests.RequestException as exc:  # network issues, timeouts, etc.
+            last_exc = exc
+            break
+
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError(f"[weather] request_json_with_retry exhausted for {url}")
+
+
 def build_slate_fallback() -> pd.DataFrame:
     """Build a minimal slate when the usual slate CSV is missing/empty."""
     fallback_path = Path("data") / "opponent_map_from_props.csv"
@@ -293,18 +351,22 @@ def _get_hourly_forecast(lat: float, lon: float) -> pd.DataFrame:
     """Fetch hourly forecast periods from the NWS API."""
 
     points_url = f"https://api.weather.gov/points/{lat},{lon}"
-    points_resp = SESSION.get(points_url, headers=NWS_HEADERS, timeout=15)
-    points_resp.raise_for_status()
-    points_json = points_resp.json()
+    points_json = request_json_with_retry(
+        points_url,
+        headers=NWS_HEADERS,
+        timeout=15,
+    )
 
     properties = points_json.get("properties", {})
     forecast_url = properties.get("forecastHourly")
     if not forecast_url:
         raise RuntimeError(f"[weather] No forecastHourly URL for {lat},{lon}")
 
-    forecast_resp = SESSION.get(forecast_url, headers=NWS_HEADERS, timeout=15)
-    forecast_resp.raise_for_status()
-    forecast_json = forecast_resp.json()
+    forecast_json = request_json_with_retry(
+        forecast_url,
+        headers=NWS_HEADERS,
+        timeout=15,
+    )
 
     periods = forecast_json.get("properties", {}).get("periods", [])
     rows = []
@@ -429,6 +491,28 @@ def _base_weather_row(home_team: str,
     }
 
 
+def _fallback_meta(meta: dict | None) -> dict | None:
+    if not meta:
+        return None
+    city = str(meta.get("city", "")).strip().upper()
+    state = str(meta.get("state", "")).strip().upper()
+    fallback = CITY_FALLBACK_COORDS.get((city, state))
+    if not fallback:
+        return None
+    merged = dict(meta)
+    merged.update(fallback)
+    return merged
+
+
+def _mark_indoor_neutral(base_row: dict) -> dict:
+    row = dict(base_row)
+    row["indoor"] = True
+    row["forecast_ok"] = 0
+    if not row.get("blurb"):
+        row["blurb"] = "Forecast unavailable; treating as indoor/neutral"
+    return row
+
+
 def _weather_row_for_game(row: pd.Series) -> dict:
     """Build weather summary for a single game row."""
 
@@ -483,15 +567,38 @@ def _weather_row_for_game(row: pd.Series) -> dict:
 
     try:
         fc_df = _get_hourly_forecast(lat, lon)
+    except requests.HTTPError as exc:
+        status = getattr(exc.response, "status_code", None)
+        fallback = _fallback_meta(meta)
+        if status == 404 and fallback:
+            try:
+                fc_df = _get_hourly_forecast(fallback.get("lat"), fallback.get("lon"))
+                meta = fallback
+            except Exception as fallback_err:
+                logger.warning(
+                    "[weather] WARNING: unable to fetch forecast for %s at %s (fallback %s,%s failed: %s), marking as indoor/neutral.",
+                    home_team,
+                    meta.get("stadium", "unknown stadium"),
+                    fallback.get("city"),
+                    fallback.get("state"),
+                    fallback_err,
+                )
+                return _mark_indoor_neutral(base_row)
+        else:
+            logger.warning(
+                "[weather] WARNING: unable to fetch forecast for %s at %s, marking as indoor/neutral.",
+                home_team,
+                meta.get("stadium", "unknown stadium"),
+            )
+            return _mark_indoor_neutral(base_row)
     except Exception as exc:
         logger.warning(
-            "[weather] Forecast fetch failed for %s (%s,%s): %s",
+            "[weather] WARNING: unable to fetch forecast for %s at %s: %s, marking as indoor/neutral.",
             home_team,
-            lat,
-            lon,
+            meta.get("stadium", "unknown stadium"),
             exc,
         )
-        return base_row
+        return _mark_indoor_neutral(base_row)
 
     summary = _summarize_window(
         fc_df,
@@ -535,10 +642,18 @@ def _weather_row_for_game(row: pd.Series) -> dict:
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    slate_df = _load_slate_from_repo()
+    try:
+        slate_df = _load_slate_from_repo()
+    except RuntimeError as err:
+        logger.warning("%s", err)
+        slate_df = pd.DataFrame()
 
     if slate_df.empty:
-        raise RuntimeError("[weather] Slate is empty even after fallback")
+        logger.warning("[weather] Slate is empty even after fallback; writing empty weather file")
+        OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame().to_csv(OUT_PATH, index=False)
+        print(f"[weather] wrote 0 games -> {OUT_PATH} (fallback_used=False)")
+        return
 
     fallback_used = bool(slate_df.attrs.get("fallback_used", False))
 
@@ -555,9 +670,8 @@ def main():
 
     weather_df = pd.DataFrame(rows).drop_duplicates()
 
-    # fail-fast if totally empty or all forecast_ok=0
     if weather_df.empty:
-        raise RuntimeError("[weather] No weather rows generated at all")
+        logger.warning("[weather] No weather rows generated at all; writing empty file")
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     weather_df.to_csv(OUT_PATH, index=False)

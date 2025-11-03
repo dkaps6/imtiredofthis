@@ -23,6 +23,7 @@ DATA_DIR = Path("data")
 PROPS_ENRICHED_PATH = DATA_DIR / "props_enriched.csv"
 PROPS_RAW_DATA_PATH = DATA_DIR / "props_raw.csv"
 OPPONENT_MAP_PATH = DATA_DIR / "opponent_map_from_props.csv"
+ODDS_GAME_DATA_PATH = DATA_DIR / "odds_game.csv"
 ROLES_PATH = Path("data/roles_ourlads.csv")
 
 # Known book keys for US (include alias keys we might see from the API)
@@ -453,8 +454,80 @@ def _write_props_enriched(props: pd.DataFrame, out_game: str) -> pd.DataFrame:
     return props_enriched
 
 
-def _build_opponent_map(enriched: Optional[pd.DataFrame]) -> pd.DataFrame:
-    cols = ["player", "team", "opponent", "event_id"]
+def _prepare_game_meta(
+    game_df: Optional[pd.DataFrame], season: int | None
+) -> pd.DataFrame:
+    """Normalize game-level metadata for joining onto props."""
+
+    base_cols = ["event_id", "week", "season", "game_timestamp"]
+    if game_df is None or game_df.empty:
+        return pd.DataFrame(columns=base_cols)
+
+    meta = game_df.copy()
+    if "event_id" not in meta.columns:
+        meta["event_id"] = pd.NA
+    meta["event_id"] = meta["event_id"].fillna("").astype(str)
+
+    ts_col = next(
+        (
+            col
+            for col in ["kickoff_ts", "commence_time", "game_timestamp"]
+            if col in meta.columns
+        ),
+        None,
+    )
+    if ts_col:
+        meta["game_timestamp"] = pd.to_datetime(meta[ts_col], errors="coerce")
+    else:
+        meta["game_timestamp"] = pd.NaT
+
+    keep_cols = ["event_id", "game_timestamp"]
+    if "week" in meta.columns:
+        keep_cols.append("week")
+    if "season" in meta.columns:
+        keep_cols.append("season")
+    meta = meta[keep_cols].drop_duplicates(subset=["event_id"])
+
+    if "week" in meta.columns:
+        meta["week"] = pd.to_numeric(meta["week"], errors="coerce")
+    else:
+        meta["week"] = pd.NA
+
+    if "season" in meta.columns:
+        meta["season"] = pd.to_numeric(meta["season"], errors="coerce").astype(
+            "Int64"
+        )
+        if season is not None:
+            meta["season"] = meta["season"].fillna(int(season))
+    else:
+        if season is not None:
+            meta["season"] = pd.Series(
+                [int(season)] * len(meta), index=meta.index, dtype="Int64"
+            )
+        else:
+            meta["season"] = pd.Series([pd.NA] * len(meta), index=meta.index, dtype="Int64")
+
+    for col in base_cols:
+        if col not in meta.columns:
+            meta[col] = pd.NA
+
+    return meta[base_cols]
+
+
+def _build_opponent_map(
+    enriched: Optional[pd.DataFrame],
+    game_df: Optional[pd.DataFrame],
+    season: int | None,
+) -> pd.DataFrame:
+    cols = [
+        "player",
+        "team",
+        "opponent",
+        "week",
+        "season",
+        "game_timestamp",
+        "event_id",
+    ]
     if enriched is None or enriched.empty:
         return pd.DataFrame(columns=cols)
 
@@ -490,30 +563,71 @@ def _build_opponent_map(enriched: Optional[pd.DataFrame]) -> pd.DataFrame:
         .str.strip()
     )
 
+    if "event_id" in working.columns:
+        working["event_id"] = working["event_id"].fillna("").astype(str)
+    else:
+        working["event_id"] = ""
+
     working["player_compact"] = working["player_canonical"].apply(_compact_player_id)
 
+    meta = _prepare_game_meta(game_df, season)
+    if not meta.empty:
+        working = working.merge(meta, on="event_id", how="left")
+    else:
+        for col in ["week", "season"]:
+            if col not in working.columns:
+                working[col] = pd.NA
+        if "game_timestamp" not in working.columns:
+            working["game_timestamp"] = pd.NaT
+
+    if season is not None:
+        season_series = working.get("season")
+        if season_series is None:
+            season_series = pd.Series(pd.NA, index=working.index)
+        working["season"] = season_series.fillna(int(season))
+
     out = (
-        working[["player_compact", "team", "opponent", "event_id"]]
+        working[
+            [
+                "player_compact",
+                "team",
+                "opponent",
+                "week",
+                "season",
+                "game_timestamp",
+                "event_id",
+            ]
+        ]
         .rename(columns={"player_compact": "player"})
+        .copy()
     )
+
     out = out[out["player"].astype(str).str.strip().ne("")]
+    out = out[out["team"].astype(str).str.strip().ne("")]
     out = out.drop_duplicates(subset=["player", "team", "event_id"])
-    out = out.sort_values(["team", "player", "event_id"], kind="mergesort")
 
     missing_team = out["team"].astype(str).str.strip().eq("")
     if missing_team.any():
         log.warning(
             "opponent map missing team for %d players", int(missing_team.sum())
         )
-    missing_opp = out["opponent"].astype(str).str.strip().eq("")
-    if missing_opp.any():
-        log.warning(
-            "opponent map missing opponent for %d players", int(missing_opp.sum())
-        )
-    return out
+    missing_opp = out["opponent"].astype(str).str.strip().eq("") | out["opponent"].isna()
+    missing_week = out["week"].isna()
+    missing_ts = out["game_timestamp"].isna()
+    missing_any = missing_opp | missing_week | missing_ts
+    if missing_any.any():
+        for player in sorted(out.loc[missing_any, "player"].dropna().unique()):
+            log.warning("[opponent_map] missing mapping for %s", player)
+
+    return out.reindex(columns=cols)
 
 
-def _write_data_exports(raw_props: pd.DataFrame, enriched: Optional[pd.DataFrame]) -> None:
+def _write_data_exports(
+    raw_props: pd.DataFrame,
+    enriched: Optional[pd.DataFrame],
+    game_df: Optional[pd.DataFrame],
+    season: int | None,
+) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     props_copy = raw_props.copy()
@@ -545,7 +659,14 @@ def _write_data_exports(raw_props: pd.DataFrame, enriched: Optional[pd.DataFrame
     props_copy.to_csv(PROPS_RAW_DATA_PATH, index=False)
     log.info(f"wrote {PROPS_RAW_DATA_PATH} rows={len(props_copy)}")
 
-    opponent_map = _build_opponent_map(enriched)
+    if game_df is not None and not game_df.empty:
+        game_df.to_csv(ODDS_GAME_DATA_PATH, index=False)
+        log.info(f"wrote {ODDS_GAME_DATA_PATH} rows={len(game_df)}")
+    else:
+        pd.DataFrame().to_csv(ODDS_GAME_DATA_PATH, index=False)
+        log.info(f"wrote empty {ODDS_GAME_DATA_PATH}")
+
+    opponent_map = _build_opponent_map(enriched, game_df, season)
     opponent_map.to_csv(OPPONENT_MAP_PATH, index=False)
     log.info(f"wrote {OPPONENT_MAP_PATH} rows={len(opponent_map)}")
 
@@ -776,8 +897,15 @@ def fetch_odds(
         enriched = _write_props_enriched(props, out_game)
     except Exception as err:
         log.info(f"failed to write props_enriched.csv: {err}")
+    season_value: int | None = None
+    if season:
+        try:
+            season_value = int(season)
+        except (TypeError, ValueError):
+            season_value = None
+
     try:
-        _write_data_exports(props, enriched)
+        _write_data_exports(props, enriched, game_df, season_value)
     except Exception as err:
         log.info(f"failed to write data exports: {err}")
 
