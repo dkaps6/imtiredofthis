@@ -52,6 +52,7 @@ PLAYER_FORM_OUT = Path("data/player_form.csv")
 PLAYER_FORM_CONSENSUS_OUT = Path("data/player_form_consensus.csv")
 DEBUG_MISSING_OPP = Path("data/_debug/player_missing_opponent.csv")
 OPPONENT_MAP_PATH = Path("data/opponent_map_from_props.csv")
+TEAM_WEEK_MAP_PATH = Path("data/team_week_map.csv")
 UNMATCHED_ROLES_DEBUG_PATH = Path("data/unmatched_roles_merge.csv")
 TEAM_FORM_PATH = Path("data/team_form.csv")
 
@@ -3132,6 +3133,63 @@ def _load_props_enriched() -> pd.DataFrame:
     return df[keep_cols].drop_duplicates()
 
 
+def _load_props_opponent_map() -> pd.DataFrame:
+    base = _read_csv_safe(str(OPPONENT_MAP_PATH))
+    if base.empty:
+        return pd.DataFrame(
+            columns=[
+                "player",
+                "player_clean_key",
+                "team",
+                "opponent",
+                "season",
+                "week",
+                "event_id",
+            ]
+        )
+
+    df = base.copy()
+    df.columns = [c.lower() for c in df.columns]
+
+    for col in ("player", "player_clean_key"):
+        if col not in df.columns:
+            df[col] = pd.NA
+        df[col] = df[col].astype("string")
+
+    for col in ("season", "week"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+        else:
+            df[col] = pd.Series(pd.NA, index=df.index, dtype="Int64")
+
+    if "event_id" not in df.columns:
+        df["event_id"] = pd.NA
+    df["event_id"] = df["event_id"].astype("string").str.strip()
+
+    for col in ("team", "opponent"):
+        if col not in df.columns:
+            df[col] = pd.NA
+        df[col] = (
+            df[col]
+            .astype("string")
+            .str.upper()
+            .str.strip()
+            .map(_canon_team)
+            .replace("", pd.NA)
+        )
+
+    keep = [
+        "player",
+        "player_clean_key",
+        "team",
+        "opponent",
+        "season",
+        "week",
+        "event_id",
+    ]
+    return df[keep].drop_duplicates()
+
+
 def _load_team_week_schedule_map(seasons: Iterable[int]) -> pd.DataFrame:
     frames: List[pd.DataFrame] = []
     season_set = {
@@ -3439,6 +3497,141 @@ def _enrich_team_and_opponent_from_props(
         if helper in enriched.columns:
             enriched.drop(columns=[helper], inplace=True)
 
+    if not TEAM_WEEK_MAP_PATH.exists():
+        raise FileNotFoundError(
+            "data/team_week_map.csv missing. Run scripts/utils/make_team_week_map.py earlier in the workflow."
+        )
+
+    team_week = _read_csv_safe(str(TEAM_WEEK_MAP_PATH))
+    if team_week.empty:
+        raise RuntimeError(
+            "team_week_map.csv is empty. Ensure make_team_week_map.py completed successfully before player_form."
+        )
+
+    team_week = team_week.copy()
+    team_week.columns = [c.lower() for c in team_week.columns]
+    for col in ("season", "week"):
+        if col in team_week.columns:
+            team_week[col] = pd.to_numeric(team_week[col], errors="coerce").astype("Int64")
+    for col in ("team", "opponent"):
+        if col in team_week.columns:
+            team_week[col] = (
+                team_week[col]
+                .astype("string")
+                .str.upper()
+                .str.strip()
+                .map(_canon_team)
+                .replace("", pd.NA)
+            )
+
+    rename_tw = {"game_id": "teamweek_event_id", "kickoff_utc": "teamweek_kickoff_ts"}
+    for src, dst in rename_tw.items():
+        if src in team_week.columns and dst not in team_week.columns:
+            team_week.rename(columns={src: dst}, inplace=True)
+
+    if "opponent" in team_week.columns:
+        team_week.rename(columns={"opponent": "teamweek_opponent"}, inplace=True)
+
+    join_cols = [
+        col
+        for col in ("season", "week", "team")
+        if col in enriched.columns and col in team_week.columns
+    ]
+    if len(join_cols) != 3:
+        raise RuntimeError("team_week_map join requires season, week, and team columns")
+
+    tw_subset_cols = join_cols + [
+        c
+        for c in (
+            "teamweek_opponent",
+            "teamweek_event_id",
+            "teamweek_kickoff_ts",
+            "venue",
+            "is_home",
+        )
+        if c in team_week.columns
+    ]
+    team_week = team_week.loc[:, tw_subset_cols].drop_duplicates(subset=join_cols, keep="last")
+
+    enriched = enriched.merge(
+        team_week,
+        on=join_cols,
+        how="left",
+        validate="m:1",
+    )
+
+    if "teamweek_opponent" in enriched.columns:
+        for col in ("opponent", "opponent_abbr", "opp_abbr"):
+            if col not in enriched.columns:
+                enriched[col] = pd.NA
+        enriched["opponent"] = enriched["opponent"].fillna(enriched["teamweek_opponent"])
+        enriched["opponent_abbr"] = enriched["opponent_abbr"].fillna(enriched["teamweek_opponent"])
+        enriched["opp_abbr"] = enriched["opp_abbr"].fillna(enriched["teamweek_opponent"])
+        enriched["is_bye"] = enriched["teamweek_opponent"].isna()
+        bye_mask = enriched["is_bye"].fillna(False)
+        enriched.loc[bye_mask, ["opponent", "opponent_abbr", "opp_abbr"]] = "BYE"
+        enriched.drop(columns=["teamweek_opponent"], inplace=True)
+    else:
+        if "is_bye" not in enriched.columns:
+            enriched["is_bye"] = False
+
+    if "teamweek_event_id" in enriched.columns:
+        enriched["teamweek_event_id"] = (
+            enriched["teamweek_event_id"].astype("string").str.strip()
+        )
+        if "event_id" in enriched.columns:
+            enriched["event_id"] = enriched["event_id"].astype("string").combine_first(
+                enriched["teamweek_event_id"]
+            )
+        else:
+            enriched["event_id"] = enriched["teamweek_event_id"]
+        enriched.drop(columns=["teamweek_event_id"], inplace=True)
+
+    if "teamweek_kickoff_ts" in enriched.columns:
+        kickoff_series = pd.to_datetime(
+            enriched["teamweek_kickoff_ts"], errors="coerce", utc=True
+        )
+        kickoff_text = kickoff_series.astype("string")
+        if "kickoff_ts" in enriched.columns:
+            enriched["kickoff_ts"] = enriched["kickoff_ts"].fillna(kickoff_text)
+        else:
+            enriched["kickoff_ts"] = kickoff_text
+        enriched.drop(columns=["teamweek_kickoff_ts"], inplace=True)
+
+    if "is_home" in enriched.columns:
+        try:
+            enriched["is_home"] = enriched["is_home"].astype("boolean")
+        except Exception:
+            enriched["is_home"] = enriched["is_home"]
+
+    live_map = _load_props_opponent_map()
+    if not live_map.empty and {"event_id"}.issubset(live_map.columns):
+        live_map = live_map.dropna(subset=["event_id"])
+        if not live_map.empty:
+            live_map["event_id"] = live_map["event_id"].astype("string").str.strip()
+            join_live = [
+                col
+                for col in ("player_clean_key", "team", "opponent")
+                if col in enriched.columns and col in live_map.columns
+            ]
+            if join_live:
+                live_subset = live_map[join_live + ["event_id"]].drop_duplicates()
+                enriched = enriched.merge(
+                    live_subset,
+                    on=join_live,
+                    how="left",
+                    suffixes=("", "_live"),
+                    validate="m:1",
+                )
+                if "event_id_live" in enriched.columns:
+                    if "event_id" in enriched.columns:
+                        enriched["event_id"] = enriched["event_id"].combine_first(
+                            enriched["event_id_live"]
+                        )
+                    else:
+                        enriched["event_id"] = enriched["event_id_live"]
+                    enriched.drop(columns=["event_id_live"], inplace=True)
+
     if "season" in enriched.columns:
         enriched["season"] = pd.to_numeric(enriched["season"], errors="coerce").astype("Int64")
     if "week" in enriched.columns:
@@ -3465,6 +3658,12 @@ def _enrich_team_and_opponent_from_props(
 
     if "opp_abbr" not in enriched.columns:
         enriched["opp_abbr"] = enriched.get("opponent_abbr")
+
+    if "is_bye" in enriched.columns:
+        try:
+            enriched["is_bye"] = enriched["is_bye"].fillna(False).astype("boolean")
+        except Exception:
+            enriched["is_bye"] = enriched["is_bye"].fillna(False)
 
     dedup_cols = [c for c in ["player_canonical", "team_abbr", "opponent_abbr"] if c in enriched.columns]
     if len(dedup_cols) == 3:
