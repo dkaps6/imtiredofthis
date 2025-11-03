@@ -3497,10 +3497,21 @@ def _enrich_team_and_opponent_from_props(
         if helper in enriched.columns:
             enriched.drop(columns=[helper], inplace=True)
 
-    if not TEAM_WEEK_MAP_PATH.exists():
-        raise FileNotFoundError(
-            "data/team_week_map.csv missing. Run scripts/utils/make_team_week_map.py earlier in the workflow."
-        )
+    if not TEAM_WEEK_MAP_PATH.exists() or TEAM_WEEK_MAP_PATH.stat().st_size == 0:
+        try:
+            from scripts.utils.make_team_week_map import build_map
+
+            tw = build_map(int(season))
+            TEAM_WEEK_MAP_PATH.parent.mkdir(parents=True, exist_ok=True)
+            tw.to_csv(TEAM_WEEK_MAP_PATH, index=False)
+            print(
+                f"[make_player_form] built team_week_map on the fly → {len(tw)} rows"
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                "team_week_map.csv is empty or missing and auto-build failed. "
+                "Ensure make_team_week_map.py runs before make_player_form."
+            ) from exc
 
     team_week = _read_csv_safe(str(TEAM_WEEK_MAP_PATH))
     if team_week.empty:
