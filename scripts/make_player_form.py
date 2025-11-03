@@ -392,44 +392,40 @@ def assert_no_duplicate_columns(df: pd.DataFrame, label: str) -> None:
 
 
 def _dedupe_player_clean_key(df: pd.DataFrame) -> pd.DataFrame:
-    """Collapse player_clean_key columns created by fallback merges."""
+    """
+    Collapse player_clean_key_x / player_clean_key_y into a single player_clean_key,
+    drop the suffix columns, and remove duplicate column names.
 
-    if df is None or df.empty:
-        return df
+    Priority: use *_x if it's a real, non-empty string; otherwise fall back to *_y.
+    """
 
-    working = df.copy()
-    has_x = "player_clean_key_x" in working.columns
-    has_y = "player_clean_key_y" in working.columns
+    x_col = "player_clean_key_x"
+    y_col = "player_clean_key_y"
+    base_col = "player_clean_key"
 
-    combined = None
+    has_x = x_col in df.columns
+    has_y = y_col in df.columns
+
     if has_x and has_y:
-        x = working["player_clean_key_x"].astype("string")
-        y = working["player_clean_key_y"].astype("string")
-        combined = x.copy()
-        prefer_x = combined.notna() & combined.str.strip().ne("")
-        combined = combined.where(prefer_x, y)
-    elif has_x:
-        combined = working["player_clean_key_x"].astype("string")
-    elif has_y:
-        combined = working["player_clean_key_y"].astype("string")
+        x_series = df[x_col].astype(str).str.strip()
+        y_series = df[y_col].astype(str).str.strip()
 
-    if combined is not None:
-        if "player_clean_key" in working.columns:
-            existing = working["player_clean_key"].astype("string")
-            keep_existing = existing.notna() & existing.str.strip().ne("")
-            combined = existing.where(keep_existing, combined)
-        working["player_clean_key"] = combined
+        df[base_col] = x_series.where(x_series != "", y_series)
+        df = df.drop(columns=[x_col, y_col])
 
-    drop_cols = [
-        c for c in ("player_clean_key_x", "player_clean_key_y") if c in working.columns
-    ]
-    if drop_cols:
-        working = working.drop(columns=drop_cols)
+    elif has_x and not has_y:
+        if base_col not in df.columns:
+            df[base_col] = df[x_col]
+        df = df.drop(columns=[x_col])
 
-    # Drop any duplicate column names introduced during merges (keep first occurrence).
-    working = working.loc[:, ~working.columns.duplicated()]
+    elif has_y and not has_x:
+        if base_col not in df.columns:
+            df[base_col] = df[y_col]
+        df = df.drop(columns=[y_col])
 
-    return working
+    # Remove any duplicate column names that came from merges
+    df = df.loc[:, ~df.columns.duplicated(keep="first")]
+    return df
 
 
 def _normalize_key(s: str) -> str:
@@ -3673,15 +3669,7 @@ def _write_player_form_outputs(df: pd.DataFrame, slate_date: str | None = None) 
             ", ".join(missing),
         )
 
-    def _prefer_suffix(frame: pd.DataFrame, base_col: str) -> pd.DataFrame:
-        x_col = f"{base_col}_x"
-        y_col = f"{base_col}_y"
-        if x_col in frame.columns and y_col in frame.columns:
-            frame[base_col] = frame[x_col].where(frame[x_col].notna(), frame[y_col])
-            frame = frame.drop(columns=[x_col, y_col])
-        return frame
-
-    df = _prefer_suffix(df, "player_clean_key")
+    # final safety cleanup: drop duplicate column names
     df = df.loc[:, ~df.columns.duplicated(keep="first")]
 
     assert_no_duplicate_columns(df, "final player_form before write")
