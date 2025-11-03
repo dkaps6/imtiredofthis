@@ -391,68 +391,58 @@ def assert_no_duplicate_columns(df: pd.DataFrame, label: str) -> None:
         )
 
 
-def _dedupe_player_clean_key(df: pd.DataFrame) -> pd.DataFrame:
-    """Collapse any *_x/*_y variants into a single ``player_clean_key`` column."""
+def _normalize_player_clean_key_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize any player_clean_key merge artifacts to a single column."""
 
     if df is None:
         return df
 
-    base_col = "player_clean_key"
-    x_col = f"{base_col}_x"
-    y_col = f"{base_col}_y"
+    dupe_cols = [c for c in df.columns if c.startswith("player_clean_key")]
+    if "player_clean_key_x" in dupe_cols and "player_clean_key_y" in dupe_cols:
+        df["player_clean_key"] = (
+            df["player_clean_key_x"]
+            .fillna(df["player_clean_key_y"])
+            .astype(str)
+            .str.strip()
+        )
+        df = df.drop(columns=["player_clean_key_x", "player_clean_key_y"])
+    elif "player_clean_key_x" in dupe_cols:
+        df = df.rename(columns={"player_clean_key_x": "player_clean_key"})
+    elif "player_clean_key_y" in dupe_cols:
+        df = df.rename(columns={"player_clean_key_y": "player_clean_key"})
 
-    def _extract_series(column_name: str) -> Optional[pd.Series]:
-        if column_name not in df.columns:
-            return None
+    return df
 
-        value = df[column_name]
 
-        if isinstance(value, pd.Series):
-            return value
+def _dedupe_player_clean_key(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Guarantee a single 'player_clean_key' column.
+    Collapse any 'player_clean_key_x'/'player_clean_key_y'/etc into one string.
+    """
 
-        if isinstance(value, pd.DataFrame):
-            for candidate_name in value.columns:
-                candidate = value[candidate_name]
-                if candidate.notna().any():
-                    return candidate
-            if len(value.columns) > 0:
-                return value.iloc[:, 0]
-            return pd.Series(dtype="object")
-
-        return pd.Series(value)
-
-    def _clean(series: Optional[pd.Series]) -> Optional[pd.Series]:
-        if series is None:
-            return None
-
-        def _coerce(val: Any) -> str:
-            if val is None:
-                return ""
-            if pd.isna(val):
-                return ""
-            text = str(val).strip()
-            if text.lower() in {"", "nan", "none", "nat"}:
-                return ""
-            return text
-
-        return series.astype(object).map(_coerce)
-
-    x_series = _clean(_extract_series(x_col))
-    y_series = _clean(_extract_series(y_col))
-
-    if x_series is None and y_series is None:
-        df = df.loc[:, ~df.columns.duplicated(keep="first")]
+    if df is None:
         return df
 
-    if x_series is not None and y_series is not None:
-        df[base_col] = x_series.where(x_series != "", y_series)
-    elif x_series is not None:
-        df[base_col] = x_series
-    else:
-        df[base_col] = y_series
+    key_cols = [
+        c for c in df.columns if c == "player_clean_key" or c.startswith("player_clean_key_")
+    ]
 
-    df = df.drop(columns=[x_col, y_col], errors="ignore")
-    df = df.loc[:, ~df.columns.duplicated(keep="first")]
+    if not key_cols:
+        return df
+
+    def choose_key(row):
+        for kc in key_cols:
+            val = row.get(kc)
+            if pd.notna(val) and str(val).strip() != "":
+                return str(val).strip()
+        return ""
+
+    df["player_clean_key"] = df.apply(choose_key, axis=1)
+
+    # Drop duplicates, keep only the canonical column
+    drop_cols = [c for c in key_cols if c != "player_clean_key"]
+    df = df.drop(columns=drop_cols, errors="ignore")
+
     return df
 
 
@@ -978,6 +968,7 @@ def _inject_week_opponent_and_roles(
     enriched = ensure_canonical(enriched, player_col="player", team_col="team")
 
     enriched = enriched.merge(props_merge, on="player_canonical", how="left")
+    enriched = _normalize_player_clean_key_columns(enriched)
 
     if "team_abbr" in enriched.columns:
         enriched["team_abbr"] = (
@@ -3037,6 +3028,7 @@ def _enrich_team_and_opponent_from_props(
             on="player_canonical",
             how="left",
         )
+        enriched = _normalize_player_clean_key_columns(enriched)
     else:
         for col in ["props_team_abbr", "props_opponent_abbr", "props_kickoff_ts", "props_event_id"]:
             if col not in enriched.columns:
