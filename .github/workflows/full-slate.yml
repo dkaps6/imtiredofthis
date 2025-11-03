@@ -94,6 +94,12 @@ jobs:
         env:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
 
+      - name: Build team-week map (authoritative opponents)
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/utils/make_team_week_map.py \
+            --season "${SEASON}"
+
       - name: Build opponent map from props
         run: |
           export PYTHONPATH="${PWD}"

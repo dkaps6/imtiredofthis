@@ -134,7 +134,13 @@ def main() -> None:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     tw = build_map(args.season)
     tw.to_csv(args.out, index=False)
-    print(f"[team_week_map] wrote {len(tw)} rows -> {args.out}")
+    n_rows = len(tw)
+    print(f"[team_week_map] wrote {n_rows} rows -> {args.out}")
+    if n_rows == 0:
+        raise RuntimeError(
+            "team_week_map produced 0 rows. Check data/odds_game.csv (or data/schedule.csv) columns: "
+            "season, week, home/home_team, away/away_team."
+        )
 
 
 if __name__ == "__main__":
