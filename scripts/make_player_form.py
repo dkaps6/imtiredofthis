@@ -393,10 +393,11 @@ def assert_no_duplicate_columns(df: pd.DataFrame, label: str) -> None:
 
 def _dedupe_player_clean_key(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Collapse player_clean_key_x / player_clean_key_y into a single player_clean_key,
-    drop the suffix columns, and remove duplicate column names.
-
-    Priority: use *_x if it's a real, non-empty string; otherwise fall back to *_y.
+    Goal:
+    - After all merges, we sometimes have both player_clean_key_x and player_clean_key_y.
+    - We want ONE canonical column called player_clean_key.
+    - Rule: prefer _x if it's a real non-empty string, else fallback to _y.
+    - Then drop the suffix columns and drop any duplicate column names.
     """
 
     x_col = "player_clean_key_x"
@@ -406,25 +407,35 @@ def _dedupe_player_clean_key(df: pd.DataFrame) -> pd.DataFrame:
     has_x = x_col in df.columns
     has_y = y_col in df.columns
 
-    if has_x and has_y:
-        x_series = df[x_col].astype(str).str.strip()
-        y_series = df[y_col].astype(str).str.strip()
+    # If neither x nor y exists, just do a light duplicate-column cleanup and return.
+    if not has_x and not has_y:
+        df = df.loc[:, ~df.columns.duplicated(keep="first")]
+        return df
 
+    if has_x and has_y:
+        # Force both columns to string -> strip whitespace
+        x_series = df[x_col].astype(str).fillna("").str.strip()
+        y_series = df[y_col].astype(str).fillna("").str.strip()
+
+        # Prefer x unless x is "", then use y
         df[base_col] = x_series.where(x_series != "", y_series)
+
+        # Now drop the suffix columns
         df = df.drop(columns=[x_col, y_col])
 
     elif has_x and not has_y:
-        if base_col not in df.columns:
-            df[base_col] = df[x_col]
+        # Only _x exists
+        df[base_col] = df[x_col].astype(str).fillna("").str.strip()
         df = df.drop(columns=[x_col])
 
     elif has_y and not has_x:
-        if base_col not in df.columns:
-            df[base_col] = df[y_col]
+        # Only _y exists
+        df[base_col] = df[y_col].astype(str).fillna("").str.strip()
         df = df.drop(columns=[y_col])
 
-    # Remove any duplicate column names that came from merges
+    # Final cleanup: remove any duplicated column names left over from wide merges
     df = df.loc[:, ~df.columns.duplicated(keep="first")]
+
     return df
 
 
@@ -3657,6 +3668,12 @@ def _enforce_consensus_schema(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _write_player_form_outputs(df: pd.DataFrame, slate_date: str | None = None) -> None:
+    # Final safety: drop any duplicated column names
+    df = df.loc[:, ~df.columns.duplicated(keep="first")]
+
+    # Keep the existing assert here
+    assert_no_duplicate_columns(df, "final player_form before write")
+
     if df is None or df.empty:
         raise RuntimeError("[make_player_form] final player_form empty; aborting run")
 
@@ -3668,11 +3685,6 @@ def _write_player_form_outputs(df: pd.DataFrame, slate_date: str | None = None) 
             "[make_player_form] player_form missing expected columns prior to write: %s",
             ", ".join(missing),
         )
-
-    # final safety cleanup: drop duplicate column names
-    df = df.loc[:, ~df.columns.duplicated(keep="first")]
-
-    assert_no_duplicate_columns(df, "final player_form before write")
 
     df_out = _ensure_single_position_column(df.copy())
     df_out = _ensure_cols(df_out, FINAL_COLS)
