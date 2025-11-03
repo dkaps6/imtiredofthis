@@ -392,52 +392,66 @@ def assert_no_duplicate_columns(df: pd.DataFrame, label: str) -> None:
 
 
 def _dedupe_player_clean_key(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Guarantee we end up with exactly one 'player_clean_key' column.
+    """Collapse any *_x/*_y variants into a single ``player_clean_key`` column."""
 
-    We sometimes carry both player_clean_key_x / player_clean_key_y from merges,
-    and in ugly edge cases those can themselves be DataFrames or objects that
-    don't behave like a normal Series. We coerce them down to a single clean
-    string column and prefer _x over _y when _x is non-empty.
-    """
+    if df is None:
+        return df
 
-    x_col = "player_clean_key_x"
-    y_col = "player_clean_key_y"
     base_col = "player_clean_key"
+    x_col = f"{base_col}_x"
+    y_col = f"{base_col}_y"
 
-    has_x = x_col in df.columns
-    has_y = y_col in df.columns
+    def _extract_series(column_name: str) -> Optional[pd.Series]:
+        if column_name not in df.columns:
+            return None
 
-    def _as_clean_series(obj) -> pd.Series:
-        # obj might be a Series OR a DataFrame (multi-col duplicate merge fallout)
-        if isinstance(obj, pd.DataFrame):
-            # choose a non-empty column if possible; else fallback to the first
-            for c in obj.columns:
-                cand = obj[c].astype(str).fillna("").str.strip()
-                if cand.ne("").any():
-                    return cand
-            first_col = obj.columns[0]
-            return obj[first_col].astype(str).fillna("").str.strip()
-        else:
-            return pd.Series(obj).astype(str).fillna("").str.strip()
+        value = df[column_name]
 
-    if not has_x and not has_y:
-        return df.loc[:, ~df.columns.duplicated(keep="first")]
+        if isinstance(value, pd.Series):
+            return value
 
-    if has_x and has_y:
-        x_series = _as_clean_series(df[x_col])
-        y_series = _as_clean_series(df[y_col])
+        if isinstance(value, pd.DataFrame):
+            for candidate_name in value.columns:
+                candidate = value[candidate_name]
+                if candidate.notna().any():
+                    return candidate
+            if len(value.columns) > 0:
+                return value.iloc[:, 0]
+            return pd.Series(dtype="object")
+
+        return pd.Series(value)
+
+    def _clean(series: Optional[pd.Series]) -> Optional[pd.Series]:
+        if series is None:
+            return None
+
+        def _coerce(val: Any) -> str:
+            if val is None:
+                return ""
+            if pd.isna(val):
+                return ""
+            text = str(val).strip()
+            if text.lower() in {"", "nan", "none", "nat"}:
+                return ""
+            return text
+
+        return series.astype(object).map(_coerce)
+
+    x_series = _clean(_extract_series(x_col))
+    y_series = _clean(_extract_series(y_col))
+
+    if x_series is None and y_series is None:
+        df = df.loc[:, ~df.columns.duplicated(keep="first")]
+        return df
+
+    if x_series is not None and y_series is not None:
         df[base_col] = x_series.where(x_series != "", y_series)
-        df = df.drop(columns=[x_col, y_col], errors="ignore")
-    elif has_x and not has_y:
-        x_series = _as_clean_series(df[x_col])
+    elif x_series is not None:
         df[base_col] = x_series
-        df = df.drop(columns=[x_col], errors="ignore")
-    elif has_y and not has_x:
-        y_series = _as_clean_series(df[y_col])
+    else:
         df[base_col] = y_series
-        df = df.drop(columns=[y_col], errors="ignore")
 
+    df = df.drop(columns=[x_col, y_col], errors="ignore")
     df = df.loc[:, ~df.columns.duplicated(keep="first")]
     return df
 
