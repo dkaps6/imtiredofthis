@@ -430,16 +430,18 @@ def _dedupe_player_clean_key(df: pd.DataFrame) -> pd.DataFrame:
     if not key_cols:
         return df
 
-    def choose_key(row):
-        for kc in key_cols:
-            val = row.get(kc)
-            if pd.notna(val) and str(val).strip() != "":
-                return str(val).strip()
-        return ""
+    # Work column-wise to avoid DataFrame.apply(axis=1) pitfalls when some
+    # duplicates are entirely missing or non-string typed.
+    key_frame = df.loc[:, key_cols].copy()
+    for col in key_cols:
+        key_frame[col] = key_frame[col].astype("string").str.strip()
 
-    df["player_clean_key"] = df.apply(choose_key, axis=1)
+    # Treat empty strings as NA so that bfill finds the first non-empty key.
+    key_frame = key_frame.replace({"": pd.NA})
 
-    # Drop duplicates, keep only the canonical column
+    combined = key_frame.bfill(axis=1).iloc[:, 0].fillna("")
+    df["player_clean_key"] = combined
+
     drop_cols = [c for c in key_cols if c != "player_clean_key"]
     df = df.drop(columns=drop_cols, errors="ignore")
 
@@ -3676,7 +3678,9 @@ def _enforce_consensus_schema(df: pd.DataFrame) -> pd.DataFrame:
     return out[ordered]
 
 
-def _write_player_form_outputs(df: pd.DataFrame, slate_date: str | None = None) -> None:
+def _write_player_form_outputs(
+    df: pd.DataFrame, slate_date: str | None = None, season: int | None = None
+) -> None:
     # Final safety: drop any duplicated column names
     df = df.loc[:, ~df.columns.duplicated(keep="first")]
 
@@ -4033,7 +4037,7 @@ def cli():
 
         # Final write on success
         df = _dedupe_player_clean_key(df)
-        _write_player_form_outputs(df, slate_date=args.date)
+        _write_player_form_outputs(df, slate_date=args.date, season=args.season)
         return
 
     except Exception as e:
@@ -4051,7 +4055,9 @@ def cli():
                         file=sys.stderr,
                     )
                 df = _dedupe_player_clean_key(df)
-                _write_player_form_outputs(df, slate_date=args.date)
+                _write_player_form_outputs(
+                    df, slate_date=args.date, season=args.season
+                )
                 return
         except Exception as _w:
             print(
