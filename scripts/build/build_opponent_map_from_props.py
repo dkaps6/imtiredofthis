@@ -1,259 +1,297 @@
+#!/usr/bin/env python3
+"""Derive opponent map from sportsbook props and odds feeds."""
+from __future__ import annotations
+
 import argparse
 from pathlib import Path
+from typing import Iterable, Tuple
 
 import pandas as pd
 
 from scripts.utils.name_clean import canonical_player
+from scripts.utils.team_maps import TEAM_NAME_TO_ABBR
 
-DATA = Path("data")
+DATA_DIR = Path("data")
+OUT_PATH = DATA_DIR / "opponent_map_from_props.csv"
 
-# --- RESTORED, LIGHTWEIGHT FALLBACK ---
-TEAM_NAME_TO_ABBR = {
-    "ARIZONA CARDINALS": "ARI", "ATLANTA FALCONS": "ATL", "BALTIMORE RAVENS": "BAL",
-    "BUFFALO BILLS": "BUF", "CAROLINA PANTHERS": "CAR", "CHICAGO BEARS": "CHI",
-    "CINCINNATI BENGALS": "CIN", "CLEVELAND BROWNS": "CLE", "DALLAS COWBOYS": "DAL",
-    "DENVER BRONCOS": "DEN", "DETROIT LIONS": "DET", "GREEN BAY PACKERS": "GB",
-    "HOUSTON TEXANS": "HOU", "INDIANAPOLIS COLTS": "IND", "JACKSONVILLE JAGUARS": "JAX",
-    "KANSAS CITY CHIEFS": "KC", "LAS VEGAS RAIDERS": "LV", "LOS ANGELES CHARGERS": "LAC",
-    "LOS ANGELES RAMS": "LAR", "MIAMI DOLPHINS": "MIA", "MINNESOTA VIKINGS": "MIN",
-    "NEW ENGLAND PATRIOTS": "NE", "NEW ORLEANS SAINTS": "NO", "NEW YORK GIANTS": "NYG",
-    "NEW YORK JETS": "NYJ", "PHILADELPHIA EAGLES": "PHI", "PITTSBURGH STEELERS": "PIT",
-    "SAN FRANCISCO 49ERS": "SF", "SEATTLE SEAHAWKS": "SEA", "TAMPA BAY BUCCANEERS": "TB",
-    "TENNESSEE TITANS": "TEN", "WASHINGTON COMMANDERS": "WAS",
-}
-TEAM_NAME_TO_ABBR.update({k.lower(): v for k, v in TEAM_NAME_TO_ABBR.items()})
+REQUIRED_COLUMNS = [
+    "player",
+    "team",
+    "opponent",
+    "season",
+    "week",
+    "event_id",
+    "player_clean_key",
+    "team_abbr",
+    "opponent_abbr",
+    "game_timestamp",
+]
+
+TEAM_SOURCE_CANDIDATES = [
+    "team",
+    "team_abbr",
+    "player_team",
+    "player_team_abbr",
+    "player_team_code",
+    "player_team_name",
+    "team_name",
+]
+OPP_SOURCE_CANDIDATES = [
+    "opponent",
+    "opponent_abbr",
+    "opponent_team_abbr",
+    "player_opponent",
+    "player_opponent_abbr",
+]
+TIMESTAMP_CANDIDATES = [
+    "market_timestamp",
+    "timestamp",
+    "last_update",
+    "updated_at",
+    "created_at",
+    "commence_time",
+]
 
 
-def _norm_team_name(val) -> str:
-    if not isinstance(val, str):
-        return ""
-    raw = val.strip()
-    if not raw:
-        return ""
-    for key in (raw, raw.upper(), raw.lower()):
-        if key in TEAM_NAME_TO_ABBR:
-            return TEAM_NAME_TO_ABBR[key]
-    upper = raw.upper()
+def _read_first_existing(paths: Iterable[str]) -> Tuple[pd.DataFrame, str]:
+    for raw in paths:
+        path = Path(raw)
+        if not path.exists() or path.stat().st_size == 0:
+            continue
+        try:
+            df = pd.read_csv(path)
+        except pd.errors.EmptyDataError:
+            continue
+        except Exception as err:  # pragma: no cover - best-effort logging only
+            print(f"[opponent_map] WARN: failed to read {path}: {err}")
+            continue
+        return df, str(path)
+    return pd.DataFrame(), ""
+
+
+def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=[])
+    out = df.copy()
+    out.columns = [c.lower() for c in out.columns]
+    return out
+
+
+def _team_lookup(value) -> str | pd.NA:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return pd.NA
+    text = str(value).strip()
+    if not text:
+        return pd.NA
+    direct = TEAM_NAME_TO_ABBR.get(text)
+    if direct:
+        return direct
+    direct = TEAM_NAME_TO_ABBR.get(text.upper())
+    if direct:
+        return direct
+    direct = TEAM_NAME_TO_ABBR.get(text.lower())
+    if direct:
+        return direct
+    upper = text.upper()
     if upper in TEAM_NAME_TO_ABBR.values():
         return upper
-    return ""
+    return pd.NA
 
 
-def _canonicalize_players(df: pd.DataFrame) -> pd.DataFrame:
-    if df is None or df.empty:
-        return pd.DataFrame()
-    for cand in ("player_clean_key", "player_key", "player", "player_name"):
+def _map_team_series(series: pd.Series | None, index: pd.Index) -> pd.Series:
+    if series is None:
+        return pd.Series(pd.NA, index=index, dtype="string")
+    mapped = series.map(_team_lookup)
+    return mapped.astype("string")
+
+
+def _ensure_player_column(df: pd.DataFrame) -> pd.DataFrame:
+    if "player" in df.columns:
+        return df
+    for cand in ("player_name", "player_full_name", "name"):
         if cand in df.columns:
-            df["player_name_raw"] = df[cand]
-            break
-    else:
-        df["player_name_raw"] = ""
-    df["player_clean_key"] = df["player_name_raw"].astype(str).map(canonical_player)
+            df = df.rename(columns={cand: "player"})
+            return df
+    df["player"] = pd.NA
     return df
 
 
 def _ensure_event_id(df: pd.DataFrame) -> pd.DataFrame:
     if "event_id" not in df.columns:
-        df["event_id"] = ""
-    df["event_id"] = df["event_id"].astype(str)
+        df["event_id"] = pd.NA
+    df["event_id"] = df["event_id"].astype("string").str.strip()
     return df
 
 
-def _infer_team_from_props(df: pd.DataFrame) -> pd.Series:
-    candidate_cols = [
-        c for c in df.columns if c.lower() in {"team", "team_abbr", "player_team", "player_team_abbr", "team_name"}
-    ]
-    if not candidate_cols:
-        return pd.Series(["" for _ in range(len(df))], index=df.index, dtype=object)
-    base = df[candidate_cols[0]].fillna("").astype(str)
-    mapped = base.map(_norm_team_name)
-    fallback = base.str.upper().where(base.str.upper().isin(TEAM_NAME_TO_ABBR.values()), "")
-    return mapped.where(mapped.ne(""), fallback)
+def _ensure_required_columns(df: pd.DataFrame) -> pd.DataFrame:
+    for col in REQUIRED_COLUMNS:
+        if col not in df.columns:
+            df[col] = pd.Series(dtype="string") if col not in {"season", "week"} else pd.Series(dtype="Int64")
+    return df[REQUIRED_COLUMNS]
+
+
+def _empty_output(out_path: Path) -> pd.DataFrame:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    empty = pd.DataFrame({col: [] for col in REQUIRED_COLUMNS})
+    empty.to_csv(out_path, index=False)
+    return empty
 
 
 def build_opponent_map(
-    props_path: str = "data/props_raw.csv",
-    odds_path: str = "data/odds_game.csv",
-    out_path: str = "data/opponent_map_from_props.csv",
-    season: int | None = None,
-    week: str | None = None,
+    props_path: str = "outputs/props_raw.csv",
+    odds_path: str = "outputs/odds_game.csv",
+    out_path: str | Path = OUT_PATH,
 ) -> pd.DataFrame:
-    props = pd.read_csv(props_path)
-    odds = pd.read_csv(odds_path)
+    """Create opponent map CSV by joining props to odds on event_id."""
+    out_path = Path(out_path)
 
-    if props.empty or odds.empty:
-        DATA.mkdir(parents=True, exist_ok=True)
-        empty = pd.DataFrame(columns=["player", "team", "opponent", "event_id"])
-        empty.to_csv(out_path, index=False)
-        print("[opponent_map] wrote data/opponent_map_from_props.csv rows=0")
-        return empty
-
-    props = _canonicalize_players(props)
+    props_candidates = [props_path]
+    for fallback in ("outputs/props_raw.csv", "data/props_raw.csv"):
+        if fallback not in props_candidates:
+            props_candidates.append(fallback)
+    props_raw, props_source = _read_first_existing(props_candidates)
+    props = _normalize_columns(props_raw)
+    props = _ensure_player_column(props)
     props = _ensure_event_id(props)
-    odds = _ensure_event_id(odds.copy())
 
-    join_cols = [c for c in ["event_id", "home_team", "away_team", "season", "week", "commence_time"] if c in odds.columns]
-    joined = props.merge(odds[join_cols], on="event_id", how="left", suffixes=("", "_odds"))
+    odds_candidates = [odds_path]
+    for fallback in ("outputs/odds_game.csv", "data/odds_game.csv"):
+        if fallback not in odds_candidates:
+            odds_candidates.append(fallback)
+    games_raw, games_source = _read_first_existing(odds_candidates)
+    games = _normalize_columns(games_raw)
+    if not games.empty:
+        games = _ensure_event_id(games)
 
-    for col in ("home_team", "away_team"):
-        if col in joined.columns:
-            joined[f"{col}_abbr"] = joined[col].map(_norm_team_name)
-            fallback = joined[col].astype(str).str.upper()
-            joined[f"{col}_abbr"] = joined[f"{col}_abbr"].where(
-                joined[f"{col}_abbr"].ne(""), fallback.where(fallback.isin(TEAM_NAME_TO_ABBR.values()), "")
+    if props.empty:
+        print("[opponent_map] WARN: no props data available; writing empty opponent map")
+        _empty_output(out_path)
+        return pd.DataFrame(columns=REQUIRED_COLUMNS)
+
+    props = props[props["player"].astype("string").str.strip() != ""].copy()
+    props = props[props["event_id"].astype("string").str.strip() != ""].copy()
+    if props.empty:
+        print("[opponent_map] WARN: props lack player/event_id identifiers; writing empty opponent map")
+        _empty_output(out_path)
+        return pd.DataFrame(columns=REQUIRED_COLUMNS)
+
+    props["player"] = props["player"].astype("string").str.strip()
+    props["player_clean_key"] = props["player"].map(canonical_player).astype("string")
+
+    keep_cols = {"event_id", "player", "player_clean_key", "season", "week"}
+    keep_cols.update(TEAM_SOURCE_CANDIDATES)
+    keep_cols.update(OPP_SOURCE_CANDIDATES)
+    existing_cols = [c for c in props.columns if c in keep_cols]
+    props = props.loc[:, existing_cols].copy()
+
+    if games.empty:
+        merged = props.copy()
+        merged["home_team"] = pd.NA
+        merged["away_team"] = pd.NA
+        merged["commence_time"] = pd.NA
+        merged["season"] = merged.get("season", pd.Series(pd.NA, index=merged.index, dtype="Int64"))
+        merged["week"] = merged.get("week", pd.Series(pd.NA, index=merged.index, dtype="Int64"))
+    else:
+        keep_game_cols = [
+            c
+            for c in (
+                "event_id",
+                "home_team",
+                "away_team",
+                "season",
+                "week",
+                "commence_time",
             )
-        else:
-            joined[f"{col}_abbr"] = ""
-
-    joined["team_abbr"] = _infer_team_from_props(joined)
-
-    def infer_team(row):
-        team = row.get("team_abbr", "")
-        if team:
-            return team
-        for side in ("home_team_abbr", "away_team_abbr"):
-            side_val = row.get(side, "")
-            if side_val:
-                return side_val
-        return ""
-
-    joined["team_abbr"] = joined.apply(infer_team, axis=1)
-
-    def infer_opp(row):
-        team = row.get("team_abbr", "")
-        home = row.get("home_team_abbr", "")
-        away = row.get("away_team_abbr", "")
-        if team and home and away:
-            if team == home:
-                return away
-            if team == away:
-                return home
-        return ""
-
-    joined["opponent_abbr"] = joined.apply(infer_opp, axis=1)
-
-    timestamp_col = next(
-        (c for c in ["market_timestamp", "timestamp", "last_update", "created_at", "updated_at"] if c in joined.columns),
-        None,
-    )
-    if timestamp_col:
-        joined["_ts"] = pd.to_datetime(joined[timestamp_col], errors="coerce")
-
-    keep_cols = [
-        c
-        for c in [
-            "season",
-            "week",
-            "event_id",
-            "commence_time",
-            "player_name_raw",
-            "player_clean_key",
-            "team_abbr",
-            "opponent_abbr",
-            "_ts",
+            if c in games.columns
         ]
-        if c in joined.columns
-    ]
-    out = joined[keep_cols].copy()
+        games_subset = games.loc[:, keep_game_cols].drop_duplicates(subset=["event_id"], keep="last")
+        merged = props.merge(games_subset, on="event_id", how="left")
 
-    for col in ("team_abbr", "opponent_abbr"):
-        if col in out.columns:
-            out[col] = out[col].fillna("").astype(str).str.upper()
+    merged["home_team_abbr"] = _map_team_series(merged.get("home_team"), merged.index)
+    merged["away_team_abbr"] = _map_team_series(merged.get("away_team"), merged.index)
 
-    if "season" not in out.columns:
-        out["season"] = pd.NA
-    if "week" not in out.columns:
-        out["week"] = pd.NA
+    team_series = pd.Series(pd.NA, index=merged.index, dtype="string")
+    for col in TEAM_SOURCE_CANDIDATES:
+        if col in merged.columns:
+            team_series = team_series.combine_first(_map_team_series(merged[col], merged.index))
 
-    dedup_subset = [c for c in ["season", "week", "player_clean_key"] if c in out.columns]
-    if dedup_subset:
-        sort_cols = dedup_subset + (["_ts"] if "_ts" in out.columns else [])
-        out = out.sort_values(sort_cols)
-        out = out.drop_duplicates(subset=dedup_subset, keep="last")
-    if "_ts" in out.columns:
-        out = out.drop(columns=["_ts"])
+    opp_series = pd.Series(pd.NA, index=merged.index, dtype="string")
+    for col in OPP_SOURCE_CANDIDATES:
+        if col in merged.columns:
+            opp_series = opp_series.combine_first(_map_team_series(merged[col], merged.index))
 
-    resolved_season = season
-    if resolved_season is None and "season" in out.columns:
-        season_series = pd.to_numeric(out["season"], errors="coerce")
-        if season_series.notna().any():
-            try:
-                resolved_season = int(season_series.dropna().iloc[-1])
-            except Exception:
-                resolved_season = None
-    if resolved_season is not None:
-        out["season"] = int(resolved_season)
+    # Derive missing opponent/team values from home/away sides when possible
+    if not merged.empty:
+        mask = team_series.isna() & opp_series.notna() & merged.get("home_team_abbr").notna()
+        if mask.any():
+            opp_home = opp_series[mask] == merged.loc[mask, "home_team_abbr"]
+            opp_away = opp_series[mask] == merged.loc[mask, "away_team_abbr"]
+            team_series.loc[mask & opp_home] = merged.loc[mask & opp_home, "away_team_abbr"]
+            team_series.loc[mask & opp_away] = merged.loc[mask & opp_away, "home_team_abbr"]
+
+        mask = team_series.notna() & opp_series.isna()
+        if mask.any():
+            team_is_home = team_series[mask] == merged.loc[mask, "home_team_abbr"]
+            team_is_away = team_series[mask] == merged.loc[mask, "away_team_abbr"]
+            opp_series.loc[mask & team_is_home] = merged.loc[mask & team_is_home, "away_team_abbr"]
+            opp_series.loc[mask & team_is_away] = merged.loc[mask & team_is_away, "home_team_abbr"]
+
+    # Normalize season/week types
+    for col in ("season", "week"):
+        if col in merged.columns:
+            merged[col] = pd.to_numeric(merged[col], errors="coerce").astype("Int64")
+        else:
+            merged[col] = pd.Series(pd.NA, index=merged.index, dtype="Int64")
+
+    timestamp_col = next((c for c in TIMESTAMP_CANDIDATES if c in merged.columns), None)
+    if timestamp_col:
+        ts = pd.to_datetime(merged[timestamp_col], errors="coerce", utc=True)
+        game_timestamp = ts.astype("string")
     else:
-        out["season"] = pd.Series(pd.NA, index=out.index, dtype="Int64")
+        game_timestamp = pd.Series(pd.NA, index=merged.index, dtype="string")
 
-    resolved_week = week
-    if resolved_week is None and "week" in out.columns:
-        wk_series = out["week"]
-        if not wk_series.dropna().empty:
-            resolved_week = wk_series.dropna().astype(str).iloc[-1]
-    if resolved_week is None:
-        out["week"] = ""
-    else:
-        out["week"] = str(resolved_week)
-    out["week"] = out["week"].astype("string")
+    out = pd.DataFrame(index=merged.index)
+    out["player"] = merged["player"].astype("string").str.strip()
+    out["event_id"] = merged["event_id"].astype("string").str.strip()
+    out["player_clean_key"] = merged["player_clean_key"].astype("string")
+    out["team_abbr"] = team_series
+    out["opponent_abbr"] = opp_series
+    out["team"] = out["team_abbr"]
+    out["opponent"] = out["opponent_abbr"]
+    out["season"] = merged["season"]
+    out["week"] = merged["week"]
+    out["game_timestamp"] = game_timestamp
 
-    if "commence_time" in out.columns:
-        ts = pd.to_datetime(out["commence_time"], errors="coerce", utc=True)
-    else:
-        ts = pd.Series(pd.NaT, index=out.index)
-    out["game_timestamp"] = ts.astype("string")
+    out = out.dropna(subset=["event_id", "player_clean_key"], how="any")
+    out = out.drop_duplicates(subset=["event_id", "player_clean_key"])
+    out = _ensure_required_columns(out)
 
-    required = {
-        "player": "player",
-        "player_name": "player",
-        "player_name_raw": "player",
-        "name": "player",
-        "team": "team",
-        "team_abbr": "team",
-        "player_team_abbr": "team",
-        "opponent": "opponent",
-        "opponent_abbr": "opponent",
-        "opponent_team_abbr": "opponent",
-        "event_id": "event_id",
-        "props_event_id": "event_id",
-    }
-    renamed = {c: required[c] for c in out.columns if c in required}
-    out = out.rename(columns=renamed)
-
-    for col in ["player", "team", "opponent"]:
-        if col not in out.columns:
-            out[col] = pd.NA
-
-    out["player"] = out["player"].fillna("").astype(str).str.strip()
-    out["team"] = out["team"].fillna("").astype(str).str.upper().str.strip()
-    out["opponent"] = out["opponent"].fillna("").astype(str).str.upper().str.strip()
-
-    keep = [c for c in ["player", "team", "opponent", "event_id"] if c in out.columns]
-    out = out[keep]
-    out = out[out["player"].astype(str).str.strip() != ""]
-    out = out.drop_duplicates()
-
-    DATA.mkdir(parents=True, exist_ok=True)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
     out.to_csv(out_path, index=False)
 
-    print(f"[opponent_map] wrote data/opponent_map_from_props.csv rows={len(out)}")
-
+    joined_rows = len(out)
+    print(
+        "[opponent_map] wrote"
+        f" {joined_rows:,} rows → {out_path}"
+        + (f" (props={props_source})" if props_source else "")
+        + (f" (odds={games_source})" if games_source else ""),
+    )
     return out
 
 
-if __name__ == "__main__":
+def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--props-path", default="data/props_raw.csv")
-    parser.add_argument("--odds-path", default="data/odds_game.csv")
-    parser.add_argument("--out-path", default="data/opponent_map_from_props.csv")
-    parser.add_argument("--season", type=int, default=None)
-    parser.add_argument("--week", type=str, default=None)
+    parser.add_argument("--props-path", default="outputs/props_raw.csv")
+    parser.add_argument("--odds-path", default="outputs/odds_game.csv")
+    parser.add_argument("--out-path", default=str(OUT_PATH))
     args = parser.parse_args()
 
     build_opponent_map(
         props_path=args.props_path,
         odds_path=args.odds_path,
         out_path=args.out_path,
-        season=args.season,
-        week=args.week,
     )
+
+
+if __name__ == "__main__":
+    main()

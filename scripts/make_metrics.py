@@ -101,83 +101,104 @@ def _ensure_player_clean_key(df: pd.DataFrame, candidates: list[str]) -> pd.Data
     return df
 
 
+
 def merge_opponent_map(base_df: pd.DataFrame) -> pd.DataFrame:
-    """Attach team/opponent from opponent_map_from_props.csv using event_id + player_key."""
+    """Merge opponent abbreviations from opponent_map_from_props.csv."""
     path = DATA_PATH / "opponent_map_from_props.csv"
+    base = base_df.copy()
+
     if not path.exists():
         print("[make_metrics] WARN: opponent_map_from_props.csv missing – proceeding without opponent join")
-        return base_df
+        if "opponent_abbr" not in base.columns:
+            base["opponent_abbr"] = pd.NA
+        return base
 
-    opp = pd.read_csv(path)
+    try:
+        opp = pd.read_csv(path)
+    except pd.errors.EmptyDataError:
+        print("[make_metrics] WARN: opponent_map_from_props.csv empty – proceeding without opponent join")
+        if "opponent_abbr" not in base.columns:
+            base["opponent_abbr"] = pd.NA
+        return base
+
     if opp.empty:
         print("[make_metrics] WARN: opponent_map_from_props.csv empty – proceeding without opponent join")
-        return base_df
+        if "opponent_abbr" not in base.columns:
+            base["opponent_abbr"] = pd.NA
+        return base
 
-    if "player_key" in opp.columns:
-        opp["player_key"] = opp["player_key"].astype(str).map(canonical_player)
+    opp = opp.copy()
+    for col in ("season", "week"):
+        if col in opp.columns:
+            opp[col] = pd.to_numeric(opp[col], errors="coerce").astype("Int64")
+    if "event_id" in opp.columns:
+        opp["event_id"] = opp["event_id"].astype("string")
+
+    if "player_clean_key" not in opp.columns:
+        source_col = next((c for c in ("player", "player_name_raw", "player_name") if c in opp.columns), None)
+        if source_col:
+            opp["player_clean_key"] = opp[source_col].astype("string").map(canonical_player)
+        else:
+            opp["player_clean_key"] = pd.Series(pd.NA, index=opp.index, dtype="string")
     else:
-        source = opp.get("player_clean_key", opp.get("player_name_raw", ""))
-        opp["player_key"] = source.astype(str).map(canonical_player)
+        opp["player_clean_key"] = opp["player_clean_key"].astype("string")
 
-    if "player_key" not in base_df.columns:
+    if "opponent_abbr" in opp.columns:
+        opp["opponent_abbr"] = opp["opponent_abbr"].astype("string")
+    else:
+        opp["opponent_abbr"] = pd.Series(pd.NA, index=opp.index, dtype="string")
+
+    for col in ("season", "week"):
+        if col in base.columns:
+            base[col] = pd.to_numeric(base[col], errors="coerce").astype("Int64")
+    if "event_id" in base.columns:
+        base["event_id"] = base["event_id"].astype("string")
+
+    if "player_clean_key" not in base.columns:
         name_col = next(
-            (c for c in base_df.columns if c.lower() in ("player", "player_name", "name", "display_name", "player_clean_key")),
+            (
+                c
+                for c in base.columns
+                if c.lower() in {"player", "player_name", "name", "display_name", "player_key"}
+            ),
             None,
         )
         if name_col:
-            base_df["player_key"] = base_df[name_col].astype(str).map(canonical_player)
+            base["player_clean_key"] = base[name_col].astype("string").map(canonical_player)
         else:
-            base_df["player_key"] = ""
+            base["player_clean_key"] = pd.Series(pd.NA, index=base.index, dtype="string")
     else:
-        base_df["player_key"] = base_df["player_key"].astype(str).map(canonical_player)
+        base["player_clean_key"] = base["player_clean_key"].astype("string")
 
-    if "player_clean_key" in base_df.columns:
-        base_df["player_key"] = base_df["player_key"].where(
-            base_df["player_key"].ne(""), base_df["player_clean_key"].astype(str).map(canonical_player)
-        )
+    if "opponent_abbr" not in base.columns:
+        base["opponent_abbr"] = pd.Series(pd.NA, index=base.index, dtype="string")
+    else:
+        base["opponent_abbr"] = base["opponent_abbr"].astype("string")
 
-    on_cols = [c for c in ("event_id", "player_key") if c in base_df.columns and c in opp.columns]
-    if not on_cols:
-        print("[make_metrics] WARN: cannot join opponent map (missing event_id/player_key)")
-        return base_df
+    join_cols = [
+        col
+        for col in ("season", "week", "event_id", "player_clean_key")
+        if col in base.columns and col in opp.columns
+    ]
+    if not join_cols:
+        print("[make_metrics] WARN: no shared columns to join opponent map; skipping")
+        return base
 
-    opp_subset_cols = [c for c in ("event_id", "player_key", "team_abbr", "opponent_abbr") if c in opp.columns]
-    opp_subset = opp[opp_subset_cols].drop_duplicates(subset=on_cols, keep="last")
+    opp_subset_cols = join_cols + [c for c in ("team_abbr", "opponent_abbr", "team", "opponent") if c in opp.columns]
+    opp_subset = opp.loc[:, opp_subset_cols].drop_duplicates(subset=join_cols, keep="last")
 
-    left_keys = pd.DataFrame(columns=on_cols)
-    if on_cols:
-        base_df = _ensure_str_keys(base_df, on_cols)
-        opp_subset = _ensure_str_keys(opp_subset, on_cols)
-        if not base_df.empty:
-            left_keys = base_df[on_cols].drop_duplicates()
+    merged = base.merge(
+        opp_subset,
+        how="left",
+        on=join_cols,
+        suffixes=("", "_opp"),
+        indicator=True,
+    )
 
-    merged = base_df.merge(opp_subset, on=on_cols, how="left", suffixes=("", "_opp"))
-    if on_cols and not left_keys.empty and merged.empty:
-        right_keys = (
-            opp_subset[on_cols].drop_duplicates()
-            if not opp_subset.empty
-            else pd.DataFrame(columns=on_cols)
-        )
-        dbg = left_keys.merge(right_keys, on=on_cols, how="left", indicator=True)
-        dbg = dbg[dbg["_merge"] == "left_only"]
-        Path("data/_debug").mkdir(parents=True, exist_ok=True)
-        dbg.to_csv(
-            "data/_debug/metrics_left_keys_without_opp_match.csv",
-            index=False,
-        )
-        raise RuntimeError(
-            "metrics_ready is empty after opponent map merge (debug keys written)"
-        )
+    joined_rows = int((merged["_merge"] == "both").sum())
+    merged.drop(columns=["_merge"], inplace=True)
 
-    merged = _drop_dupe_cols(merged)
-
-    joined_rows = 0
-    if "opponent_abbr_opp" in merged.columns:
-        joined_rows = int(merged["opponent_abbr_opp"].notna().sum())
-    elif "team_abbr_opp" in merged.columns:
-        joined_rows = int(merged["team_abbr_opp"].notna().sum())
-
-    for col in ("team_abbr", "opponent_abbr"):
+    for col in ("team", "team_abbr", "opponent", "opponent_abbr"):
         opp_col = f"{col}_opp"
         if opp_col in merged.columns:
             if col in merged.columns:
@@ -203,7 +224,6 @@ def merge_opponent_map(base_df: pd.DataFrame) -> pd.DataFrame:
     print(f"[make_metrics] missing team/opponent after merge: {missing_count}")
 
     return merged
-
 DATA_DIR = "data"
 DATA_PATH = Path(DATA_DIR)
 METRICS_OUT_PATH = DATA_PATH / "metrics_ready.csv"
