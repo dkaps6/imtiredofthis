@@ -83,19 +83,9 @@ def build_opponent_map(
 
     if props.empty or odds.empty:
         DATA.mkdir(parents=True, exist_ok=True)
-        empty = pd.DataFrame(
-            columns=[
-                "season",
-                "week",
-                "event_id",
-                "player_clean_key",
-                "team_abbr",
-                "opponent_abbr",
-                "game_timestamp",
-            ]
-        )
+        empty = pd.DataFrame(columns=["player", "team", "opponent", "event_id"])
         empty.to_csv(out_path, index=False)
-        print("[build_opponent_map_from_props] rows=0 opponent_missing=0")
+        print("[opponent_map] wrote data/opponent_map_from_props.csv rows=0")
         return empty
 
     props = _canonicalize_players(props)
@@ -213,12 +203,40 @@ def build_opponent_map(
         ts = pd.Series(pd.NaT, index=out.index)
     out["game_timestamp"] = ts.astype("string")
 
+    required = {
+        "player": "player",
+        "player_name": "player",
+        "player_name_raw": "player",
+        "name": "player",
+        "team": "team",
+        "team_abbr": "team",
+        "player_team_abbr": "team",
+        "opponent": "opponent",
+        "opponent_abbr": "opponent",
+        "opponent_team_abbr": "opponent",
+        "event_id": "event_id",
+        "props_event_id": "event_id",
+    }
+    renamed = {c: required[c] for c in out.columns if c in required}
+    out = out.rename(columns=renamed)
+
+    for col in ["player", "team", "opponent"]:
+        if col not in out.columns:
+            out[col] = pd.NA
+
+    out["player"] = out["player"].fillna("").astype(str).str.strip()
+    out["team"] = out["team"].fillna("").astype(str).str.upper().str.strip()
+    out["opponent"] = out["opponent"].fillna("").astype(str).str.upper().str.strip()
+
+    keep = [c for c in ["player", "team", "opponent", "event_id"] if c in out.columns]
+    out = out[keep]
+    out = out[out["player"].astype(str).str.strip() != ""]
+    out = out.drop_duplicates()
+
     DATA.mkdir(parents=True, exist_ok=True)
     out.to_csv(out_path, index=False)
 
-    opp_col = out.get("opponent_abbr", pd.Series([], dtype=object))
-    missing = int(opp_col.astype(str).str.strip().replace({"nan": "", "NAN": "", "None": ""}).eq("").sum())
-    print(f"[build_opponent_map_from_props] rows={len(out)} opponent_missing={missing}")
+    print(f"[opponent_map] wrote data/opponent_map_from_props.csv rows={len(out)}")
 
     return out
 

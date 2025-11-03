@@ -3872,6 +3872,12 @@ def _write_player_form_outputs(
         )
         oppmap = pd.DataFrame()
 
+    if not oppmap.empty:
+        if "player_team_abbr" in oppmap.columns and "team" not in oppmap.columns:
+            oppmap["team"] = oppmap["player_team_abbr"]
+        if "opponent_team_abbr" in oppmap.columns and "opponent" not in oppmap.columns:
+            oppmap["opponent"] = oppmap["opponent_team_abbr"]
+
     if not oppmap.empty and {"player", "team"}.issubset(oppmap.columns):
         oppmap = oppmap.copy()
         oppmap["player"] = oppmap["player"].fillna("").astype(str)
