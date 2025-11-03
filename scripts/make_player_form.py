@@ -393,11 +393,12 @@ def assert_no_duplicate_columns(df: pd.DataFrame, label: str) -> None:
 
 def _dedupe_player_clean_key(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Goal:
-    - After all merges, we sometimes have both player_clean_key_x and player_clean_key_y.
-    - We want ONE canonical column called player_clean_key.
-    - Rule: prefer _x if it's a real non-empty string, else fallback to _y.
-    - Then drop the suffix columns and drop any duplicate column names.
+    Guarantee we end up with exactly one 'player_clean_key' column.
+
+    We sometimes carry both player_clean_key_x / player_clean_key_y from merges,
+    and in ugly edge cases those can themselves be DataFrames or objects that
+    don't behave like a normal Series. We coerce them down to a single clean
+    string column and prefer _x over _y when _x is non-empty.
     """
 
     x_col = "player_clean_key_x"
@@ -407,35 +408,37 @@ def _dedupe_player_clean_key(df: pd.DataFrame) -> pd.DataFrame:
     has_x = x_col in df.columns
     has_y = y_col in df.columns
 
-    # If neither x nor y exists, just do a light duplicate-column cleanup and return.
+    def _as_clean_series(obj) -> pd.Series:
+        # obj might be a Series OR a DataFrame (multi-col duplicate merge fallout)
+        if isinstance(obj, pd.DataFrame):
+            # choose a non-empty column if possible; else fallback to the first
+            for c in obj.columns:
+                cand = obj[c].astype(str).fillna("").str.strip()
+                if cand.ne("").any():
+                    return cand
+            first_col = obj.columns[0]
+            return obj[first_col].astype(str).fillna("").str.strip()
+        else:
+            return pd.Series(obj).astype(str).fillna("").str.strip()
+
     if not has_x and not has_y:
-        df = df.loc[:, ~df.columns.duplicated(keep="first")]
-        return df
+        return df.loc[:, ~df.columns.duplicated(keep="first")]
 
     if has_x and has_y:
-        # Force both columns to string -> strip whitespace
-        x_series = df[x_col].astype(str).fillna("").str.strip()
-        y_series = df[y_col].astype(str).fillna("").str.strip()
-
-        # Prefer x unless x is "", then use y
+        x_series = _as_clean_series(df[x_col])
+        y_series = _as_clean_series(df[y_col])
         df[base_col] = x_series.where(x_series != "", y_series)
-
-        # Now drop the suffix columns
-        df = df.drop(columns=[x_col, y_col])
-
+        df = df.drop(columns=[x_col, y_col], errors="ignore")
     elif has_x and not has_y:
-        # Only _x exists
-        df[base_col] = df[x_col].astype(str).fillna("").str.strip()
-        df = df.drop(columns=[x_col])
-
+        x_series = _as_clean_series(df[x_col])
+        df[base_col] = x_series
+        df = df.drop(columns=[x_col], errors="ignore")
     elif has_y and not has_x:
-        # Only _y exists
-        df[base_col] = df[y_col].astype(str).fillna("").str.strip()
-        df = df.drop(columns=[y_col])
+        y_series = _as_clean_series(df[y_col])
+        df[base_col] = y_series
+        df = df.drop(columns=[y_col], errors="ignore")
 
-    # Final cleanup: remove any duplicated column names left over from wide merges
     df = df.loc[:, ~df.columns.duplicated(keep="first")]
-
     return df
 
 
