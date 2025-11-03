@@ -50,6 +50,8 @@ PROPS_ENRICHED_PATH = Path("data/props_enriched.csv")
 SCHEDULE_GAMES_PATH = Path("data/games.csv")
 PLAYER_FORM_OUT = Path("data/player_form.csv")
 PLAYER_FORM_CONSENSUS_OUT = Path("data/player_form_consensus.csv")
+PLAYER_GAME_LOGS_OUT = Path("data/player_game_logs.csv")
+PLAYER_SEASON_TOTALS_OUT = Path("data/player_season_totals.csv")
 DEBUG_MISSING_OPP = Path("data/_debug/player_missing_opponent.csv")
 OPPONENT_MAP_PATH = Path("data/opponent_map_from_props.csv")
 TEAM_WEEK_MAP_PATH = Path("data/team_week_map.csv")
@@ -4476,6 +4478,140 @@ def _write_player_form_outputs(
         team_col="team",
         roster_map=roster_map_for_names,
     )
+
+    # Ensure downstream keys exist before writing extras
+    if "player_key" not in player_form.columns:
+        player_series = player_form.get("player")
+        if player_series is None:
+            player_series = pd.Series("", index=player_form.index)
+        player_form["player_key"] = (
+            player_series.astype("string").fillna("")
+        ).apply(normalize_pf_id)
+    else:
+        player_form["player_key"] = (
+            player_form["player_key"].astype("string").fillna("")
+        ).apply(normalize_pf_id)
+
+    if "display_name" not in player_form.columns:
+        display_series = player_form.get("player_display")
+        if display_series is None:
+            display_series = player_form.get("player")
+        if display_series is None:
+            display_series = pd.Series("", index=player_form.index)
+        player_form["display_name"] = display_series.astype("string")
+    else:
+        display_series = player_form["display_name"].astype("string")
+        fallback_display = player_form.get("player_display")
+        if fallback_display is not None:
+            display_series = display_series.fillna(fallback_display.astype("string"))
+        player_form["display_name"] = display_series
+
+    # ---------- NEW: game logs + season-to-date rollups ----------
+    def _safe_cols(df: pd.DataFrame, candidates: List[str]) -> List[str]:
+        return [col for col in candidates if col in df.columns]
+
+    count_cols = _safe_cols(
+        player_form,
+        [
+            "targets",
+            "receptions",
+            "rushes",
+            "routes",
+            "pass_att",
+            "dropbacks",
+            "rz_targets",
+            "rz_rushes",
+            "games",
+        ],
+    )
+    sum_cols = _safe_cols(
+        player_form,
+        [
+            "rec_yards",
+            "rush_yards",
+            "pass_yards",
+            "team_targets",
+            "team_dropbacks",
+            "team_rushes",
+            "rz_team_targets",
+            "rz_team_rushes",
+        ],
+    )
+    max_cols = _safe_cols(player_form, ["long_rec", "long_rush"])
+
+    required_keys = ["season", "week", "team", "game_id", "player_key"]
+    missing_keys = [key for key in required_keys if key not in player_form.columns]
+    if missing_keys:
+        raise RuntimeError(
+            "[make_player_form] missing required columns for game logs: "
+            + ", ".join(missing_keys)
+        )
+
+    group_keys = ["season", "team", "player_key", "display_name", "game_id", "week"]
+    agg_spec: Dict[str, str] = {}
+    for col in count_cols:
+        agg_spec[col] = "sum"
+    for col in sum_cols:
+        agg_spec[col] = "sum"
+    for col in max_cols:
+        agg_spec[col] = "max"
+
+    game_logs = (
+        player_form.groupby(group_keys, dropna=False, as_index=False).agg(agg_spec)
+        if agg_spec
+        else player_form[group_keys].drop_duplicates()
+    )
+
+    if "routes" in game_logs.columns and "targets" in game_logs.columns:
+        game_logs["tgt_per_route"] = np.where(
+            game_logs["routes"] > 0,
+            game_logs["targets"] / game_logs["routes"],
+            0.0,
+        )
+    if "receptions" in game_logs.columns and "targets" in game_logs.columns:
+        game_logs["catch_rate"] = np.where(
+            game_logs["targets"] > 0,
+            game_logs["receptions"] / game_logs["targets"],
+            0.0,
+        )
+
+    if agg_spec:
+        season_totals = (
+            game_logs.groupby(["season", "team", "player_key", "display_name"], as_index=False)
+            .agg({col: func for col, func in agg_spec.items()})
+        )
+    else:
+        season_totals = game_logs.groupby(
+            ["season", "team", "player_key", "display_name"], as_index=False
+        ).size()
+        season_totals.rename(columns={"size": "games"}, inplace=True)
+
+    if agg_spec:
+        rename_map = {col: f"{col}_szn" for col in agg_spec}
+        season_totals.rename(columns=rename_map, inplace=True)
+
+    rolling_cols = [col for col in game_logs.columns if col in (count_cols + sum_cols)]
+    if rolling_cols:
+        game_logs = game_logs.sort_values(["season", "player_key", "week"])
+        for col in rolling_cols:
+            csum = (
+                game_logs.groupby(["season", "player_key"], dropna=False)[col]
+                .cumsum()
+                .shift(1)
+                .fillna(0)
+            )
+            game_logs[f"{col}_prior"] = csum
+
+        prior_cols = [f"{col}_prior" for col in rolling_cols]
+        prior_keys = ["season", "week", "player_key"]
+        prior_view = game_logs[prior_keys + prior_cols].drop_duplicates(prior_keys)
+        player_form = player_form.merge(prior_view, on=prior_keys, how="left")
+
+    PLAYER_GAME_LOGS_OUT.parent.mkdir(parents=True, exist_ok=True)
+    game_logs.to_csv(PLAYER_GAME_LOGS_OUT, index=False)
+    PLAYER_SEASON_TOTALS_OUT.parent.mkdir(parents=True, exist_ok=True)
+    season_totals.to_csv(PLAYER_SEASON_TOTALS_OUT, index=False)
+    # ------------------------------------------------------------
 
     if player_form.empty:
         raise RuntimeError("[make_player_form] final player_form empty; aborting run")
