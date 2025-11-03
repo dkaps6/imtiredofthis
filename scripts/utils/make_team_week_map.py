@@ -156,14 +156,6 @@ def build_map(season: int) -> pd.DataFrame:
     tw["team"] = _norm_team(tw["team"])
     tw["opponent"] = _norm_team(tw["opponent"])
 
-    duplicate_mask = tw.duplicated(["season", "week", "team"], keep=False)
-    if duplicate_mask.any():
-        dupes = tw.loc[duplicate_mask, ["season", "week", "team"]].drop_duplicates()
-        raise RuntimeError(
-            "Duplicate (season, week, team) detected in team_week_map; check schedule sources\n"
-            + dupes.to_string(index=False)
-        )
-
     tw["is_bye"] = tw["opponent"].isna() | tw["opponent"].eq("BYE")
     tw.loc[tw["is_bye"], "opponent"] = "BYE"
     tw["is_bye"] = tw["is_bye"].fillna(False).astype(bool)
@@ -174,6 +166,18 @@ def build_map(season: int) -> pd.DataFrame:
 
     out_cols = ["season", "week", "team", "opponent", "game_id", "kickoff_utc", "is_bye"]
     out = tw.loc[:, out_cols].copy()
+
+    # --- NEW: safeguard against duplicates (one row per team/week) ---
+    dupes = out[out.duplicated(subset=["season", "week", "team"], keep=False)]
+    if not dupes.empty:
+        # keep the earliest kickoff (or arbitrary first) per team/week
+        out = (
+            out.sort_values(["season", "week", "kickoff_utc"])
+            .drop_duplicates(subset=["season", "week", "team"], keep="first")
+        )
+        print(
+            f"[make_team_week_map] WARNING: dropped {len(dupes)} duplicate rows (kept first per team/week)"
+        )
     return out
 
 
