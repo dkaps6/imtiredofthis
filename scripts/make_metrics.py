@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 # scripts/make_metrics.py
-"""
+__doc__ = """
 Build a single, pricing-ready table that joins props with all context metrics.
 
 Inputs (best-effort; missing inputs won’t crash):
@@ -17,8 +19,6 @@ Inputs (best-effort; missing inputs won’t crash):
 Output:
 - data/metrics_ready.csv
 """
-
-from __future__ import annotations
 
 import argparse
 import os

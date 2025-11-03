@@ -3950,6 +3950,11 @@ def _write_player_form_outputs(df: pd.DataFrame, slate_date: str | None = None) 
         )
 
     consensus = pf_consensus
+    try:
+        consensus["season"] = int(season)
+    except Exception:
+        # Defensive: preserve original behavior if season cannot coerce.
+        consensus["season"] = season
     PLAYER_FORM_CONSENSUS_OUT.parent.mkdir(parents=True, exist_ok=True)
     consensus.to_csv(PLAYER_FORM_CONSENSUS_OUT, index=False)
 
