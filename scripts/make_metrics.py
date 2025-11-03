@@ -33,6 +33,7 @@ import pandas as pd
 
 from scripts._opponent_map import attach_opponent
 from scripts.make_player_form import canonicalize_name
+from scripts.utils.name_clean import canonical_player
 
 
 
@@ -70,6 +71,107 @@ def _inj_normalize_team(s):
 
 def _inj_player_key(s):
     return s.fillna("").astype(str).str.lower().str.replace(r"[^a-z0-9]","",regex=True)
+
+
+def _canon_df(df: pd.DataFrame, player_col: str) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    if player_col not in df.columns:
+        df["player_clean_key"] = ""
+        return df
+    df["player_clean_key"] = df[player_col].astype(str).map(canonical_player)
+    return df
+
+
+def _ensure_player_clean_key(df: pd.DataFrame, candidates: list[str]) -> pd.DataFrame:
+    for col in candidates:
+        if col in df.columns:
+            df = _canon_df(df, col)
+            if col != "player_clean_key":
+                df.rename(columns={col: "player_clean_key"}, inplace=True)
+            return df
+    df["player_clean_key"] = ""
+    return df
+
+
+def merge_opponent_map(base_df: pd.DataFrame) -> pd.DataFrame:
+    """Attach team/opponent from opponent_map_from_props.csv using event_id + player_key."""
+    path = DATA_PATH / "opponent_map_from_props.csv"
+    if not path.exists():
+        print("[make_metrics] WARN: opponent_map_from_props.csv missing – proceeding without opponent join")
+        return base_df
+
+    opp = pd.read_csv(path)
+    if opp.empty:
+        print("[make_metrics] WARN: opponent_map_from_props.csv empty – proceeding without opponent join")
+        return base_df
+
+    if "player_key" in opp.columns:
+        opp["player_key"] = opp["player_key"].astype(str).map(canonical_player)
+    else:
+        source = opp.get("player_clean_key", opp.get("player_name_raw", ""))
+        opp["player_key"] = source.astype(str).map(canonical_player)
+
+    if "player_key" not in base_df.columns:
+        name_col = next(
+            (c for c in base_df.columns if c.lower() in ("player", "player_name", "name", "display_name", "player_clean_key")),
+            None,
+        )
+        if name_col:
+            base_df["player_key"] = base_df[name_col].astype(str).map(canonical_player)
+        else:
+            base_df["player_key"] = ""
+    else:
+        base_df["player_key"] = base_df["player_key"].astype(str).map(canonical_player)
+
+    if "player_clean_key" in base_df.columns:
+        base_df["player_key"] = base_df["player_key"].where(
+            base_df["player_key"].ne(""), base_df["player_clean_key"].astype(str).map(canonical_player)
+        )
+
+    on_cols = [c for c in ("event_id", "player_key") if c in base_df.columns and c in opp.columns]
+    if not on_cols:
+        print("[make_metrics] WARN: cannot join opponent map (missing event_id/player_key)")
+        return base_df
+
+    opp_subset_cols = [c for c in ("event_id", "player_key", "team_abbr", "opponent_abbr") if c in opp.columns]
+    opp_subset = opp[opp_subset_cols].drop_duplicates(subset=on_cols, keep="last")
+
+    merged = base_df.merge(opp_subset, on=on_cols, how="left", suffixes=("", "_opp"))
+    merged = _drop_dupe_cols(merged)
+
+    joined_rows = 0
+    if "opponent_abbr_opp" in merged.columns:
+        joined_rows = int(merged["opponent_abbr_opp"].notna().sum())
+    elif "team_abbr_opp" in merged.columns:
+        joined_rows = int(merged["team_abbr_opp"].notna().sum())
+
+    for col in ("team_abbr", "opponent_abbr"):
+        opp_col = f"{col}_opp"
+        if opp_col in merged.columns:
+            if col in merged.columns:
+                merged[col] = merged[col].combine_first(merged[opp_col])
+            else:
+                merged[col] = merged[opp_col]
+            merged.drop(columns=[opp_col], inplace=True)
+
+    missing_mask = _missing_mask(merged.get("team_abbr"), merged.index) | _missing_mask(
+        merged.get("opponent_abbr"), merged.index
+    )
+    missing_count = int(missing_mask.sum())
+
+    if missing_count:
+        audit = merged.loc[missing_mask].copy()
+        DATA_PATH.mkdir(parents=True, exist_ok=True)
+        audit.to_csv(DATA_PATH / "metrics_missing_core.csv", index=False)
+        print(
+            f"[make_metrics] WARN: opponent unresolved for {missing_count} rows -> data/metrics_missing_core.csv"
+        )
+
+    print(f"[make_metrics] opponent map joined rows: {joined_rows}")
+    print(f"[make_metrics] missing team/opponent after merge: {missing_count}")
+
+    return merged
 
 DATA_DIR = "data"
 DATA_PATH = Path(DATA_DIR)
@@ -137,10 +239,29 @@ def safe_div(n, d):
     with np.errstate(divide="ignore", invalid="ignore"):
         return np.where(d == 0, np.nan, n / d)
 
-def _drop_duplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
+def _drop_dupe_cols(df: pd.DataFrame) -> pd.DataFrame:
     if df is None:
         return df
-    return df.loc[:, ~df.columns.duplicated()]
+    seen: set[str] = set()
+    keep: list[str] = []
+    for col in df.columns:
+        if col not in seen:
+            keep.append(col)
+            seen.add(col)
+    return df.loc[:, keep]
+
+
+def _drop_duplicate_columns(df: pd.DataFrame) -> pd.DataFrame:
+    return _drop_dupe_cols(df)
+
+
+def _missing_mask(series: pd.Series | None, index: pd.Index) -> pd.Series:
+    if series is None:
+        return pd.Series(False, index=index)
+    mask = series.isna()
+    if series.dtype == object:
+        mask = mask | series.astype(str).str.strip().eq("")
+    return mask
 
 def _normalize_team_names(s: pd.Series) -> pd.Series:
     """Map common sportsbook aliases to nflverse team codes (best effort)."""
@@ -284,6 +405,8 @@ def load_props() -> pd.DataFrame:
     else:
         df["player_canonical"] = ""
 
+    df = _canon_df(df, "player")
+
     if "commence_time" in df.columns:
         dt = pd.to_datetime(df["commence_time"], errors="coerce", utc=True)
         df["slate_date"] = dt.dt.date.astype(str)
@@ -404,6 +527,8 @@ def load_player_form() -> pd.DataFrame:
     else:
         df["player_canonical"] = df["player"].apply(canonicalize_name)
 
+    df = _canon_df(df, "player")
+
     if "opponent_abbr" in df.columns:
         df["opponent_abbr"] = _normalize_team_names(df["opponent_abbr"])
     elif "opponent" in df.columns:
@@ -468,6 +593,7 @@ def load_cb_assignments() -> pd.DataFrame:
     )
     df["player"] = _normalize_player_name(df["player"])
     df["player_canonical"] = df["player"].apply(canonicalize_name)
+    df = _canon_df(df, "player")
     df["opp_def_team"] = _normalize_team_names(df["opp_def_team"])
     df["opponent_abbr"] = df["opp_def_team"]
     return df
@@ -482,6 +608,7 @@ def load_injuries() -> pd.DataFrame:
         df["status"] = df["status"].astype(str).str.title()
     df["player"] = _normalize_player_name(df.get("player", pd.Series([], dtype=object)))
     df["player_canonical"] = df["player"].apply(canonicalize_name)
+    df = _canon_df(df, "player")
     df["team_abbr"] = _normalize_team_names(df.get("team", pd.Series([], dtype=object)))
     return df[["player","player_canonical","team","team_abbr","status"]].drop_duplicates()
 
@@ -507,6 +634,7 @@ def load_qb_run_metrics() -> pd.DataFrame:
     else:
         df["player"] = ""
         df["player_canonical"] = ""
+    df = _canon_df(df, "player")
     if "week" in df.columns:
         df["week"] = pd.to_numeric(df["week"], errors="coerce").astype("Int64")
     return df
@@ -658,6 +786,7 @@ def build_metrics(season: int) -> pd.DataFrame:
         return empty
 
     pf  = load_player_form()
+    pf = _ensure_player_clean_key(pf, ["player_clean_key", "player", "player_key"])
     tf  = load_team_form()
     cov = load_coverage()
     cba = load_cb_assignments()
@@ -665,6 +794,7 @@ def build_metrics(season: int) -> pd.DataFrame:
     qb_run = load_qb_run_metrics()
     wx  = load_weather()
     gl  = load_game_lines_preferring_odds()
+    print(f"[make_metrics] player_form rows pre-merge: {len(pf)}")
     upstream_empty = {
         "props_raw": False,
         "player_form": pf.empty,
@@ -697,6 +827,7 @@ def build_metrics(season: int) -> pd.DataFrame:
 
     # Stable player keys for joins
     props["player_key"] = _player_key_series(props.get("player", pd.Series(dtype=object)))
+    props = _ensure_player_clean_key(props, ["player_clean_key", "player", "player_key"])
     pf_consensus = pd.DataFrame()
     pf_by_opponent = pd.DataFrame()
     if not pf.empty:
@@ -831,12 +962,22 @@ def build_metrics(season: int) -> pd.DataFrame:
     else:
         props["opponent_abbr"] = ""
 
-    # Base: props + player_form (non-destructive)
+    # Base: props + opponent map + player_form (non-destructive)
     base = props.copy()
+    if "season" not in base.columns:
+        base["season"] = season
+    else:
+        base["season"] = base["season"].fillna(season)
+    base = _ensure_player_clean_key(base, ["player_clean_key", "player", "player_key"])
+    base["player_key"] = base["player_clean_key"].astype(str)
+
+    base = merge_opponent_map(base)
+
     if not pf_consensus.empty:
         keep_pf = [
             "player",
             "player_canonical",
+            "player_clean_key",
             "team",
             "team_abbr",
             "opponent",
@@ -856,30 +997,55 @@ def build_metrics(season: int) -> pd.DataFrame:
             "ypa_prior",
         ]
         keep_pf = [c for c in keep_pf if c in pf_consensus.columns]
-        join_cols = [
-            c
-            for c in ["player_canonical", "team_abbr"]
-            if c in pf_consensus.columns and c in base.columns
-        ]
-        if not join_cols:
-            join_cols = ["player_canonical"] if "player_canonical" in base.columns and "player_canonical" in pf_consensus.columns else []
-        if join_cols and keep_pf:
-            pf_subset = pf_consensus[keep_pf].drop_duplicates(subset=join_cols)
-            base = base.merge(pf_subset, on=join_cols, how="left", suffixes=("", "_pf"))
-        # backfill props.team from pf if missing
-        if "team" in base.columns and "team_pf" in base.columns:
-            base["team"] = base["team"].combine_first(base["team_pf"])
-            base.drop(columns=[c for c in ["team_pf"] if c in base.columns], inplace=True)
-        if "team_abbr" in base.columns and "team_abbr_pf" in base.columns:
-            base["team_abbr"] = base["team_abbr"].combine_first(base["team_abbr_pf"])
-            base.drop(columns=["team_abbr_pf"], inplace=True, errors="ignore")
-        if "opponent_abbr" in base.columns and "opponent_abbr_pf" in base.columns:
-            base["opponent_abbr"] = base["opponent_abbr"].combine_first(
-                base["opponent_abbr_pf"]
+        if keep_pf:
+            pf_subset = pf_consensus[keep_pf].drop_duplicates(
+                subset=[c for c in ["season", "week", "player_clean_key"] if c in keep_pf],
+                keep="last",
             )
-            base.drop(columns=["opponent_abbr_pf"], inplace=True, errors="ignore")
+            join_cols = [
+                c
+                for c in ["season", "week", "player_clean_key"]
+                if c in base.columns and c in pf_subset.columns
+            ]
+            if "player_clean_key" in base.columns and "player_clean_key" in pf_subset.columns and "player_clean_key" not in join_cols:
+                join_cols.append("player_clean_key")
+            if join_cols:
+                pf_subset = pf_subset[[c for c in keep_pf if c in pf_subset.columns]]
+                base = base.merge(pf_subset, on=join_cols, how="left", suffixes=("", "_pf"))
+        for col in ["team", "team_abbr", "opponent_abbr"]:
+            col_pf = f"{col}_pf"
+            if col_pf in base.columns:
+                if col in base.columns:
+                    base[col] = base[col].combine_first(base[col_pf])
+                else:
+                    base[col] = base[col_pf]
+                base.drop(columns=[col_pf], inplace=True, errors="ignore")
+
+    if "position_role" not in base.columns:
+        base["position_role"] = pd.NA
+    if "position" in base.columns:
+        base["position_role"] = base["position_role"].combine_first(base["position"])
+    if "position_pf" in base.columns:
+        base["position_role"] = base["position_role"].combine_first(base["position_pf"])
+        base.drop(columns=["position_pf"], inplace=True, errors="ignore")
+
     player_metrics = _drop_duplicate_columns(base)
     base = player_metrics
+
+    collision_cols = [c for c in base.columns if c.endswith("_x") or c.endswith("_y")]
+    if collision_cols:
+        for col in collision_cols:
+            root = col[:-2]
+            if root in base.columns:
+                base[root] = base[root].combine_first(base[col])
+            else:
+                base[root] = base[col]
+        base.drop(columns=[c for c in collision_cols if c in base.columns], inplace=True, errors="ignore")
+
+    if "team_abbr" in base.columns:
+        base["team_abbr"] = _normalize_team_names(base["team_abbr"])
+    if "opponent_abbr" in base.columns:
+        base["opponent_abbr"] = _normalize_team_names(base["opponent_abbr"])
     # --- fallback usage merge on (team, position, first_initial, last_name_u) ---
     try:
         # ensure initials/last exist
@@ -1225,6 +1391,7 @@ def build_metrics(season: int) -> pd.DataFrame:
         "event_id",
         "player",
         "player_canonical",
+        "player_clean_key",
         "team",
         "team_abbr",
         "opponent",
@@ -1234,6 +1401,7 @@ def build_metrics(season: int) -> pd.DataFrame:
         "over_odds",
         "under_odds",
         "target_share","rush_share","route_rate","yprr_proxy","ypt","ypc","ypa_prior","rz_tgt_share","rz_carry_share","position","role",
+        "position_role",
         "pace","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
         "def_pass_epa_opp","def_rush_epa_opp","def_sack_rate_opp","light_box_rate_opp","heavy_box_rate_opp",
         "coverage_top_shadow_opp","coverage_heavy_man_opp","coverage_heavy_zone_opp",
@@ -1262,10 +1430,12 @@ def build_metrics(season: int) -> pd.DataFrame:
     if "position" not in base.columns:
         base["position"] = pd.NA
     for col in pos_cols:
-        if col == "position":
+        if col in {"position", "position_role"}:
             continue
         base["position"] = base["position"].combine_first(base[col])
         base.drop(columns=[col], inplace=True, errors="ignore")
+    if "position_role" in base.columns:
+        base["position"] = base["position"].combine_first(base["position_role"])
 
     drop_suffix_cols = [c for c in base.columns if c.endswith("_pf") or c.endswith("_pvt") or c.endswith("_fbroles")]
     if drop_suffix_cols:
@@ -1280,6 +1450,16 @@ def build_metrics(season: int) -> pd.DataFrame:
         print(f"[make_metrics] WARN: opponent unresolved for {unresolved_opponents} rows")
     if missing_weather:
         print(f"[make_metrics] WARN: weather missing for {missing_weather} rows")
+
+    missing_core_mask = (
+        _missing_mask(base.get("team_abbr"), base.index)
+        | _missing_mask(base.get("opponent_abbr"), base.index)
+        | _missing_mask(base.get("position_role"), base.index)
+    )
+    core_missing = base.loc[missing_core_mask].copy()
+    Path("data").mkdir(parents=True, exist_ok=True)
+    core_missing.to_csv("data/metrics_missing_core.csv", index=False)
+    print(f"[make_metrics] missing core coverage rows: {len(core_missing)}")
 
     base = base[want].drop_duplicates().reset_index(drop=True)
     base.attrs["row_counts"] = {

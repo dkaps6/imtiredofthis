@@ -94,6 +94,12 @@ jobs:
         env:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
 
+      - name: Build opponent map from props
+        run: |
+          export PYTHONPATH="${PWD}"
+          python -m compileall scripts/build/build_opponent_map_from_props.py
+          python scripts/build/build_opponent_map_from_props.py
+
       # ----------------------------------------
       # 4. Build QB run/scramble metrics
       # ----------------------------------------
