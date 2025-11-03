@@ -15,6 +15,36 @@ SCHEDULE_PATH = Path("data/schedule.csv")
 OUT_PATH = Path("data/team_week_map.csv")
 
 
+def _first_thursday_on_or_after_sept1(season: int) -> pd.Timestamp:
+    """Approximate NFL Week 1 anchor: first Thursday on/after Sept 1 (UTC)."""
+
+    d = pd.Timestamp(season, 9, 1, tz="UTC")
+    # Thursday = 3 (Mon=0)
+    offset = (3 - d.weekday()) % 7
+    return d + pd.Timedelta(days=offset)
+
+
+def _infer_week_from_kickoff(season: int, kickoff: pd.Series) -> pd.Series:
+    """Infer NFL 'week' from kickoff timestamps when a week column isn't present.
+
+    Approximation: Week 1 window starts the Tuesday prior to the Week 1 Thursday,
+    and each week advances every 7 days. Result is clipped to [1, 22].
+    """
+
+    if kickoff is None:
+        return pd.Series(dtype="Int64")
+
+    ts = pd.to_datetime(kickoff, errors="coerce", utc=True)
+    if ts.isna().all():
+        return pd.Series(pd.NA, index=ts.index, dtype="Int64")
+
+    anchor_thu = _first_thursday_on_or_after_sept1(season)
+    week1_start = (anchor_thu - pd.Timedelta(days=2)).normalize()  # Tuesday 00:00 UTC
+    weeks = ((ts - week1_start) / pd.Timedelta(days=7)).floordiv(1).astype("Int64") + 1
+    weeks = weeks.where(weeks >= 1, 1).where(weeks <= 22, 22)
+    return weeks
+
+
 def _read_first(paths: list[Path]) -> pd.DataFrame:
     for path in paths:
         if path.exists() and path.stat().st_size > 0:
@@ -61,9 +91,18 @@ def build_map(season: int) -> pd.DataFrame:
     else:
         working["season"] = pd.Series(season, index=working.index, dtype="Int64")
 
-    if "week" not in working.columns:
-        raise ValueError("schedule source missing week column")
-    working["week"] = pd.to_numeric(working["week"], errors="coerce").astype("Int64")
+    if "kickoff_utc" not in working.columns and "commence_time" in working.columns:
+        working.rename(columns={"commence_time": "kickoff_utc"}, inplace=True)
+
+    if "kickoff_utc" not in working.columns:
+        working["kickoff_utc"] = pd.NaT
+    else:
+        working["kickoff_utc"] = pd.to_datetime(working["kickoff_utc"], errors="coerce", utc=True)
+
+    if "week" in working.columns:
+        working["week"] = pd.to_numeric(working["week"], errors="coerce").astype("Int64")
+    else:
+        working["week"] = _infer_week_from_kickoff(season, working["kickoff_utc"]).astype("Int64")
 
     rename_map = {
         "home": "home_team",
@@ -89,11 +128,6 @@ def build_map(season: int) -> pd.DataFrame:
         game_id = working.index.astype(str)
     working["game_id"] = game_id.where(game_id.ne(""), working.index.astype(str))
 
-    if "kickoff_utc" not in working.columns and "commence_time" in working.columns:
-        working.rename(columns={"commence_time": "kickoff_utc"}, inplace=True)
-
-    if "kickoff_utc" not in working.columns:
-        working["kickoff_utc"] = pd.NaT
     if "venue" not in working.columns:
         working["venue"] = pd.NA
 
