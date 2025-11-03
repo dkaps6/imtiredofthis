@@ -3562,14 +3562,82 @@ def _enrich_team_and_opponent_from_props(
         )
         if c in team_week.columns
     ]
-    team_week = team_week.loc[:, tw_subset_cols].drop_duplicates(subset=join_cols, keep="last")
+    team_week_subset = team_week.loc[:, tw_subset_cols].copy()
 
-    enriched = enriched.merge(
-        team_week,
-        on=join_cols,
-        how="left",
-        validate="m:1",
+    base_cols = list(enriched.columns)
+    enriched_base = enriched.copy()
+    if "event_id" in enriched_base.columns:
+        enriched_base["event_id"] = (
+            enriched_base["event_id"].astype("string").str.strip()
+        )
+    if "team" in enriched_base.columns:
+        enriched_base["team"] = (
+            enriched_base["team"].astype("string").str.upper().str.strip()
+        )
+
+    # --- Priority 1: join by (event_id, team) when available ---
+    schedule_joined = enriched_base.copy()
+    if {
+        "teamweek_event_id",
+        "team",
+    }.issubset(team_week_subset.columns) and "event_id" in enriched_base.columns:
+        event_cols = [
+            "team",
+            "teamweek_event_id",
+        ] + [
+            col
+            for col in team_week_subset.columns
+            if col not in {"team"}
+        ]
+        # Preserve column order while de-duplicating
+        seen = set()
+        event_cols = [col for col in event_cols if not (col in seen or seen.add(col))]
+        event_subset = (
+            team_week_subset.loc[:, event_cols]
+            .dropna(subset=["teamweek_event_id"])
+            .drop_duplicates(subset=["team", "teamweek_event_id"], keep="last")
+        )
+        if not event_subset.empty:
+            event_subset["team"] = (
+                event_subset["team"].astype("string").str.upper().str.strip()
+            )
+            event_subset["teamweek_event_id"] = (
+                event_subset["teamweek_event_id"].astype("string").str.strip()
+            )
+            schedule_joined = enriched_base.merge(
+                event_subset,
+                how="left",
+                left_on=["team", "event_id"],
+                right_on=["team", "teamweek_event_id"],
+                suffixes=("", "_sched"),
+                validate="m:1",
+            )
+
+    # --- Priority 2: fallback join on (season, week, team) ---
+    team_week_fallback = team_week_subset.drop_duplicates(
+        subset=join_cols, keep="last"
     )
+    if not team_week_fallback.empty:
+        fallback = enriched_base.merge(
+            team_week_fallback,
+            on=join_cols,
+            how="left",
+            validate="m:1",
+        )
+        schedule_cols = [
+            col
+            for col in fallback.columns
+            if col not in base_cols
+        ]
+        for col in schedule_cols:
+            if col not in schedule_joined.columns:
+                schedule_joined[col] = fallback[col]
+            else:
+                schedule_joined[col] = schedule_joined[col].where(
+                    schedule_joined[col].notna(), fallback[col]
+                )
+
+    enriched = schedule_joined
 
     if "teamweek_opponent" in enriched.columns:
         for col in ("opponent", "opponent_abbr", "opp_abbr"):
