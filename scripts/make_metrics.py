@@ -1879,6 +1879,15 @@ def main(args: argparse.Namespace) -> int:
 
     try:
         df = _generate_metrics_dataframe(args.season)
+        if "is_bye" in df.columns:
+            before = len(df)
+            df = df.loc[~df["is_bye"].fillna(False)].copy()
+            removed = before - len(df)
+            if removed:
+                print(
+                    f"[make_metrics] excluded BYE rows: {removed} (remaining {len(df)})"
+                )
+            df.drop(columns=["is_bye"], inplace=True, errors="ignore")
     except Exception as exc:
         print(f"[make_metrics] FATAL: unhandled error building metrics: {exc}")
         traceback.print_exc()
