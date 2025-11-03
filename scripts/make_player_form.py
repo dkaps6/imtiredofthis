@@ -4029,10 +4029,7 @@ def _write_player_form_outputs(
         )
 
     consensus = pf_consensus
-    try:
-        consensus["season"] = int(season)
-    except Exception:
-        consensus["season"] = season
+    consensus["season"] = int(season)
     PLAYER_FORM_CONSENSUS_OUT.parent.mkdir(parents=True, exist_ok=True)
     consensus.to_csv(PLAYER_FORM_CONSENSUS_OUT, index=False)
 

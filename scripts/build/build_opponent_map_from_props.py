@@ -1,3 +1,4 @@
+import argparse
 from pathlib import Path
 
 import pandas as pd
@@ -74,13 +75,25 @@ def build_opponent_map(
     props_path: str = "data/props_raw.csv",
     odds_path: str = "data/odds_game.csv",
     out_path: str = "data/opponent_map_from_props.csv",
+    season: int | None = None,
+    week: str | None = None,
 ) -> pd.DataFrame:
     props = pd.read_csv(props_path)
     odds = pd.read_csv(odds_path)
 
     if props.empty or odds.empty:
         DATA.mkdir(parents=True, exist_ok=True)
-        empty = pd.DataFrame(columns=["season", "week", "event_id", "player_clean_key", "team_abbr", "opponent_abbr"])
+        empty = pd.DataFrame(
+            columns=[
+                "season",
+                "week",
+                "event_id",
+                "player_clean_key",
+                "team_abbr",
+                "opponent_abbr",
+                "game_timestamp",
+            ]
+        )
         empty.to_csv(out_path, index=False)
         print("[build_opponent_map_from_props] rows=0 opponent_missing=0")
         return empty
@@ -157,9 +170,10 @@ def build_opponent_map(
         if col in out.columns:
             out[col] = out[col].fillna("").astype(str).str.upper()
 
-    for col in ("season", "week"):
-        if col not in out.columns:
-            out[col] = pd.NA
+    if "season" not in out.columns:
+        out["season"] = pd.NA
+    if "week" not in out.columns:
+        out["week"] = pd.NA
 
     dedup_subset = [c for c in ["season", "week", "player_clean_key"] if c in out.columns]
     if dedup_subset:
@@ -168,6 +182,36 @@ def build_opponent_map(
         out = out.drop_duplicates(subset=dedup_subset, keep="last")
     if "_ts" in out.columns:
         out = out.drop(columns=["_ts"])
+
+    resolved_season = season
+    if resolved_season is None and "season" in out.columns:
+        season_series = pd.to_numeric(out["season"], errors="coerce")
+        if season_series.notna().any():
+            try:
+                resolved_season = int(season_series.dropna().iloc[-1])
+            except Exception:
+                resolved_season = None
+    if resolved_season is not None:
+        out["season"] = int(resolved_season)
+    else:
+        out["season"] = pd.Series(pd.NA, index=out.index, dtype="Int64")
+
+    resolved_week = week
+    if resolved_week is None and "week" in out.columns:
+        wk_series = out["week"]
+        if not wk_series.dropna().empty:
+            resolved_week = wk_series.dropna().astype(str).iloc[-1]
+    if resolved_week is None:
+        out["week"] = ""
+    else:
+        out["week"] = str(resolved_week)
+    out["week"] = out["week"].astype("string")
+
+    if "commence_time" in out.columns:
+        ts = pd.to_datetime(out["commence_time"], errors="coerce", utc=True)
+    else:
+        ts = pd.Series(pd.NaT, index=out.index)
+    out["game_timestamp"] = ts.astype("string")
 
     DATA.mkdir(parents=True, exist_ok=True)
     out.to_csv(out_path, index=False)
@@ -180,4 +224,18 @@ def build_opponent_map(
 
 
 if __name__ == "__main__":
-    build_opponent_map()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--props-path", default="data/props_raw.csv")
+    parser.add_argument("--odds-path", default="data/odds_game.csv")
+    parser.add_argument("--out-path", default="data/opponent_map_from_props.csv")
+    parser.add_argument("--season", type=int, default=None)
+    parser.add_argument("--week", type=str, default=None)
+    args = parser.parse_args()
+
+    build_opponent_map(
+        props_path=args.props_path,
+        odds_path=args.odds_path,
+        out_path=args.out_path,
+        season=args.season,
+        week=args.week,
+    )

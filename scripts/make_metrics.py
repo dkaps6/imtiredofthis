@@ -73,6 +73,13 @@ def _inj_player_key(s):
     return s.fillna("").astype(str).str.lower().str.replace(r"[^a-z0-9]","",regex=True)
 
 
+def _ensure_str_keys(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    for c in cols:
+        if c in df.columns:
+            df[c] = df[c].astype("string")
+    return df
+
+
 def _canon_df(df: pd.DataFrame, player_col: str) -> pd.DataFrame:
     if df is None or df.empty:
         return df
@@ -137,7 +144,31 @@ def merge_opponent_map(base_df: pd.DataFrame) -> pd.DataFrame:
     opp_subset_cols = [c for c in ("event_id", "player_key", "team_abbr", "opponent_abbr") if c in opp.columns]
     opp_subset = opp[opp_subset_cols].drop_duplicates(subset=on_cols, keep="last")
 
+    left_keys = pd.DataFrame(columns=on_cols)
+    if on_cols:
+        base_df = _ensure_str_keys(base_df, on_cols)
+        opp_subset = _ensure_str_keys(opp_subset, on_cols)
+        if not base_df.empty:
+            left_keys = base_df[on_cols].drop_duplicates()
+
     merged = base_df.merge(opp_subset, on=on_cols, how="left", suffixes=("", "_opp"))
+    if on_cols and not left_keys.empty and merged.empty:
+        right_keys = (
+            opp_subset[on_cols].drop_duplicates()
+            if not opp_subset.empty
+            else pd.DataFrame(columns=on_cols)
+        )
+        dbg = left_keys.merge(right_keys, on=on_cols, how="left", indicator=True)
+        dbg = dbg[dbg["_merge"] == "left_only"]
+        Path("data/_debug").mkdir(parents=True, exist_ok=True)
+        dbg.to_csv(
+            "data/_debug/metrics_left_keys_without_opp_match.csv",
+            index=False,
+        )
+        raise RuntimeError(
+            "metrics_ready is empty after opponent map merge (debug keys written)"
+        )
+
     merged = _drop_dupe_cols(merged)
 
     joined_rows = 0
@@ -1004,14 +1035,43 @@ def build_metrics(season: int) -> pd.DataFrame:
             )
             join_cols = [
                 c
-                for c in ["season", "week", "player_clean_key"]
+                for c in [
+                    "season",
+                    "week",
+                    "game_id",
+                    "player_clean_key",
+                    "posteam",
+                    "opponent_abbr",
+                ]
                 if c in base.columns and c in pf_subset.columns
             ]
-            if "player_clean_key" in base.columns and "player_clean_key" in pf_subset.columns and "player_clean_key" not in join_cols:
-                join_cols.append("player_clean_key")
             if join_cols:
                 pf_subset = pf_subset[[c for c in keep_pf if c in pf_subset.columns]]
-                base = base.merge(pf_subset, on=join_cols, how="left", suffixes=("", "_pf"))
+                base = _ensure_str_keys(base, join_cols)
+                pf_subset = _ensure_str_keys(pf_subset, join_cols)
+                print(
+                    "[make_metrics] dtypes(left):",
+                    {c: str(base[c].dtype) for c in join_cols if c in base.columns},
+                )
+                print(
+                    "[make_metrics] dtypes(right):",
+                    {c: str(pf_subset[c].dtype) for c in join_cols if c in pf_subset.columns},
+                )
+                left_keys = base[join_cols].drop_duplicates() if join_cols else pd.DataFrame()
+                merged = base.merge(pf_subset, on=join_cols, how="left", suffixes=("", "_pf"))
+                if merged.empty:
+                    right_keys = pf_subset[join_cols].drop_duplicates() if join_cols else pd.DataFrame()
+                    dbg = left_keys.merge(right_keys, on=join_cols, how="left", indicator=True)
+                    dbg = dbg[dbg["_merge"] == "left_only"]
+                    Path("data/_debug").mkdir(parents=True, exist_ok=True)
+                    dbg.to_csv(
+                        "data/_debug/metrics_left_keys_without_pf_match.csv",
+                        index=False,
+                    )
+                    raise RuntimeError(
+                        "metrics_ready is empty after merge (debug keys written)"
+                    )
+                base = merged
         for col in ["team", "team_abbr", "opponent_abbr"]:
             col_pf = f"{col}_pf"
             if col_pf in base.columns:
