@@ -2,11 +2,11 @@
 import sys
 from pathlib import Path
 
+import difflib
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
-
-import os
 
 import numpy as np
 import pandas as pd
@@ -95,6 +95,224 @@ def _canon_team(x: str) -> str:
         abbr = TEAM_NAME_TO_ABBR[s2]
         return abbr if abbr in VALID else ""
     return ""
+
+
+def _normalize_team(val: str | None) -> str | None:
+    """
+    Normalize team strings (abbr/casing/spacing) so cross-source joins succeed.
+    """
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return None
+    s = str(val).strip().upper().replace(" ", "")
+    alias = {
+        "WSH": "WAS",
+        "JAX": "JAC",
+        "LAR": "LA",
+    }
+    return alias.get(s, s)
+
+
+def _infer_opponent_row(row: pd.Series) -> str | None:
+    """
+    Given a row that contains team_norm, home_team_norm, away_team_norm,
+    return the opponent abbr if possible, else None.
+    """
+    tn = row.get("team_norm")
+    h = row.get("home_team_norm")
+    a = row.get("away_team_norm")
+    if tn and h and a:
+        return a if tn == h else (h if tn == a else None)
+    return None
+
+
+def _fallback_match_team(row: pd.Series, odds_teams: pd.DataFrame) -> dict | None:
+    """
+    Pick a best-guess game for props rows missing event_id by matching team_norm
+    against either home_team_norm or away_team_norm. Uses exact then fuzzy match.
+    Returns a dict of matched odds fields (or None).
+    """
+    tn = row.get("team_norm")
+    if not tn:
+        return None
+
+    exact = odds_teams[
+        (odds_teams["home_team_norm"] == tn) | (odds_teams["away_team_norm"] == tn)
+    ]
+    if not exact.empty:
+        return exact.iloc[0].to_dict()
+
+    all_teams = list(
+        set(odds_teams["home_team_norm"]) | set(odds_teams["away_team_norm"])
+    )
+    close = difflib.get_close_matches(tn, all_teams, n=1)
+    if close:
+        fuzzy = odds_teams[
+            (odds_teams["home_team_norm"] == close[0])
+            | (odds_teams["away_team_norm"] == close[0])
+        ]
+        if not fuzzy.empty:
+            return fuzzy.iloc[0].to_dict()
+    return None
+
+
+def build_opponent_map(
+    props: pd.DataFrame | None = None,
+    odds: pd.DataFrame | None = None,
+    props_path: str = "data/props_raw.csv",
+    odds_path: str = "data/odds_game.csv",
+    out_path: str = "data/opponent_map_from_props.csv",
+) -> pd.DataFrame:
+    """
+    Build a dense mapping of (player, team, opponent, event_id, season, week).
+    - Primary join on event_id
+    - Fallback join on normalized team when event_id missing
+    - Infers opponent from home/away when possible
+    """
+
+    def _safe_read(path: str) -> pd.DataFrame:
+        try:
+            return pd.read_csv(path)
+        except FileNotFoundError:
+            return pd.DataFrame()
+        except Exception:
+            return pd.DataFrame()
+
+    if props is None or props.empty:
+        props = _safe_read(props_path)
+    if odds is None or odds.empty:
+        odds = _safe_read(odds_path)
+
+    props = props.copy() if props is not None else pd.DataFrame()
+    odds = odds.copy() if odds is not None else pd.DataFrame()
+
+    if props.empty:
+        props = pd.DataFrame(columns=["player", "team", "event_id"])
+    if odds.empty:
+        odds = pd.DataFrame(columns=["event_id", "home_team", "away_team", "week", "season"])
+
+    team_source = None
+    for cand in ["team", "player_team_abbr", "team_abbr", "player_team"]:
+        if cand in props.columns:
+            team_source = props[cand]
+            break
+    if team_source is None:
+        team_source = pd.Series([None] * len(props), index=props.index)
+    props["team_norm"] = team_source.apply(_normalize_team)
+
+    def _clean_event_id(val):
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return np.nan
+        sval = str(val).strip()
+        return sval if sval else np.nan
+
+    if "event_id" in props.columns:
+        props["event_id"] = props["event_id"].apply(_clean_event_id)
+    else:
+        props["event_id"] = np.nan
+
+    odds_home = odds.get(
+        "home_team", pd.Series([None] * len(odds), index=odds.index)
+    )
+    odds_away = odds.get(
+        "away_team", pd.Series([None] * len(odds), index=odds.index)
+    )
+    odds["home_team_norm"] = odds_home.apply(_normalize_team)
+    odds["away_team_norm"] = odds_away.apply(_normalize_team)
+
+    if "event_id" in odds.columns:
+        odds["event_id"] = odds["event_id"].apply(_clean_event_id)
+    else:
+        odds["event_id"] = np.nan
+
+    ts_col = next(
+        (
+            col
+            for col in ["kickoff_ts", "commence_time", "game_timestamp"]
+            if col in odds.columns
+        ),
+        None,
+    )
+    if ts_col:
+        odds["game_timestamp"] = pd.to_datetime(odds[ts_col], errors="coerce")
+
+    if "week" in odds.columns:
+        odds["week"] = pd.to_numeric(odds["week"], errors="coerce")
+    if "season" in odds.columns:
+        odds["season"] = pd.to_numeric(odds["season"], errors="coerce")
+
+    merged = props.merge(odds, how="left", on="event_id", suffixes=("", "_odds"))
+
+    missing_evt = merged[merged["event_id"].isna()].copy()
+    if not missing_evt.empty and not odds.empty:
+        base_cols = [
+            "home_team_norm",
+            "away_team_norm",
+            "week",
+            "season",
+            "game_timestamp",
+            "event_id",
+        ]
+        odds_cols = [col for col in base_cols if col in odds.columns]
+        odds_min = odds[odds_cols].drop_duplicates()
+
+        matched = missing_evt.apply(
+            lambda r: _fallback_match_team(r, odds_min), axis=1
+        ).apply(pd.Series)
+        for col in [
+            "home_team_norm",
+            "away_team_norm",
+            "week",
+            "season",
+            "game_timestamp",
+            "event_id",
+        ]:
+            if col in missing_evt.columns:
+                missing_evt[col] = missing_evt[col].fillna(matched.get(col))
+            else:
+                missing_evt[col] = matched.get(col)
+
+        merged = pd.concat(
+            [merged[~merged["event_id"].isna()], missing_evt], ignore_index=True
+        )
+
+    merged["opponent"] = merged.apply(_infer_opponent_row, axis=1)
+
+    player_col = (
+        "player"
+        if "player" in merged.columns
+        else ("player_name" if "player_name" in merged.columns else None)
+    )
+    if player_col is None:
+        merged["player"] = ""
+        player_col = "player"
+
+    keep = [
+        player_col,
+        "team_norm",
+        "opponent",
+        "event_id",
+        "season",
+        "week",
+        "game_timestamp",
+    ]
+
+    for col in keep:
+        if col not in merged.columns:
+            merged[col] = np.nan
+
+    out = merged[keep].rename(columns={player_col: "player"})
+    out = out.drop_duplicates()
+    out = out.rename(columns={"team_norm": "team"})
+
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    out.to_csv(out_path, index=False)
+    print(f"[opponent_map] wrote {len(out):,} rows -> {out_path}")
+    missing_opp = out["opponent"].isna().sum()
+    if missing_opp:
+        print(
+            f"[opponent_map] WARNING: {missing_opp} rows still missing opponent (could not infer)"
+        )
+    return out
 
 
 def build_name_canonical_map_from_inputs(df_list):
@@ -320,177 +538,55 @@ def main() -> None:
         ],
     ].copy()
 
-    if "event_id" not in out_df.columns:
-        out_df["event_id"] = ""
-
     props_path_candidates = [
         Path("data") / "props_raw.csv",
         Path("outputs") / "props_raw.csv",
     ]
-    props_raw = pd.DataFrame()
+    props_df = pd.DataFrame()
+    props_path_str = None
     for cand in props_path_candidates:
         if cand.exists():
+            props_path_str = str(cand)
             try:
-                props_raw = pd.read_csv(cand)
-            except Exception:
-                props_raw = pd.DataFrame()
-            if not props_raw.empty:
-                break
-
-    if not props_raw.empty:
-        props_work = props_raw.copy()
-        if "player" in props_work.columns:
-            props_work["player_key"] = props_work["player"].astype(str).map(
-                _player_key_from_name_nh
-            )
-        else:
-            props_work["player_key"] = ""
-
-        team_col = None
-        for col in ["team", "player_team_abbr", "team_abbr", "player_team"]:
-            if col in props_work.columns:
-                team_col = col
-                break
-        if team_col is not None:
-            props_work["team_key"] = props_work[team_col].astype(str).str.upper().str.strip().map(
-                _canon_team
-            )
-        else:
-            props_work["team_key"] = ""
-
-        if "event_id" in props_work.columns:
-            props_work["event_id"] = props_work["event_id"].astype(str)
-        else:
-            props_work["event_id"] = ""
-
-        event_map = props_work[
-            ["player_key", "team_key", "event_id"]
-        ].dropna(subset=["player_key"])
-        event_map = event_map[event_map["event_id"].astype(str).str.strip().ne("")]
-        if not event_map.empty:
-            out_df = out_df.merge(
-                event_map.drop_duplicates(subset=["player_key", "team_key"]),
-                on=["player_key", "team_key"],
-                how="left",
-                suffixes=("", "_props"),
-            )
-            if "event_id_props" in out_df.columns:
-                out_df["event_id"] = out_df["event_id_props"].combine_first(
-                    out_df.get("event_id")
+                props_df = pd.read_csv(cand)
+            except Exception as exc:
+                print(
+                    "[build_opponent_map_from_props] failed to load props file "
+                    f"{cand}: {exc}"
                 )
-                out_df.drop(columns=["event_id_props"], inplace=True)
+                props_df = pd.DataFrame()
+            break
+    if props_path_str is None:
+        props_path_str = str(props_path_candidates[0])
 
     odds_candidates = [
         Path("data") / "odds_game.csv",
         Path("outputs") / "odds_game.csv",
     ]
     odds_df = pd.DataFrame()
+    odds_path_str = None
     for cand in odds_candidates:
         if cand.exists():
+            odds_path_str = str(cand)
             try:
                 odds_df = pd.read_csv(cand)
-            except Exception:
+            except Exception as exc:
+                print(
+                    "[build_opponent_map_from_props] failed to load odds file "
+                    f"{cand}: {exc}"
+                )
                 odds_df = pd.DataFrame()
-            if not odds_df.empty:
-                break
+            break
+    if odds_path_str is None:
+        odds_path_str = str(odds_candidates[0])
 
-    if not odds_df.empty and "event_id" in odds_df.columns:
-        odds_work = odds_df.copy()
-        odds_work["event_id"] = odds_work["event_id"].astype(str)
-        ts_col = next(
-            (
-                col
-                for col in ["kickoff_ts", "commence_time", "game_timestamp"]
-                if col in odds_work.columns
-            ),
-            None,
-        )
-        if ts_col:
-            odds_work["game_timestamp_odds"] = pd.to_datetime(
-                odds_work[ts_col], errors="coerce"
-            )
-        else:
-            odds_work["game_timestamp_odds"] = pd.NaT
-
-        if "week" in odds_work.columns:
-            odds_work["week_odds"] = pd.to_numeric(
-                odds_work["week"], errors="coerce"
-            )
-        else:
-            odds_work["week_odds"] = pd.NA
-
-        if "season" in odds_work.columns:
-            odds_work["season_odds"] = pd.to_numeric(
-                odds_work["season"], errors="coerce"
-            )
-        else:
-            odds_work["season_odds"] = pd.NA
-
-        odds_meta = odds_work[[
-            "event_id",
-            "game_timestamp_odds",
-            "week_odds",
-            "season_odds",
-        ]].drop_duplicates(subset=["event_id"])
-
-        out_df = out_df.merge(odds_meta, on="event_id", how="left")
-        if "game_timestamp_odds" in out_df.columns:
-            out_df["game_timestamp"] = out_df["game_timestamp_odds"].combine_first(
-                out_df.get("game_timestamp")
-            )
-            out_df.drop(columns=["game_timestamp_odds"], inplace=True)
-        if "week_odds" in out_df.columns:
-            out_df["week"] = out_df["week_odds"].combine_first(out_df.get("week"))
-            out_df.drop(columns=["week_odds"], inplace=True)
-        if "season_odds" in out_df.columns:
-            out_df["season"] = out_df["season_odds"].combine_first(
-                out_df.get("season")
-            )
-            out_df.drop(columns=["season_odds"], inplace=True)
-
-    if "event_id" not in out_df.columns:
-        out_df["event_id"] = ""
-
-    if out_df.get("season").isna().all():
-        out_df["season"] = int(season)
-
-    if out_df.get("week").isna().all():
-        print(
-            "[build_opponent_map_from_props] WARNING: week values missing; downstream may need schedule refresh"
-        )
-
-    missing_cols = {
-        col
-        for col in ["opponent", "week", "season", "game_timestamp"]
-        if col not in out_df.columns
-    }
-    for col in missing_cols:
-        out_df[col] = pd.NA
-
-    missing_mask = (
-        out_df["opponent"].astype(str).str.strip().eq("")
-        | out_df["opponent"].isna()
-        | out_df["week"].isna()
-        | out_df["season"].isna()
-        | out_df["game_timestamp"].isna()
-    )
-    if missing_mask.any():
-        for player in sorted(out_df.loc[missing_mask, "player"].dropna().unique()):
-            print(f"[opponent_map] missing mapping for {player}")
-
-    out_path = Path(os.path.join("data", "opponent_map_from_props.csv"))
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_df.to_csv(out_path, index=False)
-    print(
-        f"[build_opponent_map_from_props] wrote {len(out_df)} rows → {out_path}"
-    )
-
-    debug_dir = Path(os.path.join("data", "_debug"))
-    debug_dir.mkdir(parents=True, exist_ok=True)
-    out_df.head(50).to_csv(debug_dir / "opponent_sample.csv", index=False)
-    print(
-        "[build_opponent_map_from_props] wrote debug sample → "
-        f"{debug_dir / 'opponent_sample.csv'}"
+    out_path = Path("data") / "opponent_map_from_props.csv"
+    build_opponent_map(
+        props=props_df if not props_df.empty else None,
+        odds=odds_df if not odds_df.empty else None,
+        props_path=props_path_str,
+        odds_path=odds_path_str,
+        out_path=str(out_path),
     )
 
 
