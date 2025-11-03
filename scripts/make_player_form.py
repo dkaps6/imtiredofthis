@@ -39,6 +39,7 @@ from scripts.utils.canonical_names import (
     canonicalize_player_name as _canonicalize_with_utils,
     log_unmapped_variant,
 )
+from scripts.utils.name_clean import canonical_player
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ PLAYER_FORM_CONSENSUS_OUT = Path("data/player_form_consensus.csv")
 DEBUG_MISSING_OPP = Path("data/_debug/player_missing_opponent.csv")
 OPPONENT_MAP_PATH = Path("data/opponent_map_from_props.csv")
 UNMATCHED_ROLES_DEBUG_PATH = Path("data/unmatched_roles_merge.csv")
+TEAM_FORM_PATH = Path("data/team_form.csv")
 
 
 CANON_OVERRIDES = {
@@ -68,6 +70,10 @@ CANON_OVERRIDES = {
     "dadams": "davante adams",
     # ...add obvious skill guys, QBs, etc.
 }
+
+IDENTITY_COLUMNS = ["player_source_name", "player_display", "player_clean_key"]
+
+_ROSTER_LOOKUP_CACHE: Optional[pd.DataFrame] = None
 
 
 NAME_OVERRIDES = {
@@ -489,6 +495,65 @@ def _normalize_key(s: str) -> str:
     return s
 
 
+def _standardize_optional_name(value: Any) -> Optional[str]:
+    """Return a cleaned, title-cased name when possible."""
+
+    if value is None:
+        return None
+    if isinstance(value, float) and np.isnan(value):
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    lowered = text.lower()
+    if lowered in {"nan", "none", "null"}:
+        return None
+    return standardize_full_name(text)
+
+
+def _extract_initial_last(name: Any) -> Tuple[Optional[str], Optional[str]]:
+    """Parse compact/initialed names into (first_initial, last_name)."""
+
+    if name is None:
+        return (None, None)
+    text = str(name).strip()
+    if not text:
+        return (None, None)
+
+    cleaned = re.sub(r"[^A-Za-z\s]", " ", text)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if cleaned:
+        parts = cleaned.split()
+        if len(parts) >= 2:
+            first = next((p for p in parts if p), "")
+            last = next((p for p in reversed(parts) if p), "")
+            first_initial = first[0] if first else ""
+            last_token = re.sub(r"[^A-Za-z]", "", last)
+            if first_initial and last_token:
+                return (first_initial.lower(), last_token.lower())
+
+    collapsed = re.sub(r"[^A-Za-z]", "", text)
+    if len(collapsed) < 2:
+        return (None, None)
+
+    boundary = None
+    for idx in range(1, len(collapsed)):
+        ch = collapsed[idx]
+        nxt = collapsed[idx + 1] if idx + 1 < len(collapsed) else ""
+        if ch.isupper() and nxt.islower():
+            boundary = idx
+            break
+    if boundary is None:
+        boundary = 1
+
+    first_initial = collapsed[0]
+    last = collapsed[boundary:]
+    if not first_initial or not last:
+        return (None, None)
+
+    return (first_initial.lower(), last.lower())
+
+
 def _canonical_identity_fields(raw: Any) -> Dict[str, str]:
     """Return canonical name metadata using shared utils and log unmapped variants."""
 
@@ -521,6 +586,252 @@ def canonicalize_player_name(raw: str) -> str:
     """Legacy alias that returns the normalized canonical name string."""
 
     return _canonicalize_player_name(raw)
+
+
+def _build_roster_lookup() -> pd.DataFrame:
+    """Load roster data with clean display names and helpful tokens."""
+
+    global _ROSTER_LOOKUP_CACHE
+    if _ROSTER_LOOKUP_CACHE is not None:
+        return _ROSTER_LOOKUP_CACHE.copy()
+
+    frames: List[pd.DataFrame] = []
+    for path in [ROLES_PATH, TEAM_FORM_PATH]:
+        if not path.exists():
+            continue
+        df = _read_csv_safe(str(path))
+        if df.empty or "player" not in df.columns:
+            continue
+        base = pd.DataFrame({"player_display": df["player"]})
+        if "team_abbr" in df.columns:
+            base["team_abbr"] = df["team_abbr"]
+        elif "team" in df.columns:
+            base["team_abbr"] = df["team"]
+        else:
+            base["team_abbr"] = pd.NA
+        base["player_display"] = base["player_display"].map(_standardize_optional_name)
+        base = base.dropna(subset=["player_display"])
+        if base.empty:
+            continue
+        base["team_abbr"] = (
+            base["team_abbr"].astype("string").str.strip().str.upper()
+        )
+        base.loc[
+            base["team_abbr"].isin({"", "NAN", "NONE", "NULL"}), "team_abbr"
+        ] = pd.NA
+        frames.append(base)
+
+    if not frames:
+        _ROSTER_LOOKUP_CACHE = pd.DataFrame(
+            columns=[
+                "player_display",
+                "team_abbr",
+                "player_clean_key",
+                "first_initial_lower",
+                "last_lower",
+            ]
+        )
+        return _ROSTER_LOOKUP_CACHE.copy()
+
+    roster = pd.concat(frames, ignore_index=True)
+    roster = roster.dropna(subset=["player_display"]).drop_duplicates()
+    roster["player_display"] = roster["player_display"].map(_standardize_optional_name)
+    roster = roster.dropna(subset=["player_display"])
+    roster["player_display"] = roster["player_display"].astype("string")
+    roster["team_abbr"] = roster["team_abbr"].astype("string")
+
+    roster["player_clean_key"] = roster["player_display"].astype("object").fillna("")
+    roster["player_clean_key"] = roster["player_clean_key"].apply(canonical_player)
+    roster["player_clean_key"] = roster["player_clean_key"].astype("object").fillna("").apply(
+        _normalize_key
+    )
+
+    tokens = roster["player_display"].astype("string").str.split()
+    roster["first_initial_lower"] = tokens.str[0].str[0].str.lower()
+    roster["last_lower"] = tokens.str[-1].str.lower()
+
+    roster = roster.drop_duplicates(subset=["player_display", "team_abbr"]).reset_index(
+        drop=True
+    )
+
+    roster["player_display"] = roster["player_display"].astype("string")
+    roster["team_abbr"] = roster["team_abbr"].astype("string")
+    roster["player_clean_key"] = roster["player_clean_key"].astype("string")
+    roster["first_initial_lower"] = roster["first_initial_lower"].astype("string")
+    roster["last_lower"] = roster["last_lower"].astype("string")
+
+    _ROSTER_LOOKUP_CACHE = roster
+    return roster.copy()
+
+
+def _attach_player_identity(
+    df: pd.DataFrame, team_columns: Iterable[str] = ("team_abbr", "team")
+) -> pd.DataFrame:
+    """Ensure source/display/clean name columns are populated consistently."""
+
+    if df is None:
+        return df
+    out = df.copy()
+
+    if out.empty:
+        for col in IDENTITY_COLUMNS:
+            if col not in out.columns:
+                out[col] = pd.Series(dtype="string")
+        return out
+
+    def _clean_text(series: pd.Series) -> pd.Series:
+        ser = series.astype("string")
+        ser = ser.str.strip()
+        ser = ser.mask(ser.str.lower().isin({"", "nan", "none", "null"}))
+        return ser
+
+    if "player_source_name" not in out.columns:
+        source = pd.Series(pd.NA, index=out.index, dtype="string")
+        for cand in ["player_name_raw", "player_name", "player_original", "player"]:
+            if cand in out.columns:
+                candidate = _clean_text(out[cand])
+                source = source.combine_first(candidate)
+        out["player_source_name"] = source
+    else:
+        out["player_source_name"] = _clean_text(out["player_source_name"])
+
+    display = out.get("player_display")
+    if display is None:
+        display = pd.Series(pd.NA, index=out.index, dtype="string")
+    else:
+        display = _clean_text(display)
+    for cand in ["canonical_player_name", "player", "player_name", "player_source_name"]:
+        if cand in out.columns:
+            candidate = _clean_text(out[cand])
+            display = display.combine_first(candidate)
+    display = display.map(_standardize_optional_name)
+    out["player_display"] = pd.Series(display, index=out.index, dtype="string")
+
+    source = out["player_source_name"].combine_first(out["player_display"])
+    out["player_source_name"] = pd.Series(source, index=out.index, dtype="string")
+
+    if "player_clean_key" in out.columns:
+        key_series = out["player_clean_key"]
+    else:
+        key_series = pd.Series("", index=out.index, dtype="string")
+    key_series = key_series.astype("object").fillna("").apply(_normalize_key)
+    display_keys = out["player_display"].astype("object").fillna("").apply(_normalize_key)
+    source_keys = out["player_source_name"].astype("object").fillna("").apply(_normalize_key)
+    key_series = key_series.replace("", pd.NA)
+    key_series = key_series.combine_first(display_keys.replace("", pd.NA))
+    key_series = key_series.combine_first(source_keys.replace("", pd.NA))
+    out["player_clean_key"] = pd.Series(key_series.fillna(""), index=out.index, dtype="string")
+
+    team_lookup = pd.Series(pd.NA, index=out.index, dtype="object")
+    for col in team_columns:
+        if col in out.columns:
+            candidate = _clean_text(out[col]).str.upper()
+            team_lookup = team_lookup.combine_first(candidate.astype("object"))
+    out["_team_lookup"] = pd.Series(team_lookup, index=out.index, dtype="string")
+    out["_team_lookup"] = out["_team_lookup"].mask(out["_team_lookup"].str.len() == 0, pd.NA)
+
+    roster = _build_roster_lookup()
+    if not roster.empty:
+        roster_key = roster.loc[:, ["player_clean_key", "player_display"]].drop_duplicates()
+        roster_key = roster_key.rename(columns={"player_display": "__roster_display"})
+        out = out.merge(roster_key, on="player_clean_key", how="left")
+        roster_display = _clean_text(out["__roster_display"])
+        fill_mask = out["player_display"].isna() | out["player_display"].astype("string").str.strip().eq("")
+        out.loc[fill_mask, "player_display"] = roster_display.loc[fill_mask]
+        out.drop(columns=["__roster_display"], inplace=True)
+
+        unresolved_idx = out.index[
+            (out["player_display"].isna() | out["player_display"].astype("string").str.strip().eq(""))
+            & out["_team_lookup"].notna()
+        ]
+        if len(unresolved_idx) > 0:
+            roster_guess = roster.loc[
+                roster["team_abbr"].notna()
+                & roster["first_initial_lower"].notna()
+                & roster["last_lower"].notna(),
+                [
+                    "team_abbr",
+                    "first_initial_lower",
+                    "last_lower",
+                    "player_display",
+                    "player_clean_key",
+                ],
+            ]
+            if not roster_guess.empty:
+                roster_guess = roster_guess.drop_duplicates(
+                    subset=["team_abbr", "first_initial_lower", "last_lower"]
+                )
+                lookup = {
+                    (row.team_abbr, row.first_initial_lower, row.last_lower): (
+                        row.player_display,
+                        row.player_clean_key,
+                    )
+                    for row in roster_guess.itertuples(index=False)
+                }
+                for idx in unresolved_idx:
+                    team_key = out.at[idx, "_team_lookup"]
+                    if pd.isna(team_key):
+                        continue
+                    name_basis = out.at[idx, "player_source_name"]
+                    if pd.isna(name_basis) or str(name_basis).strip() == "":
+                        if "player" in out.columns:
+                            name_basis = out.at[idx, "player"]
+                    if (pd.isna(name_basis) or str(name_basis).strip() == "") and "canonical_player_name" in out.columns:
+                        name_basis = out.at[idx, "canonical_player_name"]
+                    first_initial, last_lower = _extract_initial_last(name_basis)
+                    if not first_initial or not last_lower:
+                        continue
+                    key = (str(team_key), first_initial, last_lower)
+                    guess = lookup.get(key)
+                    if not guess:
+                        continue
+                    display_guess, key_guess = guess
+                    current_display = out.at[idx, "player_display"]
+                    if pd.isna(current_display) or str(current_display).strip() == "":
+                        out.at[idx, "player_display"] = display_guess
+                    current_key = out.at[idx, "player_clean_key"]
+                    if pd.isna(current_key) or str(current_key).strip() == "":
+                        out.at[idx, "player_clean_key"] = key_guess
+
+    out["player_display"] = out["player_display"].map(_standardize_optional_name)
+    out["player_display"] = out["player_display"].astype("string")
+    out["player_source_name"] = _clean_text(out["player_source_name"]).combine_first(
+        out["player_display"]
+    )
+    out["player_source_name"] = out["player_source_name"].astype("string")
+    out["player_clean_key"] = out["player_clean_key"].astype("object").fillna("").apply(
+        _normalize_key
+    )
+    out["player_clean_key"] = out["player_clean_key"].astype("string")
+
+    out.drop(columns=["_team_lookup"], inplace=True, errors="ignore")
+
+    for col in IDENTITY_COLUMNS:
+        if col not in out.columns:
+            out[col] = pd.Series(pd.NA, index=out.index, dtype="string")
+        else:
+            out[col] = out[col].astype("string")
+
+    return out
+
+
+def _reorder_identity_columns(
+    df: pd.DataFrame, identity_cols: Iterable[str] = IDENTITY_COLUMNS
+) -> pd.DataFrame:
+    """Place identity columns next to `player` for readability."""
+
+    if df is None or not isinstance(df, pd.DataFrame):
+        return df
+
+    front: List[str] = []
+    if "player" in df.columns:
+        front.append("player")
+    for col in identity_cols:
+        if col in df.columns and col not in front:
+            front.append(col)
+
+    remainder = [c for c in df.columns if c not in front]
+    return df[front + remainder]
 
 
 def build_name_canonical_map() -> dict:
@@ -704,6 +1015,8 @@ PLAYER_FORM_REQUIRED_COLUMNS = [
 ] + PLAYER_FORM_USAGE_COLS + PLAYER_FORM_SHARE_COLS
 
 FINAL_COLS = PLAYER_FORM_REQUIRED_COLUMNS + [
+    "player_source_name",
+    "player_display",
     "player_canonical",
     "player_clean_key",
     "team_key",
@@ -3008,6 +3321,12 @@ def _enrich_team_and_opponent_from_props(
         return df
 
     raw_players = df["player"].copy()
+    if "player_source_name" in df.columns:
+        df["player_source_name"] = df["player_source_name"].combine_first(
+            raw_players
+        )
+    else:
+        df["player_source_name"] = raw_players
     for raw in raw_players.dropna().unique():
         log_unmapped_variant(raw)
 
@@ -3769,8 +4088,13 @@ def _write_player_form_outputs(
         )
 
     df_out = _ensure_single_position_column(df.copy())
+    df_out = _attach_player_identity(df_out, team_columns=("team_abbr", "team"))
     df_out = _ensure_cols(df_out, FINAL_COLS)
     player_form = _enforce_player_form_schema(df_out)
+    player_form = _attach_player_identity(
+        player_form, team_columns=("team_abbr", "team")
+    )
+    player_form = _reorder_identity_columns(player_form)
     try:
         player_form["season"] = int(season)
     except Exception:
@@ -3834,6 +4158,11 @@ def _write_player_form_outputs(
     if len(dedup_cols) == 3:
         player_form = player_form.sort_values(dedup_cols).drop_duplicates(subset=dedup_cols, keep="first")
 
+    player_form = _attach_player_identity(
+        player_form, team_columns=("team_abbr", "team")
+    )
+    player_form = _reorder_identity_columns(player_form)
+
     if player_form.empty:
         raise RuntimeError("[make_player_form] final player_form empty; aborting run")
 
@@ -3842,6 +4171,8 @@ def _write_player_form_outputs(
 
     consensus = _build_grouped_consensus(player_form)
     consensus = _enforce_consensus_schema(consensus)
+    consensus = _attach_player_identity(consensus, team_columns=("team_abbr", "team"))
+    consensus = _reorder_identity_columns(consensus)
 
     pf_consensus = consensus.copy()
     if "player" not in pf_consensus.columns:
@@ -4033,6 +4364,11 @@ def _write_player_form_outputs(
         logger.warning(
             "[make_player_form] failed writing unmatched roles debug: %s", err
         )
+
+    pf_consensus = _attach_player_identity(
+        pf_consensus, team_columns=("team_abbr", "team")
+    )
+    pf_consensus = _reorder_identity_columns(pf_consensus)
 
     consensus = pf_consensus
     consensus["season"] = int(season)
