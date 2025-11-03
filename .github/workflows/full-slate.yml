@@ -107,31 +107,7 @@ jobs:
           python scripts/build/build_opponent_map_from_props.py
 
       # ----------------------------------------
-      # 4. Build QB run/scramble metrics
-      # ----------------------------------------
-      # Generates qb_designed_runs.csv and qb_scramble_rates.csv from nflverse PBP.
-      # You already added row-count guards so it fails if data is totally empty.
-      - name: Build QB scramble / designed-run metrics
-        run: |
-          export PYTHONPATH="${PWD}"
-          python scripts/build/build_qb_run_metrics.py \
-            --season "${SEASON}"
-
-      # ----------------------------------------
-      # 5. Build team_form.csv
-      # ----------------------------------------
-      # make_team_form.py is responsible for merging:
-      # - SharpFootball (pace, neutral_pace, coverage tendencies, box rate, etc.)
-      # - nflverse / nflreadr data (EPA, PROE, etc.)
-      # and writing data/team_form.csv
-      - name: Build team_form
-        run: |
-          export PYTHONPATH="${PWD}"
-          python scripts/make_team_form.py \
-            --season "${SEASON}"
-
-      # ----------------------------------------
-      # 6. Build player_form + player_form_consensus
+      # 4. Build player_form + player_form_consensus
       # ----------------------------------------
       # make_player_form.py should:
       # - merge roles_ourlads.csv
@@ -144,6 +120,30 @@ jobs:
           python scripts/make_player_form.py \
             --season "${SEASON}" \
             --date "${SLATE_DATE}"
+
+      # ----------------------------------------
+      # 5. Build QB run/scramble metrics
+      # ----------------------------------------
+      # Generates qb_designed_runs.csv and qb_scramble_rates.csv from nflverse PBP.
+      # You already added row-count guards so it fails if data is totally empty.
+      - name: Build QB scramble / designed-run metrics
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/build/build_qb_run_metrics.py \
+            --season "${SEASON}"
+
+      # ----------------------------------------
+      # 6. Build team_form.csv
+      # ----------------------------------------
+      # make_team_form.py is responsible for merging:
+      # - SharpFootball (pace, neutral_pace, coverage tendencies, box rate, etc.)
+      # - nflverse / nflreadr data (EPA, PROE, etc.)
+      # and writing data/team_form.csv
+      - name: Build team_form
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/make_team_form.py \
+            --season "${SEASON}"
 
       # ----------------------------------------
       # 7. Build weather for this slate
