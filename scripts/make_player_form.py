@@ -39,7 +39,7 @@ from scripts.utils.canonical_names import (
     canonicalize_player_name as _canonicalize_with_utils,
     log_unmapped_variant,
 )
-from scripts.utils.name_clean import canonical_player, canonicalize, normalize_team
+from scripts.utils.name_clean import canonical_key, canonical_player, canonicalize, normalize_team
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +85,27 @@ NAME_OVERRIDES = {
     "D.ADAMS": "Davante Adams",
     "DADAMS": "Davante Adams",
 }
+
+
+def _coerce_merge_keys(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None:
+        return pd.DataFrame()
+
+    out = df.copy()
+    for col in ("season", "week"):
+        if col not in out.columns:
+            out[col] = pd.NA
+        out[col] = (
+            pd.to_numeric(out[col], errors="coerce")
+            .astype("Int64")
+            .fillna(-1)
+            .astype("int64")
+            .astype("string")
+        )
+    if "player_clean_key" not in out.columns:
+        out["player_clean_key"] = ""
+    out["player_clean_key"] = out["player_clean_key"].astype("string").fillna("")
+    return out
 
 
 def canonicalize_name(raw_name: str) -> str:
@@ -650,7 +671,7 @@ def _build_roster_lookup() -> pd.DataFrame:
     roster["team_abbr"] = roster["team_abbr"].astype("string")
 
     roster["player_clean_key"] = roster["player_display"].astype("object").fillna("")
-    roster["player_clean_key"] = roster["player_clean_key"].apply(canonical_player)
+    roster["player_clean_key"] = roster["player_clean_key"].apply(canonical_key)
     roster["player_clean_key"] = roster["player_clean_key"].astype("object").fillna("").apply(
         _normalize_key
     )
@@ -4666,28 +4687,30 @@ def _write_player_form_outputs(
         if "opponent_team_abbr" in oppmap.columns and "opponent" not in oppmap.columns:
             oppmap["opponent"] = oppmap["opponent_team_abbr"]
 
-    if not oppmap.empty and {"player", "team"}.issubset(oppmap.columns):
-        oppmap = oppmap.copy()
-        oppmap["player"] = oppmap["player"].fillna("").astype(str)
-        oppmap["team"] = (
-            oppmap["team"].fillna("").astype(str).str.upper().str.strip()
-        )
-        oppmap["player_key"] = oppmap["player"].apply(normalize_pf_id)
-        available = [
-            c
-            for c in ["player_key", "team", "opponent", "event_id"]
-            if c in oppmap.columns
-        ]
-        if {"player_key", "team"}.issubset(available):
-            subset = oppmap[available].copy()
+    if not oppmap.empty:
+        required = {"season", "week", "player_clean_key", "opponent", "event_id"}
+        missing_required = sorted(required - set(oppmap.columns))
+        if missing_required:
+            logger.warning(
+                "[make_player_form] opponent map missing required columns: %s",
+                missing_required,
+            )
+        else:
+            base = _coerce_merge_keys(pf_consensus)
+            opp_ready = _coerce_merge_keys(oppmap)
+            subset = opp_ready[list(required)].copy()
             subset = subset.sort_values(
-                ["player_key", "team", "event_id"], kind="mergesort"
-            ).drop_duplicates(subset=["player_key", "team"], keep="first")
-            pf_consensus = pf_consensus.merge(
+                ["season", "week", "player_clean_key", "event_id"],
+                kind="mergesort",
+            ).drop_duplicates(subset=["season", "week", "player_clean_key"], keep="last")
+            subset = subset.rename(
+                columns={"opponent": "opponent_props", "event_id": "event_id_props"}
+            )
+            pf_consensus = base.merge(
                 subset,
-                on=["player_key", "team"],
+                on=["season", "week", "player_clean_key"],
                 how="left",
-                suffixes=("", "_props"),
+                validate="m:1",
             )
             pf_consensus = _coalesce_dupe_cols(pf_consensus)
             if "opponent_props" in pf_consensus.columns:
@@ -4703,16 +4726,19 @@ def _write_player_form_outputs(
                     pf_consensus.get("event_id")
                 )
                 pf_consensus.drop(columns=["event_id_props"], inplace=True)
-        else:
-            logger.warning(
-                "[make_player_form] opponent map missing required columns: %s",
-                sorted(set(["player", "team", "opponent", "event_id"]) - set(available)),
-            )
+            for col in ("season", "week"):
+                if col in pf_consensus.columns:
+                    numeric = pd.to_numeric(pf_consensus[col], errors="coerce")
+                    numeric.loc[numeric < 0] = pd.NA
+                    pf_consensus[col] = numeric.astype("Int64")
+            if "player_clean_key" in pf_consensus.columns:
+                pf_consensus["player_clean_key"] = (
+                    pf_consensus["player_clean_key"].astype("string").fillna("")
+                )
     else:
-        if oppmap.empty:
-            logger.warning(
-                "[make_player_form] opponent_map_from_props.csv missing or empty; opponents/event_id may be null"
-            )
+        logger.warning(
+            "[make_player_form] opponent_map_from_props.csv missing or empty; opponents/event_id may be null"
+        )
 
     if "opponent" not in pf_consensus.columns:
         pf_consensus["opponent"] = pd.NA

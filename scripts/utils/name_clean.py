@@ -9,7 +9,8 @@ import pandas as pd
 
 from scripts.utils.team_maps import TEAM_NAME_TO_ABBR
 
-_SUFFIX_RE = re.compile(r"\b(JR|SR|II|III|IV|V)\b\.?", re.IGNORECASE)
+SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
+
 _PUNCT_RE = re.compile(r"[^\w\s]")
 _SPACES_RE = re.compile(r"\s+")
 
@@ -20,10 +21,139 @@ def _strip_accents(value: str) -> str:
     )
 
 
+def _strip_suffixes(name: str) -> str:
+    t = name.strip()
+    t = re.sub(r"[.,]", " ", t)
+    parts = [p for p in t.split() if p.lower() not in SUFFIXES]
+    return " ".join(parts)
+
+
+def _norm_spaces(s: str) -> str:
+    return _SPACES_RE.sub(" ", s.strip())
+
+
+def canonical_player(raw: Optional[str]) -> str:
+    """Normalize a player string into a tidy "First Last" representation."""
+
+    if raw is None:
+        return ""
+
+    text = _strip_accents(str(raw))
+    text = _strip_suffixes(text)
+
+    # Last, First -> First Last
+    m = re.match(r"^\s*([A-Za-z'\- ]+)\s*,\s*([A-Za-z'\- ]+)\s*$", text)
+    if m:
+        text = f"{m.group(2)} {m.group(1)}"
+
+    text = re.sub(r"[^A-Za-z'\- ]+", " ", text)
+    text = _norm_spaces(text)
+    if not text:
+        return ""
+    return text.title()
+
+
+def canonical_key(name: Optional[str]) -> str:
+    """Compact key used across joins (lowercase, punctuation-free)."""
+
+    full = canonical_player(name)
+    if not full:
+        return ""
+    return (
+        full.lower()
+        .replace(" ", "")
+        .replace("-", "")
+        .replace("'", "")
+    )
+
+
+def initials_last_to_full(
+    token: str, team: Optional[str], roster_df: pd.DataFrame
+) -> Optional[str]:
+    """Resolve tokens like 'J.Williams' → 'Javonte Williams' using team context."""
+
+    if not token or roster_df is None or roster_df.empty:
+        return None
+
+    t = str(token).strip()
+    if not t:
+        return None
+    t = t.replace(".", " ")
+    t = _norm_spaces(t)
+    m = re.match(r"^([A-Za-z])\s*([A-Za-z'\-]+)$", t)
+    if not m:
+        return None
+
+    init = m.group(1).upper()
+    last = m.group(2).title()
+
+    lookup = roster_df
+    if "team" in lookup.columns:
+        team_norm = None
+        if isinstance(team, str):
+            team_norm = normalize_team(team)
+        elif team is not None and not pd.isna(team):
+            team_norm = normalize_team(str(team))
+        if team_norm:
+            lookup = lookup[lookup["team"] == team_norm]
+
+    cand = lookup[lookup["last_name"] == last]
+    if cand.empty:
+        return None
+
+    cand = cand[cand["first_name"].str[:1].str.upper() == init]
+    if len(cand) == 1:
+        return cand.iloc[0]["full_name"]
+    return None
+
+
+def build_roster_lookup(roles: pd.DataFrame) -> pd.DataFrame:
+    """Return roster lookup DataFrame with first/last/full names by team."""
+
+    cols = ["team", "first_name", "last_name", "full_name"]
+    if roles is None or roles.empty:
+        return pd.DataFrame(columns=cols)
+
+    working = roles.copy()
+    working.columns = [str(c).lower() for c in working.columns]
+
+    if "player" not in working.columns:
+        return pd.DataFrame(columns=cols)
+
+    team_col = next(
+        (cand for cand in ("team", "team_abbr", "team_code", "team_name") if cand in working.columns),
+        None,
+    )
+
+    roster = pd.DataFrame({"player": working["player"]})
+    if team_col is not None:
+        roster["team"] = working[team_col]
+    else:
+        roster["team"] = pd.NA
+
+    roster["player"] = roster["player"].astype("string")
+    roster["team"] = roster["team"].astype("string")
+    roster["team"] = roster["team"].map(normalize_team).astype("string")
+
+    roster["full_name"] = roster["player"].apply(canonical_player)
+    roster = roster[roster["full_name"].str.len() > 0].copy()
+
+    if roster.empty:
+        return pd.DataFrame(columns=cols)
+
+    sp = roster["full_name"].str.split(" ", n=1, expand=True)
+    roster["first_name"] = sp[0].fillna("").astype("string")
+    roster["last_name"] = sp[1].fillna("").astype("string")
+    roster = roster.drop(columns=["player"])
+
+    roster = roster[cols].drop_duplicates().reset_index(drop=True)
+    return roster
+
+
 def _normalize_tokens(raw: str) -> str:
     raw = raw or ""
     raw = _strip_accents(str(raw))
-    raw = _SUFFIX_RE.sub("", raw)
+    raw = _strip_suffixes(raw)
     raw = _PUNCT_RE.sub(" ", raw)
     raw = _SPACES_RE.sub(" ", raw).strip()
     return raw.lower()
@@ -53,24 +183,6 @@ TEAM_NORMALIZE.update(
         "ARI CARDINALS": "ARI",
     }
 )
-
-
-def canonical_player(name: Optional[str]) -> str:
-    """Normalize a display name into a lowercase "first last" token."""
-
-    if not name:
-        return ""
-    normalized = _normalize_tokens(str(name))
-    tokens = normalized.split()
-    if len(tokens) >= 2:
-        normalized = f"{tokens[0]} {tokens[-1]}"
-    elif tokens:
-        normalized = tokens[0]
-    else:
-        normalized = ""
-    return normalized
-
-
 def canonicalize(
     df: pd.DataFrame,
     name_cols: Sequence[str],

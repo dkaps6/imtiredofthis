@@ -33,7 +33,7 @@ import pandas as pd
 
 from scripts._opponent_map import attach_opponent
 from scripts.make_player_form import canonicalize_name
-from scripts.utils.name_clean import canonical_player
+from scripts.utils.name_clean import canonical_key
 
 
 
@@ -86,7 +86,7 @@ def _canon_df(df: pd.DataFrame, player_col: str) -> pd.DataFrame:
     if player_col not in df.columns:
         df["player_clean_key"] = ""
         return df
-    df["player_clean_key"] = df[player_col].astype(str).map(canonical_player)
+    df["player_clean_key"] = df[player_col].astype(str).map(canonical_key)
     return df
 
 
@@ -137,7 +137,7 @@ def merge_opponent_map(base_df: pd.DataFrame) -> pd.DataFrame:
     if "player_clean_key" not in opp.columns:
         source_col = next((c for c in ("player", "player_name_raw", "player_name") if c in opp.columns), None)
         if source_col:
-            opp["player_clean_key"] = opp[source_col].astype("string").map(canonical_player)
+            opp["player_clean_key"] = opp[source_col].astype("string").map(canonical_key)
         else:
             opp["player_clean_key"] = pd.Series(pd.NA, index=opp.index, dtype="string")
     else:
@@ -164,7 +164,7 @@ def merge_opponent_map(base_df: pd.DataFrame) -> pd.DataFrame:
             None,
         )
         if name_col:
-            base["player_clean_key"] = base[name_col].astype("string").map(canonical_player)
+            base["player_clean_key"] = base[name_col].astype("string").map(canonical_key)
         else:
             base["player_clean_key"] = pd.Series(pd.NA, index=base.index, dtype="string")
     else:
