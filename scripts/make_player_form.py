@@ -3282,6 +3282,11 @@ def _load_props_opponent_map() -> pd.DataFrame:
             df[col] = pd.NA
         df[col] = df[col].astype("string")
 
+    if "player_canonical" not in df.columns:
+        df["player_canonical"] = df["player"].astype("string")
+    else:
+        df["player_canonical"] = df["player_canonical"].astype("string")
+
     for col in ("season", "week"):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
@@ -3292,7 +3297,7 @@ def _load_props_opponent_map() -> pd.DataFrame:
         df["event_id"] = pd.NA
     df["event_id"] = df["event_id"].astype("string").str.strip()
 
-    for col in ("team", "opponent"):
+    for col in ("team", "opponent", "team_abbr", "opponent_abbr"):
         if col not in df.columns:
             df[col] = pd.NA
         df[col] = (
@@ -3304,14 +3309,25 @@ def _load_props_opponent_map() -> pd.DataFrame:
             .replace("", pd.NA)
         )
 
+    if "game_timestamp" in df.columns:
+        df["game_timestamp"] = pd.to_numeric(
+            df["game_timestamp"], errors="coerce"
+        ).astype("Int64")
+    else:
+        df["game_timestamp"] = pd.Series(pd.NA, index=df.index, dtype="Int64")
+
     keep = [
         "player",
         "player_clean_key",
+        "player_canonical",
         "team",
         "opponent",
+        "team_abbr",
+        "opponent_abbr",
         "season",
         "week",
         "event_id",
+        "game_timestamp",
     ]
     return df[keep].drop_duplicates()
 
@@ -3390,48 +3406,172 @@ def _resolve_opponents(df: pd.DataFrame, season_hint: int | None = None) -> pd.D
         props_map["week"] = pd.to_numeric(props_map["week"], errors="coerce")
         props_map = ensure_canonical(props_map, player_col="player", team_col="team")
 
-        merge_cols = ["player_canonical", "team"]
-        if props_map["season"].notna().any():
-            merge_cols.append("season")
-        if props_map["week"].notna().any():
-            merge_cols.append("week")
+        joined_by_key = False
+        if "player_clean_key" in working.columns and "player_clean_key" in props_map.columns:
+            props_subset = props_map[
+                [
+                    "player_clean_key",
+                    "team",
+                    "team_abbr",
+                    "opponent",
+                    "opponent_abbr",
+                    "season",
+                    "week",
+                    "game_timestamp",
+                ]
+            ].drop_duplicates()
+            working = working.merge(
+                props_subset,
+                on=["player_clean_key"],
+                how="left",
+                suffixes=("", "_props"),
+            )
+            working = _coalesce_dupe_cols(working)
+            working = _normalize_player_clean_key_columns(working)
+            assert_no_duplicate_columns(working, "props opponent merge")
 
-        props_subset = props_map[merge_cols + ["opponent"]].drop_duplicates()
-        working = working.merge(
-            props_subset,
-            on=merge_cols,
-            how="left",
-            suffixes=("", "_props"),
-        )
-        working = _coalesce_dupe_cols(working)
-        assert_no_duplicate_columns(working, "props opponent merge")
-        if "opponent_props" in working.columns:
-            working["opponent"] = working["opponent"].fillna(working["opponent_props"])
-            working.drop(columns=["opponent_props"], inplace=True)
+            for col in ("team", "team_abbr", "opponent", "opponent_abbr"):
+                props_col = f"{col}_props"
+                if props_col in working.columns:
+                    base = working.get(col)
+                    if base is None:
+                        working[col] = working[props_col]
+                    else:
+                        working[col] = base.combine_first(working[props_col])
+                    working.drop(columns=[props_col], inplace=True)
 
-        team_cols = [
-            c for c in ["team", "season", "week", "opponent"] if c in props_map.columns
-        ]
-        if {"team", "opponent"}.issubset(team_cols):
-            team_subset = props_map[team_cols].dropna(subset=["team"])
-            team_subset = team_subset.dropna(subset=["opponent"], how="any")
-            if "season" in team_subset.columns:
-                team_subset["season"] = pd.to_numeric(team_subset["season"], errors="coerce")
-            if "week" in team_subset.columns:
-                team_subset["week"] = pd.to_numeric(team_subset["week"], errors="coerce")
-            merge_team_cols = [c for c in ["team", "season", "week"] if c in team_subset.columns]
-            if merge_team_cols:
-                working = working.merge(
-                    team_subset[merge_team_cols + ["opponent"]].drop_duplicates(),
-                    on=merge_team_cols,
-                    how="left",
-                    suffixes=("", "_teamopp"),
+            if "game_timestamp" not in working.columns:
+                working["game_timestamp"] = pd.Series(
+                    pd.NA, index=working.index, dtype="Int64"
                 )
-                working = _coalesce_dupe_cols(working)
-                assert_no_duplicate_columns(working, "team-level opponent merge")
-                if "opponent_teamopp" in working.columns:
-                    working["opponent"] = working["opponent"].fillna(working["opponent_teamopp"])
-                    working.drop(columns=["opponent_teamopp"], inplace=True)
+            else:
+                working["game_timestamp"] = pd.to_numeric(
+                    working["game_timestamp"], errors="coerce"
+                ).astype("Int64")
+
+            if "game_timestamp_props" in working.columns:
+                working["game_timestamp_props"] = pd.to_numeric(
+                    working["game_timestamp_props"], errors="coerce"
+                ).astype("Int64")
+                working["game_timestamp"] = working["game_timestamp"].combine_first(
+                    working["game_timestamp_props"]
+                )
+                working.drop(columns=["game_timestamp_props"], inplace=True)
+
+            joined_by_key = True
+
+        if not joined_by_key:
+            merge_cols = ["player_canonical", "team"]
+            if props_map["season"].notna().any():
+                merge_cols.append("season")
+            if props_map["week"].notna().any():
+                merge_cols.append("week")
+
+            props_subset = props_map[merge_cols + ["opponent"]].drop_duplicates()
+            working = working.merge(
+                props_subset,
+                on=merge_cols,
+                how="left",
+                suffixes=("", "_props"),
+            )
+            working = _coalesce_dupe_cols(working)
+            assert_no_duplicate_columns(working, "props opponent merge")
+            if "opponent_props" in working.columns:
+                working["opponent"] = working["opponent"].fillna(working["opponent_props"])
+                working.drop(columns=["opponent_props"], inplace=True)
+
+            team_cols = [
+                c for c in ["team", "season", "week", "opponent"] if c in props_map.columns
+            ]
+            if {"team", "opponent"}.issubset(team_cols):
+                team_subset = props_map[team_cols].dropna(subset=["team"])
+                team_subset = team_subset.dropna(subset=["opponent"], how="any")
+                if "season" in team_subset.columns:
+                    team_subset["season"] = pd.to_numeric(team_subset["season"], errors="coerce")
+                if "week" in team_subset.columns:
+                    team_subset["week"] = pd.to_numeric(team_subset["week"], errors="coerce")
+                merge_team_cols = [
+                    c for c in ["team", "season", "week"] if c in team_subset.columns
+                ]
+                if merge_team_cols:
+                    working = working.merge(
+                        team_subset[merge_team_cols + ["opponent"]].drop_duplicates(),
+                        on=merge_team_cols,
+                        how="left",
+                        suffixes=("", "_teamopp"),
+                    )
+                    working = _coalesce_dupe_cols(working)
+                    assert_no_duplicate_columns(working, "team-level opponent merge")
+                    if "opponent_teamopp" in working.columns:
+                        working["opponent"] = working["opponent"].fillna(
+                            working["opponent_teamopp"]
+                        )
+                        working.drop(columns=["opponent_teamopp"], inplace=True)
+
+        for col in ("team", "team_abbr", "opponent", "opponent_abbr"):
+            if col in working.columns:
+                working[col] = (
+                    working[col]
+                    .astype("string")
+                    .str.upper()
+                    .str.strip()
+                    .map(_canon_team)
+                    .replace("", pd.NA)
+                )
+
+        if {"team", "team_abbr"}.issubset(working.columns):
+            working["team"] = working["team"].combine_first(working["team_abbr"])
+        if {"opponent", "opponent_abbr"}.issubset(working.columns):
+            working["opponent"] = working["opponent"].combine_first(
+                working["opponent_abbr"]
+            )
+
+        try:
+            sched_opp = pd.read_csv("data/team_week_map.csv")
+        except Exception:
+            sched_opp = pd.DataFrame()
+        if not sched_opp.empty:
+            needed = {"season", "week", "team", "opponent"}
+            if needed.issubset({c.lower() for c in sched_opp.columns}):
+                sched_cols = {c.lower(): c for c in sched_opp.columns}
+                subset = sched_opp[
+                    [
+                        sched_cols["season"],
+                        sched_cols["week"],
+                        sched_cols["team"],
+                        sched_cols["opponent"],
+                    ]
+                ].copy()
+                subset.columns = ["season", "week", "team", "opponent_sched"]
+                subset["season"] = pd.to_numeric(subset["season"], errors="coerce")
+                subset["week"] = pd.to_numeric(subset["week"], errors="coerce")
+                subset["team"] = subset["team"].astype("string").str.upper().str.strip().map(
+                    _canon_team
+                )
+                subset["opponent_sched"] = subset["opponent_sched"].astype(
+                    "string"
+                ).str.upper().str.strip().map(_canon_team)
+
+                join_cols = [
+                    col
+                    for col in ["season", "week", "team"]
+                    if col in working.columns and col in subset.columns
+                ]
+                if len(join_cols) == 3:
+                    working = working.merge(
+                        subset.drop_duplicates(join_cols + ["opponent_sched"]),
+                        on=join_cols,
+                        how="left",
+                        suffixes=("", "_sched"),
+                    )
+                    if "opponent_sched" in working.columns:
+                        if "opponent_abbr" not in working.columns:
+                            working["opponent_abbr"] = working["opponent_sched"]
+                        else:
+                            working["opponent_abbr"] = working["opponent_abbr"].combine_first(
+                                working["opponent_sched"]
+                            )
+                        working.drop(columns=["opponent_sched"], inplace=True)
 
     seasons = working.get("season")
     season_values = []

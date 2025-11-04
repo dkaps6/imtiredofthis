@@ -34,6 +34,22 @@ SESSION = requests.Session()
 logger = logging.getLogger(__name__)
 
 
+def _to_datetime_utc(series: pd.Series) -> pd.Series:
+    """Coerce mixed datetime/epoch inputs to timezone-aware UTC timestamps."""
+
+    if series is None:
+        return pd.Series(dtype="datetime64[ns, UTC]")
+
+    if not isinstance(series, pd.Series):
+        series = pd.Series(series)
+
+    numeric = pd.to_numeric(series, errors="coerce")
+    dt_numeric = pd.to_datetime(numeric, unit="s", utc=True, errors="coerce")
+    dt_series = pd.to_datetime(series, utc=True, errors="coerce")
+
+    return dt_numeric.combine_first(dt_series)
+
+
 def build_slate_fallback() -> pd.DataFrame:
     """Build a minimal slate when the usual slate CSV is missing/empty."""
 
@@ -144,31 +160,71 @@ def build_slate_fallback() -> pd.DataFrame:
 def _load_slate_from_repo() -> pd.DataFrame:
     """
     Try, in order:
-      1) data/game_lines.csv  (preferred, written by team-week map builder)
+      1) data/game_lines.csv (preferred), falling back to data/odds_game.csv or data/team_week_map.csv
       2) data/opponent_map_from_props.csv  (must have home/away; use game_timestamp if present)
       3) existing legacy sources (current code path)
     Returns DataFrame with columns at least: home, away, kickoff_utc (may contain NaT if unknown).
     """
 
-    # 1) Preferred slate
+    # 1) Preferred slate (game_lines → odds_game → team_week_map)
+    slate = pd.DataFrame()
     try:
-        gl = pd.read_csv("data/game_lines.csv")
-        if not gl.empty:
-            rename = {"kickoff": "kickoff_utc", "kickoff_local": "kickoff_utc"}
-            for k, v in rename.items():
-                if k in gl.columns and "kickoff_utc" not in gl.columns:
-                    gl = gl.rename(columns={k: v})
-            need = [c for c in ["home", "away"] if c in gl.columns]
-            if len(need) == 2:
-                out = gl.copy()
-                if "kickoff_utc" not in out.columns:
-                    out["kickoff_utc"] = pd.NaT
-                out["kickoff_utc"] = pd.to_datetime(
-                    out["kickoff_utc"], utc=True, errors="coerce"
-                )
-                return out[["home", "away", "kickoff_utc"]].drop_duplicates()
-    except Exception:
-        pass
+        slate = pd.read_csv("data/game_lines.csv")
+    except (pd.errors.EmptyDataError, FileNotFoundError):
+        try:
+            odds_primary = pd.read_csv("data/odds_game.csv")
+        except (pd.errors.EmptyDataError, FileNotFoundError):
+            odds_primary = pd.DataFrame()
+        if not odds_primary.empty:
+            keep = [
+                c
+                for c in ["event_id", "home_team", "away_team", "commence_time", "home", "away"]
+                if c in odds_primary.columns
+            ]
+            slate = odds_primary.loc[:, keep].copy()
+
+    if slate.empty:
+        try:
+            team_week = pd.read_csv("data/team_week_map.csv")
+        except (pd.errors.EmptyDataError, FileNotFoundError):
+            team_week = pd.DataFrame()
+        if not team_week.empty:
+            keep = [
+                c
+                for c in ["season", "week", "team", "opponent", "kickoff_utc"]
+                if c in team_week.columns
+            ]
+            slate = team_week.loc[:, keep].copy()
+            rename = {"team": "home", "opponent": "away", "kickoff_utc": "commence_time"}
+            slate = slate.rename(columns={k: v for k, v in rename.items() if k in slate.columns})
+
+    if not slate.empty:
+        cols = {col.lower(): col for col in slate.columns}
+        rename_map = {}
+        if "home_team" in cols and "home" not in slate.columns:
+            rename_map[cols["home_team"]] = "home"
+        if "away_team" in cols and "away" not in slate.columns:
+            rename_map[cols["away_team"]] = "away"
+        if "kickoff" in cols and "commence_time" not in slate.columns:
+            rename_map[cols["kickoff"]] = "commence_time"
+        if "kickoff_utc" in cols and "commence_time" not in slate.columns:
+            rename_map[cols["kickoff_utc"]] = "commence_time"
+        if rename_map:
+            slate = slate.rename(columns=rename_map)
+
+        if {"home", "away"}.issubset(slate.columns):
+            slate["home"] = slate["home"].astype(str).str.upper().str.strip()
+            slate["away"] = slate["away"].astype(str).str.upper().str.strip()
+            if "commence_time" in slate.columns:
+                slate["kickoff_utc"] = _to_datetime_utc(slate["commence_time"])
+            elif "kickoff_utc" in slate.columns:
+                slate["kickoff_utc"] = _to_datetime_utc(slate["kickoff_utc"])
+            else:
+                slate["kickoff_utc"] = pd.NaT
+
+            slate = slate.dropna(subset=["home", "away", "kickoff_utc"])
+            if not slate.empty:
+                return slate[["home", "away", "kickoff_utc"]].drop_duplicates()
 
     # 2) Opponent map (reduced slate)
     try:
@@ -177,9 +233,7 @@ def _load_slate_from_repo() -> pd.DataFrame:
             out = om[["home", "away"]].drop_duplicates().copy()
             if "game_timestamp" in om.columns:
                 ts = om[["home", "away", "game_timestamp"]].dropna().drop_duplicates()
-                ts["kickoff_utc"] = pd.to_datetime(
-                    ts["game_timestamp"], utc=True, errors="coerce"
-                )
+                ts["kickoff_utc"] = _to_datetime_utc(ts["game_timestamp"])
                 out = out.merge(ts[["home", "away", "kickoff_utc"]], on=["home", "away"], how="left")
             else:
                 out["kickoff_utc"] = pd.NaT
