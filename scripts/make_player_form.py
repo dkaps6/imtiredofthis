@@ -3903,6 +3903,160 @@ def _enrich_team_and_opponent_from_props(
         enriched = enriched.sort_values(dedup_cols).drop_duplicates(subset=dedup_cols, keep="first")
 
     enriched = _overlay_opponents(enriched, season)
+
+    # ---- Attach or synthesize deterministic game identifiers ----
+    def _compose_game_id_from_series(
+        frame: pd.DataFrame, home_series: pd.Series, away_series: pd.Series
+    ) -> pd.Series:
+        if frame.empty or "season" not in frame.columns or "week" not in frame.columns:
+            return pd.Series(pd.NA, index=frame.index, dtype="string")
+
+        season_vals = (
+            pd.to_numeric(frame["season"], errors="coerce")
+            .astype("Int64")
+            .astype("string")
+        )
+        week_vals = (
+            pd.to_numeric(frame["week"], errors="coerce")
+            .astype("Int64")
+            .astype("string")
+            .str.zfill(2)
+        )
+        home_vals = home_series.astype("string").str.upper().str.strip()
+        away_vals = away_series.astype("string").str.upper().str.strip()
+
+        out_series = season_vals + "_" + week_vals + "_" + home_vals + "_" + away_vals
+        invalid_mask = (
+            season_vals.isna()
+            | week_vals.isna()
+            | home_vals.isna()
+            | away_vals.isna()
+        )
+        out_series.loc[invalid_mask] = pd.NA
+        return out_series.astype("string")
+
+    if "game_id" in enriched.columns:
+        enriched["game_id"] = (
+            enriched["game_id"].astype("string").str.strip().replace("", pd.NA)
+        )
+    else:
+        enriched["game_id"] = pd.NA
+
+    gl_path = Path("data/game_lines.csv")
+    if gl_path.exists() and {"season", "week"}.issubset(enriched.columns):
+        try:
+            game_lines = pd.read_csv(gl_path)
+        except Exception as err:
+            logger.warning("[make_player_form] failed to read %s: %s", gl_path, err)
+            game_lines = pd.DataFrame()
+
+        if not game_lines.empty:
+            working = game_lines.copy()
+            working.columns = [str(c).lower() for c in working.columns]
+
+            for col in ("season", "week"):
+                if col in working.columns:
+                    working[col] = pd.to_numeric(working[col], errors="coerce").astype("Int64")
+            for col in ("home", "away"):
+                if col in working.columns:
+                    working[col] = (
+                        working[col]
+                        .astype("string")
+                        .str.upper()
+                        .str.strip()
+                        .replace("", pd.NA)
+                    )
+
+            if "game_id" not in working.columns:
+                season_vals = working["season"].astype("Int64").astype("string")
+                week_vals = (
+                    working["week"].astype("Int64").astype("string").str.zfill(2)
+                )
+                home_vals = working["home"].astype("string").str.upper().str.strip()
+                away_vals = working["away"].astype("string").str.upper().str.strip()
+                working["game_id"] = (
+                    season_vals + "_" + week_vals + "_" + home_vals + "_" + away_vals
+                )
+                working.loc[
+                    season_vals.isna()
+                    | week_vals.isna()
+                    | home_vals.isna()
+                    | away_vals.isna(),
+                    "game_id",
+                ] = pd.NA
+
+            join_cols = [
+                col
+                for col in ("season", "week", "home_team", "away_team")
+                if col in enriched.columns
+            ]
+            if len(join_cols) == 4 and {"home", "away", "game_id"}.issubset(working.columns):
+                enriched["home_team"] = (
+                    enriched["home_team"].astype("string").str.upper().str.strip()
+                )
+                enriched["away_team"] = (
+                    enriched["away_team"].astype("string").str.upper().str.strip()
+                )
+                schedule_subset = (
+                    working[["season", "week", "home", "away", "game_id"]]
+                    .dropna(subset=["home", "away"])
+                    .drop_duplicates(subset=["season", "week", "home", "away"], keep="first")
+                    .rename(columns={"home": "home_team", "away": "away_team"})
+                )
+                enriched = enriched.merge(
+                    schedule_subset,
+                    on=["season", "week", "home_team", "away_team"],
+                    how="left",
+                    suffixes=("", "_from_schedule"),
+                )
+                helper_col = "game_id_from_schedule"
+                if helper_col in enriched.columns:
+                    enriched["game_id"] = enriched["game_id"].fillna(
+                        enriched[helper_col]
+                    )
+                    enriched.drop(columns=[helper_col], inplace=True)
+
+    missing_mask = enriched["game_id"].isna()
+    if missing_mask.any() and {"home_team", "away_team"}.issubset(enriched.columns):
+        enriched.loc[missing_mask, "game_id"] = _compose_game_id_from_series(
+            enriched.loc[missing_mask],
+            enriched.loc[missing_mask, "home_team"],
+            enriched.loc[missing_mask, "away_team"],
+        )
+        missing_mask = enriched["game_id"].isna()
+
+    if missing_mask.any() and {"home_team_abbr", "away_team_abbr"}.issubset(enriched.columns):
+        enriched.loc[missing_mask, "game_id"] = _compose_game_id_from_series(
+            enriched.loc[missing_mask],
+            enriched.loc[missing_mask, "home_team_abbr"],
+            enriched.loc[missing_mask, "away_team_abbr"],
+        )
+        missing_mask = enriched["game_id"].isna()
+
+    if missing_mask.any() and {"team_abbr", "opponent_abbr"}.issubset(enriched.columns):
+        tmp = enriched.loc[missing_mask, ["team_abbr", "opponent_abbr"]].copy()
+        team_vals = tmp["team_abbr"].astype("string").str.upper().str.strip()
+        opp_vals = tmp["opponent_abbr"].astype("string").str.upper().str.strip()
+
+        def _pick_home(a: str, b: str) -> object:
+            if pd.isna(a) or pd.isna(b):
+                return pd.NA
+            return a if a <= b else b
+
+        def _pick_away(a: str, b: str) -> object:
+            if pd.isna(a) or pd.isna(b):
+                return pd.NA
+            return b if a <= b else a
+
+        home_vals = team_vals.combine(opp_vals, _pick_home)
+        away_vals = team_vals.combine(opp_vals, _pick_away)
+        enriched.loc[missing_mask, "game_id"] = _compose_game_id_from_series(
+            enriched.loc[missing_mask], home_vals, away_vals
+        )
+
+    if "game_id" in enriched.columns:
+        enriched["game_id"] = enriched["game_id"].astype("string")
+
     return enriched
 
 
