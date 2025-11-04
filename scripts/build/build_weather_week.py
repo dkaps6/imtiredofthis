@@ -143,14 +143,51 @@ def build_slate_fallback() -> pd.DataFrame:
 
 def _load_slate_from_repo() -> pd.DataFrame:
     """
-    Try to infer this week's slate from existing repo artifacts.
-
-    We expect to find something like data/game_lines.csv or similar that already has
-    home team, away team, kickoff time, and local tz.
-
-    If we can't find/parse it, raise RuntimeError with instructions so the pipeline
-    fails early and loudly instead of silently creating an empty weather_week.csv.
+    Try, in order:
+      1) data/game_lines.csv  (preferred, written by team-week map builder)
+      2) data/opponent_map_from_props.csv  (must have home/away; use game_timestamp if present)
+      3) existing legacy sources (current code path)
+    Returns DataFrame with columns at least: home, away, kickoff_utc (may contain NaT if unknown).
     """
+
+    # 1) Preferred slate
+    try:
+        gl = pd.read_csv("data/game_lines.csv")
+        if not gl.empty:
+            rename = {"kickoff": "kickoff_utc", "kickoff_local": "kickoff_utc"}
+            for k, v in rename.items():
+                if k in gl.columns and "kickoff_utc" not in gl.columns:
+                    gl = gl.rename(columns={k: v})
+            need = [c for c in ["home", "away"] if c in gl.columns]
+            if len(need) == 2:
+                out = gl.copy()
+                if "kickoff_utc" not in out.columns:
+                    out["kickoff_utc"] = pd.NaT
+                out["kickoff_utc"] = pd.to_datetime(
+                    out["kickoff_utc"], utc=True, errors="coerce"
+                )
+                return out[["home", "away", "kickoff_utc"]].drop_duplicates()
+    except Exception:
+        pass
+
+    # 2) Opponent map (reduced slate)
+    try:
+        om = pd.read_csv("data/opponent_map_from_props.csv")
+        if not om.empty and all(c in om.columns for c in ["home", "away"]):
+            out = om[["home", "away"]].drop_duplicates().copy()
+            if "game_timestamp" in om.columns:
+                ts = om[["home", "away", "game_timestamp"]].dropna().drop_duplicates()
+                ts["kickoff_utc"] = pd.to_datetime(
+                    ts["game_timestamp"], utc=True, errors="coerce"
+                )
+                out = out.merge(ts[["home", "away", "kickoff_utc"]], on=["home", "away"], how="left")
+            else:
+                out["kickoff_utc"] = pd.NaT
+            return out[["home", "away", "kickoff_utc"]]
+    except Exception:
+        pass
+
+    # 3) Fall back to legacy logic (existing code below)
 
     # Look in multiple places so we always find a slate, even when props are empty.
     candidates = [

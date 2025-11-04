@@ -3,11 +3,159 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
 from scripts.utils.name_clean import normalize_team
+
+
+def _ensure_cols(df: pd.DataFrame, cols: list[str]) -> bool:
+    return all(c in df.columns for c in cols)
+
+
+def _write_game_lines_from_team_week_map(
+    tw: pd.DataFrame, out_path: str = "data/game_lines.csv"
+) -> None:
+    """
+    Convert team_week_map rows to a per-game slate with home/away + kickoff times.
+    Expected inputs in `tw` (at least): season, week, home, away
+    Optional inputs used if present: local_tz, kickoff_local, kickoff_utc, kickoff (any tz)
+    If no kickoff present, synthesize 13:00 local time for the home team (UTC conversion if local_tz given).
+    """
+
+    if tw is None or tw.empty:
+        return
+
+    df = tw.copy()
+
+    # normalize column names we might get from upstream
+    rename_map = {
+        "home_team": "home",
+        "away_team": "away",
+        "home_abbr": "home",
+        "away_abbr": "away",
+        "kickoff_raw": "kickoff_local",
+    }
+    for k, v in rename_map.items():
+        if k in df.columns and v not in df.columns:
+            df = df.rename(columns={k: v})
+
+    # Pick the columns we care about
+    keep = [
+        c
+        for c in [
+            "season",
+            "week",
+            "home",
+            "away",
+            "local_tz",
+            "kickoff_local",
+            "kickoff_utc",
+            "kickoff",
+        ]
+        if c in df.columns
+    ]
+    slate = (
+        df[keep]
+        .drop_duplicates(subset=["season", "week", "home", "away"])
+        .reset_index(drop=True)
+    )
+
+    # If we have only a generic 'kickoff', treat it as local time if local_tz exists; otherwise leave it as is.
+    if "kickoff" in slate.columns and "kickoff_local" not in slate.columns:
+        slate["kickoff_local"] = slate["kickoff"]
+
+    # Synthesize missing kickoff timestamps at 13:00 local
+    if "kickoff_local" not in slate.columns:
+        slate["kickoff_local"] = pd.NaT
+    if "local_tz" not in slate.columns:
+        slate["local_tz"] = None
+
+    mask_missing = slate["kickoff_local"].isna()
+    if mask_missing.any():
+        default_times: list[pd.Timestamp | datetime] = []
+        for _, row in slate.loc[mask_missing].iterrows():
+            tz_name = row.get("local_tz")
+            tz = None
+            if isinstance(tz_name, str) and tz_name:
+                try:
+                    tz = ZoneInfo(tz_name)
+                except Exception:
+                    tz = None
+            if tz is None:
+                tz = ZoneInfo("UTC")
+            inferred_date = None
+            if "season" in row and "week" in row:
+                try:
+                    season = int(row["season"])
+                    week = int(row["week"])
+                    inferred_date = _first_thursday_on_or_after_sept1(season) + pd.Timedelta(
+                        days=(week - 1) * 7
+                    )
+                except Exception:
+                    inferred_date = None
+            if inferred_date is None:
+                inferred_date = pd.Timestamp.utcnow()
+            kickoff_dt = pd.Timestamp(
+                year=inferred_date.year,
+                month=inferred_date.month,
+                day=inferred_date.day,
+                hour=13,
+                minute=0,
+                tz=tz,
+            )
+            default_times.append(kickoff_dt)
+        slate.loc[mask_missing, "kickoff_local"] = default_times
+
+    # Build kickoff_utc if possible
+    if "kickoff_utc" not in slate.columns:
+        slate["kickoff_utc"] = pd.NaT
+    try:
+        for idx, row in slate.iterrows():
+            kl = row.get("kickoff_local", pd.NaT)
+            tz_name = row.get("local_tz")
+            if pd.isna(kl):
+                continue
+            if isinstance(kl, str):
+                try:
+                    kl_dt = pd.to_datetime(kl)
+                except Exception:
+                    kl_dt = pd.NaT
+            else:
+                kl_dt = pd.to_datetime(kl)
+            if pd.isna(kl_dt):
+                continue
+            if getattr(kl_dt, "tzinfo", None) is None:
+                if isinstance(tz_name, str) and tz_name:
+                    try:
+                        kl_dt = kl_dt.tz_localize(ZoneInfo(tz_name))
+                    except (TypeError, ValueError):
+                        kl_dt = kl_dt.tz_localize("UTC")
+                else:
+                    kl_dt = kl_dt.tz_localize("UTC")
+            if tz_name and isinstance(tz_name, str):
+                try:
+                    slate.at[idx, "local_tz"] = tz_name
+                except Exception:
+                    pass
+            try:
+                slate.at[idx, "kickoff_utc"] = kl_dt.astimezone(ZoneInfo("UTC"))
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    out_cols = ["home", "away", "local_tz", "kickoff_local", "kickoff_utc"]
+    for c in out_cols:
+        if c not in slate.columns:
+            slate[c] = pd.NA
+
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    slate[out_cols].to_csv(out_path, index=False)
 
 
 ODDS_PATH = Path("data/odds_game.csv")
@@ -190,6 +338,12 @@ def main() -> None:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     tw = build_map(args.season)
     tw.to_csv(args.out, index=False)
+    _write_game_lines_from_team_week_map(tw, out_path="data/game_lines.csv")
+    try:
+        gl_rows = len(pd.read_csv("data/game_lines.csv"))
+    except Exception:
+        gl_rows = 0
+    print(f"[team_week_map] wrote data/game_lines.csv rows={gl_rows}")
     n_rows = len(tw)
     print(f"[team_week_map] wrote {n_rows} rows -> {args.out}")
     if n_rows == 0:
