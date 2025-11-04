@@ -38,6 +38,35 @@ from scripts.make_player_form import canonicalize_name
 from scripts.utils.name_clean import canonical_key
 
 
+def _log_merge_counts(
+    stage: str,
+    left: pd.DataFrame,
+    right: pd.DataFrame,
+    join_cols: list[str] | tuple[str, ...],
+    how: str,
+    merged: pd.DataFrame,
+    indicator_col: str = "_merge",
+) -> None:
+    """Emit join diagnostics and persist left-only keys for debugging."""
+
+    join_cols_list = [col for col in join_cols if col in merged.columns]
+    left_rows, right_rows, merged_rows = len(left), len(right), len(merged)
+    print(f"[make_metrics] {stage}: left={left_rows} right={right_rows} → merged={merged_rows} (how={how})")
+
+    if indicator_col in merged.columns:
+        left_only_mask = merged[indicator_col].eq("left_only")
+        left_only = int(left_only_mask.sum())
+        if left_only > 0 and join_cols_list:
+            debug_dir = Path("data") / "debug"
+            debug_dir.mkdir(parents=True, exist_ok=True)
+            unmatched = merged.loc[left_only_mask, join_cols_list].drop_duplicates()
+            debug_path = debug_dir / f"left_join_unmatched__{stage}.csv"
+            unmatched.to_csv(debug_path, index=False)
+            print(
+                f"[make_metrics] WARN: {left_only} rows missing matches at {stage}; keys saved → {debug_path}"
+            )
+
+
 
 def _inj_load_lines_preferring_odds():
     for p in ["outputs/odds_game.csv", "outputs/game_lines.csv"]:
@@ -193,16 +222,26 @@ def merge_opponent_map(base_df: pd.DataFrame) -> pd.DataFrame:
         left_merge = coerce_merge_keys(left_merge, text_cols, as_str=True)
         right_merge = coerce_merge_keys(right_merge, text_cols, as_str=True)
 
+    indicator_name = "_merge_opponent"
     merged = left_merge.merge(
         right_merge,
         how="left",
         on=join_cols,
         suffixes=("", "_opp"),
-        indicator=True,
+        indicator=indicator_name,
+    )
+    _log_merge_counts(
+        stage="join_opponent_map",
+        left=left_merge,
+        right=right_merge,
+        join_cols=join_cols,
+        how="left",
+        merged=merged,
+        indicator_col=indicator_name,
     )
 
-    joined_rows = int((merged["_merge"] == "both").sum())
-    merged.drop(columns=["_merge"], inplace=True)
+    joined_rows = int((merged[indicator_name] == "both").sum())
+    merged.drop(columns=[indicator_name], inplace=True, errors="ignore")
 
     for col in ("team", "team_abbr", "opponent", "opponent_abbr"):
         opp_col = f"{col}_opp"
@@ -677,7 +716,14 @@ def load_injuries() -> pd.DataFrame:
     return df[["player","player_canonical","team","team_abbr","status"]].drop_duplicates()
 
 def load_weather() -> pd.DataFrame:
-    df = _read_csv(os.path.join(DATA_DIR, "weather.csv"))
+    path = os.path.join(DATA_DIR, "weather.csv")
+    if not os.path.exists(path):
+        print("[make_metrics] WARN: weather.csv not found; continuing without weather")
+        return pd.DataFrame()
+
+    df = _read_csv(path)
+    if df.empty:
+        print("[make_metrics] WARN: weather.csv empty; continuing without weather")
     return df
 
 def load_qb_run_metrics() -> pd.DataFrame:
@@ -1361,13 +1407,33 @@ def build_metrics(season: int) -> pd.DataFrame:
     w = load_weather()
     if not w.empty and "event_id" in base.columns:
         wx_keep = [c for c in ["event_id","wind_mph","temp_f","precip"] if c in w.columns]
-        base = base.merge(w[wx_keep].drop_duplicates(), on="event_id", how="left")
+        right = w[wx_keep].drop_duplicates()
+        indicator_name = "_merge_weather_event"
+        merged = base.merge(right, on="event_id", how="left", indicator=indicator_name)
+        _log_merge_counts(
+            stage="join_weather_event",
+            left=base,
+            right=right,
+            join_cols=["event_id"],
+            how="left",
+            merged=merged,
+            indicator_col=indicator_name,
+        )
+        merged.drop(columns=[indicator_name], inplace=True, errors="ignore")
+        base = merged
     else:
         for c in ["wind_mph","temp_f","precip"]:
             if c not in base.columns:
                 base[c] = np.nan
 
-    ww = _read_csv(WEATHER_WEEK_PATH)
+    if not WEATHER_WEEK_PATH.exists():
+        print("[make_metrics] WARN: weather_week.csv not found; skipping slate weather join")
+        ww = pd.DataFrame()
+    else:
+        ww = _read_csv(WEATHER_WEEK_PATH)
+        if ww.empty:
+            print("[make_metrics] WARN: weather_week.csv empty; skipping slate weather join")
+
     if not ww.empty:
         ww.columns = [c.lower() for c in ww.columns]
         home_col = "home_team" if "home_team" in ww.columns else "home"
@@ -1411,11 +1477,24 @@ def build_metrics(season: int) -> pd.DataFrame:
         ]
         if {"team_abbr", "opponent_abbr", "slate_date"}.issubset(ww_keep):
             weather_cols = ww_long[ww_keep].drop_duplicates()
-            base = base.merge(
+            indicator_name = "_merge_weather_slate"
+            merged = base.merge(
                 weather_cols,
                 on=["team_abbr", "opponent_abbr", "slate_date"],
                 how="left",
+                indicator=indicator_name,
             )
+            _log_merge_counts(
+                stage="join_weather_slate",
+                left=base,
+                right=weather_cols,
+                join_cols=["team_abbr", "opponent_abbr", "slate_date"],
+                how="left",
+                merged=merged,
+                indicator_col=indicator_name,
+            )
+            merged.drop(columns=[indicator_name], inplace=True, errors="ignore")
+            base = merged
     for target, source in [
         ("wind_mph", "wind_mph_game"),
         ("temp_f", "temp_f_game"),

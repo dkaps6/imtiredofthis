@@ -51,14 +51,6 @@ REQUIRED: dict[str, Sequence[str]] = {
         "light_box_rate",
         "heavy_box_rate",
     ),
-    os.path.join("data", "opponent_map_from_props.csv"): (
-        "player",
-        "team",
-        "opponent",
-        "week",
-        "season",
-        "game_timestamp",
-    ),
     os.path.join("data", "qb_designed_runs.csv"): (
         "player",
         "week",
@@ -85,11 +77,25 @@ REQUIRED: dict[str, Sequence[str]] = {
     ),
 }
 
+OPTIONAL_INPUTS: dict[str, Sequence[str]] = {
+    os.path.join("data", "opponent_map_from_props.csv"): (
+        "player",
+        "team",
+        "opponent",
+        "season",
+        "week",
+    ),
+    os.path.join("data", "weather_week.csv"): (),
+}
+
+OPTIONAL_WARN_COLUMNS: dict[str, Sequence[str]] = {
+    os.path.join("data", "opponent_map_from_props.csv"): ("game_timestamp",),
+}
+
 DEFAULT_REQUIRED_KEYS: Sequence[str] = (
     "team_form",
     "player_form",
     "qb_run_metrics",
-    "weather_week",
     "props_raw",
     "odds_game",
     "metrics_ready",
@@ -152,6 +158,7 @@ def check_required_inputs(required: Iterable[str | Path] | None = None) -> None:
     """Validate that each required CSV exists and has at least one row."""
 
     schema_failures: List[str] = []
+    optional_warnings: List[str] = []
     for item, expected_cols in REQUIRED.items():
         csv_path = _resolve_item(str(item))
         pretty = _pretty_path(csv_path)
@@ -172,6 +179,33 @@ def check_required_inputs(required: Iterable[str | Path] | None = None) -> None:
             joined = ", ".join(missing_cols)
             schema_failures.append(f"{pretty} missing columns: {joined}")
 
+    for item, expected_cols in OPTIONAL_INPUTS.items():
+        csv_path = _resolve_item(str(item))
+        pretty = _pretty_path(csv_path)
+        if not csv_path.exists():
+            optional_warnings.append(f" - {pretty} missing (optional)")
+            continue
+        try:
+            sample = pd.read_csv(csv_path, nrows=5)
+        except pd.errors.EmptyDataError:
+            optional_warnings.append(f" - {pretty} empty (optional)")
+            continue
+        except Exception as exc:  # pragma: no cover - guard rails for runtime issues
+            optional_warnings.append(f" - {pretty} (error reading: {exc}) (optional)")
+            continue
+
+        missing_cols = [col for col in expected_cols if col and col not in sample.columns]
+        if missing_cols:
+            joined = ", ".join(missing_cols)
+            optional_warnings.append(f" - {pretty} missing columns: {joined} (optional)")
+
+        warn_cols = OPTIONAL_WARN_COLUMNS.get(item, ())
+        warn_missing = [col for col in warn_cols if col not in sample.columns]
+        for col in warn_missing:
+            optional_warnings.append(
+                f" - {pretty} missing column (best-effort): {col}"
+            )
+
     items = list(required) if required is not None else list(DEFAULT_REQUIRED_KEYS)
     resolved_paths = _dedupe_paths(_resolve_item(str(item)) for item in items)
 
@@ -183,6 +217,9 @@ def check_required_inputs(required: Iterable[str | Path] | None = None) -> None:
             failures.append(error)
         else:
             print(f"[metrics_ready] ✓ {_pretty_path(csv_path)}")
+
+    for warn in optional_warnings:
+        print(f"[metrics_ready] WARN{warn}")
 
     all_failures = schema_failures + failures
     if all_failures:
