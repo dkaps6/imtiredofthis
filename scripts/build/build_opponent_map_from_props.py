@@ -22,6 +22,7 @@ from scripts.utils.df_keys import coerce_merge_keys
 
 DEFAULT_OUT = Path("data/opponent_map_from_props.csv")
 UNRESOLVED_OUT = Path("data/opponent_map_unresolved.csv")
+TEAM_WEEK_MAP_PATH = Path("data/team_week_map.csv")
 UNRESOLVED_COLUMNS = [
     "reason",
     "player_raw",
@@ -73,6 +74,47 @@ def _load_roles_dataframe() -> pd.DataFrame:
         merged = pd.concat(frames, ignore_index=True, sort=False)
         return merged
     return pd.DataFrame()
+
+
+def _load_team_week_map() -> pd.DataFrame:
+    path = TEAM_WEEK_MAP_PATH
+    if not path.exists() or path.stat().st_size == 0:
+        return pd.DataFrame()
+    try:
+        df = pd.read_csv(path)
+    except pd.errors.EmptyDataError:
+        return pd.DataFrame()
+    except Exception as err:  # pragma: no cover - defensive logging
+        print(f"[opponent_map] WARN: failed to read {path}: {err}")
+        return pd.DataFrame()
+    if df.empty:
+        return pd.DataFrame()
+
+    working = df.copy()
+    working.columns = [str(c).lower() for c in working.columns]
+
+    for col in ("season", "week"):
+        if col in working.columns:
+            working[col] = pd.to_numeric(working[col], errors="coerce").astype("Int64")
+
+    for col in ("team", "opponent"):
+        if col in working.columns:
+            working[col] = _norm_team(working[col])
+
+    if "opponent" in working.columns:
+        opp_series = working["opponent"].astype("string")
+        bye_mask = opp_series.str.upper().eq("BYE")
+        working.loc[bye_mask.fillna(False), "opponent"] = pd.NA
+
+    for col in ("game_id", "event_id"):
+        if col in working.columns:
+            working[col] = working[col].astype("string").str.strip()
+
+    for col in ("kickoff_local", "kickoff_utc"):
+        if col in working.columns:
+            working[col] = pd.to_datetime(working[col], errors="coerce")
+
+    return working
 
 
 def _write_unresolved(records: list[dict[str, object]]) -> pd.DataFrame:
@@ -311,6 +353,75 @@ def build_opponent_map(
     for col in ("season", "week"):
         out[col] = pd.to_numeric(out[col], errors="coerce").astype("Int64")
     out["event_id"] = out["event_id"].astype("string")
+
+    schedule_df = _load_team_week_map()
+    if not schedule_df.empty:
+        rename = {}
+        if "opponent" in schedule_df.columns:
+            rename["opponent"] = "schedule_opponent"
+        if "game_id" in schedule_df.columns:
+            rename["game_id"] = "schedule_game_id"
+        if "event_id" in schedule_df.columns and "schedule_game_id" not in rename.values():
+            rename["event_id"] = "schedule_game_id"
+        if "kickoff_local" in schedule_df.columns:
+            rename["kickoff_local"] = "schedule_kickoff_local"
+        if "kickoff_utc" in schedule_df.columns:
+            rename["kickoff_utc"] = "schedule_kickoff_utc"
+
+        schedule_subset = schedule_df.rename(columns=rename)
+        join_cols = [
+            col
+            for col in ("season", "week", "team")
+            if col in schedule_subset.columns and col in out.columns
+        ]
+        schedule_keep = join_cols + [
+            col
+            for col in (
+                "schedule_opponent",
+                "schedule_game_id",
+                "schedule_kickoff_local",
+                "schedule_kickoff_utc",
+            )
+            if col in schedule_subset.columns
+        ]
+        schedule_subset = schedule_subset.loc[:, schedule_keep].drop_duplicates(
+            subset=join_cols, keep="last"
+        )
+
+        if join_cols and not schedule_subset.empty:
+            left = out.copy()
+            right = schedule_subset.copy()
+
+            numeric = [c for c in ("season", "week") if c in join_cols]
+            text = [c for c in join_cols if c not in numeric]
+            if numeric:
+                left = coerce_merge_keys(left, numeric, as_str=False)
+                right = coerce_merge_keys(right, numeric, as_str=False)
+            if text:
+                left = coerce_merge_keys(left, text, as_str=True)
+                right = coerce_merge_keys(right, text, as_str=True)
+
+            merged = left.merge(right, on=join_cols, how="left", suffixes=("", "_sched"))
+
+            if "schedule_opponent" in merged.columns:
+                sched_opp = merged["schedule_opponent"].astype("string")
+                merged["schedule_opponent"] = sched_opp.replace("", pd.NA)
+                opp_series = merged["opponent"].astype("string")
+                fill_mask = opp_series.isna() | opp_series.str.strip().eq("")
+                merged.loc[fill_mask, "opponent"] = merged.loc[fill_mask, "schedule_opponent"]
+
+            if "schedule_game_id" in merged.columns:
+                sched_event = merged["schedule_game_id"].astype("string").str.strip()
+                merged["schedule_game_id"] = sched_event
+                event_series = merged["event_id"].astype("string")
+                missing_event = event_series.isna() | event_series.str.strip().eq("")
+                merged.loc[missing_event, "event_id"] = merged.loc[missing_event, "schedule_game_id"]
+
+            out = merged
+
+    drop_sched_cols = [c for c in out.columns if c.startswith("schedule_")]
+    if drop_sched_cols:
+        out.drop(columns=drop_sched_cols, inplace=True)
 
     opponent_str = out["opponent"].astype("string")
     missing_opponent_mask = opponent_str.fillna("").str.strip() == ""

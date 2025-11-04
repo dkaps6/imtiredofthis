@@ -13,6 +13,7 @@ SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
 
 _PUNCT_RE = re.compile(r"[^\w\s]")
 _SPACES_RE = re.compile(r"\s+")
+_GLUED_INITIAL_RE = re.compile(r"^([A-Z](?:[a-z]?))([A-Z][a-z]+)$")
 
 
 def _strip_accents(value: str) -> str:
@@ -40,6 +41,12 @@ def canonical_player(raw: Optional[str]) -> str:
 
     text = _strip_accents(str(raw))
     text = _strip_suffixes(text)
+
+    compact = text.replace(" ", "")
+    glued = _GLUED_INITIAL_RE.match(compact)
+    if glued and " " not in text:
+        prefix = compact[: len(compact) - len(glued.group(2))]
+        text = f"{prefix} {glued.group(2)}"
 
     # Last, First -> First Last
     m = re.match(r"^\s*([A-Za-z'\- ]+)\s*,\s*([A-Za-z'\- ]+)\s*$", text)
