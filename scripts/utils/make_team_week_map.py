@@ -38,7 +38,7 @@ def _canon_pair(a: str, b: str) -> Tuple[str, str]:
 def _first_thursday_on_or_after_sept1(season: int) -> pd.Timestamp:
     """Return the first Thursday on/after September 1 for the given season."""
 
-    anchor = pd.Timestamp(season, 9, 1, tz="UTC")
+    anchor = pd.Timestamp(year=season, month=9, day=1, tz="UTC")
     offset = (3 - anchor.weekday()) % 7  # Thursday == 3
     return anchor + pd.Timedelta(days=offset)
 
