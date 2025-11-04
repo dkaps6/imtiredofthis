@@ -499,6 +499,9 @@ def build_opponent_map(
 
             merged = left.merge(right, on=join_cols, how="left", suffixes=("", "_sched"))
 
+            if "opponent" in merged.columns and "opponent_props" not in merged.columns:
+                merged["opponent_props"] = merged["opponent"]
+
             if "schedule_opponent" in merged.columns:
                 sched_opp = merged["schedule_opponent"].astype("string")
                 merged["schedule_opponent"] = sched_opp.replace("", pd.NA)
@@ -512,6 +515,19 @@ def build_opponent_map(
                 event_series = merged["event_id"].astype("string")
                 missing_event = event_series.isna() | event_series.str.strip().eq("")
                 merged.loc[missing_event, "event_id"] = merged.loc[missing_event, "schedule_game_id"]
+
+            if "game_timestamp" in merged.columns:
+                merged["game_timestamp"] = pd.to_datetime(
+                    merged["game_timestamp"], utc=True, errors="coerce"
+                )
+            else:
+                merged["game_timestamp"] = pd.NaT
+
+            if "schedule_kickoff_utc" in merged.columns:
+                sched_ts = pd.to_datetime(
+                    merged["schedule_kickoff_utc"], utc=True, errors="coerce"
+                )
+                merged["game_timestamp"] = merged["game_timestamp"].combine_first(sched_ts)
 
             out = merged
 

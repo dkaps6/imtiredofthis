@@ -38,7 +38,8 @@ def _canon_pair(a: str, b: str) -> Tuple[str, str]:
 def _first_thursday_on_or_after_sept1(season: int) -> pd.Timestamp:
     """Return the first Thursday on/after September 1 for the given season."""
 
-    anchor = pd.Timestamp(year=season, month=9, day=1, tz="UTC")
+    # Construct from string to avoid timezone warnings on some pandas builds.
+    anchor = pd.Timestamp(f"{season}-09-01 00:00:00", tz="UTC")
     offset = (3 - anchor.weekday()) % 7  # Thursday == 3
     return anchor + pd.Timedelta(days=offset)
 
@@ -195,7 +196,9 @@ def build_map(season: int) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
-def _write_game_lines_from_team_week_map(tw: pd.DataFrame, out_path: Path = GAME_LINES_PATH) -> pd.DataFrame:
+def _write_game_lines_from_team_week_map(
+    tw: pd.DataFrame, out_path: Path = GAME_LINES_PATH
+) -> pd.DataFrame:
     """Collapse team-week rows into unique games (home vs away)."""
 
     if tw is None or tw.empty:
@@ -248,6 +251,60 @@ def _write_game_lines_from_team_week_map(tw: pd.DataFrame, out_path: Path = GAME
             | away_str.isna(),
             "game_id",
         ] = pd.NA
+
+    stadium_meta = pd.DataFrame(
+        [
+            ("ARI", "State Farm Stadium", "US/Arizona", "dome", "grass"),
+            ("ATL", "Mercedes-Benz Stadium", "US/Eastern", "dome", "turf"),
+            ("BAL", "M&T Bank Stadium", "US/Eastern", "outdoor", "grass"),
+            ("BUF", "Highmark Stadium", "US/Eastern", "outdoor", "turf"),
+            ("CAR", "Bank of America Stadium", "US/Eastern", "outdoor", "grass"),
+            ("CHI", "Soldier Field", "US/Central", "outdoor", "grass"),
+            ("CIN", "Paycor Stadium", "US/Eastern", "outdoor", "turf"),
+            ("CLE", "Cleveland Browns Stadium", "US/Eastern", "outdoor", "grass"),
+            ("DAL", "AT&T Stadium", "US/Central", "dome", "turf"),
+            ("DEN", "Empower Field at Mile High", "US/Mountain", "outdoor", "grass"),
+            ("DET", "Ford Field", "US/Eastern", "dome", "turf"),
+            ("GB", "Lambeau Field", "US/Central", "outdoor", "grass"),
+            ("HOU", "NRG Stadium", "US/Central", "dome", "turf"),
+            ("IND", "Lucas Oil Stadium", "US/Eastern", "dome", "turf"),
+            ("JAX", "EverBank Stadium", "US/Eastern", "outdoor", "turf"),
+            ("KC", "GEHA Field at Arrowhead", "US/Central", "outdoor", "grass"),
+            ("LAC", "SoFi Stadium", "US/Pacific", "dome", "turf"),
+            ("LAR", "SoFi Stadium", "US/Pacific", "dome", "turf"),
+            ("LV", "Allegiant Stadium", "US/Pacific", "dome", "turf"),
+            ("MIA", "Hard Rock Stadium", "US/Eastern", "outdoor", "grass"),
+            ("MIN", "U.S. Bank Stadium", "US/Central", "dome", "turf"),
+            ("NE", "Gillette Stadium", "US/Eastern", "outdoor", "turf"),
+            ("NO", "Caesars Superdome", "US/Central", "dome", "turf"),
+            ("NYG", "MetLife Stadium", "US/Eastern", "outdoor", "turf"),
+            ("NYJ", "MetLife Stadium", "US/Eastern", "outdoor", "turf"),
+            ("PHI", "Lincoln Financial Field", "US/Eastern", "outdoor", "grass"),
+            ("PIT", "Acrisure Stadium", "US/Eastern", "outdoor", "turf"),
+            ("SEA", "Lumen Field", "US/Pacific", "outdoor", "turf"),
+            ("SF", "Levi's Stadium", "US/Pacific", "outdoor", "grass"),
+            ("TB", "Raymond James Stadium", "US/Eastern", "outdoor", "grass"),
+            ("TEN", "Nissan Stadium", "US/Central", "outdoor", "grass"),
+            ("WAS", "Commanders Field", "US/Eastern", "outdoor", "grass"),
+        ],
+        columns=["home", "stadium", "tz", "roof", "surface"],
+    )
+
+    out = out.merge(stadium_meta, on="home", how="left")
+
+    column_order = [
+        "season",
+        "week",
+        "home",
+        "away",
+        "kickoff_utc",
+        "stadium",
+        "tz",
+        "roof",
+        "surface",
+        "game_id",
+    ]
+    out = out[[c for c in column_order if c in out.columns]]
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out.to_csv(out_path, index=False)
