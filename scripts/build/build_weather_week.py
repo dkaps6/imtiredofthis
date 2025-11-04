@@ -152,8 +152,11 @@ def _load_slate_from_repo() -> pd.DataFrame:
     fails early and loudly instead of silently creating an empty weather_week.csv.
     """
 
+    # Look in multiple places so we always find a slate, even when props are empty.
     candidates = [
         (Path("data") / "game_lines.csv", "game_lines.csv"),
+        (Path("outputs") / "odds_game.csv", "outputs/odds_game.csv"),
+        (Path("data") / "team_week_map.csv", "team_week_map.csv"),
         (Path("data") / "opponent_map_from_props.csv", "opponent_map_from_props.csv"),
     ]
 
@@ -189,6 +192,41 @@ def _load_slate_from_repo() -> pd.DataFrame:
             if any(token in key for token in ("tz", "timezone", "local_tz")):
                 tz_col = value
 
+        source_df = df
+
+        if label == "team_week_map.csv" and not home_col:
+            team_col = cols.get("team")
+            opp_col = cols.get("opponent")
+            home_flag_col = cols.get("is_home")
+            kickoff_col = kickoff_col or cols.get("kickoff_local") or cols.get("kickoff_utc")
+            if team_col and opp_col and home_flag_col and kickoff_col:
+                home_mask = (
+                    df[home_flag_col]
+                    .astype(str)
+                    .str.strip()
+                    .str.lower()
+                    .isin(["true", "t", "1", "yes"])
+                )
+                home_df = df[home_mask].copy()
+                if not home_df.empty:
+                    tz_override = tz_col or cols.get("local_tz")
+                    source_df = pd.DataFrame(
+                        {
+                            "home": home_df[team_col].astype(str).str.upper().str.strip(),
+                            "away": home_df[opp_col].astype(str).str.upper().str.strip(),
+                            "kickoff_raw": home_df[kickoff_col],
+                        }
+                    )
+                    if tz_override and tz_override in home_df.columns:
+                        source_df["local_tz"] = home_df[tz_override].astype(str)
+                    else:
+                        source_df["local_tz"] = source_df["home"].map(_infer_tz_from_team)
+
+                    kickoff_col = "kickoff_raw"
+                    home_col = "home"
+                    away_col = "away"
+                    tz_col = "local_tz"
+
         if not home_col or not away_col or not kickoff_col:
             logger.warning(
                 "[weather] Slate candidate %s missing required columns (home/away/kickoff)",
@@ -198,9 +236,9 @@ def _load_slate_from_repo() -> pd.DataFrame:
 
         out = pd.DataFrame(
             {
-                "home": df[home_col].astype(str).str.upper().str.strip(),
-                "away": df[away_col].astype(str).str.upper().str.strip(),
-                "kickoff_raw": df[kickoff_col],
+                "home": source_df[home_col].astype(str).str.upper().str.strip(),
+                "away": source_df[away_col].astype(str).str.upper().str.strip(),
+                "kickoff_raw": source_df[kickoff_col],
             }
         )
 
@@ -225,8 +263,8 @@ def _load_slate_from_repo() -> pd.DataFrame:
             )
             continue
 
-        if tz_col and tz_col in df.columns:
-            out["local_tz"] = df[tz_col].astype(str)
+        if tz_col and tz_col in source_df.columns:
+            out["local_tz"] = source_df[tz_col].astype(str)
         else:
             out["local_tz"] = out["home"].map(_infer_tz_from_team)
 
