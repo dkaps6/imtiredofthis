@@ -222,8 +222,7 @@ jobs:
             --date "${SLATE_DATE}"
           export PYTHONPATH="${PWD}"
           python scripts/pricing.py \
-            --season "${SEASON}" \
-            --date "${SLATE_DATE}"
+            --season "${SEASON}"
 
       # ----------------------------------------
       # 11. Upload artifacts

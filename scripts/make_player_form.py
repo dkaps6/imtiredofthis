@@ -4838,6 +4838,115 @@ def _write_player_form_outputs(
     )
     max_cols = _safe_cols(player_form, ["long_rec", "long_rush"])
 
+    if "game_id" not in player_form.columns or player_form["game_id"].isna().all():
+        if "game_id" not in player_form.columns:
+            player_form["game_id"] = pd.NA
+        existing_game_ids = player_form["game_id"].astype("string").replace("", pd.NA)
+
+        if "old_game_id" in player_form.columns:
+            old_ids = player_form["old_game_id"].astype("string").str.strip()
+            player_form["game_id"] = existing_game_ids.combine_first(
+                old_ids.replace("", pd.NA)
+            )
+            existing_game_ids = player_form["game_id"].astype("string").replace("", pd.NA)
+
+        if player_form["game_id"].isna().all():
+            try:
+                game_lines = pd.read_csv(Path("data/game_lines.csv"))
+            except Exception:
+                game_lines = pd.DataFrame()
+
+            if not game_lines.empty:
+                required = {"season", "week", "home", "away"}
+                if required.issubset(game_lines.columns):
+                    working = game_lines.copy()
+                    for col in ("season", "week"):
+                        working[col] = pd.to_numeric(
+                            working[col], errors="coerce"
+                        ).astype("Int64")
+                    for col in ("home", "away"):
+                        working[col] = (
+                            working[col]
+                            .astype("string")
+                            .str.upper()
+                            .str.strip()
+                        )
+
+                    if "game_id" not in working.columns:
+                        season_str = working["season"].astype("Int64").astype("string")
+                        week_str = working["week"].astype("Int64").astype("string").str.zfill(2)
+                        home_str = working["home"].astype("string")
+                        away_str = working["away"].astype("string")
+                        working["game_id"] = (
+                            season_str + "_" + week_str + "_" + home_str + "_" + away_str
+                        )
+
+                    team_rows = pd.concat(
+                        [
+                            working.assign(team=working["home"], opponent=working["away"]),
+                            working.assign(team=working["away"], opponent=working["home"]),
+                        ],
+                        ignore_index=True,
+                    )
+                    team_rows = team_rows.dropna(subset=["season", "week", "team", "game_id"])
+                    team_rows["team"] = team_rows["team"].astype("string")
+
+                    lookup = {}
+                    for record in team_rows.itertuples(index=False):
+                        season_val = getattr(record, "season", pd.NA)
+                        week_val = getattr(record, "week", pd.NA)
+                        team_val = getattr(record, "team", "")
+                        game_val = getattr(record, "game_id", pd.NA)
+                        if pd.isna(season_val) or pd.isna(week_val) or not team_val:
+                            continue
+                        try:
+                            key = (int(season_val), int(week_val), str(team_val))
+                        except Exception:
+                            continue
+                        if pd.isna(game_val):
+                            continue
+                        lookup[key] = game_val
+
+                    if lookup:
+                        team_col = None
+                        for candidate in ("team_abbr", "team"):
+                            if candidate in player_form.columns:
+                                team_col = candidate
+                                break
+
+                        if team_col is not None and {"season", "week"}.issubset(player_form.columns):
+                            season_vals = pd.to_numeric(
+                                player_form["season"], errors="coerce"
+                            ).astype("Int64")
+                            week_vals = pd.to_numeric(
+                                player_form["week"], errors="coerce"
+                            ).astype("Int64")
+                            team_vals = (
+                                player_form[team_col]
+                                .astype("string")
+                                .str.upper()
+                                .str.strip()
+                            )
+
+                            keys = []
+                            for season_val, week_val, team_val in zip(
+                                season_vals, week_vals, team_vals
+                            ):
+                                if pd.isna(season_val) or pd.isna(week_val) or not team_val:
+                                    keys.append(None)
+                                    continue
+                                try:
+                                    keys.append((int(season_val), int(week_val), str(team_val)))
+                                except Exception:
+                                    keys.append(None)
+
+                            mapped_ids = pd.Series(
+                                [lookup.get(key) for key in keys], index=player_form.index
+                            )
+                            player_form["game_id"] = (
+                                player_form["game_id"].astype("string").replace("", pd.NA)
+                            ).combine_first(mapped_ids)
+
     required_keys = ["season", "week", "team", "game_id", "player_key"]
     missing_keys = [key for key in required_keys if key not in player_form.columns]
     if missing_keys:
