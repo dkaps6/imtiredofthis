@@ -181,114 +181,134 @@ def build_slate_fallback() -> pd.DataFrame:
     return fallback_df
 
 def _load_slate_from_repo() -> pd.DataFrame:
-    """
-    Try to infer this week's slate from existing repo artifacts.
+    """Load the upcoming slate from repo artifacts (game_lines preferred)."""
 
-    We expect to find something like data/game_lines.csv or similar that already has
-    home team, away team, kickoff time, and local tz.
+    game_lines = Path("data/game_lines.csv")
+    opponent_map = Path("data/opponent_map_from_props.csv")
 
-    If we can't find/parse it, raise RuntimeError with instructions so the pipeline
-    fails early and loudly instead of silently creating an empty weather_week.csv.
-    """
-    candidates = [
-        Path("data") / "game_lines.csv",
-        Path("data") / "opponent_map_from_props.csv",
-    ]
-
-    for c in candidates:
-        if c.exists():
-            try:
-                df = pd.read_csv(c)
-            except (pd.errors.EmptyDataError, FileNotFoundError):
-                df = pd.DataFrame()
-            # try to normalize columns -> home, away, kickoff_local, local_tz
-            cols = {col.lower(): col for col in df.columns}
-
-            # Heuristic mapping. You can refine this as needed.
-            # We try common patterns you've been using in the repo:
-            home_col = None
-            away_col = None
-            kickoff_col = None
-            tz_col = None
-
-            for k,v in cols.items():
-                if k in ("home","home_team","posteam","posteam_home"):
-                    home_col = v
-                if k in ("away","away_team","defteam","posteam_away"):
-                    away_col = v
-                if "kickoff" in k or "start" in k or "datetime" in k:
-                    kickoff_col = v
-                if "tz" in k or "timezone" in k or "local_tz" in k:
-                    tz_col = v
-
-            if df.empty:
-                continue
-
-            if home_col and away_col and kickoff_col:
-                out = pd.DataFrame({
-                    "home": df[home_col].astype(str).str.upper().str.strip(),
-                    "away": df[away_col].astype(str).str.upper().str.strip(),
-                    "kickoff_raw": df[kickoff_col],
-                })
-
-                # local tz optional; fallback guess using home stadium if missing
-                if tz_col and tz_col in df.columns:
-                    out["local_tz"] = df[tz_col].astype(str)
+    if game_lines.exists():
+        try:
+            gl = pd.read_csv(game_lines)
+        except (pd.errors.EmptyDataError, FileNotFoundError):
+            gl = pd.DataFrame()
+        if not gl.empty:
+            cols = {c.lower(): c for c in gl.columns}
+            home_col = next((cols[key] for key in ("home", "home_team", "home_abbr") if key in cols), None)
+            away_col = next((cols[key] for key in ("away", "away_team", "away_abbr") if key in cols), None)
+            if home_col and away_col:
+                out = pd.DataFrame(
+                    {
+                        "home": gl[home_col].astype(str).str.upper().str.strip(),
+                        "away": gl[away_col].astype(str).str.upper().str.strip(),
+                    }
+                )
+                tz_col = next((cols[key] for key in ("local_tz", "tz", "timezone") if key in cols), None)
+                if tz_col:
+                    out["local_tz"] = gl[tz_col].astype(str).str.strip()
                 else:
                     out["local_tz"] = out["home"].map(_infer_tz_from_team)
 
-                # parse kickoff_raw into tz-aware UTC then also compute local kickoff
-                # We'll assume kickoff_raw is either already ISO with TZ, or naive local.
-                # We will try UTC parse first, then local.
-                kickoff_utc = []
-                kickoff_local = []
-                for _, r in out.iterrows():
-                    raw = str(r["kickoff_raw"])
+                if "kickoff_local" in cols:
+                    kickoff_local = pd.to_datetime(gl[cols["kickoff_local"]], errors="coerce")
+                else:
+                    kickoff_local = pd.Series(pd.NaT, index=gl.index, dtype="datetime64[ns]")
 
-                    # try parse as ISO first
-                    dt_obj = None
+                if "kickoff_utc" in cols:
+                    kickoff_utc = pd.to_datetime(gl[cols["kickoff_utc"]], utc=True, errors="coerce")
+                elif "commence_time" in cols:
+                    kickoff_utc = pd.to_datetime(gl[cols["commence_time"]], utc=True, errors="coerce")
+                else:
+                    kickoff_utc = pd.Series([pd.NaT] * len(gl), index=gl.index)
+                    kickoff_utc = pd.to_datetime(kickoff_utc, utc=True, errors="coerce")
+
+                localized = []
+                for idx in range(len(out)):
+                    tz_name = out.at[idx, "local_tz"]
+                    home_team = out.at[idx, "home"]
+                    tz_name = tz_name if isinstance(tz_name, str) and tz_name else _infer_tz_from_team(home_team)
                     try:
-                        dt_obj = datetime.fromisoformat(raw)
+                        tzinfo = ZoneInfo(tz_name)
                     except Exception:
-                        pass
+                        tzinfo = ZoneInfo("UTC")
 
-                    # if dt_obj is naive, assume it's already UTC for now
-                    if dt_obj is not None and dt_obj.tzinfo is None:
-                        dt_obj = dt_obj.replace(tzinfo=ZoneInfo("UTC"))
+                    local_val = kickoff_local.iloc[idx]
+                    utc_val = kickoff_utc.iloc[idx] if idx < len(kickoff_utc) else pd.NaT
 
-                    if dt_obj is None:
-                        # last resort: now() so code doesn't explode;
-                        # pipeline will complain later if too fake.
-                        dt_obj = datetime.now(tz=ZoneInfo("UTC"))
+                    if pd.isna(local_val) and pd.notna(utc_val):
+                        try:
+                            local_val = utc_val.tz_convert(tzinfo)
+                        except Exception:
+                            local_val = utc_val
+                    elif isinstance(local_val, pd.Timestamp) and local_val.tzinfo is None:
+                        try:
+                            local_val = local_val.tz_localize(tzinfo)
+                        except Exception:
+                            local_val = local_val.tz_localize("UTC")
+                    localized.append(local_val)
 
-                    # store UTC ts
-                    kickoff_utc.append(dt_obj.astimezone(ZoneInfo("UTC")))
+                out["kickoff_local"] = pd.Series(localized, index=out.index)
 
-                    # stadium tz
-                    tzname = r["local_tz"]
-                    try:
-                        local_dt = dt_obj.astimezone(ZoneInfo(tzname))
-                    except Exception:
-                        # fallback guess from team again
-                        tz_fallback = _infer_tz_from_team(r["home"])
-                        local_dt = dt_obj.astimezone(ZoneInfo(tz_fallback))
-                    kickoff_local.append(local_dt)
+                if "kickoff_utc" in cols or "commence_time" in cols:
+                    out["kickoff_utc"] = kickoff_utc
+                else:
+                    utc_from_local = []
+                    for val in out["kickoff_local"]:
+                        if pd.isna(val):
+                            utc_from_local.append(pd.NaT)
+                            continue
+                        try:
+                            utc_from_local.append(val.astimezone(ZoneInfo("UTC")))
+                        except Exception:
+                            utc_from_local.append(pd.NaT)
+                    out["kickoff_utc"] = pd.Series(utc_from_local, index=out.index)
 
-                out["kickoff_utc"] = kickoff_utc
-                out["kickoff_local"] = kickoff_local
-
+                out = out.dropna(subset=["home", "away"]).drop_duplicates(subset=["home", "away"])
                 out.attrs["fallback_used"] = False
-                return out
+                return out[["home", "away", "local_tz", "kickoff_local", "kickoff_utc"]]
+
+    if opponent_map.exists():
+        try:
+            om = pd.read_csv(opponent_map)
+        except (pd.errors.EmptyDataError, FileNotFoundError):
+            om = pd.DataFrame()
+        if not om.empty and {"team", "opponent", "game_timestamp"}.issubset(om.columns):
+            out = pd.DataFrame(
+                {
+                    "home": om["team"].astype(str).str.upper().str.strip(),
+                    "away": om["opponent"].astype(str).str.upper().str.strip(),
+                }
+            )
+            out["kickoff_utc"] = pd.to_datetime(om["game_timestamp"], utc=True, errors="coerce")
+            out["local_tz"] = out["home"].map(_infer_tz_from_team)
+            local_vals = []
+            for idx in range(len(out)):
+                utc_ts = out.at[idx, "kickoff_utc"]
+                tz_name = out.at[idx, "local_tz"]
+                tz_name = tz_name if isinstance(tz_name, str) and tz_name else _infer_tz_from_team(out.at[idx, "home"])
+                try:
+                    tzinfo = ZoneInfo(tz_name)
+                except Exception:
+                    tzinfo = ZoneInfo("UTC")
+                if pd.isna(utc_ts):
+                    local_vals.append(pd.NaT)
+                else:
+                    try:
+                        local_vals.append(utc_ts.tz_convert(tzinfo))
+                    except Exception:
+                        local_vals.append(utc_ts)
+            out["kickoff_local"] = pd.Series(local_vals, index=out.index)
+            out.attrs["fallback_used"] = False
+            return out[["home", "away", "local_tz", "kickoff_local", "kickoff_utc"]]
 
     fallback_df = build_slate_fallback()
     if not fallback_df.empty:
         return fallback_df
 
     raise RuntimeError(
-        "[weather] Could not infer this week's slate from repo "
-        "(no usable game_lines/opponent_map file with home/away/kickoff). "
+        "[weather] Could not infer this week's slate from repo (no usable game_lines/opponent_map file with home/away/kickoff). "
         "Please extend _load_slate_from_repo() to read your actual slate CSV."
     )
+
 
 def _infer_tz_from_team(team: str) -> str:
     """

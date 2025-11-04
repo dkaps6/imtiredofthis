@@ -21,9 +21,12 @@ from scripts.utils.name_clean import (
 from scripts.utils.df_keys import coerce_merge_keys
 
 
-DEFAULT_OUT = Path("data/opponent_map_from_props.csv")
-UNRESOLVED_OUT = Path("data/opponent_map_unresolved.csv")
-TEAM_WEEK_MAP_PATH = Path("data/team_week_map.csv")
+DATA_DIR = Path("data")
+OUT_PATH = DATA_DIR / "opponent_map_from_props.csv"
+DEFAULT_OUT = OUT_PATH
+UNRESOLVED_OUT = DATA_DIR / "opponent_map_unresolved.csv"
+TEAM_WEEK_MAP_PATH = DATA_DIR / "team_week_map.csv"
+ODDS_GAME_PATH = Path("outputs/odds_game.csv")
 UNRESOLVED_COLUMNS = [
     "reason",
     "player_raw",
@@ -63,168 +66,62 @@ def _load_csv_safe(path: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def _attach_game_timestamp(op_map: pd.DataFrame) -> pd.DataFrame:
-    """Add game_timestamp (UTC) by first joining odds_game, else use game_lines (or leave NaT)."""
-    if op_map is None or op_map.empty:
-        return op_map
+def _add_game_timestamp_from_odds(df: pd.DataFrame) -> pd.DataFrame:
+    """Attach UTC kickoff timestamp for each event when possible."""
 
-    df = op_map.copy()
+    if df is None or df.empty:
+        return df
 
-    if "home" not in df.columns and "home_team" in df.columns:
-        df["home"] = df["home_team"]
-    if "away" not in df.columns and "away_team" in df.columns:
-        df["away"] = df["away_team"]
+    if "event_id" not in df.columns:
+        df = df.copy()
+        df["game_timestamp"] = pd.NaT
+        return df
 
-    # 1) Try odds_game first (preferred)
-    odds_game = _load_csv_safe("outputs/odds_game.csv")
-    rename_og = {"commence_time": "kickoff_utc", "kickoff": "kickoff_utc", "game_timestamp": "kickoff_utc"}
-    for k, v in rename_og.items():
-        if k in odds_game.columns and "kickoff_utc" not in odds_game.columns:
-            odds_game = odds_game.rename(columns={k: v})
-    og_keep = [c for c in ["event_id", "home", "away", "kickoff_utc"] if c in odds_game.columns]
-    odds_game = odds_game[og_keep].drop_duplicates() if og_keep else pd.DataFrame()
+    if not ODDS_GAME_PATH.exists():
+        df = df.copy()
+        df["game_timestamp"] = pd.NaT
+        return df
 
-    if "event_id" in df.columns and not odds_game.empty:
-        df = df.merge(odds_game, on="event_id", how="left", suffixes=("", "_og"))
+    try:
+        odds_games = pd.read_csv(ODDS_GAME_PATH)
+    except Exception:
+        df = df.copy()
+        df["game_timestamp"] = pd.NaT
+        return df
+
+    if odds_games.empty or "event_id" not in odds_games.columns:
+        df = df.copy()
+        df["game_timestamp"] = pd.NaT
+        return df
+
+    working = odds_games.copy()
+    if "commence_time" in working.columns:
+        working["game_timestamp"] = pd.to_datetime(
+            working["commence_time"], utc=True, errors="coerce"
+        )
+    elif "kickoff_utc" in working.columns:
+        working["game_timestamp"] = pd.to_datetime(
+            working["kickoff_utc"], utc=True, errors="coerce"
+        )
+    elif "game_timestamp" in working.columns:
+        working["game_timestamp"] = pd.to_datetime(
+            working["game_timestamp"], utc=True, errors="coerce"
+        )
     else:
-        if "kickoff_utc" not in df.columns:
-            df["kickoff_utc"] = pd.NaT
+        working["game_timestamp"] = pd.NaT
 
-    # 2) Fallback to slate (game_lines) by (home,away) match if kickoff still missing
-    needs_kl = df["kickoff_utc"].isna() if "kickoff_utc" in df.columns else pd.Series([], dtype=bool)
-    if needs_kl.any():
-        slate = _load_csv_safe("data/game_lines.csv")
-        if not slate.empty:
-            rename_gl = {"kickoff": "kickoff_local"}
-            for k, v in rename_gl.items():
-                if k in slate.columns and "kickoff_local" not in slate.columns:
-                    slate = slate.rename(columns={k: v})
-            gl_keep = [c for c in ["home", "away", "local_tz", "kickoff_local", "kickoff_utc"] if c in slate.columns]
-            slate = slate[gl_keep].drop_duplicates() if gl_keep else pd.DataFrame()
-            if not slate.empty:
-                df = df.merge(slate, on=["home", "away"], how="left", suffixes=("", "_slate"))
-                if "kickoff_utc_slate" in df.columns:
-                    df["kickoff_utc"] = df["kickoff_utc"].fillna(df["kickoff_utc_slate"])
-                # convert local times to UTC where needed
-                local_cols = [
-                    col
-                    for col in ["kickoff_local", "kickoff_local_slate"]
-                    if col in df.columns
-                ]
-                tz_cols = [col for col in ["local_tz", "local_tz_slate"] if col in df.columns]
-                for idx in df.index[df["kickoff_utc"].isna()]:
-                    local_val = None
-                    for col in local_cols:
-                        val = df.at[idx, col]
-                        if pd.notna(val):
-                            local_val = val
-                            break
-                    if local_val is None:
-                        continue
-                    tz_name = None
-                    for col in tz_cols:
-                        val = df.at[idx, col]
-                        if isinstance(val, str) and val:
-                            tz_name = val
-                            break
-                    try:
-                        local_dt = pd.to_datetime(local_val)
-                    except Exception:
-                        local_dt = pd.NaT
-                    if pd.isna(local_dt):
-                        continue
-                    if getattr(local_dt, "tzinfo", None) is None:
-                        if tz_name:
-                            try:
-                                local_dt = local_dt.tz_localize(ZoneInfo(tz_name))
-                            except (TypeError, ValueError):
-                                local_dt = local_dt.tz_localize("UTC")
-                        else:
-                            local_dt = local_dt.tz_localize("UTC")
-                    try:
-                        df.at[idx, "kickoff_utc"] = local_dt.astimezone(ZoneInfo("UTC"))
-                    except Exception:
-                        continue
+    keep = working[["event_id", "game_timestamp"]].drop_duplicates()
+    merged = df.merge(keep, on="event_id", how="left")
+    if "game_timestamp_x" in merged.columns:
+        merged["game_timestamp"] = merged["game_timestamp_x"].combine_first(
+            merged.get("game_timestamp_y")
+        )
+        merged.drop(columns=["game_timestamp_x", "game_timestamp_y"], inplace=True)
 
-    # 3) Fallback to team_week_map if still missing
-    needs_tw = df["kickoff_utc"].isna() if "kickoff_utc" in df.columns else pd.Series([], dtype=bool)
-    if needs_tw.any():
-        team_week = _load_csv_safe("data/team_week_map.csv")
-        if not team_week.empty:
-            working = team_week.copy()
-            working.columns = [c.lower() for c in working.columns]
-            if {"team", "opponent", "is_home"}.issubset(working.columns):
-                home_mask = working["is_home"].astype(str).str.lower().isin(
-                    ["true", "1", "yes", "t"]
-                )
-                home_df = working.loc[home_mask].copy()
-                if not home_df.empty:
-                    home_df["home"] = _norm_team(home_df["team"])
-                    home_df["away"] = _norm_team(home_df["opponent"])
-                    if "local_tz" not in home_df.columns:
-                        home_df["local_tz"] = pd.NA
-                    tw_keep = [
-                        c
-                        for c in ["home", "away", "local_tz", "kickoff_local", "kickoff_utc"]
-                        if c in home_df.columns
-                    ]
-                    slate_tw = home_df[tw_keep].drop_duplicates(subset=["home", "away"])
-                    df = df.merge(slate_tw, on=["home", "away"], how="left", suffixes=("", "_tw"))
-                    fill_cols = ["kickoff_utc_tw"]
-                    for col in fill_cols:
-                        if col in df.columns:
-                            df["kickoff_utc"] = df["kickoff_utc"].fillna(df[col])
-                    local_cols = [
-                        col
-                        for col in ["kickoff_local", "kickoff_local_tw"]
-                        if col in df.columns
-                    ]
-                    tz_cols = [
-                        col for col in ["local_tz", "local_tz_tw"] if col in df.columns
-                    ]
-                    for idx in df.index[df["kickoff_utc"].isna()]:
-                        local_val = None
-                        for col in local_cols:
-                            val = df.at[idx, col]
-                            if pd.notna(val):
-                                local_val = val
-                                break
-                        if local_val is None:
-                            continue
-                        tz_name = None
-                        for col in tz_cols:
-                            val = df.at[idx, col]
-                            if isinstance(val, str) and val:
-                                tz_name = val
-                                break
-                        try:
-                            local_dt = pd.to_datetime(local_val)
-                        except Exception:
-                            local_dt = pd.NaT
-                        if pd.isna(local_dt):
-                            continue
-                        if getattr(local_dt, "tzinfo", None) is None:
-                            if tz_name:
-                                try:
-                                    local_dt = local_dt.tz_localize(ZoneInfo(tz_name))
-                                except (TypeError, ValueError):
-                                    local_dt = local_dt.tz_localize("UTC")
-                            else:
-                                local_dt = local_dt.tz_localize("UTC")
-                        try:
-                            df.at[idx, "kickoff_utc"] = local_dt.astimezone(ZoneInfo("UTC"))
-                        except Exception:
-                            continue
+    if "game_timestamp" not in merged.columns:
+        merged["game_timestamp"] = pd.NaT
 
-    if "kickoff_utc" not in df.columns:
-        df["kickoff_utc"] = pd.NaT
-    df["game_timestamp"] = pd.to_datetime(df["kickoff_utc"], utc=True, errors="coerce")
-
-    drop_cols = [c for c in df.columns if c.endswith("_og") or c.endswith("_slate") or c.endswith("_tw")]
-    if drop_cols:
-        df = df.drop(columns=drop_cols)
-
-    return df
+    return merged
 
 
 def _load_roles_dataframe() -> pd.DataFrame:
@@ -640,7 +537,7 @@ def build_opponent_map(
     opponent_map = coerce_merge_keys(
         opponent_map, ["player_clean_key", "team", "event_id"], as_str=True
     )
-    opponent_map = _attach_game_timestamp(opponent_map)
+    opponent_map = _add_game_timestamp_from_odds(opponent_map)
     for col in [
         "season",
         "week",
@@ -654,11 +551,7 @@ def build_opponent_map(
             opponent_map[col] = pd.NA
     out_path.parent.mkdir(parents=True, exist_ok=True)
     opponent_map.to_csv(out_path, index=False)
-    try:
-        op_rows = len(pd.read_csv(out_path))
-    except Exception:
-        op_rows = len(opponent_map)
-    print(f"[oddsapi] wrote data/opponent_map_from_props.csv rows={op_rows}")
+    print(f"[oddsapi] wrote {len(opponent_map)} rows → {out_path}")
     unresolved_df = _write_unresolved(unresolved_records)
     size_bytes = out_path.stat().st_size if out_path.exists() else 0
     print(

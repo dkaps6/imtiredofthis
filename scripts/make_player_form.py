@@ -89,6 +89,100 @@ NAME_OVERRIDES = {
 }
 
 
+def _overlay_opponents(pf: pd.DataFrame, season: int | None = None) -> pd.DataFrame:
+    """Fill opponent columns using schedule and live opponent maps when available."""
+
+    tw_path = Path("data/team_week_map.csv")
+    om_path = Path("data/opponent_map_from_props.csv")
+
+    out = pf.copy()
+
+    if "team" in out.columns:
+        out["team"] = out["team"].astype("string").str.upper().str.strip()
+    if "opponent" in out.columns:
+        out["opponent"] = out["opponent"].astype("string")
+    if "opponent_abbr" in out.columns:
+        out["opponent_abbr"] = out["opponent_abbr"].astype("string")
+
+    if tw_path.exists():
+        try:
+            tw = pd.read_csv(tw_path)
+        except Exception:
+            tw = pd.DataFrame()
+        if not tw.empty:
+            for col in ("season", "week"):
+                if col in tw.columns:
+                    tw[col] = pd.to_numeric(tw[col], errors="coerce").astype("Int64")
+            for col in ("team", "opponent"):
+                if col in tw.columns:
+                    tw[col] = (
+                        tw[col]
+                        .astype("string")
+                        .str.upper()
+                        .str.strip()
+                        .replace("", pd.NA)
+                    )
+
+            join_keys = [k for k in ("season", "week", "team") if k in out.columns and k in tw.columns]
+            if len(join_keys) == 3:
+                subset = tw[join_keys + [c for c in ("opponent", "bye") if c in tw.columns]].drop_duplicates()
+                subset = subset.rename(columns={"opponent": "_schedule_opponent", "bye": "_schedule_bye"})
+                merged = out.merge(subset, on=join_keys, how="left")
+                if "_schedule_opponent" in merged.columns:
+                    merged["_schedule_opponent"] = merged["_schedule_opponent"].astype("string")
+                    if "opponent" in merged.columns:
+                        merged["opponent"] = merged["opponent"].fillna(merged["_schedule_opponent"])
+                    else:
+                        merged["opponent"] = merged["_schedule_opponent"]
+                    if "opponent_abbr" in merged.columns:
+                        merged["opponent_abbr"] = merged["opponent_abbr"].fillna(merged["_schedule_opponent"])
+                    merged.drop(columns=["_schedule_opponent"], inplace=True)
+                if "_schedule_bye" in merged.columns:
+                    bye_mask = merged["_schedule_bye"].fillna(False).astype(bool)
+                    merged.loc[bye_mask, ["opponent", "opponent_abbr"]] = "BYE"
+                    merged.drop(columns=["_schedule_bye"], inplace=True)
+                out = merged
+
+    if om_path.exists():
+        try:
+            om = pd.read_csv(om_path)
+        except Exception:
+            om = pd.DataFrame()
+        if not om.empty:
+            for col in ("season", "week"):
+                if col in om.columns:
+                    om[col] = pd.to_numeric(om[col], errors="coerce").astype("Int64")
+            for col in ("team", "opponent", "player_clean_key", "player_key"):
+                if col in om.columns:
+                    om[col] = (
+                        om[col]
+                        .astype("string")
+                        .str.upper()
+                        .str.strip()
+                    )
+
+            key_col = "player_clean_key" if "player_clean_key" in om.columns else None
+            if key_col is None and "player_key" in om.columns:
+                key_col = "player_key"
+
+            if key_col and "player_clean_key" in out.columns:
+                over = om[[key_col, "opponent"]].dropna(subset=["opponent"]).drop_duplicates()
+                over = over.rename(columns={key_col: "player_clean_key", "opponent": "_props_opponent"})
+                merged = out.merge(over, on="player_clean_key", how="left")
+                if "_props_opponent" in merged.columns:
+                    merged["_props_opponent"] = merged["_props_opponent"].astype("string")
+                    if "opponent" in merged.columns:
+                        merged["opponent"] = merged["_props_opponent"].fillna(merged["opponent"])
+                    else:
+                        merged["opponent"] = merged["_props_opponent"]
+                    if "opponent_abbr" in merged.columns:
+                        merged["opponent_abbr"] = merged["_props_opponent"].fillna(merged["opponent_abbr"])
+                    merged.drop(columns=["_props_opponent"], inplace=True)
+                out = merged
+
+    return out
+
+
 def _coerce_merge_keys(df: pd.DataFrame) -> pd.DataFrame:
     if df is None:
         return pd.DataFrame()
@@ -3808,6 +3902,7 @@ def _enrich_team_and_opponent_from_props(
     if len(dedup_cols) == 3:
         enriched = enriched.sort_values(dedup_cols).drop_duplicates(subset=dedup_cols, keep="first")
 
+    enriched = _overlay_opponents(enriched, season)
     return enriched
 
 
