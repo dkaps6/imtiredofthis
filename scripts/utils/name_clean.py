@@ -11,6 +11,36 @@ from scripts.utils.team_maps import TEAM_NAME_TO_ABBR
 
 SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
 
+_FIRST_NAME_ALIASES: dict[str, str] = {
+    "william": "will",
+    "willie": "will",
+    "christopher": "chris",
+    "nicholas": "nick",
+    "nicolas": "nick",
+    "joshua": "josh",
+    "josh": "josh",
+    "matthew": "matt",
+    "matt": "matt",
+    "dakota": "dak",
+    "kenneth": "ken",
+    "anthony": "tony",
+    "antonio": "tony",
+    "trey": "trey",
+    "geno": "geno",
+    "bo": "bo",
+    "brock": "brock",
+    "courtland": "courtland",
+    "troy": "troy",
+    "ashton": "ashton",
+}
+
+_INITIAL_LAST_ALIASES: dict[tuple[str, str], str] = {
+    ("b", "nix"): "bo",
+    ("g", "smith"): "geno",
+    ("d", "prescott"): "dak",
+    ("k", "walker"): "ken",
+}
+
 _PUNCT_RE = re.compile(r"[^\w\s]")
 _SPACES_RE = re.compile(r"\s+")
 _GLUED_INITIAL_RE = re.compile(r"^([A-Z](?:[a-z]?))([A-Z][a-z]+)$")
@@ -31,6 +61,39 @@ def _strip_suffixes(name: str) -> str:
 
 def _norm_spaces(s: str) -> str:
     return _SPACES_RE.sub(" ", s.strip())
+
+
+def _normalize_for_alias(token: str) -> str:
+    token = token or ""
+    return re.sub(r"[^a-z]", "", token.lower())
+
+
+def _alias_first_token(first: str, last: str) -> str:
+    if not first:
+        return first
+
+    if "-" in first:
+        head, *rest = first.split("-")
+        context = rest[0] if rest else last
+        aliased_head = _alias_first_token(head, context)
+        if aliased_head != head:
+            return "-".join([aliased_head] + rest)
+        return first
+
+    norm_first = _normalize_for_alias(first)
+    norm_last = _normalize_for_alias(last)
+
+    if norm_first and len(norm_first) == 1 and norm_last:
+        pair = (norm_first, norm_last)
+        alias = _INITIAL_LAST_ALIASES.get(pair)
+        if alias:
+            return alias
+
+    alias = _FIRST_NAME_ALIASES.get(norm_first)
+    if alias:
+        return alias
+
+    return first
 
 
 def canonical_player(raw: Optional[str]) -> str:
@@ -57,6 +120,13 @@ def canonical_player(raw: Optional[str]) -> str:
     text = _norm_spaces(text)
     if not text:
         return ""
+
+    tokens = text.split()
+    if tokens:
+        last = tokens[1] if len(tokens) > 1 else ""
+        tokens[0] = _alias_first_token(tokens[0], last)
+
+    text = " ".join(tokens)
     return text.title()
 
 
