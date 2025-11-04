@@ -42,6 +42,7 @@ from scripts.utils.canonical_names import (
     log_unmapped_variant,
 )
 from scripts.utils.name_clean import canonical_key, canonical_player, canonicalize, normalize_team
+from scripts.utils.normalize_players import normalize_game_logs, normalize_season_totals
 
 logger = logging.getLogger(__name__)
 
@@ -122,11 +123,21 @@ def _overlay_opponents(pf: pd.DataFrame, season: int | None = None) -> pd.DataFr
                         .str.strip()
                         .replace("", pd.NA)
                     )
+            if "event_id" in tw.columns:
+                tw["event_id"] = (
+                    tw["event_id"].astype("string").str.strip().replace("", pd.NA)
+                )
 
             join_keys = [k for k in ("season", "week", "team") if k in out.columns and k in tw.columns]
             if len(join_keys) == 3:
-                subset = tw[join_keys + [c for c in ("opponent", "bye") if c in tw.columns]].drop_duplicates()
-                subset = subset.rename(columns={"opponent": "_schedule_opponent", "bye": "_schedule_bye"})
+                extra_cols = [
+                    c
+                    for c in ("opponent", "bye", "event_id")
+                    if c in tw.columns
+                ]
+                subset = tw[join_keys + extra_cols].drop_duplicates()
+                rename_map = {"opponent": "_schedule_opponent", "bye": "_schedule_bye", "event_id": "_schedule_event_id"}
+                subset = subset.rename(columns={k: v for k, v in rename_map.items() if k in subset.columns})
                 merged = out.merge(subset, on=join_keys, how="left")
                 if "_schedule_opponent" in merged.columns:
                     merged["_schedule_opponent"] = merged["_schedule_opponent"].astype("string")
@@ -137,6 +148,13 @@ def _overlay_opponents(pf: pd.DataFrame, season: int | None = None) -> pd.DataFr
                     if "opponent_abbr" in merged.columns:
                         merged["opponent_abbr"] = merged["opponent_abbr"].fillna(merged["_schedule_opponent"])
                     merged.drop(columns=["_schedule_opponent"], inplace=True)
+                if "_schedule_event_id" in merged.columns:
+                    merged["_schedule_event_id"] = merged["_schedule_event_id"].astype("string")
+                    if "event_id" in merged.columns:
+                        merged["event_id"] = merged["event_id"].fillna(merged["_schedule_event_id"])
+                    else:
+                        merged["event_id"] = merged["_schedule_event_id"]
+                    merged.drop(columns=["_schedule_event_id"], inplace=True)
                 if "_schedule_bye" in merged.columns:
                     bye_mask = merged["_schedule_bye"].fillna(False).astype(bool)
                     merged.loc[bye_mask, ["opponent", "opponent_abbr"]] = "BYE"
@@ -152,7 +170,7 @@ def _overlay_opponents(pf: pd.DataFrame, season: int | None = None) -> pd.DataFr
             for col in ("season", "week"):
                 if col in om.columns:
                     om[col] = pd.to_numeric(om[col], errors="coerce").astype("Int64")
-            for col in ("team", "opponent", "player_clean_key", "player_key"):
+            for col in ("team", "opponent", "player_clean_key", "player_key", "event_id"):
                 if col in om.columns:
                     om[col] = (
                         om[col]
@@ -166,41 +184,101 @@ def _overlay_opponents(pf: pd.DataFrame, season: int | None = None) -> pd.DataFr
                 key_col = "player_key"
 
             if key_col and "player_clean_key" in out.columns:
-                over = om[[key_col, "opponent"]].dropna(subset=["opponent"]).drop_duplicates()
-                over = over.rename(columns={key_col: "player_clean_key", "opponent": "_props_opponent"})
-                merged = out.merge(over, on="player_clean_key", how="left")
-                if "_props_opponent" in merged.columns:
-                    merged["_props_opponent"] = merged["_props_opponent"].astype("string")
-                    if "opponent" in merged.columns:
-                        merged["opponent"] = merged["_props_opponent"].fillna(merged["opponent"])
-                    else:
-                        merged["opponent"] = merged["_props_opponent"]
-                    if "opponent_abbr" in merged.columns:
-                        merged["opponent_abbr"] = merged["_props_opponent"].fillna(merged["opponent_abbr"])
-                    merged.drop(columns=["_props_opponent"], inplace=True)
-                out = merged
+                available = [c for c in ("opponent", "event_id") if c in om.columns]
+                if available:
+                    select_cols = [key_col]
+                    if "event_id" in om.columns and "event_id" in out.columns:
+                        select_cols.append("event_id")
+                    select_cols.extend(available)
+                    over = om[select_cols].copy()
+                    if key_col != "player_clean_key":
+                        over.rename(columns={key_col: "player_clean_key"}, inplace=True)
+                    over = over.dropna(subset=["player_clean_key", "opponent"])
+                    join_cols = ["player_clean_key"]
+                    if "event_id" in over.columns and "event_id" in out.columns:
+                        join_cols.append("event_id")
+                    rename = {}
+                    if "opponent" in available:
+                        rename["opponent"] = "_props_opponent"
+                    if "event_id" in available:
+                        rename["event_id"] = "_props_event_id"
+                    over = over.drop_duplicates(join_cols)
+                    over = over.rename(
+                        columns={k: v for k, v in rename.items() if k in over.columns}
+                    )
+                    merged = out.merge(over, on=join_cols, how="left")
+                    if "_props_opponent" in merged.columns:
+                        merged["_props_opponent"] = (
+                            merged["_props_opponent"].astype("string")
+                        )
+                        if "opponent" in merged.columns:
+                            merged["opponent"] = merged["_props_opponent"].fillna(
+                                merged["opponent"]
+                            )
+                        else:
+                            merged["opponent"] = merged["_props_opponent"]
+                        if "opponent_abbr" in merged.columns:
+                            merged["opponent_abbr"] = merged["_props_opponent"].fillna(
+                                merged["opponent_abbr"]
+                            )
+                        merged.drop(columns=["_props_opponent"], inplace=True)
+                    if "_props_event_id" in merged.columns:
+                        merged["_props_event_id"] = (
+                            merged["_props_event_id"].astype("string")
+                        )
+                        if "event_id" in merged.columns:
+                            merged["event_id"] = merged["event_id"].fillna(
+                                merged["_props_event_id"]
+                            )
+                        else:
+                            merged["event_id"] = merged["_props_event_id"]
+                        merged.drop(columns=["_props_event_id"], inplace=True)
+                    out = merged
 
     return out
 
 
 def _coerce_merge_keys(df: pd.DataFrame) -> pd.DataFrame:
+    """Coerce merge keys to nullable numeric/string dtypes without lossy casts."""
+
     if df is None:
         return pd.DataFrame()
 
     out = df.copy()
+    if out.empty:
+        out["season"] = pd.Series(dtype="Int64")
+        out["week"] = pd.Series(dtype="Int64")
+        out["player_clean_key"] = pd.Series(dtype="string")
+        return out
+
     for col in ("season", "week"):
-        if col not in out.columns:
-            out[col] = pd.NA
-        out[col] = (
-            pd.to_numeric(out[col], errors="coerce")
-            .astype("Int64")
-            .fillna(-1)
-            .astype("int64")
-            .astype("string")
-        )
-    if "player_clean_key" not in out.columns:
-        out["player_clean_key"] = ""
-    out["player_clean_key"] = out["player_clean_key"].astype("string").fillna("")
+        if col in out.columns:
+            out[col] = pd.to_numeric(out[col], errors="coerce").astype("Int64")
+        else:
+            out[col] = pd.Series(pd.NA, index=out.index, dtype="Int64")
+
+    for col in ("team", "opponent", "player_clean_key", "game_id", "event_id"):
+        if col in out.columns:
+            series = out[col].astype("string").fillna("").str.strip()
+            if col in {"team", "opponent"}:
+                series = series.str.upper()
+            out[col] = series
+
+    if "player_clean_key" not in out.columns or out["player_clean_key"].eq("").all():
+        candidate = None
+        for key_col in ("player_key", "player", "display_name"):
+            if key_col in out.columns:
+                series = out[key_col].astype("string").fillna("").str.strip()
+                if series.ne("").any():
+                    candidate = series
+                    break
+        if candidate is None:
+            out["player_clean_key"] = ""
+        else:
+            out["player_clean_key"] = candidate.map(canonical_key).fillna("")
+    else:
+        out["player_clean_key"] = out["player_clean_key"].astype("string").fillna("")
+
     return out
 
 
@@ -5154,6 +5232,18 @@ def _write_player_form_outputs(
         prior_keys = ["season", "week", "player_key"]
         prior_view = game_logs[prior_keys + prior_cols].drop_duplicates(prior_keys)
         player_form = player_form.merge(prior_view, on=prior_keys, how="left")
+
+    game_logs = normalize_game_logs(
+        game_logs,
+        team_week_map=TEAM_WEEK_MAP_PATH,
+        props_map=OPPONENT_MAP_PATH,
+    )
+    season_totals = normalize_season_totals(season_totals)
+    player_form = normalize_game_logs(
+        player_form,
+        team_week_map=TEAM_WEEK_MAP_PATH,
+        props_map=OPPONENT_MAP_PATH,
+    )
 
     PLAYER_GAME_LOGS_OUT.parent.mkdir(parents=True, exist_ok=True)
     game_logs.to_csv(PLAYER_GAME_LOGS_OUT, index=False)

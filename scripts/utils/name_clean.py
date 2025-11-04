@@ -7,7 +7,10 @@ from typing import Optional, Sequence
 
 import pandas as pd
 
-from scripts.utils.team_maps import TEAM_NAME_TO_ABBR
+try:
+    from scripts.utils.team_maps import TEAM_NAME_TO_ABBR
+except ImportError:  # pragma: no cover - fallback for partial environments
+    TEAM_NAME_TO_ABBR: dict[str, str] = {}
 
 SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
 
