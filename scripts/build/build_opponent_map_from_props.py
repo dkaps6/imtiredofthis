@@ -17,6 +17,7 @@ from scripts.utils.name_clean import (
     initials_last_to_full,
     normalize_team,
 )
+from scripts.utils.df_keys import coerce_merge_keys
 
 
 DEFAULT_OUT = Path("data/opponent_map_from_props.csv")
@@ -324,6 +325,7 @@ def build_opponent_map(
         out = out.loc[~missing_opponent_mask].copy()
 
     out = out.drop_duplicates(subset=["player_clean_key", "team", "opponent", "event_id"], keep="last")
+    out = coerce_merge_keys(out, ["player_clean_key", "team", "event_id"], as_str=True)
     out.to_csv(out_path, index=False)
     unresolved_df = _write_unresolved(unresolved_records)
     size_bytes = out_path.stat().st_size if out_path.exists() else 0

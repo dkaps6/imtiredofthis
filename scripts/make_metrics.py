@@ -31,6 +31,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from scripts.utils.df_keys import coerce_merge_keys
+
 from scripts._opponent_map import attach_opponent
 from scripts.make_player_form import canonicalize_name
 from scripts.utils.name_clean import canonical_key
@@ -71,13 +73,6 @@ def _inj_normalize_team(s):
 
 def _inj_player_key(s):
     return s.fillna("").astype(str).str.lower().str.replace(r"[^a-z0-9]","",regex=True)
-
-
-def _ensure_str_keys(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
-    for c in cols:
-        if c in df.columns:
-            df[c] = df[c].astype("string")
-    return df
 
 
 def _canon_df(df: pd.DataFrame, player_col: str) -> pd.DataFrame:
@@ -187,8 +182,19 @@ def merge_opponent_map(base_df: pd.DataFrame) -> pd.DataFrame:
     opp_subset_cols = join_cols + [c for c in ("team_abbr", "opponent_abbr", "team", "opponent") if c in opp.columns]
     opp_subset = opp.loc[:, opp_subset_cols].drop_duplicates(subset=join_cols, keep="last")
 
-    merged = base.merge(
-        opp_subset,
+    left_merge = base.copy()
+    right_merge = opp_subset.copy()
+    numeric_cols = [c for c in ("season", "week") if c in join_cols]
+    text_cols = [c for c in join_cols if c not in numeric_cols]
+    if numeric_cols:
+        left_merge = coerce_merge_keys(left_merge, numeric_cols, as_str=False)
+        right_merge = coerce_merge_keys(right_merge, numeric_cols, as_str=False)
+    if text_cols:
+        left_merge = coerce_merge_keys(left_merge, text_cols, as_str=True)
+        right_merge = coerce_merge_keys(right_merge, text_cols, as_str=True)
+
+    merged = left_merge.merge(
+        right_merge,
         how="left",
         on=join_cols,
         suffixes=("", "_opp"),
@@ -1074,20 +1080,33 @@ def build_metrics(season: int) -> pd.DataFrame:
             ]
             if join_cols:
                 pf_subset = pf_subset[[c for c in keep_pf if c in pf_subset.columns]]
-                base = _ensure_str_keys(base, join_cols)
-                pf_subset = _ensure_str_keys(pf_subset, join_cols)
+                numeric_join = [c for c in ("season", "week") if c in join_cols]
+                text_join = [c for c in join_cols if c not in numeric_join]
+                left_merge = base.copy()
+                right_merge = pf_subset.copy()
+                if numeric_join:
+                    left_merge = coerce_merge_keys(left_merge, numeric_join, as_str=False)
+                    right_merge = coerce_merge_keys(right_merge, numeric_join, as_str=False)
+                if text_join:
+                    left_merge = coerce_merge_keys(left_merge, text_join, as_str=True)
+                    right_merge = coerce_merge_keys(right_merge, text_join, as_str=True)
                 print(
                     "[make_metrics] dtypes(left):",
-                    {c: str(base[c].dtype) for c in join_cols if c in base.columns},
+                    {c: str(left_merge[c].dtype) for c in join_cols if c in left_merge.columns},
                 )
                 print(
                     "[make_metrics] dtypes(right):",
-                    {c: str(pf_subset[c].dtype) for c in join_cols if c in pf_subset.columns},
+                    {c: str(right_merge[c].dtype) for c in join_cols if c in right_merge.columns},
                 )
-                left_keys = base[join_cols].drop_duplicates() if join_cols else pd.DataFrame()
-                merged = base.merge(pf_subset, on=join_cols, how="left", suffixes=("", "_pf"))
+                left_keys = left_merge[join_cols].drop_duplicates() if join_cols else pd.DataFrame()
+                merged = left_merge.merge(
+                    right_merge,
+                    on=join_cols,
+                    how="left",
+                    suffixes=("", "_pf"),
+                )
                 if merged.empty:
-                    right_keys = pf_subset[join_cols].drop_duplicates() if join_cols else pd.DataFrame()
+                    right_keys = right_merge[join_cols].drop_duplicates() if join_cols else pd.DataFrame()
                     dbg = left_keys.merge(right_keys, on=join_cols, how="left", indicator=True)
                     dbg = dbg[dbg["_merge"] == "left_only"]
                     Path("data/_debug").mkdir(parents=True, exist_ok=True)
