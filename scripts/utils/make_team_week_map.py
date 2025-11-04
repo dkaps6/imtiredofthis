@@ -234,6 +234,21 @@ def _write_game_lines_from_team_week_map(tw: pd.DataFrame, out_path: Path = GAME
         }
     )
     out = out.dropna(subset=["home", "away"])
+
+    if not out.empty:
+        season_str = out["season"].astype("Int64").astype("string")
+        week_str = out["week"].astype("Int64").astype("string").str.zfill(2)
+        home_str = out["home"].astype("string").str.upper().str.strip()
+        away_str = out["away"].astype("string").str.upper().str.strip()
+        out["game_id"] = season_str + "_" + week_str + "_" + home_str + "_" + away_str
+        out.loc[
+            season_str.isna()
+            | week_str.isna()
+            | home_str.isna()
+            | away_str.isna(),
+            "game_id",
+        ] = pd.NA
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out.to_csv(out_path, index=False)
     print(f"[make_team_week_map] wrote {len(out)} rows → {out_path}")
