@@ -35,6 +35,8 @@ import unicodedata
 import numpy as np
 import pandas as pd
 
+from scripts.utils.df_keys import coerce_merge_keys
+
 from scripts.utils.canonical_names import (
     canonicalize_player_name as _canonicalize_with_utils,
     log_unmapped_variant,
@@ -3469,11 +3471,13 @@ def _enrich_team_and_opponent_from_props(
             props_map["__has_team"] = False
         props_map = props_map.sort_values(["player_canonical", "__has_team"], ascending=[True, False])
         props_map = props_map.drop_duplicates(subset=["player_canonical"], keep="first")
-        enriched = enriched.merge(
-            props_map.drop(columns=[c for c in ["__has_team"] if c in props_map.columns]),
-            on="player_canonical",
-            how="left",
-        )
+        props_join_cols = ["player_canonical"]
+        props_subset = props_map.drop(
+            columns=[c for c in ["__has_team"] if c in props_map.columns]
+        ).copy()
+        left_props = coerce_merge_keys(enriched, props_join_cols, as_str=True)
+        right_props = coerce_merge_keys(props_subset, props_join_cols, as_str=True)
+        enriched = left_props.merge(right_props, on="player_canonical", how="left")
         enriched = _coalesce_dupe_cols(enriched)
         enriched = _normalize_player_clean_key_columns(enriched)
     else:
@@ -3630,8 +3634,14 @@ def _enrich_team_and_opponent_from_props(
             event_subset["teamweek_game_id"] = (
                 event_subset["teamweek_game_id"].astype("string").str.strip()
             )
-            schedule_joined = enriched_base.merge(
-                event_subset,
+            left_sched = coerce_merge_keys(
+                enriched_base, ["team", "event_id"], as_str=True
+            )
+            right_sched = coerce_merge_keys(
+                event_subset, ["team", "teamweek_game_id"], as_str=True
+            )
+            schedule_joined = left_sched.merge(
+                right_sched,
                 how="left",
                 left_on=["team", "event_id"],
                 right_on=["team", "teamweek_game_id"],
@@ -3644,8 +3654,18 @@ def _enrich_team_and_opponent_from_props(
         subset=join_cols, keep="last"
     )
     if not team_week_fallback.empty:
-        fallback = enriched_base.merge(
-            team_week_fallback,
+        left_fb = enriched_base.copy()
+        right_fb = team_week_fallback.copy()
+        numeric_fb = [c for c in ("season", "week") if c in join_cols]
+        text_fb = [c for c in join_cols if c not in numeric_fb]
+        if numeric_fb:
+            left_fb = coerce_merge_keys(left_fb, numeric_fb, as_str=False)
+            right_fb = coerce_merge_keys(right_fb, numeric_fb, as_str=False)
+        if text_fb:
+            left_fb = coerce_merge_keys(left_fb, text_fb, as_str=True)
+            right_fb = coerce_merge_keys(right_fb, text_fb, as_str=True)
+        fallback = left_fb.merge(
+            right_fb,
             on=join_cols,
             how="left",
             validate="m:1",
@@ -3736,8 +3756,10 @@ def _enrich_team_and_opponent_from_props(
             ]
             if join_live:
                 live_subset = live_map[join_live + ["event_id"]].drop_duplicates()
-                enriched = enriched.merge(
-                    live_subset,
+                left_live = coerce_merge_keys(enriched, join_live, as_str=True)
+                right_live = coerce_merge_keys(live_subset, join_live, as_str=True)
+                enriched = left_live.merge(
+                    right_live,
                     on=join_live,
                     how="left",
                     suffixes=("", "_live"),
