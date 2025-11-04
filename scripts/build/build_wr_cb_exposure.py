@@ -48,6 +48,17 @@ def normalize_team(series: pd.Series) -> pd.Series:
     return series.astype(str).str.upper().str.strip()
 
 
+def to_datetime_utc(series: pd.Series) -> pd.Series:
+    if series is None:
+        return pd.Series(dtype="datetime64[ns, UTC]")
+    if not isinstance(series, pd.Series):
+        series = pd.Series(series)
+    numeric = pd.to_numeric(series, errors="coerce")
+    dt_numeric = pd.to_datetime(numeric, unit="s", utc=True, errors="coerce")
+    dt_series = pd.to_datetime(series, utc=True, errors="coerce")
+    return dt_numeric.combine_first(dt_series)
+
+
 def pf_key(name: str) -> str:
     tokens = re.sub(r"[^A-Za-z\s\-]", "", str(name)).strip().split()
     if not tokens:
@@ -67,7 +78,7 @@ def select_upcoming(schedule: pd.DataFrame | None) -> pd.DataFrame:
     df["week"] = pd.to_numeric(df.get("week"), errors="coerce").astype("Int64")
     df["season"] = pd.to_numeric(df.get("season"), errors="coerce").astype("Int64")
     if "game_timestamp" in df.columns:
-        df["game_time"] = pd.to_datetime(df["game_timestamp"], errors="coerce", utc=True)
+        df["game_time"] = to_datetime_utc(df["game_timestamp"])
     else:
         df["game_time"] = pd.NaT
 

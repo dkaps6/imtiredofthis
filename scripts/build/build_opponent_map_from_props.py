@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
+import numpy as np
 import pandas as pd
 from zoneinfo import ZoneInfo
 
@@ -66,6 +67,35 @@ def _load_csv_safe(path: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def _to_epoch_seconds(series: pd.Series) -> pd.Series:
+    """Coerce arbitrary datetime-like inputs into UTC epoch seconds."""
+
+    if series is None:
+        return pd.Series(dtype="Int64")
+
+    if not isinstance(series, pd.Series):
+        series = pd.Series(series)
+
+    out = pd.Series(pd.NA, index=series.index, dtype="Int64")
+
+    numeric = pd.to_numeric(series, errors="coerce")
+    numeric_mask = numeric.notna()
+    if numeric_mask.any():
+        out.loc[numeric_mask] = (
+            numeric.loc[numeric_mask].round().astype("Int64")
+        )
+
+    remaining = out.isna()
+    if remaining.any():
+        dt = pd.to_datetime(series.loc[remaining], utc=True, errors="coerce")
+        if not dt.empty:
+            epoch = (dt.dropna().view("int64") // 1_000_000_000)
+            epoch_series = pd.Series(epoch, index=dt.dropna().index, dtype="Int64")
+            out.loc[epoch_series.index] = epoch_series
+
+    return out
+
+
 def _add_game_timestamp_from_odds(df: pd.DataFrame) -> pd.DataFrame:
     """Attach UTC kickoff timestamp for each event when possible."""
 
@@ -96,19 +126,13 @@ def _add_game_timestamp_from_odds(df: pd.DataFrame) -> pd.DataFrame:
 
     working = odds_games.copy()
     if "commence_time" in working.columns:
-        working["game_timestamp"] = pd.to_datetime(
-            working["commence_time"], utc=True, errors="coerce"
-        )
+        working["game_timestamp"] = _to_epoch_seconds(working["commence_time"])
     elif "kickoff_utc" in working.columns:
-        working["game_timestamp"] = pd.to_datetime(
-            working["kickoff_utc"], utc=True, errors="coerce"
-        )
+        working["game_timestamp"] = _to_epoch_seconds(working["kickoff_utc"])
     elif "game_timestamp" in working.columns:
-        working["game_timestamp"] = pd.to_datetime(
-            working["game_timestamp"], utc=True, errors="coerce"
-        )
+        working["game_timestamp"] = _to_epoch_seconds(working["game_timestamp"])
     else:
-        working["game_timestamp"] = pd.NaT
+        working["game_timestamp"] = pd.Series(pd.NA, index=working.index, dtype="Int64")
 
     keep = working[["event_id", "game_timestamp"]].drop_duplicates()
     merged = df.merge(keep, on="event_id", how="left")
@@ -119,7 +143,9 @@ def _add_game_timestamp_from_odds(df: pd.DataFrame) -> pd.DataFrame:
         merged.drop(columns=["game_timestamp_x", "game_timestamp_y"], inplace=True)
 
     if "game_timestamp" not in merged.columns:
-        merged["game_timestamp"] = pd.NaT
+        merged["game_timestamp"] = pd.Series(
+            pd.NA, index=merged.index, dtype="Int64"
+        )
 
     return merged
 
@@ -249,11 +275,15 @@ def build_opponent_map(
         "player",
         "player_name_clean",
         "player_clean_key",
+        "player_canonical",
         "team",
         "opponent",
+        "team_abbr",
+        "opponent_abbr",
         "season",
         "week",
         "event_id",
+        "game_timestamp",
     ]
 
     unresolved_records: list[dict[str, object]] = []
@@ -324,6 +354,12 @@ def build_opponent_map(
     cleaned = props.apply(_clean_player, axis=1)
     props["player_name_clean"] = cleaned["player_name_clean"].astype("string")
     props["player_clean_key"] = cleaned["player_clean_key"].astype("string")
+    props["player_canonical"] = (
+        props["player_name_clean"].where(
+            props["player_name_clean"].astype("string").str.strip().str.len() > 0,
+            props["player"],
+        )
+    ).astype("string")
 
     missing_key_mask = props["player_clean_key"].fillna("").str.len() == 0
     if missing_key_mask.any():
@@ -393,14 +429,76 @@ def build_opponent_map(
     ]
     odds = odds.loc[:, keep_odds_cols].drop_duplicates(subset=["event_id"], keep="last")
 
-    merged = props.merge(odds, on="event_id", how="inner")
+    merged = props.merge(odds, on="event_id", how="left")
     if merged.empty:
         return _return_empty("[opponent_map] WARN: no props matched live odds; wrote empty map")
+
+    merged["player_canonical"] = merged.get("player_canonical", pd.Series(dtype="string"))
+    merged["player_canonical"] = merged["player_canonical"].astype("string").str.strip()
+
+    if "home_team" in merged.columns:
+        merged["home_team"] = _norm_team(merged["home_team"])
+    if "away_team" in merged.columns:
+        merged["away_team"] = _norm_team(merged["away_team"])
 
     if "home_team" in merged.columns and "home" not in merged.columns:
         merged["home"] = merged["home_team"]
     if "away_team" in merged.columns and "away" not in merged.columns:
         merged["away"] = merged["away_team"]
+
+    player_upper = merged["player_canonical"].astype("string").str.upper()
+    home_vals = merged.get("home_team", pd.Series(index=merged.index, dtype="string")).astype("string").str.upper()
+    away_vals = merged.get("away_team", pd.Series(index=merged.index, dtype="string")).astype("string").str.upper()
+
+    home_match = pd.Series(
+        [
+            bool(player) and bool(home) and home in player
+            for player, home in zip(player_upper.fillna(""), home_vals.fillna(""))
+        ],
+        index=merged.index,
+    )
+
+    team_guess = pd.Series(
+        np.where(home_match, home_vals.fillna(""), away_vals.fillna("")),
+        index=merged.index,
+        dtype="string",
+    ).replace("", pd.NA)
+    opponent_guess = pd.Series(
+        np.where(home_match, away_vals.fillna(""), home_vals.fillna("")),
+        index=merged.index,
+        dtype="string",
+    ).replace("", pd.NA)
+
+    if "team_abbr" in merged.columns:
+        merged["team_abbr"] = _norm_team(merged["team_abbr"])
+    else:
+        merged["team_abbr"] = pd.Series(pd.NA, index=merged.index, dtype="string")
+    merged["team_abbr"] = merged["team_abbr"].replace({"": pd.NA})
+    merged["team_abbr"] = merged["team_abbr"].combine_first(team_guess)
+
+    if "opponent_abbr" in merged.columns:
+        merged["opponent_abbr"] = _norm_team(merged["opponent_abbr"])
+    else:
+        merged["opponent_abbr"] = pd.Series(pd.NA, index=merged.index, dtype="string")
+    merged["opponent_abbr"] = merged["opponent_abbr"].replace({"": pd.NA})
+    merged["opponent_abbr"] = merged["opponent_abbr"].combine_first(opponent_guess)
+
+    if "team" in merged.columns:
+        merged["team"] = _norm_team(merged["team"])
+        merged["team"] = merged["team"].combine_first(merged["team_abbr"])
+    else:
+        merged["team"] = merged["team_abbr"]
+
+    if "opponent" in merged.columns:
+        merged["opponent"] = _norm_team(merged["opponent"])
+        merged["opponent"] = merged["opponent"].combine_first(merged["opponent_abbr"])
+    else:
+        merged["opponent"] = merged["opponent_abbr"]
+
+    if "commence_time" in merged.columns:
+        merged["game_timestamp"] = _to_epoch_seconds(merged["commence_time"])
+    elif "game_timestamp" not in merged.columns:
+        merged["game_timestamp"] = pd.Series(pd.NA, index=merged.index, dtype="Int64")
 
     if "team" in merged.columns and "home_team" in merged.columns and "away_team" in merged.columns:
         merged["opponent"] = merged.apply(
@@ -422,6 +520,7 @@ def build_opponent_map(
             "player",
             "player_name_clean",
             "player_clean_key",
+            "player_canonical",
             "team",
             "opponent",
             "season",
@@ -433,6 +532,7 @@ def build_opponent_map(
             "away_team",
             "team_abbr",
             "opponent_abbr",
+            "game_timestamp",
         ]
         if c in merged.columns
     ]
@@ -446,6 +546,11 @@ def build_opponent_map(
     out["player"] = out["player"].astype("string")
     out["player_name_clean"] = out["player_name_clean"].astype("string")
     out["player_clean_key"] = out["player_clean_key"].astype("string")
+    if "player_canonical" in out.columns:
+        out["player_canonical"] = out["player_canonical"].astype("string")
+    for col in ("team_abbr", "opponent_abbr"):
+        if col in out.columns:
+            out[col] = _norm_team(out[col])
     for col in ("season", "week"):
         out[col] = pd.to_numeric(out[col], errors="coerce").astype("Int64")
     out["event_id"] = out["event_id"].astype("string")
@@ -517,16 +622,14 @@ def build_opponent_map(
                 merged.loc[missing_event, "event_id"] = merged.loc[missing_event, "schedule_game_id"]
 
             if "game_timestamp" in merged.columns:
-                merged["game_timestamp"] = pd.to_datetime(
-                    merged["game_timestamp"], utc=True, errors="coerce"
-                )
+                merged["game_timestamp"] = _to_epoch_seconds(merged["game_timestamp"])
             else:
-                merged["game_timestamp"] = pd.NaT
+                merged["game_timestamp"] = pd.Series(
+                    pd.NA, index=merged.index, dtype="Int64"
+                )
 
             if "schedule_kickoff_utc" in merged.columns:
-                sched_ts = pd.to_datetime(
-                    merged["schedule_kickoff_utc"], utc=True, errors="coerce"
-                )
+                sched_ts = _to_epoch_seconds(merged["schedule_kickoff_utc"])
                 merged["game_timestamp"] = merged["game_timestamp"].combine_first(sched_ts)
 
             out = merged
@@ -554,6 +657,14 @@ def build_opponent_map(
         opponent_map, ["player_clean_key", "team", "event_id"], as_str=True
     )
     opponent_map = _add_game_timestamp_from_odds(opponent_map)
+    if "game_timestamp" in opponent_map.columns:
+        opponent_map["game_timestamp"] = _to_epoch_seconds(
+            opponent_map["game_timestamp"]
+        )
+    else:
+        opponent_map["game_timestamp"] = pd.Series(
+            pd.NA, index=opponent_map.index, dtype="Int64"
+        )
     for col in [
         "season",
         "week",
