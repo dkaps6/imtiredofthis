@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 from zoneinfo import ZoneInfo
 
+from scripts.utils.name_canon import make_player_key, most_common_full_name
 from scripts.utils.name_clean import (
     build_roster_lookup,
     canonical_key,
@@ -19,6 +20,7 @@ from scripts.utils.name_clean import (
     initials_last_to_full,
     normalize_team,
 )
+from scripts.utils.team_codes import canon_team
 from scripts.utils.df_keys import coerce_merge_keys
 
 
@@ -26,6 +28,8 @@ DATA_DIR = Path("data")
 OUT_PATH = DATA_DIR / "opponent_map_from_props.csv"
 DEFAULT_OUT = OUT_PATH
 UNRESOLVED_OUT = DATA_DIR / "opponent_map_unresolved.csv"
+PLAYER_NAME_MAP_PATH = DATA_DIR / "player_name_map_from_props.csv"
+MISSING_SAMPLE_PATH = DATA_DIR / "opponent_map_missing_sample.csv"
 TEAM_WEEK_MAP_PATH = DATA_DIR / "team_week_map.csv"
 ODDS_GAME_PATH = Path("outputs/odds_game.csv")
 UNRESOLVED_COLUMNS = [
@@ -229,9 +233,50 @@ def _write_unresolved(records: list[dict[str, object]]) -> pd.DataFrame:
     return df
 
 
+def _write_player_name_map(props: pd.DataFrame) -> None:
+    if props is None or props.empty:
+        return
+    if "player_clean_key" not in props.columns or "player" not in props.columns:
+        return
+
+    try:
+        grouped = (
+            props.loc[:, ["player_clean_key", "player"]]
+            .dropna(subset=["player_clean_key", "player"])
+            .groupby("player_clean_key", dropna=False)["player"]
+            .agg(list)
+            .reset_index()
+        )
+    except Exception:
+        return
+
+    if grouped.empty:
+        return
+
+    grouped["player_name_full"] = grouped["player"].map(most_common_full_name)
+    keep_cols = ["player_clean_key", "player_name_full"]
+    name_map = grouped.loc[:, keep_cols].copy()
+    name_map["player_clean_key"] = name_map["player_clean_key"].astype("string")
+    name_map["player_name_full"] = name_map["player_name_full"].astype("string")
+
+    PLAYER_NAME_MAP_PATH.parent.mkdir(parents=True, exist_ok=True)
+    name_map.to_csv(PLAYER_NAME_MAP_PATH, index=False)
+
+
 def _norm_team(series: pd.Series) -> pd.Series:
     series = series.fillna("").astype("string")
-    return series.map(normalize_team).astype("string")
+    normalized = series.map(normalize_team).astype("object")
+
+    def _canon(value: object) -> object:
+        if pd.isna(value):
+            return pd.NA
+        text = str(value).strip()
+        if not text:
+            return pd.NA
+        canon = canon_team(text)
+        return canon if canon else pd.NA
+
+    return pd.Series(normalized.apply(_canon), index=series.index, dtype="string")
 
 
 def _parse_commence(series: pd.Series) -> pd.Series:
@@ -321,6 +366,10 @@ def build_opponent_map(
 
     props = props.copy()
     props.columns = [c.lower() for c in props.columns]
+    if "commence_time" in props.columns:
+        props["commence_time"] = pd.to_datetime(
+            props["commence_time"], errors="coerce", utc=True
+        )
     if "player" not in props.columns:
         alt = next((c for c in ("player_name", "name") if c in props.columns), None)
         if alt:
@@ -329,6 +378,13 @@ def build_opponent_map(
             props["player"] = pd.NA
     props["player"] = props["player"].astype("string").str.strip()
     props = props[props["player"].str.len() > 0]
+
+    if "player" in props.columns:
+        props["_player_key_fallback"] = props["player"].astype("string").map(
+            make_player_key
+        )
+    else:
+        props["_player_key_fallback"] = ""
 
     if "event_id" not in props.columns:
         props["event_id"] = pd.NA
@@ -354,6 +410,7 @@ def build_opponent_map(
     cleaned = props.apply(_clean_player, axis=1)
     props["player_name_clean"] = cleaned["player_name_clean"].astype("string")
     props["player_clean_key"] = cleaned["player_clean_key"].astype("string")
+    props["_player_key_fallback"] = props["_player_key_fallback"].astype("string")
     props["player_canonical"] = (
         props["player_name_clean"].where(
             props["player_name_clean"].astype("string").str.strip().str.len() > 0,
@@ -363,11 +420,21 @@ def build_opponent_map(
 
     missing_key_mask = props["player_clean_key"].fillna("").str.len() == 0
     if missing_key_mask.any():
+        props.loc[missing_key_mask, "player_clean_key"] = props.loc[
+            missing_key_mask, "_player_key_fallback"
+        ]
+    missing_key_mask = props["player_clean_key"].fillna("").str.len() == 0
+    if missing_key_mask.any():
         _record_unresolved_rows(props.loc[missing_key_mask], "missing_player_key")
         props = props.loc[~missing_key_mask].copy()
 
     if props.empty:
         return _return_empty("[opponent_map] WARN: no props with resolvable players; wrote empty map")
+
+    _write_player_name_map(props)
+
+    if "_player_key_fallback" in props.columns:
+        props.drop(columns=["_player_key_fallback"], inplace=True)
 
     for col in ("team", "season", "week"):
         if col not in props.columns:
@@ -648,6 +715,17 @@ def build_opponent_map(
             team_val = getattr(row, "team", pd.NA)
             event_val = getattr(row, "event_id", pd.NA)
             print(f"[opponent_map] missing mapping for {name} ({team_val}, event {event_val})")
+        sample_cols = [c for c in ["player", "event_id"] if c in missing_rows.columns]
+        if sample_cols:
+            try:
+                MISSING_SAMPLE_PATH.parent.mkdir(parents=True, exist_ok=True)
+                missing_rows.loc[:, sample_cols].head(200).to_csv(
+                    MISSING_SAMPLE_PATH, index=False
+                )
+            except Exception as err:
+                print(
+                    f"[opponent_map] WARN: failed writing missing sample to {MISSING_SAMPLE_PATH}: {err}"
+                )
         out = out.loc[~missing_opponent_mask].copy()
 
     opponent_map = out.drop_duplicates(
@@ -681,10 +759,35 @@ def build_opponent_map(
     print(f"[oddsapi] wrote {len(opponent_map)} rows → {out_path}")
     unresolved_df = _write_unresolved(unresolved_records)
     size_bytes = out_path.stat().st_size if out_path.exists() else 0
+    missing_home = (
+        opponent_map["home_team"].isna().sum()
+        if "home_team" in opponent_map.columns
+        else 0
+    )
+    missing_away = (
+        opponent_map["away_team"].isna().sum()
+        if "away_team" in opponent_map.columns
+        else 0
+    )
     print(
-        f"[opponent_map] wrote {len(opponent_map):,} rows -> {out_path} ({size_bytes:,} bytes)"
+        "[opponent_map] wrote %s rows -> %s (%s bytes); missing_home=%s missing_away=%s"
+        % (
+            f"{len(opponent_map):,}",
+            out_path,
+            f"{size_bytes:,}",
+            int(missing_home),
+            int(missing_away),
+        )
     )
     print(f"[opponent_map] unresolved rows: {len(unresolved_df):,} -> {UNRESOLVED_OUT}")
+    if PLAYER_NAME_MAP_PATH.exists():
+        print(
+            f"[opponent_map] wrote player name map with {PLAYER_NAME_MAP_PATH.stat().st_size:,} bytes -> {PLAYER_NAME_MAP_PATH}"
+        )
+    if MISSING_SAMPLE_PATH.exists():
+        print(
+            f"[opponent_map] missing sample preview -> {MISSING_SAMPLE_PATH}"
+        )
     return opponent_map
 
 
