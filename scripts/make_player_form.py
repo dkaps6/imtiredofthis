@@ -2117,6 +2117,101 @@ def _canon_team(x: str) -> str:
     return ""
 
 
+def _backfill_opponent_from_schedule(out: pd.DataFrame) -> pd.DataFrame:
+    """Use team-week map to fill opponents/event IDs when props miss them."""
+
+    if out is None or out.empty:
+        return out
+
+    sched_path = Path("data/team_week_map.csv")
+    if not sched_path.exists():
+        alt = Path("outputs/team_week_map.csv")
+        if alt.exists():
+            sched_path = alt
+        else:
+            print("[make_player_form] skip schedule backfill: team_week_map.csv not found")
+            return out
+
+    try:
+        sch = pd.read_csv(sched_path)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        print(f"[make_player_form] skip schedule backfill: failed to read schedule ({exc})")
+        return out
+
+    if sch.empty:
+        print("[make_player_form] skip schedule backfill: schedule empty")
+        return out
+
+    sch = sch.copy()
+    for col in ("season", "week"):
+        if col in sch.columns:
+            sch[col] = pd.to_numeric(sch[col], errors="coerce").astype("Int64")
+    for col in ("team", "opponent"):
+        if col in sch.columns:
+            sch[col] = sch[col].map(_canon_team)
+            sch.loc[sch[col] == "", col] = pd.NA
+    if "bye" in sch.columns:
+        sch["bye"] = sch["bye"].fillna(False).astype(bool)
+    else:
+        sch["bye"] = False
+
+    take_cols = [c for c in ("season", "week", "team", "opponent", "bye", "event_id") if c in sch.columns]
+    if len(take_cols) < 3 or not {"season", "week", "team"}.issubset(take_cols):
+        return out
+
+    sch = sch[take_cols].drop_duplicates()
+
+    merged = out.copy()
+    for col in ("season", "week"):
+        if col in merged.columns:
+            merged[col] = pd.to_numeric(merged[col], errors="coerce").astype("Int64")
+    if "team" in merged.columns:
+        merged["team"] = merged["team"].map(_canon_team)
+        merged.loc[merged["team"] == "", "team"] = pd.NA
+
+    join_keys = [c for c in ("season", "week", "team") if c in merged.columns]
+    if len(join_keys) < 3:
+        return out
+
+    merged = merged.merge(
+        sch,
+        on=join_keys,
+        how="left",
+        suffixes=("", "_schedule"),
+        validate="m:1",
+    )
+
+    if "opponent" not in merged.columns:
+        merged["opponent"] = pd.Series(pd.NA, index=merged.index)
+
+    props_series = merged.get("opponent_from_props")
+    if props_series is not None:
+        merged["opponent"] = props_series.combine_first(merged["opponent"])
+
+    need_mask = merged["opponent"].isna()
+    if "opponent_schedule" in merged.columns:
+        merged.loc[need_mask, "opponent"] = merged.loc[need_mask, "opponent_schedule"]
+        merged.drop(columns=["opponent_schedule"], inplace=True)
+
+    n_backfilled = int((need_mask & merged["opponent"].notna()).sum())
+    if n_backfilled:
+        print(f"[make_player_form] schedule backfill: opponent filled for {n_backfilled} rows")
+
+    if "event_id" in merged.columns and "event_id_schedule" in merged.columns:
+        merged["event_id"] = merged["event_id"].combine_first(merged["event_id_schedule"])
+        merged.drop(columns=["event_id_schedule"], inplace=True)
+    elif "event_id" not in merged.columns and "event_id_schedule" in merged.columns:
+        merged.rename(columns={"event_id_schedule": "event_id"}, inplace=True)
+
+    if "bye" in merged.columns and "bye_schedule" in merged.columns:
+        merged["bye"] = merged["bye"].fillna(False) | merged["bye_schedule"].fillna(False)
+        merged.drop(columns=["bye_schedule"], inplace=True)
+    elif "bye_schedule" in merged.columns:
+        merged.rename(columns={"bye_schedule": "bye"}, inplace=True)
+
+    return merged
+
+
 def _derive_opponent(df: pd.DataFrame) -> pd.Series:
     """Return canonical opponent abbreviations for a play-by-play frame.
 
@@ -4191,6 +4286,7 @@ def _enrich_team_and_opponent_from_props(
         enriched = enriched.sort_values(dedup_cols).drop_duplicates(subset=dedup_cols, keep="first")
 
     enriched = _overlay_opponents(enriched, season)
+    enriched = _backfill_opponent_from_schedule(enriched)
 
     # ---- Attach or synthesize deterministic game identifiers ----
     def _compose_game_id_from_series(
