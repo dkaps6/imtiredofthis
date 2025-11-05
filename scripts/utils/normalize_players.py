@@ -42,7 +42,18 @@ def _to_frame(source: FrameLike | None) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def _as_string(series: pd.Series) -> pd.Series:
+def _as_string(series, *, index: pd.Index | None = None) -> pd.Series:
+    """
+    Normalize an arbitrary input to a Pandas string Series:
+    - If `series` is not a Series (e.g., a scalar ''), coerce to a Series
+      aligned to `index` (or a length-1 Series if index is None).
+    - Always return dtype 'string' with trimmed text and NA as empty string.
+    """
+    if not isinstance(series, pd.Series):
+        if index is None:
+            series = pd.Series([series])
+        else:
+            series = pd.Series([series] * len(index), index=index)
     return series.astype("string").fillna("").str.strip()
 
 
@@ -119,13 +130,19 @@ def _normalize_schedule_join(df: pd.DataFrame, team_week: FrameLike | None) -> p
     merged = left.merge(subset, on=join_cols, how="left", validate="m:1")
 
     if "_schedule_opponent" in merged.columns:
-        merged["opponent"] = _as_string(merged.get("opponent", ""))
+        merged["opponent"] = _as_string(
+            merged["opponent"] if "opponent" in merged.columns else pd.Series(pd.NA, index=merged.index),
+            index=merged.index,
+        )
         merged["opponent"] = merged["opponent"].where(
             merged["opponent"].ne(""), merged["_schedule_opponent"]
         )
         merged.drop(columns=["_schedule_opponent"], inplace=True)
     if "_schedule_event_id" in merged.columns:
-        merged["event_id"] = _as_string(merged.get("event_id", ""))
+        merged["event_id"] = _as_string(
+            merged["event_id"] if "event_id" in merged.columns else pd.Series(pd.NA, index=merged.index),
+            index=merged.index,
+        )
         merged["event_id"] = merged["event_id"].where(
             merged["event_id"].ne(""), merged["_schedule_event_id"]
         )
