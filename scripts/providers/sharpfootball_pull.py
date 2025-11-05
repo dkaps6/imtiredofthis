@@ -32,8 +32,9 @@ import time
 import math
 import string
 import argparse
+import logging
 from io import StringIO
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import pandas as pd
 import numpy as np
@@ -192,6 +193,68 @@ def _normalize_team_name(name: str) -> str:
     if tail in TEAM_CODES:
         return tail
     return ""
+
+
+def _fallback_pace_table(html: Optional[str] = None, season: Optional[int] = None) -> Optional[pd.DataFrame]:
+    """Attempt to recover the pace table using more permissive parsing."""
+
+    if not html and season is not None:
+        html = _fetch_html(URLS["pace"], season, "pace_fallback")
+
+    if not html:
+        return None
+
+    try:
+        tables = pd.read_html(html)
+    except Exception as exc:
+        logging.warning("[sharpfootball_pull] fallback pace parse failed: %s", exc)
+        return None
+
+    def _flatten(col: Any) -> str:
+        if isinstance(col, tuple):
+            return " ".join(str(part).strip() for part in col if str(part).strip())
+        return str(col)
+
+    for tbl in tables:
+        frame = tbl.copy()
+        flat_cols = [_flatten(c) for c in frame.columns]
+        norm_cols = [c.strip().lower() for c in flat_cols]
+        frame.columns = norm_cols
+
+        team_cols = [c for c in frame.columns if "team" in c]
+        pace_cols = [
+            c
+            for c in frame.columns
+            if "neutral" in c
+            and any(tok in c for tok in ("pace", "sec", "second"))
+            and "db" not in c
+        ]
+
+        if not team_cols or not pace_cols:
+            continue
+
+        team_col = team_cols[0]
+        pace_col = pace_cols[0]
+        candidate = frame[[team_col, pace_col]].rename(
+            columns={team_col: "team", pace_col: "neutral_pace"}
+        )
+        candidate["team"] = candidate["team"].astype(str).str.strip()
+        candidate["neutral_pace"] = (
+            candidate["neutral_pace"]
+            .astype(str)
+            .str.replace(r"[^0-9.]", "", regex=True)
+            .str.strip()
+        )
+        candidate["neutral_pace"] = pd.to_numeric(candidate["neutral_pace"], errors="coerce")
+        candidate["team"] = candidate["team"].apply(_normalize_team_name)
+        candidate["team"] = candidate["team"].astype(str).str.upper().str.strip()
+        candidate = candidate[candidate["team"].isin(TEAM_CODES)]
+        candidate = candidate.drop_duplicates(subset=["team"])
+        if not candidate.empty:
+            return candidate[["team", "neutral_pace"]]
+
+    logging.warning("[sharpfootball_pull] fallback pace parse did not locate a usable table")
+    return None
 
 
 def _session() -> requests.Session:
@@ -573,11 +636,22 @@ def _prepare_piece_for_merge(kind: str, df: pd.DataFrame) -> Optional[pd.DataFra
 def _pull_one(kind: str, url: str, season: int) -> Tuple[str, int, Optional[pd.DataFrame]]:
     html = _fetch_html(url, season, kind)
     df = _read_single_table_from_html(html or "")
+    if (df is None or df.empty) and kind == "pace":
+        df = _fallback_pace_table(html=html, season=season)
     if df is None or df.empty:
         return kind, 0, None
 
     if kind == "pace":
-        df = _normalize_pace_table(df)
+        try:
+            df = _normalize_pace_table(df)
+        except Exception as exc:
+            logging.warning(
+                "[sharpfootball_pull] primary pace normalization failed: %s", exc
+            )
+            fallback_df = _fallback_pace_table(html=html, season=season)
+            if fallback_df is None or fallback_df.empty:
+                return kind, 0, None
+            df = fallback_df
     elif kind == "coverage_scheme":
         df = _normalize_coverage_scheme_table(df)
 
@@ -718,6 +792,35 @@ def merge_team_form(season: int, pieces: Dict[str, pd.DataFrame]) -> int:
                 .str.strip()
             )
             merged[col] = pd.to_numeric(merged[col], errors="coerce")
+
+    if "neutral_pace" not in merged.columns or merged["neutral_pace"].isna().all():
+        fallback_pace = _fallback_pace_table(season=season)
+        if fallback_pace is not None and not fallback_pace.empty:
+            merged = merged.merge(
+                fallback_pace,
+                on="team",
+                how="left",
+                suffixes=("", "_fallback"),
+            )
+            if "neutral_pace_fallback" in merged.columns:
+                if "neutral_pace" in merged.columns:
+                    merged["neutral_pace"] = merged["neutral_pace"].combine_first(
+                        merged["neutral_pace_fallback"]
+                    )
+                else:
+                    merged["neutral_pace"] = merged["neutral_pace_fallback"]
+                merged.drop(columns=["neutral_pace_fallback"], inplace=True)
+
+    if "neutral_pace" not in merged.columns:
+        merged["neutral_pace"] = 30.5
+    else:
+        merged["neutral_pace"] = pd.to_numeric(merged["neutral_pace"], errors="coerce")
+        if merged["neutral_pace"].isna().all():
+            merged["neutral_pace"] = 30.5
+        else:
+            merged["neutral_pace"] = merged["neutral_pace"].fillna(
+                merged["neutral_pace"].median()
+            )
 
     # 4️⃣ Required columns guard
     required_cols = ["neutral_pace", "coverage_man_rate", "coverage_zone_rate"]
