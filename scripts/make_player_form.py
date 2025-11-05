@@ -41,8 +41,10 @@ from scripts.utils.canonical_names import (
     canonicalize_player_name as _canonicalize_with_utils,
     log_unmapped_variant,
 )
+from scripts.utils.name_canon import make_player_key
 from scripts.utils.name_clean import canonical_key, canonical_player, canonicalize, normalize_team
 from scripts.utils.normalize_players import normalize_game_logs, normalize_season_totals
+from scripts.utils.team_codes import canon_team
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +90,74 @@ NAME_OVERRIDES = {
     "D.ADAMS": "Davante Adams",
     "DADAMS": "Davante Adams",
 }
+
+
+def _canon_team_series(series: pd.Series) -> pd.Series:
+    if series is None:
+        return series
+
+    def _canon(value: object) -> object:
+        if pd.isna(value):
+            return pd.NA
+        text = str(value).strip()
+        if not text:
+            return pd.NA
+        canon = canon_team(text)
+        return canon if canon else pd.NA
+
+    return pd.Series(series.astype("object").apply(_canon), index=series.index, dtype="string")
+
+
+def _attach_player_name_from_props(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    if "player_clean_key" not in df.columns:
+        return df
+
+    path = Path("data/player_name_map_from_props.csv")
+    if not path.exists() or path.stat().st_size == 0:
+        return df
+
+    try:
+        name_map = pd.read_csv(path)
+    except Exception as err:
+        logger.warning(
+            "[make_player_form] failed reading %s for player names: %s",
+            path,
+            err,
+        )
+        return df
+
+    if name_map.empty or "player_clean_key" not in name_map.columns:
+        return df
+
+    working = df.copy()
+    working["player_clean_key"] = working["player_clean_key"].astype("string")
+    name_map = name_map.copy()
+    name_map["player_clean_key"] = name_map["player_clean_key"].astype("string")
+    if "player_name_full" in name_map.columns:
+        name_map["player_name_full"] = name_map["player_name_full"].astype("string")
+
+    merged = working.merge(name_map, on="player_clean_key", how="left")
+
+    if "player_name" not in merged.columns:
+        merged["player_name"] = pd.Series(pd.NA, index=merged.index, dtype="string")
+
+    if "player_name_full" in merged.columns:
+        merged["player_name"] = merged["player_name"].astype("string").fillna(
+            merged["player_name_full"]
+        )
+        merged.drop(columns=["player_name_full"], inplace=True)
+
+    fallback = None
+    for col in ("display_name", "player_display", "player_canonical", "player"):
+        if col in merged.columns:
+            fallback = merged[col].astype("string")
+            break
+    if fallback is not None:
+        merged["player_name"] = merged["player_name"].fillna(fallback)
+
+    return merged
 
 
 def _overlay_opponents(pf: pd.DataFrame, season: int | None = None) -> pd.DataFrame:
@@ -4900,6 +4970,29 @@ def _write_player_form_outputs(
         player_form, team_columns=("team_abbr", "team")
     )
     player_form = _reorder_identity_columns(player_form)
+
+    if "player_clean_key" in player_form.columns:
+        key_series = player_form["player_clean_key"].astype("string")
+        missing_key_mask = key_series.isna() | key_series.str.strip().eq("")
+        if missing_key_mask.any():
+            fallback = None
+            for candidate in (
+                "display_name",
+                "player",
+                "player_canonical",
+                "player_name_clean",
+            ):
+                if candidate in player_form.columns:
+                    fallback = player_form[candidate].astype("string")
+                    break
+            if fallback is not None:
+                fallback_keys = fallback.map(make_player_key)
+                player_form.loc[missing_key_mask, "player_clean_key"] = fallback_keys.loc[
+                    missing_key_mask
+                ]
+        player_form["player_clean_key"] = (
+            player_form["player_clean_key"].astype("string").fillna("")
+        )
     try:
         player_form["season"] = int(season)
     except Exception:
@@ -4943,6 +5036,20 @@ def _write_player_form_outputs(
     player_form["opponent_abbr"] = player_form["opponent_abbr"].replace("", pd.NA)
     player_form["opponent"] = player_form["opponent"].fillna(player_form["opponent_abbr"])
     player_form["opponent"] = player_form["opponent"].replace("", pd.NA)
+
+    for col in ("team_abbr", "team", "opponent_abbr", "opponent"):
+        if col in player_form.columns:
+            player_form[col] = _canon_team_series(player_form[col])
+
+    if {"bye", "opponent"}.issubset(player_form.columns):
+        bye_mask = player_form["bye"].fillna(False).astype(bool)
+        player_form.loc[bye_mask, "opponent"] = "BYE"
+        if "opponent_abbr" in player_form.columns:
+            player_form.loc[bye_mask, "opponent_abbr"] = "BYE"
+        clear_mask = (~bye_mask) & player_form["opponent"].astype("string").str.upper().eq("BYE")
+        player_form.loc[clear_mask, "opponent"] = pd.NA
+        if "opponent_abbr" in player_form.columns:
+            player_form.loc[clear_mask, "opponent_abbr"] = pd.NA
 
     still_missing = player_form["opponent_abbr"].isna()
     if still_missing.any():
@@ -5022,6 +5129,16 @@ def _write_player_form_outputs(
         if fallback_display is not None:
             display_series = display_series.fillna(fallback_display.astype("string"))
         player_form["display_name"] = display_series
+
+    player_form = _attach_player_name_from_props(player_form)
+    if "player_name" in player_form.columns:
+        player_form["player_name"] = player_form["player_name"].astype("string")
+        if "display_name" in player_form.columns:
+            player_form["player_name"] = player_form["player_name"].fillna(
+                player_form["display_name"].astype("string")
+            )
+    elif "display_name" in player_form.columns:
+        player_form["player_name"] = player_form["display_name"].astype("string")
 
     # ---------- NEW: game logs + season-to-date rollups ----------
     def _safe_cols(df: pd.DataFrame, candidates: List[str]) -> List[str]:
@@ -5254,6 +5371,23 @@ def _write_player_form_outputs(
     if player_form.empty:
         raise RuntimeError("[make_player_form] final player_form empty; aborting run")
 
+    missing_opponent_count = (
+        player_form["opponent"].isna().sum()
+        if "opponent" in player_form.columns
+        else -1
+    )
+    missing_name_count = (
+        player_form["player_name"].isna().sum()
+        if "player_name" in player_form.columns
+        else -1
+    )
+    logger.info(
+        "[make_player_form] rows=%d missing_opponent=%s missing_player_name=%s",
+        len(player_form),
+        "na" if missing_opponent_count < 0 else int(missing_opponent_count),
+        "na" if missing_name_count < 0 else int(missing_name_count),
+    )
+
     PLAYER_FORM_OUT.parent.mkdir(parents=True, exist_ok=True)
     player_form.to_csv(PLAYER_FORM_OUT, index=False)
 
@@ -5277,6 +5411,28 @@ def _write_player_form_outputs(
 
     if "event_id" not in pf_consensus.columns:
         pf_consensus["event_id"] = pd.NA
+
+    if "player_clean_key" in pf_consensus.columns:
+        key_series = pf_consensus["player_clean_key"].astype("string")
+        missing_key_mask = key_series.isna() | key_series.str.strip().eq("")
+        if missing_key_mask.any():
+            fallback = None
+            for candidate in ("player", "player_canonical", "player_display"):
+                if candidate in pf_consensus.columns:
+                    fallback = pf_consensus[candidate].astype("string")
+                    break
+            if fallback is not None:
+                fallback_keys = fallback.map(make_player_key)
+                pf_consensus.loc[missing_key_mask, "player_clean_key"] = fallback_keys.loc[
+                    missing_key_mask
+                ]
+        pf_consensus["player_clean_key"] = (
+            pf_consensus["player_clean_key"].astype("string").fillna("")
+        )
+
+    for col in ("team", "opponent", "opponent_abbr"):
+        if col in pf_consensus.columns:
+            pf_consensus[col] = _canon_team_series(pf_consensus[col])
 
     # --- merge opponent map from props ---
     oppmap = pd.DataFrame()
@@ -5470,6 +5626,16 @@ def _write_player_form_outputs(
         team_col="team",
         roster_map=roster_map_for_names,
     )
+
+    pf_consensus = _attach_player_name_from_props(pf_consensus)
+    if "player_name" in pf_consensus.columns:
+        pf_consensus["player_name"] = pf_consensus["player_name"].astype("string")
+        if "display_name" in pf_consensus.columns:
+            pf_consensus["player_name"] = pf_consensus["player_name"].fillna(
+                pf_consensus["display_name"].astype("string")
+            )
+    elif "display_name" in pf_consensus.columns:
+        pf_consensus["player_name"] = pf_consensus["display_name"].astype("string")
 
     pf_consensus = _attach_player_identity(
         pf_consensus, team_columns=("team_abbr", "team")
