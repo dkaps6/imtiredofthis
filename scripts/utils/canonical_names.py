@@ -89,3 +89,22 @@ def canonicalize_player_name(source_key: str) -> str:
 
 # Optional: explicit alias used in some places
 canonicalize_name = canonicalize_player_name
+
+
+def log_unmapped_variant(raw_name: str) -> None:
+    """Legacy stub for compatibility. Logs unmapped canonicalization variants.
+    This function is called by make_player_form and other scripts to record player names
+    that failed to match during canonicalization. Writes to data/_debug/unmapped_names.log.
+    """
+    import os
+    import datetime
+    from pathlib import Path
+
+    try:
+        path = Path("data/_debug/unmapped_names.log")
+        os.makedirs(path.parent, exist_ok=True)
+        ts = datetime.datetime.now().isoformat(timespec="seconds")
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"[{ts}] {raw_name}\n")
+    except Exception as e:
+        print(f"[log_unmapped_variant] ⚠️ Failed to log {raw_name}: {e}")
