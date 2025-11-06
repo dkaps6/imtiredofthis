@@ -15,3 +15,8 @@ names: build_name_overrides
 		--manual-overrides data/manual_name_overrides.csv \
 		--out outputs/player_form_fullnames.csv \
 		--force-manual
+
+.PHONY: metrics_weekly
+metrics_weekly:
+	python scripts/utils/scrape_wr_cb_matchups.py
+	python scripts/make_metrics.py
