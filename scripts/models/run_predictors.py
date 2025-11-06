@@ -6,6 +6,12 @@ from typing import Dict, Tuple, List
 import pandas as pd
 import numpy as np
 
+# -------- Optional unified model stack bridge --------
+try:
+    from .model_stack_patch import run_full_model
+except ImportError:
+    run_full_model = None
+
 # -------- Optional SciPy for SGP bivariate normal ----------
 try:
     from scipy.stats import multivariate_normal, norm
@@ -479,7 +485,26 @@ def run(season: int):
         else:
             print("[predictors] (no SGP pairs found)")
 
-if __name__=='__main__':
+def main():
     import argparse
     ap=argparse.ArgumentParser(); ap.add_argument('--season', type=int, required=True)
     a=ap.parse_args(); run(a.season)
+
+if __name__ == '__main__':
+    try:
+        main()  # preserve original main() entrypoint
+    except Exception as e:
+        print(f'[run_predictors] ⚠️ Base model runner encountered an error: {e}')
+        import traceback; traceback.print_exc()
+
+    # Optional unified model stack integration
+    if run_full_model is not None:
+        try:
+            print('\n[run_predictors] → Executing unified model stack integration...')
+            run_full_model()
+            print('[run_predictors] ✅ Unified model stack completed successfully.')
+        except Exception as e:
+            print(f'[run_predictors] ⚠️ Unified model stack skipped due to error: {e}')
+            import traceback; traceback.print_exc()
+    else:
+        print('[run_predictors] ℹ️ Unified model stack not available (model_stack_patch.py not found).')
