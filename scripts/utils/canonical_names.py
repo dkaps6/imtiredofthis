@@ -1,143 +1,136 @@
-# scripts/utils/canonical_names.py
-#
-# This module defines a canonical map for known player name variants
-# and exposes helper(s) that normalize raw strings into a stable identity.
-#
-# The map keys should be UPPERCASE alphanumeric (no punctuation/spaces),
-# and the values should be the official canonical player name in UPPERCASE
-# "FIRST LAST" form.
+#!/usr/bin/env python3
+"""
+Canonicalize player names in player_form.csv
 
+Priority:
+  1) roles_ourlads: player_key -> player (ignore middle initials; keep suffixes)
+  2) manual overrides: player_source_name -> full First Last (unconditional if --force-manual)
+
+Also updates canonical name fields when present:
+  canonical_player_name, player_name_canonical, player_canonical, player_display, display_name
+"""
+
+import argparse
 import re
+from pathlib import Path
+import pandas as pd
 
-CANONICAL_NAME_MAP = {
-    # Davante Adams variants
-    "DADAMS": "DAVANTE ADAMS",
-    "DAVANTEADAMS": "DAVANTE ADAMS",
-    "DADAMSWR": "DAVANTE ADAMS",  # some props boards suffix position
-    "D.ADAMS": "DAVANTE ADAMS",
-    "DAADAMS": "DAVANTE ADAMS",
+SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
 
-    # Justin Jefferson variants
-    "JJEFFERSON": "JUSTIN JEFFERSON",
-    "J.JEFFERSON": "JUSTIN JEFFERSON",
-    "JUSTINJEFFERSON": "JUSTIN JEFFERSON",
-    "JJETTAS": "JUSTIN JEFFERSON",  # common alias
-
-    # CeeDee Lamb variants
-    "CDLAMB": "CEEDEE LAMB",
-    "C.LAMB": "CEEDEE LAMB",
-    "CEEDEELAMB": "CEEDEE LAMB",
-
-    # Puka Nacua variants
-    "PNACUA": "PUKA NACUA",
-    "P.NACUA": "PUKA NACUA",
-    "PUKANACUA": "PUKA NACUA",
-
-    # Tyreek Hill variants
-    "THILL": "TYREEK HILL",
-    "T.HILL": "TYREEK HILL",
-    "TYREEKHILL": "TYREEK HILL",
-
-    # Travis Kelce variants
-    "TKELCE": "TRAVIS KELCE",
-    "T.KELCE": "TRAVIS KELCE",
-    "TRAVISKELCE": "TRAVIS KELCE",
-
-    # Amon-Ra St. Brown variants
-    "ASTBROWN": "AMON-RA ST. BROWN",
-    "A.STBROWN": "AMON-RA ST. BROWN",
-    "AMONRASTBROWN": "AMON-RA ST. BROWN",
-
-    # Ja'Marr Chase variants
-    "JCHASE": "JA'MARR CHASE",
-    "J.CHASE": "JA'MARR CHASE",
-    "JAMARRCHASE": "JA'MARR CHASE",
-
-    # Add more as needed. This list will grow over time.
-}
+CANON_COLS = [
+    "canonical_player_name",
+    "player_name_canonical",
+    "player_canonical",
+    "player_display",
+    "display_name",
+]
 
 
-def _clean_raw_name(n: str) -> str:
-    """
-    Take an arbitrary player name string and normalize it to
-    uppercase A-Z with no punctuation or whitespace so it can be
-    looked up in CANONICAL_NAME_MAP.
-    Examples:
-      'D.Adams'       -> 'DADAMS'
-      'Davante Adams' -> 'DAVANTEADAMS'
-      'P. Nacua'      -> 'PNACUA'
-    """
-    if n is None:
+def strip_middle_initial(full_name: str) -> str:
+    """Return 'First Last' (preserve suffix like 'Jr', 'III')."""
+    if not isinstance(full_name, str):
         return ""
-    n = str(n).upper()
-    # remove punctuation and whitespace
-    for bad in [".", ",", "'", '"', "-", "_", " "]:
-        n = n.replace(bad, "")
-    return n.strip()
+    parts = re.split(r"\s+", full_name.replace(",", " ").strip())
+    parts = [p.replace(".", "") for p in parts if p.strip()]
+    if not parts:
+        return ""
+    first = parts[0]
+    last = parts[-1]
+    if last.lower() in SUFFIXES and len(parts) >= 3:
+        last = parts[-2] + " " + parts[-1]
+    return f"{first} {last}".strip()
+
+def norm_key(s: str) -> str:
+    """Lowercase; remove spaces, apostrophes, hyphens, periods."""
+    if not isinstance(s, str):
+        return ""
+    s = s.lower().strip()
+    for ch in (" ", "'", "-", "."):
+        s = s.replace(ch, "")
+    return s
 
 
-def canonicalize_player_name(raw: str) -> tuple[str, str]:
-    """
-    Returns a canonical player identity:
-    - try direct dictionary hit
-    - try fuzzy match
-    - else fallback to cleaned full uppercase FIRST LAST style
-    We also return a SECOND value (clean_key) which is the normalized
-    lookup key so other scripts can join on it.
-    """
-    from difflib import get_close_matches
+def load_roles_map(path: Path) -> dict:
+    df = pd.read_csv(path)
+    cols = {c.lower(): c for c in df.columns}
+    if "player_key" not in cols or "player" not in cols:
+        raise SystemExit("roles_ourlads.csv must contain 'player_key' and 'player' columns.")
+    key_col = cols["player_key"]
+    name_col = cols["player"]
+    df["_key"] = df[key_col].astype(str).map(norm_key)
+    df["_full"] = df[name_col].astype(str).map(strip_middle_initial)
+    return dict(zip(df["_key"], df["_full"]))
 
-    clean_key = _clean_raw_name(raw)
 
-    # 1. direct dict match
-    if clean_key in CANONICAL_NAME_MAP:
-        return CANONICAL_NAME_MAP[clean_key], clean_key
+def load_manual_map(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    df = pd.read_csv(path)
+    need = {"player_source_name", "full_name"}
+    if not need.issubset(df.columns):
+        raise SystemExit("manual_name_overrides.csv must have columns: player_source_name, full_name")
+    df["_key"] = df["player_source_name"].astype(str).map(norm_key)
+    return dict(zip(df["_key"], df["full_name"]))
 
-    # 2. fuzzy match against known keys
-    possible = get_close_matches(
-        clean_key,
-        list(CANONICAL_NAME_MAP.keys()),
-        n=1,
-        cutoff=0.88,
+
+def canonicalize(
+    player_form: Path,
+    roles_ourlads: Path,
+    manual_overrides: Path,
+    out: Path,
+    force_manual: bool,
+) -> None:
+    pf = pd.read_csv(player_form)
+
+    if "player_source_name" not in pf.columns:
+        raise SystemExit("player_form.csv must include 'player_source_name'.")
+
+    if "player" not in pf.columns:
+        pf["player"] = pf["player_source_name"]
+
+    roles_map = load_roles_map(roles_ourlads)
+    manual_map = load_manual_map(manual_overrides)
+
+    keys = pf["player_source_name"].astype(str).map(norm_key)
+
+    # Pass 1: roles mapping
+    from_roles = keys.map(roles_map)
+
+    # Pass 2: manual mapping
+    from_manual = keys.map(manual_map)
+
+    if force_manual:
+        # roles as base; manual overrides wherever present
+        full_names = from_roles.where(~keys.isin(manual_map.keys()), from_manual)
+    else:
+        # only fill where roles didn't resolve
+        full_names = from_roles.fillna(from_manual)
+
+    # Write into player + canonical columns
+    pf["player"] = full_names.fillna(pf["player"])
+    for c in CANON_COLS:
+        if c in pf.columns:
+            pf[c] = full_names.fillna(pf[c])
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    pf.to_csv(out, index=False)
+
+def main(argv=None):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--player-form", type=Path, required=True)
+    ap.add_argument("--roles-ourlads", type=Path, required=True)
+    ap.add_argument("--manual-overrides", type=Path, default=Path("data/manual_name_overrides.csv"))
+    ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--force-manual", action="store_true", help="Always apply manual overrides where keys exist.")
+    ns = ap.parse_args(argv)
+
+    canonicalize(
+        player_form=ns.player_form,
+        roles_ourlads=ns.roles_ourlads,
+        manual_overrides=ns.manual_overrides,
+        out=ns.out,
+        force_manual=ns.force_manual,
     )
-    if possible:
-        hit = possible[0]
-        return CANONICAL_NAME_MAP[hit], clean_key
 
-    # 3. fallback: convert to "FIRST LAST" uppercase-ish
-    # e.g. "DAVANTEADAMS" -> "DAVANTE ADAMS"
-    # We'll do a naive split by capital letter boundaries? Too heavy.
-    # Instead, just return the cleaned_key as-is. Downstream grouping will
-    # still work because it's consistent.
-    return clean_key, clean_key
-
-
-def canonicalize_name(raw: str) -> str:
-    """Return the repo-standard canonical token for a player name."""
-
-    canonical, _ = canonicalize_player_name(raw)
-    canonical = (canonical or "").strip()
-    if not canonical and raw:
-        canonical = str(raw)
-
-    lowered = canonical.lower()
-    lowered = re.sub(r"[^a-z0-9 ]+", "", lowered)
-    lowered = re.sub(r"\s+", " ", lowered).strip()
-    return lowered
-
-
-def log_unmapped_variant(raw: str, path: str = "data/unmapped_player_names.txt") -> None:
-    """
-    Append any unseen / unmapped variant to a file so we can grow CANONICAL_NAME_MAP
-    over time without breaking the pipeline. We don't crash here.
-    """
-    try:
-        canonical, clean_key = canonicalize_player_name(raw)
-        # If canonical == clean_key and clean_key not in CANONICAL_NAME_MAP,
-        # that means we didn't have a confident mapping for a "fancy" alias.
-        if clean_key not in CANONICAL_NAME_MAP.values() and clean_key not in CANONICAL_NAME_MAP:
-            with open(path, "a") as f:
-                f.write(f"{raw} -> {clean_key}\n")
-    except Exception:
-        # never kill pipeline because of logging
-        pass
+if __name__ == "__main__":
+    main()
