@@ -225,22 +225,40 @@ POSITION_ALIASES = {
 }
 
 ROLE_SLOT_MAPPING = {
-    "LWR": "WR1",
-    "RWR": "WR2",
-    "SWR": "WR3",
-    "QB": "QB1",
-    "RB": "RB1",
-    "TE": "TE1",
+    # Legacy patterns (each row has only Player 1 filled)
+    "LWR": {1: "WR1"},
+    "RWR": {1: "WR2"},
+    "SWR": {1: "WR3"},
+    "QB":  {1: "QB1"},
+    "RB":  {1: "RB1"},
+    "TE":  {1: "TE1"},
+    # NEW: Generic WR row that uses Player 1..3 across columns
+    "WR":  {1: "WR1", 2: "WR2", 3: "WR3"},
 }
 
-
-def map_role(base_pos: str, depth_slot: str) -> Optional[str]:
+def map_role(base_pos: str, depth_slot: str):
+    """
+    Map Ourlads base position + slot label ('Player N') to a fantasy role.
+    Supports pages that list a single 'WR' row with Player 1..3.
+    Keeps existing LWR/RWR/SWR behavior.
+    """
+    import re
     base = (base_pos or "").upper().strip()
-    slot = re.sub(r"\s+", " ", (depth_slot or "").strip().lower())
-    base = POSITION_ALIASES.get(base, base)
-    if slot != "player 1":
+    # Extract the slot number from 'Player N'
+    m = re.search(r"player\s*(\d+)", (depth_slot or ""), flags=re.I)
+    if not m:
         return None
-    return ROLE_SLOT_MAPPING.get(base)
+    n = int(m.group(1))
+
+    # Exact base match
+    if base in ROLE_SLOT_MAPPING:
+        return ROLE_SLOT_MAPPING[base].get(n)
+
+    # Fallback: anything starting with 'WR' (e.g., WR, WR-X)
+    if base.startswith("WR"):
+        return {1: "WR1", 2: "WR2", 3: "WR3"}.get(n)
+
+    return None
 
 
 # --- HTTP fetch with retries -------------------------------------------------
@@ -341,24 +359,21 @@ def fetch_team_roles(team: str, soup: BeautifulSoup) -> List[dict]:
     if not data_rows:
         return []
 
-    # find column indices for Player 1/2/3 slots
-    slot_idxs: List[Tuple[int, str]] = []
+    # Find indices for columns "Player 1", "Player 2", "Player 3"
+    slot_idxs = []
     for want in ("player 1", "player 2", "player 3"):
         idx = None
-        for col_idx, label in enumerate(header):
-            if col_idx == 0:
+        for i, label in enumerate(header):
+            if i == 0:
                 continue
-            if re.sub(r"\s+", " ", label.strip()).lower() == want:
-                idx = col_idx
+            if re.sub(r"\s+", " ", str(label).strip()).lower() == want:
+                idx = i
                 break
         if idx is not None:
             slot_idxs.append((idx, want.title()))
-    if not slot_idxs:
-        for fallback_idx in range(1, min(4, len(header))):
-            slot_idxs.append((fallback_idx, f"Player {fallback_idx}"))
-
-    if not slot_idxs:
-        return []
+    # Fallback if headers missing but table is wide: assume next 3 columns
+    if not slot_idxs and len(header) > 3:
+        slot_idxs = [(1, "Player 1"), (2, "Player 2"), (3, "Player 3")]
 
     records: List[dict] = []
     team_code = _canon_team(team)
@@ -375,9 +390,9 @@ def fetch_team_roles(team: str, soup: BeautifulSoup) -> List[dict]:
         for idx, slot_label in slot_idxs:
             if idx >= len(tds):
                 continue
-            cell_text = BeautifulSoup(
-                tds[idx].decode_contents(), "lxml"
-            ).get_text(" ", strip=True)
+            cell_text = BeautifulSoup(tds[idx].decode_contents(), "lxml").get_text(
+                " ", strip=True
+            )
             candidates = _split_candidates(cell_text)
             if not candidates:
                 continue
@@ -389,15 +404,13 @@ def fetch_team_roles(team: str, soup: BeautifulSoup) -> List[dict]:
             if not role:
                 continue
             position_out = POSITION_ALIASES.get(base_pos, base_pos)
-            records.append(
-                {
-                    "team": team_code,
-                    "player": player_clean,
-                    "position": position_out,
-                    "depth_slot": slot_label,
-                    "role": role,
-                }
-            )
+            records.append({
+                "team": team_code,
+                "player": player_clean,
+                "position": position_out,
+                "depth_slot": slot_label,
+                "role": role,
+            })
 
     return records
 

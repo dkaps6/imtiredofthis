@@ -121,3 +121,27 @@ def log_unmapped_variant(
     except Exception:
         # This logger is intentionally fail-safe; never raise upstream.
         pass
+
+# --- BEGIN: back-compat unmapped variant logger (append-only) ---
+from typing import Optional, Dict, Any
+import os, json
+
+_UNMAPPED_LOG = os.environ.get("UNMAPPED_NAME_LOG", "data/_debug/unmapped_names.jsonl")
+
+def log_unmapped_variant(source: str, raw_name: str, context: Optional[Dict[str, Any]] = None) -> None:
+    """
+    Legacy-compatible logger used by fetchers and make_player_form to record
+    names that could not be canonicalized. Writes JSONL lines to data/_debug/unmapped_names.jsonl.
+    Never raises.
+    """
+    try:
+        os.makedirs(os.path.dirname(_UNMAPPED_LOG), exist_ok=True)
+        payload = {"source": source, "raw_name": raw_name}
+        if context:
+            payload.update(context)
+        with open(_UNMAPPED_LOG, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except Exception:
+        # must not break the pipeline
+        pass
+# --- END: back-compat unmapped variant logger ---
