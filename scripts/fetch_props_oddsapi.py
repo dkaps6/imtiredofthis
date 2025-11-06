@@ -6,7 +6,10 @@ from pathlib import Path
 from typing import List, Tuple, Optional, Any, Dict
 
 import requests
+
+# --- BEGIN: mandatory global imports ---
 import pandas as pd
+# --- END: mandatory global imports ---
 
 from scripts.make_player_form import canonicalize_name, TEAM_NAME_TO_ABBR, _canon_team
 
