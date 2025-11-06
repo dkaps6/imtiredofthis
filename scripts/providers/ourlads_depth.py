@@ -25,7 +25,7 @@ import os, re, time, warnings, sys
 from typing import Dict, List, Optional, Tuple
 import pandas as pd
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 DATA_DIR = "data"
 OUT_ROLES = os.path.join(DATA_DIR, "roles_ourlads.csv")
@@ -105,6 +105,8 @@ DROP_TOKENS = {
     "Sr", "Sr.", "Jr", "Jr.", "III",
 }
 
+NON_NAME_TOKENS = {"jr", "sr", "ii", "iii", "iv", "v", "vi", "vii"}
+
 
 def canonical_player_key(full_name: str) -> str:
     """
@@ -143,60 +145,69 @@ def canonical_player_key(full_name: str) -> str:
 
 
 def clean_ourlads_name(raw: str) -> str:
-    """
-    Convert Ourlads depth text like:
-      'Allen, Josh 18/1 cc'
-      'Kelce, Travis CF23'
-      'Pacheco, Isiah 22/5'
-      'Brown, Amon-Ra (R)'
-    into canonical sportsbook-style:
-      'Josh Allen'
-      'Travis Kelce'
-      'Isiah Pacheco'
-      'Amon-Ra Brown'
-
-    Rules:
-    - Flip 'Last, First ...' -> 'First Last'
-    - Drop tokens that contain digits or '/' (draft/UDFA markers like '22/5', 'CF23', 'U/LAC')
-    - Drop common junk/status tokens like 'cc', 'ps', 'ir', '(R)', 'pup', etc.
-    - Strip commas/parentheses and collapse whitespace.
-    """
+    """Return strictly "First Last" with suffixes/status tokens removed."""
 
     if not isinstance(raw, str):
         return ""
 
-    # 1. Flip "Last, First ..." -> "First Last ..."
-    parts = [p.strip() for p in raw.split(",", 1)]
-    if len(parts) == 2:
-        last, first_rest = parts[0], parts[1]
-        candidate = f"{first_rest} {last}"
-    else:
-        candidate = raw
+    working = raw.strip()
+    if "," in working:
+        last, first_rest = [p.strip() for p in working.split(",", 1)]
+        working = f"{first_rest} {last}".strip()
 
-    # 2. Token clean
-    cleaned_tokens = []
-    for tok in re.split(r"\s+", candidate):
-        tnorm = tok.lower().strip(",()")
+    # Remove parenthetical/suffix clutter before tokenization
+    working = re.sub(r"\(.*?\)", " ", working)
+    working = working.replace("/", " ")
 
-        # Drop obvious garbage:
-        # - numeric or slash tokens (draft round, UDFA markers)
-        # - bad status/junk tokens (cc, ps, ir, pup, etc.)
-        if re.search(r"[\d/]", tok):
+    tokens: List[str] = []
+    for tok in re.split(r"\s+", working):
+        piece = tok.strip(",()")
+        if not piece:
             continue
-        if tnorm in BAD_TOKENS:
+        lower = piece.lower().strip(".")
+        if re.search(r"\d", piece):
             continue
-
-        # Drop lone punctuation leftovers
-        if tnorm in {"", "-", "--"}:
+        if lower in BAD_TOKENS or lower in NON_NAME_TOKENS:
             continue
+        if lower in {"u", "cc", "t"}:
+            continue
+        if len(lower) == 1:  # middle initial
+            continue
+        clean_piece = re.sub(r"[^A-Za-z\-']", "", piece)
+        clean_piece = clean_piece.strip("'")
+        if not clean_piece:
+            continue
+        tokens.append(clean_piece)
 
-        cleaned_tokens.append(tok.strip(",()"))
+    if not tokens:
+        return ""
 
-    # 3. Rebuild "Firstname Lastname" string
-    name = " ".join(cleaned_tokens)
-    name = re.sub(r"\s+", " ", name).strip()
+    first = tokens[0]
+    last = tokens[-1]
+    if not last:
+        return first
+    return f"{first} {last}".strip()
 
-    return name
+
+def _cell_status(cell: Tag) -> str:
+    """Detect inactive players (rendered in red)."""
+
+    if cell is None:
+        return "active"
+
+    def _has_red(tag: Tag) -> bool:
+        style = (tag.get("style") or "").lower()
+        if "color" in style and "red" in style:
+            return True
+        color = (tag.get("color") or "").lower()
+        return color == "red"
+
+    if _has_red(cell):
+        return "inactive"
+    for desc in cell.descendants:
+        if isinstance(desc, Tag) and _has_red(desc):
+            return "inactive"
+    return "active"
 
 
 # regex to split multi-player cells
@@ -394,19 +405,21 @@ def fetch_team_roles(team: str, soup: BeautifulSoup) -> List[dict]:
             if not role:
                 continue
             position_out = POSITION_ALIASES.get(base_pos, base_pos)
+            status = _cell_status(tds[idx])
             records.append({
                 "team": team_code,
                 "player": player_clean,
                 "position": position_out,
                 "depth_slot": slot_label,
                 "role": role,
+                "status": status,
             })
         # --- END: player extraction across slots ---
 
     return records
 
 
-def main():
+def main(*, include_inactive: bool = False):
     warnings.simplefilter("ignore")
     os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -427,7 +440,7 @@ def main():
     if all_rows:
         roles_all = pd.DataFrame(all_rows)
     else:
-        roles_all = pd.DataFrame(columns=["team","player","position","depth_slot","role"])
+        roles_all = pd.DataFrame(columns=["team","player","position","depth_slot","role","status"])
 
     # Final cleanup & canonicalization
     roles_all = roles_all.dropna(subset=["player","role"])
@@ -438,6 +451,9 @@ def main():
             roles_all["team"].astype(str).str.upper().str.strip().map(_canon_team)
         )
         roles_all = roles_all[roles_all["team"].isin(VALID)]
+        if not include_inactive and "status" in roles_all.columns:
+            status_lower = roles_all["status"].astype(str).str.lower()
+            roles_all = roles_all[status_lower != "inactive"].copy()
         # remove dupes like same player under multiple slots
         roles_all = roles_all.drop_duplicates(subset=["team","player","role"])
         roles_all = roles_all.sort_values(["team","role","player"])
@@ -459,9 +475,23 @@ def main():
         roles_all = roles_all.drop(columns=["_pos_rank", "_role_rank"])
 
     roles_all["player_key"] = roles_all["player"].apply(canonical_player_key)
-    output_df = roles_all[["team","player","role","position","player_key"]].copy()
+    cols = ["team","player","role","position","player_key"]
+    if "status" in roles_all.columns:
+        cols.insert(2, "status")
+    output_df = roles_all[cols].copy()
     output_df.to_csv(OUT_ROLES, index=False)
-    print(f"[ourlads_depth] wrote rows={len(output_df)} → {OUT_ROLES}")
+    print(
+        f"[ourlads_depth] wrote rows={len(output_df)} (include_inactive={include_inactive}) → {OUT_ROLES}"
+    )
 
 if __name__ == "__main__":
-    main()
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--include-inactive",
+        action="store_true",
+        help="Keep players marked inactive (red text) in output",
+    )
+    args = parser.parse_args()
+    main(include_inactive=args.include_inactive)

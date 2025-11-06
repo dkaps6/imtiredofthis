@@ -874,6 +874,7 @@ def _fetch_market_for_events(api_key: str, region: str, books: Optional[set[str]
             log.info(f"{mk_try} eid={eid} status={status} limit={_lim(headers)}")
 
             if status == 200 and isinstance(js, dict):
+                df = pd.DataFrame()
                 bm_count = len(js.get("bookmakers", []))
                 if bm_count == 0 and books is not None:
                     log.info(f"{mk_try} eid={eid}: 0 bookmakers after filter → retry w/o filter")
@@ -881,11 +882,15 @@ def _fetch_market_for_events(api_key: str, region: str, books: Optional[set[str]
                     params2.pop("bookmakers", None)
                     status2, js2, _ = _get(url, params2)
                     if status2 == 200 and isinstance(js2, dict):
-                        df = _normalize_player_rows([js2], None, mk_try)
-                    else:
-                        df = pd.DataFrame()
+                        try:
+                            df = _normalize_player_rows([js2], None, mk_try)
+                        except Exception as err:
+                            log.info(f"normalize fail eid={eid} market={mk_try} (no filter): {err}")
                 else:
-                    df = _normalize_player_rows([js], books, mk_try)
+                    try:
+                        df = _normalize_player_rows([js], books, mk_try)
+                    except Exception as err:
+                        log.info(f"normalize fail eid={eid} market={mk_try}: {err}")
                 if not df.empty:
                     frames.append(df)
                     got_any = True
@@ -913,14 +918,21 @@ def _fetch_market_for_events(api_key: str, region: str, books: Optional[set[str]
             status, js, headers = _get(url, params)
             log.info(f"{mk} eid={eid} (us2) status={status} limit={_lim(headers)}")
             if status == 200 and isinstance(js, dict):
-                df = _normalize_player_rows([js], books, mk)
+                df = pd.DataFrame()
+                try:
+                    df = _normalize_player_rows([js], books, mk)
+                except Exception as err:
+                    log.info(f"normalize fail eid={eid} market={mk} (us2): {err}")
                 if df.empty and books is not None:
                     # try without filters in us2 too
                     params2 = dict(params)
                     params2.pop("bookmakers", None)
                     status2, js2, _ = _get(url, params2)
                     if status2 == 200 and isinstance(js2, dict):
-                        df = _normalize_player_rows([js2], None, mk)
+                        try:
+                            df = _normalize_player_rows([js2], None, mk)
+                        except Exception as err:
+                            log.info(f"normalize fail eid={eid} market={mk} (us2, no filter): {err}")
                 if not df.empty:
                     frames_us2.append(df)
         if frames_us2:
@@ -946,7 +958,11 @@ def _fetch_bulk_market(api_key: str, region: str, books: Optional[set[str]], mar
     if status != 200 or not isinstance(js, list):
         log.info(f"bulk fetch failed market={mk}: {js}")
         return pd.DataFrame()
-    return _normalize_player_rows(js, books, mk)
+    try:
+        return _normalize_player_rows(js, books, mk)
+    except Exception as err:
+        log.info(f"normalize fail market={mk} (bulk): {err}")
+        return pd.DataFrame()
 
 # ------------------------- PUBLIC ENTRY -------------------
 
@@ -1012,27 +1028,42 @@ def fetch_odds(
         if not df.empty:
             frames.append(df)
 
-    if not frames:
-        # leave empty—your downstream wants to crash if props are empty
-        pd.DataFrame(columns=["event_id","commence_time","book","market","player","side","line","price_american"]).to_csv(out, index=False)
+    props = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    if props.empty:
+        empty_cols = [
+            "event_id",
+            "commence_time",
+            "book",
+            "market",
+            "player",
+            "side",
+            "line",
+            "price_american",
+        ]
+        pd.DataFrame(columns=empty_cols).to_csv(out, index=False)
         log.info(f"wrote empty {out}")
         return
-
-    props = pd.concat(frames, ignore_index=True)
     if "player" in props.columns:
         props["player_canonical"] = props["player"].apply(canonicalize_name)
     else:
         props["player_canonical"] = ""
 
     # --- BEGIN: enrich props with opponent from odds_game ---
-    import pandas as pd
-
-    games = pd.read_csv("outputs/odds_game.csv")
-    for c in ("home_team", "away_team"):
-        games[c] = games[c].astype(str).str.upper()
+    try:
+        games = pd.read_csv("outputs/odds_game.csv")
+    except Exception as err:
+        log.info(f"failed to read outputs/odds_game.csv: {err}")
+        games = pd.DataFrame()
+    if not games.empty:
+        for c in ("home_team", "away_team"):
+            games[c] = games[c].astype(str).str.upper()
 
     props["event_id"] = props["event_id"].astype(str)
-    props = props.merge(games[["event_id","home_team","away_team"]], on="event_id", how="left")
+    if not games.empty:
+        props = props.merge(games[["event_id","home_team","away_team"]], on="event_id", how="left")
+    else:
+        props["home_team"] = props.get("home_team", "")
+        props["away_team"] = props.get("away_team", "")
 
     def _infer_opp(row):
         tm = str(row.get("team", "")).upper()
@@ -1047,6 +1078,27 @@ def fetch_odds(
 
     if "team" in props.columns:
         props["opp_team"] = props.apply(_infer_opp, axis=1)
+
+    team_fix = {"BLT": "BAL", "CLV": "CLE", "HST": "HOU"}
+
+    def _apply_team_fix(value: Any) -> Any:
+        if isinstance(value, str):
+            upper = value.upper()
+            return team_fix.get(upper, value)
+        return value
+
+    for col in (
+        "team",
+        "opp_team",
+        "team_abbr",
+        "opponent_abbr",
+        "player_team_abbr",
+        "opponent_team_abbr",
+        "home_team_abbr",
+        "away_team_abbr",
+    ):
+        if col in props.columns:
+            props[col] = props[col].apply(_apply_team_fix)
 
     # keep your original file AND write an enriched one for downstream robustness
     props.to_csv("outputs/props_enriched.csv", index=False)

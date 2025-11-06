@@ -1833,6 +1833,15 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
         )
 
     roles = pd.read_csv(roles_path)
+    if "status" in roles.columns:
+        status_series = roles["status"].astype(str).str.lower()
+        before = len(roles)
+        roles = roles[status_series != "inactive"].copy()
+        logger.info(
+            "[make_player_form] roles filtered to active only: %s → %s",
+            before,
+            len(roles),
+        )
     if roles.empty:
         raise RuntimeError(
             "roles_ourlads.csv is empty. Check Ourlads scraper/selectors."
