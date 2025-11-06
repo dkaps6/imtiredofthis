@@ -1847,20 +1847,39 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
             "roles_ourlads.csv is empty. Check Ourlads scraper/selectors."
         )
 
-    for col in ("team", "player", "role"):
+    for col in ("team", "player", "role", "model_role", "position", "position_group"):
         if col in roles.columns:
             roles[col] = roles[col].astype(str)
     if "player" in roles.columns:
         roles["player"] = roles["player"].map(_clean_name).map(standardize_full_name)
     roles["team"] = roles.get("team", "").astype(str).map(_canon_team)
     roles["role"] = roles.get("role", "").astype(str).str.upper().str.strip()
+    if "model_role" in roles.columns:
+        roles["model_role"] = roles["model_role"].astype(str).str.upper().str.strip()
+        roles["model_role"] = roles["model_role"].replace({"": pd.NA, "NAN": pd.NA})
+        roles["role"] = roles["model_role"].combine_first(roles["role"])
+    else:
+        roles["model_role"] = roles["role"]
+    if "depth_chart_role" in roles.columns and "alignment_role" not in roles.columns:
+        roles.rename(columns={"depth_chart_role": "alignment_role"}, inplace=True)
+    if "alignment_role" in roles.columns:
+        roles["alignment_role"] = roles["alignment_role"].astype(str).str.upper().str.strip()
+    if "position_group" in roles.columns:
+        roles["position_group"] = roles["position_group"].astype(str).str.upper().str.strip()
     if "position" not in roles.columns and "role" in roles.columns:
         roles["position"] = roles["role"].str.extract(r"([A-Z]+)")
 
     roles = ensure_canonical(roles, player_col="player", team_col="team")
 
     merge_cols = ["player_canonical", "team"]
-    for extra in ["role", "position", "position_guess"]:
+    for extra in [
+        "role",
+        "model_role",
+        "position",
+        "position_group",
+        "alignment_role",
+        "position_guess",
+    ]:
         if extra in roles.columns:
             merge_cols.append(extra)
 
@@ -1878,6 +1897,12 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
 
     assert_no_duplicate_columns(pf, "roles merge")
 
+    if "model_role" not in pf.columns and "role" in pf.columns:
+        pf["model_role"] = pf["role"]
+    if "position_group" not in pf.columns:
+        pf["position_group"] = pd.NA
+    if "alignment_role" not in pf.columns:
+        pf["alignment_role"] = pd.NA
     if "role_roles" in pf.columns:
         pf["role"] = pf["role"].combine_first(pf["role_roles"])
         pf.drop(columns=["role_roles"], inplace=True)
@@ -1886,6 +1911,15 @@ def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
         pf.drop(columns=["position_roles"], inplace=True)
     if "position_guess" in pf.columns:
         pf["position"] = pf["position"].combine_first(pf["position_guess"])
+    if "model_role_roles" in pf.columns:
+        pf["model_role"] = pf["model_role"].combine_first(pf["model_role_roles"])
+        pf.drop(columns=["model_role_roles"], inplace=True)
+    if "position_group_roles" in pf.columns:
+        pf["position_group"] = pf.get("position_group").combine_first(pf["position_group_roles"])
+        pf.drop(columns=["position_group_roles"], inplace=True)
+    if "alignment_role_roles" in pf.columns:
+        pf["alignment_role"] = pf.get("alignment_role").combine_first(pf["alignment_role_roles"])
+        pf.drop(columns=["alignment_role_roles"], inplace=True)
 
     pf["unmatched_flag"] = pf["role"].isna()
 
@@ -4101,6 +4135,70 @@ def _enrich_team_and_opponent_from_props(
 
     team_week = team_week.copy()
     team_week.columns = [c.lower() for c in team_week.columns]
+
+    standard_keys = {"team", "season", "week"}
+    if not standard_keys.issubset(set(team_week.columns)):
+        week10_col = next(
+            (
+                col
+                for col in team_week.columns
+                if col.startswith("week") and "10" in col
+            ),
+            None,
+        )
+        team_col = "team" if "team" in team_week.columns else None
+        if not team_col:
+            for candidate in ("team_abbr", "team_code"):
+                if candidate in team_week.columns:
+                    team_col = candidate
+                    break
+        if week10_col and team_col:
+            simple_map = team_week[[team_col, week10_col]].copy()
+            simple_map.columns = ["team", "teamweek_opponent"]
+            simple_map["team"] = (
+                simple_map["team"].astype("string").str.upper().str.strip().map(_canon_team)
+            )
+            simple_map["teamweek_opponent"] = (
+                simple_map["teamweek_opponent"].astype("string").str.upper().str.strip().map(_canon_team)
+            )
+            enriched_simple = enriched.copy()
+            team_merge_col = "team" if "team" in enriched_simple.columns else None
+            if not team_merge_col:
+                for candidate in (
+                    "team_abbr",
+                    "team_code",
+                    "team_key",
+                    "player_team_abbr",
+                ):
+                    if candidate in enriched_simple.columns:
+                        team_merge_col = candidate
+                        enriched_simple["team"] = enriched_simple[candidate]
+                        break
+            if team_merge_col:
+                enriched_simple["team"] = (
+                    enriched_simple["team"].astype("string").str.upper().str.strip().map(_canon_team)
+                )
+                enriched_simple = enriched_simple.merge(
+                    simple_map.drop_duplicates(subset=["team"], keep="last"),
+                    on="team",
+                    how="left",
+                )
+                if "opponent" in enriched_simple.columns:
+                    enriched_simple["opponent"] = enriched_simple["opponent"].combine_first(
+                        enriched_simple.get("teamweek_opponent")
+                    )
+                else:
+                    enriched_simple["opponent"] = enriched_simple.get("teamweek_opponent")
+                enriched_simple.drop(columns=["teamweek_opponent"], inplace=True, errors="ignore")
+                if "week" in enriched_simple.columns:
+                    enriched_simple["week"] = enriched_simple["week"].fillna(10)
+                else:
+                    enriched_simple["week"] = 10
+                return enriched_simple
+        else:
+            raise RuntimeError(
+                "team_week_map.csv missing required season/week columns or week_10 column"
+            )
     for col in ("season", "week"):
         if col in team_week.columns:
             team_week[col] = pd.to_numeric(team_week[col], errors="coerce").astype("Int64")

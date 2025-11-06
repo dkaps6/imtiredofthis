@@ -22,7 +22,9 @@
 # - Canonicalizes team abbreviations (BUF, KC, WAS, etc.)
 
 import os, re, time, warnings, sys
+from collections import Counter
 from typing import Dict, List, Optional, Tuple
+
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup, Tag
@@ -107,6 +109,8 @@ DROP_TOKENS = {
 
 NON_NAME_TOKENS = {"jr", "sr", "ii", "iii", "iv", "v", "vi", "vii"}
 
+SKILL_GROUPS = {"QB", "RB", "WR", "TE", "FB"}
+
 
 def canonical_player_key(full_name: str) -> str:
     """
@@ -189,6 +193,35 @@ def clean_ourlads_name(raw: str) -> str:
     return f"{first} {last}".strip()
 
 
+def _position_group(base_pos: str) -> str:
+    base = (base_pos or "").upper().strip()
+    if not base:
+        return ""
+    if base in {"HB", "TB"}:
+        return "RB"
+    if base == "FB":
+        return "FB"
+    if base.endswith("WR") or base in {"WR", "FL", "SE", "SLOT", "SL"}:
+        return "WR"
+    if base in {"TE", "Y"}:
+        return "TE"
+    if base == "QB":
+        return "QB"
+    return base
+
+
+def _slot_depth(slot_label: str) -> Optional[int]:
+    if not slot_label:
+        return None
+    m = re.search(r"(\d+)", slot_label)
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except ValueError:
+        return None
+
+
 def _cell_status(cell: Tag) -> str:
     """Detect inactive players (rendered in red)."""
 
@@ -230,11 +263,6 @@ def _split_candidates(cell_text: str) -> List[str]:
 OL_POSITIONS = {"LT","LG","C","RG","RT"}
 
 # how we convert Ourlads position column + "Player 1" slot into fantasy role
-POSITION_ALIASES = {
-    "HB": "RB",
-    "TB": "RB",
-}
-
 ROLE_SLOT_MAPPING = {
     "LWR": {1: "WR1"},
     "RWR": {1: "WR2"},
@@ -242,6 +270,9 @@ ROLE_SLOT_MAPPING = {
     "QB":  {1: "QB1"},
     "RB":  {1: "RB1"},
     "TE":  {1: "TE1"},
+    "HB":  {1: "RB1"},
+    "TB":  {1: "RB1"},
+    "FB":  {1: "FB1"},
     # NEW: when the table uses a single WR row with Player 1..3
     "WR":  {1: "WR1", 2: "WR2", 3: "WR3"},
 }
@@ -251,7 +282,6 @@ def map_role(base_pos: str, depth_slot: str):
     Maps an Ourlads base position + slot label ('Player N') to a depth role (WR1, WR2, WR3, etc).
     Supports pages that list one 'WR' row with Player 1–3 columns.
     """
-    import re
     base = (base_pos or "").upper().strip()
     m = re.search(r"player\s*(\d+)", (depth_slot or ""), flags=re.I)
     if not m:
@@ -353,7 +383,7 @@ def _extract_table_structure(table: BeautifulSoup) -> (List[str], List[Beautiful
     return header, data_rows
 
 
-def fetch_team_roles(team: str, soup: BeautifulSoup) -> List[dict]:
+def fetch_team_roles(team: str, soup: BeautifulSoup, include_inactive: bool) -> List[dict]:
     table = _find_offense_table(soup)
     if not table:
         return []
@@ -387,9 +417,11 @@ def fetch_team_roles(team: str, soup: BeautifulSoup) -> List[dict]:
         ).upper()
         base_pos = pos_raw.strip().upper()
         if not base_pos or base_pos in OL_POSITIONS:
-            # ignore OL entirely
             continue
-        # --- BEGIN: player extraction across slots ---
+        pos_group = _position_group(base_pos)
+        if pos_group not in SKILL_GROUPS:
+            continue
+
         for idx, slot_label in slot_idxs:
             if idx >= len(tds):
                 continue
@@ -401,20 +433,36 @@ def fetch_team_roles(team: str, soup: BeautifulSoup) -> List[dict]:
             player_clean = clean_ourlads_name(raw_player_name)
             if not player_clean or len(player_clean.split()) < 2:
                 continue
-            role = map_role(base_pos, slot_label)
-            if not role:
-                continue
-            position_out = POSITION_ALIASES.get(base_pos, base_pos)
+
+            depth_idx = _slot_depth(slot_label)
+            depth_role = f"{base_pos}{depth_idx}" if depth_idx else base_pos
             status = _cell_status(tds[idx])
+            if status == "inactive" and not include_inactive:
+                continue
+
+            model_role = map_role(base_pos, slot_label)
+            if model_role is None and pos_group == "WR" and depth_idx:
+                if base_pos in {"LWR", "RWR", "SWR"} and depth_idx > 1:
+                    model_role = f"WR{depth_idx + 2}"
+                else:
+                    model_role = f"WR{depth_idx}"
+            if model_role is None and pos_group in {"RB", "QB", "TE", "FB"} and depth_idx:
+                model_role = f"{pos_group}{depth_idx}"
+
+            role_out = model_role or depth_role
+
             records.append({
                 "team": team_code,
                 "player": player_clean,
-                "position": position_out,
+                "position": base_pos,
+                "position_group": pos_group,
                 "depth_slot": slot_label,
-                "role": role,
+                "depth_index": depth_idx,
+                "depth_chart_role": depth_role,
+                "role": role_out,
+                "model_role": model_role or role_out,
                 "status": status,
             })
-        # --- END: player extraction across slots ---
 
     return records
 
@@ -428,7 +476,7 @@ def main(*, season: Optional[int] = None, include_inactive: bool = False):
     for tm in sorted(TEAM_URLS.keys()):
         try:
             soup = _get_depth_soup(tm)
-            team_rows = fetch_team_roles(tm, soup)
+            team_rows = fetch_team_roles(tm, soup, include_inactive)
             if not team_rows:
                 print(f"[ourlads_depth] NOTE: 0 Player 1 rows for {tm}", file=sys.stderr)
             else:
@@ -443,7 +491,7 @@ def main(*, season: Optional[int] = None, include_inactive: bool = False):
         roles_all = pd.DataFrame(columns=["team","player","position","depth_slot","role","status"])
 
     # Final cleanup & canonicalization
-    roles_all = roles_all.dropna(subset=["player","role"])
+    roles_all = roles_all.dropna(subset=["player", "role"])
     if not roles_all.empty:
         # re-clean in case anything weird leaked
         roles_all["player"] = roles_all["player"].map(clean_ourlads_name)
@@ -451,37 +499,97 @@ def main(*, season: Optional[int] = None, include_inactive: bool = False):
             roles_all["team"].astype(str).str.upper().str.strip().map(_canon_team)
         )
         roles_all = roles_all[roles_all["team"].isin(VALID)]
+        if "position_group" not in roles_all.columns:
+            roles_all["position_group"] = roles_all["position"].astype(str)
+        roles_all["position_group"] = roles_all["position_group"].astype(str).str.upper().str.strip()
+        roles_all = roles_all[roles_all["position_group"].isin(SKILL_GROUPS)].copy()
+
         if not include_inactive and "status" in roles_all.columns:
             status_lower = roles_all["status"].astype(str).str.lower()
             roles_all = roles_all[status_lower != "inactive"].copy()
-        # remove dupes like same player under multiple slots
-        roles_all = roles_all.drop_duplicates(subset=["team","player","role"])
-        roles_all = roles_all.sort_values(["team","role","player"])
+
+        roles_all["role"] = roles_all["role"].astype(str).str.upper().str.strip()
+        roles_all["model_role"] = (
+            roles_all.get("model_role", roles_all["role"])
+            .astype(str)
+            .str.upper()
+            .str.strip()
+        )
+        roles_all["model_role"] = roles_all["model_role"].replace({"": pd.NA, "NAN": pd.NA})
+        roles_all["depth_chart_role"] = (
+            roles_all.get("depth_chart_role", roles_all["role"])
+            .astype(str)
+            .str.upper()
+            .str.strip()
+        )
+        roles_all["depth_chart_role"] = roles_all["depth_chart_role"].replace({"": pd.NA, "NAN": pd.NA})
+
+        # remove dupes like same player under multiple slots/alignment entries
+        roles_all = roles_all.drop_duplicates(
+            subset=["team", "player", "depth_chart_role"], keep="first"
+        )
 
         offense_roles = {"QB1", "RB1", "WR1", "WR2", "WR3", "TE1"}
-        offense_positions = {"QB", "RB", "WR", "TE"}
         roles_all = roles_all[roles_all["role"].isin(offense_roles)].copy()
-        roles_all = roles_all[roles_all["position"].isin(offense_positions)].copy()
 
-        pos_priority = {"QB": 0, "RB": 1, "WR": 2, "TE": 3}
-        role_priority = {"QB1": 0, "RB1": 1, "WR1": 2, "WR2": 3, "WR3": 4, "TE1": 5}
-        roles_all["_pos_rank"] = roles_all["position"].map(pos_priority).fillna(99)
+        pos_priority = {"QB": 0, "RB": 1, "WR": 2, "TE": 3, "FB": 4}
+        role_priority = {
+            "QB1": 0,
+            "RB1": 1,
+            "WR1": 2,
+            "WR2": 3,
+            "WR3": 4,
+            "TE1": 5,
+        }
+        roles_all["_pos_rank"] = roles_all["position_group"].map(pos_priority).fillna(99)
         roles_all["_role_rank"] = roles_all["role"].map(role_priority).fillna(99)
+        if "depth_index" in roles_all.columns:
+            roles_all["depth_index"] = pd.to_numeric(
+                roles_all["depth_index"], errors="coerce"
+            )
+        else:
+            roles_all["depth_index"] = pd.NA
+        roles_all["_depth_rank"] = roles_all["depth_index"].fillna(99)
         roles_all = roles_all.sort_values(
-            ["team", "player", "_pos_rank", "_role_rank", "role", "position"]
+            [
+                "team",
+                "player",
+                "_pos_rank",
+                "_depth_rank",
+                "_role_rank",
+                "role",
+                "depth_chart_role",
+            ]
         )
         # keep strongest role encountered for each player (Player 1 slot first)
         roles_all = roles_all.drop_duplicates(subset=["team", "player"], keep="first")
-        roles_all = roles_all.drop(columns=["_pos_rank", "_role_rank"])
+        roles_all = roles_all.drop(columns=["_pos_rank", "_role_rank", "_depth_rank"])
 
     roles_all["player_key"] = roles_all["player"].apply(canonical_player_key)
-    cols = ["team","player","role","position","player_key"]
-    if "status" in roles_all.columns:
-        cols.insert(2, "status")
+    cols = [
+        "team",
+        "player",
+        "status" if "status" in roles_all.columns else None,
+        "role",
+        "model_role",
+        "position",
+        "position_group",
+        "depth_chart_role",
+        "depth_slot",
+        "depth_index",
+        "player_key",
+    ]
+    cols = [c for c in cols if c is not None and c in roles_all.columns]
     output_df = roles_all[cols].copy()
     output_df.to_csv(OUT_ROLES, index=False)
+    counts: Counter = Counter()
+    pos_values = output_df.get("position_group")
+    if pos_values is not None:
+        counts = Counter(
+            [val for val in pos_values.dropna().astype(str) if str(val).strip()]
+        )
     print(
-        f"[ourlads_depth] wrote rows={len(output_df)} (include_inactive={include_inactive}) → {OUT_ROLES}"
+        f"[ourlads_depth] wrote rows={len(output_df)} groups={dict(counts)} (include_inactive={include_inactive}) → {OUT_ROLES}"
     )
 
 if __name__ == "__main__":

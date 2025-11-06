@@ -13,11 +13,13 @@ The function canonicalize_player_name uses:
   2) data/manual_name_overrides.csv (player_source_name -> full name), overrides roles
 """
 
-import os
+from __future__ import annotations
+
 import json
+import os
 import re
-from pathlib import Path
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import pandas as pd
@@ -25,6 +27,9 @@ import pandas as pd
 # ---------- helpers ----------
 
 SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
+
+_SPACES = re.compile(r"\s+")
+_TRAIL_TAG = re.compile(r"\s+[A-Z]{1,3}\d{1,2}(?:/[A-Z]\d{1,2})?$")
 
 def strip_middle_initial(full_name: str) -> str:
     if not isinstance(full_name, str):
@@ -38,6 +43,31 @@ def strip_middle_initial(full_name: str) -> str:
     if last.lower() in SUFFIXES and len(parts) >= 3:
         last = parts[-2] + " " + parts[-1]
     return f"{first} {last}".strip()
+
+
+def _strip_ourlads_noise(name: str) -> str:
+    """Normalize raw roster names into "First Last" style strings."""
+
+    if not isinstance(name, str):
+        return ""
+
+    working = name.strip()
+    if not working:
+        return ""
+
+    # remove trailing roster codes like "24/1", "CF25", "U/NE"
+    working = _TRAIL_TAG.sub("", working)
+
+    # flip "Last, First" ordering when present
+    if "," in working:
+        last, first = [p.strip() for p in working.split(",", 1)]
+        working = f"{first} {last}".strip()
+
+    # collapse whitespace + normalize apostrophes
+    working = working.replace("’", "'")
+    working = _SPACES.sub(" ", working)
+
+    return working.strip()
 
 def norm_key(s: str) -> str:
     if not isinstance(s, str):
@@ -79,17 +109,21 @@ def build_manual_map(overrides_path: str = "data/manual_name_overrides.csv") -> 
 # ---------- legacy API (kept for make_player_form.py) ----------
 
 def canonicalize_player_name(source_key: str) -> str:
-    """
-    Legacy entrypoint used throughout the repo.
-    Accepts 'player_source_name' or 'player_key' like 'Zflowers'/'Jsmith-Njigba'
-    and returns the full 'First Last' (with suffix if present).
-    """
-    k = norm_key(source_key)
+    """Return a cleaned "First Last" style name for varied upstream inputs."""
+
+    if source_key is None:
+        return ""
+
+    cleaned = _strip_ourlads_noise(str(source_key))
+    if not cleaned:
+        return ""
+
+    k = norm_key(cleaned)
     manual = build_manual_map()
     if k in manual:
         return manual[k]
     roles = build_roles_map()
-    return roles.get(k, source_key or "")
+    return roles.get(k, cleaned)
 
 # Optional: explicit alias used in some places
 canonicalize_name = canonicalize_player_name
@@ -110,7 +144,6 @@ def log_unmapped_variant(
         try:
             payload.update(dict(context))
         except Exception:
-            # if context is not a mapping, fall back to repr for debugging
             payload["context"] = repr(context)
 
     try:
@@ -121,27 +154,3 @@ def log_unmapped_variant(
     except Exception:
         # This logger is intentionally fail-safe; never raise upstream.
         pass
-
-# --- BEGIN: back-compat unmapped variant logger (append-only) ---
-from typing import Optional, Dict, Any
-import os, json
-
-_UNMAPPED_LOG = os.environ.get("UNMAPPED_NAME_LOG", "data/_debug/unmapped_names.jsonl")
-
-def log_unmapped_variant(source: str, raw_name: str, context: Optional[Dict[str, Any]] = None) -> None:
-    """
-    Legacy-compatible logger used by fetchers and make_player_form to record
-    names that could not be canonicalized. Writes JSONL lines to data/_debug/unmapped_names.jsonl.
-    Never raises.
-    """
-    try:
-        os.makedirs(os.path.dirname(_UNMAPPED_LOG), exist_ok=True)
-        payload = {"source": source, "raw_name": raw_name}
-        if context:
-            payload.update(context)
-        with open(_UNMAPPED_LOG, "a", encoding="utf-8") as f:
-            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
-    except Exception:
-        # must not break the pipeline
-        pass
-# --- END: back-compat unmapped variant logger ---

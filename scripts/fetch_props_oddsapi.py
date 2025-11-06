@@ -1079,12 +1079,29 @@ def fetch_odds(
     if "team" in props.columns:
         props["opp_team"] = props.apply(_infer_opp, axis=1)
 
-    team_fix = {"BLT": "BAL", "CLV": "CLE", "HST": "HOU"}
+    team_fix = {
+        "BLT": "BAL",
+        "CLV": "CLE",
+        "HST": "HOU",
+        "LVG": "LV",
+        "KAN": "KC",
+        "NWE": "NE",
+        "NOR": "NO",
+        "SFO": "SF",
+        "TAM": "TB",
+        "SDG": "LAC",
+    }
 
     def _apply_team_fix(value: Any) -> Any:
         if isinstance(value, str):
-            upper = value.upper()
-            return team_fix.get(upper, value)
+            upper = value.upper().strip()
+            alias = team_fix.get(upper, upper)
+            canon = _canon_team(alias)
+            if canon:
+                return canon
+            if upper in TEAM_NAME_TO_ABBR:
+                return TEAM_NAME_TO_ABBR[upper]
+            return alias
         return value
 
     for col in (
@@ -1103,6 +1120,104 @@ def fetch_odds(
     # keep your original file AND write an enriched one for downstream robustness
     props.to_csv("outputs/props_enriched.csv", index=False)
     # --- END: enrich props with opponent from odds_game ---
+
+    # --- BEGIN: fall back to team_week_map (week 10) when opponents still missing ---
+    map_path = Path("data/team_week_map.csv")
+    if map_path.exists() and map_path.stat().st_size > 0 and not props.empty:
+        try:
+            team_week = pd.read_csv(map_path)
+        except Exception as err:
+            log.info(f"failed to read team_week_map.csv: {err}")
+            team_week = pd.DataFrame()
+
+        if not team_week.empty:
+            team_week.columns = [str(c).strip().lower() for c in team_week.columns]
+            team_col = None
+            for candidate in ("team", "team_abbr"):
+                if candidate in team_week.columns:
+                    team_col = candidate
+                    break
+            opp_map = pd.DataFrame()
+            mapped_week = None
+
+            if team_col:
+                if {"week", "opponent"}.issubset(team_week.columns):
+                    mapped_week = 10
+                    opp_map = team_week[team_week["week"] == 10][[team_col, "opponent"]]
+                else:
+                    week10_col = next(
+                        (
+                            col
+                            for col in team_week.columns
+                            if col.startswith("week") and "10" in col
+                        ),
+                        None,
+                    )
+                    if week10_col:
+                        mapped_week = 10
+                        opp_map = team_week[[team_col, week10_col]].rename(
+                            columns={week10_col: "opponent"}
+                        )
+                    elif "opponent" in team_week.columns:
+                        opp_map = team_week[[team_col, "opponent"]]
+
+            if not opp_map.empty and team_col:
+                opp_map = opp_map.copy()
+                opp_map.columns = ["team_map", "opponent_map"]
+                opp_map["team_map"] = (
+                    opp_map["team_map"].astype(str).str.upper().str.strip().apply(_apply_team_fix)
+                )
+                opp_map["opponent_map"] = (
+                    opp_map["opponent_map"].astype(str).str.upper().str.strip().apply(_apply_team_fix)
+                )
+                opp_map = opp_map.dropna(subset=["team_map"])
+                opp_map = opp_map.drop_duplicates(subset=["team_map"], keep="last")
+
+                team_col_props = None
+                for candidate in (
+                    "team",
+                    "team_abbr",
+                    "player_team_abbr",
+                    "team_code",
+                ):
+                    if candidate in props.columns:
+                        team_col_props = candidate
+                        break
+
+                if team_col_props:
+                    props["_team_for_map"] = (
+                        props[team_col_props]
+                        .astype(str)
+                        .str.upper()
+                        .str.strip()
+                        .apply(_apply_team_fix)
+                    )
+                    props = props.merge(
+                        opp_map,
+                        left_on="_team_for_map",
+                        right_on="team_map",
+                        how="left",
+                    )
+                    props.drop(
+                        columns=["_team_for_map", "team_map"], inplace=True, errors="ignore"
+                    )
+                    if "opp_team" in props.columns:
+                        props["opp_team"] = props["opp_team"].fillna(props.get("opponent_map"))
+                    else:
+                        props["opp_team"] = props.get("opponent_map")
+                    if "opponent" in props.columns:
+                        props["opponent"] = props["opponent"].fillna(props.get("opponent_map"))
+                    if "opponent_team_abbr" in props.columns:
+                        props["opponent_team_abbr"] = props["opponent_team_abbr"].fillna(
+                            props.get("opponent_map")
+                        )
+                    props.drop(columns=["opponent_map"], inplace=True, errors="ignore")
+                    if mapped_week == 10:
+                        if "week" in props.columns:
+                            props["week"] = props["week"].fillna(10)
+                        else:
+                            props["week"] = 10
+    # --- END: fall back to team_week_map ---
 
     props.to_csv(out, index=False)
     log.info(f"wrote {out} rows={len(props)}")
