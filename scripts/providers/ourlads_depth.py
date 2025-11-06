@@ -225,39 +225,31 @@ POSITION_ALIASES = {
 }
 
 ROLE_SLOT_MAPPING = {
-    # Legacy patterns (each row has only Player 1 filled)
     "LWR": {1: "WR1"},
     "RWR": {1: "WR2"},
     "SWR": {1: "WR3"},
     "QB":  {1: "QB1"},
     "RB":  {1: "RB1"},
     "TE":  {1: "TE1"},
-    # NEW: Generic WR row that uses Player 1..3 across columns
+    # NEW: when the table uses a single WR row with Player 1..3
     "WR":  {1: "WR1", 2: "WR2", 3: "WR3"},
 }
 
 def map_role(base_pos: str, depth_slot: str):
     """
-    Map Ourlads base position + slot label ('Player N') to a fantasy role.
-    Supports pages that list a single 'WR' row with Player 1..3.
-    Keeps existing LWR/RWR/SWR behavior.
+    Maps an Ourlads base position + slot label ('Player N') to a depth role (WR1, WR2, WR3, etc).
+    Supports pages that list one 'WR' row with Player 1–3 columns.
     """
     import re
     base = (base_pos or "").upper().strip()
-    # Extract the slot number from 'Player N'
     m = re.search(r"player\s*(\d+)", (depth_slot or ""), flags=re.I)
     if not m:
         return None
     n = int(m.group(1))
-
-    # Exact base match
     if base in ROLE_SLOT_MAPPING:
         return ROLE_SLOT_MAPPING[base].get(n)
-
-    # Fallback: anything starting with 'WR' (e.g., WR, WR-X)
     if base.startswith("WR"):
         return {1: "WR1", 2: "WR2", 3: "WR3"}.get(n)
-
     return None
 
 
@@ -359,21 +351,20 @@ def fetch_team_roles(team: str, soup: BeautifulSoup) -> List[dict]:
     if not data_rows:
         return []
 
-    # Find indices for columns "Player 1", "Player 2", "Player 3"
+    # --- BEGIN: detect slot columns ---
     slot_idxs = []
     for want in ("player 1", "player 2", "player 3"):
         idx = None
         for i, label in enumerate(header):
-            if i == 0:
-                continue
             if re.sub(r"\s+", " ", str(label).strip()).lower() == want:
                 idx = i
                 break
         if idx is not None:
             slot_idxs.append((idx, want.title()))
-    # Fallback if headers missing but table is wide: assume next 3 columns
+    # fallback if missing headers but wide table
     if not slot_idxs and len(header) > 3:
         slot_idxs = [(1, "Player 1"), (2, "Player 2"), (3, "Player 3")]
+    # --- END: detect slot columns ---
 
     records: List[dict] = []
     team_code = _canon_team(team)
@@ -387,12 +378,11 @@ def fetch_team_roles(team: str, soup: BeautifulSoup) -> List[dict]:
         if not base_pos or base_pos in OL_POSITIONS:
             # ignore OL entirely
             continue
+        # --- BEGIN: player extraction across slots ---
         for idx, slot_label in slot_idxs:
             if idx >= len(tds):
                 continue
-            cell_text = BeautifulSoup(tds[idx].decode_contents(), "lxml").get_text(
-                " ", strip=True
-            )
+            cell_text = BeautifulSoup(tds[idx].decode_contents(), "lxml").get_text(" ", strip=True)
             candidates = _split_candidates(cell_text)
             if not candidates:
                 continue
@@ -411,6 +401,7 @@ def fetch_team_roles(team: str, soup: BeautifulSoup) -> List[dict]:
                 "depth_slot": slot_label,
                 "role": role,
             })
+        # --- END: player extraction across slots ---
 
     return records
 
