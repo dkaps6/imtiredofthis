@@ -2002,41 +2002,48 @@ def main(args: argparse.Namespace) -> int:
         print("[make_metrics] FATAL: merged metrics is empty, aborting")
         return 1
 
-    # --- WR/CB Matchup Enrichment (weekly) ---
-    from pathlib import Path
-    import pandas as pd
+    metrics = df.copy()
 
-    def integrate_wr_cb_weekly(df):
-        twm = Path("data/team_week_map.csv")
-        if not twm.exists():
-            print("⚠️ team_week_map.csv not found — skipping WR/CB enrichment")
-            return df
-        tw = pd.read_csv(twm)
-        current_week = int(tw["week"].max())
+    try:
+        from scripts.fantasypoints_wr_cb_scraper import (  # type: ignore
+            get_current_week,
+            main as update_wr_cb,
+        )
 
-        match_path = Path(f"data/wr_cb_matchups_WEEK{current_week}.csv")
-        if not match_path.exists():
-            print(f"⚠️ No WR/CB matchup file for Week {current_week}; run scraper first")
-            return df
+        print("[make_metrics] Updating FantasyPoints WR–CB matchups…")
+        update_wr_cb()
+        current_week = get_current_week()
+    except Exception as exc:  # pragma: no cover - network resiliency
+        print(f"[make_metrics] WARN: WR–CB update failed ({exc})")
+        current_week = None
 
-        wr_cb = pd.read_csv(match_path)
-        # Ensure title case for player names to align with canonicalized player_form
-        if "player" in wr_cb.columns:
-            wr_cb["player"] = wr_cb["player"].astype(str).str.title().str.strip()
-
-        merge_cols = [c for c in ["player", "matchup_adv", "slot_rate", "left_align_rate", "right_align_rate"] if c in wr_cb.columns]
-        if "player" in df.columns and set(merge_cols).issubset(wr_cb.columns):
-            df = df.merge(wr_cb[merge_cols], on="player", how="left")
-            print(f"✅ WR/CB matchup data merged for Week {current_week}")
+    if current_week is not None:
+        wr_cb_path = Path(f"data/wr_cb_matchups_week_{current_week}.csv")
+        if wr_cb_path.exists():
+            try:
+                wr_cb_df = pd.read_csv(wr_cb_path)
+                join_cols = ["player", "team", "opponent"]
+                if all(col in wr_cb_df.columns for col in join_cols) and all(
+                    col in metrics.columns for col in join_cols
+                ):
+                    metrics = metrics.merge(wr_cb_df, on=join_cols, how="left")
+                    print(
+                        f"[make_metrics] WR–CB matchup data merged for Week {current_week}"
+                    )
+                else:
+                    print(
+                        "[make_metrics] WARN: WR–CB matchup CSV missing expected columns; skipping merge"
+                    )
+            except Exception as exc:  # pragma: no cover - CSV read resiliency
+                print(f"[make_metrics] WARN: Failed to merge WR–CB matchup data ({exc})")
         else:
-            print("⚠️ Could not merge WR/CB; missing 'player' column or expected keys")
-        return df
-
-    df = integrate_wr_cb_weekly(df)
+            print(
+                f"[make_metrics] WARN: WR–CB matchup file not found for Week {current_week} ({wr_cb_path})"
+            )
 
     METRICS_OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(METRICS_OUT_PATH, index=False)
-    print(f"[make_metrics] Wrote {len(df)} rows → {METRICS_OUT_PATH}")
+    metrics.to_csv(METRICS_OUT_PATH, index=False)
+    print(f"[make_metrics] Wrote {len(metrics)} rows → {METRICS_OUT_PATH}")
     return 0
 
 
