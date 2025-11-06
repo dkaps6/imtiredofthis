@@ -92,7 +92,11 @@ def _canonical_identity_fields(raw) -> dict:
 
     if raw_str and canonical and canonical == clean_key:
         try:
-            log_unmapped_variant(raw_str)
+            log_unmapped_variant(
+                "enrich_player_form",
+                raw_str,
+                {"stage": "canonical_identity_fields"},
+            )
         except Exception:
             pass
 

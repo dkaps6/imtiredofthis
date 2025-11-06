@@ -27,6 +27,7 @@ import os
 import re
 import sys
 import warnings
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -62,6 +63,7 @@ OPPONENT_MAP_PATH = Path("data/opponent_map_from_props.csv")
 TEAM_WEEK_MAP_PATH = Path("data/team_week_map.csv")
 UNMATCHED_ROLES_DEBUG_PATH = Path("data/unmatched_roles_merge.csv")
 TEAM_FORM_PATH = Path("data/team_form.csv")
+MANUAL_OVERRIDES_PATH = os.getenv("MANUAL_OVERRIDES_PATH", "data/manual_name_overrides.csv")
 
 
 CANON_OVERRIDES = {
@@ -551,6 +553,78 @@ def _format_canonical_player_name(raw: str) -> str:
     return standardize_full_name(value)
 
 
+def _manual_override_keys(raw: object) -> set[str]:
+    """Return normalized key variants for manual override lookups."""
+
+    if raw is None:
+        return set()
+
+    text = str(raw)
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    lowered = text.lower().strip()
+    if not lowered:
+        return set()
+
+    collapsed = re.sub(r"[^a-z0-9]+", "", lowered)
+    spaced = re.sub(r"\s+", " ", lowered).strip()
+
+    variants = {lowered, collapsed, spaced, spaced.replace(" ", "")}
+    return {v for v in variants if v}
+
+
+def _load_manual_name_overrides(path: str) -> dict[str, str]:
+    """
+    Reads a CSV with columns: player_source_name, full_name.
+    Ignores header rows, comments, and malformed lines.
+    """
+
+    import csv
+
+    mapping: dict[str, str] = {}
+    if not path:
+        return mapping
+
+    candidate = Path(path)
+    if not candidate.exists() or candidate.stat().st_size == 0:
+        return mapping
+
+    try:
+        with candidate.open(newline="", encoding="utf-8") as handle:
+            reader = csv.reader(handle)
+            for row in reader:
+                if not row or len(row) < 2:
+                    continue
+                first = str(row[0]).strip()
+                if not first:
+                    continue
+                lower = first.lower()
+                if lower.startswith("#"):
+                    continue
+                if lower in {"player_source_name", "player_key", "player"}:
+                    continue
+                second = str(row[1]).strip()
+                if not second:
+                    continue
+                formatted = _format_canonical_player_name(second)
+                if not formatted:
+                    continue
+                for key in _manual_override_keys(first):
+                    mapping[key] = formatted
+    except Exception as err:
+        logger.warning(
+            "[make_player_form] failed reading manual overrides %s: %s",
+            candidate,
+            err,
+        )
+
+    return mapping
+
+
+@lru_cache(maxsize=1)
+def _manual_name_overrides() -> dict[str, str]:
+    return _load_manual_name_overrides(MANUAL_OVERRIDES_PATH)
+
+
 def _canonicalize_player_name(raw: str) -> str:
     if raw is None:
         return ""
@@ -566,6 +640,14 @@ def _canonicalize_player_name(raw: str) -> str:
     n = _strip_suffixes(n)
     # collapse whitespace again
     n = re.sub(r"\s+", " ", n).strip()
+    manual_map = _manual_name_overrides()
+    if manual_map:
+        for candidate in _manual_override_keys(raw):
+            if candidate in manual_map:
+                return manual_map[candidate]
+        for candidate in _manual_override_keys(n):
+            if candidate in manual_map:
+                return manual_map[candidate]
     # if it's initial+lastname like "m harrison", collapse to "mharrison"
     parts = n.split()
     if len(parts) == 2 and len(parts[0]) == 1:
@@ -838,7 +920,11 @@ def _canonical_identity_fields(raw: Any) -> Dict[str, str]:
 
     if raw_str and canonical and canonical == clean_key:
         try:
-            log_unmapped_variant(raw_str)
+            log_unmapped_variant(
+                "make_player_form",
+                raw_str,
+                {"stage": "canonical_identity_fields"},
+            )
         except Exception:
             pass
 
@@ -3242,7 +3328,11 @@ def build_player_form(season: int = 2025, slate_date: str | None = None) -> pd.D
         base["team"] = base["team"].astype(str).map(normalize_team)
         base.loc[base["team"].isin(["", "NAN", "NONE", "NULL"]), "team"] = pd.NA
     for raw in base.get("player", pd.Series(dtype=object)).dropna().unique():
-        log_unmapped_variant(raw)
+        log_unmapped_variant(
+            "make_player_form",
+            raw,
+            {"stage": "post_player_cleaning"},
+        )
 
     # Normalize team and (optional) week the same way we did before:
     base["team_key"] = (
@@ -3895,7 +3985,11 @@ def _enrich_team_and_opponent_from_props(
     else:
         df["player_source_name"] = raw_players
     for raw in raw_players.dropna().unique():
-        log_unmapped_variant(raw)
+        log_unmapped_variant(
+            "make_player_form",
+            raw,
+            {"stage": "enrich_team_opponent"},
+        )
 
     identity = raw_players.apply(lambda nm: pd.Series(_canonical_identity_fields(nm)))
     df["player_name_canonical"] = identity["player_name_canonical"].astype(str)
@@ -4543,7 +4637,11 @@ def _load_props_players() -> pd.DataFrame:
         pr["player_canonical"] = pr["player"].apply(_canonicalize_player_name)
     pr["player_clean_key"] = pr["player_canonical"].apply(_normalize_key)
     for raw in pr["player"].dropna().unique():
-        log_unmapped_variant(raw)
+        log_unmapped_variant(
+            "make_player_form",
+            raw,
+            {"stage": "normalize_props_players"},
+        )
 
     return pr[["player", "team", "opponent", "player_clean_key"]].drop_duplicates()
 
@@ -4571,7 +4669,11 @@ def _validate_required(df: pd.DataFrame):
     if "player_clean_key" not in df.columns:
         df["player_clean_key"] = df["player_canonical"].apply(_normalize_key)
     for raw in player_series.dropna().unique():
-        log_unmapped_variant(raw)
+        log_unmapped_variant(
+            "make_player_form",
+            raw,
+            {"stage": "validate_required"},
+        )
 
     need = df.merge(
         props_players[["player_clean_key"]].drop_duplicates(),
