@@ -2002,26 +2002,37 @@ def main(args: argparse.Namespace) -> int:
         print("[make_metrics] FATAL: merged metrics is empty, aborting")
         return 1
 
-    # --- WR/CB Matchup Enrichment ---
+    # --- WR/CB Matchup Enrichment (weekly) ---
     from pathlib import Path
     import pandas as pd
 
-    matchup_file = Path("data/wr_cb_matchups.csv")
-    if matchup_file.exists():
-        wr_cb = pd.read_csv(matchup_file)
-        wr_cb["player"] = wr_cb["player"].str.strip().str.title()
+    def integrate_wr_cb_weekly(df):
+        twm = Path("data/team_week_map.csv")
+        if not twm.exists():
+            print("⚠️ team_week_map.csv not found — skipping WR/CB enrichment")
+            return df
+        tw = pd.read_csv(twm)
+        current_week = int(tw["week"].max())
 
-        if "player" in df.columns:
-            df = df.merge(
-                wr_cb[["player", "matchup_adv", "slot_rate", "left_align_rate", "right_align_rate"]],
-                on="player",
-                how="left"
-            )
-            print(f"✅ Added WR/CB matchup columns for {df['matchup_adv'].notna().sum()} WRs")
+        match_path = Path(f"data/wr_cb_matchups_WEEK{current_week}.csv")
+        if not match_path.exists():
+            print(f"⚠️ No WR/CB matchup file for Week {current_week}; run scraper first")
+            return df
+
+        wr_cb = pd.read_csv(match_path)
+        # Ensure title case for player names to align with canonicalized player_form
+        if "player" in wr_cb.columns:
+            wr_cb["player"] = wr_cb["player"].astype(str).str.title().str.strip()
+
+        merge_cols = [c for c in ["player", "matchup_adv", "slot_rate", "left_align_rate", "right_align_rate"] if c in wr_cb.columns]
+        if "player" in df.columns and set(merge_cols).issubset(wr_cb.columns):
+            df = df.merge(wr_cb[merge_cols], on="player", how="left")
+            print(f"✅ WR/CB matchup data merged for Week {current_week}")
         else:
-            print("⚠️ Could not find 'player' column to join WR/CB data")
-    else:
-        print("⚠️ No WR/CB matchup file found; skipping enrichment")
+            print("⚠️ Could not merge WR/CB; missing 'player' column or expected keys")
+        return df
+
+    df = integrate_wr_cb_weekly(df)
 
     METRICS_OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(METRICS_OUT_PATH, index=False)
