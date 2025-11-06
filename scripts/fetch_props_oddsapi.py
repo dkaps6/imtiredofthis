@@ -622,6 +622,142 @@ def _build_opponent_map(
     return out.reindex(columns=cols)
 
 
+def _write_props_enriched_data(
+    raw_props: pd.DataFrame,
+    enriched: Optional[pd.DataFrame],
+    game_df: Optional[pd.DataFrame],
+) -> None:
+    """Write data/props_enriched.csv with deterministic opponent inference."""
+
+    PROPS_ENRICHED_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    base = pd.DataFrame()
+    if enriched is not None and not enriched.empty:
+        base = enriched.copy()
+    elif raw_props is not None and not raw_props.empty:
+        base = raw_props.copy()
+        if "player" in base.columns and "player_name_raw" not in base.columns:
+            base["player_name_raw"] = base["player"]
+        if "market" in base.columns and "player_market" not in base.columns:
+            base["player_market"] = base["market"]
+        if "side" in base.columns and "stat_type" not in base.columns:
+            base["stat_type"] = base["side"]
+        if "price_american" in base.columns and "odds" not in base.columns:
+            base["odds"] = base["price_american"]
+
+    if base.empty:
+        pd.DataFrame().to_csv(PROPS_ENRICHED_PATH, index=False)
+        log.info(f"wrote empty {PROPS_ENRICHED_PATH}")
+        return
+
+    if "event_id" not in base.columns:
+        if raw_props is not None and "event_id" in raw_props.columns:
+            base["event_id"] = raw_props["event_id"]
+        else:
+            base["event_id"] = ""
+    base["event_id"] = base["event_id"].fillna("").astype(str)
+
+    games = pd.DataFrame()
+    if game_df is not None and not game_df.empty:
+        games = game_df.copy()
+    else:
+        try:
+            games = pd.read_csv(ODDS_GAME_DATA_PATH)
+        except Exception:
+            games = pd.DataFrame()
+
+    if not games.empty and "event_id" in games.columns:
+        games_subset_cols = [
+            c
+            for c in [
+                "event_id",
+                "home_team",
+                "away_team",
+                "home_team_abbr",
+                "away_team_abbr",
+                "kickoff_ts",
+                "commence_time",
+            ]
+            if c in games.columns
+        ]
+        games_subset = games[games_subset_cols].copy()
+        games_subset["event_id"] = games_subset["event_id"].fillna("").astype(str)
+        for col in ["home_team", "away_team", "home_team_abbr", "away_team_abbr"]:
+            if col in games_subset.columns:
+                games_subset[col] = (
+                    games_subset[col]
+                    .fillna("")
+                    .astype(str)
+                    .str.upper()
+                    .str.strip()
+                )
+        if "kickoff_ts" not in games_subset.columns and "commence_time" in games_subset.columns:
+            games_subset["kickoff_ts"] = games_subset["commence_time"]
+        games_subset = games_subset.drop_duplicates(subset=["event_id"])
+        base = base.merge(games_subset, on="event_id", how="left")
+
+    team_col = next(
+        (candidate for candidate in ["player_team_abbr", "team", "player_team"] if candidate in base.columns),
+        None,
+    )
+    if team_col:
+        base[team_col] = (
+            base[team_col]
+            .fillna("")
+            .astype(str)
+            .str.upper()
+            .str.strip()
+        )
+
+    if "opponent_team_abbr" not in base.columns:
+        base["opponent_team_abbr"] = pd.NA
+
+    def _opp_from_row(row: pd.Series) -> Optional[str]:
+        tm = str(row.get(team_col, "")) if team_col else ""
+        tm = tm.upper().strip()
+        home = row.get("home_team_abbr") or row.get("home_team")
+        away = row.get("away_team_abbr") or row.get("away_team")
+        home = "" if home is None else str(home).upper().strip()
+        away = "" if away is None else str(away).upper().strip()
+        if not tm or not home or not away:
+            return None
+        if tm == home:
+            return away
+        if tm == away:
+            return home
+        return None
+
+    if team_col and len(base):
+        mask = base["opponent_team_abbr"].isna() | base["opponent_team_abbr"].astype(str).str.strip().eq("")
+        if mask.any():
+            inferred = base.loc[mask].apply(_opp_from_row, axis=1)
+            base.loc[mask, "opponent_team_abbr"] = inferred
+
+    for col in ["player_team_abbr", "opponent_team_abbr", "home_team_abbr", "away_team_abbr"]:
+        if col in base.columns:
+            base[col] = (
+                base[col]
+                .fillna("")
+                .astype(str)
+                .str.upper()
+                .str.strip()
+            )
+
+    if "kickoff_ts" not in base.columns:
+        if "commence_time" in base.columns:
+            base["kickoff_ts"] = base["commence_time"]
+        elif "game_timestamp" in base.columns:
+            base["kickoff_ts"] = base["game_timestamp"]
+
+    for helper in ["home_team", "away_team"]:
+        abbr_col = f"{helper}_abbr"
+        if helper in base.columns and abbr_col in base.columns:
+            base.drop(columns=[helper], inplace=True)
+
+    base.to_csv(PROPS_ENRICHED_PATH, index=False)
+    log.info(f"wrote {PROPS_ENRICHED_PATH} rows={len(base)}")
+
+
 def _write_data_exports(
     raw_props: pd.DataFrame,
     enriched: Optional[pd.DataFrame],
@@ -669,6 +805,8 @@ def _write_data_exports(
     opponent_map = _build_opponent_map(enriched, game_df, season)
     opponent_map.to_csv(OPPONENT_MAP_PATH, index=False)
     log.info(f"wrote {OPPONENT_MAP_PATH} rows={len(opponent_map)}")
+
+    _write_props_enriched_data(props_copy, enriched, game_df)
 
 # ------------------------- CORE FETCHERS ------------------
 

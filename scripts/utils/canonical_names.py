@@ -13,10 +13,14 @@ The function canonicalize_player_name uses:
   2) data/manual_name_overrides.csv (player_source_name -> full name), overrides roles
 """
 
+import os
+import json
 import re
 from pathlib import Path
-import pandas as pd
 from functools import lru_cache
+from typing import Any, Dict, Optional
+
+import pandas as pd
 
 # ---------- helpers ----------
 
@@ -91,20 +95,29 @@ def canonicalize_player_name(source_key: str) -> str:
 canonicalize_name = canonicalize_player_name
 
 
-def log_unmapped_variant(raw_name: str) -> None:
-    """Legacy stub for compatibility. Logs unmapped canonicalization variants.
-    This function is called by make_player_form and other scripts to record player names
-    that failed to match during canonicalization. Writes to data/_debug/unmapped_names.log.
-    """
-    import os
-    import datetime
-    from pathlib import Path
+_UNMAPPED_LOG = os.environ.get("UNMAPPED_NAME_LOG", "data/_debug/unmapped_names.jsonl")
+
+
+def log_unmapped_variant(
+    source: str,
+    raw_name: str,
+    context: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Best-effort logging for unmapped canonical name variants."""
+
+    payload = {"source": source, "raw_name": raw_name}
+    if context:
+        try:
+            payload.update(dict(context))
+        except Exception:
+            # if context is not a mapping, fall back to repr for debugging
+            payload["context"] = repr(context)
 
     try:
-        path = Path("data/_debug/unmapped_names.log")
-        os.makedirs(path.parent, exist_ok=True)
-        ts = datetime.datetime.now().isoformat(timespec="seconds")
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(f"[{ts}] {raw_name}\n")
-    except Exception as e:
-        print(f"[log_unmapped_variant] ⚠️ Failed to log {raw_name}: {e}")
+        log_path = Path(_UNMAPPED_LOG)
+        os.makedirs(log_path.parent, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except Exception:
+        # This logger is intentionally fail-safe; never raise upstream.
+        pass

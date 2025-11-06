@@ -22,7 +22,7 @@
 # - Canonicalizes team abbreviations (BUF, KC, WAS, etc.)
 
 import os, re, time, warnings, sys
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
@@ -341,17 +341,23 @@ def fetch_team_roles(team: str, soup: BeautifulSoup) -> List[dict]:
     if not data_rows:
         return []
 
-    # find column index for "Player 1"
-    try:
-        player1_idx = next(
-            idx
-            for idx, label in enumerate(header)
-            if idx > 0 and re.sub(r"\s+"," ",label.strip()).lower() == "player 1"
-        )
-    except StopIteration:
-        player1_idx = 1 if len(header) > 1 else None
+    # find column indices for Player 1/2/3 slots
+    slot_idxs: List[Tuple[int, str]] = []
+    for want in ("player 1", "player 2", "player 3"):
+        idx = None
+        for col_idx, label in enumerate(header):
+            if col_idx == 0:
+                continue
+            if re.sub(r"\s+", " ", label.strip()).lower() == want:
+                idx = col_idx
+                break
+        if idx is not None:
+            slot_idxs.append((idx, want.title()))
+    if not slot_idxs:
+        for fallback_idx in range(1, min(4, len(header))):
+            slot_idxs.append((fallback_idx, f"Player {fallback_idx}"))
 
-    if player1_idx is None:
+    if not slot_idxs:
         return []
 
     records: List[dict] = []
@@ -359,9 +365,6 @@ def fetch_team_roles(team: str, soup: BeautifulSoup) -> List[dict]:
 
     for tr in data_rows:
         tds = tr.find_all("td")
-        if len(tds) <= player1_idx:
-            continue
-
         pos_raw = BeautifulSoup(tds[0].decode_contents(), "lxml").get_text(
             " ", strip=True
         ).upper()
@@ -369,40 +372,32 @@ def fetch_team_roles(team: str, soup: BeautifulSoup) -> List[dict]:
         if not base_pos or base_pos in OL_POSITIONS:
             # ignore OL entirely
             continue
-
-        # The column header for this slot ("Player 1", etc.)
-        depth_slot_label = header[player1_idx] if player1_idx < len(header) else "Player 1"
-        depth_slot_label = re.sub(r"\s+", " ", depth_slot_label).strip() or "Player 1"
-
-        # Grab the text from the Player 1 cell
-        cell_text = BeautifulSoup(
-            tds[player1_idx].decode_contents(), "lxml"
-        ).get_text(" ", strip=True)
-
-        # Some cells contain multiple slash/and separated names -> split and take first
-        candidates = _split_candidates(cell_text)
-        if not candidates:
-            continue
-
-        raw_player_name = candidates[0]
-        player_clean = clean_ourlads_name(raw_player_name)
-        if not player_clean or len(player_clean.split()) < 2:
-            continue
-
-        role = map_role(base_pos, depth_slot_label)
-        if not role:
-            continue
-
-        position_out = POSITION_ALIASES.get(base_pos, base_pos)
-        records.append(
-            {
-                "team": team_code,
-                "player": player_clean,
-                "position": position_out,
-                "depth_slot": "Player 1",
-                "role": role,
-            }
-        )
+        for idx, slot_label in slot_idxs:
+            if idx >= len(tds):
+                continue
+            cell_text = BeautifulSoup(
+                tds[idx].decode_contents(), "lxml"
+            ).get_text(" ", strip=True)
+            candidates = _split_candidates(cell_text)
+            if not candidates:
+                continue
+            raw_player_name = candidates[0]
+            player_clean = clean_ourlads_name(raw_player_name)
+            if not player_clean or len(player_clean.split()) < 2:
+                continue
+            role = map_role(base_pos, slot_label)
+            if not role:
+                continue
+            position_out = POSITION_ALIASES.get(base_pos, base_pos)
+            records.append(
+                {
+                    "team": team_code,
+                    "player": player_clean,
+                    "position": position_out,
+                    "depth_slot": slot_label,
+                    "role": role,
+                }
+            )
 
     return records
 
@@ -455,6 +450,7 @@ def main():
         roles_all = roles_all.sort_values(
             ["team", "player", "_pos_rank", "_role_rank", "role", "position"]
         )
+        # keep strongest role encountered for each player (Player 1 slot first)
         roles_all = roles_all.drop_duplicates(subset=["team", "player"], keep="first")
         roles_all = roles_all.drop(columns=["_pos_rank", "_role_rank"])
 
