@@ -48,6 +48,17 @@ ALIASES = {
     "LA": "LAR",
     "LOS ANGELES RAMS": "LAR",
     "LOS ANGELES CHARGERS": "LAC",
+    # sportsbook/vendor oddities
+    "BLT": "BAL",
+    "CLV": "CLE",
+    "HST": "HOU",
+    "LVG": "LV",
+    "KAN": "KC",
+    "NWE": "NE",
+    "NOR": "NO",
+    "SFO": "SF",
+    "TAM": "TB",
+    "SDG": "LAC",
 }
 
 
