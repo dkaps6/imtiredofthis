@@ -1,33 +1,28 @@
 #!/usr/bin/env python3
 """
-Canonicalize player names in player_form.csv
+Backwards-compatible name canonicalization utilities.
 
-Priority:
-  1) roles_ourlads: player_key -> player (ignore middle initials; keep suffixes)
-  2) manual overrides: player_source_name -> full First Last (unconditional if --force-manual)
+Exports:
+  - canonicalize_player_name(source_key: str) -> str
+      (legacy API expected by make_player_form.py)
+  - build_roles_map(), build_manual_map() helpers
+  - norm_key(), strip_middle_initial()
 
-Also updates canonical name fields when present:
-  canonical_player_name, player_name_canonical, player_canonical, player_display, display_name
+The function canonicalize_player_name uses:
+  1) roles_ourlads.csv (player_key -> full name, ignoring middle initials)
+  2) data/manual_name_overrides.csv (player_source_name -> full name), overrides roles
 """
 
-import argparse
 import re
 from pathlib import Path
 import pandas as pd
+from functools import lru_cache
+
+# ---------- helpers ----------
 
 SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
 
-CANON_COLS = [
-    "canonical_player_name",
-    "player_name_canonical",
-    "player_canonical",
-    "player_display",
-    "display_name",
-]
-
-
 def strip_middle_initial(full_name: str) -> str:
-    """Return 'First Last' (preserve suffix like 'Jr', 'III')."""
     if not isinstance(full_name, str):
         return ""
     parts = re.split(r"\s+", full_name.replace(",", " ").strip())
@@ -41,7 +36,6 @@ def strip_middle_initial(full_name: str) -> str:
     return f"{first} {last}".strip()
 
 def norm_key(s: str) -> str:
-    """Lowercase; remove spaces, apostrophes, hyphens, periods."""
     if not isinstance(s, str):
         return ""
     s = s.lower().strip()
@@ -49,88 +43,49 @@ def norm_key(s: str) -> str:
         s = s.replace(ch, "")
     return s
 
+# ---------- map builders (cached) ----------
 
-def load_roles_map(path: Path) -> dict:
-    df = pd.read_csv(path)
+@lru_cache(maxsize=1)
+def build_roles_map(roles_path: str = "data/roles_ourlads.csv") -> dict:
+    p = Path(roles_path)
+    if not p.exists():
+        return {}
+    df = pd.read_csv(p)
     cols = {c.lower(): c for c in df.columns}
     if "player_key" not in cols or "player" not in cols:
-        raise SystemExit("roles_ourlads.csv must contain 'player_key' and 'player' columns.")
+        return {}
     key_col = cols["player_key"]
     name_col = cols["player"]
     df["_key"] = df[key_col].astype(str).map(norm_key)
     df["_full"] = df[name_col].astype(str).map(strip_middle_initial)
     return dict(zip(df["_key"], df["_full"]))
 
-
-def load_manual_map(path: Path) -> dict:
-    if not path.exists():
+@lru_cache(maxsize=1)
+def build_manual_map(overrides_path: str = "data/manual_name_overrides.csv") -> dict:
+    p = Path(overrides_path)
+    if not p.exists():
         return {}
-    df = pd.read_csv(path)
+    df = pd.read_csv(p)
     need = {"player_source_name", "full_name"}
     if not need.issubset(df.columns):
-        raise SystemExit("manual_name_overrides.csv must have columns: player_source_name, full_name")
+        return {}
     df["_key"] = df["player_source_name"].astype(str).map(norm_key)
     return dict(zip(df["_key"], df["full_name"]))
 
+# ---------- legacy API (kept for make_player_form.py) ----------
 
-def canonicalize(
-    player_form: Path,
-    roles_ourlads: Path,
-    manual_overrides: Path,
-    out: Path,
-    force_manual: bool,
-) -> None:
-    pf = pd.read_csv(player_form)
+def canonicalize_player_name(source_key: str) -> str:
+    """
+    Legacy entrypoint used throughout the repo.
+    Accepts 'player_source_name' or 'player_key' like 'Zflowers'/'Jsmith-Njigba'
+    and returns the full 'First Last' (with suffix if present).
+    """
+    k = norm_key(source_key)
+    manual = build_manual_map()
+    if k in manual:
+        return manual[k]
+    roles = build_roles_map()
+    return roles.get(k, source_key or "")
 
-    if "player_source_name" not in pf.columns:
-        raise SystemExit("player_form.csv must include 'player_source_name'.")
-
-    if "player" not in pf.columns:
-        pf["player"] = pf["player_source_name"]
-
-    roles_map = load_roles_map(roles_ourlads)
-    manual_map = load_manual_map(manual_overrides)
-
-    keys = pf["player_source_name"].astype(str).map(norm_key)
-
-    # Pass 1: roles mapping
-    from_roles = keys.map(roles_map)
-
-    # Pass 2: manual mapping
-    from_manual = keys.map(manual_map)
-
-    if force_manual:
-        # roles as base; manual overrides wherever present
-        full_names = from_roles.where(~keys.isin(manual_map.keys()), from_manual)
-    else:
-        # only fill where roles didn't resolve
-        full_names = from_roles.fillna(from_manual)
-
-    # Write into player + canonical columns
-    pf["player"] = full_names.fillna(pf["player"])
-    for c in CANON_COLS:
-        if c in pf.columns:
-            pf[c] = full_names.fillna(pf[c])
-
-    out.parent.mkdir(parents=True, exist_ok=True)
-    pf.to_csv(out, index=False)
-
-def main(argv=None):
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--player-form", type=Path, required=True)
-    ap.add_argument("--roles-ourlads", type=Path, required=True)
-    ap.add_argument("--manual-overrides", type=Path, default=Path("data/manual_name_overrides.csv"))
-    ap.add_argument("--out", type=Path, required=True)
-    ap.add_argument("--force-manual", action="store_true", help="Always apply manual overrides where keys exist.")
-    ns = ap.parse_args(argv)
-
-    canonicalize(
-        player_form=ns.player_form,
-        roles_ourlads=ns.roles_ourlads,
-        manual_overrides=ns.manual_overrides,
-        out=ns.out,
-        force_manual=ns.force_manual,
-    )
-
-if __name__ == "__main__":
-    main()
+# Optional: explicit alias used in some places
+canonicalize_name = canonicalize_player_name
