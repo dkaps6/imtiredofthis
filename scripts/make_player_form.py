@@ -574,49 +574,25 @@ def _manual_override_keys(raw: object) -> set[str]:
 
 def _load_manual_name_overrides(path: str) -> dict[str, str]:
     """
-    Reads a CSV with columns: player_source_name, full_name.
-    Ignores header rows, comments, and malformed lines.
+    Reads a CSV with columns: player_source_name, full_name
+    Ignores header rows and any malformed lines.
     """
-
-    import csv
-
+    import csv, os
     mapping: dict[str, str] = {}
-    if not path:
+    if not path or not os.path.exists(path):
         return mapping
-
-    candidate = Path(path)
-    if not candidate.exists() or candidate.stat().st_size == 0:
-        return mapping
-
-    try:
-        with candidate.open(newline="", encoding="utf-8") as handle:
-            reader = csv.reader(handle)
-            for row in reader:
-                if not row or len(row) < 2:
-                    continue
-                first = str(row[0]).strip()
-                if not first:
-                    continue
-                lower = first.lower()
-                if lower.startswith("#"):
-                    continue
-                if lower in {"player_source_name", "player_key", "player"}:
-                    continue
-                second = str(row[1]).strip()
-                if not second:
-                    continue
-                formatted = _format_canonical_player_name(second)
-                if not formatted:
-                    continue
-                for key in _manual_override_keys(first):
-                    mapping[key] = formatted
-    except Exception as err:
-        logger.warning(
-            "[make_player_form] failed reading manual overrides %s: %s",
-            candidate,
-            err,
-        )
-
+    with open(path, newline="", encoding="utf-8") as f:
+        r = csv.reader(f)
+        for row in r:
+            if not row or len(row) < 2:
+                continue
+            # header guard
+            if str(row[0]).strip().lower() in {"player_source_name", "player_key", "player"}:
+                continue
+            k = str(row[0]).strip()
+            v = str(row[1]).strip()
+            if k and v:
+                mapping[k] = v
     return mapping
 
 

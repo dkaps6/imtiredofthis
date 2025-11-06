@@ -1020,6 +1020,35 @@ def fetch_odds(
         props["player_canonical"] = props["player"].apply(canonicalize_name)
     else:
         props["player_canonical"] = ""
+
+    # --- BEGIN: enrich props with opponent from odds_game ---
+    import pandas as pd
+
+    games = pd.read_csv("outputs/odds_game.csv")
+    for c in ("home_team", "away_team"):
+        games[c] = games[c].astype(str).str.upper()
+
+    props["event_id"] = props["event_id"].astype(str)
+    props = props.merge(games[["event_id","home_team","away_team"]], on="event_id", how="left")
+
+    def _infer_opp(row):
+        tm = str(row.get("team", "")).upper()
+        h, a = row.get("home_team", ""), row.get("away_team", "")
+        if not tm or not h or not a:
+            return None
+        if tm == h:
+            return a
+        if tm == a:
+            return h
+        return None
+
+    if "team" in props.columns:
+        props["opp_team"] = props.apply(_infer_opp, axis=1)
+
+    # keep your original file AND write an enriched one for downstream robustness
+    props.to_csv("outputs/props_enriched.csv", index=False)
+    # --- END: enrich props with opponent from odds_game ---
+
     props.to_csv(out, index=False)
     log.info(f"wrote {out} rows={len(props)}")
 
