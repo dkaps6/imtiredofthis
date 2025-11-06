@@ -419,7 +419,7 @@ def fetch_team_roles(team: str, soup: BeautifulSoup) -> List[dict]:
     return records
 
 
-def main(*, include_inactive: bool = False):
+def main(*, season: Optional[int] = None, include_inactive: bool = False):
     warnings.simplefilter("ignore")
     os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -488,10 +488,28 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
+    # Accept either a positional SEASON or the --season flag (both ints)
+    parser.add_argument(
+        "season_positional",
+        nargs="?",
+        type=int,
+        help="Season year (e.g., 2025)",
+    )
+    parser.add_argument(
+        "--season",
+        dest="season_flag",
+        type=int,
+        help="Season year (e.g., 2025)",
+    )
     parser.add_argument(
         "--include-inactive",
         action="store_true",
         help="Keep players marked inactive (red text) in output",
     )
     args = parser.parse_args()
-    main(include_inactive=args.include_inactive)
+    season = args.season_flag if args.season_flag is not None else args.season_positional
+    if season is None:
+        raise SystemExit(
+            "ourlads_depth.py: missing season. Pass either a positional season (e.g., `python ... 2025`) or `--season 2025`."
+        )
+    main(season=season, include_inactive=args.include_inactive)
