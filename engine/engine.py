@@ -98,7 +98,7 @@ def run_pipeline(season: int = 2025,
         _run("python scripts/fetch_props_oddsapi.py")
 
         # Optional providers (soft-fail)
-        _run("python scripts/providers/ourlads_depth.py || true")
+        _run(f"python scripts/providers/ourlads_depth.py --season {season} || true")
         _run("python scripts/providers/injuries.py || true")
 
     except Exception as e:
