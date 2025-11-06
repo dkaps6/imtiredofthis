@@ -2002,6 +2002,27 @@ def main(args: argparse.Namespace) -> int:
         print("[make_metrics] FATAL: merged metrics is empty, aborting")
         return 1
 
+    # --- WR/CB Matchup Enrichment ---
+    from pathlib import Path
+    import pandas as pd
+
+    matchup_file = Path("data/wr_cb_matchups.csv")
+    if matchup_file.exists():
+        wr_cb = pd.read_csv(matchup_file)
+        wr_cb["player"] = wr_cb["player"].str.strip().str.title()
+
+        if "player" in df.columns:
+            df = df.merge(
+                wr_cb[["player", "matchup_adv", "slot_rate", "left_align_rate", "right_align_rate"]],
+                on="player",
+                how="left"
+            )
+            print(f"✅ Added WR/CB matchup columns for {df['matchup_adv'].notna().sum()} WRs")
+        else:
+            print("⚠️ Could not find 'player' column to join WR/CB data")
+    else:
+        print("⚠️ No WR/CB matchup file found; skipping enrichment")
+
     METRICS_OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(METRICS_OUT_PATH, index=False)
     print(f"[make_metrics] Wrote {len(df)} rows → {METRICS_OUT_PATH}")
