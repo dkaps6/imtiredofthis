@@ -409,6 +409,7 @@ def fetch_team_roles(team: str, soup: BeautifulSoup, include_inactive: bool) -> 
 
     records: List[dict] = []
     team_code = _canon_team(team)
+    wr_seen = 0
 
     for tr in data_rows:
         tds = tr.find_all("td")
@@ -449,7 +450,15 @@ def fetch_team_roles(team: str, soup: BeautifulSoup, include_inactive: bool) -> 
             if model_role is None and pos_group in {"RB", "QB", "TE", "FB"} and depth_idx:
                 model_role = f"{pos_group}{depth_idx}"
 
+            fallback_wr_role = None
+            if base_pos == "WR" and slot_label.strip().lower() == "player 1":
+                fallback_wr_role = {0: "WR1", 1: "WR2", 2: "WR3"}.get(wr_seen)
+                if fallback_wr_role:
+                    model_role = fallback_wr_role
+
             role_out = model_role or depth_role
+            if fallback_wr_role:
+                role_out = fallback_wr_role
 
             records.append({
                 "team": team_code,
@@ -463,6 +472,9 @@ def fetch_team_roles(team: str, soup: BeautifulSoup, include_inactive: bool) -> 
                 "model_role": model_role or role_out,
                 "status": status,
             })
+
+            if fallback_wr_role:
+                wr_seen += 1
 
     return records
 

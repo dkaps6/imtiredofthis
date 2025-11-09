@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 from typing import Iterable
 
@@ -219,6 +219,34 @@ def _load_team_week_map() -> pd.DataFrame:
     return working
 
 
+def _infer_week_from_schedule(
+    schedule: pd.DataFrame, season_hint: int | None
+) -> int | None:
+    if schedule is None or schedule.empty:
+        return None
+
+    working = schedule.copy()
+
+    if "season" in working.columns:
+        working["season"] = pd.to_numeric(
+            working["season"], errors="coerce"
+        ).astype("Int64")
+        if season_hint is not None:
+            working = working.loc[working["season"] == season_hint]
+        elif working["season"].notna().any():
+            season_hint = int(working["season"].dropna().max())
+            working = working.loc[working["season"] == season_hint]
+
+    if "week" not in working.columns:
+        return None
+
+    week_values = pd.to_numeric(working["week"], errors="coerce").dropna()
+    if week_values.empty:
+        return None
+
+    return int(week_values.max())
+
+
 def _write_unresolved(records: list[dict[str, object]]) -> pd.DataFrame:
     UNRESOLVED_OUT.parent.mkdir(parents=True, exist_ok=True)
     if records:
@@ -287,8 +315,13 @@ def _parse_commence(series: pd.Series) -> pd.Series:
     return parsed
 
 
-def _resolve_slate_date() -> datetime.date | None:
-    raw = os.getenv("SLATE_DATE", "").strip()
+def _resolve_slate_date(raw: str | None = None) -> datetime.date | None:
+    """Resolve desired slate date from CLI override or environment."""
+
+    if raw is None:
+        raw = os.getenv("SLATE_DATE", "")
+
+    raw = (raw or "").strip()
     if not raw:
         return None
     for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S%z"):
@@ -307,12 +340,30 @@ def build_opponent_map(
     props_path: Path | None = None,
     odds_path: Path | None = None,
     out_path: Path = DEFAULT_OUT,
+    slate_date: date | datetime | str | None = None,
+    week: int | None = None,
 ) -> pd.DataFrame:
     props_candidates = [p for p in [props_path, Path("outputs/props_raw.csv"), Path("data/props_raw.csv")] if p]
     odds_candidates = [p for p in [odds_path, Path("outputs/odds_game.csv"), Path("data/odds_game.csv")] if p]
 
     props = _read_first(props_candidates)
     odds = _read_first(odds_candidates)
+
+    if isinstance(slate_date, datetime):
+        slate_dt: date | None = slate_date.date()
+    elif isinstance(slate_date, date):
+        slate_dt = slate_date
+    elif isinstance(slate_date, str):
+        slate_dt = _resolve_slate_date(slate_date)
+    else:
+        slate_dt = _resolve_slate_date()
+
+    week_value: int | None = None
+    if week is not None:
+        try:
+            week_value = int(week)
+        except (TypeError, ValueError):
+            week_value = None
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -361,6 +412,43 @@ def build_opponent_map(
 
     if props.empty or odds.empty:
         return _return_empty("[opponent_map] WARN: missing props or odds source; wrote empty map")
+
+    def _extract_season(frame: pd.DataFrame) -> int | None:
+        if frame is None or frame.empty or "season" not in frame.columns:
+            return None
+        try:
+            series = pd.to_numeric(frame["season"], errors="coerce").dropna()
+        except Exception:
+            return None
+        if series.empty:
+            return None
+        return int(series.max())
+
+    season_hint = _extract_season(props)
+    if season_hint is None:
+        season_hint = _extract_season(odds)
+
+    schedule_df = _load_team_week_map()
+    if (
+        season_hint is None
+        and schedule_df is not None
+        and not schedule_df.empty
+        and "season" in schedule_df.columns
+    ):
+        season_vals = pd.to_numeric(schedule_df["season"], errors="coerce").dropna()
+        if not season_vals.empty:
+            season_hint = int(season_vals.max())
+
+    if season_hint is None:
+        env_season = os.getenv("SEASON", "").strip()
+        try:
+            season_hint = int(env_season)
+        except (TypeError, ValueError):
+            season_hint = None
+
+    target_week = week_value
+    if target_week is None and slate_dt is None:
+        target_week = _infer_week_from_schedule(schedule_df, season_hint)
 
     roster_lookup = build_roster_lookup(_load_roles_dataframe())
 
@@ -445,6 +533,10 @@ def build_opponent_map(
         props["team_abbr"] = _norm_team(props["team_abbr"])
     for col in ("season", "week"):
         props[col] = pd.to_numeric(props[col], errors="coerce").astype("Int64")
+    if season_hint is not None and "season" in props.columns:
+        props["season"] = props["season"].fillna(int(season_hint)).astype("Int64")
+    if target_week is not None and "week" in props.columns:
+        props["week"] = props["week"].fillna(int(target_week)).astype("Int64")
 
     odds = odds.copy()
     odds.columns = [c.lower() for c in odds.columns]
@@ -459,12 +551,11 @@ def build_opponent_map(
     if "commence_time" in odds.columns:
         odds["commence_time"] = _parse_commence(odds["commence_time"])
 
-    slate_date = _resolve_slate_date()
     live_mask = pd.Series(True, index=odds.index)
     if "status" in odds.columns:
         live_mask &= odds["status"].astype("string").str.lower().isin(["pre", "inprogress", "open"])
-    if slate_date is not None and "commence_time" in odds.columns:
-        live_mask &= odds["commence_time"].dt.date.eq(slate_date)
+    if slate_dt is not None and "commence_time" in odds.columns:
+        live_mask &= odds["commence_time"].dt.date.eq(slate_dt)
     odds = odds.loc[live_mask].copy()
 
     if odds.empty:
@@ -621,22 +712,44 @@ def build_opponent_map(
     for col in ("season", "week"):
         out[col] = pd.to_numeric(out[col], errors="coerce").astype("Int64")
     out["event_id"] = out["event_id"].astype("string")
+    if season_hint is not None and "season" in out.columns:
+        out["season"] = out["season"].fillna(int(season_hint)).astype("Int64")
+    if target_week is not None and "week" in out.columns:
+        out["week"] = out["week"].fillna(int(target_week)).astype("Int64")
 
-    schedule_df = _load_team_week_map()
-    if not schedule_df.empty:
+    schedule_subset = schedule_df if isinstance(schedule_df, pd.DataFrame) else pd.DataFrame()
+    if not schedule_subset.empty:
+        schedule_subset = schedule_subset.copy()
+        if (
+            season_hint is not None
+            and "season" in schedule_subset.columns
+        ):
+            schedule_subset = schedule_subset.loc[
+                schedule_subset["season"] == season_hint
+            ]
+        if (
+            slate_dt is None
+            and target_week is not None
+            and "week" in schedule_subset.columns
+        ):
+            schedule_subset = schedule_subset.loc[
+                schedule_subset["week"] == target_week
+            ]
+
+    if not schedule_subset.empty:
         rename = {}
-        if "opponent" in schedule_df.columns:
+        if "opponent" in schedule_subset.columns:
             rename["opponent"] = "schedule_opponent"
-        if "game_id" in schedule_df.columns:
+        if "game_id" in schedule_subset.columns:
             rename["game_id"] = "schedule_game_id"
-        if "event_id" in schedule_df.columns and "schedule_game_id" not in rename.values():
+        if "event_id" in schedule_subset.columns and "schedule_game_id" not in rename.values():
             rename["event_id"] = "schedule_game_id"
-        if "kickoff_local" in schedule_df.columns:
+        if "kickoff_local" in schedule_subset.columns:
             rename["kickoff_local"] = "schedule_kickoff_local"
-        if "kickoff_utc" in schedule_df.columns:
+        if "kickoff_utc" in schedule_subset.columns:
             rename["kickoff_utc"] = "schedule_kickoff_utc"
 
-        schedule_subset = schedule_df.rename(columns=rename)
+        schedule_subset = schedule_subset.rename(columns=rename)
         join_cols = [
             col
             for col in ("season", "week", "team")
@@ -707,6 +820,8 @@ def build_opponent_map(
 
     opponent_str = out["opponent"].astype("string")
     missing_opponent_mask = opponent_str.fillna("").str.strip() == ""
+    total_rows = len(out)
+    missing_count = int(missing_opponent_mask.sum())
     if missing_opponent_mask.any():
         missing_rows = out.loc[missing_opponent_mask].copy()
         _record_unresolved_rows(missing_rows, "missing_opponent")
@@ -727,6 +842,16 @@ def build_opponent_map(
                     f"[opponent_map] WARN: failed writing missing sample to {MISSING_SAMPLE_PATH}: {err}"
                 )
         out = out.loc[~missing_opponent_mask].copy()
+
+    mapped_count = total_rows - missing_count
+    print(
+        "[opponent_map] summary: total=%s mapped=%s missing=%s"
+        % (
+            f"{total_rows:,}",
+            f"{mapped_count:,}",
+            f"{missing_count:,}",
+        )
+    )
 
     opponent_map = out.drop_duplicates(
         subset=["player_clean_key", "team", "opponent", "event_id"], keep="last"
@@ -754,6 +879,25 @@ def build_opponent_map(
     ]:
         if col not in opponent_map.columns:
             opponent_map[col] = pd.NA
+    if "season" in opponent_map.columns:
+        opponent_map["season"] = pd.to_numeric(
+            opponent_map["season"], errors="coerce"
+        ).astype("Int64")
+        if season_hint is not None:
+            opponent_map["season"] = opponent_map["season"].fillna(
+                int(season_hint)
+            ).astype("Int64")
+    if "week" in opponent_map.columns:
+        opponent_map["week"] = pd.to_numeric(
+            opponent_map["week"], errors="coerce"
+        ).astype("Int64")
+        if target_week is not None:
+            opponent_map["week"] = opponent_map["week"].fillna(
+                int(target_week)
+            ).astype("Int64")
+    for text_col in ("player_clean_key", "opponent", "event_id"):
+        if text_col in opponent_map.columns:
+            opponent_map[text_col] = opponent_map[text_col].astype("string")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     opponent_map.to_csv(out_path, index=False)
     print(f"[oddsapi] wrote {len(opponent_map)} rows → {out_path}")
@@ -796,9 +940,27 @@ def main() -> None:
     parser.add_argument("--props-path", type=Path, default=Path("outputs/props_raw.csv"))
     parser.add_argument("--odds-path", type=Path, default=Path("outputs/odds_game.csv"))
     parser.add_argument("--out-path", type=Path, default=DEFAULT_OUT)
+    parser.add_argument(
+        "--date",
+        type=str,
+        default=None,
+        help="Slate date like YYYY-MM-DD (leave blank to infer from schedule)",
+    )
+    parser.add_argument(
+        "--week",
+        type=int,
+        default=None,
+        help="Target week number when schedule inference is desired",
+    )
     args = parser.parse_args()
 
-    build_opponent_map(props_path=args.props_path, odds_path=args.odds_path, out_path=args.out_path)
+    build_opponent_map(
+        props_path=args.props_path,
+        odds_path=args.odds_path,
+        out_path=args.out_path,
+        slate_date=args.date,
+        week=args.week,
+    )
 
 
 if __name__ == "__main__":

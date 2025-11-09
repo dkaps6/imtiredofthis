@@ -38,10 +38,7 @@ import pandas as pd
 
 from scripts.utils.df_keys import coerce_merge_keys
 
-from scripts.utils.canonical_names import (
-    canonicalize_player_name as _canonicalize_with_utils,
-    log_unmapped_variant,
-)
+from scripts.utils.canonical_names import log_unmapped_variant
 from scripts.utils.name_canon import make_player_key
 from scripts.utils.name_clean import canonical_key, canonical_player, canonicalize, normalize_team
 from scripts.utils.normalize_players import normalize_game_logs, normalize_season_totals
@@ -887,34 +884,41 @@ def _extract_initial_last(name: Any) -> Tuple[Optional[str], Optional[str]]:
 
 
 def _canonical_identity_fields(raw: Any) -> Dict[str, str]:
-    """Return canonical name metadata using shared utils and log unmapped variants."""
+    """Return canonical identity fields without assuming two name tokens."""
 
     raw_str = "" if raw is None else str(raw)
-    canonical, clean_key = _canonicalize_with_utils(raw_str)
-    canonical = (canonical or "").strip()
-    clean_key = (clean_key or "").strip()
+    normalized = standardize_full_name(raw_str)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    if not normalized and raw_str:
+        normalized = re.sub(r"\s+", " ", raw_str).strip()
 
-    if raw_str and canonical and canonical == clean_key:
-        try:
-            log_unmapped_variant(
-                "make_player_form",
-                raw_str,
-                {"stage": "canonical_identity_fields"},
-            )
-        except Exception:
-            pass
+    parts = [p for p in normalized.split(" ") if p]
+    first = parts[0] if parts else ""
+    if len(parts) >= 2:
+        last = parts[-1]
+    else:
+        last = parts[0] if parts else ""
 
-    if not canonical:
-        canonical = raw_str.upper().strip()
+    key = ""
+    if last:
+        key = (first[:1] + last).lower() if first else last.lower()
+    elif first:
+        key = first.lower()
 
-    canonical_upper = canonical.upper()
-    canonical_lower = re.sub(r"[^a-z0-9 ]+", "", canonical_upper.lower()).strip()
-    player_clean_key = re.sub(r"\s+", "_", canonical_lower)
+    canonical_upper = normalized.upper()
+    canonical_lower = canonical_upper.lower()
+    clean_base = re.sub(r"[^a-z0-9 ]+", "", canonical_lower).strip()
+    player_clean_key = re.sub(r"\s+", "_", clean_base)
+    if not player_clean_key and key:
+        player_clean_key = key.replace(" ", "")
 
     return {
         "player_name_canonical": canonical_upper,
         "player_canonical": canonical_lower,
         "player_clean_key": player_clean_key,
+        "first": first,
+        "last": last,
+        "player_key": key,
     }
 
 
@@ -2738,7 +2742,9 @@ def _infer_roles_minimal(pf: pd.DataFrame) -> pd.DataFrame:
 # ---------------------------
 
 
-def build_player_form(season: int = 2025, slate_date: str | None = None) -> pd.DataFrame:
+def build_player_form(
+    season: int = 2025, slate_date: str | None = None, week: int | None = None
+) -> pd.DataFrame:
     if slate_date:
         logger.info("[make_player_form] build_player_form using slate_date=%s", slate_date)
     try:
@@ -3401,7 +3407,7 @@ def build_player_form(season: int = 2025, slate_date: str | None = None) -> pd.D
 
     out = base.copy()
     out = _apply_canonical_names(out)
-    out = _enrich_team_and_opponent_from_props(out, season)
+    out = _enrich_team_and_opponent_from_props(out, season, week=week)
     sched_lu = _build_schedule_opponent_lookup()
     out = _assign_team_and_opp_via_schedule(out, sched_lu)
 
@@ -3611,7 +3617,7 @@ def _load_props_enriched() -> pd.DataFrame:
     return df[keep_cols].drop_duplicates()
 
 
-def _load_props_opponent_map() -> pd.DataFrame:
+def _load_props_opponent_map(week: int | None = None) -> pd.DataFrame:
     base = _read_csv_safe(str(OPPONENT_MAP_PATH))
     if base.empty:
         return pd.DataFrame(
@@ -3681,7 +3687,16 @@ def _load_props_opponent_map() -> pd.DataFrame:
         "event_id",
         "game_timestamp",
     ]
-    return df[keep].drop_duplicates()
+    filtered = df[keep].drop_duplicates()
+    if week is not None and "week" in filtered.columns:
+        try:
+            week_int = int(week)
+        except (TypeError, ValueError):
+            week_int = None
+        if week_int is not None:
+            filtered = filtered.loc[filtered["week"] == week_int]
+
+    return filtered
 
 
 def _load_team_week_schedule_map(seasons: Iterable[int]) -> pd.DataFrame:
@@ -3985,7 +4000,7 @@ def _resolve_opponents(df: pd.DataFrame, season_hint: int | None = None) -> pd.D
 
 
 def _enrich_team_and_opponent_from_props(
-    out: pd.DataFrame, season: int | None = None
+    out: pd.DataFrame, season: int | None = None, week: int | None = None
 ) -> pd.DataFrame:
     if out is None or out.empty:
         return out
@@ -4011,9 +4026,27 @@ def _enrich_team_and_opponent_from_props(
         )
 
     identity = raw_players.apply(lambda nm: pd.Series(_canonical_identity_fields(nm)))
+    expected_identity_cols = [
+        "player_name_canonical",
+        "player_canonical",
+        "player_clean_key",
+        "first",
+        "last",
+        "player_key",
+    ]
+    for col in expected_identity_cols:
+        if col not in identity.columns:
+            identity[col] = ""
+    identity = identity.fillna("")
+
     df["player_name_canonical"] = identity["player_name_canonical"].astype(str)
     df["player_canonical"] = identity["player_canonical"].astype(str)
     df["player_clean_key"] = identity["player_clean_key"].astype(str)
+    df["player_key"] = identity["player_key"].astype(str)
+    key_fallback = df["player_key"].astype(str)
+    clean_mask = df["player_clean_key"].astype(str).str.strip() == ""
+    if clean_mask.any():
+        df.loc[clean_mask, "player_clean_key"] = key_fallback.loc[clean_mask]
     df["canonical_player_name"] = df["player_name_canonical"].apply(
         _format_canonical_player_name
     )
@@ -4398,7 +4431,7 @@ def _enrich_team_and_opponent_from_props(
         except Exception:
             enriched["is_home"] = enriched["is_home"]
 
-    live_map = _load_props_opponent_map()
+    live_map = _load_props_opponent_map(week=week)
     if not live_map.empty and {"event_id"}.issubset(live_map.columns):
         live_map = live_map.dropna(subset=["event_id"])
         if not live_map.empty:
@@ -5948,13 +5981,19 @@ def cli():
         required=False,
         help="Slate date like YYYY-MM-DD (used for opponent mapping / props alignment)",
     )
+    parser.add_argument(
+        "--week",
+        type=int,
+        required=False,
+        help="Optional week number when building opponent enrichment",
+    )
     args = parser.parse_args()
 
     _safe_mkdir(DATA_DIR)
 
     try:
         # Build player form
-        df = build_player_form(season=args.season, slate_date=args.date)
+        df = build_player_form(season=args.season, slate_date=args.date, week=args.week)
 
         # Fallback sweep BEFORE strict validation (retain your original behavior)
         try:
@@ -5994,7 +6033,7 @@ def cli():
 
         # Opponent enrichment (non-fatal)
         try:
-            df = _enrich_team_and_opponent_from_props(df, args.season)
+            df = _enrich_team_and_opponent_from_props(df, args.season, week=args.week)
         except Exception as _enr_e:
             print(
                 f"[make_player_form] WARN opponent enrichment skipped in cli(): {_enr_e}",
@@ -6014,7 +6053,7 @@ def cli():
         try:
             if "df" in locals() and isinstance(df, pd.DataFrame) and len(df) > 0:
                 try:
-                    df = _enrich_team_and_opponent_from_props(df, args.season)
+                    df = _enrich_team_and_opponent_from_props(df, args.season, week=args.week)
                 except Exception as _enr_e:
                     print(
                         f"[make_player_form] WARN enrichment skipped in error path: {_enr_e}",
