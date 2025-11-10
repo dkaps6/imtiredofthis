@@ -132,6 +132,21 @@ canonicalize_name = canonicalize_player_name
 _UNMAPPED_LOG = os.environ.get("UNMAPPED_NAME_LOG", "data/_debug/unmapped_names.jsonl")
 
 
+def canonicalize_player_name_safe(raw: str):
+    """
+    Return (canonical_full_name, clean_key). If the underlying function returns
+    extra metadata, ignore it for backward compatibility.
+    """
+
+    out = canonicalize_player_name(raw)
+    if isinstance(out, tuple):
+        if len(out) >= 2:
+            return out[0], out[1]
+        if len(out) == 1:
+            return out[0], out[0]
+    return str(out), str(out)
+
+
 def log_unmapped_variant(
     source: str,
     raw_name: str,

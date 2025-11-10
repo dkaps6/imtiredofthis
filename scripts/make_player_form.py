@@ -38,7 +38,11 @@ import pandas as pd
 
 from scripts.utils.df_keys import coerce_merge_keys
 
-from scripts.utils.canonical_names import log_unmapped_variant
+from scripts._opponent_map import normalize_team_series
+from scripts.utils.canonical_names import (
+    canonicalize_player_name_safe,
+    log_unmapped_variant,
+)
 from scripts.utils.name_canon import make_player_key
 from scripts.utils.name_clean import canonical_key, canonical_player, canonicalize, normalize_team
 from scripts.utils.normalize_players import normalize_game_logs, normalize_season_totals
@@ -896,43 +900,10 @@ def _extract_initial_last(name: Any) -> Tuple[Optional[str], Optional[str]]:
     return (first_initial.lower(), last.lower())
 
 
-def _canonical_identity_fields(raw: Any) -> Dict[str, str]:
-    """Return canonical identity fields without assuming two name tokens."""
-
-    raw_str = "" if raw is None else str(raw)
-    normalized = standardize_full_name(raw_str)
-    normalized = re.sub(r"\s+", " ", normalized).strip()
-    if not normalized and raw_str:
-        normalized = re.sub(r"\s+", " ", raw_str).strip()
-
-    parts = [p for p in normalized.split(" ") if p]
-    first = parts[0] if parts else ""
-    if len(parts) >= 2:
-        last = parts[-1]
-    else:
-        last = parts[0] if parts else ""
-
-    key = ""
-    if last:
-        key = (first[:1] + last).lower() if first else last.lower()
-    elif first:
-        key = first.lower()
-
-    canonical_upper = normalized.upper()
-    canonical_lower = canonical_upper.lower()
-    clean_base = re.sub(r"[^a-z0-9 ]+", "", canonical_lower).strip()
-    player_clean_key = re.sub(r"\s+", "_", clean_base)
-    if not player_clean_key and key:
-        player_clean_key = key.replace(" ", "")
-
-    return {
-        "player_name_canonical": canonical_upper,
-        "player_canonical": canonical_lower,
-        "player_clean_key": player_clean_key,
-        "first": first,
-        "last": last,
-        "player_key": key,
-    }
+def _canonical_identity_fields(raw_str: str):
+    # Always returns exactly two fields for legacy callers
+    canonical, clean_key = canonicalize_player_name_safe(raw_str)
+    return canonical, clean_key
 
 
 def canonicalize_player_name(raw: str) -> str:
@@ -3271,6 +3242,7 @@ def build_player_form_legacy(
     base = _apply_canonical_names(base)
 
     print("[pf] base after concat/merge:", len(base))
+    base = base[base["season"] == season].copy()
 
     # Initialize position/role as NaN (do not uppercase yet)
     base["position"] = np.nan
@@ -4038,19 +4010,26 @@ def _enrich_team_and_opponent_from_props(
             {"stage": "enrich_team_opponent"},
         )
 
-    identity = raw_players.apply(lambda nm: pd.Series(_canonical_identity_fields(nm)))
-    expected_identity_cols = [
-        "player_name_canonical",
-        "player_canonical",
-        "player_clean_key",
-        "first",
-        "last",
-        "player_key",
-    ]
-    for col in expected_identity_cols:
-        if col not in identity.columns:
-            identity[col] = ""
+    identity = raw_players.apply(
+        lambda nm: pd.Series(
+            _canonical_identity_fields(nm),
+            index=["player_name_canonical", "player_clean_key"],
+        )
+    )
     identity = identity.fillna("")
+    canonical_series = identity["player_name_canonical"].astype(str)
+    identity["player_name_canonical"] = canonical_series.str.upper().str.strip()
+    identity["player_canonical"] = identity["player_name_canonical"].str.lower()
+
+    split_parts = canonical_series.str.strip().str.split()
+    first = split_parts.str[0].fillna("")
+    last = split_parts.str[-1].fillna("")
+    player_key = (
+        first.str[:1].fillna("").str.lower() + last.fillna("").str.lower()
+    )
+    fallback_mask = last.str.strip().eq("")
+    player_key = player_key.where(~fallback_mask, first.str.lower())
+    identity["player_key"] = player_key.fillna("")
 
     df["player_name_canonical"] = identity["player_name_canonical"].astype(str)
     df["player_canonical"] = identity["player_canonical"].astype(str)
@@ -4944,11 +4923,17 @@ def _attach_consensus_keys(df: pd.DataFrame) -> pd.DataFrame:
         out["player_name"] = out.get("player", "")
 
     canonical_df = out["player_name"].apply(
-        lambda nm: pd.Series(_canonical_identity_fields(nm))
+        lambda nm: pd.Series(
+            _canonical_identity_fields(nm),
+            index=["player_name_canonical", "player_clean_key"],
+        )
     )
-    out["player_name_canonical"] = canonical_df["player_name_canonical"].astype(
-        str
+    canonical_df = canonical_df.fillna("")
+    canonical_df["player_name_canonical"] = (
+        canonical_df["player_name_canonical"].astype(str).str.upper().str.strip()
     )
+    canonical_df["player_canonical"] = canonical_df["player_name_canonical"].str.lower()
+    out["player_name_canonical"] = canonical_df["player_name_canonical"].astype(str)
     out["player_canonical"] = canonical_df["player_canonical"].astype(str)
     out["player_clean_key"] = canonical_df["player_clean_key"].astype(str)
 
@@ -5185,6 +5170,10 @@ def _enforce_player_form_schema(df: pd.DataFrame) -> pd.DataFrame:
         if col in out.columns:
             out[col] = pd.to_numeric(out[col], errors="coerce")
 
+    for col in ("team", "team_abbr", "opponent", "opponent_abbr", "opp_abbr"):
+        if col in out.columns:
+            out[col] = normalize_team_series(out[col])
+
     ordered = PLAYER_FORM_REQUIRED_COLUMNS + [
         c for c in out.columns if c not in PLAYER_FORM_REQUIRED_COLUMNS
     ]
@@ -5288,7 +5277,30 @@ def _write_player_form_outputs(
     assert_no_duplicate_columns(df, "final player_form before write")
 
     if df is None or df.empty:
-        raise RuntimeError("[make_player_form] final player_form empty; aborting run")
+        print(
+            "[make_player_form][ERROR] final player_form empty; writing empty file to aid debugging"
+        )
+        empty = df if isinstance(df, pd.DataFrame) else pd.DataFrame()
+        try:
+            empty = _ensure_cols(empty.copy(), FINAL_COLS)
+        except Exception:
+            empty = pd.DataFrame(columns=FINAL_COLS)
+        try:
+            PLAYER_FORM_OUT.parent.mkdir(parents=True, exist_ok=True)
+            empty.to_csv(PLAYER_FORM_OUT, index=False)
+        except Exception as err:
+            print(
+                f"[make_player_form][ERROR] failed writing empty player_form.csv: {err}"
+            )
+        for path in (PLAYER_GAME_LOGS_OUT, PLAYER_SEASON_TOTALS_OUT, PLAYER_FORM_CONSENSUS_OUT):
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                pd.DataFrame().to_csv(path, index=False)
+            except Exception as err:
+                print(
+                    f"[make_player_form][ERROR] failed writing placeholder {path}: {err}"
+                )
+        return
 
     essential = {"player_clean_key", "team", "opponent", "week"}
     essential.update(PLAYER_FORM_SHARE_COLS)

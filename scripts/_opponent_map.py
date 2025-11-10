@@ -1,29 +1,130 @@
 # scripts/_opponent_map.py
 import logging
-from typing import Optional
+from typing import Iterable, Optional, Union
 
 import pandas as pd
 
 logger = logging.getLogger("opponent_map")
 
 TEAM_ALIASES = {
+    # site oddities
     "BLT": "BAL",
+    "BAL RAVENS": "BAL",
     "CLV": "CLE",
+    "CLEVELAND BROWNS": "CLE",
     "HST": "HOU",
-    "WSH": "WAS",
+    "HOUSTON TEXANS": "HOU",
+    # common book strings & spaces
+    "JAX": "JAX",
     "JAC": "JAX",
+    "WSH": "WAS",
+    "WFT": "WAS",
+    "COMMANDERS": "WAS",
+    "NO": "NO",
+    "NOR": "NO",
+    "NOS": "NO",
+    "N.O.": "NO",
+    "TB": "TB",
+    "T.B.": "TB",
+    "TAM": "TB",
     "SD": "LAC",
-    "LA": "LAR",
-    "STL": "LAR",
+    "S.D.": "LAC",
+    "LA CHARGERS": "LAC",
+    "STL": "LA",
+    "LA RAMS": "LA",
+    "LAR": "LA",
+    "NEP": "NE",
+    "N.E.": "NE",
+    "GNB": "GB",
+    "G.B.": "GB",
+    "SFO": "SF",
+    "S.F.": "SF",
+    "ARI": "ARI",
     "ARZ": "ARI",
+    "KCC": "KC",
+    "K.C.": "KC",
+    "N.Y. JETS": "NYJ",
+    "NY JETS": "NYJ",
+    "N.Y. GIANTS": "NYG",
+    "NY GIANTS": "NYG",
+    # extras retained from legacy map
+    "BAL": "BAL",
+    "CLE": "CLE",
+    "HOU": "HOU",
+    "WAS": "WAS",
     "OAK": "LV",
 }
 
+CANON_SET = set(
+    [
+        "ARI",
+        "ATL",
+        "BAL",
+        "BUF",
+        "CAR",
+        "CHI",
+        "CIN",
+        "CLE",
+        "DAL",
+        "DEN",
+        "DET",
+        "GB",
+        "HOU",
+        "IND",
+        "JAX",
+        "KC",
+        "LV",
+        "LAC",
+        "LA",
+        "MIA",
+        "MIN",
+        "NE",
+        "NO",
+        "NYG",
+        "NYJ",
+        "PHI",
+        "PIT",
+        "SEA",
+        "SF",
+        "TB",
+        "TEN",
+        "WAS",
+    ]
+)
 
-def normalize_team(team: Optional[object]) -> str:
-    if pd.isna(team):
+
+def _normalize_one(team: Union[str, object]) -> str:
+    if team is None:
         return ""
-    return TEAM_ALIASES.get(str(team).upper(), str(team).upper())
+    if isinstance(team, float) and pd.isna(team):
+        return ""
+    t = str(team).strip().upper()
+    if t in {"", "NAN", "NONE", "NULL", "NA", "<NA>"}:
+        return ""
+    t = TEAM_ALIASES.get(t, t)
+    # Drop stray punctuation/words
+    t = t.replace(".", "").replace("  ", " ").strip()
+    if t in CANON_SET:
+        return t
+    # last resort: collapse to 2–3 letters (keeps TB, NO, LA)
+    return TEAM_ALIASES.get(t, t)
+
+
+def normalize_team(val: Union[str, pd.Series]) -> str:
+    """Backward-compat: scalar input → scalar output."""
+
+    if isinstance(val, pd.Series):
+        # old call sites should not send a Series; handled by normalize_team_series
+        # keep scalar pathway for safety
+        return _normalize_one(val.iloc[0]) if not val.empty else ""
+    return _normalize_one(val)
+
+
+def normalize_team_series(vals: Union[pd.Series, Iterable]) -> pd.Series:
+    """Vectorized normalization for Series/arrays."""
+
+    s = pd.Series(vals, copy=False)
+    return s.astype(str).map(_normalize_one)
 
 
 def build_opponent_map(week: Optional[int] = 10, team_map_path: str = "data/team_week_map.csv") -> pd.DataFrame:
@@ -43,8 +144,10 @@ def build_opponent_map(week: Optional[int] = 10, team_map_path: str = "data/team
         return pd.DataFrame(columns=["event_id", "week", "team", "opponent"])
 
     working = tm.copy()
-    working["team"] = working["team"].apply(normalize_team)
-    working["opponent"] = working["opponent"].apply(normalize_team)
+    if "team" in working.columns:
+        working["team"] = normalize_team_series(working["team"])
+    if "opponent" in working.columns:
+        working["opponent"] = normalize_team_series(working["opponent"])
 
     if week is not None and "week" in working.columns:
         working = working[working["week"] == week]
@@ -89,7 +192,7 @@ def attach_opponent(
     if opponent_map_df.empty:
         return target
 
-    target[team_col] = target[team_col].apply(normalize_team)
+    target[team_col] = normalize_team_series(target[team_col])
     if opponent_col not in target.columns:
         target[opponent_col] = pd.NA
 
