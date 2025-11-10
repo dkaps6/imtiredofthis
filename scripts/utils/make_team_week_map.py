@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Tuple
+from typing import Optional, Tuple
 
 import pandas as pd
 
@@ -14,8 +14,6 @@ from scripts.providers.build_schedule import build_or_get_schedule
 DATA_DIR = Path("data")
 TEAM_WEEK_PATH = DATA_DIR / "team_week_map.csv"
 GAME_LINES_PATH = DATA_DIR / "game_lines.csv"
-ODDS_PATH = DATA_DIR / "odds_game.csv"
-SCHEDULE_PATH = DATA_DIR / "schedule.csv"
 
 
 def _ensure_int(value: object) -> object:
@@ -152,32 +150,21 @@ def _prepare_schedule_rows(df: pd.DataFrame, season: int) -> pd.DataFrame:
     return combined.loc[:, keep + extra_cols].dropna(subset=["team"])
 
 
-def _load_or_build_schedule_source(season: int, schedule_path: Path | str) -> Tuple[pd.DataFrame, Path]:
-    target_path = Path(schedule_path) if schedule_path else SCHEDULE_PATH
-    candidates = [target_path, ODDS_PATH, SCHEDULE_PATH, DATA_DIR / f"schedule_{season}.csv"]
+def _load_or_build_schedule_source(season: int, schedule_path: Optional[str]) -> Tuple[pd.DataFrame, Path]:
+    if schedule_path:
+        print(
+            f"[make_team_week_map] schedule override requested: {schedule_path}"
+        )
+        built_path = Path(
+            build_or_get_schedule(season, schedule_override=schedule_path)
+        )
+    else:
+        built_path = Path(build_or_get_schedule(season))
 
-    seen: set[Path] = set()
-    for path in candidates:
-        path = Path(path)
-        if path in seen:
-            continue
-        seen.add(path)
-        if not path.exists() or path.stat().st_size == 0:
-            continue
-        try:
-            df = pd.read_csv(path)
-        except pd.errors.EmptyDataError:
-            continue
-        except Exception as err:  # pragma: no cover - defensive logging
-            print(f"[make_team_week_map] WARN: failed to read {path}: {err}")
-            continue
-        combined = _prepare_schedule_rows(df, season)
-        if not combined.empty:
-            return combined, path
+    print(f"[make_team_week_map] resolved schedule csv: {built_path}")
 
-    built_path = Path(build_or_get_schedule(season, out_path=str(target_path)))
     try:
-        df = pd.read_csv(built_path)
+        df = pd.read_csv(built_path, low_memory=False)
     except Exception as err:  # pragma: no cover
         raise FileNotFoundError("Failed to materialize schedule for team_week_map") from err
 
@@ -187,7 +174,7 @@ def _load_or_build_schedule_source(season: int, schedule_path: Path | str) -> Tu
     return combined, built_path
 
 
-def build_map(season: int, schedule_path: Path | str = SCHEDULE_PATH) -> pd.DataFrame:
+def build_map(season: int, schedule_path: Optional[str] = None) -> pd.DataFrame:
     """Assemble the team_week_map for a given season."""
 
     df, resolved_path = _load_or_build_schedule_source(season, schedule_path)
@@ -355,7 +342,12 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--season", type=int, required=True)
     parser.add_argument("--out", type=Path, default=TEAM_WEEK_PATH)
-    parser.add_argument("--schedule", type=str, default="data/schedule.csv")
+    parser.add_argument(
+        "--schedule",
+        type=str,
+        default=None,
+        help="Optional local schedule CSV to use instead of downloading.",
+    )
     args = parser.parse_args()
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)

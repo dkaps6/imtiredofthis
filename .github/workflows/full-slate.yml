@@ -84,8 +84,8 @@ jobs:
       - name: Build team-week map (authoritative opponents)
         run: |
           export PYTHONPATH="${PWD}"
-          python scripts/utils/make_team_week_map.py \
-            --season "${SEASON}"
+          SCHED=""; test -f "data/schedules/schedule_${SEASON}.csv" && SCHED="--schedule data/schedules/schedule_${SEASON}.csv"
+          python scripts/utils/make_team_week_map.py --season "${SEASON}" ${SCHED}
 
       # ----------------------------------------
       # 3. Fetch player props / odds board (before player_form)
