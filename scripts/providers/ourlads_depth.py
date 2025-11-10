@@ -124,22 +124,28 @@ WR_PATTERN = re.compile(r"\b(W|WR|LWR|RWR|SWR|Slot WR|Wide Receiver)\b", re.I)
 
 
 def clean_name(raw):
-    raw = re.sub(r"\([^)]*\)", "", raw)
-    raw = re.sub(r"\d+/?\d*", "", raw)
-    raw = re.sub(r"[^A-Za-z\s\-'\.]+", "", raw)
+    raw = re.sub(r"\([^)]*\)", "", raw)            # remove parenthetical status
+    raw = re.sub(r"\d+/?\d*", "", raw)             # remove jersey/injury numbers
+    raw = re.sub(r"[^A-Za-z\s\-'\.]+", "", raw)    # keep letters only
     return raw.strip()
+
+
+def normalize_team(t):
+    if t is None or (isinstance(t, float) and pd.isna(t)):
+        return ""
+    text = str(t).strip()
+    if not text:
+        return ""
+    return TEAM_MAP.get(text.upper(), text.upper())
 
 
 def make_keys(name):
     full = clean_name(name)
     if not full:
         return "", "", ""
-    parts = full.split(" ", 1)
-    first = parts[0]
-    last = parts[1] if len(parts) > 1 else ""
-    short = f"{first[0].lower()}{last.lower()}" if first else ""
-    clean = full.replace(" ", "").lower()
-    return full, short, clean
+    first, *last = full.split(" ", 1)
+    last = last[0] if last else ""
+    return full, f"{first[0].lower()}{last.lower()}" if first else "", full.replace(" ", "").lower()
 
 
 def _strip_name_suffix(raw: str) -> str:
@@ -611,7 +617,6 @@ def main(*, season: Optional[int] = None, include_inactive: bool = True):
     roles_all["player_key"] = key_df["player_key"]
     roles_all["player_clean_key"] = key_df["player_clean_key"]
 
-    roles_all["team"] = roles_all["team"].replace(TEAM_MAP)
     cols = [
         "team",
         "player",
@@ -627,13 +632,22 @@ def main(*, season: Optional[int] = None, include_inactive: bool = True):
         "player_clean_key",
     ]
     cols = [c for c in cols if c is not None and c in roles_all.columns]
-    output_df = roles_all[cols].copy()
-    total_rows = len(output_df)
-    if output_df.empty:
+    df = roles_all[cols].copy()
+    if not df.empty and "team" in df.columns:
+        df["team"] = df["team"].apply(normalize_team)
+    if not df.empty:
+        mask = pd.Series(False, index=df.index)
+        if "position" in df.columns:
+            mask = mask | df["position"].astype(str).str.upper().isin(SKILL_POSITIONS)
+        if "position_group" in df.columns:
+            mask = mask | df["position_group"].astype(str).str.upper().isin(SKILL_POSITIONS)
+        df = df[mask].copy()
+    total_rows = len(df)
+    if df.empty:
         logger.warning("[OUR-LADS] No active offensive players parsed; output will be empty")
     else:
         order = ["WR", "RB", "TE", "QB", "FB"]
-        for team_code, group in output_df.groupby("team"):
+        for team_code, group in df.groupby("team"):
             pos_series = group.get("position_group")
             if pos_series is None:
                 pos_series = pd.Series(dtype=str)
@@ -664,14 +678,24 @@ def main(*, season: Optional[int] = None, include_inactive: bool = True):
             detail = f" ({'; '.join(detail_parts)})" if detail_parts else ""
             print(f"[OURlads] {team_code}: {len(group)} players written{detail}")
 
-    print(f"[OURlads] {len(output_df)} total players written. Position counts:")
-    if "position" in output_df.columns:
-        print(output_df["position"].value_counts())
+    final_df = df.drop(
+        columns=[
+            col
+            for col in df.columns
+            if "injury" in col.lower() or "status" in col.lower()
+        ],
+        errors="ignore",
+    )
 
-    output_df.to_csv(OUT_ROLES, index=False)
+    # ensure only SKILL_POSITIONS are kept, normalize team via TEAM_MAP, and log totals:
+    print(f"[OURlads] Writing {len(final_df)} total rows.")
+    if "position" in final_df.columns:
+        print(final_df["position"].value_counts())
+
+    final_df.to_csv(OUT_ROLES, index=False)
     logger.info(
         "[OUR-LADS] wrote %d rows → %s (include_inactive=%s)",
-        total_rows,
+        len(final_df),
         OUT_ROLES,
         include_inactive,
     )
