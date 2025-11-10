@@ -9,6 +9,7 @@ from typing import Tuple
 import pandas as pd
 
 from scripts.utils.name_clean import normalize_team
+from scripts.providers.build_schedule import build_or_get_schedule
 
 DATA_DIR = Path("data")
 TEAM_WEEK_PATH = DATA_DIR / "team_week_map.csv"
@@ -68,9 +69,99 @@ def _norm_team(series: pd.Series) -> pd.Series:
     return out.astype("string")
 
 
-def _load_or_build_schedule_source(season: int) -> pd.DataFrame:
-    candidates = [ODDS_PATH, SCHEDULE_PATH, DATA_DIR / f"schedule_{season}.csv"]
+def _prepare_schedule_rows(df: pd.DataFrame, season: int) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    working = df.copy()
+    working.columns = [str(c).lower() for c in working.columns]
+
+    rename_map = {
+        "home_team": "home",
+        "home_abbr": "home",
+        "home_code": "home",
+        "home_team_id": "home",
+        "away_team": "away",
+        "away_abbr": "away",
+        "away_code": "away",
+        "away_team_id": "away",
+    }
+    for src, dst in rename_map.items():
+        if src in working.columns and dst not in working.columns:
+            working.rename(columns={src: dst}, inplace=True)
+
+    if "home" not in working.columns or "away" not in working.columns:
+        return pd.DataFrame()
+
+    if "season" in working.columns:
+        working["season"] = pd.to_numeric(working["season"], errors="coerce").astype("Int64")
+    else:
+        working["season"] = pd.Series(season, index=working.index, dtype="Int64")
+
+    if "kickoff_utc" not in working.columns and "commence_time" in working.columns:
+        working.rename(columns={"commence_time": "kickoff_utc"}, inplace=True)
+    if "kickoff" in working.columns and "kickoff_utc" not in working.columns:
+        working.rename(columns={"kickoff": "kickoff_utc"}, inplace=True)
+    working["kickoff_utc"] = pd.to_datetime(working.get("kickoff_utc"), utc=True, errors="coerce")
+
+    if "week" not in working.columns or working["week"].isna().all():
+        working["week"] = _infer_week_from_kickoff(season, working["kickoff_utc"])
+    else:
+        working["week"] = working["week"].map(_ensure_int).astype("Int64")
+
+    home = working.assign(
+        team=working["home"],
+        opponent=working["away"],
+        home_away="H",
+        home_abbr=working["home"],
+        away_abbr=working["away"],
+    )
+    away = working.assign(
+        team=working["away"],
+        opponent=working["home"],
+        home_away="A",
+        home_abbr=working["home"],
+        away_abbr=working["away"],
+    )
+    combined = pd.concat([home, away], ignore_index=True)
+
+    combined["team"] = _norm_team(combined.get("team"))
+    combined["opponent"] = _norm_team(combined.get("opponent"))
+    combined["home_abbr"] = _norm_team(combined.get("home_abbr"))
+    combined["away_abbr"] = _norm_team(combined.get("away_abbr"))
+    combined["home_away"] = combined.get("home_away", pd.Series(dtype="string")).astype("string").str.upper()
+    combined["season"] = pd.to_numeric(combined.get("season"), errors="coerce").astype("Int64")
+    combined["week"] = pd.to_numeric(combined.get("week"), errors="coerce").astype("Int64")
+    combined["kickoff_utc"] = pd.to_datetime(combined.get("kickoff_utc"), utc=True, errors="coerce")
+    combined["bye"] = combined["opponent"].isna() | combined["opponent"].eq("BYE")
+    combined.loc[combined["bye"], "opponent"] = "BYE"
+
+    keep = [
+        "season",
+        "week",
+        "team",
+        "opponent",
+        "home_abbr",
+        "away_abbr",
+        "home_away",
+        "kickoff_utc",
+        "bye",
+    ]
+    extra_cols = [c for c in ("event_id", "game_id") if c in combined.columns]
+    keep = [c for c in keep if c in combined.columns]
+    return combined.loc[:, keep + extra_cols].dropna(subset=["team"])
+
+
+def _load_or_build_schedule_source(season: int, schedule_path: Path | str) -> Tuple[pd.DataFrame, Path]:
+    target_path = Path(schedule_path) if schedule_path else SCHEDULE_PATH
+    candidates = [target_path, ODDS_PATH, SCHEDULE_PATH, DATA_DIR / f"schedule_{season}.csv"]
+
+    seen: set[Path] = set()
     for path in candidates:
+        path = Path(path)
+        if path in seen:
+            continue
+        seen.add(path)
         if not path.exists() or path.stat().st_size == 0:
             continue
         try:
@@ -80,82 +171,28 @@ def _load_or_build_schedule_source(season: int) -> pd.DataFrame:
         except Exception as err:  # pragma: no cover - defensive logging
             print(f"[make_team_week_map] WARN: failed to read {path}: {err}")
             continue
-        if df is None or df.empty:
-            continue
+        combined = _prepare_schedule_rows(df, season)
+        if not combined.empty:
+            return combined, path
 
-        working = df.copy()
-        working.columns = [str(c).lower() for c in working.columns]
+    built_path = Path(build_or_get_schedule(season, out_path=str(target_path)))
+    try:
+        df = pd.read_csv(built_path)
+    except Exception as err:  # pragma: no cover
+        raise FileNotFoundError("Failed to materialize schedule for team_week_map") from err
 
-        rename_map = {
-            "home_team": "home",
-            "home_abbr": "home",
-            "home_code": "home",
-            "home_team_id": "home",
-            "away_team": "away",
-            "away_abbr": "away",
-            "away_code": "away",
-            "away_team_id": "away",
-        }
-        for src, dst in rename_map.items():
-            if src in working.columns and dst not in working.columns:
-                working.rename(columns={src: dst}, inplace=True)
-
-        if {"home", "away"}.isdisjoint(working.columns):
-            continue
-        if "home" not in working.columns or "away" not in working.columns:
-            continue
-
-        if "season" in working.columns:
-            working["season"] = pd.to_numeric(working["season"], errors="coerce").astype("Int64")
-        else:
-            working["season"] = pd.Series(season, index=working.index, dtype="Int64")
-
-        if "kickoff_utc" not in working.columns and "commence_time" in working.columns:
-            working.rename(columns={"commence_time": "kickoff_utc"}, inplace=True)
-        if "kickoff" in working.columns and "kickoff_utc" not in working.columns:
-            working.rename(columns={"kickoff": "kickoff_utc"}, inplace=True)
-        working["kickoff_utc"] = pd.to_datetime(working.get("kickoff_utc"), utc=True, errors="coerce")
-
-        if "week" not in working.columns or working["week"].isna().all():
-            working["week"] = _infer_week_from_kickoff(season, working["kickoff_utc"])
-        else:
-            working["week"] = working["week"].map(_ensure_int).astype("Int64")
-
-        home = working.assign(team=working["home"], opponent=working["away"], home_away="H")
-        away = working.assign(team=working["away"], opponent=working["home"], home_away="A")
-        combined = pd.concat([home, away], ignore_index=True)
-
-        combined["team"] = _norm_team(combined.get("team"))
-        combined["opponent"] = _norm_team(combined.get("opponent"))
-        combined["home_away"] = combined.get("home_away", pd.Series(dtype="string")).astype("string").str.upper()
-        combined["season"] = pd.to_numeric(combined.get("season"), errors="coerce").astype("Int64")
-        combined["week"] = pd.to_numeric(combined.get("week"), errors="coerce").astype("Int64")
-        combined["kickoff_utc"] = pd.to_datetime(combined.get("kickoff_utc"), utc=True, errors="coerce")
-        combined["bye"] = combined["opponent"].isna() | combined["opponent"].eq("BYE")
-        combined.loc[combined["bye"], "opponent"] = "BYE"
-
-        keep = [
-            "season",
-            "week",
-            "team",
-            "opponent",
-            "home_away",
-            "kickoff_utc",
-            "bye",
-        ]
-        extra_cols = [c for c in ("event_id", "game_id") if c in combined.columns]
-        return combined.loc[:, keep + extra_cols].dropna(subset=["team"])
-
-    raise FileNotFoundError(
-        "Need a schedule source (data/odds_game.csv or data/schedule.csv) to build team_week_map"
-    )
+    combined = _prepare_schedule_rows(df, season)
+    if combined.empty:
+        raise FileNotFoundError("Materialized schedule did not contain usable rows")
+    return combined, built_path
 
 
-def build_map(season: int) -> pd.DataFrame:
+def build_map(season: int, schedule_path: Path | str = SCHEDULE_PATH) -> pd.DataFrame:
     """Assemble the team_week_map for a given season."""
 
-    src = _load_or_build_schedule_source(season)
-    df = src.copy()
+    df, resolved_path = _load_or_build_schedule_source(season, schedule_path)
+    print(f"[make_team_week_map] using schedule source: {resolved_path}")
+    df = df.copy()
 
     for col in ("team", "opponent"):
         if col in df.columns:
@@ -177,6 +214,8 @@ def build_map(season: int) -> pd.DataFrame:
         "week",
         "team",
         "opponent",
+        "home_abbr",
+        "away_abbr",
         "home_away",
         "kickoff_utc",
         "bye",
@@ -316,10 +355,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--season", type=int, required=True)
     parser.add_argument("--out", type=Path, default=TEAM_WEEK_PATH)
+    parser.add_argument("--schedule", type=str, default="data/schedule.csv")
     args = parser.parse_args()
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    tw = build_map(args.season)
+    tw = build_map(args.season, schedule_path=args.schedule)
     tw.to_csv(args.out, index=False)
     print(f"[make_team_week_map] wrote {len(tw)} rows → {args.out}")
     _write_game_lines_from_team_week_map(tw, out_path=GAME_LINES_PATH)
