@@ -12,6 +12,7 @@ import pandas as pd
 # --- END: mandatory global imports ---
 
 from scripts.make_player_form import canonicalize_name, TEAM_NAME_TO_ABBR, _canon_team
+from scripts._opponent_map import build_opponent_map, normalize_team as map_normalize_team
 
 # ------------------------- CONFIG -------------------------
 
@@ -28,6 +29,7 @@ PROPS_RAW_DATA_PATH = DATA_DIR / "props_raw.csv"
 OPPONENT_MAP_PATH = DATA_DIR / "opponent_map_from_props.csv"
 ODDS_GAME_DATA_PATH = DATA_DIR / "odds_game.csv"
 ROLES_PATH = Path("data/roles_ourlads.csv")
+NAME_MAP_PATH = DATA_DIR / "player_name_map_from_props.csv"
 
 # Known book keys for US (include alias keys we might see from the API)
 US_BOOK_KEYS = {
@@ -158,6 +160,136 @@ def _try_json(r: requests.Response):
         return r.json()
     except Exception:
         return {"text": r.text[:500]}
+
+
+def _load_player_name_map(path: Path) -> dict[str, str]:
+    """Load sportsbook player name overrides mapping raw display names to canonical versions."""
+
+    if not path.exists() or path.stat().st_size == 0:
+        return {}
+    try:
+        mapping_df = pd.read_csv(path)
+    except Exception as err:
+        log.info(f"player name map load failed (%s)", err)
+        return {}
+    if mapping_df.empty:
+        return {}
+    columns = {c.lower(): c for c in mapping_df.columns}
+    raw_col = next(
+        (columns[key] for key in ("raw_name", "book_name", "player", "source_name") if key in columns),
+        None,
+    )
+    canon_col = next(
+        (
+            columns[key]
+            for key in (
+                "canonical_name",
+                "player_canonical",
+                "canonical",
+                "player_name",
+            )
+            if key in columns
+        ),
+        None,
+    )
+    if not raw_col or not canon_col:
+        return {}
+    name_map: dict[str, str] = {}
+    for raw_value, canon_value in zip(mapping_df[raw_col], mapping_df[canon_col]):
+        if not isinstance(raw_value, str) or not isinstance(canon_value, str):
+            continue
+        raw_clean = raw_value.strip()
+        canon_clean = canon_value.strip()
+        if raw_clean and canon_clean:
+            name_map[raw_clean] = canon_clean
+    return name_map
+
+
+def _canonicalize_player_names(df: pd.DataFrame, name_map: dict[str, str]) -> pd.DataFrame:
+    """Apply canonical player mapping and log missing overrides as warnings."""
+
+    if df is None or df.empty or not name_map or "player" not in df.columns:
+        return df
+    working = df.copy()
+    raw_names = working["player"].astype(str).str.strip()
+    mapped = raw_names.map(name_map)
+    unmatched = raw_names[mapped.isna()].dropna().unique()
+    for raw_name in unmatched:
+        log.warning(
+            "[ODDS-FETCH] Warning: Unmatched player '%s' → No canonical match.",
+            raw_name,
+        )
+    working.loc[mapped.notna(), "player"] = mapped[mapped.notna()]
+    working["player_canonical"] = working["player"].apply(canonicalize_name)
+    return working
+
+
+def _normalize_teams_and_opponents(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize team/opponent abbreviations and backfill opponents using schedule coverage."""
+
+    if df is None or df.empty:
+        return df
+    working = df.copy()
+    team_columns = [
+        "team",
+        "team_abbr",
+        "player_team_abbr",
+        "home_team",
+        "away_team",
+        "home_team_abbr",
+        "away_team_abbr",
+        "opponent",
+        "opponent_abbr",
+        "opp_team",
+        "opponent_team_abbr",
+    ]
+    for col in team_columns:
+        if col in working.columns:
+            working[col] = map_normalize_team(working[col].astype(str))
+    if "team_abbr" not in working.columns:
+        base_team = None
+        for candidate in ("team", "player_team_abbr"):
+            if candidate in working.columns:
+                base_team = working[candidate]
+                break
+        if base_team is None:
+            base_team = pd.Series("", index=working.index)
+        working["team_abbr"] = map_normalize_team(base_team.astype(str))
+    if "opponent_abbr" not in working.columns:
+        if "opponent" in working.columns:
+            working["opponent_abbr"] = map_normalize_team(
+                working["opponent"].astype(str)
+            )
+        else:
+            working["opponent_abbr"] = pd.Series(pd.NA, index=working.index)
+    opp_map = build_opponent_map()
+    if opp_map:
+        mask = working["opponent_abbr"].isna() | (
+            working["opponent_abbr"].astype(str).str.strip().isin(["", "NAN"])
+        )
+        working.loc[mask, "opponent_abbr"] = working.loc[mask, "team_abbr"].map(
+            opp_map
+        )
+    bye_mask = working["team_abbr"].astype(str).str.upper().eq("BYE")
+    working.loc[bye_mask, "opponent_abbr"] = "BYE"
+    unmatched = (
+        working.loc[
+            working["opponent_abbr"].isna() | (working["opponent_abbr"].astype(str).str.strip() == ""),
+            "team_abbr",
+        ]
+        .dropna()
+        .unique()
+    )
+    for team_code in unmatched:
+        log.warning(
+            "[ODDS-FETCH] Warning: Unmatched opponent for team '%s' → No canonical match.",
+            team_code,
+        )
+    working["team_abbr"] = working["team_abbr"].astype(str).str.upper().str.strip()
+    working["opponent_abbr"] = (
+        working["opponent_abbr"].astype(str).str.upper().str.strip().replace({"": pd.NA, "NAN": pd.NA})
+    )
+    return working
 
 # Player props → per-event endpoint; game markets → bulk
 BULK_ONLY_CANONICAL: set[str] = set(GAME_MARKETS)
@@ -1117,6 +1249,41 @@ def fetch_odds(
         if col in props.columns:
             props[col] = props[col].apply(_apply_team_fix)
 
+    name_map = _load_player_name_map(NAME_MAP_PATH)
+    props = _canonicalize_player_names(props, name_map)
+    props = _normalize_teams_and_opponents(props)
+
+    if "market" in props.columns:
+        props["market_type"] = props["market"].astype(str)
+    elif "market_type" not in props.columns:
+        props["market_type"] = pd.NA
+    props["prop_value"] = props.get("line", pd.Series(pd.NA, index=props.index))
+    props["odds"] = props.get("price_american", pd.Series(pd.NA, index=props.index))
+    if "book" not in props.columns:
+        props["book"] = pd.NA
+    if "team_abbr" not in props.columns:
+        props["team_abbr"] = pd.Series(pd.NA, index=props.index)
+    if "opponent_abbr" not in props.columns:
+        props["opponent_abbr"] = pd.Series(pd.NA, index=props.index)
+
+    props["team_abbr"] = props["team_abbr"].astype(str).str.upper().str.strip()
+    props["opponent_abbr"] = props["opponent_abbr"].astype(str).str.upper().str.strip().replace({"": pd.NA})
+
+    required_cols = [
+        "player",
+        "team_abbr",
+        "opponent_abbr",
+        "market_type",
+        "prop_value",
+        "book",
+        "odds",
+    ]
+    for col in required_cols:
+        if col not in props.columns:
+            props[col] = pd.NA
+    remaining_cols = [col for col in props.columns if col not in required_cols]
+    props = props[required_cols + remaining_cols]
+
     # keep your original file AND write an enriched one for downstream robustness
     props.to_csv("outputs/props_enriched.csv", index=False)
     # --- END: enrich props with opponent from odds_game ---
@@ -1221,6 +1388,9 @@ def fetch_odds(
 
     props.to_csv(out, index=False)
     log.info(f"wrote {out} rows={len(props)}")
+    PROPS_RAW_DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+    props.to_csv(PROPS_RAW_DATA_PATH, index=False)
+    log.info(f"wrote {PROPS_RAW_DATA_PATH} rows={len(props)}")
 
     wide = _wide_over_under(props)
     if not wide.empty and "player" in wide.columns:
