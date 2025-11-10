@@ -7,6 +7,27 @@ import pandas as pd
 
 logger = logging.getLogger("opponent_map")
 
+# --- Team name/abbr normalization used by fetchers and mappers ---
+
+# Books sometimes use non-standard three-letter codes.
+TEAM_ABBR_NORMALIZER = {
+    "BLT": "BAL",
+    "CLV": "CLE",
+    "HST": "HOU",
+    # defensively support a few common alternates we’ve seen
+    "JAC": "JAX", "LA": "LAR", "WSH": "WAS",
+    "LVG": "LV",  "ARZ": "ARI", "TAM": "TB",
+}
+
+
+def normalize_team_abbr(s: str) -> str:
+    """Uppercase and map any odd sportsbook abbreviations to model abbrs."""
+    if not s:
+        return s
+    s = s.strip().upper()
+    return TEAM_ABBR_NORMALIZER.get(s, s)
+
+
 # Normalize many site/book/team variants into model's canonical 2–3 letter codes.
 TEAM_ALIASES = {
     # user-specified weird site codes
