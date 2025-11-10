@@ -1284,23 +1284,26 @@ def fetch_odds(
     remaining_cols = [col for col in props.columns if col not in required_cols]
     props = props[required_cols + remaining_cols]
 
+    if "player_name" not in props.columns and "player" in props.columns:
+        props["player_name"] = props["player"]
+    props["player_key"] = props["player_name"].apply(
+        lambda x: re.sub(r"[^a-z]", "", str(x).lower())
+    )
     props["player_clean_key"] = props["player"].apply(
         lambda x: re.sub(r"[^a-z]", "", str(x).lower())
     )
 
     try:
-        team_week_map = pd.read_csv("data/team_week_map.csv")
+        sched = pd.read_csv("data/team_week_map.csv")
     except FileNotFoundError:
         log.info("team_week_map.csv not found; skipping opponent merge")
-        team_week_map = pd.DataFrame()
+        sched = pd.DataFrame()
     except Exception as exc:
         log.info(f"failed to read team_week_map.csv: {exc}")
-        team_week_map = pd.DataFrame()
+        sched = pd.DataFrame()
 
-    if not team_week_map.empty and {"event_id", "team", "opponent"}.issubset(
-        team_week_map.columns
-    ):
-        schedule = team_week_map[["event_id", "team", "opponent"]].copy()
+    if not sched.empty and {"event_id", "team", "opponent"}.issubset(sched.columns):
+        schedule = sched[["event_id", "team", "opponent"]].copy()
         schedule["event_id"] = schedule["event_id"].astype(str)
         props = props.merge(
             schedule,

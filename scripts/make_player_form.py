@@ -6113,63 +6113,31 @@ def _player_key_from_name(name: object) -> str:
 
 def build_player_form(season: int = 2025) -> pd.DataFrame:
     roles = pd.read_csv("data/roles_ourlads.csv")
-    player_logs = pd.read_csv("data/player_game_logs.csv")
-    team_map = pd.read_csv("data/team_week_map.csv")
+    logs = pd.read_csv("data/player_game_logs.csv")
+    sched = pd.read_csv("data/team_week_map.csv")
 
-    player_logs = player_logs[player_logs["season"] == season].copy()
+    print(f"[PlayerForm] Loaded {len(roles)} role rows from roles_ourlads.csv")
+    print(f"[PlayerForm] Loaded {len(logs)} game logs before season filter")
+    print(f"[PlayerForm] Loaded {len(sched)} schedule rows from team_week_map.csv")
 
+    logs = logs[logs["season"] == 2025].copy()  # restrict season
+    print(f"[PlayerForm] Retained {len(logs)} logs for season 2025")
+
+    roles["player_key"] = roles["player"].apply(normalize_name)
     roles["player_clean_key"] = roles["player"].apply(normalize_name)
-    if "player_key" not in roles.columns:
-        roles["player_key"] = roles["player"].apply(_player_key_from_name)
-    else:
-        roles["player_key"] = (
-            roles["player_key"].fillna("").astype(str)
-        )
-        missing_keys = roles["player_key"].eq("")
-        roles.loc[missing_keys, "player_key"] = roles.loc[
-            missing_keys, "player"
-        ].apply(_player_key_from_name)
-
-    player_logs["player_clean_key"] = player_logs["player"].apply(normalize_name)
-    if "player_key" not in player_logs.columns:
-        player_logs["player_key"] = player_logs["player"].apply(
-            _player_key_from_name
-        )
-    else:
-        player_logs["player_key"] = (
-            player_logs["player_key"].fillna("").astype(str)
-        )
-        missing_logs = player_logs["player_key"].eq("")
-        player_logs.loc[missing_logs, "player_key"] = player_logs.loc[
-            missing_logs, "player"
-        ].apply(_player_key_from_name)
-
-    role_cols = [
-        c for c in roles.columns if c not in {"player_key", "player_clean_key"}
-    ]
-    roles_for_merge = roles.rename(
-        columns={col: f"{col}_role" for col in role_cols}
-    )
+    logs["player_key"] = logs["player"].apply(normalize_name)
+    logs["player_clean_key"] = logs["player"].apply(normalize_name)
 
     merged = pd.merge(
-        player_logs,
-        roles_for_merge,
+        logs,
+        roles,
         on=["player_key", "player_clean_key"],
         how="left",
+        suffixes=("", "_role"),
     )
+    print(f"[PlayerForm] Merged logs with roles → {len(merged)} rows")
 
-    role_series = merged.get("role_role")
-    missing_roles = (
-        merged[role_series.isna()] if role_series is not None else pd.DataFrame()
-    )
-    if not missing_roles.empty:
-        print(
-            f"[PlayerForm] Missing {len(missing_roles)} roles, writing to player_form_missing.csv"
-        )
-        missing_roles.to_csv("data/player_form_missing.csv", index=False)
-        merged = merged[~merged.index.isin(missing_roles.index)].copy()
-
-    for col in ("player", "team", "position", "role"):
+    for col in ("team", "position", "role", "player"):
         role_col = f"{col}_role"
         if role_col in merged.columns:
             if col in merged.columns:
@@ -6178,32 +6146,31 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
                 merged[col] = merged[role_col]
             merged.drop(columns=[role_col], inplace=True)
 
-    team_map = team_map.rename(
-        columns={"team": "team_schedule", "opponent": "opponent_schedule"}
-    )
-    merged = merged.merge(
-        team_map[["event_id", "team_schedule", "opponent_schedule"]],
-        on="event_id",
-        how="left",
-    )
+    miss = merged[merged["team"].isna()]
+    if not miss.empty:
+        miss.to_csv("data/player_form_missing.csv", index=False)
+        print(f"[PlayerForm] Missing {len(miss)} players")
 
-    if "team_schedule" in merged.columns:
-        if "team" in merged.columns:
-            merged["team"] = merged["team"].fillna(merged["team_schedule"])
-        else:
-            merged["team"] = merged["team_schedule"]
-        merged.drop(columns=["team_schedule"], inplace=True)
-    if "opponent_schedule" in merged.columns:
-        if "opponent" in merged.columns:
-            merged["opponent"] = merged["opponent"].fillna(
-                merged["opponent_schedule"]
-            )
-        else:
-            merged["opponent"] = merged["opponent_schedule"]
-        merged.drop(columns=["opponent_schedule"], inplace=True)
+    if {"event_id", "team", "opponent"}.issubset(sched.columns):
+        schedule = sched[["event_id", "team", "opponent"]].copy()
+        merged = merged.merge(schedule, on="event_id", how="left", suffixes=("", "_schedule"))
+        if "team_schedule" in merged.columns:
+            if "team" in merged.columns:
+                merged["team"] = merged["team"].fillna(merged["team_schedule"])
+            else:
+                merged["team"] = merged["team_schedule"]
+            merged.drop(columns=["team_schedule"], inplace=True)
+        if "opponent_schedule" in merged.columns:
+            if "opponent" in merged.columns:
+                merged["opponent"] = merged["opponent"].fillna(merged["opponent_schedule"])
+            else:
+                merged["opponent"] = merged["opponent_schedule"]
+            merged.drop(columns=["opponent_schedule"], inplace=True)
+    else:
+        print("[PlayerForm] team_week_map missing required columns; opponent join skipped")
 
     merged.to_csv("data/player_form.csv", index=False)
-    print(f"[PlayerForm] {len(merged)} players written.")
+    print(f"[PlayerForm] {len(merged)} total players written.")
     return merged
 
 

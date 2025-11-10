@@ -23,17 +23,12 @@ TEAM_ALIASES = {
 def normalize_team(team: Optional[object]) -> str:
     if pd.isna(team):
         return ""
-    text = str(team).strip().upper()
-    if not text:
-        return ""
-    if text == "BYE":
-        return "BYE"
-    return TEAM_ALIASES.get(text, text)
+    return TEAM_ALIASES.get(str(team).upper(), str(team).upper())
 
 
 def build_opponent_map(week: Optional[int] = 10, team_map_path: str = "data/team_week_map.csv") -> pd.DataFrame:
     try:
-        team_map = pd.read_csv(team_map_path)
+        tm = pd.read_csv(team_map_path)
     except FileNotFoundError:
         logger.warning("[OpponentMap] team_week_map.csv not found at %s", team_map_path)
         return pd.DataFrame(columns=["event_id", "week", "team", "opponent"])
@@ -42,46 +37,35 @@ def build_opponent_map(week: Optional[int] = 10, team_map_path: str = "data/team
         return pd.DataFrame(columns=["event_id", "week", "team", "opponent"])
 
     required = {"event_id", "week", "team", "opponent"}
-    if not required.issubset(team_map.columns):
-        missing = ", ".join(sorted(required - set(team_map.columns)))
+    if not required.issubset(tm.columns):
+        missing = ", ".join(sorted(required - set(tm.columns)))
         logger.error("[OpponentMap] team_week_map missing columns: %s", missing)
         return pd.DataFrame(columns=["event_id", "week", "team", "opponent"])
 
-    team_map = team_map.copy()
-    team_map["team"] = team_map["team"].apply(normalize_team)
-    team_map["opponent"] = team_map["opponent"].apply(normalize_team)
+    working = tm.copy()
+    working["team"] = working["team"].apply(normalize_team)
+    working["opponent"] = working["opponent"].apply(normalize_team)
 
-    if week is not None and "week" in team_map.columns:
-        team_map = team_map[team_map["week"] == week]
+    if week is not None and "week" in working.columns:
+        working = working[working["week"] == week]
 
-    out_rows = []
-    for _, row in team_map.iterrows():
-        team = row.get("team", "")
-        opponent = row.get("opponent", "")
-        if not team:
+    out = []
+    for _, r in working.iterrows():
+        team_val = r.get("team", "")
+        opponent_val = r.get("opponent", "")
+        if not team_val:
             continue
-        event_id = row.get("event_id")
-        week_value = row.get("week")
-        out_rows.append(
-            {
-                "event_id": event_id,
-                "week": week_value,
-                "team": team,
-                "opponent": opponent,
-            }
-        )
-        if opponent and opponent != "BYE":
-            out_rows.append(
-                {
-                    "event_id": event_id,
-                    "week": week_value,
-                    "team": opponent,
-                    "opponent": team,
-                }
-            )
+        event_id = r.get("event_id")
+        week_val = r.get("week")
+        if opponent_val == "BYE":
+            out.append({"event_id": event_id, "week": week_val, "team": team_val, "opponent": "BYE"})
+        else:
+            out.append({"event_id": event_id, "week": week_val, "team": team_val, "opponent": opponent_val})
+            if opponent_val:
+                out.append({"event_id": event_id, "week": week_val, "team": opponent_val, "opponent": team_val})
 
-    df = pd.DataFrame(out_rows).drop_duplicates(subset=["event_id", "team", "opponent"])
-    print(f"[OpponentMap] {len(df)} rows generated for week {week}")
+    df = pd.DataFrame(out).drop_duplicates(subset=["event_id", "team", "opponent"])
+    print(f"[OpponentMap] {len(df)} rows written for week {week}")
     df.to_csv("data/opponent_map.csv", index=False)
     return df
 
