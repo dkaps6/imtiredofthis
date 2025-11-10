@@ -12,7 +12,7 @@ import pandas as pd
 # --- END: mandatory global imports ---
 
 from scripts.make_player_form import canonicalize_name, TEAM_NAME_TO_ABBR, _canon_team
-from scripts._opponent_map import CANON_SET, build_opponent_map, normalize_team_series
+from scripts._opponent_map import CANON_SET, build_opponent_map, map_normalize_team
 
 # ------------------------- CONFIG -------------------------
 
@@ -229,7 +229,7 @@ def _normalize_teams_and_opponents(df: pd.DataFrame) -> pd.DataFrame:
     working = df.copy()
     for col in ("home_team", "away_team", "team", "opponent", "home", "away"):
         if col in working.columns:
-            working[col] = normalize_team_series(working[col])
+            working[col] = working[col].apply(map_normalize_team)
     for col in (
         "team_abbr",
         "player_team_abbr",
@@ -237,15 +237,15 @@ def _normalize_teams_and_opponents(df: pd.DataFrame) -> pd.DataFrame:
         "away_team_abbr",
     ):
         if col in working.columns:
-            working[col] = normalize_team_series(working[col])
+            working[col] = working[col].apply(map_normalize_team)
     for col in ("opponent_abbr", "opponent_team_abbr"):
         if col in working.columns:
-            working[col] = normalize_team_series(working[col])
+            working[col] = working[col].apply(map_normalize_team)
 
     if "team_abbr" not in working.columns and "team" in working.columns:
-        working["team_abbr"] = normalize_team_series(working["team"])
+        working["team_abbr"] = working["team"].apply(map_normalize_team)
     if "opponent_abbr" not in working.columns and "opponent" in working.columns:
-        working["opponent_abbr"] = normalize_team_series(working["opponent"])
+        working["opponent_abbr"] = working["opponent"].apply(map_normalize_team)
     # For any residual unknowns, log once
     valid_values = CANON_SET | {"BYE", ""}
     for col in ("team", "opponent"):

@@ -900,10 +900,53 @@ def _extract_initial_last(name: Any) -> Tuple[Optional[str], Optional[str]]:
     return (first_initial.lower(), last.lower())
 
 
-def _canonical_identity_fields(raw_str: str):
-    # Always returns exactly two fields for legacy callers
-    canonical, clean_key = canonicalize_player_name_safe(raw_str)
-    return canonical, clean_key
+def _canonical_identity_fields(raw_name: str) -> Tuple[str, str, str]:
+    """Return robust canonical name metadata (name, clean key, player key)."""
+
+    canonical = ""
+    clean_key = ""
+
+    try:
+        result = canonicalize_player_name_safe(raw_name)
+    except ValueError:
+        result = ("", "")
+    except TypeError:
+        result = ("", "")
+
+    if isinstance(result, (list, tuple)):
+        if len(result) >= 2:
+            canonical, clean_key = result[0], result[1]
+        elif len(result) == 1:
+            canonical = result[0]
+    else:
+        canonical = result
+
+    canonical = str(canonical or "").strip()
+    raw_as_str = str(raw_name or "").strip()
+    if not canonical and raw_as_str:
+        canonical = canonical_player(raw_as_str)
+
+    clean_key = str(clean_key or "").strip()
+    if not clean_key and canonical:
+        clean_key = canonical_key(canonical)
+
+    basis = canonical if canonical else raw_as_str
+    parts = [p for p in re.split(r"\s+", basis) if p]
+    if not parts:
+        player_key = ""
+    else:
+        if len(parts) == 1:
+            first, last = parts[0], ""
+        else:
+            first = " ".join(parts[:-1])
+            last = parts[-1]
+        first_initial = re.sub(r"[^a-z]", "", first[:1].lower())
+        last_clean = re.sub(r"[^a-z]", "", last.lower())
+        player_key = first_initial + last_clean
+        if not player_key:
+            player_key = re.sub(r"[^a-z]", "", first.lower())
+
+    return canonical, clean_key, player_key
 
 
 def canonicalize_player_name(raw: str) -> str:
@@ -4013,7 +4056,11 @@ def _enrich_team_and_opponent_from_props(
     identity = raw_players.apply(
         lambda nm: pd.Series(
             _canonical_identity_fields(nm),
-            index=["player_name_canonical", "player_clean_key"],
+            index=[
+                "player_name_canonical",
+                "player_clean_key",
+                "player_key_seed",
+            ],
         )
     )
     identity = identity.fillna("")
@@ -4024,12 +4071,18 @@ def _enrich_team_and_opponent_from_props(
     split_parts = canonical_series.str.strip().str.split()
     first = split_parts.str[0].fillna("")
     last = split_parts.str[-1].fillna("")
-    player_key = (
+    generated_key = (
         first.str[:1].fillna("").str.lower() + last.fillna("").str.lower()
     )
     fallback_mask = last.str.strip().eq("")
-    player_key = player_key.where(~fallback_mask, first.str.lower())
-    identity["player_key"] = player_key.fillna("")
+    generated_key = generated_key.where(~fallback_mask, first.str.lower())
+    identity = identity.rename(columns={"player_key_seed": "player_key"})
+    identity["player_key"] = identity["player_key"].astype(str)
+    empty_mask = identity["player_key"].str.strip().eq("")
+    if empty_mask.any():
+        identity.loc[empty_mask, "player_key"] = (
+            generated_key.fillna("").loc[empty_mask]
+        )
 
     df["player_name_canonical"] = identity["player_name_canonical"].astype(str)
     df["player_canonical"] = identity["player_canonical"].astype(str)
@@ -4925,17 +4978,48 @@ def _attach_consensus_keys(df: pd.DataFrame) -> pd.DataFrame:
     canonical_df = out["player_name"].apply(
         lambda nm: pd.Series(
             _canonical_identity_fields(nm),
-            index=["player_name_canonical", "player_clean_key"],
+            index=[
+                "player_name_canonical",
+                "player_clean_key",
+                "player_key_seed",
+            ],
         )
     )
     canonical_df = canonical_df.fillna("")
+    canonical_series = canonical_df["player_name_canonical"].astype(str)
     canonical_df["player_name_canonical"] = (
-        canonical_df["player_name_canonical"].astype(str).str.upper().str.strip()
+        canonical_series.str.upper().str.strip()
     )
     canonical_df["player_canonical"] = canonical_df["player_name_canonical"].str.lower()
+
+    split_parts = canonical_series.str.strip().str.split()
+    first = split_parts.str[0].fillna("")
+    last = split_parts.str[-1].fillna("")
+    generated_key = (
+        first.str[:1].fillna("").str.lower() + last.fillna("").str.lower()
+    )
+    fallback_mask = last.str.strip().eq("")
+    generated_key = generated_key.where(~fallback_mask, first.str.lower())
+
+    canonical_df = canonical_df.rename(columns={"player_key_seed": "player_key"})
+    canonical_df["player_key"] = canonical_df["player_key"].astype(str)
+    empty_mask = canonical_df["player_key"].str.strip().eq("")
+    if empty_mask.any():
+        canonical_df.loc[empty_mask, "player_key"] = (
+            generated_key.fillna("").loc[empty_mask]
+        )
+
     out["player_name_canonical"] = canonical_df["player_name_canonical"].astype(str)
     out["player_canonical"] = canonical_df["player_canonical"].astype(str)
     out["player_clean_key"] = canonical_df["player_clean_key"].astype(str)
+    if "player_key" not in out.columns:
+        out["player_key"] = canonical_df["player_key"].astype(str)
+    else:
+        overwrite_mask = out["player_key"].astype(str).str.strip().eq("")
+        if overwrite_mask.any():
+            out.loc[overwrite_mask, "player_key"] = (
+                canonical_df.loc[overwrite_mask, "player_key"].astype(str)
+            )
 
     if "team_key" not in out.columns:
         out["team_key"] = (
