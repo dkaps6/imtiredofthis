@@ -2044,6 +2044,21 @@ def main(args: argparse.Namespace) -> int:
     METRICS_OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     metrics.to_csv(METRICS_OUT_PATH, index=False)
     print(f"[make_metrics] Wrote {len(metrics)} rows → {METRICS_OUT_PATH}")
+
+    # --- Auto validation hook ---
+    try:
+        from scripts.validate_build_integrity import run_core_validation
+
+        print("\n[MAKE-METRICS] Running post-build validation...")
+        ok = run_core_validation()
+        if not ok:
+            print("[MAKE-METRICS] ❌ Validation failed — stopping pipeline")
+            raise SystemExit(1)
+        else:
+            print("[MAKE-METRICS] ✅ Validation passed successfully")
+    except Exception as e:
+        print(f"[MAKE-METRICS] Validation skipped or errored: {e}")
+        raise
     return 0
 
 
