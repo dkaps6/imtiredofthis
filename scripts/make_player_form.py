@@ -6218,21 +6218,26 @@ def _player_key_from_name(name: object) -> str:
 
 
 def build_player_form(season: int = 2025) -> pd.DataFrame:
+    season = int(season)
+    global CURRENT_SEASON
+    CURRENT_SEASON = season
+
     roles = pd.read_csv("data/roles_ourlads.csv")
     logs = pd.read_csv("data/player_game_logs.csv")
-    logs_initial_count = len(logs)
-    if "season" in logs.columns:
-        logs = logs[logs["season"] == CURRENT_SEASON].copy()
     sched = pd.read_csv("data/team_week_map.csv")
+
+    logs_initial_count = len(logs)
+
+    roles = _filter_to_season(roles, season)
+    logs = _filter_to_season(logs, season)
+    sched = _filter_to_season(sched, season)
 
     print(f"[PlayerForm] Loaded {len(roles)} role rows from roles_ourlads.csv")
     print(f"[PlayerForm] Loaded {logs_initial_count} game logs before season filter")
     print(f"[PlayerForm] Loaded {len(sched)} schedule rows from team_week_map.csv")
 
     if "season" in logs.columns:
-        print(
-            f"[PlayerForm] Retained {len(logs)} logs for season {CURRENT_SEASON}"
-        )
+        print(f"[PlayerForm] Retained {len(logs)} logs for season {season}")
 
     roles["player_key"] = roles["player"].apply(normalize_name)
     roles["player_clean_key"] = roles["player"].apply(normalize_name)
@@ -6286,7 +6291,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     pf = pf.copy()
     if "season" in pf.columns:
         pf["season"] = pd.to_numeric(pf["season"], errors="coerce").astype("Int64")
-        pf = pf[pf["season"] == pd.Series([CURRENT_SEASON], dtype="Int64").iloc[0]].copy()
+        pf = pf[pf["season"] == pd.Series([season], dtype="Int64").iloc[0]].copy()
 
     # Overlay opponents using schedule map first, then props map
     try:
@@ -6339,7 +6344,16 @@ def cli():
     args = parser.parse_args()
 
     Path(DATA_DIR).mkdir(parents=True, exist_ok=True)
-    build_player_form(season=args.season)
+    env_season = os.environ.get("SEASON")
+    try:
+        season_value = int(env_season) if env_season not in (None, "") else int(args.season)
+    except (TypeError, ValueError):
+        season_value = int(args.season)
+
+    global CURRENT_SEASON
+    CURRENT_SEASON = season_value
+
+    build_player_form(season=season_value)
 
 
 if __name__ == "__main__":

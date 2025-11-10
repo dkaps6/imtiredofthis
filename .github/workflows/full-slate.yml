@@ -81,6 +81,12 @@ jobs:
           python scripts/providers/ourlads_depth.py \
             --season "${SEASON}"
 
+      - name: Build team-week map (authoritative opponents)
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/utils/make_team_week_map.py \
+            --season "${SEASON}"
+
       # ----------------------------------------
       # 3. Fetch player props / odds board (before player_form)
       # ----------------------------------------
@@ -93,12 +99,6 @@ jobs:
         shell: /usr/bin/bash -e {0}
         env:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-
-      - name: Build team-week map (authoritative opponents)
-        run: |
-          export PYTHONPATH="${PWD}"
-          python scripts/utils/make_team_week_map.py \
-            --season "${SEASON}"
 
       - name: Build opponent map from props
         run: |

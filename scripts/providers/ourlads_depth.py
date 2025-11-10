@@ -35,6 +35,25 @@ OUT_ROLES = os.path.join(DATA_DIR, "roles_ourlads.csv")
 
 logger = logging.getLogger("ourlads_depth")
 
+NAME_TOKEN_RE = re.compile(r"^\s*([^,]+)\s*,\s*([A-Za-z\.\-']+)(?:\s+Jr\.)?\s*(?:\d+\/\d+)?\s*$")
+
+
+def _clean_ourlads_name(raw: str) -> str:
+    """
+    Convert 'Harrison Jr., Marvin 24/1' -> 'Marvin Harrison'
+    Drop numeric depth tokens and suffixes.
+    """
+
+    if not raw:
+        return raw
+    raw = raw.strip()
+    m = NAME_TOKEN_RE.match(raw)
+    if not m:
+        # Fallback: collapse spaces and strip trailing tokens
+        return re.sub(r"\s+\d+\/\d+\s*$", "", raw).replace("  ", " ").strip()
+    last, first = m.group(1), m.group(2)
+    return f"{first} {last}".replace("  ", " ").strip()
+
 # canonical team set
 VALID = {
     "ARI","ATL","BAL","BUF","CAR","CHI","CIN","CLE","DAL","DEN","DET","GB","HOU",
@@ -296,8 +315,8 @@ OL_POSITIONS = {"LT","LG","C","RG","RT"}
 # how we convert Ourlads position column + "Player 1" slot into fantasy role
 ROLE_SLOT_MAPPING = {
     "LWR": {1: "WR1"},
-    "RWR": {1: "WR2"},
-    "SWR": {1: "WR3"},
+    "RWR": {1: "WR3"},
+    "SWR": {1: "WR2"},
     "QB":  {1: "QB1"},
     "RB":  {1: "RB1"},
     "TE":  {1: "TE1"},
@@ -307,6 +326,8 @@ ROLE_SLOT_MAPPING = {
     # NEW: when the table uses a single WR row with Player 1..3
     "WR":  {1: "WR1", 2: "WR2", 3: "WR3"},
 }
+
+WR_ROLE_BY_COL = {"LWR": "WR1", "SWR": "WR2", "RWR": "WR3"}
 
 def map_role(base_pos: str, depth_slot: str):
     """
@@ -333,7 +354,7 @@ def _normalized_role(base_pos: str, pos_group: str, depth_idx: Optional[int]) ->
     base = (base_pos or "").upper().strip()
     group = (pos_group or base).upper().strip()
     if base in {"LWR", "RWR", "SWR"}:
-        mapping = {"LWR": "WR1", "RWR": "WR2", "SWR": "WR3"}
+        mapping = {"LWR": "WR1", "SWR": "WR2", "RWR": "WR3"}
         return mapping.get(base, f"WR{depth_idx or 1}")
     if group == "WR" and depth_idx:
         return f"WR{depth_idx}"
@@ -475,11 +496,24 @@ def fetch_team_roles(team: str, soup: BeautifulSoup, include_inactive: bool) -> 
         for idx, slot_label in slot_idxs:
             if idx >= len(tds):
                 continue
-            cell_text = BeautifulSoup(tds[idx].decode_contents(), "lxml").get_text(
+            cell = tds[idx]
+            cell_text = BeautifulSoup(cell.decode_contents(), "lxml").get_text(
                 " ", strip=True
             )
             candidates = _split_candidates(cell_text)
             if not candidates:
+                continue
+
+            classes = [cls.lower() for cls in cell.get("class", [])]
+            is_inactive = any(
+                cls in ["inj", "ir", "pup", "doubtful", "questionable"]
+                for cls in classes
+            )
+
+            status = _cell_status(cell)
+            if is_inactive:
+                status = "inactive"
+            if status == "inactive" and not include_inactive:
                 continue
 
             chosen_name: Optional[str] = None
@@ -489,7 +523,9 @@ def fetch_team_roles(team: str, soup: BeautifulSoup, include_inactive: bool) -> 
                 text_lower = candidate.lower().strip()
                 if not candidate or "injured" in text_lower:
                     continue
-                cleaned_candidate = clean_ourlads_name(candidate)
+                raw_name_text = candidate
+                player_name = _clean_ourlads_name(raw_name_text)
+                cleaned_candidate = clean_ourlads_name(player_name)
                 full_name, short_key, clean_key = make_keys(cleaned_candidate)
                 if full_name and " " in full_name:
                     chosen_name = full_name
@@ -501,13 +537,12 @@ def fetch_team_roles(team: str, soup: BeautifulSoup, include_inactive: bool) -> 
 
             depth_idx = _slot_depth(slot_label)
             depth_role = f"{base_pos}{depth_idx}" if depth_idx else base_pos
-            status = _cell_status(tds[idx])
-            if status == "inactive" and not include_inactive:
-                continue
+            depth_role = WR_ROLE_BY_COL.get(base_pos, depth_role)
 
             normalized_role = map_role(base_pos, slot_label) or _normalized_role(
                 base_pos, pos_group, depth_idx
             )
+            normalized_role = WR_ROLE_BY_COL.get(base_pos, normalized_role)
 
             records.append(
                 {
