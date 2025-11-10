@@ -42,13 +42,21 @@ VALID = {
     "PHI","PIT","SEA","SF","TB","TEN","WAS"
 }
 
-TEAM_ALIASES = {
+TEAM_FIXES = {
     "ARZ": "ARI",
     "JAC": "JAX",
+    "CLV": "CLE",
+    "BLT": "BAL",
     "WSH": "WAS",
-    "LA":  "LAR",
+    "SD": "LAC",
+    "LA": "LAR",
+    "HST": "HOU",
+}
+
+# Retain historical aliases while layering the new TEAM_FIXES guidance.
+TEAM_ALIASES = {
+    **TEAM_FIXES,
     "STL": "LAR",
-    "SD":  "LAC",
     "OAK": "LV",
 }
 
@@ -166,6 +174,13 @@ def clean_ourlads_name(raw: str) -> str:
 
     # Remove parenthetical/suffix clutter before tokenization
     working = re.sub(r"\(.*?\)", " ", working)
+    working = re.sub(r"\*.*?\*", " ", working)
+    working = re.sub(
+        r"\b(?:IR|PUP|NFI|DNR|OUT|INJ|INACTIVE)\b",
+        " ",
+        working,
+        flags=re.I,
+    )
     working = working.replace("/", " ")
 
     tokens: List[str] = []
@@ -192,11 +207,22 @@ def clean_ourlads_name(raw: str) -> str:
     if not tokens:
         return ""
 
-    first = tokens[0]
-    last = tokens[-1]
+    def _normalize_token_case(token: str) -> str:
+        upper_token = token.upper()
+        if len(token) <= 3 and token.isupper() and upper_token not in {"MAC"}:
+            return upper_token
+        if upper_token.startswith("MC") and len(token) > 2:
+            return upper_token[:2].title() + upper_token[2:].title()
+        return token.title()
+
+    first = _normalize_token_case(tokens[0])
+    last = _normalize_token_case(tokens[-1])
     if not last:
-        return first
-    return f"{first} {last}".strip()
+        name = first
+    else:
+        name = f"{first} {last}".strip()
+    name = re.sub(r"[\d/]+$", "", name).strip()
+    return name
 
 
 def _position_group(base_pos: str) -> str:
@@ -207,7 +233,7 @@ def _position_group(base_pos: str) -> str:
         return "RB"
     if base == "FB":
         return "FB"
-    if base.endswith("WR") or base in {"WR", "FL", "SE", "SLOT", "SL"}:
+    if base.startswith("WR") or "WR" in base or "WIDE" in base:
         return "WR"
     if base in {"TE", "Y"}:
         return "TE"
@@ -496,7 +522,7 @@ def fetch_team_roles(team: str, soup: BeautifulSoup, include_inactive: bool) -> 
     return records
 
 
-def main(*, season: Optional[int] = None, include_inactive: bool = False):
+def main(*, season: Optional[int] = None, include_inactive: bool = True):
     warnings.simplefilter("ignore")
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     logger.setLevel(logging.INFO)
@@ -590,6 +616,17 @@ def main(*, season: Optional[int] = None, include_inactive: bool = False):
     ]
     cols = [c for c in cols if c is not None and c in roles_all.columns]
     output_df = roles_all[cols].copy()
+    total_rows = len(output_df)
+    unique_teams = (
+        {
+            str(val).upper().strip()
+            for val in output_df["team"].dropna().tolist()
+            if str(val).strip()
+        }
+        if "team" in output_df.columns
+        else set()
+    )
+
     if output_df.empty:
         logger.warning("[OUR-LADS] No active offensive players parsed; output will be empty")
     else:
@@ -606,16 +643,33 @@ def main(*, season: Optional[int] = None, include_inactive: bool = False):
             breakdown = ", ".join(
                 f"{pos}:{pos_counts[pos]}" for pos in order if pos_counts.get(pos)
             )
-            logger.info(
-                f"[OUR-LADS] {team_code}: {len(group)} active players ({breakdown})"
-                if breakdown
-                else f"[OUR-LADS] {team_code}: {len(group)} active players"
+            status_series = group.get("status")
+            status_counts: Counter = Counter()
+            if status_series is not None:
+                for raw_status in status_series.tolist():
+                    status_text = "" if pd.isna(raw_status) else str(raw_status).strip().lower()
+                    if not status_text or status_text in {"nan", "<na>"}:
+                        continue
+                    status_counts[status_text] += 1
+            status_breakdown = ", ".join(
+                f"{status.upper()}:{status_counts[status]}" for status in sorted(status_counts)
             )
+            detail_parts = []
+            if breakdown:
+                detail_parts.append(f"positions: {breakdown}")
+            if status_breakdown:
+                detail_parts.append(f"status: {status_breakdown}")
+            detail = f" ({'; '.join(detail_parts)})" if detail_parts else ""
+            print(f"[OUR-LADS] {team_code}: {len(group)} players written{detail}")
+
+    print(
+        f"[OUR-LADS] ✅ Final total: {total_rows} players across {len(unique_teams)} teams"
+    )
 
     output_df.to_csv(OUT_ROLES, index=False)
     logger.info(
         "[OUR-LADS] wrote %d rows → %s (include_inactive=%s)",
-        len(output_df),
+        total_rows,
         OUT_ROLES,
         include_inactive,
     )
@@ -639,8 +693,16 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--include-inactive",
+        dest="include_inactive",
         action="store_true",
+        default=True,
         help="Keep players marked inactive (red text) in output",
+    )
+    parser.add_argument(
+        "--exclude-inactive",
+        dest="include_inactive",
+        action="store_false",
+        help="Exclude players marked inactive (red text) from output",
     )
     args = parser.parse_args()
     season = args.season_flag if args.season_flag is not None else args.season_positional

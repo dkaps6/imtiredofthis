@@ -8,6 +8,48 @@ TEAM_ALIASES = {
     "BLT": "BAL",
     "CLV": "CLE",
     "HST": "HOU",
+    "ARZ": "ARI",
+    "JAC": "JAX",
+    "WSH": "WAS",
+    "SD": "LAC",
+    "LA": "LAR",
+    "STL": "LAR",
+    "OAK": "LV",
+}
+
+ALL_TEAMS = {
+    "ARI",
+    "ATL",
+    "BAL",
+    "BUF",
+    "CAR",
+    "CHI",
+    "CIN",
+    "CLE",
+    "DAL",
+    "DEN",
+    "DET",
+    "GB",
+    "HOU",
+    "IND",
+    "JAX",
+    "KC",
+    "LAC",
+    "LAR",
+    "LV",
+    "MIA",
+    "MIN",
+    "NE",
+    "NO",
+    "NYG",
+    "NYJ",
+    "PHI",
+    "PIT",
+    "SEA",
+    "SF",
+    "TB",
+    "TEN",
+    "WAS",
 }
 
 
@@ -21,7 +63,11 @@ def _normalize_code(value: object) -> str:
         return ""
     if text == "BYE":
         return "BYE"
-    return TEAM_ALIASES.get(text, text)
+    canonical = TEAM_ALIASES.get(text, text)
+    canonical = canonical.upper()
+    if canonical in ALL_TEAMS or canonical == "BYE":
+        return canonical
+    return canonical
 
 # --- light, safe utilities used by multiple scripts ---
 
@@ -60,10 +106,18 @@ def build_opponent_map(coverage_path: str = "data/coverage_cb.csv") -> dict:
     teams_seen: set[str] = set()
 
     for off, deff in zip(cov["offense_team"], cov["defense_team"]):
-        if off and off != "BYE" and deff and deff != "BYE":
-            mapping[off] = deff
-            mapping.setdefault(deff, off)
-            teams_seen.update({off, deff})
+        if not off:
+            continue
+        if off == "BYE":
+            continue
+        teams_seen.add(off)
+        if deff and deff != "BYE":
+            teams_seen.add(deff)
+        if not deff or deff == "BYE":
+            mapping[off] = "BYE"
+            continue
+        mapping[off] = deff
+        mapping.setdefault(deff, off)
 
     normalized_count = len(teams_seen)
     teams_with_gaps = {
@@ -72,10 +126,21 @@ def build_opponent_map(coverage_path: str = "data/coverage_cb.csv") -> dict:
         if team not in mapping or mapping.get(team, "") in {"", "BYE"}
     }
     logger.info(
-        "[OPPONENT-MAP] Normalized %d teams, %d unmapped opponents",
+        "[OPPONENT-MAP] Normalized %d teams, %d provisional BYE assignments",
         normalized_count,
         len(teams_with_gaps),
     )
+
+    for team in ALL_TEAMS:
+        if team not in mapping:
+            mapping[team] = "BYE"
+
+    print(f"[OPPONENT-MAP] Normalized {len(mapping)} teams.")
+    missing = ALL_TEAMS - set(mapping.keys())
+    if missing:
+        print(f"[OPPONENT-MAP] WARNING: Missing mappings for {missing}")
+    else:
+        print("[OPPONENT-MAP] ✅ All 32 team mappings complete.")
     return mapping
 
 def attach_opponent(df: pd.DataFrame,
