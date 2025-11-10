@@ -6265,8 +6265,49 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     else:
         print("[PlayerForm] team_week_map missing required columns; opponent join skipped")
 
+    pf = merged.copy()
+
+    # Force season scope to CURRENT_SEASON and re-attach opponents for the scoped rows
+    pf = pf.copy()
+    if "season" in pf.columns:
+        pf["season"] = pd.to_numeric(pf["season"], errors="coerce").astype("Int64")
+        pf = pf[pf["season"] == pd.Series([CURRENT_SEASON], dtype="Int64").iloc[0]].copy()
+
+    # Overlay opponents using schedule map first, then props map
+    try:
+        from scripts._opponent_map import attach_opponent, normalize_team_series
+        if "team" in pf.columns:
+            pf["team"] = normalize_team_series(pf["team"])
+        pf = attach_opponent(
+            pf,
+            team_col="team",
+            coverage_path="data/team_week_map.csv",
+            opponent_col="opponent",
+            inplace=False,
+            week=10,
+        )
+        # Also mirror opponent into opponent_abbr if that column exists
+        if "opponent_abbr" in pf.columns:
+            pf["opponent_abbr"] = pf["opponent_abbr"].fillna(pf.get("opponent"))
+    except Exception as e:
+        print(f"[make_player_form] WARNING: opponent overlay failed: {e}")
+
+    merged = pf.copy()
+
+    os.makedirs("data/_debug", exist_ok=True)
     merged.to_csv("data/player_form.csv", index=False)
     print(f"[PlayerForm] {len(merged)} total players written.")
+
+    # Debug: dump any rows still missing opponent so CI logs point straight to the holes
+    try:
+        miss = pf[pf["opponent"].isna() if "opponent" in pf.columns else []]
+        if miss is not None and len(miss) > 0:
+            miss = miss.copy()
+            miss.to_csv("data/_debug/player_missing_opponent.csv", index=False)
+            print(f"[make_player_form] WARNING missing opponent rows: {len(miss)} → data/_debug/player_missing_opponent.csv")
+    except Exception:
+        pass
+
     return merged
 
 

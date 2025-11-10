@@ -58,24 +58,14 @@ NFLV, NFL_PKG = _import_nflverse()
 DATA_DIR = "data"
 OUTPATH = Path(DATA_DIR) / "team_form.csv"
 TEAM_FORM_OUTPUT_COLUMNS = [
-    "team",
-    "team_abbr",
-    "season",
-    "games_played",
-    "def_pass_epa",
-    "def_rush_epa",
-    "def_sack_rate",
-    "pace",                 # legacy tempo column
-    "neutral_pace",         # explicit neutral tempo from nflverse
-    "neutral_pace_score",   # Sharp blended speed index
-    "pass_rate_over_expected",
-    "proe",
-    "rz_rate",
-    "12p_rate",
-    "slot_rate",
-    "ay_per_att",
-    "light_box_rate",
-    "heavy_box_rate",
+    "team","team_abbr","season","games_played",
+    "def_pass_epa","def_rush_epa","def_sack_rate",
+    "pace","neutral_pace","neutral_pace_score",
+    "pass_rate_over_expected","proe","rz_rate","12p_rate","slot_rate","ay_per_att",
+    "light_box_rate","heavy_box_rate",
+    # NEW metrics:
+    "success_rate_off","success_rate_def","success_rate_diff",
+    "explosive_play_rate_allowed",
 ]
 
 # -----------------------------
@@ -830,7 +820,8 @@ def build_team_form(season: int, box_backfill_prev: bool = False) -> pd.DataFram
     out["season"] = int(season)
 
     z_cols = ["def_pass_epa","def_rush_epa","def_sack_rate","pace_neutral","proe",
-              "rz_rate","personnel_12_rate","slot_rate","ay_per_att","light_box_rate","heavy_box_rate"]
+              "rz_rate","personnel_12_rate","slot_rate","ay_per_att","light_box_rate","heavy_box_rate",
+              "success_rate_off","success_rate_def","success_rate_diff","explosive_play_rate_allowed"]
     out = zscore(out, z_cols)
 
     out = out.rename(columns={"pace_neutral": "pace", "personnel_12_rate": "12p_rate"})
@@ -1059,6 +1050,65 @@ def main():
                 df["neutral_pace_score"] = np.nan
         else:
             df["neutral_pace_score"] = np.nan
+
+        df_to_write = df
+
+        # --- NEW: derive Success Rates + Explosive Play Rate Allowed from nflverse PBP ---
+        try:
+            season = 2025
+            pbp = NFLV.import_pbp_data([season])  # nflreadpy or nfl_data_py via _import_nflverse()
+            # Basic filters: no penalties-only rows
+            pbp = pbp[pbp["play_type"].isin(["pass","run"])]
+            # Success definition (common): EPA > 0
+            pbp["is_success"] = (pbp["epa"] > 0).astype(int)
+            # Explosive threshold: >=15 pass or >=10 rush (ceiling indicator)
+            pbp["is_explosive"] = (
+                ((pbp["play_type"] == "pass") & (pbp["yards_gained"] >= 15)) |
+                ((pbp["play_type"] == "run") & (pbp["yards_gained"] >= 10))
+            ).astype(int)
+
+            # Map team abbreviations to your canonical codes
+            if "posteam" in pbp:
+                pbp["off_team"] = pbp["posteam"].astype(str).str.upper()
+            else:
+                pbp["off_team"] = pd.NA
+            if "defteam" in pbp:
+                pbp["def_team"] = pbp["defteam"].astype(str).str.upper()
+            else:
+                pbp["def_team"] = pd.NA
+
+            # Aggregate per-team
+            off_grp = pbp.groupby("off_team", dropna=True, as_index=False).agg(
+                off_plays=("is_success","size"),
+                off_success=("is_success","sum"),
+            )
+            off_grp["success_rate_off"] = off_grp["off_success"] / off_grp["off_plays"]
+
+            def_grp = pbp.groupby("def_team", dropna=True, as_index=False).agg(
+                def_plays=("is_success","size"),
+                def_success_allowed=("is_success","sum"),
+                def_explosive_allowed=("is_explosive","sum"),
+            )
+            def_grp["success_rate_def"] = def_grp["def_success_allowed"] / def_grp["def_plays"]
+            def_grp["explosive_play_rate_allowed"] = def_grp["def_explosive_allowed"] / def_grp["def_plays"]
+
+            # Join into existing team frame (we assume `df` holds the team rows by this point)
+            # Ensure `df` has column 'team' canonicalized (e.g., "KC","PHI", etc.)
+            df = df.copy()
+            df["team"] = df["team"].astype(str).str.upper()
+
+            df = df.merge(off_grp[["off_team","success_rate_off"]], left_on="team", right_on="off_team", how="left") \
+                   .drop(columns=["off_team"], errors="ignore")
+            df = df.merge(def_grp[["def_team","success_rate_def","explosive_play_rate_allowed"]],
+                          left_on="team", right_on="def_team", how="left") \
+                   .drop(columns=["def_team"], errors="ignore")
+
+            df["success_rate_diff"] = df["success_rate_off"] - df["success_rate_def"]
+
+            # Z-scores for the new metrics (only when enough teams present)
+            df = zscore(df, ["success_rate_off","success_rate_def","success_rate_diff","explosive_play_rate_allowed"])
+        except Exception as e:
+            print(f"[make_team_form] WARNING: SRD/EPR derivation failed: {e}")
 
         df_to_write = df
 

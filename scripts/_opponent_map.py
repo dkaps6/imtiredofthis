@@ -1,191 +1,112 @@
 # scripts/_opponent_map.py
 import logging
 from typing import Iterable, Optional, Union
-
+import os
 import pandas as pd
 
 logger = logging.getLogger("opponent_map")
 
+# Normalize many site/book/team variants into model's canonical 2–3 letter codes.
 TEAM_ALIASES = {
-    # site oddities
-    "BLT": "BAL",
-    "BAL RAVENS": "BAL",
-    "CLV": "CLE",
-    "CLEVELAND BROWNS": "CLE",
-    "HST": "HOU",
-    "HOUSTON TEXANS": "HOU",
-    # common book strings & spaces
-    "JAX": "JAX",
-    "JAC": "JAX",
-    "WSH": "WAS",
-    "WFT": "WAS",
-    "COMMANDERS": "WAS",
-    "NO": "NO",
-    "NOR": "NO",
-    "NOS": "NO",
-    "N.O.": "NO",
-    "TB": "TB",
-    "T.B.": "TB",
-    "TAM": "TB",
-    "SD": "LAC",
-    "S.D.": "LAC",
-    "LA CHARGERS": "LAC",
-    "STL": "LA",
-    "LA RAMS": "LA",
-    "LAR": "LA",
-    "NEP": "NE",
-    "N.E.": "NE",
-    "GNB": "GB",
-    "G.B.": "GB",
-    "SFO": "SF",
-    "S.F.": "SF",
-    "ARI": "ARI",
+    # Site/book oddities & historical
+    "BLT": "BAL", "BAL RAVENS": "BAL",
+    "CLV": "CLE", "CLEVELAND BROWNS": "CLE",
+    "HST": "HOU", "HOUSTON TEXANS": "HOU",
+    "JAC": "JAX", "WSH": "WAS", "WFT": "WAS", "COMMANDERS": "WAS",
+    "NEP": "NE", "N.E.": "NE",
+    "GNB": "GB", "G.B.": "GB",
+    "SFO": "SF", "S.F.": "SF",
     "ARZ": "ARI",
-    "KCC": "KC",
-    "K.C.": "KC",
-    "N.Y. JETS": "NYJ",
-    "NY JETS": "NYJ",
-    "N.Y. GIANTS": "NYG",
-    "NY GIANTS": "NYG",
-    # extras retained from legacy map
-    "BAL": "BAL",
-    "CLE": "CLE",
-    "HOU": "HOU",
-    "WAS": "WAS",
-    "OAK": "LV",
+    "KCC": "KC", "K.C.": "KC",
+    "SD": "LAC", "S.D.": "LAC", "LA CHARGERS": "LAC",
+    "STL": "LA", "LA RAMS": "LA", "LAR": "LA",
+    "N.O.": "NO", "NOR": "NO", "NOS": "NO",
+    "T.B.": "TB", "TAM": "TB",
+    "N.Y. JETS": "NYJ", "NY JETS": "NYJ",
+    "N.Y. GIANTS": "NYG", "NY GIANTS": "NYG",
+    "OAK": "LV",  # legacy
+    # Identity passthroughs
+    "ARI":"ARI","ATL":"ATL","BAL":"BAL","BUF":"BUF","CAR":"CAR","CHI":"CHI","CIN":"CIN","CLE":"CLE",
+    "DAL":"DAL","DEN":"DEN","DET":"DET","GB":"GB","HOU":"HOU","IND":"IND","JAX":"JAX","KC":"KC",
+    "LV":"LV","LAC":"LAC","LA":"LA","MIA":"MIA","MIN":"MIN","NE":"NE","NO":"NO","NYG":"NYG","NYJ":"NYJ",
+    "PHI":"PHI","PIT":"PIT","SEA":"SEA","SF":"SF","TB":"TB","TEN":"TEN","WAS":"WAS",
 }
 
-CANON_SET = set(
-    [
-        "ARI",
-        "ATL",
-        "BAL",
-        "BUF",
-        "CAR",
-        "CHI",
-        "CIN",
-        "CLE",
-        "DAL",
-        "DEN",
-        "DET",
-        "GB",
-        "HOU",
-        "IND",
-        "JAX",
-        "KC",
-        "LV",
-        "LAC",
-        "LA",
-        "MIA",
-        "MIN",
-        "NE",
-        "NO",
-        "NYG",
-        "NYJ",
-        "PHI",
-        "PIT",
-        "SEA",
-        "SF",
-        "TB",
-        "TEN",
-        "WAS",
-    ]
-)
+CANON_SET = set([
+    "ARI","ATL","BAL","BUF","CAR","CHI","CIN","CLE","DAL","DEN","DET","GB","HOU",
+    "IND","JAX","KC","LV","LAC","LA","MIA","MIN","NE","NO","NYG","NYJ","PHI","PIT","SEA","SF","TB","TEN","WAS"
+])
 
-
-def _normalize_one(team: Union[str, object]) -> object:
-    if isinstance(team, pd.Series):
-        # legacy callers might still hand us a Series; normalize element-wise
-        return team.apply(_normalize_one)
-    if team is None or (isinstance(team, float) and pd.isna(team)):
+def _normalize_one(x: Union[str, object]) -> str:
+    if x is None:
         return ""
-    if isinstance(team, str) and not team.strip():
+    if isinstance(x, float) and pd.isna(x):
         return ""
-    try:
-        if pd.isna(team):  # handles pd.NA, numpy.nan, etc.
-            return ""
-    except TypeError:
-        # objects that do not support isna checks fall through
-        pass
-
-    t = str(team).strip().upper()
-    if t in {"", "NAN", "NONE", "NULL", "NA", "<NA>"}:
+    s = str(x).strip().upper()
+    if not s or s in {"NAN","NA","NONE","NULL","<NA>"}:
         return ""
-    t = TEAM_ALIASES.get(t, t)
-    # Drop stray punctuation/words
-    t = t.replace(".", "").replace("  ", " ").strip()
-    if t in CANON_SET:
-        return t
-    # last resort: collapse to 2–3 letters (keeps TB, NO, LA)
-    return TEAM_ALIASES.get(t, t)
-
+    s = s.replace(".", "").replace("  ", " ")
+    s = TEAM_ALIASES.get(s, s)
+    if s in CANON_SET:
+        return s
+    return TEAM_ALIASES.get(s, s)
 
 def normalize_team(val: Union[str, pd.Series, object]) -> object:
-    """Backward-compatible entry point for scalar normalization."""
-
     if isinstance(val, pd.Series):
         return val.apply(_normalize_one)
     return _normalize_one(val)
 
-
 def normalize_team_series(vals: Union[pd.Series, Iterable]) -> pd.Series:
-    """Vectorized normalization for Series/arrays."""
-
     s = pd.Series(vals, copy=False)
     return s.apply(_normalize_one)
 
-
-def map_normalize_team(x):
-    """Element-wise scalar wrapper (safe for Series.apply)."""
-
-    return _normalize_one(x)
-
-
 def build_opponent_map(week: Optional[int] = 10, team_map_path: str = "data/team_week_map.csv") -> pd.DataFrame:
+    """
+    Build symmetric opponent pairs from team_week_map.csv, week-filtered.
+    Writes data/opponent_map.csv for downstream joins and returns the df.
+    """
     try:
         tm = pd.read_csv(team_map_path)
     except FileNotFoundError:
-        logger.warning("[OpponentMap] team_week_map.csv not found at %s", team_map_path)
-        return pd.DataFrame(columns=["event_id", "week", "team", "opponent"])
+        logger.warning("[OpponentMap] %s not found", team_map_path)
+        return pd.DataFrame(columns=["event_id","week","team","opponent"])
     except Exception as exc:
         logger.error("[OpponentMap] Failed to read %s: %s", team_map_path, exc)
-        return pd.DataFrame(columns=["event_id", "week", "team", "opponent"])
+        return pd.DataFrame(columns=["event_id","week","team","opponent"])
 
-    required = {"event_id", "week", "team", "opponent"}
+    required = {"event_id","week","team","opponent"}
     if not required.issubset(tm.columns):
         missing = ", ".join(sorted(required - set(tm.columns)))
         logger.error("[OpponentMap] team_week_map missing columns: %s", missing)
-        return pd.DataFrame(columns=["event_id", "week", "team", "opponent"])
+        return pd.DataFrame(columns=list(required))
 
     working = tm.copy()
-    if "team" in working.columns:
-        working["team"] = normalize_team_series(working["team"])
-    if "opponent" in working.columns:
-        working["opponent"] = normalize_team_series(working["opponent"])
+    working["team"] = normalize_team_series(working["team"])
+    working["opponent"] = working["opponent"].astype(str).str.upper().str.strip()
+    working.loc[working["opponent"].ne("BYE"), "opponent"] = normalize_team_series(working["opponent"])
 
-    if week is not None and "week" in working.columns:
+    if week is not None:
         working = working[working["week"] == week]
 
-    out = []
+    out_rows = []
     for _, r in working.iterrows():
-        team_val = r.get("team", "")
-        opponent_val = r.get("opponent", "")
-        if not team_val:
+        evt = str(r.get("event_id","")).strip()
+        wk = r.get("week")
+        t = r.get("team","")
+        opp = r.get("opponent","")
+        if not t:
             continue
-        event_id = r.get("event_id")
-        week_val = r.get("week")
-        if opponent_val == "BYE":
-            out.append({"event_id": event_id, "week": week_val, "team": team_val, "opponent": "BYE"})
-        else:
-            out.append({"event_id": event_id, "week": week_val, "team": team_val, "opponent": opponent_val})
-            if opponent_val:
-                out.append({"event_id": event_id, "week": week_val, "team": opponent_val, "opponent": team_val})
+        if opp == "BYE":
+            out_rows.append({"event_id": evt, "week": wk, "team": t, "opponent": "BYE"})
+        elif opp:
+            out_rows.append({"event_id": evt, "week": wk, "team": t, "opponent": opp})
+            out_rows.append({"event_id": evt, "week": wk, "team": opp, "opponent": t})
 
-    df = pd.DataFrame(out).drop_duplicates(subset=["event_id", "team", "opponent"])
-    print(f"[OpponentMap] {len(df)} rows written for week {week}")
+    df = pd.DataFrame(out_rows).drop_duplicates(subset=["event_id","team","opponent"])
+    os.makedirs("data/_debug", exist_ok=True)
     df.to_csv("data/opponent_map.csv", index=False)
+    print(f"[OpponentMap] wrote {len(df)} rows for week={week} → data/opponent_map.csv")
     return df
-
 
 def attach_opponent(
     df: pd.DataFrame,
@@ -195,39 +116,59 @@ def attach_opponent(
     inplace: bool = True,
     week: Optional[int] = None,
 ) -> pd.DataFrame:
+    """
+    Attach opponent by (season, week, team) using team_week_map.csv;
+    fall back to any pre-built data/opponent_map_from_props.csv when available.
+    """
     if df is None or df.empty:
         return df
-
     target = df if inplace else df.copy()
     if team_col not in target.columns:
-        return target
-
-    opponent_map_df = build_opponent_map(week=week, team_map_path=coverage_path)
-    if opponent_map_df.empty:
         return target
 
     target[team_col] = normalize_team_series(target[team_col])
     if opponent_col not in target.columns:
         target[opponent_col] = pd.NA
 
-    mapping_event = {}
-    mapping_team = {}
-    for row in opponent_map_df.itertuples(index=False):
-        team = getattr(row, "team", "")
-        opponent = getattr(row, "opponent", "")
-        event_id = getattr(row, "event_id", None)
-        if team:
-            mapping_team.setdefault(team, opponent)
-            if event_id is not None:
-                mapping_event[(event_id, team)] = opponent
+    sched = build_opponent_map(week=week, team_map_path=coverage_path)
+    if not sched.empty:
+        join_cols = []
+        for col in ("season","week","team"):
+            if col in target.columns and col in sched.columns:
+                join_cols.append(col)
+        # event_id optional improvement
+        extra = [c for c in ("event_id",) if c in target.columns and c in sched.columns]
+        sel = list(set(join_cols + extra + ["opponent"]))
+        over = sched[sel].drop_duplicates()
+        over = over.rename(columns={"opponent": "__schedule_opp"})
+        target = target.merge(over, on=join_cols + extra, how="left")
+        if "__schedule_opp" in target.columns:
+            target[opponent_col] = target[opponent_col].fillna(target["__schedule_opp"])
+            target.drop(columns=["__schedule_opp"], inplace=True)
 
-    mask = target[opponent_col].isna() | (target[opponent_col].astype(str).str.strip() == "")
+    # If props-built map exists, allow it to fill remaining holes.
+    props_path = "data/opponent_map_from_props.csv"
+    if os.path.exists(props_path):
+        try:
+            om = pd.read_csv(props_path)
+        except Exception:
+            om = pd.DataFrame()
+        if not om.empty:
+            for c in ("team","opponent"):
+                if c in om.columns:
+                    om[c] = normalize_team_series(om[c])
+            if "team" in target.columns and "team" in om.columns:
+                over2 = om[["team","opponent"]].dropna().drop_duplicates().rename(columns={"opponent":"__props_opp"})
+                target = target.merge(over2, on=["team"], how="left")
+                if "__props_opp" in target.columns:
+                    target[opponent_col] = target[opponent_col].fillna(target["__props_opp"])
+                    target.drop(columns=["__props_opp"], inplace=True)
 
-    if "event_id" in target.columns:
-        event_keys = list(zip(target.loc[mask, "event_id"], target.loc[mask, team_col]))
-        mapped_values = [mapping_event.get(key, mapping_team.get(key[1], "")) for key in event_keys]
-        target.loc[mask, opponent_col] = mapped_values
-    else:
-        target.loc[mask, opponent_col] = target.loc[mask, team_col].map(mapping_team)
+    # Log any unresolved mappings for debugging
+    miss = target[target[opponent_col].isna()].copy()
+    if not miss.empty:
+        os.makedirs("data/_debug", exist_ok=True)
+        miss.to_csv("data/_debug/opponent_map_unresolved.csv", index=False)
+        print(f"[OpponentMap] WARNING unresolved opponent rows: {len(miss)} → data/_debug/opponent_map_unresolved.csv")
 
     return target
