@@ -93,11 +93,21 @@ CANON_SET = set(
 )
 
 
-def _normalize_one(team: Union[str, object]) -> str:
-    if team is None:
+def _normalize_one(team: Union[str, object]) -> object:
+    if isinstance(team, pd.Series):
+        # legacy callers might still hand us a Series; normalize element-wise
+        return team.apply(_normalize_one)
+    if team is None or (isinstance(team, float) and pd.isna(team)):
         return ""
-    if isinstance(team, float) and pd.isna(team):
+    if isinstance(team, str) and not team.strip():
         return ""
+    try:
+        if pd.isna(team):  # handles pd.NA, numpy.nan, etc.
+            return ""
+    except TypeError:
+        # objects that do not support isna checks fall through
+        pass
+
     t = str(team).strip().upper()
     if t in {"", "NAN", "NONE", "NULL", "NA", "<NA>"}:
         return ""
@@ -110,13 +120,11 @@ def _normalize_one(team: Union[str, object]) -> str:
     return TEAM_ALIASES.get(t, t)
 
 
-def normalize_team(val: Union[str, pd.Series]) -> str:
-    """Backward-compat: scalar input → scalar output."""
+def normalize_team(val: Union[str, pd.Series, object]) -> object:
+    """Backward-compatible entry point for scalar normalization."""
 
     if isinstance(val, pd.Series):
-        # old call sites should not send a Series; handled by normalize_team_series
-        # keep scalar pathway for safety
-        return _normalize_one(val.iloc[0]) if not val.empty else ""
+        return val.apply(_normalize_one)
     return _normalize_one(val)
 
 
@@ -124,7 +132,13 @@ def normalize_team_series(vals: Union[pd.Series, Iterable]) -> pd.Series:
     """Vectorized normalization for Series/arrays."""
 
     s = pd.Series(vals, copy=False)
-    return s.astype(str).map(_normalize_one)
+    return s.apply(_normalize_one)
+
+
+def map_normalize_team(x):
+    """Element-wise scalar wrapper (safe for Series.apply)."""
+
+    return _normalize_one(x)
 
 
 def build_opponent_map(week: Optional[int] = 10, team_map_path: str = "data/team_week_map.csv") -> pd.DataFrame:

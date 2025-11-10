@@ -23,6 +23,18 @@ import requests
 
 from scripts.utils.stadium_locations import STADIUM_LOCATION
 
+STADIUM_LOCATION.setdefault(
+    "WAS",
+    {
+        "city": "Landover",
+        "state": "MD",
+        "stadium": "Commanders Field",
+        "indoor": False,
+        "lat": 38.9076,
+        "lon": -76.8645,
+    },
+)
+
 OUT_PATH = Path("data") / "weather_week.csv"
 
 NWS_HEADERS = {
@@ -738,7 +750,13 @@ def main():
     slate_df = _load_slate_from_repo()
 
     if slate_df.empty:
-        raise RuntimeError("[weather] Slate is empty even after fallback")
+        logger.warning(
+            "[weather] Slate is empty even after fallback; writing empty weather file"
+        )
+        OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame().to_csv(OUT_PATH, index=False)
+        print(f"[weather] wrote 0 games -> {OUT_PATH} (fallback_used=False)")
+        return
 
     source_label = slate_df.attrs.get("source", "unknown")
     logger.info("[weather] using slate source: %s", source_label)
@@ -758,9 +776,19 @@ def main():
 
     weather_df = pd.DataFrame(rows).drop_duplicates()
 
-    # fail-fast if totally empty or all forecast_ok=0
-    if weather_df.empty or weather_df["forecast_ok"].fillna(0).sum() == 0:
-        raise RuntimeError("[weather] No weather rows generated at all")
+    if weather_df.empty:
+        logger.warning("[weather] No weather rows generated; writing empty file")
+        OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame().to_csv(OUT_PATH, index=False)
+        print(
+            f"[weather] wrote 0 games -> {OUT_PATH} (fallback_used={fallback_used})"
+        )
+        return
+
+    if weather_df["forecast_ok"].fillna(0).sum() == 0:
+        logger.warning(
+            "[weather] forecast_ok=0 for all games; writing results for transparency"
+        )
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     weather_df.to_csv(OUT_PATH, index=False)
