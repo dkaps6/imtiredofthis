@@ -172,3 +172,28 @@ def attach_opponent(
         print(f"[OpponentMap] WARNING unresolved opponent rows: {len(miss)} → data/_debug/opponent_map_unresolved.csv")
 
     return target
+
+# --- Legacy API shims for backward compatibility with existing scripts ---
+# Some scripts still import: map_normalize_team, team_map
+# Keep these thin wrappers so we don’t have to touch the callers.
+
+def map_normalize_team(x):
+    """Legacy alias → normalize a single team token to canonical code."""
+    return normalize_team(x)
+
+def map_normalize_team_series(vals):
+    """Legacy alias → normalize a pandas Series/iterable of team tokens."""
+    return normalize_team_series(vals)
+
+def team_map(week: int = 10, team_map_path: str = "data/team_week_map.csv"):
+    """Legacy alias → returns the schedule/opponent map for a given week."""
+    return build_opponent_map(week=week, team_map_path=team_map_path)
+
+# Be explicit about public surface (helps static tools/linters).
+__all__ = [
+    "TEAM_ALIASES", "CANON_SET",
+    "normalize_team", "normalize_team_series",
+    "build_opponent_map", "attach_opponent",
+    # legacy:
+    "map_normalize_team", "map_normalize_team_series", "team_map",
+]
