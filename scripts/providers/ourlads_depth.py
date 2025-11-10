@@ -42,21 +42,25 @@ VALID = {
     "PHI","PIT","SEA","SF","TB","TEN","WAS"
 }
 
-TEAM_FIXES = {
-    "ARZ": "ARI",
-    "JAC": "JAX",
-    "CLV": "CLE",
+TEAM_MAP = {
     "BLT": "BAL",
+    "CLV": "CLE",
+    "HST": "HOU",
     "WSH": "WAS",
+    "JAC": "JAX",
     "SD": "LAC",
     "LA": "LAR",
-    "HST": "HOU",
+    "STL": "LAR",
+}
+
+TEAM_FIXES = {
+    "ARZ": "ARI",
+    **TEAM_MAP,
 }
 
 # Retain historical aliases while layering the new TEAM_FIXES guidance.
 TEAM_ALIASES = {
     **TEAM_FIXES,
-    "STL": "LAR",
     "OAK": "LV",
 }
 
@@ -112,41 +116,30 @@ BAD_TOKENS = {
     "(r)", "(ir)", "(ps)", "(pup)"
 }
 
-DROP_TOKENS = {
-    "U", "CC", "T",
-    "II", "III", "IV", "V", "VI", "VII",
-    "Sr", "Sr.", "Jr", "Jr.", "III",
-}
-
 NON_NAME_TOKENS = {"jr", "sr", "ii", "iii", "iv", "v", "vi", "vii"}
 
-SKILL_GROUPS = {"QB", "RB", "WR", "TE", "FB"}
+SKILL_POSITIONS = ["QB", "RB", "FB", "WR", "TE"]
+SKILL_GROUPS = set(SKILL_POSITIONS)
+WR_PATTERN = re.compile(r"\b(W|WR|LWR|RWR|SWR|Slot WR|Wide Receiver)\b", re.I)
 
 
-def canonical_player_key(full_name: str) -> str:
-    """Return the canonical player key (first initial + last name, no punctuation)."""
+def clean_name(raw):
+    raw = re.sub(r"\([^)]*\)", "", raw)
+    raw = re.sub(r"\d+/?\d*", "", raw)
+    raw = re.sub(r"[^A-Za-z\s\-'\.]+", "", raw)
+    return raw.strip()
 
-    if not isinstance(full_name, str):
-        return ""
-    cleaned = (
-        full_name.replace(".", "")
-        .replace("'", "")
-        .strip()
-    )
-    if not cleaned:
-        return ""
-    parts = [p for p in cleaned.split() if p and p not in DROP_TOKENS]
-    if not parts:
-        return ""
+
+def make_keys(name):
+    full = clean_name(name)
+    if not full:
+        return "", "", ""
+    parts = full.split(" ", 1)
     first = parts[0]
-    last = parts[-1]
-    if not first or not last:
-        return ""
-    last_letters = re.sub(r"[^A-Za-z]", "", last)
-    if not last_letters:
-        return ""
-    key = f"{first[0].upper()}{last_letters.title().replace(' ', '')}"
-    return key
+    last = parts[1] if len(parts) > 1 else ""
+    short = f"{first[0].lower()}{last.lower()}" if first else ""
+    clean = full.replace(" ", "").lower()
+    return full, short, clean
 
 
 def _strip_name_suffix(raw: str) -> str:
@@ -233,7 +226,7 @@ def _position_group(base_pos: str) -> str:
         return "RB"
     if base == "FB":
         return "FB"
-    if base.startswith("WR") or "WR" in base or "WIDE" in base:
+    if base.startswith("WR") or WR_PATTERN.search(base_pos or ""):
         return "WR"
     if base in {"TE", "Y"}:
         return "TE"
@@ -458,7 +451,8 @@ def fetch_team_roles(team: str, soup: BeautifulSoup, include_inactive: bool) -> 
     # --- END: detect slot columns ---
 
     records: List[dict] = []
-    team_code = _canon_team(team)
+    canon_team = _canon_team(team)
+    team_code = TEAM_MAP.get(canon_team, canon_team)
 
     for tr in data_rows:
         tds = tr.find_all("td")
@@ -483,13 +477,18 @@ def fetch_team_roles(team: str, soup: BeautifulSoup, include_inactive: bool) -> 
                 continue
 
             chosen_name: Optional[str] = None
+            player_key: str = ""
+            player_clean_key: str = ""
             for candidate in candidates:
                 text_lower = candidate.lower().strip()
                 if not candidate or "injured" in text_lower:
                     continue
                 cleaned_candidate = clean_ourlads_name(candidate)
-                if cleaned_candidate and len(cleaned_candidate.split()) >= 2:
-                    chosen_name = cleaned_candidate
+                full_name, short_key, clean_key = make_keys(cleaned_candidate)
+                if full_name and " " in full_name:
+                    chosen_name = full_name
+                    player_key = short_key
+                    player_clean_key = clean_key
                     break
             if not chosen_name:
                 continue
@@ -516,6 +515,8 @@ def fetch_team_roles(team: str, soup: BeautifulSoup, include_inactive: bool) -> 
                     "role": normalized_role,
                     "model_role": normalized_role,
                     "status": status,
+                    "player_key": player_key,
+                    "player_clean_key": player_clean_key,
                 }
             )
 
@@ -600,7 +601,17 @@ def main(*, season: Optional[int] = None, include_inactive: bool = True):
             subset=["team", "player", "role"], keep="first"
         )
 
-    roles_all["player_key"] = roles_all["player"].apply(canonical_player_key)
+    def _derive_keys(name: str) -> Tuple[str, str, str]:
+        full, short, clean = make_keys(name)
+        return full or name, short, clean
+
+    key_df = roles_all["player"].apply(_derive_keys).apply(pd.Series)
+    key_df.columns = ["player_cleaned", "player_key", "player_clean_key"]
+    roles_all["player"] = key_df["player_cleaned"]
+    roles_all["player_key"] = key_df["player_key"]
+    roles_all["player_clean_key"] = key_df["player_clean_key"]
+
+    roles_all["team"] = roles_all["team"].replace(TEAM_MAP)
     cols = [
         "team",
         "player",
@@ -613,20 +624,11 @@ def main(*, season: Optional[int] = None, include_inactive: bool = True):
         "depth_slot",
         "depth_index",
         "player_key",
+        "player_clean_key",
     ]
     cols = [c for c in cols if c is not None and c in roles_all.columns]
     output_df = roles_all[cols].copy()
     total_rows = len(output_df)
-    unique_teams = (
-        {
-            str(val).upper().strip()
-            for val in output_df["team"].dropna().tolist()
-            if str(val).strip()
-        }
-        if "team" in output_df.columns
-        else set()
-    )
-
     if output_df.empty:
         logger.warning("[OUR-LADS] No active offensive players parsed; output will be empty")
     else:
@@ -660,11 +662,11 @@ def main(*, season: Optional[int] = None, include_inactive: bool = True):
             if status_breakdown:
                 detail_parts.append(f"status: {status_breakdown}")
             detail = f" ({'; '.join(detail_parts)})" if detail_parts else ""
-            print(f"[OUR-LADS] {team_code}: {len(group)} players written{detail}")
+            print(f"[OURlads] {team_code}: {len(group)} players written{detail}")
 
-    print(
-        f"[OUR-LADS] ✅ Final total: {total_rows} players across {len(unique_teams)} teams"
-    )
+    print(f"[OURlads] {len(output_df)} total players written. Position counts:")
+    if "position" in output_df.columns:
+        print(output_df["position"].value_counts())
 
     output_df.to_csv(OUT_ROLES, index=False)
     logger.info(

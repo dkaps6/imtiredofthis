@@ -2755,7 +2755,7 @@ def _infer_roles_minimal(pf: pd.DataFrame) -> pd.DataFrame:
 # ---------------------------
 
 
-def build_player_form(
+def build_player_form_legacy(
     season: int = 2025, slate_date: str | None = None, week: int | None = None
 ) -> pd.DataFrame:
     if slate_date:
@@ -6089,6 +6089,124 @@ def _write_player_form_outputs(
     )
 
 
+def normalize_name(name: object) -> str:
+    if pd.isna(name):
+        return ""
+    return re.sub(r"[^a-z]", "", str(name).lower())
+
+
+def _player_key_from_name(name: object) -> str:
+    if not isinstance(name, str):
+        return ""
+    cleaned = re.sub(r"[^A-Za-z\s\-']", " ", name).strip()
+    if not cleaned:
+        return ""
+    parts = [p for p in re.split(r"\s+", cleaned) if p]
+    if not parts:
+        return ""
+    first = re.sub(r"[^A-Za-z]", "", parts[0]).lower()
+    last = re.sub(r"[^A-Za-z]", "", parts[-1]).lower() if len(parts) > 1 else ""
+    if first and last:
+        return f"{first[0]}{last}"
+    return last or first
+
+
+def build_player_form(season: int = 2025) -> pd.DataFrame:
+    roles = pd.read_csv("data/roles_ourlads.csv")
+    player_logs = pd.read_csv("data/player_game_logs.csv")
+    team_map = pd.read_csv("data/team_week_map.csv")
+
+    player_logs = player_logs[player_logs["season"] == season].copy()
+
+    roles["player_clean_key"] = roles["player"].apply(normalize_name)
+    if "player_key" not in roles.columns:
+        roles["player_key"] = roles["player"].apply(_player_key_from_name)
+    else:
+        roles["player_key"] = (
+            roles["player_key"].fillna("").astype(str)
+        )
+        missing_keys = roles["player_key"].eq("")
+        roles.loc[missing_keys, "player_key"] = roles.loc[
+            missing_keys, "player"
+        ].apply(_player_key_from_name)
+
+    player_logs["player_clean_key"] = player_logs["player"].apply(normalize_name)
+    if "player_key" not in player_logs.columns:
+        player_logs["player_key"] = player_logs["player"].apply(
+            _player_key_from_name
+        )
+    else:
+        player_logs["player_key"] = (
+            player_logs["player_key"].fillna("").astype(str)
+        )
+        missing_logs = player_logs["player_key"].eq("")
+        player_logs.loc[missing_logs, "player_key"] = player_logs.loc[
+            missing_logs, "player"
+        ].apply(_player_key_from_name)
+
+    role_cols = [
+        c for c in roles.columns if c not in {"player_key", "player_clean_key"}
+    ]
+    roles_for_merge = roles.rename(
+        columns={col: f"{col}_role" for col in role_cols}
+    )
+
+    merged = pd.merge(
+        player_logs,
+        roles_for_merge,
+        on=["player_key", "player_clean_key"],
+        how="left",
+    )
+
+    role_series = merged.get("role_role")
+    missing_roles = (
+        merged[role_series.isna()] if role_series is not None else pd.DataFrame()
+    )
+    if not missing_roles.empty:
+        print(
+            f"[PlayerForm] Missing {len(missing_roles)} roles, writing to player_form_missing.csv"
+        )
+        missing_roles.to_csv("data/player_form_missing.csv", index=False)
+        merged = merged[~merged.index.isin(missing_roles.index)].copy()
+
+    for col in ("player", "team", "position", "role"):
+        role_col = f"{col}_role"
+        if role_col in merged.columns:
+            if col in merged.columns:
+                merged[col] = merged[col].fillna(merged[role_col])
+            else:
+                merged[col] = merged[role_col]
+            merged.drop(columns=[role_col], inplace=True)
+
+    team_map = team_map.rename(
+        columns={"team": "team_schedule", "opponent": "opponent_schedule"}
+    )
+    merged = merged.merge(
+        team_map[["event_id", "team_schedule", "opponent_schedule"]],
+        on="event_id",
+        how="left",
+    )
+
+    if "team_schedule" in merged.columns:
+        if "team" in merged.columns:
+            merged["team"] = merged["team"].fillna(merged["team_schedule"])
+        else:
+            merged["team"] = merged["team_schedule"]
+        merged.drop(columns=["team_schedule"], inplace=True)
+    if "opponent_schedule" in merged.columns:
+        if "opponent" in merged.columns:
+            merged["opponent"] = merged["opponent"].fillna(
+                merged["opponent_schedule"]
+            )
+        else:
+            merged["opponent"] = merged["opponent_schedule"]
+        merged.drop(columns=["opponent_schedule"], inplace=True)
+
+    merged.to_csv("data/player_form.csv", index=False)
+    print(f"[PlayerForm] {len(merged)} players written.")
+    return merged
+
+
 # ---------------------------
 # CLI
 # ---------------------------
@@ -6096,103 +6214,13 @@ def _write_player_form_outputs(
 
 def cli():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--season", type=int, required=True)
-    parser.add_argument(
-        "--date",
-        type=str,
-        required=False,
-        help="Slate date like YYYY-MM-DD (used for opponent mapping / props alignment)",
-    )
-    parser.add_argument(
-        "--week",
-        type=int,
-        required=False,
-        help="Optional week number when building opponent enrichment",
-    )
+    parser.add_argument("--season", type=int, default=2025)
+    parser.add_argument("--date", type=str, required=False)
+    parser.add_argument("--week", type=int, required=False)
     args = parser.parse_args()
 
-    _safe_mkdir(DATA_DIR)
-
-    try:
-        # Build player form
-        df = build_player_form(season=args.season, slate_date=args.date, week=args.week)
-
-        # Fallback sweep BEFORE strict validation (retain your original behavior)
-        try:
-            before = df.copy()
-            df = _apply_fallback_enrichers(df)
-            filled = {}
-            for c in [
-                "route_rate",
-                "tgt_share",
-                "rush_share",
-                "yprr",
-                "ypc",
-                "ypa",
-                "rz_share",
-            ]:
-                if c in before.columns and c in df.columns:
-                    filled[c] = int((df[c].notna() & before[c].isna()).sum())
-            if filled:
-                print(
-                    "[make_player_form] fallback enriched:",
-                    ", ".join(f"{k}:+{v}" for k, v in filled.items()),
-                )
-        except Exception as _fb_e:
-            print(
-                f"[make_player_form] WARN fallback enrichers skipped: {_fb_e}",
-                file=sys.stderr,
-            )
-
-        # Validate required metrics for players that appear in props
-        try:
-            _validate_required(df)
-        except Exception as _val_e:
-            print(
-                f"[make_player_form] WARN validation noted issues: {_val_e}",
-                file=sys.stderr,
-            )
-
-        # Opponent enrichment (non-fatal)
-        try:
-            df = _enrich_team_and_opponent_from_props(df, args.season, week=args.week)
-        except Exception as _enr_e:
-            print(
-                f"[make_player_form] WARN opponent enrichment skipped in cli(): {_enr_e}",
-                file=sys.stderr,
-            )
-
-        # Final write on success
-        df = _dedupe_player_clean_key(df)
-        _write_player_form_outputs(df, slate_date=args.date, season=args.season)
-        return
-
-    except Exception as e:
-        # Log error and try to salvage partial DF
-        print(f"[make_player_form] ERROR: {e}", file=sys.stderr)
-        if isinstance(e, RuntimeError) and "opponent merge" in str(e):
-            raise
-        try:
-            if "df" in locals() and isinstance(df, pd.DataFrame) and len(df) > 0:
-                try:
-                    df = _enrich_team_and_opponent_from_props(df, args.season, week=args.week)
-                except Exception as _enr_e:
-                    print(
-                        f"[make_player_form] WARN enrichment skipped in error path: {_enr_e}",
-                        file=sys.stderr,
-                    )
-                df = _dedupe_player_clean_key(df)
-                _write_player_form_outputs(
-                    df, slate_date=args.date, season=args.season
-                )
-                return
-        except Exception as _w:
-            print(
-                f"[make_player_form] WARN could not write partial df in error path: {_w}",
-                file=sys.stderr,
-            )
-
-        raise
+    Path(DATA_DIR).mkdir(parents=True, exist_ok=True)
+    build_player_form(season=args.season)
 
 
 if __name__ == "__main__":
