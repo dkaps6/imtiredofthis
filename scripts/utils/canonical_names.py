@@ -15,7 +15,6 @@ The function canonicalize_player_name uses:
 
 from __future__ import annotations
 
-import json
 import os
 import re
 from functools import lru_cache
@@ -147,25 +146,6 @@ def canonicalize_player_name_safe(raw: str):
     return str(out), str(out)
 
 
-def log_unmapped_variant(
-    source: str,
-    raw_name: str,
-    context: Optional[Dict[str, Any]] = None,
-) -> None:
-    """Best-effort logging for unmapped canonical name variants."""
-
-    payload = {"source": source, "raw_name": raw_name}
-    if context:
-        try:
-            payload.update(dict(context))
-        except Exception:
-            payload["context"] = repr(context)
-
-    try:
-        log_path = Path(_UNMAPPED_LOG)
-        os.makedirs(log_path.parent, exist_ok=True)
-        with log_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
-    except Exception:
-        # This logger is intentionally fail-safe; never raise upstream.
-        pass
+def log_unmapped_variant(raw: str, where: str = "unknown", *args, **kwargs) -> None:
+    # Optional debug hook; keep silent unless you want to log variants externally.
+    return

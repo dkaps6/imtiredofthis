@@ -1,64 +1,131 @@
 # scripts/_opponent_map.py
 import logging
-from typing import Iterable, Optional, Union
 import os
+from typing import Iterable, Optional, Union
+
 import pandas as pd
 
 logger = logging.getLogger("opponent_map")
 
 # Normalize many site/book/team variants into model's canonical 2–3 letter codes.
 TEAM_ALIASES = {
-    # Site/book oddities & historical
-    "BLT": "BAL", "BAL RAVENS": "BAL",
-    "CLV": "CLE", "CLEVELAND BROWNS": "CLE",
-    "HST": "HOU", "HOUSTON TEXANS": "HOU",
-    "JAC": "JAX", "WSH": "WAS", "WFT": "WAS", "COMMANDERS": "WAS",
-    "NEP": "NE", "N.E.": "NE",
-    "GNB": "GB", "G.B.": "GB",
-    "SFO": "SF", "S.F.": "SF",
+    # user-specified weird site codes
+    "BLT": "BAL",
+    "CLV": "CLE",
+    "HST": "HOU",
+    # common alternates
     "ARZ": "ARI",
-    "KCC": "KC", "K.C.": "KC",
-    "SD": "LAC", "S.D.": "LAC", "LA CHARGERS": "LAC",
-    "STL": "LA", "LA RAMS": "LA", "LAR": "LA",
-    "N.O.": "NO", "NOR": "NO", "NOS": "NO",
-    "T.B.": "TB", "TAM": "TB",
-    "N.Y. JETS": "NYJ", "NY JETS": "NYJ",
-    "N.Y. GIANTS": "NYG", "NY GIANTS": "NYG",
-    "OAK": "LV",  # legacy
-    # Identity passthroughs
-    "ARI":"ARI","ATL":"ATL","BAL":"BAL","BUF":"BUF","CAR":"CAR","CHI":"CHI","CIN":"CIN","CLE":"CLE",
-    "DAL":"DAL","DEN":"DEN","DET":"DET","GB":"GB","HOU":"HOU","IND":"IND","JAX":"JAX","KC":"KC",
-    "LV":"LV","LAC":"LAC","LA":"LA","MIA":"MIA","MIN":"MIN","NE":"NE","NO":"NO","NYG":"NYG","NYJ":"NYJ",
-    "PHI":"PHI","PIT":"PIT","SEA":"SEA","SF":"SF","TB":"TB","TEN":"TEN","WAS":"WAS",
+    "JAC": "JAX",
+    "JAX": "JAX",
+    "LA": "LAR",
+    "STL": "LAR",
+    "OAK": "LV",
+    "WSH": "WAS",
+    "WFT": "WAS",
+    # Expanded aliases from legacy pipelines
+    "BAL RAVENS": "BAL",
+    "CLEVELAND BROWNS": "CLE",
+    "HOUSTON TEXANS": "HOU",
+    "COMMANDERS": "WAS",
+    "NEP": "NE",
+    "N.E.": "NE",
+    "GNB": "GB",
+    "G.B.": "GB",
+    "SFO": "SF",
+    "S.F.": "SF",
+    "KCC": "KC",
+    "K.C.": "KC",
+    "SD": "LAC",
+    "S.D.": "LAC",
+    "LA CHARGERS": "LAC",
+    "LA RAMS": "LAR",
+    "LAR": "LAR",
+    "N.O.": "NO",
+    "NOR": "NO",
+    "NOS": "NO",
+    "T.B.": "TB",
+    "TAM": "TB",
+    "N.Y. JETS": "NYJ",
+    "NY JETS": "NYJ",
+    "N.Y. GIANTS": "NYG",
+    "NY GIANTS": "NYG",
 }
+
+
+def _canon_team_str(s: str) -> str | None:
+    if not s:
+        return None
+    t = str(s).strip().upper()
+    if t == "" or t in {"NA", "NONE"}:
+        return None
+    t = TEAM_ALIASES.get(t, t)
+    if t in {"NAN", "<NA>"}:
+        return None
+    return TEAM_ALIASES.get(t, t)
+
+
+def normalize_team(
+    x: Union[pd.Series, list, tuple, str, None]
+) -> Union[pd.Series, str, None]:
+    """
+    Vector-safe normalizer. If x is a Series/array-like, return a Series with
+    alias mapping + trim + upper. If x is a scalar, do the same and return str|None.
+    """
+
+    if isinstance(x, pd.Series):
+        series = x.astype("string").fillna("").map(_canon_team_str)
+        return series.astype("string")
+    if isinstance(x, (list, tuple)):
+        s = pd.Series(list(x), dtype="string").fillna("").map(_canon_team_str)
+        return s.astype("string")
+    if x is None or (isinstance(x, float) and pd.isna(x)):
+        return None
+    if isinstance(x, pd.api.extensions.ExtensionArray):
+        s = pd.Series(x).astype("string").fillna("").map(_canon_team_str)
+        return s.astype("string")
+    if pd.isna(x):  # type: ignore[arg-type]
+        return None
+    return _canon_team_str(x)
+
+
+def map_normalize_team(series: pd.Series) -> pd.Series:
+    """Backwards-compat wrapper: expects a Series, returns Series."""
+
+    normalized = normalize_team(series)
+    if isinstance(normalized, pd.Series):
+        return normalized.astype("string")
+    return pd.Series(normalized, index=series.index, dtype="string")
+
+
+def map_normalize_opponent_map(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Normalize any opponent/team columns we use in props/opponent mapping.
+    Expected optional columns: 'team', 'team_abbr', 'opponent', 'opponent_abbr', 'home_team', 'away_team'
+    """
+
+    out = df.copy()
+    for col in (
+        "team",
+        "team_abbr",
+        "opponent",
+        "opponent_abbr",
+        "home_team",
+        "away_team",
+    ):
+        if col in out.columns:
+            out[col] = map_normalize_team(out[col].astype("string"))
+    return out
 
 CANON_SET = set([
     "ARI","ATL","BAL","BUF","CAR","CHI","CIN","CLE","DAL","DEN","DET","GB","HOU",
-    "IND","JAX","KC","LV","LAC","LA","MIA","MIN","NE","NO","NYG","NYJ","PHI","PIT","SEA","SF","TB","TEN","WAS"
+    "IND","JAX","KC","LV","LAC","LA","LAR","MIA","MIN","NE","NO","NYG","NYJ","PHI","PIT","SEA","SF","TB","TEN","WAS"
 ])
 
-def _normalize_one(x: Union[str, object]) -> str:
-    if x is None:
-        return ""
-    if isinstance(x, float) and pd.isna(x):
-        return ""
-    s = str(x).strip().upper()
-    if not s or s in {"NAN","NA","NONE","NULL","<NA>"}:
-        return ""
-    s = s.replace(".", "").replace("  ", " ")
-    s = TEAM_ALIASES.get(s, s)
-    if s in CANON_SET:
-        return s
-    return TEAM_ALIASES.get(s, s)
-
-def normalize_team(val: Union[str, pd.Series, object]) -> object:
-    if isinstance(val, pd.Series):
-        return val.apply(_normalize_one)
-    return _normalize_one(val)
 
 def normalize_team_series(vals: Union[pd.Series, Iterable]) -> pd.Series:
-    s = pd.Series(vals, copy=False)
-    return s.apply(_normalize_one)
+    if isinstance(vals, pd.Series):
+        return map_normalize_team(vals)
+    return map_normalize_team(pd.Series(list(vals), dtype="string"))
 
 def build_opponent_map(week: Optional[int] = 10, team_map_path: str = "data/team_week_map.csv") -> pd.DataFrame:
     """
@@ -81,9 +148,12 @@ def build_opponent_map(week: Optional[int] = 10, team_map_path: str = "data/team
         return pd.DataFrame(columns=list(required))
 
     working = tm.copy()
-    working["team"] = normalize_team_series(working["team"])
-    working["opponent"] = working["opponent"].astype(str).str.upper().str.strip()
-    working.loc[working["opponent"].ne("BYE"), "opponent"] = normalize_team_series(working["opponent"])
+    working["team"] = map_normalize_team(working["team"].astype("string"))
+    working["opponent"] = working["opponent"].astype("string")
+    bye_mask = working["opponent"].str.upper().str.strip().eq("BYE")
+    normalized_opponent = map_normalize_team(working.loc[~bye_mask, "opponent"].astype("string"))
+    working.loc[~bye_mask, "opponent"] = normalized_opponent
+    working.loc[bye_mask, "opponent"] = "BYE"
 
     if week is not None:
         working = working[working["week"] == week]
@@ -181,9 +251,22 @@ def map_normalize_team(x):
     """Legacy alias → normalize a single team token to canonical code."""
     return normalize_team(x)
 
+
 def map_normalize_team_series(vals):
     """Legacy alias → normalize a pandas Series/iterable of team tokens."""
     return normalize_team_series(vals)
+
+
+def dump_norm_debug(df: pd.DataFrame, path: str) -> None:
+    try:
+        sel = df.copy()
+        for col in ("team", "opponent", "team_abbr", "opponent_abbr"):
+            if col in sel.columns:
+                sel[col] = map_normalize_team(sel[col].astype("string"))
+        sel.head(200).to_csv(path, index=False)
+    except Exception:
+        pass
+
 
 def team_map(week: int = 10, team_map_path: str = "data/team_week_map.csv"):
     """Legacy alias → returns the schedule/opponent map for a given week."""
@@ -193,7 +276,9 @@ def team_map(week: int = 10, team_map_path: str = "data/team_week_map.csv"):
 __all__ = [
     "TEAM_ALIASES", "CANON_SET",
     "normalize_team", "normalize_team_series",
+    "map_normalize_team", "map_normalize_team_series",
+    "map_normalize_opponent_map", "dump_norm_debug",
     "build_opponent_map", "attach_opponent",
     # legacy:
-    "map_normalize_team", "map_normalize_team_series", "team_map",
+    "team_map",
 ]

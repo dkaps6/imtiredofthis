@@ -86,7 +86,13 @@ def ensure_schema(df: pd.DataFrame) -> pd.DataFrame:
 
 def _canonical_identity_fields(raw) -> dict:
     raw_str = "" if raw is None else str(raw)
-    canonical, clean_key = _canonicalize_with_utils(raw_str)
+    canon_tuple = _canonicalize_with_utils(raw_str)
+    if isinstance(canon_tuple, (list, tuple)):
+        canonical = canon_tuple[0] if canon_tuple else ""
+        clean_key = canon_tuple[1] if len(canon_tuple) > 1 else None
+    else:
+        canonical = canon_tuple
+        clean_key = None
     canonical = (canonical or "").strip()
     clean_key = (clean_key or "").strip()
 
