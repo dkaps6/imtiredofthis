@@ -12,7 +12,7 @@ import pandas as pd
 # --- END: mandatory global imports ---
 
 from scripts.make_player_form import canonicalize_name, TEAM_NAME_TO_ABBR, _canon_team
-from scripts._opponent_map import build_opponent_map, normalize_team as map_normalize_team
+from scripts._opponent_map import CANON_SET, build_opponent_map, normalize_team_series
 
 # ------------------------- CONFIG -------------------------
 
@@ -223,72 +223,40 @@ def _canonicalize_player_names(df: pd.DataFrame, name_map: dict[str, str]) -> pd
     working["player_canonical"] = working["player"].apply(canonicalize_name)
     return working
 
-
 def _normalize_teams_and_opponents(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize team/opponent abbreviations and backfill opponents using schedule coverage."""
-
     if df is None or df.empty:
         return df
     working = df.copy()
-    team_columns = [
-        "team",
+    for col in ("home_team", "away_team", "team", "opponent", "home", "away"):
+        if col in working.columns:
+            working[col] = normalize_team_series(working[col])
+    for col in (
         "team_abbr",
         "player_team_abbr",
-        "home_team",
-        "away_team",
         "home_team_abbr",
         "away_team_abbr",
-        "opponent",
-        "opponent_abbr",
-        "opp_team",
-        "opponent_team_abbr",
-    ]
-    for col in team_columns:
+    ):
         if col in working.columns:
-            working[col] = map_normalize_team(working[col].astype(str))
-    if "team_abbr" not in working.columns:
-        base_team = None
-        for candidate in ("team", "player_team_abbr"):
-            if candidate in working.columns:
-                base_team = working[candidate]
-                break
-        if base_team is None:
-            base_team = pd.Series("", index=working.index)
-        working["team_abbr"] = map_normalize_team(base_team.astype(str))
-    if "opponent_abbr" not in working.columns:
-        if "opponent" in working.columns:
-            working["opponent_abbr"] = map_normalize_team(
-                working["opponent"].astype(str)
-            )
-        else:
-            working["opponent_abbr"] = pd.Series(pd.NA, index=working.index)
-    opp_map = build_opponent_map()
-    if opp_map:
-        mask = working["opponent_abbr"].isna() | (
-            working["opponent_abbr"].astype(str).str.strip().isin(["", "NAN"])
-        )
-        working.loc[mask, "opponent_abbr"] = working.loc[mask, "team_abbr"].map(
-            opp_map
-        )
-    bye_mask = working["team_abbr"].astype(str).str.upper().eq("BYE")
-    working.loc[bye_mask, "opponent_abbr"] = "BYE"
-    unmatched = (
-        working.loc[
-            working["opponent_abbr"].isna() | (working["opponent_abbr"].astype(str).str.strip() == ""),
-            "team_abbr",
-        ]
-        .dropna()
-        .unique()
-    )
-    for team_code in unmatched:
-        log.warning(
-            "[ODDS-FETCH] Warning: Unmatched opponent for team '%s' → No canonical match.",
-            team_code,
-        )
-    working["team_abbr"] = working["team_abbr"].astype(str).str.upper().str.strip()
-    working["opponent_abbr"] = (
-        working["opponent_abbr"].astype(str).str.upper().str.strip().replace({"": pd.NA, "NAN": pd.NA})
-    )
+            working[col] = normalize_team_series(working[col])
+    for col in ("opponent_abbr", "opponent_team_abbr"):
+        if col in working.columns:
+            working[col] = normalize_team_series(working[col])
+
+    if "team_abbr" not in working.columns and "team" in working.columns:
+        working["team_abbr"] = normalize_team_series(working["team"])
+    if "opponent_abbr" not in working.columns and "opponent" in working.columns:
+        working["opponent_abbr"] = normalize_team_series(working["opponent"])
+    # For any residual unknowns, log once
+    valid_values = CANON_SET | {"BYE", ""}
+    for col in ("team", "opponent"):
+        if col in working.columns:
+            values = working[col].fillna("").astype(str)
+            unknown = sorted({v for v in values.unique() if v and v not in valid_values})
+            if unknown:
+                print(
+                    f"[oddsapi][warn] unknown {col} samples:",
+                    unknown[:10],
+                )
     return working
 
 # Player props → per-event endpoint; game markets → bulk
