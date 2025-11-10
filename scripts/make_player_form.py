@@ -38,7 +38,7 @@ import pandas as pd
 
 from scripts.utils.df_keys import coerce_merge_keys
 
-from scripts._opponent_map import normalize_team_series
+from scripts._opponent_map import dump_norm_debug, normalize_team as _canon_team_series
 from scripts.utils.canonical_names import (
     canonicalize_player_name_safe,
     log_unmapped_variant,
@@ -106,24 +106,6 @@ def _filter_to_season(df: pd.DataFrame, season: int) -> pd.DataFrame:
     numeric = pd.to_numeric(df["season"], errors="coerce")
     mask = numeric.eq(int(season))
     return df.loc[mask].copy()
-
-
-def _canon_team_series(series: pd.Series) -> pd.Series:
-    if series is None:
-        return series
-
-    def _canon(value: object) -> object:
-        if pd.isna(value):
-            return pd.NA
-        text = str(value).strip()
-        if not text:
-            return pd.NA
-        canon = canon_team(text)
-        return canon if canon else pd.NA
-
-    return pd.Series(series.astype("object").apply(_canon), index=series.index, dtype="string")
-
-
 def _attach_player_name_from_props(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return df
@@ -5256,7 +5238,7 @@ def _enforce_player_form_schema(df: pd.DataFrame) -> pd.DataFrame:
 
     for col in ("team", "team_abbr", "opponent", "opponent_abbr", "opp_abbr"):
         if col in out.columns:
-            out[col] = normalize_team_series(out[col])
+            out[col] = _canon_team_series(out[col])
 
     ordered = PLAYER_FORM_REQUIRED_COLUMNS + [
         c for c in out.columns if c not in PLAYER_FORM_REQUIRED_COLUMNS
@@ -5901,6 +5883,34 @@ def _write_player_form_outputs(
     # ------------------------------------------------------------
 
     if player_form.empty:
+        try:
+            debug_path = Path("data/_debug/player_form_mismatch_sample.csv")
+            debug_path.parent.mkdir(parents=True, exist_ok=True)
+            sample_source = pd.DataFrame()
+            if "drop_mask" in locals() and "joined" in locals():
+                sample_cols = [
+                    col
+                    for col in (
+                        "player",
+                        "player_canonical",
+                        "team",
+                        "team_abbr",
+                        "opponent",
+                        "opponent_abbr",
+                    )
+                    if col in joined.columns
+                ]
+                sample_source = joined.loc[drop_mask, sample_cols].copy()
+                if "team" not in sample_source.columns and "team_abbr" in sample_source.columns:
+                    sample_source["team"] = sample_source["team_abbr"]
+                if "opponent" not in sample_source.columns and "opponent_abbr" in sample_source.columns:
+                    sample_source["opponent"] = sample_source["opponent_abbr"]
+            dump_norm_debug(sample_source, str(debug_path))
+        except Exception as debug_err:
+            logger.warning(
+                "[make_player_form] failed to write mismatch sample: %s",
+                debug_err,
+            )
         raise RuntimeError("[make_player_form] final player_form empty; aborting run")
 
     missing_opponent_count = (
@@ -6210,14 +6220,19 @@ def _player_key_from_name(name: object) -> str:
 def build_player_form(season: int = 2025) -> pd.DataFrame:
     roles = pd.read_csv("data/roles_ourlads.csv")
     logs = pd.read_csv("data/player_game_logs.csv")
+    logs_initial_count = len(logs)
+    if "season" in logs.columns:
+        logs = logs[logs["season"] == CURRENT_SEASON].copy()
     sched = pd.read_csv("data/team_week_map.csv")
 
     print(f"[PlayerForm] Loaded {len(roles)} role rows from roles_ourlads.csv")
-    print(f"[PlayerForm] Loaded {len(logs)} game logs before season filter")
+    print(f"[PlayerForm] Loaded {logs_initial_count} game logs before season filter")
     print(f"[PlayerForm] Loaded {len(sched)} schedule rows from team_week_map.csv")
 
-    logs = logs[logs["season"] == 2025].copy()  # restrict season
-    print(f"[PlayerForm] Retained {len(logs)} logs for season 2025")
+    if "season" in logs.columns:
+        print(
+            f"[PlayerForm] Retained {len(logs)} logs for season {CURRENT_SEASON}"
+        )
 
     roles["player_key"] = roles["player"].apply(normalize_name)
     roles["player_clean_key"] = roles["player"].apply(normalize_name)
@@ -6275,9 +6290,9 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
 
     # Overlay opponents using schedule map first, then props map
     try:
-        from scripts._opponent_map import attach_opponent, normalize_team_series
+        from scripts._opponent_map import attach_opponent, normalize_team as _norm_team_helper
         if "team" in pf.columns:
-            pf["team"] = normalize_team_series(pf["team"])
+            pf["team"] = _norm_team_helper(pf["team"])
         pf = attach_opponent(
             pf,
             team_col="team",
