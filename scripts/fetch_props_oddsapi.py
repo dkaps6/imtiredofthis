@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import os, sys, time, argparse, logging, re
+import argparse
+import logging
+import os
+import re
+import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Tuple, Optional, Any, Dict
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
@@ -11,7 +17,7 @@ import requests
 import pandas as pd
 # --- END: mandatory global imports ---
 
-from scripts.make_player_form import canonicalize_name, TEAM_NAME_TO_ABBR, _canon_team
+from scripts.make_player_form import canonicalize_name, TEAM_NAME_TO_ABBR
 from scripts._opponent_map import (
     CANON_SET,
     build_opponent_map,
@@ -36,7 +42,6 @@ OPPONENT_MAP_PATH = DATA_DIR / "opponent_map_from_props.csv"
 ODDS_GAME_DATA_PATH = DATA_DIR / "odds_game.csv"
 ROLES_PATH = Path("data/roles_ourlads.csv")
 NAME_MAP_PATH = DATA_DIR / "player_name_map_from_props.csv"
-TEAM_WEEK_MAP_PATH = DATA_DIR / "team_week_map.csv"
 
 # Known book keys for US (include alias keys we might see from the API)
 US_BOOK_KEYS = {
@@ -167,6 +172,69 @@ def _try_json(r: requests.Response):
         return r.json()
     except Exception:
         return {"text": r.text[:500]}
+
+
+TEAM_FIXES = {
+    "BLT": "BAL",
+    "CLV": "CLE",
+    "HST": "HOU",
+    "ARZ": "ARI",
+    "LA": "LAR",
+    "WSH": "WAS",
+}
+TEAM_FIXES.update({
+    "LVG": "LV",
+    "KAN": "KC",
+    "NWE": "NE",
+    "NOR": "NO",
+    "SFO": "SF",
+    "TAM": "TB",
+    "SDG": "LAC",
+})
+
+
+def _canon_team(x: str) -> str:
+    if not isinstance(x, str):
+        return x
+    x = x.strip().upper()
+    x = TEAM_FIXES.get(x, x)
+    if x in TEAM_NAME_TO_ABBR:
+        return TEAM_NAME_TO_ABBR[x]
+    return x
+
+
+def _to_int_safe(v):
+    try:
+        return int(v)
+    except Exception:
+        return None
+
+
+def _load_team_week_map(season: int):
+    path = "data/team_week_map.csv"
+    if not os.path.exists(path):
+        print("[fetch_props_oddsapi] team_week_map.csv not found; will skip stamping opponents")
+        return None
+    tw = pd.read_csv(path)
+    if "season" in tw.columns:
+        tw = tw[tw["season"].astype(int) == int(season)]
+    for col in ("home_abbr", "away_abbr"):
+        if col in tw.columns:
+            tw[col] = tw[col].map(_canon_team)
+    return tw
+
+
+def _load_roles_ourlads():
+    path = "data/roles_ourlads.csv"
+    if not os.path.exists(path):
+        print("[fetch_props_oddsapi] roles_ourlads.csv not found; cannot stamp team_abbr from roles")
+        return None
+    df = pd.read_csv(path)
+    if "team" in df.columns:
+        df["team"] = df["team"].map(_canon_team)
+    name_col = "player"
+    df["_pn_key"] = df[name_col].astype(str).str.strip().str.lower()
+    return df[["_pn_key", "team"]].drop_duplicates()
 
 
 def _load_player_name_map(path: Path) -> dict[str, str]:
@@ -388,221 +456,6 @@ def _normalize_team_abbr(team: Any) -> str:
     if len(upper) == 3 and upper.isalpha():
         return _canon_team(upper)
     return _canon_team(upper)
-
-
-def _load_player_team_map(season: int) -> dict[str, str]:
-    """Read roles_ourlads.csv and build {player_full_name -> team_abbr}."""
-
-    candidates = [Path("roles_ourlads.csv"), Path("data/roles_ourlads.csv")]
-    df: Optional[pd.DataFrame] = None
-    for path in candidates:
-        if path.exists() and path.stat().st_size > 0:
-            try:
-                df = pd.read_csv(path)
-                break
-            except Exception as err:
-                log.info(f"[fetch_props_oddsapi] failed to read {path}: {err}")
-                return {}
-    if df is None or df.empty:
-        return {}
-    if "team_abbr" not in df.columns and "team" in df.columns:
-        df = df.rename(columns={"team": "team_abbr"})
-    if "team_abbr" not in df.columns or "player" not in df.columns:
-        return {}
-    df["team_abbr"] = df["team_abbr"].astype(str).str.upper()
-    df["player"] = df["player"].astype(str).str.strip()
-    if "season" in df.columns:
-        try:
-            df["season"] = pd.to_numeric(df["season"], errors="coerce").astype("Int64")
-            df = df[df["season"] == season]
-        except Exception:
-            df = df
-    return dict(zip(df["player"], df["team_abbr"]))
-
-
-def _load_team_week_map_frame() -> Optional[pd.DataFrame]:
-    paths = [TEAM_WEEK_MAP_PATH, Path("team_week_map.csv")]
-    for path in paths:
-        if path.exists() and path.stat().st_size > 0:
-            try:
-                df = pd.read_csv(path)
-            except Exception as err:
-                log.info(f"[fetch_props_oddsapi] failed to read {path}: {err}")
-                continue
-            if df is None or df.empty:
-                continue
-            keep = [
-                c
-                for c in [
-                    "season",
-                    "week",
-                    "team",
-                    "opponent",
-                    "home_abbr",
-                    "away_abbr",
-                    "event_id",
-                    "kickoff_utc",
-                    "home_away",
-                ]
-                if c in df.columns
-            ]
-            df = df.loc[:, keep].drop_duplicates() if keep else df.copy()
-            print(f"[fetch_props_oddsapi] Loaded team_week_map: {len(df)} rows")
-            return df
-    return None
-
-
-def _load_team_week_map(
-    season: int, week: Optional[int], tw: Optional[pd.DataFrame] = None
-) -> dict[str, str]:
-    """Read team_week_map.csv and build {team_abbr -> opponent_abbr} for the week."""
-
-    if tw is None:
-        tw = _load_team_week_map_frame()
-    if tw is None or tw.empty:
-        return {}
-
-    tw = tw.copy()
-    tw.columns = [str(c).strip().lower() for c in tw.columns]
-    if "team_abbr" not in tw.columns and "team" in tw.columns:
-        tw = tw.rename(columns={"team": "team_abbr"})
-    if "opponent_abbr" not in tw.columns and "opponent" in tw.columns:
-        tw = tw.rename(columns={"opponent": "opponent_abbr"})
-
-    if {"team_abbr", "opponent_abbr"}.issubset(tw.columns):
-        tw["team_abbr"] = tw["team_abbr"].astype(str)
-        tw["opponent_abbr"] = tw["opponent_abbr"].astype(str)
-    else:
-        return {}
-
-    if "season" in tw.columns:
-        try:
-            tw["season"] = pd.to_numeric(tw["season"], errors="coerce")
-            tw = tw[tw["season"] == season]
-        except Exception:
-            pass
-
-    if "week" in tw.columns:
-        try:
-            tw["week"] = pd.to_numeric(tw["week"], errors="coerce")
-        except Exception:
-            tw["week"] = pd.NA
-    else:
-        tw["week"] = pd.NA
-
-    target_week: Optional[int] = None
-    if week is not None and week > 0:
-        target_week = int(week)
-    else:
-        week_series = tw["week"].dropna()
-        if not week_series.empty:
-            try:
-                target_week = int(week_series.max())
-            except Exception:
-                target_week = None
-
-    if target_week is not None:
-        tw = tw[tw["week"] == target_week]
-
-    mapping: dict[str, str] = {}
-    for _, row in tw.iterrows():
-        t = normalize_team_abbr(str(row.get("team_abbr", "")))
-        o = normalize_team_abbr(str(row.get("opponent_abbr", "")))
-        if t:
-            mapping[t] = o
-    return mapping
-
-
-def _attach_team_and_opponent(props_df: pd.DataFrame, season: int, week: Optional[int]) -> pd.DataFrame:
-    name_to_team = _load_player_team_map(season)
-    tw_frame = _load_team_week_map_frame()
-    team_to_opp = _load_team_week_map(season, week, tw=tw_frame)
-
-    if not name_to_team and not team_to_opp:
-        return props_df
-
-    def team_lookup(player: str) -> str:
-        if player in name_to_team:
-            return name_to_team[player]
-        base = " ".join([p for p in str(player).split() if len(p) > 1])
-        return name_to_team.get(base, "")
-
-    working = props_df.copy()
-    if "player" in working.columns:
-        working["team_abbr"] = working["player"].map(team_lookup).fillna("")
-    else:
-        working["team_abbr"] = ""
-    working["team_abbr"] = working["team_abbr"].astype(str).str.upper().apply(normalize_team_abbr)
-    working["opponent_abbr"] = working["team_abbr"].map(team_to_opp).fillna("")
-
-    if (
-        tw_frame is not None
-        and not tw_frame.empty
-        and "event_id" in working.columns
-        and "event_id" in tw_frame.columns
-    ):
-        events = tw_frame.copy()
-        events = events.dropna(subset=["event_id"])
-        if not events.empty:
-            events["event_id"] = events["event_id"].astype(str).str.strip()
-            events = events[events["event_id"].astype(str).str.len() > 0]
-        if events is not None and not events.empty:
-            if "kickoff_utc" in events.columns:
-                events["kickoff_utc"] = pd.to_datetime(
-                    events["kickoff_utc"], errors="coerce", utc=True
-                )
-            for col in ["home_abbr", "away_abbr"]:
-                if col in events.columns:
-                    events[col] = events[col].astype(str).str.upper().apply(normalize_team_abbr)
-            rename_map = {
-                "home_abbr": "tw_home_abbr",
-                "away_abbr": "tw_away_abbr",
-                "season": "tw_season",
-                "week": "tw_week",
-                "kickoff_utc": "tw_kickoff_utc",
-            }
-            events = events.rename(
-                columns={src: dst for src, dst in rename_map.items() if src in events.columns}
-            )
-            events = (
-                events.sort_values(["event_id"])
-                .drop_duplicates(subset=["event_id"], keep="first")
-            )
-            working = working.merge(events, on="event_id", how="left")
-
-            if "team_abbr" in working.columns:
-                working["team_abbr"] = (
-                    working["team_abbr"].fillna("").astype(str).str.upper().apply(normalize_team_abbr)
-                )
-            else:
-                working["team_abbr"] = ""
-
-            if "opponent_abbr" in working.columns:
-                working["opponent_abbr"] = working["opponent_abbr"].fillna("")
-            else:
-                working["opponent_abbr"] = ""
-
-            def _opp_from_event(row: pd.Series) -> str:
-                team = str(row.get("team_abbr", "") or "").upper()
-                opp = str(row.get("opponent_abbr", "") or "").upper()
-                home = str(row.get("tw_home_abbr", "") or "").upper()
-                away = str(row.get("tw_away_abbr", "") or "").upper()
-                if team and not opp:
-                    if home and team == home:
-                        return away
-                    if away and team == away:
-                        return home
-                return opp
-
-            working["opponent_abbr"] = working.apply(_opp_from_event, axis=1)
-
-    missing_team = int(working["team_abbr"].eq("").sum()) if "team_abbr" in working.columns else len(working)
-    missing_opp = int(working["opponent_abbr"].eq("").sum()) if "opponent_abbr" in working.columns else len(working)
-    print(
-        f"[fetch_props_oddsapi] Missing team for {missing_team} rows; missing opponent for {missing_opp} rows"
-    )
-
-    return working
 
 
 def _load_roster_map() -> dict[str, set[str]]:
@@ -1421,18 +1274,7 @@ def fetch_odds(
     if "team" in props.columns:
         props["opp_team"] = props.apply(_infer_opp, axis=1)
 
-    team_fix = {
-        "BLT": "BAL",
-        "CLV": "CLE",
-        "HST": "HOU",
-        "LVG": "LV",
-        "KAN": "KC",
-        "NWE": "NE",
-        "NOR": "NO",
-        "SFO": "SF",
-        "TAM": "TB",
-        "SDG": "LAC",
-    }
+    team_fix = dict(TEAM_FIXES)
 
     def _apply_team_fix(value: Any) -> Any:
         if isinstance(value, str):
@@ -1463,13 +1305,98 @@ def fetch_odds(
     props = _canonicalize_player_names(props, name_map)
     props = _normalize_teams_and_opponents(props)
 
-    if season_value is not None:
+    # --- Attach team/opponent from authoritative sources ---
+    season_for_stamp = season_value if season_value is not None else _to_int_safe(os.environ.get("SEASON"))
+    if season_for_stamp is None:
         try:
-            props = _attach_team_and_opponent(props, season=season_value, week=week_value)
-        except Exception as err:
-            log.info(f"[fetch_props_oddsapi] team/opponent enrichment failed: {err}")
+            season_for_stamp = _to_int_safe(season)
+        except Exception:
+            season_for_stamp = None
+
+    roles = _load_roles_ourlads()
+    if roles is not None:
+        if "player" in props.columns:
+            props["_pn_key"] = props["player"].astype(str).str.strip().str.lower()
+            roles_merge = roles.rename(columns={"team": "_roles_team"})
+            props = props.merge(roles_merge, on="_pn_key", how="left")
+            if "_roles_team" in props.columns:
+                props["_roles_team"] = props["_roles_team"].map(_canon_team)
+                if "team_abbr" in props.columns:
+                    props["team_abbr"] = props["team_abbr"].fillna(props["_roles_team"])
+                    mask_empty = props["team_abbr"].astype(str).str.strip() == ""
+                    props.loc[mask_empty, "team_abbr"] = props.loc[mask_empty, "_roles_team"]
+                else:
+                    props["team_abbr"] = props["_roles_team"]
+                props.drop(columns=["_roles_team"], inplace=True)
+        else:
+            print("[fetch_props_oddsapi] WARNING: props has no 'player' column; cannot merge roles_ourlads")
+
+    tw = _load_team_week_map(season_for_stamp) if season_for_stamp is not None else None
+    if tw is not None and "team_abbr" in props.columns:
+        keep = [c for c in ["season", "week", "home_abbr", "away_abbr", "event_id", "kickoff_utc"] if c in tw.columns]
+        tw = tw[keep].drop_duplicates() if keep else tw.copy()
+
+        def _mk_row(home, away, wk, eid, ko):
+            home_c = _canon_team(home)
+            away_c = _canon_team(away)
+            return pd.DataFrame({
+                "week": [wk],
+                "team_abbr": [home_c],
+                "opponent_abbr_tw": [away_c],
+                "event_id_tw": [eid],
+                "kickoff_utc_tw": [ko],
+            })
+
+        rows: list[pd.DataFrame] = []
+        for _, r in tw.iterrows():
+            wk = r.get("week")
+            eid = r.get("event_id")
+            ko = r.get("kickoff_utc")
+            h, a = r.get("home_abbr"), r.get("away_abbr")
+            if pd.notna(h):
+                rows.append(_mk_row(h, a, wk, eid, ko))
+            if pd.notna(a):
+                rows.append(_mk_row(a, h, wk, eid, ko))
+        if rows:
+            lut = pd.concat(rows, ignore_index=True)
+            merge_keys = ["team_abbr", "week"] if "week" in props.columns else ["team_abbr"]
+            props = props.merge(lut, on=merge_keys, how="left")
+            for col in ["opponent_abbr", "event_id", "kickoff_utc"]:
+                tw_col = f"{col}_tw"
+                if tw_col in props.columns:
+                    if col in props.columns:
+                        props[col] = props[col].fillna(props[tw_col])
+                        if props[col].dtype == object:
+                            empty_mask = props[col].astype(str).str.strip() == ""
+                            props.loc[empty_mask, col] = props.loc[empty_mask, tw_col]
+                    else:
+                        props[col] = props[tw_col]
+                    props.drop(columns=[tw_col], inplace=True)
+            print(
+                f"[fetch_props_oddsapi] Stamped opponent for {props['opponent_abbr'].notna().sum()} rows "
+                f"(merge keys {merge_keys})"
+            )
+        else:
+            print("[fetch_props_oddsapi] team_week_map produced no rows after normalization")
     else:
-        log.info("[fetch_props_oddsapi] Season unknown → skipping team/opponent enrichment")
+        print("[fetch_props_oddsapi] Skipping opponent stamping (no tw or no team_abbr)")
+
+    if "kickoff_utc" in props.columns:
+        def _to_iso_utc(val: Any):
+            if pd.isna(val):
+                return pd.NA
+            if isinstance(val, datetime):
+                dt = val if val.tzinfo else val.replace(tzinfo=timezone.utc)
+            else:
+                dt = pd.to_datetime(val, utc=True, errors="coerce")
+                if pd.isna(dt):
+                    return val
+                dt = dt.to_pydatetime()
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc).isoformat()
+
+        props["kickoff_utc"] = props["kickoff_utc"].apply(_to_iso_utc)
 
     if "market" in props.columns:
         props["market_type"] = props["market"].astype(str)
@@ -1510,6 +1437,10 @@ def fetch_odds(
     props["player_clean_key"] = props["player"].apply(
         lambda x: re.sub(r"[^a-z]", "", str(x).lower())
     )
+
+    for c in ["_pn_key"]:
+        if c in props.columns:
+            del props[c]
 
     # keep your original file AND write an enriched one for downstream robustness
     props.to_csv("outputs/props_enriched.csv", index=False)
