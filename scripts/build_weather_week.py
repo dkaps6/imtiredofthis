@@ -25,6 +25,7 @@ import requests
 from scripts.utils.stadium_locations import STADIUM_LOCATION
 
 OUT_PATH = Path("data") / "weather_week.csv"
+WEEK = 10
 
 NWS_HEADERS = {
     "User-Agent": "imtiredofthis-weather (+https://github.com/imtiredofthis)",
@@ -692,10 +693,65 @@ def main():
 
     if weather_df.empty:
         logger.warning("[weather] No weather rows generated at all; writing empty file")
+        OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        weather_df.to_csv(OUT_PATH, index=False)
+        print(f"[weather] wrote 0 games -> {OUT_PATH} (fallback_used={fallback_used})")
+        return
+
+    team_rows = []
+    for _, row in weather_df.iterrows():
+        for team_col, opp_col in (("home", "away"), ("away", "home")):
+            team_code = str(row.get(team_col, "")).upper().strip()
+            if not team_code:
+                continue
+            opp_code = str(row.get(opp_col, "")).upper().strip()
+            condition = "DOME" if row.get("indoor") else row.get("conditions_main") or "UNKNOWN"
+            entry = {
+                "team_abbr": team_code,
+                "opponent_abbr": opp_code or pd.NA,
+                "week": WEEK,
+                "stadium": row.get("stadium"),
+                "city": row.get("city"),
+                "state": row.get("state"),
+                "condition": condition,
+                "condition_desc": row.get("conditions_desc"),
+                "temp_f": row.get("temp_F_mean"),
+                "wind_mph": row.get("wind_mph_mean"),
+                "precip_prob": row.get("precip_prob_max"),
+                "forecast_ok": int(bool(row.get("forecast_ok"))) if condition != "DOME" else 0,
+                "notes": row.get("notes"),
+            }
+            team_rows.append(entry)
+
+    team_weather = pd.DataFrame(team_rows).drop_duplicates(subset=["team_abbr", "week"])
+    if team_weather.empty:
+        logger.warning("[weather] No team-level weather rows generated; writing empty file")
+        OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        team_weather.to_csv(OUT_PATH, index=False)
+        print(f"[weather] wrote 0 games -> {OUT_PATH} (fallback_used={fallback_used})")
+        return
+
+    team_weather["team_abbr"] = team_weather["team_abbr"].astype(str).str.upper().str.strip()
+    team_weather["opponent_abbr"] = team_weather["opponent_abbr"].astype(str).str.upper().str.strip().replace({"": pd.NA})
+
+    matched_mask = team_weather["forecast_ok"].fillna(0).astype(int)
+    matched_count = int(matched_mask.sum())
+    total_rows = len(team_weather)
+    dome_count = int((team_weather["condition"].astype(str).str.upper() == "DOME").sum())
+
+    logger.info(
+        "[WEATHER] %d/%d matched successfully, %d dome teams excluded",
+        matched_count,
+        total_rows,
+        dome_count,
+    )
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    weather_df.to_csv(OUT_PATH, index=False)
-    print(f"[weather] wrote {len(weather_df)} games -> {OUT_PATH} (fallback_used={fallback_used})")
+    team_weather.to_csv(OUT_PATH, index=False)
+    print(
+        f"[weather] wrote {len(team_weather)} team rows -> {OUT_PATH} "
+        f"(fallback_used={fallback_used})"
+    )
 
 if __name__ == "__main__":
     main()
