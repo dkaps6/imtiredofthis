@@ -36,6 +36,7 @@ OPPONENT_MAP_PATH = DATA_DIR / "opponent_map_from_props.csv"
 ODDS_GAME_DATA_PATH = DATA_DIR / "odds_game.csv"
 ROLES_PATH = Path("data/roles_ourlads.csv")
 NAME_MAP_PATH = DATA_DIR / "player_name_map_from_props.csv"
+TEAM_WEEK_MAP_PATH = DATA_DIR / "team_week_map.csv"
 
 # Known book keys for US (include alias keys we might see from the API)
 US_BOOK_KEYS = {
@@ -419,19 +420,45 @@ def _load_player_team_map(season: int) -> dict[str, str]:
     return dict(zip(df["player"], df["team_abbr"]))
 
 
-def _load_team_week_map(season: int, week: Optional[int]) -> dict[str, str]:
-    """Read team_week_map.csv and build {team_abbr -> opponent_abbr} for the week."""
-
-    paths = [Path("team_week_map.csv"), Path("data/team_week_map.csv")]
-    tw: Optional[pd.DataFrame] = None
+def _load_team_week_map_frame() -> Optional[pd.DataFrame]:
+    paths = [TEAM_WEEK_MAP_PATH, Path("team_week_map.csv")]
     for path in paths:
         if path.exists() and path.stat().st_size > 0:
             try:
-                tw = pd.read_csv(path)
-                break
+                df = pd.read_csv(path)
             except Exception as err:
                 log.info(f"[fetch_props_oddsapi] failed to read {path}: {err}")
-                return {}
+                continue
+            if df is None or df.empty:
+                continue
+            keep = [
+                c
+                for c in [
+                    "season",
+                    "week",
+                    "team",
+                    "opponent",
+                    "home_abbr",
+                    "away_abbr",
+                    "event_id",
+                    "kickoff_utc",
+                    "home_away",
+                ]
+                if c in df.columns
+            ]
+            df = df.loc[:, keep].drop_duplicates() if keep else df.copy()
+            print(f"[fetch_props_oddsapi] Loaded team_week_map: {len(df)} rows")
+            return df
+    return None
+
+
+def _load_team_week_map(
+    season: int, week: Optional[int], tw: Optional[pd.DataFrame] = None
+) -> dict[str, str]:
+    """Read team_week_map.csv and build {team_abbr -> opponent_abbr} for the week."""
+
+    if tw is None:
+        tw = _load_team_week_map_frame()
     if tw is None or tw.empty:
         return {}
 
@@ -488,7 +515,8 @@ def _load_team_week_map(season: int, week: Optional[int]) -> dict[str, str]:
 
 def _attach_team_and_opponent(props_df: pd.DataFrame, season: int, week: Optional[int]) -> pd.DataFrame:
     name_to_team = _load_player_team_map(season)
-    team_to_opp = _load_team_week_map(season, week)
+    tw_frame = _load_team_week_map_frame()
+    team_to_opp = _load_team_week_map(season, week, tw=tw_frame)
 
     if not name_to_team and not team_to_opp:
         return props_df
@@ -506,6 +534,67 @@ def _attach_team_and_opponent(props_df: pd.DataFrame, season: int, week: Optiona
         working["team_abbr"] = ""
     working["team_abbr"] = working["team_abbr"].astype(str).str.upper().apply(normalize_team_abbr)
     working["opponent_abbr"] = working["team_abbr"].map(team_to_opp).fillna("")
+
+    if (
+        tw_frame is not None
+        and not tw_frame.empty
+        and "event_id" in working.columns
+        and "event_id" in tw_frame.columns
+    ):
+        events = tw_frame.copy()
+        events = events.dropna(subset=["event_id"])
+        if not events.empty:
+            events["event_id"] = events["event_id"].astype(str).str.strip()
+            events = events[events["event_id"].astype(str).str.len() > 0]
+        if events is not None and not events.empty:
+            if "kickoff_utc" in events.columns:
+                events["kickoff_utc"] = pd.to_datetime(
+                    events["kickoff_utc"], errors="coerce", utc=True
+                )
+            for col in ["home_abbr", "away_abbr"]:
+                if col in events.columns:
+                    events[col] = events[col].astype(str).str.upper().apply(normalize_team_abbr)
+            rename_map = {
+                "home_abbr": "tw_home_abbr",
+                "away_abbr": "tw_away_abbr",
+                "season": "tw_season",
+                "week": "tw_week",
+                "kickoff_utc": "tw_kickoff_utc",
+            }
+            events = events.rename(
+                columns={src: dst for src, dst in rename_map.items() if src in events.columns}
+            )
+            events = (
+                events.sort_values(["event_id"])
+                .drop_duplicates(subset=["event_id"], keep="first")
+            )
+            working = working.merge(events, on="event_id", how="left")
+
+            if "team_abbr" in working.columns:
+                working["team_abbr"] = (
+                    working["team_abbr"].fillna("").astype(str).str.upper().apply(normalize_team_abbr)
+                )
+            else:
+                working["team_abbr"] = ""
+
+            if "opponent_abbr" in working.columns:
+                working["opponent_abbr"] = working["opponent_abbr"].fillna("")
+            else:
+                working["opponent_abbr"] = ""
+
+            def _opp_from_event(row: pd.Series) -> str:
+                team = str(row.get("team_abbr", "") or "").upper()
+                opp = str(row.get("opponent_abbr", "") or "").upper()
+                home = str(row.get("tw_home_abbr", "") or "").upper()
+                away = str(row.get("tw_away_abbr", "") or "").upper()
+                if team and not opp:
+                    if home and team == home:
+                        return away
+                    if away and team == away:
+                        return home
+                return opp
+
+            working["opponent_abbr"] = working.apply(_opp_from_event, axis=1)
 
     missing_team = int(working["team_abbr"].eq("").sum()) if "team_abbr" in working.columns else len(working)
     missing_opp = int(working["opponent_abbr"].eq("").sum()) if "opponent_abbr" in working.columns else len(working)
