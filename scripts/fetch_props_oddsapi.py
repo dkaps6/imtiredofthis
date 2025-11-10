@@ -1284,8 +1284,48 @@ def fetch_odds(
     remaining_cols = [col for col in props.columns if col not in required_cols]
     props = props[required_cols + remaining_cols]
 
+    props["player_clean_key"] = props["player"].apply(
+        lambda x: re.sub(r"[^a-z]", "", str(x).lower())
+    )
+
+    try:
+        team_week_map = pd.read_csv("data/team_week_map.csv")
+    except FileNotFoundError:
+        log.info("team_week_map.csv not found; skipping opponent merge")
+        team_week_map = pd.DataFrame()
+    except Exception as exc:
+        log.info(f"failed to read team_week_map.csv: {exc}")
+        team_week_map = pd.DataFrame()
+
+    if not team_week_map.empty and {"event_id", "team", "opponent"}.issubset(
+        team_week_map.columns
+    ):
+        schedule = team_week_map[["event_id", "team", "opponent"]].copy()
+        schedule["event_id"] = schedule["event_id"].astype(str)
+        props = props.merge(
+            schedule,
+            on="event_id",
+            how="left",
+            suffixes=("", "_schedule"),
+        )
+        if "team_schedule" in props.columns:
+            if "team" in props.columns:
+                props["team"] = props["team"].fillna(props["team_schedule"])
+            else:
+                props["team"] = props["team_schedule"]
+            props.drop(columns=["team_schedule"], inplace=True)
+        if "opponent_schedule" in props.columns:
+            if "opponent" in props.columns:
+                props["opponent"] = props["opponent"].fillna(
+                    props["opponent_schedule"]
+                )
+            else:
+                props["opponent"] = props["opponent_schedule"]
+            props.drop(columns=["opponent_schedule"], inplace=True)
+
     # keep your original file AND write an enriched one for downstream robustness
     props.to_csv("outputs/props_enriched.csv", index=False)
+    props.to_csv(DATA_DIR / "props_enriched.csv", index=False)
     # --- END: enrich props with opponent from odds_game ---
 
     # --- BEGIN: fall back to team_week_map (week 10) when opponents still missing ---
