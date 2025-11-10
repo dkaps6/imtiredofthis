@@ -63,6 +63,9 @@ TEAM_FORM_PATH = Path("data/team_form.csv")
 MANUAL_OVERRIDES_PATH = os.getenv("MANUAL_OVERRIDES_PATH", "data/manual_name_overrides.csv")
 
 
+CURRENT_SEASON = 2025
+
+
 CANON_OVERRIDES = {
     # Common problem mappings (extend this dict as needed):
     "mharrrison": "marvin harrison jr",
@@ -89,6 +92,16 @@ NAME_OVERRIDES = {
     "D.ADAMS": "Davante Adams",
     "DADAMS": "Davante Adams",
 }
+
+
+def _filter_to_season(df: pd.DataFrame, season: int) -> pd.DataFrame:
+    """Limit a DataFrame to rows matching the provided season value."""
+
+    if df is None or df.empty or "season" not in df.columns:
+        return df
+    numeric = pd.to_numeric(df["season"], errors="coerce")
+    mask = numeric.eq(int(season))
+    return df.loc[mask].copy()
 
 
 def _canon_team_series(series: pd.Series) -> pd.Series:
@@ -5256,7 +5269,17 @@ def _write_player_form_outputs(
                 pass
         raise RuntimeError("season could not be resolved")
 
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logger.setLevel(logging.INFO)
+
     season = _resolve_season(df, slate_date, season)
+    if season != CURRENT_SEASON:
+        logger.info(
+            "[PLAYER-FORM] overriding season %s with %s for export",
+            season,
+            CURRENT_SEASON,
+        )
+    season = CURRENT_SEASON
 
     # Final safety: drop any duplicated column names
     df = df.loc[:, ~df.columns.duplicated(keep="first")]
@@ -5675,6 +5698,105 @@ def _write_player_form_outputs(
         team_week_map=TEAM_WEEK_MAP_PATH,
         props_map=OPPONENT_MAP_PATH,
     )
+
+    game_logs = _filter_to_season(game_logs, CURRENT_SEASON)
+    season_totals = _filter_to_season(season_totals, CURRENT_SEASON)
+    player_form = _filter_to_season(player_form, CURRENT_SEASON)
+
+    if "team_abbr" not in player_form.columns:
+        player_form["team_abbr"] = player_form.get("team", pd.Series(dtype="string"))
+    player_form["team_abbr"] = (
+        player_form["team_abbr"].astype("string").str.upper().str.strip()
+    )
+    if "player_key" not in player_form.columns:
+        name_source = None
+        for candidate in ("player_name", "player_canonical", "player"):
+            if candidate in player_form.columns:
+                name_source = player_form[candidate].astype("string")
+                break
+        if name_source is None:
+            name_source = pd.Series("", index=player_form.index, dtype="string")
+        player_form["player_key"] = name_source.fillna("").apply(make_player_key)
+    else:
+        player_form["player_key"] = (
+            player_form["player_key"].astype("string").fillna("")
+        ).apply(make_player_key)
+
+    roles_lookup = pd.DataFrame()
+    try:
+        if ROLES_PATH.exists() and ROLES_PATH.stat().st_size > 0:
+            roles_lookup = pd.read_csv(ROLES_PATH)
+    except Exception as err:
+        logger.warning(
+            "[PLAYER-FORM] roles merge skipped; unable to read %s (%s)",
+            ROLES_PATH,
+            err,
+        )
+        roles_lookup = pd.DataFrame()
+
+    if not roles_lookup.empty and {"team", "player_key"}.issubset(roles_lookup.columns):
+        roles_lookup = roles_lookup.copy()
+        roles_lookup["team"] = (
+            roles_lookup["team"].astype(str).str.upper().str.strip()
+        )
+        roles_lookup["player_key"] = (
+            roles_lookup["player_key"].astype(str).str.strip()
+        )
+        roles_lookup = roles_lookup.rename(columns={"player": "roles_player"})
+        merge_cols = [c for c in ("team", "player_key", "roles_player") if c in roles_lookup.columns]
+        roles_lookup = roles_lookup[merge_cols].dropna(subset=["team", "player_key"])
+        joined = player_form.merge(
+            roles_lookup,
+            left_on=["player_key", "team_abbr"],
+            right_on=["player_key", "team"],
+            how="left",
+            suffixes=("", "_roles"),
+        )
+    else:
+        joined = player_form.copy()
+        joined["roles_player"] = pd.NA
+
+    missing_team_mask = joined["team_abbr"].isna() | (
+        joined["team_abbr"].astype(str).str.strip() == ""
+    )
+    mismatch_mask = joined.get("roles_player").isna()
+    drop_mask = missing_team_mask | mismatch_mask
+    dropped_mismatch = int(drop_mask.sum())
+
+    filtered_form = joined.loc[~drop_mask].copy()
+
+    if "roles_player" in filtered_form.columns:
+        if "player_name" in filtered_form.columns:
+            filtered_form["player_name"] = filtered_form["player_name"].astype("string").fillna(
+                filtered_form["roles_player"]
+            )
+        else:
+            filtered_form["player_name"] = filtered_form["roles_player"].astype("string")
+        if "player_canonical" in filtered_form.columns:
+            filtered_form["player_canonical"] = filtered_form["player_canonical"].astype("string").fillna(
+                filtered_form["player_name"].astype("string")
+            )
+
+    dedup_cols = [col for col in ["player_key", "team_abbr"] if col in filtered_form.columns]
+    if len(dedup_cols) == 2:
+        sort_cols = dedup_cols + (
+            ["week"] if "week" in filtered_form.columns else []
+        )
+        filtered_form = (
+            filtered_form.sort_values(sort_cols)
+            .drop_duplicates(subset=dedup_cols, keep="last")
+            .reset_index(drop=True)
+        )
+
+    filtered_form.drop(columns=["team_roles", "roles_player"], inplace=True, errors="ignore")
+
+    logger.info(
+        "[PLAYER-FORM] %d players written, %d dropped (team mismatch)",
+        len(filtered_form),
+        dropped_mismatch,
+    )
+
+    player_form = filtered_form
 
     PLAYER_GAME_LOGS_OUT.parent.mkdir(parents=True, exist_ok=True)
     game_logs.to_csv(PLAYER_GAME_LOGS_OUT, index=False)

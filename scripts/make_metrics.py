@@ -21,6 +21,7 @@ Output:
 """
 
 import argparse
+import logging
 import os
 import re
 import sys
@@ -33,7 +34,7 @@ import pandas as pd
 
 from scripts.utils.df_keys import coerce_merge_keys
 
-from scripts._opponent_map import attach_opponent
+from scripts._opponent_map import attach_opponent, build_opponent_map
 from scripts.make_player_form import canonicalize_name
 from scripts.utils.name_clean import canonical_key
 
@@ -279,6 +280,8 @@ def merge_opponent_map(base_df: pd.DataFrame) -> pd.DataFrame:
 DATA_DIR = "data"
 DATA_PATH = Path(DATA_DIR)
 METRICS_OUT_PATH = DATA_PATH / "metrics_ready.csv"
+METRICS_EXPORT_PATH = DATA_PATH / "make_metrics_output.csv"
+WEEK = 10
 TEAM_FORM_PATH = DATA_PATH / "team_form.csv"
 PLAYER_FORM_PATH = DATA_PATH / "player_form.csv"
 PLAYER_CONS_PATH = DATA_PATH / "player_form_consensus.csv"
@@ -1932,6 +1935,9 @@ REQUIRED_INPUTS: dict[str, Path] = {
     "team_form": TEAM_FORM_PATH,
     "player_form": PLAYER_FORM_PATH,
     "player_form_consensus": PLAYER_CONS_PATH,
+    "props_raw": DATA_PATH / "props_raw.csv",
+    "weather": WEATHER_PATH,
+    "opponent_map": DATA_PATH / "_opponent_map.csv",
 }
 
 OPTIONAL_INPUTS: dict[str, Path] = {
@@ -1946,6 +1952,21 @@ OPTIONAL_INPUTS: dict[str, Path] = {
 
 def _validate_core_inputs() -> bool:
     for label, path in REQUIRED_INPUTS.items():
+        if label == "opponent_map" and not path.exists():
+            mapping = build_opponent_map()
+            if mapping:
+                df_map = (
+                    pd.DataFrame(
+                        [{"team": team, "opponent": opponent} for team, opponent in mapping.items()]
+                    )
+                    .dropna(subset=["team"])
+                    .drop_duplicates(subset=["team"], keep="first")
+                )
+                path.parent.mkdir(parents=True, exist_ok=True)
+                df_map.to_csv(path, index=False)
+            else:
+                print(f"[make_metrics] FATAL: opponent map missing and could not be generated ({path})")
+                return False
         try:
             df = pd.read_csv(path)
         except FileNotFoundError:
@@ -1970,10 +1991,75 @@ def _log_optional_inputs() -> None:
             print(f"[make_metrics] WARN: optional input '{label}' missing or empty ({path})")
 
 
+def _finalize_metrics_table(metrics: pd.DataFrame, season: int) -> tuple[pd.DataFrame, int, int]:
+    """Clean and filter the merged metrics table for downstream consumption."""
+
+    if metrics is None:
+        return pd.DataFrame(), 0, 0
+    working = metrics.copy()
+
+    if "team_abbr" in working.columns:
+        working["team_abbr"] = working["team_abbr"].astype(str).str.upper().str.strip()
+    elif "team" in working.columns:
+        working["team_abbr"] = working["team"].astype(str).str.upper().str.strip()
+    else:
+        working["team_abbr"] = ""
+
+    if "player_canonical" in working.columns:
+        working["player_canonical"] = working["player_canonical"].astype(str).str.strip()
+    elif "player" in working.columns:
+        working["player_canonical"] = working["player"].astype(str).apply(canonicalize_name)
+    else:
+        working["player_canonical"] = ""
+
+    if "opponent_abbr" in working.columns:
+        opponent_series = working["opponent_abbr"].astype(str).str.upper().str.strip()
+    elif "opponent" in working.columns:
+        opponent_series = working["opponent"].astype(str).str.upper().str.strip()
+    else:
+        opponent_series = pd.Series("", index=working.index)
+
+    missing_opponent_mask = opponent_series.eq("") | opponent_series.eq("NAN") | opponent_series.isna()
+    missing_player_mask = working["player_canonical"].eq("") | working["player_canonical"].isna()
+    missing_opponents = int(missing_opponent_mask.sum())
+    missing_players = int(missing_player_mask.sum())
+
+    working.loc[missing_opponent_mask, "opponent_abbr"] = pd.NA
+    working.loc[~missing_opponent_mask, "opponent_abbr"] = opponent_series.loc[
+        ~missing_opponent_mask
+    ]
+
+    cleaned = working.loc[~missing_opponent_mask & ~missing_player_mask].copy()
+
+    cleaned["week"] = WEEK
+    cleaned["team_abbr"] = cleaned["team_abbr"].astype(str).str.upper().str.strip()
+    cleaned["player_canonical"] = cleaned["player_canonical"].astype(str).str.strip()
+
+    player_count = cleaned["player_canonical"].nunique(dropna=True)
+    team_count = cleaned["team_abbr"].nunique(dropna=True)
+
+    logging.getLogger(__name__).info(
+        "[METRICS] Merged %d players x %d teams x Week %d",
+        player_count,
+        team_count,
+        WEEK,
+    )
+    logging.getLogger(__name__).info(
+        "[METRICS] Missing opponents: %d | Missing players: %d | Final rows: %d",
+        missing_opponents,
+        missing_players,
+        len(cleaned),
+    )
+
+    return cleaned, missing_opponents, missing_players
+
+
 def main(args: argparse.Namespace) -> int:
     if not isinstance(args.season, int):
         print("[make_metrics] FATAL: season must be an integer")
         return 1
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     _safe_mkdir(DATA_DIR)
 
@@ -2041,9 +2127,14 @@ def main(args: argparse.Namespace) -> int:
                 f"[make_metrics] WARN: WR–CB matchup file not found for Week {current_week} ({wr_cb_path})"
             )
 
+    metrics, _, _ = _finalize_metrics_table(metrics, args.season)
+
     METRICS_OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     metrics.to_csv(METRICS_OUT_PATH, index=False)
+    METRICS_EXPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    metrics.to_csv(METRICS_EXPORT_PATH, index=False)
     print(f"[make_metrics] Wrote {len(metrics)} rows → {METRICS_OUT_PATH}")
+    print(f"[make_metrics] Wrote {len(metrics)} rows → {METRICS_EXPORT_PATH}")
     return 0
 
 

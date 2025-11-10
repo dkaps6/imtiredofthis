@@ -21,6 +21,7 @@
 #     removes "cc", "ps", "ir", "pup", "22/5", "U/LAC", "(R)", etc.
 # - Canonicalizes team abbreviations (BUF, KC, WAS, etc.)
 
+import logging
 import os, re, time, warnings, sys
 from collections import Counter
 from typing import Dict, List, Optional, Tuple
@@ -31,6 +32,8 @@ from bs4 import BeautifulSoup, Tag
 
 DATA_DIR = "data"
 OUT_ROLES = os.path.join(DATA_DIR, "roles_ourlads.csv")
+
+logger = logging.getLogger("ourlads_depth")
 
 # canonical team set
 VALID = {
@@ -113,20 +116,7 @@ SKILL_GROUPS = {"QB", "RB", "WR", "TE", "FB"}
 
 
 def canonical_player_key(full_name: str) -> str:
-    """
-    "ZAY CC JONES"      -> "Zjones"
-    "Darnell U Mooney"  -> "Dmooney"
-    "JOE T FLACCO"      -> "Jflacco"
-    "Kyle Pitts Sr."    -> "Kpitts"
-    Behavior:
-    - strip '.' and "'"
-    - split on whitespace
-    - drop anything in DROP_TOKENS
-    - first remaining token = first name
-    - last remaining token = last name
-    - build key = first_initial + last_name
-    - lowercase then capitalize first char
-    """
+    """Return the canonical player key (first initial + last name, no punctuation)."""
 
     if not isinstance(full_name, str):
         return ""
@@ -144,8 +134,23 @@ def canonical_player_key(full_name: str) -> str:
     last = parts[-1]
     if not first or not last:
         return ""
-    key = (first[0] + last).lower()
-    return key[0].upper() + key[1:]
+    last_letters = re.sub(r"[^A-Za-z]", "", last)
+    if not last_letters:
+        return ""
+    key = f"{first[0].upper()}{last_letters.title().replace(' ', '')}"
+    return key
+
+
+def _strip_name_suffix(raw: str) -> str:
+    """Remove trailing numeric/letter suffixes introduced by OurLads scraping artifacts."""
+
+    if not raw:
+        return raw
+    working = raw.strip()
+    match = re.match(r"([A-Za-z\-']+?)(?:\d+[A-Za-z]*)?$", working)
+    if match:
+        return match.group(1)
+    return working
 
 
 def clean_ourlads_name(raw: str) -> str:
@@ -177,6 +182,7 @@ def clean_ourlads_name(raw: str) -> str:
             continue
         if len(lower) == 1:  # middle initial
             continue
+        piece = _strip_name_suffix(piece)
         clean_piece = re.sub(r"[^A-Za-z\-']", "", piece)
         clean_piece = clean_piece.strip("'")
         if not clean_piece:
@@ -296,6 +302,24 @@ def map_role(base_pos: str, depth_slot: str):
 
 # --- HTTP fetch with retries -------------------------------------------------
 
+def _normalized_role(base_pos: str, pos_group: str, depth_idx: Optional[int]) -> str:
+    """Return a normalized role label (e.g., WR1, RB2) for downstream merges."""
+
+    base = (base_pos or "").upper().strip()
+    group = (pos_group or base).upper().strip()
+    if base in {"LWR", "RWR", "SWR"}:
+        mapping = {"LWR": "WR1", "RWR": "WR2", "SWR": "WR3"}
+        return mapping.get(base, f"WR{depth_idx or 1}")
+    if group == "WR" and depth_idx:
+        return f"WR{depth_idx}"
+    if group in {"QB", "RB", "TE", "FB"}:
+        if depth_idx:
+            return f"{group}{depth_idx}"
+        return f"{group}1"
+    return group or base
+
+
+
 def _get_html(url: str, max_tries: int = 3, backoff: float = 0.8) -> str:
     last = None
     for i in range(1, max_tries+1):
@@ -409,7 +433,6 @@ def fetch_team_roles(team: str, soup: BeautifulSoup, include_inactive: bool) -> 
 
     records: List[dict] = []
     team_code = _canon_team(team)
-    wr_seen = 0
 
     for tr in data_rows:
         tds = tr.find_all("td")
@@ -426,13 +449,23 @@ def fetch_team_roles(team: str, soup: BeautifulSoup, include_inactive: bool) -> 
         for idx, slot_label in slot_idxs:
             if idx >= len(tds):
                 continue
-            cell_text = BeautifulSoup(tds[idx].decode_contents(), "lxml").get_text(" ", strip=True)
+            cell_text = BeautifulSoup(tds[idx].decode_contents(), "lxml").get_text(
+                " ", strip=True
+            )
             candidates = _split_candidates(cell_text)
             if not candidates:
                 continue
-            raw_player_name = candidates[0]
-            player_clean = clean_ourlads_name(raw_player_name)
-            if not player_clean or len(player_clean.split()) < 2:
+
+            chosen_name: Optional[str] = None
+            for candidate in candidates:
+                text_lower = candidate.lower().strip()
+                if not candidate or "injured" in text_lower:
+                    continue
+                cleaned_candidate = clean_ourlads_name(candidate)
+                if cleaned_candidate and len(cleaned_candidate.split()) >= 2:
+                    chosen_name = cleaned_candidate
+                    break
+            if not chosen_name:
                 continue
 
             depth_idx = _slot_depth(slot_label)
@@ -441,46 +474,32 @@ def fetch_team_roles(team: str, soup: BeautifulSoup, include_inactive: bool) -> 
             if status == "inactive" and not include_inactive:
                 continue
 
-            model_role = map_role(base_pos, slot_label)
-            if model_role is None and pos_group == "WR" and depth_idx:
-                if base_pos in {"LWR", "RWR", "SWR"} and depth_idx > 1:
-                    model_role = f"WR{depth_idx + 2}"
-                else:
-                    model_role = f"WR{depth_idx}"
-            if model_role is None and pos_group in {"RB", "QB", "TE", "FB"} and depth_idx:
-                model_role = f"{pos_group}{depth_idx}"
+            normalized_role = map_role(base_pos, slot_label) or _normalized_role(
+                base_pos, pos_group, depth_idx
+            )
 
-            fallback_wr_role = None
-            if base_pos == "WR" and slot_label.strip().lower() == "player 1":
-                fallback_wr_role = {0: "WR1", 1: "WR2", 2: "WR3"}.get(wr_seen)
-                if fallback_wr_role:
-                    model_role = fallback_wr_role
-
-            role_out = model_role or depth_role
-            if fallback_wr_role:
-                role_out = fallback_wr_role
-
-            records.append({
-                "team": team_code,
-                "player": player_clean,
-                "position": base_pos,
-                "position_group": pos_group,
-                "depth_slot": slot_label,
-                "depth_index": depth_idx,
-                "depth_chart_role": depth_role,
-                "role": role_out,
-                "model_role": model_role or role_out,
-                "status": status,
-            })
-
-            if fallback_wr_role:
-                wr_seen += 1
+            records.append(
+                {
+                    "team": team_code,
+                    "player": chosen_name,
+                    "position": base_pos,
+                    "position_group": pos_group,
+                    "depth_slot": slot_label,
+                    "depth_index": depth_idx,
+                    "depth_chart_role": depth_role,
+                    "role": normalized_role,
+                    "model_role": normalized_role,
+                    "status": status,
+                }
+            )
 
     return records
 
 
 def main(*, season: Optional[int] = None, include_inactive: bool = False):
     warnings.simplefilter("ignore")
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logger.setLevel(logging.INFO)
     os.makedirs(DATA_DIR, exist_ok=True)
 
     all_rows: List[dict] = []
@@ -490,11 +509,11 @@ def main(*, season: Optional[int] = None, include_inactive: bool = False):
             soup = _get_depth_soup(tm)
             team_rows = fetch_team_roles(tm, soup, include_inactive)
             if not team_rows:
-                print(f"[ourlads_depth] NOTE: 0 Player 1 rows for {tm}", file=sys.stderr)
+                logger.warning("[OUR-LADS] %s returned zero skill players", tm)
             else:
                 all_rows.extend(team_rows)
         except Exception as e:
-            print(f"[ourlads_depth] WARN: failed {tm}: {e}", flush=True)
+            logger.warning("[OUR-LADS] %s fetch failed: %s", tm, e)
         time.sleep(0.5)  # don't hammer
 
     if all_rows:
@@ -536,46 +555,24 @@ def main(*, season: Optional[int] = None, include_inactive: bool = False):
         )
         roles_all["depth_chart_role"] = roles_all["depth_chart_role"].replace({"": pd.NA, "NAN": pd.NA})
 
-        # remove dupes like same player under multiple slots/alignment entries
-        roles_all = roles_all.drop_duplicates(
-            subset=["team", "player", "depth_chart_role"], keep="first"
-        )
-
-        offense_roles = {"QB1", "RB1", "WR1", "WR2", "WR3", "TE1"}
-        roles_all = roles_all[roles_all["role"].isin(offense_roles)].copy()
-
-        pos_priority = {"QB": 0, "RB": 1, "WR": 2, "TE": 3, "FB": 4}
-        role_priority = {
-            "QB1": 0,
-            "RB1": 1,
-            "WR1": 2,
-            "WR2": 3,
-            "WR3": 4,
-            "TE1": 5,
-        }
-        roles_all["_pos_rank"] = roles_all["position_group"].map(pos_priority).fillna(99)
-        roles_all["_role_rank"] = roles_all["role"].map(role_priority).fillna(99)
         if "depth_index" in roles_all.columns:
             roles_all["depth_index"] = pd.to_numeric(
                 roles_all["depth_index"], errors="coerce"
             )
         else:
             roles_all["depth_index"] = pd.NA
-        roles_all["_depth_rank"] = roles_all["depth_index"].fillna(99)
         roles_all = roles_all.sort_values(
             [
                 "team",
-                "player",
-                "_pos_rank",
-                "_depth_rank",
-                "_role_rank",
+                "position_group",
+                "depth_index",
                 "role",
-                "depth_chart_role",
+                "player",
             ]
         )
-        # keep strongest role encountered for each player (Player 1 slot first)
-        roles_all = roles_all.drop_duplicates(subset=["team", "player"], keep="first")
-        roles_all = roles_all.drop(columns=["_pos_rank", "_role_rank", "_depth_rank"])
+        roles_all = roles_all.drop_duplicates(
+            subset=["team", "player", "role"], keep="first"
+        )
 
     roles_all["player_key"] = roles_all["player"].apply(canonical_player_key)
     cols = [
@@ -593,15 +590,34 @@ def main(*, season: Optional[int] = None, include_inactive: bool = False):
     ]
     cols = [c for c in cols if c is not None and c in roles_all.columns]
     output_df = roles_all[cols].copy()
+    if output_df.empty:
+        logger.warning("[OUR-LADS] No active offensive players parsed; output will be empty")
+    else:
+        order = ["WR", "RB", "TE", "QB", "FB"]
+        for team_code, group in output_df.groupby("team"):
+            pos_series = group.get("position_group")
+            if pos_series is None:
+                pos_series = pd.Series(dtype=str)
+            pos_counts = Counter(
+                str(val).upper().strip()
+                for val in pos_series.dropna().astype(str)
+                if str(val).strip()
+            )
+            breakdown = ", ".join(
+                f"{pos}:{pos_counts[pos]}" for pos in order if pos_counts.get(pos)
+            )
+            logger.info(
+                f"[OUR-LADS] {team_code}: {len(group)} active players ({breakdown})"
+                if breakdown
+                else f"[OUR-LADS] {team_code}: {len(group)} active players"
+            )
+
     output_df.to_csv(OUT_ROLES, index=False)
-    counts: Counter = Counter()
-    pos_values = output_df.get("position_group")
-    if pos_values is not None:
-        counts = Counter(
-            [val for val in pos_values.dropna().astype(str) if str(val).strip()]
-        )
-    print(
-        f"[ourlads_depth] wrote rows={len(output_df)} groups={dict(counts)} (include_inactive={include_inactive}) → {OUT_ROLES}"
+    logger.info(
+        "[OUR-LADS] wrote %d rows → %s (include_inactive=%s)",
+        len(output_df),
+        OUT_ROLES,
+        include_inactive,
     )
 
 if __name__ == "__main__":
