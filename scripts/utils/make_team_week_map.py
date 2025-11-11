@@ -6,10 +6,44 @@ import argparse
 from pathlib import Path
 from typing import Optional, Tuple
 
-import pandas as pd
+import io
+import gzip
+import os
 
-from scripts._opponent_map import normalize_team_series
+import pandas as pd
+import requests
+
 from scripts.utils.name_clean import normalize_team
+
+NFLVERSE_SCHED_URL = "https://raw.githubusercontent.com/nflverse/nflfastR-data/master/schedules/sched_{season}.csv.gz"
+SCHED_DIR = Path("data/schedules")  # new per-season cache
+LEGACY_SCHED = Path("data/schedule.csv")  # legacy single-file schedule
+
+_EXPECTED_COLS = {"season", "week", "gameday", "game_id", "home_team", "away_team"}
+
+
+def _validate_schedule(df: pd.DataFrame) -> pd.DataFrame:
+    if not _EXPECTED_COLS.issubset(set(df.columns)):
+        raise ValueError(
+            "schedule missing columns; have="
+            f"{sorted(df.columns)} need={sorted(_EXPECTED_COLS)}"
+        )
+    df = df.loc[:, sorted(list(_EXPECTED_COLS))].copy()
+    df["season"] = df["season"].astype(int)
+    return df
+
+
+def _fetch_schedule_nflverse(season: int) -> pd.DataFrame:
+    url = NFLVERSE_SCHED_URL.format(season=season)
+    SCHED_DIR.mkdir(parents=True, exist_ok=True)
+    r = requests.get(url, timeout=30)
+    if r.status_code != 200 or not r.content:
+        raise RuntimeError(
+            f"nflverse schedule fetch failed: {url} status={r.status_code}"
+        )
+    with gzip.open(io.BytesIO(r.content), "rt", encoding="utf-8") as f:
+        df = pd.read_csv(f)
+    return _validate_schedule(df)
 
 DATA_DIR = Path("data")
 TEAM_WEEK_PATH = DATA_DIR / "team_week_map.csv"
@@ -98,6 +132,8 @@ def _prepare_schedule_rows(df: pd.DataFrame, season: int) -> pd.DataFrame:
 
     if "kickoff_utc" not in working.columns and "commence_time" in working.columns:
         working.rename(columns={"commence_time": "kickoff_utc"}, inplace=True)
+    if "kickoff_utc" not in working.columns and "gameday" in working.columns:
+        working.rename(columns={"gameday": "kickoff_utc"}, inplace=True)
     if "kickoff" in working.columns and "kickoff_utc" not in working.columns:
         working.rename(columns={"kickoff": "kickoff_utc"}, inplace=True)
     working["kickoff_utc"] = pd.to_datetime(working.get("kickoff_utc"), utc=True, errors="coerce")
@@ -151,40 +187,60 @@ def _prepare_schedule_rows(df: pd.DataFrame, season: int) -> pd.DataFrame:
 
 
 def _load_or_build_schedule_source(season: int) -> pd.DataFrame:
-    """Return schedule with columns: season, week, team, opponent, home_away, kickoff_utc, event_id, bye (bool)."""
-    DATA = Path("data")
-    DATA.mkdir(parents=True, exist_ok=True)
-    cache_csv = DATA / "schedule.csv"
+    """
+    Load a valid schedule frame. Priority:
+      1) Valid per-season cache at data/schedules/schedule_{season}.csv
+      2) Valid legacy data/schedule.csv (auto-migrate → per-season cache)
+      3) Fetch from nflverse, validate, cache
+    Any invalid/empty cache is discarded and refetched.
+    """
 
-    if cache_csv.exists():
-        sch = pd.read_csv(cache_csv)
-        if "season" in sch and sch["season"].eq(season).any():
-            return sch[sch["season"] == season].copy()
+    SCHED_DIR.mkdir(parents=True, exist_ok=True)
+    cache_csv = SCHED_DIR / f"schedule_{season}.csv"
 
-    # Try nfl_data_py first (no auth)
-    try:
-        import nfl_data_py as nfl
+    # 1) Prefer per-season cache if it exists & is non-empty
+    if cache_csv.exists() and cache_csv.stat().st_size > 0:
+        try:
+            df = _validate_schedule(pd.read_csv(os.fspath(cache_csv)))
+            print(
+                f"[team_week_map] Using cached schedule: {cache_csv} rows={len(df)}"
+            )
+            return df
+        except Exception as e:
+            print(f"[team_week_map] Bad per-season cache; refetching: {e}")
+            try:
+                cache_csv.unlink(missing_ok=True)
+            except Exception:
+                pass
 
-        raw = nfl.import_schedules([season])
-        # Home/away rows — build team/opponent twice (home & away)
-        home = raw.rename(columns={
-            "home_team": "team", "away_team": "opponent",
-            "gameday": "kickoff_utc", "game_id": "event_id", "week": "week"
-        }).assign(home_away="H", bye=False, season=season)
-        away = raw.rename(columns={
-            "away_team": "team", "home_team": "opponent",
-            "gameday": "kickoff_utc", "game_id": "event_id", "week": "week"
-        }).assign(home_away="A", bye=False, season=season)
-        sch = pd.concat([home, away], ignore_index=True)
-        # normalize teams
-        sch["team"] = normalize_team_series(sch["team"])
-        sch["opponent"] = normalize_team_series(sch["opponent"])
-        sch.to_csv(cache_csv, index=False)
-        return sch
-    except Exception as e:
-        print(f"[schedule] nfl_data_py fallback failed: {e}")
+    # 2) Fall back to legacy single-file schedule.csv if present
+    if LEGACY_SCHED.exists() and LEGACY_SCHED.stat().st_size > 0:
+        try:
+            legacy = _validate_schedule(pd.read_csv(os.fspath(LEGACY_SCHED)))
+            # If legacy contains this season, filter & migrate
+            legacy_this = legacy[legacy["season"] == int(season)].copy()
+            if not legacy_this.empty:
+                legacy_this.to_csv(os.fspath(cache_csv), index=False)
+                print(
+                    f"[team_week_map] Migrated legacy schedule → {cache_csv} "
+                    f"(rows={len(legacy_this)}) from {LEGACY_SCHED}"
+                )
+                return legacy_this
+            else:
+                print(
+                    f"[team_week_map] Legacy schedule present but no rows for "
+                    f"season {season}; will fetch."
+                )
+        except Exception as e:
+            print(f"[team_week_map] Legacy schedule invalid; ignoring: {e}")
 
-    raise FileNotFoundError("No schedule source available and fallback failed.")
+    # 3) Fetch fresh from nflverse
+    df = _fetch_schedule_nflverse(season)
+    df.to_csv(os.fspath(cache_csv), index=False)
+    print(
+        f"[team_week_map] Fetched schedule from nflverse → {cache_csv} rows={len(df)}"
+    )
+    return df
 
 
 def build_map(season: int, schedule_path: Optional[str] = None) -> pd.DataFrame:
@@ -195,12 +251,46 @@ def build_map(season: int, schedule_path: Optional[str] = None) -> pd.DataFrame:
         path = Path(schedule_path)
         if not path.exists():
             raise FileNotFoundError(f"Provided schedule override not found: {path}")
-        raw = pd.read_csv(path, low_memory=False)
-        df = _prepare_schedule_rows(raw, season)
+        raw = pd.read_csv(os.fspath(path), low_memory=False)
+        try:
+            df_sched = _validate_schedule(raw)
+        except Exception:
+            df_sched = raw
         print(f"[make_team_week_map] using schedule source: {path}")
     else:
-        df = _load_or_build_schedule_source(season)
-        print("[make_team_week_map] using schedule source: nfl_data_py import")
+        df_sched = _load_or_build_schedule_source(season)
+
+    if isinstance(df_sched, pd.DataFrame):
+        seasons_series = df_sched.get("season")
+        seasons = (
+            pd.to_numeric(seasons_series, errors="coerce")
+            .dropna()
+            .astype(int)
+            .unique()
+            .tolist()
+            if seasons_series is not None
+            else []
+        )
+        seasons = sorted(seasons)
+        weeks = (
+            pd.to_numeric(df_sched.get("week"), errors="coerce")
+            .dropna()
+            .astype(int)
+            .nunique()
+            if "week" in df_sched
+            else 0
+        )
+        games = len(df_sched)
+    else:
+        seasons = []
+        weeks = 0
+        games = 0
+
+    print(
+        f"[team_week_map] seasons={seasons} weeks={int(weeks)} games={int(games)}"
+    )
+
+    df = _prepare_schedule_rows(df_sched, season)
 
     if df.empty:
         raise FileNotFoundError("Materialized schedule did not contain usable rows")
