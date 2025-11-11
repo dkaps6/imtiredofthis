@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import re
@@ -11,13 +12,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from zoneinfo import ZoneInfo
+
 import requests
 
 # --- BEGIN: mandatory global imports ---
 import pandas as pd
 # --- END: mandatory global imports ---
 
-from scripts.make_player_form import canonicalize_name, TEAM_NAME_TO_ABBR
 from scripts._opponent_map import (
     CANON_SET,
     build_opponent_map,
@@ -25,6 +27,8 @@ from scripts._opponent_map import (
     normalize_team,
     normalize_team_abbr,
 )
+from scripts.utils.canonical_names import canonicalize_player_name, norm_key
+from scripts.utils.team_maps import TEAM_NAME_TO_ABBR
 
 # ------------------------- CONFIG -------------------------
 
@@ -34,6 +38,7 @@ REGION_DEFAULT = "us"
 TIMEOUT_S = 25
 BACKOFF_S = [0.6, 1.2, 2.0, 3.5, 5.0]
 GAME_MARKETS = ["h2h", "spreads", "totals"]  # bulk-only
+CENTRAL_TZ = ZoneInfo("America/Chicago")
 
 DATA_DIR = Path("data")
 PROPS_ENRICHED_PATH = DATA_DIR / "props_enriched.csv"
@@ -42,6 +47,7 @@ OPPONENT_MAP_PATH = DATA_DIR / "opponent_map_from_props.csv"
 ODDS_GAME_DATA_PATH = DATA_DIR / "odds_game.csv"
 ROLES_PATH = Path("data/roles_ourlads.csv")
 NAME_MAP_PATH = DATA_DIR / "player_name_map_from_props.csv"
+PLAYER_NAME_LOG_PATH = Path("outputs/player_name_map_from_props.csv")
 
 # Known book keys for US (include alias keys we might see from the API)
 US_BOOK_KEYS = {
@@ -167,6 +173,29 @@ def _lim(headers: dict) -> dict:
             out[k] = headers.get(k)
     return out
 
+
+def _derive_slate_date(events: List[dict]) -> Optional[str]:
+    """Infer slate date from the first commence_time in America/Chicago."""
+
+    if not events:
+        return None
+    commence_values: List[datetime] = []
+    for ev in events:
+        commence = ev.get("commence_time")
+        if not commence:
+            continue
+        try:
+            dt = pd.to_datetime(commence, utc=True, errors="coerce")
+        except Exception:
+            dt = pd.NaT
+        if pd.isna(dt):
+            continue
+        commence_values.append(dt.to_pydatetime().astimezone(CENTRAL_TZ))
+    if not commence_values:
+        return None
+    first = min(commence_values)
+    return first.date().isoformat()
+
 def _try_json(r: requests.Response):
     try:
         return r.json()
@@ -280,23 +309,59 @@ def _load_player_name_map(path: Path) -> dict[str, str]:
     return name_map
 
 
-def _canonicalize_player_names(df: pd.DataFrame, name_map: dict[str, str]) -> pd.DataFrame:
-    """Apply canonical player mapping and log missing overrides as warnings."""
+def _canonicalize_player_names(
+    df: pd.DataFrame,
+    name_map: dict[str, str],
+) -> tuple[pd.DataFrame, List[dict[str, Any]]]:
+    """Apply canonical player mapping and capture unresolved names for logging."""
 
-    if df is None or df.empty or not name_map or "player" not in df.columns:
-        return df
+    if df is None or df.empty or "player" not in df.columns:
+        return df, []
+
     working = df.copy()
-    raw_names = working["player"].astype(str).str.strip()
-    mapped = raw_names.map(name_map)
-    unmatched = raw_names[mapped.isna()].dropna().unique()
-    for raw_name in unmatched:
-        log.warning(
-            "[ODDS-FETCH] Warning: Unmatched player '%s' → No canonical match.",
-            raw_name,
+    working["player_raw"] = working["player"].astype(str)
+
+    overrides = {k.strip(): v.strip() for k, v in (name_map or {}).items() if k and v}
+    name_records: List[dict[str, Any]] = []
+
+    def _canonize_single(raw_value: str) -> tuple[str, int]:
+        raw_value = (raw_value or "").strip()
+        override = overrides.get(raw_value, raw_value)
+        canonical = canonicalize_player_name(override)
+        if not isinstance(canonical, str):
+            canonical = str(canonical)
+        canonical_clean = canonical.strip()
+        if not canonical_clean:
+            return override, 1
+        return canonical_clean, 0
+
+    canonical_values: List[str] = []
+    unresolved_flags: List[int] = []
+
+    for raw in working["player_raw"].astype(str):
+        canonical_name, unresolved_flag = _canonize_single(raw)
+        canonical_values.append(canonical_name or raw)
+        unresolved_flags.append(unresolved_flag)
+
+    working["player"] = canonical_values
+    working["player_canonical"] = canonical_values
+
+    for raw_value, canonical_value, unresolved_flag in zip(
+        working["player_raw"], canonical_values, unresolved_flags
+    ):
+        name_records.append(
+            {
+                "player_raw": raw_value,
+                "player_canonical": canonical_value,
+                "unresolved": int(bool(unresolved_flag)),
+            }
         )
-    working.loc[mapped.notna(), "player"] = mapped[mapped.notna()]
-    working["player_canonical"] = working["player"].apply(canonicalize_name)
-    return working
+        if unresolved_flag:
+            log.warning(
+                "[ODDS-FETCH] unresolved canonical name for '%s'", raw_value
+            )
+
+    return working, name_records
 
 def _normalize_teams_and_opponents(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
@@ -425,6 +490,88 @@ def _normalize_player_rows(events: list, books_filter: Optional[set[str]], marke
         df["price_american"] = pd.to_numeric(df["price_american"], errors="coerce")
     return df
 
+
+def _serialize_offer_rows(df: pd.DataFrame) -> List[dict[str, Any]]:
+    offers: List[dict[str, Any]] = []
+    if df is None or df.empty:
+        return offers
+    for row in df.to_dict(orient="records"):
+        offers.append(
+            {
+                "book": row.get("book"),
+                "book_title": row.get("book_title"),
+                "side": row.get("side"),
+                "line": row.get("line"),
+                "price": row.get("price_american"),
+            }
+        )
+    return offers
+
+
+def _build_market_records(
+    df: pd.DataFrame,
+    *,
+    include_missing: Optional[List[dict[str, Any]]] = None,
+) -> List[dict[str, Any]]:
+    records: List[dict[str, Any]] = []
+    if df is not None and not df.empty:
+        group_cols = [c for c in ["event_id", "player", "market"] if c in df.columns]
+        if len(group_cols) == 3:
+            for keys, group in df.groupby(group_cols):
+                event_id, player, market = keys
+                commence = None
+                if "commence_time" in group.columns:
+                    commence = group["commence_time"].iloc[0]
+                fetched_val = None
+                if "fetched_at" in group.columns:
+                    fetched_val = group["fetched_at"].iloc[0]
+                missing_flag = int(group.get("bookmaker_missing", pd.Series([0])).max())
+                team_val = group.get("team_abbr")
+                team_abbr = team_val.iloc[0] if isinstance(team_val, pd.Series) else None
+                opp_val = group.get("opponent_abbr")
+                opponent_abbr = opp_val.iloc[0] if isinstance(opp_val, pd.Series) else None
+                raw_value = group["player_raw"].iloc[0] if "player_raw" in group.columns else player
+                records.append(
+                    {
+                        "event_id": event_id,
+                        "player": player,
+                        "player_raw": raw_value,
+                        "market": market,
+                        "commence_time": commence,
+                        "books_json": _serialize_offer_rows(group),
+                        "bookmaker_missing": missing_flag,
+                        "fetched_at": fetched_val,
+                        "team_abbr": team_abbr,
+                        "opponent_abbr": opponent_abbr,
+                    }
+                )
+    if include_missing:
+        records.extend(include_missing)
+    return records
+
+
+def _write_market_dumps(records: Dict[str, List[dict[str, Any]]]) -> None:
+    out_dir = Path("outputs/props_raw")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for market, recs in (records or {}).items():
+        market_path = out_dir / f"{market}.csv"
+        df = pd.DataFrame(recs)
+        if not df.empty and "books_json" in df.columns:
+            df["books_json"] = df["books_json"].apply(lambda v: json.dumps(v or []))
+        else:
+            df = pd.DataFrame(
+                columns=[
+                    "event_id",
+                    "player",
+                    "market",
+                    "commence_time",
+                    "books_json",
+                    "bookmaker_missing",
+                    "fetched_at",
+                ]
+            )
+        df.to_csv(market_path, index=False)
+
 def _wide_over_under(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
@@ -470,7 +617,7 @@ def _load_roster_map() -> dict[str, set[str]]:
         return {}
     roles = roles[list(need)].copy()
     roles["team"] = roles["team"].apply(_canon_team)
-    roles["player_canonical"] = roles["player"].apply(canonicalize_name)
+    roles["player_canonical"] = roles["player"].apply(canonicalize_player_name)
     roster: dict[str, set[str]] = {}
     for team, group in roles.dropna(subset=["team"]).groupby("team"):
         names = {nm for nm in group["player_canonical"].astype(str) if nm}
@@ -569,7 +716,7 @@ def _write_props_enriched(props: pd.DataFrame, out_game: str) -> pd.DataFrame:
     working["odds"] = working.get("price_american", "")
 
     if "player_canonical" not in working.columns:
-        working["player_canonical"] = working.get("player", "").apply(canonicalize_name)
+        working["player_canonical"] = working.get("player", "").apply(canonicalize_player_name)
 
     enriched = working.merge(event_info, on="event_id", how="left")
 
@@ -1028,14 +1175,23 @@ ALT_KEYS = {
     "player_anytime_td":    ["anytime_td"],
 }
 
-def _fetch_market_for_events(api_key: str, region: str, books: Optional[set[str]],
-                             event_ids: list[str], market_key: str) -> pd.DataFrame:
+def _fetch_market_for_events(
+    api_key: str,
+    region: str,
+    books: Optional[set[str]],
+    event_ids: list[str],
+    market_key: str,
+    fetched_at: str,
+) -> tuple[pd.DataFrame, List[dict[str, Any]], dict[str, int]]:
     mk = _normalize_market(market_key)
     frames: List[pd.DataFrame] = []
+    event_state: Dict[str, dict[str, Any]] = {
+        str(eid): {"filtered": False, "fallback": pd.DataFrame()}
+        for eid in event_ids
+    }
 
     tried = [mk] + ALT_KEYS.get(mk, [])
     for mk_try in tried:
-        got_any = False
         for eid in event_ids:
             url = f"{BASE}/sports/{SPORT}/events/{eid}/odds"
             params = {"apiKey": api_key, "regions": region, "markets": mk_try, "oddsFormat": "american"}
@@ -1045,39 +1201,47 @@ def _fetch_market_for_events(api_key: str, region: str, books: Optional[set[str]
             log.info(f"{mk_try} eid={eid} status={status} limit={_lim(headers)}")
 
             if status == 200 and isinstance(js, dict):
-                df = pd.DataFrame()
                 bm_count = len(js.get("bookmakers", []))
                 if bm_count == 0 and books is not None:
-                    log.info(f"{mk_try} eid={eid}: 0 bookmakers after filter → retry w/o filter")
                     params2 = dict(params)
                     params2.pop("bookmakers", None)
+                    log.info(
+                        f"{mk_try} eid={eid}: 0 bookmakers after filter → retry w/o filter"
+                    )
                     status2, js2, _ = _get(url, params2)
                     if status2 == 200 and isinstance(js2, dict):
                         try:
-                            df = _normalize_player_rows([js2], None, mk_try)
+                            fallback_df = _normalize_player_rows([js2], None, mk_try)
                         except Exception as err:
-                            log.info(f"normalize fail eid={eid} market={mk_try} (no filter): {err}")
-                else:
-                    try:
-                        df = _normalize_player_rows([js], books, mk_try)
-                    except Exception as err:
-                        log.info(f"normalize fail eid={eid} market={mk_try}: {err}")
+                            log.info(
+                                f"normalize fail eid={eid} market={mk_try} (no filter): {err}"
+                            )
+                            fallback_df = pd.DataFrame()
+                        event_state[str(eid)]["fallback"] = fallback_df
+                    continue
+
+                try:
+                    df = _normalize_player_rows([js], books, mk_try)
+                except Exception as err:
+                    log.info(f"normalize fail eid={eid} market={mk_try}: {err}")
+                    df = pd.DataFrame()
                 if not df.empty:
+                    df["fetched_at"] = fetched_at
+                    df["bookmaker_missing"] = 0
                     frames.append(df)
-                    got_any = True
+                    event_state[str(eid)]["filtered"] = True
 
             elif status == 422:
-                # try next synonym
                 continue
             elif status in (401, 403, 404):
                 log.info(f"skip market={mk_try} for eid={eid}: {js}")
             else:
                 log.info(f"market fetch error eid={eid} market={mk_try}: {js}")
 
-        if got_any:
-            break  # stop at first synonym that yields data
+        if frames:
+            break
 
-    # Dual-region fallback: if region=us yields nothing, try us2 once
+    # Dual-region fallback for filtered fetch only when nothing returned
     if not frames and region == "us":
         log.info(f"{mk} → no data from region=us; retrying region=us2 for same events...")
         frames_us2: List[pd.DataFrame] = []
@@ -1089,23 +1253,18 @@ def _fetch_market_for_events(api_key: str, region: str, books: Optional[set[str]
             status, js, headers = _get(url, params)
             log.info(f"{mk} eid={eid} (us2) status={status} limit={_lim(headers)}")
             if status == 200 and isinstance(js, dict):
-                df = pd.DataFrame()
                 try:
                     df = _normalize_player_rows([js], books, mk)
                 except Exception as err:
                     log.info(f"normalize fail eid={eid} market={mk} (us2): {err}")
-                if df.empty and books is not None:
-                    # try without filters in us2 too
-                    params2 = dict(params)
-                    params2.pop("bookmakers", None)
-                    status2, js2, _ = _get(url, params2)
-                    if status2 == 200 and isinstance(js2, dict):
-                        try:
-                            df = _normalize_player_rows([js2], None, mk)
-                        except Exception as err:
-                            log.info(f"normalize fail eid={eid} market={mk} (us2, no filter): {err}")
+                    df = pd.DataFrame()
                 if not df.empty:
+                    df["fetched_at"] = fetched_at
+                    df["bookmaker_missing"] = 0
                     frames_us2.append(df)
+                    event_state[str(eid)]["filtered"] = True
+            elif status == 422:
+                continue
         if frames_us2:
             merged = pd.concat(frames_us2, ignore_index=True)
             frames.append(merged)
@@ -1113,9 +1272,57 @@ def _fetch_market_for_events(api_key: str, region: str, books: Optional[set[str]
         else:
             log.info(f"{mk}: region=us2 also empty.")
 
-    if not frames:
-        return pd.DataFrame()
-    return pd.concat(frames, ignore_index=True)
+    merged_filtered = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+    stats = {
+        "events": len(event_ids),
+        "offers": int(len(merged_filtered)) if not merged_filtered.empty else 0,
+        "missing_filtered": 0,
+        "saved_no_filter": 0,
+        "bookmaker_missing": 0,
+    }
+
+    missing_rows: List[dict[str, Any]] = []
+    for eid, info in event_state.items():
+        if info.get("filtered"):
+            continue
+        stats["missing_filtered"] += 1
+        fallback_df: pd.DataFrame = info.get("fallback", pd.DataFrame())
+        if fallback_df is not None and not fallback_df.empty:
+            stats["saved_no_filter"] += fallback_df["player"].dropna().nunique()
+            for player, group in fallback_df.groupby("player"):
+                books_json = _serialize_offer_rows(group)
+                commence = None
+                if "commence_time" in group.columns:
+                    commence = group["commence_time"].iloc[0]
+                missing_rows.append(
+                    {
+                        "event_id": eid,
+                        "player": player,
+                        "player_raw": player,
+                        "market": mk,
+                        "commence_time": commence,
+                        "books_json": books_json,
+                        "bookmaker_missing": 1,
+                        "fetched_at": fetched_at,
+                    }
+                )
+        else:
+            stats["bookmaker_missing"] += 1
+            missing_rows.append(
+                {
+                    "event_id": eid,
+                    "player": "",
+                    "player_raw": "",
+                    "market": mk,
+                    "commence_time": None,
+                    "books_json": [],
+                    "bookmaker_missing": 1,
+                    "fetched_at": fetched_at,
+                }
+            )
+
+    return merged_filtered, missing_rows, stats
 
 def _fetch_bulk_market(api_key: str, region: str, books: Optional[set[str]], market_key: str) -> pd.DataFrame:
     # bulk for game markets only
@@ -1195,8 +1402,18 @@ def fetch_odds(
 
     Path("outputs").mkdir(parents=True, exist_ok=True)
 
+    fetched_at = datetime.now(timezone.utc).isoformat()
+
     # events for event-odds
     events = _fetch_events_by_h2h(api_key, region, books_set)
+    log.info(f"events pulled={len(events)}")
+    if not date:
+        inferred_date = _derive_slate_date(events)
+        if inferred_date:
+            date = inferred_date
+            log.info(
+                f"defaulted slate date to {date} (America/Chicago) based on first event"
+            )
     event_ids = [e.get("id") for e in events if e.get("id")]
 
     # bulk game odds snapshot
@@ -1210,36 +1427,68 @@ def fetch_odds(
 
     # per-market fetch
     frames: List[pd.DataFrame] = []
+    market_records: Dict[str, List[dict[str, Any]]] = {}
+    market_stats: Dict[str, dict[str, int]] = {}
     for mk in normalized_markets:
         if mk in GAME_MARKETS:
             log.info(f"=== MARKET {mk} (bulk) ===")
             df = _fetch_bulk_market(api_key, region, books_set, mk)
+            missing_rows: List[dict[str, Any]] = []
+            stats = {
+                "events": len(event_ids),
+                "offers": int(len(df)) if not df.empty else 0,
+                "missing_filtered": 0,
+                "saved_no_filter": 0,
+                "bookmaker_missing": 0,
+            }
         else:
             if not event_ids:
                 log.info(f"no events → skip player market {mk}")
+                market_records[mk] = _build_market_records(pd.DataFrame(), include_missing=[])
+                market_stats[mk] = {
+                    "events": 0,
+                    "offers": 0,
+                    "missing_filtered": 0,
+                    "saved_no_filter": 0,
+                    "bookmaker_missing": 0,
+                }
                 continue
             log.info(f"=== MARKET {mk} (per-event) ===")
-            df = _fetch_market_for_events(api_key, region, books_set, event_ids, mk)
+            df, missing_rows, stats = _fetch_market_for_events(
+                api_key,
+                region,
+                books_set,
+                event_ids,
+                mk,
+                fetched_at,
+            )
         if not df.empty:
             frames.append(df)
+        market_records[mk] = _build_market_records(df, include_missing=missing_rows)
+        market_stats[mk] = stats
+
+        log.info(
+            f"market={mk} offers={stats['offers']} missing_filtered={stats['missing_filtered']} "
+            f"saved_no_filter={stats['saved_no_filter']} missing_rows={len(market_records[mk])}"
+        )
+
+    _write_market_dumps(market_records)
+
+    if market_stats:
+        total_missing_rows = sum(stats.get("bookmaker_missing", 0) for stats in market_stats.values())
+        total_no_filter_saved = sum(stats.get("saved_no_filter", 0) for stats in market_stats.values())
+        total_missing_filtered = sum(stats.get("missing_filtered", 0) for stats in market_stats.values())
+        log.info(
+            "market summary: missing_filtered=%s saved_via_no_filter=%s remaining_missing_rows=%s",
+            total_missing_filtered,
+            total_no_filter_saved,
+            total_missing_rows,
+        )
 
     props = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
-    if props.empty:
-        empty_cols = [
-            "event_id",
-            "commence_time",
-            "book",
-            "market",
-            "player",
-            "side",
-            "line",
-            "price_american",
-        ]
-        pd.DataFrame(columns=empty_cols).to_csv(out, index=False)
-        log.info(f"wrote empty {out}")
-        return
+    name_records_all: List[dict[str, Any]] = []
     if "player" in props.columns:
-        props["player_canonical"] = props["player"].apply(canonicalize_name)
+        props["player_canonical"] = props["player"].apply(canonicalize_player_name)
     else:
         props["player_canonical"] = ""
 
@@ -1302,7 +1551,8 @@ def fetch_odds(
             props[col] = props[col].apply(_apply_team_fix)
 
     name_map = _load_player_name_map(NAME_MAP_PATH)
-    props = _canonicalize_player_names(props, name_map)
+    props, name_records = _canonicalize_player_names(props, name_map)
+    name_records_all.extend(name_records)
     props = _normalize_teams_and_opponents(props)
 
     # --- Attach team/opponent from authoritative sources ---
@@ -1442,20 +1692,189 @@ def fetch_odds(
         if c in props.columns:
             del props[c]
 
+    # --- Build consolidated records for props_raw.csv ---
+    actual_records = _build_market_records(props, include_missing=None)
+    missing_records_all: List[dict[str, Any]] = []
+    for recs in market_records.values():
+        missing_records_all.extend([r for r in recs if r.get("bookmaker_missing")])
+
+    missing_df = pd.DataFrame(missing_records_all)
+    if not missing_df.empty:
+        missing_df, missing_name_records = _canonicalize_player_names(missing_df, name_map)
+        name_records_all.extend(missing_name_records)
+        missing_records_processed = missing_df.to_dict("records")
+    else:
+        missing_records_processed = []
+
+    combined_records = actual_records + missing_records_processed
+    final_df = pd.DataFrame(combined_records)
+
+    if final_df.empty:
+        final_df = pd.DataFrame(
+            columns=[
+                "event_id",
+                "market",
+                "player_raw",
+                "player",
+                "player_canonical",
+                "team_abbr",
+                "opponent_abbr",
+                "bookmaker_missing",
+                "offers_json",
+                "source",
+                "fetched_at",
+            ]
+        )
+    else:
+        final_df["player_canonical"] = final_df.get("player", "")
+        if "player_raw" not in final_df.columns:
+            final_df["player_raw"] = final_df["player_canonical"]
+        if "fetched_at" in final_df.columns:
+            final_df["fetched_at"] = final_df["fetched_at"].fillna(fetched_at)
+        else:
+            final_df["fetched_at"] = fetched_at
+        if "bookmaker_missing" in final_df.columns:
+            final_df["bookmaker_missing"] = (
+                final_df["bookmaker_missing"].fillna(0).astype(int)
+            )
+        else:
+            final_df["bookmaker_missing"] = 0
+        if "books_json" in final_df.columns:
+            offers_series = final_df["books_json"]
+        else:
+            offers_series = pd.Series([[] for _ in range(len(final_df))])
+        final_df["offers_json"] = offers_series.apply(
+            lambda v: json.dumps(v or []) if isinstance(v, (list, tuple)) else json.dumps([])
+        )
+        missing_mask_final = final_df["bookmaker_missing"].astype(int) == 1
+        if missing_mask_final.any():
+            final_df.loc[missing_mask_final, "offers_json"] = json.dumps([])
+        final_df["source"] = "oddsapi"
+        if "books_json" in final_df.columns:
+            final_df.drop(columns=["books_json"], inplace=True)
+
+    # Attach team/opponent metadata to consolidated output
+    if not final_df.empty:
+        final_df["event_id"] = final_df["event_id"].astype(str)
+        if not props.empty:
+            meta_cols = [
+                c
+                for c in [
+                    "event_id",
+                    "market",
+                    "player_canonical",
+                    "team_abbr",
+                    "opponent_abbr",
+                    "home_team_abbr",
+                    "away_team_abbr",
+                    "commence_time",
+                ]
+                if c in props.columns
+            ]
+            meta = (
+                props[meta_cols]
+                .drop_duplicates(subset=["event_id", "market", "player_canonical"])
+                if meta_cols
+                else pd.DataFrame()
+            )
+            if not meta.empty:
+                final_df = final_df.merge(
+                    meta,
+                    on=["event_id", "market", "player_canonical"],
+                    how="left",
+                    suffixes=("", "_meta"),
+                )
+
+        if not game_df.empty and "event_id" in final_df.columns:
+            game_subset_cols = [
+                c
+                for c in [
+                    "event_id",
+                    "home_team_abbr",
+                    "away_team_abbr",
+                    "commence_time",
+                ]
+                if c in game_df.columns
+            ]
+            if game_subset_cols:
+                game_subset = game_df[game_subset_cols].drop_duplicates("event_id")
+                final_df = final_df.merge(game_subset, on="event_id", how="left")
+
+        roster_map = _load_roster_map()
+        if roster_map:
+            mask_missing_team = final_df.get("team_abbr").isna() if "team_abbr" in final_df.columns else pd.Series(False)
+            if "team_abbr" not in final_df.columns:
+                final_df["team_abbr"] = pd.NA
+                mask_missing_team = final_df["team_abbr"].isna()
+            if mask_missing_team.any():
+                inferred = final_df.loc[mask_missing_team].apply(
+                    lambda row: _infer_player_team(row, roster_map), axis=1
+                )
+                final_df.loc[mask_missing_team, "team_abbr"] = inferred
+
+        if "team_abbr" in final_df.columns:
+            final_df["team_abbr"] = final_df["team_abbr"].apply(_canon_team)
+        else:
+            final_df["team_abbr"] = ""
+
+        if "opponent_abbr" not in final_df.columns:
+            final_df["opponent_abbr"] = ""
+
+        def _derive_opp_from_row(row: pd.Series) -> str:
+            return _infer_opponent(
+                row.get("team_abbr"),
+                row.get("home_team_abbr"),
+                row.get("away_team_abbr"),
+            )
+
+        opp_mask = final_df["opponent_abbr"].isna() | final_df["opponent_abbr"].astype(str).str.strip().eq("")
+        if opp_mask.any():
+            inferred_opps = final_df.loc[opp_mask].apply(_derive_opp_from_row, axis=1)
+            final_df.loc[opp_mask, "opponent_abbr"] = inferred_opps
+
+        final_df["team_abbr"] = final_df["team_abbr"].fillna("").astype(str).str.upper()
+        final_df["opponent_abbr"] = final_df["opponent_abbr"].fillna("").astype(str).str.upper()
+
+    final_schema = [
+        "event_id",
+        "market",
+        "player_raw",
+        "player_canonical",
+        "team_abbr",
+        "opponent_abbr",
+        "bookmaker_missing",
+        "offers_json",
+        "source",
+        "fetched_at",
+    ]
+    for col in final_schema:
+        if col not in final_df.columns:
+            final_df[col] = pd.NA
+    final_df = final_df[final_schema]
+
     # keep your original file AND write an enriched one for downstream robustness
     props.to_csv("outputs/props_enriched.csv", index=False)
     props.to_csv(DATA_DIR / "props_enriched.csv", index=False)
     # --- END: enrich props with opponent from odds_game ---
 
-    props.to_csv(out, index=False)
-    log.info(f"wrote {out} rows={len(props)}")
+    final_df.to_csv(out, index=False)
+    log.info(f"wrote {out} rows={len(final_df)}")
     PROPS_RAW_DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
-    props.to_csv(PROPS_RAW_DATA_PATH, index=False)
-    log.info(f"wrote {PROPS_RAW_DATA_PATH} rows={len(props)}")
+    final_df.to_csv(PROPS_RAW_DATA_PATH, index=False)
+    log.info(f"wrote {PROPS_RAW_DATA_PATH} rows={len(final_df)}")
+
+    # Write player name mapping for overrides/unresolved tracking
+    PLAYER_NAME_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    name_map_df = pd.DataFrame(name_records_all)
+    if not name_map_df.empty:
+        name_map_df = name_map_df.drop_duplicates(subset=["player_raw", "player_canonical"])
+    else:
+        name_map_df = pd.DataFrame(columns=["player_raw", "player_canonical", "unresolved"])
+    name_map_df.to_csv(PLAYER_NAME_LOG_PATH, index=False)
 
     wide = _wide_over_under(props)
     if not wide.empty and "player" in wide.columns:
-        wide["player_canonical"] = wide["player"].apply(canonicalize_name)
+        wide["player_canonical"] = wide["player"].apply(canonicalize_player_name)
     wide_out = Path(out).with_name("props_raw_wide.csv")
     wide.to_csv(wide_out, index=False)
     log.info(f"wrote {wide_out} rows={len(wide)}")
