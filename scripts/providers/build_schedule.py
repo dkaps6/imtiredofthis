@@ -2,150 +2,155 @@
 from __future__ import annotations
 import io
 import gzip
-import json
 import logging
-from pathlib import Path
 from typing import Optional, List
-
 import pandas as pd
 import requests
+from datetime import datetime
+import numpy as np
 
 log = logging.getLogger("build_schedule")
 log.setLevel(logging.INFO)
 
-# ---- Helpers ---------------------------------------------------------------
+TEAM_FIXES = {
+    "BLT": "BAL", "CLV": "CLE", "HST": "HOU",
+    "ARZ": "ARI", "LA": "LAR", "WSH": "WAS"
+}
+def _canon_team(x: str) -> str:
+    if not isinstance(x, str):
+        return x
+    x = x.strip().upper()
+    return TEAM_FIXES.get(x, x)
 
-def _http_get(url: str, headers: Optional[dict] = None, expect_gzip: bool = False) -> bytes:
-    r = requests.get(url, headers=headers or {}, timeout=30)
+def _http_get(url: str, expect_gzip: bool = False) -> bytes:
+    # Be a polite client
+    headers = {
+        "User-Agent": "imtiredofthis/1.0 (schedule fetch)",
+        "Accept": "*/*",
+    }
+    r = requests.get(url, headers=headers, timeout=45)
     r.raise_for_status()
     data = r.content
     if expect_gzip:
-        # nflverse publishes .csv.gz frequently
         try:
             data = gzip.decompress(data)
         except OSError:
-            # if server already returned plain csv
             pass
     return data
 
 def _read_csv_bytes(b: bytes) -> pd.DataFrame:
     return pd.read_csv(io.BytesIO(b), low_memory=False)
 
-# ---- NFLVerse primary sources ---------------------------------------------
-
-def _nflverse_urls(season: int) -> List[dict]:
-    """Return a list of candidate NFLVerse schedule endpoints for a season."""
-    s = str(season)
+def _nflverse_master_urls() -> List[dict]:
+    # Consolidated schedules across seasons
     return [
-        # historic path
-        {"url": f"https://github.com/nflverse/nflfastR-data/raw/master/schedules/sched_{s}.csv.gz", "gzip": True},
-        # current releases bucket (name has changed across years)
-        {"url": f"https://raw.githubusercontent.com/nflverse/nflverse-data/master/releases/schedules/sched_{s}.csv.gz", "gzip": True},
-        {"url": f"https://raw.githubusercontent.com/nflverse/nflverse-data/master/releases/schedules/schedules_{s}.csv.gz", "gzip": True},
-        # plain csv fallbacks
-        {"url": f"https://raw.githubusercontent.com/nflverse/nflfastR-data/master/schedules/sched_{s}.csv", "gzip": False},
-        {"url": f"https://raw.githubusercontent.com/nflverse/nflverse-data/master/releases/schedules/schedules_{s}.csv", "gzip": False},
+        {"url": "https://raw.githubusercontent.com/nflverse/nflfastR-data/master/schedules/schedules.csv.gz", "gzip": True},
+        {"url": "https://raw.githubusercontent.com/nflverse/nflverse-data/master/releases/schedules/schedules.csv.gz", "gzip": True},
+        {"url": "https://raw.githubusercontent.com/nflverse/nflfastR-data/master/schedules/schedules.csv", "gzip": False},
+        {"url": "https://raw.githubusercontent.com/nflverse/nflverse-data/master/releases/schedules/schedules.csv", "gzip": False},
     ]
 
-def _download_nflverse(season: int) -> pd.DataFrame:
+def _download_nflverse_master(season: int) -> pd.DataFrame:
     last_err = None
-    for ent in _nflverse_urls(season):
+    for ent in _nflverse_master_urls():
         url, gz = ent["url"], ent["gzip"]
-        log.info(f"[schedule] Trying NFLVerse: {url}")
+        log.info(f"[schedule] Trying NFLVerse master: {url}")
         try:
             b = _http_get(url, expect_gzip=gz)
             df = _read_csv_bytes(b)
-            # normalize expected columns
-            cols = {c.lower(): c for c in df.columns}
-            # standardize common names used elsewhere
+            # Normalize typical columns
+            cols_lower = {c.lower(): c for c in df.columns}
             rename = {}
-            if "home_team" in cols: rename[cols["home_team"]] = "home_team"
-            if "away_team" in cols: rename[cols["away_team"]] = "away_team"
-            if "week" in cols: rename[cols["week"]] = "week"
-            if "season" in cols: rename[cols["season"]] = "season"
+            for want in ["season", "week", "home_team", "away_team", "game_id"]:
+                if want in cols_lower:
+                    rename[cols_lower[want]] = want
+            # kickoff time commonly "game_time", "start_time", or "gameday"+"gametime"
+            if "start_time" in cols_lower:
+                rename[cols_lower["start_time"]] = "kickoff_utc"
+            elif "game_time" in cols_lower:
+                rename[cols_lower["game_time"]] = "kickoff_utc"
             df = df.rename(columns=rename)
-            needed = {"home_team", "away_team", "week"}
-            if not needed.issubset(set(df.columns)):
-                raise ValueError(f"NFLVerse schedule missing expected columns; got {df.columns.tolist()}")
-            log.info("[schedule] NFLVerse fetch OK")
+
+            # Filter by season
+            if "season" not in df.columns:
+                raise ValueError("NFLVerse master schedule missing 'season' column")
+            df = df[df["season"].astype(int) == int(season)].copy()
+            if df.empty:
+                raise ValueError(f"No rows for season {season} in master schedule")
+
+            # Coerce kickoff to UTC if present
+            if "kickoff_utc" in df.columns:
+                df["kickoff_utc"] = pd.to_datetime(df["kickoff_utc"], errors="coerce", utc=True)
+            else:
+                df["kickoff_utc"] = pd.NaT
+
+            # Canonicalize team codes
+            for c in ("home_team","away_team"):
+                if c in df.columns:
+                    df[c] = df[c].astype(str).map(_canon_team)
+
+            # Ensure expected columns exist
+            for c in ("week","home_team","away_team"):
+                if c not in df.columns:
+                    raise ValueError(f"Master schedule missing required column '{c}'")
+
+            # Keep minimal set used downstream
+            keep = ["season","week","home_team","away_team","kickoff_utc"]
+            if "game_id" in df.columns:
+                keep.append("game_id")
+            df = df[keep].drop_duplicates().reset_index(drop=True)
+            log.info(f"[schedule] NFLVerse master OK: {len(df)} rows for {season}")
             return df
         except Exception as e:
             last_err = e
-            log.warning(f"[schedule] NFLVerse source failed: {e}")
-    if last_err:
-        raise last_err
-    raise RuntimeError("No NFLVerse schedule sources attempted.")
+            log.warning(f"[schedule] NFLVerse master failed: {e}")
+    raise last_err
 
-# ---- APISports fallback ----------------------------------------------------
+def _download_nfl_data_py(season: int) -> pd.DataFrame:
+    import nfl_data_py as nfl
+    log.info("[schedule] Trying nfl_data_py.import_schedules()")
+    df = nfl.import_schedules([season])
+    # nfl_data_py columns vary; standardize
+    rename = {}
+    if "home_team" not in df.columns and "home" in df.columns:
+        rename["home"] = "home_team"
+    if "away_team" not in df.columns and "away" in df.columns:
+        rename["away"] = "away_team"
+    if "week" not in df.columns and "game_week" in df.columns:
+        rename["game_week"] = "week"
+    if "gameday" in df.columns and "game_time" in df.columns and "kickoff_utc" not in df.columns:
+        # combine
+        pass
+    df = df.rename(columns=rename)
+    if "kickoff_utc" not in df.columns:
+        # Try 'start_time' or combine gameday+game_time
+        if "start_time" in df.columns:
+            df["kickoff_utc"] = pd.to_datetime(df["start_time"], errors="coerce", utc=True)
+        elif {"gameday","game_time"}.issubset(df.columns):
+            df["kickoff_utc"] = pd.to_datetime(df["gameday"] + " " + df["game_time"], errors="coerce", utc=True)
+        else:
+            df["kickoff_utc"] = pd.NaT
 
-def _download_apisports(season: int, api_key: Optional[str]) -> pd.DataFrame:
-    if not api_key:
-        raise RuntimeError("APISPORTS_KEY not set; cannot use APISports fallback.")
-    # American Football / NFL league=1
-    url = f"https://v3.american-football.api-sports.io/games?league=1&season={season}"
-    log.info(f"[schedule] Trying APISports: {url}")
-    headers = {"x-apisports-key": api_key}
-    b = _http_get(url, headers=headers, expect_gzip=False)
-    js = json.loads(b.decode("utf-8"))
-    # Normalize minimal schedule
-    rows = []
-    for item in js.get("response", []):
-        # API returns many fields; we only need week + team codes
-        week = item.get("week")
-        home = (((item.get("teams") or {}).get("home") or {}).get("name")) or ((item.get("teams") or {}).get("home") or {}).get("code")
-        away = (((item.get("teams") or {}).get("away") or {}).get("name")) or ((item.get("teams") or {}).get("away") or {}).get("code")
-        if week and home and away:
-            rows.append({"season": season, "week": int(week), "home_team": home, "away_team": away})
-    if not rows:
-        raise RuntimeError("APISports returned no schedule rows.")
-    df = pd.DataFrame(rows)
-    log.info(f"[schedule] APISports fallback OK with {len(df)} games.")
+    df = df[df["season"].astype(int) == int(season)].copy()
+    for c in ("home_team","away_team"):
+        df[c] = df[c].astype(str).map(_canon_team)
+    keep = ["season","week","home_team","away_team","kickoff_utc"]
+    if "game_id" in df.columns:
+        keep.append("game_id")
+    df = df[keep].drop_duplicates().reset_index(drop=True)
+    log.info(f"[schedule] nfl_data_py OK: {len(df)} rows for {season}")
     return df
 
-# ---- Public API ------------------------------------------------------------
-
-def build_or_get_schedule(season: int, out_path: Optional[str] = None, schedule_override: Optional[str] = None) -> str:
+def build_or_get_schedule(season: int) -> pd.DataFrame:
     """
-    Returns a CSV path containing a normalized schedule with columns:
-    season, week, home_team, away_team
-    Resolution order:
-      1) schedule_override (local csv)
-      2) NFLVerse (multiple endpoints)
-      3) APISports fallback (requires APISPORTS_KEY)
+    Returns a DataFrame with columns at least:
+      season, week, home_team, away_team, kickoff_utc[, game_id]
+    No manual CSV and no APISports.
     """
-    target = Path(out_path or f"data/schedules/schedule_{season}.csv")
-    target.parent.mkdir(parents=True, exist_ok=True)
-
-    # 1) local override
-    if schedule_override:
-        p = Path(schedule_override)
-        if not p.exists():
-            raise FileNotFoundError(f"Provided --schedule path not found: {p}")
-        df = pd.read_csv(p, low_memory=False)
-        df.to_csv(target, index=False)
-        log.info(f"[schedule] Using local override {p} -> {target}")
-        return str(target)
-
-    # 2) NFLVerse
+    # 1) nflverse consolidated master
     try:
-        df = _download_nflverse(season)
-        df.to_csv(target, index=False)
-        log.info(f"[schedule] Wrote schedule to {target}")
-        return str(target)
-    except Exception as nfl_err:
-        log.warning(f"[schedule] NFLVerse failed: {nfl_err}")
-
-    # 3) APISports fallback
-    try:
-        import os
-        api_key = os.environ.get("APISPORTS_KEY")
-        df = _download_apisports(season, api_key)
-        df.to_csv(target, index=False)
-        log.info(f"[schedule] Wrote schedule (APISports) to {target}")
-        return str(target)
-    except Exception as apis_err:
-        log.error(f"[schedule] APISports fallback failed: {apis_err}")
-        # bubble up so caller can decide to fail early with a clear message
-        raise
-
-__all__ = ["build_or_get_schedule"]
+        return _download_nflverse_master(season)
+    except Exception as e:
+        log.warning(f"[schedule] Master fetch failed, trying nfl_data_py fallback: {e}")
+    # 2) nfl_data_py fallback (also pulls from nflverse sources)
+    return _download_nfl_data_py(season)

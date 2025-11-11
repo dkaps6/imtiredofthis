@@ -150,35 +150,36 @@ def _prepare_schedule_rows(df: pd.DataFrame, season: int) -> pd.DataFrame:
     return combined.loc[:, keep + extra_cols].dropna(subset=["team"])
 
 
-def _load_or_build_schedule_source(season: int, schedule_path: Optional[str]) -> Tuple[pd.DataFrame, Path]:
+def _load_or_build_schedule_source(season: int, schedule_path: Optional[str]) -> Tuple[pd.DataFrame, Optional[Path]]:
     if schedule_path:
         print(
             f"[make_team_week_map] schedule override requested: {schedule_path}"
         )
-        built_path = Path(
-            build_or_get_schedule(season, schedule_override=schedule_path)
-        )
+        path = Path(schedule_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Provided schedule override not found: {path}")
+        df = pd.read_csv(path, low_memory=False)
+        source = path
     else:
-        built_path = Path(build_or_get_schedule(season))
+        df = build_or_get_schedule(season)
+        source = None
 
-    print(f"[make_team_week_map] resolved schedule csv: {built_path}")
-
-    try:
-        df = pd.read_csv(built_path, low_memory=False)
-    except Exception as err:  # pragma: no cover
-        raise FileNotFoundError("Failed to materialize schedule for team_week_map") from err
+    print(f"[make_team_week_map] schedule rows: {len(df)} for season={season}")
 
     combined = _prepare_schedule_rows(df, season)
     if combined.empty:
         raise FileNotFoundError("Materialized schedule did not contain usable rows")
-    return combined, built_path
+    return combined, source
 
 
 def build_map(season: int, schedule_path: Optional[str] = None) -> pd.DataFrame:
     """Assemble the team_week_map for a given season."""
 
     df, resolved_path = _load_or_build_schedule_source(season, schedule_path)
-    print(f"[make_team_week_map] using schedule source: {resolved_path}")
+    if resolved_path is not None:
+        print(f"[make_team_week_map] using schedule source: {resolved_path}")
+    else:
+        print("[make_team_week_map] using schedule source: build_schedule DataFrame")
     df = df.copy()
 
     for col in ("team", "opponent"):
