@@ -38,7 +38,7 @@ import pandas as pd
 
 from scripts.utils.df_keys import coerce_merge_keys
 
-from scripts._opponent_map import dump_norm_debug, normalize_team as _canon_team_series
+from scripts._opponent_map import normalize_team_series
 from scripts.utils.canonical_names import (
     canonicalize_player_name_safe,
     log_unmapped_variant,
@@ -66,8 +66,19 @@ UNMATCHED_ROLES_DEBUG_PATH = Path("data/unmatched_roles_merge.csv")
 TEAM_FORM_PATH = Path("data/team_form.csv")
 MANUAL_OVERRIDES_PATH = os.getenv("MANUAL_OVERRIDES_PATH", "data/manual_name_overrides.csv")
 
+SEASON = int(os.environ.get("SEASON", "2025"))
 
-CURRENT_SEASON = 2025
+# Required inputs
+TEAM_WEEK = "data/team_week_map.csv"
+OPPMAP = "data/opponent_map_from_props.csv"
+ROLES = "data/roles_ourlads.csv"
+
+for p in [TEAM_WEEK, OPPMAP, ROLES]:
+    if not os.path.exists(p):
+        raise FileNotFoundError(f"[player_form] missing required input: {p}")
+
+
+CURRENT_SEASON = SEASON
 
 
 CANON_OVERRIDES = {
@@ -96,6 +107,17 @@ NAME_OVERRIDES = {
     "D.ADAMS": "Davante Adams",
     "DADAMS": "Davante Adams",
 }
+
+
+def _canon_team_series(series: pd.Series) -> pd.Series:
+    return normalize_team_series(series)
+
+
+def _dump_norm_debug(df: pd.DataFrame, path: str) -> None:
+    if df is None:
+        df = pd.DataFrame()
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(path, index=False)
 
 
 def _filter_to_season(df: pd.DataFrame, season: int) -> pd.DataFrame:
@@ -5905,7 +5927,7 @@ def _write_player_form_outputs(
                     sample_source["team"] = sample_source["team_abbr"]
                 if "opponent" not in sample_source.columns and "opponent_abbr" in sample_source.columns:
                     sample_source["opponent"] = sample_source["opponent_abbr"]
-            dump_norm_debug(sample_source, str(debug_path))
+            _dump_norm_debug(sample_source, str(debug_path))
         except Exception as debug_err:
             logger.warning(
                 "[make_player_form] failed to write mismatch sample: %s",
@@ -6219,6 +6241,14 @@ def _player_key_from_name(name: object) -> str:
 
 def build_player_form(season: int = 2025) -> pd.DataFrame:
     season = int(season)
+    target_season = SEASON
+    if season != target_season:
+        logger.info(
+            "[make_player_form] overriding season %s with env SEASON=%s",
+            season,
+            target_season,
+        )
+    season = target_season
     global CURRENT_SEASON
     CURRENT_SEASON = season
 
@@ -6307,6 +6337,11 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     )
     print(f"[PlayerForm] Merged logs with roles → {len(merged)} rows")
 
+    if "season" in merged.columns:
+        merged["season"] = pd.to_numeric(merged["season"], errors="coerce").astype("Int64")
+        season_scope = pd.Series([SEASON], dtype="Int64").iloc[0]
+        merged = merged[merged["season"] == season_scope].copy()
+
     for col in ("team", "position", "role", "player"):
         role_col = f"{col}_role"
         if role_col in merged.columns:
@@ -6345,7 +6380,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     pf = pf.copy()
     if "season" in pf.columns:
         pf["season"] = pd.to_numeric(pf["season"], errors="coerce").astype("Int64")
-        pf = pf[pf["season"] == pd.Series([season], dtype="Int64").iloc[0]].copy()
+        pf = pf[pf["season"] == pd.Series([SEASON], dtype="Int64").iloc[0]].copy()
 
     # Overlay opponents using schedule map first, then props map
     try:
@@ -6405,9 +6440,17 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         merged["role"] = pd.NA
 
     merged["team_abbr"] = merged["team_abbr"].astype("string").str.upper().str.strip()
-    merged["season"] = season
+    merged["season"] = SEASON
     if "week" not in merged.columns:
         merged["week"] = pd.NA
+
+    if merged.empty:
+        dbg = "artifacts/player_form_debug_empty.csv"
+        os.makedirs(os.path.dirname(dbg), exist_ok=True)
+        merged.to_csv(dbg, index=False)
+        raise RuntimeError(
+            "[player_form] produced empty DataFrame; debug dump written to artifacts/player_form_debug_empty.csv"
+        )
 
     os.makedirs("data/_debug", exist_ok=True)
     merged.to_csv("data/player_form.csv", index=False)

@@ -8,8 +8,8 @@ from typing import Optional, Tuple
 
 import pandas as pd
 
+from scripts._opponent_map import normalize_team_series
 from scripts.utils.name_clean import normalize_team
-from scripts.providers.build_schedule import build_or_get_schedule
 
 DATA_DIR = Path("data")
 TEAM_WEEK_PATH = DATA_DIR / "team_week_map.csv"
@@ -150,36 +150,62 @@ def _prepare_schedule_rows(df: pd.DataFrame, season: int) -> pd.DataFrame:
     return combined.loc[:, keep + extra_cols].dropna(subset=["team"])
 
 
-def _load_or_build_schedule_source(season: int, schedule_path: Optional[str]) -> Tuple[pd.DataFrame, Optional[Path]]:
-    if schedule_path:
-        print(
-            f"[make_team_week_map] schedule override requested: {schedule_path}"
-        )
-        path = Path(schedule_path)
-        if not path.exists():
-            raise FileNotFoundError(f"Provided schedule override not found: {path}")
-        df = pd.read_csv(path, low_memory=False)
-        source = path
-    else:
-        df = build_or_get_schedule(season)
-        source = None
+def _load_or_build_schedule_source(season: int) -> pd.DataFrame:
+    """Return schedule with columns: season, week, team, opponent, home_away, kickoff_utc, event_id, bye (bool)."""
+    DATA = Path("data")
+    DATA.mkdir(parents=True, exist_ok=True)
+    cache_csv = DATA / "schedule.csv"
 
-    print(f"[make_team_week_map] schedule rows: {len(df)} for season={season}")
+    if cache_csv.exists():
+        sch = pd.read_csv(cache_csv)
+        if "season" in sch and sch["season"].eq(season).any():
+            return sch[sch["season"] == season].copy()
 
-    combined = _prepare_schedule_rows(df, season)
-    if combined.empty:
-        raise FileNotFoundError("Materialized schedule did not contain usable rows")
-    return combined, source
+    # Try nfl_data_py first (no auth)
+    try:
+        import nfl_data_py as nfl
+
+        raw = nfl.import_schedules([season])
+        # Home/away rows — build team/opponent twice (home & away)
+        home = raw.rename(columns={
+            "home_team": "team", "away_team": "opponent",
+            "gameday": "kickoff_utc", "game_id": "event_id", "week": "week"
+        }).assign(home_away="H", bye=False, season=season)
+        away = raw.rename(columns={
+            "away_team": "team", "home_team": "opponent",
+            "gameday": "kickoff_utc", "game_id": "event_id", "week": "week"
+        }).assign(home_away="A", bye=False, season=season)
+        sch = pd.concat([home, away], ignore_index=True)
+        # normalize teams
+        sch["team"] = normalize_team_series(sch["team"])
+        sch["opponent"] = normalize_team_series(sch["opponent"])
+        sch.to_csv(cache_csv, index=False)
+        return sch
+    except Exception as e:
+        print(f"[schedule] nfl_data_py fallback failed: {e}")
+
+    raise FileNotFoundError("No schedule source available and fallback failed.")
 
 
 def build_map(season: int, schedule_path: Optional[str] = None) -> pd.DataFrame:
     """Assemble the team_week_map for a given season."""
 
-    df, resolved_path = _load_or_build_schedule_source(season, schedule_path)
-    if resolved_path is not None:
-        print(f"[make_team_week_map] using schedule source: {resolved_path}")
+    if schedule_path:
+        print(f"[make_team_week_map] schedule override requested: {schedule_path}")
+        path = Path(schedule_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Provided schedule override not found: {path}")
+        raw = pd.read_csv(path, low_memory=False)
+        df = _prepare_schedule_rows(raw, season)
+        print(f"[make_team_week_map] using schedule source: {path}")
     else:
-        print("[make_team_week_map] using schedule source: build_schedule DataFrame")
+        df = _load_or_build_schedule_source(season)
+        print("[make_team_week_map] using schedule source: nfl_data_py import")
+
+    if df.empty:
+        raise FileNotFoundError("Materialized schedule did not contain usable rows")
+
+    print(f"[make_team_week_map] schedule rows: {len(df)} for season={season}")
     df = df.copy()
 
     for col in ("team", "opponent"):
