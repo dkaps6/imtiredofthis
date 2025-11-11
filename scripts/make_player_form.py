@@ -6222,14 +6222,68 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     global CURRENT_SEASON
     CURRENT_SEASON = season
 
-    roles = pd.read_csv("data/roles_ourlads.csv")
-    logs = pd.read_csv("data/player_game_logs.csv")
-    sched = pd.read_csv("data/team_week_map.csv")
+    roles_path = Path("data/roles_ourlads.csv")
+    logs_path = Path("data/player_game_logs.csv")
+    sched_path = Path("data/team_week_map.csv")
+    totals_path = Path("data/player_season_totals.csv")
+
+    partial_flag = 0
+
+    if roles_path.exists():
+        roles = pd.read_csv(roles_path)
+    else:
+        logger.warning("[make_player_form] roles_ourlads.csv missing; continuing with empty roles")
+        roles = pd.DataFrame(columns=["player", "team"])
+
+    if logs_path.exists():
+        try:
+            logs = pd.read_csv(logs_path)
+        except Exception as err:
+            logger.warning(
+                "[make_player_form] failed reading %s: %s", logs_path, err
+            )
+            logs = pd.DataFrame(columns=["player"])
+            partial_flag = 1
+    else:
+        logger.warning(
+            "[make_player_form] player_game_logs.csv missing; building partial output"
+        )
+        logs = pd.DataFrame(columns=["player"])
+        partial_flag = 1
+
+    if sched_path.exists():
+        try:
+            sched = pd.read_csv(sched_path)
+        except Exception as err:
+            logger.warning(
+                "[make_player_form] failed reading %s: %s", sched_path, err
+            )
+            sched = pd.DataFrame()
+    else:
+        logger.warning("[make_player_form] team_week_map.csv missing; schedule enrich skipped")
+        sched = pd.DataFrame()
+
+    if totals_path.exists():
+        try:
+            totals = pd.read_csv(totals_path)
+        except Exception as err:
+            logger.warning(
+                "[make_player_form] failed reading %s: %s", totals_path, err
+            )
+            totals = pd.DataFrame()
+            partial_flag = 1
+    else:
+        totals = pd.DataFrame()
+        partial_flag = 1
+        logger.warning(
+            "[make_player_form] player_season_totals.csv missing; skipping totals enrich"
+        )
 
     logs_initial_count = len(logs)
 
     roles = _filter_to_season(roles, season)
     logs = _filter_to_season(logs, season)
+    totals = _filter_to_season(totals, season)
     sched = _filter_to_season(sched, season)
 
     print(f"[PlayerForm] Loaded {len(roles)} role rows from roles_ourlads.csv")
@@ -6313,6 +6367,47 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         print(f"[make_player_form] WARNING: opponent overlay failed: {e}")
 
     merged = pf.copy()
+
+    if merged.empty and not roles.empty:
+        fallback = roles.copy()
+        fallback["season"] = season
+        fallback["week"] = pd.NA
+        fallback["opponent"] = pd.NA
+        fallback["opponent_abbr"] = pd.NA
+        fallback["player_source_name"] = fallback.get("player", pd.Series("", index=fallback.index))
+        fallback["team_abbr"] = fallback.get("team", pd.Series("", index=fallback.index)).astype("string").str.upper()
+        fallback["partial"] = 1
+        merged = fallback
+        partial_flag = 1
+    else:
+        merged["partial"] = partial_flag
+
+    if "player_source_name" not in merged.columns:
+        source_series = None
+        for candidate in ("player", "player_name", "display_name"):
+            if candidate in merged.columns:
+                source_series = merged[candidate]
+                break
+        if source_series is None:
+            source_series = pd.Series("", index=merged.index)
+        merged["player_source_name"] = source_series
+
+    if "team_abbr" not in merged.columns:
+        if "team" in merged.columns:
+            merged["team_abbr"] = merged["team"]
+        else:
+            merged["team_abbr"] = pd.NA
+
+    if "position" not in merged.columns:
+        merged["position"] = pd.NA
+
+    if "role" not in merged.columns:
+        merged["role"] = pd.NA
+
+    merged["team_abbr"] = merged["team_abbr"].astype("string").str.upper().str.strip()
+    merged["season"] = season
+    if "week" not in merged.columns:
+        merged["week"] = pd.NA
 
     os.makedirs("data/_debug", exist_ok=True)
     merged.to_csv("data/player_form.csv", index=False)

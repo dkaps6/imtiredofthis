@@ -3,9 +3,12 @@ import logging
 import os
 from typing import Iterable, Optional, Union
 
+from zoneinfo import ZoneInfo
+
 import pandas as pd
 
 logger = logging.getLogger("opponent_map")
+CENTRAL_TZ = ZoneInfo("America/Chicago")
 
 # --- Team name/abbr normalization used by fetchers and mappers ---
 
@@ -148,56 +151,179 @@ def normalize_team_series(vals: Union[pd.Series, Iterable]) -> pd.Series:
         return map_normalize_team(vals)
     return map_normalize_team(pd.Series(list(vals), dtype="string"))
 
-def build_opponent_map(week: Optional[int] = 10, team_map_path: str = "data/team_week_map.csv") -> pd.DataFrame:
-    """
-    Build symmetric opponent pairs from team_week_map.csv, week-filtered.
-    Writes data/opponent_map.csv for downstream joins and returns the df.
-    """
+
+def _build_from_odds_game(paths: Optional[list[str]] = None) -> tuple[pd.DataFrame, list[dict]]:
+    if paths is None:
+        paths = ["outputs/odds_game.csv", "data/odds_game.csv"]
+
+    frame = pd.DataFrame()
+    for path in paths:
+        if os.path.exists(path):
+            try:
+                frame = pd.read_csv(path)
+                if not frame.empty:
+                    break
+            except Exception as exc:
+                logger.warning("[opponent_map] failed reading %s: %s", path, exc)
+    if frame.empty:
+        return pd.DataFrame(columns=["event_id", "team", "opponent", "game_date", "origin"]), []
+
+    unresolved: list[dict] = []
+    rows: list[dict] = []
+    frame.columns = [c.lower() for c in frame.columns]
+    for record in frame.to_dict(orient="records"):
+        event_id = str(record.get("event_id", "")).strip()
+        home = normalize_team(record.get("home_team"))
+        away = normalize_team(record.get("away_team"))
+        commence = record.get("commence_time") or record.get("kickoff_ts")
+        game_date = None
+        if commence:
+            dt = pd.to_datetime(commence, utc=True, errors="coerce")
+            if not pd.isna(dt):
+                dt = dt.tz_convert(CENTRAL_TZ) if dt.tzinfo else dt.tz_localize("UTC").tz_convert(CENTRAL_TZ)
+                game_date = dt.date().isoformat()
+        if not event_id:
+            unresolved.append({"source": "odds_game", "reason": "missing event_id", "home": home, "away": away})
+            continue
+        if not home or not away:
+            unresolved.append({"source": "odds_game", "event_id": event_id, "reason": "team not recognized"})
+            continue
+        rows.append({
+            "event_id": event_id,
+            "team": home,
+            "opponent": away,
+            "game_date": game_date,
+            "origin": "odds_game",
+        })
+        rows.append({
+            "event_id": event_id,
+            "team": away,
+            "opponent": home,
+            "game_date": game_date,
+            "origin": "odds_game",
+        })
+    return pd.DataFrame(rows), unresolved
+
+
+def _build_from_team_week_map(
+    path: str = "data/team_week_map.csv",
+    *,
+    week: Optional[int] = None,
+) -> tuple[pd.DataFrame, list[dict]]:
+    if not os.path.exists(path):
+        logger.warning("[opponent_map] %s not found", path)
+        return pd.DataFrame(columns=["event_id", "team", "opponent", "season", "week", "origin"]), [
+            {"source": "team_week_map", "reason": "file missing"}
+        ]
+
     try:
-        tm = pd.read_csv(team_map_path)
-    except FileNotFoundError:
-        logger.warning("[OpponentMap] %s not found", team_map_path)
-        return pd.DataFrame(columns=["event_id","week","team","opponent"])
+        frame = pd.read_csv(path)
     except Exception as exc:
-        logger.error("[OpponentMap] Failed to read %s: %s", team_map_path, exc)
-        return pd.DataFrame(columns=["event_id","week","team","opponent"])
+        logger.error("[opponent_map] failed to read %s: %s", path, exc)
+        return pd.DataFrame(columns=["event_id", "team", "opponent", "season", "week", "origin"]), [
+            {"source": "team_week_map", "reason": f"read error: {exc}"}
+        ]
 
-    required = {"event_id","week","team","opponent"}
-    if not required.issubset(tm.columns):
-        missing = ", ".join(sorted(required - set(tm.columns)))
-        logger.error("[OpponentMap] team_week_map missing columns: %s", missing)
-        return pd.DataFrame(columns=list(required))
+    if frame.empty:
+        return pd.DataFrame(columns=["event_id", "team", "opponent", "season", "week", "origin"]), []
 
-    working = tm.copy()
-    working["team"] = map_normalize_team(working["team"].astype("string"))
-    working["opponent"] = working["opponent"].astype("string")
-    bye_mask = working["opponent"].str.upper().str.strip().eq("BYE")
-    normalized_opponent = map_normalize_team(working.loc[~bye_mask, "opponent"].astype("string"))
-    working.loc[~bye_mask, "opponent"] = normalized_opponent
-    working.loc[bye_mask, "opponent"] = "BYE"
-
-    if week is not None:
+    unresolved: list[dict] = []
+    working = frame.copy()
+    if week is not None and "week" in working.columns:
         working = working[working["week"] == week]
 
-    out_rows = []
-    for _, r in working.iterrows():
-        evt = str(r.get("event_id","")).strip()
-        wk = r.get("week")
-        t = r.get("team","")
-        opp = r.get("opponent","")
-        if not t:
-            continue
-        if opp == "BYE":
-            out_rows.append({"event_id": evt, "week": wk, "team": t, "opponent": "BYE"})
-        elif opp:
-            out_rows.append({"event_id": evt, "week": wk, "team": t, "opponent": opp})
-            out_rows.append({"event_id": evt, "week": wk, "team": opp, "opponent": t})
+    for col in ("team", "opponent"):
+        if col in working.columns:
+            working[col] = normalize_team_series(working[col])
 
-    df = pd.DataFrame(out_rows).drop_duplicates(subset=["event_id","team","opponent"])
-    os.makedirs("data/_debug", exist_ok=True)
-    df.to_csv("data/opponent_map.csv", index=False)
-    print(f"[OpponentMap] wrote {len(df)} rows for week={week} → data/opponent_map.csv")
-    return df
+    rows: list[dict] = []
+    for record in working.to_dict(orient="records"):
+        team = record.get("team")
+        opponent = record.get("opponent")
+        if not team or team == "BYE":
+            continue
+        if not opponent or opponent == "BYE":
+            unresolved.append({
+                "source": "team_week_map",
+                "team": team,
+                "week": record.get("week"),
+                "reason": "opponent missing",
+            })
+            continue
+        rows.append({
+            "event_id": str(record.get("event_id", "")).strip(),
+            "team": team,
+            "opponent": opponent,
+            "season": record.get("season"),
+            "week": record.get("week"),
+            "origin": "team_week_map",
+        })
+    return pd.DataFrame(rows), unresolved
+
+def build_opponent_map(week: Optional[int] = 10, team_map_path: str = "data/team_week_map.csv") -> pd.DataFrame:
+    """Merge opponent mapping data from odds_game and team_week_map sources."""
+
+    odds_df, odds_unresolved = _build_from_odds_game()
+    tw_df, tw_unresolved = _build_from_team_week_map(team_map_path, week=week)
+
+    combined = pd.concat([odds_df, tw_df], ignore_index=True, sort=False)
+    if combined.empty:
+        result = pd.DataFrame(
+            columns=["event_id", "team", "opponent", "game_date", "season", "week", "origin"]
+        )
+    else:
+        combined["event_id"] = combined.get("event_id", "").fillna("").astype(str)
+        combined["team"] = normalize_team_series(combined.get("team", ""))
+        combined["opponent"] = normalize_team_series(combined.get("opponent", ""))
+        combined["_priority"] = combined.get("origin").map({"odds_game": 0, "team_week_map": 1}).fillna(1)
+        combined["_dedupe_key"] = combined.apply(
+            lambda row: (
+                row.get("event_id", ""),
+                row.get("week"),
+                row.get("team", ""),
+            ),
+            axis=1,
+        )
+        combined = (
+            combined.sort_values("_priority")
+            .drop_duplicates(subset="_dedupe_key", keep="first")
+            .drop(columns=["_dedupe_key", "_priority"], errors="ignore")
+        )
+        result_cols = [
+            "event_id",
+            "team",
+            "opponent",
+            "game_date",
+            "season",
+            "week",
+            "origin",
+        ]
+        for col in result_cols:
+            if col not in combined.columns:
+                combined[col] = pd.NA
+        result = combined[result_cols]
+
+    unresolved = odds_unresolved + tw_unresolved
+    if unresolved:
+        unresolved_df = pd.DataFrame(unresolved)
+    else:
+        unresolved_df = pd.DataFrame(columns=["source", "reason"])
+
+    os.makedirs("data", exist_ok=True)
+    out_path = os.path.join("data", "opponent_map_from_props.csv")
+    result.to_csv(out_path, index=False)
+    logger.info("[OpponentMap] wrote %s rows → %s", len(result), out_path)
+
+    unresolved_path = os.path.join("data", "opponent_map_unresolved.csv")
+    unresolved_df.to_csv(unresolved_path, index=False)
+    if not unresolved_df.empty:
+        logger.info(
+            "[OpponentMap] unresolved entries=%s → %s",
+            len(unresolved_df),
+            unresolved_path,
+        )
+
+    return result
 
 def attach_opponent(
     df: pd.DataFrame,
