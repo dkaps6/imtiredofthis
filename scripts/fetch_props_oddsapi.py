@@ -21,14 +21,14 @@ import pandas as pd
 # --- END: mandatory global imports ---
 
 from scripts._opponent_map import (
-    CANON_SET,
-    build_opponent_map,
-    map_normalize_opponent_map,
-    normalize_team,
-    normalize_team_abbr,
+    CANON_TEAM_ABBR,
+    map_normalize_team,
+    normalize_team_series,
 )
 from scripts.utils.canonical_names import canonicalize_player_name, norm_key
 from scripts.utils.team_maps import TEAM_NAME_TO_ABBR
+
+CANON_SET = set(CANON_TEAM_ABBR.values())
 
 # ------------------------- CONFIG -------------------------
 
@@ -225,11 +225,17 @@ TEAM_FIXES.update({
 def _canon_team(x: str) -> str:
     if not isinstance(x, str):
         return x
+    candidate = map_normalize_team(x)
+    if candidate:
+        return candidate
     x = x.strip().upper()
     x = TEAM_FIXES.get(x, x)
     if x in TEAM_NAME_TO_ABBR:
-        return TEAM_NAME_TO_ABBR[x]
-    return x
+        mapped = TEAM_NAME_TO_ABBR[x]
+        fallback = map_normalize_team(mapped)
+        return fallback or mapped
+    fallback = map_normalize_team(x)
+    return fallback or x
 
 
 def _to_int_safe(v):
@@ -367,21 +373,40 @@ def _normalize_teams_and_opponents(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return df
     working = df.copy()
-    working = map_normalize_opponent_map(working)
-
     for col in (
+        "team",
+        "team_abbr",
         "player_team_abbr",
         "home",
         "away",
+        "home_team",
+        "away_team",
+        "home_team_abbr",
+        "away_team_abbr",
+        "opponent",
+        "opponent_abbr",
         "opponent_team_abbr",
     ):
         if col in working.columns:
-            working[col] = normalize_team(working[col])
+            working[col] = normalize_team_series(working[col])
 
-    if "team_abbr" not in working.columns and "team" in working.columns:
-        working["team_abbr"] = normalize_team(working["team"])
-    if "opponent_abbr" not in working.columns and "opponent" in working.columns:
-        working["opponent_abbr"] = normalize_team(working["opponent"])
+    if "team_abbr" in working.columns or "team" in working.columns:
+        team_series = working.get("team_abbr")
+        if team_series is None:
+            team_series = pd.Series(pd.NA, index=working.index, dtype="object")
+        if "team" in working.columns:
+            team_series = team_series.fillna(working["team"])
+        working["team_abbr"] = normalize_team_series(team_series.astype(str))
+
+    if "opponent_abbr" in working.columns:
+        working["opponent_abbr"] = normalize_team_series(
+            working["opponent_abbr"].astype(str)
+        )
+    elif "opponent" in working.columns:
+        working["opponent_abbr"] = normalize_team_series(
+            working["opponent"].astype(str)
+        )
+
     # For any residual unknowns, log once
     valid_values = CANON_SET | {"BYE", ""}
     for col in ("team", "opponent"):
@@ -591,6 +616,9 @@ def _normalize_team_abbr(team: Any) -> str:
     raw = ("" if team is None else str(team)).strip()
     if not raw:
         return ""
+    normalized = map_normalize_team(raw)
+    if normalized:
+        return normalized
     upper = raw.upper()
     if upper in TEAM_NAME_TO_ABBR:
         return TEAM_NAME_TO_ABBR[upper]

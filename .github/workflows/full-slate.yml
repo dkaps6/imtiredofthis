@@ -19,27 +19,23 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
+  ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+  ESPN_COOKIE: ${{ secrets.ESPN_COOKIE }}
+  MSF_KEY: ${{ secrets.MSF_KEY }}
+  MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
+  NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
+  NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
+  SEASON: ${{ github.event.inputs.season }}
+  SLATE_DATE: ${{ github.event.inputs.date }}
+
 jobs:
-  build:
+  setup_python:
     runs-on: ubuntu-latest
-
-    env:
-      PYTHONDONTWRITEBYTECODE: "1"
-      PIP_DISABLE_PIP_VERSION_CHECK: "1"
-      APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
-      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-      ESPN_COOKIE: ${{ secrets.ESPN_COOKIE }}
-      MSF_KEY: ${{ secrets.MSF_KEY }}
-      MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
-      NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
-      NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
-      SEASON: ${{ github.event.inputs.season }}
-      SLATE_DATE: ${{ github.event.inputs.date }}
-
     steps:
-      # ----------------------------
-      # 0. Checkout + Python setup
-      # ----------------------------
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -54,51 +50,126 @@ jobs:
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           fi
-          # if metrics_ready.py uses yaml or rapidfuzz etc and it's NOT in requirements.txt,
-          # make sure requirements.txt gets updated in repo. don't pip install ad-hoc here
-          # unless you're intentionally hot-patching.
 
-      # ----------------------------------------
-      # 1. Pull SharpFootball team metrics
-      # ----------------------------------------
-      # scrapes pace / neutral pace / box rates / tendencies / coverage / etc.
-      # outputs CSVs into data/ (e.g. sharp_pace_*.csv, sharp_coverage_*.csv ...)
-      - name: Pull SharpFootball metrics
-        run: |
-          export PYTHONPATH="${PWD}"
-          python scripts/providers/sharpfootball_pull.py \
-            --season "${SEASON}" \
-            --dump-html
+  build_team_week_map:
+    runs-on: ubuntu-latest
+    needs: [setup_python]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      # ----------------------------------------
-      # 2. Build depth / roles (Ourlads)
-      # ----------------------------------------
-      # This should write depth/role info like roles_ourlads.csv
-      # plus whatever merged roles file player_form expects.
-      - name: Build depth / roles (Ourlads)
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps (core + HTML parsers)
         run: |
-          export PYTHONPATH="${PWD}"
-          python scripts/providers/ourlads_depth.py \
-            --season "${SEASON}"
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
 
       - name: Build team-week map (authoritative opponents)
         run: |
           export PYTHONPATH="${PWD}"
-          SCHED=""; test -f "data/schedules/schedule_${SEASON}.csv" && SCHED="--schedule data/schedules/schedule_${SEASON}.csv"
+          SCHED=""
+          if [ -f "data/schedules/schedule_${SEASON}.csv" ]; then
+            SCHED="--schedule data/schedules/schedule_${SEASON}.csv"
+          fi
           python scripts/utils/make_team_week_map.py --season "${SEASON}" ${SCHED}
 
-      # ----------------------------------------
-      # 3. Fetch player props / odds board (before player_form)
-      # ----------------------------------------
+      - name: Persist state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: state-build_team_week_map
+          path: |
+            data/**
+            outputs/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  fetch_player_props_odds_board:
+    runs-on: ubuntu-latest
+    needs: [build_team_week_map]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore state from build_team_week_map
+        uses: actions/download-artifact@v4
+        with:
+          name: state-build_team_week_map
+          path: previous_state
+
+      - name: Merge previous state
+        run: |
+          if [ -d previous_state ]; then
+            cp -a previous_state/. .
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps (core + HTML parsers)
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+
       - name: Fetch player props / odds board
+        shell: /usr/bin/bash -e {0}
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/fetch_props_oddsapi.py \
             --season "${SEASON}" \
             --date "${SLATE_DATE}"
-        shell: /usr/bin/bash -e {0}
-        env:
-          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+
+      - name: Persist state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: state-fetch_player_props_odds_board
+          path: |
+            data/**
+            outputs/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  build_opponent_map_from_props:
+    runs-on: ubuntu-latest
+    needs: [build_team_week_map, fetch_player_props_odds_board]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore state from fetch_player_props_odds_board
+        uses: actions/download-artifact@v4
+        with:
+          name: state-fetch_player_props_odds_board
+          path: previous_state
+
+      - name: Merge previous state
+        run: |
+          if [ -d previous_state ]; then
+            cp -a previous_state/. .
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps (core + HTML parsers)
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
 
       - name: Build opponent map from props
         run: |
@@ -106,14 +177,93 @@ jobs:
           python -m compileall scripts/build/build_opponent_map_from_props.py
           python scripts/build/build_opponent_map_from_props.py
 
-      # ----------------------------------------
-      # 4. Build player_form + player_form_consensus
-      # ----------------------------------------
-      # make_player_form.py should:
-      # - merge roles_ourlads.csv
-      # - merge props_enriched.csv for team/opponent alignment
-      # - canonicalize player names (strip middle initials, normalize "J.Fields" -> "Justin Fields")
-      # - output data/player_form.csv and data/player_form_consensus.csv
+      - name: Persist state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: state-build_opponent_map_from_props
+          path: |
+            data/**
+            outputs/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  build_depth_roles_ourlads:
+    runs-on: ubuntu-latest
+    needs: [setup_python]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps (core + HTML parsers)
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+
+      - name: Build depth / roles (Ourlads)
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/providers/ourlads_depth.py \
+            --season "${SEASON}"
+
+      - name: Persist state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: state-build_depth_roles_ourlads
+          path: |
+            data/**
+            outputs/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  build_player_form_consensus:
+    runs-on: ubuntu-latest
+    needs: [build_opponent_map_from_props, build_depth_roles_ourlads]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore state from build_opponent_map_from_props
+        uses: actions/download-artifact@v4
+        with:
+          name: state-build_opponent_map_from_props
+          path: opponent_state
+
+      - name: Restore roles state
+        uses: actions/download-artifact@v4
+        with:
+          name: state-build_depth_roles_ourlads
+          path: roles_state
+
+      - name: Merge previous state
+        run: |
+          if [ -d opponent_state ]; then
+            cp -a opponent_state/. .
+          fi
+          if [ -d roles_state ]; then
+            cp -a roles_state/. .
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps (core + HTML parsers)
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+
       - name: Build player_form / consensus
         run: |
           export PYTHONPATH="${PWD}"
@@ -121,62 +271,168 @@ jobs:
             --season "${SEASON}" \
             --date "${SLATE_DATE}"
 
-      # ----------------------------------------
-      # 5. Build QB run/scramble metrics
-      # ----------------------------------------
-      # Generates qb_designed_runs.csv and qb_scramble_rates.csv from nflverse PBP.
-      # You already added row-count guards so it fails if data is totally empty.
-      - name: Build QB scramble / designed-run metrics
+      - name: Persist state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: state-build_player_form_consensus
+          path: |
+            data/**
+            outputs/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  build_team_form:
+    runs-on: ubuntu-latest
+    needs: [build_team_week_map]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore state from build_team_week_map
+        uses: actions/download-artifact@v4
+        with:
+          name: state-build_team_week_map
+          path: previous_state
+
+      - name: Merge previous state
+        run: |
+          if [ -d previous_state ]; then
+            cp -a previous_state/. .
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps (core + HTML parsers)
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+
+      - name: Pull SharpFootball metrics
         run: |
           export PYTHONPATH="${PWD}"
-          python scripts/build/build_qb_run_metrics.py \
-            --season "${SEASON}"
+          python scripts/providers/sharpfootball_pull.py \
+            --season "${SEASON}" \
+            --dump-html
 
-      # ----------------------------------------
-      # 6. Build team_form.csv
-      # ----------------------------------------
-      # make_team_form.py is responsible for merging:
-      # - SharpFootball (pace, neutral_pace, coverage tendencies, box rate, etc.)
-      # - nflverse / nflreadr data (EPA, PROE, etc.)
-      # and writing data/team_form.csv
       - name: Build team_form
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/make_team_form.py \
             --season "${SEASON}"
 
-      # ----------------------------------------
-      # 7. Build weather for this slate
-      # ----------------------------------------
-      # Weather needs to be in place before downstream metrics.
+      - name: Persist state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: state-build_team_form
+          path: |
+            data/**
+            outputs/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  build_weather:
+    runs-on: ubuntu-latest
+    needs: [build_team_week_map]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore state from build_team_week_map
+        uses: actions/download-artifact@v4
+        with:
+          name: state-build_team_week_map
+          path: previous_state
+
+      - name: Merge previous state
+        run: |
+          if [ -d previous_state ]; then
+            cp -a previous_state/. .
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps (core + HTML parsers)
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+
       - name: Build weather (per-game forecast)
         continue-on-error: true
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-          PYTHONDONTWRITEBYTECODE: 1
-          PIP_DISABLE_PIP_VERSION_CHECK: 1
-          APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
-          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-          ESPN_COOKIE: ${{ secrets.ESPN_COOKIE }}
-          MSF_KEY: ${{ secrets.MSF_KEY }}
-          MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
-          NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
-          NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
-          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
-          SEASON: ${{ env.SEASON }}
-          SLATE_DATE: ${{ env.SLATE_DATE }}
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/build/build_weather_week.py \
             --season "${SEASON}" \
             --date "${SLATE_DATE}"
 
-      # ----------------------------------------
-      # 8. Run pipeline (full metrics prep)
-      # ----------------------------------------
-      # This stage assembles all derived features that pricing depends on.
-      # After this, the repo should have:
-      # - fully enriched per-player/per-team matchup features
+      - name: Persist state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: state-build_weather
+          path: |
+            data/**
+            outputs/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  run_pipeline_full_metrics:
+    runs-on: ubuntu-latest
+    needs: [build_player_form_consensus, build_team_form]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore state from build_player_form_consensus
+        uses: actions/download-artifact@v4
+        with:
+          name: state-build_player_form_consensus
+          path: player_form_state
+
+      - name: Restore state from build_team_form
+        uses: actions/download-artifact@v4
+        with:
+          name: state-build_team_form
+          path: team_form_state
+
+      - name: Merge previous state
+        run: |
+          if [ -d player_form_state ]; then
+            cp -a player_form_state/. .
+          fi
+          if [ -d team_form_state ]; then
+            cp -a team_form_state/. .
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps (core + HTML parsers)
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+
+      - name: Build QB scramble / designed-run metrics
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/build/build_qb_run_metrics.py \
+            --season "${SEASON}"
+
       - name: Run pipeline (full metrics)
         run: |
           export PYTHONPATH="${PWD}"
@@ -185,19 +441,48 @@ jobs:
             --mode full \
             --date "${SLATE_DATE}"
 
-      # ----------------------------------------
-      # 9. metrics_ready sanity gate
-      # ----------------------------------------
-      # HARD FAIL GATE.
-      # metrics_ready.py should:
-      # - confirm required CSVs exist and are non-empty:
-      #   data/team_form.csv
-      #   data/player_form.csv
-      #   data/player_form_consensus.csv
-      #   data/qb_designed_runs.csv
-      #   data/qb_scramble_rates.csv
-      #   any other must-have inputs
-      # If anything is missing/empty -> raise RuntimeError -> nonzero exit -> job stops here.
+      - name: Persist state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: state-run_pipeline_full_metrics
+          path: |
+            data/**
+            outputs/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  validate_metrics_ready:
+    runs-on: ubuntu-latest
+    needs: [run_pipeline_full_metrics]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore state from run_pipeline_full_metrics
+        uses: actions/download-artifact@v4
+        with:
+          name: state-run_pipeline_full_metrics
+          path: previous_state
+
+      - name: Merge previous state
+        run: |
+          if [ -d previous_state ]; then
+            cp -a previous_state/. .
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps (core + HTML parsers)
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+
       - name: Validate metrics_ready (must pass before pricing)
         run: |
           export PYTHONPATH="${PWD}"
@@ -205,15 +490,49 @@ jobs:
             --season "${SEASON}" \
             --date "${SLATE_DATE}"
 
-      # ----------------------------------------
-      # 10. Elite model | Run pricing
-      # ----------------------------------------
-      # ONLY after the sanity gate passes do we hit pricing.
-      # This is where Odds API credits and sportsbook calls happen.
-      # This step should generate final projection tables and bet slips.
+      - name: Persist state
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: state-validate_metrics_ready
+          path: |
+            data/**
+            outputs/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  elite_model_run_pricing:
+    runs-on: ubuntu-latest
+    needs: [validate_metrics_ready]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore state from validate_metrics_ready
+        uses: actions/download-artifact@v4
+        with:
+          name: state-validate_metrics_ready
+          path: previous_state
+
+      - name: Merge previous state
+        run: |
+          if [ -d previous_state ]; then
+            cp -a previous_state/. .
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps (core + HTML parsers)
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+
       - name: Elite model | Run pricing
-        env:
-          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/make_metrics.py \
@@ -224,14 +543,8 @@ jobs:
           python scripts/pricing.py \
             --season "${SEASON}"
 
-      # ----------------------------------------
-      # 11. Upload artifacts
-      # ----------------------------------------
-      # Always upload every CSV and output we care about,
-      # even if an earlier step failed. This lets us inspect
-      # partials like opponent_map_from_props.csv, player_form.csv, etc.
       - name: Upload artifacts (always)
-        if: always()
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: run_${{ github.run_id }}
