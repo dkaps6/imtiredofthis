@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import argparse
-import gzip
-import io
+import io, gzip
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 import pandas as pd
 import requests
@@ -28,9 +27,14 @@ PFR_URL = "https://www.pro-football-reference.com/years/{season}/games.htm"
 LEGACY_SCHED = Path("data/schedule.csv")
 _EXPECTED_COLS = {"season", "week", "gameday", "game_id", "home_team", "away_team"}
 
+UA = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/118.0 Safari/537.36"
+}
+
 
 def _validate_schedule(df: pd.DataFrame) -> pd.DataFrame:
-    if not _EXPECTED_COLS.issubset(set(df.columns)):
+    if not _EXPECTED_COLS.issubset(df.columns):
         raise ValueError(
             f"schedule missing cols; have={sorted(df.columns)} need={sorted(_EXPECTED_COLS)}"
         )
@@ -44,15 +48,14 @@ def _fetch_schedule_nflverse(season: int) -> pd.DataFrame:
     r = requests.get(url, timeout=30)
     if r.status_code != 200 or not r.content:
         raise RuntimeError(f"nflverse schedule fetch failed: {url} status={r.status_code}")
-    buf = io.BytesIO(r.content)
-    with gzip.GzipFile(fileobj=buf) as gz:
+    with gzip.GzipFile(fileobj=io.BytesIO(r.content)) as gz:
         df = pd.read_csv(gz)
     df = df.rename(columns={"gameday": "gamedate"})
-    df["home_team"] = canon_team(df["home_team"])
-    df["away_team"] = canon_team(df["away_team"])
-    # Some nflverse dumps use "gameday", some "gamedate"—normalize back to 'gameday'
+    # normalize back to 'gameday'
     if "gamedate" in df.columns and "gameday" not in df.columns:
         df["gameday"] = df["gamedate"]
+    df["home_team"] = canon_team(df["home_team"])
+    df["away_team"] = canon_team(df["away_team"])
     return _validate_schedule(df)
 
 
@@ -95,23 +98,55 @@ PFR_TO_ABBR = {
 }
 
 
+def _name_to_abbr(s: pd.Series) -> pd.Series:
+    # handle full names (PFR) -> our abbrs, then canonicalize to our codes
+    out = s.map(PFR_TO_ABBR).fillna(s)
+    return canon_team(out)
+
+
 def _fetch_schedule_pfr(season: int) -> pd.DataFrame:
     url = PFR_URL.format(season=season)
-    tables = pd.read_html(url, match="Week")
-    sched = None
-    for t in tables:
-        if {"Week", "Date", "Visitor", "Home"}.issubset(set(t.columns)):
-            sched = t
+    resp = requests.get(url, headers=UA, timeout=30)
+    if resp.status_code != 200 or not resp.text:
+        raise RuntimeError(f"PFR fetch failed: {url} status={resp.status_code}")
+
+    # parse all tables and pick the first matching one
+    tables = pd.read_html(resp.text)
+    t = None
+    for tbl in tables:
+        cols = set(tbl.columns.astype(str))
+        if {"Week", "Date"}.issubset(cols) and (
+            {"Visitor", "Home"}.issubset(cols)
+            or {"Winner/tie", "Loser/tie", "Unnamed: 5"}.issubset(cols)
+            or {"Winner/tie", "Loser/tie", "at"}.issubset(cols)
+        ):
+            t = tbl
             break
-    if sched is None:
+    if t is None:
+        # helpful debug drop (optional): write HTML to help investigate
+        with open(f"data/schedules/pfr_{season}.html", "w", encoding="utf-8") as f:
+            f.write(resp.text)
         raise RuntimeError(f"PFR schedule table not found: {url}")
 
-    t = sched.loc[sched["Week"].astype(str).str.match(r"^\d+$", na=False)].copy()
+    # keep only numeric NFL weeks (skip Preseason/Playoffs rows)
+    mask_week = t["Week"].astype(str).str.match(r"^\d+$", na=False)
+    t = t.loc[mask_week].copy()
     t["season"] = int(season)
     t["week"] = t["Week"].astype(int)
     t["gameday"] = pd.to_datetime(t["Date"], errors="coerce")
-    t["away_team"] = canon_team(t["Visitor"].map(PFR_TO_ABBR).fillna(t["Visitor"]))
-    t["home_team"] = canon_team(t["Home"].map(PFR_TO_ABBR).fillna(t["Home"]))
+    if {"Visitor", "Home"}.issubset(set(t.columns)):
+        # future-schedule style
+        t["away_team"] = _name_to_abbr(t["Visitor"])
+        t["home_team"] = _name_to_abbr(t["Home"])
+    else:
+        # results style: Winner/Loser with 'at' flag ('@' means Winner was away)
+        at_col = "at" if "at" in t.columns else "Unnamed: 5"
+        is_winner_away = t[at_col].astype(str).str.strip().eq("@")
+        winner = _name_to_abbr(t["Winner/tie"])
+        loser = _name_to_abbr(t["Loser/tie"])
+        t["home_team"] = winner.where(~is_winner_away, loser)
+        t["away_team"] = winner.where(is_winner_away, loser)
+
     t["game_id"] = (
         t["season"].astype(str)
         + "_"
@@ -141,7 +176,7 @@ def _ensure_int(value: object) -> object:
         return pd.NA
 
 
-def _canon_pair(a: str, b: str) -> Tuple[str, str]:
+def _canon_pair(a: str, b: str) -> tuple[str, str]:
     a_norm = (a or "").strip().upper()
     b_norm = (b or "").strip().upper()
     return (a_norm, b_norm) if a_norm <= b_norm else (b_norm, a_norm)
@@ -281,6 +316,14 @@ def _load_or_build_schedule_source(
             return df
         except Exception as e:
             print(f"[team_week_map] Explicit schedule invalid; ignoring: {e}")
+            # if it's our cache path, nuke it so we can refetch
+            try:
+                sp = Path(schedule_path)
+                if sp.resolve().is_file() and sp.parent.resolve() == SCHED_DIR.resolve():
+                    sp.unlink(missing_ok=True)
+                    print(f"[team_week_map] Deleted invalid explicit cache: {schedule_path}")
+            except Exception:
+                pass
 
     # 1) cached per-season
     if cache_csv.exists() and cache_csv.stat().st_size > 0:
