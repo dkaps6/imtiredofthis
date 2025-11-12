@@ -5,8 +5,11 @@ from __future__ import annotations
 import argparse
 import io
 import gzip
+import json
 import os
+import random
 import re
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -137,6 +140,117 @@ def _fetch_schedule_espn_html(season: int, max_week: int = 19) -> pd.DataFrame:
     df = df[df["home_team"] != ""]
     df = df[df["away_team"] != ""]
 
+    return df
+
+
+def _fetch_schedule_espn_json(
+    season: int, seasontype: int = 2, weeks: list[int] | None = None
+) -> pd.DataFrame:
+    """
+    Robust ESPN JSON fallback (no HTML/JS). Pulls per-week scoreboard JSON and
+    returns columns: season, week, gameday (UTC date), game_id, home_team, away_team.
+
+    - Uses site.api.espn.com (no cookie required).
+    - Canonicalizes team abbreviations via canon_team().
+    - Adds small jitter + UA header to be polite.
+    """
+    if weeks is None:
+        # Regular season weeks; adjust if you later want preseason/postseason
+        weeks = list(range(1, 19))
+
+    rows: list[dict] = []
+    ua = (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    )
+    session = requests.Session()
+    session.headers.update(
+        {
+            "User-Agent": ua,
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Connection": "keep-alive",
+        }
+    )
+
+    for wk in weeks:
+        url = (
+            "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+            f"?week={wk}&year={season}&seasontype={seasontype}"
+        )
+        try:
+            r = session.get(url, timeout=20)
+            if r.status_code != 200:
+                print(
+                    f"[team_week_map][ESPN-JSON] week {wk}: HTTP {r.status_code} for {url}"
+                )
+                time.sleep(0.8 + random.random() * 0.6)
+                continue
+
+            payload = r.json()
+            events = payload.get("events", []) or []
+            print(f"[team_week_map][ESPN-JSON] week {wk}: {len(events)} events")
+
+            for ev in events:
+                gid = ev.get("id")
+                date_iso = ev.get("date")
+                comps = (ev.get("competitions") or [])
+                if not comps:
+                    continue
+                comp = comps[0]
+                competitors = comp.get("competitors") or []
+                home_abbr = away_abbr = None
+
+                for c in competitors:
+                    team = (c.get("team") or {})
+                    abbr = (
+                        team.get("abbreviation")
+                        or team.get("shortDisplayName")
+                        or team.get("location")
+                        or team.get("displayName")
+                    )
+                    side = c.get("homeAway")
+                    if side == "home":
+                        home_abbr = abbr
+                    elif side == "away":
+                        away_abbr = abbr
+
+                if not (home_abbr and away_abbr and gid):
+                    # log diagnostic row for debugging
+                    print(
+                        f"[team_week_map][ESPN-JSON] week {wk}: skipped missing fields "
+                        f"(gid={gid}, home={home_abbr}, away={away_abbr})"
+                    )
+                    continue
+
+                rows.append(
+                    {
+                        "season": int(season),
+                        "week": int(wk),
+                        "gameday": date_iso,
+                        "game_id": str(gid),
+                        "home_team": home_abbr,
+                        "away_team": away_abbr,
+                    }
+                )
+
+            time.sleep(0.8 + random.random() * 0.6)
+        except Exception as e:
+            print(f"[team_week_map][ESPN-JSON] week {wk}: exception {e}")
+
+    if not rows:
+        print("[team_week_map][ESPN-JSON] produced 0 rows")
+        return pd.DataFrame(
+            columns=["season", "week", "gameday", "game_id", "home_team", "away_team"]
+        )
+
+    df = pd.DataFrame(rows)
+    # Canonicalize team codes to match our internal keys
+    df["home_team"] = canon_team(df["home_team"])
+    df["away_team"] = canon_team(df["away_team"])
+    # Basic sanity
+    df = df.dropna(subset=["home_team", "away_team", "game_id"]).reset_index(drop=True)
+    print(f"[team_week_map][ESPN-JSON] final rows: {len(df)}")
     return df
 
 
@@ -415,6 +529,29 @@ def _load_or_build_schedule_source(season: int, schedule_path: str | None) -> pd
     except Exception as e:
         print(f"[team_week_map] PFR failed: {e}")
 
+    # NEW: ESPN JSON fallback (robust, no HTML parsing)
+    try:
+        df_espn = _fetch_schedule_espn_json(season=int(season), seasontype=2)
+        if not df_espn.empty:
+            # Persist debug copy for auditing
+            out_json = Path("data/schedules")
+            out_json.mkdir(parents=True, exist_ok=True)
+            with open(out_json / f"schedule_{season}_espn.json", "w") as fp:
+                json.dump(df_espn.to_dict(orient="records"), fp, indent=2)
+            print(f"[team_week_map] ESPN JSON fallback produced {len(df_espn)} rows")
+            return df_espn.rename(
+                columns={
+                    "home_team": "home_team",
+                    "away_team": "away_team",
+                    "game_id": "game_id",
+                    "gameday": "gameday",
+                }
+            )
+        else:
+            print("[team_week_map] ESPN JSON fallback produced empty schedule")
+    except Exception as e:
+        print(f"[team_week_map] ESPN JSON fallback failed: {e}")
+
     # 3) ESPN HTML fallback (new)
     try:
         df_espn = _fetch_schedule_espn_html(season)
@@ -485,7 +622,16 @@ def build_map(season: int, schedule_path: Optional[str] = None) -> pd.DataFrame:
         print(
             f"[make_team_week_map] WARNING: dropped {dropped} duplicate rows (kept first per team/week)"
         )
-    return df.reset_index(drop=True)
+
+    df = df.reset_index(drop=True)
+
+    out_csv = Path("data") / "team_week_map.csv"
+    out_csv.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(out_csv, index=False)
+    print(f"[team_week_map] wrote {out_csv} with {len(df)} rows; sample:")
+    print(df.head(5).to_string(index=False))
+
+    return df
 
 
 def _write_game_lines_from_team_week_map(
