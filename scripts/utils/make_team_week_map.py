@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import argparse
-import io, gzip
+import io
+import gzip
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -11,7 +14,7 @@ import pandas as pd
 import requests
 
 # import both names; we’ll use a single local name
-from scripts._opponent_map import canon_team as _canon_any, _canon_team_series as _canon_series, TEAM_FIX
+from scripts._opponent_map import canon_team as _canon_any, _canon_team_series as _canon_series
 from scripts.utils.name_clean import normalize_team
 
 
@@ -23,7 +26,11 @@ SCHED_DIR = Path("data/schedules")
 SCHED_DIR.mkdir(parents=True, exist_ok=True)
 
 NFLVERSE_URL = "https://raw.githubusercontent.com/nflverse/nflfastR-data/master/schedules/sched_{season}.csv.gz"
+# PFR kept as last-resort; often 403s on CI
 PFR_URL = "https://www.pro-football-reference.com/years/{season}/games.htm"
+# ESPN API (weeks 1..23 in regular/post types)
+ESPN_WEEK_EVENTS = "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/seasons/{season}/types/2/weeks/{week}/events"
+
 LEGACY_SCHED = Path("data/schedule.csv")
 _EXPECTED_COLS = {"season", "week", "gameday", "game_id", "home_team", "away_team"}
 
@@ -38,8 +45,10 @@ def _validate_schedule(df: pd.DataFrame) -> pd.DataFrame:
         raise ValueError(
             f"schedule missing cols; have={sorted(df.columns)} need={sorted(_EXPECTED_COLS)}"
         )
-    out = df.loc[:, sorted(list(_EXPECTED_COLS))].copy()
+    out = df.loc[:, sorted(_EXPECTED_COLS)].copy()
     out["season"] = out["season"].astype(int)
+    out["week"] = out["week"].astype(int)
+    out["gameday"] = pd.to_datetime(out["gameday"], errors="coerce", utc=True)
     return out
 
 
@@ -50,12 +59,84 @@ def _fetch_schedule_nflverse(season: int) -> pd.DataFrame:
         raise RuntimeError(f"nflverse schedule fetch failed: {url} status={r.status_code}")
     with gzip.GzipFile(fileobj=io.BytesIO(r.content)) as gz:
         df = pd.read_csv(gz)
-    df = df.rename(columns={"gameday": "gamedate"})
-    # normalize back to 'gameday'
-    if "gamedate" in df.columns and "gameday" not in df.columns:
+    # ensure canonical columns
+    if "gameday" not in df.columns and "gamedate" in df.columns:
         df["gameday"] = df["gamedate"]
+    df = df.rename(columns={"home_team": "home_team", "away_team": "away_team"})
     df["home_team"] = canon_team(df["home_team"])
     df["away_team"] = canon_team(df["away_team"])
+    return _validate_schedule(
+        df[["season", "week", "gameday", "game_id", "home_team", "away_team"]]
+    )
+
+
+def _fetch_schedule_espn(season: int) -> pd.DataFrame:
+    # Regular season weeks typically 1..18; include 19..23 to cover bye/post-season variations safely
+    rows = []
+    for wk in range(1, 24):
+        url = ESPN_WEEK_EVENTS.format(season=season, week=wk)
+        r = requests.get(url, timeout=20, headers=UA)
+        if r.status_code != 200:
+            # Stop if the week endpoint disappears for future weeks, but keep any rows we got
+            continue
+        try:
+            data = json.loads(r.text)
+        except json.JSONDecodeError:
+            continue
+        if "items" not in data or not data["items"]:
+            continue
+        for item in data["items"]:
+            # item is a URL to the event; fetch details
+            ev_resp = requests.get(item, timeout=20, headers=UA)
+            try:
+                ev = json.loads(ev_resp.text)
+            except json.JSONDecodeError:
+                continue
+            # event 'competitions'[0] contains competitors & date
+            if not ev.get("competitions"):
+                continue
+            comp = ev["competitions"][0]
+            date_iso = comp.get("date")
+            gameday = pd.NaT
+            if date_iso:
+                try:
+                    dt = datetime.fromisoformat(date_iso.replace("Z", "+00:00")).astimezone(
+                        timezone.utc
+                    )
+                    gameday = pd.to_datetime(dt, utc=True)
+                except Exception:
+                    try:
+                        gameday = pd.to_datetime(date_iso, utc=True)
+                    except Exception:
+                        gameday = pd.NaT
+
+            home_abbr, away_abbr = None, None
+            for c in comp.get("competitors", []):
+                team = c.get("team", {})
+                abbr = team.get("abbreviation")
+                if c.get("homeAway") == "home":
+                    home_abbr = abbr
+                elif c.get("homeAway") == "away":
+                    away_abbr = abbr
+            if not home_abbr or not away_abbr:
+                continue
+
+            home_abbr = canon_team(pd.Series([home_abbr])).iloc[0]
+            away_abbr = canon_team(pd.Series([away_abbr])).iloc[0]
+            game_id = f"{season}_{wk}_{home_abbr}_{away_abbr}"
+            rows.append(
+                {
+                    "season": season,
+                    "week": wk,
+                    "gameday": gameday,
+                    "game_id": game_id,
+                    "home_team": home_abbr,
+                    "away_team": away_abbr,
+                }
+            )
+    if not rows:
+        raise RuntimeError("ESPN schedule fetch produced 0 rows")
+    df = pd.DataFrame(rows).drop_duplicates(subset=["game_id"])
     return _validate_schedule(df)
 
 
@@ -364,7 +445,16 @@ def _load_or_build_schedule_source(
     except Exception as e:
         print(f"[team_week_map] nflverse failed: {e}")
 
-    # 4) PFR fallback
+    # 4) ESPN (new, CI-friendly)
+    try:
+        df = _fetch_schedule_espn(season)
+        df.to_csv(cache_csv, index=False)
+        print(f"[team_week_map] Fetched ESPN → {cache_csv} rows={len(df)}")
+        return df
+    except Exception as e:
+        print(f"[team_week_map] ESPN failed: {e}")
+
+    # 5) PFR fallback (last resort; may 403 on CI)
     try:
         df = _fetch_schedule_pfr(season)
         df.to_csv(cache_csv, index=False)
@@ -373,7 +463,7 @@ def _load_or_build_schedule_source(
     except Exception as e:
         print(f"[team_week_map] PFR failed: {e}")
 
-    # 5) last resort (give downstream something to join)
+    # 6) last resort (give downstream something to join)
     raise RuntimeError("Could not build schedule from any source")
 
 
