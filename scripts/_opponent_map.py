@@ -1,22 +1,42 @@
 # scripts/_opponent_map.py
 from __future__ import annotations
+
+from typing import Dict, Union
+
 import pandas as pd
-from typing import Dict
+
+# Merge these into your existing TEAM_FIX; do not delete any keys you already have.
+TEAM_FIX: Dict[str, str] = {
+    # Normalize odd vendor/team tokens:
+    "BLT": "BAL", "CLV": "CLE", "HST": "HOU",
+    "ARZ": "ARI", "JAC": "JAX", "LA": "LAR", "WSH": "WAS",
+    # Identity for standard codes:
+    "ARI": "ARI", "ATL": "ATL", "BAL": "BAL", "BUF": "BUF", "CAR": "CAR", "CHI": "CHI",
+    "CIN": "CIN", "CLE": "CLE", "DAL": "DAL", "DEN": "DEN", "DET": "DET", "GB": "GB",
+    "HOU": "HOU", "IND": "IND", "JAX": "JAX", "KC": "KC", "LAC": "LAC", "LAR": "LAR",
+    "LV": "LV", "MIA": "MIA", "MIN": "MIN", "NE": "NE", "NO": "NO", "NYG": "NYG", "NYJ": "NYJ",
+    "PHI": "PHI", "PIT": "PIT", "SEA": "SEA", "SF": "SF", "TB": "TB", "TEN": "TEN", "WAS": "WAS",
+}
+
+
+def canon_team(x: Union[str, pd.Series]) -> Union[str, pd.Series]:
+    """Canonicalize a single team code or a pandas Series of codes."""
+    if isinstance(x, pd.Series):
+        s = x.astype(str).str.upper()
+        return s.map(TEAM_FIX).fillna(s)
+    if x is None:
+        return x
+    s = str(x).upper()
+    return TEAM_FIX.get(s, s)
+
+
+# Back-compat alias expected by some modules:
+def _canon_team_series(s: pd.Series) -> pd.Series:  # keep this name for legacy import sites
+    return canon_team(s)
+
 
 # Canonical 2–3 letter team abbreviations used by our model
-CANON_TEAM_ABBR: Dict[str, str] = {
-    # odd site aliases → canonical model keys
-    "BLT": "BAL", "BAL": "BAL",
-    "CLV": "CLE", "CLE": "CLE",
-    "HST": "HOU", "HOU": "HOU",
-    # regular teams pass-through
-    "ARI": "ARI", "ATL": "ATL", "BUF": "BUF", "CAR": "CAR", "CHI": "CHI",
-    "CIN": "CIN", "DAL": "DAL", "DEN": "DEN", "DET": "DET", "GB": "GB",
-    "IND": "IND", "JAX": "JAX", "KC": "KC", "LAC": "LAC", "LAR": "LAR",
-    "LV": "LV", "MIA": "MIA", "MIN": "MIN", "NE": "NE", "NO": "NO",
-    "NYG": "NYG", "NYJ": "NYJ", "PHI": "PHI", "PIT": "PIT", "SEA": "SEA",
-    "SF": "SF", "TB": "TB", "TEN": "TEN", "WAS": "WAS",
-}
+CANON_TEAM_ABBR: Dict[str, str] = TEAM_FIX
 
 # broader remap for free-form names we see in APIs / books
 TEAM_REMAP: Dict[str, str] = {
@@ -55,20 +75,30 @@ TEAM_REMAP: Dict[str, str] = {
     "WASHINGTON COMMANDERS": "WAS", "COMMANDERS": "WAS",
 }
 
+
 def map_normalize_team(x: str | None) -> str | None:
-    if not x:
+    if x is None:
         return None
-    key = str(x).strip().upper()
-    # First, normalize any long-form to an abbr
-    if key in TEAM_REMAP:
-        key = TEAM_REMAP[key]
-    # Then coerce to canonical abbr set
-    return CANON_TEAM_ABBR.get(key, CANON_TEAM_ABBR.get(TEAM_REMAP.get(key, key), None))
+    key = str(x).strip()
+    if not key:
+        return None
+    key_upper = key.upper()
+    if key_upper in TEAM_REMAP:
+        key_upper = TEAM_REMAP[key_upper]
+    canon = canon_team(key_upper)
+    if not isinstance(canon, str):
+        return None
+    return TEAM_FIX.get(canon.upper())
+
 
 def normalize_team_series(s: pd.Series) -> pd.Series:
-    return s.map(map_normalize_team)
+    return s.apply(map_normalize_team)
+
 
 __all__ = [
+    "TEAM_FIX",
+    "canon_team",
+    "_canon_team_series",
     "CANON_TEAM_ABBR",
     "TEAM_REMAP",
     "map_normalize_team",
