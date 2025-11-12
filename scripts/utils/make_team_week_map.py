@@ -261,33 +261,27 @@ def build_map(season: int, schedule_path: Optional[str] = None) -> pd.DataFrame:
         df_sched = _load_or_build_schedule_source(season)
 
     if isinstance(df_sched, pd.DataFrame):
-        seasons_series = df_sched.get("season")
-        seasons = (
-            pd.to_numeric(seasons_series, errors="coerce")
+        seasons_list = (
+            pd.to_numeric(df_sched.get("season"), errors="coerce")
             .dropna()
             .astype(int)
             .unique()
             .tolist()
-            if seasons_series is not None
-            else []
         )
-        seasons = sorted(seasons)
-        weeks = (
+        weeks_n = (
             pd.to_numeric(df_sched.get("week"), errors="coerce")
             .dropna()
             .astype(int)
             .nunique()
-            if "week" in df_sched
-            else 0
         )
-        games = len(df_sched)
+        games_n = len(df_sched)
     else:
-        seasons = []
-        weeks = 0
-        games = 0
+        seasons_list = []
+        weeks_n = 0
+        games_n = 0
 
     print(
-        f"[team_week_map] seasons={seasons} weeks={int(weeks)} games={int(games)}"
+        f"[team_week_map] seasons={seasons_list} weeks={weeks_n} games={games_n}"
     )
 
     df = _prepare_schedule_rows(df_sched, season)
