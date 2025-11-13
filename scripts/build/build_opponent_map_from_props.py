@@ -20,7 +20,7 @@ from scripts.utils.name_clean import (
     initials_last_to_full,
     normalize_team,
 )
-from scripts.utils.team_codes import canon_team
+from scripts._opponent_map import canon_team
 from scripts.utils.df_keys import coerce_merge_keys
 
 
@@ -898,6 +898,13 @@ def build_opponent_map(
     for text_col in ("player_clean_key", "opponent", "event_id"):
         if text_col in opponent_map.columns:
             opponent_map[text_col] = opponent_map[text_col].astype("string")
+    for team_col in ("team", "opponent", "home_team", "away_team", "team_abbr", "opponent_abbr"):
+        if team_col in opponent_map.columns:
+            opponent_map[team_col] = (
+                opponent_map[team_col]
+                .astype("string")
+                .map(lambda val: canon_team(val) if val else val)
+            )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     opponent_map.to_csv(out_path, index=False)
     print(f"[oddsapi] wrote {len(opponent_map)} rows → {out_path}")

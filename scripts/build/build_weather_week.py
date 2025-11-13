@@ -5,6 +5,7 @@
 # - Summarizes temp/wind/precip around kickoff.
 # - Fails fast (RuntimeError) if we cannot generate at least 1 row.
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -21,7 +22,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import requests
 
-from scripts._opponent_map import canon_team as canon_team_series
+from scripts._opponent_map import canon_team
 from scripts.utils.stadium_locations import STADIUM_LOCATION
 
 STADIUM_LOCATION.setdefault(
@@ -45,6 +46,10 @@ NWS_HEADERS = {
 
 SESSION = requests.Session()
 logger = logging.getLogger(__name__)
+
+
+def _canon_series(series: pd.Series) -> pd.Series:
+    return series.fillna("").astype(str).apply(canon_team)
 
 
 def _to_datetime_utc(series: pd.Series) -> pd.Series:
@@ -140,8 +145,8 @@ def _normalize_team_week_map(team_week: pd.DataFrame) -> pd.DataFrame:
 
     out = pd.DataFrame(
         {
-            "home": canon_team_series(team_week[home_col].astype(str)),
-            "away": canon_team_series(team_week[away_col].astype(str)),
+            "home": _canon_series(team_week[home_col].astype(str)),
+            "away": _canon_series(team_week[away_col].astype(str)),
         }
     )
 
@@ -229,6 +234,21 @@ def _normalize_team_week_map(team_week: pd.DataFrame) -> pd.DataFrame:
     out["kickoff_local"] = kickoff_local_values
     out["kickoff_utc"] = pd.to_datetime(kickoff_utc_values, utc=True, errors="coerce")
     out["kickoff_et"] = kickoff_et_strings
+
+    if season_col and season_col in team_week.columns:
+        try:
+            out["season"] = pd.to_numeric(team_week[season_col], errors="coerce").astype("Int64")
+        except Exception:
+            out["season"] = pd.Series(pd.NA, index=out.index, dtype="Int64")
+    else:
+        out["season"] = pd.Series(pd.NA, index=out.index, dtype="Int64")
+    if week_col and week_col in team_week.columns:
+        try:
+            out["week"] = pd.to_numeric(team_week[week_col], errors="coerce").astype("Int64")
+        except Exception:
+            out["week"] = pd.Series(pd.NA, index=out.index, dtype="Int64")
+    else:
+        out["week"] = pd.Series(pd.NA, index=out.index, dtype="Int64")
 
     return out.dropna(subset=["home", "away"]).reset_index(drop=True)
 
@@ -340,268 +360,216 @@ def build_slate_fallback() -> pd.DataFrame:
     return fallback_df
 
 
-def _load_slate_from_repo() -> pd.DataFrame:
-    """
-    Try, in order:
-      1) data/game_lines.csv (preferred), falling back to data/odds_game.csv or data/team_week_map.csv
-      2) data/opponent_map_from_props.csv  (must have home/away; use game_timestamp if present)
-      3) existing legacy sources (current code path)
-    Returns DataFrame with columns at least: home, away, kickoff_utc (may contain NaT if unknown).
-    """
-
-    # 1) Preferred slate (game_lines → odds_game → team_week_map)
-    slate = pd.DataFrame()
+def _read_csv_optional(path: Path) -> pd.DataFrame:
+    if not path.exists() or path.stat().st_size == 0:
+        return pd.DataFrame()
     try:
-        slate = pd.read_csv("data/game_lines.csv")
+        return pd.read_csv(path)
     except (pd.errors.EmptyDataError, FileNotFoundError):
-        try:
-            odds_primary = pd.read_csv("data/odds_game.csv")
-        except (pd.errors.EmptyDataError, FileNotFoundError):
-            odds_primary = pd.DataFrame()
-        if not odds_primary.empty:
-            keep = [
-                c
-                for c in ["event_id", "home_team", "away_team", "commence_time", "home", "away"]
-                if c in odds_primary.columns
-            ]
-            slate = odds_primary.loc[:, keep].copy()
+        return pd.DataFrame()
+    except Exception as exc:
+        logger.warning("[weather] failed reading %s: %s", path, exc)
+        return pd.DataFrame()
 
-    if slate.empty:
-        try:
-            team_week = pd.read_csv("data/team_week_map.csv")
-        except (pd.errors.EmptyDataError, FileNotFoundError):
-            team_week = pd.DataFrame()
-        if not team_week.empty:
-            normalized = _normalize_team_week_map(team_week)
-            if not normalized.empty:
-                slate = normalized
-                slate.attrs["source"] = "team_week_map.csv"
-                slate.attrs["source_path"] = "data/team_week_map.csv"
 
-    if not slate.empty:
-        cols = {col.lower(): col for col in slate.columns}
-        rename_map = {}
-        if "home_team" in cols and "home" not in slate.columns:
-            rename_map[cols["home_team"]] = "home"
-        if "away_team" in cols and "away" not in slate.columns:
-            rename_map[cols["away_team"]] = "away"
-        if "kickoff" in cols and "commence_time" not in slate.columns:
-            rename_map[cols["kickoff"]] = "commence_time"
-        if "kickoff_utc" in cols and "commence_time" not in slate.columns:
-            rename_map[cols["kickoff_utc"]] = "commence_time"
-        if rename_map:
-            slate = slate.rename(columns=rename_map)
+def _load_team_week_source(season: int | None) -> pd.DataFrame:
+    df = _read_csv_optional(Path("data/team_week_map.csv"))
+    if df.empty:
+        return pd.DataFrame()
+    normalized = _normalize_team_week_map(df)
+    if normalized.empty:
+        return normalized
+    if season is not None and "season" in normalized.columns:
+        mask = normalized["season"].fillna(season).astype("Int64") == int(season)
+        normalized = normalized.loc[mask].copy()
+    normalized.attrs["source"] = "team_week_map"
+    return normalized
 
-        if {"home", "away"}.issubset(slate.columns):
-            slate["home"] = slate["home"].astype(str).str.upper().str.strip()
-            slate["away"] = slate["away"].astype(str).str.upper().str.strip()
-            if "commence_time" in slate.columns:
-                slate["kickoff_utc"] = _to_datetime_utc(slate["commence_time"])
-            elif "kickoff_utc" in slate.columns:
-                slate["kickoff_utc"] = _to_datetime_utc(slate["kickoff_utc"])
+
+def _load_odds_game_source() -> pd.DataFrame:
+    df = _read_csv_optional(Path("data/odds_game.csv"))
+    if df.empty:
+        df = _read_csv_optional(Path("outputs/odds_game.csv"))
+    if df.empty:
+        return pd.DataFrame()
+    cols = {c.lower(): c for c in df.columns}
+    home_col = next((cols[key] for key in ("home_team", "home") if key in cols), None)
+    away_col = next((cols[key] for key in ("away_team", "away") if key in cols), None)
+    kickoff_col = next(
+        (cols[key] for key in ("commence_time", "kickoff_ts", "kickoff_utc") if key in cols),
+        None,
+    )
+    if not (home_col and away_col):
+        return pd.DataFrame()
+    working = pd.DataFrame(
+        {
+            "home": _canon_series(df[home_col]),
+            "away": _canon_series(df[away_col]),
+        }
+    )
+    if kickoff_col:
+        working["kickoff_utc"] = pd.to_datetime(df[kickoff_col], utc=True, errors="coerce")
+    else:
+        working["kickoff_utc"] = pd.NaT
+    if "event_id" in cols:
+        working["event_id"] = df[cols["event_id"]]
+    working.attrs["source"] = "odds_game"
+    return working
+
+
+def _load_schedule_source(season: int | None) -> pd.DataFrame:
+    df = _read_csv_optional(Path("data/schedule.csv"))
+    if df.empty:
+        return pd.DataFrame()
+    cols = {c.lower(): c for c in df.columns}
+    home_col = next((cols[key] for key in ("home", "home_team") if key in cols), None)
+    away_col = next((cols[key] for key in ("away", "away_team") if key in cols), None)
+    kickoff_col = next(
+        (cols[key] for key in ("kickoff_utc", "kickoff", "start_time", "commence_time") if key in cols),
+        None,
+    )
+    date_col = next((cols[key] for key in ("gameday", "game_date", "date") if key in cols), None)
+    if not (home_col and away_col):
+        return pd.DataFrame()
+    working = pd.DataFrame(
+        {
+            "home": _canon_series(df[home_col]),
+            "away": _canon_series(df[away_col]),
+        }
+    )
+    if kickoff_col:
+        working["kickoff_utc"] = pd.to_datetime(df[kickoff_col], utc=True, errors="coerce")
+    else:
+        working["kickoff_utc"] = pd.NaT
+    if date_col:
+        working["kickoff_date"] = pd.to_datetime(df[date_col], errors="coerce")
+    if season is not None and "season" in cols:
+        season_series = pd.to_numeric(df[cols["season"]], errors="coerce").astype("Int64")
+        working = working.loc[season_series == int(season)].copy()
+    working.attrs["source"] = "schedule"
+    return working
+
+
+def _nearest_game_date(df: pd.DataFrame, slate_date: str | None) -> datetime.date | None:
+    if slate_date:
+        target = pd.to_datetime(slate_date, errors="coerce")
+        if pd.notna(target):
+            return target.date()
+    if "kickoff_utc" in df.columns and df["kickoff_utc"].notna().any():
+        kickoff = pd.to_datetime(df["kickoff_utc"], utc=True, errors="coerce").dropna()
+        if not kickoff.empty:
+            now = pd.Timestamp.utcnow()
+            upcoming = kickoff[kickoff >= now]
+            target = upcoming.min() if not upcoming.empty else kickoff.max()
+            if pd.notna(target):
+                return target.date()
+    if "kickoff_local" in df.columns and df["kickoff_local"].notna().any():
+        local = pd.to_datetime(df["kickoff_local"], errors="coerce").dropna()
+        if not local.empty:
+            now_local = pd.Timestamp.utcnow().tz_localize("UTC")
+            upcoming = local[local >= now_local]
+            target = upcoming.min() if not upcoming.empty else local.max()
+            if pd.notna(target):
+                target = target.tz_convert("UTC") if target.tzinfo else target
+                return target.date()
+    if "kickoff_date" in df.columns and df["kickoff_date"].notna().any():
+        dates = pd.to_datetime(df["kickoff_date"], errors="coerce").dropna()
+        if not dates.empty:
+            today = pd.Timestamp.utcnow().date()
+            upcoming_dates = dates[dates.dt.date >= today]
+            target = upcoming_dates.min() if not upcoming_dates.empty else dates.max()
+            if pd.notna(target):
+                return target.date()
+    return None
+
+
+def _filter_games_by_date(df: pd.DataFrame, target_date: datetime.date | None) -> pd.DataFrame:
+    if target_date is None or df.empty:
+        return df
+    mask = pd.Series(False, index=df.index)
+    if "kickoff_utc" in df.columns:
+        utc_dates = pd.to_datetime(df["kickoff_utc"], utc=True, errors="coerce").dt.date
+        mask = mask | (utc_dates == target_date)
+    if "kickoff_local" in df.columns:
+        local_dates = pd.to_datetime(df["kickoff_local"], errors="coerce").dt.date
+        mask = mask | (local_dates == target_date)
+    if "kickoff_date" in df.columns:
+        base_dates = pd.to_datetime(df["kickoff_date"], errors="coerce").dt.date
+        mask = mask | (base_dates == target_date)
+    filtered = df.loc[mask.fillna(False)].copy()
+    return filtered if not filtered.empty else df
+
+
+def _ensure_local_kickoff(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    kickoff_local: list = []
+    kickoff_utc: list = []
+    tz_values: list = []
+    for _, row in df.iterrows():
+        home = canon_team(row.get("home"))
+        tz_name = row.get("local_tz") or _infer_tz_from_team(home)
+        tzinfo = ZoneInfo(tz_name)
+        local_raw = pd.to_datetime(row.get("kickoff_local"), errors="coerce")
+        utc_raw = pd.to_datetime(row.get("kickoff_utc"), utc=True, errors="coerce")
+        date_raw = row.get("kickoff_date")
+        if pd.notna(local_raw):
+            if local_raw.tzinfo is None:
+                local_raw = local_raw.tz_localize(tzinfo)
             else:
-                slate["kickoff_utc"] = pd.NaT
+                local_raw = local_raw.tz_convert(tzinfo)
+        elif pd.notna(utc_raw):
+            local_raw = utc_raw.tz_convert(tzinfo)
+        elif date_raw is not None and str(date_raw).strip():
+            date_ts = pd.to_datetime(date_raw, errors="coerce")
+            if pd.notna(date_ts):
+                if date_ts.tzinfo is None:
+                    date_ts = date_ts.tz_localize(tzinfo)
+                else:
+                    date_ts = date_ts.tz_convert(tzinfo)
+                local_raw = date_ts.replace(hour=12, minute=0, second=0, microsecond=0)
+        if pd.isna(utc_raw) and pd.notna(local_raw):
+            utc_raw = local_raw.astimezone(ZoneInfo("UTC"))
+        kickoff_local.append(local_raw)
+        kickoff_utc.append(utc_raw)
+        tz_values.append(tz_name)
+    working = df.copy()
+    working["kickoff_local"] = kickoff_local
+    working["kickoff_utc"] = kickoff_utc
+    working["local_tz"] = tz_values
+    working["kickoff_date"] = [
+        (val.date() if isinstance(val, datetime) else (utc.date() if pd.notna(utc) else pd.NaT))
+        for val, utc in zip(kickoff_local, kickoff_utc)
+    ]
+    return working
 
-            slate = slate.dropna(subset=["home", "away", "kickoff_utc"])
-            if not slate.empty:
-                result_cols = ["home", "away", "kickoff_utc"]
-                for optional in ["kickoff_local", "local_tz", "kickoff_et"]:
-                    if optional in slate.columns and optional not in result_cols:
-                        result_cols.append(optional)
-                return slate[result_cols].drop_duplicates()
 
-    # 2) Opponent map (reduced slate)
-    try:
-        om = pd.read_csv("data/opponent_map_from_props.csv")
-        if not om.empty and all(c in om.columns for c in ["home", "away"]):
-            out = om[["home", "away"]].drop_duplicates().copy()
-            if "game_timestamp" in om.columns:
-                ts = om[["home", "away", "game_timestamp"]].dropna().drop_duplicates()
-                ts["kickoff_utc"] = _to_datetime_utc(ts["game_timestamp"])
-                out = out.merge(ts[["home", "away", "kickoff_utc"]], on=["home", "away"], how="left")
-            else:
-                out["kickoff_utc"] = pd.NaT
-            return out[["home", "away", "kickoff_utc"]]
-    except Exception:
-        pass
-
-    # 3) Fall back to legacy logic (existing code below)
-
-    # Look in multiple places so we always find a slate, even when props are empty.
-    candidates = [
-        (Path("data") / "game_lines.csv", "game_lines.csv"),
-        (Path("outputs") / "odds_game.csv", "outputs/odds_game.csv"),
-        (Path("data") / "team_week_map.csv", "team_week_map.csv"),
-        (Path("data") / "opponent_map_from_props.csv", "opponent_map_from_props.csv"),
+def _load_slate_from_repo(season: int | None, slate_date: str | None) -> pd.DataFrame:
+    loaders = [
+        lambda: _load_team_week_source(season),
+        _load_odds_game_source,
+        lambda: _load_schedule_source(season),
     ]
 
-    for path, label in candidates:
-        try:
-            df = pd.read_csv(path)
-        except (pd.errors.EmptyDataError, FileNotFoundError) as exc:
-            logger.warning(
-                "[weather] Unable to read slate candidate %s: %s",
-                path,
-                exc,
-            )
-            continue
-
+    for loader in loaders:
+        df = loader()
         if df.empty:
-            logger.warning("[weather] Slate candidate %s is empty", path)
             continue
-
-        cols = {col.lower(): col for col in df.columns}
-
-        home_col = None
-        away_col = None
-        kickoff_col = None
-        tz_col = None
-
-        for key, value in cols.items():
-            if key in {"home", "home_team", "posteam", "posteam_home"}:
-                home_col = value
-            if key in {"away", "away_team", "defteam", "posteam_away"}:
-                away_col = value
-            if any(token in key for token in ("kickoff", "start", "datetime", "game_time")):
-                kickoff_col = value
-            if any(token in key for token in ("tz", "timezone", "local_tz")):
-                tz_col = value
-
-        source_df = df
-
-        if label == "team_week_map.csv" and {"home_team", "away_team"}.issubset(cols):
-            normalized = _normalize_team_week_map(df)
-            if not normalized.empty:
-                normalized.attrs["fallback_used"] = False
-                normalized.attrs["source"] = label
-                normalized.attrs["source_path"] = str(path)
-                return normalized
-
-        if label == "team_week_map.csv" and not home_col:
-            team_col = cols.get("team")
-            opp_col = cols.get("opponent")
-            home_flag_col = cols.get("is_home")
-            kickoff_col = kickoff_col or cols.get("kickoff_local") or cols.get("kickoff_utc")
-            if team_col and opp_col and home_flag_col and kickoff_col:
-                home_mask = (
-                    df[home_flag_col]
-                    .astype(str)
-                    .str.strip()
-                    .str.lower()
-                    .isin(["true", "t", "1", "yes"])
-                )
-                home_df = df[home_mask].copy()
-                if not home_df.empty:
-                    tz_override = tz_col or cols.get("local_tz")
-                    source_df = pd.DataFrame(
-                        {
-                            "home": home_df[team_col].astype(str).str.upper().str.strip(),
-                            "away": home_df[opp_col].astype(str).str.upper().str.strip(),
-                            "kickoff_raw": home_df[kickoff_col],
-                        }
-                    )
-                    if tz_override and tz_override in home_df.columns:
-                        source_df["local_tz"] = home_df[tz_override].astype(str)
-                    else:
-                        source_df["local_tz"] = source_df["home"].map(_infer_tz_from_team)
-
-                    kickoff_col = "kickoff_raw"
-                    home_col = "home"
-                    away_col = "away"
-                    tz_col = "local_tz"
-
-        if not home_col or not away_col or not kickoff_col:
-            logger.warning(
-                "[weather] Slate candidate %s missing required columns (home/away/kickoff)",
-                path,
-            )
+        df = _ensure_local_kickoff(df)
+        target_date = _nearest_game_date(df, slate_date)
+        df = _filter_games_by_date(df, target_date)
+        df = _ensure_local_kickoff(df)
+        if df.empty:
             continue
-
-        out = pd.DataFrame(
-            {
-                "home": source_df[home_col].astype(str).str.upper().str.strip(),
-                "away": source_df[away_col].astype(str).str.upper().str.strip(),
-                "kickoff_raw": source_df[kickoff_col],
-            }
-        )
-
-        out["home"] = out["home"].replace({"": pd.NA, "NAN": pd.NA})
-        out["away"] = out["away"].replace({"": pd.NA, "NAN": pd.NA})
-        out["kickoff_raw_str"] = out["kickoff_raw"].astype(str).str.strip()
-
-        invalid_kickoff = out["kickoff_raw_str"].str.upper().isin({"", "NAN", "NAT"})
-        valid_mask = (
-            out["home"].notna()
-            & out["away"].notna()
-            & out["kickoff_raw_str"].notna()
-            & ~invalid_kickoff
-        )
-        out = out[valid_mask].copy()
-        out = out.drop(columns=["kickoff_raw_str"])
-
-        if out.empty:
-            logger.warning(
-                "[weather] Slate candidate %s produced no usable home/away/kickoff rows",
-                path,
-            )
-            continue
-
-        if tz_col and tz_col in source_df.columns:
-            out["local_tz"] = source_df[tz_col].astype(str)
-        else:
-            out["local_tz"] = out["home"].map(_infer_tz_from_team)
-
-        kickoff_utc = []
-        kickoff_local = []
-        for _, record in out.iterrows():
-            raw = record["kickoff_raw"]
-            dt_obj = None
-            if isinstance(raw, datetime):
-                dt_obj = raw
-            else:
-                try:
-                    dt_obj = datetime.fromisoformat(str(raw))
-                except Exception:
-                    dt_obj = None
-
-            if dt_obj is not None and dt_obj.tzinfo is None:
-                dt_obj = dt_obj.replace(tzinfo=ZoneInfo("UTC"))
-
-            if dt_obj is None:
-                dt_obj = datetime.now(tz=ZoneInfo("UTC"))
-
-            kickoff_utc.append(dt_obj.astimezone(ZoneInfo("UTC")))
-
-            tzname = record.get("local_tz") or _infer_tz_from_team(record["home"])
-            try:
-                local_dt = dt_obj.astimezone(ZoneInfo(tzname))
-            except Exception:
-                tz_fallback = _infer_tz_from_team(record["home"])
-                local_dt = dt_obj.astimezone(ZoneInfo(tz_fallback))
-            kickoff_local.append(local_dt)
-
-        out["kickoff_utc"] = kickoff_utc
-        out["kickoff_local"] = kickoff_local
-        out["slate_date"] = [
-            dt.date().isoformat() if isinstance(dt, datetime) else ""
-            for dt in kickoff_local
-        ]
-
-        out.attrs["fallback_used"] = False
-        out.attrs["source"] = label
-        out.attrs["source_path"] = str(path)
-        return out
+        return df
 
     fallback_df = build_slate_fallback()
     if not fallback_df.empty:
-        return fallback_df
+        return _ensure_local_kickoff(fallback_df)
 
     raise RuntimeError(
-        "[weather] Could not infer this week's slate from repo "
-        "(no usable game_lines/opponent_map file with home/away/kickoff). "
-        "Please extend _load_slate_from_repo() to read your actual slate CSV."
+        "Could not load a slate for weather forecasts. (team_week_map/odds_game/schedule missing)"
     )
-
 
 def _infer_tz_from_team(team: str) -> str:
     """
@@ -925,10 +893,25 @@ def _weather_row_for_game(row: pd.Series) -> dict:
     return out
 
 
-def main():
+def main(season: str | None = None, slate_date: str | None = None):
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    slate_df = _load_slate_from_repo()
+    env_season = (season or os.getenv("SEASON", "").strip()) or None
+    season_value: int | None = None
+    if env_season:
+        try:
+            season_value = int(env_season)
+        except ValueError:
+            season_value = None
+
+    env_slate = slate_date if slate_date is not None else os.getenv("SLATE_DATE", "")
+    env_slate = (env_slate or "").strip() or None
+
+    try:
+        slate_df = _load_slate_from_repo(season_value, env_slate)
+    except RuntimeError as exc:
+        logger.warning("[weather] %s", exc)
+        slate_df = pd.DataFrame()
 
     if slate_df.empty:
         logger.warning(
@@ -940,7 +923,17 @@ def main():
         return
 
     source_label = slate_df.attrs.get("source", "unknown")
-    logger.info("[weather] using slate source: %s", source_label)
+    logger.info("[weather] slate source: %s", source_label)
+
+    kickoff_local_raw = slate_df.get("kickoff_local")
+    usable_kickoff = 0
+    if kickoff_local_raw is not None:
+        kickoff_local_series = pd.to_datetime(kickoff_local_raw, errors="coerce")
+        if isinstance(kickoff_local_series, pd.Series):
+            usable_kickoff = int(kickoff_local_series.notna().sum())
+        else:
+            usable_kickoff = int(pd.notna(kickoff_local_series))
+    logger.info("[weather] kickoff_local rows: %s/%s", usable_kickoff, len(slate_df))
 
     fallback_used = bool(slate_df.attrs.get("fallback_used", False))
 
@@ -979,4 +972,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--season", default=None)
+    parser.add_argument("--date", default=None)
+    args = parser.parse_args()
+    main(season=args.season, slate_date=args.date)

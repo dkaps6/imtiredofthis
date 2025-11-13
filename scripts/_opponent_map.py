@@ -1,95 +1,11 @@
 from __future__ import annotations
 
-import pandas as pd
 import re
+from typing import Dict
 
-# Existing house fixes? Keep them, but ensure keys are UPPERCASE
-TEAM_FIX = {
-    # weird book / legacy codes you already normalize:
-    "BLT": "BAL",
-    "CLV": "CLE",
-    "HST": "HOU",
-    "ARZ": "ARI",
-    "JAC": "JAX",
-    "WSH": "WAS",
-    # Identity for standard codes so map_normalize_team stays deterministic
-    "ARI": "ARI",
-    "ATL": "ATL",
-    "BAL": "BAL",
-    "BUF": "BUF",
-    "CAR": "CAR",
-    "CHI": "CHI",
-    "CIN": "CIN",
-    "CLE": "CLE",
-    "DAL": "DAL",
-    "DEN": "DEN",
-    "DET": "DET",
-    "GB": "GB",
-    "HOU": "HOU",
-    "IND": "IND",
-    "JAX": "JAX",
-    "KC": "KC",
-    "LAC": "LAC",
-    "LAR": "LAR",
-    "LV": "LV",
-    "MIA": "MIA",
-    "MIN": "MIN",
-    "NE": "NE",
-    "NO": "NO",
-    "NYG": "NYG",
-    "NYJ": "NYJ",
-    "PHI": "PHI",
-    "PIT": "PIT",
-    "SEA": "SEA",
-    "SF": "SF",
-    "TB": "TB",
-    "TEN": "TEN",
-    "WAS": "WAS",
-}
+import pandas as pd
 
-# ESPN city/long-name forms → your house abbreviations
-ESPN_NAME_FIX = {
-    "WASHINGTON": "WAS",
-    "MIAMI": "MIA",
-    "CAROLINA": "CAR",
-    "ATLANTA": "ATL",
-    "TAMPA BAY": "TB",
-    "BUFFALO": "BUF",
-    "HOUSTON": "HOU",
-    "TENNESSEE": "TEN",
-    "CHICAGO": "CHI",
-    "MINNESOTA": "MIN",
-
-    # helpful extras (common long forms)
-    "SAN FRANCISCO": "SF",
-    "ARIZONA": "ARI",
-    "NEW ENGLAND": "NE",
-    "DALLAS": "DAL",
-    "PHILADELPHIA": "PHI",
-    "NEW YORK JETS": "NYJ",
-    "NY JETS": "NYJ",
-    "NEW YORK GIANTS": "NYG",
-    "NY GIANTS": "NYG",
-    "LOS ANGELES RAMS": "LAR",
-    "LA RAMS": "LAR",
-    "LOS ANGELES CHARGERS": "LAC",
-    "LA CHARGERS": "LAC",
-    "LAS VEGAS": "LV",
-    "JACKSONVILLE": "JAX",
-    "KANSAS CITY": "KC",
-    "GREEN BAY": "GB",
-    "NEW ORLEANS": "NO",
-    "CLEVELAND": "CLE",
-    "CINCINNATI": "CIN",
-    "BALTIMORE": "BAL",
-    "PITTSBURGH": "PIT",
-    "DETROIT": "DET",
-    "INDIANAPOLIS": "IND",
-    "DENVER": "DEN",
-    "SEATTLE": "SEA",
-    "LA": None,  # guard; specific LA teams handled above
-}
-
+# Canonical NFL team abbreviations used across the project.
 CANON_TEAM_CODES = {
     "ARI",
     "ATL",
@@ -125,124 +41,281 @@ CANON_TEAM_CODES = {
     "WAS",
 }
 
+# Weird codes observed in APIs/books + identity mapping for determinism.
+TEAM_FIX: Dict[str, str] = {
+    "BLT": "BAL",
+    "CLV": "CLE",
+    "HST": "HOU",
+    "ARZ": "ARI",
+    "JAC": "JAX",
+    "WSH": "WAS",
+    "LA": "LAR",
+    "LVG": "LV",
+    "KAN": "KC",
+    "NWE": "NE",
+    "NOR": "NO",
+    "SFO": "SF",
+    "TAM": "TB",
+    "SDG": "LAC",
+}
+TEAM_FIX.update({code: code for code in CANON_TEAM_CODES})
+
+# ESPN schedule "city" names.
+ESPN_CITY_TO_ABBR: Dict[str, str] = {
+    "Washington": "WAS",
+    "San Francisco": "SF",
+    "Tampa Bay": "TB",
+    "New England": "NE",
+    "New York Jets": "NYJ",
+    "New York Giants": "NYG",
+    "Las Vegas": "LV",
+    "Los Angeles Rams": "LAR",
+    "Los Angeles Chargers": "LAC",
+    "Jacksonville": "JAX",
+    "Kansas City": "KC",
+    "Green Bay": "GB",
+    "New Orleans": "NO",
+    "Minnesota": "MIN",
+    "Cleveland": "CLE",
+    "Chicago": "CHI",
+    "Detroit": "DET",
+    "Atlanta": "ATL",
+    "Carolina": "CAR",
+    "Buffalo": "BUF",
+    "Houston": "HOU",
+    "Tennessee": "TEN",
+    "Miami": "MIA",
+    "Philadelphia": "PHI",
+    "Dallas": "DAL",
+    "Baltimore": "BAL",
+    "Cincinnati": "CIN",
+    "Pittsburgh": "PIT",
+    "Seattle": "SEA",
+    "Arizona": "ARI",
+    "Indianapolis": "IND",
+    "Denver": "DEN",
+    "Los Angeles": "LAR",  # ambiguous city, default to Rams
+}
+
+# Full franchise names → canonical abbreviations.
+TEAM_NAME_TO_ABBR: Dict[str, str] = {
+    "Washington Commanders": "WAS",
+    "San Francisco 49ers": "SF",
+    "Tampa Bay Buccaneers": "TB",
+    "New England Patriots": "NE",
+    "New York Jets": "NYJ",
+    "New York Giants": "NYG",
+    "Las Vegas Raiders": "LV",
+    "Los Angeles Rams": "LAR",
+    "Los Angeles Chargers": "LAC",
+    "Jacksonville Jaguars": "JAX",
+    "Kansas City Chiefs": "KC",
+    "Green Bay Packers": "GB",
+    "New Orleans Saints": "NO",
+    "Minnesota Vikings": "MIN",
+    "Cleveland Browns": "CLE",
+    "Chicago Bears": "CHI",
+    "Detroit Lions": "DET",
+    "Atlanta Falcons": "ATL",
+    "Carolina Panthers": "CAR",
+    "Buffalo Bills": "BUF",
+    "Houston Texans": "HOU",
+    "Tennessee Titans": "TEN",
+    "Miami Dolphins": "MIA",
+    "Philadelphia Eagles": "PHI",
+    "Dallas Cowboys": "DAL",
+    "Baltimore Ravens": "BAL",
+    "Cincinnati Bengals": "CIN",
+    "Pittsburgh Steelers": "PIT",
+    "Seattle Seahawks": "SEA",
+    "Arizona Cardinals": "ARI",
+    "Indianapolis Colts": "IND",
+    "Denver Broncos": "DEN",
+    # Legacy / alternate full names seen in data feeds.
+    "Oakland Raiders": "LV",
+    "San Diego Chargers": "LAC",
+    "St. Louis Rams": "LAR",
+    "Washington Football Team": "WAS",
+    "Washington Redskins": "WAS",
+}
+
+# Common nicknames / shorthand names.
+TEAM_NICKNAME_TO_ABBR: Dict[str, str] = {
+    "Cardinals": "ARI",
+    "Falcons": "ATL",
+    "Ravens": "BAL",
+    "Bills": "BUF",
+    "Panthers": "CAR",
+    "Bears": "CHI",
+    "Bengals": "CIN",
+    "Browns": "CLE",
+    "Cowboys": "DAL",
+    "Broncos": "DEN",
+    "Lions": "DET",
+    "Packers": "GB",
+    "Texans": "HOU",
+    "Colts": "IND",
+    "Jaguars": "JAX",
+    "Jags": "JAX",
+    "Chiefs": "KC",
+    "Chargers": "LAC",
+    "Rams": "LAR",
+    "Raiders": "LV",
+    "Dolphins": "MIA",
+    "Fins": "MIA",
+    "Vikings": "MIN",
+    "Patriots": "NE",
+    "Pats": "NE",
+    "Saints": "NO",
+    "Giants": "NYG",
+    "Jets": "NYJ",
+    "Eagles": "PHI",
+    "Steelers": "PIT",
+    "Seahawks": "SEA",
+    "Hawks": "SEA",
+    "49ers": "SF",
+    "Niners": "SF",
+    "Buccaneers": "TB",
+    "Bucs": "TB",
+    "Titans": "TEN",
+    "Commanders": "WAS",
+    "Football Team": "WAS",
+}
+
+# Additional aliases that appear in feeds/HTML (city abbreviations, two-word combos).
+ADDITIONAL_TEAM_ALIASES: Dict[str, str] = {
+    "NY JETS": "NYJ",
+    "NY GIANTS": "NYG",
+    "NEW YORK JETS": "NYJ",
+    "NEW YORK GIANTS": "NYG",
+    "LA RAMS": "LAR",
+    "LA CHARGERS": "LAC",
+    "LOS ANGELES RAIDERS": "LV",
+    "ARIZONA CARDINALS": "ARI",
+    "ATLANTA FALCONS": "ATL",
+    "BALTIMORE RAVENS": "BAL",
+    "BUFFALO BILLS": "BUF",
+    "CAROLINA PANTHERS": "CAR",
+    "CHICAGO BEARS": "CHI",
+    "CINCINNATI BENGALS": "CIN",
+    "CLEVELAND BROWNS": "CLE",
+    "DALLAS COWBOYS": "DAL",
+    "DENVER BRONCOS": "DEN",
+    "DETROIT LIONS": "DET",
+    "GREEN BAY PACKERS": "GB",
+    "HOUSTON TEXANS": "HOU",
+    "INDIANAPOLIS COLTS": "IND",
+    "JACKSONVILLE JAGUARS": "JAX",
+    "KANSAS CITY CHIEFS": "KC",
+    "LAS VEGAS RAIDERS": "LV",
+    "LOS ANGELES RAMS": "LAR",
+    "LOS ANGELES CHARGERS": "LAC",
+    "MIAMI DOLPHINS": "MIA",
+    "MINNESOTA VIKINGS": "MIN",
+    "NEW ENGLAND PATRIOTS": "NE",
+    "NEW ORLEANS SAINTS": "NO",
+    "PHILADELPHIA EAGLES": "PHI",
+    "PITTSBURGH STEELERS": "PIT",
+    "SAN FRANCISCO 49ERS": "SF",
+    "SEATTLE SEAHAWKS": "SEA",
+    "TAMPA BAY BUCCANEERS": "TB",
+    "TENNESSEE TITANS": "TEN",
+    "WASHINGTON COMMANDERS": "WAS",
+}
+
+
+def _build_canon_team_abbr() -> Dict[str, str]:
+    mapping: Dict[str, str] = {}
+
+    def _ingest(source: Dict[str, str], *, normalize: bool = True) -> None:
+        for raw_key, value in source.items():
+            if not raw_key or not value:
+                continue
+            key = raw_key.upper() if normalize else raw_key
+            mapping[key] = value
+
+    for code in CANON_TEAM_CODES:
+        mapping[code] = code
+
+    _ingest(TEAM_FIX)
+    _ingest({k.upper(): v for k, v in ESPN_CITY_TO_ABBR.items()})
+    _ingest({k.upper(): v for k, v in TEAM_NAME_TO_ABBR.items()})
+    _ingest({k.upper(): v for k, v in TEAM_NICKNAME_TO_ABBR.items()})
+    _ingest(ADDITIONAL_TEAM_ALIASES)
+
+    return mapping
+
+
+CANON_TEAM_ABBR = _build_canon_team_abbr()
+TEAM_REMAP: Dict[str, str] = {key.upper(): val for key, val in CANON_TEAM_ABBR.items()}
+
+_PUNCT_PATTERN = re.compile(r"[\.\u2019\u2018'`]")
+_WHITESPACE_PATTERN = re.compile(r"\s+")
+
+
+def _clean_token(name: str | None) -> str:
+    text = "" if name is None else str(name)
+    text = text.strip()
+    if not text:
+        return ""
+    text = _PUNCT_PATTERN.sub("", text)
+    text = _WHITESPACE_PATTERN.sub(" ", text)
+    return text
+
+
+def canon_team(name: str) -> str:
+    """Return the canonical 2–3 letter team abbreviation for *name*."""
+
+    cleaned = _clean_token(name)
+    if not cleaned:
+        return ""
+
+    upper = cleaned.upper()
+    if upper in CANON_TEAM_ABBR:
+        return CANON_TEAM_ABBR[upper]
+
+    title = cleaned.title()
+    if title in ESPN_CITY_TO_ABBR:
+        return ESPN_CITY_TO_ABBR[title]
+    if title in TEAM_NAME_TO_ABBR:
+        return TEAM_NAME_TO_ABBR[title]
+
+    return upper
+
 
 def _canon_team_series(s: pd.Series) -> pd.Series:
-    """
-    Canonicalize team names coming from books, HTML pages, etc.
-    Returns your house abbreviations (e.g., WAS, MIA, SF, NE).
-    """
-    x = s.fillna("").astype(str).str.strip()
-    x = x.str.replace(r"\s+", " ", regex=True).str.upper()
+    """Vectorized wrapper returning canonical team abbreviations for a Series."""
 
-    # apply house fixes (weird book codes first)
-    x = x.replace(TEAM_FIX)
-
-    # map ESPN-style names/long forms
-    x = x.replace({k: v for k, v in ESPN_NAME_FIX.items() if v is not None})
-
-    # if something is still the literal city "LA" etc., leave as-is for later logic
-    return x
+    x = s.fillna("").astype(str)
+    return x.apply(canon_team)
 
 
-# Re-export alias some modules already import
-canon_team = _canon_team_series
+def canon_team_series(series: pd.Series) -> pd.Series:
+    """Public alias so callers can import canon_team_series directly."""
 
-# broader remap for free-form names we see in APIs / books
-TEAM_REMAP = {
-    # full names → abbr
-    "ARIZONA CARDINALS": "ARI",
-    "CARDINALS": "ARI",
-    "ATLANTA FALCONS": "ATL",
-    "FALCONS": "ATL",
-    "BALTIMORE RAVENS": "BAL",
-    "RAVENS": "BAL",
-    "BLT": "BAL",
-    "BUFFALO BILLS": "BUF",
-    "BILLS": "BUF",
-    "CAROLINA PANTHERS": "CAR",
-    "PANTHERS": "CAR",
-    "CHICAGO BEARS": "CHI",
-    "BEARS": "CHI",
-    "CINCINNATI BENGALS": "CIN",
-    "BENGALS": "CIN",
-    "CLEVELAND BROWNS": "CLE",
-    "BROWNS": "CLE",
-    "CLV": "CLE",
-    "DALLAS COWBOYS": "DAL",
-    "COWBOYS": "DAL",
-    "DENVER BRONCOS": "DEN",
-    "BRONCOS": "DEN",
-    "DETROIT LIONS": "DET",
-    "LIONS": "DET",
-    "GREEN BAY PACKERS": "GB",
-    "PACKERS": "GB",
-    "HOUSTON TEXANS": "HOU",
-    "TEXANS": "HOU",
-    "HST": "HOU",
-    "INDIANAPOLIS COLTS": "IND",
-    "COLTS": "IND",
-    "JACKSONVILLE JAGUARS": "JAX",
-    "JAGUARS": "JAX",
-    "KANSAS CITY CHIEFS": "KC",
-    "CHIEFS": "KC",
-    "LAS VEGAS RAIDERS": "LV",
-    "RAIDERS": "LV",
-    "OAKLAND RAIDERS": "LV",
-    "LOS ANGELES CHARGERS": "LAC",
-    "CHARGERS": "LAC",
-    "LOS ANGELES RAMS": "LAR",
-    "RAMS": "LAR",
-    "MIAMI DOLPHINS": "MIA",
-    "DOLPHINS": "MIA",
-    "MINNESOTA VIKINGS": "MIN",
-    "VIKINGS": "MIN",
-    "NEW ENGLAND PATRIOTS": "NE",
-    "PATRIOTS": "NE",
-    "NEW ORLEANS SAINTS": "NO",
-    "SAINTS": "NO",
-    "NEW YORK GIANTS": "NYG",
-    "GIANTS": "NYG",
-    "NEW YORK JETS": "NYJ",
-    "JETS": "NYJ",
-    "PHILADELPHIA EAGLES": "PHI",
-    "EAGLES": "PHI",
-    "PITTSBURGH STEELERS": "PIT",
-    "STEELERS": "PIT",
-    "SAN FRANCISCO 49ERS": "SF",
-    "49ERS": "SF",
-    "SEATTLE SEAHAWKS": "SEA",
-    "SEAHAWKS": "SEA",
-    "TAMPA BAY BUCCANEERS": "TB",
-    "BUCCANEERS": "TB",
-    "TAMPA BAY": "TB",
-    "TENNESSEE TITANS": "TEN",
-    "TITANS": "TEN",
-    "WASHINGTON COMMANDERS": "WAS",
-    "COMMANDERS": "WAS",
-}
+    return _canon_team_series(series)
 
 
 def map_normalize_team(x: str | None) -> str | None:
     if x is None:
         return None
-    key = str(x).strip()
-    if not key:
+
+    candidate = canon_team(str(x))
+    if not candidate:
         return None
-    key_upper = key.upper()
-    if key_upper in TEAM_REMAP:
-        key_upper = TEAM_REMAP[key_upper]
-    canon = _canon_team_series(pd.Series([key_upper])).iloc[0]
-    if not isinstance(canon, str):
-        return None
-    canon = canon.strip().upper()
-    if not canon:
-        return None
-    if canon in CANON_TEAM_CODES:
-        return canon
-    if canon in TEAM_FIX:
-        fixed = TEAM_FIX[canon]
-        if fixed in CANON_TEAM_CODES:
-            return fixed
+
+    candidate = candidate.upper()
+    if candidate in CANON_TEAM_CODES:
+        return candidate
+
+    fixed = TEAM_FIX.get(candidate)
+    if fixed and fixed in CANON_TEAM_CODES:
+        return fixed
+
+    mapped = CANON_TEAM_ABBR.get(candidate)
+    if mapped and mapped in CANON_TEAM_CODES:
+        return mapped
+
     return None
 
 
@@ -252,8 +325,12 @@ def normalize_team_series(s: pd.Series) -> pd.Series:
 
 __all__ = [
     "TEAM_FIX",
+    "TEAM_NAME_TO_ABBR",
+    "ESPN_CITY_TO_ABBR",
+    "CANON_TEAM_ABBR",
     "canon_team",
     "_canon_team_series",
+    "canon_team_series",
     "CANON_TEAM_CODES",
     "TEAM_REMAP",
     "map_normalize_team",

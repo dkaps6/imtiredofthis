@@ -18,7 +18,7 @@ import requests
 from bs4 import BeautifulSoup
 
 # Canonicalize team names
-from scripts._opponent_map import _canon_team_series as canon_team
+from scripts._opponent_map import canon_team
 from scripts.utils.name_clean import normalize_team
 
 SCHED_DIR = Path("data/schedules")
@@ -35,6 +35,10 @@ UA = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/118.0 Safari/537.36"
 }
+
+
+def canon_team_series(series: pd.Series) -> pd.Series:
+    return series.fillna("").astype(str).apply(canon_team)
 
 
 def _validate_schedule(df: pd.DataFrame) -> pd.DataFrame:
@@ -60,8 +64,8 @@ def _fetch_schedule_nflverse(season: int) -> pd.DataFrame:
     if "gameday" not in df.columns and "gamedate" in df.columns:
         df["gameday"] = df["gamedate"]
     df = df.rename(columns={"home_team": "home_team", "away_team": "away_team"})
-    df["home_team"] = canon_team(df["home_team"])
-    df["away_team"] = canon_team(df["away_team"])
+    df["home_team"] = canon_team_series(df["home_team"])
+    df["away_team"] = canon_team_series(df["away_team"])
     return _validate_schedule(
         df[["season", "week", "gameday", "game_id", "home_team", "away_team"]]
     )
@@ -132,8 +136,8 @@ def _fetch_schedule_espn_html(season: int, max_week: int = 19) -> pd.DataFrame:
         raise RuntimeError("ESPN HTML fallback produced empty schedule")
 
     # Canonicalize to house abbreviations
-    df["home_team"] = canon_team(df["home_team"])
-    df["away_team"] = canon_team(df["away_team"])
+    df["home_team"] = canon_team_series(df["home_team"])
+    df["away_team"] = canon_team_series(df["away_team"])
 
     # Drop any rows that failed to canonicalize (very rare with our map)
     df = df.dropna(subset=["home_team", "away_team"])
@@ -271,8 +275,8 @@ def _fetch_schedule_espn_json(
 
     df = pd.DataFrame(rows)
     # Canonicalize team codes to match our internal keys
-    df["home_team"] = canon_team(df["home_team"])
-    df["away_team"] = canon_team(df["away_team"])
+    df["home_team"] = canon_team_series(df["home_team"])
+    df["away_team"] = canon_team_series(df["away_team"])
     if "kickoff_et" not in df.columns:
         df["kickoff_et"] = ""
     else:
@@ -325,7 +329,7 @@ PFR_TO_ABBR = {
 def _name_to_abbr(s: pd.Series) -> pd.Series:
     # handle full names (PFR) -> our abbrs, then canonicalize to our codes
     out = s.map(PFR_TO_ABBR).fillna(s)
-    return canon_team(out)
+    return canon_team_series(out)
 
 
 def _fetch_schedule_pfr(season: int) -> pd.DataFrame:
@@ -532,8 +536,8 @@ def _load_or_build_schedule_source(season: int, schedule_path: str | None) -> pd
             df_local = pd.read_csv(local)
             need = {"season", "week", "home_team", "away_team"}
             if need.issubset(df_local.columns) and not df_local.empty:
-                df_local["home_team"] = canon_team(df_local["home_team"])
-                df_local["away_team"] = canon_team(df_local["away_team"])
+                df_local["home_team"] = canon_team_series(df_local["home_team"])
+                df_local["away_team"] = canon_team_series(df_local["away_team"])
                 df_local = _validate_schedule(df_local)
                 print(f"[team_week_map] Using local schedule cache: {local}")
                 return df_local
@@ -642,6 +646,7 @@ def build_map(season: int, schedule_path: Optional[str] = None) -> pd.DataFrame:
     ]
     extras = [c for c in ("event_id", "game_id") if c in df.columns]
     df = df.loc[:, [c for c in keep_cols + extras if c in df.columns]].copy()
+    df = df.rename(columns={"home_abbr": "home_team_abbr", "away_abbr": "away_team_abbr"})
     df["kickoff_utc"] = pd.to_datetime(df.get("kickoff_utc"), utc=True, errors="coerce")
 
     df = df.sort_values(["season", "week", "team", "kickoff_utc"], na_position="last")
