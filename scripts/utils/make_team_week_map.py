@@ -200,6 +200,22 @@ def _fetch_schedule_espn_json(
                 comp = comps[0]
                 competitors = comp.get("competitors") or []
                 home_abbr = away_abbr = None
+                kickoff_str = ""
+                kickoff_source = comp.get("date") or date_iso
+                if kickoff_source:
+                    kickoff_ts = pd.to_datetime(kickoff_source, errors="coerce", utc=True)
+                    if pd.isna(kickoff_ts):
+                        kickoff_ts = pd.to_datetime(kickoff_source, errors="coerce")
+                    if pd.notna(kickoff_ts):
+                        if kickoff_ts.tzinfo is None:
+                            kickoff_ts = kickoff_ts.tz_localize("UTC")
+                        try:
+                            kickoff_et = kickoff_ts.tz_convert("America/New_York")
+                        except Exception:
+                            kickoff_et = kickoff_ts.tz_convert("UTC").tz_convert(
+                                "America/New_York"
+                            )
+                        kickoff_str = kickoff_et.strftime("%Y-%m-%d %H:%M:%S ET")
 
                 for c in competitors:
                     team = (c.get("team") or {})
@@ -231,6 +247,7 @@ def _fetch_schedule_espn_json(
                         "game_id": str(gid),
                         "home_team": home_abbr,
                         "away_team": away_abbr,
+                        "kickoff_et": kickoff_str,
                     }
                 )
 
@@ -241,13 +258,25 @@ def _fetch_schedule_espn_json(
     if not rows:
         print("[team_week_map][ESPN-JSON] produced 0 rows")
         return pd.DataFrame(
-            columns=["season", "week", "gameday", "game_id", "home_team", "away_team"]
+            columns=[
+                "season",
+                "week",
+                "gameday",
+                "game_id",
+                "home_team",
+                "away_team",
+                "kickoff_et",
+            ]
         )
 
     df = pd.DataFrame(rows)
     # Canonicalize team codes to match our internal keys
     df["home_team"] = canon_team(df["home_team"])
     df["away_team"] = canon_team(df["away_team"])
+    if "kickoff_et" not in df.columns:
+        df["kickoff_et"] = ""
+    else:
+        df["kickoff_et"] = df["kickoff_et"].fillna("").astype(str)
     # Basic sanity
     df = df.dropna(subset=["home_team", "away_team", "game_id"]).reset_index(drop=True)
     print(f"[team_week_map][ESPN-JSON] final rows: {len(df)}")
@@ -608,6 +637,7 @@ def build_map(season: int, schedule_path: Optional[str] = None) -> pd.DataFrame:
         "away_abbr",
         "home_away",
         "kickoff_utc",
+        "kickoff_et",
         "bye",
     ]
     extras = [c for c in ("event_id", "game_id") if c in df.columns]

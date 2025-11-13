@@ -22,6 +22,7 @@ import pandas as pd
 
 from scripts._opponent_map import (
     CANON_TEAM_ABBR,
+    canon_team as canon_team_series,
     map_normalize_team,
     normalize_team_series,
 )
@@ -222,20 +223,30 @@ TEAM_FIXES.update({
 })
 
 
-def _canon_team(x: str) -> str:
-    if not isinstance(x, str):
-        return x
-    candidate = map_normalize_team(x)
-    if candidate:
-        return candidate
-    x = x.strip().upper()
-    x = TEAM_FIXES.get(x, x)
-    if x in TEAM_NAME_TO_ABBR:
-        mapped = TEAM_NAME_TO_ABBR[x]
+def _canon_team(value):
+    if isinstance(value, pd.Series):
+        normalized = canon_team_series(value)
+        mapped = normalized.apply(map_normalize_team)
+        filled = mapped.fillna(normalized)
+        return filled.str.upper()
+
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return value
+
+    series = canon_team_series(pd.Series([value]))
+    candidate = series.iloc[0]
+    mapped = map_normalize_team(candidate)
+    if mapped:
+        return mapped
+
+    text = str(candidate).strip().upper()
+    text = TEAM_FIXES.get(text, text)
+    if text in TEAM_NAME_TO_ABBR:
+        mapped = TEAM_NAME_TO_ABBR[text]
         fallback = map_normalize_team(mapped)
         return fallback or mapped
-    fallback = map_normalize_team(x)
-    return fallback or x
+    fallback = map_normalize_team(text)
+    return fallback or text
 
 
 def _to_int_safe(v):
