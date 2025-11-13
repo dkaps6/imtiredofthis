@@ -133,17 +133,32 @@ _UNMAPPED_LOG = os.environ.get("UNMAPPED_NAME_LOG", "data/_debug/unmapped_names.
 
 def canonicalize_player_name_safe(raw: str):
     """
-    Return (canonical_full_name, clean_key). If the underlying function returns
-    extra metadata, ignore it for backward compatibility.
+    Return (canonical_full_name, clean_key).
+
+    The canonical name is always a human-readable string while the key is the
+    normalized lookup token used across the project.  When the legacy helper
+    returns a simple string, derive the key from that value so callers never
+    have to duplicate the normalization logic.
     """
 
     out = canonicalize_player_name(raw)
     if isinstance(out, tuple):
         if len(out) >= 2:
-            return out[0], out[1]
-        if len(out) == 1:
-            return out[0], out[0]
-    return str(out), str(out)
+            name, key = out[0], out[1]
+        elif len(out) == 1:
+            name, key = out[0], out[0]
+        else:
+            name, key = "", ""
+    else:
+        name, key = out, out
+
+    name_str = "" if name is None else str(name).strip()
+    key_str = "" if key is None else str(key).strip()
+
+    if not key_str:
+        key_str = norm_key(name_str or raw or "")
+
+    return name_str, key_str
 
 
 def log_unmapped_variant(raw: str, where: str = "unknown", *args, **kwargs) -> None:

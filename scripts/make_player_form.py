@@ -6444,6 +6444,27 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     if "week" not in merged.columns:
         merged["week"] = pd.NA
 
+    def _canonicalize_player(row: pd.Series) -> pd.Series:
+        raw = row.get("player_source_name")
+        if not isinstance(raw, str) or not raw.strip():
+            raw = row.get("player")
+        if not isinstance(raw, str) or not raw.strip():
+            return pd.Series({"player": "", "player_clean_key": ""})
+        full_name, key = canonicalize_player_name_safe(raw)
+        full_name = (full_name or "").strip()
+        key = (key or "").strip()
+        if not full_name:
+            full_name = raw.strip()
+        if not key:
+            _, key = canonicalize_player_name_safe(full_name)
+        return pd.Series({"player": full_name, "player_clean_key": key})
+
+    canon = merged.apply(_canonicalize_player, axis=1)
+    merged["player"] = canon["player"].astype("string")
+    merged["player_clean_key"] = canon["player_clean_key"].astype("string")
+
+    merged = merged[merged["player"].astype("string").str.strip().str.len() > 0]
+
     if merged.empty:
         dbg = "artifacts/player_form_debug_empty.csv"
         os.makedirs(os.path.dirname(dbg), exist_ok=True)
