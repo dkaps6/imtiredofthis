@@ -113,11 +113,42 @@ DROP_TOKENS = {
 
 # ------------------------- LOGGING ------------------------
 
-log = logging.getLogger("oddsapi")
+log = logging.getLogger("fetch_props_oddsapi")
 log.setLevel(logging.INFO)
-_handler = logging.StreamHandler(sys.stdout)
-_handler.setFormatter(logging.Formatter("[oddsapi] %(message)s"))
-log.addHandler(_handler)
+if not log.handlers:
+    _handler = logging.StreamHandler(sys.stdout)
+    _handler.setFormatter(logging.Formatter("[oddsapi] %(message)s"))
+    log.addHandler(_handler)
+
+STATE_DIR = Path("previous_state")
+STATE_FILE = STATE_DIR / "props_state.json"
+
+
+def _load_state() -> dict:
+    try:
+        if STATE_FILE.exists():
+            with STATE_FILE.open("r", encoding="utf-8") as f:
+                state = json.load(f)
+            if not isinstance(state, dict):
+                log.warning("props_state.json is not a dict; resetting to {}")
+                return {}
+            log.info("Restored props state with keys: %s", list(state.keys()))
+            return state
+        log.info("No previous props state found; starting fresh.")
+        return {}
+    except Exception as e:  # pragma: no cover - defensive I/O handling
+        log.warning("Failed to read props_state.json (%s); starting fresh.", e)
+        return {}
+
+
+def _save_state(state: dict) -> None:
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        with STATE_FILE.open("w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
+        log.info("Saved props state to %s", STATE_FILE)
+    except Exception as e:  # pragma: no cover - defensive I/O handling
+        log.warning("Failed to save props_state.json: %s", e)
 
 # ------------------------- HELPERS ------------------------
 
@@ -167,6 +198,18 @@ def _lim(headers: dict) -> dict:
         if k in headers:
             out[k] = headers.get(k)
     return out
+
+
+def _sanitize_params(params: Optional[dict[str, Any]]) -> dict[str, Any]:
+    sanitized: dict[str, Any] = {}
+    if not params:
+        return sanitized
+    for key, value in params.items():
+        if isinstance(key, str) and key.lower() == "apikey":
+            sanitized[key] = "***"
+        else:
+            sanitized[key] = value
+    return sanitized
 
 
 def _derive_slate_date(events: List[dict]) -> Optional[str]:
@@ -426,23 +469,40 @@ BULK_ONLY_CANONICAL: set[str] = set(GAME_MARKETS)
 
 # ------------------------- HTTP --------------------------
 
+_SESSION = requests.Session()
+
+
 def _get(url: str, params: dict, max_retries: int = 5) -> Tuple[int, Optional[Any], dict]:
     for i in range(max_retries):
         try:
-            r = requests.get(url, params=params, timeout=TIMEOUT_S)
-            if r.status_code == 200:
+            resp = _SESSION.get(url, params=params, timeout=TIMEOUT_S)
+            if resp.status_code == 200:
                 try:
-                    return 200, r.json(), r.headers
+                    data = resp.json()
                 except Exception:
-                    return 200, None, r.headers
-            if r.status_code in (401, 403, 404, 422):
-                return r.status_code, _try_json(r), r.headers
-            if r.status_code in (429, 500, 502, 503, 504):
+                    return 200, None, resp.headers
+                if data is None:
+                    log.warning("Odds API returned empty payload for %s %s", url, _sanitize_params(params))
+                    return 200, None, resp.headers
+                if isinstance(data, (list, dict)) and not data:
+                    log.warning("Odds API returned empty payload for %s %s", url, _sanitize_params(params))
+                    if isinstance(data, dict):
+                        data = {}
+                    else:
+                        data = []
+                return 200, data, resp.headers
+            if resp.status_code in (401, 403, 404, 422):
+                return resp.status_code, _try_json(resp), resp.headers
+            if resp.status_code in (429, 500, 502, 503, 504):
                 wait = BACKOFF_S[min(i, len(BACKOFF_S)-1)]
-                log.info(f"HTTP {r.status_code} → backoff {wait}s: {url}")
+                log.info(f"HTTP {resp.status_code} → backoff {wait}s: {url}")
                 time.sleep(wait)
                 continue
-            return r.status_code, _try_json(r), r.headers
+            raise RuntimeError(
+                f"Odds API {url} failed {resp.status_code}: {resp.text[:300]}"
+            )
+        except RuntimeError:
+            raise
         except requests.RequestException as e:
             wait = BACKOFF_S[min(i, len(BACKOFF_S)-1)]
             log.info(f"Request error: {e} → retry {wait}s")
@@ -1445,6 +1505,8 @@ def fetch_odds(
     markets = [m.strip() for m in markets if m.strip()]
     normalized_markets: List[str] = [_normalize_market(m) for m in markets]
 
+    state: dict = _load_state()
+
     Path("outputs").mkdir(parents=True, exist_ok=True)
 
     log.info(
@@ -1950,6 +2012,17 @@ def fetch_odds(
         _write_data_exports(props, enriched, game_df, season_value)
     except Exception as err:
         log.info(f"failed to write data exports: {err}")
+
+    books_snapshot: List[str] = sorted(books_set) if books_set else []
+    state["last_fetch"] = {
+        "fetched_at": fetched_at,
+        "date": date,
+        "season": season_value,
+        "markets": normalized_markets,
+        "books": books_snapshot,
+        "event_count": len(event_ids),
+    }
+    _save_state(state)
 
 # ------------------------- CLI ----------------------------
 
