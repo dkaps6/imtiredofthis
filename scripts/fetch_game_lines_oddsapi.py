@@ -52,6 +52,9 @@ def main():
         "oddsFormat": "american",
         "dateFormat": "iso",
     }
+    books_override = os.getenv("GAMELINE_BOOKS", "")
+    if books_override:
+        params["bookmakers"] = books_override
     url = "https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds?" + urlencode(params)
 
     try:

@@ -14,16 +14,44 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from zoneinfo import ZoneInfo
 
+import pandas as pd
 import requests
 
-# --- BEGIN: mandatory global imports ---
-import pandas as pd
-# --- END: mandatory global imports ---
+from scripts.lib.io_utils import ensure_dir, safe_concat, write_atomic
+from scripts.lib.logging_utils import get_logger
+from scripts.lib.time_windows import compute_slate_window
 
 from scripts._opponent_map import CANON_TEAM_ABBR, canon_team
 from scripts.utils.canonical_names import canonicalize_player_name, norm_key
 
 CANON_SET = set(CANON_TEAM_ABBR.values())
+
+# ------------------------- RUNTIME CONFIG -----------------
+
+LOGGER = get_logger("fetch_props")
+
+PREFERRED_BOOKS = [
+    b.strip()
+    for b in os.getenv("BOOKS_PREF", "draftkings,fanduel").split(",")
+    if b.strip()
+]
+ALLOW_FALLBACK = os.getenv("ALLOW_FALLBACK", "1") == "1"  # if no offers from preferred, try all
+MISSING_POLICY = os.getenv("MISSING_POLICY", "warn")  # "warn" or "ignore" (never "fail")
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", "outputs")
+ensure_dir(OUTPUT_DIR)
+
+MARKETS = [
+    # keep your existing list; include only what you actually fetch
+    "player_pass_yds",
+    "player_pass_tds",
+    "player_rush_yds",
+    "player_rush_tds",
+    "player_reception_yds",
+    "player_receptions",
+    "player_rush_reception_yds",
+    "player_anytime_td",
+    # etc…
+]
 
 # ------------------------- CONFIG -------------------------
 
@@ -113,15 +141,13 @@ DROP_TOKENS = {
 
 # ------------------------- LOGGING ------------------------
 
-log = logging.getLogger("fetch_props_oddsapi")
-log.setLevel(logging.INFO)
-if not log.handlers:
-    _handler = logging.StreamHandler(sys.stdout)
-    _handler.setFormatter(logging.Formatter("[oddsapi] %(message)s"))
-    log.addHandler(_handler)
+log = LOGGER
 
 STATE_DIR = Path("previous_state")
 STATE_FILE = STATE_DIR / "props_state.json"
+
+_FETCH_API_KEY: str = ""
+_FETCH_REGION: str = REGION_DEFAULT
 
 
 def _load_state() -> dict:
@@ -198,6 +224,75 @@ def _lim(headers: dict) -> dict:
         if k in headers:
             out[k] = headers.get(k)
     return out
+
+
+def offers_is_empty(offers_json) -> bool:
+    try:
+        return not offers_json or len(offers_json.get("bookmakers", [])) == 0
+    except Exception:
+        return True
+
+
+def fetch_market_offers(event_id: str, market: str, bookmakers: str | None):
+    url = f"{BASE}/sports/{SPORT}/events/{event_id}/odds"
+    params = {
+        "apiKey": _FETCH_API_KEY,
+        "regions": _FETCH_REGION,
+        "markets": market,
+        "oddsFormat": "american",
+    }
+    if bookmakers:
+        params["bookmakers"] = bookmakers
+    status, js, headers = _get(url, params)
+    log.info(f"{market} eid={event_id} status={status} limit={_lim(headers)}")
+    if status == 200 and isinstance(js, dict):
+        return js
+    return {}
+
+
+def normalize_offers_to_rows(
+    offers_json,
+    event_id: str,
+    market: str,
+    *,
+    source_market: str | None = None,
+) -> List[dict[str, Any]]:
+    if not offers_json:
+        return []
+    commence = offers_json.get("commence_time")
+    rows: List[dict[str, Any]] = []
+    for bm in offers_json.get("bookmakers", []) or []:
+        book_key = (bm.get("key") or "").strip().lower()
+        book_title = (bm.get("title") or "").strip()
+        for mk in bm.get("markets", []) or []:
+            mk_key = mk.get("key") or source_market or market
+            if source_market:
+                if mk_key != source_market:
+                    continue
+            elif mk_key != market:
+                continue
+            for outcome in mk.get("outcomes", []) or []:
+                side = (outcome.get("name") or "").upper()
+                if market == "player_anytime_td":
+                    if side == "YES":
+                        side = "OVER"
+                    elif side == "NO":
+                        side = "UNDER"
+                player = outcome.get("description") or outcome.get("participant")
+                rows.append(
+                    {
+                        "event_id": str(event_id),
+                        "commence_time": commence,
+                        "book": book_key,
+                        "book_title": book_title,
+                        "market": market,
+                        "player": player,
+                        "side": side,
+                        "line": outcome.get("point"),
+                        "price_american": outcome.get("price"),
+                    }
+                )
+    return rows
 
 
 def _sanitize_params(params: Optional[dict[str, Any]]) -> dict[str, Any]:
@@ -1470,6 +1565,15 @@ def fetch_odds(
         log.info("ERROR: ODDS_API_KEY not set")
         sys.exit(2)
 
+    global _FETCH_API_KEY, _FETCH_REGION
+    _FETCH_API_KEY = api_key
+    _FETCH_REGION = region
+
+    anchor, start_local, end_local = compute_slate_window()
+    LOGGER.info(
+        f"Slate anchor={anchor.isoformat()} window_local=[{start_local} → {end_local}]"
+    )
+
     season_value: Optional[int] = None
     if season:
         try:
@@ -1544,6 +1648,14 @@ def fetch_odds(
     frames: List[pd.DataFrame] = []
     market_records: Dict[str, List[dict[str, Any]]] = {}
     market_stats: Dict[str, dict[str, int]] = {}
+    all_market_paths: List[str] = []
+    summary: List[dict[str, Any]] = []
+    preferred_param = ",".join(PREFERRED_BOOKS) if PREFERRED_BOOKS else ""
+    preferred_param = preferred_param or None
+    event_lookup: Dict[str, dict] = {
+        str(ev.get("id")): ev for ev in events if ev.get("id")
+    }
+
     for mk in normalized_markets:
         if mk in GAME_MARKETS:
             log.info(f"=== MARKET {mk} (bulk) ===")
@@ -1556,36 +1668,127 @@ def fetch_odds(
                 "saved_no_filter": 0,
                 "bookmaker_missing": 0,
             }
-        else:
-            if not event_ids:
-                log.info(f"no events → skip player market {mk}")
-                market_records[mk] = _build_market_records(pd.DataFrame(), include_missing=[])
-                market_stats[mk] = {
-                    "events": 0,
-                    "offers": 0,
-                    "missing_filtered": 0,
-                    "saved_no_filter": 0,
-                    "bookmaker_missing": 0,
-                }
-                continue
-            log.info(f"=== MARKET {mk} (per-event) ===")
-            df, missing_rows, stats = _fetch_market_for_events(
-                api_key,
-                region,
-                books_set,
-                event_ids,
-                mk,
-                fetched_at,
+            if not df.empty:
+                frames.append(df)
+            market_records[mk] = _build_market_records(df, include_missing=missing_rows)
+            market_stats[mk] = stats
+            log.info(
+                f"market={mk} offers={stats['offers']} missing_filtered={stats['missing_filtered']} "
+                f"saved_no_filter={stats['saved_no_filter']} missing_rows={len(market_records[mk])}"
             )
+            continue
+
+        market_path = os.path.join(OUTPUT_DIR, f"props_{mk}.csv")
+        all_market_paths.append(market_path)
+        rows: List[pd.DataFrame] = []
+        missing_rows: List[dict[str, Any]] = []
+        missing = 0
+        saved_no_filter = 0
+
+        if not event_ids:
+            log.info(f"no events → skip player market {mk}")
+            market_records[mk] = _build_market_records(pd.DataFrame(), include_missing=[])
+            market_stats[mk] = {
+                "events": 0,
+                "offers": 0,
+                "missing_filtered": 0,
+                "saved_no_filter": 0,
+                "bookmaker_missing": 0,
+            }
+            summary.append({"market": mk, "rows": 0, "missing_events": 0})
+            level = "info"
+            getattr(LOGGER, level)(
+                f"market={mk} wrote_rows=0 missing_events=0 file={market_path}"
+            )
+            continue
+
+        log.info(f"=== MARKET {mk} (per-event) ===")
+        for eid in event_ids:
+            used_key = mk
+            used_fallback = False
+            offers = {}
+            variants = [mk] + ALT_KEYS.get(mk, [])
+            for mk_try in variants:
+                used_key = mk_try
+                offers = fetch_market_offers(eid, mk_try, preferred_param)
+                if offers_is_empty(offers) and ALLOW_FALLBACK:
+                    offers_all = fetch_market_offers(eid, mk_try, None)
+                    if not offers_is_empty(offers_all):
+                        offers = offers_all
+                        used_fallback = True
+                if not offers_is_empty(offers):
+                    break
+            if offers_is_empty(offers):
+                missing += 1
+                ev = event_lookup.get(str(eid), {})
+                missing_rows.append(
+                    {
+                        "event_id": eid,
+                        "player": "",
+                        "player_raw": "",
+                        "market": mk,
+                        "commence_time": ev.get("commence_time"),
+                        "books_json": [],
+                        "bookmaker_missing": 1,
+                        "fetched_at": fetched_at,
+                    }
+                )
+                time.sleep(0.05)
+                continue
+
+            normalized_rows = normalize_offers_to_rows(
+                offers, eid, mk, source_market=used_key
+            )
+            if normalized_rows:
+                df_event = pd.DataFrame(normalized_rows)
+                df_event["fetched_at"] = fetched_at
+                df_event["bookmaker_missing"] = 0
+                rows.append(df_event)
+                if used_fallback:
+                    if "player" in df_event.columns:
+                        saved_no_filter += df_event["player"].dropna().nunique()
+                    else:
+                        saved_no_filter += len(df_event)
+            else:
+                missing += 1
+                ev = event_lookup.get(str(eid), {})
+                missing_rows.append(
+                    {
+                        "event_id": eid,
+                        "player": "",
+                        "player_raw": "",
+                        "market": mk,
+                        "commence_time": ev.get("commence_time"),
+                        "books_json": [],
+                        "bookmaker_missing": 1,
+                        "fetched_at": fetched_at,
+                    }
+                )
+            time.sleep(0.05)
+
+        df = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
         if not df.empty:
+            if "line" in df.columns:
+                df["line"] = pd.to_numeric(df["line"], errors="coerce")
+            if "price_american" in df.columns:
+                df["price_american"] = pd.to_numeric(df["price_american"], errors="coerce")
+            safe_concat(market_path, df)
             frames.append(df)
+        summary.append({"market": mk, "rows": len(df), "missing_events": missing})
+        level = "warning" if missing > 0 and MISSING_POLICY == "warn" else "info"
+        getattr(LOGGER, level)(
+            f"market={mk} wrote_rows={len(df)} missing_events={missing} file={market_path}"
+        )
+
+        stats = {
+            "events": len(event_ids),
+            "offers": int(len(df)) if not df.empty else 0,
+            "missing_filtered": missing,
+            "saved_no_filter": saved_no_filter,
+            "bookmaker_missing": missing,
+        }
         market_records[mk] = _build_market_records(df, include_missing=missing_rows)
         market_stats[mk] = stats
-
-        log.info(
-            f"market={mk} offers={stats['offers']} missing_filtered={stats['missing_filtered']} "
-            f"saved_no_filter={stats['saved_no_filter']} missing_rows={len(market_records[mk])}"
-        )
 
     _write_market_dumps(market_records)
 
@@ -1600,7 +1803,28 @@ def fetch_odds(
             total_missing_rows,
         )
 
-    props = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    frames_from_disk: List[pd.DataFrame] = []
+    for path in all_market_paths:
+        if os.path.exists(path):
+            try:
+                frames_from_disk.append(pd.read_csv(path))
+            except Exception as e:
+                LOGGER.warning(f"skip bad file {path}: {e}")
+
+    if frames_from_disk:
+        consolidated = pd.concat(frames_from_disk, ignore_index=True)
+        write_atomic(os.path.join(OUTPUT_DIR, "props_raw.csv"), consolidated)
+        LOGGER.info(
+            f"Consolidated props_raw.csv rows={len(consolidated)} from {len(frames_from_disk)} market files"
+        )
+    else:
+        consolidated = pd.DataFrame()
+        LOGGER.warning("No market files present; props_raw.csv not written")
+
+    if not consolidated.empty:
+        props = consolidated
+    else:
+        props = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
     name_records_all: List[dict[str, Any]] = []
     if "player" in props.columns:
         props["player_canonical"] = props["player"].apply(canonicalize_player_name)
@@ -1981,10 +2205,10 @@ def fetch_odds(
     props.to_csv(DATA_DIR / "props_enriched.csv", index=False)
     # --- END: enrich props with opponent from odds_game ---
 
-    final_df.to_csv(out, index=False)
+    write_atomic(out, final_df)
     log.info(f"wrote {out} rows={len(final_df)}")
     PROPS_RAW_DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
-    final_df.to_csv(PROPS_RAW_DATA_PATH, index=False)
+    write_atomic(str(PROPS_RAW_DATA_PATH), final_df)
     log.info(f"wrote {PROPS_RAW_DATA_PATH} rows={len(final_df)}")
 
     # Write player name mapping for overrides/unresolved tracking
@@ -2032,7 +2256,7 @@ if __name__ == "__main__":
     ap.add_argument("--books", "--bookmakers", dest="books",
                     default="draftkings,fanduel,betmgm,caesars",
                     nargs="?", const="")
-    ap.add_argument("--markets", default="player_pass_yds,player_reception_yds,player_rush_yds,player_receptions,player_rush_reception_yds,player_anytime_td")
+    ap.add_argument("--markets", default=",".join(MARKETS))
     ap.add_argument("--region", default=REGION_DEFAULT)
     ap.add_argument("--date", nargs="?", default="", const="")
     ap.add_argument("--season", default="")
