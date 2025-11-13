@@ -249,7 +249,7 @@ STADIUM_LOCATION = {
         "lat": 36.1665,
         "lon": -86.7713,
     },
-    "WSH": {
+    "WAS": {
         "stadium": "FedEx Field",
         "city": "Landover",
         "state": "MD",
@@ -258,6 +258,8 @@ STADIUM_LOCATION = {
         "lon": -76.8645,
     },
 }
+
+STADIUM_LOCATION.setdefault("WSH", STADIUM_LOCATION["WAS"])
 
 
 for team, meta in STADIUM_LOCATION.items():
