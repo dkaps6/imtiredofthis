@@ -20,14 +20,8 @@ import requests
 import pandas as pd
 # --- END: mandatory global imports ---
 
-from scripts._opponent_map import (
-    CANON_TEAM_ABBR,
-    canon_team as canon_team_series,
-    map_normalize_team,
-    normalize_team_series,
-)
+from scripts._opponent_map import CANON_TEAM_ABBR, canon_team
 from scripts.utils.canonical_names import canonicalize_player_name, norm_key
-from scripts.utils.team_maps import TEAM_NAME_TO_ABBR
 
 CANON_SET = set(CANON_TEAM_ABBR.values())
 
@@ -211,8 +205,6 @@ TEAM_FIXES = {
     "ARZ": "ARI",
     "LA": "LAR",
     "WSH": "WAS",
-}
-TEAM_FIXES.update({
     "LVG": "LV",
     "KAN": "KC",
     "NWE": "NE",
@@ -220,33 +212,31 @@ TEAM_FIXES.update({
     "SFO": "SF",
     "TAM": "TB",
     "SDG": "LAC",
-})
+}
 
 
 def _canon_team(value):
     if isinstance(value, pd.Series):
-        normalized = canon_team_series(value)
-        mapped = normalized.apply(map_normalize_team)
-        filled = mapped.fillna(normalized)
-        return filled.str.upper()
+        return value.apply(_canon_team)
 
     if value is None or (isinstance(value, float) and pd.isna(value)):
-        return value
+        return ""
 
-    series = canon_team_series(pd.Series([value]))
-    candidate = series.iloc[0]
-    mapped = map_normalize_team(candidate)
-    if mapped:
-        return mapped
-
-    text = str(candidate).strip().upper()
-    text = TEAM_FIXES.get(text, text)
-    if text in TEAM_NAME_TO_ABBR:
-        mapped = TEAM_NAME_TO_ABBR[text]
-        fallback = map_normalize_team(mapped)
-        return fallback or mapped
-    fallback = map_normalize_team(text)
-    return fallback or text
+    text = str(value)
+    upper = text.strip().upper()
+    alias = TEAM_FIXES.get(upper, upper)
+    canonical = canon_team(alias)
+    if not canonical:
+        return ""
+    canonical = canonical.upper()
+    if canonical in CANON_SET:
+        return canonical
+    fallback = CANON_TEAM_ABBR.get(canonical, canonical)
+    if fallback in CANON_SET:
+        return fallback
+    if fallback.upper() in CANON_SET:
+        return fallback.upper()
+    return canonical
 
 
 def _to_int_safe(v):
@@ -384,6 +374,10 @@ def _normalize_teams_and_opponents(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return df
     working = df.copy()
+
+    def _apply(series: pd.Series) -> pd.Series:
+        return series.fillna("").apply(_canon_team)
+
     for col in (
         "team",
         "team_abbr",
@@ -399,7 +393,7 @@ def _normalize_teams_and_opponents(df: pd.DataFrame) -> pd.DataFrame:
         "opponent_team_abbr",
     ):
         if col in working.columns:
-            working[col] = normalize_team_series(working[col])
+            working[col] = _apply(working[col].astype(str))
 
     if "team_abbr" in working.columns or "team" in working.columns:
         team_series = working.get("team_abbr")
@@ -407,16 +401,12 @@ def _normalize_teams_and_opponents(df: pd.DataFrame) -> pd.DataFrame:
             team_series = pd.Series(pd.NA, index=working.index, dtype="object")
         if "team" in working.columns:
             team_series = team_series.fillna(working["team"])
-        working["team_abbr"] = normalize_team_series(team_series.astype(str))
+        working["team_abbr"] = _apply(team_series.astype(str))
 
     if "opponent_abbr" in working.columns:
-        working["opponent_abbr"] = normalize_team_series(
-            working["opponent_abbr"].astype(str)
-        )
+        working["opponent_abbr"] = _apply(working["opponent_abbr"].astype(str))
     elif "opponent" in working.columns:
-        working["opponent_abbr"] = normalize_team_series(
-            working["opponent"].astype(str)
-        )
+        working["opponent_abbr"] = _apply(working["opponent"].astype(str))
 
     # For any residual unknowns, log once
     valid_values = CANON_SET | {"BYE", ""}
@@ -466,8 +456,8 @@ def _normalize_game_rows(events: list, books_filter: Optional[set[str]]) -> pd.D
     for ev in events or []:
         eid = ev.get("id")
         commence = ev.get("commence_time")
-        home = ev.get("home_team")
-        away = ev.get("away_team")
+        home = _canon_team(ev.get("home_team"))
+        away = _canon_team(ev.get("away_team"))
         for bm in ev.get("bookmakers", []):
             book_key = (bm.get("key") or "").strip().lower()
             book_title = (bm.get("title") or "").strip()
@@ -627,21 +617,16 @@ def _normalize_team_abbr(team: Any) -> str:
     raw = ("" if team is None else str(team)).strip()
     if not raw:
         return ""
-    normalized = map_normalize_team(raw)
-    if normalized:
-        return normalized
     upper = raw.upper()
-    if upper in TEAM_NAME_TO_ABBR:
-        return TEAM_NAME_TO_ABBR[upper]
-    lower = raw.lower()
-    if lower in TEAM_NAME_TO_ABBR:
-        return TEAM_NAME_TO_ABBR[lower]
-    cleaned = re.sub(r"[^A-Z0-9 ]+", "", upper)
-    if cleaned in TEAM_NAME_TO_ABBR:
-        return TEAM_NAME_TO_ABBR[cleaned]
-    if len(upper) == 3 and upper.isalpha():
-        return _canon_team(upper)
-    return _canon_team(upper)
+    alias = TEAM_FIXES.get(upper, upper)
+    canonical = canon_team(alias)
+    if not canonical:
+        return ""
+    canonical = canonical.upper()
+    if canonical in CANON_SET:
+        return canonical
+    fallback = CANON_TEAM_ABBR.get(canonical, canonical)
+    return fallback.upper() if isinstance(fallback, str) else ""
 
 
 def _load_roster_map() -> dict[str, set[str]]:
@@ -898,17 +883,19 @@ def _build_opponent_map(
     team_series = working.get("player_team_abbr")
     if team_series is None:
         team_series = working.get("team")
-    working["team"] = (
-        team_series.fillna("")
-        .astype(str)
-        .str.upper()
-        .str.strip()
-    )
+    if team_series is None:
+        team_series = pd.Series([""] * len(working), index=working.index)
+    raw_team_series = team_series.fillna("").astype(str)
+    working["team"] = raw_team_series.apply(_canon_team)
 
     opp_series = working.get("opponent_team_abbr")
     if opp_series is None:
         fallback = [
-            _infer_opponent(team, home, away)
+            _infer_opponent(
+                _canon_team(team),
+                _canon_team(home),
+                _canon_team(away),
+            )
             for team, home, away in zip(
                 working.get("team", pd.Series([], dtype=object)),
                 working.get("home_team_abbr", pd.Series([], dtype=object)),
@@ -916,12 +903,23 @@ def _build_opponent_map(
             )
         ]
         opp_series = pd.Series(fallback, index=working.index)
-    working["opponent"] = (
-        opp_series.fillna("")
-        .astype(str)
-        .str.upper()
-        .str.strip()
-    )
+    raw_opp_series = opp_series.fillna("").astype(str)
+    working["opponent"] = raw_opp_series.apply(_canon_team)
+
+    def _count_unresolved(series: pd.Series) -> int:
+        if series is None or series.empty:
+            return 0
+        series_str = series.fillna("").astype(str)
+        return int(
+            sum(
+                1
+                for value in series_str
+                if value and _canon_team(value) not in CANON_SET
+            )
+        )
+
+    pre_team_unresolved = _count_unresolved(raw_team_series)
+    pre_opp_unresolved = _count_unresolved(raw_opp_series)
 
     if "event_id" in working.columns:
         working["event_id"] = working["event_id"].fillna("").astype(str)
@@ -978,6 +976,16 @@ def _build_opponent_map(
     if missing_any.any():
         for player in sorted(out.loc[missing_any, "player"].dropna().unique()):
             log.warning("[opponent_map] missing mapping for %s", player)
+
+    post_team_unresolved = _count_unresolved(out["team"])
+    post_opp_unresolved = _count_unresolved(out["opponent"])
+    log.info(
+        "[opponent_map] unresolved team/opponent counts pre=%s/%s post=%s/%s",
+        pre_team_unresolved,
+        pre_opp_unresolved,
+        post_team_unresolved,
+        post_opp_unresolved,
+    )
 
     return out.reindex(columns=cols)
 
@@ -1151,6 +1159,10 @@ def _write_data_exports(
         props_copy.rename(columns={"player_team_abbr": "team"}, inplace=True)
     if "opponent_team_abbr" in props_copy.columns:
         props_copy.rename(columns={"opponent_team_abbr": "opponent"}, inplace=True)
+
+    for col in ("team", "opponent", "home_team_abbr", "away_team_abbr"):
+        if col in props_copy.columns:
+            props_copy[col] = props_copy[col].apply(_canon_team)
 
     props_copy.to_csv(PROPS_RAW_DATA_PATH, index=False)
     log.info(f"wrote {PROPS_RAW_DATA_PATH} rows={len(props_copy)}")
@@ -1398,12 +1410,6 @@ def fetch_odds(
         log.info("ERROR: ODDS_API_KEY not set")
         sys.exit(2)
 
-    log.info(
-        "fetching Odds API props board (season=%s, date=%s)",
-        "" if season is None else season,
-        date,
-    )
-
     season_value: Optional[int] = None
     if season:
         try:
@@ -1440,6 +1446,14 @@ def fetch_odds(
     normalized_markets: List[str] = [_normalize_market(m) for m in markets]
 
     Path("outputs").mkdir(parents=True, exist_ok=True)
+
+    log.info(
+        "[props] fetch start season=%s date=%s markets=%d books=%s",
+        "" if season is None else season,
+        date,
+        len(normalized_markets),
+        ",".join(sorted(books_set)) if books_set else "all",
+    )
 
     fetched_at = datetime.now(timezone.utc).isoformat()
 
@@ -1539,7 +1553,7 @@ def fetch_odds(
         games = pd.DataFrame()
     if not games.empty:
         for c in ("home_team", "away_team"):
-            games[c] = games[c].astype(str).str.upper()
+            games[c] = games[c].apply(_canon_team)
 
     props["event_id"] = props["event_id"].astype(str)
     if not games.empty:
@@ -1549,8 +1563,9 @@ def fetch_odds(
         props["away_team"] = props.get("away_team", "")
 
     def _infer_opp(row):
-        tm = str(row.get("team", "")).upper()
-        h, a = row.get("home_team", ""), row.get("away_team", "")
+        tm = _canon_team(row.get("team", ""))
+        h = _canon_team(row.get("home_team", ""))
+        a = _canon_team(row.get("away_team", ""))
         if not tm or not h or not a:
             return None
         if tm == h:
@@ -1562,18 +1577,12 @@ def fetch_odds(
     if "team" in props.columns:
         props["opp_team"] = props.apply(_infer_opp, axis=1)
 
-    team_fix = dict(TEAM_FIXES)
-
     def _apply_team_fix(value: Any) -> Any:
         if isinstance(value, str):
-            upper = value.upper().strip()
-            alias = team_fix.get(upper, upper)
-            canon = _canon_team(alias)
+            canon = _canon_team(value)
             if canon:
                 return canon
-            if upper in TEAM_NAME_TO_ABBR:
-                return TEAM_NAME_TO_ABBR[upper]
-            return alias
+            return value.strip().upper()
         return value
 
     for col in (
@@ -1585,6 +1594,8 @@ def fetch_odds(
         "opponent_team_abbr",
         "home_team_abbr",
         "away_team_abbr",
+        "home_team",
+        "away_team",
     ):
         if col in props.columns:
             props[col] = props[col].apply(_apply_team_fix)
@@ -1890,6 +1901,18 @@ def fetch_odds(
         if col not in final_df.columns:
             final_df[col] = pd.NA
     final_df = final_df[final_schema]
+
+    unique_players = (
+        final_df["player_canonical"].dropna().nunique()
+        if "player_canonical" in final_df.columns
+        else 0
+    )
+    log.info(
+        "[props] fetch finish markets=%d players=%d rows=%d",
+        len(normalized_markets),
+        int(unique_players),
+        len(final_df),
+    )
 
     # keep your original file AND write an enriched one for downstream robustness
     props.to_csv("outputs/props_enriched.csv", index=False)
