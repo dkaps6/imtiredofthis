@@ -22,7 +22,11 @@ from scripts.lib.logging_utils import get_logger
 from scripts.lib.time_windows import compute_slate_window
 
 from scripts._opponent_map import CANON_TEAM_ABBR, canon_team
-from scripts.utils.canonical_names import canonicalize_player_name, norm_key
+from scripts.utils.canonical_names import (
+    canonicalize_player_name,
+    canonicalize_player_name_safe,
+    norm_key,
+)
 
 CANON_SET = set(CANON_TEAM_ABBR.values())
 
@@ -278,7 +282,10 @@ def normalize_offers_to_rows(
                         side = "OVER"
                     elif side == "NO":
                         side = "UNDER"
-                player = outcome.get("description") or outcome.get("participant")
+                raw_name = outcome.get("description") or outcome.get("participant")
+                canonical_name, canonical_key = canonicalize_player_name_safe(raw_name)
+                if not canonical_name:
+                    canonical_name = (raw_name or "")
                 rows.append(
                     {
                         "event_id": str(event_id),
@@ -286,7 +293,11 @@ def normalize_offers_to_rows(
                         "book": book_key,
                         "book_title": book_title,
                         "market": market,
-                        "player": player,
+                        "player": canonical_name,
+                        "player_raw": raw_name,
+                        "book_player_name": raw_name,
+                        "canonical_player_name": canonical_name,
+                        "canonical_player_key": canonical_key,
                         "side": side,
                         "line": outcome.get("point"),
                         "price_american": outcome.get("price"),
@@ -460,51 +471,60 @@ def _canonicalize_player_names(
 ) -> tuple[pd.DataFrame, List[dict[str, Any]]]:
     """Apply canonical player mapping and capture unresolved names for logging."""
 
-    if df is None or df.empty or "player" not in df.columns:
+    if df is None or df.empty:
         return df, []
 
     working = df.copy()
-    working["player_raw"] = working["player"].astype(str)
+
+    raw_col = None
+    for candidate in ("book_player_name", "player_raw", "player"):
+        if candidate in working.columns:
+            raw_col = candidate
+            break
+    if raw_col is None:
+        raw_col = "player"
+        working[raw_col] = working.get("player", "")
+
+    working["player_raw"] = working[raw_col].astype(str)
 
     overrides = {k.strip(): v.strip() for k, v in (name_map or {}).items() if k and v}
     name_records: List[dict[str, Any]] = []
 
-    def _canonize_single(raw_value: str) -> tuple[str, int]:
-        raw_value = (raw_value or "").strip()
-        override = overrides.get(raw_value, raw_value)
-        canonical = canonicalize_player_name(override)
-        if not isinstance(canonical, str):
-            canonical = str(canonical)
-        canonical_clean = canonical.strip()
-        if not canonical_clean:
-            return override, 1
-        return canonical_clean, 0
-
     canonical_values: List[str] = []
-    unresolved_flags: List[int] = []
+    canonical_keys: List[str] = []
 
     for raw in working["player_raw"].astype(str):
-        canonical_name, unresolved_flag = _canonize_single(raw)
-        canonical_values.append(canonical_name or raw)
-        unresolved_flags.append(unresolved_flag)
-
-    working["player"] = canonical_values
-    working["player_canonical"] = canonical_values
-
-    for raw_value, canonical_value, unresolved_flag in zip(
-        working["player_raw"], canonical_values, unresolved_flags
-    ):
+        raw_value = (raw or "").strip()
+        override = overrides.get(raw_value, raw_value)
+        canonical_name, canonical_key = canonicalize_player_name_safe(override)
+        canonical_name = (canonical_name or "").strip()
+        canonical_key = (canonical_key or "").strip() or norm_key(canonical_name or override)
+        if not canonical_name:
+            canonical_name = override
+        unresolved_flag = int(not canonical_name)
+        canonical_values.append(canonical_name)
+        canonical_keys.append(canonical_key)
         name_records.append(
             {
-                "player_raw": raw_value,
-                "player_canonical": canonical_value,
-                "unresolved": int(bool(unresolved_flag)),
+                "raw_name": raw_value,
+                "canonical_player_name": canonical_name,
+                "canonical_player_key": canonical_key,
+                "canonical_name": canonical_name,
+                "source": "oddsapi",
+                "unresolved": unresolved_flag,
             }
         )
         if unresolved_flag:
             log.warning(
                 "[ODDS-FETCH] unresolved canonical name for '%s'", raw_value
             )
+
+    working["player"] = canonical_values
+    working["player_canonical"] = canonical_values
+    working["canonical_player_name"] = canonical_values
+    working["canonical_player_key"] = canonical_keys
+    if "book_player_name" not in working.columns:
+        working["book_player_name"] = working["player_raw"]
 
     return working, name_records
 
@@ -712,11 +732,29 @@ def _build_market_records(
                 opp_val = group.get("opponent_abbr")
                 opponent_abbr = opp_val.iloc[0] if isinstance(opp_val, pd.Series) else None
                 raw_value = group["player_raw"].iloc[0] if "player_raw" in group.columns else player
+                book_value = (
+                    group["book_player_name"].iloc[0]
+                    if "book_player_name" in group.columns
+                    else raw_value
+                )
+                canonical_value = (
+                    group["canonical_player_name"].iloc[0]
+                    if "canonical_player_name" in group.columns
+                    else player
+                )
+                canonical_key = (
+                    group["canonical_player_key"].iloc[0]
+                    if "canonical_player_key" in group.columns
+                    else norm_key(canonical_value)
+                )
                 records.append(
                     {
                         "event_id": event_id,
-                        "player": player,
+                        "player": canonical_value,
                         "player_raw": raw_value,
+                        "book_player_name": book_value,
+                        "canonical_player_name": canonical_value,
+                        "canonical_player_key": canonical_key,
                         "market": market,
                         "commence_time": commence,
                         "books_json": _serialize_offer_rows(group),
@@ -1889,6 +1927,8 @@ def fetch_odds(
     name_map = _load_player_name_map(NAME_MAP_PATH)
     props, name_records = _canonicalize_player_names(props, name_map)
     name_records_all.extend(name_records)
+    if "canonical_player_key" in props.columns:
+        props["player_clean_key"] = props["canonical_player_key"]
     props = _normalize_teams_and_opponents(props)
 
     # --- Attach team/opponent from authoritative sources ---
@@ -2050,8 +2090,10 @@ def fetch_odds(
             columns=[
                 "event_id",
                 "market",
+                "book_player_name",
+                "canonical_player_name",
+                "canonical_player_key",
                 "player_raw",
-                "player",
                 "player_canonical",
                 "team_abbr",
                 "opponent_abbr",
@@ -2062,9 +2104,27 @@ def fetch_odds(
             ]
         )
     else:
-        final_df["player_canonical"] = final_df.get("player", "")
+        canonical_series = final_df.get("canonical_player_name")
+        if canonical_series is None:
+            canonical_series = final_df.get("player")
+        if canonical_series is None:
+            canonical_series = pd.Series([""] * len(final_df), index=final_df.index)
+        else:
+            canonical_series = canonical_series.astype(str).fillna("")
+        final_df["canonical_player_name"] = canonical_series
+        final_df["player_canonical"] = final_df["canonical_player_name"]
         if "player_raw" not in final_df.columns:
-            final_df["player_raw"] = final_df["player_canonical"]
+            final_df["player_raw"] = final_df["canonical_player_name"]
+        else:
+            final_df["player_raw"] = final_df["player_raw"].astype(str).fillna("")
+        if "book_player_name" not in final_df.columns:
+            final_df["book_player_name"] = final_df["player_raw"]
+        else:
+            final_df["book_player_name"] = final_df["book_player_name"].astype(str).fillna("")
+        final_df["canonical_player_key"] = final_df.get("canonical_player_key", pd.Series(pd.NA, index=final_df.index))
+        final_df["canonical_player_key"] = final_df["canonical_player_key"].fillna(
+            final_df["canonical_player_name"].apply(lambda x: norm_key(str(x)))
+        )
         if "fetched_at" in final_df.columns:
             final_df["fetched_at"] = final_df["fetched_at"].fillna(fetched_at)
         else:
@@ -2174,6 +2234,9 @@ def fetch_odds(
     final_schema = [
         "event_id",
         "market",
+        "book_player_name",
+        "canonical_player_name",
+        "canonical_player_key",
         "player_raw",
         "player_canonical",
         "team_abbr",
@@ -2213,12 +2276,44 @@ def fetch_odds(
 
     # Write player name mapping for overrides/unresolved tracking
     PLAYER_NAME_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    NAME_MAP_PATH.parent.mkdir(parents=True, exist_ok=True)
     name_map_df = pd.DataFrame(name_records_all)
-    if not name_map_df.empty:
-        name_map_df = name_map_df.drop_duplicates(subset=["player_raw", "player_canonical"])
+    if name_map_df.empty:
+        name_map_df = pd.DataFrame(
+            columns=[
+                "raw_name",
+                "canonical_player_name",
+                "canonical_player_key",
+                "canonical_name",
+                "source",
+                "unresolved",
+            ]
+        )
     else:
-        name_map_df = pd.DataFrame(columns=["player_raw", "player_canonical", "unresolved"])
+        if "raw_name" not in name_map_df.columns and "player_raw" in name_map_df.columns:
+            name_map_df["raw_name"] = name_map_df["player_raw"]
+        if "canonical_player_name" not in name_map_df.columns and "player_canonical" in name_map_df.columns:
+            name_map_df["canonical_player_name"] = name_map_df["player_canonical"]
+        if "canonical_name" not in name_map_df.columns:
+            name_map_df["canonical_name"] = name_map_df.get("canonical_player_name", "")
+        name_map_df["source"] = name_map_df.get("source", "oddsapi").fillna("oddsapi")
+        if "canonical_player_key" not in name_map_df.columns:
+            name_map_df["canonical_player_key"] = name_map_df["canonical_player_name"].apply(lambda x: norm_key(str(x)))
+        name_map_df = name_map_df.drop_duplicates(subset=["raw_name", "canonical_player_key"])
+
+    ordered_columns = [
+        "raw_name",
+        "canonical_player_name",
+        "canonical_player_key",
+        "canonical_name",
+        "source",
+        "unresolved",
+    ]
+    extra_cols = [c for c in name_map_df.columns if c not in ordered_columns]
+    name_map_df = name_map_df[ordered_columns + extra_cols]
+
     name_map_df.to_csv(PLAYER_NAME_LOG_PATH, index=False)
+    name_map_df.to_csv(NAME_MAP_PATH, index=False)
 
     wide = _wide_over_under(props)
     if not wide.empty and "player" in wide.columns:
