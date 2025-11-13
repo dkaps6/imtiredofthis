@@ -1056,57 +1056,91 @@ def main():
         # --- NEW: derive Success Rates + Explosive Play Rate Allowed from nflverse PBP ---
         try:
             season = 2025
-            pbp = NFLV.import_pbp_data([season])  # nflreadpy or nfl_data_py via _import_nflverse()
-            # Basic filters: no penalties-only rows
-            pbp = pbp[pbp["play_type"].isin(["pass","run"])]
-            # Success definition (common): EPA > 0
-            pbp["is_success"] = (pbp["epa"] > 0).astype(int)
-            # Explosive threshold: >=15 pass or >=10 rush (ceiling indicator)
+
+            # Load PBP with the same package abstraction used earlier
+            if NFL_PKG == "nflreadpy":
+                pbp_raw = NFLV.load_pbp(seasons=[season])
+                # normalize to pandas
+                pbp = _to_pandas(pbp_raw)
+            else:
+                # nfl_data_py path
+                pbp_raw = NFLV.import_pbp_data([season], downcast=True)  # type: ignore
+                pbp = _to_pandas(pbp_raw)
+
+            pbp.columns = [c.lower() for c in pbp.columns]
+
+            # Keep only run/pass plays
+            if "play_type" in pbp.columns:
+                pbp = pbp[pbp["play_type"].isin(["pass", "run"])].copy()
+            else:
+                # nflreadpy sometimes uses flags rather than play_type; if missing, bail gracefully
+                pass_flag = pbp.get("pass", None)
+                rush_flag = pbp.get("rush", None)
+                if pass_flag is None and rush_flag is None:
+                    raise RuntimeError("PBP lacks play_type/pass/rush columns; cannot compute SR/EPR.")
+                mask = pd.Series(False, index=pbp.index)
+                if pass_flag is not None:
+                    mask |= pass_flag.astype(bool)
+                if rush_flag is not None:
+                    mask |= rush_flag.astype(bool)
+                pbp = pbp.loc[mask].copy()
+
+            # Success definition: EPA > 0
+            if "epa" not in pbp.columns:
+                pbp["epa"] = pd.NA
+            pbp["is_success"] = (pd.to_numeric(pbp["epa"], errors="coerce") > 0).astype(int)
+
+            # Explosive: >=15 yd pass or >=10 yd rush
+            yg = pd.to_numeric(pbp.get("yards_gained"), errors="coerce")
+            is_pass = (pbp.get("play_type") == "pass") if "play_type" in pbp else pbp.get("pass", pd.Series(False, index=pbp.index)).astype(bool)
+            is_run  = (pbp.get("play_type") == "run")  if "play_type" in pbp else pbp.get("rush", pd.Series(False, index=pbp.index)).astype(bool)
             pbp["is_explosive"] = (
-                ((pbp["play_type"] == "pass") & (pbp["yards_gained"] >= 15)) |
-                ((pbp["play_type"] == "run") & (pbp["yards_gained"] >= 10))
+                (is_pass & (yg >= 15)) | (is_run & (yg >= 10))
             ).astype(int)
 
-            # Map team abbreviations to your canonical codes
-            if "posteam" in pbp:
-                pbp["off_team"] = pbp["posteam"].astype(str).str.upper()
-            else:
-                pbp["off_team"] = pd.NA
-            if "defteam" in pbp:
-                pbp["def_team"] = pbp["defteam"].astype(str).str.upper()
-            else:
-                pbp["def_team"] = pd.NA
+            # Map team columns
+            off_team = None
+            def_team = None
+            for cand in ["posteam", "offense_team", "club_code"]:
+                if cand in pbp.columns:
+                    off_team = cand
+                    break
+            for cand in ["defteam", "def_team"]:
+                if cand in pbp.columns:
+                    def_team = cand
+                    break
+            if off_team is None or def_team is None:
+                raise RuntimeError("Cannot find offense/defense team columns in PBP.")
 
-            # Aggregate per-team
-            off_grp = pbp.groupby("off_team", dropna=True, as_index=False).agg(
-                off_plays=("is_success","size"),
-                off_success=("is_success","sum"),
+            pbp["off_team"] = pbp[off_team].astype(str).str.upper().map(canon_team)
+            pbp["def_team"] = pbp[def_team].astype(str).str.upper().map(canon_team)
+            pbp = pbp[pbp["off_team"].isin(VALID) & pbp["def_team"].isin(VALID)]
+
+            off_grp = pbp.groupby("off_team", as_index=False).agg(
+                off_plays=("is_success", "size"),
+                off_success=("is_success", "sum"),
             )
             off_grp["success_rate_off"] = off_grp["off_success"] / off_grp["off_plays"]
 
-            def_grp = pbp.groupby("def_team", dropna=True, as_index=False).agg(
-                def_plays=("is_success","size"),
-                def_success_allowed=("is_success","sum"),
-                def_explosive_allowed=("is_explosive","sum"),
+            def_grp = pbp.groupby("def_team", as_index=False).agg(
+                def_plays=("is_success", "size"),
+                def_success_allowed=("is_success", "sum"),
+                def_explosive_allowed=("is_explosive", "sum"),
             )
             def_grp["success_rate_def"] = def_grp["def_success_allowed"] / def_grp["def_plays"]
             def_grp["explosive_play_rate_allowed"] = def_grp["def_explosive_allowed"] / def_grp["def_plays"]
 
-            # Join into existing team frame (we assume `df` holds the team rows by this point)
-            # Ensure `df` has column 'team' canonicalized (e.g., "KC","PHI", etc.)
             df = df.copy()
             df["team"] = df["team"].astype(str).str.upper()
 
-            df = df.merge(off_grp[["off_team","success_rate_off"]], left_on="team", right_on="off_team", how="left") \
-                   .drop(columns=["off_team"], errors="ignore")
-            df = df.merge(def_grp[["def_team","success_rate_def","explosive_play_rate_allowed"]],
-                          left_on="team", right_on="def_team", how="left") \
-                   .drop(columns=["def_team"], errors="ignore")
+            df = df.merge(off_grp[["off_team", "success_rate_off"]],
+                          left_on="team", right_on="off_team", how="left").drop(columns=["off_team"], errors="ignore")
+            df = df.merge(def_grp[["def_team", "success_rate_def", "explosive_play_rate_allowed"]],
+                          left_on="team", right_on="def_team", how="left").drop(columns=["def_team"], errors="ignore")
 
             df["success_rate_diff"] = df["success_rate_off"] - df["success_rate_def"]
 
-            # Z-scores for the new metrics (only when enough teams present)
-            df = zscore(df, ["success_rate_off","success_rate_def","success_rate_diff","explosive_play_rate_allowed"])
+            df = zscore(df, ["success_rate_off", "success_rate_def", "success_rate_diff", "explosive_play_rate_allowed"])
         except Exception as e:
             print(f"[make_team_form] WARNING: SRD/EPR derivation failed: {e}")
 
