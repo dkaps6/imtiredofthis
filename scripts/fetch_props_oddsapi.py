@@ -23,7 +23,6 @@ from scripts.lib.time_windows import compute_slate_window
 
 from scripts._opponent_map import CANON_TEAM_ABBR, canon_team
 from scripts.utils.canonical_names import (
-    canonicalize_player_name,
     canonicalize_player_name_safe,
     norm_key,
 )
@@ -75,6 +74,11 @@ ODDS_GAME_DATA_PATH = DATA_DIR / "odds_game.csv"
 ROLES_PATH = Path("data/roles_ourlads.csv")
 NAME_MAP_PATH = DATA_DIR / "player_name_map_from_props.csv"
 PLAYER_NAME_LOG_PATH = Path("outputs/player_name_map_from_props.csv")
+
+
+def _canonical_name_only(raw_value: Any) -> str:
+    name, _ = canonicalize_player_name_safe(raw_value)
+    return name
 
 # Known book keys for US (include alias keys we might see from the API)
 US_BOOK_KEYS = {
@@ -834,7 +838,7 @@ def _load_roster_map() -> dict[str, set[str]]:
         return {}
     roles = roles[list(need)].copy()
     roles["team"] = roles["team"].apply(_canon_team)
-    roles["player_canonical"] = roles["player"].apply(canonicalize_player_name)
+    roles["player_canonical"] = roles["player"].apply(_canonical_name_only)
     roster: dict[str, set[str]] = {}
     for team, group in roles.dropna(subset=["team"]).groupby("team"):
         names = {nm for nm in group["player_canonical"].astype(str) if nm}
@@ -933,7 +937,9 @@ def _write_props_enriched(props: pd.DataFrame, out_game: str) -> pd.DataFrame:
     working["odds"] = working.get("price_american", "")
 
     if "player_canonical" not in working.columns:
-        working["player_canonical"] = working.get("player", "").apply(canonicalize_player_name)
+        working["player_canonical"] = working.get("player", "").apply(
+            _canonical_name_only
+        )
 
     enriched = working.merge(event_info, on="event_id", how="left")
 
@@ -1865,7 +1871,7 @@ def fetch_odds(
         props = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
     name_records_all: List[dict[str, Any]] = []
     if "player" in props.columns:
-        props["player_canonical"] = props["player"].apply(canonicalize_player_name)
+        props["player_canonical"] = props["player"].apply(_canonical_name_only)
     else:
         props["player_canonical"] = ""
 
@@ -2317,7 +2323,7 @@ def fetch_odds(
 
     wide = _wide_over_under(props)
     if not wide.empty and "player" in wide.columns:
-        wide["player_canonical"] = wide["player"].apply(canonicalize_player_name)
+        wide["player_canonical"] = wide["player"].apply(_canonical_name_only)
     wide_out = Path(out).with_name("props_raw_wide.csv")
     wide.to_csv(wide_out, index=False)
     log.info(f"wrote {wide_out} rows={len(wide)}")

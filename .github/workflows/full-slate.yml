@@ -126,6 +126,27 @@ jobs:
             pip install -r requirements.txt
           fi
 
+      - name: Verify roles_ourlads.csv is present and non-empty
+        run: |
+          set -euo pipefail
+          FILE="outputs/roles_ourlads.csv"
+          if [ ! -f "$FILE" ]; then
+            echo "ERROR: $FILE does not exist. The 'Build depth / roles (Ourlads)' step must run successfully before this job."
+            ls -R .
+            exit 1
+          fi
+
+          line_count="$(wc -l < "$FILE" || echo 0)"
+          if [ "$line_count" -le 1 ]; then
+            echo "ERROR: $FILE exists but appears to be empty (lines=$line_count)."
+            echo "This would cause canonical_names.build_roles_map() to crash. Failing fast instead."
+            head -n 5 "$FILE" || true
+            exit 1
+          fi
+
+          echo "roles_ourlads.csv looks OK (lines=$line_count)."
+          head -n 5 "$FILE" || true
+
       - name: Fetch player props / odds board
         shell: /usr/bin/bash -e {0}
         run: |
