@@ -126,71 +126,44 @@ jobs:
             pip install -r requirements.txt
           fi
 
-      - name: Resolve roles_ourlads.csv location
-        id: resolve_roles
+      - name: Fetch player props / odds board
         run: |
           set -euo pipefail
 
-          echo "[resolve_roles] Listing data/ and outputs/ directories for context"
-          ls -l data || true
-          ls -l outputs || true
+          echo "[workflow] Resolving roles_ourlads.csv path..."
 
-          declare -a candidates=()
-          if [ -n "${ROLES_OURLADS_PATH:-}" ]; then
-            candidates+=("${ROLES_OURLADS_PATH}")
-          fi
-          candidates+=("outputs/roles_ourlads.csv" "data/roles_ourlads.csv")
+          roles_candidates=(
+            "data/roles_ourlads.csv"
+            "outputs/roles_ourlads.csv"
+          )
 
-          chosen=""
-          chosen_lines=""
-          checked_list=""
-
-          echo "[resolve_roles] Evaluating candidate files in priority order"
-          for path in "${candidates[@]}"; do
-            if [ -z "$path" ]; then
-              continue
-            fi
-
-            if [ -z "$checked_list" ]; then
-              checked_list="$path"
-            else
-              checked_list="$checked_list, $path"
-            fi
-
-            if [ -f "$path" ]; then
-              lines="$(wc -l < "$path" || echo 0)"
-              size="$(stat -c%s "$path" 2>/dev/null || echo n/a)"
-              echo "  - $path exists (lines=$lines, size=$size)"
+          roles_path=""
+          for candidate in "${roles_candidates[@]}"; do
+            if [ -f "$candidate" ]; then
+              lines=$(wc -l < "$candidate" || echo 0)
+              echo "  - found $candidate (lines=$lines)"
               if [ "$lines" -gt 1 ]; then
-                chosen="$path"
-                chosen_lines="$lines"
+                roles_path="$candidate"
                 break
               fi
-              echo "    -> skipping $path because it has <= 1 line"
-            else
-              echo "  - $path missing"
             fi
           done
 
-          if [ -z "$chosen" ]; then
-            echo "ERROR: Could not find a non-empty roles_ourlads.csv. Checked: ${checked_list:-<none>}" >&2
-            echo "Ensure the 'Build depth / roles (Ourlads)' job completed and its artifact was restored." >&2
+          if [ -z "$roles_path" ]; then
+            echo "::error::Could not find a non-empty roles_ourlads.csv before fetching props."
+            echo "Checked candidates: ${roles_candidates[*]}"
             exit 1
           fi
 
-          echo "[resolve_roles] Selected roles file: $chosen (lines=$chosen_lines)"
-          head -n 5 "$chosen" || true
-          echo "roles_path=$chosen" >> "$GITHUB_OUTPUT"
+          echo "[workflow] Using roles_ourlads.csv at: $roles_path"
+          export ROLES_OURLADS_PATH="$roles_path"
+          echo "ROLES_OURLADS_PATH=$roles_path" >> "$GITHUB_ENV"
 
-      - name: Fetch player props / odds board
-        shell: /usr/bin/bash -e {0}
+          python -m scripts.fetch_props_oddsapi --season "${SEASON}" --date "${SLATE_DATE}"
+
         env:
-          ROLES_OURLADS_PATH: ${{ steps.resolve_roles.outputs.roles_path }}
-        run: |
-          export PYTHONPATH="${PWD}"
-          python scripts/fetch_props_oddsapi.py \
-            --season "${SEASON}" \
-            --date "${SLATE_DATE}"
+          PYTHONPATH: .
+          # ROLES_OURLADS_PATH is set in the run block above
 
       - name: Persist state
         if: ${{ always() }}

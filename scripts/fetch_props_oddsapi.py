@@ -43,6 +43,8 @@ MISSING_POLICY = os.getenv("MISSING_POLICY", "warn")  # "warn" or "ignore" (neve
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", "outputs")
 ensure_dir(OUTPUT_DIR)
 
+ROLES_OURLADS_PATH = os.getenv("ROLES_OURLADS_PATH", "data/roles_ourlads.csv")
+
 MARKETS = [
     # keep your existing list; include only what you actually fetch
     "player_pass_yds",
@@ -71,7 +73,6 @@ PROPS_ENRICHED_PATH = DATA_DIR / "props_enriched.csv"
 PROPS_RAW_DATA_PATH = DATA_DIR / "props_raw.csv"
 OPPONENT_MAP_PATH = DATA_DIR / "opponent_map_from_props.csv"
 ODDS_GAME_DATA_PATH = DATA_DIR / "odds_game.csv"
-ROLES_PATH = Path("data/roles_ourlads.csv")
 NAME_MAP_PATH = DATA_DIR / "player_name_map_from_props.csv"
 PLAYER_NAME_LOG_PATH = Path("outputs/player_name_map_from_props.csv")
 
@@ -183,6 +184,45 @@ def _save_state(state: dict) -> None:
         log.info("Saved props state to %s", STATE_FILE)
     except Exception as e:  # pragma: no cover - defensive I/O handling
         log.warning("Failed to save props_state.json: %s", e)
+
+
+def build_roles_map(roles_path: str | Path) -> pd.DataFrame:
+    """
+    Load the roles file from Ourlads (canonical depth chart) and validate it.
+
+    :param roles_path: path to roles_ourlads.csv
+    :return: DataFrame with at least one row of data
+    :raises RuntimeError: if the file is missing or effectively empty
+    """
+
+    path = Path(roles_path)
+
+    print(f"[FETCH-PROPS] build_roles_map: attempting to load roles from {path.resolve()}")
+
+    if not path.exists():
+        raise RuntimeError(f"[FETCH-PROPS] roles file does not exist: {path.resolve()}")
+
+    # Quick sanity check on line count to avoid 1-line stub files
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            lines = sum(1 for _ in f)
+    except OSError as e:
+        raise RuntimeError(f"[FETCH-PROPS] failed to read roles file {path.resolve()}: {e}") from e
+
+    if lines <= 1:
+        raise RuntimeError(
+            f"[FETCH-PROPS] roles file {path.resolve()} appears empty (lines={lines}). "
+            "Did the Ourlads step run and successfully write roles_ourlads.csv?"
+        )
+
+    df = pd.read_csv(path)
+    if df.empty:
+        raise RuntimeError(
+            f"[FETCH-PROPS] roles file {path.resolve()} loaded but DataFrame is empty."
+        )
+
+    print(f"[FETCH-PROPS] Loaded {len(df)} roles from {path.resolve()}")
+    return df
 
 # ------------------------- HELPERS ------------------------
 
@@ -414,11 +454,7 @@ def _load_team_week_map(season: int):
 
 
 def _load_roles_ourlads():
-    path = "data/roles_ourlads.csv"
-    if not os.path.exists(path):
-        print("[fetch_props_oddsapi] roles_ourlads.csv not found; cannot stamp team_abbr from roles")
-        return None
-    df = pd.read_csv(path)
+    df = build_roles_map(ROLES_OURLADS_PATH)
     if "team" in df.columns:
         df["team"] = df["team"].map(_canon_team)
     name_col = "player"
@@ -827,14 +863,9 @@ def _normalize_team_abbr(team: Any) -> str:
 
 
 def _load_roster_map() -> dict[str, set[str]]:
-    if not ROLES_PATH.exists() or ROLES_PATH.stat().st_size == 0:
-        return {}
-    try:
-        roles = pd.read_csv(ROLES_PATH)
-    except Exception:
-        return {}
+    roles = build_roles_map(ROLES_OURLADS_PATH)
     need = {"team", "player"}
-    if roles.empty or not need.issubset(set(roles.columns)):
+    if not need.issubset(set(roles.columns)):
         return {}
     roles = roles[list(need)].copy()
     roles["team"] = roles["team"].apply(_canon_team)

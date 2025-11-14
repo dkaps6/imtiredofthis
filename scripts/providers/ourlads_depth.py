@@ -24,6 +24,7 @@
 import logging
 import os, re, time, warnings, sys
 from pathlib import Path
+import shutil
 from collections import Counter
 from typing import Dict, List, Optional, Tuple
 
@@ -31,12 +32,9 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup, Tag
 
-DATA_DIR = "data"
-OUTPUTS_DIR = "outputs"
-OUT_ROLES = Path(OUTPUTS_DIR) / "roles_ourlads.csv"
-OUT_ROLES_MIRROR = Path(DATA_DIR) / "roles_ourlads.csv"
-
 logger = logging.getLogger("ourlads_depth")
+
+DATA_DIR = "data"
 
 NAME_TOKEN_RE = re.compile(r"^\s*([^,]+)\s*,\s*([A-Za-z\.\-']+)(?:\s+Jr\.)?\s*(?:\d+\/\d+)?\s*$")
 
@@ -730,25 +728,28 @@ def main(*, season: Optional[int] = None, include_inactive: bool = True):
     if "position" in final_df.columns:
         print(final_df["position"].value_counts())
 
-    data_path = Path(DATA_DIR)
-    outputs_path = Path(OUTPUTS_DIR)
-    data_path.mkdir(parents=True, exist_ok=True)
-    outputs_path.mkdir(parents=True, exist_ok=True)
+    roles_df = final_df.reset_index(drop=True)
 
-    authoritative_path = outputs_path / "roles_ourlads.csv"
-    mirror_path = data_path / "roles_ourlads.csv"
+    data_dir = Path("data")
+    outputs_dir = Path("outputs")
+    data_dir.mkdir(parents=True, exist_ok=True)
+    outputs_dir.mkdir(parents=True, exist_ok=True)
 
-    final_df.to_csv(authoritative_path, index=False)
-    final_df.to_csv(mirror_path, index=False)
+    canonical_path = data_dir / "roles_ourlads.csv"
+    mirror_path = outputs_dir / "roles_ourlads.csv"
 
-    print(f"[OURlads] Writing roles CSV: {len(final_df)} rows")
-    print(f"[OURlads] Authoritative roles file: {authoritative_path}")
-    print(f"[OURlads] Mirror roles file:       {mirror_path}")
+    roles_df.to_csv(canonical_path, index=False)
+
+    # Mirror to outputs/ for convenience
+    shutil.copy2(canonical_path, mirror_path)
+
+    print(f"[OUR-LADS] Wrote {len(roles_df)} roles → {canonical_path.resolve()}")
+    print(f"[OUR-LADS] Mirrored roles → {mirror_path.resolve()}")
 
     logger.info(
         "[OUR-LADS] wrote %d rows → %s (include_inactive=%s)",
-        len(final_df),
-        authoritative_path,
+        len(roles_df),
+        canonical_path,
         include_inactive,
     )
 
