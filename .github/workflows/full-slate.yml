@@ -126,29 +126,66 @@ jobs:
             pip install -r requirements.txt
           fi
 
-      - name: Verify roles_ourlads.csv is present and non-empty
+      - name: Resolve roles_ourlads.csv location
+        id: resolve_roles
         run: |
           set -euo pipefail
-          FILE="data/roles_ourlads.csv"
-          if [ ! -f "$FILE" ]; then
-            echo "ERROR: $FILE does not exist. The 'Build depth / roles (Ourlads)' step must run successfully before this job."
-            ls -R .
+
+          echo "[resolve_roles] Listing data/ and outputs/ directories for context"
+          ls -l data || true
+          ls -l outputs || true
+
+          declare -a candidates=()
+          if [ -n "${ROLES_OURLADS_PATH:-}" ]; then
+            candidates+=("${ROLES_OURLADS_PATH}")
+          fi
+          candidates+=("outputs/roles_ourlads.csv" "data/roles_ourlads.csv")
+
+          chosen=""
+          chosen_lines=""
+          checked_list=""
+
+          echo "[resolve_roles] Evaluating candidate files in priority order"
+          for path in "${candidates[@]}"; do
+            if [ -z "$path" ]; then
+              continue
+            fi
+
+            if [ -z "$checked_list" ]; then
+              checked_list="$path"
+            else
+              checked_list="$checked_list, $path"
+            fi
+
+            if [ -f "$path" ]; then
+              lines="$(wc -l < "$path" || echo 0)"
+              size="$(stat -c%s "$path" 2>/dev/null || echo n/a)"
+              echo "  - $path exists (lines=$lines, size=$size)"
+              if [ "$lines" -gt 1 ]; then
+                chosen="$path"
+                chosen_lines="$lines"
+                break
+              fi
+              echo "    -> skipping $path because it has <= 1 line"
+            else
+              echo "  - $path missing"
+            fi
+          done
+
+          if [ -z "$chosen" ]; then
+            echo "ERROR: Could not find a non-empty roles_ourlads.csv. Checked: ${checked_list:-<none>}" >&2
+            echo "Ensure the 'Build depth / roles (Ourlads)' job completed and its artifact was restored." >&2
             exit 1
           fi
 
-          line_count="$(wc -l < "$FILE" || echo 0)"
-          if [ "$line_count" -le 1 ]; then
-            echo "ERROR: $FILE exists but appears to be empty (lines=$line_count)."
-            echo "This would cause canonical_names.build_roles_map() to crash. Failing fast instead."
-            head -n 5 "$FILE" || true
-            exit 1
-          fi
-
-          echo "roles_ourlads.csv looks OK (lines=$line_count)."
-          head -n 5 "$FILE" || true
+          echo "[resolve_roles] Selected roles file: $chosen (lines=$chosen_lines)"
+          head -n 5 "$chosen" || true
+          echo "roles_path=$chosen" >> "$GITHUB_OUTPUT"
 
       - name: Fetch player props / odds board
         shell: /usr/bin/bash -e {0}
+        env:
+          ROLES_OURLADS_PATH: ${{ steps.resolve_roles.outputs.roles_path }}
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/fetch_props_oddsapi.py \

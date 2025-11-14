@@ -85,6 +85,58 @@ _ROLES_CACHE: dict[str, str] | None = None
 _ROLES_CACHE_PATH: Path | None = None
 
 
+def _resolve_roles_ourlads_path() -> Path:
+    """
+    Locate a non-empty roles_ourlads.csv file.
+
+    Priority:
+    1. ROLES_OURLADS_PATH env var, if set and non-empty.
+    2. outputs/roles_ourlads.csv (authoritative).
+    3. data/roles_ourlads.csv (mirror / legacy).
+
+    Raises a clear ValueError if no suitable file is found.
+    """
+
+    candidates = []
+
+    env_path = os.environ.get("ROLES_OURLADS_PATH")
+    if env_path:
+        candidates.append(Path(env_path))
+
+    candidates.append(Path("outputs/roles_ourlads.csv"))
+    candidates.append(Path("data/roles_ourlads.csv"))
+
+    tried_messages: list[str] = []
+
+    for path in candidates:
+        if not path:
+            continue
+        tried_messages.append(str(path))
+        if not path.is_file():
+            continue
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                first = f.readline()
+                second = f.readline()
+                if not first:
+                    continue
+                if not second:
+                    continue
+        except OSError:
+            continue
+
+        print(f"[canonical_names] Using roles file: {path}")
+        return path
+
+    msg = (
+        "[canonical_names] ERROR: Could not locate a non-empty roles_ourlads.csv.\n"
+        f"Tried paths (in order): {', '.join(tried_messages) or '<none>'}.\n"
+        "Ensure the 'Build depth / roles (Ourlads)' step completed successfully "
+        "and that its artifact was restored into this job's workspace."
+    )
+    raise ValueError(msg)
+
+
 def build_roles_map(roles_path: str | Path | None = None) -> dict[str, str]:
     """
     Load the roles_ourlads CSV used for canonical name resolution.
@@ -95,101 +147,92 @@ def build_roles_map(roles_path: str | Path | None = None) -> dict[str, str]:
 
     global _ROLES_CACHE, _ROLES_CACHE_PATH
 
-    if roles_path is not None:
-        requested_path = Path(roles_path)
-        if _ROLES_CACHE is not None and _ROLES_CACHE_PATH == requested_path:
-            logger.debug("build_roles_map: returning cached map for %s", requested_path)
-            return _ROLES_CACHE
-        candidate_paths: list[Path] = [requested_path]
+    if roles_path is None:
+        resolved_path = _resolve_roles_ourlads_path()
     else:
-        if _ROLES_CACHE is not None and _ROLES_CACHE_PATH is not None:
-            logger.debug(
-                "build_roles_map: returning cached map for %s", _ROLES_CACHE_PATH
-            )
-            return _ROLES_CACHE
-        candidate_paths = []
+        resolved_path = Path(roles_path)
 
-    candidate_paths.extend(
-        p for p in [Path("outputs/roles_ourlads.csv"), Path("data/roles_ourlads.csv")]
-        if p not in candidate_paths
-    )
+    if _ROLES_CACHE is not None and _ROLES_CACHE_PATH == resolved_path:
+        logger.debug("build_roles_map: returning cached map for %s", resolved_path)
+        return _ROLES_CACHE
 
-    tried: list[tuple[Path, str, int]] = []
-    seen: set[Path] = set()
+    if _ROLES_CACHE is not None and roles_path is None and _ROLES_CACHE_PATH is not None:
+        logger.debug(
+            "build_roles_map: returning cached map for %s", _ROLES_CACHE_PATH
+        )
+        return _ROLES_CACHE
 
-    for path in candidate_paths:
-        if path in seen:
-            continue
-        seen.add(path)
+    print(f"[canonical_names] build_roles_map loading from: {resolved_path}")
 
-        if not path.exists():
-            logger.info("build_roles_map: %s does not exist", path)
-            tried.append((path, "missing", 0))
-            continue
+    if not resolved_path.exists():
+        message = f"build_roles_map: specified roles file does not exist: {resolved_path}"
+        logger.error(message)
+        raise ValueError(message)
 
-        try:
-            size = path.stat().st_size
-        except OSError:
-            size = -1
+    try:
+        size = resolved_path.stat().st_size
+    except OSError:
+        size = -1
 
-        try:
-            df = pd.read_csv(path)
-        except pd.errors.EmptyDataError:
-            logger.warning("build_roles_map: %s is empty (size=%s)", path, size)
-            tried.append((path, "empty_csv", size))
-            continue
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.warning(
-                "build_roles_map: failed to read %s (size=%s) due to %s: %s",
-                path,
-                size,
-                type(exc).__name__,
-                exc,
-            )
-            tried.append((path, f"read_error:{type(exc).__name__}", size))
-            continue
-
-        if df.empty or len(df.columns) == 0:
-            logger.warning(
-                "build_roles_map: %s has no rows/cols (size=%s)", path, size
-            )
-            tried.append((path, "no_rows_or_cols", size))
-            continue
-
-        cols = {c.lower(): c for c in df.columns}
-        if "player_key" not in cols or "player" not in cols:
-            logger.warning(
-                "build_roles_map: %s missing required columns (size=%s)",
-                path,
-                size,
-            )
-            tried.append((path, "missing_columns", size))
-            continue
-
-        key_col = cols["player_key"]
-        name_col = cols["player"]
-        df["_key"] = df[key_col].astype(str).map(norm_key)
-        df["_full"] = df[name_col].astype(str).map(strip_middle_initial)
-        roles_map = dict(zip(df["_key"], df["_full"]))
-
-        logger.info(
-            "build_roles_map: using %s (rows=%d, cols=%d, size=%s)",
-            path,
-            len(df),
-            len(df.columns),
+    try:
+        df = pd.read_csv(resolved_path)
+    except pd.errors.EmptyDataError as exc:
+        logger.warning(
+            "build_roles_map: %s is empty (size=%s)", resolved_path, size
+        )
+        raise ValueError(
+            f"build_roles_map: {resolved_path} is empty (size={size})"
+        ) from exc
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.warning(
+            "build_roles_map: failed to read %s (size=%s) due to %s: %s",
+            resolved_path,
             size,
+            type(exc).__name__,
+            exc,
+        )
+        raise
+
+    if df.shape[0] <= 0:
+        raise ValueError(
+            f"[canonical_names] roles CSV {resolved_path} has no data rows."
+        )
+    if len(df.columns) == 0:
+        logger.warning(
+            "build_roles_map: %s has no columns (size=%s)", resolved_path, size
+        )
+        raise ValueError(
+            f"build_roles_map: {resolved_path} has no columns (size={size})"
         )
 
-        _ROLES_CACHE = roles_map
-        _ROLES_CACHE_PATH = path
-        return roles_map
+    cols = {c.lower(): c for c in df.columns}
+    if "player_key" not in cols or "player" not in cols:
+        logger.warning(
+            "build_roles_map: %s missing required columns (size=%s)",
+            resolved_path,
+            size,
+        )
+        raise ValueError(
+            f"build_roles_map: {resolved_path} missing required columns (size={size})"
+        )
 
-    lines = ["build_roles_map: no usable roles_ourlads.csv candidates found:"]
-    for path, status, size in tried:
-        lines.append(f"  - {path}: {status}, size={size}")
-    message = "\n".join(lines)
-    logger.error(message)
-    raise RuntimeError(message)
+    key_col = cols["player_key"]
+    name_col = cols["player"]
+    df["_key"] = df[key_col].astype(str).map(norm_key)
+    df["_full"] = df[name_col].astype(str).map(strip_middle_initial)
+    roles_map = dict(zip(df["_key"], df["_full"]))
+
+    logger.info(
+        "build_roles_map: using %s (rows=%d, cols=%d, size=%s)",
+        resolved_path,
+        len(df),
+        len(df.columns),
+        size,
+    )
+
+    _ROLES_CACHE = roles_map
+    _ROLES_CACHE_PATH = resolved_path
+    return roles_map
 
 @lru_cache(maxsize=1)
 def build_manual_map(overrides_path: str = "data/manual_name_overrides.csv") -> dict:
