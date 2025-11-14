@@ -129,7 +129,7 @@ jobs:
       - name: Verify roles_ourlads.csv is present and non-empty
         run: |
           set -euo pipefail
-          FILE="outputs/roles_ourlads.csv"
+          FILE="data/roles_ourlads.csv"
           if [ ! -f "$FILE" ]; then
             echo "ERROR: $FILE does not exist. The 'Build depth / roles (Ourlads)' step must run successfully before this job."
             ls -R .
