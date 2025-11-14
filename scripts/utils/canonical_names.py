@@ -15,13 +15,16 @@ The function canonicalize_player_name uses:
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Optional
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 # ---------- helpers ----------
 
@@ -78,20 +81,115 @@ def norm_key(s: str) -> str:
 
 # ---------- map builders (cached) ----------
 
-@lru_cache(maxsize=1)
-def build_roles_map(roles_path: str = "data/roles_ourlads.csv") -> dict:
-    p = Path(roles_path)
-    if not p.exists():
-        return {}
-    df = pd.read_csv(p)
-    cols = {c.lower(): c for c in df.columns}
-    if "player_key" not in cols or "player" not in cols:
-        return {}
-    key_col = cols["player_key"]
-    name_col = cols["player"]
-    df["_key"] = df[key_col].astype(str).map(norm_key)
-    df["_full"] = df[name_col].astype(str).map(strip_middle_initial)
-    return dict(zip(df["_key"], df["_full"]))
+_ROLES_CACHE: dict[str, str] | None = None
+_ROLES_CACHE_PATH: Path | None = None
+
+
+def build_roles_map(roles_path: str | Path | None = None) -> dict[str, str]:
+    """
+    Load the roles_ourlads CSV used for canonical name resolution.
+
+    This function is hardened against missing/empty files and logs exactly
+    which path is chosen (or why it failed).
+    """
+
+    global _ROLES_CACHE, _ROLES_CACHE_PATH
+
+    if roles_path is not None:
+        requested_path = Path(roles_path)
+        if _ROLES_CACHE is not None and _ROLES_CACHE_PATH == requested_path:
+            logger.debug("build_roles_map: returning cached map for %s", requested_path)
+            return _ROLES_CACHE
+        candidate_paths: list[Path] = [requested_path]
+    else:
+        if _ROLES_CACHE is not None and _ROLES_CACHE_PATH is not None:
+            logger.debug(
+                "build_roles_map: returning cached map for %s", _ROLES_CACHE_PATH
+            )
+            return _ROLES_CACHE
+        candidate_paths = []
+
+    candidate_paths.extend(
+        p for p in [Path("outputs/roles_ourlads.csv"), Path("data/roles_ourlads.csv")]
+        if p not in candidate_paths
+    )
+
+    tried: list[tuple[Path, str, int]] = []
+    seen: set[Path] = set()
+
+    for path in candidate_paths:
+        if path in seen:
+            continue
+        seen.add(path)
+
+        if not path.exists():
+            logger.info("build_roles_map: %s does not exist", path)
+            tried.append((path, "missing", 0))
+            continue
+
+        try:
+            size = path.stat().st_size
+        except OSError:
+            size = -1
+
+        try:
+            df = pd.read_csv(path)
+        except pd.errors.EmptyDataError:
+            logger.warning("build_roles_map: %s is empty (size=%s)", path, size)
+            tried.append((path, "empty_csv", size))
+            continue
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.warning(
+                "build_roles_map: failed to read %s (size=%s) due to %s: %s",
+                path,
+                size,
+                type(exc).__name__,
+                exc,
+            )
+            tried.append((path, f"read_error:{type(exc).__name__}", size))
+            continue
+
+        if df.empty or len(df.columns) == 0:
+            logger.warning(
+                "build_roles_map: %s has no rows/cols (size=%s)", path, size
+            )
+            tried.append((path, "no_rows_or_cols", size))
+            continue
+
+        cols = {c.lower(): c for c in df.columns}
+        if "player_key" not in cols or "player" not in cols:
+            logger.warning(
+                "build_roles_map: %s missing required columns (size=%s)",
+                path,
+                size,
+            )
+            tried.append((path, "missing_columns", size))
+            continue
+
+        key_col = cols["player_key"]
+        name_col = cols["player"]
+        df["_key"] = df[key_col].astype(str).map(norm_key)
+        df["_full"] = df[name_col].astype(str).map(strip_middle_initial)
+        roles_map = dict(zip(df["_key"], df["_full"]))
+
+        logger.info(
+            "build_roles_map: using %s (rows=%d, cols=%d, size=%s)",
+            path,
+            len(df),
+            len(df.columns),
+            size,
+        )
+
+        _ROLES_CACHE = roles_map
+        _ROLES_CACHE_PATH = path
+        return roles_map
+
+    lines = ["build_roles_map: no usable roles_ourlads.csv candidates found:"]
+    for path, status, size in tried:
+        lines.append(f"  - {path}: {status}, size={size}")
+    message = "\n".join(lines)
+    logger.error(message)
+    raise RuntimeError(message)
 
 @lru_cache(maxsize=1)
 def build_manual_map(overrides_path: str = "data/manual_name_overrides.csv") -> dict:
@@ -131,17 +229,26 @@ canonicalize_name = canonicalize_player_name
 _UNMAPPED_LOG = os.environ.get("UNMAPPED_NAME_LOG", "data/_debug/unmapped_names.jsonl")
 
 
-def canonicalize_player_name_safe(raw: str):
+def canonicalize_player_name_safe(raw_name: str) -> tuple[str, Optional[str]]:
     """
-    Return (canonical_full_name, clean_key).
+    Safe wrapper around canonicalize_player_name.
 
-    The canonical name is always a human-readable string while the key is the
-    normalized lookup token used across the project.  When the legacy helper
-    returns a simple string, derive the key from that value so callers never
-    have to duplicate the normalization logic.
+    - On success: returns (canonical_name, canonical_key)
+    - On failure: logs and falls back to (raw_name, None) without raising.
     """
 
-    out = canonicalize_player_name(raw)
+    try:
+        out = canonicalize_player_name(raw_name)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning(
+            "canonicalize_player_name_safe: falling back to raw name %r due to %s: %s",
+            raw_name,
+            type(exc).__name__,
+            exc,
+        )
+        fallback = "" if raw_name is None else str(raw_name).strip()
+        return fallback, None
+
     if isinstance(out, tuple):
         if len(out) >= 2:
             name, key = out[0], out[1]
@@ -153,10 +260,18 @@ def canonicalize_player_name_safe(raw: str):
         name, key = out, out
 
     name_str = "" if name is None else str(name).strip()
-    key_str = "" if key is None else str(key).strip()
+    raw_fallback = "" if raw_name is None else str(raw_name).strip()
+
+    if key is None:
+        key_str: Optional[str] = None
+    else:
+        key_str = str(key).strip()
+        if not key_str:
+            key_str = None
 
     if not key_str:
-        key_str = norm_key(name_str or raw or "")
+        normalized = norm_key(name_str or raw_fallback)
+        key_str = normalized or None
 
     return name_str, key_str
 
