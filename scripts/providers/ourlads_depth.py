@@ -4,7 +4,7 @@
 #
 # Scrapes Ourlads depth charts for every NFL team and writes a clean,
 # canonical roles file:
-#   data/roles_ourlads.csv  with cols: team,player,role,position
+#   outputs/roles_ourlads.csv  with cols: team,player,role,position
 #
 # Key details:
 # - Only "Player 1" at fantasy positions (QB/RB/TE/LWR/RWR/SWR)
@@ -31,9 +31,10 @@ from pathlib import Path
 from collections import Counter
 from typing import Dict, List, Optional, Tuple
 
+ROLES_OUT_PATH = Path("outputs") / "roles_ourlads.csv"
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_ROOT / "data"
-ROLES_PATH = DATA_DIR / "roles_ourlads.csv"
 
 import pandas as pd
 import requests
@@ -763,10 +764,20 @@ def main(*, season: Optional[int] = None, include_inactive: bool = True):
             "This will cause downstream failures in fetch_props_oddsapi."
         )
 
-    roles_df.to_csv(ROLES_PATH, index=False)
+    # Ensure output directory exists
+    ROLES_OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    roles_df.to_csv(ROLES_OUT_PATH, index=False)
+
+    abs_path = ROLES_OUT_PATH.resolve()
+    size = os.path.getsize(ROLES_OUT_PATH)
+    print(
+        f"[OURLADS DEBUG] Wrote roles_ourlads.csv to {abs_path} "
+        f"(bytes={size}, rows={len(roles_df)})"
+    )
     logger.info(
         "Wrote roles_ourlads CSV to %s with shape=%s",
-        ROLES_PATH,
+        abs_path,
         roles_df.shape,
     )
 
