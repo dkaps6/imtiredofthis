@@ -24,9 +24,7 @@ from scripts.lib.time_windows import compute_slate_window
 from scripts._opponent_map import CANON_TEAM_ABBR, canon_team
 from scripts.utils.canonical_names import (
     canonicalize_player_name_safe,
-    build_roles_map,
     build_roles_map_from_csv,
-    _load_roles_ourlads_df,
     norm_key,
 )
 
@@ -80,7 +78,54 @@ ODDS_GAME_DATA_PATH = DATA_DIR / "odds_game.csv"
 NAME_MAP_PATH = DATA_DIR / "player_name_map_from_props.csv"
 PLAYER_NAME_LOG_PATH = Path("outputs/player_name_map_from_props.csv")
 
-_ROLES_CSV_OVERRIDE: Path | None = None
+# Optional override from env for where roles_ourlads.csv lives.
+_ROLES_CSV_OVERRIDE = os.getenv("ROLES_CSV", "").strip() or None  # type: str | None
+
+
+def _resolve_roles_csv() -> Path:
+    """
+    Decide which roles_ourlads.csv to use.
+
+    Precedence:
+    1) _ROLES_CSV_OVERRIDE env/override, if it exists and is non-empty.
+    2) outputs/roles_ourlads.csv (from the Ourlads build step).
+    3) data/roles_ourlads.csv (local copy / fallback).
+
+    Raises FileNotFoundError if nothing exists or all are empty.
+    """
+
+    candidates: list[Path] = []
+
+    # 1) Explicit override
+    if _ROLES_CSV_OVERRIDE:
+        override = Path(_ROLES_CSV_OVERRIDE)
+        candidates.append(override)
+
+    # 2) Default artifact locations
+    candidates.append(Path("outputs/roles_ourlads.csv"))
+    candidates.append(Path("data/roles_ourlads.csv"))
+
+    non_empty: list[Path] = []
+    for p in candidates:
+        try:
+            if p.is_file() and p.stat().st_size > 0:
+                non_empty.append(p)
+        except OSError:
+            # Ignore unreadable paths
+            continue
+
+    if not non_empty:
+        raise FileNotFoundError(
+            f"[roles_ourlads] Could not locate a non-empty roles CSV. "
+            f"Checked: {', '.join(str(p) for p in candidates)}"
+        )
+
+    chosen = non_empty[0]
+    print(
+        f"[roles_ourlads] Using roles CSV at {chosen} "
+        f"(size={chosen.stat().st_size} bytes)"
+    )
+    return chosen
 
 
 def _canonical_name_only(raw_value: Any) -> str:
@@ -193,8 +238,15 @@ def _save_state(state: dict) -> None:
 
 
 def load_roles_df() -> pd.DataFrame:
-    roles_df = _load_roles_ourlads_df(_ROLES_CSV_OVERRIDE)
+    roles_csv_path = _resolve_roles_csv()
+    roles_df = pd.read_csv(roles_csv_path)
     logger.info("Loaded roles_ourlads CSV with shape=%s", roles_df.shape)
+
+    if roles_df.empty:
+        raise ValueError(
+            f"[roles_ourlads] roles CSV {roles_csv_path} is empty; "
+            "did the 'Build depth / roles (Ourlads)' step succeed and upload its artifact?"
+        )
 
     required_cols = {"team", "player", "position", "role", "player_key"}
     missing = required_cols - set(roles_df.columns)
@@ -2399,20 +2451,15 @@ if __name__ == "__main__":
     global _ROLES_CSV_OVERRIDE
     roles_override = Path(args.roles_csv).resolve() if args.roles_csv else None
     if roles_override:
-        _ROLES_CSV_OVERRIDE = roles_override
+        _ROLES_CSV_OVERRIDE = str(roles_override)
 
     try:
-        if roles_override:
-            roles_map = build_roles_map_from_csv(roles_override)
-            print(
-                f"[fetch_props_oddsapi] INFO: roles_ourlads.csv loaded from {roles_override} entries={len(roles_map)}"
-            )
-        else:
-            roles_map = build_roles_map()
-            print(
-                f"[fetch_props_oddsapi] INFO: roles_ourlads.csv loaded with entries={len(roles_map)}"
-            )
-    except ValueError:
+        roles_csv_path = _resolve_roles_csv()
+        roles_map = build_roles_map_from_csv(roles_csv_path)
+        print(
+            f"[fetch_props_oddsapi] INFO: roles_ourlads.csv loaded from {roles_csv_path} entries={len(roles_map)}"
+        )
+    except (FileNotFoundError, ValueError):
         print(
             "[fetch_props_oddsapi] WARNING: proceeding without roles_ourlads.csv; "
             "player name canonicalization will fall back to raw names."
