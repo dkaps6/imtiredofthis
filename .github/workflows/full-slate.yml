@@ -126,44 +126,19 @@ jobs:
             pip install -r requirements.txt
           fi
 
+      - name: Download roles_ourlads artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: roles_ourlads
+          path: .
+
       - name: Fetch player props / odds board
         run: |
           set -euo pipefail
-
-          echo "[workflow] Resolving roles_ourlads.csv path..."
-
-          roles_candidates=(
-            "data/roles_ourlads.csv"
-            "outputs/roles_ourlads.csv"
-          )
-
-          roles_path=""
-          for candidate in "${roles_candidates[@]}"; do
-            if [ -f "$candidate" ]; then
-              lines=$(wc -l < "$candidate" || echo 0)
-              echo "  - found $candidate (lines=$lines)"
-              if [ "$lines" -gt 1 ]; then
-                roles_path="$candidate"
-                break
-              fi
-            fi
-          done
-
-          if [ -z "$roles_path" ]; then
-            echo "::error::Could not find a non-empty roles_ourlads.csv before fetching props."
-            echo "Checked candidates: ${roles_candidates[*]}"
-            exit 1
-          fi
-
-          echo "[workflow] Using roles_ourlads.csv at: $roles_path"
-          export ROLES_OURLADS_PATH="$roles_path"
-          echo "ROLES_OURLADS_PATH=$roles_path" >> "$GITHUB_ENV"
-
           python -m scripts.fetch_props_oddsapi --season "${SEASON}" --date "${SLATE_DATE}"
 
         env:
           PYTHONPATH: .
-          # ROLES_OURLADS_PATH is set in the run block above
 
       - name: Persist state
         if: ${{ always() }}
@@ -248,6 +223,12 @@ jobs:
           export PYTHONPATH="${PWD}"
           python scripts/providers/ourlads_depth.py \
             --season "${SEASON}"
+
+      - name: Upload roles_ourlads.csv
+        uses: actions/upload-artifact@v4
+        with:
+          name: roles_ourlads
+          path: data/roles_ourlads.csv
 
       - name: Persist state
         if: ${{ always() }}
