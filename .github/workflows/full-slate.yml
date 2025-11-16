@@ -132,10 +132,46 @@ jobs:
           name: roles_ourlads
           path: .
 
-      - name: Fetch player props / odds board
+      - name: Restore state from build_depth_roles_ourlads
+        uses: actions/download-artifact@v4
+        with:
+          name: state-build_depth_roles_ourlads
+          path: .
+
+      - name: Ensure roles_ourlads.csv exists and is non-empty
         run: |
           set -euo pipefail
-          python -m scripts.fetch_props_oddsapi --season "${SEASON}" --date "${SLATE_DATE}"
+
+          candidates=("data/roles_ourlads.csv" "outputs/roles_ourlads.csv")
+          chosen=""
+
+          echo "Looking for roles_ourlads.csv in:"
+          for c in "${candidates[@]}"; do
+            if [ -f "$c" ]; then
+              lines="$(wc -l < "$c" || echo 0)"
+              echo "  - $c (lines=$lines)"
+              if [ "$lines" -gt 1 ]; then
+                chosen="$c"
+                break
+              fi
+            else
+              echo "  - $c (missing)"
+            fi
+          done
+
+          if [ -z "$chosen" ]; then
+            echo "ERROR: Could not locate a non-empty roles_ourlads.csv in any of: ${candidates[*]}"
+            echo "       Check the 'Build depth / roles (Ourlads)' step for scraper/site issues."
+            exit 1
+          fi
+
+          echo "Using roles file: $chosen"
+          echo "ROLES_CSV=$chosen" >> "$GITHUB_ENV"
+
+      - name: Fetch player props / odds board
+        run: |
+          export PYTHONPATH="${PWD}"
+          python -m scripts.fetch_props_oddsapi --season "${SEASON}" --date "${SLATE_DATE}" --roles-csv "${ROLES_CSV}"
 
         env:
           PYTHONPATH: .

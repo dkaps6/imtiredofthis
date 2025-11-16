@@ -31,6 +31,7 @@ from pathlib import Path
 from collections import Counter
 from typing import Dict, List, Optional, Tuple
 
+ROLES_DATA_PATH = Path("data") / "roles_ourlads.csv"
 ROLES_OUT_PATH = Path("outputs") / "roles_ourlads.csv"
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -739,12 +740,12 @@ def main(*, season: Optional[int] = None, include_inactive: bool = True):
     if "position" in final_df.columns:
         print(final_df["position"].value_counts())
 
-    roles_df = final_df.reset_index(drop=True)
+    df_roles = final_df.reset_index(drop=True)
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-    if roles_df.empty:
-        roles_df = pd.DataFrame(
+    if df_roles.empty:
+        df_roles = pd.DataFrame(
             columns=[
                 "team",
                 "player",
@@ -764,21 +765,30 @@ def main(*, season: Optional[int] = None, include_inactive: bool = True):
             "This will cause downstream failures in fetch_props_oddsapi."
         )
 
-    # Ensure output directory exists
-    ROLES_OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    print(f"[OURlads] Writing roles CSV: {len(df_roles)} rows")
 
-    roles_df.to_csv(ROLES_OUT_PATH, index=False)
+    data_path = ROLES_DATA_PATH
+    outputs_path = ROLES_OUT_PATH
 
-    abs_path = ROLES_OUT_PATH.resolve()
-    size = os.path.getsize(ROLES_OUT_PATH)
+    for path in (data_path, outputs_path):
+        os.makedirs(path.parent, exist_ok=True)
+
+    df_roles.to_csv(data_path, index=False)
+    print(f"[OUR-LADS] Wrote {len(df_roles)} roles → {data_path}")
+
+    df_roles.to_csv(outputs_path, index=False)
+    print(f"[OUR-LADS] Mirrored roles → {outputs_path}")
+
+    abs_path = outputs_path.resolve()
+    size = os.path.getsize(outputs_path)
     print(
         f"[OURLADS DEBUG] Wrote roles_ourlads.csv to {abs_path} "
-        f"(bytes={size}, rows={len(roles_df)})"
+        f"(bytes={size}, rows={len(df_roles)})"
     )
     logger.info(
         "Wrote roles_ourlads CSV to %s with shape=%s",
         abs_path,
-        roles_df.shape,
+        df_roles.shape,
     )
 
 if __name__ == "__main__":

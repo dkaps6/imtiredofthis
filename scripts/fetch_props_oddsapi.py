@@ -24,6 +24,8 @@ from scripts.lib.time_windows import compute_slate_window
 from scripts._opponent_map import CANON_TEAM_ABBR, canon_team
 from scripts.utils.canonical_names import (
     canonicalize_player_name_safe,
+    build_roles_map,
+    build_roles_map_from_csv,
     _load_roles_ourlads_df,
     norm_key,
 )
@@ -77,6 +79,8 @@ OPPONENT_MAP_PATH = DATA_DIR / "opponent_map_from_props.csv"
 ODDS_GAME_DATA_PATH = DATA_DIR / "odds_game.csv"
 NAME_MAP_PATH = DATA_DIR / "player_name_map_from_props.csv"
 PLAYER_NAME_LOG_PATH = Path("outputs/player_name_map_from_props.csv")
+
+_ROLES_CSV_OVERRIDE: Path | None = None
 
 
 def _canonical_name_only(raw_value: Any) -> str:
@@ -189,7 +193,7 @@ def _save_state(state: dict) -> None:
 
 
 def load_roles_df() -> pd.DataFrame:
-    roles_df = _load_roles_ourlads_df()
+    roles_df = _load_roles_ourlads_df(_ROLES_CSV_OVERRIDE)
     logger.info("Loaded roles_ourlads CSV with shape=%s", roles_df.shape)
 
     required_cols = {"team", "player", "position", "role", "player_key"}
@@ -2380,17 +2384,34 @@ if __name__ == "__main__":
     ap.add_argument("--season", default="")
     ap.add_argument("--out", default="outputs/props_raw.csv")
     ap.add_argument("--out_game", default="outputs/odds_game.csv")
+    ap.add_argument(
+        "--roles-csv",
+        type=str,
+        default=None,
+        help="Optional explicit path to roles_ourlads.csv",
+    )
     args = ap.parse_args()
 
     # IMPORTANT: interpret "" as ALL (None), not an empty list
     raw_books = (args.books or "").strip()
     books_list: Optional[List[str]] = None if raw_books == "" else [b.strip() for b in raw_books.split(",") if b.strip()]
 
+    global _ROLES_CSV_OVERRIDE
+    roles_override = Path(args.roles_csv).resolve() if args.roles_csv else None
+    if roles_override:
+        _ROLES_CSV_OVERRIDE = roles_override
+
     try:
-        roles_df = _load_roles_ourlads_df()
-        print(
-            f"[fetch_props_oddsapi] INFO: roles_ourlads.csv loaded with shape={roles_df.shape}"
-        )
+        if roles_override:
+            roles_map = build_roles_map_from_csv(roles_override)
+            print(
+                f"[fetch_props_oddsapi] INFO: roles_ourlads.csv loaded from {roles_override} entries={len(roles_map)}"
+            )
+        else:
+            roles_map = build_roles_map()
+            print(
+                f"[fetch_props_oddsapi] INFO: roles_ourlads.csv loaded with entries={len(roles_map)}"
+            )
     except ValueError:
         print(
             "[fetch_props_oddsapi] WARNING: proceeding without roles_ourlads.csv; "
