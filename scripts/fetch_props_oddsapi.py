@@ -27,6 +27,11 @@ from scripts.utils.canonical_names import (
     norm_key,
 )
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DATA_DIR = REPO_ROOT / "data"
+ROLES_PATH = DATA_DIR / "roles_ourlads.csv"
+logger = logging.getLogger(__name__)
+
 CANON_SET = set(CANON_TEAM_ABBR.values())
 
 # ------------------------- RUNTIME CONFIG -----------------
@@ -42,8 +47,6 @@ ALLOW_FALLBACK = os.getenv("ALLOW_FALLBACK", "1") == "1"  # if no offers from pr
 MISSING_POLICY = os.getenv("MISSING_POLICY", "warn")  # "warn" or "ignore" (never "fail")
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", "outputs")
 ensure_dir(OUTPUT_DIR)
-
-ROLES_OURLADS_PATH = os.getenv("ROLES_OURLADS_PATH", "data/roles_ourlads.csv")
 
 MARKETS = [
     # keep your existing list; include only what you actually fetch
@@ -68,7 +71,6 @@ BACKOFF_S = [0.6, 1.2, 2.0, 3.5, 5.0]
 GAME_MARKETS = ["h2h", "spreads", "totals"]  # bulk-only
 CENTRAL_TZ = ZoneInfo("America/Chicago")
 
-DATA_DIR = Path("data")
 PROPS_ENRICHED_PATH = DATA_DIR / "props_enriched.csv"
 PROPS_RAW_DATA_PATH = DATA_DIR / "props_raw.csv"
 OPPONENT_MAP_PATH = DATA_DIR / "opponent_map_from_props.csv"
@@ -186,43 +188,38 @@ def _save_state(state: dict) -> None:
         log.warning("Failed to save props_state.json: %s", e)
 
 
-def build_roles_map(roles_path: str | Path) -> pd.DataFrame:
-    """
-    Load the roles file from Ourlads (canonical depth chart) and validate it.
+def load_roles_df() -> pd.DataFrame:
+    logger.info("Attempting to load roles_ourlads from %s", ROLES_PATH)
 
-    :param roles_path: path to roles_ourlads.csv
-    :return: DataFrame with at least one row of data
-    :raises RuntimeError: if the file is missing or effectively empty
-    """
-
-    path = Path(roles_path)
-
-    print(f"[FETCH-PROPS] build_roles_map: attempting to load roles from {path.resolve()}")
-
-    if not path.exists():
-        raise RuntimeError(f"[FETCH-PROPS] roles file does not exist: {path.resolve()}")
-
-    # Quick sanity check on line count to avoid 1-line stub files
-    try:
-        with path.open("r", encoding="utf-8") as f:
-            lines = sum(1 for _ in f)
-    except OSError as e:
-        raise RuntimeError(f"[FETCH-PROPS] failed to read roles file {path.resolve()}: {e}") from e
-
-    if lines <= 1:
-        raise RuntimeError(
-            f"[FETCH-PROPS] roles file {path.resolve()} appears empty (lines={lines}). "
-            "Did the Ourlads step run and successfully write roles_ourlads.csv?"
+    if not ROLES_PATH.exists():
+        raise FileNotFoundError(
+            f"roles_ourlads file not found at {ROLES_PATH}. "
+            "Make sure the 'Build depth / roles (Ourlads)' step ran successfully "
+            "and that its artifact was downloaded into this workspace."
         )
 
-    df = pd.read_csv(path)
-    if df.empty:
+    roles_df = pd.read_csv(ROLES_PATH)
+    logger.info("Loaded roles_ourlads CSV with shape=%s", roles_df.shape)
+
+    if roles_df.empty or len(roles_df) == 0:
         raise RuntimeError(
-            f"[FETCH-PROPS] roles file {path.resolve()} loaded but DataFrame is empty."
+            f"roles_ourlads at {ROLES_PATH} is empty (0 rows). "
+            "Check the 'Build depth / roles (Ourlads)' logs to see why no rows were scraped."
         )
 
-    print(f"[FETCH-PROPS] Loaded {len(df)} roles from {path.resolve()}")
-    return df
+    required_cols = {"team", "player", "position", "role", "player_key"}
+    missing = required_cols - set(roles_df.columns)
+    if missing:
+        raise RuntimeError(
+            f"roles_ourlads at {ROLES_PATH} is missing expected columns: {sorted(missing)}. "
+            f"Columns present: {sorted(roles_df.columns)}"
+        )
+
+    return roles_df
+
+
+def build_roles_map(_: str | Path | None = None) -> pd.DataFrame:
+    return load_roles_df()
 
 # ------------------------- HELPERS ------------------------
 
@@ -454,7 +451,7 @@ def _load_team_week_map(season: int):
 
 
 def _load_roles_ourlads():
-    df = build_roles_map(ROLES_OURLADS_PATH)
+    df = load_roles_df()
     if "team" in df.columns:
         df["team"] = df["team"].map(_canon_team)
     name_col = "player"
@@ -863,7 +860,7 @@ def _normalize_team_abbr(team: Any) -> str:
 
 
 def _load_roster_map() -> dict[str, set[str]]:
-    roles = build_roles_map(ROLES_OURLADS_PATH)
+    roles = load_roles_df()
     need = {"team", "player"}
     if not need.issubset(set(roles.columns)):
         return {}
@@ -2383,6 +2380,13 @@ def fetch_odds(
 # ------------------------- CLI ----------------------------
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+    )
+    logger.info("Running fetch_props_oddsapi from cwd=%s", os.getcwd())
+    logger.info("Repo root resolved to %s", REPO_ROOT)
+
     ap = argparse.ArgumentParser()
     # Accept both names; allow empty (no filter) with nargs='?' / const=''
     ap.add_argument("--books", "--bookmakers", dest="books",

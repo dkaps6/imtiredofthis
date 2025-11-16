@@ -22,19 +22,24 @@
 # - Canonicalizes team abbreviations (BUF, KC, WAS, etc.)
 
 import logging
-import os, re, time, warnings, sys
+import os
+import re
+import time
+import warnings
+import sys
 from pathlib import Path
-import shutil
 from collections import Counter
 from typing import Dict, List, Optional, Tuple
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DATA_DIR = REPO_ROOT / "data"
+ROLES_PATH = DATA_DIR / "roles_ourlads.csv"
 
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup, Tag
 
 logger = logging.getLogger("ourlads_depth")
-
-DATA_DIR = "data"
 
 NAME_TOKEN_RE = re.compile(r"^\s*([^,]+)\s*,\s*([A-Za-z\.\-']+)(?:\s+Jr\.)?\s*(?:\d+\/\d+)?\s*$")
 
@@ -567,9 +572,14 @@ def fetch_team_roles(team: str, soup: BeautifulSoup, include_inactive: bool) -> 
 
 def main(*, season: Optional[int] = None, include_inactive: bool = True):
     warnings.simplefilter("ignore")
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+    )
     logger.setLevel(logging.INFO)
-    os.makedirs(DATA_DIR, exist_ok=True)
+    logger.info("Running ourlads_depth from cwd=%s", os.getcwd())
+    logger.info("Repo root resolved to %s", REPO_ROOT)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     all_rows: List[dict] = []
 
@@ -730,27 +740,34 @@ def main(*, season: Optional[int] = None, include_inactive: bool = True):
 
     roles_df = final_df.reset_index(drop=True)
 
-    data_dir = Path("data")
-    outputs_dir = Path("outputs")
-    data_dir.mkdir(parents=True, exist_ok=True)
-    outputs_dir.mkdir(parents=True, exist_ok=True)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-    canonical_path = data_dir / "roles_ourlads.csv"
-    mirror_path = outputs_dir / "roles_ourlads.csv"
+    if roles_df.empty:
+        roles_df = pd.DataFrame(
+            columns=[
+                "team",
+                "player",
+                "role",
+                "model_role",
+                "position",
+                "position_group",
+                "depth_chart_role",
+                "depth_slot",
+                "depth_index",
+                "player_key",
+                "player_clean_key",
+            ]
+        )
+        logger.warning(
+            "No roles were scraped from Ourlads – roles DataFrame is empty. "
+            "This will cause downstream failures in fetch_props_oddsapi."
+        )
 
-    roles_df.to_csv(canonical_path, index=False)
-
-    # Mirror to outputs/ for convenience
-    shutil.copy2(canonical_path, mirror_path)
-
-    print(f"[OUR-LADS] Wrote {len(roles_df)} roles → {canonical_path.resolve()}")
-    print(f"[OUR-LADS] Mirrored roles → {mirror_path.resolve()}")
-
+    roles_df.to_csv(ROLES_PATH, index=False)
     logger.info(
-        "[OUR-LADS] wrote %d rows → %s (include_inactive=%s)",
-        len(roles_df),
-        canonical_path,
-        include_inactive,
+        "Wrote roles_ourlads CSV to %s with shape=%s",
+        ROLES_PATH,
+        roles_df.shape,
     )
 
 if __name__ == "__main__":
