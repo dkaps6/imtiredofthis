@@ -24,12 +24,12 @@ from scripts.lib.time_windows import compute_slate_window
 from scripts._opponent_map import CANON_TEAM_ABBR, canon_team
 from scripts.utils.canonical_names import (
     canonicalize_player_name_safe,
+    _load_roles_ourlads_df,
     norm_key,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_ROOT / "data"
-ROLES_PATH = DATA_DIR / "roles_ourlads.csv"
 logger = logging.getLogger(__name__)
 
 CANON_SET = set(CANON_TEAM_ABBR.values())
@@ -189,37 +189,19 @@ def _save_state(state: dict) -> None:
 
 
 def load_roles_df() -> pd.DataFrame:
-    logger.info("Attempting to load roles_ourlads from %s", ROLES_PATH)
-
-    if not ROLES_PATH.exists():
-        raise FileNotFoundError(
-            f"roles_ourlads file not found at {ROLES_PATH}. "
-            "Make sure the 'Build depth / roles (Ourlads)' step ran successfully "
-            "and that its artifact was downloaded into this workspace."
-        )
-
-    roles_df = pd.read_csv(ROLES_PATH)
+    roles_df = _load_roles_ourlads_df()
     logger.info("Loaded roles_ourlads CSV with shape=%s", roles_df.shape)
-
-    if roles_df.empty or len(roles_df) == 0:
-        raise RuntimeError(
-            f"roles_ourlads at {ROLES_PATH} is empty (0 rows). "
-            "Check the 'Build depth / roles (Ourlads)' logs to see why no rows were scraped."
-        )
 
     required_cols = {"team", "player", "position", "role", "player_key"}
     missing = required_cols - set(roles_df.columns)
     if missing:
         raise RuntimeError(
-            f"roles_ourlads at {ROLES_PATH} is missing expected columns: {sorted(missing)}. "
+            "roles_ourlads is missing expected columns: "
+            f"{sorted(missing)}. "
             f"Columns present: {sorted(roles_df.columns)}"
         )
 
     return roles_df
-
-
-def build_roles_map(_: str | Path | None = None) -> pd.DataFrame:
-    return load_roles_df()
 
 # ------------------------- HELPERS ------------------------
 
@@ -2403,6 +2385,17 @@ if __name__ == "__main__":
     # IMPORTANT: interpret "" as ALL (None), not an empty list
     raw_books = (args.books or "").strip()
     books_list: Optional[List[str]] = None if raw_books == "" else [b.strip() for b in raw_books.split(",") if b.strip()]
+
+    try:
+        roles_df = _load_roles_ourlads_df()
+        print(
+            f"[fetch_props_oddsapi] INFO: roles_ourlads.csv loaded with shape={roles_df.shape}"
+        )
+    except ValueError:
+        print(
+            "[fetch_props_oddsapi] WARNING: proceeding without roles_ourlads.csv; "
+            "player name canonicalization will fall back to raw names."
+        )
 
     fetch_odds(
         books=books_list,
