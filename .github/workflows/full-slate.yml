@@ -92,99 +92,55 @@ jobs:
 
   fetch_player_props_odds_board:
     runs-on: ubuntu-latest
-    needs: [build_team_week_map, build_depth_roles_ourlads]
+    needs:
+      - build_team_week_map
+      - build_depth_roles_ourlads
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore state from fetch_player_props_odds_board
-        if: always()
-        continue-on-error: true
+      - name: Restore roles_ourlads artifact
         uses: actions/download-artifact@v4
         with:
-          name: state-fetch_player_props_odds_board
-          path: previous_state
-
-      - name: Ensure previous_state exists
-        run: mkdir -p previous_state && ls -la previous_state || true
-
-      - name: Merge previous state
-        run: |
-          if [ -d previous_state ]; then
-            cp -a previous_state/. .
-          fi
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install deps (core + HTML parsers)
-        run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
-
-      - name: Download roles_ourlads artifact
-        uses: actions/download-artifact@v4
-        with:
+          # This must match the name used in the upload step of the Ourlads job
           name: roles_ourlads
-          path: .
+          # Put the artifact contents (roles_ourlads.csv) under outputs/
+          path: outputs
 
-      - name: Restore state from build_depth_roles_ourlads
-        uses: actions/download-artifact@v4
-        with:
-          name: state-build_depth_roles_ourlads
-          path: .
+      - name: Resolve roles_ourlads.csv
+        run: |
+          echo "[workflow] Resolving roles_ourlads.csv path..."
+          echo "  - listing outputs and data directories (if present)"
+          ls -l outputs || true
+          ls -l data || true
+
+          # Expect the artifact to contain outputs/roles_ourlads.csv
+          if [ -f outputs/roles_ourlads.csv ]; then
+            echo "  - found outputs/roles_ourlads.csv"
+            mkdir -p data
+            cp outputs/roles_ourlads.csv data/roles_ourlads.csv
+          fi
+
+          if [ ! -f data/roles_ourlads.csv ]; then
+            echo "ERROR: data/roles_ourlads.csv not found after artifact restore."
+            echo "       Ensure 'Build depth / roles (Ourlads)' uploads an artifact named 'roles_ourlads'."
+            exit 1
+          fi
+
+          lines=$(wc -l < data/roles_ourlads.csv || echo 0)
+          echo "  - data/roles_ourlads.csv lines=${lines}"
+          if [ "$lines" -le 1 ]; then
+            echo "ERROR: data/roles_ourlads.csv exists but has <= 1 line."
+            echo "       The roles file appears empty; aborting before fetching props."
+            exit 1
+          fi
 
       - name: Fetch player props / odds board
         run: |
-          echo "::group::Resolve roles_ourlads.csv"
-          candidates=( "data/roles_ourlads.csv" "outputs/roles_ourlads.csv" "roles_ourlads.csv" )
-          export ROLES_CSV=""
-
-          echo "CSV files in workspace:"
-          ls -l *.csv || true
-          ls -l data/*.csv || true
-          ls -l outputs/*.csv || true
-
-          for p in "${candidates[@]}"; do
-            if [[ -f "$p" ]]; then
-              lines=$(wc -l < "$p" || echo 0)
-              bytes=$(wc -c < "$p" || echo 0)
-              if [[ "$lines" -gt 1 && "$bytes" -gt 10 ]]; then
-                echo "Using roles file: $p (lines=$lines, bytes=$bytes)"
-                export ROLES_CSV="$p"
-                break
-              else
-                echo "Candidate $p exists but looks empty (lines=$lines, bytes=$bytes); skipping"
-              fi
-            else
-              echo "Candidate $p does not exist; skipping"
-            fi
-          done
-
-          if [[ -z "$ROLES_CSV" ]]; then
-            echo "::warning::No non-empty roles_ourlads.csv found; WR/CB canonicalization will fall back to raw names."
-          fi
-          echo "::endgroup::"
-
           export PYTHONPATH="${PWD}"
           python scripts/fetch_props_oddsapi.py \
             --season "${SEASON}" \
             --date "${SLATE_DATE}"
-
-      - name: Persist state
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: state-fetch_player_props_odds_board
-          path: |
-            data/**
-            outputs/**
-          if-no-files-found: ignore
-          retention-days: 7
 
   build_opponent_map_from_props:
     runs-on: ubuntu-latest
