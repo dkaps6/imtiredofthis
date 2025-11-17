@@ -1,5 +1,7 @@
 # --- Core scientific stack (Py3.11 compatible, plays nice with nfl_data_py 0.3.3) ---
-pandas==2.2.2
+# pandas must stay <2.0 because nfl_data_py 0.3.3 requires pandas<2.0.
+# 1.5.3 supports Python 3.11 and works with statsmodels 0.14.2.
+pandas==1.5.3
 numpy==1.26.4
 scipy==1.11.4
 scikit-learn==1.4.2
