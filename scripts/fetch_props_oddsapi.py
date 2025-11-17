@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import sys
 import time
 from datetime import datetime, timezone
@@ -2476,6 +2477,32 @@ if __name__ == "__main__":
             set_roles_csv_override(roles_arg)
         roles_csv_path = _locate_roles_csv(args.roles_csv)
         logging.info("[fetch_props] Final roles CSV path resolved to %s", roles_csv_path)
+        resolved_roles_path = Path(roles_csv_path)
+        default_targets = [
+            Path("roles_ourlads.csv"),
+            Path("data/roles_ourlads.csv"),
+            Path("outputs/roles_ourlads.csv"),
+        ]
+        for target in default_targets:
+            if target.parent != Path('.'):
+                target.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                if resolved_roles_path.resolve() == target.resolve():
+                    continue
+            except OSError:
+                # If resolve fails for any reason, still attempt to copy
+                pass
+            try:
+                shutil.copyfile(resolved_roles_path, target)
+                logging.info(
+                    "[fetch_props] Mirrored roles CSV to %s", target
+                )
+            except OSError as copy_exc:
+                logging.warning(
+                    "[fetch_props] Unable to mirror roles CSV to %s: %s",
+                    target,
+                    copy_exc,
+                )
         roles_map = build_roles_map_from_csv(roles_csv_path)
         print(
             f"[fetch_props_oddsapi] INFO: roles_ourlads.csv loaded from {roles_csv_path} entries={len(roles_map)}"
