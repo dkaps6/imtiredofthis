@@ -15,90 +15,119 @@ The function canonicalize_player_name uses:
 
 from __future__ import annotations
 
-import logging
 import os
+import logging
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
 
 import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-log = logger
+_ROLES_CACHE: pd.DataFrame | None = None
+_ROLES_LOOKUP_CACHE: dict[str, str] | None = None
 
-_ROLES_OURLADS_DF: pd.DataFrame | None = None
-_ROLES_OURLADS_PATH: Path | None = None
+# Optional override from env, if you ever want to force a path
+_ROLES_CSV_OVERRIDE = os.environ.get("ROLES_CSV", "").strip() or None
 
 
-def _load_roles_ourlads_df(override_path: str | Path | None = None) -> pd.DataFrame:
+def build_roles_map() -> pd.DataFrame:
     """
-    Locate and load roles_ourlads.csv from disk with robust path handling.
-    Returns a DataFrame, or raises ValueError with detailed diagnostics.
+    Load the roles_ourlads.csv file from one of several candidate locations.
+
+    If nothing usable is found, we raise ValueError so callers can decide
+    whether to fail hard or just fall back to raw names.
     """
 
-    global _ROLES_OURLADS_DF, _ROLES_OURLADS_PATH
+    global _ROLES_CACHE, _ROLES_LOOKUP_CACHE
 
-    override_candidate = Path(override_path) if override_path else None
-    if _ROLES_OURLADS_DF is not None:
-        if override_candidate is None:
-            return _ROLES_OURLADS_DF
-        if _ROLES_OURLADS_PATH and Path(_ROLES_OURLADS_PATH) == override_candidate.resolve():
-            return _ROLES_OURLADS_DF
+    if _ROLES_CACHE is not None:
+        return _ROLES_CACHE
 
-    candidate_paths: list[Path] = []
-    if override_candidate is not None:
-        candidate_paths.append(override_candidate)
+    candidates: list[Path] = []
 
-    env_path = os.environ.get("ROLES_OURLADS_PATH")
-    if env_path:
-        candidate_paths.append(Path(env_path))
+    # Highest priority: explicit override from env / workflow
+    if _ROLES_CSV_OVERRIDE:
+        candidates.append(Path(_ROLES_CSV_OVERRIDE))
 
-    candidate_paths.extend(
+    # Then the usual suspects
+    candidates.extend(
         [
-            Path("outputs") / "roles_ourlads.csv",
-            Path("data") / "roles_ourlads.csv",
+            Path("data/roles_ourlads.csv"),
+            Path("outputs/roles_ourlads.csv"),
             Path("roles_ourlads.csv"),
-            # common artifact nesting: outputs/roles_ourlads/roles_ourlads.csv
-            Path("outputs") / "roles_ourlads" / "roles_ourlads.csv",
         ]
     )
 
-    diagnostics: list[str] = []
+    logger.info(
+        "[canonical_names] build_roles_map: candidate paths=%s",
+        [str(p) for p in candidates],
+    )
 
-    print("[canonical_names] DEBUG: attempting to locate roles_ourlads.csv")
-    for p in candidate_paths:
-        abs_path = p.resolve()
-        exists = p.exists()
-        size = os.path.getsize(p) if exists else 0
-        diagnostics.append(f"- {abs_path} (exists={exists}, bytes={size})")
-        print(f"[canonical_names] DEBUG: candidate {abs_path} exists={exists}, bytes={size}")
+    last_error: Exception | None = None
 
-        if exists and size > 0:
-            try:
-                df = pd.read_csv(p)
-            except Exception as e:
-                print(f"[canonical_names] WARNING: failed to read {abs_path}: {e}")
-                continue
-
-            if df.empty:
-                print(
-                    f"[canonical_names] WARNING: {abs_path} read successfully but is empty (0 rows)"
+    for p in candidates:
+        try:
+            if not p.exists():
+                logger.debug(
+                    "[canonical_names] build_roles_map: %s does not exist; skipping",
+                    p,
                 )
                 continue
 
-            print(f"[canonical_names] INFO: using roles_ourlads from {abs_path} shape={df.shape}")
-            _ROLES_OURLADS_DF = df
-            _ROLES_OURLADS_PATH = abs_path
+            size = p.stat().st_size
+            # Treat tiny files as effectively empty (e.g. touched stubs)
+            if size < 10:
+                logger.debug(
+                    "[canonical_names] build_roles_map: %s is only %d bytes; treating as empty",
+                    p,
+                    size,
+                )
+                continue
+
+            logger.info(
+                "[canonical_names] build_roles_map: loading roles from %s (bytes=%d)",
+                p,
+                size,
+            )
+            df = pd.read_csv(p)
+
+            if (
+                df.empty
+                or "player" not in df.columns
+                or "player_key" not in df.columns
+            ):
+                logger.warning(
+                    "[canonical_names] build_roles_map: %s loaded but empty or missing required columns; skipping",
+                    p,
+                )
+                continue
+
+            _ROLES_CACHE = df
+            _ROLES_LOOKUP_CACHE = None
+            logger.info(
+                "[canonical_names] build_roles_map: loaded roles shape=%s", df.shape
+            )
             return df
 
-    message = (
-        "[canonical_names] ERROR: Could not locate a non-empty roles_ourlads.csv.\n"
-        "Checked the following candidate paths:\n" + "\n".join(diagnostics)
+        except Exception as exc:  # includes EmptyDataError
+            last_error = exc
+            logger.warning(
+                "[canonical_names] build_roles_map: failed to read %s; skipping. error=%s",
+                p,
+                exc,
+            )
+            continue
+
+    # If we get here, nothing worked
+    msg = (
+        "Could not locate a non-empty roles_ourlads.csv. "
+        f"Candidates={ [str(p) for p in candidates] }. "
+        f"Last error={last_error!r}"
     )
-    print(message)
-    raise ValueError(message)
+    logger.error("[canonical_names] ERROR: %s", msg)
+    raise ValueError(msg)
 
 # ---------- helpers ----------
 
@@ -155,113 +184,54 @@ def norm_key(s: str) -> str:
 
 # ---------- map builders (cached) ----------
 
-_ROLES_CACHE: dict[str, str] | None = None
-_ROLES_CACHE_PATH: Path | None = None
-
 
 def _build_roles_map_from_df(df: pd.DataFrame) -> dict[str, str]:
     if df.shape[0] <= 0:
-        raise ValueError(
-            "[canonical_names] roles CSV has no data rows."
-        )
+        raise ValueError("[canonical_names] roles CSV has no data rows.")
     if len(df.columns) == 0:
-        raise ValueError(
-            "build_roles_map: roles CSV has no columns"
-        )
+        raise ValueError("build_roles_map: roles CSV has no columns")
 
     cols = {c.lower(): c for c in df.columns}
     if "player_key" not in cols or "player" not in cols:
-        raise ValueError(
-            "build_roles_map: roles CSV missing required columns"
-        )
+        raise ValueError("build_roles_map: roles CSV missing required columns")
 
     key_col = cols["player_key"]
     name_col = cols["player"]
-    df["_key"] = df[key_col].astype(str).map(norm_key)
-    df["_full"] = df[name_col].astype(str).map(strip_middle_initial)
-    return dict(zip(df["_key"], df["_full"]))
+    keys = df[key_col].astype(str).map(norm_key)
+    names = df[name_col].astype(str).map(strip_middle_initial)
+    return dict(zip(keys, names))
 
 
 def build_roles_map_from_csv(path: str | Path) -> dict[str, str]:
-    """Load a roles_ourlads.csv and return the existing roles map structure.
-
-    Raises a clear ValueError if the file is missing or empty.
-    """
-
-    global _ROLES_CACHE, _ROLES_CACHE_PATH, _ROLES_OURLADS_DF, _ROLES_OURLADS_PATH
+    """Load a roles_ourlads.csv and return the existing roles map structure."""
 
     p = Path(path)
-    if (
-        _ROLES_CACHE is not None
-        and _ROLES_CACHE_PATH is not None
-        and _ROLES_CACHE_PATH.resolve() == p.resolve()
-    ):
-        return _ROLES_CACHE
     if not p.exists():
         raise ValueError(f"[canonical_names] roles CSV not found at {p}")
     try:
         df = pd.read_csv(p)
-    except pd.errors.EmptyDataError:
-        raise ValueError(f"[canonical_names] roles CSV at {p} is empty")
+    except pd.errors.EmptyDataError as exc:
+        raise ValueError(f"[canonical_names] roles CSV at {p} is empty") from exc
 
     if df.empty:
         raise ValueError(f"[canonical_names] roles CSV at {p} has no rows")
 
-    log.info(
+    logger.info(
         "[canonical_names] Loaded roles CSV %s with shape=%s",
         p,
         df.shape,
     )
 
-    roles_map = _build_roles_map_from_df(df)
-
-    _ROLES_CACHE = roles_map
-    _ROLES_CACHE_PATH = p
-    _ROLES_OURLADS_DF = df
-    _ROLES_OURLADS_PATH = p
-    return roles_map
+    return _build_roles_map_from_df(df)
 
 
-def build_roles_map(roles_path: str | Path | None = None) -> dict[str, str]:
-    """
-    Load the roles_ourlads CSV used for canonical name resolution.
+def _get_roles_lookup() -> dict[str, str]:
+    global _ROLES_LOOKUP_CACHE
 
-    This function is hardened against missing/empty files and logs exactly
-    which path is chosen (or why it failed).
-    """
-
-    global _ROLES_CACHE, _ROLES_CACHE_PATH
-
-    resolved_override = Path(roles_path) if roles_path is not None else None
-    if roles_path is None and _ROLES_CACHE is not None:
-        logger.debug("build_roles_map: returning cached map for %s", _ROLES_CACHE_PATH)
-        return _ROLES_CACHE
-    if (
-        resolved_override is not None
-        and _ROLES_CACHE is not None
-        and _ROLES_CACHE_PATH is not None
-        and _ROLES_CACHE_PATH == resolved_override
-    ):
-        logger.debug(
-            "build_roles_map: returning cached map for %s", _ROLES_CACHE_PATH
-        )
-        return _ROLES_CACHE
-
-    _load_roles_ourlads_df(roles_path)
-    resolved_path = _ROLES_OURLADS_PATH or resolved_override
-
-    if resolved_path is None:
-        raise ValueError("[canonical_names] unable to resolve roles_ourlads.csv path")
-
-    roles_map = build_roles_map_from_csv(resolved_path)
-
-    logger.info(
-        "build_roles_map: using %s (rows=%d)",
-        resolved_path,
-        len(roles_map),
-    )
-
-    return roles_map
+    if _ROLES_LOOKUP_CACHE is None:
+        df = build_roles_map()
+        _ROLES_LOOKUP_CACHE = _build_roles_map_from_df(df)
+    return _ROLES_LOOKUP_CACHE
 
 @lru_cache(maxsize=1)
 def build_manual_map(overrides_path: str = "data/manual_name_overrides.csv") -> dict:
@@ -291,8 +261,9 @@ def canonicalize_player_name(source_key: str) -> str:
     manual = build_manual_map()
     if k in manual:
         return manual[k]
-    roles = build_roles_map()
-    return roles.get(k, cleaned)
+
+    roles_lookup = _get_roles_lookup()
+    return roles_lookup.get(k, cleaned)
 
 # Optional: explicit alias used in some places
 canonicalize_name = canonicalize_player_name
@@ -301,50 +272,33 @@ canonicalize_name = canonicalize_player_name
 _UNMAPPED_LOG = os.environ.get("UNMAPPED_NAME_LOG", "data/_debug/unmapped_names.jsonl")
 
 
-def canonicalize_player_name_safe(raw_name: str) -> tuple[str, Optional[str]]:
+def canonicalize_player_name_safe(raw: str) -> tuple[str, str]:
     """
-    Canonicalize a player name using roles_ourlads.csv if available.
-    If roles cannot be loaded, fall back to the raw name but log once.
+    Try to canonicalize a player name; on any problem, log a warning
+    and fall back to (raw_name, raw_name).
     """
-
-    fallback = "" if raw_name is None else str(raw_name).strip()
 
     try:
-        roles_map = build_roles_map()
-    except ValueError:
-        logger.info(
-            "[canonical_names] canonicalize_player_name_safe: falling back to raw "
-            "name %r because roles_ourlads.csv could not be loaded.",
-            fallback,
-        )
-        roles_map = None
-    except Exception as exc:  # pragma: no cover - defensive
+        canonical_name = canonicalize_player_name(raw)
+        canonical_name = str(canonical_name or "").strip()
+        canonical_key = norm_key(canonical_name) if canonical_name else ""
+        return canonical_name, canonical_key
+    except ValueError as exc:
+        fallback = "" if raw is None else str(raw).strip()
         logger.warning(
-            "canonicalize_player_name_safe: falling back to raw name %r due to %s: %s",
-            raw_name,
-            type(exc).__name__,
+            "[canonical_names] canonicalize_player_name_safe: falling back to raw name %r due to ValueError: %s",
+            raw,
             exc,
         )
-        roles_map = None
-
-    manual_map = build_manual_map()
-
-    cleaned = _strip_ourlads_noise(str(raw_name))
-    if not cleaned:
-        return fallback, None
-
-    k = norm_key(cleaned)
-    if k in manual_map:
-        name = manual_map[k]
-    elif roles_map is not None and k in roles_map:
-        name = roles_map[k]
-    else:
-        name = cleaned
-
-    name_str = "" if name is None else str(name).strip()
-
-    key_str = norm_key(name_str or fallback) or None
-    return name_str, key_str
+        return fallback, fallback
+    except Exception as exc:
+        fallback = "" if raw is None else str(raw).strip()
+        logger.warning(
+            "[canonical_names] canonicalize_player_name_safe: unexpected error for %r; falling back to raw. error=%s",
+            raw,
+            exc,
+        )
+        return fallback, fallback
 
 
 def log_unmapped_variant(raw: str, where: str = "unknown", *args, **kwargs) -> None:

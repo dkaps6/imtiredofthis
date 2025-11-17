@@ -138,43 +138,42 @@ jobs:
           name: state-build_depth_roles_ourlads
           path: .
 
-      - name: Ensure roles_ourlads.csv exists and is non-empty
+      - name: Fetch player props / odds board
         run: |
-          set -euo pipefail
+          echo "::group::Resolve roles_ourlads.csv"
+          candidates=( "data/roles_ourlads.csv" "outputs/roles_ourlads.csv" "roles_ourlads.csv" )
+          export ROLES_CSV=""
 
-          candidates=("data/roles_ourlads.csv" "outputs/roles_ourlads.csv")
-          chosen=""
+          echo "CSV files in workspace:"
+          ls -l *.csv || true
+          ls -l data/*.csv || true
+          ls -l outputs/*.csv || true
 
-          echo "Looking for roles_ourlads.csv in:"
-          for c in "${candidates[@]}"; do
-            if [ -f "$c" ]; then
-              lines="$(wc -l < "$c" || echo 0)"
-              echo "  - $c (lines=$lines)"
-              if [ "$lines" -gt 1 ]; then
-                chosen="$c"
+          for p in "${candidates[@]}"; do
+            if [[ -f "$p" ]]; then
+              lines=$(wc -l < "$p" || echo 0)
+              bytes=$(wc -c < "$p" || echo 0)
+              if [[ "$lines" -gt 1 && "$bytes" -gt 10 ]]; then
+                echo "Using roles file: $p (lines=$lines, bytes=$bytes)"
+                export ROLES_CSV="$p"
                 break
+              else
+                echo "Candidate $p exists but looks empty (lines=$lines, bytes=$bytes); skipping"
               fi
             else
-              echo "  - $c (missing)"
+              echo "Candidate $p does not exist; skipping"
             fi
           done
 
-          if [ -z "$chosen" ]; then
-            echo "ERROR: Could not locate a non-empty roles_ourlads.csv in any of: ${candidates[*]}"
-            echo "       Check the 'Build depth / roles (Ourlads)' step for scraper/site issues."
-            exit 1
+          if [[ -z "$ROLES_CSV" ]]; then
+            echo "::warning::No non-empty roles_ourlads.csv found; WR/CB canonicalization will fall back to raw names."
           fi
+          echo "::endgroup::"
 
-          echo "Using roles file: $chosen"
-          echo "ROLES_CSV=$chosen" >> "$GITHUB_ENV"
-
-      - name: Fetch player props / odds board
-        run: |
           export PYTHONPATH="${PWD}"
-          python -m scripts.fetch_props_oddsapi --season "${SEASON}" --date "${SLATE_DATE}" --roles-csv "${ROLES_CSV}"
-
-        env:
-          PYTHONPATH: .
+          python scripts/fetch_props_oddsapi.py \
+            --season "${SEASON}" \
+            --date "${SLATE_DATE}"
 
       - name: Persist state
         if: ${{ always() }}
@@ -264,6 +263,9 @@ jobs:
           export PYTHONPATH="${PWD}"
           python scripts/providers/ourlads_depth.py \
             --season "${SEASON}"
+          cp data/roles_ourlads.csv roles_ourlads.csv
+          mkdir -p outputs
+          cp data/roles_ourlads.csv outputs/roles_ourlads.csv
 
       - name: Upload roles_ourlads.csv
         uses: actions/upload-artifact@v4

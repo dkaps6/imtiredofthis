@@ -31,8 +31,7 @@ from pathlib import Path
 from collections import Counter
 from typing import Dict, List, Optional, Tuple
 
-ROLES_DATA_PATH = Path("data") / "roles_ourlads.csv"
-ROLES_OUT_PATH = Path("outputs") / "roles_ourlads.csv"
+ROLES_OUTPUT_PATH = Path("data") / "roles_ourlads.csv"
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_ROOT / "data"
@@ -767,20 +766,14 @@ def main(*, season: Optional[int] = None, include_inactive: bool = True):
 
     print(f"[OURlads] Writing roles CSV: {len(df_roles)} rows")
 
-    data_path = ROLES_DATA_PATH
-    outputs_path = ROLES_OUT_PATH
+    output_path = ROLES_OUTPUT_PATH
+    os.makedirs(output_path.parent, exist_ok=True)
 
-    for path in (data_path, outputs_path):
-        os.makedirs(path.parent, exist_ok=True)
+    df_roles.to_csv(output_path, index=False)
+    print(f"[OUR-LADS] Wrote {len(df_roles)} roles → {output_path}")
 
-    df_roles.to_csv(data_path, index=False)
-    print(f"[OUR-LADS] Wrote {len(df_roles)} roles → {data_path}")
-
-    df_roles.to_csv(outputs_path, index=False)
-    print(f"[OUR-LADS] Mirrored roles → {outputs_path}")
-
-    abs_path = outputs_path.resolve()
-    size = os.path.getsize(outputs_path)
+    abs_path = output_path.resolve()
+    size = os.path.getsize(output_path)
     print(
         f"[OURLADS DEBUG] Wrote roles_ourlads.csv to {abs_path} "
         f"(bytes={size}, rows={len(df_roles)})"
