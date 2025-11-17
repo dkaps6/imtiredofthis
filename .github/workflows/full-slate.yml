@@ -135,10 +135,12 @@ jobs:
             exit 1
           fi
 
-      - name: Install Python dependencies
+      - name: Install deps for fetch props
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: 1
 
       - name: Fetch player props / odds board
         run: |
