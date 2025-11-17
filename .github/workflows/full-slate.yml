@@ -135,6 +135,11 @@ jobs:
             exit 1
           fi
 
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
       - name: Fetch player props / odds board
         run: |
           export PYTHONPATH="${PWD}"
