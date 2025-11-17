@@ -47,9 +47,7 @@ jobs:
       - name: Install deps (core + HTML parsers)
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
+          pip install -r requirements.txt
 
   build_team_week_map:
     runs-on: ubuntu-latest
@@ -66,9 +64,7 @@ jobs:
       - name: Install deps (core + HTML parsers)
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
+          pip install -r requirements.txt
 
       - name: Build team-week map (authoritative opponents)
         run: |
@@ -181,9 +177,7 @@ jobs:
       - name: Install deps (core + HTML parsers)
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
+          pip install -r requirements.txt
 
       - name: Build opponent map from props
         run: |
@@ -217,9 +211,7 @@ jobs:
       - name: Install deps (core + HTML parsers)
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
+          pip install -r requirements.txt
 
       - name: Build depth / roles (Ourlads)
         run: |
@@ -283,9 +275,7 @@ jobs:
       - name: Install deps (core + HTML parsers)
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
+          pip install -r requirements.txt
 
       - name: Build player_form / consensus
         run: |
@@ -332,9 +322,7 @@ jobs:
       - name: Install deps (core + HTML parsers)
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
+          pip install -r requirements.txt
 
       - name: Pull SharpFootball metrics
         run: |
@@ -387,9 +375,7 @@ jobs:
       - name: Install deps (core + HTML parsers)
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
+          pip install -r requirements.txt
 
       - name: Build weather (per-game forecast)
         continue-on-error: true
@@ -446,9 +432,7 @@ jobs:
       - name: Install deps (core + HTML parsers)
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
+          pip install -r requirements.txt
 
       - name: Build QB scramble / designed-run metrics
         run: |
@@ -502,9 +486,7 @@ jobs:
       - name: Install deps (core + HTML parsers)
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
+          pip install -r requirements.txt
 
       - name: Validate metrics_ready (must pass before pricing)
         run: |
@@ -551,9 +533,7 @@ jobs:
       - name: Install deps (core + HTML parsers)
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
+          pip install -r requirements.txt
 
       - name: Elite model | Run pricing
         run: |
