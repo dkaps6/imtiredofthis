@@ -195,10 +195,15 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Restore state from fetch_player_props_odds_board
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: state-fetch_player_props_odds_board
           path: previous_state
+          merge-multiple: false
+          repository: dkaps6/imtiredofthis
+          run-id: 19411229739
+          if-no-files-found: ignore
 
       - name: Merge previous state
         run: |

@@ -78,54 +78,75 @@ ODDS_GAME_DATA_PATH = DATA_DIR / "odds_game.csv"
 NAME_MAP_PATH = DATA_DIR / "player_name_map_from_props.csv"
 PLAYER_NAME_LOG_PATH = Path("outputs/player_name_map_from_props.csv")
 
-# Optional override from env for where roles_ourlads.csv lives.
-_ROLES_CSV_OVERRIDE = os.getenv("ROLES_CSV", "").strip() or None  # type: str | None
+# Optional override for the roles CSV path used by fetch_props.
+_ROLES_CSV_OVERRIDE: Path | None = None
 
 
-def _resolve_roles_csv() -> Path:
+def set_roles_csv_override(path: str | Path | None) -> None:
+    """Set or clear the module-level override for the roles CSV path."""
+
+    global _ROLES_CSV_OVERRIDE
+    if path is None:
+        _ROLES_CSV_OVERRIDE = None
+    else:
+        _ROLES_CSV_OVERRIDE = Path(path)
+
+
+def _locate_roles_csv(explicit_path: str | None = None) -> Path:
     """
     Decide which roles_ourlads.csv to use.
 
     Precedence:
-    1) _ROLES_CSV_OVERRIDE env/override, if it exists and is non-empty.
-    2) outputs/roles_ourlads.csv (from the Ourlads build step).
-    3) data/roles_ourlads.csv (local copy / fallback).
-
-    Raises FileNotFoundError if nothing exists or all are empty.
+      1. Explicit path passed into the function.
+      2. Module-level override `_ROLES_CSV_OVERRIDE` (if not None).
+      3. Default search in outputs/roles_ourlads.csv then data/roles_ourlads.csv.
     """
 
     candidates: list[Path] = []
 
-    # 1) Explicit override
-    if _ROLES_CSV_OVERRIDE:
-        override = Path(_ROLES_CSV_OVERRIDE)
-        candidates.append(override)
+    if explicit_path:
+        candidates.append(Path(explicit_path))
 
-    # 2) Default artifact locations
+    if _ROLES_CSV_OVERRIDE is not None:
+        candidates.append(_ROLES_CSV_OVERRIDE)
+
     candidates.append(Path("outputs/roles_ourlads.csv"))
     candidates.append(Path("data/roles_ourlads.csv"))
 
-    non_empty: list[Path] = []
-    for p in candidates:
-        try:
-            if p.is_file() and p.stat().st_size > 0:
-                non_empty.append(p)
-        except OSError:
-            # Ignore unreadable paths
+    seen: set[str] = set()
+    filtered_candidates: list[Path] = []
+    for candidate in candidates:
+        candidate_str = str(candidate.resolve()) if candidate.is_absolute() else str(candidate)
+        if candidate_str in seen:
             continue
+        seen.add(candidate_str)
+        filtered_candidates.append(candidate)
 
-    if not non_empty:
-        raise FileNotFoundError(
-            f"[roles_ourlads] Could not locate a non-empty roles CSV. "
-            f"Checked: {', '.join(str(p) for p in candidates)}"
+    for p in filtered_candidates:
+        try:
+            df = pd.read_csv(p)
+        except FileNotFoundError:
+            continue
+        except pd.errors.EmptyDataError:
+            continue
+        except OSError:
+            continue
+        if df.empty:
+            continue
+        logging.info(
+            "[fetch_props] Using roles_ourlads.csv from %s (%d rows)",
+            p,
+            len(df),
         )
+        return p
 
-    chosen = non_empty[0]
-    print(
-        f"[roles_ourlads] Using roles CSV at {chosen} "
-        f"(size={chosen.stat().st_size} bytes)"
+    msg = (
+        "[fetch_props] ERROR: Could not locate a non-empty roles_ourlads.csv. "
+        "Tried (in order): "
+        + ", ".join(str(c) for c in filtered_candidates)
     )
-    return chosen
+    logging.error(msg)
+    raise FileNotFoundError(msg)
 
 
 def _canonical_name_only(raw_value: Any) -> str:
@@ -237,8 +258,8 @@ def _save_state(state: dict) -> None:
         log.warning("Failed to save props_state.json: %s", e)
 
 
-def load_roles_df() -> pd.DataFrame:
-    roles_csv_path = _resolve_roles_csv()
+def load_roles_df(explicit_path: str | None = None) -> pd.DataFrame:
+    roles_csv_path = _locate_roles_csv(explicit_path)
     roles_df = pd.read_csv(roles_csv_path)
     logger.info("Loaded roles_ourlads CSV with shape=%s", roles_df.shape)
 
@@ -2448,13 +2469,13 @@ if __name__ == "__main__":
     raw_books = (args.books or "").strip()
     books_list: Optional[List[str]] = None if raw_books == "" else [b.strip() for b in raw_books.split(",") if b.strip()]
 
-    global _ROLES_CSV_OVERRIDE
-    roles_override = Path(args.roles_csv).resolve() if args.roles_csv else None
-    if roles_override:
-        _ROLES_CSV_OVERRIDE = str(roles_override)
-
     try:
-        roles_csv_path = _resolve_roles_csv()
+        env_override = os.getenv("ROLES_CSV")
+        roles_arg = args.roles_csv or env_override or None
+        if roles_arg:
+            set_roles_csv_override(roles_arg)
+        roles_csv_path = _locate_roles_csv(args.roles_csv)
+        logging.info("[fetch_props] Final roles CSV path resolved to %s", roles_csv_path)
         roles_map = build_roles_map_from_csv(roles_csv_path)
         print(
             f"[fetch_props_oddsapi] INFO: roles_ourlads.csv loaded from {roles_csv_path} entries={len(roles_map)}"
