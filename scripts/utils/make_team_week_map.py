@@ -6,6 +6,7 @@ import argparse
 import io
 import gzip
 import json
+import logging
 import os
 import random
 import re
@@ -20,6 +21,13 @@ from bs4 import BeautifulSoup
 # Canonicalize team names
 from scripts._opponent_map import canon_team
 from scripts.utils.name_clean import normalize_team
+
+TEAM_WEEK_MAP_CSV = os.environ.get(
+    "TEAM_WEEK_MAP_CSV",
+    "data/team_week_map.csv",
+)
+
+logger = logging.getLogger(__name__)
 
 SCHED_DIR = Path("data/schedules")
 SCHED_DIR.mkdir(parents=True, exist_ok=True)
@@ -388,7 +396,7 @@ def _fetch_schedule_pfr(season: int) -> pd.DataFrame:
     return _validate_schedule(t)
 
 DATA_DIR = Path("data")
-TEAM_WEEK_PATH = DATA_DIR / "team_week_map.csv"
+TEAM_WEEK_PATH = Path(TEAM_WEEK_MAP_CSV)
 GAME_LINES_PATH = DATA_DIR / "game_lines.csv"
 
 
@@ -660,10 +668,15 @@ def build_map(season: int, schedule_path: Optional[str] = None) -> pd.DataFrame:
 
     df = df.reset_index(drop=True)
 
-    out_csv = Path("data") / "team_week_map.csv"
-    out_csv.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(out_csv, index=False)
-    print(f"[team_week_map] wrote {out_csv} with {len(df)} rows; sample:")
+    out_path = TEAM_WEEK_MAP_CSV
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    df.to_csv(out_path, index=False)
+    logger.info(
+        "[team_week_map] wrote %d rows to %s",
+        len(df),
+        os.path.abspath(out_path),
+    )
+    print(f"[team_week_map] wrote {out_path} with {len(df)} rows; sample:")
     print(df.head(5).to_string(index=False))
 
     return df
