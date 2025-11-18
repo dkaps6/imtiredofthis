@@ -82,6 +82,11 @@ PLAYER_NAME_LOG_PATH = Path("outputs/player_name_map_from_props.csv")
 # Optional override for the roles CSV path used by fetch_props.
 _ROLES_CSV_OVERRIDE: Path | None = None
 
+TEAM_WEEK_MAP_CSV = os.environ.get(
+    "TEAM_WEEK_MAP_CSV",
+    "data/team_week_map.csv",
+)
+
 
 def set_roles_csv_override(path: str | Path | None) -> None:
     """Set or clear the module-level override for the roles CSV path."""
@@ -496,18 +501,56 @@ def _to_int_safe(v):
         return None
 
 
-def _load_team_week_map(season: int):
-    path = "data/team_week_map.csv"
+def _load_team_week_map(
+    season: int,
+    schedule_path: str | None = None,
+) -> pd.DataFrame:
+    """
+    Load the authoritative team-week map (full-season schedule).
+
+    The schedule_path param allows overrides, but by default we read from
+    TEAM_WEEK_MAP_CSV, which is also where scripts/make_team_week_map.py writes.
+    """
+
+    path = schedule_path or TEAM_WEEK_MAP_CSV
+    abs_path = os.path.abspath(path)
+
+    logger.info(
+        "[fetch_props] loading team_week_map for season=%s from %s",
+        season,
+        abs_path,
+    )
+
     if not os.path.exists(path):
-        print("[fetch_props_oddsapi] team_week_map.csv not found; will skip stamping opponents")
-        return None
-    tw = pd.read_csv(path)
-    if "season" in tw.columns:
-        tw = tw[tw["season"].astype(int) == int(season)]
+        raise FileNotFoundError(
+            f"team_week_map CSV not found at {abs_path}. "
+            "Did the 'Build team-week map (authoritative opponents)' step run in this job?"
+        )
+
+    size = os.path.getsize(path)
+    if size < 64:
+        # We expect hundreds of rows; a tiny file means something went wrong upstream.
+        raise RuntimeError(
+            f"team_week_map CSV at {abs_path} is unexpectedly small "
+            f"(size={size} bytes). Upstream schedule build may have failed."
+        )
+
+    df = pd.read_csv(path)
+
+    if "season" in df.columns:
+        df = df[df["season"].astype(int) == int(season)].copy()
+
     for col in ("home_abbr", "away_abbr"):
-        if col in tw.columns:
-            tw[col] = tw[col].map(_canon_team)
-    return tw
+        if col in df.columns:
+            df[col] = df[col].map(_canon_team)
+
+    logger.info(
+        "[fetch_props] loaded team_week_map: %d rows, columns=%s",
+        len(df),
+        list(df.columns),
+    )
+
+    return df
 
 
 def _load_roles_ourlads():

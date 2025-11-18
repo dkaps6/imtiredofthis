@@ -67,6 +67,10 @@ jobs:
           pip install -r requirements.txt
 
       - name: Build team-week map (authoritative opponents)
+        env:
+          TEAM_WEEK_MAP_CSV: data/team_week_map.csv
+          SEASON: ${{ env.SEASON }}
+          SLATE_DATE: ${{ env.SLATE_DATE }}
         run: |
           export PYTHONPATH="${PWD}"
           SCHED=""
@@ -144,6 +148,18 @@ jobs:
           python -m pip install "pandas==1.5.3"
 
       - name: Fetch player props / odds board
+        env:
+          TEAM_WEEK_MAP_CSV: data/team_week_map.csv
+          ROLES_CSV: data/roles_ourlads.csv
+          SEASON: ${{ env.SEASON }}
+          SLATE_DATE: ${{ env.SLATE_DATE }}
+          APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          ESPN_COOKIE: ${{ secrets.ESPN_COOKIE }}
+          MSF_KEY: ${{ secrets.MSF_KEY }}
+          MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
+          NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
+          NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/fetch_props_oddsapi.py \
