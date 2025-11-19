@@ -1,10 +1,12 @@
 # scripts/models/types.py
 """
-Shared dataclasses and types for model outputs, edges, and Monte Carlo leg results.
+Shared dataclasses and types for model inputs/outputs used across predictors.
 """
 
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional
+
+from scripts.models.shared_types import TeamScriptFeatures
 
 @dataclass
 class LegResult:
@@ -53,3 +55,23 @@ class LegResult:
                     setattr(self, attr, float(val))
                 except Exception:
                     setattr(self, attr, None)
+
+
+@dataclass
+class PlayerModelInput:
+    """Represents the full context for a single player/market model evaluation."""
+
+    player_id: str
+    player_name: str
+    team_abbr: str
+    opponent_abbr: str
+    market: str
+    line: Optional[float] = None
+    stat_type: Optional[str] = None
+    bookmaker: Optional[str] = None
+    event_id: Optional[str] = None
+    model_features: Dict[str, Any] = field(default_factory=dict)
+
+    # Team-level script features (offense & defense)
+    offense_script: Optional[TeamScriptFeatures] = None
+    defense_script: Optional[TeamScriptFeatures] = None

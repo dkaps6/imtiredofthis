@@ -8,9 +8,12 @@ import numpy as np
 
 # -------- Optional unified model stack bridge --------
 try:
-    from .model_stack_patch import run_full_model
+    from .run_full_model import run_full_model
 except ImportError:
-    run_full_model = None
+    try:
+        from .model_stack_patch import run_full_model
+    except ImportError:
+        run_full_model = None
 
 # -------- Optional SciPy for SGP bivariate normal ----------
 try:
