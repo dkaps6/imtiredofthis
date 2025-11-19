@@ -360,23 +360,6 @@ def attach_opponent(
     This is a lightweight, backwards-compatible implementation used by
     make_metrics.py and some legacy scripts. It expects that `df` has
     at least (season, week, team) columns (names configurable via args).
-
-    Parameters
-    ----------
-    df : DataFrame
-        Input frame containing per-team or per-player rows.
-    season_col, week_col, team_col : str
-        Column names in `df` that identify the game.
-    out_col : str
-        Name of the opponent column to add/overwrite in `df`.
-    schedule_path : str | None
-        Optional override path to the schedule CSV. Defaults to
-        "data/team_week_map.csv".
-
-    Returns
-    -------
-    DataFrame
-        A copy of `df` with an opponent column merged in when possible.
     """
     if df is None or df.empty:
         return df
@@ -408,10 +391,10 @@ def attach_opponent(
     # Canonicalize team + opponent using the same helper as the props pipeline.
     sched = sched.copy()
     try:
-        sched["team_canon"] = sched["team"].map(_canon_team)
-        sched["opp_canon"] = sched["opponent"].map(_canon_team)
+        sched["team_canon"] = sched["team"].map(canon_team)
+        sched["opp_canon"] = sched["opponent"].map(canon_team)
     except NameError:
-        # Fallback: upper-case if _canon_team is unavailable for some reason.
+        # Fallback: upper-case if canon_team is unavailable for some reason.
         sched["team_canon"] = sched["team"].astype(str).str.upper()
         sched["opp_canon"] = sched["opponent"].astype(str).str.upper()
 
@@ -442,7 +425,7 @@ def attach_opponent(
 
     # Canonicalize the team column in df for the join.
     try:
-        out["_team_canon"] = out[team_col].map(_canon_team)
+        out["_team_canon"] = out[team_col].map(canon_team)
     except NameError:
         out["_team_canon"] = out[team_col].astype(str).str.upper()
 
@@ -466,6 +449,8 @@ def attach_opponent(
         merged[out_col] = merged["opp_canon"]
 
     # Clean up helper columns.
-    merged = merged.drop(columns=[c for c in ("_team_canon", "team_canon", "opp_canon") if c in merged.columns])
+    merged = merged.drop(
+        columns=[c for c in ("_team_canon", "team_canon", "opp_canon") if c in merged.columns]
+    )
 
     return merged
