@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import requests
 
-from scripts.lib.io_utils import ensure_dir, safe_concat, write_atomic
+from scripts.lib.io_utils import safe_concat, write_atomic
 from scripts.lib.logging_utils import get_logger
 from scripts.lib.time_windows import compute_slate_window
 
@@ -30,8 +30,28 @@ from scripts.utils.canonical_names import (
     norm_key,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-DATA_DIR = REPO_ROOT / "data"
+# Root paths for this repo
+ROOT_DIR = Path(__file__).resolve().parents[1]
+
+# Normalize data/ and outputs/ to live under the repo root,
+# consistent with make_team_form and the other builders.
+DATA_DIR = ROOT_DIR / "data"
+OUTPUT_DIR = ROOT_DIR / "outputs"
+
+# Ensure the directories exist before we try to read/write
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+# Optional: allow a DATA_DIR override, but keep it inside the repo if relative.
+data_dir_env = os.environ.get("DATA_DIR")
+if data_dir_env:
+    candidate = Path(data_dir_env)
+    if not candidate.is_absolute():
+        candidate = ROOT_DIR / candidate
+    # Only override if the path is valid; otherwise stick with ROOT_DIR / "data"
+    candidate.mkdir(parents=True, exist_ok=True)
+    DATA_DIR = candidate
+
 logger = logging.getLogger(__name__)
 
 CANON_SET = set(CANON_TEAM_ABBR.values())
@@ -47,8 +67,6 @@ PREFERRED_BOOKS = [
 ]
 ALLOW_FALLBACK = os.getenv("ALLOW_FALLBACK", "1") == "1"  # if no offers from preferred, try all
 MISSING_POLICY = os.getenv("MISSING_POLICY", "warn")  # "warn" or "ignore" (never "fail")
-OUTPUT_DIR = os.getenv("OUTPUT_DIR", "outputs")
-ensure_dir(OUTPUT_DIR)
 
 MARKETS = [
     # keep your existing list; include only what you actually fetch
@@ -78,7 +96,7 @@ PROPS_RAW_DATA_PATH = DATA_DIR / "props_raw.csv"
 OPPONENT_MAP_PATH = DATA_DIR / "opponent_map_from_props.csv"
 ODDS_GAME_DATA_PATH = DATA_DIR / "odds_game.csv"
 NAME_MAP_PATH = DATA_DIR / "player_name_map_from_props.csv"
-PLAYER_NAME_LOG_PATH = Path("outputs/player_name_map_from_props.csv")
+PLAYER_NAME_LOG_PATH = OUTPUT_DIR / "player_name_map_from_props.csv"
 
 # Optional override for the roles CSV path used by fetch_props.
 _ROLES_CSV_OVERRIDE: Path | None = None
@@ -117,8 +135,8 @@ def _locate_roles_csv(explicit_path: str | None = None) -> Path:
     if _ROLES_CSV_OVERRIDE is not None:
         candidates.append(_ROLES_CSV_OVERRIDE)
 
-    candidates.append(Path("outputs/roles_ourlads.csv"))
-    candidates.append(Path("data/roles_ourlads.csv"))
+    candidates.append(OUTPUT_DIR / "roles_ourlads.csv")
+    candidates.append(DATA_DIR / "roles_ourlads.csv")
 
     seen: set[str] = set()
     filtered_candidates: list[Path] = []
@@ -979,7 +997,7 @@ def _build_market_records(
 
 
 def _write_market_dumps(records: Dict[str, List[dict[str, Any]]]) -> None:
-    out_dir = Path("outputs/props_raw")
+    out_dir = OUTPUT_DIR / "props_raw"
     out_dir.mkdir(parents=True, exist_ok=True)
     for market, recs in (records or {}).items():
         market_path = out_dir / f"{market}.csv"
@@ -1801,8 +1819,8 @@ def fetch_odds(
     region: str = REGION_DEFAULT,
     date: str = "",
     season: str | int | None = None,
-    out: str = "outputs/props_raw.csv",
-    out_game: str = "outputs/odds_game.csv",
+    out: Path | str = OUTPUT_DIR / "props_raw.csv",
+    out_game: Path | str = OUTPUT_DIR / "odds_game.csv",
 ) -> None:
     api_key = os.getenv("ODDS_API_KEY", "").strip()
     if not api_key:
@@ -1812,6 +1830,16 @@ def fetch_odds(
     global _FETCH_API_KEY, _FETCH_REGION
     _FETCH_API_KEY = api_key
     _FETCH_REGION = region
+
+    out_path = Path(out)
+    if not out_path.is_absolute():
+        out_path = ROOT_DIR / out_path
+    out = str(out_path)
+
+    out_game_path = Path(out_game)
+    if not out_game_path.is_absolute():
+        out_game_path = ROOT_DIR / out_game_path
+    out_game = str(out_game_path)
 
     anchor, start_local, end_local = compute_slate_window()
     LOGGER.info(
@@ -1855,7 +1883,7 @@ def fetch_odds(
 
     state: dict = _load_state()
 
-    Path("outputs").mkdir(parents=True, exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     log.info(
         "[props] fetch start season=%s date=%s markets=%d books=%s",
@@ -1892,7 +1920,7 @@ def fetch_odds(
     frames: List[pd.DataFrame] = []
     market_records: Dict[str, List[dict[str, Any]]] = {}
     market_stats: Dict[str, dict[str, int]] = {}
-    all_market_paths: List[str] = []
+    all_market_paths: List[Path] = []
     summary: List[dict[str, Any]] = []
     preferred_param = ",".join(PREFERRED_BOOKS) if PREFERRED_BOOKS else ""
     preferred_param = preferred_param or None
@@ -1922,7 +1950,7 @@ def fetch_odds(
             )
             continue
 
-        market_path = os.path.join(OUTPUT_DIR, f"props_{mk}.csv")
+        market_path = OUTPUT_DIR / f"props_{mk}.csv"
         all_market_paths.append(market_path)
         rows: List[pd.DataFrame] = []
         missing_rows: List[dict[str, Any]] = []
@@ -2016,7 +2044,7 @@ def fetch_odds(
                 df["line"] = pd.to_numeric(df["line"], errors="coerce")
             if "price_american" in df.columns:
                 df["price_american"] = pd.to_numeric(df["price_american"], errors="coerce")
-            safe_concat(market_path, df)
+            safe_concat(str(market_path), df)
             frames.append(df)
         summary.append({"market": mk, "rows": len(df), "missing_events": missing})
         level = "warning" if missing > 0 and MISSING_POLICY == "warn" else "info"
@@ -2049,7 +2077,7 @@ def fetch_odds(
 
     frames_from_disk: List[pd.DataFrame] = []
     for path in all_market_paths:
-        if os.path.exists(path):
+        if path.exists():
             try:
                 frames_from_disk.append(pd.read_csv(path))
             except Exception as e:
@@ -2057,7 +2085,7 @@ def fetch_odds(
 
     if frames_from_disk:
         consolidated = pd.concat(frames_from_disk, ignore_index=True)
-        write_atomic(os.path.join(OUTPUT_DIR, "props_raw.csv"), consolidated)
+        write_atomic(str(OUTPUT_DIR / "props_raw.csv"), consolidated)
         LOGGER.info(
             f"Consolidated props_raw.csv rows={len(consolidated)} from {len(frames_from_disk)} market files"
         )
@@ -2076,10 +2104,11 @@ def fetch_odds(
         props["player_canonical"] = ""
 
     # --- BEGIN: enrich props with opponent from odds_game ---
+    odds_game_path = OUTPUT_DIR / "odds_game.csv"
     try:
-        games = pd.read_csv("outputs/odds_game.csv")
+        games = pd.read_csv(odds_game_path)
     except Exception as err:
-        log.info(f"failed to read outputs/odds_game.csv: {err}")
+        log.info(f"failed to read {odds_game_path}: {err}")
         games = pd.DataFrame()
     if not games.empty:
         for c in ("home_team", "away_team"):
@@ -2470,8 +2499,8 @@ def fetch_odds(
     )
 
     # keep your original file AND write an enriched one for downstream robustness
-    props.to_csv("outputs/props_enriched.csv", index=False)
-    props.to_csv(DATA_DIR / "props_enriched.csv", index=False)
+    props.to_csv(OUTPUT_DIR / "props_enriched.csv", index=False)
+    props.to_csv(PROPS_ENRICHED_PATH, index=False)
     # --- END: enrich props with opponent from odds_game ---
 
     write_atomic(out, final_df)
@@ -2557,7 +2586,7 @@ if __name__ == "__main__":
         format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
     )
     logger.info("Running fetch_props_oddsapi from cwd=%s", os.getcwd())
-    logger.info("Repo root resolved to %s", REPO_ROOT)
+    logger.info("Repo root resolved to %s", ROOT_DIR)
 
     ap = argparse.ArgumentParser()
     # Accept both names; allow empty (no filter) with nargs='?' / const=''
@@ -2568,8 +2597,8 @@ if __name__ == "__main__":
     ap.add_argument("--region", default=REGION_DEFAULT)
     ap.add_argument("--date", nargs="?", default="", const="")
     ap.add_argument("--season", default="")
-    ap.add_argument("--out", default="outputs/props_raw.csv")
-    ap.add_argument("--out_game", default="outputs/odds_game.csv")
+    ap.add_argument("--out", default=str(OUTPUT_DIR / "props_raw.csv"))
+    ap.add_argument("--out_game", default=str(OUTPUT_DIR / "odds_game.csv"))
     ap.add_argument(
         "--roles-csv",
         type=str,
@@ -2591,9 +2620,9 @@ if __name__ == "__main__":
         logging.info("[fetch_props] Final roles CSV path resolved to %s", roles_csv_path)
         resolved_roles_path = Path(roles_csv_path)
         default_targets = [
-            Path("roles_ourlads.csv"),
-            Path("data/roles_ourlads.csv"),
-            Path("outputs/roles_ourlads.csv"),
+            ROOT_DIR / "roles_ourlads.csv",
+            DATA_DIR / "roles_ourlads.csv",
+            OUTPUT_DIR / "roles_ourlads.csv",
         ]
         for target in default_targets:
             if target.parent != Path('.'):
