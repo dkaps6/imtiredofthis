@@ -115,6 +115,9 @@ def attach_opponent(
     Backwards-compatible helper to attach opponent info to a per-team/per-player
     DataFrame.
 
+    This is a lightweight, backwards-compatible implementation used by
+    make_metrics.py and some legacy scripts. It expects that `df` has
+    at least (season, week, team) columns (names configurable via args).
     Old callers may still pass season_col / week_col / team_col / out_col /
     schedule_path. We now ignore schedule_path and load the opponent map from
     the CSV produced by the build_opponent_map_from_props step, but we keep the
@@ -148,6 +151,24 @@ def attach_opponent(
         )
         return df
 
+    # Canonicalize team + opponent using the same helper as the props pipeline.
+    sched = sched.copy()
+    try:
+        sched["team_canon"] = sched["team"].map(canon_team)
+        sched["opp_canon"] = sched["opponent"].map(canon_team)
+    except NameError:
+        # Fallback: upper-case if canon_team is unavailable for some reason.
+        sched["team_canon"] = sched["team"].astype(str).str.upper()
+        sched["opp_canon"] = sched["opponent"].astype(str).str.upper()
+
+    # Work on a copy of df to avoid mutating callers unexpectedly.
+    out = df.copy()
+
+    # If the caller uses a different team column name, normalize it to a temp key.
+    if team_col not in out.columns:
+        # If there is a 'team_abbr' column, fall back to that.
+        if "team_abbr" in out.columns:
+            out[team_col] = out["team_abbr"]
     df_work = df.copy()
 
     # Ensure we have a team column to join on.
@@ -172,6 +193,20 @@ def attach_opponent(
             )
             return df
 
+    # Canonicalize the team column in df for the join.
+    try:
+        out["_team_canon"] = out[team_col].map(canon_team)
+    except NameError:
+        out["_team_canon"] = out[team_col].astype(str).str.upper()
+
+    # Build a minimal schedule frame to join on.
+    sched_key = sched[["season", "week", "team_canon", "opp_canon"]].drop_duplicates()
+
+    # Perform the left join.
+    merged = out.merge(
+        sched_key,
+        left_on=[season_col, week_col, "_team_canon"],
+        right_on=["season", "week", "team_canon"],
     # We expect opponent_map to have: season, week, team_abbr, opponent.
     # Rename df columns to those canonical names for the join, then rename back.
     rename_map: dict[str, str] = {}
@@ -207,6 +242,13 @@ def attach_opponent(
         merged[out_col] = merged[out_col].where(
             merged[out_col].notna(), merged["opponent"]
         )
+    else:
+        merged[out_col] = merged["opp_canon"]
+
+    # Clean up helper columns.
+    merged = merged.drop(
+        columns=[c for c in ("_team_canon", "team_canon", "opp_canon") if c in merged.columns]
+    )
     elif "opponent" in merged.columns:
         merged[out_col] = merged["opponent"]
 
