@@ -1,348 +1,104 @@
+# scripts/_opponent_map.py
+
 from __future__ import annotations
 
-import re
+import logging
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 
 import pandas as pd
 
-# Canonical NFL team abbreviations used across the project.
-CANON_TEAM_CODES = {
-    "ARI",
-    "ATL",
-    "BAL",
-    "BUF",
-    "CAR",
-    "CHI",
-    "CIN",
-    "CLE",
-    "DAL",
-    "DEN",
-    "DET",
-    "GB",
-    "HOU",
-    "IND",
-    "JAX",
-    "KC",
-    "LAC",
-    "LAR",
-    "LV",
-    "MIA",
-    "MIN",
-    "NE",
-    "NO",
-    "NYG",
-    "NYJ",
-    "PHI",
-    "PIT",
-    "SEA",
-    "SF",
-    "TB",
-    "TEN",
-    "WAS",
-}
+from scripts.config import DATA_DIR
+from scripts.utils.canonical_names import canon_team_series as _canon_team_series
 
-# Weird codes observed in APIs/books + identity mapping for determinism.
-TEAM_FIX: Dict[str, str] = {
-    "BLT": "BAL",
-    "CLV": "CLE",
-    "HST": "HOU",
-    "ARZ": "ARI",
-    "JAC": "JAX",
-    "WSH": "WAS",
-    "LA": "LAR",
-    "LVG": "LV",
-    "KAN": "KC",
-    "NWE": "NE",
-    "NOR": "NO",
-    "SFO": "SF",
-    "TAM": "TB",
-    "SDG": "LAC",
-}
-TEAM_FIX.update({code: code for code in CANON_TEAM_CODES})
+LOG = logging.getLogger(__name__)
 
-# ESPN schedule "city" names.
-ESPN_CITY_TO_ABBR: Dict[str, str] = {
-    "Washington": "WAS",
-    "San Francisco": "SF",
-    "Tampa Bay": "TB",
-    "New England": "NE",
-    "New York Jets": "NYJ",
-    "New York Giants": "NYG",
-    "Las Vegas": "LV",
-    "Los Angeles Rams": "LAR",
-    "Los Angeles Chargers": "LAC",
-    "Jacksonville": "JAX",
-    "Kansas City": "KC",
-    "Green Bay": "GB",
-    "New Orleans": "NO",
-    "Minnesota": "MIN",
-    "Cleveland": "CLE",
-    "Chicago": "CHI",
-    "Detroit": "DET",
-    "Atlanta": "ATL",
-    "Carolina": "CAR",
-    "Buffalo": "BUF",
-    "Houston": "HOU",
-    "Tennessee": "TEN",
-    "Miami": "MIA",
-    "Philadelphia": "PHI",
-    "Dallas": "DAL",
-    "Baltimore": "BAL",
-    "Cincinnati": "CIN",
-    "Pittsburgh": "PIT",
-    "Seattle": "SEA",
-    "Arizona": "ARI",
-    "Indianapolis": "IND",
-    "Denver": "DEN",
-    "Los Angeles": "LAR",  # ambiguous city, default to Rams
-}
+# Keep a small compatibility alias for other modules that import canon_team from here.
+def canon_team_series(s: pd.Series) -> pd.Series:
+    """
+    Canonicalize team abbreviations using the shared canonical_names helper.
 
-# Full franchise names → canonical abbreviations.
-TEAM_NAME_TO_ABBR: Dict[str, str] = {
-    "Washington Commanders": "WAS",
-    "San Francisco 49ers": "SF",
-    "Tampa Bay Buccaneers": "TB",
-    "New England Patriots": "NE",
-    "New York Jets": "NYJ",
-    "New York Giants": "NYG",
-    "Las Vegas Raiders": "LV",
-    "Los Angeles Rams": "LAR",
-    "Los Angeles Chargers": "LAC",
-    "Jacksonville Jaguars": "JAX",
-    "Kansas City Chiefs": "KC",
-    "Green Bay Packers": "GB",
-    "New Orleans Saints": "NO",
-    "Minnesota Vikings": "MIN",
-    "Cleveland Browns": "CLE",
-    "Chicago Bears": "CHI",
-    "Detroit Lions": "DET",
-    "Atlanta Falcons": "ATL",
-    "Carolina Panthers": "CAR",
-    "Buffalo Bills": "BUF",
-    "Houston Texans": "HOU",
-    "Tennessee Titans": "TEN",
-    "Miami Dolphins": "MIA",
-    "Philadelphia Eagles": "PHI",
-    "Dallas Cowboys": "DAL",
-    "Baltimore Ravens": "BAL",
-    "Cincinnati Bengals": "CIN",
-    "Pittsburgh Steelers": "PIT",
-    "Seattle Seahawks": "SEA",
-    "Arizona Cardinals": "ARI",
-    "Indianapolis Colts": "IND",
-    "Denver Broncos": "DEN",
-    # Legacy / alternate full names seen in data feeds.
-    "Oakland Raiders": "LV",
-    "San Diego Chargers": "LAC",
-    "St. Louis Rams": "LAR",
-    "Washington Football Team": "WAS",
-    "Washington Redskins": "WAS",
-}
-
-# Common nicknames / shorthand names.
-TEAM_NICKNAME_TO_ABBR: Dict[str, str] = {
-    "Cardinals": "ARI",
-    "Falcons": "ATL",
-    "Ravens": "BAL",
-    "Bills": "BUF",
-    "Panthers": "CAR",
-    "Bears": "CHI",
-    "Bengals": "CIN",
-    "Browns": "CLE",
-    "Cowboys": "DAL",
-    "Broncos": "DEN",
-    "Lions": "DET",
-    "Packers": "GB",
-    "Texans": "HOU",
-    "Colts": "IND",
-    "Jaguars": "JAX",
-    "Jags": "JAX",
-    "Chiefs": "KC",
-    "Chargers": "LAC",
-    "Rams": "LAR",
-    "Raiders": "LV",
-    "Dolphins": "MIA",
-    "Fins": "MIA",
-    "Vikings": "MIN",
-    "Patriots": "NE",
-    "Pats": "NE",
-    "Saints": "NO",
-    "Giants": "NYG",
-    "Jets": "NYJ",
-    "Eagles": "PHI",
-    "Steelers": "PIT",
-    "Seahawks": "SEA",
-    "Hawks": "SEA",
-    "49ers": "SF",
-    "Niners": "SF",
-    "Buccaneers": "TB",
-    "Bucs": "TB",
-    "Titans": "TEN",
-    "Commanders": "WAS",
-    "Football Team": "WAS",
-}
-
-# Additional aliases that appear in feeds/HTML (city abbreviations, two-word combos).
-ADDITIONAL_TEAM_ALIASES: Dict[str, str] = {
-    "NY JETS": "NYJ",
-    "NY GIANTS": "NYG",
-    "NEW YORK JETS": "NYJ",
-    "NEW YORK GIANTS": "NYG",
-    "LA RAMS": "LAR",
-    "LA CHARGERS": "LAC",
-    "LOS ANGELES RAIDERS": "LV",
-    "ARIZONA CARDINALS": "ARI",
-    "ATLANTA FALCONS": "ATL",
-    "BALTIMORE RAVENS": "BAL",
-    "BUFFALO BILLS": "BUF",
-    "CAROLINA PANTHERS": "CAR",
-    "CHICAGO BEARS": "CHI",
-    "CINCINNATI BENGALS": "CIN",
-    "CLEVELAND BROWNS": "CLE",
-    "DALLAS COWBOYS": "DAL",
-    "DENVER BRONCOS": "DEN",
-    "DETROIT LIONS": "DET",
-    "GREEN BAY PACKERS": "GB",
-    "HOUSTON TEXANS": "HOU",
-    "INDIANAPOLIS COLTS": "IND",
-    "JACKSONVILLE JAGUARS": "JAX",
-    "KANSAS CITY CHIEFS": "KC",
-    "LAS VEGAS RAIDERS": "LV",
-    "LOS ANGELES RAMS": "LAR",
-    "LOS ANGELES CHARGERS": "LAC",
-    "MIAMI DOLPHINS": "MIA",
-    "MINNESOTA VIKINGS": "MIN",
-    "NEW ENGLAND PATRIOTS": "NE",
-    "NEW ORLEANS SAINTS": "NO",
-    "PHILADELPHIA EAGLES": "PHI",
-    "PITTSBURGH STEELERS": "PIT",
-    "SAN FRANCISCO 49ERS": "SF",
-    "SEATTLE SEAHAWKS": "SEA",
-    "TAMPA BAY BUCCANEERS": "TB",
-    "TENNESSEE TITANS": "TEN",
-    "WASHINGTON COMMANDERS": "WAS",
-}
+    This is the function other modules should import:
+        from scripts._opponent_map import canon_team_series
+    """
+    return _canon_team_series(s)
 
 
-def _build_canon_team_abbr() -> Dict[str, str]:
-    mapping: Dict[str, str] = {}
+def _default_opponent_map_path() -> Path:
+    """
+    Default location where the opponent map is written by the new build step.
 
-    def _ingest(source: Dict[str, str], *, normalize: bool = True) -> None:
-        for raw_key, value in source.items():
-            if not raw_key or not value:
-                continue
-            key = raw_key.upper() if normalize else raw_key
-            mapping[key] = value
-
-    for code in CANON_TEAM_CODES:
-        mapping[code] = code
-
-    _ingest(TEAM_FIX)
-    _ingest({k.upper(): v for k, v in ESPN_CITY_TO_ABBR.items()})
-    _ingest({k.upper(): v for k, v in TEAM_NAME_TO_ABBR.items()})
-    _ingest({k.upper(): v for k, v in TEAM_NICKNAME_TO_ABBR.items()})
-    _ingest(ADDITIONAL_TEAM_ALIASES)
-
-    return mapping
+    We intentionally centralize this in one place so both the build and
+    pipeline layers stay in sync.
+    """
+    # This is produced by scripts/build/build_opponent_map_from_props.py
+    return DATA_DIR / "opponent_map_from_props.csv"
 
 
-CANON_TEAM_ABBR = _build_canon_team_abbr()
-TEAM_REMAP: Dict[str, str] = {key.upper(): val for key, val in CANON_TEAM_ABBR.items()}
+def load_opponent_map(path: Optional[Path] = None) -> pd.DataFrame:
+    """
+    Load the opponent map from disk.
 
-_PUNCT_PATTERN = re.compile(r"[\.\u2019\u2018'`]")
-_WHITESPACE_PATTERN = re.compile(r"\s+")
+    If the file does not exist or is empty, return an empty DataFrame and log
+    a warning instead of raising. This keeps downstream steps from crashing.
+    """
+    if path is None:
+        path = _default_opponent_map_path()
 
+    path = Path(path)
 
-def _clean_token(name: str | None) -> str:
-    text = "" if name is None else str(name)
-    text = text.strip()
-    if not text:
-        return ""
-    text = _PUNCT_PATTERN.sub("", text)
-    text = _WHITESPACE_PATTERN.sub(" ", text)
-    return text
+    if not path.exists():
+        LOG.warning(
+            "[_opponent_map] opponent map file not found at %s; "
+            "returning empty DataFrame",
+            path,
+        )
+        return pd.DataFrame()
 
+    try:
+        df = pd.read_csv(path)
+    except Exception as exc:  # pragma: no cover - defensive
+        LOG.error(
+            "[_opponent_map] failed to read opponent map at %s: %s", path, exc
+        )
+        return pd.DataFrame()
 
-def canon_team(name: str) -> str:
-    """Return the canonical 2–3 letter team abbreviation for *name*."""
-
-    cleaned = _clean_token(name)
-    if not cleaned:
-        return ""
-
-    upper = cleaned.upper()
-    if upper in CANON_TEAM_ABBR:
-        return CANON_TEAM_ABBR[upper]
-
-    title = cleaned.title()
-    if title in ESPN_CITY_TO_ABBR:
-        return ESPN_CITY_TO_ABBR[title]
-    if title in TEAM_NAME_TO_ABBR:
-        return TEAM_NAME_TO_ABBR[title]
-
-    return upper
-
-
-def _canon_team_series(s: pd.Series) -> pd.Series:
-    """Vectorized wrapper returning canonical team abbreviations for a Series."""
-
-    x = s.fillna("").astype(str)
-    return x.apply(canon_team)
+    if df.empty:
+        LOG.warning(
+            "[_opponent_map] opponent map at %s is empty; "
+            "downstream merges will be no-ops",
+            path,
+        )
+    return df
 
 
-def canon_team_series(series: pd.Series) -> pd.Series:
-    """Public alias so callers can import canon_team_series directly."""
+def build_opponent_map(
+    season: int,
+    schedule_path: Optional[Path] = None,
+    out_path: Optional[Path] = None,
+) -> pd.DataFrame:
+    """
+    Backwards-compatible stub used by older callers.
 
-    return _canon_team_series(series)
+    The actual *building* of the opponent map now lives in
+    scripts/build/build_opponent_map_from_props.py and is executed as its own
+    GitHub Actions step.
 
+    For pipeline consumers, we just load whatever the build step already wrote.
+    """
+    # Prefer an explicit out_path if the caller passed one, otherwise use the
+    # standard location. We ignore schedule_path because building is handled
+    # earlier in the workflow.
+    if out_path is None:
+        out_path = _default_opponent_map_path()
 
-def map_normalize_team(x: str | None) -> str | None:
-    if x is None:
-        return None
-
-    candidate = canon_team(str(x))
-    if not candidate:
-        return None
-
-    candidate = candidate.upper()
-    if candidate in CANON_TEAM_CODES:
-        return candidate
-
-    fixed = TEAM_FIX.get(candidate)
-    if fixed and fixed in CANON_TEAM_CODES:
-        return fixed
-
-    mapped = CANON_TEAM_ABBR.get(candidate)
-    if mapped and mapped in CANON_TEAM_CODES:
-        return mapped
-
-    return None
-
-
-def normalize_team_series(s: pd.Series) -> pd.Series:
-    return s.apply(map_normalize_team)
-
-
-__all__ = [
-    "TEAM_FIX",
-    "TEAM_NAME_TO_ABBR",
-    "ESPN_CITY_TO_ABBR",
-    "CANON_TEAM_ABBR",
-    "canon_team",
-    "_canon_team_series",
-    "canon_team_series",
-    "CANON_TEAM_CODES",
-    "TEAM_REMAP",
-    "map_normalize_team",
-    "normalize_team_series",
-    "attach_opponent",
-]
-
-
-# ---------------------------------------------------------------------------
-# Backwards-compatible helper for metrics / player-form pipeline
-# ---------------------------------------------------------------------------
+    df = load_opponent_map(out_path)
+    LOG.info(
+        "[_opponent_map] build_opponent_map shim returning %d rows for season %s",
+        len(df),
+        season,
+    )
+    return df
 
 
 def attach_opponent(
@@ -353,38 +109,45 @@ def attach_opponent(
     team_col: str = "team",
     out_col: str = "opponent",
     schedule_path: Optional[str] = None,
+    opponent_map: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
     """
-    Attach an opponent column to `df` using data/team_week_map.csv.
+    Backwards-compatible helper to attach opponent info to a per-team/per-player
+    DataFrame.
 
     This is a lightweight, backwards-compatible implementation used by
     make_metrics.py and some legacy scripts. It expects that `df` has
     at least (season, week, team) columns (names configurable via args).
+    Old callers may still pass season_col / week_col / team_col / out_col /
+    schedule_path. We now ignore schedule_path and load the opponent map from
+    the CSV produced by the build_opponent_map_from_props step, but we keep the
+    signature so existing code continues to work.
+
+    Parameters
+    ----------
+    df : DataFrame
+        Input frame containing per-team or per-player rows.
+    season_col, week_col, team_col : str
+        Column names in `df` that identify the game.
+    out_col : str
+        Name of the opponent column to add/overwrite in `df`.
+    schedule_path : str | None
+        Deprecated. Kept for compatibility; the opponent map is now built in a
+        separate step and loaded from data/opponent_map_from_props.csv.
+    opponent_map : DataFrame | None
+        Optional override opponent map. If None, we load from disk.
     """
     if df is None or df.empty:
         return df
 
-    schedule_path = schedule_path or "data/team_week_map.csv"
-    path = Path(schedule_path)
-    if not path.exists():
-        # Keep behaviour non-fatal; callers can still operate without opponent.
-        print(
-            f"[attach_opponent] WARNING: schedule file not found at {path}; "
-            "returning original dataframe."
-        )
-        return df
+    # Load the pre-built opponent map if the caller didn't supply one.
+    if opponent_map is None:
+        opponent_map = load_opponent_map()
 
-    try:
-        sched = pd.read_csv(path)
-    except Exception as err:
-        print(f"[attach_opponent] WARNING: failed to read {path}: {err}")
-        return df
-
-    needed = {"season", "week", "team", "opponent"}
-    if not needed.issubset(set(sched.columns)):
-        print(
-            "[attach_opponent] WARNING: team_week_map.csv is missing "
-            f"required columns {needed}; returning original dataframe."
+    if opponent_map is None or opponent_map.empty:
+        LOG.warning(
+            "[_opponent_map] attach_opponent called with empty opponent map; "
+            "returning dataframe unchanged"
         )
         return df
 
@@ -406,20 +169,27 @@ def attach_opponent(
         # If there is a 'team_abbr' column, fall back to that.
         if "team_abbr" in out.columns:
             out[team_col] = out["team_abbr"]
+    df_work = df.copy()
+
+    # Ensure we have a team column to join on.
+    if team_col not in df_work.columns:
+        if "team_abbr" in df_work.columns:
+            df_work[team_col] = df_work["team_abbr"]
         else:
-            # Nothing to join on; bail out quietly.
-            print(
-                f"[attach_opponent] WARNING: {team_col!r} column not found "
-                "in input; returning original dataframe."
+            LOG.warning(
+                "[_opponent_map] attach_opponent: cannot find team_col %r "
+                "or 'team_abbr' in df; returning unchanged",
+                team_col,
             )
             return df
 
-    # Basic sanity: required columns in df.
+    # Sanity check required columns in df.
     for col in (season_col, week_col, team_col):
-        if col not in out.columns:
-            print(
-                f"[attach_opponent] WARNING: column {col!r} missing from "
-                "input; returning original dataframe."
+        if col not in df_work.columns:
+            LOG.warning(
+                "[_opponent_map] attach_opponent: missing column %r in df; "
+                "returning unchanged",
+                col,
             )
             return df
 
@@ -437,13 +207,40 @@ def attach_opponent(
         sched_key,
         left_on=[season_col, week_col, "_team_canon"],
         right_on=["season", "week", "team_canon"],
-        how="left",
+    # We expect opponent_map to have: season, week, team_abbr, opponent.
+    # Rename df columns to those canonical names for the join, then rename back.
+    rename_map: dict[str, str] = {}
+    if season_col != "season":
+        rename_map[season_col] = "season"
+    if week_col != "week":
+        rename_map[week_col] = "week"
+    if team_col != "team_abbr":
+        rename_map[team_col] = "team_abbr"
+
+    df_for_join = df_work.rename(columns=rename_map)
+
+    LOG.info(
+        "[_opponent_map] attaching opponent using keys ['season', 'week', 'team_abbr'] "
+        "(df rows=%d, opp_map rows=%d)",
+        len(df_for_join),
+        len(opponent_map),
     )
 
-    # Fill / rename the opponent column.
-    if out_col in merged.columns:
+    merged = df_for_join.merge(
+        opponent_map,
+        how="left",
+        on=["season", "week", "team_abbr"],
+        suffixes=("", "_opp"),
+    )
+
+    # Restore original column names if we renamed them for the join.
+    inverse_rename = {v: k for k, v in rename_map.items()}
+    merged = merged.rename(columns=inverse_rename)
+
+    # Ensure callers see the opponent under out_col.
+    if out_col in merged.columns and "opponent" in merged.columns:
         merged[out_col] = merged[out_col].where(
-            merged[out_col].notna(), merged["opp_canon"]
+            merged[out_col].notna(), merged["opponent"]
         )
     else:
         merged[out_col] = merged["opp_canon"]
@@ -452,5 +249,7 @@ def attach_opponent(
     merged = merged.drop(
         columns=[c for c in ("_team_canon", "team_canon", "opp_canon") if c in merged.columns]
     )
+    elif "opponent" in merged.columns:
+        merged[out_col] = merged["opponent"]
 
     return merged
