@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import re
-from typing import Dict
+from pathlib import Path
+from typing import Dict, Optional
 
 import pandas as pd
 
@@ -335,4 +336,136 @@ __all__ = [
     "TEAM_REMAP",
     "map_normalize_team",
     "normalize_team_series",
+    "attach_opponent",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Backwards-compatible helper for metrics / player-form pipeline
+# ---------------------------------------------------------------------------
+
+
+def attach_opponent(
+    df: pd.DataFrame,
+    *,
+    season_col: str = "season",
+    week_col: str = "week",
+    team_col: str = "team",
+    out_col: str = "opponent",
+    schedule_path: Optional[str] = None,
+) -> pd.DataFrame:
+    """
+    Attach an opponent column to `df` using data/team_week_map.csv.
+
+    This is a lightweight, backwards-compatible implementation used by
+    make_metrics.py and some legacy scripts. It expects that `df` has
+    at least (season, week, team) columns (names configurable via args).
+
+    Parameters
+    ----------
+    df : DataFrame
+        Input frame containing per-team or per-player rows.
+    season_col, week_col, team_col : str
+        Column names in `df` that identify the game.
+    out_col : str
+        Name of the opponent column to add/overwrite in `df`.
+    schedule_path : str | None
+        Optional override path to the schedule CSV. Defaults to
+        "data/team_week_map.csv".
+
+    Returns
+    -------
+    DataFrame
+        A copy of `df` with an opponent column merged in when possible.
+    """
+    if df is None or df.empty:
+        return df
+
+    schedule_path = schedule_path or "data/team_week_map.csv"
+    path = Path(schedule_path)
+    if not path.exists():
+        # Keep behaviour non-fatal; callers can still operate without opponent.
+        print(
+            f"[attach_opponent] WARNING: schedule file not found at {path}; "
+            "returning original dataframe."
+        )
+        return df
+
+    try:
+        sched = pd.read_csv(path)
+    except Exception as err:
+        print(f"[attach_opponent] WARNING: failed to read {path}: {err}")
+        return df
+
+    needed = {"season", "week", "team", "opponent"}
+    if not needed.issubset(set(sched.columns)):
+        print(
+            "[attach_opponent] WARNING: team_week_map.csv is missing "
+            f"required columns {needed}; returning original dataframe."
+        )
+        return df
+
+    # Canonicalize team + opponent using the same helper as the props pipeline.
+    sched = sched.copy()
+    try:
+        sched["team_canon"] = sched["team"].map(_canon_team)
+        sched["opp_canon"] = sched["opponent"].map(_canon_team)
+    except NameError:
+        # Fallback: upper-case if _canon_team is unavailable for some reason.
+        sched["team_canon"] = sched["team"].astype(str).str.upper()
+        sched["opp_canon"] = sched["opponent"].astype(str).str.upper()
+
+    # Work on a copy of df to avoid mutating callers unexpectedly.
+    out = df.copy()
+
+    # If the caller uses a different team column name, normalize it to a temp key.
+    if team_col not in out.columns:
+        # If there is a 'team_abbr' column, fall back to that.
+        if "team_abbr" in out.columns:
+            out[team_col] = out["team_abbr"]
+        else:
+            # Nothing to join on; bail out quietly.
+            print(
+                f"[attach_opponent] WARNING: {team_col!r} column not found "
+                "in input; returning original dataframe."
+            )
+            return df
+
+    # Basic sanity: required columns in df.
+    for col in (season_col, week_col, team_col):
+        if col not in out.columns:
+            print(
+                f"[attach_opponent] WARNING: column {col!r} missing from "
+                "input; returning original dataframe."
+            )
+            return df
+
+    # Canonicalize the team column in df for the join.
+    try:
+        out["_team_canon"] = out[team_col].map(_canon_team)
+    except NameError:
+        out["_team_canon"] = out[team_col].astype(str).str.upper()
+
+    # Build a minimal schedule frame to join on.
+    sched_key = sched[["season", "week", "team_canon", "opp_canon"]].drop_duplicates()
+
+    # Perform the left join.
+    merged = out.merge(
+        sched_key,
+        left_on=[season_col, week_col, "_team_canon"],
+        right_on=["season", "week", "team_canon"],
+        how="left",
+    )
+
+    # Fill / rename the opponent column.
+    if out_col in merged.columns:
+        merged[out_col] = merged[out_col].where(
+            merged[out_col].notna(), merged["opp_canon"]
+        )
+    else:
+        merged[out_col] = merged["opp_canon"]
+
+    # Clean up helper columns.
+    merged = merged.drop(columns=[c for c in ("_team_canon", "team_canon", "opp_canon") if c in merged.columns])
+
+    return merged
