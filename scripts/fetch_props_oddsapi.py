@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -501,6 +502,48 @@ def _to_int_safe(v):
         return None
 
 
+def _ensure_team_week_map(season: int) -> Path:
+    """Ensure the default team_week_map exists and is non-empty."""
+
+    path = Path(TEAM_WEEK_MAP_CSV)
+
+    def _is_bad(p: Path) -> bool:
+        try:
+            if not p.exists():
+                return True
+            if p.stat().st_size <= 1:
+                return True
+        except OSError:
+            return True
+        return False
+
+    if not _is_bad(path):
+        return path
+
+    logger.warning(
+        "[fetch_props] team_week_map CSV missing or tiny at %s; rebuilding via make_team_week_map.py for season=%s",
+        path,
+        season,
+    )
+
+    cmd = [
+        sys.executable,
+        "scripts/utils/make_team_week_map.py",
+        "--season",
+        str(season),
+    ]
+    env = dict(os.environ)
+    env.setdefault("SEASON", str(season))
+    subprocess.run(cmd, check=True, env=env)
+
+    if _is_bad(path):
+        raise RuntimeError(
+            f"After rebuilding, team_week_map CSV at {path} is still missing or empty."
+        )
+
+    return path
+
+
 def _load_team_week_map(
     season: int,
     schedule_path: str | None = None,
@@ -512,7 +555,10 @@ def _load_team_week_map(
     TEAM_WEEK_MAP_CSV, which is also where scripts/make_team_week_map.py writes.
     """
 
-    path = schedule_path or TEAM_WEEK_MAP_CSV
+    if schedule_path is None:
+        path = _ensure_team_week_map(season)
+    else:
+        path = Path(schedule_path)
     abs_path = os.path.abspath(path)
 
     logger.info(
@@ -529,13 +575,36 @@ def _load_team_week_map(
 
     size = os.path.getsize(path)
     if size < 64:
-        # We expect hundreds of rows; a tiny file means something went wrong upstream.
-        raise RuntimeError(
-            f"team_week_map CSV at {abs_path} is unexpectedly small "
-            f"(size={size} bytes). Upstream schedule build may have failed."
-        )
+        if schedule_path is None:
+            logger.warning(
+                "[fetch_props] team_week_map CSV at %s is unexpectedly small (size=%s); rebuilding and retrying.",
+                abs_path,
+                size,
+            )
+            path = _ensure_team_week_map(season)
+            abs_path = os.path.abspath(path)
+            size = os.path.getsize(path)
+        else:
+            raise RuntimeError(
+                f"team_week_map CSV at {abs_path} is unexpectedly small "
+                f"(size={size} bytes). Upstream schedule build may have failed."
+            )
 
-    df = pd.read_csv(path)
+    def _read_team_week_map(current_path: str | Path) -> pd.DataFrame:
+        return pd.read_csv(current_path)
+
+    try:
+        df = _read_team_week_map(path)
+    except pd.errors.EmptyDataError:
+        if schedule_path is not None:
+            raise
+        logger.warning(
+            "[fetch_props] team_week_map CSV at %s raised EmptyDataError; rebuilding and retrying once.",
+            abs_path,
+        )
+        path = _ensure_team_week_map(season)
+        abs_path = os.path.abspath(path)
+        df = _read_team_week_map(path)
 
     if "season" in df.columns:
         df = df[df["season"].astype(int) == int(season)].copy()
