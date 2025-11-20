@@ -22,6 +22,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
+from scripts.utils.team_codes import canon_team as _canon_team_from_codes
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,59 @@ _ROLES_LOOKUP_CACHE: dict[str, str] | None = None
 
 # Optional override from env, if you ever want to force a path
 _ROLES_CSV_OVERRIDE = os.environ.get("ROLES_CSV", "").strip() or None
+
+_PUNCT_PATTERN = re.compile(r"[\.\u2019\u2018'`]")
+_WHITESPACE_PATTERN = re.compile(r"\s+")
+
+
+def _clean_token(name: str | None) -> str:
+    text = "" if name is None else str(name)
+    text = text.strip()
+    if not text:
+        return ""
+    text = _PUNCT_PATTERN.sub("", text)
+    text = _WHITESPACE_PATTERN.sub(" ", text)
+    return text
+
+
+def canon_team(name: str | None) -> str:
+    """Canonicalize a team name or abbreviation into a standard code."""
+
+    try:
+        # Delay import to avoid circular dependency during module initialization.
+        from scripts import _opponent_map as opponent_map
+    except Exception:
+        opponent_map = None
+
+    cleaned = _clean_token(name)
+    if not cleaned:
+        return ""
+
+    upper = cleaned.upper()
+    mapping = getattr(opponent_map, "CANON_TEAM_ABBR", {}) if opponent_map else {}
+    if upper in mapping:
+        return mapping[upper]
+
+    title = cleaned.title()
+    city_map = getattr(opponent_map, "ESPN_CITY_TO_ABBR", {}) if opponent_map else {}
+    if title in city_map:
+        return city_map[title]
+
+    name_map = getattr(opponent_map, "TEAM_NAME_TO_ABBR", {}) if opponent_map else {}
+    if title in name_map:
+        return name_map[title]
+
+    fallback = _canon_team_from_codes(cleaned)
+    if fallback:
+        return str(fallback)
+
+    return upper
+
+
+def canon_team_series(series: pd.Series) -> pd.Series:
+    """Vectorized wrapper for canon_team."""
+
+    return series.fillna("").astype(str).apply(canon_team)
 
 
 def build_roles_map() -> pd.DataFrame:
