@@ -34,7 +34,7 @@ import pandas as pd
 
 from scripts.utils.df_keys import coerce_merge_keys
 
-from scripts._opponent_map import attach_opponent, build_opponent_map
+from scripts._opponent_map import attach_opponent, canon_team_series
 from scripts.make_player_form import canonicalize_name
 from scripts.utils.name_clean import canonical_key
 
@@ -128,153 +128,51 @@ def _ensure_player_clean_key(df: pd.DataFrame, candidates: list[str]) -> pd.Data
 
 
 def merge_opponent_map(base_df: pd.DataFrame) -> pd.DataFrame:
-    """Merge opponent abbreviations from opponent_map_from_props.csv."""
-    path = DATA_PATH / "opponent_map_from_props.csv"
+    """Attach opponent abbreviations using the authoritative team_week_map.csv."""
+
     base = base_df.copy()
 
-    if not path.exists():
-        print("[make_metrics] WARN: opponent_map_from_props.csv missing – proceeding without opponent join")
-        if "opponent_abbr" not in base.columns:
-            base["opponent_abbr"] = pd.NA
+    if base.empty:
         return base
 
-    try:
-        opp = pd.read_csv(path)
-    except pd.errors.EmptyDataError:
-        print("[make_metrics] WARN: opponent_map_from_props.csv empty – proceeding without opponent join")
-        if "opponent_abbr" not in base.columns:
-            base["opponent_abbr"] = pd.NA
-        return base
-
-    if opp.empty:
-        print("[make_metrics] WARN: opponent_map_from_props.csv empty – proceeding without opponent join")
-        if "opponent_abbr" not in base.columns:
-            base["opponent_abbr"] = pd.NA
-        return base
-
-    opp = opp.copy()
-    for col in ("season", "week"):
-        if col in opp.columns:
-            opp[col] = pd.to_numeric(opp[col], errors="coerce").astype("Int64")
-    if "event_id" in opp.columns:
-        opp["event_id"] = opp["event_id"].astype("string")
-
-    if "player_clean_key" not in opp.columns:
-        source_col = next((c for c in ("player", "player_name_raw", "player_name") if c in opp.columns), None)
-        if source_col:
-            opp["player_clean_key"] = opp[source_col].astype("string").map(canonical_key)
-        else:
-            opp["player_clean_key"] = pd.Series(pd.NA, index=opp.index, dtype="string")
-    else:
-        opp["player_clean_key"] = opp["player_clean_key"].astype("string")
-
-    if "opponent_abbr" in opp.columns:
-        opp["opponent_abbr"] = opp["opponent_abbr"].astype("string")
-    else:
-        opp["opponent_abbr"] = pd.Series(pd.NA, index=opp.index, dtype="string")
-
-    for col in ("season", "week"):
-        if col in base.columns:
-            base[col] = pd.to_numeric(base[col], errors="coerce").astype("Int64")
-    if "event_id" in base.columns:
-        base["event_id"] = base["event_id"].astype("string")
-
-    if "player_clean_key" not in base.columns:
-        name_col = next(
-            (
-                c
-                for c in base.columns
-                if c.lower() in {"player", "player_name", "name", "display_name", "player_key"}
-            ),
-            None,
-        )
-        if name_col:
-            base["player_clean_key"] = base[name_col].astype("string").map(canonical_key)
-        else:
-            base["player_clean_key"] = pd.Series(pd.NA, index=base.index, dtype="string")
-    else:
-        base["player_clean_key"] = base["player_clean_key"].astype("string")
-
-    if "opponent_abbr" not in base.columns:
-        base["opponent_abbr"] = pd.Series(pd.NA, index=base.index, dtype="string")
-    else:
-        base["opponent_abbr"] = base["opponent_abbr"].astype("string")
-
-    join_cols = [
-        col
-        for col in ("season", "week", "event_id", "player_clean_key")
-        if col in base.columns and col in opp.columns
-    ]
-    if not join_cols:
-        print("[make_metrics] WARN: no shared columns to join opponent map; skipping")
-        return base
-
-    opp_subset_cols = join_cols + [c for c in ("team_abbr", "opponent_abbr", "team", "opponent") if c in opp.columns]
-    opp_subset = opp.loc[:, opp_subset_cols].drop_duplicates(subset=join_cols, keep="last")
-
-    left_merge = base.copy()
-    right_merge = opp_subset.copy()
-    numeric_cols = [c for c in ("season", "week") if c in join_cols]
-    text_cols = [c for c in join_cols if c not in numeric_cols]
-    if numeric_cols:
-        left_merge = coerce_merge_keys(left_merge, numeric_cols, as_str=False)
-        right_merge = coerce_merge_keys(right_merge, numeric_cols, as_str=False)
-    if text_cols:
-        left_merge = coerce_merge_keys(left_merge, text_cols, as_str=True)
-        right_merge = coerce_merge_keys(right_merge, text_cols, as_str=True)
-
-    indicator_name = "_merge_opponent"
-    merged = left_merge.merge(
-        right_merge,
-        how="left",
-        on=join_cols,
-        suffixes=("", "_opp"),
-        indicator=indicator_name,
-    )
-    _log_merge_counts(
-        stage="join_opponent_map",
-        left=left_merge,
-        right=right_merge,
-        join_cols=join_cols,
-        how="left",
-        merged=merged,
-        indicator_col=indicator_name,
-    )
-
-    joined_rows = int((merged[indicator_name] == "both").sum())
-    merged.drop(columns=[indicator_name], inplace=True, errors="ignore")
-
-    for col in ("team", "team_abbr", "opponent", "opponent_abbr"):
-        opp_col = f"{col}_opp"
-        if opp_col in merged.columns:
-            if col in merged.columns:
-                merged[col] = merged[col].combine_first(merged[opp_col])
-            else:
-                merged[col] = merged[opp_col]
-            merged.drop(columns=[opp_col], inplace=True)
-
-    missing_mask = _missing_mask(merged.get("team_abbr"), merged.index) | _missing_mask(
-        merged.get("opponent_abbr"), merged.index
-    )
-    missing_count = int(missing_mask.sum())
-
-    if missing_count:
-        audit = merged.loc[missing_mask].copy()
-        DATA_PATH.mkdir(parents=True, exist_ok=True)
-        audit.to_csv(DATA_PATH / "metrics_missing_core.csv", index=False)
-        print(
-            f"[make_metrics] WARN: opponent unresolved for {missing_count} rows -> data/metrics_missing_core.csv"
+    if not TEAM_WEEK_MAP_PATH.exists():
+        raise FileNotFoundError(
+            f"Expected {TEAM_WEEK_MAP_PATH} to exist before running run_pipeline_full_metrics"
         )
 
-    print(f"[make_metrics] opponent map joined rows: {joined_rows}")
-    print(f"[make_metrics] missing team/opponent after merge: {missing_count}")
+    if TEAM_WEEK_MAP_PATH.stat().st_size == 0:
+        raise ValueError(
+            f"Expected {TEAM_WEEK_MAP_PATH} to be non-empty before running run_pipeline_full_metrics"
+        )
 
-    opp_counts = (
-        merged.groupby("team", dropna=False)
-        .size()
-        .reset_index(name="rows")
+    if "season" in base.columns:
+        base["season"] = pd.to_numeric(base["season"], errors="coerce").astype("Int64")
+    if "week" in base.columns:
+        base["week"] = pd.to_numeric(base["week"], errors="coerce").astype("Int64")
+
+    team_col: str | None = None
+    if "team_abbr" in base.columns:
+        team_col = "team_abbr"
+    elif "team" in base.columns:
+        team_col = "team"
+
+    if team_col is None:
+        print("[make_metrics] WARN: no team column available for opponent attachment; skipping")
+        return base
+
+    base[team_col] = canon_team_series(base[team_col])
+
+    merged = attach_opponent(
+        base,
+        season_col="season",
+        week_col="week",
+        team_col=team_col,
+        out_col="opponent",
+        schedule_path=str(TEAM_WEEK_MAP_PATH),
     )
-    opp_counts.to_csv("data/_debug_team_rows_after_opponent_join.csv", index=False)
+
+    if "opponent" in merged.columns and "opponent_abbr" not in merged.columns:
+        merged["opponent_abbr"] = canon_team_series(merged["opponent"])
 
     return merged
 DATA_DIR = "data"
@@ -282,6 +180,7 @@ DATA_PATH = Path(DATA_DIR)
 METRICS_OUT_PATH = DATA_PATH / "metrics_ready.csv"
 METRICS_EXPORT_PATH = DATA_PATH / "make_metrics_output.csv"
 WEEK = 10
+TEAM_WEEK_MAP_PATH = DATA_PATH / "team_week_map.csv"
 TEAM_FORM_PATH = DATA_PATH / "team_form.csv"
 PLAYER_FORM_PATH = DATA_PATH / "player_form.csv"
 PLAYER_CONS_PATH = DATA_PATH / "player_form_consensus.csv"
@@ -919,8 +818,8 @@ def build_metrics(season: int) -> pd.DataFrame:
         "weather": wx.empty,
         "odds_game": gl.empty,
     }
-    pf = attach_opponent(pf, team_col="team", coverage_path="data/coverage_cb.csv")
-    tf = attach_opponent(tf, team_col="team", coverage_path="data/coverage_cb.csv")
+    pf = attach_opponent(pf, team_col="team", schedule_path=str(TEAM_WEEK_MAP_PATH))
+    tf = attach_opponent(tf, team_col="team", schedule_path=str(TEAM_WEEK_MAP_PATH))
 
     # Week inference for props (if missing)
     if "week" not in props.columns or props["week"].isna().all():
@@ -1937,7 +1836,7 @@ REQUIRED_INPUTS: dict[str, Path] = {
     "player_form_consensus": PLAYER_CONS_PATH,
     "props_raw": DATA_PATH / "props_raw.csv",
     "weather": WEATHER_PATH,
-    "opponent_map": DATA_PATH / "_opponent_map.csv",
+    "team_week_map": TEAM_WEEK_MAP_PATH,
 }
 
 OPTIONAL_INPUTS: dict[str, Path] = {
@@ -1952,21 +1851,6 @@ OPTIONAL_INPUTS: dict[str, Path] = {
 
 def _validate_core_inputs() -> bool:
     for label, path in REQUIRED_INPUTS.items():
-        if label == "opponent_map" and not path.exists():
-            mapping = build_opponent_map()
-            if mapping:
-                df_map = (
-                    pd.DataFrame(
-                        [{"team": team, "opponent": opponent} for team, opponent in mapping.items()]
-                    )
-                    .dropna(subset=["team"])
-                    .drop_duplicates(subset=["team"], keep="first")
-                )
-                path.parent.mkdir(parents=True, exist_ok=True)
-                df_map.to_csv(path, index=False)
-            else:
-                print(f"[make_metrics] FATAL: opponent map missing and could not be generated ({path})")
-                return False
         try:
             df = pd.read_csv(path)
         except FileNotFoundError:
