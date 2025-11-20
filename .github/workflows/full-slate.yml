@@ -182,7 +182,6 @@ jobs:
           merge-multiple: false
           repository: dkaps6/imtiredofthis
           run-id: 19411229739
-          if-no-files-found: ignore
 
       - name: Merge previous state
         run: |
