@@ -1,5 +1,3 @@
-# scripts/_opponent_map.py
-
 from __future__ import annotations
 
 import logging
@@ -9,29 +7,44 @@ from typing import Optional
 import pandas as pd
 
 from scripts.config import DATA_DIR
-from scripts.utils.canonical_names import canon_team_series as _canon_team_series
+from scripts.utils.canonical_names import (
+    canon_team,
+    canon_team_series as _canon_team_series,
+)
 
 LOG = logging.getLogger(__name__)
 
-# Keep a small compatibility alias for other modules that import canon_team from here.
+
+# ---------------------------------------------------------------------------
+# Public canonical helpers
+# ---------------------------------------------------------------------------
+
 def canon_team_series(s: pd.Series) -> pd.Series:
     """
     Canonicalize team abbreviations using the shared canonical_names helper.
 
     This is the function other modules should import:
+
         from scripts._opponent_map import canon_team_series
+
+    We also re-export `canon_team` below for backwards compatibility with
+    callers such as make_team_week_map.py.
     """
+
     return _canon_team_series(s)
 
 
+# ---------------------------------------------------------------------------
+# Opponent-map I/O
+# ---------------------------------------------------------------------------
+
 def _default_opponent_map_path() -> Path:
     """
-    Default location where the opponent map is written by the new build step.
+    Default location where the opponent map is written by the build step.
 
-    We intentionally centralize this in one place so both the build and
-    pipeline layers stay in sync.
+    This is produced by scripts/build/build_opponent_map_from_props.py.
     """
-    # This is produced by scripts/build/build_opponent_map_from_props.py
+
     return DATA_DIR / "opponent_map_from_props.csv"
 
 
@@ -42,6 +55,7 @@ def load_opponent_map(path: Optional[Path] = None) -> pd.DataFrame:
     If the file does not exist or is empty, return an empty DataFrame and log
     a warning instead of raising. This keeps downstream steps from crashing.
     """
+
     if path is None:
         path = _default_opponent_map_path()
 
@@ -69,6 +83,7 @@ def load_opponent_map(path: Optional[Path] = None) -> pd.DataFrame:
             "downstream merges will be no-ops",
             path,
         )
+
     return df
 
 
@@ -86,9 +101,7 @@ def build_opponent_map(
 
     For pipeline consumers, we just load whatever the build step already wrote.
     """
-    # Prefer an explicit out_path if the caller passed one, otherwise use the
-    # standard location. We ignore schedule_path because building is handled
-    # earlier in the workflow.
+
     if out_path is None:
         out_path = _default_opponent_map_path()
 
@@ -101,6 +114,10 @@ def build_opponent_map(
     return df
 
 
+# ---------------------------------------------------------------------------
+# Attach opponent info to per-team / per-player frames
+# ---------------------------------------------------------------------------
+
 def attach_opponent(
     df: pd.DataFrame,
     *,
@@ -108,35 +125,23 @@ def attach_opponent(
     week_col: str = "week",
     team_col: str = "team",
     out_col: str = "opponent",
-    schedule_path: Optional[str] = None,
+    schedule_path: Optional[str] = None,  # deprecated, kept for compat
     opponent_map: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
     """
     Backwards-compatible helper to attach opponent info to a per-team/per-player
     DataFrame.
 
-    This is a lightweight, backwards-compatible implementation used by
-    make_metrics.py and some legacy scripts. It expects that `df` has
-    at least (season, week, team) columns (names configurable via args).
-    Old callers may still pass season_col / week_col / team_col / out_col /
-    schedule_path. We now ignore schedule_path and load the opponent map from
-    the CSV produced by the build_opponent_map_from_props step, but we keep the
-    signature so existing code continues to work.
+    Expected opponent_map schema (from build_opponent_map_from_props step):
+        season, week, team_abbr, opponent
 
-    Parameters
-    ----------
-    df : DataFrame
-        Input frame containing per-team or per-player rows.
-    season_col, week_col, team_col : str
-        Column names in `df` that identify the game.
-    out_col : str
-        Name of the opponent column to add/overwrite in `df`.
-    schedule_path : str | None
-        Deprecated. Kept for compatibility; the opponent map is now built in a
-        separate step and loaded from data/opponent_map_from_props.csv.
-    opponent_map : DataFrame | None
-        Optional override opponent map. If None, we load from disk.
+    We:
+      1. Ensure df has a team column (or fall back to 'team_abbr')
+      2. Rename df columns to ('season', 'week', 'team_abbr') for the join
+      3. Merge opponent_map
+      4. Rename columns back and ensure the caller sees `out_col` for opponent
     """
+
     if df is None or df.empty:
         return df
 
@@ -151,24 +156,6 @@ def attach_opponent(
         )
         return df
 
-    # Canonicalize team + opponent using the same helper as the props pipeline.
-    sched = sched.copy()
-    try:
-        sched["team_canon"] = sched["team"].map(canon_team)
-        sched["opp_canon"] = sched["opponent"].map(canon_team)
-    except NameError:
-        # Fallback: upper-case if canon_team is unavailable for some reason.
-        sched["team_canon"] = sched["team"].astype(str).str.upper()
-        sched["opp_canon"] = sched["opponent"].astype(str).str.upper()
-
-    # Work on a copy of df to avoid mutating callers unexpectedly.
-    out = df.copy()
-
-    # If the caller uses a different team column name, normalize it to a temp key.
-    if team_col not in out.columns:
-        # If there is a 'team_abbr' column, fall back to that.
-        if "team_abbr" in out.columns:
-            out[team_col] = out["team_abbr"]
     df_work = df.copy()
 
     # Ensure we have a team column to join on.
@@ -193,22 +180,7 @@ def attach_opponent(
             )
             return df
 
-    # Canonicalize the team column in df for the join.
-    try:
-        out["_team_canon"] = out[team_col].map(canon_team)
-    except NameError:
-        out["_team_canon"] = out[team_col].astype(str).str.upper()
-
-    # Build a minimal schedule frame to join on.
-    sched_key = sched[["season", "week", "team_canon", "opp_canon"]].drop_duplicates()
-
-    # Perform the left join.
-    merged = out.merge(
-        sched_key,
-        left_on=[season_col, week_col, "_team_canon"],
-        right_on=["season", "week", "team_canon"],
-    # We expect opponent_map to have: season, week, team_abbr, opponent.
-    # Rename df columns to those canonical names for the join, then rename back.
+    # Rename df columns to match the opponent_map join keys.
     rename_map: dict[str, str] = {}
     if season_col != "season":
         rename_map[season_col] = "season"
@@ -238,18 +210,21 @@ def attach_opponent(
     merged = merged.rename(columns=inverse_rename)
 
     # Ensure callers see the opponent under out_col.
-    if out_col in merged.columns and "opponent" in merged.columns:
-        merged[out_col] = merged[out_col].where(
-            merged[out_col].notna(), merged["opponent"]
-        )
-    else:
-        merged[out_col] = merged["opp_canon"]
-
-    # Clean up helper columns.
-    merged = merged.drop(
-        columns=[c for c in ("_team_canon", "team_canon", "opp_canon") if c in merged.columns]
-    )
-    elif "opponent" in merged.columns:
-        merged[out_col] = merged["opponent"]
+    if "opponent" in merged.columns:
+        if out_col in merged.columns:
+            merged[out_col] = merged[out_col].where(
+                merged[out_col].notna(), merged["opponent"]
+            )
+        else:
+            merged[out_col] = merged["opponent"]
 
     return merged
+
+
+__all__ = [
+    "canon_team",
+    "canon_team_series",
+    "load_opponent_map",
+    "build_opponent_map",
+    "attach_opponent",
+]
