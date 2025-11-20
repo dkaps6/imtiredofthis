@@ -5,6 +5,12 @@ from pathlib import Path
 from typing import Dict, Optional
 
 import pandas as pd
+from scripts.utils.canonical_names import (
+    canon_team,
+    canon_team_series as _canon_team_series,
+)
+
+canon_team_series = _canon_team_series
 
 
 # ---------------------------------------------------------------------------
@@ -255,79 +261,6 @@ def _build_canon_team_abbr() -> Dict[str, str]:
 CANON_TEAM_ABBR = _build_canon_team_abbr()
 TEAM_REMAP: Dict[str, str] = {key.upper(): val for key, val in CANON_TEAM_ABBR.items()}
 
-_PUNCT_PATTERN = re.compile(r"[\.\u2019\u2018'`]")
-_WHITESPACE_PATTERN = re.compile(r"\s+")
-
-
-def _clean_token(name: str | None) -> str:
-    text = "" if name is None else str(name)
-    text = text.strip()
-    if not text:
-        return ""
-    text = _PUNCT_PATTERN.sub("", text)
-    text = _WHITESPACE_PATTERN.sub(" ", text)
-    return text
-
-
-def canon_team(name: str) -> str:
-    """Return the canonical 2–3 letter team abbreviation for *name*."""
-
-    cleaned = _clean_token(name)
-    if not cleaned:
-        return ""
-
-    upper = cleaned.upper()
-    if upper in CANON_TEAM_ABBR:
-        return CANON_TEAM_ABBR[upper]
-
-    title = cleaned.title()
-    if title in ESPN_CITY_TO_ABBR:
-        return ESPN_CITY_TO_ABBR[title]
-    if title in TEAM_NAME_TO_ABBR:
-        return TEAM_NAME_TO_ABBR[title]
-
-    return upper
-
-
-def _canon_team_series(s: pd.Series) -> pd.Series:
-    """Vectorized wrapper returning canonical team abbreviations for a Series."""
-
-    x = s.fillna("").astype(str)
-    return x.apply(canon_team)
-
-
-def canon_team_series(series: pd.Series) -> pd.Series:
-    """Public alias so callers can import canon_team_series directly."""
-
-    return _canon_team_series(series)
-
-
-def map_normalize_team(x: str | None) -> str | None:
-    if x is None:
-        return None
-
-    candidate = canon_team(str(x))
-    if not candidate:
-        return None
-
-    candidate = candidate.upper()
-    if candidate in CANON_TEAM_CODES:
-        return candidate
-
-    fixed = TEAM_FIX.get(candidate)
-    if fixed and fixed in CANON_TEAM_CODES:
-        return fixed
-
-    mapped = CANON_TEAM_ABBR.get(candidate)
-    if mapped and mapped in CANON_TEAM_CODES:
-        return mapped
-
-    return None
-
-
-def normalize_team_series(s: pd.Series) -> pd.Series:
-    return s.apply(map_normalize_team)
-
 
 __all__ = [
     "TEAM_FIX",
@@ -335,7 +268,6 @@ __all__ = [
     "ESPN_CITY_TO_ABBR",
     "CANON_TEAM_ABBR",
     "canon_team",
-    "_canon_team_series",
     "canon_team_series",
     "CANON_TEAM_CODES",
     "TEAM_REMAP",
@@ -476,3 +408,32 @@ def attach_opponent(
     )
 
     return merged
+
+
+# ---------------------------------------------------------------------------
+# Compatibility shims for older callers
+# ---------------------------------------------------------------------------
+
+
+def map_normalize_team(x: str | None) -> str | None:
+    """
+    Backwards-compatible wrapper used by older code that expected
+    map_normalize_team in this module.
+
+    It just delegates to scripts.utils.canonical_names.canon_team and
+    normalizes empty / unknown values to None.
+    """
+    if x is None:
+        return None
+    val = canon_team(str(x))
+    return val or None
+
+
+def normalize_team_series(s: pd.Series) -> pd.Series:
+    """
+    Vectorised wrapper around map_normalize_team.
+
+    This mirrors the old behaviour that the metrics and player-form
+    pipelines expect when they call normalize_team_series from here.
+    """
+    return s.apply(map_normalize_team)
