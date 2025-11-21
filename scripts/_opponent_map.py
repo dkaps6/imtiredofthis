@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib.util
 import logging
 import re
 from pathlib import Path
@@ -8,20 +7,8 @@ from typing import Dict, Optional
 
 import pandas as pd
 
-# DATA_DIR is only needed to pick a default on-disk location for the opponent
-# map. Some older entrypoints (like make_team_week_map) import this module
-# but don't define DATA_DIR in scripts.config, which caused import-time failures
-# when the module was absent. For backwards compatibility, use scripts.config
-# if it exists; otherwise default to the local "data" directory.
-_config_spec = importlib.util.find_spec("scripts.config")
-if _config_spec and _config_spec.loader:
-    _config_module = importlib.util.module_from_spec(_config_spec)
-    _config_spec.loader.exec_module(_config_module)
-    _DATA_DIR = Path(getattr(_config_module, "DATA_DIR", "data"))
-else:
-    _DATA_DIR = Path("data")
-
-DATA_DIR = Path(_DATA_DIR)
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DATA_DIR = REPO_ROOT / "data"
 
 from scripts.utils.canonical_names import (
     canon_team,
@@ -31,6 +18,26 @@ from scripts.utils.canonical_names import (
 
 canon_team_series = _canon_team_series
 LOG = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Default path helpers
+# ---------------------------------------------------------------------------
+
+
+def _default_opponent_map_path() -> Path:
+    """
+    Default location where the opponent map is written by the new build step.
+
+    We intentionally centralize this in one place so both the build and
+    pipeline layers stay in sync.
+    """
+
+    # This is produced by scripts/build/build_opponent_map_from_props.py.
+    # Resolve relative to the repo root (parent of the scripts directory) so
+    # this works both locally and in CI without relying on scripts.config.
+    repo_root = Path(__file__).resolve().parents[1]
+    return repo_root / "data" / "opponent_map_from_props.csv"
 
 
 # ---------------------------------------------------------------------------
