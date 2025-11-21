@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 from typing import Dict, Optional
 
 import pandas as pd
+from scripts.config import DATA_DIR
 from scripts.utils.canonical_names import (
     canon_team,
     canon_team_series as _canon_team_series,
+    normalize_team_series as _normalize_team_series,
 )
 
 canon_team_series = _canon_team_series
+LOG = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -318,7 +322,7 @@ def attach_opponent(
     if df is None or df.empty:
         return df
 
-    schedule_path = schedule_path or "data/team_week_map.csv"
+    schedule_path = schedule_path or Path(DATA_DIR) / "team_week_map.csv"
     path = Path(schedule_path)
     if not path.exists():
         # Keep behaviour non-fatal; callers can still operate without opponent.
@@ -431,9 +435,11 @@ def map_normalize_team(x: str | None) -> str | None:
 
 def normalize_team_series(s: pd.Series) -> pd.Series:
     """
-    Vectorised wrapper around map_normalize_team.
+    Backwards-compatible shim so legacy callers that import
+    `normalize_team_series` from `scripts._opponent_map` keep working.
 
-    This mirrors the old behaviour that the metrics and player-form
-    pipelines expect when they call normalize_team_series from here.
+    The real implementation now lives in
+    `scripts.utils.canonical_names.normalize_team_series`, so this
+    simply forwards there.
     """
-    return s.apply(map_normalize_team)
+    return _normalize_team_series(s)
