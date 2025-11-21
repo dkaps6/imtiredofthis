@@ -1,12 +1,28 @@
 from __future__ import annotations
 
+import importlib.util
 import logging
 import re
 from pathlib import Path
 from typing import Dict, Optional
 
 import pandas as pd
-from scripts.config import DATA_DIR
+
+# DATA_DIR is only needed to pick a default on-disk location for the opponent
+# map. Some older entrypoints (like make_team_week_map) import this module
+# but don't define DATA_DIR in scripts.config, which caused import-time failures
+# when the module was absent. For backwards compatibility, use scripts.config
+# if it exists; otherwise default to the local "data" directory.
+_config_spec = importlib.util.find_spec("scripts.config")
+if _config_spec and _config_spec.loader:
+    _config_module = importlib.util.module_from_spec(_config_spec)
+    _config_spec.loader.exec_module(_config_module)
+    _DATA_DIR = Path(getattr(_config_module, "DATA_DIR", "data"))
+else:
+    _DATA_DIR = Path("data")
+
+DATA_DIR = Path(_DATA_DIR)
+
 from scripts.utils.canonical_names import (
     canon_team,
     canon_team_series as _canon_team_series,
