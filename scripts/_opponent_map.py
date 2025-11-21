@@ -13,11 +13,20 @@ DATA_DIR = REPO_ROOT / "data"
 from scripts.utils.canonical_names import (
     canon_team,
     canon_team_series as _canon_team_series,
-    normalize_team_series as _normalize_team_series,
 )
 
 canon_team_series = _canon_team_series
 LOG = logging.getLogger(__name__)
+
+
+def normalize_team_series(s: pd.Series) -> pd.Series:
+    """
+    Legacy shim: older code imports normalize_team_series from this module.
+    Internally we just delegate to scripts.utils.canonical_names.canon_team_series
+    so all team-abbreviation logic stays centralized.
+    """
+
+    return canon_team_series(s)
 
 
 # ---------------------------------------------------------------------------
