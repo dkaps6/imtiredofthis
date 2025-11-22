@@ -319,7 +319,8 @@ __all__ = [
 
 
 def attach_opponent(
-    df: pd.DataFrame,
+    df_players: pd.DataFrame,
+    opponent_map: Optional[pd.DataFrame] = None,
     *,
     season_col: str = "season",
     week_col: str = "week",
@@ -328,120 +329,113 @@ def attach_opponent(
     schedule_path: Optional[str] = None,
 ) -> pd.DataFrame:
     """
-    Attach an opponent column to `df` using data/team_week_map.csv.
+    Attach an opponent column using a provided map or the default schedule CSV.
 
-    This is a lightweight, backwards-compatible implementation used by
-    make_metrics.py and some legacy scripts. It expects that `df` has
-    at least (season, week, team) columns (names configurable via args).
-
-    Parameters
-    ----------
-    df : DataFrame
-        Input frame containing per-team or per-player rows.
-    season_col, week_col, team_col : str
-        Column names in `df` that identify the game.
-    out_col : str
-        Name of the opponent column to add/overwrite in `df`.
-    schedule_path : str | None
-        Optional override path to the schedule CSV. Defaults to
-        "data/team_week_map.csv".
-
-    Returns
-    -------
-    DataFrame
-        A copy of `df` with an opponent column merged in when possible.
+    This remains backwards-compatible with earlier callers by falling back to
+    ``data/team_week_map.csv`` when an explicit opponent map is not provided.
     """
-    if df is None or df.empty:
-        return df
+    if df_players is None or df_players.empty:
+        return df_players
 
-    schedule_path = schedule_path or Path(DATA_DIR) / "team_week_map.csv"
-    path = Path(schedule_path)
-    if not path.exists():
-        # Keep behaviour non-fatal; callers can still operate without opponent.
-        print(
-            f"[attach_opponent] WARNING: schedule file not found at {path}; "
-            "returning original dataframe."
-        )
-        return df
-
-    try:
-        sched = pd.read_csv(path)
-    except Exception as err:
-        print(f"[attach_opponent] WARNING: failed to read {path}: {err}")
-        return df
-
-    needed = {"season", "week", "team", "opponent"}
-    if not needed.issubset(set(sched.columns)):
-        print(
-            "[attach_opponent] WARNING: team_week_map.csv is missing "
-            f"required columns {needed}; returning original dataframe."
-        )
-        return df
-
-    # Canonicalize team + opponent using the same helper as the props pipeline.
-    sched = sched.copy()
-    try:
-        sched["team_canon"] = sched["team"].map(canon_team)
-        sched["opp_canon"] = sched["opponent"].map(canon_team)
-    except NameError:
-        # Fallback: upper-case if canon_team is unavailable for some reason.
-        sched["team_canon"] = sched["team"].astype(str).str.upper()
-        sched["opp_canon"] = sched["opponent"].astype(str).str.upper()
-
-    # Work on a copy of df to avoid mutating callers unexpectedly.
-    out = df.copy()
-
-    # If the caller uses a different team column name, normalize it to a temp key.
-    if team_col not in out.columns:
-        # If there is a 'team_abbr' column, fall back to that.
-        if "team_abbr" in out.columns:
-            out[team_col] = out["team_abbr"]
-        else:
-            # Nothing to join on; bail out quietly.
-            print(
-                f"[attach_opponent] WARNING: {team_col!r} column not found "
-                "in input; returning original dataframe."
+    # Load the opponent map from disk when one was not supplied explicitly.
+    if opponent_map is None:
+        path = Path(schedule_path or Path(DATA_DIR) / "team_week_map.csv")
+        if not path.exists():
+            LOG.warning(
+                "[_opponent_map] attach_opponent schedule file not found at %s; returning original frame",
+                path,
             )
-            return df
+            return df_players
 
-    # Basic sanity: required columns in df.
-    for col in (season_col, week_col, team_col):
-        if col not in out.columns:
-            print(
-                f"[attach_opponent] WARNING: column {col!r} missing from "
-                "input; returning original dataframe."
+        try:
+            opponent_map = pd.read_csv(path)
+        except Exception as err:  # pragma: no cover - defensive
+            LOG.warning(
+                "[_opponent_map] attach_opponent failed to read %s: %s", path, err
             )
-            return df
+            return df_players
 
-    # Canonicalize the team column in df for the join.
-    try:
-        out["_team_canon"] = out[team_col].map(canon_team)
-    except NameError:
-        out["_team_canon"] = out[team_col].astype(str).str.upper()
+        needed_base = {"season", "week", "team"}
+        opp_col_in_map: Optional[str] = None
+        if out_col in opponent_map.columns:
+            opp_col_in_map = out_col
+        elif "opponent" in opponent_map.columns:
+            opp_col_in_map = "opponent"
 
-    # Build a minimal schedule frame to join on.
-    sched_key = sched[["season", "week", "team_canon", "opp_canon"]].drop_duplicates()
+        if not needed_base.issubset(set(opponent_map.columns)) or opp_col_in_map is None:
+            LOG.warning(
+                "[_opponent_map] attach_opponent map %s missing required columns %s; returning original frame",
+                path,
+                needed_base.union({out_col}),
+            )
+            return df_players
 
-    # Perform the left join.
-    merged = out.merge(
-        sched_key,
-        left_on=[season_col, week_col, "_team_canon"],
-        right_on=["season", "week", "team_canon"],
+        if opp_col_in_map != out_col:
+            opponent_map = opponent_map.rename(columns={opp_col_in_map: out_col})
+
+        # Canonicalize team values and expose a consistent join column.
+        opponent_map = opponent_map.copy()
+        try:
+            opponent_map["team_abbr"] = opponent_map["team"].map(canon_team)
+        except NameError:
+            opponent_map["team_abbr"] = opponent_map["team"].astype(str).str.upper()
+
+    # Work out a safe join key set.
+    candidate_keys = [season_col, week_col, team_col, "team_abbr"]
+    join_keys = [
+        k for k in candidate_keys if k in df_players.columns and k in opponent_map.columns
+    ]
+
+    if not join_keys:
+        LOG.warning(
+            "[_opponent_map] attach_opponent found no common join keys between players (%s) and opponent map (%s); returning unchanged",
+            list(df_players.columns),
+            list(opponent_map.columns),
+        )
+        return df_players
+
+    # Work on a copy so we don’t mutate the caller’s frame.
+    players = df_players.copy()
+
+    # If the player frame already has an opponent column, park it under a
+    # different name so the merge doesn’t raise a ValueError for overlapping
+    # columns. We’ll reconcile after the merge.
+    existing_opp_col: Optional[str] = None
+    if out_col in players.columns:
+        existing_opp_col = f"{out_col}_existing"
+        players[existing_opp_col] = players[out_col]
+        players = players.drop(columns=[out_col])
+
+    LOG.info(
+        "[_opponent_map] attaching opponent info using keys %s (players=%d, opp_map=%d, had_existing_opp=%s)",
+        join_keys,
+        len(players),
+        len(opponent_map),
+        bool(existing_opp_col),
+    )
+
+    merged = players.merge(
+        opponent_map,
         how="left",
+        on=join_keys,
+        suffixes=("", "_opp"),
     )
 
-    # Fill / rename the opponent column.
-    if out_col in merged.columns:
-        merged[out_col] = merged[out_col].where(
-            merged[out_col].notna(), merged["opp_canon"]
-        )
-    else:
-        merged[out_col] = merged["opp_canon"]
+    # If the opponent map provided an opponent column, prefer that.
+    opp_col_from_map = f"{out_col}_opp"
+    if opp_col_from_map in merged.columns:
+        merged[out_col] = merged[opp_col_from_map]
+        merged = merged.drop(columns=[opp_col_from_map])
+    elif "opponent_opp" in merged.columns:
+        merged[out_col] = merged["opponent_opp"]
+        merged = merged.drop(columns=["opponent_opp"])
+    # Otherwise, fall back to any existing opponent we preserved.
+    elif existing_opp_col:
+        merged[out_col] = merged[existing_opp_col]
 
-    # Clean up helper columns.
-    merged = merged.drop(
-        columns=[c for c in ("_team_canon", "team_canon", "opp_canon") if c in merged.columns]
-    )
+    # Clean up the parked column if we created one.
+    if existing_opp_col and existing_opp_col in merged.columns:
+        merged = merged.drop(columns=[existing_opp_col])
 
     return merged
 
