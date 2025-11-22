@@ -236,6 +236,19 @@ def _read_csv(path: str) -> pd.DataFrame:
     except Exception:
         return pd.DataFrame()
 
+
+def _require_non_empty_csv(path: Path) -> None:
+    if not path.exists() or path.stat().st_size <= 1:
+        if path.name == "player_form.csv":
+            print("")
+            print("❌ FATAL: player_form.csv is empty or missing")
+            print("This model requires PlayerForm to be populated before continuing.")
+            print("Fix upstream build_player_form_consensus step.")
+            print("")
+            sys.exit(1)
+        print(f"[make_metrics] FATAL: required input CSV is empty: {path}")
+        raise SystemExit(1)
+
 def _safe_mkdir(p: str):
     os.makedirs(p, exist_ok=True)
 
@@ -497,10 +510,14 @@ def load_team_form() -> pd.DataFrame:
 
 def load_player_form() -> pd.DataFrame:
     # prefer consensus if present
-    consensus_path = os.path.join(DATA_DIR, "player_form_consensus.csv")
-    base_path = os.path.join(DATA_DIR, "player_form.csv")
+    consensus_path = Path(DATA_DIR) / "player_form_consensus.csv"
+    base_path = Path(DATA_DIR) / "player_form.csv"
+
+    # Player form is now a HARD dependency
+    _require_non_empty_csv(base_path)
+
     df = pd.DataFrame()
-    if os.path.exists(consensus_path):
+    if consensus_path.exists():
         try:
             df = pd.read_csv(consensus_path)
             df.columns = [c.lower() for c in df.columns]
@@ -510,9 +527,15 @@ def load_player_form() -> pd.DataFrame:
             df = pd.DataFrame()
     if df.empty:
         # Fallback to the base player_form extract when consensus has no rows
-        df = _read_csv(base_path)
+        df = pd.read_csv(base_path)
+        df.columns = [c.lower() for c in df.columns]
+
     if df.empty:
-        return df
+        print("")
+        print("❌ FATAL: player_form.csv loaded but contains zero rows")
+        print("PlayerForm must be populated correctly before continuing.")
+        print("")
+        sys.exit(1)
     if "team" in df.columns:
         df["team"] = _normalize_team_names(df["team"])
     if "team_abbr" in df.columns:
