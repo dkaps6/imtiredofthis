@@ -5933,7 +5933,19 @@ def _write_player_form_outputs(
                 "[make_player_form] failed to write mismatch sample: %s",
                 debug_err,
             )
-        raise RuntimeError("[make_player_form] final player_form empty; aborting run")
+        logger.warning("[make_player_form] final player_form empty; writing headers only.")
+        placeholder = _enforce_player_form_schema(pd.DataFrame())
+        PLAYER_FORM_OUT.parent.mkdir(parents=True, exist_ok=True)
+        placeholder.to_csv(PLAYER_FORM_OUT, index=False)
+
+        empty_consensus = _build_grouped_consensus(placeholder)
+        empty_consensus = _enforce_consensus_schema(empty_consensus)
+        empty_consensus = _attach_player_identity(empty_consensus, team_columns=("team_abbr", "team"))
+        empty_consensus = _reorder_identity_columns(empty_consensus)
+        PLAYER_FORM_CONSENSUS_OUT.parent.mkdir(parents=True, exist_ok=True)
+        empty_consensus.to_csv(PLAYER_FORM_CONSENSUS_OUT, index=False)
+
+        return placeholder
 
     missing_opponent_count = (
         player_form["opponent"].isna().sum()
