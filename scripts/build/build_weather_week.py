@@ -5,6 +5,8 @@
 # - Summarizes temp/wind/precip around kickoff.
 # - Fails fast (RuntimeError) if we cannot generate at least 1 row.
 
+from __future__ import annotations  # defer evaluation of type hints
+
 import argparse
 import sys
 from pathlib import Path
@@ -16,7 +18,8 @@ if str(REPO_ROOT) not in sys.path:
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import datetime, date
+from typing import Optional
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -450,11 +453,23 @@ def _load_schedule_source(season: int | None) -> pd.DataFrame:
     return working
 
 
-def _nearest_game_date(df: pd.DataFrame, slate_date: str | None) -> datetime.date | None:
+def _nearest_game_date(df: pd.DataFrame, slate_date: str | None) -> Optional[date]:
+    if df is None or df.empty:
+        return None
+
+    slate: Optional[date] = None
     if slate_date:
-        target = pd.to_datetime(slate_date, errors="coerce")
-        if pd.notna(target):
-            return target.date()
+        try:
+            cleaned = slate_date.strip()
+        except AttributeError:
+            cleaned = ""
+        if cleaned:
+            try:
+                slate = datetime.strptime(cleaned, "%Y-%m-%d").date()
+            except ValueError:
+                slate = None
+    if slate:
+        return slate
     if "kickoff_utc" in df.columns and df["kickoff_utc"].notna().any():
         kickoff = pd.to_datetime(df["kickoff_utc"], utc=True, errors="coerce").dropna()
         if not kickoff.empty:
@@ -483,7 +498,7 @@ def _nearest_game_date(df: pd.DataFrame, slate_date: str | None) -> datetime.dat
     return None
 
 
-def _filter_games_by_date(df: pd.DataFrame, target_date: datetime.date | None) -> pd.DataFrame:
+def _filter_games_by_date(df: pd.DataFrame, target_date: Optional[date]) -> pd.DataFrame:
     if target_date is None or df.empty:
         return df
     mask = pd.Series(False, index=df.index)
