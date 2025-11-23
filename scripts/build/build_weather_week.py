@@ -5,7 +5,7 @@
 # - Summarizes temp/wind/precip around kickoff.
 # - Fails fast (RuntimeError) if we cannot generate at least 1 row.
 
-from __future__ import annotations  # defer evaluation of type hints
+from __future__ import annotations  # Delayed annotation evaluation (PEP 563/PEP 649)
 
 import argparse
 import sys
@@ -454,20 +454,26 @@ def _load_schedule_source(season: int | None) -> pd.DataFrame:
 
 
 def _nearest_game_date(df: pd.DataFrame, slate_date: str | None) -> Optional[date]:
+    """
+    Given a DataFrame with a "date" column of type datetime.date and an optional
+    slate_date string, return the date from the DataFrame that is closest to the slate_date.
+    If slate_date is None or an empty string, return the date nearest to today.
+    The return annotation uses Optional[date] to avoid runtime TypeError on union types.
+    """
+
     if df is None or df.empty:
         return None
 
     slate: Optional[date] = None
     if slate_date:
         try:
-            cleaned = slate_date.strip()
-        except AttributeError:
-            cleaned = ""
-        if cleaned:
-            try:
-                slate = datetime.strptime(cleaned, "%Y-%m-%d").date()
-            except ValueError:
-                slate = None
+            slate_date = slate_date.strip()
+            slate = datetime.strptime(slate_date, "%Y-%m-%d").date() if slate_date else None
+        except ValueError:
+            slate = None
+    else:
+        slate = None
+
     if slate:
         return slate
     if "kickoff_utc" in df.columns and df["kickoff_utc"].notna().any():
