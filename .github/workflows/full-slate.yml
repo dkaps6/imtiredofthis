@@ -33,8 +33,10 @@ env:
   SLATE_DATE: ${{ github.event.inputs.date }}
 
 jobs:
-  setup_python:
+  full_slate:
+    name: Full slate (single job)
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,23 +51,37 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-  build_team_week_map:
-    runs-on: ubuntu-latest
-    needs: [setup_python, build_depth_roles_ourlads]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install deps (core + HTML parsers)
+      - name: Install extra deps for props script
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m pip install "pandas==1.5.3"
 
+      - name: Echo config
+        run: |
+          echo "Season: ${SEASON}"
+          echo "Slate date: ${SLATE_DATE:-<empty>}"
+
+      # 1) Build depth / roles (Ourlads) and validate
+      - name: Build depth / roles (Ourlads)
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/providers/ourlads_depth.py \
+            --season "${SEASON}"
+          mkdir -p outputs
+          cp data/roles_ourlads.csv outputs/roles_ourlads.csv
+
+          if [ ! -f data/roles_ourlads.csv ]; then
+            echo "ERROR: data/roles_ourlads.csv not found after Ourlads build."
+            exit 1
+          fi
+          lines=$(wc -l < data/roles_ourlads.csv || echo 0)
+          echo "roles_ourlads.csv lines=${lines}"
+          if [ "$lines" -le 1 ]; then
+            echo "ERROR: data/roles_ourlads.csv exists but has <= 1 line."
+            exit 1
+          fi
+
+      # 2) Build team-week map
       - name: Build team-week map (authoritative opponents)
         env:
           TEAM_WEEK_MAP_CSV: data/team_week_map.csv
@@ -79,74 +95,12 @@ jobs:
           fi
           python scripts/utils/make_team_week_map.py --season "${SEASON}" ${SCHED}
 
-      - name: Persist state
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: state-build_team_week_map
-          path: |
-            data/**
-            outputs/**
-          if-no-files-found: ignore
-          retention-days: 7
-
-  fetch_player_props_odds_board:
-    runs-on: ubuntu-latest
-    needs:
-      - build_team_week_map
-      - build_depth_roles_ourlads
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Restore roles_ourlads artifact
-        uses: actions/download-artifact@v4
-        with:
-          # This must match the name used in the upload step of the Ourlads job
-          name: roles_ourlads
-          # Put the artifact contents (roles_ourlads.csv) under outputs/
-          path: outputs
-
-      - name: Resolve roles_ourlads.csv
-        run: |
-          echo "[workflow] Resolving roles_ourlads.csv path..."
-          echo "  - listing outputs and data directories (if present)"
-          ls -l outputs || true
-          ls -l data || true
-
-          # Expect the artifact to contain outputs/roles_ourlads.csv
-          if [ -f outputs/roles_ourlads.csv ]; then
-            echo "  - found outputs/roles_ourlads.csv"
-            mkdir -p data
-            cp outputs/roles_ourlads.csv data/roles_ourlads.csv
-          fi
-
-          if [ ! -f data/roles_ourlads.csv ]; then
-            echo "ERROR: data/roles_ourlads.csv not found after artifact restore."
-            echo "       Ensure 'Build depth / roles (Ourlads)' uploads an artifact named 'roles_ourlads'."
+          if [ ! -s data/team_week_map.csv ]; then
+            echo "ERROR: data/team_week_map.csv missing or empty after make_team_week_map."
             exit 1
           fi
 
-          lines=$(wc -l < data/roles_ourlads.csv || echo 0)
-          echo "  - data/roles_ourlads.csv lines=${lines}"
-          if [ "$lines" -le 1 ]; then
-            echo "ERROR: data/roles_ourlads.csv exists but has <= 1 line."
-            echo "       The roles file appears empty; aborting before fetching props."
-            exit 1
-          fi
-
-      - name: Install deps for fetch props
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-        env:
-          PIP_DISABLE_PIP_VERSION_CHECK: 1
-
-      - name: Install extra deps for props script
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install "pandas==1.5.3"
-
+      # 3) Fetch props + odds board
       - name: Fetch player props / odds board
         env:
           TEAM_WEEK_MAP_CSV: data/team_week_map.csv
@@ -166,244 +120,26 @@ jobs:
             --season "${SEASON}" \
             --date "${SLATE_DATE}"
 
-      # New: human-friendly artifact for props output
-      - name: Upload props board artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: props_board
-          # adjust these paths if your script writes different filenames
-          path: |
-            outputs/props_enriched.csv
-            outputs/props_raw.csv
-          if-no-files-found: warn
-
-  build_opponent_map_from_props:
-    runs-on: ubuntu-latest
-    needs: [build_team_week_map, fetch_player_props_odds_board]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Restore state from fetch_player_props_odds_board
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: state-fetch_player_props_odds_board
-          path: previous_state
-          merge-multiple: false
-          repository: dkaps6/imtiredofthis
-          run-id: 19411229739
-
-      - name: Merge previous state
-        run: |
-          if [ -d previous_state ]; then
-            cp -a previous_state/. .
+          if [ -f outputs/props_enriched.csv ]; then
+            echo "props_enriched.csv rows:"
+            wc -l outputs/props_enriched.csv || true
+          else
+            echo "WARNING: outputs/props_enriched.csv not found."
           fi
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install deps (core + HTML parsers)
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
+      # 4) Build opponent map from props
       - name: Build opponent map from props
         run: |
           export PYTHONPATH="${PWD}"
           python -m compileall scripts/build/build_opponent_map_from_props.py
           python scripts/build/build_opponent_map_from_props.py
 
-      - name: Persist state
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: state-build_opponent_map_from_props
-          path: |
-            data/**
-            outputs/**
-          if-no-files-found: ignore
-          retention-days: 7
-
-  build_depth_roles_ourlads:
-    runs-on: ubuntu-latest
-    needs: [setup_python]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install deps (core + HTML parsers)
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Build depth / roles (Ourlads)
-        run: |
-          export PYTHONPATH="${PWD}"
-          python scripts/providers/ourlads_depth.py \
-            --season "${SEASON}"
-          cp data/roles_ourlads.csv roles_ourlads.csv
-          mkdir -p outputs
-          cp data/roles_ourlads.csv outputs/roles_ourlads.csv
-
-      - name: Upload roles_ourlads.csv
-        uses: actions/upload-artifact@v4
-        with:
-          name: roles_ourlads
-          path: outputs/roles_ourlads.csv
-
-      - name: Persist state
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: state-build_depth_roles_ourlads
-          path: |
-            data/**
-            outputs/**
-          if-no-files-found: ignore
-          retention-days: 7
-
-  build_player_form_consensus:
-    runs-on: ubuntu-latest
-    needs: [build_opponent_map_from_props, build_depth_roles_ourlads, build_team_week_map]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Restore state from build_opponent_map_from_props
-        uses: actions/download-artifact@v4
-        with:
-          name: state-build_opponent_map_from_props
-          path: opponent_state
-
-      - name: Restore roles state
-        uses: actions/download-artifact@v4
-        with:
-          name: state-build_depth_roles_ourlads
-          path: roles_state
-
-      - name: Merge previous state
-        run: |
-          if [ -d opponent_state ]; then
-            cp -a opponent_state/. .
-          fi
-          if [ -d roles_state ]; then
-            cp -a roles_state/. .
-          fi
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install deps (core + HTML parsers)
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Download team week map
-        uses: actions/download-artifact@v4
-        with:
-          name: state-build_team_week_map
-          path: data
-
-      - name: Normalise player-form input filenames
-        run: |
-          mkdir -p data
-          mv data/team_week_map*.csv data/team_week_map.csv || true
-
-      - name: Download Stage Inputs
-        run: |
-          echo "Staging PlayerForm inputs..."
-          mkdir -p data/staging
-
-          cp data/player_game_logs.csv data/staging/ || exit 1
-          cp data/player_season_totals.csv data/staging/ || exit 1
-          cp data/team_week_map.csv data/staging/ || exit 1
-
-          echo "Row counts:"
-          wc -l data/staging/*.csv
-
-          if [ ! -s data/staging/player_game_logs.csv ]; then
-            echo "player_game_logs.csv is EMPTY"
+          if [ ! -s data/opponent_map_from_props.csv ]; then
+            echo "ERROR: data/opponent_map_from_props.csv missing or empty."
             exit 1
           fi
 
-          if [ ! -s data/staging/player_season_totals.csv ]; then
-            echo "player_season_totals.csv is EMPTY"
-            exit 1
-          fi
-
-          if [ ! -s data/staging/team_week_map.csv ]; then
-            echo "team_week_map.csv is EMPTY"
-            exit 1
-          fi
-
-      - name: Build player_form / consensus
-        run: |
-          export PYTHONPATH="${PWD}"
-          echo "Building Player Form..."
-          python scripts/make_player_form.py \
-            --season "${SEASON}" \
-            --date "${SLATE_DATE}" || exit 1
-
-          if [ ! -s data/player_form.csv ]; then
-            echo "❌ PlayerForm is EMPTY (no rows/bytes) — stopping pipeline"
-            exit 1
-          fi
-
-          if [ ! -s data/player_form_consensus.csv ]; then
-            echo "❌ PlayerForm consensus is EMPTY — stopping pipeline"
-            exit 1
-          fi
-
-      - name: Persist state
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: state-build_player_form_consensus
-          path: |
-            data/**
-            outputs/**
-          if-no-files-found: ignore
-          retention-days: 7
-
-  build_team_form:
-    runs-on: ubuntu-latest
-    needs: [build_team_week_map]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Restore state from build_team_week_map
-        uses: actions/download-artifact@v4
-        with:
-          name: state-build_team_week_map
-          path: previous_state
-
-      - name: Merge previous state
-        run: |
-          if [ -d previous_state ]; then
-            cp -a previous_state/. .
-          fi
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install deps (core + HTML parsers)
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
+      # 5) Pull SharpFootball metrics + build team_form
       - name: Pull SharpFootball metrics
         run: |
           export PYTHONPATH="${PWD}"
@@ -417,46 +153,12 @@ jobs:
           python scripts/make_team_form.py \
             --season "${SEASON}"
 
-      - name: Persist state
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: state-build_team_form
-          path: |
-            data/**
-            outputs/**
-          if-no-files-found: ignore
-          retention-days: 7
-
-  build_weather:
-    runs-on: ubuntu-latest
-    needs: [fetch_player_props_odds_board]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Restore state from build_team_week_map
-        uses: actions/download-artifact@v4
-        with:
-          name: state-build_team_week_map
-          path: previous_state
-
-      - name: Merge previous state
-        run: |
-          if [ -d previous_state ]; then
-            cp -a previous_state/. .
+          if [ ! -s data/team_form.csv ]; then
+            echo "ERROR: data/team_form.csv missing or empty after make_team_form."
+            exit 1
           fi
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install deps (core + HTML parsers)
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
+      # 6) Build weather (best-effort)
       - name: Build weather (per-game forecast)
         continue-on-error: true
         run: |
@@ -465,62 +167,53 @@ jobs:
             --season "${SEASON}" \
             --date "${SLATE_DATE}"
 
-      - name: Persist state
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: state-build_weather
-          path: |
-            data/**
-            outputs/**
-          if-no-files-found: ignore
-          retention-days: 7
-
-  run_pipeline_full_metrics:
-    runs-on: ubuntu-latest
-    needs: [build_player_form_consensus, build_team_form]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Restore state from build_player_form_consensus
-        uses: actions/download-artifact@v4
-        with:
-          name: state-build_player_form_consensus
-          path: player_form_state
-
-      - name: Restore state from build_team_form
-        uses: actions/download-artifact@v4
-        with:
-          name: state-build_team_form
-          path: team_form_state
-
-      - name: Merge previous state
+      # 7) Stage and validate PlayerForm inputs
+      - name: Stage PlayerForm inputs
         run: |
-          if [ -d player_form_state ]; then
-            cp -a player_form_state/. .
+          echo "Staging PlayerForm inputs..."
+          mkdir -p data/staging
+
+          cp data/player_game_logs.csv data/staging/ || exit 1
+          cp data/player_season_totals.csv data/staging/ || exit 1
+          cp data/team_week_map.csv data/staging/ || exit 1
+
+          echo "Row counts for staged PlayerForm inputs:"
+          wc -l data/staging/*.csv || true
+
+          if [ ! -s data/staging/player_game_logs.csv ]; then
+            echo "player_game_logs.csv is EMPTY"
+            exit 1
           fi
-          if [ -d team_form_state ]; then
-            cp -a team_form_state/. .
+          if [ ! -s data/staging/player_season_totals.csv ]; then
+            echo "player_season_totals.csv is EMPTY"
+            exit 1
+          fi
+          if [ ! -s data/staging/team_week_map.csv ]; then
+            echo "team_week_map.csv is EMPTY"
+            exit 1
           fi
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install deps (core + HTML parsers)
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Build QB scramble / designed-run metrics
+      # 8) Build player_form / consensus (script already hard-fails on empty)
+      - name: Build player_form / consensus
         run: |
           export PYTHONPATH="${PWD}"
-          python scripts/build/build_qb_run_metrics.py \
-            --season "${SEASON}"
+          echo "Building Player Form..."
+          python scripts/make_player_form.py \
+            --season "${SEASON}" \
+            --date "${SLATE_DATE}"
 
-      - name: Run pipeline (full metrics)
+          if [ ! -s data/player_form.csv ]; then
+            echo "❌ PlayerForm is EMPTY — stopping pipeline"
+            exit 1
+          fi
+
+          if [ ! -s data/player_form_consensus.csv ]; then
+            echo "❌ PlayerForm consensus is EMPTY — stopping pipeline"
+            exit 1
+          fi
+
+      # 9) Run full metrics pipeline
+      - name: Run full metrics pipeline
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/make_metrics.py \
@@ -528,57 +221,7 @@ jobs:
             --mode full \
             --date "${SLATE_DATE}"
 
-      # New: single "everything" artifact so the run feels unified
-      - name: Upload full slate outputs
-        uses: actions/upload-artifact@v4
-        with:
-          name: full_slate_outputs
-          # grab all CSVs / model outputs that matter
-          path: |
-            data/**/*.csv
-            outputs/**
-          if-no-files-found: warn
-
-      - name: Persist state
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: state-run_pipeline_full_metrics
-          path: |
-            data/**
-            outputs/**
-          if-no-files-found: ignore
-          retention-days: 7
-
-  validate_metrics_ready:
-    runs-on: ubuntu-latest
-    needs: [run_pipeline_full_metrics]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Restore state from run_pipeline_full_metrics
-        uses: actions/download-artifact@v4
-        with:
-          name: state-run_pipeline_full_metrics
-          path: previous_state
-
-      - name: Merge previous state
-        run: |
-          if [ -d previous_state ]; then
-            cp -a previous_state/. .
-          fi
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install deps (core + HTML parsers)
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
+      # 10) Validate metrics_ready before pricing
       - name: Validate metrics_ready (must pass before pricing)
         run: |
           export PYTHONPATH="${PWD}"
@@ -586,65 +229,33 @@ jobs:
             --season "${SEASON}" \
             --date "${SLATE_DATE}"
 
-      - name: Persist state
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: state-validate_metrics_ready
-          path: |
-            data/**
-            outputs/**
-          if-no-files-found: ignore
-          retention-days: 7
-
-  elite_model_run_pricing:
-    runs-on: ubuntu-latest
-    needs: [validate_metrics_ready]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Restore state from validate_metrics_ready
-        uses: actions/download-artifact@v4
-        with:
-          name: state-validate_metrics_ready
-          path: previous_state
-
-      - name: Merge previous state
+      # 11) Run pricing model
+      - name: Run pricing model
         run: |
-          if [ -d previous_state ]; then
-            cp -a previous_state/. .
-          fi
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install deps (core + HTML parsers)
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Elite model | Run pricing
-        run: |
-          export PYTHONPATH="${PWD}"
-          python scripts/make_metrics.py \
-            --season "${SEASON}" \
-            --mode pricing \
-            --date "${SLATE_DATE}"
           export PYTHONPATH="${PWD}"
           python scripts/pricing.py \
             --season "${SEASON}"
 
+      # 12) Optional: CSV row-count summary for quick debugging
+      - name: Summarize CSV row counts
+        run: |
+          echo "=== Row counts under data/ ==="
+          find data -maxdepth 2 -name "*.csv" -print0 | xargs -0 -I{} sh -c 'echo "--- {}"; wc -l "{}" || true'
+
+          echo "=== Row counts under outputs/ ==="
+          if [ -d outputs ]; then
+            find outputs -maxdepth 2 -name "*.csv" -print0 | xargs -0 -I{} sh -c 'echo "--- {}"; wc -l "{}" || true'
+          fi
+
+      # 13) Unified artifact – everything in one bundle
       - name: Upload artifacts (always)
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: run_${{ github.run_id }}
           path: |
+            data/**
             outputs/**
-            data/*.csv
             data/_debug/**
             data/_sharp_dump_*.html
           if-no-files-found: warn
