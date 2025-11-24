@@ -308,12 +308,45 @@ jobs:
           mkdir -p data
           mv data/team_week_map*.csv data/team_week_map.csv || true
 
+      - name: Download Stage Inputs
+        run: |
+          echo "Staging PlayerForm inputs..."
+          mkdir -p data/staging
+
+          cp data/player_game_logs.csv data/staging/ || exit 1
+          cp data/player_season_totals.csv data/staging/ || exit 1
+          cp data/team_week_map.csv data/staging/ || exit 1
+
+          echo "Row counts:"
+          wc -l data/staging/*.csv
+
+          if [ ! -s data/staging/player_game_logs.csv ]; then
+            echo "player_game_logs.csv is EMPTY"
+            exit 1
+          fi
+
+          if [ ! -s data/staging/player_season_totals.csv ]; then
+            echo "player_season_totals.csv is EMPTY"
+            exit 1
+          fi
+
+          if [ ! -s data/staging/team_week_map.csv ]; then
+            echo "team_week_map.csv is EMPTY"
+            exit 1
+          fi
+
       - name: Build player_form / consensus
         run: |
           export PYTHONPATH="${PWD}"
+          echo "Building Player Form..."
           python scripts/make_player_form.py \
             --season "${SEASON}" \
-            --date "${SLATE_DATE}"
+            --date "${SLATE_DATE}" || exit 1
+
+          if [ ! -s data/player_form.csv ]; then
+            echo "❌ PlayerForm is EMPTY — stopping pipeline"
+            exit 1
+          fi
 
       - name: Persist state
         if: ${{ always() }}
