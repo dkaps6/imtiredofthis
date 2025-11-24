@@ -6345,8 +6345,9 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
             "[make_player_form] player_season_totals.csv missing; skipping totals enrich"
         )
 
-    # If BOTH logs and totals are missing/empty, this new path is hopeless.
-    # Fall back to the legacy builder which computes everything from PBP.
+    # If BOTH logs and totals are missing/empty, this path has nothing to work with.
+    # Fall back to the legacy PBP-based builder which computes metrics directly
+    # from play-by-play instead of relying on pre-built CSVs.
     if logs.empty and totals.empty:
         logger.error(
             "[make_player_form] No usable game logs or season totals found; "
