@@ -16,6 +16,7 @@ from scripts.utils.canonical_names import (
 )
 
 canon_team_series = _canon_team_series
+_normalize_team_series = canon_team_series
 LOG = logging.getLogger(__name__)
 
 
@@ -308,6 +309,7 @@ __all__ = [
     "CANON_TEAM_CODES",
     "TEAM_REMAP",
     "map_normalize_team",
+    "normalize_team",
     "normalize_team_series",
     "attach_opponent",
 ]
