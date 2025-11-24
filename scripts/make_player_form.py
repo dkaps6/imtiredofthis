@@ -6286,6 +6286,12 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
             )
             logs = pd.DataFrame(columns=["player"])
             partial_flag = 1
+        else:
+            if logs.empty:
+                raise RuntimeError(
+                    "player_game_logs.csv is empty – upstream game log build failed. "
+                    "Ensure your pipeline generates game logs before running make_player_form."
+                )
     else:
         logger.warning(
             "[make_player_form] player_game_logs.csv missing; building partial output"
@@ -6314,6 +6320,12 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
             )
             totals = pd.DataFrame()
             partial_flag = 1
+        else:
+            if totals.empty:
+                raise RuntimeError(
+                    "player_season_totals.csv is empty – upstream season totals build failed. "
+                    "Ensure your pipeline generates season totals before running make_player_form."
+                )
     else:
         totals = pd.DataFrame()
         partial_flag = 1

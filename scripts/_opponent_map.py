@@ -445,6 +445,29 @@ def attach_opponent(
 # ---------------------------------------------------------------------------
 
 
+def normalize_team(team: str) -> str:
+    """
+    Normalize a team name or abbreviation to its canonical 3-letter team code.
+
+    This wrapper delegates to `map_normalize_team` so callers can import
+    `normalize_team` from this module (as expected by make_player_form.py).
+
+    Examples:
+        >>> normalize_team("Niners")
+        'SF'
+        >>> normalize_team("San Francisco 49ers")
+        'SF'
+        >>> normalize_team("sf")
+        'SF'
+
+    If the input cannot be normalized, the original value is returned.
+    """
+    try:
+        return map_normalize_team(team)
+    except Exception:
+        return team
+
+
 def map_normalize_team(x: str | None) -> str | None:
     """
     Backwards-compatible wrapper used by older code that expected
