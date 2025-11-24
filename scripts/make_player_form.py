@@ -6280,6 +6280,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     sched_path = Path("data/team_week_map.csv")
     totals_path = Path("data/player_season_totals.csv")
 
+    # Tracks whether we had to fall back due to missing inputs.
     partial_flag = 0
 
     if roles_path.exists():
@@ -6343,6 +6344,16 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         logger.warning(
             "[make_player_form] player_season_totals.csv missing; skipping totals enrich"
         )
+
+    # If BOTH logs and totals are missing/empty, this new path is hopeless.
+    # Fall back to the legacy builder which computes everything from PBP.
+    if logs.empty and totals.empty:
+        logger.error(
+            "[make_player_form] No usable game logs or season totals found; "
+            "falling back to build_player_form_legacy(season=%s).",
+            season,
+        )
+        return build_player_form_legacy(season=season)
 
     logs_initial_count = len(logs)
 
