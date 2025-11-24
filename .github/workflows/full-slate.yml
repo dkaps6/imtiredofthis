@@ -166,6 +166,17 @@ jobs:
             --season "${SEASON}" \
             --date "${SLATE_DATE}"
 
+      # New: human-friendly artifact for props output
+      - name: Upload props board artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: props_board
+          # adjust these paths if your script writes different filenames
+          path: |
+            outputs/props_enriched.csv
+            outputs/props_raw.csv
+          if-no-files-found: warn
+
   build_opponent_map_from_props:
     runs-on: ubuntu-latest
     needs: [build_team_week_map, fetch_player_props_odds_board]
@@ -511,6 +522,17 @@ jobs:
             --season "${SEASON}" \
             --mode full \
             --date "${SLATE_DATE}"
+
+      # New: single "everything" artifact so the run feels unified
+      - name: Upload full slate outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: full_slate_outputs
+          # grab all CSVs / model outputs that matter
+          path: |
+            data/**/*.csv
+            outputs/**
+          if-no-files-found: warn
 
       - name: Persist state
         if: ${{ always() }}
