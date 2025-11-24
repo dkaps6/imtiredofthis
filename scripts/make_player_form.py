@@ -6417,22 +6417,26 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         pf["season"] = pd.to_numeric(pf["season"], errors="coerce").astype("Int64")
         pf = pf[pf["season"] == pd.Series([SEASON], dtype="Int64").iloc[0]].copy()
 
-    # Overlay opponents using schedule map first, then props map
+    # Overlay opponents using the schedule-based helper.
+    # attach_opponent is intentionally best-effort: if required columns
+    # (season/week/team) are missing it simply returns the original frame.
     try:
         from scripts._opponent_map import attach_opponent, normalize_team as _norm_team_helper
+
         if "team" in pf.columns:
             pf["team"] = _norm_team_helper(pf["team"])
+
         pf = attach_opponent(
             pf,
+            season_col="season",
+            week_col="week",
             team_col="team",
-            coverage_path="data/team_week_map.csv",
-            opponent_col="opponent",
-            inplace=False,
-            week=10,
+            out_col="opponent",
+            schedule_path="data/team_week_map.csv",
         )
-        # Also mirror opponent into opponent_abbr if that column exists
-        if "opponent_abbr" in pf.columns:
-            pf["opponent_abbr"] = pf["opponent_abbr"].fillna(pf.get("opponent"))
+
+        if "opponent_abbr" in pf.columns and "opponent" in pf.columns:
+            pf["opponent_abbr"] = pf["opponent_abbr"].fillna(pf["opponent"])
     except Exception as e:
         print(f"[make_player_form] WARNING: opponent overlay failed: {e}")
 
