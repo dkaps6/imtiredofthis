@@ -193,22 +193,24 @@ jobs:
             exit 1
           fi
 
-      # 8) Build player_form / consensus (script already hard-fails on empty)
-      - name: Build player_form / consensus
+      # 8) Build player_form / consensus (legacy CSV-based)
+      - name: Build player form (legacy CSV-based)
         run: |
           export PYTHONPATH="${PWD}"
-          echo "Building Player Form..."
+          echo "Building Player Form."
           python scripts/make_player_form.py \
-            --season "${SEASON}" \
-            --date "${SLATE_DATE}"
+            --season "${{ env.SEASON }}" \
+            --slate-date "${{ env.SLATE_DATE }}"
 
           if [ ! -s data/player_form.csv ]; then
-            echo "❌ PlayerForm is EMPTY — stopping pipeline"
+            echo "❌ PlayerForm CSV is EMPTY or missing after make_player_form.py"
+            ls -l data || true
             exit 1
           fi
 
           if [ ! -s data/player_form_consensus.csv ]; then
-            echo "❌ PlayerForm consensus is EMPTY — stopping pipeline"
+            echo "❌ PlayerForm consensus CSV is EMPTY or missing after make_player_form.py"
+            ls -l data || true
             exit 1
           fi
 

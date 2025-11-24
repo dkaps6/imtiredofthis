@@ -6549,7 +6549,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
 def cli():
     parser = argparse.ArgumentParser()
     parser.add_argument("--season", type=int, default=2025)
-    parser.add_argument("--date", type=str, required=False)
+    parser.add_argument("--date", "--slate-date", dest="date", type=str, required=False)
     parser.add_argument("--week", type=int, required=False)
     args = parser.parse_args()
 
