@@ -700,7 +700,22 @@ def main():
         pass
 
     # ---- FINALIZE (coerce types, fillna 0.0, clamp shares) ----
-    pf = attach_opponent(pf, team_col="team", coverage_path="data/coverage_cb.csv")
+    # Best-effort schedule-based opponent backfill. Any opponent data already
+    # merged from props (merge_opponent_from_props) is preserved.
+    try:
+        pf = attach_opponent(
+            pf,
+            season_col="season",
+            week_col="week",
+            team_col="team",
+            out_col="opponent",
+            schedule_path=os.path.join(DATA_DIR, "team_week_map.csv"),
+        )
+    except Exception:
+        # Non-fatal: leave existing opponent values as-is so the validator can
+        # still run even if the schedule file is missing or mismatched.
+        pass
+
     pf = finalize_player_form(pf)
 
     consensus = build_player_form_consensus(pf)
