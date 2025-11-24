@@ -1836,6 +1836,46 @@ def _read_csv_safe(path: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def _safe_read_csv(path: Path, label: str) -> pd.DataFrame:
+    """
+    Read a CSV for a *required* input.
+
+    Old behavior was to swallow errors and return an empty DataFrame.
+    That led to hollow PlayerForm outputs (roles-only) and confusing
+    downstream failures in the metrics step.
+
+    New behavior:
+      - If file is missing or 0 bytes → hard fail.
+      - If file exists but cannot be parsed → hard fail.
+      - If file parses but has 0 rows → hard fail.
+
+    This keeps all the pain localized to the build_player_form step so
+    we don't chase "mystery" empty PlayerForm in run_pipeline_full_metrics.
+    """
+    if not path.exists():
+        raise RuntimeError(
+            f"[make_player_form] REQUIRED input '{label}' is missing: {path}"
+        )
+    if path.stat().st_size == 0:
+        raise RuntimeError(
+            f"[make_player_form] REQUIRED input '{label}' is empty (0 bytes): {path}"
+        )
+
+    try:
+        df = pd.read_csv(path)
+    except Exception as err:
+        raise RuntimeError(
+            f"[make_player_form] REQUIRED input '{label}' exists but could not be parsed: {path} ({err})"
+        ) from err
+
+    if df.empty:
+        raise RuntimeError(
+            f"[make_player_form] REQUIRED input '{label}' parsed but has 0 rows: {path}"
+        )
+
+    return df
+
+
 # === SURGICAL ADDITION: merge roles from Ourlads depth charts (clean placement) ===
 def _merge_depth_roles(pf: pd.DataFrame) -> pd.DataFrame:
     import os
@@ -6262,6 +6302,33 @@ def _player_key_from_name(name: object) -> str:
     return last or first
 
 
+def _load_player_logs(
+    logs_path: Path,
+    season_totals_path: Path | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Load per-game and season-total player logs.
+
+    These are REQUIRED for building PlayerForm in the legacy flow.
+    If they are missing / empty / unreadable, we raise and stop here
+    instead of silently writing a roles-only skeleton.
+    """
+    logs = _safe_read_csv(logs_path, "player_game_logs.csv")
+    totals = (
+        _safe_read_csv(season_totals_path, "player_season_totals.csv")
+        if season_totals_path is not None
+        else pd.DataFrame()
+    )
+
+    logger.info("[PlayerForm] Loaded %d game logs before season filter", len(logs))
+    if not totals.empty:
+        logger.info("[PlayerForm] Loaded %d season totals rows", len(totals))
+    else:
+        logger.info("[PlayerForm] No season totals available")
+
+    return logs, totals
+
+
 def build_player_form(season: int = 2025) -> pd.DataFrame:
     season = int(season)
     target_season = SEASON
@@ -6289,27 +6356,7 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         logger.warning("[make_player_form] roles_ourlads.csv missing; continuing with empty roles")
         roles = pd.DataFrame(columns=["player", "team"])
 
-    if logs_path.exists():
-        try:
-            logs = pd.read_csv(logs_path)
-        except Exception as err:
-            logger.warning(
-                "[make_player_form] failed reading %s: %s", logs_path, err
-            )
-            logs = pd.DataFrame(columns=["player"])
-            partial_flag = 1
-        else:
-            if logs.empty:
-                raise RuntimeError(
-                    "player_game_logs.csv is empty – upstream game log build failed. "
-                    "Ensure your pipeline generates game logs before running make_player_form."
-                )
-    else:
-        logger.warning(
-            "[make_player_form] player_game_logs.csv missing; building partial output"
-        )
-        logs = pd.DataFrame(columns=["player"])
-        partial_flag = 1
+    logs, totals = _load_player_logs(logs_path, totals_path)
 
     if sched_path.exists():
         try:
@@ -6322,28 +6369,6 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     else:
         logger.warning("[make_player_form] team_week_map.csv missing; schedule enrich skipped")
         sched = pd.DataFrame()
-
-    if totals_path.exists():
-        try:
-            totals = pd.read_csv(totals_path)
-        except Exception as err:
-            logger.warning(
-                "[make_player_form] failed reading %s: %s", totals_path, err
-            )
-            totals = pd.DataFrame()
-            partial_flag = 1
-        else:
-            if totals.empty:
-                raise RuntimeError(
-                    "player_season_totals.csv is empty – upstream season totals build failed. "
-                    "Ensure your pipeline generates season totals before running make_player_form."
-                )
-    else:
-        totals = pd.DataFrame()
-        partial_flag = 1
-        logger.warning(
-            "[make_player_form] player_season_totals.csv missing; skipping totals enrich"
-        )
 
     # If BOTH logs and totals are missing/empty, this path has nothing to work with.
     # Fall back to the legacy PBP-based builder which computes metrics directly
@@ -6454,19 +6479,17 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
 
     merged = pf.copy()
 
-    if merged.empty and not roles.empty:
-        fallback = roles.copy()
-        fallback["season"] = season
-        fallback["week"] = pd.NA
-        fallback["opponent"] = pd.NA
-        fallback["opponent_abbr"] = pd.NA
-        fallback["player_source_name"] = fallback.get("player", pd.Series("", index=fallback.index))
-        fallback["team_abbr"] = fallback.get("team", pd.Series("", index=fallback.index)).astype("string").str.upper()
-        fallback["partial"] = 1
-        merged = fallback
-        partial_flag = 1
-    else:
-        merged["partial"] = partial_flag
+    # If everything ended up empty here, treat it as a hard failure.
+    # At this point we *know* logs and schedule loaded, so an empty
+    # PlayerForm means our merge logic dropped everything.
+    if merged.empty:
+        raise RuntimeError(
+            "[make_player_form] PlayerForm is EMPTY after merges even though "
+            "logs and roles were loaded. This usually means a bad join key "
+            "(season/week/team/opponent) or a bug in the merge logic."
+        )
+
+    merged["partial"] = partial_flag
 
     if "player_source_name" not in merged.columns:
         source_series = None
