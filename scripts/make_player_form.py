@@ -6562,7 +6562,14 @@ def cli():
     global CURRENT_SEASON
     CURRENT_SEASON = season_value
 
-    build_player_form(season=season_value)
+    # Use the legacy PBP-based builder as the canonical path.
+    # This path fetches/derives everything from play-by-play and does not
+    # require pre-baked player_game_logs / player_season_totals CSVs.
+    build_player_form_legacy(
+        season=season_value,
+        slate_date=args.date,
+        week=args.week,
+    )
 
 
 if __name__ == "__main__":
