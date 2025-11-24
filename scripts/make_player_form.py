@@ -944,9 +944,10 @@ def _canonical_identity_fields(raw_name: str) -> Tuple[str, str, str]:
         else:
             first = " ".join(parts[:-1])
             last = parts[-1]
-        first_initial = re.sub(r"[^a-z]", "", first[:1].lower())
-        last_clean = re.sub(r"[^a-z]", "", last.lower())
-        player_key = first_initial + last_clean
+        first_clean = re.sub(r"[^a-z]", "", first.lower()).strip()
+        last_clean = re.sub(r"[^a-z]", "", last.lower()).strip()
+        player_key = f"{first_clean} {last_clean}".strip()
+        player_key = re.sub(r"\s+", " ", player_key)
         if not player_key:
             player_key = re.sub(r"[^a-z]", "", first.lower())
 
@@ -4076,10 +4077,15 @@ def _enrich_team_and_opponent_from_props(
     first = split_parts.str[0].fillna("")
     last = split_parts.str[-1].fillna("")
     generated_key = (
-        first.str[:1].fillna("").str.lower() + last.fillna("").str.lower()
+        first.fillna("").str.lower().str.strip()
+        + " "
+        + last.fillna("").str.lower().str.strip()
     )
+    generated_key = generated_key.str.replace(r"\s+", " ", regex=True).str.strip()
     fallback_mask = last.str.strip().eq("")
-    generated_key = generated_key.where(~fallback_mask, first.str.lower())
+    generated_key = generated_key.where(
+        ~fallback_mask, first.str.lower().str.replace(r"\s+", " ", regex=True).str.strip()
+    )
     identity = identity.rename(columns={"player_key_seed": "player_key"})
     identity["player_key"] = identity["player_key"].astype(str)
     empty_mask = identity["player_key"].str.strip().eq("")
@@ -5000,10 +5006,15 @@ def _attach_consensus_keys(df: pd.DataFrame) -> pd.DataFrame:
     first = split_parts.str[0].fillna("")
     last = split_parts.str[-1].fillna("")
     generated_key = (
-        first.str[:1].fillna("").str.lower() + last.fillna("").str.lower()
+        first.fillna("").str.lower().str.strip()
+        + " "
+        + last.fillna("").str.lower().str.strip()
     )
+    generated_key = generated_key.str.replace(r"\s+", " ", regex=True).str.strip()
     fallback_mask = last.str.strip().eq("")
-    generated_key = generated_key.where(~fallback_mask, first.str.lower())
+    generated_key = generated_key.where(
+        ~fallback_mask, first.str.lower().str.replace(r"\s+", " ", regex=True).str.strip()
+    )
 
     canonical_df = canonical_df.rename(columns={"player_key_seed": "player_key"})
     canonical_df["player_key"] = canonical_df["player_key"].astype(str)

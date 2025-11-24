@@ -10,24 +10,45 @@ import pandas as pd
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = REPO_ROOT / "data"
 
-from scripts.utils.canonical_names import (
-    canon_team,
-    canon_team_series as _canon_team_series,
-)
+from scripts.utils.canonical_names import canon_team_series as _canon_team_series
 
 canon_team_series = _canon_team_series
-_normalize_team_series = canon_team_series
 LOG = logging.getLogger(__name__)
 
 
-def normalize_team_series(s: pd.Series) -> pd.Series:
-    """
-    Legacy shim: older code imports normalize_team_series from this module.
-    Internally we just delegate to scripts.utils.canonical_names.canon_team_series
-    so all team-abbreviation logic stays centralized.
-    """
+# ------------------------------------------------------------------
+# LEGACY NORMALIZATION SHIM (REQUIRED BY build_team_week_map)
+# ------------------------------------------------------------------
+_PUNCT = re.compile(r"[.\u2019\u2018'`]")
+_WS = re.compile(r"\s+")
 
-    return canon_team_series(s)
+
+def _clean_token(name: str | None) -> str:
+    text = "" if name is None else str(name)
+    text = text.strip()
+    if not text:
+        return ""
+    text = _PUNCT.sub("", text)
+    text = _WS.sub(" ", text)
+    return text
+
+
+def canon_team(name: str) -> str:
+    """Backwards compatible team normalizer."""
+
+    cleaned = _clean_token(name)
+    return cleaned.upper()
+
+
+def map_normalize_team(x: str | None) -> str | None:
+    if x is None:
+        return None
+    val = canon_team(x)
+    return val if val else None
+
+
+def normalize_team_series(s):
+    return s.apply(map_normalize_team)
 
 
 # ---------------------------------------------------------------------------
@@ -469,28 +490,3 @@ def normalize_team(team: str) -> str:
     except Exception:
         return team
 
-
-def map_normalize_team(x: str | None) -> str | None:
-    """
-    Backwards-compatible wrapper used by older code that expected
-    map_normalize_team in this module.
-
-    It just delegates to scripts.utils.canonical_names.canon_team and
-    normalizes empty / unknown values to None.
-    """
-    if x is None:
-        return None
-    val = canon_team(str(x))
-    return val or None
-
-
-def normalize_team_series(s: pd.Series) -> pd.Series:
-    """
-    Backwards-compatible shim so legacy callers that import
-    `normalize_team_series` from `scripts._opponent_map` keep working.
-
-    The real implementation now lives in
-    `scripts.utils.canonical_names.normalize_team_series`, so this
-    simply forwards there.
-    """
-    return _normalize_team_series(s)
