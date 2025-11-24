@@ -5916,6 +5916,9 @@ def _write_player_form_outputs(
     # ------------------------------------------------------------
 
     if player_form.empty:
+        # At this point something upstream has gone badly wrong (logs/schedule
+        # merge, opponent mapping, etc.). We still try to dump a debug sample
+        # and then we HARD-FAIL so downstream metrics never see an empty file.
         try:
             debug_path = Path("data/_debug/player_form_mismatch_sample.csv")
             debug_path.parent.mkdir(parents=True, exist_ok=True)
@@ -5944,19 +5947,16 @@ def _write_player_form_outputs(
                 "[make_player_form] failed to write mismatch sample: %s",
                 debug_err,
             )
-        logger.warning("[make_player_form] final player_form empty; writing headers only.")
-        placeholder = _enforce_player_form_schema(pd.DataFrame())
-        PLAYER_FORM_OUT.parent.mkdir(parents=True, exist_ok=True)
-        placeholder.to_csv(PLAYER_FORM_OUT, index=False)
 
-        empty_consensus = _build_grouped_consensus(placeholder)
-        empty_consensus = _enforce_consensus_schema(empty_consensus)
-        empty_consensus = _attach_player_identity(empty_consensus, team_columns=("team_abbr", "team"))
-        empty_consensus = _reorder_identity_columns(empty_consensus)
-        PLAYER_FORM_CONSENSUS_OUT.parent.mkdir(parents=True, exist_ok=True)
-        empty_consensus.to_csv(PLAYER_FORM_CONSENSUS_OUT, index=False)
+        logger.error(
+            "[make_player_form] final player_form is EMPTY after all joins. "
+            "This is a fatal condition; see data/_debug/player_form_mismatch_sample.csv "
+            "and upstream inputs (player_game_logs, team_week_map, roles_ourlads, opponent map)."
+        )
 
-        return placeholder
+        # Do NOT write placeholder CSVs here; fail fast so the build_player_form_consensus
+        # job surfaces the real issue and run_pipeline_full_metrics never starts.
+        raise RuntimeError("player_form is empty after normalization and joins")
 
     missing_opponent_count = (
         player_form["opponent"].isna().sum()

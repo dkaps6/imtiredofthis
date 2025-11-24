@@ -355,7 +355,12 @@ jobs:
             --date "${SLATE_DATE}" || exit 1
 
           if [ ! -s data/player_form.csv ]; then
-            echo "❌ PlayerForm is EMPTY — stopping pipeline"
+            echo "❌ PlayerForm is EMPTY (no rows/bytes) — stopping pipeline"
+            exit 1
+          fi
+
+          if [ ! -s data/player_form_consensus.csv ]; then
+            echo "❌ PlayerForm consensus is EMPTY — stopping pipeline"
             exit 1
           fi
 

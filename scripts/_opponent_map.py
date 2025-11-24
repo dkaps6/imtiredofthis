@@ -12,6 +12,8 @@ DATA_DIR = REPO_ROOT / "data"
 
 from scripts.utils.canonical_names import canon_team_series as _canon_team_series
 
+# Re-export canon_team_series so downstream callers can rely on the shared
+# canonical mapping logic from scripts.utils.canonical_names
 canon_team_series = _canon_team_series
 LOG = logging.getLogger(__name__)
 
@@ -33,22 +35,35 @@ def _clean_token(name: str | None) -> str:
     return text
 
 
-def canon_team(name: str) -> str:
-    """Backwards compatible team normalizer."""
+def canon_team(name: str | None) -> str:
+    """
+    Backwards compatible team normalizer.
 
-    cleaned = _clean_token(name)
-    return cleaned.upper()
+    Delegate to scripts.utils.canonical_names.canon_team so there is a single
+    source of truth for team alias handling.
+    """
+
+    from scripts.utils.canonical_names import canon_team as _canon_team  # local import to avoid import cycles
+
+    return _canon_team(name)
 
 
-def map_normalize_team(x: str | None) -> str | None:
-    if x is None:
-        return None
-    val = canon_team(x)
-    return val if val else None
+def map_normalize_team(x):
+    # Kept for backwards compatibility, but prefer normalize_team_series / canon_team_series
+    if pd.isna(x):
+        return x
+    return canon_team(str(x))
 
 
-def normalize_team_series(s):
-    return s.apply(map_normalize_team)
+def normalize_team_series(s: pd.Series) -> pd.Series:
+    """
+    Backwards-compatible team-series normalizer.
+
+    Delegate to scripts.utils.canonical_names.canon_team_series so all codepaths
+    share the same alias + cleanup rules.
+    """
+
+    return _canon_team_series(s)
 
 
 # ---------------------------------------------------------------------------
