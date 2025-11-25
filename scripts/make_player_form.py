@@ -6489,6 +6489,23 @@ def build_player_form(
     if "season" in logs.columns:
         print(f"[PlayerForm] Retained {len(logs)} logs for season {season}")
 
+    # Ensure logs has a player column before applying key normalization. Older
+    # inputs may carry a different name field; promote the first available
+    # candidate and fail fast with a clear error if none are present.
+    if "player" not in logs.columns:
+        candidate_cols = [c for c in ["player_name", "display_name", "name"] if c in logs.columns]
+        if candidate_cols:
+            src = candidate_cols[0]
+            print(
+                f"[PlayerForm] 'player' column missing on logs; using '{src}' as the source for player names."
+            )
+            logs["player"] = logs[src].astype("string")
+        else:
+            raise RuntimeError(
+                "[PlayerForm] logs is missing a 'player' column and no fallback name-like columns were found. "
+                f"Columns present on logs: {list(logs.columns)}"
+            )
+
     roles["player_key"] = roles["player"].apply(normalize_name)
     roles["player_clean_key"] = roles["player"].apply(normalize_name)
     logs["player_key"] = logs["player"].apply(normalize_name)
