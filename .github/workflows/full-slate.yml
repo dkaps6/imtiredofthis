@@ -50,6 +50,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          python - << 'EOF'
+from importlib import import_module
+for pkg in ["nfl_data_py", "nflreadpy"]:
+    import_module(pkg)
+    print(f"{pkg} OK")
+EOF
 
       - name: Install extra deps for props script
         run: |
