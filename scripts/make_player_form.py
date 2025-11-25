@@ -1861,38 +1861,55 @@ def _safe_read_csv(path: Path | str, label: str = "") -> pd.DataFrame:
 
 def _fetch_player_logs(season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Always fetch normalized game logs and season totals for the given season.
+    Legacy helper used by ``main`` to obtain per-game and season-total logs.
 
-    This is the *only* place we build player logs now. We do not trust any
-    pre-existing CSVs on disk, because they can be stale or header-only.
+    This wrapper now delegates CSV I/O to ``_load_player_logs`` and then
+    normalizes keys/opponents via ``normalize_game_logs`` and
+    ``normalize_season_totals``.
+
+    NOTE:
+    ``normalize_game_logs`` no longer accepts a ``season`` keyword
+    argument – season scoping is handled *after* normalization via
+    ``_filter_to_season``.  Passing ``season=`` is what produced:
+        TypeError: normalize_game_logs() got an unexpected keyword argument 'season'
     """
-    logger.info("[pf] fetching normalized game logs and season totals for %s", season)
 
-    game_logs = normalize_game_logs(
-        _safe_read_csv(PLAYER_GAME_LOGS_OUT),
+    # Read whatever is on disk (the staging step may or may not have
+    # created these yet; if they are missing/empty, _load_player_logs
+    # will raise or log appropriately).
+    logs, totals = _load_player_logs(
+        PLAYER_GAME_LOGS_OUT,
+        season_totals_path=PLAYER_SEASON_TOTALS_OUT,
+    )
+
+    logger.info("[PlayerForm] _fetch_player_logs: raw logs rows=%d", len(logs))
+
+    # Enforce season scope BEFORE we complain about emptiness.
+    logs = _filter_to_season(logs, season)
+    totals = _filter_to_season(totals, season)
+
+    logger.info(
+        "[PlayerForm] _fetch_player_logs: logs rows after season=%d, totals rows=%d",
+        len(logs),
+        len(totals),
+    )
+
+    if logs.empty:
+        raise RuntimeError(
+            f"[PlayerForm] player_game_logs.csv is empty after season filter for "
+            f"season {season} – upstream log builder wrote no rows."
+        )
+
+    # Normalize join keys + opponent context.  DO NOT pass season= here;
+    # normalize_game_logs only takes (frame, team_week_map, props_map).
+    logs = normalize_game_logs(
+        logs,
         team_week_map=TEAM_WEEK_MAP_PATH,
         props_map=OPPONENT_MAP_PATH,
     )
-    season_totals = normalize_season_totals(_safe_read_csv(PLAYER_SEASON_TOTALS_OUT))
+    totals = normalize_season_totals(totals)
 
-    game_logs = _filter_to_season(game_logs, season)
-    season_totals = _filter_to_season(season_totals, season)
-
-    logger.info(
-        "[pf] normalized logs: game_logs=%d, season_totals=%d",
-        0 if game_logs is None else len(game_logs),
-        0 if season_totals is None else len(season_totals),
-    )
-
-    # persist for debugging / local inspection only
-    PLAYER_GAME_LOGS_OUT.parent.mkdir(parents=True, exist_ok=True)
-    PLAYER_SEASON_TOTALS_OUT.parent.mkdir(parents=True, exist_ok=True)
-    if game_logs is not None and not game_logs.empty:
-        game_logs.to_csv(PLAYER_GAME_LOGS_OUT, index=False)
-    if season_totals is not None and not season_totals.empty:
-        season_totals.to_csv(PLAYER_SEASON_TOTALS_OUT, index=False)
-
-    return game_logs, season_totals
+    return logs, totals
 
 
 # === SURGICAL ADDITION: merge roles from Ourlads depth charts (clean placement) ===
