@@ -48,8 +48,50 @@ from scripts.utils.canonical_names import (
 from scripts.utils.name_canon import make_player_key
 from scripts.utils.name_clean import canonical_key, canonical_player, canonicalize, normalize_team
 from scripts.utils.normalize_players import normalize_game_logs, normalize_season_totals
-# nflreadr is required; fail fast if missing
-from nflreadr import load_pbp
+###############################################################################
+# PBP loader compatibility layer
+#
+# Historically this script used the R package `nflreadr` via reticulate-style
+# patterns. In CI we are pure Python, so we provide a local `load_pbp`
+# implementation that mimics the nflreadr API but is backed by Python libs.
+###############################################################################
+try:
+    # Preferred: Python port of nflreadr
+    import nflreadpy as _nfl
+
+    def load_pbp(seasons=None, **kwargs):
+        """
+        Compatibility wrapper for nflreadr::load_pbp using nflreadpy.
+
+        - `seasons` can be an int, list of ints, or None (current season).
+        - Returns a pandas.DataFrame so downstream code does not need changes.
+        """
+        pbp_pl = _nfl.load_pbp(seasons)
+        # nflreadpy returns a Polars DataFrame; convert if possible
+        try:
+            return pbp_pl.to_pandas()
+        except AttributeError:
+            return pbp_pl
+
+except ImportError:
+    # Fallback: use nfl_data_py if nflreadpy is not available.
+    from nfl_data_py import import_pbp_data as _import_pbp_data
+
+    def load_pbp(seasons=None, **kwargs):
+        """
+        Fallback PBP loader using nfl_data_py.import_pbp_data.
+        """
+        if seasons is None:
+            raise RuntimeError(
+                "load_pbp() called without seasons and nflreadpy is unavailable. "
+                "Pass explicit seasons or install nflreadpy."
+            )
+        if isinstance(seasons, (list, tuple, set)):
+            season_list = [int(s) for s in seasons]
+        else:
+            season_list = [int(seasons)]
+        return _import_pbp_data(season_list)
+
 from scripts.utils.team_codes import canon_team
 
 logger = logging.getLogger(__name__)
