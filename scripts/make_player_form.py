@@ -1869,15 +1869,11 @@ def _fetch_player_logs(season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     logger.info("[pf] fetching normalized game logs and season totals for %s", season)
 
     game_logs = normalize_game_logs(
-        season=season,
-        team_week_path=str(TEAM_WEEK_MAP_PATH),
-        opponent_map_path=str(OPPONENT_MAP_PATH),
+        _safe_read_csv(PLAYER_GAME_LOGS_OUT),
+        team_week_map=TEAM_WEEK_MAP_PATH,
+        props_map=OPPONENT_MAP_PATH,
     )
-    season_totals = normalize_season_totals(
-        season=season,
-        team_week_path=str(TEAM_WEEK_MAP_PATH),
-        opponent_map_path=str(OPPONENT_MAP_PATH),
-    )
+    season_totals = normalize_season_totals(_safe_read_csv(PLAYER_SEASON_TOTALS_OUT))
 
     game_logs = _filter_to_season(game_logs, season)
     season_totals = _filter_to_season(season_totals, season)
