@@ -46,6 +46,7 @@ from scripts.utils.canonical_names import (
 from scripts.utils.name_canon import make_player_key
 from scripts.utils.name_clean import canonical_key, canonical_player, canonicalize, normalize_team
 from scripts.utils.normalize_players import normalize_game_logs, normalize_season_totals
+from nflreadr import load_pbp
 from scripts.utils.team_codes import canon_team
 
 logger = logging.getLogger(__name__)
@@ -2601,38 +2602,6 @@ def _load_schedule_map(season: int) -> pd.DataFrame:
         df["away_team"].astype(str).str.upper().str.strip().map(_canon_team)
     )
     return df[["game_id", "home_team", "away_team"]].drop_duplicates()
-
-
-def load_pbp(season: int) -> pd.DataFrame:
-    # explicit, version-safe loader with diagnostics
-    rows = -1
-    try:
-        if NFL_PKG == "nflreadpy":
-            raw = NFLV.load_pbp(seasons=[season])
-        else:
-            # nfl_data_py has had both names in the wild
-            if hasattr(NFLV, "import_pbp_data"):
-                raw = NFLV.import_pbp_data([season], downcast=True)  # type: ignore
-            elif hasattr(NFLV, "import_pbp"):
-                raw = NFLV.import_pbp([season])  # type: ignore
-            else:
-                raise RuntimeError("nfl_data_py missing import_pbp(_data) functions")
-        pbp = _to_pandas(raw)
-        pbp.columns = [c.lower() for c in pbp.columns]
-        rows = len(pbp)
-        print(
-            f"[pf] PBP loaded for {season}: rows={rows}, sample_cols={list(pbp.columns[:10])}"
-        )
-        if rows == 0:
-            raise RuntimeError("PBP returned 0 rows (unexpected for active season).")
-        return pbp
-    except Exception as e:
-        print(
-            f"[pf] ERROR loading PBP {season}: {type(e).__name__}: {e}", file=sys.stderr
-        )
-        return pd.DataFrame()
-
-
 def _load_weekly_rosters(season: int) -> pd.DataFrame:
     """(player, team, position), forgiving team keys."""
     try:
@@ -6706,12 +6675,7 @@ def cli() -> int:
     """
     Entry point used by the GitHub Action.
 
-    IMPORTANT:
-      - We *do not* depend on pre-written data/player_game_logs.csv or
-        data/player_season_totals.csv anymore.
-      - Those CSVs are treated as OUTPUTS of build_player_form_legacy, not inputs.
-      - build_player_form_legacy is responsible for fetching/deriving everything
-        from nflverse/nflreadr play-by-play for the requested season.
+    Always fetches live play-by-play and fails hard if outputs are empty.
     """
 
     parser = argparse.ArgumentParser()
@@ -6733,23 +6697,50 @@ def cli() -> int:
     global CURRENT_SEASON
     CURRENT_SEASON = season_value
 
-    logger.info(
-        "[make_player_form] starting legacy PBP builder for season=%s date=%s week=%s",
-        season_value,
-        args.date,
-        args.week,
+    logger.info("[make_player_form] forcing live PBP fetch…")
+
+    # --- ALWAYS FETCH LIVE DATA ---
+    pbp = load_pbp(season_value)
+    if pbp is None or pbp.empty:
+        raise RuntimeError(
+            f"[make_player_form] FATAL: load_pbp({season_value}) returned empty frame"
+        )
+
+    logger.info(f"[make_player_form] PBP rows: {len(pbp)}")
+
+    # --- BUILD LOGS ---
+    game_logs = normalize_game_logs(
+        pbp,
+        team_week_map=TEAM_WEEK_MAP_PATH,
+        props_map=OPPONENT_MAP_PATH,
     )
 
-    # Canonical path: build from play-by-play and write:
-    #   - data/player_form.csv
-    #   - data/player_form_consensus.csv
-    #   - data/player_game_logs.csv
-    #   - data/player_season_totals.csv
-    build_player_form_legacy(
-        season=season_value,
-        slate_date=args.date,
-        week=args.week,
-    )
+    if game_logs is None or game_logs.empty:
+        raise RuntimeError("[make_player_form] FATAL: normalized game_logs empty")
+
+    season_totals = normalize_season_totals(game_logs)
+
+    # --- WRITE SIDE EFFECT FILES ---
+    Path(DATA_DIR).mkdir(exist_ok=True, parents=True)
+    game_logs.to_csv(PLAYER_GAME_LOGS_OUT, index=False)
+    if season_totals is not None and not season_totals.empty:
+        season_totals.to_csv(PLAYER_SEASON_TOTALS_OUT, index=False)
+
+    pf = build_player_form(game_logs, season_totals)
+
+    if pf is None or pf.empty:
+        raise RuntimeError("[make_player_form] FATAL: player_form empty after build")
+
+    pf.to_csv(PLAYER_FORM_OUT, index=False)
+
+    consensus = _build_season_consensus(pf)
+
+    if consensus is None or consensus.empty:
+        raise RuntimeError("[make_player_form] FATAL: consensus empty")
+
+    consensus.to_csv(PLAYER_FORM_CONSENSUS_OUT, index=False)
+
+    logger.info("[make_player_form] finished successfully")
 
     return 0
 
