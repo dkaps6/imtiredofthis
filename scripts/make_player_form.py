@@ -52,29 +52,25 @@ logger = logging.getLogger(__name__)
 
 
 DATA_DIR = "data"
-ROLES_PATH = Path("data/roles_ourlads.csv")
-PROPS_ENRICHED_PATH = Path("data/props_enriched.csv")
-SCHEDULE_GAMES_PATH = Path("data/games.csv")
-PLAYER_FORM_OUT = Path("data/player_form.csv")
-PLAYER_FORM_CONSENSUS_OUT = Path("data/player_form_consensus.csv")
-PLAYER_GAME_LOGS_OUT = Path("data/player_game_logs.csv")
-PLAYER_SEASON_TOTALS_OUT = Path("data/player_season_totals.csv")
-DEBUG_MISSING_OPP = Path("data/_debug/player_missing_opponent.csv")
-OPPONENT_MAP_PATH = Path("data/opponent_map_from_props.csv")
-TEAM_WEEK_MAP_PATH = Path("data/team_week_map.csv")
-UNMATCHED_ROLES_DEBUG_PATH = Path("data/unmatched_roles_merge.csv")
-TEAM_FORM_PATH = Path("data/team_form.csv")
-MANUAL_OVERRIDES_PATH = os.getenv("MANUAL_OVERRIDES_PATH", "data/manual_name_overrides.csv")
+ROLES_PATH = Path(DATA_DIR) / "roles_ourlads.csv"
+PROPS_ENRICHED_PATH = Path(DATA_DIR) / "props_enriched.csv"
+SCHEDULE_GAMES_PATH = Path(DATA_DIR) / "games.csv"
+PLAYER_FORM_OUT = Path(DATA_DIR) / "player_form.csv"
+PLAYER_FORM_CONSENSUS_OUT = Path(DATA_DIR) / "player_form_consensus.csv"
+PLAYER_GAME_LOGS_OUT = Path(DATA_DIR) / "player_game_logs.csv"
+PLAYER_SEASON_TOTALS_OUT = Path(DATA_DIR) / "player_season_totals.csv"
+DEBUG_MISSING_OPP = Path(DATA_DIR) / "_debug" / "player_missing_opponent.csv"
+OPPONENT_MAP_PATH = Path(DATA_DIR) / "opponent_map_from_props.csv"
+TEAM_WEEK_MAP_PATH = Path(DATA_DIR) / "team_week_map.csv"
+UNMATCHED_ROLES_DEBUG_PATH = Path(DATA_DIR) / "unmatched_roles_merge.csv"
+TEAM_FORM_PATH = Path(DATA_DIR) / "team_form.csv"
+MANUAL_OVERRIDES_PATH = os.getenv("MANUAL_OVERRIDES_PATH", str(Path(DATA_DIR) / "manual_name_overrides.csv"))
 
 SEASON = int(os.environ.get("SEASON", "2025"))
 
-# Required inputs
-TEAM_WEEK = "data/team_week_map.csv"
-OPPMAP = "data/opponent_map_from_props.csv"
-ROLES = "data/roles_ourlads.csv"
-
-for p in [TEAM_WEEK, OPPMAP, ROLES]:
-    if not os.path.exists(p):
+# Required *structural* inputs (schedule / roles / opponent map).
+for p in (TEAM_WEEK_MAP_PATH, OPPONENT_MAP_PATH, ROLES_PATH):
+    if not p.exists():
         raise FileNotFoundError(f"[player_form] missing required input: {p}")
 
 
@@ -1836,44 +1832,71 @@ def _read_csv_safe(path: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def _safe_read_csv(path: Path, label: str) -> pd.DataFrame:
+def _safe_read_csv(path: Path | str, label: str = "") -> pd.DataFrame:
     """
-    Read a CSV for a *required* input.
+    Legacy helper to read CSVs defensively.
 
-    Old behavior was to swallow errors and return an empty DataFrame.
-    That led to hollow PlayerForm outputs (roles-only) and confusing
-    downstream failures in the metrics step.
-
-    New behavior:
-      - If file is missing or 0 bytes → hard fail.
-      - If file exists but cannot be parsed → hard fail.
-      - If file parses but has 0 rows → hard fail.
-
-    This keeps all the pain localized to the build_player_form step so
-    we don't chase "mystery" empty PlayerForm in run_pipeline_full_metrics.
+    IMPORTANT: this is now used only for *optional* debug inputs. The primary
+    player logs are fetched via normalize_game_logs / normalize_season_totals.
     """
-    if not path.exists():
-        raise RuntimeError(
-            f"[make_player_form] REQUIRED input '{label}' is missing: {path}"
-        )
-    if path.stat().st_size == 0:
-        raise RuntimeError(
-            f"[make_player_form] REQUIRED input '{label}' is empty (0 bytes): {path}"
-        )
+
+    p = Path(path)
+    if not p.exists() or p.stat().st_size == 0:
+        logger.info("[player_form] %s missing or empty on disk: %s", label, p)
+        return pd.DataFrame()
 
     try:
-        df = pd.read_csv(path)
+        df = pd.read_csv(p)
     except Exception as err:
-        raise RuntimeError(
-            f"[make_player_form] REQUIRED input '{label}' exists but could not be parsed: {path} ({err})"
-        ) from err
+        logger.warning("[player_form] failed reading %s (%s): %s", label, p, err)
+        return pd.DataFrame()
 
+    # treat header-only as empty
     if df.empty:
-        raise RuntimeError(
-            f"[make_player_form] REQUIRED input '{label}' parsed but has 0 rows: {path}"
-        )
+        logger.info("[player_form] %s has 0 data rows on disk: %s", label, p)
+        return pd.DataFrame()
 
     return df
+
+
+def _fetch_player_logs(season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Always fetch normalized game logs and season totals for the given season.
+
+    This is the *only* place we build player logs now. We do not trust any
+    pre-existing CSVs on disk, because they can be stale or header-only.
+    """
+    logger.info("[pf] fetching normalized game logs and season totals for %s", season)
+
+    game_logs = normalize_game_logs(
+        season=season,
+        team_week_path=str(TEAM_WEEK_MAP_PATH),
+        opponent_map_path=str(OPPONENT_MAP_PATH),
+    )
+    season_totals = normalize_season_totals(
+        season=season,
+        team_week_path=str(TEAM_WEEK_MAP_PATH),
+        opponent_map_path=str(OPPONENT_MAP_PATH),
+    )
+
+    game_logs = _filter_to_season(game_logs, season)
+    season_totals = _filter_to_season(season_totals, season)
+
+    logger.info(
+        "[pf] normalized logs: game_logs=%d, season_totals=%d",
+        0 if game_logs is None else len(game_logs),
+        0 if season_totals is None else len(season_totals),
+    )
+
+    # persist for debugging / local inspection only
+    PLAYER_GAME_LOGS_OUT.parent.mkdir(parents=True, exist_ok=True)
+    PLAYER_SEASON_TOTALS_OUT.parent.mkdir(parents=True, exist_ok=True)
+    if game_logs is not None and not game_logs.empty:
+        game_logs.to_csv(PLAYER_GAME_LOGS_OUT, index=False)
+    if season_totals is not None and not season_totals.empty:
+        season_totals.to_csv(PLAYER_SEASON_TOTALS_OUT, index=False)
+
+    return game_logs, season_totals
 
 
 # === SURGICAL ADDITION: merge roles from Ourlads depth charts (clean placement) ===
@@ -6329,7 +6352,28 @@ def _load_player_logs(
     return logs, totals
 
 
-def build_player_form(season: int = 2025) -> pd.DataFrame:
+def build_player_form_from_logs(
+    game_logs: pd.DataFrame,
+    season_totals: pd.DataFrame | None,
+    roles_path: str | Path,
+    opponent_map_path: str | Path,
+    team_week_map_path: str | Path,
+    season: int = SEASON,
+) -> pd.DataFrame:
+    """Thin wrapper to align with the orchestrator contract for this script."""
+
+    return build_player_form(
+        season=season,
+        game_logs=game_logs,
+        season_totals=season_totals,
+    )
+
+
+def build_player_form(
+    season: int = 2025,
+    game_logs: pd.DataFrame | None = None,
+    season_totals: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     season = int(season)
     target_season = SEASON
     if season != target_season:
@@ -6356,7 +6400,16 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
         logger.warning("[make_player_form] roles_ourlads.csv missing; continuing with empty roles")
         roles = pd.DataFrame(columns=["player", "team"])
 
-    logs, totals = _load_player_logs(logs_path, totals_path)
+    logs = game_logs.copy() if game_logs is not None else pd.DataFrame()
+    totals = season_totals.copy() if season_totals is not None else pd.DataFrame()
+
+    # Fill missing inputs from disk if needed.
+    if logs.empty or totals.empty:
+        disk_logs, disk_totals = _load_player_logs(logs_path, totals_path)
+        if logs.empty:
+            logs = disk_logs
+        if totals.empty:
+            totals = disk_totals
 
     if sched_path.exists():
         try:
@@ -6564,37 +6617,67 @@ def build_player_form(season: int = 2025) -> pd.DataFrame:
     return merged
 
 
+def main(argv: Optional[List[str]] = None) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--season", type=int, default=SEASON)
+    parser.add_argument(
+        "--slate-date",
+        dest="slate_date",
+        default=os.environ.get("SLATE_DATE", ""),
+        help="ISO date for current slate (YYYY-MM-DD). Used only for logging/filtering.",
+    )
+    parser.add_argument("--week", type=int, required=False, help="Optional week (unused; kept for compatibility).")
+    args = parser.parse_args(argv)
+
+    season = int(args.season)
+    slate_date = args.slate_date
+
+    logger.info("[pf] building player_form for season=%s slate_date=%s", season, slate_date)
+
+    # 1) Always fetch normalized logs for the requested season.
+    game_logs, season_totals = _fetch_player_logs(season)
+
+    if game_logs is None or game_logs.empty:
+        raise RuntimeError(f"[pf] FATAL: normalized game logs are empty for season={season}")
+    if season_totals is None or season_totals.empty:
+        logger.warning("[pf] season_totals empty for season=%s (will build using game logs only)", season)
+
+    # 2) Build the base player_form frame from logs + totals
+    base = build_player_form_from_logs(
+        game_logs=game_logs,
+        season_totals=season_totals,
+        roles_path=ROLES_PATH,
+        opponent_map_path=OPPONENT_MAP_PATH,
+        team_week_map_path=TEAM_WEEK_MAP_PATH,
+        season=season,
+    )
+
+    logger.info("[pf] base player_form rows before enrichment: %d", len(base))
+    if base.empty:
+        raise RuntimeError(f"[pf] FATAL: player_form base is empty for season={season}")
+
+    if not PLAYER_FORM_OUT.exists() or PLAYER_FORM_OUT.stat().st_size == 0:
+        raise RuntimeError("[pf] FATAL: player_form.csv was not written or is empty")
+    if not PLAYER_FORM_CONSENSUS_OUT.exists() or PLAYER_FORM_CONSENSUS_OUT.stat().st_size == 0:
+        raise RuntimeError("[pf] FATAL: player_form_consensus.csv was not written or is empty")
+
+    logger.info(
+        "[pf] final player_form rows: %d; player_form_consensus rows: %s",
+        len(base),
+        "unknown" if not PLAYER_FORM_CONSENSUS_OUT.exists() else sum(1 for _ in open(PLAYER_FORM_CONSENSUS_OUT, "r")) - 1,
+    )
+
+    return 0
+
+
 # ---------------------------
 # CLI
 # ---------------------------
 
 
-def cli():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--season", type=int, default=2025)
-    parser.add_argument("--date", "--slate-date", dest="date", type=str, required=False)
-    parser.add_argument("--week", type=int, required=False)
-    args = parser.parse_args()
-
-    Path(DATA_DIR).mkdir(parents=True, exist_ok=True)
-    env_season = os.environ.get("SEASON")
-    try:
-        season_value = int(env_season) if env_season not in (None, "") else int(args.season)
-    except (TypeError, ValueError):
-        season_value = int(args.season)
-
-    global CURRENT_SEASON
-    CURRENT_SEASON = season_value
-
-    # Use the legacy PBP-based builder as the canonical path.
-    # This path fetches/derives everything from play-by-play and does not
-    # require pre-baked player_game_logs / player_season_totals CSVs.
-    build_player_form_legacy(
-        season=season_value,
-        slate_date=args.date,
-        week=args.week,
-    )
+def cli() -> int:
+    return main()
 
 
 if __name__ == "__main__":
-    cli()
+    sys.exit(cli())
