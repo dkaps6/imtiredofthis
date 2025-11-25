@@ -6676,7 +6676,39 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 
 def cli() -> int:
-    return main()
+    exit_code = main()
+
+    # ---- Hard validation of outputs ----
+    #
+    # At this point build_player_form_legacy() should have:
+    #   - written data/player_form.csv
+    #   - written data/player_form_consensus.csv
+    #   - written data/player_game_logs.csv / data/player_season_totals.csv
+    # If any of the core outputs are missing or have 0 rows, we fail fast here
+    # so the workflow surfaces the *real* issue at the PlayerForm step.
+
+    def _check_nonempty_csv(path: Path, label: str) -> int:
+        if not path.exists() or path.stat().st_size == 0:
+            raise RuntimeError(
+                f"[make_player_form] FATAL: {label} was not written or is empty: {path}"
+            )
+        try:
+            df = pd.read_csv(path)
+        except Exception as err:
+            raise RuntimeError(
+                f"[make_player_form] FATAL: failed to read {label} after build: {path} ({err})"
+            ) from err
+        if df.empty:
+            raise RuntimeError(
+                f"[make_player_form] FATAL: {label} has 0 rows after build: {path}"
+            )
+        logger.info("[make_player_form] %s rows=%d (%s)", label, len(df), path)
+        return len(df)
+
+    _check_nonempty_csv(PLAYER_FORM_OUT, "player_form.csv")
+    _check_nonempty_csv(PLAYER_FORM_CONSENSUS_OUT, "player_form_consensus.csv")
+
+    return exit_code
 
 
 if __name__ == "__main__":
