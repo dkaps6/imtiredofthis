@@ -48,6 +48,7 @@ from scripts.utils.canonical_names import (
 from scripts.utils.name_canon import make_player_key
 from scripts.utils.name_clean import canonical_key, canonical_player, canonicalize, normalize_team
 from scripts.utils.normalize_players import normalize_game_logs, normalize_season_totals
+# nflreadr is required; fail fast if missing
 from nflreadr import load_pbp
 from scripts.utils.team_codes import canon_team
 
