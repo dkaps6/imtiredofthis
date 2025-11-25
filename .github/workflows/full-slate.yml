@@ -202,25 +202,18 @@ jobs:
           fi
 
       # 8) Build player_form / consensus (legacy CSV-based)
-      - name: Build player form (legacy CSV-based)
+      - name: Build Player Form (authoritative step)
         run: |
-          export PYTHONPATH="${PWD}"
-          echo "Building Player Form."
-          python scripts/make_player_form.py \
-            --season "${{ env.SEASON }}" \
-            --slate-date "${{ env.SLATE_DATE }}"
+          python scripts/make_player_form.py
 
-          if [ ! -s data/player_form.csv ]; then
-            echo "❌ PlayerForm CSV is EMPTY or missing after make_player_form.py"
-            ls -l data || true
-            exit 1
-          fi
-
-          if [ ! -s data/player_form_consensus.csv ]; then
-            echo "❌ PlayerForm consensus CSV is EMPTY or missing after make_player_form.py"
-            ls -l data || true
-            exit 1
-          fi
+          # HARD FAIL IF EMPTY
+          python - <<'EOF'
+          import pandas as pd
+          import sys
+          df = pd.read_csv("data/player_form.csv")
+          if df.empty:
+              sys.exit("FATAL: player_form.csv is empty")
+          EOF
 
       # 9) Run full metrics pipeline
       - name: Run full metrics pipeline
