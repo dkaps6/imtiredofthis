@@ -1,6 +1,7 @@
 """Helpers to normalize player-level tables before persistence/joins."""
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Mapping, Sequence, Union
 
@@ -26,6 +27,9 @@ except Exception:  # pragma: no cover - fallback for stripped environments
 
 
 FrameLike = Union[str, Path, pd.DataFrame]
+
+
+logger = logging.getLogger(__name__)
 
 
 def _to_frame(source: FrameLike | None) -> pd.DataFrame:
@@ -110,6 +114,8 @@ def _normalize_schedule_join(df: pd.DataFrame, team_week: FrameLike | None) -> p
         rename_map["event_id"] = "_schedule_event_id"
     if "bye" in working.columns:
         rename_map["bye"] = "_schedule_bye"
+    if "game_id" in working.columns:
+        rename_map["game_id"] = "_schedule_game_id"
     if rename_map:
         working = working.rename(columns=rename_map)
 
@@ -121,12 +127,14 @@ def _normalize_schedule_join(df: pd.DataFrame, team_week: FrameLike | None) -> p
     for col in ("season", "week"):
         if col in left.columns:
             left[col] = _as_int(left[col])
-    for col in ("team",):
+    for col in ("team", "opponent"):
         if col in left.columns:
             left[col] = _as_string(left[col]).str.upper()
 
     subset_cols = join_cols + [c for c in working.columns if c.startswith("_schedule_")]
     subset = working[subset_cols].drop_duplicates(join_cols)
+    pre_merge_rows = len(left)
+
     merged = left.merge(subset, on=join_cols, how="left", validate="m:1")
 
     if "_schedule_opponent" in merged.columns:
@@ -151,6 +159,27 @@ def _normalize_schedule_join(df: pd.DataFrame, team_week: FrameLike | None) -> p
         merged["bye"] = merged.get("bye")
         merged["bye"] = merged["bye"].combine_first(merged["_schedule_bye"])
         merged.drop(columns=["_schedule_bye"], inplace=True)
+    if "_schedule_game_id" in merged.columns:
+        merged["game_id"] = _as_string(
+            merged.get("game_id", pd.Series(pd.NA, index=merged.index)),
+            index=merged.index,
+        )
+        merged["game_id"] = merged["game_id"].where(
+            merged["game_id"].ne(""), merged["_schedule_game_id"]
+        )
+        merged.drop(columns=["_schedule_game_id"], inplace=True)
+
+    if "game_id" in merged.columns:
+        non_null = merged.dropna(subset=["game_id"])
+        if non_null.empty:
+            raise RuntimeError(
+                "[FATAL] normalize_game_logs removed all rows after team_week_map join. "
+                "Team abbreviations do not match (case/format issue)."
+            )
+        if len(non_null) < pre_merge_rows * 0.5:
+            logger.error(
+                "[DIAG] normalize_game_logs lost more than 50%% of rows during join."
+            )
 
     return merged
 
