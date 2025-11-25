@@ -1861,55 +1861,69 @@ def _safe_read_csv(path: Path | str, label: str = "") -> pd.DataFrame:
 
 def _fetch_player_logs(season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Legacy helper used by ``main`` to obtain per-game and season-total logs.
+    Canonical helper to obtain per-game and season-total logs for a season.
 
-    This wrapper now delegates CSV I/O to ``_load_player_logs`` and then
-    normalizes keys/opponents via ``normalize_game_logs`` and
-    ``normalize_season_totals``.
-
-    NOTE:
-    ``normalize_game_logs`` no longer accepts a ``season`` keyword
-    argument – season scoping is handled *after* normalization via
-    ``_filter_to_season``.  Passing ``season=`` is what produced:
-        TypeError: normalize_game_logs() got an unexpected keyword argument 'season'
+    IMPORTANT:
+      - This ALWAYS fetches play-by-play for the requested season via ``load_pbp``.
+      - It does NOT depend on pre-existing CSVs on disk.
+      - It writes ``data/player_game_logs.csv`` and
+        ``data/player_season_totals.csv`` as side-effects.
+      - If anything ends up empty, we fail loudly instead of silently
+        degrading to a roles-only PlayerForm.
     """
 
-    # Read whatever is on disk (the staging step may or may not have
-    # created these yet; if they are missing/empty, _load_player_logs
-    # will raise or log appropriately).
-    logs, totals = _load_player_logs(
-        PLAYER_GAME_LOGS_OUT,
-        season_totals_path=PLAYER_SEASON_TOTALS_OUT,
-    )
+    # 1) Fetch raw PBP for the season.
+    logger.info("[pf] fetching play-by-play for season=%s", season)
+    pbp = load_pbp(season)
 
-    logger.info("[PlayerForm] _fetch_player_logs: raw logs rows=%d", len(logs))
-
-    # Enforce season scope BEFORE we complain about emptiness.
-    logs = _filter_to_season(logs, season)
-    totals = _filter_to_season(totals, season)
-
-    logger.info(
-        "[PlayerForm] _fetch_player_logs: logs rows after season=%d, totals rows=%d",
-        len(logs),
-        len(totals),
-    )
-
-    if logs.empty:
+    if pbp is None or pbp.empty:
         raise RuntimeError(
-            f"[PlayerForm] player_game_logs.csv is empty after season filter for "
-            f"season {season} – upstream log builder wrote no rows."
+            f"[pf] FATAL: play-by-play frame is empty for season={season}. "
+            "Check nflverse/nflreadr data availability for this season."
         )
 
-    # Normalize join keys + opponent context.  DO NOT pass season= here;
-    # normalize_game_logs only takes (frame, team_week_map, props_map).
-    logs = normalize_game_logs(
-        logs,
+    logger.info("[pf] raw PBP rows for season %s: %d", season, len(pbp))
+
+    # 2) Normalize into per-game logs with schedule/opponent context.
+    # NOTE: normalize_game_logs DOES NOT take a ``season=`` kwarg anymore;
+    # it infers season from the frame itself and from team_week_map / props_map.
+    game_logs = normalize_game_logs(
+        pbp,
         team_week_map=TEAM_WEEK_MAP_PATH,
         props_map=OPPONENT_MAP_PATH,
     )
-    totals = normalize_season_totals(totals)
 
-    return logs, totals
+    if game_logs is None or game_logs.empty:
+        raise RuntimeError(
+            f"[pf] FATAL: normalized game logs are empty for season={season}. "
+            "Most likely a join mismatch with team_week_map.csv or "
+            "opponent_map_from_props.csv – inspect those inputs."
+        )
+
+    # 3) Derive season totals from game logs.
+    season_totals = normalize_season_totals(game_logs)
+    if season_totals is None or season_totals.empty:
+        logger.warning(
+            "[pf] no season_totals derived for season=%s; "
+            "continuing with game logs only.",
+            season,
+        )
+
+    # 4) Persist logs to disk as canonical outputs for downstream debugging.
+    PLAYER_GAME_LOGS_OUT.parent.mkdir(parents=True, exist_ok=True)
+    game_logs.to_csv(PLAYER_GAME_LOGS_OUT, index=False)
+
+    if season_totals is not None and not season_totals.empty:
+        PLAYER_SEASON_TOTALS_OUT.parent.mkdir(parents=True, exist_ok=True)
+        season_totals.to_csv(PLAYER_SEASON_TOTALS_OUT, index=False)
+
+    logger.info(
+        "[pf] _fetch_player_logs complete: game_logs rows=%d, season_totals rows=%d",
+        len(game_logs),
+        len(season_totals) if season_totals is not None else 0,
+    )
+
+    return game_logs, season_totals
 
 
 # === SURGICAL ADDITION: merge roles from Ourlads depth charts (clean placement) ===
