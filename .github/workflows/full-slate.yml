@@ -168,29 +168,37 @@ jobs:
             --date "${SLATE_DATE}"
 
       # 7) Stage and validate PlayerForm inputs
-      - name: Stage PlayerForm inputs
+      - name: Stage PlayerForm inputs (schedule required, logs optional)
         run: |
-          echo "Staging PlayerForm inputs..."
+          echo "Staging PlayerForm inputs (schedule required, logs optional)..."
           mkdir -p data/staging
 
-          cp data/player_game_logs.csv data/staging/ || exit 1
-          cp data/player_season_totals.csv data/staging/ || exit 1
+          # team_week_map is still REQUIRED
+          if [ ! -s data/team_week_map.csv ]; then
+            echo "ERROR: data/team_week_map.csv is missing or empty"
+            ls -l data || true
+            exit 1
+          fi
           cp data/team_week_map.csv data/staging/ || exit 1
 
-          echo "Row counts for staged PlayerForm inputs:"
-          wc -l data/staging/*.csv || true
+          # player_game_logs / player_season_totals are OPTIONAL here.
+          # When using the PBP-based builder, make_player_form.py will
+          # fetch and write them as side-effects; they do not need to
+          # exist before that step runs.
+          for f in data/player_game_logs.csv data/player_season_totals.csv; do
+            if [ -f "$f" ]; then
+              echo "Found optional input: $f"
+              cp "$f" data/staging/ || true
+            else
+              echo "NOTE: $f not present before make_player_form; it will be created (if needed) by the PBP-based builder."
+            fi
+          done
 
-          if [ ! -s data/staging/player_game_logs.csv ]; then
-            echo "player_game_logs.csv is EMPTY"
-            exit 1
-          fi
-          if [ ! -s data/staging/player_season_totals.csv ]; then
-            echo "player_season_totals.csv is EMPTY"
-            exit 1
-          fi
-          if [ ! -s data/staging/team_week_map.csv ]; then
-            echo "team_week_map.csv is EMPTY"
-            exit 1
+          echo "Row counts for staged PlayerForm inputs (if any):"
+          if ls data/staging/*.csv >/dev/null 2>&1; then
+            wc -l data/staging/*.csv || true
+          else
+            echo "(no staged CSVs yet)"
           fi
 
       # 8) Build player_form / consensus (legacy CSV-based)
