@@ -6773,7 +6773,11 @@ def cli() -> int:
     if season_totals is not None and not season_totals.empty:
         season_totals.to_csv(PLAYER_SEASON_TOTALS_OUT, index=False)
 
-    pf = build_player_form(game_logs, season_totals)
+    pf = build_player_form(
+        season=season_value,
+        game_logs=game_logs,
+        season_totals=season_totals,
+    )
 
     if pf is None or pf.empty:
         raise RuntimeError("[make_player_form] FATAL: player_form empty after build")
