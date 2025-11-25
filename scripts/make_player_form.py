@@ -6689,39 +6689,55 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 
 def cli() -> int:
-    exit_code = main()
+    """
+    Entry point used by the GitHub Action.
 
-    # ---- Hard validation of outputs ----
-    #
-    # At this point build_player_form_legacy() should have:
-    #   - written data/player_form.csv
-    #   - written data/player_form_consensus.csv
-    #   - written data/player_game_logs.csv / data/player_season_totals.csv
-    # If any of the core outputs are missing or have 0 rows, we fail fast here
-    # so the workflow surfaces the *real* issue at the PlayerForm step.
+    IMPORTANT:
+      - We *do not* depend on pre-written data/player_game_logs.csv or
+        data/player_season_totals.csv anymore.
+      - Those CSVs are treated as OUTPUTS of build_player_form_legacy, not inputs.
+      - build_player_form_legacy is responsible for fetching/deriving everything
+        from nflverse/nflreadr play-by-play for the requested season.
+    """
 
-    def _check_nonempty_csv(path: Path, label: str) -> int:
-        if not path.exists() or path.stat().st_size == 0:
-            raise RuntimeError(
-                f"[make_player_form] FATAL: {label} was not written or is empty: {path}"
-            )
-        try:
-            df = pd.read_csv(path)
-        except Exception as err:
-            raise RuntimeError(
-                f"[make_player_form] FATAL: failed to read {label} after build: {path} ({err})"
-            ) from err
-        if df.empty:
-            raise RuntimeError(
-                f"[make_player_form] FATAL: {label} has 0 rows after build: {path}"
-            )
-        logger.info("[make_player_form] %s rows=%d (%s)", label, len(df), path)
-        return len(df)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--season", type=int, default=2025)
+    parser.add_argument(
+        "--date", "--slate-date", dest="date", type=str, required=False
+    )
+    parser.add_argument("--week", type=int, required=False)
+    args = parser.parse_args()
 
-    _check_nonempty_csv(PLAYER_FORM_OUT, "player_form.csv")
-    _check_nonempty_csv(PLAYER_FORM_CONSENSUS_OUT, "player_form_consensus.csv")
+    Path(DATA_DIR).mkdir(parents=True, exist_ok=True)
 
-    return exit_code
+    env_season = os.environ.get("SEASON")
+    try:
+        season_value = int(env_season) if env_season not in (None, "") else int(args.season)
+    except (TypeError, ValueError):
+        season_value = int(args.season)
+
+    global CURRENT_SEASON
+    CURRENT_SEASON = season_value
+
+    logger.info(
+        "[make_player_form] starting legacy PBP builder for season=%s date=%s week=%s",
+        season_value,
+        args.date,
+        args.week,
+    )
+
+    # Canonical path: build from play-by-play and write:
+    #   - data/player_form.csv
+    #   - data/player_form_consensus.csv
+    #   - data/player_game_logs.csv
+    #   - data/player_season_totals.csv
+    build_player_form_legacy(
+        season=season_value,
+        slate_date=args.date,
+        week=args.week,
+    )
+
+    return 0
 
 
 if __name__ == "__main__":
