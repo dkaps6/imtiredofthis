@@ -206,6 +206,11 @@ jobs:
         run: |
           python scripts/make_player_form.py
 
+          if [ ! -s data/player_game_logs.csv ]; then
+            echo "❌ player_game_logs.csv missing or empty"
+            exit 1
+          fi
+
           # HARD FAIL IF EMPTY
           python - <<'EOF'
           import pandas as pd

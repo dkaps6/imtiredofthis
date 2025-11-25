@@ -36,6 +36,8 @@ import unicodedata
 import numpy as np
 import pandas as pd
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from scripts.utils.df_keys import coerce_merge_keys
 
 from scripts._opponent_map import normalize_team_series
@@ -6716,7 +6718,9 @@ def cli() -> int:
     )
 
     if game_logs is None or game_logs.empty:
-        raise RuntimeError("[make_player_form] FATAL: normalized game_logs empty")
+        raise RuntimeError(
+            f"[make_player_form] FATAL: normalized game_logs empty for season={season_value}"
+        )
 
     season_totals = normalize_season_totals(game_logs)
 
