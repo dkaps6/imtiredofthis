@@ -1910,69 +1910,97 @@ def _safe_read_csv(path: Path | str, label: str = "") -> pd.DataFrame:
 
 def _fetch_player_logs(season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Canonical helper to obtain per-game and season-total logs for a season.
+    Build *player-level* game logs and season totals for the given season.
 
-    IMPORTANT:
-      - This ALWAYS fetches play-by-play for the requested season via ``load_pbp``.
-      - It does NOT depend on pre-existing CSVs on disk.
-      - It writes ``data/player_game_logs.csv`` and
-        ``data/player_season_totals.csv`` as side-effects.
-      - If anything ends up empty, we fail loudly instead of silently
-        degrading to a roles-only PlayerForm.
+    Instead of raw play-by-play, we use nfl_data_py's weekly dataset so that
+    each row is a single player's stat line for a single game. This matches
+    the conceptual model for player_form and player_form_consensus:
+      - player_form: one row per (player, team, season, week)
+      - player_form_consensus: one row per (player, team, season) with totals
+        and per-game averages across those weeks.
     """
 
-    # 1) Fetch raw PBP for the season.
-    logger.info("[pf] fetching play-by-play for season=%s", season)
-    pbp = load_pbp(season)
+    import nfl_data_py as nfl
 
-    if pbp is None or pbp.empty:
+    season_int = int(season)
+    years = [season_int]
+
+    weekly = nfl.import_weekly_data(years, downcast=True)
+    if weekly is None or weekly.empty:
         raise RuntimeError(
-            f"[pf] FATAL: play-by-play frame is empty for season={season}. "
-            "Check nflverse/nflreadr data availability for this season."
+            f"[make_player_form] FATAL: import_weekly_data({years}) returned empty frame"
         )
 
-    logger.info("[pf] raw PBP rows for season %s: %d", season, len(pbp))
+    # Restrict to regular season if present
+    if "season_type" in weekly.columns:
+        weekly = weekly[weekly["season_type"] == "REG"]
 
-    # 2) Normalize into per-game logs with schedule/opponent context.
-    # NOTE: normalize_game_logs DOES NOT take a ``season=`` kwarg anymore;
-    # it infers season from the frame itself and from team_week_map / props_map.
-    game_logs = normalize_game_logs(
-        pbp,
-        team_week_map=TEAM_WEEK_MAP_PATH,
-        props_map=OPPONENT_MAP_PATH,
+    if weekly.empty:
+        raise RuntimeError(
+            f"[make_player_form] FATAL: weekly data empty for REG season={season_int}"
+        )
+
+    # --- Player identity ----------------------------------------------------
+    if "player" not in weekly.columns:
+        name_candidates = ["player_name", "full_name"]
+        for c in name_candidates:
+            if c in weekly.columns:
+                weekly = weekly.copy()
+                weekly["player"] = weekly[c].astype("string")
+                break
+        if "player" not in weekly.columns:
+            raise RuntimeError(
+                "[make_player_form] FATAL: weekly data missing a usable player "
+                f"name column; columns={list(weekly.columns)}"
+            )
+
+    # --- Team identity (we'll canonicalize later via canonical_names) ------
+    if "team" not in weekly.columns:
+        team_candidates = ["recent_team", "team_abbr", "posteam"]
+        for c in team_candidates:
+            if c in weekly.columns:
+                weekly = weekly.copy()
+                weekly["team"] = weekly[c]
+                break
+
+    # Week & season
+    if "week" in weekly.columns:
+        weekly["week"] = pd.to_numeric(weekly["week"], errors="coerce")
+    weekly["season"] = season_int
+
+    # Use weekly as our player_game_logs: one row per player-game
+    logs = weekly.copy()
+
+    # --- Season totals: one row per (player, team, season) -----------------
+    group_keys = [k for k in ["player", "team", "season"] if k in logs.columns]
+    if not group_keys:
+        raise RuntimeError(
+            "[make_player_form] FATAL: weekly data missing grouping keys "
+            "(player/team/season) needed for season totals"
+        )
+
+    numeric_cols = [
+        c for c in logs.columns
+        if pd.api.types.is_numeric_dtype(logs[c])
+    ]
+    if not numeric_cols:
+        raise RuntimeError(
+            "[make_player_form] FATAL: weekly data has no numeric stat columns "
+            f"to aggregate; columns={list(logs.columns)}"
+        )
+
+    totals = (
+        logs.groupby(group_keys, dropna=False)[numeric_cols]
+        .sum()
+        .reset_index()
     )
 
-    if game_logs is None or game_logs.empty:
-        raise RuntimeError(
-            f"[pf] FATAL: normalized game logs are empty for season={season}. "
-            "Most likely a join mismatch with team_week_map.csv or "
-            "opponent_map_from_props.csv – inspect those inputs."
-        )
+    # Write the CSVs the rest of the pipeline expects
+    Path(DATA_DIR).mkdir(parents=True, exist_ok=True)
+    logs.to_csv(PLAYER_GAME_LOGS_OUT, index=False)
+    totals.to_csv(PLAYER_SEASON_TOTALS_OUT, index=False)
 
-    # 3) Derive season totals from game logs.
-    season_totals = normalize_season_totals(game_logs)
-    if season_totals is None or season_totals.empty:
-        logger.warning(
-            "[pf] no season_totals derived for season=%s; "
-            "continuing with game logs only.",
-            season,
-        )
-
-    # 4) Persist logs to disk as canonical outputs for downstream debugging.
-    PLAYER_GAME_LOGS_OUT.parent.mkdir(parents=True, exist_ok=True)
-    game_logs.to_csv(PLAYER_GAME_LOGS_OUT, index=False)
-
-    if season_totals is not None and not season_totals.empty:
-        PLAYER_SEASON_TOTALS_OUT.parent.mkdir(parents=True, exist_ok=True)
-        season_totals.to_csv(PLAYER_SEASON_TOTALS_OUT, index=False)
-
-    logger.info(
-        "[pf] _fetch_player_logs complete: game_logs rows=%d, season_totals rows=%d",
-        len(game_logs),
-        len(season_totals) if season_totals is not None else 0,
-    )
-
-    return game_logs, season_totals
+    return logs, totals
 
 
 # === SURGICAL ADDITION: merge roles from Ourlads depth charts (clean placement) ===
