@@ -6757,80 +6757,43 @@ def cli() -> int:
     """
     Entry point used by the GitHub Action.
 
-    Always fetches live play-by-play and fails hard if outputs are empty.
+    Thin wrapper around ``main`` so that all logic flows through the
+    normalized game-log / season-total builder instead of duplicating
+    the pipeline here.
     """
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--season", type=int, default=2025)
     parser.add_argument(
-        "--date", "--slate-date", dest="date", type=str, required=False
+        "--season",
+        type=int,
+        default=os.environ.get("SEASON", 2025),
+        help="Season to build player_form for (defaults to SEASON env or 2025).",
     )
-    parser.add_argument("--week", type=int, required=False)
+    parser.add_argument(
+        "--date",
+        "--slate-date",
+        dest="slate_date",
+        type=str,
+        default=os.environ.get("SLATE_DATE", ""),
+        help="Optional slate date (YYYY-MM-DD) used only for logging/filtering.",
+    )
+    parser.add_argument(
+        "--week",
+        type=int,
+        required=False,
+        help="Unused; kept for CLI compatibility.",
+    )
     args = parser.parse_args()
 
-    Path(DATA_DIR).mkdir(parents=True, exist_ok=True)
+    argv: List[str] = ["--season", str(args.season)]
+    if args.slate_date:
+        argv.extend(["--slate-date", args.slate_date])
 
-    env_season = os.environ.get("SEASON")
-    try:
-        season_value = int(env_season) if env_season not in (None, "") else int(args.season)
-    except (TypeError, ValueError):
-        season_value = int(args.season)
-
-    global CURRENT_SEASON
-    CURRENT_SEASON = season_value
-
-    logger.info("[make_player_form] forcing live PBP fetch…")
-
-    # --- ALWAYS FETCH LIVE DATA ---
-    pbp = load_pbp(season_value)
-    if pbp is None or pbp.empty:
-        raise RuntimeError(
-            f"[make_player_form] FATAL: load_pbp({season_value}) returned empty frame"
-        )
-
-    logger.info(f"[make_player_form] PBP rows: {len(pbp)}")
-
-    # --- BUILD LOGS ---
-    game_logs = normalize_game_logs(
-        pbp,
-        team_week_map=TEAM_WEEK_MAP_PATH,
-        props_map=OPPONENT_MAP_PATH,
-    )
-
-    if game_logs is None or game_logs.empty:
-        raise RuntimeError(
-            f"[make_player_form] FATAL: normalized game_logs empty for season={season_value}"
-        )
-
-    season_totals = normalize_season_totals(game_logs)
-
-    # --- WRITE SIDE EFFECT FILES ---
-    Path(DATA_DIR).mkdir(exist_ok=True, parents=True)
-    game_logs.to_csv(PLAYER_GAME_LOGS_OUT, index=False)
-    if season_totals is not None and not season_totals.empty:
-        season_totals.to_csv(PLAYER_SEASON_TOTALS_OUT, index=False)
-
-    pf = build_player_form(
-        season=season_value,
-        game_logs=game_logs,
-        season_totals=season_totals,
-    )
-
-    if pf is None or pf.empty:
-        raise RuntimeError("[make_player_form] FATAL: player_form empty after build")
-
-    pf.to_csv(PLAYER_FORM_OUT, index=False)
-
-    consensus = _build_season_consensus(pf)
-
-    if consensus is None or consensus.empty:
-        raise RuntimeError("[make_player_form] FATAL: consensus empty")
-
-    consensus.to_csv(PLAYER_FORM_CONSENSUS_OUT, index=False)
-
-    logger.info("[make_player_form] finished successfully")
-
-    return 0
+    # Delegate to the newer main() implementation which:
+    #   * fetches normalized logs via _fetch_player_logs
+    #   * builds player_form + player_form_consensus
+    #   * enforces fail-fast checks on empty outputs
+    return main(argv)
 
 
 if __name__ == "__main__":
