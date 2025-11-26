@@ -1553,7 +1553,7 @@ def _build_season_consensus(base: pd.DataFrame) -> pd.DataFrame:
     df.columns = [c.lower() for c in df.columns]
 
     # numeric coercion for denominators (when present)
-    for c in [
+    denom_cols = [
         "targets",
         "team_targets",
         "team_dropbacks",
@@ -1568,38 +1568,41 @@ def _build_season_consensus(base: pd.DataFrame) -> pd.DataFrame:
         "rz_team_rushes",
         "pass_yards",
         "pass_att",
-    ]:
+    ]
+
+    for c in denom_cols:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce")
 
     keys = [k for k in ["player", "team", "season"] if k in df.columns]
     if not keys:
+        # No sensible grouping keys → nothing to do
+        logger.error(
+            "[make_player_form] season consensus: missing all grouping keys "
+            "(player/team/season). Available columns: %s",
+            sorted(df.columns),
+        )
         return pd.DataFrame()
+
+    # Build aggregation spec ONLY from columns that actually exist
+    agg_spec = {c: "sum" for c in denom_cols if c in df.columns}
+
+    if not agg_spec:
+        # This is the situation currently blowing up CI: we hit groupby.agg({})
+        logger.error(
+            "[make_player_form] season consensus: no numeric denominators present. "
+            "Expected one of %s but found none on player_form. Columns: %s",
+            denom_cols,
+            sorted(df.columns),
+        )
+        raise RuntimeError(
+            "[make_player_form] FATAL: season consensus cannot compute – "
+            "no expected denominator columns found on player_form"
+        )
 
     sums = (
         df.groupby(keys, dropna=False)
-        .agg(
-            {
-                c: "sum"
-                for c in [
-                    "targets",
-                    "team_targets",
-                    "team_dropbacks",
-                    "receptions",
-                    "rec_yards",
-                    "rushes",
-                    "team_rushes",
-                    "rush_yards",
-                    "rz_targets",
-                    "rz_team_targets",
-                    "rz_rushes",
-                    "rz_team_rushes",
-                    "pass_yards",
-                    "pass_att",
-                ]
-                if c in df.columns
-            }
-        )
+        .agg(agg_spec)
         .reset_index()
     )
 
