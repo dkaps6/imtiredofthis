@@ -6489,21 +6489,38 @@ def build_player_form(
     if "season" in logs.columns:
         print(f"[PlayerForm] Retained {len(logs)} logs for season {season}")
 
-    # Ensure logs has a player column before applying key normalization. Older
-    # inputs may carry a different name field; promote the first available
-    # candidate and fail fast with a clear error if none are present.
-    if "player" not in logs.columns:
-        candidate_cols = [c for c in ["player_name", "display_name", "name"] if c in logs.columns]
+    # --- NEW: ensure we have a canonical "player" column on logs -------------
+    #
+    # The new PBP / game-log pipeline can surface player names under a variety
+    # of columns (e.g. "name", "player_name", "display_name") instead of the
+    # legacy "player" column.  Downstream logic (player_key, merges, etc.)
+    # expects logs["player"] to exist, which is why we are currently hitting:
+    #
+    #   KeyError: 'player'
+    #   ... logs["player_key"] = logs["player"].apply(normalize_name)
+    #
+    # Here we normalize that: pick the first available name column and create
+    # a canonical "player" column from it.  If nothing usable is present, we
+    # fail fast with a clear error.
+    if not logs.empty and "player" not in logs.columns:
+        candidate_cols = [
+            col for col in ("name", "player_name", "display_name")
+            if col in logs.columns
+        ]
         if candidate_cols:
             src = candidate_cols[0]
             print(
-                f"[PlayerForm] 'player' column missing on logs; using '{src}' as the source for player names."
+                f"[PlayerForm] 'player' column missing on logs; "
+                f"using '{src}' as the source for player names."
             )
+            logs = logs.copy()
             logs["player"] = logs[src].astype("string")
         else:
+            # Fail loudly so we don't silently write garbage PlayerForm.
             raise RuntimeError(
-                "[PlayerForm] logs is missing a 'player' column and no fallback name-like columns were found. "
-                f"Columns present on logs: {list(logs.columns)}"
+                "[PlayerForm] FATAL: no usable player-name column found on "
+                f"logs; expected one of ['player', 'name', 'player_name', "
+                f"'display_name']; got columns={list(logs.columns)}"
             )
 
     roles["player_key"] = roles["player"].apply(normalize_name)
