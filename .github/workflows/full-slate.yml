@@ -49,9 +49,12 @@ jobs:
       - name: Install deps (core + HTML parsers)
         run: |
           python -m pip install --upgrade pip
+          # Core project deps
           pip install -r requirements.txt
+          # Ensure nflreadpy is available for make_player_form
+          pip install nflreadpy
           python - << 'EOF'
-     
+
           from importlib import import_module
           for pkg in ["nfl_data_py", "nflreadpy"]:
               import_module(pkg)
