@@ -15,7 +15,7 @@
 #
 # Free sources to cite:
 # - nflverse/nflfastR 2025 PBP (public GitHub release asset): https://github.com/nflverse/nflverse-data/releases/download/pbp/pbp_2025.csv.gz
-# - PBP field dictionary (qtr, score_differential, posteam, qb_dropback, rush_attempt): https://nflreadr.nflverse.com/articles/dictionary_pbp.html
+# - PBP field dictionary (qtr, score_differential, posteam, qb_dropback, rush_attempt): see nflverse play-by-play documentation
 #
 import sys
 from pathlib import Path

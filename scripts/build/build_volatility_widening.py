@@ -7,7 +7,7 @@
 # Free data source:
 # - nflverse/nflfastR play-by-play (2025 season): https://github.com/nflverse/nflverse-data/releases/download/pbp/pbp_2025.csv.gz
 #   Contains qb_dropback, rush_attempt, posteam, defteam, score_differential, play_id, game_id, game_seconds_remaining.
-# - Field dictionary: https://nflreadr.nflverse.com/articles/dictionary_pbp.html
+# - Field dictionary: see nflverse play-by-play documentation for field definitions
 #
 # Metric definitions:
 # - pace_std: standard deviation of seconds/play for that team's offensive plays in a week (using deltas in game_seconds_remaining between snaps).

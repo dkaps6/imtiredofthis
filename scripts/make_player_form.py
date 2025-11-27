@@ -51,17 +51,17 @@ from scripts.utils.normalize_players import normalize_game_logs, normalize_seaso
 ###############################################################################
 # PBP loader compatibility layer
 #
-# Historically this script used the R package `nflreadr` via reticulate-style
-# patterns. In CI we are pure Python, so we provide a local `load_pbp`
-# implementation that mimics the nflreadr API but is backed by Python libs.
+# Historically this script used an R package via reticulate-style patterns.
+# In CI we are pure Python, so we provide a local `load_pbp` implementation
+# that mirrors the nflreadpy API and is backed by Python libs.
 ###############################################################################
 try:
-    # Preferred: Python port of nflreadr
+    # Preferred: Python port of the nflverse reader (nflreadpy)
     import nflreadpy as _nfl
 
     def load_pbp(seasons=None, **kwargs):
         """
-        Compatibility wrapper for nflreadr::load_pbp using nflreadpy.
+        Compatibility wrapper for nflreadpy::load_pbp using nflreadpy.
 
         - `seasons` can be an int, list of ints, or None (current season).
         - Returns a pandas.DataFrame so downstream code does not need changes.
@@ -1944,7 +1944,7 @@ def _fetch_player_logs(season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     logger.info("[pf] fetching weekly player stats via nflreadpy for season=%s", season_int)
 
-    # nflreadpy API is designed to mirror nflreadr:
+    # nflreadpy API is designed to mirror the upstream reader:
     # load_player_stats(seasons, summary_level="week") -> week-level player stats.
     stats_pl = nfl.load_player_stats(
         seasons=[season_int],
@@ -1984,7 +1984,7 @@ def _fetch_player_logs(season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
         )
 
     # --- Team identity ------------------------------------------------------
-    # nflreadr/nflreadpy expose a `team` column in stats_player_week.
+    # nflreadpy exposes a `team` column in stats_player_week.
     # If it's not present for any reason, fall back to known alternatives.
     if "team" not in df.columns:
         for c in ["recent_team", "team_abbr", "posteam"]:

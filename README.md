@@ -38,7 +38,7 @@ Outputs include player-level projections, fair-odds lines, value percentages, an
 
 ### Core Pipeline
 1. **Data ingestion**
-   - Sources: `nflverse`, `nflreadr`, `nfldata`, `ESPN`, `The Odds API`
+    - Sources: `nflverse`, `nflreadpy`, `nfldata`, `ESPN`, `The Odds API`
    - Fetches player props, team stats, game lines, and situational data
 2. **Feature engineering**
    - Builds rolling form metrics: team EPA, SR, pressure/coverage rates, pace

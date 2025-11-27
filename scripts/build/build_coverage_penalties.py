@@ -9,7 +9,7 @@
 # - nflverse/nflfastR play-by-play 2025 (public GitHub release asset):
 #   https://github.com/nflverse/nflverse-data/releases/download/pbp/pbp_2025.csv.gz
 # - PBP field dictionary (penalty, penalty_yards, penalty_team, defteam, week, desc):
-#   https://nflreadr.nflverse.com/articles/dictionary_pbp.html
+#   see nflverse play-by-play documentation
 #
 # Notes:
 # - We count only **defensive** penalties (credited to the defense).
