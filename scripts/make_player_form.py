@@ -1909,130 +1909,104 @@ def _safe_read_csv(path: Path | str, label: str = "") -> pd.DataFrame:
 
 def _fetch_player_logs(season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Build *player-level* game logs and season totals for a single season,
-    using nflreadpy.load_player_stats as the source of truth.
+    Canonical helper to obtain per-game and season-total logs for a season,
+    using nflreadpy's weekly *player stats* as the source of truth.
 
-    Semantics:
-      - We call nflreadpy.load_player_stats(seasons=[season], summary_level="week")
-        which returns week-level player stats (one row per player per game),
-        matching the `stats_player_week_<season>.csv` files in nflverse-data.
-      - We then:
-          * convert to pandas
-          * enforce core ID columns (player, team, season, week)
-          * treat that as player_game_logs
-          * aggregate numeric columns per (player, team, season) to build
-            player_season_totals
-      - Both tables are written to disk for debugging:
-          * data/player_game_logs.csv
-          * data/player_season_totals.csv
+    This is the authoritative place where we get:
+      - targets, receptions, receiving_yards
+      - carries, rushing_yards
+      - attempts, passing_yards
 
-    This matches the conceptual model for your pipeline:
-      - player_game_logs: one line per game per player
-      - player_form: enriched per-game lines (roles, opponent, coverage, etc.)
-      - player_form_consensus: season-long rollup per player
+    We then rename those into the canonical column names that the rest of the
+    PlayerForm / consensus code expects:
+      - receiving_yards -> rec_yards
+      - carries        -> rushes
+      - rushing_yards  -> rush_yards
+      - attempts       -> pass_att
+      - passing_yards  -> pass_yards
+      - targets, receptions stay as-is
+
+    Side effects:
+      - Writes data/player_game_logs.csv (per-player, per-week)
+      - Writes data/player_season_totals.csv (per-player, per-team, per-season)
+      - Fails loudly if anything critical is empty.
     """
+
     try:
         import nflreadpy as nfl
     except ImportError as err:
         raise RuntimeError(
-            "[make_player_form] FATAL: nflreadpy is required for "
-            "player stats but is not installed. Add `nflreadpy` to your "
-            "Python dependencies (requirements/pyproject) and re-run."
+            "[make_player_form] FATAL: nflreadpy is required for player logs. "
+            "Ensure `nflreadpy` is installed in your environment."
         ) from err
 
     season_int = int(season)
-
     logger.info("[pf] fetching weekly player stats via nflreadpy for season=%s", season_int)
 
-    # nflreadpy API is designed to mirror the upstream reader:
-    # load_player_stats(seasons, summary_level="week") -> week-level player stats.
+    # Weekly player stats -> official box-score style stats
     stats_pl = nfl.load_player_stats(
         seasons=[season_int],
         summary_level="week",
     )
-
-    # nflreadpy returns a Polars DataFrame; convert to pandas for the existing pipeline.
     df = stats_pl.to_pandas()
 
     if df is None or df.empty:
         raise RuntimeError(
-            f"[make_player_form] FATAL: nfl.load_player_stats([{season_int}], "
+            f"[make_player_form] FATAL: load_player_stats([{season_int}], "
             'summary_level="week") returned an empty frame.'
         )
 
-    # Restrict to regular season if season_type column is present.
+    # Restrict to regular season if present
     if "season_type" in df.columns:
         df = df[df["season_type"] == "REG"]
-
     if df.empty:
         raise RuntimeError(
-            f"[make_player_form] FATAL: week-level player stats empty for "
-            f"REG season={season_int}"
+            f"[make_player_form] FATAL: weekly player stats empty for REG season={season_int}"
         )
 
-    # --- Player identity ----------------------------------------------------
-    # Ensure we have a canonical "player" column downstream.
-    if "player" not in df.columns:
-        for c in ["player_display_name", "player_name", "full_name"]:
-            if c in df.columns:
-                df["player"] = df[c].astype("string")
-                break
-    if "player" not in df.columns:
-        raise RuntimeError(
-            "[make_player_form] FATAL: week-level player stats lack a usable "
-            f"player name column; columns={list(df.columns)}"
-        )
-
-    # --- Team identity ------------------------------------------------------
-    # nflreadpy exposes a `team` column in stats_player_week.
-    # If it's not present for any reason, fall back to known alternatives.
-    if "team" not in df.columns:
-        for c in ["recent_team", "team_abbr", "posteam"]:
-            if c in df.columns:
-                df["team"] = df[c]
-                break
-    if "team" not in df.columns:
-        logger.warning(
-            "[make_player_form] week-level player stats missing `team` column; "
-            "downstream canonicalization will have to infer team from other sources."
-        )
-
-    # --- Week & season ------------------------------------------------------
+    # --- Identity columns: player & team ------------------------------------
+    # Keep whatever name columns are present; we'll normalize later.
+    # Here we just make sure season/week are numeric and present.
+    df["season"] = season_int
     if "week" in df.columns:
         df["week"] = pd.to_numeric(df["week"], errors="coerce")
-    else:
-        logger.warning(
-            "[make_player_form] week-level player stats missing `week`; "
-            "consensus will treat each row as a separate game."
-        )
 
-    df["season"] = season_int
+    # --- Rename to canonical denominator names for PlayerForm ----------------
+    rename_map = {
+        # receiving
+        "receiving_yards": "rec_yards",
+        # rushing
+        "carries": "rushes",
+        "rushing_yards": "rush_yards",
+        # passing
+        "attempts": "pass_att",
+        "passing_yards": "pass_yards",
+    }
+    df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
 
-    # This per-player, per-game table is our canonical game_logs.
+    # At this point we should have, when applicable:
+    #   targets, receptions, rec_yards, rushes, rush_yards, pass_att, pass_yards
+    # plus all the other nflverse stats (air yards, EPA, etc.).
+
     game_logs = df.copy()
 
-    # --- Season totals: one row per (player, team, season) ------------------
-    group_keys = [k for k in ["player", "team", "season"] if k in game_logs.columns]
+    # Build season totals: one row per (player, team, season).
+    group_keys = [k for k in ["player_name", "player", "recent_team", "team", "season"] if k in game_logs.columns]
+
     if not group_keys:
         raise RuntimeError(
-            "[make_player_form] FATAL: missing grouping keys (player/team/season) "
-            "for season totals aggregation."
+            "[make_player_form] FATAL: no grouping keys (player/team/season) "
+            "found in weekly player stats."
         )
 
-    # Aggregate numeric stat columns, but DO NOT aggregate the grouping keys
-    # themselves (player/team/season). If we include "season" here, it will
-    # exist both as an index level and as a summed column, and reset_index()
-    # will raise: "ValueError: cannot insert season, already exists".
-    numeric_cols: list[str] = [
+    numeric_cols = [
         c
         for c in game_logs.columns
         if pd.api.types.is_numeric_dtype(game_logs[c])
-        and c not in group_keys
     ]
     if not numeric_cols:
         raise RuntimeError(
-            "[make_player_form] FATAL: no numeric stat columns found in "
-            f"week-level player stats; columns={list(game_logs.columns)}"
+            "[make_player_form] FATAL: no numeric stat columns found in weekly player stats."
         )
 
     season_totals = (
@@ -2041,7 +2015,7 @@ def _fetch_player_logs(season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
         .reset_index()
     )
 
-    # Persist logs to disk for debugging / other scripts.
+    # Persist to disk for downstream steps and debugging
     PLAYER_GAME_LOGS_OUT.parent.mkdir(parents=True, exist_ok=True)
     game_logs.to_csv(PLAYER_GAME_LOGS_OUT, index=False)
 
@@ -2049,7 +2023,7 @@ def _fetch_player_logs(season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     season_totals.to_csv(PLAYER_SEASON_TOTALS_OUT, index=False)
 
     logger.info(
-        "[pf] _fetch_player_logs via nflreadpy complete: game_logs rows=%d, "
+        "[pf] _fetch_player_logs (nflreadpy) complete: game_logs rows=%d, "
         "season_totals rows=%d",
         len(game_logs),
         len(season_totals),
