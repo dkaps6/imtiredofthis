@@ -266,7 +266,7 @@ def _ensure_plays_est_column(df: pd.DataFrame) -> pd.DataFrame:
 def _compute_team_proe_from_pbp(pbp_df: pd.DataFrame) -> pd.DataFrame:
     """
     Approximate pass rate over expected (PROE) at the team level using only data
-    we already loaded from nflverse/nflreadr.
+    we already loaded from nflverse/nflreadpy.
 
     Steps:
     - Define 'neutral situations' = whatever logic we already consider for neutral pace

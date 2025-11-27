@@ -18,7 +18,7 @@
 # - Play-by-play release (pbp_2025.csv.gz): https://github.com/nflverse/nflverse-data/releases
 #   Direct asset (subject to release tag): https://github.com/nflverse/nflverse-data/releases/download/pbp/pbp_2025.csv.gz
 # - Field dictionary (pass_attempt, rush_attempt, epa, score_differential, etc.):
-#   https://nflreadr.nflverse.com/articles/dictionary_pbp.html
+#   see nflverse play-by-play documentation
 #
 import sys
 from pathlib import Path

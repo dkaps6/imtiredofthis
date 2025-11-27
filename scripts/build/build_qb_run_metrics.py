@@ -8,8 +8,7 @@
 # Data source (free):
 # - nflverse/nflfastR play-by-play (contains qb_scramble, qb_dropback, qb_kneel, play_type, rush_attempt, passer_player_name, rusher_player_name, week)
 #   Docs: https://nflfastr.com/reference/fast_scraper.html  (variable: qb_scramble)
-#         https://nflreadr.nflverse.com/ (data access & dictionaries)
-#         https://brieger.esalq.usp.br/CRAN/web/packages/nflreadr/vignettes/dictionary_pbp.html  (qb_dropback, qb_kneel)
+#         nflverse documentation covers data access and field dictionaries
 #
 # Implementation notes:
 # - We fetch the public season CSV from nflverse releases (pbp_2025.csv.gz). If that URL fails, try a small set of fallbacks.

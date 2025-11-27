@@ -8,7 +8,7 @@
 # - nflverse/nflfastR play-by-play 2025 season CSV (public GitHub Releases)
 #   https://github.com/nflverse/nflverse-data/releases  (pbp_2025.csv.gz)
 #   Dictionary / fields (qtr, score_differential, posteam, defteam, qb_dropback, rush_attempt, game_id, play_id, game_seconds_remaining):
-#   https://nflreadr.nflverse.com/articles/dictionary_pbp.html
+#   see nflverse play-by-play field dictionary documentation
 #   https://nflfastr.com/reference/fast_scraper.html
 #
 # Metric definitions:
