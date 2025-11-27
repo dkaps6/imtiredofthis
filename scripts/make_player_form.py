@@ -6436,6 +6436,75 @@ def normalize_name(name: object) -> str:
     return re.sub(r"[^a-z]", "", str(name).lower())
 
 
+def _ensure_player_identity_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Ensure a logs-like DataFrame has the identity columns expected downstream.
+
+    We standardize two columns:
+    - ``player``: player display/name string
+    - ``team``:   team abbreviation
+
+    Newer pipelines may emit alternative column names (e.g., ``player_name``,
+    ``display_name``, ``name`` for player; ``recent_team``, ``posteam`` for
+    team). This helper derives the canonical columns when possible and fails
+    loudly if no reasonable source exists.
+    """
+    if df is None or df.empty:
+        return df
+
+    out = df.copy()
+
+    # ---- player ----
+    if "player" not in out.columns:
+        candidate_name_cols = [
+            "player_name",
+            "player_display_name",
+            "display_name",
+            "name",
+        ]
+        for col in candidate_name_cols:
+            if col in out.columns:
+                out["player"] = out[col].astype("string")
+                print(
+                    f"[PlayerForm] Derived 'player' from '{col}' "
+                    f"for {out['player'].notna().sum()} rows"
+                )
+                break
+        else:
+            raise RuntimeError(
+                "FATAL: logs frame has no 'player' column and no usable "
+                "name column (looked for: "
+                + ", ".join(candidate_name_cols)
+                + ")."
+            )
+
+    # ---- team ----
+    if "team" not in out.columns:
+        candidate_team_cols = [
+            "team",
+            "recent_team",
+            "posteam",
+            "offense_team",
+        ]
+        for col in candidate_team_cols:
+            if col in out.columns:
+                out["team"] = out[col].astype("string")
+                print(
+                    f"[PlayerForm] Derived 'team' from '{col}' "
+                    f"for {out['team'].notna().sum()} rows"
+                )
+                break
+        else:
+            raise RuntimeError(
+                "FATAL: logs frame has no 'team' column and no usable "
+                "team surrogate (looked for: "
+                + ", ".join(candidate_team_cols)
+                + ")."
+            )
+
+    return out
+
+
 def _player_key_from_name(name: object) -> str:
     if not isinstance(name, str):
         return ""
@@ -6575,39 +6644,9 @@ def build_player_form(
     if "season" in logs.columns:
         print(f"[PlayerForm] Retained {len(logs)} logs for season {season}")
 
-    # --- NEW: ensure we have a canonical "player" column on logs -------------
-    #
-    # The new PBP / game-log pipeline can surface player names under a variety
-    # of columns (e.g. "name", "player_name", "display_name") instead of the
-    # legacy "player" column.  Downstream logic (player_key, merges, etc.)
-    # expects logs["player"] to exist, which is why we are currently hitting:
-    #
-    #   KeyError: 'player'
-    #   ... logs["player_key"] = logs["player"].apply(normalize_name)
-    #
-    # Here we normalize that: pick the first available name column and create
-    # a canonical "player" column from it.  If nothing usable is present, we
-    # fail fast with a clear error.
-    if not logs.empty and "player" not in logs.columns:
-        candidate_cols = [
-            col for col in ("name", "player_name", "display_name")
-            if col in logs.columns
-        ]
-        if candidate_cols:
-            src = candidate_cols[0]
-            print(
-                f"[PlayerForm] 'player' column missing on logs; "
-                f"using '{src}' as the source for player names."
-            )
-            logs = logs.copy()
-            logs["player"] = logs[src].astype("string")
-        else:
-            # Fail loudly so we don't silently write garbage PlayerForm.
-            raise RuntimeError(
-                "[PlayerForm] FATAL: no usable player-name column found on "
-                f"logs; expected one of ['player', 'name', 'player_name', "
-                f"'display_name']; got columns={list(logs.columns)}"
-            )
+    # Normalize identity columns to guarantee downstream merges can rely on
+    # logs['player'] and logs['team'].
+    logs = _ensure_player_identity_columns(logs)
 
     roles["player_key"] = roles["player"].apply(normalize_name)
     roles["player_clean_key"] = roles["player"].apply(normalize_name)
