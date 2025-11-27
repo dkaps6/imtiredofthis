@@ -1545,118 +1545,117 @@ def _build_team_to_opp_map_for_slate(
 
 
 # === Weighted season consensus helper (surgical add) ===
-def _build_season_consensus(base: pd.DataFrame) -> pd.DataFrame:
-    """Weighted season consensus per (player, team, season). Requires denominators if available."""
-    if base is None or base.empty:
-        return pd.DataFrame()
-    df = base.copy()
-    df.columns = [c.lower() for c in df.columns]
+def _build_season_consensus(player_form: pd.DataFrame) -> pd.DataFrame:
+    """
+    Build a season-level *consensus* table from per-game player_form rows.
 
-    # numeric coercion for denominators (when present)
-    denom_cols = [
-        "targets",
-        "team_targets",
-        "team_dropbacks",
-        "receptions",
-        "rec_yards",
-        "rushes",
-        "team_rushes",
-        "rush_yards",
-        "rz_targets",
-        "rz_team_targets",
-        "rz_rushes",
-        "rz_team_rushes",
-        "pass_yards",
-        "pass_att",
-    ]
+    Semantics:
+      - Input:  one row per (player, team, week, season, ...), with per-game
+        rates/shares/efficiency metrics already computed.
+      - Output: one row per (player, team, season, position, role, ...), where
+        each numeric metric is the *average across games*, plus a games_played
+        column that tells us how many games were included.
 
-    for c in denom_cols:
-        if c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
+    This version intentionally does NOT require legacy 'denominator' columns
+    like targets / attempts / carries. It assumes player_form is already in a
+    per-game shape and aggregates by simple means.
+    """
 
-    keys = [k for k in ["player", "team", "season"] if k in df.columns]
-    if not keys:
-        # No sensible grouping keys → nothing to do
-        logger.error(
-            "[make_player_form] season consensus: missing all grouping keys "
-            "(player/team/season). Available columns: %s",
-            sorted(df.columns),
-        )
-        return pd.DataFrame()
-
-    # Build aggregation spec ONLY from columns that actually exist
-    agg_spec = {c: "sum" for c in denom_cols if c in df.columns}
-
-    if not agg_spec:
-        # This is the situation currently blowing up CI: we hit groupby.agg({})
-        logger.error(
-            "[make_player_form] season consensus: no numeric denominators present. "
-            "Expected one of %s but found none on player_form. Columns: %s",
-            denom_cols,
-            sorted(df.columns),
-        )
+    if player_form is None or player_form.empty:
         raise RuntimeError(
-            "[make_player_form] FATAL: season consensus cannot compute – "
-            "no expected denominator columns found on player_form"
+            "[make_player_form] FATAL: player_form is empty – cannot build season consensus"
         )
 
-    sums = (
-        df.groupby(keys, dropna=False)
-        .agg(agg_spec)
-        .reset_index()
+    df = player_form.copy()
+
+    # Coerce season/week to numeric where present so groupby behaves.
+    for col in ("season", "week"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # Grouping keys: only keep the ones that actually exist on the frame.
+    group_keys: list[str] = []
+    for col in (
+        "season",
+        "player_clean_key",
+        "player_canonical",
+        "player",
+        "team",
+        "position",
+        "role",
+    ):
+        if col in df.columns:
+            group_keys.append(col)
+
+    if not group_keys:
+        raise RuntimeError(
+            "[make_player_form] FATAL: cannot build season consensus – "
+            "no grouping keys present on player_form"
+        )
+
+    # Numeric value columns to average (shares, rates, efficiencies, etc.).
+    numeric_cols = df.select_dtypes(include=["number", "float", "int", "Int64"]).columns.tolist()
+    exclude_cols = set(group_keys) | {"week", "game_id", "event_id"}
+    value_cols = [c for c in numeric_cols if c not in exclude_cols]
+
+    if not value_cols:
+        raise RuntimeError(
+            "[make_player_form] FATAL: cannot build season consensus – "
+            "no numeric value columns found on player_form"
+        )
+
+    logger.info(
+        "[PlayerForm] Building season consensus from %d player_form rows; "
+        "group_keys=%s, value_cols=%d",
+        len(df),
+        group_keys,
+        len(value_cols),
     )
 
-    out = sums.copy()
-    # receiving
-    if {"targets", "team_targets"}.issubset(out.columns):
-        out["tgt_share"] = out["targets"] / out["team_targets"]
-    if {"targets", "team_dropbacks"}.issubset(out.columns):
-        out["route_rate"] = out["targets"] / out["team_dropbacks"]
-    if {"rec_yards", "targets"}.issubset(out.columns):
-        out["ypt"] = out["rec_yards"] / out["targets"]
-        out["yprr"] = out["rec_yards"] / out["targets"]
-    if {"receptions", "targets"}.issubset(out.columns):
-        out["receptions_per_target"] = out["receptions"] / out["targets"]
-    if {"rz_targets", "rz_team_targets"}.issubset(out.columns):
-        out["rz_tgt_share"] = out["rz_targets"] / out["rz_team_targets"]
-    # rushing
-    if {"rushes", "team_rushes"}.issubset(out.columns):
-        out["rush_share"] = out["rushes"] / out["team_rushes"]
-    if {"rush_yards", "rushes"}.issubset(out.columns):
-        out["ypc"] = out["rush_yards"] / out["rushes"]
-    if {"rz_rushes", "rz_team_rushes"}.issubset(out.columns):
-        out["rz_rush_share"] = out["rz_rushes"] / out["rz_team_rushes"]
-    # qb
-    if {"pass_yards", "pass_att"}.issubset(out.columns):
-        out["ypa"] = out["pass_yards"] / out["pass_att"]
+    # games_played: number of distinct weeks per (player, team, season, ...).
+    if "week" in df.columns:
+        games = df.groupby(group_keys)["week"].nunique().rename("games_played")
+    else:
+        # Fallback: simple row count if week is not available for some reason.
+        games = df.groupby(group_keys).size().rename("games_played")
 
-    # combined RZ share
-    out["rz_share"] = np.nan
-    if "rz_tgt_share" in out.columns or "rz_rush_share" in out.columns:
-        t = out.get("rz_tgt_share", pd.Series(np.nan, index=out.index))
-        r = out.get("rz_rush_share", pd.Series(np.nan, index=out.index))
-        out["rz_share"] = np.fmax(t, r)
+    # Aggregate numeric metrics by mean across games.
+    agg_spec = {c: "mean" for c in value_cols}
+    consensus = df.groupby(group_keys, dropna=False).agg(agg_spec).reset_index()
 
-    # carry role/position mode from base
-    def _mode(series: pd.Series):
-        s = series.dropna().astype(str)
-        if s.empty:
-            return np.nan
-        m = s.mode()
-        return m.iloc[0] if not m.empty else s.iloc[0]
+    # Attach games_played.
+    consensus = consensus.merge(games.reset_index(), on=group_keys, how="left")
 
-    for lab in ["position", "role"]:
-        if lab in df.columns:
-            m = df.groupby(keys, dropna=False)[lab].apply(_mode).reset_index()
-            out = out.merge(m, on=keys, how="left")
+    # Reorder columns: identity + games_played first, then everything else.
+    front_cols = [
+        c
+        for c in (
+            "player",
+            "player_canonical",
+            "player_clean_key",
+            "team",
+            "season",
+            "position",
+            "role",
+            "games_played",
+        )
+        if c in consensus.columns
+    ]
+    other_cols = [c for c in consensus.columns if c not in front_cols]
+    consensus = consensus[front_cols + other_cols]
 
-    # games
-    games = df.groupby(keys, dropna=False).size().rename("games").reset_index()
-    out = out.merge(games, on=keys, how="left")
+    if consensus.empty:
+        raise RuntimeError(
+            "[make_player_form] FATAL: season consensus is empty after aggregation"
+        )
 
-    # mark as consensus row
-    out["opponent"] = "ALL"
-    return out
+    logger.info(
+        "[PlayerForm] Season consensus built: %d rows, %d value columns averaged",
+        len(consensus),
+        len(value_cols),
+    )
+
+    return consensus
 
 
 CONSENSUS_OPPONENT_SENTINEL = "ALL"
