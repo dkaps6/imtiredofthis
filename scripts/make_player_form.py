@@ -2020,11 +2020,15 @@ def _fetch_player_logs(season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
             "for season totals aggregation."
         )
 
-    # Aggregate all numeric columns; later stages decide which ones to use.
+    # Aggregate numeric stat columns, but DO NOT aggregate the grouping keys
+    # themselves (player/team/season). If we include "season" here, it will
+    # exist both as an index level and as a summed column, and reset_index()
+    # will raise: "ValueError: cannot insert season, already exists".
     numeric_cols: list[str] = [
         c
         for c in game_logs.columns
         if pd.api.types.is_numeric_dtype(game_logs[c])
+        and c not in group_keys
     ]
     if not numeric_cols:
         raise RuntimeError(
