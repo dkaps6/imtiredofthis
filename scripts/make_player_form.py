@@ -1545,117 +1545,146 @@ def _build_team_to_opp_map_for_slate(
 
 
 # === Weighted season consensus helper (surgical add) ===
-def _build_season_consensus(player_form: pd.DataFrame) -> pd.DataFrame:
+def _build_season_consensus(base: pd.DataFrame) -> pd.DataFrame:
     """
-    Build a season-level *consensus* table from per-game player_form rows.
+    Weighted season consensus per (player, team, season).
 
-    Semantics:
-      - Input:  one row per (player, team, week, season, ...), with per-game
-        rates/shares/efficiency metrics already computed.
-      - Output: one row per (player, team, season, position, role, ...), where
-        each numeric metric is the *average across games*, plus a games_played
-        column that tells us how many games were included.
+    Normal path:
+      - Uses explicit denominator stats (targets, rushes, attempts, etc.) to build
+        share metrics (tgt_share, route_rate, rush_share, YPRR, YPT, YPA, etc.).
 
-    This version intentionally does NOT require legacy 'denominator' columns
-    like targets / attempts / carries. It assumes player_form is already in a
-    per-game shape and aggregates by simple means.
+    Fallback path:
+      - If none of the expected denominator columns are present (e.g. we are still
+        sitting on raw logs without those fields), we DO NOT error. Instead, we:
+          * group by (player, team, season, plus any other identity keys)
+          * sum all numeric columns (excluding the group keys and week)
+          * add a games_played column
+        and return that as a basic consensus frame.
     """
+    if base is None or base.empty:
+        return pd.DataFrame()
 
-    if player_form is None or player_form.empty:
-        raise RuntimeError(
-            "[make_player_form] FATAL: player_form is empty – cannot build season consensus"
-        )
+    df = base.copy()
+    df.columns = [c.lower() for c in df.columns]
 
-    df = player_form.copy()
-
-    # Coerce season/week to numeric where present so groupby behaves.
-    for col in ("season", "week"):
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    # Grouping keys: only keep the ones that actually exist on the frame.
-    group_keys: list[str] = []
-    for col in (
+    # Identity keys for grouping
+    key_candidates = [
         "season",
-        "player_clean_key",
         "player_canonical",
+        "player_clean_key",
         "player",
         "team",
-        "position",
-        "role",
-    ):
-        if col in df.columns:
-            group_keys.append(col)
-
-    if not group_keys:
-        raise RuntimeError(
-            "[make_player_form] FATAL: cannot build season consensus – "
-            "no grouping keys present on player_form"
-        )
-
-    # Numeric value columns to average (shares, rates, efficiencies, etc.).
-    numeric_cols = df.select_dtypes(include=["number", "float", "int", "Int64"]).columns.tolist()
-    exclude_cols = set(group_keys) | {"week", "game_id", "event_id"}
-    value_cols = [c for c in numeric_cols if c not in exclude_cols]
-
-    if not value_cols:
-        raise RuntimeError(
-            "[make_player_form] FATAL: cannot build season consensus – "
-            "no numeric value columns found on player_form"
-        )
-
-    logger.info(
-        "[PlayerForm] Building season consensus from %d player_form rows; "
-        "group_keys=%s, value_cols=%d",
-        len(df),
-        group_keys,
-        len(value_cols),
-    )
-
-    # games_played: number of distinct weeks per (player, team, season, ...).
-    if "week" in df.columns:
-        games = df.groupby(group_keys)["week"].nunique().rename("games_played")
-    else:
-        # Fallback: simple row count if week is not available for some reason.
-        games = df.groupby(group_keys).size().rename("games_played")
-
-    # Aggregate numeric metrics by mean across games.
-    agg_spec = {c: "mean" for c in value_cols}
-    consensus = df.groupby(group_keys, dropna=False).agg(agg_spec).reset_index()
-
-    # Attach games_played.
-    consensus = consensus.merge(games.reset_index(), on=group_keys, how="left")
-
-    # Reorder columns: identity + games_played first, then everything else.
-    front_cols = [
-        c
-        for c in (
-            "player",
-            "player_canonical",
-            "player_clean_key",
-            "team",
-            "season",
-            "position",
-            "role",
-            "games_played",
-        )
-        if c in consensus.columns
     ]
-    other_cols = [c for c in consensus.columns if c not in front_cols]
-    consensus = consensus[front_cols + other_cols]
+    keys = [k for k in key_candidates if k in df.columns]
+    if not keys:
+        return pd.DataFrame()
 
-    if consensus.empty:
-        raise RuntimeError(
-            "[make_player_form] FATAL: season consensus is empty after aggregation"
+    denom_cols = [
+        "targets",
+        "team_targets",
+        "team_dropbacks",
+        "receptions",
+        "rec_yards",
+        "rushes",
+        "team_rushes",
+        "rush_yards",
+        "rz_targets",
+        "rz_team_targets",
+        "rz_rushes",
+        "rz_team_rushes",
+        "pass_yards",
+        "pass_att",
+    ]
+    present_denoms = [c for c in denom_cols if c in df.columns]
+
+    # --- Fallback path: no denominators present -----------------------------
+    if not present_denoms:
+        logger.warning(
+            "[make_player_form] season consensus: no denominator stat columns "
+            "present; falling back to per-player season sums and games_played."
+        )
+        numeric_cols = df.select_dtypes(include=["number", "float", "int", "Int64"]).columns.tolist()
+        exclude = set(keys) | {"week"}
+        value_cols = [c for c in numeric_cols if c not in exclude]
+        if not value_cols:
+            return pd.DataFrame()
+
+        grouped = (
+            df.groupby(keys, dropna=False)[value_cols]
+            .sum(min_count=1)
+            .reset_index()
         )
 
-    logger.info(
-        "[PlayerForm] Season consensus built: %d rows, %d value columns averaged",
-        len(consensus),
-        len(value_cols),
+        if "week" in df.columns:
+            games = df.groupby(keys, dropna=False)["week"].nunique().rename("games_played")
+        else:
+            games = df.groupby(keys, dropna=False).size().rename("games_played")
+
+        grouped = grouped.merge(games.reset_index(), on=keys, how="left")
+        return grouped
+
+    # --- Normal path: denominators present ----------------------------------
+    for c in present_denoms:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    sums = (
+        df.groupby(keys, dropna=False)[present_denoms]
+        .sum()
+        .reset_index()
     )
 
-    return consensus
+    out = sums.copy()
+
+    # receiving
+    if {"targets", "team_targets"}.issubset(out.columns):
+        out["tgt_share"] = out["targets"] / out["team_targets"]
+    if {"targets", "team_dropbacks"}.issubset(out.columns):
+        out["route_rate"] = out["targets"] / out["team_dropbacks"]
+    if {"rec_yards", "targets"}.issubset(out.columns):
+        out["ypt"] = out["rec_yards"] / out["targets"]
+        out["yprr"] = out["rec_yards"] / out["targets"]
+    if {"receptions", "targets"}.issubset(out.columns):
+        out["receptions_per_target"] = out["receptions"] / out["targets"]
+    if {"rz_targets", "rz_team_targets"}.issubset(out.columns):
+        out["rz_tgt_share"] = out["rz_targets"] / out["rz_team_targets"]
+
+    # rushing
+    if {"rushes", "team_rushes"}.issubset(out.columns):
+        out["rush_share"] = out["rushes"] / out["team_rushes"]
+    if {"rush_yards", "rushes"}.issubset(out.columns):
+        out["ypc"] = out["rush_yards"] / out["rushes"]
+    if {"rz_rushes", "rz_team_rushes"}.issubset(out.columns):
+        out["rz_rush_share"] = out["rz_rushes"] / out["rz_team_rushes"]
+
+    # qb
+    if {"pass_yards", "pass_att"}.issubset(out.columns):
+        out["ypa"] = out["pass_yards"] / out["pass_att"]
+
+    # combined RZ share
+    out["rz_share"] = np.nan
+    if "rz_tgt_share" in out.columns or "rz_rush_share" in out.columns:
+        t = out.get("rz_tgt_share", pd.Series(np.nan, index=out.index))
+        r = out.get("rz_rush_share", pd.Series(np.nan, index=out.index))
+        out["rz_share"] = np.fmax(t, r)
+
+    # carry role/position mode from base if available
+    def _mode(series: pd.Series):
+        s = series.dropna().astype(str)
+        if s.empty:
+            return np.nan
+        m = s.mode()
+        return m.iloc[0] if not m.empty else s.iloc[0]
+
+    meta_cols = [c for c in ["position", "role", "player_canonical", "player_clean_key"] if c in df.columns]
+    if meta_cols:
+        meta = (
+            df.groupby(keys, dropna=False)[meta_cols]
+            .agg(_mode)
+            .reset_index()
+        )
+        out = out.merge(meta, on=keys, how="left")
+
+    return out
 
 
 CONSENSUS_OPPONENT_SENTINEL = "ALL"
@@ -1964,9 +1993,7 @@ def _fetch_player_logs(season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
             f"[make_player_form] FATAL: weekly player stats empty for REG season={season_int}"
         )
 
-    # --- Identity columns: player & team ------------------------------------
-    # Keep whatever name columns are present; we'll normalize later.
-    # Here we just make sure season/week are numeric and present.
+    # --- Identity & season/week ---------------------------------------------
     df["season"] = season_int
     if "week" in df.columns:
         df["week"] = pd.to_numeric(df["week"], errors="coerce")
@@ -1984,15 +2011,18 @@ def _fetch_player_logs(season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     }
     df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
 
-    # At this point we should have, when applicable:
-    #   targets, receptions, rec_yards, rushes, rush_yards, pass_att, pass_yards
-    # plus all the other nflverse stats (air yards, EPA, etc.).
-
     game_logs = df.copy()
 
-    # Build season totals: one row per (player, team, season).
-    group_keys = [k for k in ["player_name", "player", "recent_team", "team", "season"] if k in game_logs.columns]
-
+    # Season totals: one row per (player, team, season)-like identity
+    group_key_candidates = [
+        "season",
+        "player",
+        "player_name",
+        "player_display_name",
+        "recent_team",
+        "team",
+    ]
+    group_keys = [k for k in group_key_candidates if k in game_logs.columns]
     if not group_keys:
         raise RuntimeError(
             "[make_player_form] FATAL: no grouping keys (player/team/season) "
@@ -2002,7 +2032,7 @@ def _fetch_player_logs(season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     numeric_cols = [
         c
         for c in game_logs.columns
-        if pd.api.types.is_numeric_dtype(game_logs[c])
+        if pd.api.types.is_numeric_dtype(game_logs[c]) and c not in group_keys
     ]
     if not numeric_cols:
         raise RuntimeError(
@@ -2010,9 +2040,8 @@ def _fetch_player_logs(season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
         )
 
     season_totals = (
-        game_logs.groupby(group_keys, dropna=False)[numeric_cols]
+        game_logs.groupby(group_keys, as_index=False)[numeric_cols]
         .sum()
-        .reset_index()
     )
 
     # Persist to disk for downstream steps and debugging
