@@ -1833,13 +1833,13 @@ def _generate_metrics_dataframe(season: int) -> pd.DataFrame:
 REQUIRED_INPUTS: dict[str, Path] = {
     "team_form": TEAM_FORM_PATH,
     "player_form": PLAYER_FORM_PATH,
-    "player_form_consensus": PLAYER_CONS_PATH,
     "props_raw": DATA_PATH / "props_raw.csv",
     "weather": WEATHER_PATH,
     "team_week_map": TEAM_WEEK_MAP_PATH,
 }
 
 OPTIONAL_INPUTS: dict[str, Path] = {
+    "player_form_consensus": PLAYER_CONS_PATH,
     "qb_scramble_rates": QB_SCRAMBLE_PATH,
     "qb_designed_runs": QB_DESIGNED_PATH,
     "qb_mobility": QB_MOBILITY_PATH,
