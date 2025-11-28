@@ -1544,6 +1544,262 @@ def _build_team_to_opp_map_for_slate(
     return mapping
 
 
+# --- PBP aggregation for season consensus ----------------------------------
+def _aggregate_pbp_to_player_form(pbp: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate raw play-by-play into per-player, per-game stat lines."""
+
+    if pbp is None or pbp.empty:
+        return pd.DataFrame()
+
+    df = pbp.copy()
+    df.columns = [c.lower() for c in df.columns]
+
+    off_col = (
+        "posteam"
+        if "posteam" in df.columns
+        else ("offense_team" if "offense_team" in df.columns else None)
+    )
+    opp_col = (
+        "defteam"
+        if "defteam" in df.columns
+        else ("defense_team" if "defense_team" in df.columns else None)
+    )
+
+    if off_col is None:
+        return pd.DataFrame()
+
+    df["team"] = df[off_col].astype(str).str.upper().str.strip().map(_canon_team)
+    df["opponent"] = (
+        df[opp_col].astype(str).str.upper().str.strip() if opp_col else df.get("opponent")
+    )
+
+    for col in [
+        "pass_attempt",
+        "complete_pass",
+        "qb_dropback",
+        "rush_attempt",
+        "yards_gained",
+    ]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+            if col != "yards_gained":
+                df[col] = df[col].astype(int)
+
+    df["season"] = pd.to_numeric(df.get("season"), errors="coerce")
+    df["week"] = pd.to_numeric(df.get("week"), errors="coerce")
+
+    is_pass = df.get("pass")
+    if is_pass is None:
+        pt = df.get("play_type")
+        is_pass = pt.isin(["pass", "no_play"]) if pt is not None else pd.Series(False, index=df.index)
+    else:
+        is_pass = pd.Series(is_pass).astype(bool)
+
+    rec = df.loc[is_pass].copy()
+    rcv_col = "receiver_player_name" if "receiver_player_name" in rec.columns else ("receiver" if "receiver" in rec.columns else None)
+    if rcv_col is None:
+        rec["receiver_player_name"] = np.nan
+        rcv_col = "receiver_player_name"
+    rec["player"] = _norm_name(rec[rcv_col].fillna(""))
+    rec["player_id"] = rec.get("receiver_id")
+
+    rec_keys = [
+        col
+        for col in ["season", "week", "team", "opponent", "player", "player_id"]
+        if col in rec.columns
+    ]
+    rec_keys = rec_keys or ["team", "opponent", "player"]
+
+    team_keys = [col for col in ["season", "week", "team", "opponent"] if col in rec.columns]
+    team_targets = rec.groupby(team_keys, dropna=False).size().rename("team_targets") if team_keys else pd.Series(dtype=float)
+    if "qb_dropback" in rec.columns:
+        team_dropbacks = rec.groupby(team_keys, dropna=False)["qb_dropback"].sum(min_count=1).rename("team_dropbacks")
+    else:
+        team_dropbacks = team_targets.rename("team_dropbacks") if not team_targets.empty else pd.Series(dtype=float)
+
+    rec_stats = (
+        rec.groupby(rec_keys, dropna=False)
+        .agg(
+            targets=("pass_attempt", "sum") if "pass_attempt" in rec.columns else ("player", "size"),
+            rec_yards=("yards_gained", "sum"),
+            receptions=("complete_pass", "sum") if "complete_pass" in rec.columns else (rcv_col, "size"),
+        )
+        .reset_index()
+    )
+    if not team_targets.empty:
+        rec_stats = rec_stats.merge(team_targets.reset_index(), on=team_keys, how="left")
+    if not team_dropbacks.empty:
+        rec_stats = rec_stats.merge(team_dropbacks.reset_index(), on=team_keys, how="left")
+
+    yardline = pd.to_numeric(rec.get("yardline_100"), errors="coerce")
+    rz_rec = rec.loc[yardline <= 20] if not rec.empty else rec
+    rz_targets = (
+        rz_rec.groupby(rec_keys, dropna=False).size().rename("rz_targets") if not rz_rec.empty else pd.Series(dtype=float)
+    )
+    rz_team_targets = (
+        rz_rec.groupby(team_keys, dropna=False).size().rename("rz_team_targets") if not rz_rec.empty else pd.Series(dtype=float)
+    )
+    if not rz_targets.empty:
+        rec_stats = rec_stats.merge(rz_targets.reset_index(), on=rec_keys, how="left")
+    if not rz_team_targets.empty:
+        rec_stats = rec_stats.merge(rz_team_targets.reset_index(), on=team_keys, how="left")
+
+    rush_flag = df.get("rush")
+    if rush_flag is None:
+        pt = df.get("play_type")
+        rush_flag = pt.eq("run") if pt is not None else pd.Series(False, index=df.index)
+    else:
+        rush_flag = pd.Series(rush_flag).astype(bool)
+
+    ru = df.loc[rush_flag].copy()
+    rush_col = "rusher_player_name" if "rusher_player_name" in ru.columns else ("rusher" if "rusher" in ru.columns else None)
+    if rush_col is None:
+        ru["rusher_player_name"] = np.nan
+        rush_col = "rusher_player_name"
+    ru["player"] = _norm_name(ru[rush_col].fillna(""))
+    ru["player_id"] = ru.get("rusher_id")
+
+    rush_keys = [
+        col
+        for col in ["season", "week", "team", "opponent", "player", "player_id"]
+        if col in ru.columns
+    ]
+    rush_keys = rush_keys or ["team", "opponent", "player"]
+
+    team_rushes = ru.groupby(team_keys, dropna=False).size().rename("team_rushes") if team_keys else pd.Series(dtype=float)
+    rush_stats = (
+        ru.groupby(rush_keys, dropna=False)
+        .agg(
+            rushes=("rush_attempt", "sum") if "rush_attempt" in ru.columns else ("player", "size"),
+            rush_yards=("yards_gained", "sum"),
+        )
+        .reset_index()
+    )
+    if not team_rushes.empty:
+        rush_stats = rush_stats.merge(team_rushes.reset_index(), on=team_keys, how="left")
+
+    yardline_ru = pd.to_numeric(ru.get("yardline_100"), errors="coerce")
+    rz_ru = ru.loc[yardline_ru <= 10] if not ru.empty else ru
+    rz_rushes = (
+        rz_ru.groupby(rush_keys, dropna=False).size().rename("rz_rushes") if not rz_ru.empty else pd.Series(dtype=float)
+    )
+    rz_team_rushes = (
+        rz_ru.groupby(team_keys, dropna=False).size().rename("rz_team_rushes") if not rz_ru.empty else pd.Series(dtype=float)
+    )
+    if not rz_rushes.empty:
+        rush_stats = rush_stats.merge(rz_rushes.reset_index(), on=rush_keys, how="left")
+    if not rz_team_rushes.empty:
+        rush_stats = rush_stats.merge(rz_team_rushes.reset_index(), on=team_keys, how="left")
+
+    qb_col = "passer_player_name" if "passer_player_name" in df.columns else ("passer" if "passer" in df.columns else None)
+    qb = df.copy() if qb_col else pd.DataFrame()
+    qb_df = pd.DataFrame(columns=["team", "opponent", "player"])
+    if qb_col:
+        qb["player"] = _norm_name(qb[qb_col].fillna(""))
+        qb["player_id"] = qb.get("passer_id")
+        qb_keys = [
+            col
+            for col in ["season", "week", "team", "opponent", "player", "player_id"]
+            if col in qb.columns
+        ]
+        qb_keys = qb_keys or ["team", "opponent", "player"]
+        qb_df = (
+            qb.groupby(qb_keys, dropna=False)
+            .agg(
+                pass_yards=("yards_gained", "sum"),
+                pass_att=("pass_attempt", "sum") if "pass_attempt" in qb.columns else (qb_col, "size"),
+                dropbacks=("qb_dropback", "sum") if "qb_dropback" in qb.columns else (qb_col, "size"),
+            )
+            .reset_index()
+        )
+
+    merge_keys = [
+        col
+        for col in ["season", "week", "team", "opponent", "player", "player_id"]
+        if col in df.columns or col in rec_stats.columns or col in rush_stats.columns
+    ]
+    merge_keys = merge_keys or ["team", "opponent", "player"]
+
+    base = rec_stats.merge(rush_stats, on=merge_keys, how="outer", suffixes=("_rec", "_rush"))
+    base = _coalesce_dupe_cols(base)
+    assert_no_duplicate_columns(base, "pbp rec/rush merge")
+
+    if "player_rec" in base.columns or "player_rush" in base.columns:
+        base["player"] = base.get("player_rec").combine_first(base.get("player_rush"))
+        base.drop(columns=[c for c in ["player_rec", "player_rush"] if c in base.columns], inplace=True)
+
+    if "player_id_rec" in base.columns or "player_id_rush" in base.columns:
+        base["player_id"] = base.get("player_id_rec").combine_first(base.get("player_id_rush"))
+        base.drop(columns=[c for c in ["player_id_rec", "player_id_rush"] if c in base.columns], inplace=True)
+
+    if not qb_df.empty:
+        base = base.merge(qb_df, on=merge_keys, how="left", suffixes=("", "_qb"))
+        base = _coalesce_dupe_cols(base)
+        assert_no_duplicate_columns(base, "pbp qb merge")
+
+    base["tgt_share"] = np.where(
+        base.get("team_targets", 0) > 0,
+        base.get("targets") / base.get("team_targets"),
+        np.nan,
+    )
+    base["route_rate"] = np.where(
+        base.get("team_dropbacks", 0) > 0,
+        base.get("targets") / base.get("team_dropbacks"),
+        np.nan,
+    )
+    base["ypt"] = np.where(base.get("targets", 0) > 0, base.get("rec_yards") / base.get("targets"), np.nan)
+    base["receptions_per_target"] = np.where(
+        base.get("targets", 0) > 0,
+        base.get("receptions") / base.get("targets"),
+        np.nan,
+    )
+    base["rush_share"] = np.where(
+        base.get("team_rushes", 0) > 0,
+        base.get("rushes") / base.get("team_rushes"),
+        np.nan,
+    )
+    base["ypc"] = np.where(base.get("rushes", 0) > 0, base.get("rush_yards") / base.get("rushes"), np.nan)
+    base["ypa"] = np.where(base.get("pass_att", 0) > 0, base.get("pass_yards") / base.get("pass_att"), np.nan)
+    base["rz_tgt_share"] = np.where(
+        base.get("rz_team_targets", 0) > 0,
+        base.get("rz_targets") / base.get("rz_team_targets"),
+        np.nan,
+    )
+    base["rz_rush_share"] = np.where(
+        base.get("rz_team_rushes", 0) > 0,
+        base.get("rz_rushes") / base.get("rz_team_rushes"),
+        np.nan,
+    )
+    base["rz_share"] = base[["rz_tgt_share", "rz_rush_share"]].max(axis=1)
+
+    required = [
+        "targets",
+        "receptions",
+        "rec_yards",
+        "pass_att",
+        "pass_yards",
+        "rushes",
+        "rush_yards",
+        "team_targets",
+        "team_dropbacks",
+        "team_rushes",
+        "rz_targets",
+        "rz_team_targets",
+        "rz_rushes",
+        "rz_team_rushes",
+    ]
+    base = _ensure_cols(base, required)
+
+    logger.info(
+        "[make_player_form] aggregated raw PBP rows=%d → player_form rows=%d players=%d",
+        len(pbp),
+        len(base),
+        base.get("player", pd.Series(dtype=object)).nunique(),
+    )
+
+    return base
+
+
 # === Weighted season consensus helper (surgical add) ===
 def _build_season_consensus(base: pd.DataFrame) -> pd.DataFrame:
     """
@@ -1567,19 +1823,7 @@ def _build_season_consensus(base: pd.DataFrame) -> pd.DataFrame:
     df = base.copy()
     df.columns = [c.lower() for c in df.columns]
 
-    # Identity keys for grouping
-    key_candidates = [
-        "season",
-        "player_canonical",
-        "player_clean_key",
-        "player",
-        "team",
-    ]
-    keys = [k for k in key_candidates if k in df.columns]
-    if not keys:
-        return pd.DataFrame()
-
-    denom_cols = [
+    expected_denoms = [
         "targets",
         "team_targets",
         "team_dropbacks",
@@ -1595,33 +1839,33 @@ def _build_season_consensus(base: pd.DataFrame) -> pd.DataFrame:
         "pass_yards",
         "pass_att",
     ]
-    present_denoms = [c for c in denom_cols if c in df.columns]
 
-    # --- Fallback path: no denominators present -----------------------------
+    # Identity keys for grouping
+    key_candidates = [
+        "season",
+        "player_canonical",
+        "player_clean_key",
+        "player",
+        "team",
+    ]
+    keys = [k for k in key_candidates if k in df.columns]
+    if not keys:
+        return pd.DataFrame()
+
+    present_denoms = [c for c in expected_denoms if c in df.columns]
+
     if not present_denoms:
-        logger.warning(
-            "[make_player_form] season consensus: no denominator stat columns "
-            "present; falling back to per-player season sums and games_played."
+        aggregated = _aggregate_pbp_to_player_form(df)
+        if not aggregated.empty:
+            df = aggregated
+            present_denoms = [c for c in expected_denoms if c in df.columns]
+
+    if not present_denoms:
+        missing_cols = [col for col in expected_denoms if col not in df.columns]
+        raise RuntimeError(
+            "[make_player_form] season consensus cannot proceed; missing denominator "
+            f"columns: {missing_cols}. Current columns: {sorted(df.columns)}"
         )
-        numeric_cols = df.select_dtypes(include=["number", "float", "int", "Int64"]).columns.tolist()
-        exclude = set(keys) | {"week"}
-        value_cols = [c for c in numeric_cols if c not in exclude]
-        if not value_cols:
-            return pd.DataFrame()
-
-        grouped = (
-            df.groupby(keys, dropna=False)[value_cols]
-            .sum(min_count=1)
-            .reset_index()
-        )
-
-        if "week" in df.columns:
-            games = df.groupby(keys, dropna=False)["week"].nunique().rename("games_played")
-        else:
-            games = df.groupby(keys, dropna=False).size().rename("games_played")
-
-        grouped = grouped.merge(games.reset_index(), on=keys, how="left")
-        return grouped
 
     # --- Normal path: denominators present ----------------------------------
     for c in present_denoms:
@@ -6176,6 +6420,17 @@ def _write_player_form_outputs(
     consensus = _attach_player_identity(consensus, team_columns=("team_abbr", "team"))
     consensus = _reorder_identity_columns(consensus)
 
+    try:
+        player_count = consensus.get("player_clean_key", pd.Series(dtype=object)).nunique()
+    except Exception:
+        player_count = "unknown"
+    logger.info(
+        "[make_player_form] player_form rows=%d players=%s | consensus rows=%d before finalization",
+        len(player_form),
+        player_count,
+        len(consensus),
+    )
+
     pf_consensus = consensus.copy()
     if "player" not in pf_consensus.columns:
         pf_consensus["player"] = pf_consensus.get("player_canonical", "")
@@ -6427,6 +6682,16 @@ def _write_player_form_outputs(
     PLAYER_FORM_CONSENSUS_OUT.parent.mkdir(parents=True, exist_ok=True)
     consensus.to_csv(PLAYER_FORM_CONSENSUS_OUT, index=False)
 
+    try:
+        consensus_players = consensus.get("player_clean_key", pd.Series(dtype=object)).nunique()
+    except Exception:
+        consensus_players = "unknown"
+    logger.info(
+        "[make_player_form] consensus players=%s rows=%d written -> %s",
+        consensus_players,
+        len(consensus),
+        PLAYER_FORM_CONSENSUS_OUT,
+    )
     print(f"[make_player_form] wrote {len(player_form)} rows -> {PLAYER_FORM_OUT}")
     print(
         f"[make_player_form] wrote {len(consensus)} rows -> {PLAYER_FORM_CONSENSUS_OUT}"
