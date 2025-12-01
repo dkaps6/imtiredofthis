@@ -1804,18 +1804,18 @@ def _aggregate_pbp_to_player_form(pbp: pd.DataFrame) -> pd.DataFrame:
 # === Weighted season consensus helper (surgical add) ===
 def _build_season_consensus(base: pd.DataFrame) -> pd.DataFrame:
     """
-    Weighted season consensus per (player, team, season).
+    Season consensus per (player, team, season).
 
     Normal path:
-      - Uses explicit denominator stats (targets, rushes, attempts, etc.) to build
-        share metrics (tgt_share, route_rate, rush_share, YPRR, YPT, YPA, etc.).
+      - Use explicit denominator stats (targets, rushes, attempts, etc.) to build
+        share metrics (tgt_share, route_rate, rush_share, yprr, ypt, ypa, etc.).
 
     Fallback path:
-      - If none of the expected denominator columns are present (e.g. we are still
-        sitting on raw logs without those fields), we DO NOT error. Instead, we:
+      - If none of the expected denominator columns are present (e.g. logs are
+        still PBP-shaped), do NOT raise. Instead:
           * group by (player, team, season, plus any other identity keys)
-          * sum all numeric columns (excluding the group keys and week)
-          * add a games_played column
+          * sum numeric columns
+          * add games_played
         and return that as a basic consensus frame.
     """
     if base is None or base.empty:
@@ -1824,7 +1824,20 @@ def _build_season_consensus(base: pd.DataFrame) -> pd.DataFrame:
     df = base.copy()
     df.columns = [c.lower() for c in df.columns]
 
-    expected_denoms = [
+    # Identity keys for grouping
+    key_candidates = [
+        "season",
+        "player_canonical",
+        "player_clean_key",
+        "player",
+        "team",
+    ]
+    keys = [k for k in key_candidates if k in df.columns]
+    if not keys:
+        logger.error("[make_player_form] season consensus: no group keys present; columns=%s", list(df.columns))
+        return pd.DataFrame()
+
+    denom_cols = [
         "targets",
         "team_targets",
         "team_dropbacks",
@@ -1840,33 +1853,36 @@ def _build_season_consensus(base: pd.DataFrame) -> pd.DataFrame:
         "pass_yards",
         "pass_att",
     ]
+    present_denoms = [c for c in denom_cols if c in df.columns]
 
-    # Identity keys for grouping
-    key_candidates = [
-        "season",
-        "player_canonical",
-        "player_clean_key",
-        "player",
-        "team",
-    ]
-    keys = [k for k in key_candidates if k in df.columns]
-    if not keys:
-        return pd.DataFrame()
-
-    present_denoms = [c for c in expected_denoms if c in df.columns]
-
+    # --- Fallback: no denominators present ----------------------------------
     if not present_denoms:
-        aggregated = _aggregate_pbp_to_player_form(df)
-        if not aggregated.empty:
-            df = aggregated
-            present_denoms = [c for c in expected_denoms if c in df.columns]
-
-    if not present_denoms:
-        missing_cols = [col for col in expected_denoms if col not in df.columns]
-        raise RuntimeError(
-            "[make_player_form] season consensus cannot proceed; missing denominator "
-            f"columns: {missing_cols}. Current columns: {sorted(df.columns)}"
+        logger.warning(
+            "[make_player_form] season consensus: no denominator stat columns "
+            "present; falling back to per-player season sums only. "
+            "columns=%s",
+            list(df.columns),
         )
+        numeric_cols = df.select_dtypes(include=["number", "float", "int", "Int64"]).columns.tolist()
+        exclude = set(keys) | {"week"}
+        value_cols = [c for c in numeric_cols if c not in exclude]
+        if not value_cols:
+            return pd.DataFrame()
+
+        grouped = (
+            df.groupby(keys, dropna=False)[value_cols]
+            .sum(min_count=1)
+            .reset_index()
+        )
+
+        # games_played
+        if "week" in df.columns:
+            games = df.groupby(keys, dropna=False)["week"].nunique().rename("games_played")
+        else:
+            games = df.groupby(keys, dropna=False).size().rename("games_played")
+
+        grouped = grouped.merge(games.reset_index(), on=keys, how="left")
+        return grouped
 
     # --- Normal path: denominators present ----------------------------------
     for c in present_denoms:

@@ -1844,6 +1844,7 @@ def _generate_metrics_dataframe(season: int) -> pd.DataFrame:
 REQUIRED_INPUTS: dict[str, Path] = {
     "team_form": TEAM_FORM_PATH,
     "player_form": PLAYER_FORM_PATH,
+    "player_form_consensus": PLAYER_CONS_PATH,
     "props_raw": DATA_PATH / "props_raw.csv",
     "weather": WEATHER_PATH,
     "team_week_map": TEAM_WEEK_MAP_PATH,
@@ -1861,57 +1862,50 @@ OPTIONAL_INPUTS: dict[str, Path] = {
 
 
 def _validate_core_inputs() -> bool:
+    """
+    Fail fast on required inputs, but treat player_form_consensus as optional
+    since load_player_form() can fall back to player_form.csv.
+    """
     for label, path in REQUIRED_INPUTS.items():
-        str_path = str(path)
-        is_consensus = "player_form_consensus.csv" in os.path.basename(str_path)
-
-        if is_consensus:
-            if not os.path.exists(path):
-                print(
-                    "[make_metrics] WARNING: optional player_form_consensus.csv missing; "
-                    "will fall back to player_form.csv",
-                    file=sys.stderr,
-                )
-                continue
-            try:
-                df = pd.read_csv(path)
-            except pd.errors.EmptyDataError:
-                print(
-                    "[make_metrics] WARNING: optional player_form_consensus.csv is empty; "
-                    "will fall back to player_form.csv",
-                    file=sys.stderr,
-                )
-                continue
-            except Exception as exc:
-                print(
-                    f"[make_metrics] WARNING: optional player_form_consensus.csv unreadable ({exc}); "
-                    "will fall back to player_form.csv",
-                    file=sys.stderr,
-                )
-                continue
-
-            if df.empty:
-                print(
-                    "[make_metrics] WARNING: optional player_form_consensus.csv has no rows; "
-                    "will fall back to player_form.csv",
-                    file=sys.stderr,
-                )
-                continue
-            continue
+        is_consensus = (label == "player_form_consensus")
 
         try:
             df = pd.read_csv(path)
         except FileNotFoundError:
+            if is_consensus:
+                print(
+                    f"[make_metrics] WARN: optional input '{label}' missing ({path}); "
+                    "will fall back to player_form.csv",
+                )
+                continue
             print(f"[make_metrics] FATAL: missing required input CSV: {path}")
             return False
         except pd.errors.EmptyDataError:
+            if is_consensus:
+                print(
+                    f"[make_metrics] WARN: optional input '{label}' is empty ({path}); "
+                    "will fall back to player_form.csv",
+                )
+                continue
             print(f"[make_metrics] FATAL: required input CSV is empty: {path}")
             return False
         except Exception as exc:
+            if is_consensus:
+                print(
+                    f"[make_metrics] WARN: optional input '{label}' unreadable ({path}): {exc}; "
+                    "will fall back to player_form.csv",
+                )
+                continue
             print(f"[make_metrics] FATAL: unable to load required input '{label}': {exc}")
             return False
 
         if df.empty:
+            if is_consensus:
+                print(
+                    f"[make_metrics] WARN: optional input '{label}' has no rows ({path}); "
+                    "will fall back to player_form.csv",
+                )
+                continue
             print(f"[make_metrics] FATAL: required input '{label}' has no rows: {path}")
             return False
     return True
