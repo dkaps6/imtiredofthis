@@ -98,6 +98,7 @@ logger = logging.getLogger(__name__)
 
 
 DATA_DIR = "data"
+DATA = Path(DATA_DIR)
 ROLES_PATH = Path(DATA_DIR) / "roles_ourlads.csv"
 PROPS_ENRICHED_PATH = Path(DATA_DIR) / "props_enriched.csv"
 SCHEDULE_GAMES_PATH = Path(DATA_DIR) / "games.csv"
@@ -7086,54 +7087,53 @@ def build_player_form(
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--season", type=int, default=SEASON)
-    parser.add_argument(
-        "--slate-date",
-        dest="slate_date",
-        default=os.environ.get("SLATE_DATE", ""),
-        help="ISO date for current slate (YYYY-MM-DD). Used only for logging/filtering.",
-    )
-    parser.add_argument("--week", type=int, required=False, help="Optional week (unused; kept for compatibility).")
-    args = parser.parse_args(argv)
+    """
+    AUTHORITATIVE PLAYER FORM BUILDER.
 
-    season = int(args.season)
-    slate_date = args.slate_date
+    Uses build_player_form_legacy (the original player model), which:
+      - Builds REAL per-game stats: targets, receptions, rushes, pass_att,
+        rec_yards, rush_yards, pass_yards, team_targets, team_dropbacks, etc.
+      - Outputs the correct schema required for season consensus.
+    """
 
-    logger.info("[pf] building player_form for season=%s slate_date=%s", season, slate_date)
+    season = int(os.environ.get("SEASON", "2025"))
+    slate_date = os.environ.get("SLATE_DATE") or None
 
-    # 1) Always fetch normalized logs for the requested season.
-    game_logs, season_totals = _fetch_player_logs(season)
+    # 1. Build per-game player stats (the REAL player_form)
+    pf = build_player_form_legacy(season=season, slate_date=slate_date, week=None)
+    assert_non_empty(pf, "player_form (legacy)")
 
-    if game_logs is None or game_logs.empty:
-        raise RuntimeError(f"[pf] FATAL: normalized game logs are empty for season={season}")
-    if season_totals is None or season_totals.empty:
-        logger.warning("[pf] season_totals empty for season=%s (will build using game logs only)", season)
+    # 2. Canonicalize team abbreviations
+    if "team" in pf.columns:
+        pf["team"] = normalize_team_series(pf["team"])
+    if "opponent" in pf.columns:
+        pf["opponent"] = normalize_team_series(pf["opponent"])
 
-    # 2) Build the base player_form frame from logs + totals
-    base = build_player_form_from_logs(
-        game_logs=game_logs,
-        season_totals=season_totals,
-        roles_path=ROLES_PATH,
-        opponent_map_path=OPPONENT_MAP_PATH,
-        team_week_map_path=TEAM_WEEK_MAP_PATH,
-        season=season,
-    )
+    # 3. Build season consensus from REAL per-game denominators
+    pf_consensus = _build_season_consensus(pf)
+    assert_non_empty(pf_consensus, "player_form_consensus")
 
-    logger.info("[pf] base player_form rows before enrichment: %d", len(base))
-    if base.empty:
-        raise RuntimeError(f"[pf] FATAL: player_form base is empty for season={season}")
+    # 4. Write outputs
+    DATA.mkdir(parents=True, exist_ok=True)
+    pf.to_csv(DATA / "player_form.csv", index=False)
+    pf_consensus.to_csv(DATA / "player_form_consensus.csv", index=False)
 
-    if not PLAYER_FORM_OUT.exists() or PLAYER_FORM_OUT.stat().st_size == 0:
-        raise RuntimeError("[pf] FATAL: player_form.csv was not written or is empty")
-    if not PLAYER_FORM_CONSENSUS_OUT.exists() or PLAYER_FORM_CONSENSUS_OUT.stat().st_size == 0:
-        raise RuntimeError("[pf] FATAL: player_form_consensus.csv was not written or is empty")
+    # OPTIONAL: produce game_logs + season_totals as artifacts
+    if "week" in pf.columns:
+        num_cols = pf.select_dtypes(include=["number", "float", "int", "Int64"]).columns.tolist()
+        group_keys = [k for k in ["season", "week", "team", "opponent", "player"] if k in pf.columns]
 
-    logger.info(
-        "[pf] final player_form rows: %d; player_form_consensus rows: %s",
-        len(base),
-        "unknown" if not PLAYER_FORM_CONSENSUS_OUT.exists() else sum(1 for _ in open(PLAYER_FORM_CONSENSUS_OUT, "r")) - 1,
-    )
+        if num_cols and group_keys:
+            game_logs = pf[group_keys + num_cols].copy()
+            game_logs.to_csv(DATA / "player_game_logs.csv", index=False)
+
+            season_keys = [k for k in group_keys if k != "week"]
+            season_totals = (
+                game_logs.groupby(season_keys, dropna=False)[num_cols]
+                .sum(min_count=1)
+                .reset_index()
+            )
+            season_totals.to_csv(DATA / "player_season_totals.csv", index=False)
 
     return 0
 
@@ -7175,15 +7175,13 @@ def cli() -> int:
     )
     args = parser.parse_args()
 
-    argv: List[str] = ["--season", str(args.season)]
+    # Propagate CLI inputs via environment for the authoritative main() impl
+    os.environ["SEASON"] = str(args.season)
     if args.slate_date:
-        argv.extend(["--slate-date", args.slate_date])
+        os.environ["SLATE_DATE"] = args.slate_date
 
-    # Delegate to the newer main() implementation which:
-    #   * fetches normalized logs via _fetch_player_logs
-    #   * builds player_form + player_form_consensus
-    #   * enforces fail-fast checks on empty outputs
-    return main(argv)
+    # Delegate to authoritative builder (legacy model + consensus)
+    return main()
 
 
 if __name__ == "__main__":
