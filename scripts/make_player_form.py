@@ -35,6 +35,7 @@ import unicodedata
 
 import numpy as np
 import pandas as pd
+import nfl_data_py as nfl
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -2199,122 +2200,262 @@ def _safe_read_csv(path: Path | str, label: str = "") -> pd.DataFrame:
 
 def _fetch_player_logs(season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Canonical helper to obtain per-game and season-total logs for a season,
-    using nflreadpy's weekly *player stats* as the source of truth.
+    AUTHORITATIVE: build per-player, per-game logs + season totals
+    using BOTH nfl_data_py weekly stats AND play-by-play for red zone.
 
-    This is the authoritative place where we get:
-      - targets, receptions, receiving_yards
-      - carries, rushing_yards
-      - attempts, passing_yards
+    This function is responsible for producing the *denominators* that
+    season consensus depends on:
+      - targets, team_targets
+      - rushes, team_rushes
+      - pass_att, team_dropbacks
+      - rz_targets, rz_team_targets
+      - rz_rushes, rz_team_rushes
 
-    We then rename those into the canonical column names that the rest of the
-    PlayerForm / consensus code expects:
-      - receiving_yards -> rec_yards
-      - carries        -> rushes
-      - rushing_yards  -> rush_yards
-      - attempts       -> pass_att
-      - passing_yards  -> pass_yards
-      - targets, receptions stay as-is
-
-    Side effects:
-      - Writes data/player_game_logs.csv (per-player, per-week)
-      - Writes data/player_season_totals.csv (per-player, per-team, per-season)
-      - Fails loudly if anything critical is empty.
+    It writes:
+      - data/player_game_logs.csv
+      - data/player_season_totals.csv
+    and returns (game_logs, season_totals).
     """
+    season = int(season)
 
-    try:
-        import nflreadpy as nfl
-    except ImportError as err:
-        raise RuntimeError(
-            "[make_player_form] FATAL: nflreadpy is required for player logs. "
-            "Ensure `nflreadpy` is installed in your environment."
-        ) from err
+    # ------------------------------------------------------------------
+    # 1) Weekly per-player stats (targets, rushes, attempts, yards)
+    # ------------------------------------------------------------------
+    logger.info("[pf] fetching weekly player stats for season=%s", season)
+    weekly = nfl.import_weekly_data([season])
+    if weekly is None or weekly.empty:
+        raise RuntimeError(f"[pf] FATAL: import_weekly_data returned empty for season={season}")
 
-    season_int = int(season)
-    logger.info("[pf] fetching weekly player stats via nflreadpy for season=%s", season_int)
+    weekly = weekly.copy()
 
-    # Weekly player stats -> official box-score style stats
-    stats_pl = nfl.load_player_stats(
-        seasons=[season_int],
-        summary_level="week",
+    # Normalize core keys
+    if "season" in weekly.columns:
+        weekly["season"] = pd.to_numeric(weekly["season"], errors="coerce").fillna(season).astype("Int64")
+    else:
+        weekly["season"] = season
+
+    if "week" in weekly.columns:
+        weekly["week"] = pd.to_numeric(weekly["week"], errors="coerce").astype("Int64")
+
+    weekly["player_id"] = (
+        weekly.get("player_id", weekly.get("gsis_id", ""))
+        .astype("string")
+        .str.strip()
     )
-    df = stats_pl.to_pandas()
+    weekly["display_name"] = (
+        weekly.get("player_display_name", weekly.get("player_name", ""))
+        .astype("string")
+        .str.strip()
+    )
+    weekly["team"] = (
+        weekly.get("recent_team", weekly.get("team", ""))
+        .astype("string")
+        .str.strip()
+    )
 
-    if df is None or df.empty:
-        raise RuntimeError(
-            f"[make_player_form] FATAL: load_player_stats([{season_int}], "
-            'summary_level="week") returned an empty frame.'
+    # Helper: take first existing numeric column from a list of candidates
+    def _safe_num(df: pd.DataFrame, candidates: list[str]) -> pd.Series:
+        for col in candidates:
+            if col in df.columns:
+                return pd.to_numeric(df[col], errors="coerce").fillna(0)
+        return pd.Series(0, index=df.index, dtype="float")
+
+    # Base counting stats we care about
+    weekly["targets"]    = _safe_num(weekly, ["targets"])
+    weekly["receptions"] = _safe_num(weekly, ["receptions", "rec"])
+    weekly["rec_yards"]  = _safe_num(weekly, ["receiving_yards", "rec_yards"])
+
+    weekly["rushes"]     = _safe_num(weekly, ["rushing_attempts", "carries", "rush_att"])
+    weekly["rush_yards"] = _safe_num(weekly, ["rushing_yards", "rush_yards"])
+
+    weekly["pass_att"]   = _safe_num(weekly, ["attempts", "pass_attempts"])
+    weekly["pass_yards"] = _safe_num(weekly, ["passing_yards", "pass_yards"])
+
+    # Drop rows that have literally no volume; keeps logs smaller and cleaner
+    volume_cols = ["targets", "receptions", "rushes", "pass_att"]
+    volume_mask = weekly[volume_cols].sum(axis=1) > 0
+    weekly = weekly.loc[volume_mask].copy()
+
+    if weekly.empty:
+        raise RuntimeError(f"[pf] FATAL: weekly stats have no volume rows for season={season}")
+
+    # ------------------------------------------------------------------
+    # 2) Team-level denominators per game (targets / rushes / dropbacks)
+    # ------------------------------------------------------------------
+    team_keys = ["season", "week", "team"]
+    team_agg = (
+        weekly.groupby(team_keys, dropna=False)[["targets", "rushes", "pass_att"]]
+        .sum()
+        .rename(
+            columns={
+                "targets": "team_targets",
+                "rushes": "team_rushes",
+                "pass_att": "team_dropbacks",
+            }
         )
+        .reset_index()
+    )
 
-    # Restrict to regular season if present
-    if "season_type" in df.columns:
-        df = df[df["season_type"] == "REG"]
-    if df.empty:
-        raise RuntimeError(
-            f"[make_player_form] FATAL: weekly player stats empty for REG season={season_int}"
-        )
+    game_logs = weekly.merge(team_agg, on=team_keys, how="left")
 
-    # --- Identity & season/week ---------------------------------------------
-    df["season"] = season_int
-    if "week" in df.columns:
-        df["week"] = pd.to_numeric(df["week"], errors="coerce")
+    # Simple flags for downstream usage
+    game_logs["games"] = 1
+    game_logs["dropbacks"] = game_logs["pass_att"]
 
-    # --- Rename to canonical denominator names for PlayerForm ----------------
-    rename_map = {
-        # receiving
-        "receiving_yards": "rec_yards",
-        # rushing
-        "carries": "rushes",
-        "rushing_yards": "rush_yards",
-        # passing
-        "attempts": "pass_att",
-        "passing_yards": "pass_yards",
+    # ------------------------------------------------------------------
+    # 3) Red-zone usage from PBP (targets + rushes inside the 20)
+    # ------------------------------------------------------------------
+    logger.info("[pf] fetching PBP for red-zone usage for season=%s", season)
+    pbp = load_pbp(season)
+    rz_cols = ["rz_targets", "rz_rushes", "rz_team_targets", "rz_team_rushes"]
+    for c in rz_cols:
+        game_logs[c] = 0.0
+
+    if pbp is not None and not pbp.empty:
+        pbp = pbp.copy()
+
+        # Regular season, red-zone only if these columns exist
+        if "season_type" in pbp.columns:
+            pbp = pbp[pbp["season_type"] == "REG"]
+        if "yardline_100" in pbp.columns:
+            pbp = pbp[pbp["yardline_100"].notna() & (pbp["yardline_100"] <= 20)]
+
+        # Identify id columns (nflfastR-style)
+        rec_id_col = "receiver_player_id" if "receiver_player_id" in pbp.columns else None
+        rush_id_col = "rusher_player_id" if "rusher_player_id" in pbp.columns else None
+
+        # --- red-zone targets ---
+        rz_recv = pd.DataFrame()
+        if rec_id_col is not None and "pass_attempt" in pbp.columns:
+            mask = (pbp["pass_attempt"] == 1) & pbp[rec_id_col].notna()
+            rz_recv = (
+                pbp.loc[mask, ["season", "week", "posteam", rec_id_col]]
+                .assign(rz_targets=1.0)
+                .groupby(["season", "week", "posteam", rec_id_col], dropna=False)["rz_targets"]
+                .sum()
+                .reset_index()
+                .rename(
+                    columns={
+                        "posteam": "team",
+                        rec_id_col: "player_id",
+                    }
+                )
+            )
+
+        # --- red-zone rushes ---
+        rz_rush = pd.DataFrame()
+        if rush_id_col is not None and "rush_attempt" in pbp.columns:
+            mask = (pbp["rush_attempt"] == 1) & pbp[rush_id_col].notna()
+            rz_rush = (
+                pbp.loc[mask, ["season", "week", "posteam", rush_id_col]]
+                .assign(rz_rushes=1.0)
+                .groupby(["season", "week", "posteam", rush_id_col], dropna=False)["rz_rushes"]
+                .sum()
+                .reset_index()
+                .rename(
+                    columns={
+                        "posteam": "team",
+                        rush_id_col: "player_id",
+                    }
+                )
+            )
+
+        # Merge player-level RZ stats
+        if not rz_recv.empty or not rz_rush.empty:
+            from functools import reduce
+
+            frames = []
+            if not rz_recv.empty:
+                frames.append(rz_recv)
+            if not rz_rush.empty:
+                frames.append(rz_rush)
+
+            rz_player = reduce(
+                lambda left, right: pd.merge(
+                    left, right, on=["season", "week", "team", "player_id"], how="outer"
+                ),
+                frames,
+            )
+            for c in ["rz_targets", "rz_rushes"]:
+                if c in rz_player.columns:
+                    rz_player[c] = rz_player[c].fillna(0.0)
+                else:
+                    rz_player[c] = 0.0
+
+            game_logs = game_logs.merge(
+                rz_player,
+                on=["season", "week", "team", "player_id"],
+                how="left",
+                suffixes=("", "_rz"),
+            )
+            for c in ["rz_targets", "rz_rushes"]:
+                game_logs[c] = game_logs.get(c, 0).fillna(0.0)
+
+            # Team-level RZ denominators
+            team_rz = (
+                game_logs.groupby(team_keys, dropna=False)[["rz_targets", "rz_rushes"]]
+                .sum()
+                .rename(
+                    columns={
+                        "rz_targets": "rz_team_targets",
+                        "rz_rushes": "rz_team_rushes",
+                    }
+                )
+                .reset_index()
+            )
+            game_logs = game_logs.merge(team_rz, on=team_keys, how="left")
+
+    else:
+        logger.warning("[pf] PBP missing/empty for season=%s – red-zone stats unavailable", season)
+
+    # Ensure RZ columns exist even if we couldn't compute them
+    for c in rz_cols:
+        if c not in game_logs.columns:
+            game_logs[c] = 0.0
+
+    # ------------------------------------------------------------------
+    # 4) Season totals (per player, per team, per season)
+    # ------------------------------------------------------------------
+    agg_spec = {
+        "games": "sum",
+        "targets": "sum",
+        "receptions": "sum",
+        "rec_yards": "sum",
+        "rushes": "sum",
+        "rush_yards": "sum",
+        "pass_att": "sum",
+        "pass_yards": "sum",
+        "team_targets": "sum",
+        "team_rushes": "sum",
+        "team_dropbacks": "sum",
+        "rz_targets": "sum",
+        "rz_rushes": "sum",
+        "rz_team_targets": "sum",
+        "rz_team_rushes": "sum",
     }
-    df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
-
-    game_logs = df.copy()
-
-    # Season totals: one row per (player, team, season)-like identity
-    group_key_candidates = [
-        "season",
-        "player",
-        "player_name",
-        "player_display_name",
-        "recent_team",
-        "team",
-    ]
-    group_keys = [k for k in group_key_candidates if k in game_logs.columns]
-    if not group_keys:
-        raise RuntimeError(
-            "[make_player_form] FATAL: no grouping keys (player/team/season) "
-            "found in weekly player stats."
-        )
-
-    numeric_cols = [
-        c
-        for c in game_logs.columns
-        if pd.api.types.is_numeric_dtype(game_logs[c]) and c not in group_keys
-    ]
-    if not numeric_cols:
-        raise RuntimeError(
-            "[make_player_form] FATAL: no numeric stat columns found in weekly player stats."
-        )
 
     season_totals = (
-        game_logs.groupby(group_keys, as_index=False)[numeric_cols]
+        game_logs.groupby(
+            ["season", "team", "player_id", "display_name"], dropna=False
+        )[list(agg_spec.keys())]
         .sum()
+        .reset_index()
     )
 
-    # Persist to disk for downstream steps and debugging
-    PLAYER_GAME_LOGS_OUT.parent.mkdir(parents=True, exist_ok=True)
-    game_logs.to_csv(PLAYER_GAME_LOGS_OUT, index=False)
+    if game_logs.empty:
+        raise RuntimeError(f"[pf] FATAL: game_logs empty after weekly+PBP aggregation for season={season}")
+    if season_totals.empty:
+        raise RuntimeError(f"[pf] FATAL: season_totals empty after weekly+PBP aggregation for season={season}")
 
-    PLAYER_SEASON_TOTALS_OUT.parent.mkdir(parents=True, exist_ok=True)
-    season_totals.to_csv(PLAYER_SEASON_TOTALS_OUT, index=False)
+    # ------------------------------------------------------------------
+    # 5) Persist logs to disk for debugging / downstream use
+    # ------------------------------------------------------------------
+    os.makedirs("data", exist_ok=True)
+    game_logs.to_csv("data/player_game_logs.csv", index=False)
+    season_totals.to_csv("data/player_season_totals.csv", index=False)
 
     logger.info(
-        "[pf] _fetch_player_logs (nflreadpy) complete: game_logs rows=%d, "
-        "season_totals rows=%d",
+        "[pf] _fetch_player_logs complete: game_logs rows=%d, season_totals rows=%d",
         len(game_logs),
         len(season_totals),
     )
