@@ -500,16 +500,27 @@ def load_player_form() -> pd.DataFrame:
     consensus_path = os.path.join(DATA_DIR, "player_form_consensus.csv")
     base_path = os.path.join(DATA_DIR, "player_form.csv")
     df = pd.DataFrame()
+    fallback_reason = None
     if os.path.exists(consensus_path):
         try:
             df = pd.read_csv(consensus_path)
             df.columns = [c.lower() for c in df.columns]
         except pd.errors.EmptyDataError:
+            fallback_reason = "appears empty"
             df = pd.DataFrame()
-        except Exception:
+        except Exception as exc:
+            fallback_reason = f"unreadable ({exc})"
             df = pd.DataFrame()
+    else:
+        fallback_reason = "missing"
     if df.empty:
         # Fallback to the base player_form extract when consensus has no rows
+        if fallback_reason:
+            print(
+                f"[make_metrics] WARN: player_form_consensus.csv {fallback_reason}; "
+                "falling back to player_form.csv",
+                file=sys.stderr,
+            )
         df = _read_csv(base_path)
     if df.empty:
         return df
@@ -1851,6 +1862,43 @@ OPTIONAL_INPUTS: dict[str, Path] = {
 
 def _validate_core_inputs() -> bool:
     for label, path in REQUIRED_INPUTS.items():
+        str_path = str(path)
+        is_consensus = "player_form_consensus.csv" in os.path.basename(str_path)
+
+        if is_consensus:
+            if not os.path.exists(path):
+                print(
+                    "[make_metrics] WARNING: optional player_form_consensus.csv missing; "
+                    "will fall back to player_form.csv",
+                    file=sys.stderr,
+                )
+                continue
+            try:
+                df = pd.read_csv(path)
+            except pd.errors.EmptyDataError:
+                print(
+                    "[make_metrics] WARNING: optional player_form_consensus.csv is empty; "
+                    "will fall back to player_form.csv",
+                    file=sys.stderr,
+                )
+                continue
+            except Exception as exc:
+                print(
+                    f"[make_metrics] WARNING: optional player_form_consensus.csv unreadable ({exc}); "
+                    "will fall back to player_form.csv",
+                    file=sys.stderr,
+                )
+                continue
+
+            if df.empty:
+                print(
+                    "[make_metrics] WARNING: optional player_form_consensus.csv has no rows; "
+                    "will fall back to player_form.csv",
+                    file=sys.stderr,
+                )
+                continue
+            continue
+
         try:
             df = pd.read_csv(path)
         except FileNotFoundError:
