@@ -796,6 +796,38 @@ def assert_no_duplicate_columns(df: pd.DataFrame, label: str) -> None:
         )
 
 
+def _dedupe_axis1_columns(df: pd.DataFrame, label: str = "") -> pd.DataFrame:
+    """
+    Best-effort cleanup for duplicate column names.
+
+    In some pandas operations, especially when joining on partially-overlapping
+    keys, it's possible to end up with multiple columns that share the same
+    name (e.g., two 'season' columns). When a later call like
+    `groupby("season")` runs, pandas will complain with:
+
+        ValueError: Grouper for 'season' not 1-dimensional
+
+    This helper _drops subsequent duplicates_, keeping the first occurrence,
+    and logs a warning so we can see it in CI.
+    """
+    if df is None:
+        return df
+    cols = df.columns
+    if not getattr(cols, "duplicated", None):
+        return df
+    mask = cols.duplicated()
+    if mask.any():
+        dupes = cols[mask].unique()
+        logger.warning(
+            "[make_player_form] %s had duplicate columns %s – "
+            "dropping subsequent duplicates and keeping first occurrence",
+            label or "frame",
+            ", ".join(str(c) for c in dupes),
+        )
+        df = df.loc[:, ~mask].copy()
+    return df
+
+
 def _normalize_player_clean_key_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Normalize any player_clean_key merge artifacts to a single column."""
 
@@ -7236,6 +7268,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         if num_cols and group_keys:
             game_logs = pf[group_keys + num_cols].copy()
             game_logs.to_csv(DATA / "player_game_logs.csv", index=False)
+
+            # Clean up duplicate key columns before grouping to avoid ValueError
+            # about 1-dimensional groupers when pandas encounters dupes.
+            game_logs = _dedupe_axis1_columns(
+                game_logs, label="game_logs (pre-season-agg)"
+            )
 
             season_keys = [k for k in group_keys if k != "week"]
             season_totals = (
