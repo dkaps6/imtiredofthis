@@ -100,15 +100,13 @@ logger = logging.getLogger(__name__)
 
 def assert_non_empty(df, name: str) -> None:
     """
-    Fail-fast helper for core tables in make_player_form.
-
-    Many downstream steps assume tables like player_form and
-    player_form_consensus are non-empty. Instead of silently
-    proceeding with empty dataframes, raise a clear fatal here.
+    Shared guardrail: fail fast if a core DataFrame is empty.
+    Used by both the new log-driven path and the legacy path so
+    CI failures are consistent.
     """
-    if df is None or getattr(df, "empty", False):
-        rows = 0 if df is None else len(df)
-        raise RuntimeError(f"[make_player_form] FATAL: {name} is empty (rows={rows})")
+    # Treat None or missing `.empty` as fatal too.
+    if df is None or not hasattr(df, "empty") or df.empty:
+        raise RuntimeError(f"[pf] FATAL: {name} is empty")
 
 
 DATA_DIR = "data"
