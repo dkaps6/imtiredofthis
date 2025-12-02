@@ -98,6 +98,19 @@ from scripts.utils.team_codes import canon_team
 logger = logging.getLogger(__name__)
 
 
+def assert_non_empty(df, name: str) -> None:
+    """
+    Fail-fast helper for core tables in make_player_form.
+
+    Many downstream steps assume tables like player_form and
+    player_form_consensus are non-empty. Instead of silently
+    proceeding with empty dataframes, raise a clear fatal here.
+    """
+    if df is None or getattr(df, "empty", False):
+        rows = 0 if df is None else len(df)
+        raise RuntimeError(f"[make_player_form] FATAL: {name} is empty (rows={rows})")
+
+
 DATA_DIR = "data"
 DATA = Path(DATA_DIR)
 ROLES_PATH = Path(DATA_DIR) / "roles_ourlads.csv"
