@@ -98,15 +98,16 @@ from scripts.utils.team_codes import canon_team
 logger = logging.getLogger(__name__)
 
 
-def assert_non_empty(df, name: str) -> None:
+def assert_non_empty(df: pd.DataFrame | None, name: str) -> pd.DataFrame:
     """
-    Shared guardrail: fail fast if a core DataFrame is empty.
-    Used by both the new log-driven path and the legacy path so
-    CI failures are consistent.
+    Guardrail for core tables: crash loudly instead of silently
+    proceeding with an empty DataFrame.
+    Returns the dataframe so it can be used inline if desired.
     """
-    # Treat None or missing `.empty` as fatal too.
-    if df is None or not hasattr(df, "empty") or df.empty:
-        raise RuntimeError(f"[pf] FATAL: {name} is empty")
+    if df is None or getattr(df, "empty", True):
+        rows = 0 if df is None else len(df)
+        raise RuntimeError(f"FATAL: {name} is empty ({rows} rows)")
+    return df
 
 
 DATA_DIR = "data"
@@ -6559,6 +6560,7 @@ def _write_player_form_outputs(
     player_form.to_csv(PLAYER_FORM_OUT, index=False)
 
     consensus = _build_grouped_consensus(player_form)
+    consensus = assert_non_empty(consensus, "player_form_consensus (pre-identity)")
     consensus = _enforce_consensus_schema(consensus)
     consensus = _attach_player_identity(consensus, team_columns=("team_abbr", "team"))
     consensus = _reorder_identity_columns(consensus)
@@ -7243,7 +7245,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # 1. Build per-game player stats (the REAL player_form)
     pf = build_player_form_legacy(season=season, slate_date=slate_date, week=None)
-    assert_non_empty(pf, "player_form (legacy)")
+    # Fail fast if legacy player_form accidentally comes back empty
+    pf = assert_non_empty(pf, "player_form (legacy)")
 
     # 2. Canonicalize team abbreviations
     if "team" in pf.columns:
@@ -7253,7 +7256,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # 3. Build season consensus from REAL per-game denominators
     pf_consensus = _build_season_consensus(pf)
-    assert_non_empty(pf_consensus, "player_form_consensus")
+    pf_consensus = assert_non_empty(pf_consensus, "player_form_consensus")
 
     # 4. Write outputs
     DATA.mkdir(parents=True, exist_ok=True)
