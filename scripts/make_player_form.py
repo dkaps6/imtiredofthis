@@ -7264,25 +7264,41 @@ def main(argv: Optional[List[str]] = None) -> int:
     pf_consensus.to_csv(DATA / "player_form_consensus.csv", index=False)
 
     # OPTIONAL: produce game_logs + season_totals as artifacts
+    #
+    # Important: exclude grouping keys from the numeric value set to avoid
+    # pandas.reset_index() collisions ("cannot insert season, already exists").
     if "week" in pf.columns:
         num_cols = pf.select_dtypes(include=["number", "float", "int", "Int64"]).columns.tolist()
         group_keys = [k for k in ["season", "week", "team", "opponent", "player"] if k in pf.columns]
 
-        if num_cols and group_keys:
-            game_logs = pf[group_keys + num_cols].copy()
-            game_logs.to_csv(DATA / "player_game_logs.csv", index=False)
+        exclude = set(group_keys)
+        value_cols = [c for c in num_cols if c not in exclude]
 
-            # Clean up duplicate key columns before grouping to avoid ValueError
-            # about 1-dimensional groupers when pandas encounters dupes.
+        if value_cols and group_keys:
+            game_logs = pf[group_keys + value_cols].copy()
             game_logs = _dedupe_axis1_columns(
                 game_logs, label="game_logs (pre-season-agg)"
             )
+            logger.info(
+                "[make_player_form] game_logs rows=%d, cols=%d (keys=%s, value_cols=%d)",
+                len(game_logs),
+                len(game_logs.columns),
+                group_keys,
+                len(value_cols),
+            )
+            game_logs.to_csv(DATA / "player_game_logs.csv", index=False)
 
             season_keys = [k for k in group_keys if k != "week"]
             season_totals = (
-                game_logs.groupby(season_keys, dropna=False)[num_cols]
+                game_logs.groupby(season_keys, dropna=False)[value_cols]
                 .sum(min_count=1)
                 .reset_index()
+            )
+            logger.info(
+                "[make_player_form] season_totals rows=%d, cols=%d (grouped by %s)",
+                len(season_totals),
+                len(season_totals.columns),
+                season_keys,
             )
             season_totals.to_csv(DATA / "player_season_totals.csv", index=False)
 
