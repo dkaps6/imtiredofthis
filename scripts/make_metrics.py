@@ -877,10 +877,34 @@ def build_metrics(season: int) -> pd.DataFrame:
         and not team_fill_source.empty
         and {"player", "team"}.issubset(team_fill_source.columns)
     ):
-        props = props.merge(team_fill_source[["player","team"]].drop_duplicates(), on="player", how="left", suffixes=("","_pf"))
+        # Ensure join keys have compatible dtypes: logs showed float64 vs object here.
+        props = props.copy()
+        team_fill_source = team_fill_source.copy()
+        if "player" in props.columns:
+            props["player"] = props["player"].astype("string")
+        if "player" in team_fill_source.columns:
+            team_fill_source["player"] = team_fill_source["player"].astype("string")
+
+        props = props.merge(
+            team_fill_source[["player", "team"]].drop_duplicates(),
+            on="player",
+            how="left",
+            suffixes=("", "_pf"),
+        )
+
         props["team"] = props["team"].combine_first(props.get("team_pf"))
         if "team_pf" in props.columns:
             props = props.drop(columns=["team_pf"])
+
+        # Lightweight debug so we can see that the backfill actually fired
+        missing_after = int(props["team"].isna().sum())
+        print(
+            "[make_metrics] team backfill from player_form:",
+            "rows=",
+            len(props),
+            "missing_team_after=",
+            missing_after,
+        )
 
     # a few sources don't carry event_id; keep NaN and we still keep the rows
     if "event_id" not in props.columns:
