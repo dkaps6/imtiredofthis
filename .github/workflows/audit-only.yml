@@ -12,34 +12,28 @@ jobs:
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install deps (if present)
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
-
-      - name: Run repo audit
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pyyaml
+      - name: Compile repository Python
+        run: python -m compileall scripts tests
+      - name: Run strict repo audit
         run: |
           export PYTHONPATH="${PWD}"
-          python scripts/utils/audit_repo.py
-
-      - name: Upload audit artifacts (always)
+          python scripts/utils/audit_repo.py --strict
+      - name: Upload audit artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: audit-only-${{ github.run_id }}
           path: |
-            data/*.csv
+            data/**
             outputs/**
           if-no-files-found: warn
