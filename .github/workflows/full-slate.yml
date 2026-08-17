@@ -54,12 +54,9 @@ jobs:
       - name: Install deps (core + HTML parsers)
         run: |
           python -m pip install --upgrade pip
-          # Core project deps
           pip install -r requirements.txt
-          # Ensure nflreadpy is available for make_player_form
           pip install nflreadpy
           python - << 'EOF'
-
           from importlib import import_module
           for pkg in ["nfl_data_py", "nflreadpy"]:
               import_module(pkg)
@@ -145,6 +142,16 @@ jobs:
             exit 1
           fi
 
+      - name: Resolve authoritative NFL week
+        run: |
+          export PYTHONPATH="${PWD}"
+          python - <<'EOF'
+          from scripts.runtime_context import log_runtime_context, resolve_week
+          log_runtime_context()
+          week = resolve_week()
+          print(f"Authoritative NFL week resolved successfully: {week}")
+          EOF
+
       # 3) Fetch props + odds board
       - name: Fetch player props / odds board
         env:
@@ -193,10 +200,10 @@ jobs:
             --season "${SEASON}" \
             --dump-html
 
-      - name: Build team_form
+      - name: Build team_form with authoritative season
         run: |
           export PYTHONPATH="${PWD}"
-          python scripts/make_team_form.py \
+          python scripts/run_team_form_context.py \
             --season "${SEASON}"
 
           if [ ! -s data/team_form.csv ]; then
@@ -219,7 +226,6 @@ jobs:
           echo "Staging PlayerForm inputs (schedule required, logs optional)..."
           mkdir -p data/staging
 
-          # team_week_map is still REQUIRED
           if [ ! -s data/team_week_map.csv ]; then
             echo "ERROR: data/team_week_map.csv is missing or empty"
             ls -l data || true
@@ -227,10 +233,6 @@ jobs:
           fi
           cp data/team_week_map.csv data/staging/ || exit 1
 
-          # player_game_logs / player_season_totals are OPTIONAL here.
-          # When using the PBP-based builder, make_player_form.py will
-          # fetch and write them as side-effects; they do not need to
-          # exist before that step runs.
           for f in data/player_game_logs.csv data/player_season_totals.csv; do
             if [ -f "$f" ]; then
               echo "Found optional input: $f"
@@ -262,7 +264,6 @@ jobs:
             exit 1
           fi
 
-          # HARD FAIL IF EMPTY
           python - <<'EOF'
           import pandas as pd
           import sys
@@ -271,11 +272,11 @@ jobs:
               sys.exit("FATAL: player_form.csv is empty")
           EOF
 
-      # 9) Run full metrics pipeline
+      # 9) Run full metrics pipeline with schedule-derived week
       - name: Run full metrics pipeline
         run: |
           export PYTHONPATH="${PWD}"
-          python scripts/make_metrics.py \
+          python scripts/run_metrics_context.py \
             --season "${SEASON}" \
             --mode full \
             --date "${SLATE_DATE}"
