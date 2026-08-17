@@ -8,6 +8,18 @@ from pathlib import Path
 from typing import Dict, List, Set
 
 # ----------------------------
+# Season context
+# ----------------------------
+SEASON = int(os.getenv("SEASON", "2026"))
+PRIOR_SEASON = int(os.getenv("PRIOR_SEASON", str(SEASON - 1)))
+SLATE_DATE = os.getenv("SLATE_DATE", "").strip()
+
+if PRIOR_SEASON >= SEASON:
+    raise RuntimeError(
+        f"Invalid season context: PRIOR_SEASON={PRIOR_SEASON} must be less than SEASON={SEASON}"
+    )
+
+# ----------------------------
 # Paths & directories
 # ----------------------------
 ROOT = Path(__file__).resolve().parents[1]  # repo root
@@ -214,6 +226,9 @@ def markets_from_env() -> List[str]:
 def dump_config_summary() -> str:
     """Short text summary for logging."""
     d = {
+        "season": SEASON,
+        "prior_season": PRIOR_SEASON,
+        "slate_date": SLATE_DATE,
         "books": books_from_env(),
         "markets": markets_from_env(),
         "region": ODDS["region"],
