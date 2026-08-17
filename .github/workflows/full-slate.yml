@@ -4,7 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       season:
-        description: "Season (e.g., 2025)"
+        description: "NFL season"
+        required: false
+        default: "2026"
+      prior_season:
+        description: "Prior season used for historical priors/backfills"
         required: false
         default: "2025"
       date:
@@ -30,6 +34,7 @@ env:
   NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
   NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
   SEASON: ${{ github.event.inputs.season }}
+  PRIOR_SEASON: ${{ github.event.inputs.prior_season }}
   SLATE_DATE: ${{ github.event.inputs.date }}
 
 jobs:
@@ -66,10 +71,39 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install "pandas==1.5.3"
 
-      - name: Echo config
+      - name: Validate season context
         run: |
-          echo "Season: ${SEASON}"
+          export PYTHONPATH="${PWD}"
+          echo "Active season: ${SEASON}"
+          echo "Prior season: ${PRIOR_SEASON}"
           echo "Slate date: ${SLATE_DATE:-<empty>}"
+          python - <<'EOF'
+          import os
+          from scripts.config import SEASON, PRIOR_SEASON, SLATE_DATE
+
+          env_season = int(os.environ["SEASON"])
+          env_prior = int(os.environ["PRIOR_SEASON"])
+          env_date = os.environ.get("SLATE_DATE", "").strip()
+
+          if SEASON != env_season:
+              raise SystemExit(f"FATAL: scripts.config.SEASON={SEASON} != workflow SEASON={env_season}")
+          if PRIOR_SEASON != env_prior:
+              raise SystemExit(
+                  f"FATAL: scripts.config.PRIOR_SEASON={PRIOR_SEASON} != workflow PRIOR_SEASON={env_prior}"
+              )
+          if PRIOR_SEASON >= SEASON:
+              raise SystemExit(
+                  f"FATAL: PRIOR_SEASON={PRIOR_SEASON} must be less than SEASON={SEASON}"
+              )
+          if SLATE_DATE != env_date:
+              raise SystemExit(
+                  f"FATAL: scripts.config.SLATE_DATE={SLATE_DATE!r} != workflow SLATE_DATE={env_date!r}"
+              )
+
+          print(
+              f"Season context OK: current={SEASON}, prior={PRIOR_SEASON}, slate_date={SLATE_DATE or '<empty>'}"
+          )
+          EOF
 
       # 1) Build depth / roles (Ourlads) and validate
       - name: Build depth / roles (Ourlads)
@@ -96,6 +130,7 @@ jobs:
         env:
           TEAM_WEEK_MAP_CSV: data/team_week_map.csv
           SEASON: ${{ env.SEASON }}
+          PRIOR_SEASON: ${{ env.PRIOR_SEASON }}
           SLATE_DATE: ${{ env.SLATE_DATE }}
         run: |
           export PYTHONPATH="${PWD}"
@@ -116,6 +151,7 @@ jobs:
           TEAM_WEEK_MAP_CSV: data/team_week_map.csv
           ROLES_CSV: data/roles_ourlads.csv
           SEASON: ${{ env.SEASON }}
+          PRIOR_SEASON: ${{ env.PRIOR_SEASON }}
           SLATE_DATE: ${{ env.SLATE_DATE }}
           APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
@@ -211,9 +247,14 @@ jobs:
             echo "(no staged CSVs yet)"
           fi
 
-      # 8) Build player_form / consensus (legacy CSV-based)
+      # 8) Build player_form / consensus
       - name: Build Player Form (authoritative step)
+        env:
+          SEASON: ${{ env.SEASON }}
+          PRIOR_SEASON: ${{ env.PRIOR_SEASON }}
+          SLATE_DATE: ${{ env.SLATE_DATE }}
         run: |
+          export PYTHONPATH="${PWD}"
           python scripts/make_player_form.py
 
           if [ ! -s data/player_game_logs.csv ]; then
