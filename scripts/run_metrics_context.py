@@ -1,52 +1,35 @@
 #!/usr/bin/env python3
-"""Run make_metrics with season/week resolved from shared runtime context.
-
-The wrapper also injects the authoritative NFL week into props before legacy
-make_metrics can fall back to ISO/calendar week inference.
-"""
+"""Run the deterministic metrics v2 builder under shared runtime context."""
 from __future__ import annotations
 
-import sys
+import argparse
 
-import pandas as pd
-
-from scripts.runtime_context import log_runtime_context, resolve_slate_date, resolve_week, resolve_season
-import scripts.make_metrics as make_metrics
-
-
-def _install_props_week_guard(season: int, week: int) -> None:
-    original = make_metrics.load_props
-
-    def guarded_load_props():
-        props = original()
-        if props is None or props.empty:
-            return props
-        props = props.copy()
-        if "season" not in props.columns:
-            props["season"] = int(season)
-        else:
-            props["season"] = pd.to_numeric(props["season"], errors="coerce").fillna(int(season)).astype("Int64")
-        # The pipeline is a single-slate build.  Week comes from team_week_map,
-        # never from datetime.isocalendar().week.
-        props["week"] = int(week)
-        return props
-
-    make_metrics.load_props = guarded_load_props
+from scripts.metrics_v2 import build
+from scripts.runtime_context import log_runtime_context, resolve_season, resolve_slate_date, resolve_week
 
 
 def main() -> int:
-    season = resolve_season()
-    slate_date = resolve_slate_date()
-    week = resolve_week(season=season, slate_date=slate_date)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--season", type=int, default=None)
+    parser.add_argument("--date", default=None)
+    parser.add_argument("--week", type=int, default=None)
+    parser.add_argument("--mode", default="full")  # compatibility only
+    args = parser.parse_args()
 
-    make_metrics.WEEK = week
-    _install_props_week_guard(season, week)
-
+    season = int(args.season if args.season is not None else resolve_season())
+    slate = (args.date if args.date is not None else resolve_slate_date()) or ""
+    week = int(args.week if args.week is not None else resolve_week(season=season, slate_date=slate))
     log_runtime_context()
-    print(f"[run_metrics_context] overriding make_metrics.WEEK -> {week}")
-    print("[run_metrics_context] props week guard installed; ISO week inference disabled")
-    return make_metrics.cli()
+    metrics = build(season, week)
+    from pathlib import Path
+    out = Path("data/metrics_ready.csv")
+    export = Path("data/make_metrics_output.csv")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    metrics.to_csv(out, index=False)
+    metrics.to_csv(export, index=False)
+    print(f"[run_metrics_context] metrics_v2 rows={len(metrics)} season={season} week={week}")
+    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())
