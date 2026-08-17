@@ -1,16 +1,9 @@
 #!/usr/bin/env python3
-"""Static repository audit for the production Full Slate path.
-
-The old audit was intentionally non-fatal and described several obsolete paths.
-This version can run in ``--strict`` mode in CI and checks syntax, workflow YAML,
-production script presence, artifact-contract consistency, and dangerous stale
-season literals in production entry points.
-"""
+"""Static repository audit for the production Full Slate path."""
 from __future__ import annotations
 
 import argparse
 import ast
-import os
 import re
 from pathlib import Path
 
@@ -33,14 +26,18 @@ PRODUCTION_SCRIPTS = (
     "scripts/build/build_weather_week.py",
     "scripts/build/pbp_features.py",
     "scripts/player_form_v2.py",
+    "scripts/metrics_v2.py",
     "scripts/run_metrics_context.py",
-    "scripts/make_metrics.py",
     "scripts/metrics_ready.py",
     "scripts/pricing_v2.py",
     "scripts/validate_build_integrity.py",
     "scripts/artifact_contracts.py",
 )
-WORKFLOWS = (".github/workflows/full-slate.yml", ".github/workflows/audit-only.yml")
+WORKFLOWS = (
+    ".github/workflows/full-slate.yml",
+    ".github/workflows/audit-only.yml",
+    ".github/workflows/repo-ci.yml",
+)
 
 
 def _read(path: Path) -> str:
@@ -96,26 +93,21 @@ def _contract_errors() -> list[str]:
 
 
 def _stale_literal_errors() -> list[str]:
-    """Flag stale 2025 controls in production entrypoints, not historical-prior code."""
     errors = []
     patterns = (
         re.compile(r"==\s*2025"),
         re.compile(r"\[\s*2025\s*\]"),
         re.compile(r"season\s*=\s*2025"),
         re.compile(r"default\s*=\s*2025"),
+        re.compile(r"WEEK\s*=\s*\d+"),
     )
-    allowed = {
-        "scripts/config.py",  # prior-season defaults are deliberately dynamic there.
-    }
     for rel in PRODUCTION_SCRIPTS:
-        if rel in allowed:
-            continue
         text = _read(ROOT / rel)
         for line_no, line in enumerate(text.splitlines(), start=1):
             if "PRIOR_SEASON" in line or "prior_season" in line:
                 continue
             if any(p.search(line) for p in patterns):
-                errors.append(f"stale season literal in {rel}:{line_no}: {line.strip()}")
+                errors.append(f"stale runtime literal in {rel}:{line_no}: {line.strip()}")
     return errors
 
 
@@ -140,7 +132,7 @@ def run_audit() -> list[str]:
         "python syntax": _syntax_errors(),
         "workflow yaml": _workflow_errors(),
         "artifact contracts": _contract_errors(),
-        "season literals": _stale_literal_errors(),
+        "runtime literals": _stale_literal_errors(),
         "workflow wiring": _workflow_contract_errors(),
     }
     failures = []
@@ -158,16 +150,13 @@ def run_audit() -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--strict", action="store_true", help="exit non-zero if any audit check fails")
+    parser.add_argument("--strict", action="store_true")
     args = parser.parse_args()
     failures = run_audit()
     if failures and args.strict:
         print(f"[AUDIT] strict mode failed with {len(failures)} issue(s)")
         return 1
-    if failures:
-        print(f"[AUDIT] completed with {len(failures)} warning issue(s)")
-    else:
-        print("[AUDIT] passed")
+    print(f"[AUDIT] {'passed' if not failures else f'completed with {len(failures)} warning issue(s)'}")
     return 0
 
 
