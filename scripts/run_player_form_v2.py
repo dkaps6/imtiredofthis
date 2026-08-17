@@ -1,11 +1,105 @@
 #!/usr/bin/env python3
-"""Run PlayerForm v2 with robust current player/team identity resolution."""
+"""Run PlayerForm v2 with robust identity, historical schedules, and model roles."""
 from __future__ import annotations
 
 import pandas as pd
 
 import scripts.player_form_v2 as pf
 from scripts._opponent_map import canon_team
+from scripts.build._schedule_utils import get_nfl_schedule
+from scripts.runtime_context import resolve_prior_season, resolve_season
+
+_ORIGINAL_LOAD_SCHEDULE = pf._load_schedule
+_ORIGINAL_BLEND = pf._blend
+
+
+def _long_schedule_for_season(season: int) -> pd.DataFrame:
+    """Return season/week/team/opponent/game_id for any requested season."""
+    # Prefer the authoritative active-season map because it also carries any
+    # workflow-specific corrections. Historical seasons are fetched from the
+    # shared nflverse schedule helper.
+    active = resolve_season()
+    if int(season) == int(active):
+        current = _ORIGINAL_LOAD_SCHEDULE().copy()
+        scoped = current.loc[pd.to_numeric(current["season"], errors="coerce").eq(int(season))].copy()
+        if not scoped.empty:
+            return scoped
+
+    schedule = get_nfl_schedule(int(season))
+    if schedule.empty:
+        raise RuntimeError(f"No schedule rows available for season={season}")
+    home = schedule.assign(team=schedule["home"].map(canon_team), opponent=schedule["away"].map(canon_team))
+    away = schedule.assign(team=schedule["away"].map(canon_team), opponent=schedule["home"].map(canon_team))
+    out = pd.concat([home, away], ignore_index=True)
+    if "game_id" not in out.columns:
+        out["game_id"] = (
+            out["season"].astype(int).astype(str)
+            + "_" + out["week"].astype(int).astype(str).str.zfill(2)
+            + "_" + out["home"].map(canon_team).astype(str)
+            + "_" + out["away"].map(canon_team).astype(str)
+        )
+    return out[["season", "week", "team", "opponent", "game_id"]].drop_duplicates()
+
+
+def _enhanced_load_schedule() -> pd.DataFrame:
+    seasons = [resolve_prior_season(), resolve_season()]
+    frames = [_long_schedule_for_season(year) for year in seasons]
+    return pd.concat(frames, ignore_index=True).drop_duplicates(["season", "week", "team"], keep="last")
+
+
+def _position_family(value) -> str:
+    pos = "" if pd.isna(value) else str(value).upper().strip()
+    if pos in {"LWR", "RWR", "SWR", "WR", "WIDE RECEIVER"} or pos.startswith("WR"):
+        return "WR"
+    if pos in {"HB", "TB", "RB"} or pos.startswith("RB"):
+        return "RB"
+    if pos in {"TE", "Y"} or pos.startswith("TE"):
+        return "TE"
+    if pos == "QB" or pos.startswith("QB"):
+        return "QB"
+    if pos == "FB" or pos.startswith("FB"):
+        return "FB"
+    return pos or "UNK"
+
+
+def _assign_model_roles(frame: pd.DataFrame) -> pd.DataFrame:
+    """Derive model hierarchy from usage; preserve Ourlads depth alignment."""
+    out = frame.copy()
+    out["depth_role"] = out.get("role", pd.Series(pd.NA, index=out.index, dtype="string"))
+    out["alignment_position"] = out.get("position", pd.Series(pd.NA, index=out.index, dtype="string"))
+    out["position_group"] = out["alignment_position"].map(_position_family)
+    out["model_role"] = pd.Series(pd.NA, index=out.index, dtype="string")
+
+    score_by_family = {
+        "WR": ("tgt_share", "WR"),
+        "TE": ("tgt_share", "TE"),
+        "RB": ("rush_share", "RB"),
+        "QB": ("ypa", "QB"),
+        "FB": ("rush_share", "FB"),
+    }
+    for team, team_df in out.groupby("team", dropna=False):
+        for family, (score_col, prefix) in score_by_family.items():
+            idx = team_df.index[team_df["position_group"].eq(family)]
+            if not len(idx):
+                continue
+            scores = pd.to_numeric(out.loc[idx, score_col], errors="coerce") if score_col in out.columns else pd.Series(index=idx, dtype=float)
+            # Unknown usage sorts below known usage, but never changes player identity.
+            order = scores.fillna(-1).sort_values(ascending=False, kind="mergesort").index.tolist()
+            for rank, row_idx in enumerate(order, start=1):
+                out.at[row_idx, "model_role"] = f"{prefix}{rank}"
+
+    # For a player whose position is missing, retain depth role as a last-resort
+    # label rather than inventing a usage family.
+    missing = out["model_role"].isna()
+    out.loc[missing, "model_role"] = out.loc[missing, "depth_role"].astype("string")
+    out["role"] = out["model_role"]
+    # Consumers should reason about WR/RB/TE/QB family, not LWR/RWR alignment.
+    out["position"] = out["position_group"]
+    return out
+
+
+def _enhanced_blend(prior: pd.DataFrame, current: pd.DataFrame, universe: pd.DataFrame) -> pd.DataFrame:
+    return _assign_model_roles(_ORIGINAL_BLEND(prior, current, universe))
 
 
 def _enhanced_slate_universe(season: int, week: int) -> pd.DataFrame:
@@ -28,7 +122,6 @@ def _enhanced_slate_universe(season: int, week: int) -> pd.DataFrame:
         base = roles.rename(columns={"display_name": "player"})[["player", "player_clean_key", "team"]].copy()
         base["opponent"] = pd.NA
 
-    # Props-enriched identity is the strongest sportsbook-event source.
     enriched_path = pf.DATA / "props_enriched.csv"
     if enriched_path.exists() and enriched_path.stat().st_size > 0:
         e = pd.read_csv(enriched_path)
@@ -40,9 +133,7 @@ def _enhanced_slate_universe(season: int, week: int) -> pd.DataFrame:
                 e["team_enriched"] = e["player_team_abbr"].map(canon_team)
             if "opponent_team_abbr" in e.columns:
                 e["opponent_enriched"] = e["opponent_team_abbr"].map(canon_team)
-            join = [c for c in ("event_id", "player_clean_key") if c in base.columns and c in e.columns]
-            if not join:
-                join = ["player_clean_key"]
+            join = [c for c in ("event_id", "player_clean_key") if c in base.columns and c in e.columns] or ["player_clean_key"]
             cols = join + [c for c in ("team_enriched", "opponent_enriched") if c in e.columns]
             if len(cols) > len(join):
                 base = base.merge(e[cols].drop_duplicates(join, keep="last"), on=join, how="left")
@@ -51,16 +142,14 @@ def _enhanced_slate_universe(season: int, week: int) -> pd.DataFrame:
                 if "opponent_enriched" in base.columns:
                     base["opponent"] = base["opponent"].replace("", pd.NA).combine_first(base["opponent_enriched"])
 
-    # Live opponent map provides another canonical current-event identity source.
     if pf.OPPONENT_MAP.exists() and pf.OPPONENT_MAP.stat().st_size > 0:
         om = pd.read_csv(pf.OPPONENT_MAP)
         om.columns = [str(c).lower() for c in om.columns]
         if "player_clean_key" not in om.columns and "player" in om.columns:
             om["player_clean_key"] = om["player"].map(pf._canon_name).map(lambda t: t[1])
-        if "season" in om.columns:
-            om["season"] = pd.to_numeric(om["season"], errors="coerce").astype("Int64")
-        if "week" in om.columns:
-            om["week"] = pd.to_numeric(om["week"], errors="coerce").astype("Int64")
+        for c in ("season", "week"):
+            if c in om.columns:
+                om[c] = pd.to_numeric(om[c], errors="coerce").astype("Int64")
         if {"season", "week"}.issubset(om.columns):
             om = om.loc[(om["season"] == int(season)) & (om["week"] == int(week))].copy()
         for c in ("team", "opponent"):
@@ -78,15 +167,13 @@ def _enhanced_slate_universe(season: int, week: int) -> pd.DataFrame:
             if "opponent_map" in base.columns:
                 base["opponent"] = base["opponent"].replace("", pd.NA).combine_first(base["opponent_map"])
 
-    # If a sportsbook feed omitted team completely, use the current Ourlads
-    # roster only when the player resolves to exactly one team.
     role_unique = roles.groupby("player_clean_key")["team"].nunique()
     unique_keys = set(role_unique.loc[role_unique.eq(1)].index)
     role_team = roles.loc[roles["player_clean_key"].isin(unique_keys), ["player_clean_key", "team"]].drop_duplicates("player_clean_key")
     base = base.merge(role_team.rename(columns={"team": "team_roster"}), on="player_clean_key", how="left")
     base["team"] = base["team"].replace("", pd.NA).combine_first(base["team_roster"])
 
-    sched = pf._load_schedule()
+    sched = _enhanced_load_schedule()
     cur = sched.loc[(sched["season"] == int(season)) & (sched["week"] == int(week)), ["team", "opponent"]].drop_duplicates("team")
     base = base.merge(cur.rename(columns={"opponent": "schedule_opponent"}), on="team", how="left")
     base["opponent"] = base["opponent"].replace("", pd.NA).combine_first(base["schedule_opponent"])
@@ -108,7 +195,9 @@ def _enhanced_slate_universe(season: int, week: int) -> pd.DataFrame:
 
 
 def main() -> int:
+    pf._load_schedule = _enhanced_load_schedule
     pf._load_slate_universe = _enhanced_slate_universe
+    pf._blend = _enhanced_blend
     return pf.main()
 
 
