@@ -41,13 +41,9 @@ jobs:
   full_slate:
     name: Full slate (single job)
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
@@ -56,12 +52,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install nflreadpy pyyaml
-          python - <<'EOF'
-          from importlib import import_module
-          for pkg in ["pandas", "nfl_data_py", "nflreadpy"]:
-              mod = import_module(pkg)
-              print(pkg, getattr(mod, "__version__", "OK"))
-          EOF
 
       - name: Validate season context
         run: |
@@ -69,183 +59,113 @@ jobs:
           python - <<'EOF'
           import os
           from scripts.config import SEASON, PRIOR_SEASON, SLATE_DATE
-          env_season = int(os.environ["SEASON"])
-          env_prior = int(os.environ["PRIOR_SEASON"])
-          env_date = os.environ.get("SLATE_DATE", "").strip()
-          if SEASON != env_season:
-              raise SystemExit(f"FATAL: config SEASON={SEASON} != workflow SEASON={env_season}")
-          if PRIOR_SEASON != env_prior:
-              raise SystemExit(f"FATAL: config PRIOR_SEASON={PRIOR_SEASON} != workflow PRIOR_SEASON={env_prior}")
-          if PRIOR_SEASON >= SEASON:
-              raise SystemExit(f"FATAL: PRIOR_SEASON={PRIOR_SEASON} must be less than SEASON={SEASON}")
-          if SLATE_DATE != env_date:
-              raise SystemExit(f"FATAL: config SLATE_DATE={SLATE_DATE!r} != workflow SLATE_DATE={env_date!r}")
-          print(f"Season context OK: current={SEASON}, prior={PRIOR_SEASON}, slate={SLATE_DATE or '<latest>'}")
+          assert SEASON == int(os.environ["SEASON"])
+          assert PRIOR_SEASON == int(os.environ["PRIOR_SEASON"])
+          assert PRIOR_SEASON < SEASON
+          assert SLATE_DATE == os.environ.get("SLATE_DATE", "").strip()
+          print(f"current={SEASON} prior={PRIOR_SEASON} slate={SLATE_DATE or '<latest>'}")
           EOF
 
-      - name: Build depth / roles (Ourlads)
+      - name: Build Ourlads roles
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/providers/ourlads_depth.py --season "${SEASON}"
           mkdir -p outputs
           cp data/roles_ourlads.csv outputs/roles_ourlads.csv
-          test -s data/roles_ourlads.csv || { echo "ERROR: roles_ourlads.csv missing/empty"; exit 1; }
+          test -s data/roles_ourlads.csv
 
-      - name: Build team-week map (authoritative opponents)
+      - name: Build authoritative team-week map
         env:
           TEAM_WEEK_MAP_CSV: data/team_week_map.csv
         run: |
           export PYTHONPATH="${PWD}"
           SCHED=""
-          if [ -f "data/schedules/schedule_${SEASON}.csv" ]; then
-            SCHED="--schedule data/schedules/schedule_${SEASON}.csv"
-          fi
+          if [ -f "data/schedules/schedule_${SEASON}.csv" ]; then SCHED="--schedule data/schedules/schedule_${SEASON}.csv"; fi
           python scripts/utils/make_team_week_map.py --season "${SEASON}" ${SCHED}
-          test -s data/team_week_map.csv || { echo "ERROR: team_week_map.csv missing/empty"; exit 1; }
+          test -s data/team_week_map.csv
+          python -c "from scripts.runtime_context import log_runtime_context,resolve_week; log_runtime_context(); print('week=',resolve_week())"
 
-      - name: Resolve authoritative NFL week
-        run: |
-          export PYTHONPATH="${PWD}"
-          python - <<'EOF'
-          from scripts.runtime_context import log_runtime_context, resolve_week
-          log_runtime_context()
-          print("Authoritative NFL week:", resolve_week())
-          EOF
-
-      - name: Fetch player props / odds board
+      - name: Fetch player props and game odds
         env:
           TEAM_WEEK_MAP_CSV: data/team_week_map.csv
           ROLES_CSV: data/roles_ourlads.csv
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/fetch_props_oddsapi.py --season "${SEASON}" --date "${SLATE_DATE}"
-          test -s outputs/props_raw.csv || { echo "ERROR: outputs/props_raw.csv missing/empty"; exit 1; }
-          test -s outputs/odds_game.csv || { echo "ERROR: outputs/odds_game.csv missing/empty"; exit 1; }
+          test -s outputs/props_raw.csv
+          test -s outputs/odds_game.csv
 
-      - name: Build opponent map from props
+      - name: Build live opponent map
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/build/build_opponent_map_from_props.py
-          test -s data/opponent_map_from_props.csv || { echo "ERROR: opponent_map_from_props.csv missing/empty"; exit 1; }
+          test -s data/opponent_map_from_props.csv
 
-      - name: Pull SharpFootball metrics
+      - name: Build TeamForm
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/providers/sharpfootball_pull.py --season "${SEASON}" --dump-html
-
-      - name: Build team_form with authoritative season
-        run: |
-          export PYTHONPATH="${PWD}"
           python scripts/run_team_form_context.py --season "${SEASON}"
-          test -s data/team_form.csv || { echo "ERROR: team_form.csv missing/empty"; exit 1; }
+          test -s data/team_form.csv
 
-      - name: Build weather (optional enrichment)
+      - name: Build optional live enrichments
         continue-on-error: true
         run: |
           export PYTHONPATH="${PWD}"
-          python scripts/build/build_weather_week.py --season "${SEASON}" --date "${SLATE_DATE}"
+          python scripts/build/build_weather_week.py --season "${SEASON}" --date "${SLATE_DATE}" || true
+          python scripts/build/build_injuries_weekly.py data/injuries.csv || true
+          python scripts/build/build_cb_coverage_team.py || true
+          python scripts/build/build_cb_coverage_player.py || true
+          python scripts/build/build_wr_cb_exposure.py || true
+          python scripts/build/pbp_features.py --season "${SEASON}" || true
 
-      - name: Build injuries (optional enrichment)
-        continue-on-error: true
+      - name: Build PlayerForm v2 with historical priors
         run: |
           export PYTHONPATH="${PWD}"
-          python scripts/build/build_injuries_weekly.py data/injuries.csv
+          python scripts/run_player_form_v2.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
+          python scripts/enrich_player_scoring_v2.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
+          for f in data/player_game_logs.csv data/player_season_totals.csv data/player_form.csv data/player_form_consensus.csv; do test -s "$f"; done
 
-      - name: Build coverage and WR-CB enrichments (optional)
-        continue-on-error: true
+      - name: Assemble deterministic metrics
         run: |
           export PYTHONPATH="${PWD}"
-          python scripts/build/build_cb_coverage_team.py
-          python scripts/build/build_cb_coverage_player.py
-          python scripts/build/build_wr_cb_exposure.py
-
-      - name: Build current-season PBP enrichments (optional until games exist)
-        continue-on-error: true
-        run: |
-          export PYTHONPATH="${PWD}"
-          python scripts/build/pbp_features.py --season "${SEASON}"
-
-      - name: Build PlayerForm v2 (real game logs + explicit prior season)
-        run: |
-          export PYTHONPATH="${PWD}"
-          python scripts/run_player_form_v2.py \
-            --season "${SEASON}" \
-            --prior-season "${PRIOR_SEASON}" \
-            --date "${SLATE_DATE}"
-          for f in data/player_game_logs.csv data/player_season_totals.csv data/player_form.csv data/player_form_consensus.csv; do
-            test -s "$f" || { echo "ERROR: $f missing/empty"; exit 1; }
-          done
-
-      - name: Enrich PlayerForm with scoring/red-zone history
-        run: |
-          export PYTHONPATH="${PWD}"
-          python scripts/enrich_player_scoring_v2.py \
-            --season "${SEASON}" \
-            --prior-season "${PRIOR_SEASON}"
-
-      - name: Run full metrics pipeline
-        run: |
-          export PYTHONPATH="${PWD}"
-          python scripts/run_metrics_context.py \
-            --season "${SEASON}" \
-            --mode full \
-            --date "${SLATE_DATE}"
-
-      - name: Validate core build integrity
-        run: |
-          export PYTHONPATH="${PWD}"
+          python scripts/run_metrics_context.py --season "${SEASON}" --mode full --date "${SLATE_DATE}"
           python scripts/validate_build_integrity.py
-
-      - name: Validate metrics_ready before pricing
-        run: |
-          export PYTHONPATH="${PWD}"
           python scripts/metrics_ready.py --season "${SEASON}" --date "${SLATE_DATE}"
 
-      - name: Run independent simulation pricing model
+      - name: Price with joint Monte Carlo simulation
         run: |
           export PYTHONPATH="${PWD}"
-          python scripts/pricing_v2.py --season "${SEASON}"
-
-      - name: Validate priced output
-        run: |
-          export PYTHONPATH="${PWD}"
+          python scripts/run_pricing_v2.py --season "${SEASON}"
           python - <<'EOF'
           import pandas as pd
           from scripts.artifact_contracts import CONTRACTS
           c = CONTRACTS["props_priced"]
           df = pd.read_csv(c.path)
-          if df.empty:
-              raise SystemExit("FATAL: priced output is empty")
+          assert not df.empty
           missing = [x for x in c.required_columns if x not in df.columns]
-          if missing:
-              raise SystemExit(f"FATAL: priced output missing columns: {missing}")
-          print(f"Priced output OK: {len(df)} rows")
+          assert not missing, missing
+          assert "simulation_iterations" in df.columns
+          print(f"priced rows={len(df)} simulations={df['simulation_iterations'].iloc[0]}")
           EOF
 
-      - name: Run repository audit
+      - name: Strict repository audit
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/utils/audit_repo.py --strict
 
-      - name: Summarize CSV row counts
+      - name: Summarize outputs
         if: always()
         run: |
-          echo "=== Row counts under data/ ==="
-          find data -maxdepth 2 -name "*.csv" -print0 | xargs -0 -I{} sh -c 'echo "--- {}"; wc -l "{}" || true'
-          echo "=== Row counts under outputs/ ==="
-          if [ -d outputs ]; then
-            find outputs -maxdepth 2 -name "*.csv" -print0 | xargs -0 -I{} sh -c 'echo "--- {}"; wc -l "{}" || true'
-          fi
+          find data outputs -maxdepth 2 -name "*.csv" -type f -print0 2>/dev/null | xargs -0 -r -I{} sh -c 'echo "--- {}"; wc -l "{}"'
 
-      - name: Upload artifacts (always)
-        if: ${{ always() }}
+      - name: Upload artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: run_${{ github.run_id }}
           path: |
             data/**
             outputs/**
-            data/_debug/**
-            data/_sharp_dump_*.html
           if-no-files-found: warn
           retention-days: 7
