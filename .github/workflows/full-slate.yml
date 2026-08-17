@@ -79,9 +79,9 @@ jobs:
           TEAM_WEEK_MAP_CSV: data/team_week_map.csv
         run: |
           export PYTHONPATH="${PWD}"
-          SCHED=""
-          if [ -f "data/schedules/schedule_${SEASON}.csv" ]; then SCHED="--schedule data/schedules/schedule_${SEASON}.csv"; fi
-          python scripts/utils/make_team_week_map.py --season "${SEASON}" ${SCHED}
+          python scripts/utils/build_team_week_map_v2.py \
+            --season "${SEASON}" \
+            --out data/team_week_map.csv
           test -s data/team_week_map.csv
           python -c "from scripts.runtime_context import log_runtime_context,resolve_week; log_runtime_context(); print('week=',resolve_week())"
 
