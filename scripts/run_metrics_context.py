@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Run the deterministic metrics v2 builder under shared runtime context."""
+"""Run deterministic metrics v2 plus optional advanced enrichments."""
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
+from scripts.metrics_enrichment_v2 import enrich
 from scripts.metrics_v2 import build
 from scripts.runtime_context import log_runtime_context, resolve_season, resolve_slate_date, resolve_week
 
@@ -20,8 +22,7 @@ def main() -> int:
     slate = (args.date if args.date is not None else resolve_slate_date()) or ""
     week = int(args.week if args.week is not None else resolve_week(season=season, slate_date=slate))
     log_runtime_context()
-    metrics = build(season, week)
-    from pathlib import Path
+    metrics = enrich(build(season, week), season, week)
     out = Path("data/metrics_ready.csv")
     export = Path("data/make_metrics_output.csv")
     out.parent.mkdir(parents=True, exist_ok=True)
