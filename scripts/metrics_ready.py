@@ -1,334 +1,105 @@
 #!/usr/bin/env python3
+"""Pre-pricing readiness validation for Full Slate."""
 from __future__ import annotations
 
 import argparse
-import os
-import sys
 from pathlib import Path
-from typing import Iterable, List, Sequence
 
 import pandas as pd
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+from scripts.artifact_contracts import CONTRACTS
+from scripts.runtime_context import resolve_season, resolve_week
 
-from scripts.config import FILES, ROOT
-
-REQUIRED: dict[str, Sequence[str]] = {
-    os.path.join("data", "player_form_consensus.csv"): (
-        "player",
-        "team",
-        "opponent",
-        "season",
-        "position",
-        "role",
-        "tgt_share",
-        "route_rate",
-        "rush_share",
-        "yprr",
-        "ypt",
-        "ypc",
-        "ypa",
-        "receptions_per_target",
-        "rz_share",
-        "rz_tgt_share",
-        "rz_rush_share",
-        "week",
-    ),
-    os.path.join("data", "team_form.csv"): (
-        "team",
-        "season",
-        "games_played",
-        "def_pass_epa",
-        "def_rush_epa",
-        "def_sack_rate",
-        "pace",
-        "neutral_pace",
-        "pass_rate_over_expected",
-        "proe",
-        "ay_per_att",
-        "light_box_rate",
-        "heavy_box_rate",
-    ),
-    os.path.join("data", "qb_designed_runs.csv"): (
-        "player",
-        "week",
-        "designed_run_rate",
-        "designed_runs",
-        "snaps",
-    ),
-    os.path.join("data", "qb_scramble_rates.csv"): (
-        "player",
-        "week",
-        "scramble_rate",
-        "scrambles",
-        "dropbacks",
-    ),
-    os.path.join("data", "qb_run_metrics.csv"): (
-        "player",
-        "week",
-        "scramble_rate",
-        "scrambles",
-        "dropbacks",
-        "designed_run_rate",
-        "designed_runs",
-        "snaps",
-    ),
-}
-
-OPTIONAL_INPUTS: dict[str, Sequence[str]] = {
-    os.path.join("data", "opponent_map_from_props.csv"): (
-        "player",
-        "team",
-        "opponent",
-        "season",
-        "week",
-    ),
-    os.path.join("data", "weather_week.csv"): (),
-}
-
-OPTIONAL_WARN_COLUMNS: dict[str, Sequence[str]] = {
-    os.path.join("data", "opponent_map_from_props.csv"): ("game_timestamp",),
-}
-
-DEFAULT_REQUIRED_KEYS: Sequence[str] = (
-    "team_form",
-    "player_form",
-    "qb_run_metrics",
+REQUIRED_BEFORE_PRICING = (
+    "roles_ourlads",
+    "team_week_map",
+    "opponent_map",
     "props_raw",
-    "odds_game",
+    "team_form",
+    "player_game_logs",
+    "player_form",
+    "player_form_consensus",
     "metrics_ready",
 )
 
 
-def _pretty_path(path: Path) -> str:
-    """Return the path relative to the repo root when possible."""
-
-    try:
-        return str(path.resolve(strict=False).relative_to(ROOT))
-    except ValueError:
-        return str(path.resolve(strict=False))
-
-
-def _resolve_item(item: str) -> Path:
-    """Resolve a config key or filesystem path to an absolute Path."""
-
-    if item in FILES:
-        return FILES[item]
-
-    candidate = Path(item)
-    if not candidate.is_absolute():
-        candidate = ROOT / candidate
-    return candidate
-
-
-def _dedupe_paths(paths: Iterable[Path]) -> List[Path]:
-    seen: set[Path] = set()
-    ordered: List[Path] = []
-
-    for pth in paths:
-        resolved = pth.resolve(strict=False)
-        if resolved in seen:
-            continue
-        seen.add(resolved)
-        ordered.append(pth)
-
-    return ordered
-
-
-def _check_csv(path: Path) -> str | None:
-    if not path.exists():
-        return f"{_pretty_path(path)} (missing)"
-
+def _check(key: str) -> pd.DataFrame:
+    c = CONTRACTS[key]
+    path = c.path
+    if not path.exists() or path.stat().st_size == 0:
+        raise RuntimeError(f"Required artifact missing or empty: {path}")
     try:
         frame = pd.read_csv(path)
-    except pd.errors.EmptyDataError:
-        return f"{_pretty_path(path)} (empty)"
-    except Exception as exc:  # pragma: no cover - guard rails for runtime issues
-        return f"{_pretty_path(path)} (error reading: {exc})"
-
-    if frame.empty:
-        return f"{_pretty_path(path)} (empty)"
-
-    return None
-
-
-def check_required_inputs(required: Iterable[str | Path] | None = None) -> None:
-    """Validate that each required CSV exists and has at least one row."""
-
-    schema_failures: List[str] = []
-    optional_warnings: List[str] = []
-    for item, expected_cols in REQUIRED.items():
-        csv_path = _resolve_item(str(item))
-        pretty = _pretty_path(csv_path)
-        if not csv_path.exists():
-            schema_failures.append(f"{pretty} (missing)")
-            continue
-        try:
-            sample = pd.read_csv(csv_path, nrows=5)
-        except pd.errors.EmptyDataError:
-            schema_failures.append(f"{pretty} (empty)")
-            continue
-        except Exception as exc:  # pragma: no cover - guard rails for runtime issues
-            schema_failures.append(f"{pretty} (error reading: {exc})")
-            continue
-
-        missing_cols = [col for col in expected_cols if col not in sample.columns]
-        if missing_cols:
-            joined = ", ".join(missing_cols)
-            schema_failures.append(f"{pretty} missing columns: {joined}")
-
-    for item, expected_cols in OPTIONAL_INPUTS.items():
-        csv_path = _resolve_item(str(item))
-        pretty = _pretty_path(csv_path)
-        if not csv_path.exists():
-            optional_warnings.append(f" - {pretty} missing (optional)")
-            continue
-        try:
-            sample = pd.read_csv(csv_path, nrows=5)
-        except pd.errors.EmptyDataError:
-            optional_warnings.append(f" - {pretty} empty (optional)")
-            continue
-        except Exception as exc:  # pragma: no cover - guard rails for runtime issues
-            optional_warnings.append(f" - {pretty} (error reading: {exc}) (optional)")
-            continue
-
-        missing_cols = [col for col in expected_cols if col and col not in sample.columns]
-        if missing_cols:
-            joined = ", ".join(missing_cols)
-            optional_warnings.append(f" - {pretty} missing columns: {joined} (optional)")
-
-        warn_cols = OPTIONAL_WARN_COLUMNS.get(item, ())
-        warn_missing = [col for col in warn_cols if col not in sample.columns]
-        for col in warn_missing:
-            optional_warnings.append(
-                f" - {pretty} missing column (best-effort): {col}"
-            )
-
-    items = list(required) if required is not None else list(DEFAULT_REQUIRED_KEYS)
-    resolved_paths = _dedupe_paths(_resolve_item(str(item)) for item in items)
-
-    failures: List[str] = []
-
-    for csv_path in resolved_paths:
-        error = _check_csv(csv_path)
-        if error:
-            failures.append(error)
-        else:
-            print(f"[metrics_ready] ✓ {_pretty_path(csv_path)}")
-
-    for warn in optional_warnings:
-        print(f"[metrics_ready] WARN{warn}")
-
-    all_failures = schema_failures + failures
-    if all_failures:
-        details = "\n".join(f"  - {msg}" for msg in all_failures)
-        raise RuntimeError(f"Missing or incomplete inputs:\n{details}")
-
-    print("[metrics_ready] ✅ All required inputs present.")
+    except Exception as exc:
+        raise RuntimeError(f"Unable to read required artifact {path}: {exc}") from exc
+    if len(frame) < c.min_rows:
+        raise RuntimeError(f"{path} has {len(frame)} rows; expected >= {c.min_rows}")
+    missing = [col for col in c.required_columns if col not in frame.columns]
+    if missing:
+        raise RuntimeError(f"{path} missing required columns: {', '.join(missing)}")
+    print(f"[metrics_ready] ✓ {path} rows={len(frame)}")
+    return frame
 
 
-def validate_metrics_ready_csv(path: Path) -> None:
-    """Ensure metrics_ready.csv exists with the required columns."""
-
-    if not path.exists():
-        raise RuntimeError(f"metrics_ready.csv missing at {path}")
-
-    try:
-        frame = pd.read_csv(path)
-    except pd.errors.EmptyDataError:
-        raise RuntimeError("metrics_ready.csv exists but is empty") from None
-
+def validate_metrics_ready_csv(path: Path | None = None, *, season: int | None = None, week: int | None = None) -> None:
+    contract = CONTRACTS["metrics_ready"]
+    target = path or contract.path
+    if not target.exists() or target.stat().st_size == 0:
+        raise RuntimeError(f"metrics_ready.csv missing or empty at {target}")
+    frame = pd.read_csv(target)
+    missing = [c for c in contract.required_columns if c not in frame.columns]
+    if missing:
+        raise RuntimeError("metrics_ready.csv missing required columns: " + ", ".join(missing))
     if frame.empty:
         raise RuntimeError("metrics_ready.csv has 0 rows")
 
-    required_columns = {
-        "player",
-        "player_canonical",
-        "team",
-        "team_abbr",
-        "opponent",
-        "opponent_abbr",
-        "position",
-        "market",
-        "line",
-    }
-    missing = sorted(required_columns - set(frame.columns))
-    if missing:
-        raise RuntimeError(
-            "metrics_ready.csv missing required columns: " + ", ".join(missing)
-        )
+    season = int(season if season is not None else resolve_season())
+    s = pd.to_numeric(frame["season"], errors="coerce")
+    scoped = frame.loc[s.eq(season)].copy()
+    if scoped.empty:
+        raise RuntimeError(f"metrics_ready.csv contains no rows for active season {season}")
 
-    usage_cols = ["target_share", "route_rate", "rush_share"]
-    missing_usage = [col for col in usage_cols if col not in frame.columns]
-    if missing_usage:
-        raise RuntimeError(
-            "metrics_ready.csv missing usage metrics: " + ", ".join(missing_usage)
-        )
+    if week is not None and "week" in scoped.columns:
+        w = pd.to_numeric(scoped["week"], errors="coerce")
+        if not w.eq(int(week)).any():
+            raise RuntimeError(f"metrics_ready.csv contains no rows for active week {week}")
 
-    odds_columns = [col for col in ["over_odds", "under_odds"] if col in frame.columns]
-    if not odds_columns:
-        raise RuntimeError(
-            "metrics_ready.csv must include at least one odds column (over_odds/under_odds)"
-        )
+    usage = [c for c in ("target_share", "tgt_share", "rush_share") if c in scoped.columns]
+    if not usage:
+        raise RuntimeError("metrics_ready.csv contains no player usage columns")
+    odds = [c for c in ("over_odds", "under_odds") if c in scoped.columns]
+    if not odds:
+        raise RuntimeError("metrics_ready.csv must contain over_odds and/or under_odds")
 
-    # TODO: enforce weather coverage once stadium lookups are fully stabilized.
+    # route_rate/YPRR are deliberately not required to be non-null.  PlayerForm
+    # v2 refuses to fabricate routes when the source does not provide them.
+    for col in ("player", "team", "opponent"):
+        missing_count = int(scoped[col].isna().sum()) if col in scoped.columns else len(scoped)
+        if missing_count:
+            raise RuntimeError(f"metrics_ready.csv has {missing_count} missing {col} values")
 
-    print(
-        f"[metrics_ready] ✅ {len(frame)} rows validated with required metrics columns"
-    )
+    print(f"[metrics_ready] ✅ validated rows={len(scoped)} season={season} week={week if week is not None else '<any>'}")
 
 
-def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Ensure critical data/*.csv inputs exist and contain at least one row. "
-            "Accepts either config keys (e.g. 'team_form') or explicit paths."
-        )
-    )
-    parser.add_argument(
-        "--require",
-        dest="required",
-        nargs="+",
-        metavar="KEY_OR_PATH",
-        action="append",
-        help="Additional config keys or paths to validate (defaults to core metrics inputs).",
-    )
-    parser.add_argument(
-        "--season",
-        required=False,
-        help="(ignored, workflow context only)",
-    )
-    parser.add_argument(
-        "--date",
-        required=False,
-        help="(ignored, workflow context only)",
-    )
-    parser.add_argument(
-        "--extra",
-        dest="extra",
-        nargs="+",
-        metavar="PATH",
-        action="append",
-        help="Explicit filesystem paths to include in the readiness check.",
-    )
-    return parser.parse_args(argv)
+def check_required_inputs() -> None:
+    for key in REQUIRED_BEFORE_PRICING:
+        _check(key)
+    for key, contract in CONTRACTS.items():
+        if contract.required or key in REQUIRED_BEFORE_PRICING:
+            continue
+        if not contract.path.exists() or contract.path.stat().st_size == 0:
+            print(f"[metrics_ready] WARN optional artifact missing/empty: {contract.path}")
 
 
-def main(argv: Sequence[str] | None = None) -> None:
-    args = _parse_args(argv)
-
-    required_items: List[str | Path] = list(DEFAULT_REQUIRED_KEYS)
-    if args.required:
-        for group in args.required:
-            required_items.extend(group)
-    if args.extra:
-        for group in args.extra:
-            required_items.extend(Path(item) for item in group)
-
-    check_required_inputs(required_items)
-    validate_metrics_ready_csv(Path("data") / "metrics_ready.csv")
+def main(argv=None) -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--season", type=int, default=None)
+    parser.add_argument("--date", default="")
+    args = parser.parse_args(argv)
+    season = int(args.season if args.season is not None else resolve_season())
+    week = resolve_week(season=season, slate_date=args.date or "")
+    check_required_inputs()
+    validate_metrics_ready_csv(season=season, week=week)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Runtime/debug/cache artifacts
+data/_cache/
+data/_debug/
+data/logs/
+data/_sharp_dump_*.html
+previous_state/
+
+# Generated pipeline tables. These are rebuilt by Full Slate and uploaded as
+# workflow artifacts; they are not source code and must not become stale inputs.
+data/*.csv
+outputs/*.csv
+outputs/**/*.csv
+outputs/**/*.parquet
+outputs/**/*.json
+
+# Keep intentional static fixtures/schedules/model calibration files if added.
+!data/schedules/
+!data/schedules/**
+!data/*.json
+
+# Local tooling
+.DS_Store
+*.log

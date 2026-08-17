@@ -1,108 +1,149 @@
+"""Core build validation used by make_metrics and CI.
+
+Validation is season-aware and uses the same artifact contracts as the rest of
+the production pipeline.  It never assumes season 2025 and never references the
+obsolete data/opponent_map.csv path.
 """
-Build Validation Script (with CI enforcement)
-Auto-runs after metrics generation and fails builds if validation fails.
-"""
+from __future__ import annotations
+
+import os
+from datetime import datetime
 
 import pandas as pd
-import os
-import sys
-from datetime import datetime
+
+from scripts.artifact_contracts import CONTRACTS
+from scripts.runtime_context import resolve_season
 
 DATA_PATH = "data"
 LOG_PATH = os.path.join(DATA_PATH, "logs")
 os.makedirs(LOG_PATH, exist_ok=True)
 LOG_FILE = os.path.join(LOG_PATH, "validate_build.log")
 
-def log(msg):
+CORE_AT_METRICS = (
+    "roles_ourlads",
+    "team_week_map",
+    "opponent_map",
+    "props_raw",
+    "team_form",
+    "player_game_logs",
+    "player_form",
+    "player_form_consensus",
+    "metrics_ready",
+)
+
+
+def log(msg: str) -> None:
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[VALIDATE] {ts} | {msg}"
     print(line)
-    with open(LOG_FILE, "a") as f:
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(line + "\n")
 
-EXPECTED_FILES = {
-    "roles_ourlads.csv": {"min_rows": 350, "must_have": ["player", "team", "role", "position"]},
-    "opponent_map.csv": {"min_rows": 32, "must_have": ["team", "opponent"]},
-    "player_form.csv": {"min_rows": 350, "must_have": ["player", "team", "week", "season"]},
-    "props_raw.csv": {"min_rows": 150, "must_have": ["player", "team_abbr", "opponent_abbr", "market_type"]},
-    "weather.csv": {"min_rows": 20, "must_have": ["team_abbr", "week"]},
-    "make_metrics_output.csv": {"min_rows": 350, "must_have": ["player", "team", "week"]}
-}
 
-def validate_file(fname, meta):
-    path = os.path.join(DATA_PATH, fname)
-    if not os.path.exists(path):
-        log(f"❌ Missing file: {fname}")
+def _validate_contract(key: str) -> bool:
+    contract = CONTRACTS[key]
+    path = contract.path
+    if not path.exists():
+        log(f"❌ Missing file: {path}")
         return False
     try:
         df = pd.read_csv(path)
-    except Exception as e:
-        log(f"❌ Could not read {fname}: {e}")
+    except Exception as exc:
+        log(f"❌ Could not read {path}: {exc}")
         return False
-
-    # Row count check
-    if len(df) < meta["min_rows"]:
-        log(f"⚠️ {fname} has only {len(df)} rows (expected ≥ {meta['min_rows']})")
-
-    # Column check
-    missing_cols = [c for c in meta["must_have"] if c not in df.columns]
-    if missing_cols:
-        log(f"❌ {fname} missing required columns: {missing_cols}")
+    if len(df) < contract.min_rows:
+        log(f"❌ {path} has {len(df)} rows; expected >= {contract.min_rows}")
         return False
-
-    log(f"✅ {fname} validated ({len(df)} rows, {len(df.columns)} cols)")
+    missing = [c for c in contract.required_columns if c not in df.columns]
+    if missing:
+        log(f"❌ {path} missing required columns: {missing}")
+        return False
+    log(f"✅ {path} validated ({len(df)} rows, {len(df.columns)} cols)")
     return True
 
 
-def run_core_validation():
+def _validate_season(path, season: int, *, require_active_rows: bool) -> bool:
+    try:
+        df = pd.read_csv(path)
+    except Exception as exc:
+        log(f"❌ Could not read {path} for season validation: {exc}")
+        return False
+    if "season" not in df.columns:
+        return True
+    s = pd.to_numeric(df["season"], errors="coerce")
+    if require_active_rows and not s.eq(int(season)).any():
+        log(f"❌ {path} contains no rows for active season {season}")
+        return False
+    return True
+
+
+def _validate_opponents() -> bool:
+    path = CONTRACTS["team_week_map"].path
+    try:
+        df = pd.read_csv(path)
+    except Exception:
+        return False
+    if not {"season", "week", "team", "opponent"}.issubset(df.columns):
+        return False
+    season = resolve_season()
+    s = pd.to_numeric(df["season"], errors="coerce")
+    scoped = df.loc[s.eq(season)].copy()
+    scoped["team"] = scoped["team"].astype(str).str.upper().str.strip()
+    scoped["opponent"] = scoped["opponent"].astype(str).str.upper().str.strip()
+    games = scoped.loc[~scoped["opponent"].isin(["", "NAN", "NONE", "BYE"])]
+    lookup = {(int(r.week), r.team): r.opponent for r in games.itertuples() if pd.notna(r.week)}
+    bad = []
+    for (week, team), opp in lookup.items():
+        reverse = lookup.get((week, opp))
+        if reverse != team:
+            bad.append((week, team, opp, reverse))
+    if bad:
+        log(f"❌ team_week_map has {len(bad)} non-bidirectional matchup rows; sample={bad[:5]}")
+        return False
+    return True
+
+
+def run_core_validation() -> bool:
     log("=" * 60)
     log("STARTING BUILD VALIDATION")
     log("=" * 60)
     passed = True
+    for key in CORE_AT_METRICS:
+        passed = _validate_contract(key) and passed
 
-    for f, meta in EXPECTED_FILES.items():
-        ok = validate_file(f, meta)
-        passed &= ok
+    season = resolve_season()
+    # Current-slate tables must carry active-season rows. Historical game logs
+    # intentionally may contain both prior and current seasons.
+    for key in ("team_form", "player_form", "player_form_consensus", "metrics_ready"):
+        passed = _validate_season(CONTRACTS[key].path, season, require_active_rows=True) and passed
 
-    # 2025 season-only check
-    pf = os.path.join(DATA_PATH, "player_form.csv")
-    if os.path.exists(pf):
-        df = pd.read_csv(pf)
-        if "season" in df.columns:
-            non_2025 = len(df[df["season"] != 2025])
-            if non_2025 > 0:
-                log(f"⚠️ {non_2025} players not from 2025 season found in player_form.csv")
-                passed = False
+    passed = _validate_opponents() and passed
 
-    # Opponent bidirectional consistency
-    om = os.path.join(DATA_PATH, "opponent_map.csv")
-    if os.path.exists(om):
-        df = pd.read_csv(om)
-        if {"team", "opponent"}.issubset(df.columns):
-            tset, oset = set(df.team), set(df.opponent)
-            missing = tset - oset
-            if missing:
-                log(f"⚠️ Missing reverse opponent mappings for: {', '.join(missing)}")
-                passed = False
-
-    # Missing player names in final metrics
-    mm = os.path.join(DATA_PATH, "make_metrics_output.csv")
-    if os.path.exists(mm):
-        df = pd.read_csv(mm)
-        if "player" in df.columns and df["player"].isna().any():
-            log(f"⚠️ {df['player'].isna().sum()} missing player names in make_metrics_output.csv")
+    mm = CONTRACTS["metrics_ready"].path
+    if mm.exists():
+        try:
+            metrics = pd.read_csv(mm)
+            if "player" in metrics.columns:
+                missing = int(metrics["player"].isna().sum())
+                if missing:
+                    log(f"❌ {missing} missing player names in metrics_ready.csv")
+                    passed = False
+        except Exception as exc:
+            log(f"❌ Unable to inspect metrics_ready player names: {exc}")
             passed = False
 
-    log("=" * 60)
-    if passed:
-        log("✅ VALIDATION PASSED SUCCESSFULLY")
-    else:
-        log("❌ VALIDATION FOUND ISSUES — BUILD WILL FAIL")
-    log("=" * 60)
+    # Optional enrichments are informative, not contradictory hard failures.
+    for key, contract in CONTRACTS.items():
+        if contract.required or key in CORE_AT_METRICS:
+            continue
+        if not contract.path.exists() or contract.path.stat().st_size == 0:
+            log(f"⚠️ Optional artifact missing/empty: {contract.path}")
 
+    log("=" * 60)
+    log("✅ VALIDATION PASSED SUCCESSFULLY" if passed else "❌ VALIDATION FOUND ISSUES — BUILD WILL FAIL")
+    log("=" * 60)
     return passed
 
 
 if __name__ == "__main__":
-    ok = run_core_validation()
-    sys.exit(0 if ok else 1)
+    raise SystemExit(0 if run_core_validation() else 1)

@@ -1,0 +1,36 @@
+name: Repo CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - migration-4-repo-stabilization
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyyaml nflreadpy
+      - name: Compile production modules
+        run: |
+          python -m compileall scripts tests
+      - name: Static repo audit
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/utils/audit_repo.py --strict
+      - name: Unit tests
+        run: |
+          export PYTHONPATH="${PWD}"
+          pytest -q tests

@@ -1,175 +1,32 @@
 #!/usr/bin/env python3
-# build_play_volume_splits.py
-#
-# Output: play_volume_splits.csv with columns:
-#   team,week,plays_offense,plays_defense,seconds_per_play,neutral_situation_rate
-#
-# Free data source:
-# - nflverse/nflfastR play-by-play 2025 season CSV (public GitHub Releases)
-#   https://github.com/nflverse/nflverse-data/releases  (pbp_2025.csv.gz)
-#   Dictionary / fields (qtr, score_differential, posteam, defteam, qb_dropback, rush_attempt, game_id, play_id, game_seconds_remaining):
-#   see nflverse play-by-play field dictionary documentation
-#   https://nflfastr.com/reference/fast_scraper.html
-#
-# Metric definitions:
-# - Offensive plays: plays where (qb_dropback==1) OR (rush_attempt==1), counted for posteam.
-# - Defensive plays: same plays counted for defteam.
-# - Seconds per play (team offense): for each team-week, sort offensive plays by (game_id, play_id)
-#   and sum deltas of game_seconds_remaining BETWEEN that team's consecutive offensive plays;
-#   divide by offensive plays count. This approximates time between snaps including stoppages.
-# - Neutral situation rate (offense): share of offensive plays taken when |score_differential| <= 7 AND qtr in {1,2,3}.
-#
-import sys
+"""Compatibility wrapper for season-aware play-volume features."""
+from __future__ import annotations
+
+import argparse
+import os
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-import pandas as pd
-import numpy as np
-
-from scripts.utils.nflverse_fetch import get_pbp_2025
-from scripts.utils.pbp_threshold import get_dynamic_min_rows
+from scripts.build.pbp_features import build_play_volume_splits
+from scripts.utils.pbp import get_pbp
 
 
-def compute_seconds_per_play(off_df: pd.DataFrame) -> float:
-    """Approximate seconds per offensive play using game_seconds_remaining deltas between consecutive plays by same team & game."""
-    if off_df.empty:
-        return np.nan
-    d = off_df.sort_values(["game_id", "play_id"]).copy()
-    # compute delta within each game for the same team
-    d["prev_sec"] = d.groupby("game_id")["game_seconds_remaining"].shift(1)
-    # We only want deltas between consecutive OFFENSIVE plays; ensure previous row is same team's offense
-    d["prev_posteam"] = d.groupby("game_id")["posteam"].shift(1)
-    dd = d[d["prev_posteam"] == d["posteam"]].copy()
-    dd["delta"] = dd["prev_sec"] - dd["game_seconds_remaining"]
-    dd = dd[
-        (dd["delta"].notna()) & (dd["delta"] >= 0) & (dd["delta"] < 600)
-    ]  # guardrails
-    if dd.empty:
-        return np.nan
-    return float(dd["delta"].mean())
-
-
-def _maybe_warn(df: pd.DataFrame, pbp: pd.DataFrame, label: str) -> None:
-    total_games = 0
-    if "game_id" in pbp.columns:
-        total_games = int(pbp["game_id"].dropna().nunique())
-    elif {"week", "posteam"}.issubset(pbp.columns):
-        total_games = int(pbp[["week", "posteam"]].dropna().drop_duplicates().shape[0] // 2)
-    min_dynamic = max(2000, total_games * 150)
-    if len(df) < min_dynamic:
-        print(
-            f"[builder WARNING] {label} low sample size ({len(df)} rows < {min_dynamic}), writing partial output anyway"
-        )
-
-
-def main(out_csv: str = str(Path("data") / "play_volume_splits.csv")):
-    min_rows_target = get_dynamic_min_rows()
-    pbp = get_pbp_2025(min_rows=20000)
-    print(
-        f"[play_volume_splits] PBP loaded rows: {len(pbp)} (soft target {min_rows_target})"
-    )
-    if "season" in pbp.columns:
-        pbp = pbp[pbp["season"] == 2025].copy()
-    if len(pbp) <= 1000:
-        print(
-            "[builder WARNING] play_volume_splits.csv generated from limited PBP sample (<=1000 rows)"
-        )
-
-    # ensure needed columns exist
-    needed = [
-        "week",
-        "qtr",
-        "score_differential",
-        "posteam",
-        "defteam",
-        "qb_dropback",
-        "rush_attempt",
-        "game_id",
-        "play_id",
-        "game_seconds_remaining",
-    ]
-    for c in needed:
-        if c not in pbp.columns:
-            raise RuntimeError(f"Required column missing: {c}")
-
-    # Normalize numeric flags
-    for col in ["qb_dropback", "rush_attempt", "qtr"]:
-        pbp[col] = pd.to_numeric(pbp[col], errors="coerce").fillna(0).astype(int)
-    pbp["score_differential"] = pd.to_numeric(
-        pbp["score_differential"], errors="coerce"
-    )
-
-    # Valid offensive plays
-    pbp["is_off_play"] = (
-        (pbp["qb_dropback"] == 1) | (pbp["rush_attempt"] == 1)
-    ).astype(int)
-
-    # Compute per team-week
-    rows = []
-    weeks = sorted(pbp["week"].dropna().unique().tolist())
-    teams = sorted(
-        set(pbp["posteam"].dropna().unique().tolist())
-        | set(pbp["defteam"].dropna().unique().tolist())
-    )
-    for wk in weeks:
-        wk_df = pbp[pbp["week"] == wk]
-        for tm in teams:
-            off = wk_df[(wk_df["posteam"] == tm) & (wk_df["is_off_play"] == 1)]
-            deff = wk_df[(wk_df["defteam"] == tm) & (wk_df["is_off_play"] == 1)]
-
-            plays_offense = int(len(off))
-            plays_defense = int(len(deff))
-
-            # seconds per play (offense, all situations)
-            spp = compute_seconds_per_play(off)
-
-            # neutral situation rate (offense): |score_differential| <= 7 & qtr in {1,2,3}
-            if plays_offense > 0:
-                neutral_mask = (off["score_differential"].abs() <= 7) & (
-                    off["qtr"].isin([1, 2, 3])
-                )
-                neutral_rate = float(neutral_mask.mean())
-            else:
-                neutral_rate = np.nan
-
-            rows.append(
-                {
-                    "team": tm,
-                    "week": int(wk),
-                    "plays_offense": plays_offense,
-                    "plays_defense": plays_defense,
-                    "seconds_per_play": None if pd.isna(spp) else round(spp, 2),
-                    "neutral_situation_rate": (
-                        None if pd.isna(neutral_rate) else round(neutral_rate, 4)
-                    ),
-                }
-            )
-
-    out = pd.DataFrame(
-        rows,
-        columns=[
-            "team",
-            "week",
-            "plays_offense",
-            "plays_defense",
-            "seconds_per_play",
-            "neutral_situation_rate",
-        ],
-    )
-    out_path = Path(out_csv)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    _maybe_warn(out, pbp, out_path.name)
-    out.to_csv(out_path, index=False)
-    print(f"[builder] wrote {len(out)} rows -> {out_path}")
+def main(out_csv: str = "data/play_volume_splits.csv", season: int | None = None) -> None:
+    season = int(season if season is not None else os.getenv("SEASON", "2026"))
+    pbp = get_pbp(season, min_rows=1)
+    if "season_type" in pbp.columns:
+        reg = pbp.loc[pbp["season_type"].astype(str).str.upper().eq("REG")]
+        if not reg.empty:
+            pbp = reg.copy()
+    out = build_play_volume_splits(pbp)
+    path = Path(out_csv)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    out.to_csv(path, index=False)
+    print(f"[play_volume_splits] season={season} rows={len(out)} -> {path}")
 
 
 if __name__ == "__main__":
-    out = (
-        str(Path("data") / "play_volume_splits.csv")
-        if len(sys.argv) < 2
-        else sys.argv[1]
-    )
-    main(out)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("out_csv", nargs="?", default="data/play_volume_splits.csv")
+    parser.add_argument("--season", type=int, default=None)
+    args = parser.parse_args()
+    main(args.out_csv, args.season)

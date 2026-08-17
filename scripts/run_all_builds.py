@@ -1,39 +1,67 @@
 #!/usr/bin/env python3
-import subprocess, sys, os
+"""Run optional enrichment builders under one authoritative season context.
 
-BUILD_SCRIPTS = [
-    "scripts/build/build_cb_coverage_team.py",
-    "scripts/build/build_cb_coverage_player.py",
-    "scripts/build/build_weather_week.py",
-    "scripts/build/build_injuries_weekly.py",
-    "scripts/build/build_qb_run_metrics.py",
-    "scripts/build/build_wr_cb_exposure.py",
-    "scripts/build/build_play_volume_splits.py",
-    "scripts/build/build_volatility_widening.py",
-    "scripts/build/build_run_pass_funnel.py",
-    "scripts/build/build_coverage_penalties.py",
-    "scripts/build/build_script_escalators.py",
-    "scripts/build/build_opponent_map_from_props.py",
-]
+Production Full Slate calls the important builders directly; this remains a
+manual convenience orchestrator and now fails on required step errors instead
+of silently continuing through a broken feature chain.
+"""
+from __future__ import annotations
 
-def run(cmd):
-    print(f"\n$ {cmd}")
-    res = subprocess.run(cmd, shell=True)
-    if res.returncode != 0:
-        print(f"[WARN] step failed: {cmd}", file=sys.stderr)
+import os
+import subprocess
+import sys
 
-def main():
+from scripts.runtime_context import resolve_season
+
+
+def run(cmd: list[str], *, required: bool = True) -> bool:
+    print("\n$", " ".join(cmd))
+    result = subprocess.run(cmd, check=False)
+    if result.returncode != 0:
+        msg = f"step failed ({result.returncode}): {' '.join(cmd)}"
+        if required:
+            raise RuntimeError(msg)
+        print(f"[WARN] {msg}", file=sys.stderr)
+        return False
+    return True
+
+
+def main() -> int:
+    season = resolve_season()
     os.makedirs("data", exist_ok=True)
-    for path in BUILD_SCRIPTS:
-        run(f"python {path}")
+    py = sys.executable
 
-    # Fix opponents in player_form_consensus in place
-    if os.path.exists("data/opponent_map_from_props.csv") and os.path.exists("data/player_form_consensus.csv"):
-        run("python scripts/util/merge_opponent_into_player_form.py")
+    # Web enrichments can change independently and are optional.
+    optional = [
+        [py, "scripts/build/build_cb_coverage_team.py"],
+        [py, "scripts/build/build_cb_coverage_player.py"],
+        [py, "scripts/build/build_weather_week.py", "--season", str(season)],
+        [py, "scripts/build/build_injuries_weekly.py", "data/injuries.csv"],
+        [py, "scripts/build/build_wr_cb_exposure.py"],
+    ]
+    for cmd in optional:
+        run(cmd, required=False)
 
-    # OPTIONAL: if you’re using the /model pipeline we added
+    # All nflverse features are built together so they share exactly one season.
+    run([py, "scripts/build/pbp_features.py", "--season", str(season)], required=False)
+
+    # Refresh live opponent map after props are present.
+    run([py, "scripts/build/build_opponent_map_from_props.py"], required=False)
+
+    merge_script = "scripts/utils/merge_opponent_into_player_form.py"
+    if os.path.exists(merge_script) and os.path.exists("data/player_form_consensus.csv"):
+        run([py, merge_script], required=False)
+
     if os.path.exists("model/features/build.py"):
-        run('python -c "from model.features.build import build_matchup_frame as bm; df=bm(); df.to_csv(\'outputs/matchup_features.csv\', index=False); print(df.shape, \'-> outputs/matchup_features.csv\')"')
+        run([
+            py,
+            "-c",
+            "from model.features.build import build_matchup_frame as bm; "
+            "df=bm(); df.to_csv('outputs/matchup_features.csv', index=False); "
+            "print(df.shape, '-> outputs/matchup_features.csv')",
+        ], required=False)
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
