@@ -24,12 +24,18 @@ PRODUCTION_SCRIPTS = (
     "scripts/providers/sharpfootball_pull.py",
     "scripts/run_team_form_context.py",
     "scripts/build/build_weather_week.py",
+    "scripts/build/build_injuries_weekly.py",
     "scripts/build/pbp_features.py",
     "scripts/player_form_v2.py",
+    "scripts/run_player_form_v2.py",
+    "scripts/enrich_player_scoring_v2.py",
     "scripts/metrics_v2.py",
+    "scripts/metrics_enrichment_v2.py",
     "scripts/run_metrics_context.py",
     "scripts/metrics_ready.py",
     "scripts/pricing_v2.py",
+    "scripts/simulation_v2.py",
+    "scripts/run_pricing_v2.py",
     "scripts/validate_build_integrity.py",
     "scripts/artifact_contracts.py",
 )
@@ -117,10 +123,12 @@ def _workflow_contract_errors() -> list[str]:
         return []
     text = _read(path)
     required_tokens = (
-        "scripts/player_form_v2.py",
+        "scripts/run_player_form_v2.py",
+        "scripts/enrich_player_scoring_v2.py",
         "scripts/run_metrics_context.py",
+        "scripts/validate_build_integrity.py",
         "scripts/metrics_ready.py",
-        "scripts/pricing_v2.py",
+        "scripts/run_pricing_v2.py",
         "scripts/utils/audit_repo.py --strict",
     )
     return [f"full-slate workflow does not invoke {token}" for token in required_tokens if token not in text]
