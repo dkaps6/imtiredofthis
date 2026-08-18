@@ -171,12 +171,7 @@ jobs:
           if len(team) < 2 or len(team) % 2: raise SystemExit(f"FATAL: invalid scheduled coverage team rows={len(team)}")
           if player.empty or exposure.empty: raise SystemExit("FATAL: Coverage v2 lost the authoritative WR universe")
           if exposure['opponent'].fillna('').eq('').any(): raise SystemExit("FATAL: Coverage v2 has unresolved WR opponents")
-          print(
-              f"Coverage v2 OK: scheduled_teams={len(team)} WRs={len(exposure)} "
-              f"direct_matchups={int(player['matchup_available'].sum())} "
-              f"alignments={int(player['alignment_available'].sum())} "
-              f"team_scheme_rows={int(team['coverage_available'].sum())}"
-          )
+          print(f"Coverage v2 OK: scheduled_teams={len(team)} WRs={len(exposure)} direct_matchups={int(player['matchup_available'].sum())} alignments={int(player['alignment_available'].sum())} team_scheme_rows={int(team['coverage_available'].sum())}")
           EOF
 
       - name: Build optional current-season PBP enrichment
@@ -198,6 +193,12 @@ jobs:
           python scripts/run_model_context_bridge.py
           test -s data/model_context_bridge.csv
 
+      - name: Validate empirical rule layer
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_rules_bridge.py
+          test -s data/model_rule_diagnostics.csv
+
       - name: Assemble deterministic metrics
         if: ${{ github.event.inputs.fetch_live_odds == 'true' }}
         run: |
@@ -206,7 +207,7 @@ jobs:
           python scripts/validate_build_integrity.py
           python scripts/metrics_ready.py --season "${SEASON}" --date "${SLATE_DATE}"
 
-      - name: Price with joint Monte Carlo simulation
+      - name: Price with rule-adjusted joint Monte Carlo simulation
         if: ${{ github.event.inputs.fetch_live_odds == 'true' }}
         run: |
           export PYTHONPATH="${PWD}"
@@ -220,7 +221,8 @@ jobs:
           missing = [x for x in c.required_columns if x not in df.columns]
           assert not missing, missing
           assert "simulation_iterations" in df.columns
-          print(f"priced rows={len(df)} simulations={df['simulation_iterations'].iloc[0]}")
+          assert "rules_applied" in df.columns and int(df["rules_applied"].sum()) > 0
+          print(f"priced rows={len(df)} simulations={df['simulation_iterations'].iloc[0]} rule_adjusted={int(df['rules_applied'].sum())}")
           EOF
 
       - name: Strict repository audit
