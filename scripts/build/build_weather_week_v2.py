@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""Build weekly weather from the authoritative NFL schedule.
-
-This replaces the old weather slate discovery behavior that tried to infer games
-from `team_week_map.csv`, odds artifacts, or `data/schedule.csv`. The production
-schedule authority is now `get_nfl_schedule(season)` plus `resolve_week()`, so the
-weather layer should consume exactly that same game set.
-
-The existing weather module still owns stadium metadata and NWS forecast parsing;
-this entry point only owns authoritative slate construction and output semantics.
-"""
+"""Build weekly weather from the authoritative NFL schedule."""
 from __future__ import annotations
 
 import argparse
@@ -17,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+from scripts._opponent_map import canon_team
 from scripts.build import build_weather_week as legacy
 from scripts.build._schedule_utils import get_nfl_schedule
 from scripts.runtime_context import resolve_season, resolve_week
@@ -44,8 +36,17 @@ def build_weather_slate(season: int, week: int, schedule: pd.DataFrame | None = 
     if scoped.empty:
         raise RuntimeError(f"No authoritative games found for season={season} week={week}")
 
-    # One game should appear once. Duplicate game rows would duplicate weather
-    # evidence and are therefore a hard data-contract failure.
+    # Normalize every schedule provider through the repository-wide team identity
+    # contract before stadium lookup. This is where aliases such as LA -> LAR are
+    # resolved; weather must never invent its own team code vocabulary.
+    scoped["home"] = scoped["home"].map(canon_team)
+    scoped["away"] = scoped["away"].map(canon_team)
+    invalid_team = scoped["home"].eq("") | scoped["away"].eq("")
+    if invalid_team.any():
+        raise RuntimeError(
+            f"Weather slate contains unresolvable team identity rows={int(invalid_team.sum())}"
+        )
+
     dedupe_keys = ["home", "away"]
     if "game_id" in scoped.columns:
         dedupe_keys = ["game_id"]
@@ -58,9 +59,6 @@ def build_weather_slate(season: int, week: int, schedule: pd.DataFrame | None = 
     for _, game in scoped.iterrows():
         home = str(game["home"]).upper().strip()
         away = str(game["away"]).upper().strip()
-        if not home or not away:
-            raise RuntimeError("Weather slate contains blank home/away identity")
-
         kickoff_utc = pd.to_datetime(game["kickoff_utc"], utc=True, errors="coerce")
         if pd.isna(kickoff_utc):
             raise RuntimeError(
@@ -96,7 +94,6 @@ def build_weather_slate(season: int, week: int, schedule: pd.DataFrame | None = 
 
 
 def build_weather_output(slate: pd.DataFrame) -> pd.DataFrame:
-    """Apply the existing stadium/NWS weather logic to the authoritative slate."""
     rows: list[dict] = []
     for _, game in slate.iterrows():
         wx = legacy._weather_row_for_game(game)
@@ -124,12 +121,8 @@ def main() -> int:
 
     season = int(args.season) if args.season is not None else int(resolve_season())
     week = int(resolve_week())
-
     slate = build_weather_slate(season, week)
-    print(
-        f"[weather_v2] authoritative slate season={season} week={week} "
-        f"games={len(slate)} source=get_nfl_schedule"
-    )
+    print(f"[weather_v2] authoritative slate season={season} week={week} games={len(slate)} source=get_nfl_schedule")
 
     weather = build_weather_output(slate)
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -137,15 +130,9 @@ def main() -> int:
 
     ok = int(pd.to_numeric(weather.get("forecast_ok", 0), errors="coerce").fillna(0).sum())
     unavailable = int(len(weather) - ok)
-    print(
-        f"[weather_v2] wrote {len(weather)} games -> {OUT_PATH}; "
-        f"forecast_ok={ok} forecast_unavailable={unavailable}"
-    )
+    print(f"[weather_v2] wrote {len(weather)} games -> {OUT_PATH}; forecast_ok={ok} forecast_unavailable={unavailable}")
     if unavailable and ok == 0:
-        print(
-            "[weather_v2] no kickoff forecasts are currently available; "
-            "schedule/stadium rows were retained and will populate automatically when the NWS forecast horizon reaches the games"
-        )
+        print("[weather_v2] no kickoff forecasts are currently available; schedule/stadium rows were retained")
     return 0
 
 
