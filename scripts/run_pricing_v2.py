@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Production pricing: empirical probabilities from joint Monte Carlo outcomes."""
+"""Production pricing: empirical probabilities from joint Monte Carlo outcomes.
+
+Migration 3 applies the canonical empirical football rules to simulation inputs
+before the joint Monte Carlo runs.  Final projections are still the empirical
+mean of simulated outcomes; there is no post-hoc projection multiplier.
+"""
 from __future__ import annotations
 
 import argparse
@@ -8,6 +13,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from scripts.modeling.simulation_rules import apply_rules_to_metrics
 from scripts.pricing_v2 import _fair_market_prob, _fair_odds
 from scripts.runtime_context import resolve_season
 from scripts.simulation_v2 import MARKET_MAP, lookup, simulate
@@ -15,6 +21,7 @@ from scripts.simulation_v2 import MARKET_MAP, lookup, simulate
 DATA = Path("data")
 OUTPUTS = Path("outputs")
 OUT = OUTPUTS / "props_priced_clean.csv"
+RULE_INPUTS = DATA / "model_rule_simulation_inputs.csv"
 
 
 def price(season: int) -> pd.DataFrame:
@@ -27,6 +34,17 @@ def price(season: int) -> pd.DataFrame:
         df = df.loc[pd.to_numeric(df["season"], errors="coerce").eq(int(season))].copy()
     if df.empty:
         raise RuntimeError(f"metrics_ready contains no rows for season={season}")
+
+    # Rules alter finite opportunity / efficiency / uncertainty assumptions
+    # before simulation. Keep an audit artifact so every priced projection can be
+    # traced back to the exact rule-adjusted inputs used by Monte Carlo.
+    df = apply_rules_to_metrics(df)
+    rule_rows = int(pd.to_numeric(df.get("rules_applied", 0), errors="coerce").fillna(0).sum())
+    if rule_rows == 0:
+        raise RuntimeError("Canonical rule adapter matched 0 metrics rows; refusing untracked production pricing")
+    RULE_INPUTS.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(RULE_INPUTS, index=False)
+    print(f"[pricing_mc] canonical rules applied rows={rule_rows}/{len(df)} -> {RULE_INPUTS}")
 
     sims = simulate(df)
     rows = []
@@ -66,6 +84,8 @@ def price(season: int) -> pd.DataFrame:
             "model_proj": model_proj,
             "model_sd": model_sd,
             "simulation_iterations": sims.iterations,
+            "rules_applied": int(row.get("rules_applied", 0) or 0),
+            "rules_role": row.get("rules_role"),
             "season": int(season),
             "week": row.get("week"),
             "book": row.get("book"),
