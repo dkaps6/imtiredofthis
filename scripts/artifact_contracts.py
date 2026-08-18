@@ -73,7 +73,16 @@ CONTRACTS: dict[str, ArtifactContract] = {
     ),
     "player_form_consensus": ArtifactContract(
         "player_form_consensus", DATA / "player_form_consensus.csv",
-        ("player", "team", "season", "position", "role", "tgt_share", "rush_share"), min_rows=1,
+        (
+            "player", "team", "season", "position", "role", "tgt_share", "rush_share",
+            "prior_games", "current_games",
+            "tgt_share_prior", "tgt_share_current",
+            "rush_share_prior", "rush_share_current",
+            "ypt_prior", "ypt_current",
+            "ypc_prior", "ypc_current",
+            "ypa_prior", "ypa_current",
+            "receptions_per_target_prior", "receptions_per_target_current",
+        ), min_rows=1,
     ),
     "model_context_bridge": ArtifactContract(
         "model_context_bridge", DATA / "model_context_bridge.csv",
