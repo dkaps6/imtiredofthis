@@ -94,19 +94,45 @@ jobs:
           python scripts/fetch_props_oddsapi.py --season "${SEASON}" --date "${SLATE_DATE}"
           test -s outputs/props_raw.csv
           test -s outputs/odds_game.csv
+          test -s data/opponent_map_from_props.csv || { echo "ERROR: fetch_props_oddsapi did not materialize opponent_map_from_props.csv"; exit 1; }
 
-      - name: Build live opponent map
+      - name: Validate live opponent map
         run: |
           export PYTHONPATH="${PWD}"
-          python scripts/build/build_opponent_map_from_props.py
-          test -s data/opponent_map_from_props.csv
+          python - <<'EOF'
+          import pandas as pd
+          p = "data/opponent_map_from_props.csv"
+          df = pd.read_csv(p)
+          if df.empty:
+              raise SystemExit(f"FATAL: {p} is empty")
+          required = {"team", "opponent"}
+          missing = required - set(df.columns)
+          if missing:
+              raise SystemExit(f"FATAL: {p} missing columns {sorted(missing)}")
+          unresolved = int(df["team"].isna().sum() + df["opponent"].isna().sum())
+          if unresolved:
+              raise SystemExit(f"FATAL: {p} contains {unresolved} unresolved team/opponent cells")
+          print(f"opponent map OK: rows={len(df)}")
+          EOF
 
-      - name: Build TeamForm
+      - name: Build TeamForm with explicit preseason priors
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/providers/sharpfootball_pull.py --season "${SEASON}" --dump-html
+          python scripts/team_form_prior_bridge.py \
+            --season "${SEASON}" \
+            --prior-season "${PRIOR_SEASON}"
           python scripts/run_team_form_context.py --season "${SEASON}"
           test -s data/team_form.csv
+          python - <<'EOF'
+          import pandas as pd
+          df = pd.read_csv("data/team_form.csv")
+          if df.empty:
+              raise SystemExit("FATAL: team_form.csv is empty")
+          if df["season"].astype(int).nunique() != 1 or int(df["season"].astype(int).iloc[0]) != int(__import__('os').environ['SEASON']):
+              raise SystemExit("FATAL: TeamForm season context is not the active season")
+          print("TeamForm provenance:", df[[c for c in ["team_form_active_season","team_form_prior_season","pbp_feature_season","pbp_prior_used","pbp_feature_source"] if c in df.columns]].drop_duplicates().to_dict("records"))
+          EOF
 
       - name: Build optional live enrichments
         continue-on-error: true
