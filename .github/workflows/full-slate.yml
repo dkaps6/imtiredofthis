@@ -158,13 +158,31 @@ jobs:
           print(f"injuries artifact OK: rows={len(df)} (zero is valid before official reports exist)")
           EOF
 
-      - name: Build remaining optional live enrichments
+      - name: Build Coverage v2 matchup intelligence
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/build/build_coverage_v2.py --season "${SEASON}"
+          for f in data/cb_coverage_team.csv data/cb_coverage_player.csv data/wr_cb_exposure.csv; do test -s "$f"; done
+          python - <<'EOF'
+          import pandas as pd
+          team = pd.read_csv("data/cb_coverage_team.csv")
+          player = pd.read_csv("data/cb_coverage_player.csv")
+          exposure = pd.read_csv("data/wr_cb_exposure.csv")
+          if len(team) != 32: raise SystemExit(f"FATAL: coverage team rows={len(team)} expected=32")
+          if player.empty or exposure.empty: raise SystemExit("FATAL: Coverage v2 lost the authoritative WR universe")
+          if exposure['opponent'].fillna('').eq('').any(): raise SystemExit("FATAL: Coverage v2 has unresolved WR opponents")
+          print(
+              f"Coverage v2 OK: teams={len(team)} WRs={len(exposure)} "
+              f"direct_matchups={int(player['matchup_available'].sum())} "
+              f"alignments={int(player['alignment_available'].sum())} "
+              f"team_scheme_rows={int(team['coverage_available'].sum())}"
+          )
+          EOF
+
+      - name: Build optional current-season PBP enrichment
         continue-on-error: true
         run: |
           export PYTHONPATH="${PWD}"
-          python scripts/build/build_cb_coverage_team.py || true
-          python scripts/build/build_cb_coverage_player.py || true
-          python scripts/build/build_wr_cb_exposure.py || true
           python scripts/build/pbp_features.py --season "${SEASON}" || true
 
       - name: Build PlayerForm v2 with historical priors
