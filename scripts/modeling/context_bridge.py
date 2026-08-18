@@ -5,7 +5,6 @@ pregame football context but does not alter simulation_v2 or pricing outputs.
 """
 from __future__ import annotations
 
-from dataclasses import asdict
 from pathlib import Path
 from typing import Dict, Iterable
 
@@ -112,6 +111,32 @@ def build_team_contexts(team_form: pd.DataFrame, team_coverage: pd.DataFrame | N
     return out
 
 
+def _attach_schedule_identity(pf: pd.DataFrame, team_week_map: pd.DataFrame | None) -> pd.DataFrame:
+    if team_week_map is None or team_week_map.empty:
+        return pf
+    sched = team_week_map.copy()
+    sched.columns = [str(c).strip().lower() for c in sched.columns]
+    required = {"season", "week", "team", "opponent"}
+    if not required.issubset(sched.columns):
+        raise RuntimeError(f"team_week_map missing columns: {sorted(required - set(sched.columns))}")
+    sched["team"] = sched["team"].map(canon_team)
+    sched["opponent"] = sched["opponent"].map(canon_team)
+    if "game_id" not in sched.columns:
+        sched["game_id"] = ""
+    sched = sched[["season", "week", "team", "opponent", "game_id"]].copy()
+    sched["season"] = pd.to_numeric(sched["season"], errors="coerce").astype("Int64")
+    sched["week"] = pd.to_numeric(sched["week"], errors="coerce").astype("Int64")
+    if sched.duplicated(["season", "week", "team"]).any():
+        raise RuntimeError("team_week_map contains duplicate season/week/team identity")
+    out = pf.merge(sched.rename(columns={"opponent":"schedule_opponent", "game_id":"schedule_game_id"}), on=["season", "week", "team"], how="left")
+    if "game_id" not in out.columns:
+        out["game_id"] = ""
+    out["opponent"] = out["opponent"].replace("", pd.NA).combine_first(out["schedule_opponent"])
+    out["game_id"] = out["game_id"].replace("", pd.NA).combine_first(out["schedule_game_id"]).fillna("")
+    out.drop(columns=["schedule_opponent", "schedule_game_id"], inplace=True)
+    return out
+
+
 def build_player_contexts(
     player_form: pd.DataFrame,
     consensus: pd.DataFrame,
@@ -119,6 +144,7 @@ def build_player_contexts(
     exposure: pd.DataFrame | None = None,
     injuries: pd.DataFrame | None = None,
     weather: pd.DataFrame | None = None,
+    team_week_map: pd.DataFrame | None = None,
 ) -> list[PlayerContext]:
     if player_form is None or player_form.empty:
         raise RuntimeError("PlayerContext bridge requires non-empty player_form")
@@ -128,7 +154,11 @@ def build_player_contexts(
     missing = required - set(pf.columns)
     if missing:
         raise RuntimeError(f"player_form missing columns: {sorted(missing)}")
+    pf["season"] = pd.to_numeric(pf["season"], errors="coerce").astype("Int64")
+    pf["week"] = pd.to_numeric(pf["week"], errors="coerce").astype("Int64")
     pf["team"] = pf["team"].map(canon_team)
+    pf["opponent"] = pf["opponent"].map(canon_team)
+    pf = _attach_schedule_identity(pf, team_week_map)
     pf["opponent"] = pf["opponent"].map(canon_team)
     pf["player_key_bridge"] = pf["player"].map(_player_key)
     if pf[["team", "opponent"]].eq("").any().any():
@@ -141,7 +171,8 @@ def build_player_contexts(
         con.columns = [str(c).strip().lower() for c in con.columns]
         con["team"] = con["team"].map(canon_team)
         con["player_key_bridge"] = con["player"].map(_player_key)
-        keep = [c for c in con.columns if c not in {"player", "team", "season", "week", "position", "role"}]
+        excluded = {"player", "team", "season", "week", "position", "role", "player_key_bridge"}
+        keep = [c for c in con.columns if c not in excluded]
         con = con[["team", "player_key_bridge", *keep]].drop_duplicates(["team", "player_key_bridge"])
         pf = pf.merge(con, on=["team", "player_key_bridge"], how="left", suffixes=("", "_consensus"))
 
@@ -205,8 +236,8 @@ def build_player_contexts(
             player=_text(row, ["player"]),
             team=team,
             opponent=opp,
-            season=int(pd.to_numeric(row["season"], errors="raise")),
-            week=int(pd.to_numeric(row["week"], errors="raise")),
+            season=int(row["season"]),
+            week=int(row["week"]),
             position=_text(row, ["position"]).upper(),
             role=_text(row, ["role"]),
             game_id=game_id,
@@ -221,12 +252,13 @@ def load_model_contexts(data_dir: Path = DATA) -> tuple[Dict[str, TeamContext], 
     team_form = _read(data_dir / "team_form.csv", required=True)
     player_form = _read(data_dir / "player_form.csv", required=True)
     consensus = _read(data_dir / "player_form_consensus.csv", required=True)
+    team_week_map = _read(data_dir / "team_week_map.csv", required=True)
     team_cov = _read(data_dir / "cb_coverage_team.csv")
     exposure = _read(data_dir / "wr_cb_exposure.csv")
     injuries = _read(data_dir / "injuries.csv")
     weather = _read(data_dir / "weather_week.csv")
     teams = build_team_contexts(team_form, team_cov)
-    players = build_player_contexts(player_form, consensus, teams, exposure, injuries, weather)
+    players = build_player_contexts(player_form, consensus, teams, exposure, injuries, weather, team_week_map)
     return teams, players
 
 
