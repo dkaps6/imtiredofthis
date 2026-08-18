@@ -48,6 +48,21 @@ CONTRACTS: dict[str, ArtifactContract] = {
         "team_form", DATA / "team_form.csv",
         ("team", "season"), min_rows=1,
     ),
+    "cb_coverage_team": ArtifactContract(
+        "cb_coverage_team", DATA / "cb_coverage_team.csv",
+        ("team", "season", "week", "man_rate", "zone_rate", "coverage_available", "coverage_source"),
+        min_rows=32, required=False,
+    ),
+    "cb_coverage_player": ArtifactContract(
+        "cb_coverage_player", DATA / "cb_coverage_player.csv",
+        ("player", "team", "opponent", "season", "week", "primary_cb", "matchup_available", "alignment_available"),
+        min_rows=1, required=False,
+    ),
+    "wr_cb_exposure": ArtifactContract(
+        "wr_cb_exposure", DATA / "wr_cb_exposure.csv",
+        ("player", "team", "opponent", "season", "week", "exp_vs_man", "exp_vs_zone", "matchup_available", "team_coverage_available"),
+        min_rows=1, required=False,
+    ),
     "player_game_logs": ArtifactContract(
         "player_game_logs", DATA / "player_game_logs.csv",
         ("season", "week", "game_id", "player", "team", "opponent"), min_rows=1,
