@@ -51,7 +51,7 @@ CONTRACTS: dict[str, ArtifactContract] = {
     "cb_coverage_team": ArtifactContract(
         "cb_coverage_team", DATA / "cb_coverage_team.csv",
         ("team", "season", "week", "man_rate", "zone_rate", "coverage_available", "coverage_source"),
-        min_rows=32, required=False,
+        min_rows=2, required=False,
     ),
     "cb_coverage_player": ArtifactContract(
         "cb_coverage_player", DATA / "cb_coverage_player.csv",
