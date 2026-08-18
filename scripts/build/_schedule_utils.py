@@ -1,4 +1,4 @@
-"""Shared helpers for loading season schedules from nflverse releases."""
+"""Shared helpers for loading and normalizing NFL season schedules."""
 
 import sys
 from pathlib import Path
@@ -55,17 +55,10 @@ def _detect_columns(df: pd.DataFrame) -> _ScheduleColumns:
     week = _find(["week", "schedule_week"])
     home = _find(["home_team", "schedule_home_team", "home"])
     away = _find(["away_team", "schedule_away_team", "away"])
-    kickoff = _find(
-        [
-            "start_time_utc",
-            "start_time",
-            "kickoff",
-            "commence_time",
-            "game_time",
-            "game_datetime",
-            "gamedatetime",
-        ]
-    )
+    kickoff = _find([
+        "start_time_utc", "start_time", "kickoff", "commence_time",
+        "game_time", "game_datetime", "gamedatetime",
+    ])
     gameday = _find(["gameday", "game_date", "gamedate"])
     gametime = _find(["gametime", "game_time", "kickoff_time", "start_time_local"])
     stadium = _find(["stadium", "site", "venue"])
@@ -75,27 +68,14 @@ def _detect_columns(df: pd.DataFrame) -> _ScheduleColumns:
 
     if not (season and week and home and away):
         missing = [name for name, value in {
-            "season": season,
-            "week": week,
-            "home": home,
-            "away": away,
+            "season": season, "week": week, "home": home, "away": away,
         }.items() if value is None]
-        raise RuntimeError(
-            f"Schedule CSV missing required columns: {', '.join(missing)}"
-        )
+        raise RuntimeError(f"Schedule data missing required columns: {', '.join(missing)}")
 
     return _ScheduleColumns(
-        season=season,
-        week=week,
-        home=home,
-        away=away,
-        kickoff=kickoff,
-        gameday=gameday,
-        gametime=gametime,
-        stadium=stadium,
-        location=location,
-        city=city,
-        state=state,
+        season=season, week=week, home=home, away=away, kickoff=kickoff,
+        gameday=gameday, gametime=gametime, stadium=stadium,
+        location=location, city=city, state=state,
     )
 
 
@@ -113,24 +93,19 @@ def _normalize_team(series: pd.Series) -> pd.Series:
     return series.astype(str).str.upper().str.strip()
 
 
-def _parse_location(
-    df: pd.DataFrame,
-    columns: _ScheduleColumns,
-) -> pd.DataFrame:
+def _parse_location(df: pd.DataFrame, columns: _ScheduleColumns) -> pd.DataFrame:
+    index = df.index
     location_series = (
-        df[columns.location]
-        if columns.location and columns.location in df.columns
-        else pd.Series(["" for _ in range(len(df))])
+        df[columns.location] if columns.location and columns.location in df.columns
+        else pd.Series("", index=index, dtype="object")
     )
     city_series = (
-        df[columns.city]
-        if columns.city and columns.city in df.columns
-        else pd.Series(["" for _ in range(len(df))])
+        df[columns.city] if columns.city and columns.city in df.columns
+        else pd.Series("", index=index, dtype="object")
     )
     state_series = (
-        df[columns.state]
-        if columns.state and columns.state in df.columns
-        else pd.Series(["" for _ in range(len(df))])
+        df[columns.state] if columns.state and columns.state in df.columns
+        else pd.Series("", index=index, dtype="object")
     )
 
     location_series = location_series.fillna("").astype(str)
@@ -162,9 +137,9 @@ def _parse_location(
 
     return pd.DataFrame({
         "location": location_series,
-        "city": pd.Series(derived_city).str.strip(),
-        "state": pd.Series(derived_state).str.strip().str.upper(),
-    })
+        "city": pd.Series(derived_city, index=index).str.strip(),
+        "state": pd.Series(derived_state, index=index).str.strip().str.upper(),
+    }, index=index)
 
 
 def _coerce_kickoff(df: pd.DataFrame, columns: _ScheduleColumns) -> pd.Series:
@@ -176,7 +151,7 @@ def _coerce_kickoff(df: pd.DataFrame, columns: _ScheduleColumns) -> pd.Series:
     if columns.gameday and columns.gameday in df.columns:
         gameday = pd.to_datetime(df[columns.gameday], utc=True, errors="coerce")
     else:
-        gameday = pd.Series([pd.NaT] * len(df))
+        gameday = pd.Series(pd.NaT, index=df.index, dtype="datetime64[ns, UTC]")
 
     if columns.gametime and columns.gametime in df.columns:
         combo = (
@@ -192,10 +167,63 @@ def _coerce_kickoff(df: pd.DataFrame, columns: _ScheduleColumns) -> pd.Series:
     if columns.gameday and columns.gameday in df.columns:
         return pd.to_datetime(df[columns.gameday], utc=True, errors="coerce")
 
-    raise RuntimeError("Unable to determine kickoff timestamps from schedule CSV")
+    raise RuntimeError("Unable to determine kickoff timestamps from schedule data")
+
+
+def _to_pandas(value) -> pd.DataFrame:
+    """Convert nflreadpy/Polars or pandas schedule results to pandas."""
+    if isinstance(value, pd.DataFrame):
+        return value.copy()
+    if hasattr(value, "to_pandas"):
+        try:
+            return value.to_pandas()
+        except Exception:
+            pass
+    if hasattr(value, "to_dicts"):
+        return pd.DataFrame(value.to_dicts())
+    return pd.DataFrame(value)
+
+
+def _load_from_nflreadpy(season: int) -> pd.DataFrame:
+    """Load a season schedule through nflreadpy's maintained nflverse interface."""
+    try:
+        import nflreadpy as nfl
+    except Exception as exc:
+        raise RuntimeError(f"nflreadpy import failed: {exc}") from exc
+
+    try:
+        raw = nfl.load_schedules(seasons=[int(season)])
+    except TypeError:
+        # Compatibility with versions that accept a scalar/positional season.
+        raw = nfl.load_schedules([int(season)])
+    except Exception as exc:
+        raise RuntimeError(f"nflreadpy.load_schedules failed for season {season}: {exc}") from exc
+
+    df = _to_pandas(raw)
+    if df.empty:
+        raise RuntimeError(f"nflreadpy returned no schedule rows for season {season}")
+
+    season_col = next((c for c in ("season", "schedule_season", "year") if c in df.columns), None)
+    if season_col is not None:
+        marker = pd.to_numeric(df[season_col], errors="coerce")
+        df = df[marker == int(season)].copy()
+    if df.empty:
+        raise RuntimeError(f"nflreadpy returned no rows matching season {season}")
+
+    # nflverse schedules may include preseason/postseason. Historical PlayerForm
+    # requires regular-season week/game identity, so keep REG where available.
+    game_type_col = next((c for c in ("game_type", "season_type") if c in df.columns), None)
+    if game_type_col is not None:
+        game_type = df[game_type_col].astype(str).str.upper().str.strip()
+        reg = df[game_type.eq("REG")].copy()
+        if not reg.empty:
+            df = reg
+
+    return df.reset_index(drop=True)
 
 
 def _load_from_sources(season: int, session: Optional[requests.Session]) -> pd.DataFrame:
+    """Legacy HTTP fallback used only when nflreadpy cannot provide the schedule."""
     cache_path = _CACHE_DIR / f"sched_{season}.csv"
     if cache_path.exists() and cache_path.stat().st_size > 0:
         cached = _read_csv(cache_path)
@@ -231,10 +259,38 @@ def _load_from_sources(season: int, session: Optional[requests.Session]) -> pd.D
             sess.close()
 
     if last_error:
+        raise RuntimeError(f"Unable to download fallback schedule for season {season}: {last_error}")
+    raise RuntimeError(f"Unable to download fallback schedule for season {season}")
+
+
+def _load_raw_schedule(season: int, session: Optional[requests.Session]) -> pd.DataFrame:
+    """Provider order: bundle -> nflreadpy -> legacy HTTP fallback."""
+    bundle_df = None
+    if _BUNDLE_PATH.exists() and _BUNDLE_PATH.stat().st_size > 0:
+        bundle_df = _read_csv(_BUNDLE_PATH)
+        if bundle_df is not None:
+            try:
+                cols = _detect_columns(bundle_df)
+                marker = pd.to_numeric(bundle_df[cols.season], errors="coerce")
+                if (marker == int(season)).any():
+                    return bundle_df
+            except Exception:
+                pass
+
+    nflreadpy_error: Optional[Exception] = None
+    try:
+        return _load_from_nflreadpy(season)
+    except Exception as exc:
+        nflreadpy_error = exc
+        print(f"[_schedule_utils] nflreadpy unavailable for season={season}: {exc}; trying legacy fallbacks")
+
+    try:
+        return _load_from_sources(season, session)
+    except Exception as fallback_exc:
         raise RuntimeError(
-            f"Unable to download nflverse schedule for season {season}: {last_error}"
-        )
-    raise RuntimeError(f"Unable to download nflverse schedule for season {season}")
+            f"Unable to load NFL schedule for season {season}. "
+            f"nflreadpy error: {nflreadpy_error}; fallback error: {fallback_exc}"
+        ) from fallback_exc
 
 
 def get_nfl_schedule(
@@ -242,55 +298,52 @@ def get_nfl_schedule(
     *,
     session: Optional[requests.Session] = None,
 ) -> pd.DataFrame:
-    """Return schedule rows for ``season`` normalized to home/away/week/kickoff."""
-
+    """Return regular-season schedule rows normalized to home/away/week/kickoff."""
     if season is None:
         raise RuntimeError("Season is required for nfl schedule lookup")
 
-    bundle_df = None
-    if _BUNDLE_PATH.exists() and _BUNDLE_PATH.stat().st_size > 0:
-        bundle_df = _read_csv(_BUNDLE_PATH)
-
-    if bundle_df is None:
-        raw_df = _load_from_sources(season, session)
-    else:
-        raw_df = bundle_df
-
+    raw_df = _load_raw_schedule(int(season), session)
     if raw_df is None or raw_df.empty:
         raise RuntimeError("Schedule source returned no rows")
 
     columns = _detect_columns(raw_df)
-
     df = raw_df.copy()
-    df = df.rename(columns={columns.season: "season_marker"})
-    season_series = pd.to_numeric(df["season_marker"], errors="coerce").astype("Int64")
-    df = df[season_series == season]
+
+    season_series = pd.to_numeric(df[columns.season], errors="coerce")
+    df = df[season_series == int(season)].copy()
     if df.empty:
         raise RuntimeError(f"No schedule rows found for season {season}")
 
+    game_type_col = next((c for c in ("game_type", "season_type") if c in df.columns), None)
+    if game_type_col is not None:
+        game_type = df[game_type_col].astype(str).str.upper().str.strip()
+        reg = df[game_type.eq("REG")].copy()
+        if not reg.empty:
+            df = reg
+
     location_df = _parse_location(df, columns)
     kickoff_series = _coerce_kickoff(df, columns)
-
     week_series = pd.to_numeric(df[columns.week], errors="coerce").astype("Int64")
 
-    result = pd.DataFrame(
-        {
-            "season": season,
-            "week": week_series,
-            "home": _normalize_team(df[columns.home]),
-            "away": _normalize_team(df[columns.away]),
-            "kickoff_utc": kickoff_series,
-            "stadium": (
-                df[columns.stadium] if columns.stadium and columns.stadium in df.columns else location_df["location"]
-            ).fillna("").astype(str).str.strip(),
-        }
-    )
+    result = pd.DataFrame({
+        "season": int(season),
+        "week": week_series,
+        "home": _normalize_team(df[columns.home]),
+        "away": _normalize_team(df[columns.away]),
+        "kickoff_utc": kickoff_series,
+        "stadium": (
+            df[columns.stadium]
+            if columns.stadium and columns.stadium in df.columns
+            else location_df["location"]
+        ).fillna("").astype(str).str.strip(),
+    }, index=df.index)
 
     result = pd.concat([result, location_df], axis=1)
     result = result.dropna(subset=["week", "kickoff_utc"])
     result["week"] = result["week"].astype(int)
     result["kickoff_utc"] = pd.to_datetime(result["kickoff_utc"], utc=True, errors="coerce")
-    result = result[result["kickoff_utc"].notna()].reset_index(drop=True)
+    result = result[result["kickoff_utc"].notna()].copy()
+    result = result.sort_values(["week", "kickoff_utc", "away", "home"]).reset_index(drop=True)
 
     if result.empty:
         raise RuntimeError(f"Schedule normalization produced no rows for season {season}")
