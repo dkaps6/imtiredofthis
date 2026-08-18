@@ -26,6 +26,11 @@ def attach_schedule_with_game_identity(logs: pd.DataFrame, schedule: pd.DataFram
 
     Invariants:
     - schedule must have exactly one row per season/week/team;
+    - the historical PlayerForm scope is exactly the set of season/week pairs
+      present in the authoritative regular-season schedule;
+    - source rows outside that schedule scope (for example postseason weeks
+      returned by nflreadpy) are excluded deliberately and reported;
+    - any unresolved row inside a schedule-covered week is still a hard failure;
     - the output always contains one canonical ``game_id`` column;
     - schedule game identity wins when available because it is shared by both
       teams in a game;
@@ -57,6 +62,37 @@ def attach_schedule_with_game_identity(logs: pd.DataFrame, schedule: pd.DataFram
             f"duplicate_rows={int(duplicate_schedule.sum())} sample={sample}"
         )
 
+    # The shared schedule utility intentionally returns the regular season.
+    # nflreadpy weekly player stats may include postseason weeks as well. Rather
+    # than hard-coding 'week <= 18', define PlayerForm's historical scope from
+    # the authoritative schedule itself. This keeps the rule correct if the NFL
+    # calendar changes and prevents playoff teams from receiving extra prior
+    # weight merely because they played additional games.
+    schedule_season_weeks = pd.MultiIndex.from_frame(
+        right[["season", "week"]].dropna().drop_duplicates()
+    )
+    player_season_weeks = pd.MultiIndex.from_frame(left[["season", "week"]])
+    in_schedule_scope = player_season_weeks.isin(schedule_season_weeks)
+    if (~in_schedule_scope).any():
+        excluded = left.loc[~in_schedule_scope]
+        weeks = sorted(
+            {
+                (int(s), int(w))
+                for s, w in excluded[["season", "week"]].dropna().itertuples(index=False, name=None)
+            }
+        )
+        print(
+            "[player_form_v2] excluding out-of-scope weekly stat rows not present "
+            f"in regular-season schedule: rows={len(excluded)} season_weeks={weeks}"
+        )
+        left = left.loc[in_schedule_scope].copy()
+
+    if left.empty:
+        raise RuntimeError(
+            "No player weekly-stat rows remain after applying the authoritative regular-season schedule scope"
+        )
+    left["season_type"] = "REG"
+
     # Preserve provider game identity before the merge so pandas cannot create
     # game_id_x/game_id_y and silently destroy the canonical schema.
     if "game_id" in left.columns:
@@ -78,9 +114,13 @@ def attach_schedule_with_game_identity(logs: pd.DataFrame, schedule: pd.DataFram
 
     unresolved_opp = out["opponent"].isna() | out["opponent"].astype("string").str.strip().eq("")
     if unresolved_opp.any():
-        sample = out.loc[unresolved_opp, [*keys, "player"] if "player" in out.columns else keys].head(20).to_dict("records")
+        sample = out.loc[
+            unresolved_opp,
+            [*keys, "player"] if "player" in out.columns else keys,
+        ].head(20).to_dict("records")
         raise RuntimeError(
-            "Historical player rows failed schedule/opponent attachment; "
+            "Historical player rows failed schedule/opponent attachment inside the "
+            "authoritative regular-season scope; "
             f"rows={int(unresolved_opp.sum())} sample={sample}"
         )
 
@@ -99,7 +139,9 @@ def attach_schedule_with_game_identity(logs: pd.DataFrame, schedule: pd.DataFram
         + "_" + second
     )
 
-    out["game_id"] = _clean_id(out["schedule_game_id"]).combine_first(_clean_id(out["source_game_id"]))
+    out["game_id"] = _clean_id(out["schedule_game_id"]).combine_first(
+        _clean_id(out["source_game_id"])
+    )
     out["game_id"] = out["game_id"].combine_first(fallback)
 
     if out["game_id"].isna().any() or out["game_id"].astype("string").str.strip().eq("").any():
