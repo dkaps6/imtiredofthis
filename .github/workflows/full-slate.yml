@@ -15,6 +15,11 @@ on:
         description: "Slate date (YYYY-MM-DD) or blank for nearest upcoming NFL week"
         required: false
         default: ""
+      fetch_live_odds:
+        description: "Fetch live player props/game odds (USES ODDS API CREDITS)"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: full-slate-${{ github.ref }}
@@ -66,6 +71,14 @@ jobs:
           print(f"current={SEASON} prior={PRIOR_SEASON} slate={SLATE_DATE or '<latest>'}")
           EOF
 
+      - name: Live odds mode status
+        run: |
+          if [ "${{ github.event.inputs.fetch_live_odds }}" = "true" ]; then
+            echo "LIVE ODDS ENABLED: this run may consume Odds API credits."
+          else
+            echo "LIVE ODDS PAUSED: player-prop/game-odds API calls will NOT run and will consume zero Odds API credits."
+          fi
+
       - name: Build Ourlads roles
         run: |
           export PYTHONPATH="${PWD}"
@@ -86,6 +99,7 @@ jobs:
           python -c "from scripts.runtime_context import log_runtime_context,resolve_week; log_runtime_context(); print('week=',resolve_week())"
 
       - name: Fetch player props and game odds
+        if: ${{ github.event.inputs.fetch_live_odds == 'true' }}
         env:
           TEAM_WEEK_MAP_CSV: data/team_week_map.csv
           ROLES_CSV: data/roles_ourlads.csv
@@ -97,6 +111,7 @@ jobs:
           test -s data/opponent_map_from_props.csv || { echo "ERROR: fetch_props_oddsapi did not materialize opponent_map_from_props.csv"; exit 1; }
 
       - name: Validate live opponent map
+        if: ${{ github.event.inputs.fetch_live_odds == 'true' }}
         run: |
           export PYTHONPATH="${PWD}"
           python - <<'EOF'
@@ -153,6 +168,7 @@ jobs:
           for f in data/player_game_logs.csv data/player_season_totals.csv data/player_form.csv data/player_form_consensus.csv; do test -s "$f"; done
 
       - name: Assemble deterministic metrics
+        if: ${{ github.event.inputs.fetch_live_odds == 'true' }}
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/run_metrics_context.py --season "${SEASON}" --mode full --date "${SLATE_DATE}"
@@ -160,6 +176,7 @@ jobs:
           python scripts/metrics_ready.py --season "${SEASON}" --date "${SLATE_DATE}"
 
       - name: Price with joint Monte Carlo simulation
+        if: ${{ github.event.inputs.fetch_live_odds == 'true' }}
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/run_pricing_v2.py --season "${SEASON}"
