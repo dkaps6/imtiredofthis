@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
-"""Run PlayerForm v2 with maintained loaders and strict game identity handling.
-
-This production entry point owns provider compatibility that should not leak into
-the PlayerForm feature logic. In particular, weekly player-stat feeds may already
-contain a ``game_id`` while the schedule layer also supplies one. A normal pandas
-merge would silently suffix those columns to ``game_id_x``/``game_id_y`` and break
-the downstream game-log contract. We resolve that collision explicitly here.
-"""
+"""Run PlayerForm v2 with maintained loaders and strict runtime contracts."""
 from __future__ import annotations
+
+import os
 
 import pandas as pd
 
 import scripts.run_player_form_v2 as runner
 from scripts.player_stats_loader_v2 import load_weekly_player_stats
+from scripts.slate_universe_v2 import build_slate_universe
 
 
 def _clean_id(series: pd.Series) -> pd.Series:
@@ -21,22 +17,16 @@ def _clean_id(series: pd.Series) -> pd.Series:
     return out.mask(out.isin(["", "<NA>", "nan", "None"]))
 
 
+def _live_odds_enabled() -> bool:
+    return os.getenv("FETCH_LIVE_ODDS", "false").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def attach_schedule_with_game_identity(logs: pd.DataFrame, schedule: pd.DataFrame) -> pd.DataFrame:
     """Attach opponent/game identity with an explicit many-to-one contract.
 
-    Invariants:
-    - schedule must have exactly one row per season/week/team;
-    - the historical PlayerForm scope is exactly the set of season/week pairs
-      present in the authoritative regular-season schedule;
-    - source rows outside that schedule scope (for example postseason weeks
-      returned by nflreadpy) are excluded deliberately and reported;
-    - any unresolved row inside a schedule-covered week is still a hard failure;
-    - the output always contains one canonical ``game_id`` column;
-    - schedule game identity wins when available because it is shared by both
-      teams in a game;
-    - a source-provided player-stat game id is preserved as ``source_game_id``;
-    - if neither source supplies an id, a deterministic symmetric id is built so
-      both teams receive the same game key.
+    The authoritative historical scope is the set of season/week pairs present
+    in the regular-season schedule. Provider postseason rows are excluded
+    deliberately, while unresolved rows inside schedule scope remain fatal.
     """
     keys = ["season", "week", "team"]
     missing_logs = [c for c in keys if c not in logs.columns]
@@ -62,12 +52,6 @@ def attach_schedule_with_game_identity(logs: pd.DataFrame, schedule: pd.DataFram
             f"duplicate_rows={int(duplicate_schedule.sum())} sample={sample}"
         )
 
-    # The shared schedule utility intentionally returns the regular season.
-    # nflreadpy weekly player stats may include postseason weeks as well. Rather
-    # than hard-coding 'week <= 18', define PlayerForm's historical scope from
-    # the authoritative schedule itself. This keeps the rule correct if the NFL
-    # calendar changes and prevents playoff teams from receiving extra prior
-    # weight merely because they played additional games.
     schedule_season_weeks = pd.MultiIndex.from_frame(
         right[["season", "week"]].dropna().drop_duplicates()
     )
@@ -93,8 +77,6 @@ def attach_schedule_with_game_identity(logs: pd.DataFrame, schedule: pd.DataFram
         )
     left["season_type"] = "REG"
 
-    # Preserve provider game identity before the merge so pandas cannot create
-    # game_id_x/game_id_y and silently destroy the canonical schema.
     if "game_id" in left.columns:
         left["source_game_id"] = _clean_id(left["game_id"])
         left = left.drop(columns=["game_id"])
@@ -125,9 +107,6 @@ def attach_schedule_with_game_identity(logs: pd.DataFrame, schedule: pd.DataFram
         )
 
     out["opponent"] = out["opponent"].astype("string").str.upper().str.strip()
-
-    # Deterministic fallback is symmetric in the two teams. This matters: a
-    # team/opponent ordered fallback would create two IDs for the same game.
     team_a = out["team"].astype("string")
     team_b = out["opponent"].astype("string")
     first = team_a.where(team_a <= team_b, team_b)
@@ -143,22 +122,37 @@ def attach_schedule_with_game_identity(logs: pd.DataFrame, schedule: pd.DataFram
         _clean_id(out["source_game_id"])
     )
     out["game_id"] = out["game_id"].combine_first(fallback)
-
     if out["game_id"].isna().any() or out["game_id"].astype("string").str.strip().eq("").any():
         raise RuntimeError("PlayerForm game identity resolution produced missing game_id values")
-
     return out
 
 
 def main() -> int:
-    # PlayerForm keeps the build/blend semantics; this adapter supplies the
-    # maintained weekly-stat provider and collision-safe game identity contract.
+    live_odds = _live_odds_enabled()
+    print(f"[player_form_v2] FETCH_LIVE_ODDS={'true' if live_odds else 'false'}")
+
+    # Maintained weekly-stat provider.
     runner.pf._load_weekly = load_weekly_player_stats
 
+    # Collision-safe historical schedule/game identity attachment.
     def _attach(logs: pd.DataFrame) -> pd.DataFrame:
         return attach_schedule_with_game_identity(logs, runner.pf._load_schedule())
 
     runner.pf._attach_schedule = _attach
+
+    # Make offseason/no-credit mode a real production mode. The slate builder
+    # ignores stale props/odds placeholders entirely when live odds are disabled,
+    # and derives the player universe from Ourlads + the authoritative schedule.
+    def _slate(season: int, week: int) -> pd.DataFrame:
+        return build_slate_universe(
+            runner.pf,
+            runner._enhanced_load_schedule,
+            season,
+            week,
+            live_odds_enabled=live_odds,
+        )
+
+    runner._enhanced_slate_universe = _slate
     return runner.main()
 
 
