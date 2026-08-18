@@ -27,7 +27,9 @@ PRODUCTION_SCRIPTS = (
     "scripts/build/build_injuries_weekly.py",
     "scripts/build/pbp_features.py",
     "scripts/player_form_v2.py",
+    "scripts/player_stats_loader_v2.py",
     "scripts/run_player_form_v2.py",
+    "scripts/run_player_form_v2_loader.py",
     "scripts/enrich_player_scoring_v2.py",
     "scripts/metrics_v2.py",
     "scripts/metrics_enrichment_v2.py",
@@ -123,7 +125,7 @@ def _workflow_contract_errors() -> list[str]:
         return []
     text = _read(path)
     required_tokens = (
-        "scripts/run_player_form_v2.py",
+        "scripts/run_player_form_v2_loader.py",
         "scripts/enrich_player_scoring_v2.py",
         "scripts/run_metrics_context.py",
         "scripts/validate_build_integrity.py",
@@ -131,7 +133,33 @@ def _workflow_contract_errors() -> list[str]:
         "scripts/run_pricing_v2.py",
         "scripts/utils/audit_repo.py --strict",
     )
-    return [f"full-slate workflow does not invoke {token}" for token in required_tokens if token not in text]
+    errors = [f"full-slate workflow does not invoke {token}" for token in required_tokens if token not in text]
+
+    # Validate the PlayerForm compatibility chain itself instead of merely
+    # checking that an old entry-point string appears in the workflow.
+    loader_runner = ROOT / "scripts/run_player_form_v2_loader.py"
+    if loader_runner.exists():
+        loader_text = _read(loader_runner)
+        if "scripts.run_player_form_v2" not in loader_text and "run_player_form_v2" not in loader_text:
+            errors.append("PlayerForm loader runner does not delegate to run_player_form_v2")
+        if "player_stats_loader_v2" not in loader_text:
+            errors.append("PlayerForm loader runner does not wire player_stats_loader_v2")
+
+    player_runner = ROOT / "scripts/run_player_form_v2.py"
+    if player_runner.exists():
+        player_runner_text = _read(player_runner)
+        if "scripts.player_form_v2" not in player_runner_text and "player_form_v2" not in player_runner_text:
+            errors.append("run_player_form_v2 does not delegate to player_form_v2")
+
+    stats_loader = ROOT / "scripts/player_stats_loader_v2.py"
+    if stats_loader.exists():
+        stats_text = _read(stats_loader)
+        if "load_player_stats" not in stats_text:
+            errors.append("player_stats_loader_v2 does not call nflreadpy.load_player_stats")
+        if "stat_type=" in stats_text:
+            errors.append("player_stats_loader_v2 still uses deprecated nflreadpy stat_type argument")
+
+    return errors
 
 
 def run_audit() -> list[str]:
