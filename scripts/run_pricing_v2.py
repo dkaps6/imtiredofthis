@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Production pricing: empirical probabilities from joint Monte Carlo outcomes.
+"""Production pricing from canonical Bayesian + rule-adjusted joint simulation.
 
-Migration 3 applies the canonical empirical football rules to simulation inputs
-before the joint Monte Carlo runs.  Final projections are still the empirical
-mean of simulated outcomes; there is no post-hoc projection multiplier.
+Pipeline order:
+1. leakage-safe empirical-Bayesian player baseline,
+2. empirical football/context rules,
+3. joint Monte Carlo distribution,
+4. sportsbook comparison.
+
+No model component uses the sportsbook line to construct the player projection.
 """
 from __future__ import annotations
 
@@ -13,6 +17,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from scripts.modeling.bayesian_v2 import apply_bayesian_to_metrics
 from scripts.modeling.simulation_rules import apply_rules_to_metrics
 from scripts.pricing_v2 import _fair_market_prob, _fair_odds
 from scripts.runtime_context import resolve_season
@@ -35,21 +40,30 @@ def price(season: int) -> pd.DataFrame:
     if df.empty:
         raise RuntimeError(f"metrics_ready contains no rows for season={season}")
 
+    # Bayesian posterior is created before matchup/rule adjustments. This avoids
+    # the old architecture where a nominal Bayes model merely voted on a final
+    # line probability after the core football projection had already been set.
+    df = apply_bayesian_to_metrics(df)
+    bayes_rows = int(pd.to_numeric(df.get("bayes_applied", 0), errors="coerce").fillna(0).sum())
+    if bayes_rows == 0:
+        raise RuntimeError("Bayesian adapter matched 0 metrics rows; refusing baseline-only production pricing")
+
     # Rules alter finite opportunity / efficiency / uncertainty assumptions
-    # before simulation. Keep an audit artifact so every priced projection can be
-    # traced back to the exact rule-adjusted inputs used by Monte Carlo.
+    # before simulation. Keep one trace artifact containing both posterior and
+    # rule-adjusted inputs used by Monte Carlo.
     df = apply_rules_to_metrics(df)
     rule_rows = int(pd.to_numeric(df.get("rules_applied", 0), errors="coerce").fillna(0).sum())
     if rule_rows == 0:
         raise RuntimeError("Canonical rule adapter matched 0 metrics rows; refusing untracked production pricing")
     RULE_INPUTS.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(RULE_INPUTS, index=False)
+    print(f"[pricing_mc] bayesian baseline rows={bayes_rows}/{len(df)}")
     print(f"[pricing_mc] canonical rules applied rows={rule_rows}/{len(df)} -> {RULE_INPUTS}")
 
     sims = simulate(df)
     rows = []
     missed = []
-    for idx, row in df.iterrows():
+    for _, row in df.iterrows():
         raw_market = str(row.get("market", "") or "").lower()
         market = MARKET_MAP.get(raw_market, raw_market)
         outcomes = lookup(sims, row, raw_market)
@@ -84,6 +98,8 @@ def price(season: int) -> pd.DataFrame:
             "model_proj": model_proj,
             "model_sd": model_sd,
             "simulation_iterations": sims.iterations,
+            "bayes_applied": int(row.get("bayes_applied", 0) or 0),
+            "bayes_evidence_state": row.get("bayes_evidence_state"),
             "rules_applied": int(row.get("rules_applied", 0) or 0),
             "rules_role": row.get("rules_role"),
             "season": int(season),
