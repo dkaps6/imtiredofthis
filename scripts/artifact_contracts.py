@@ -1,7 +1,7 @@
 """Canonical artifact contracts for the Full Slate pipeline.
 
 Every production builder and validator should agree on these paths and minimum
-schemas.  This module intentionally contains no network or model logic.
+schemas. This module intentionally contains no network or model logic.
 """
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ CONTRACTS: dict[str, ArtifactContract] = {
     ),
     "player_game_logs": ArtifactContract(
         "player_game_logs", DATA / "player_game_logs.csv",
-        ("season", "week", "player", "team"), min_rows=1,
+        ("season", "week", "game_id", "player", "team", "opponent"), min_rows=1,
     ),
     "player_form": ArtifactContract(
         "player_form", DATA / "player_form.csv",
