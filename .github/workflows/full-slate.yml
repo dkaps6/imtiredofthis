@@ -93,9 +93,7 @@ jobs:
           TEAM_WEEK_MAP_CSV: data/team_week_map.csv
         run: |
           export PYTHONPATH="${PWD}"
-          python scripts/utils/build_team_week_map_v2.py \
-            --season "${SEASON}" \
-            --out data/team_week_map.csv
+          python scripts/utils/build_team_week_map_v2.py --season "${SEASON}" --out data/team_week_map.csv
           test -s data/team_week_map.csv
           python -c "from scripts.runtime_context import log_runtime_context,resolve_week; log_runtime_context(); print('week=',resolve_week())"
 
@@ -119,15 +117,12 @@ jobs:
           import pandas as pd
           p = "data/opponent_map_from_props.csv"
           df = pd.read_csv(p)
-          if df.empty:
-              raise SystemExit(f"FATAL: {p} is empty")
+          if df.empty: raise SystemExit(f"FATAL: {p} is empty")
           required = {"team", "opponent"}
           missing = required - set(df.columns)
-          if missing:
-              raise SystemExit(f"FATAL: {p} missing columns {sorted(missing)}")
+          if missing: raise SystemExit(f"FATAL: {p} missing columns {sorted(missing)}")
           unresolved = int(df["team"].isna().sum() + df["opponent"].isna().sum())
-          if unresolved:
-              raise SystemExit(f"FATAL: {p} contains {unresolved} unresolved team/opponent cells")
+          if unresolved: raise SystemExit(f"FATAL: {p} contains {unresolved} unresolved team/opponent cells")
           print(f"opponent map OK: rows={len(df)}")
           EOF
 
@@ -135,27 +130,38 @@ jobs:
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/providers/sharpfootball_pull.py --season "${SEASON}" --dump-html
-          python scripts/team_form_prior_bridge.py \
-            --season "${SEASON}" \
-            --prior-season "${PRIOR_SEASON}"
+          python scripts/team_form_prior_bridge.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}"
           python scripts/run_team_form_context.py --season "${SEASON}"
           test -s data/team_form.csv
           python - <<'EOF'
           import pandas as pd
           df = pd.read_csv("data/team_form.csv")
-          if df.empty:
-              raise SystemExit("FATAL: team_form.csv is empty")
+          if df.empty: raise SystemExit("FATAL: team_form.csv is empty")
           if df["season"].astype(int).nunique() != 1 or int(df["season"].astype(int).iloc[0]) != int(__import__('os').environ['SEASON']):
               raise SystemExit("FATAL: TeamForm season context is not the active season")
           print("TeamForm provenance:", df[[c for c in ["team_form_active_season","team_form_prior_season","pbp_feature_season","pbp_prior_used","pbp_feature_source"] if c in df.columns]].drop_duplicates().to_dict("records"))
           EOF
 
-      - name: Build optional live enrichments
+      - name: Build weather and injuries
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/build/build_weather_week_v2.py --season "${SEASON}" --date "${SLATE_DATE}"
+          python scripts/build/build_injuries_weekly.py data/injuries.csv --season "${SEASON}"
+          test -s data/weather_week.csv
+          test -s data/injuries.csv
+          python - <<'EOF'
+          import pandas as pd
+          df = pd.read_csv("data/injuries.csv")
+          required = {"player","team","season","week","status","practice_status","body_part","designation","report_date","source","report_available"}
+          missing = required - set(df.columns)
+          if missing: raise SystemExit(f"FATAL: injuries.csv missing columns {sorted(missing)}")
+          print(f"injuries artifact OK: rows={len(df)} (zero is valid before official reports exist)")
+          EOF
+
+      - name: Build remaining optional live enrichments
         continue-on-error: true
         run: |
           export PYTHONPATH="${PWD}"
-          python scripts/build/build_weather_week_v2.py --season "${SEASON}" --date "${SLATE_DATE}" || true
-          python scripts/build/build_injuries_weekly.py data/injuries.csv || true
           python scripts/build/build_cb_coverage_team.py || true
           python scripts/build/build_cb_coverage_player.py || true
           python scripts/build/build_wr_cb_exposure.py || true
