@@ -154,7 +154,7 @@ jobs:
         continue-on-error: true
         run: |
           export PYTHONPATH="${PWD}"
-          python scripts/build/build_weather_week.py --season "${SEASON}" --date "${SLATE_DATE}" || true
+          python scripts/build/build_weather_week_v2.py --season "${SEASON}" --date "${SLATE_DATE}" || true
           python scripts/build/build_injuries_weekly.py data/injuries.csv || true
           python scripts/build/build_cb_coverage_team.py || true
           python scripts/build/build_cb_coverage_player.py || true
