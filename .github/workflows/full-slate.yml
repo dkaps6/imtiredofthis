@@ -192,6 +192,12 @@ jobs:
           python scripts/enrich_player_scoring_v2.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
           for f in data/player_game_logs.csv data/player_season_totals.csv data/player_form.csv data/player_form_consensus.csv; do test -s "$f"; done
 
+      - name: Validate canonical model context bridge
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_context_bridge.py
+          test -s data/model_context_bridge.csv
+
       - name: Assemble deterministic metrics
         if: ${{ github.event.inputs.fetch_live_odds == 'true' }}
         run: |

@@ -75,6 +75,10 @@ CONTRACTS: dict[str, ArtifactContract] = {
         "player_form_consensus", DATA / "player_form_consensus.csv",
         ("player", "team", "season", "position", "role", "tgt_share", "rush_share"), min_rows=1,
     ),
+    "model_context_bridge": ArtifactContract(
+        "model_context_bridge", DATA / "model_context_bridge.csv",
+        ("player", "team", "opponent", "season", "week", "position", "role"), min_rows=1,
+    ),
     "qb_run_metrics": ArtifactContract(
         "qb_run_metrics", DATA / "qb_run_metrics.csv",
         ("player", "week", "scramble_rate", "designed_run_rate"), min_rows=1,

@@ -29,6 +29,22 @@ class TeamContext:
 
 
 @dataclass(frozen=True)
+class PlayerContext:
+    """Pregame football context independent of any sportsbook market/line."""
+    player: str
+    team: str
+    opponent: str
+    season: int
+    week: int
+    position: str
+    role: str = ""
+    game_id: str = ""
+    features: Dict[str, Any] = field(default_factory=dict)
+    offense: Optional[TeamContext] = None
+    defense: Optional[TeamContext] = None
+
+
+@dataclass(frozen=True)
 class PlayerProjectionInput:
     player: str
     team: str
