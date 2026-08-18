@@ -193,6 +193,19 @@ jobs:
           python scripts/run_model_context_bridge.py
           test -s data/model_context_bridge.csv
 
+      - name: Validate empirical Bayesian baseline
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_bayesian_bridge.py
+          test -s data/model_bayesian_diagnostics.csv
+          python - <<'EOF'
+          import pandas as pd
+          df = pd.read_csv("data/model_bayesian_diagnostics.csv")
+          if df.empty: raise SystemExit("FATAL: Bayesian diagnostics empty")
+          if int(df["bayes_available"].sum()) != len(df): raise SystemExit("FATAL: Bayesian baseline unavailable for active players")
+          print("Bayesian evidence states:", df["bayes_evidence_state"].value_counts().to_dict())
+          EOF
+
       - name: Validate empirical rule layer
         run: |
           export PYTHONPATH="${PWD}"
@@ -207,7 +220,7 @@ jobs:
           python scripts/validate_build_integrity.py
           python scripts/metrics_ready.py --season "${SEASON}" --date "${SLATE_DATE}"
 
-      - name: Price with rule-adjusted joint Monte Carlo simulation
+      - name: Price with Bayesian + rule-adjusted joint Monte Carlo simulation
         if: ${{ github.event.inputs.fetch_live_odds == 'true' }}
         run: |
           export PYTHONPATH="${PWD}"
@@ -221,8 +234,9 @@ jobs:
           missing = [x for x in c.required_columns if x not in df.columns]
           assert not missing, missing
           assert "simulation_iterations" in df.columns
+          assert "bayes_applied" in df.columns and int(df["bayes_applied"].sum()) > 0
           assert "rules_applied" in df.columns and int(df["rules_applied"].sum()) > 0
-          print(f"priced rows={len(df)} simulations={df['simulation_iterations'].iloc[0]} rule_adjusted={int(df['rules_applied'].sum())}")
+          print(f"priced rows={len(df)} simulations={df['simulation_iterations'].iloc[0]} bayesian={int(df['bayes_applied'].sum())} rule_adjusted={int(df['rules_applied'].sum())}")
           EOF
 
       - name: Strict repository audit
