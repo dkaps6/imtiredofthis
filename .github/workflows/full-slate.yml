@@ -168,11 +168,11 @@ jobs:
           team = pd.read_csv("data/cb_coverage_team.csv")
           player = pd.read_csv("data/cb_coverage_player.csv")
           exposure = pd.read_csv("data/wr_cb_exposure.csv")
-          if len(team) != 32: raise SystemExit(f"FATAL: coverage team rows={len(team)} expected=32")
+          if len(team) < 2 or len(team) % 2: raise SystemExit(f"FATAL: invalid scheduled coverage team rows={len(team)}")
           if player.empty or exposure.empty: raise SystemExit("FATAL: Coverage v2 lost the authoritative WR universe")
           if exposure['opponent'].fillna('').eq('').any(): raise SystemExit("FATAL: Coverage v2 has unresolved WR opponents")
           print(
-              f"Coverage v2 OK: teams={len(team)} WRs={len(exposure)} "
+              f"Coverage v2 OK: scheduled_teams={len(team)} WRs={len(exposure)} "
               f"direct_matchups={int(player['matchup_available'].sum())} "
               f"alignments={int(player['alignment_available'].sum())} "
               f"team_scheme_rows={int(team['coverage_available'].sum())}"
