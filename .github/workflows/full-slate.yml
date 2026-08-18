@@ -161,7 +161,7 @@ jobs:
       - name: Build Coverage v2 matchup intelligence
         run: |
           export PYTHONPATH="${PWD}"
-          python scripts/build/build_coverage_v2.py --season "${SEASON}"
+          python scripts/run_coverage_v2.py --season "${SEASON}"
           for f in data/cb_coverage_team.csv data/cb_coverage_player.csv data/wr_cb_exposure.csv; do test -s "$f"; done
           python - <<'EOF'
           import pandas as pd
