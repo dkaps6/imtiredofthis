@@ -41,6 +41,7 @@ env:
   SEASON: ${{ github.event.inputs.season }}
   PRIOR_SEASON: ${{ github.event.inputs.prior_season }}
   SLATE_DATE: ${{ github.event.inputs.date }}
+  FETCH_LIVE_ODDS: ${{ github.event.inputs.fetch_live_odds }}
 
 jobs:
   full_slate:
