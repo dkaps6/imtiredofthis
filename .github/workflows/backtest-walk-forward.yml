@@ -46,12 +46,17 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/backtest/build_historical_injuries.py --seasons 2024,2025 --out data/backtests/injuries_history.csv
+      - name: Build leakage-safe historical weather context
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_historical_weather.py --schedule data/backtests/schedule_history.csv --out data/backtests/weather_history.csv
       - name: Execute leakage-safe walk-forward predictions
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           rm -f data/backtests/component_predictions.csv
-          python scripts/backtest/walk_forward.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --player-logs data/backtests/player_game_logs_history.csv --team-weekly data/backtests/team_weekly_history.csv --schedule data/backtests/schedule_history.csv --universe-dir data/backtests/pregame_universe --injuries data/backtests/injuries_history.csv --out data/backtests/component_predictions.csv --iterations "${{ inputs.iterations || '2000' }}"
+          python scripts/backtest/walk_forward.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --player-logs data/backtests/player_game_logs_history.csv --team-weekly data/backtests/team_weekly_history.csv --schedule data/backtests/schedule_history.csv --universe-dir data/backtests/pregame_universe --injuries data/backtests/injuries_history.csv --weather data/backtests/weather_history.csv --out data/backtests/component_predictions.csv --iterations "${{ inputs.iterations || '2000' }}"
       - name: Evaluate OOS component performance
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -69,12 +74,15 @@ jobs:
         run: |
           echo "Validation report:"
           cat data/backtests/historical_input_validation.csv 2>/dev/null || true
-          echo "Historical injuries:"
           python - <<'PY'
           from pathlib import Path
           import pandas as pd
-          p = Path('data/backtests/injuries_history.csv')
-          print('injury rows=', len(pd.read_csv(p)) if p.exists() and p.stat().st_size else 0)
+          i = Path('data/backtests/injuries_history.csv')
+          print('injury rows=', len(pd.read_csv(i)) if i.exists() and i.stat().st_size else 0)
+          w = Path('data/backtests/weather_history.csv')
+          if w.exists() and w.stat().st_size:
+              wx = pd.read_csv(w)
+              print('weather rows=', len(wx), 'forecast_ok=', int(pd.to_numeric(wx['forecast_ok'], errors='coerce').fillna(0).sum()))
           q = Path('data/backtests/component_predictions.csv')
           if q.exists():
               x = pd.read_csv(q); print('prediction rows=', len(x))
@@ -94,6 +102,7 @@ jobs:
           path: |
             data/backtests/historical_input_validation.csv
             data/backtests/injuries_history.csv
+            data/backtests/weather_history.csv
             data/backtests/player_game_logs_history.csv
             data/backtests/component_predictions.csv
             data/backtests/evaluation/*.csv
