@@ -83,15 +83,18 @@ def estimate_plays(offense: TeamContext) -> float:
     sec_last5 = _num(offense.sec_per_play_last5, 0.0)
     recent = _num(offense.neutral_pace_last5, 0.0)
 
-    # Preserve the old recent-pace preference but fall back to a stable play prior
-    # when the historical feed does not carry comparable pace units.
+    # Pace here is seconds per play for one offense, not both teams combined.
+    # A team owns roughly half of the 3600-second game clock, so converting with
+    # 3600 / pace doubles the implied opportunity pool and routinely hits the
+    # 80-play ceiling. Use the same 1800-second team possession basis as the
+    # Monte Carlo fallback instead.
     if sec_last5 > 5.0:
-        recent_play_est = 3600.0 / sec_last5
+        recent_play_est = 1800.0 / sec_last5
         recent_play_est = _clamp(recent_play_est, 50.0, 80.0)
     elif recent > 20.0:
-        recent_play_est = _clamp(3600.0 / recent, 50.0, 80.0)
+        recent_play_est = _clamp(1800.0 / recent, 50.0, 80.0)
     elif pace > 20.0:
-        recent_play_est = _clamp(3600.0 / pace, 50.0, 80.0)
+        recent_play_est = _clamp(1800.0 / pace, 50.0, 80.0)
     else:
         recent_play_est = prior
     return _clamp(0.5 * prior + 0.5 * recent_play_est, 48.0, 82.0)
