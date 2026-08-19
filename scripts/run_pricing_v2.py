@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """Production pricing from canonical predictive components + joint simulation.
 
-Current production order:
-1. independent leakage-safe ML v2 and Markov state v2 projections are attached for audit/future ensemble,
+Production order:
+1. independent leakage-safe ML v2 and state v2 projections,
 2. leakage-safe empirical-Bayesian player baseline,
 3. empirical football/context rules,
 4. joint Monte Carlo distribution,
-5. sportsbook comparison.
+5. evidence-weighted ensemble mean (only when OOS-calibrated weights exist),
+6. sportsbook comparison.
 
-Migration 4C deliberately does NOT blend ML/state into ``model_proj`` yet.
-Those independent signals remain parallel until Migration 4D learns ensemble
-weights from walk-forward evidence. No model component uses the sportsbook line
-to construct a player projection.
+Bayesian is already embedded in the Monte Carlo baseline and is not double-counted
+as an independent ensemble vote. If no calibrated ensemble weights exist, the
+final projection is explicitly Monte Carlo only. Sportsbook lines/odds never
+construct a player projection or ensemble weight.
 """
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ import numpy as np
 import pandas as pd
 
 from scripts.modeling.bayesian_v2 import apply_bayesian_to_metrics
+from scripts.modeling.ensemble_v2 import apply_ensemble, load_weights
 from scripts.modeling.ml_v2 import apply_ml_to_metrics
 from scripts.modeling.state_v2 import apply_state_to_metrics
 from scripts.modeling.simulation_rules import apply_rules_to_metrics
@@ -73,10 +75,16 @@ def price(season: int) -> pd.DataFrame:
         raise RuntimeError("Canonical rule adapter matched 0 metrics rows; refusing untracked production pricing")
     RULE_INPUTS.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(RULE_INPUTS, index=False)
-    print(f"[pricing_mc] ML v2 supported rows={ml_rows}/{len(df)} (parallel signal; not blended yet)")
-    print(f"[pricing_mc] state v2 supported rows={state_rows}/{len(df)} (parallel signal; not blended yet)")
-    print(f"[pricing_mc] bayesian baseline rows={bayes_rows}/{len(df)}")
-    print(f"[pricing_mc] canonical rules applied rows={rule_rows}/{len(df)} -> {RULE_INPUTS}")
+    print(f"[pricing] ML v2 supported rows={ml_rows}/{len(df)}")
+    print(f"[pricing] state v2 supported rows={state_rows}/{len(df)}")
+    print(f"[pricing] bayesian baseline rows={bayes_rows}/{len(df)}")
+    print(f"[pricing] canonical rules applied rows={rule_rows}/{len(df)} -> {RULE_INPUTS}")
+
+    weights = load_weights()
+    if weights.empty:
+        print("[pricing] ensemble weights unavailable: explicit MC-only fallback until walk-forward calibration")
+    else:
+        print(f"[pricing] ensemble calibrated markets={sorted(weights['market'].astype(str).str.lower().unique().tolist())}")
 
     sims = simulate(df)
     rows, missed = [], []
@@ -86,23 +94,44 @@ def price(season: int) -> pd.DataFrame:
         outcomes = lookup(sims, row, raw_market)
         if outcomes is None or len(outcomes) == 0:
             missed.append((row.get("player"), raw_market)); continue
+
+        mc_proj = float(np.mean(outcomes))
+        component_row = pd.DataFrame([{
+            "market": market,
+            "mc_proj": mc_proj,
+            "ml_proj": row.get("ml_proj"),
+            "state_proj": row.get("state_proj"),
+        }])
+        ens = apply_ensemble(component_row, weights=weights).iloc[0]
+        ensemble_proj = float(ens["ensemble_proj"])
+        # Keep Monte Carlo's distributional shape/variance but align its mean to
+        # the evidence-weighted projection. With no calibrated weights delta=0.
+        adjusted_outcomes = np.asarray(outcomes, dtype=float) + (ensemble_proj - mc_proj)
+        adjusted_outcomes = np.clip(adjusted_outcomes, 0.0, None)
+
         if market == "anytime_td":
             line = 0.5
-            p_over = float(np.mean(outcomes >= 1.0))
+            # ATD is not currently an ML/state target, so ensemble defaults to MC.
+            p_over = float(np.mean(adjusted_outcomes >= 1.0))
         else:
             try:
                 line = float(row.get("line"))
             except Exception:
                 missed.append((row.get("player"), raw_market)); continue
-            p_over = float(np.mean(outcomes > line))
+            p_over = float(np.mean(adjusted_outcomes > line))
         p_under = 1.0 - p_over
-        model_proj = float(np.mean(outcomes))
-        model_sd = float(np.std(outcomes, ddof=1)) if len(outcomes) > 1 else 0.0
+        model_proj = float(np.mean(adjusted_outcomes))
+        model_sd = float(np.std(adjusted_outcomes, ddof=1)) if len(adjusted_outcomes) > 1 else 0.0
         mkt_over, mkt_under = _fair_market_prob(row.get("over_odds"), row.get("under_odds"))
+
         common = {
             "event_id": row.get("event_id"), "player": row.get("player"), "player_clean_key": row.get("player_clean_key"),
             "team": row.get("team"), "opponent": row.get("opponent"), "market": market, "source_market": raw_market,
-            "vegas_line": line, "model_proj": model_proj, "model_sd": model_sd, "simulation_iterations": sims.iterations,
+            "vegas_line": line, "model_proj": model_proj, "mc_proj": mc_proj, "model_sd": model_sd,
+            "simulation_iterations": sims.iterations,
+            "ensemble_proj": ensemble_proj, "ensemble_status": ens["ensemble_status"], "ensemble_method": ens["ensemble_method"],
+            "ensemble_weight_mc": ens["ensemble_weight_mc"], "ensemble_weight_ml": ens["ensemble_weight_ml"],
+            "ensemble_weight_state": ens["ensemble_weight_state"], "ensemble_calibration_rows": ens["ensemble_calibration_rows"],
             "ml_proj": row.get("ml_proj"), "ml_applied": int(row.get("ml_applied", 0) or 0), "ml_method": row.get("ml_method"), "ml_training_cutoff": row.get("ml_training_cutoff"),
             "state_proj": row.get("state_proj"), "state_applied": int(row.get("state_applied", 0) or 0), "state_method": row.get("state_method"), "state_training_cutoff": row.get("state_training_cutoff"),
             "bayes_applied": int(row.get("bayes_applied", 0) or 0), "bayes_evidence_state": row.get("bayes_evidence_state"),
@@ -115,6 +144,7 @@ def price(season: int) -> pd.DataFrame:
             rec = dict(common)
             rec.update({"side": side, "fair_prob": prob, "market_prob": market_prob, "vegas_odds": vegas_odds, "fair_odds": _fair_odds(prob), "edge_pct": edge, "edge_abs": abs(edge) if pd.notna(edge) else np.nan})
             rows.append(rec)
+
     out = pd.DataFrame(rows)
     if out.empty:
         raise RuntimeError("Monte Carlo pricing produced 0 rows")
@@ -122,7 +152,8 @@ def price(season: int) -> pd.DataFrame:
         debug = DATA / "_debug" / "pricing_unsimulated_props.csv"
         debug.parent.mkdir(parents=True, exist_ok=True)
         pd.DataFrame(missed, columns=["player", "market"]).drop_duplicates().to_csv(debug, index=False)
-        print(f"[pricing_mc] WARN unsimulated player/markets={len(set(missed))} -> {debug}")
+        print(f"[pricing] WARN unsimulated player/markets={len(set(missed))} -> {debug}")
+    print("[pricing] ensemble status:", out["ensemble_status"].value_counts().to_dict())
     return out
 
 
@@ -130,7 +161,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(); parser.add_argument("--season", type=int, default=None); args = parser.parse_args()
     season = int(args.season if args.season is not None else resolve_season())
     out = price(season); OUTPUTS.mkdir(parents=True, exist_ok=True); out.to_csv(OUT, index=False)
-    print(f"[pricing_mc] wrote rows={len(out)} -> {OUT}"); return 0
+    print(f"[pricing] wrote rows={len(out)} -> {OUT}"); return 0
 
 
 if __name__ == "__main__":
