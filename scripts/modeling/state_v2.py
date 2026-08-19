@@ -6,8 +6,8 @@ missing. This module implements an actual discrete state-transition model.
 
 For each supported target and position group, historical pregame data is split
 into LOW/MID/HIGH outcome states. We estimate smoothed P(next_state | state)
-from consecutive player games and predict the next-game outcome as the
-transition-weighted destination-state mean.
+from consecutive same-season player games and predict the next-game outcome as
+the transition-weighted destination-state mean.
 
 Production fitting is cut off strictly before the target slate week. Sportsbook
 lines are never used as state boundaries, features, or targets.
@@ -121,7 +121,7 @@ def _prepare_logs(logs: pd.DataFrame, target_season: int, target_week: int) -> p
     x["team"] = x["team"].map(canon_team)
     x["player_clean_key"] = x.get("player_clean_key", x["player"]).map(_key)
     x["position_group"] = x["position"].map(_position_group)
-    for col in ("pass_yards", "rush_yards", "rec_yards", "receptions", "rushes"):
+    for col in ("pass_yards", "rush_yards", "rec_yards", "receptions", "rushes", "pass_att", "targets"):
         if col not in x.columns:
             x[col] = np.nan
         x[col] = pd.to_numeric(x[col], errors="coerce")
@@ -133,11 +133,14 @@ def _eligible(frame: pd.DataFrame, target: str, position_group: str) -> pd.Serie
     y = pd.to_numeric(frame[TARGET_COLUMNS[target]], errors="coerce")
     mask = frame["position_group"].eq(position_group) & y.notna()
     if target == "pass_yards":
-        mask &= frame["position_group"].eq("QB")
+        mask &= frame["position_group"].eq("QB") & pd.to_numeric(frame["pass_att"], errors="coerce").gt(0)
     elif target in {"rec_yards", "receptions"}:
-        mask &= frame["position_group"].isin(["WR", "TE", "RB"])
-    elif target in {"rush_yards", "rush_att", "rush_rec_yards"}:
-        mask &= frame["position_group"].isin(["QB", "RB", "WR", "TE"])
+        mask &= frame["position_group"].isin(["WR", "TE", "RB"]) & pd.to_numeric(frame["targets"], errors="coerce").gt(0)
+    elif target in {"rush_yards", "rush_att"}:
+        mask &= frame["position_group"].isin(["QB", "RB", "WR", "TE"]) & pd.to_numeric(frame["rushes"], errors="coerce").gt(0)
+    elif target == "rush_rec_yards":
+        opportunities = pd.to_numeric(frame["rushes"], errors="coerce").fillna(0) + pd.to_numeric(frame["targets"], errors="coerce").fillna(0)
+        mask &= frame["position_group"].isin(["QB", "RB", "WR", "TE"]) & opportunities.gt(0)
     return mask
 
 
@@ -164,7 +167,10 @@ def _fit_spec(frame: pd.DataFrame, target: str, position_group: str) -> StateSpe
         return None
     part["state"] = pd.to_numeric(part[ycol], errors="coerce").map(lambda v: _state(float(v), low_cut, high_cut))
     part = part.sort_values(["player_clean_key", "season", "week"])
-    part["prev_state"] = part.groupby("player_clean_key")["state"].shift(1)
+    # Do not treat Week 1 as an immediate transition from the prior season's finale.
+    # The current-state predictor may still use the most recent prior-season game
+    # for a Week 1 forecast, but transition probabilities are learned in-season.
+    part["prev_state"] = part.groupby(["player_clean_key", "season"])["state"].shift(1)
     trans = part.loc[part["prev_state"].notna()].copy()
     n_trans = len(trans)
     if n_trans < MIN_TRANSITIONS[target]:
@@ -176,22 +182,13 @@ def _fit_spec(frame: pd.DataFrame, target: str, position_group: str) -> StateSpe
         sv = pd.to_numeric(part.loc[part["state"].eq(s), ycol], errors="coerce").dropna()
         state_means[s] = float(sv.mean()) if len(sv) else global_mean
 
-    # Laplace smoothing prevents impossible zero-probability transitions.
     probs: Dict[str, Dict[str, float]] = {}
     for src in STATES:
         counts = trans.loc[trans["prev_state"].eq(src), "state"].value_counts().to_dict()
         denom = float(sum(counts.get(dst, 0) for dst in STATES) + len(STATES))
         probs[src] = {dst: float((counts.get(dst, 0) + 1.0) / denom) for dst in STATES}
 
-    return StateSpec(
-        target=target,
-        position_group=position_group,
-        low_cut=low_cut,
-        high_cut=high_cut,
-        state_means=state_means,
-        transition_probs=probs,
-        transitions=n_trans,
-    )
+    return StateSpec(target, position_group, low_cut, high_cut, state_means, probs, n_trans)
 
 
 def train_state_model(logs: pd.DataFrame, target_season: int, target_week: int) -> StateBundle:
@@ -224,14 +221,9 @@ def predict_current(bundle: StateBundle, logs: pd.DataFrame, consensus: pd.DataF
     for _, player in c.drop_duplicates(["team", "player_clean_key"]).iterrows():
         hist = by_player.get(player["player_clean_key"], pd.DataFrame())
         rec = {
-            "player": player["player"],
-            "player_clean_key": player["player_clean_key"],
-            "team": player["team"],
-            "season": int(bundle.target_season),
-            "week": int(bundle.target_week),
-            "position": player["position"],
-            "state_position_group": player["position_group"],
-            "state_method": bundle.method,
+            "player": player["player"], "player_clean_key": player["player_clean_key"], "team": player["team"],
+            "season": int(bundle.target_season), "week": int(bundle.target_week), "position": player["position"],
+            "state_position_group": player["position_group"], "state_method": bundle.method,
             "state_training_cutoff": f"{bundle.target_season}-W{bundle.target_week:02d} pregame",
         }
         available = []
@@ -240,7 +232,8 @@ def predict_current(bundle: StateBundle, logs: pd.DataFrame, consensus: pd.DataF
             ycol = TARGET_COLUMNS[target]
             last = np.nan
             if spec is not None and not hist.empty and ycol in hist.columns:
-                s = pd.to_numeric(hist[ycol], errors="coerce").dropna()
+                eligible_hist = hist.loc[_eligible(hist, target, player["position_group"])]
+                s = pd.to_numeric(eligible_hist.get(ycol, pd.Series(dtype=float)), errors="coerce").dropna()
                 if len(s):
                     last = float(s.iloc[-1])
             if spec is None or not np.isfinite(last):
@@ -252,8 +245,7 @@ def predict_current(bundle: StateBundle, logs: pd.DataFrame, consensus: pd.DataF
                 continue
             current_state = _state(last, spec.low_cut, spec.high_cut)
             p = spec.transition_probs[current_state]
-            proj = sum(p[s] * spec.state_means[s] for s in STATES)
-            rec[f"state_{target}"] = float(max(0.0, proj))
+            rec[f"state_{target}"] = float(max(0.0, sum(p[s] * spec.state_means[s] for s in STATES)))
             rec[f"state_{target}_current_state"] = current_state
             rec[f"state_{target}_p_low"] = p["LOW"]
             rec[f"state_{target}_p_mid"] = p["MID"]
