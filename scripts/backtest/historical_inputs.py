@@ -80,6 +80,12 @@ def build_schedule_history(seasons: Iterable[int]) -> pd.DataFrame:
 def build_team_weekly_from_pbp(seasons: Iterable[int]) -> pd.DataFrame:
     """Build long-form team-week observations from completed historical games.
 
+    ``qb_dropback`` is a dropback opportunity, not an official pass attempt.
+    Sacks and scrambles can therefore make dropbacks materially exceed attempts.
+    We preserve the team's dropback share for game-script modeling and separately
+    record ``pass_attempts_per_dropback`` so the historical MC can convert the
+    projected dropback workload into official passing attempts without leakage.
+
     These rows are observations, not pregame features. The historical-context
     layer is responsible for using only rows strictly before each target week.
     """
@@ -107,6 +113,9 @@ def build_team_weekly_from_pbp(seasons: Iterable[int]) -> pd.DataFrame:
             drop = g["qb_dropback"].fillna(0).eq(1)
             opp_drop = dg["qb_dropback"].fillna(0).eq(1)
             pass_rate = float(drop.mean()) if len(g) else np.nan
+            pass_attempts_per_dropback = (
+                float(g.loc[drop, "pass_attempt"].fillna(0).mean()) if drop.any() else np.nan
+            )
             league_pass = float(league.loc[week, "league_pass_rate"]) if week in league.index else np.nan
 
             neutral_pace = np.nan
@@ -128,6 +137,8 @@ def build_team_weekly_from_pbp(seasons: Iterable[int]) -> pd.DataFrame:
                 "pressure_rate_generated": float(dg.loc[opp_drop, "pressure"].mean()) if opp_drop.any() else np.nan,
                 "neutral_pace": neutral_pace,
                 "plays_est": float(len(g)),
+                "dropback_rate": pass_rate,
+                "pass_attempts_per_dropback": pass_attempts_per_dropback,
                 "proe": pass_rate - league_pass if np.isfinite(pass_rate) and np.isfinite(league_pass) else np.nan,
                 "explosive_play_rate_allowed": float(dg["explosive"].mean()) if len(dg) else np.nan,
                 "def_pass_epa": float(dg.loc[opp_drop, "epa"].mean()) if opp_drop.any() else np.nan,
