@@ -33,10 +33,12 @@ PRODUCTION_SCRIPTS = (
     "scripts/enrich_player_scoring_v2.py",
     "scripts/modeling/context_bridge.py",
     "scripts/modeling/bayesian_v2.py",
+    "scripts/modeling/ml_v2.py",
     "scripts/modeling/rules_v2.py",
     "scripts/modeling/simulation_rules.py",
     "scripts/run_model_context_bridge.py",
     "scripts/run_model_bayesian_bridge.py",
+    "scripts/run_model_ml_bridge.py",
     "scripts/run_model_rules_bridge.py",
     "scripts/metrics_v2.py",
     "scripts/metrics_enrichment_v2.py",
@@ -136,6 +138,7 @@ def _workflow_contract_errors() -> list[str]:
         "scripts/enrich_player_scoring_v2.py",
         "scripts/run_model_context_bridge.py",
         "scripts/run_model_bayesian_bridge.py",
+        "scripts/run_model_ml_bridge.py",
         "scripts/run_model_rules_bridge.py",
         "scripts/run_metrics_context.py",
         "scripts/validate_build_integrity.py",
@@ -170,10 +173,18 @@ def _workflow_contract_errors() -> list[str]:
     pricing = ROOT / "scripts/run_pricing_v2.py"
     if pricing.exists():
         ptext = _read(pricing)
+        if "apply_ml_to_metrics" not in ptext:
+            errors.append("production pricing does not attach canonical ML v2 projection")
         if "apply_bayesian_to_metrics" not in ptext:
             errors.append("production pricing does not apply canonical Bayesian baseline")
         if "apply_rules_to_metrics" not in ptext:
             errors.append("production pricing does not apply canonical empirical rules")
+        if "ml_proj" not in ptext:
+            errors.append("production pricing does not preserve ML v2 projection for future ensemble calibration")
+
+    legacy_ml = ROOT / "scripts/models/ml_ensemble.py"
+    if legacy_ml.exists() and "ML fallback 0.5" in _read(legacy_ml):
+        errors.append("legacy ML placeholder still silently returns 0.5")
 
     return errors
 
