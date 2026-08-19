@@ -20,16 +20,21 @@ MODEL_COLUMNS = {
 
 
 def _phase(week: pd.Series) -> pd.Series:
-    w = pd.to_numeric(week, errors="coerce")
-    return pd.Series(
-        np.select(
-            [w.le(6), w.le(12), w.ge(13)],
-            ["early_1_6", "mid_7_12", "late_13_18"],
-            default="unknown",
-        ),
-        index=week.index,
-        dtype="string",
+    """Classify NFL regular-season weeks without leaking pandas nullable booleans.
+
+    ``week`` is commonly stored as pandas ``Int64``. Comparisons against that
+    dtype produce nullable BooleanArrays, which NumPy's ``select`` rejects.
+    Convert once to a plain float ndarray so every condition passed to NumPy is
+    a real boolean ndarray while missing/invalid weeks safely fall to unknown.
+    """
+    w = pd.to_numeric(week, errors="coerce").to_numpy(dtype=float, na_value=np.nan)
+    valid = np.isfinite(w)
+    values = np.select(
+        [valid & (w >= 1) & (w <= 6), valid & (w >= 7) & (w <= 12), valid & (w >= 13) & (w <= 18)],
+        ["early_1_6", "mid_7_12", "late_13_18"],
+        default="unknown",
     )
+    return pd.Series(values, index=week.index, dtype="string")
 
 
 def prepare_errors(predictions: pd.DataFrame) -> pd.DataFrame:
