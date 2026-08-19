@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
-"""Production pricing from canonical Bayesian + rule-adjusted joint simulation.
+"""Production pricing from canonical predictive components + joint simulation.
 
-Pipeline order:
-1. leakage-safe empirical-Bayesian player baseline,
-2. empirical football/context rules,
-3. joint Monte Carlo distribution,
-4. sportsbook comparison.
+Current production order:
+1. independent leakage-safe ML v2 projection is attached for audit/future ensemble,
+2. leakage-safe empirical-Bayesian player baseline,
+3. empirical football/context rules,
+4. joint Monte Carlo distribution,
+5. sportsbook comparison.
 
-No model component uses the sportsbook line to construct the player projection.
+Migration 4B deliberately does NOT blend ML into ``model_proj`` yet. The ML
+signal is carried alongside Monte Carlo so Migration 4D can learn/calibrate
+ensemble weights from walk-forward evidence rather than inventing fixed weights.
+No model component uses the sportsbook line to construct a player projection.
 """
 from __future__ import annotations
 
@@ -18,6 +22,7 @@ import numpy as np
 import pandas as pd
 
 from scripts.modeling.bayesian_v2 import apply_bayesian_to_metrics
+from scripts.modeling.ml_v2 import apply_ml_to_metrics
 from scripts.modeling.simulation_rules import apply_rules_to_metrics
 from scripts.pricing_v2 import _fair_market_prob, _fair_odds
 from scripts.runtime_context import resolve_season
@@ -27,6 +32,7 @@ DATA = Path("data")
 OUTPUTS = Path("outputs")
 OUT = OUTPUTS / "props_priced_clean.csv"
 RULE_INPUTS = DATA / "model_rule_simulation_inputs.csv"
+ML_DIAGNOSTICS = DATA / "model_ml_diagnostics.csv"
 
 
 def price(season: int) -> pd.DataFrame:
@@ -40,6 +46,16 @@ def price(season: int) -> pd.DataFrame:
     if df.empty:
         raise RuntimeError(f"metrics_ready contains no rows for season={season}")
 
+    # ML is a genuinely trained, market-independent signal. Keep it parallel to
+    # Monte Carlo until ensemble weights can be learned from historical folds.
+    if not ML_DIAGNOSTICS.exists() or ML_DIAGNOSTICS.stat().st_size == 0:
+        raise RuntimeError("data/model_ml_diagnostics.csv missing; ML v2 must train before production pricing")
+    ml_predictions = pd.read_csv(ML_DIAGNOSTICS)
+    df = apply_ml_to_metrics(df, ml_predictions)
+    ml_rows = int(pd.to_numeric(df.get("ml_applied", 0), errors="coerce").fillna(0).sum())
+    if ml_rows == 0:
+        raise RuntimeError("ML v2 matched 0 supported pricing rows; refusing silent placeholder behavior")
+
     # Bayesian posterior is created before matchup/rule adjustments. This avoids
     # the old architecture where a nominal Bayes model merely voted on a final
     # line probability after the core football projection had already been set.
@@ -49,14 +65,15 @@ def price(season: int) -> pd.DataFrame:
         raise RuntimeError("Bayesian adapter matched 0 metrics rows; refusing baseline-only production pricing")
 
     # Rules alter finite opportunity / efficiency / uncertainty assumptions
-    # before simulation. Keep one trace artifact containing both posterior and
-    # rule-adjusted inputs used by Monte Carlo.
+    # before simulation. Keep one trace artifact containing ML, posterior, and
+    # rule-adjusted inputs so future backtests can reproduce component outputs.
     df = apply_rules_to_metrics(df)
     rule_rows = int(pd.to_numeric(df.get("rules_applied", 0), errors="coerce").fillna(0).sum())
     if rule_rows == 0:
         raise RuntimeError("Canonical rule adapter matched 0 metrics rows; refusing untracked production pricing")
     RULE_INPUTS.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(RULE_INPUTS, index=False)
+    print(f"[pricing_mc] ML v2 supported rows={ml_rows}/{len(df)} (parallel signal; not blended yet)")
     print(f"[pricing_mc] bayesian baseline rows={bayes_rows}/{len(df)}")
     print(f"[pricing_mc] canonical rules applied rows={rule_rows}/{len(df)} -> {RULE_INPUTS}")
 
@@ -98,6 +115,10 @@ def price(season: int) -> pd.DataFrame:
             "model_proj": model_proj,
             "model_sd": model_sd,
             "simulation_iterations": sims.iterations,
+            "ml_proj": row.get("ml_proj"),
+            "ml_applied": int(row.get("ml_applied", 0) or 0),
+            "ml_method": row.get("ml_method"),
+            "ml_training_cutoff": row.get("ml_training_cutoff"),
             "bayes_applied": int(row.get("bayes_applied", 0) or 0),
             "bayes_evidence_state": row.get("bayes_evidence_state"),
             "rules_applied": int(row.get("rules_applied", 0) or 0),

@@ -13,6 +13,7 @@ from .contracts import (
     ProjectionDistribution,
     TeamContext,
 )
+from .ml_v2 import apply_ml_to_metrics, build_and_train
 
 __all__ = [
     "ComponentPrediction",
@@ -22,4 +23,6 @@ __all__ = [
     "TeamContext",
     "apply_bayesian_to_metrics",
     "build_bayesian_baseline",
+    "apply_ml_to_metrics",
+    "build_and_train",
 ]

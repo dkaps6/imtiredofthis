@@ -1,5 +1,13 @@
-from .shared_types import Leg, LegResult
-def run(leg: Leg)->LegResult:
-    p_ml=leg.features.get('p_ml')
-    if p_ml is None: return LegResult(p_model=0.5, mu=None, sigma=None, notes='ML fallback 0.5')
-    return LegResult(p_model=float(p_ml), mu=None, sigma=None, notes='ML ensemble')
+"""Retired legacy ML placeholder.
+
+The old implementation merely consumed an externally supplied ``p_ml`` and
+returned 0.5 when absent. That is not a trained ML model and must not be used as
+an independent ensemble voter. Use ``scripts.modeling.ml_v2`` instead.
+"""
+
+
+def run(*args, **kwargs):
+    raise RuntimeError(
+        "scripts.models.ml_ensemble is retired; use scripts.modeling.ml_v2 "
+        "for leakage-safe trained supervised ML projections"
+    )

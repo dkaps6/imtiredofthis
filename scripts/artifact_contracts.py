@@ -93,13 +93,18 @@ CONTRACTS: dict[str, ArtifactContract] = {
         ("player", "team", "season", "position", "bayes_available", "bayes_evidence_state", "bayes_tgt_share", "bayes_rush_share"),
         min_rows=1,
     ),
+    "model_ml_diagnostics": ArtifactContract(
+        "model_ml_diagnostics", DATA / "model_ml_diagnostics.csv",
+        ("player", "team", "season", "week", "position", "hist_games", "ml_available", "ml_method", "ml_training_cutoff"),
+        min_rows=1,
+    ),
     "model_rule_diagnostics": ArtifactContract(
         "model_rule_diagnostics", DATA / "model_rule_diagnostics.csv",
         ("player", "team", "opponent", "season", "week", "projected_plays", "pass_eff_mult", "rush_eff_mult"), min_rows=1,
     ),
     "model_rule_simulation_inputs": ArtifactContract(
         "model_rule_simulation_inputs", DATA / "model_rule_simulation_inputs.csv",
-        ("player", "team", "opponent", "market", "bayes_applied", "rules_applied", "rules_plays_est", "rules_pass_rate"),
+        ("player", "team", "opponent", "market", "ml_applied", "bayes_applied", "rules_applied", "rules_plays_est", "rules_pass_rate"),
         min_rows=1, required=False,
     ),
     "qb_run_metrics": ArtifactContract(
