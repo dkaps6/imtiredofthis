@@ -31,6 +31,11 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --out-dir data/backtests
+      - name: Recover historical defensive box context
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/enrich_historical_defense.py --team-weekly data/backtests/team_weekly_history.csv --seasons 2024,2025 --audit data/backtests/historical_defense_enrichment_audit.csv
       - name: Validate historical inputs
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -74,6 +79,8 @@ jobs:
         run: |
           echo "Validation report:"
           cat data/backtests/historical_input_validation.csv 2>/dev/null || true
+          echo "Historical defensive enrichment audit:"
+          cat data/backtests/historical_defense_enrichment_audit.csv 2>/dev/null || true
           python - <<'PY'
           from pathlib import Path
           import pandas as pd
@@ -101,6 +108,7 @@ jobs:
           name: backtest-2025-walk-forward
           path: |
             data/backtests/historical_input_validation.csv
+            data/backtests/historical_defense_enrichment_audit.csv
             data/backtests/injuries_history.csv
             data/backtests/weather_history.csv
             data/backtests/player_game_logs_history.csv
