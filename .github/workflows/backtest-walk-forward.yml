@@ -1,0 +1,110 @@
+name: 2025 Walk-Forward Backtest
+
+on:
+  workflow_dispatch:
+    inputs:
+      weeks:
+        description: "Weeks to backtest (for example 1-18 or 1,2,3)"
+        required: false
+        default: "1-18"
+      iterations:
+        description: "Monte Carlo iterations per player/week"
+        required: false
+        default: "2000"
+
+jobs:
+  walk-forward:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+
+      - name: Build historical schedule, team features, and pregame universes
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2025 \
+            --prior-season 2024 \
+            --weeks "${{ inputs.weeks || '1-18' }}" \
+            --out-dir data/backtests
+
+      - name: Validate historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/validate_historical_inputs.py \
+            --season 2025 \
+            --prior-season 2024 \
+            --weeks "${{ inputs.weeks || '1-18' }}" \
+            --data-dir data/backtests \
+            --report data/backtests/historical_input_validation.csv
+
+      - name: Build canonical 2024-2025 player-game history
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2024,2025 \
+            --schedule data/backtests/schedule_history.csv \
+            --out data/backtests/player_game_logs_history.csv
+
+      - name: Execute leakage-safe walk-forward predictions
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -f data/backtests/component_predictions.csv
+          python scripts/backtest/walk_forward.py \
+            --season 2025 \
+            --prior-season 2024 \
+            --weeks "${{ inputs.weeks || '1-18' }}" \
+            --player-logs data/backtests/player_game_logs_history.csv \
+            --team-weekly data/backtests/team_weekly_history.csv \
+            --schedule data/backtests/schedule_history.csv \
+            --universe-dir data/backtests/pregame_universe \
+            --out data/backtests/component_predictions.csv \
+            --iterations "${{ inputs.iterations || '2000' }}"
+
+      - name: Show prediction inventory
+        if: always()
+        run: |
+          echo "Validation report:"
+          cat data/backtests/historical_input_validation.csv 2>/dev/null || true
+          echo "Component prediction rows:"
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          p = Path('data/backtests/component_predictions.csv')
+          if not p.exists():
+              print('component_predictions.csv not produced')
+          else:
+              x = pd.read_csv(p)
+              print('rows=', len(x))
+              if len(x):
+                  print(x.groupby(['week','market']).size().to_string())
+                  print('\ncoverage:')
+                  for c in ['mc_proj','ml_proj','state_proj']:
+                      print(c, int(x[c].notna().sum()), '/', len(x))
+          PY
+
+      - name: Upload walk-forward artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backtest-2025-walk-forward
+          path: |
+            data/backtests/historical_input_validation.csv
+            data/backtests/player_game_logs_history.csv
+            data/backtests/component_predictions.csv
+          if-no-files-found: warn
+          retention-days: 14
