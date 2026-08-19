@@ -1,6 +1,34 @@
+import sys
+import types
+
 import pandas as pd
 
-from scripts.backtest.historical_player_logs import build_historical_player_logs
+from scripts.backtest.historical_player_logs import (
+    _load_historical_weekly,
+    build_historical_player_logs,
+)
+
+
+def test_historical_loader_uses_current_nflreadpy_weekly_api(monkeypatch):
+    calls = {}
+
+    class FakeFrame:
+        def to_pandas(self):
+            return pd.DataFrame([{"season": 2025, "week": 1}])
+
+    fake = types.SimpleNamespace()
+
+    def load_player_stats(*, seasons, summary_level):
+        calls["seasons"] = seasons
+        calls["summary_level"] = summary_level
+        return FakeFrame()
+
+    fake.load_player_stats = load_player_stats
+    monkeypatch.setitem(sys.modules, "nflreadpy", fake)
+
+    out = _load_historical_weekly(2025)
+    assert len(out) == 1
+    assert calls == {"seasons": [2025], "summary_level": "week"}
 
 
 def test_historical_player_logs_attach_historical_opponent(monkeypatch):
@@ -25,7 +53,7 @@ def test_historical_player_logs_attach_historical_opponent(monkeypatch):
         {"season": 2025, "week": 3, "team": "IND", "opponent": "TEN", "game_id": "g3"},
         {"season": 2025, "week": 3, "team": "TEN", "opponent": "IND", "game_id": "g3"},
     ])
-    monkeypatch.setattr("scripts.backtest.historical_player_logs._load_weekly", lambda season: raw.copy())
+    monkeypatch.setattr("scripts.backtest.historical_player_logs._load_historical_weekly", lambda season: raw.copy())
     out = build_historical_player_logs(seasons=[2025], schedule_history=schedule)
     assert len(out) == 1
     assert out.iloc[0]["player"] == "Runner One"
@@ -55,7 +83,7 @@ def test_historical_player_logs_fail_closed_without_schedule_match(monkeypatch):
     schedule = pd.DataFrame([
         {"season": 2025, "week": 3, "team": "BUF", "opponent": "MIA", "game_id": "g3"},
     ])
-    monkeypatch.setattr("scripts.backtest.historical_player_logs._load_weekly", lambda season: raw.copy())
+    monkeypatch.setattr("scripts.backtest.historical_player_logs._load_historical_weekly", lambda season: raw.copy())
     try:
         build_historical_player_logs(seasons=[2025], schedule_history=schedule)
     except RuntimeError as exc:
@@ -101,7 +129,7 @@ def test_historical_player_logs_exclude_postseason_before_schedule_join(monkeypa
         {"season": 2024, "week": 18, "team": "LAR", "opponent": "SEA", "game_id": "g18"},
         {"season": 2024, "week": 18, "team": "SEA", "opponent": "LAR", "game_id": "g18"},
     ])
-    monkeypatch.setattr("scripts.backtest.historical_player_logs._load_weekly", lambda season: raw.copy())
+    monkeypatch.setattr("scripts.backtest.historical_player_logs._load_historical_weekly", lambda season: raw.copy())
     out = build_historical_player_logs(seasons=[2024], schedule_history=schedule)
     assert len(out) == 1
     assert int(out.iloc[0]["week"]) == 18
