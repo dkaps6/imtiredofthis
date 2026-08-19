@@ -25,21 +25,12 @@ BACKTEST_DIR = Path("data") / "backtests"
 COMPONENT_PATH = BACKTEST_DIR / "component_predictions.csv"
 
 TARGET_COLUMNS = {
-    "pass_yards": "pass_yards",
-    "rush_yards": "rush_yards",
-    "rec_yards": "rec_yards",
-    "receptions": "receptions",
-    "rush_att": "rushes",
-    "rush_rec_yards": "rush_rec_yards",
+    "pass_yards": "pass_yards", "rush_yards": "rush_yards", "rec_yards": "rec_yards",
+    "receptions": "receptions", "rush_att": "rushes", "rush_rec_yards": "rush_rec_yards",
 }
-
 OPPORTUNITY_COLUMNS = {
-    "pass_yards": "pass_att",
-    "rush_yards": "rushes",
-    "rec_yards": "targets",
-    "receptions": "targets",
-    "rush_att": "rushes",
-    "rush_rec_yards": "rush_rec_opportunities",
+    "pass_yards": "pass_att", "rush_yards": "rushes", "rec_yards": "targets",
+    "receptions": "targets", "rush_att": "rushes", "rush_rec_yards": "rush_rec_opportunities",
 }
 
 
@@ -65,28 +56,20 @@ def _finite(value) -> bool:
 
 
 def _numeric_series(frame: pd.DataFrame, column: str, default=np.nan) -> pd.Series:
-    """Return a numeric Series even when an optional source column is absent."""
     if column not in frame.columns:
         return pd.Series(default, index=frame.index, dtype=float)
     return pd.to_numeric(frame[column], errors="coerce")
 
 
 def _context_trace_frame(bundle: HistoricalContextBundle) -> pd.DataFrame:
-    """One diagnostic row per pregame player describing context availability."""
     rows = []
     for p in bundle.players:
         f = p.features or {}
-        offense = p.offense
-        defense = p.defense
+        offense, defense = p.offense, p.defense
         matchup = int(f.get("matchup_available") or 0) == 1 and bool(str(f.get("primary_cb") or "").strip())
-        coverage = (
-            defense is not None
-            and _finite(defense.coverage_man_rate)
-            and _finite(defense.coverage_zone_rate)
-        )
+        coverage = defense is not None and _finite(defense.coverage_man_rate) and _finite(defense.coverage_zone_rate)
         rows.append({
-            "team": p.team,
-            "player_clean_key": _key(p.player),
+            "team": p.team, "player_clean_key": _key(p.player),
             "ctx_tgt_share_available": int(_finite(f.get("tgt_share"))),
             "ctx_rush_share_available": int(_finite(f.get("rush_share"))),
             "ctx_ypa_available": int(_finite(f.get("ypa"))),
@@ -109,7 +92,7 @@ def _context_trace_frame(bundle: HistoricalContextBundle) -> pd.DataFrame:
 
 
 def build_market_frame(bundle: HistoricalContextBundle) -> pd.DataFrame:
-    """Expand the explicit pregame universe into supported model markets."""
+    """Expand the pregame universe; only the inferred primary QB gets pass_yards."""
     base = bundle.player_form.copy()
     base.columns = [str(c).strip().lower() for c in base.columns]
     if base.empty:
@@ -120,48 +103,38 @@ def build_market_frame(bundle: HistoricalContextBundle) -> pd.DataFrame:
     for _, player in base.iterrows():
         pos = str(player.get("position", "")).upper().strip()
         markets = ["rush_yards", "rush_att", "rush_rec_yards"]
-        if pos == "QB":
+        if pos == "QB" and int(pd.to_numeric(pd.Series([player.get("qb_projection_eligible", 0)]), errors="coerce").fillna(0).iloc[0]) == 1:
             markets.append("pass_yards")
         if pos in {"RB", "WR", "LWR", "RWR", "SWR", "TE", "FB"}:
             markets += ["rec_yards", "receptions"]
         for market in dict.fromkeys(markets):
-            rec = player.to_dict()
-            rec["market"] = market
-            rows.append(rec)
+            rec = player.to_dict(); rec["market"] = market; rows.append(rec)
     return pd.DataFrame(rows)
 
 
 def _attach_component_projection(frame: pd.DataFrame, predictions: pd.DataFrame, prefix: str) -> pd.DataFrame:
-    out = frame.copy()
-    pred = predictions.copy()
+    out = frame.copy(); pred = predictions.copy()
     pred.columns = [str(c).strip().lower() for c in pred.columns]
     pred["player_clean_key"] = pred.get("player_clean_key", pred["player"]).map(_key)
-    pred = pred.drop_duplicates(["team", "player_clean_key"])
-    by_key = pred.set_index(["team", "player_clean_key"])
+    pred = pred.drop_duplicates(["team", "player_clean_key"]); by_key = pred.set_index(["team", "player_clean_key"])
     vals = []
     for _, row in out.iterrows():
-        key = (str(row["team"]), str(row["player_clean_key"]))
-        col = f"{prefix}_{row['market']}"
+        key = (str(row["team"]), str(row["player_clean_key"])); col = f"{prefix}_{row['market']}"
         if key in by_key.index and col in by_key.columns:
             value = by_key.loc[key, col]
-            if isinstance(value, pd.Series):
-                value = value.iloc[0]
+            if isinstance(value, pd.Series): value = value.iloc[0]
             vals.append(pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0])
-        else:
-            vals.append(np.nan)
+        else: vals.append(np.nan)
     out[f"{prefix}_proj"] = vals
     return out
 
 
 def build_mc_predictions(bundle: HistoricalContextBundle, *, iterations: int = 5000, seed: int = 42) -> pd.DataFrame:
-    """Run canonical Bayes -> rules -> MC and preserve diagnostic inputs."""
     metrics = build_market_frame(bundle)
     bayes = build_bayesian_baseline(bundle.player_consensus)
     metrics = apply_bayesian_to_metrics(metrics, bayes)
-
     with patch.object(simulation_rules, "load_model_contexts", return_value=(bundle.teams, bundle.players)):
         metrics = simulation_rules.apply_rules_to_metrics(metrics)
-
     if int(pd.to_numeric(metrics["rules_applied"], errors="coerce").fillna(0).sum()) == 0:
         raise RuntimeError("historical rules matched zero rows")
 
@@ -169,107 +142,69 @@ def build_mc_predictions(bundle: HistoricalContextBundle, *, iterations: int = 5
     metrics = metrics.merge(trace, on=["team", "player_clean_key"], how="left", validate="many_to_one")
     metrics["mc_projected_plays"] = pd.to_numeric(metrics.get("rules_plays_est"), errors="coerce")
     metrics["mc_pass_rate"] = pd.to_numeric(metrics.get("rules_pass_rate"), errors="coerce")
-    metrics["mc_expected_pass_attempts"] = metrics["mc_projected_plays"] * metrics["mc_pass_rate"]
+    metrics["mc_team_expected_pass_attempts"] = metrics["mc_projected_plays"] * metrics["mc_pass_rate"]
+    metrics["mc_qb_pass_att_share"] = pd.to_numeric(metrics.get("qb_pass_att_share"), errors="coerce")
+    metrics["mc_expected_pass_attempts"] = metrics["mc_team_expected_pass_attempts"] * metrics["mc_qb_pass_att_share"].fillna(1.0)
+    metrics["mc_qb_projection_eligible"] = pd.to_numeric(metrics.get("qb_projection_eligible"), errors="coerce")
+    metrics["mc_qb_role_score"] = pd.to_numeric(metrics.get("qb_role_score"), errors="coerce")
+    metrics["mc_qb_role_source"] = metrics.get("qb_role_source", "")
     metrics["mc_base_ypa"] = pd.to_numeric(metrics.get("ypa"), errors="coerce")
     metrics["mc_bayes_ypa"] = pd.to_numeric(metrics.get("bayes_ypa"), errors="coerce")
     metrics["mc_rules_ypa"] = pd.to_numeric(metrics.get("rules_ypa"), errors="coerce")
     metrics["mc_pass_eff_mult"] = pd.to_numeric(metrics.get("rules_pass_eff_mult"), errors="coerce")
-    metrics["mc_pressure_mismatch"] = (
-        pd.to_numeric(metrics.get("mc_def_pressure_generated"), errors="coerce")
-        - pd.to_numeric(metrics.get("mc_off_pressure_allowed"), errors="coerce")
-    )
+    metrics["mc_pressure_mismatch"] = pd.to_numeric(metrics.get("mc_def_pressure_generated"), errors="coerce") - pd.to_numeric(metrics.get("mc_off_pressure_allowed"), errors="coerce")
 
-    sims = simulate(metrics, iterations=int(iterations), seed=int(seed))
-    rows = []
+    sims = simulate(metrics, iterations=int(iterations), seed=int(seed)); rows = []
     for _, row in metrics.iterrows():
         outcomes = lookup(sims, row, str(row["market"]))
+        if outcomes is not None and len(outcomes) and str(row["market"]) == "pass_yards":
+            share = pd.to_numeric(pd.Series([row.get("qb_pass_att_share")]), errors="coerce").iloc[0]
+            if pd.notna(share): outcomes = outcomes * float(np.clip(share, 0.0, 1.0))
         rows.append(float(np.mean(outcomes)) if outcomes is not None and len(outcomes) else np.nan)
     metrics["mc_proj"] = rows
     return metrics
 
 
 def build_actual_rows(player_logs: pd.DataFrame, season: int, week: int) -> pd.DataFrame:
-    """Create target-week outcomes after prediction, with diagnostic opportunities."""
-    x = player_logs.copy()
-    x.columns = [str(c).strip().lower() for c in x.columns]
-    required = {"season", "week", "player", "team"}
-    missing = required - set(x.columns)
-    if missing:
-        raise RuntimeError(f"player logs missing actual-result columns: {sorted(missing)}")
-    x["season"] = pd.to_numeric(x["season"], errors="coerce")
-    x["week"] = pd.to_numeric(x["week"], errors="coerce")
+    x = player_logs.copy(); x.columns = [str(c).strip().lower() for c in x.columns]
+    required = {"season", "week", "player", "team"}; missing = required - set(x.columns)
+    if missing: raise RuntimeError(f"player logs missing actual-result columns: {sorted(missing)}")
+    x["season"] = pd.to_numeric(x["season"], errors="coerce"); x["week"] = pd.to_numeric(x["week"], errors="coerce")
     x = x.loc[x["season"].eq(int(season)) & x["week"].eq(int(week))].copy()
-    if x.empty:
-        return pd.DataFrame(columns=["team", "player_clean_key", "market", "actual", "actual_opportunities"])
+    if x.empty: return pd.DataFrame(columns=["team", "player_clean_key", "market", "actual", "actual_opportunities"])
     x["player_clean_key"] = x.get("player_clean_key", x["player"]).map(_key)
     x["rush_rec_yards"] = _numeric_series(x, "rush_yards").fillna(0.0) + _numeric_series(x, "rec_yards").fillna(0.0)
     x["rush_rec_opportunities"] = _numeric_series(x, "rushes").fillna(0.0) + _numeric_series(x, "targets").fillna(0.0)
     rows = []
     for _, r in x.iterrows():
         for market, col in TARGET_COLUMNS.items():
-            if col not in x.columns:
-                continue
+            if col not in x.columns: continue
             actual = pd.to_numeric(pd.Series([r.get(col)]), errors="coerce").iloc[0]
             opp_col = OPPORTUNITY_COLUMNS.get(market)
             opportunities = pd.to_numeric(pd.Series([r.get(opp_col)]), errors="coerce").iloc[0] if opp_col else np.nan
             if pd.notna(actual):
-                rows.append({
-                    "team": r["team"],
-                    "player_clean_key": r["player_clean_key"],
-                    "market": market,
-                    "actual": float(actual),
-                    "actual_opportunities": float(opportunities) if pd.notna(opportunities) else np.nan,
-                })
+                rows.append({"team": r["team"], "player_clean_key": r["player_clean_key"], "market": market, "actual": float(actual), "actual_opportunities": float(opportunities) if pd.notna(opportunities) else np.nan})
     return pd.DataFrame(rows).drop_duplicates(["team", "player_clean_key", "market"])
 
 
-def predict_week(
-    *, player_logs: pd.DataFrame, team_weekly: pd.DataFrame, pregame_universe: pd.DataFrame,
-    schedule: pd.DataFrame, season: int, week: int, prior_season: int,
-    team_coverage: pd.DataFrame | None = None, exposure: pd.DataFrame | None = None,
-    injuries: pd.DataFrame | None = None, weather: pd.DataFrame | None = None,
-    iterations: int = 5000, seed: int = 42,
-) -> pd.DataFrame:
-    """Generate one leakage-safe OOS component table for a historical week."""
-    bundle = build_historical_context_bundle(
-        player_logs=player_logs,
-        team_weekly=team_weekly,
-        pregame_universe=pregame_universe,
-        schedule=schedule,
-        season=int(season), week=int(week), prior_season=int(prior_season),
-        team_coverage=team_coverage, exposure=exposure, injuries=injuries, weather=weather,
-    )
-
+def predict_week(*, player_logs: pd.DataFrame, team_weekly: pd.DataFrame, pregame_universe: pd.DataFrame, schedule: pd.DataFrame, season: int, week: int, prior_season: int, team_coverage: pd.DataFrame | None = None, exposure: pd.DataFrame | None = None, injuries: pd.DataFrame | None = None, weather: pd.DataFrame | None = None, iterations: int = 5000, seed: int = 42) -> pd.DataFrame:
+    bundle = build_historical_context_bundle(player_logs=player_logs, team_weekly=team_weekly, pregame_universe=pregame_universe, schedule=schedule, season=int(season), week=int(week), prior_season=int(prior_season), team_coverage=team_coverage, exposure=exposure, injuries=injuries, weather=weather)
     mc = build_mc_predictions(bundle, iterations=iterations, seed=seed)
-    _, ml_pred = build_ml(player_logs, bundle.player_consensus, int(season), int(week))
-    _, state_pred = build_state_predictions(player_logs, bundle.player_consensus, int(season), int(week))
-
-    diagnostic_cols = [c for c in mc.columns if c.startswith("ctx_") or c.startswith("mc_") or c.startswith("rules_")]
+    _, ml_pred = build_ml(player_logs, bundle.player_consensus, int(season), int(week)); _, state_pred = build_state_predictions(player_logs, bundle.player_consensus, int(season), int(week))
+    diagnostic_cols = [c for c in mc.columns if c.startswith("ctx_") or c.startswith("mc_") or c.startswith("rules_") or c.startswith("qb_")]
     base_cols = ["player", "player_clean_key", "team", "opponent", "season", "week", "position", "role", "event_id", "market", "mc_proj"]
-    keep = list(dict.fromkeys([*base_cols, *diagnostic_cols]))
-    out = mc[keep].copy()
-    out = _attach_component_projection(out, ml_pred, "ml")
-    out = _attach_component_projection(out, state_pred, "state")
-    out["prediction_cutoff"] = f"{int(season)}-W{int(week):02d} pregame"
-    out["prior_season"] = int(prior_season)
-
+    out = mc[list(dict.fromkeys([*base_cols, *diagnostic_cols]))].copy()
+    out = _attach_component_projection(out, ml_pred, "ml"); out = _attach_component_projection(out, state_pred, "state")
+    out["prediction_cutoff"] = f"{int(season)}-W{int(week):02d} pregame"; out["prior_season"] = int(prior_season)
     actual = build_actual_rows(player_logs, int(season), int(week))
     out = out.merge(actual, on=["team", "player_clean_key", "market"], how="left", validate="one_to_one")
-    out = out.loc[pd.to_numeric(out["actual"], errors="coerce").notna()].reset_index(drop=True)
-    return out
+    return out.loc[pd.to_numeric(out["actual"], errors="coerce").notna()].reset_index(drop=True)
 
 
 def append_component_predictions(frame: pd.DataFrame, path: Path = COMPONENT_PATH) -> None:
-    """Append a completed week while preventing duplicate season/week/player/market rows."""
-    if frame is None or frame.empty:
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    new = frame.copy()
-    if path.exists() and path.stat().st_size > 0:
-        old = pd.read_csv(path)
-        both = pd.concat([old, new], ignore_index=True)
-    else:
-        both = new
+    if frame is None or frame.empty: return
+    path.parent.mkdir(parents=True, exist_ok=True); new = frame.copy()
+    if path.exists() and path.stat().st_size > 0: both = pd.concat([pd.read_csv(path), new], ignore_index=True)
+    else: both = new
     keys = ["season", "week", "team", "player_clean_key", "market"]
-    both = both.sort_values(keys).drop_duplicates(keys, keep="last")
-    both.to_csv(path, index=False)
+    both.sort_values(keys).drop_duplicates(keys, keep="last").to_csv(path, index=False)
