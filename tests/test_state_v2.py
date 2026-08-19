@@ -15,6 +15,8 @@ def _logs():
             wave = (week + i) % 3
             rows.append({
                 "season": 2025, "week": week, "player": player, "team": team, "position": pos,
+                "pass_att": (28 + 3 * wave) if pos == "QB" else 0,
+                "targets": (5 + 2 * wave) if pos in {"WR", "RB"} else 0,
                 "pass_yards": (190 + 55 * wave + i) if pos == "QB" else 0,
                 "rush_yards": 10 + 22 * wave + (25 if pos == "RB" else 0),
                 "rec_yards": 8 + 28 * wave + (30 if pos == "WR" else 0),
@@ -50,7 +52,8 @@ def test_target_cutoff_excludes_target_week_and_future_games():
     logs = _logs()
     future = pd.DataFrame([{
         "season": 2026, "week": 1, "player": "QB A", "team": "BUF", "position": "QB",
-        "pass_yards": 9999, "rush_yards": 999, "rec_yards": 0, "receptions": 0, "rushes": 40,
+        "pass_att": 60, "targets": 0, "pass_yards": 9999, "rush_yards": 999,
+        "rec_yards": 0, "receptions": 0, "rushes": 40,
     }])
     a = train_state_model(logs, 2026, 1)
     b = train_state_model(pd.concat([logs, future], ignore_index=True), 2026, 1)
