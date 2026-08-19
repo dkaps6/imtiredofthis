@@ -28,7 +28,7 @@ def test_pregame_universe_comes_from_roster_and_depth_only():
     assert set(out["player"]) == {"Alpha WR", "Beta QB"}
     assert out.loc[out["player"].eq("Alpha WR"), "opponent"].iloc[0] == "MIA"
     assert out.loc[out["player"].eq("Alpha WR"), "role"].iloc[0] == "LWR1"
-    assert out["pregame_source"].eq("nflverse_weekly_roster+depth_chart").all()
+    assert out["pregame_source"].eq("nflverse_weekly_roster+week_tagged_depth_chart").all()
 
 
 def test_pregame_universe_never_needs_target_week_results():
@@ -52,7 +52,7 @@ def test_schedule_history_expands_games_to_team_rows(monkeypatch):
     raw = pd.DataFrame([
         {"season": 2025, "week": 1, "home_team": "BUF", "away_team": "MIA", "game_id": "x"}
     ])
-    monkeypatch.setattr("scripts.backtest.historical_inputs.build_or_get_schedule", lambda season: raw.copy())
+    monkeypatch.setattr("scripts.backtest.historical_inputs._load_schedule", lambda season: raw.copy())
     out = build_schedule_history([2025])
     assert len(out) == 2
     assert set(out["team"]) == {"BUF", "MIA"}
