@@ -73,11 +73,25 @@ CONTRACTS: dict[str, ArtifactContract] = {
     ),
     "player_form_consensus": ArtifactContract(
         "player_form_consensus", DATA / "player_form_consensus.csv",
-        ("player", "team", "season", "position", "role", "tgt_share", "rush_share"), min_rows=1,
+        (
+            "player", "team", "season", "position", "role", "tgt_share", "rush_share",
+            "prior_games", "current_games",
+            "tgt_share_prior", "tgt_share_current",
+            "rush_share_prior", "rush_share_current",
+            "ypt_prior", "ypt_current",
+            "ypc_prior", "ypc_current",
+            "ypa_prior", "ypa_current",
+            "receptions_per_target_prior", "receptions_per_target_current",
+        ), min_rows=1,
     ),
     "model_context_bridge": ArtifactContract(
         "model_context_bridge", DATA / "model_context_bridge.csv",
         ("player", "team", "opponent", "season", "week", "position", "role"), min_rows=1,
+    ),
+    "model_bayesian_diagnostics": ArtifactContract(
+        "model_bayesian_diagnostics", DATA / "model_bayesian_diagnostics.csv",
+        ("player", "team", "season", "position", "bayes_available", "bayes_evidence_state", "bayes_tgt_share", "bayes_rush_share"),
+        min_rows=1,
     ),
     "model_rule_diagnostics": ArtifactContract(
         "model_rule_diagnostics", DATA / "model_rule_diagnostics.csv",
@@ -85,7 +99,7 @@ CONTRACTS: dict[str, ArtifactContract] = {
     ),
     "model_rule_simulation_inputs": ArtifactContract(
         "model_rule_simulation_inputs", DATA / "model_rule_simulation_inputs.csv",
-        ("player", "team", "opponent", "market", "rules_applied", "rules_plays_est", "rules_pass_rate"),
+        ("player", "team", "opponent", "market", "bayes_applied", "rules_applied", "rules_plays_est", "rules_pass_rate"),
         min_rows=1, required=False,
     ),
     "qb_run_metrics": ArtifactContract(

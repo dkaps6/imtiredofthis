@@ -1,8 +1,16 @@
-from math import erf, sqrt
+"""Deprecated legacy Bayesian adapter.
+
+The old implementation only applied a Normal CDF to pre-supplied ``mu``/``sd``
+and therefore was not a hierarchical Bayesian model. Production Bayesian
+shrinkage now lives in ``scripts.modeling.bayesian_v2`` and is applied before
+rules + joint Monte Carlo.
+"""
 from .shared_types import Leg, LegResult
-def run(leg: Leg)->LegResult:
-    mu=leg.features.get('bayes_mu', leg.features.get('mu',0.0))
-    sd=leg.features.get('bayes_sd', leg.features.get('sd',1.0))
-    z=(leg.line-mu)/max(1e-6,sd)
-    p_over=1-0.5*(1+erf(z/sqrt(2)))
-    return LegResult(p_model=p_over, mu=mu, sigma=sd, notes='Bayes pooled')
+
+
+def run(leg: Leg) -> LegResult:
+    raise RuntimeError(
+        "scripts.models.bayes_hier is retired: use scripts.modeling.bayesian_v2 "
+        "through the canonical production model stack. The legacy 25% ensemble "
+        "must not silently treat this placeholder as an independent model."
+    )

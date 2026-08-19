@@ -5,9 +5,8 @@ players. Player target/carry opportunities are allocated with multinomial draws,
 so same-team outcomes compete for finite volume instead of being simulated as
 independent normal distributions.
 
-Migration 3: when canonical pre-simulation rule columns are present, they are
-preferred over the raw baseline inputs. Rules therefore change football
-assumptions before simulation rather than multiplying final projections.
+Migration 3: canonical football rules alter pre-simulation assumptions.
+Migration 4A: empirical-Bayesian baselines can feed those rule-adjusted inputs.
 """
 from __future__ import annotations
 
@@ -114,13 +113,10 @@ def simulate(metrics: pd.DataFrame, *, iterations: int | None = None, seed: int 
         frame["_game_key"] = frame.apply(lambda r: "|".join(sorted([str(r.get("team", "")), str(r.get("opponent", ""))])), axis=1)
         game_key = "_game_key"
 
-    # Props contain multiple lines/books for the same player. Collapse to one
-    # player input row before simulation, then reuse the outcome array for every line.
     player_cols = [game_key, "team", "player_clean_key"]
     players = frame.sort_values(player_cols).drop_duplicates(player_cols, keep="last")
 
     for game, game_df in players.groupby(game_key, dropna=False):
-        # One shared game pace shock affects both teams, creating cross-team correlation.
         game_pace_shock = rng.normal(0.0, 2.0, iterations)
         for team, team_df in game_df.groupby("team", dropna=False):
             if pd.isna(team) or not str(team).strip():
@@ -131,12 +127,11 @@ def simulate(metrics: pd.DataFrame, *, iterations: int | None = None, seed: int 
             pass_att = rng.binomial(plays, pass_rate)
             rush_att = plays - pass_att
 
-            # Shared efficiency shocks create realistic QB/receiver co-movement.
             pass_eff_shock = np.clip(rng.normal(1.0, 0.09, iterations), 0.65, 1.35)
             rush_eff_shock = np.clip(rng.normal(1.0, 0.10, iterations), 0.60, 1.40)
 
-            target_shares = np.array([_num(r, "rules_tgt_share", "target_share", "tgt_share", default=0.0) for _, r in team_df.iterrows()])
-            rush_shares = np.array([_num(r, "rules_rush_share", "rush_share", default=0.0) for _, r in team_df.iterrows()])
+            target_shares = np.array([_num(r, "rules_tgt_share", "bayes_tgt_share", "target_share", "tgt_share", default=0.0) for _, r in team_df.iterrows()])
+            rush_shares = np.array([_num(r, "rules_rush_share", "bayes_rush_share", "rush_share", default=0.0) for _, r in team_df.iterrows()])
             targets = _allocate_counts(rng, pass_att, target_shares)
             carries = _allocate_counts(rng, rush_att, rush_shares)
 
@@ -146,18 +141,21 @@ def simulate(metrics: pd.DataFrame, *, iterations: int | None = None, seed: int 
                     continue
                 role = str(row.get("model_role", row.get("role", "")) or "").upper()
                 position = str(row.get("position", "") or "").upper()
-                catch_rate = _clip_prob(_num(row, "receptions_per_target", "catch_rate", default=0.64), 0.64)
+                catch_rate = _clip_prob(
+                    _num(row, "rules_catch_rate", "bayes_receptions_per_target", "receptions_per_target", "catch_rate", default=0.64),
+                    0.64,
+                )
                 receptions = rng.binomial(targets[:, j], catch_rate)
                 vol_mult = float(np.clip(_num(row, "rules_volatility_mult", default=1.0), 0.75, 1.50))
 
-                ypt = _num(row, "rules_ypt", "ypt")
+                ypt = _num(row, "rules_ypt", "bayes_ypt", "ypt")
                 if not np.isfinite(ypt) or ypt <= 0:
                     ypt = 7.5
                 rec_mu = targets[:, j] * ypt * pass_eff_shock
                 rec_sd = np.maximum(6.0, np.sqrt(np.maximum(targets[:, j], 1)) * ypt * 0.55) * vol_mult
                 rec_yards = np.clip(rng.normal(rec_mu, rec_sd), 0.0, None)
 
-                ypc = _num(row, "rules_ypc", "ypc")
+                ypc = _num(row, "rules_ypc", "bayes_ypc", "ypc")
                 if not np.isfinite(ypc) or ypc <= 0:
                     ypc = 4.2
                 rush_mu = carries[:, j] * ypc * rush_eff_shock
@@ -171,7 +169,7 @@ def simulate(metrics: pd.DataFrame, *, iterations: int | None = None, seed: int 
                 values[(str(game), pkey, "rush_rec_yards")] = rush_yards + rec_yards
 
                 if position == "QB" or role.startswith("QB"):
-                    ypa = _num(row, "rules_ypa", "ypa", "ypa_prior")
+                    ypa = _num(row, "rules_ypa", "bayes_ypa", "ypa", "ypa_prior")
                     if not np.isfinite(ypa) or ypa <= 0:
                         ypa = 7.0
                     qb_noise = np.clip(rng.normal(1.0, 0.07 * vol_mult, iterations), 0.72, 1.28)

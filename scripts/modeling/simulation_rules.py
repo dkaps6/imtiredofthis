@@ -1,7 +1,8 @@
 """Translate canonical football rules into simulation-ready player/team inputs.
 
 Rules adjust assumptions before Monte Carlo rather than multiplying final
-projections. This preserves finite team opportunity and correlated outcomes.
+projections. Migration 4A also allows empirical-Bayesian posterior baselines to
+feed the rule layer before contextual matchup adjustments are applied.
 """
 from __future__ import annotations
 
@@ -66,24 +67,27 @@ def _injury_limited(ctx: PlayerContext) -> bool:
     return any(token in text for token in ("OUT", "DOUBTFUL", "IR", "PUP"))
 
 
-def _injury_target_overrides(players: list[PlayerContext], labels: Dict[tuple[str, str], str]) -> Dict[tuple[str, str], float]:
-    """Apply the legacy alpha-vacancy rule while conserving redistributed share.
-
-    When the pregame WR1 is OUT/DOUBTFUL/IR/PUP, half of his target share is
-    removed and redistributed 60% to the next perimeter WR bucket, 30% to
-    slot/TE, and 10% to RB/FB. Within a bucket the added share is distributed
-    proportional to existing target share (equal split if all are zero).
-    """
+def _injury_target_overrides(
+    players: list[PlayerContext],
+    labels: Dict[tuple[str, str], str],
+    share_overrides: Dict[tuple[str, str], float] | None = None,
+) -> Dict[tuple[str, str], float]:
+    """Apply the legacy alpha-vacancy rule while conserving redistributed share."""
+    shares = share_overrides or {}
     overrides: Dict[tuple[str, str], float] = {}
     by_team: Dict[str, list[PlayerContext]] = {}
     for p in players:
         by_team.setdefault(p.team, []).append(p)
 
+    def base_share(p: PlayerContext) -> float:
+        key = (p.team, _key(p.player))
+        return max(0.0, _num(shares.get(key, p.features.get("tgt_share")), 0.0))
+
     for team, group in by_team.items():
         alpha = next((p for p in group if labels.get((team, _key(p.player))) == "WR1"), None)
         if alpha is None or not _injury_limited(alpha):
             continue
-        alpha_share = max(0.0, _num(alpha.features.get("tgt_share"), 0.0))
+        alpha_share = base_share(alpha)
         if alpha_share <= 0:
             continue
         give = alpha_share * 0.50
@@ -97,7 +101,7 @@ def _injury_target_overrides(players: list[PlayerContext], labels: Dict[tuple[st
         for weight, recipients in buckets:
             if not recipients:
                 continue
-            current = [max(0.0, _num(p.features.get("tgt_share"), 0.0)) for p in recipients]
+            current = [base_share(p) for p in recipients]
             total = sum(current)
             alloc = [(v / total if total > 0 else 1.0 / len(recipients)) for v in current]
             for p, frac, base in zip(recipients, alloc, current):
@@ -112,16 +116,26 @@ def apply_rules_to_metrics(metrics: pd.DataFrame) -> pd.DataFrame:
     _, players = load_model_contexts()
     by_player = {(p.team, _key(p.player)): p for p in players}
     role_labels = _wr_role_labels(players)
-    injury_overrides = _injury_target_overrides(players, role_labels)
 
     out = metrics.copy()
     out.columns = [str(c).lower() for c in out.columns]
     source_key = out["player_clean_key"] if "player_clean_key" in out.columns else out["player"]
     out["_bridge_key"] = source_key.map(_key)
 
+    # When Bayesian baselines are present, injury redistribution uses the same
+    # posterior opportunity assumptions that will feed simulation.
+    bayes_share_by_player: Dict[tuple[str, str], float] = {}
+    if "bayes_tgt_share" in out.columns:
+        unique = out.drop_duplicates(["team", "_bridge_key"])
+        for _, r in unique.iterrows():
+            v = _num(r.get("bayes_tgt_share"))
+            if np.isfinite(v):
+                bayes_share_by_player[(str(r.get("team", "")).upper().strip(), str(r["_bridge_key"]))] = v
+    injury_overrides = _injury_target_overrides(players, role_labels, bayes_share_by_player)
+
     for col in (
         "rules_plays_est", "rules_pass_rate", "rules_tgt_share", "rules_rush_share",
-        "rules_ypt", "rules_ypc", "rules_ypa", "rules_volatility_mult",
+        "rules_ypt", "rules_ypc", "rules_ypa", "rules_catch_rate", "rules_volatility_mult",
         "rules_pass_eff_mult", "rules_rush_eff_mult",
     ):
         out[col] = np.nan
@@ -139,11 +153,15 @@ def apply_rules_to_metrics(metrics: pd.DataFrame) -> pd.DataFrame:
         script = project_game_script(ctx.offense, ctx.defense)
         mods = matchup_multipliers(ctx.offense, ctx.defense)
         role = role_labels.get((team, pkey), "")
-        base_tgt = _num(row.get("target_share", row.get("tgt_share", ctx.features.get("tgt_share"))))
-        base_rush = _num(row.get("rush_share", ctx.features.get("rush_share")))
-        base_ypt = _num(row.get("ypt", ctx.features.get("ypt")))
-        base_ypc = _num(row.get("ypc", ctx.features.get("ypc")))
-        base_ypa = _num(row.get("ypa", ctx.features.get("ypa")))
+
+        # Bayesian posterior is the preferred baseline. Raw/blended PlayerForm
+        # remains an explicit fallback if a posterior metric is unavailable.
+        base_tgt = _num(row.get("bayes_tgt_share", row.get("target_share", row.get("tgt_share", ctx.features.get("tgt_share")))))
+        base_rush = _num(row.get("bayes_rush_share", row.get("rush_share", ctx.features.get("rush_share"))))
+        base_ypt = _num(row.get("bayes_ypt", row.get("ypt", ctx.features.get("ypt"))))
+        base_ypc = _num(row.get("bayes_ypc", row.get("ypc", ctx.features.get("ypc"))))
+        base_ypa = _num(row.get("bayes_ypa", row.get("ypa", ctx.features.get("ypa"))))
+        base_catch = _num(row.get("bayes_receptions_per_target", row.get("receptions_per_target", row.get("catch_rate", ctx.features.get("catch_rate")))))
 
         if (team, pkey) in injury_overrides:
             base_tgt = injury_overrides[(team, pkey)]
@@ -151,11 +169,16 @@ def apply_rules_to_metrics(metrics: pd.DataFrame) -> pd.DataFrame:
 
         tgt_mult = 1.0
         pos = str(ctx.position or "").upper()
-        if role == "WR1": tgt_mult *= mods.wr1_target_mult
-        elif role == "WR1_5": tgt_mult *= mods.wr1_5_target_mult
-        elif role == "SLOT": tgt_mult *= mods.slot_target_mult
-        elif pos == "TE": tgt_mult *= mods.te_target_mult
-        elif pos in {"RB", "FB"}: tgt_mult *= mods.rb_rec_target_mult
+        if role == "WR1":
+            tgt_mult *= mods.wr1_target_mult
+        elif role == "WR1_5":
+            tgt_mult *= mods.wr1_5_target_mult
+        elif role == "SLOT":
+            tgt_mult *= mods.slot_target_mult
+        elif pos == "TE":
+            tgt_mult *= mods.te_target_mult
+        elif pos in {"RB", "FB"}:
+            tgt_mult *= mods.rb_rec_target_mult
 
         if np.isfinite(base_ypt) and np.isfinite(base_tgt) and _is_wr(pos, ctx.role):
             matchup_available = int(_num(ctx.features.get("matchup_available"), 0.0)) == 1
@@ -163,15 +186,21 @@ def apply_rules_to_metrics(metrics: pd.DataFrame) -> pd.DataFrame:
             tough_shadow = matchup_available and bool(str(ctx.features.get("primary_cb") or "").strip())
             man = _num(ctx.defense.coverage_man_rate, 0.0) >= 0.50 if coverage_available else False
             zone = _num(ctx.defense.coverage_zone_rate, 0.0) >= 0.60 if coverage_available else False
-            base_ypt, base_tgt = coverage_penalty(base_ypt, base_tgt * tgt_mult,
-                tough_shadow=tough_shadow, heavy_man=man and tough_shadow,
-                heavy_zone=zone and not tough_shadow)
+            base_ypt, base_tgt = coverage_penalty(
+                base_ypt,
+                base_tgt * tgt_mult,
+                tough_shadow=tough_shadow,
+                heavy_man=man and tough_shadow,
+                heavy_zone=zone and not tough_shadow,
+            )
         elif np.isfinite(base_tgt):
             base_tgt *= tgt_mult
 
         if _injury_limited(ctx) and (team, pkey) not in injury_overrides:
-            if np.isfinite(base_tgt): base_tgt *= 0.50
-            if np.isfinite(base_rush): base_rush *= 0.50
+            if np.isfinite(base_tgt):
+                base_tgt *= 0.50
+            if np.isfinite(base_rush):
+                base_rush *= 0.50
 
         out.at[idx, "rules_plays_est"] = script.projected_plays
         out.at[idx, "rules_pass_rate"] = script.projected_pass_attempts / script.projected_plays if script.projected_plays else np.nan
@@ -180,6 +209,7 @@ def apply_rules_to_metrics(metrics: pd.DataFrame) -> pd.DataFrame:
         out.at[idx, "rules_ypt"] = base_ypt * mods.pass_eff_mult if np.isfinite(base_ypt) else np.nan
         out.at[idx, "rules_ypc"] = base_ypc * mods.rb_rush_eff_mult if np.isfinite(base_ypc) else np.nan
         out.at[idx, "rules_ypa"] = base_ypa * mods.pass_eff_mult if np.isfinite(base_ypa) else np.nan
+        out.at[idx, "rules_catch_rate"] = base_catch
         out.at[idx, "rules_volatility_mult"] = mods.volatility_mult
         out.at[idx, "rules_pass_eff_mult"] = mods.pass_eff_mult
         out.at[idx, "rules_rush_eff_mult"] = mods.rb_rush_eff_mult

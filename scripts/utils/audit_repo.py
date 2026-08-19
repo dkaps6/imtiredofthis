@@ -31,6 +31,13 @@ PRODUCTION_SCRIPTS = (
     "scripts/run_player_form_v2.py",
     "scripts/run_player_form_v2_loader.py",
     "scripts/enrich_player_scoring_v2.py",
+    "scripts/modeling/context_bridge.py",
+    "scripts/modeling/bayesian_v2.py",
+    "scripts/modeling/rules_v2.py",
+    "scripts/modeling/simulation_rules.py",
+    "scripts/run_model_context_bridge.py",
+    "scripts/run_model_bayesian_bridge.py",
+    "scripts/run_model_rules_bridge.py",
     "scripts/metrics_v2.py",
     "scripts/metrics_enrichment_v2.py",
     "scripts/run_metrics_context.py",
@@ -127,6 +134,9 @@ def _workflow_contract_errors() -> list[str]:
     required_tokens = (
         "scripts/run_player_form_v2_loader.py",
         "scripts/enrich_player_scoring_v2.py",
+        "scripts/run_model_context_bridge.py",
+        "scripts/run_model_bayesian_bridge.py",
+        "scripts/run_model_rules_bridge.py",
         "scripts/run_metrics_context.py",
         "scripts/validate_build_integrity.py",
         "scripts/metrics_ready.py",
@@ -135,8 +145,6 @@ def _workflow_contract_errors() -> list[str]:
     )
     errors = [f"full-slate workflow does not invoke {token}" for token in required_tokens if token not in text]
 
-    # Validate the PlayerForm compatibility chain itself instead of merely
-    # checking that an old entry-point string appears in the workflow.
     loader_runner = ROOT / "scripts/run_player_form_v2_loader.py"
     if loader_runner.exists():
         loader_text = _read(loader_runner)
@@ -158,6 +166,14 @@ def _workflow_contract_errors() -> list[str]:
             errors.append("player_stats_loader_v2 does not call nflreadpy.load_player_stats")
         if "stat_type=" in stats_text:
             errors.append("player_stats_loader_v2 still uses deprecated nflreadpy stat_type argument")
+
+    pricing = ROOT / "scripts/run_pricing_v2.py"
+    if pricing.exists():
+        ptext = _read(pricing)
+        if "apply_bayesian_to_metrics" not in ptext:
+            errors.append("production pricing does not apply canonical Bayesian baseline")
+        if "apply_rules_to_metrics" not in ptext:
+            errors.append("production pricing does not apply canonical empirical rules")
 
     return errors
 
