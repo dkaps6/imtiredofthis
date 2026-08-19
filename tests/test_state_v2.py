@@ -6,7 +6,10 @@ from scripts.modeling.state_v2 import apply_state_to_metrics, build_state_predic
 
 def _logs():
     rows = []
-    players = [("QB A", "BUF", "QB"), ("QB B", "MIA", "QB"), ("WR A", "BUF", "WR"), ("WR B", "MIA", "WR"), ("RB A", "BUF", "RB"), ("RB B", "MIA", "RB")]
+    players = [
+        ("QB A", "BUF", "QB"), ("QB B", "MIA", "QB"), ("QB C", "IND", "QB"), ("QB D", "HOU", "QB"),
+        ("WR A", "BUF", "WR"), ("WR B", "MIA", "WR"), ("RB A", "BUF", "RB"), ("RB B", "MIA", "RB"),
+    ]
     for week in range(1, 18):
         for i, (player, team, pos) in enumerate(players):
             wave = (week + i) % 3
