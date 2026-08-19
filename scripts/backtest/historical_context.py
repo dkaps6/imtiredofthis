@@ -8,12 +8,12 @@ players); target-week result rows are not used to decide who gets projected.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
 
 import numpy as np
 import pandas as pd
 
 from scripts._opponent_map import canon_team
+from scripts.backtest.qb_opportunity import add_qb_opportunity
 from scripts.modeling.context_bridge import build_player_contexts, build_team_contexts
 from scripts.modeling.contracts import PlayerContext, TeamContext
 from scripts.utils.canonical_names import canonicalize_player_name_safe
@@ -44,7 +44,6 @@ def _key(value) -> str:
 
 
 def before_cutoff(frame: pd.DataFrame, season: int, week: int) -> pd.DataFrame:
-    """Return rows strictly before target season/week."""
     if frame is None or frame.empty:
         return pd.DataFrame(columns=[] if frame is None else frame.columns)
     x = frame.copy()
@@ -78,19 +77,8 @@ def _num_series(frame: pd.DataFrame, name: str) -> pd.Series:
     return pd.to_numeric(frame[name], errors="coerce")
 
 
-def build_historical_player_inputs(
-    player_logs: pd.DataFrame,
-    pregame_universe: pd.DataFrame,
-    season: int,
-    week: int,
-    prior_season: int,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Build historical player form using only games before the target week.
-
-    ``pregame_universe`` must come from a pregame roster/depth source. We do not
-    derive the active universe from target-week results because doing so would
-    leak participation information.
-    """
+def build_historical_player_inputs(player_logs: pd.DataFrame, pregame_universe: pd.DataFrame, season: int, week: int, prior_season: int) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Build historical player form using only games before the target week."""
     hist = before_cutoff(player_logs, season, week)
     assert_no_future_rows(hist, season, week, "player_history")
     if hist.empty:
@@ -149,21 +137,26 @@ def build_historical_player_inputs(
             con[f"{out_col}_current"] = current_v
         rows.append(base)
         consensus_rows.append(con)
-    return hist, pd.DataFrame(rows), pd.DataFrame(consensus_rows)
+
+    player_form = pd.DataFrame(rows)
+    player_form = add_qb_opportunity(player_form, u, h, season=int(season), prior_season=int(prior_season))
+    consensus = pd.DataFrame(consensus_rows).merge(
+        player_form[["team", "player_clean_key", "qb_projection_eligible", "qb_pass_att_share", "qb_role_score", "qb_role_source"]],
+        on=["team", "player_clean_key"], how="left", validate="one_to_one",
+    )
+    return hist, player_form, consensus
 
 
 def build_historical_team_form(team_weekly: pd.DataFrame, season: int, week: int, prior_season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Aggregate long-form weekly team observations using a strict pregame cutoff."""
     hist = before_cutoff(team_weekly, season, week)
     assert_no_future_rows(hist, season, week, "team_history")
     if hist.empty:
         raise RuntimeError("No team history available before target cutoff")
     x = hist.copy()
     x["team"] = x["team"].map(canon_team)
-    numeric_exclude = {"season", "week"}
     numeric_cols = []
     for c in x.columns:
-        if c in numeric_exclude or c == "team":
+        if c in {"season", "week", "team"}:
             continue
         vals = pd.to_numeric(x[c], errors="coerce")
         if vals.notna().any():
@@ -171,8 +164,7 @@ def build_historical_team_form(team_weekly: pd.DataFrame, season: int, week: int
             numeric_cols.append(c)
 
     rows = []
-    target_teams = sorted(t for t in x["team"].dropna().astype(str).unique() if t)
-    for team in target_teams:
+    for team in sorted(t for t in x["team"].dropna().astype(str).unique() if t):
         part = x.loc[x["team"].eq(team)]
         cur = part.loc[pd.to_numeric(part["season"], errors="coerce").eq(int(season))]
         prior = part.loc[pd.to_numeric(part["season"], errors="coerce").eq(int(prior_season))]
@@ -186,38 +178,16 @@ def build_historical_team_form(team_weekly: pd.DataFrame, season: int, week: int
     return hist, pd.DataFrame(rows)
 
 
-def build_historical_context_bundle(
-    *,
-    player_logs: pd.DataFrame,
-    team_weekly: pd.DataFrame,
-    pregame_universe: pd.DataFrame,
-    schedule: pd.DataFrame,
-    season: int,
-    week: int,
-    prior_season: int,
-    team_coverage: pd.DataFrame | None = None,
-    exposure: pd.DataFrame | None = None,
-    injuries: pd.DataFrame | None = None,
-    weather: pd.DataFrame | None = None,
-) -> HistoricalContextBundle:
+def build_historical_context_bundle(*, player_logs: pd.DataFrame, team_weekly: pd.DataFrame, pregame_universe: pd.DataFrame, schedule: pd.DataFrame, season: int, week: int, prior_season: int, team_coverage: pd.DataFrame | None = None, exposure: pd.DataFrame | None = None, injuries: pd.DataFrame | None = None, weather: pd.DataFrame | None = None) -> HistoricalContextBundle:
     ph, player_form, consensus = build_historical_player_inputs(player_logs, pregame_universe, season, week, prior_season)
     th, team_form = build_historical_team_form(team_weekly, season, week, prior_season)
-
-    # Optional week-tagged enrichments must also obey the historical cutoff if
-    # they contain season/week. Target-week pregame snapshots should instead be
-    # passed without a historical result week column or through a future dated
-    # snapshot-specific adapter.
     for label, frame in (("team_coverage", team_coverage), ("exposure", exposure), ("injuries", injuries), ("weather", weather)):
         if frame is not None and not frame.empty and {"season", "week"}.issubset({str(c).lower() for c in frame.columns}):
             assert_no_future_rows(frame, season, week, label)
-
     teams = build_team_contexts(team_form, team_coverage)
-    players = build_player_contexts(
-        player_form, consensus, teams,
-        exposure=exposure, injuries=injuries, weather=weather, team_week_map=schedule,
-    )
+    players = build_player_contexts(player_form, consensus, teams, exposure=exposure, injuries=injuries, weather=weather, team_week_map=schedule)
     return HistoricalContextBundle(
-        season=int(season), week=int(week), prior_season=int(prior_season),
-        player_history=ph, team_history=th, player_form=player_form, player_consensus=consensus,
-        team_form=team_form, teams=teams, players=players,
+        season=int(season), week=int(week), prior_season=int(prior_season), player_history=ph,
+        team_history=th, player_form=player_form, player_consensus=consensus, team_form=team_form,
+        teams=teams, players=players,
     )
