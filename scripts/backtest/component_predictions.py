@@ -129,6 +129,26 @@ def _attach_component_projection(frame: pd.DataFrame, predictions: pd.DataFrame,
     return out
 
 
+def _attach_historical_passing_volume(metrics: pd.DataFrame, bundle: HistoricalContextBundle) -> pd.DataFrame:
+    """Attach leakage-safe attempt/dropback conversion from the pre-cutoff team form."""
+    out = metrics.copy()
+    tf = bundle.team_form.copy()
+    tf.columns = [str(c).strip().lower() for c in tf.columns]
+    if "team" not in tf.columns or "pass_attempts_per_dropback" not in tf.columns:
+        out["mc_pass_attempts_per_dropback"] = 1.0
+        out["mc_pass_attempt_rate_source"] = "fallback_1.0"
+        return out
+    conv = tf[["team", "pass_attempts_per_dropback"]].drop_duplicates("team").copy()
+    conv["pass_attempts_per_dropback"] = pd.to_numeric(conv["pass_attempts_per_dropback"], errors="coerce")
+    out = out.merge(conv, on="team", how="left", validate="many_to_one")
+    raw = pd.to_numeric(out["pass_attempts_per_dropback"], errors="coerce")
+    valid = raw.between(0.50, 1.00, inclusive="both")
+    out["mc_pass_attempts_per_dropback"] = raw.where(valid, 1.0).clip(0.50, 1.00)
+    out["mc_pass_attempt_rate_source"] = np.where(valid, "historical_pregame_pbp", "fallback_1.0")
+    out.drop(columns=["pass_attempts_per_dropback"], inplace=True)
+    return out
+
+
 def build_mc_predictions(bundle: HistoricalContextBundle, *, iterations: int = 5000, seed: int = 42) -> pd.DataFrame:
     metrics = build_market_frame(bundle)
     bayes = build_bayesian_baseline(bundle.player_consensus)
@@ -138,11 +158,16 @@ def build_mc_predictions(bundle: HistoricalContextBundle, *, iterations: int = 5
     if int(pd.to_numeric(metrics["rules_applied"], errors="coerce").fillna(0).sum()) == 0:
         raise RuntimeError("historical rules matched zero rows")
 
+    metrics = _attach_historical_passing_volume(metrics, bundle)
     trace = _context_trace_frame(bundle)
     metrics = metrics.merge(trace, on=["team", "player_clean_key"], how="left", validate="many_to_one")
     metrics["mc_projected_plays"] = pd.to_numeric(metrics.get("rules_plays_est"), errors="coerce")
-    metrics["mc_pass_rate"] = pd.to_numeric(metrics.get("rules_pass_rate"), errors="coerce")
-    metrics["mc_team_expected_pass_attempts"] = metrics["mc_projected_plays"] * metrics["mc_pass_rate"]
+    # rules_pass_rate is derived from qb_dropback share in the historical PBP.
+    # It therefore represents dropbacks/plays, not official pass attempts/plays.
+    metrics["mc_dropback_rate"] = pd.to_numeric(metrics.get("rules_pass_rate"), errors="coerce")
+    metrics["mc_pass_rate"] = metrics["mc_dropback_rate"] * metrics["mc_pass_attempts_per_dropback"]
+    metrics["mc_team_expected_dropbacks"] = metrics["mc_projected_plays"] * metrics["mc_dropback_rate"]
+    metrics["mc_team_expected_pass_attempts"] = metrics["mc_team_expected_dropbacks"] * metrics["mc_pass_attempts_per_dropback"]
     metrics["mc_qb_pass_att_share"] = pd.to_numeric(metrics.get("qb_pass_att_share"), errors="coerce")
     metrics["mc_expected_pass_attempts"] = metrics["mc_team_expected_pass_attempts"] * metrics["mc_qb_pass_att_share"].fillna(1.0)
     metrics["mc_qb_projection_eligible"] = pd.to_numeric(metrics.get("qb_projection_eligible"), errors="coerce")
@@ -158,7 +183,11 @@ def build_mc_predictions(bundle: HistoricalContextBundle, *, iterations: int = 5
     for _, row in metrics.iterrows():
         outcomes = lookup(sims, row, str(row["market"]))
         if outcomes is not None and len(outcomes) and str(row["market"]) == "pass_yards":
+            # simulation_v2 currently treats its team pass count as dropbacks.
+            # Convert that to official attempts before applying the QB's share.
+            attempt_rate = pd.to_numeric(pd.Series([row.get("mc_pass_attempts_per_dropback")]), errors="coerce").iloc[0]
             share = pd.to_numeric(pd.Series([row.get("qb_pass_att_share")]), errors="coerce").iloc[0]
+            if pd.notna(attempt_rate): outcomes = outcomes * float(np.clip(attempt_rate, 0.50, 1.00))
             if pd.notna(share): outcomes = outcomes * float(np.clip(share, 0.0, 1.0))
         rows.append(float(np.mean(outcomes)) if outcomes is not None and len(outcomes) else np.nan)
     metrics["mc_proj"] = rows
