@@ -64,6 +64,13 @@ def _finite(value) -> bool:
         return False
 
 
+def _numeric_series(frame: pd.DataFrame, column: str, default=np.nan) -> pd.Series:
+    """Return a numeric Series even when an optional source column is absent."""
+    if column not in frame.columns:
+        return pd.Series(default, index=frame.index, dtype=float)
+    return pd.to_numeric(frame[column], errors="coerce")
+
+
 def _context_trace_frame(bundle: HistoricalContextBundle) -> pd.DataFrame:
     """One diagnostic row per pregame player describing context availability."""
     rows = []
@@ -195,8 +202,8 @@ def build_actual_rows(player_logs: pd.DataFrame, season: int, week: int) -> pd.D
     if x.empty:
         return pd.DataFrame(columns=["team", "player_clean_key", "market", "actual", "actual_opportunities"])
     x["player_clean_key"] = x.get("player_clean_key", x["player"]).map(_key)
-    x["rush_rec_yards"] = pd.to_numeric(x.get("rush_yards"), errors="coerce").fillna(0.0) + pd.to_numeric(x.get("rec_yards"), errors="coerce").fillna(0.0)
-    x["rush_rec_opportunities"] = pd.to_numeric(x.get("rushes"), errors="coerce").fillna(0.0) + pd.to_numeric(x.get("targets"), errors="coerce").fillna(0.0)
+    x["rush_rec_yards"] = _numeric_series(x, "rush_yards").fillna(0.0) + _numeric_series(x, "rec_yards").fillna(0.0)
+    x["rush_rec_opportunities"] = _numeric_series(x, "rushes").fillna(0.0) + _numeric_series(x, "targets").fillna(0.0)
     rows = []
     for _, r in x.iterrows():
         for market, col in TARGET_COLUMNS.items():
