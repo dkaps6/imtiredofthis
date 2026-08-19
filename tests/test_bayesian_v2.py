@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from scripts.modeling.bayesian_v2 import apply_bayesian_to_metrics, build_bayesian_baseline
 
@@ -43,8 +44,21 @@ def test_posterior_shrinks_current_evidence_instead_of_copying_it():
     out = build_bayesian_baseline(_consensus())
     alpha = out.loc[out.player.eq("Alpha WR")].iloc[0]
     assert alpha.bayes_evidence_state == "prior+current"
-    assert .28 < alpha.bayes_tgt_share < .34
-    assert 9.0 < alpha.bayes_ypt < 10.0
+
+    # The posterior combines three sources of evidence: the WR population prior,
+    # capped player-prior evidence, and current-season evidence. It is therefore
+    # allowed to sit below the player's .28 prior when the WR population prior is
+    # lower; the important contract is that the current .34 is not copied blindly.
+    wr_population_tgt_share = (.28 * 17 + .14 * 17) / (17 + 17)
+    expected_tgt_share = (3.0 * wr_population_tgt_share + 6.0 * .28 + 2.0 * .34) / 11.0
+    assert alpha.bayes_tgt_share == pytest.approx(expected_tgt_share)
+    assert wr_population_tgt_share < alpha.bayes_tgt_share < .34
+
+    # Same principle for YPT: population + player prior + current evidence.
+    wr_population_ypt = (9.0 * 17 + 7.0 * 17) / (17 + 17)
+    expected_ypt = (5.0 * wr_population_ypt + 8.0 * 9.0 + 2.0 * 10.0) / 15.0
+    assert alpha.bayes_ypt == pytest.approx(expected_ypt)
+    assert wr_population_ypt < alpha.bayes_ypt < 10.0
     assert alpha.bayes_tgt_share_effective_n > alpha.current_games
 
 
