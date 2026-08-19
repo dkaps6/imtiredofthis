@@ -2,8 +2,9 @@
 
 This intentionally reuses PlayerForm v2's nflverse normalization, but attaches
 opponents from the historical schedule artifact rather than today's production
-team_week_map.csv. The output contains completed-game observations only; the
-walk-forward context layer is responsible for enforcing the prediction cutoff.
+team_week_map.csv. The output contains regular-season completed-game
+observations only; the walk-forward context layer is responsible for enforcing
+the prediction cutoff.
 """
 from __future__ import annotations
 
@@ -16,6 +17,8 @@ import pandas as pd
 from scripts._opponent_map import canon_team
 from scripts.player_form_v2 import _load_weekly, _normalize_weekly
 
+REGULAR_SEASON_MAX_WEEK = 18
+
 
 def build_historical_player_logs(
     *, seasons: Iterable[int], schedule_history: pd.DataFrame
@@ -27,6 +30,7 @@ def build_historical_player_logs(
         raise RuntimeError(f"historical schedule missing columns: {sorted(required - set(sched.columns))}")
     sched["season"] = pd.to_numeric(sched["season"], errors="coerce").astype("Int64")
     sched["week"] = pd.to_numeric(sched["week"], errors="coerce").astype("Int64")
+    sched = sched.loc[sched["week"].between(1, REGULAR_SEASON_MAX_WEEK)].copy()
     sched["team"] = sched["team"].map(canon_team)
     sched["opponent"] = sched["opponent"].map(canon_team)
     if "game_id" not in sched.columns:
@@ -38,6 +42,13 @@ def build_historical_player_logs(
     frames: list[pd.DataFrame] = []
     for season in sorted(set(int(s) for s in seasons)):
         normalized = _normalize_weekly(_load_weekly(season), season)
+        # nflverse weekly player stats include postseason weeks (19+). This
+        # backtest is explicitly regular season Weeks 1-18, and schedule_history
+        # is intentionally REG-only, so postseason observations must be excluded
+        # before opponent attachment rather than treated as missing schedule data.
+        normalized = normalized.loc[
+            pd.to_numeric(normalized["week"], errors="coerce").between(1, REGULAR_SEASON_MAX_WEEK)
+        ].copy()
         normalized = normalized.merge(
             sched.loc[sched["season"].eq(season)],
             on=["season", "week", "team"],
@@ -48,11 +59,11 @@ def build_historical_player_logs(
         if missing.any():
             sample = normalized.loc[missing, ["season", "week", "team"]].drop_duplicates().head(10)
             raise RuntimeError(
-                "historical player logs could not resolve opponent for schedule rows: "
+                "historical player logs could not resolve opponent for regular-season schedule rows: "
                 + sample.to_dict(orient="records").__repr__()
             )
         frames.append(normalized)
-        print(f"[backtest_player_logs] season={season} rows={len(normalized)}")
+        print(f"[backtest_player_logs] season={season} regular_season_rows={len(normalized)}")
 
     out = pd.concat(frames, ignore_index=True, sort=False) if frames else pd.DataFrame()
     if out.empty:
