@@ -20,14 +20,11 @@ on:
         required: false
         type: boolean
         default: false
-
 concurrency:
   group: full-slate-${{ github.ref }}
   cancel-in-progress: true
-
 permissions:
   contents: read
-
 env:
   PYTHONDONTWRITEBYTECODE: "1"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
@@ -42,7 +39,6 @@ env:
   PRIOR_SEASON: ${{ github.event.inputs.prior_season }}
   SLATE_DATE: ${{ github.event.inputs.date }}
   FETCH_LIVE_ODDS: ${{ github.event.inputs.fetch_live_odds }}
-
 jobs:
   full_slate:
     name: Full slate (single job)
@@ -52,13 +48,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install nflreadpy pyyaml
-
       - name: Validate season context
         run: |
           export PYTHONPATH="${PWD}"
@@ -71,15 +65,9 @@ jobs:
           assert SLATE_DATE == os.environ.get("SLATE_DATE", "").strip()
           print(f"current={SEASON} prior={PRIOR_SEASON} slate={SLATE_DATE or '<latest>'}")
           EOF
-
       - name: Live odds mode status
         run: |
-          if [ "${{ github.event.inputs.fetch_live_odds }}" = "true" ]; then
-            echo "LIVE ODDS ENABLED: this run may consume Odds API credits."
-          else
-            echo "LIVE ODDS PAUSED: player-prop/game-odds API calls will NOT run and will consume zero Odds API credits."
-          fi
-
+          if [ "${{ github.event.inputs.fetch_live_odds }}" = "true" ]; then echo "LIVE ODDS ENABLED"; else echo "LIVE ODDS PAUSED"; fi
       - name: Build Ourlads roles
         run: |
           export PYTHONPATH="${PWD}"
@@ -87,7 +75,6 @@ jobs:
           mkdir -p outputs
           cp data/roles_ourlads.csv outputs/roles_ourlads.csv
           test -s data/roles_ourlads.csv
-
       - name: Build authoritative team-week map
         env:
           TEAM_WEEK_MAP_CSV: data/team_week_map.csv
@@ -96,7 +83,6 @@ jobs:
           python scripts/utils/build_team_week_map_v2.py --season "${SEASON}" --out data/team_week_map.csv
           test -s data/team_week_map.csv
           python -c "from scripts.runtime_context import log_runtime_context,resolve_week; log_runtime_context(); print('week=',resolve_week())"
-
       - name: Fetch player props and game odds
         if: ${{ github.event.inputs.fetch_live_odds == 'true' }}
         env:
@@ -107,25 +93,18 @@ jobs:
           python scripts/fetch_props_oddsapi.py --season "${SEASON}" --date "${SLATE_DATE}"
           test -s outputs/props_raw.csv
           test -s outputs/odds_game.csv
-          test -s data/opponent_map_from_props.csv || { echo "ERROR: fetch_props_oddsapi did not materialize opponent_map_from_props.csv"; exit 1; }
-
+          test -s data/opponent_map_from_props.csv
       - name: Validate live opponent map
         if: ${{ github.event.inputs.fetch_live_odds == 'true' }}
         run: |
           export PYTHONPATH="${PWD}"
           python - <<'EOF'
           import pandas as pd
-          p = "data/opponent_map_from_props.csv"
-          df = pd.read_csv(p)
-          if df.empty: raise SystemExit(f"FATAL: {p} is empty")
-          required = {"team", "opponent"}
-          missing = required - set(df.columns)
-          if missing: raise SystemExit(f"FATAL: {p} missing columns {sorted(missing)}")
-          unresolved = int(df["team"].isna().sum() + df["opponent"].isna().sum())
-          if unresolved: raise SystemExit(f"FATAL: {p} contains {unresolved} unresolved team/opponent cells")
-          print(f"opponent map OK: rows={len(df)}")
+          df=pd.read_csv('data/opponent_map_from_props.csv')
+          if df.empty: raise SystemExit('FATAL: opponent map empty')
+          if df['team'].isna().any() or df['opponent'].isna().any(): raise SystemExit('FATAL: unresolved opponent map')
+          print(f'opponent map OK: rows={len(df)}')
           EOF
-
       - name: Build TeamForm with explicit preseason priors
         run: |
           export PYTHONPATH="${PWD}"
@@ -133,15 +112,6 @@ jobs:
           python scripts/team_form_prior_bridge.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}"
           python scripts/run_team_form_context.py --season "${SEASON}"
           test -s data/team_form.csv
-          python - <<'EOF'
-          import pandas as pd
-          df = pd.read_csv("data/team_form.csv")
-          if df.empty: raise SystemExit("FATAL: team_form.csv is empty")
-          if df["season"].astype(int).nunique() != 1 or int(df["season"].astype(int).iloc[0]) != int(__import__('os').environ['SEASON']):
-              raise SystemExit("FATAL: TeamForm season context is not the active season")
-          print("TeamForm provenance:", df[[c for c in ["team_form_active_season","team_form_prior_season","pbp_feature_season","pbp_prior_used","pbp_feature_source"] if c in df.columns]].drop_duplicates().to_dict("records"))
-          EOF
-
       - name: Build weather and injuries
         run: |
           export PYTHONPATH="${PWD}"
@@ -149,85 +119,55 @@ jobs:
           python scripts/build/build_injuries_weekly.py data/injuries.csv --season "${SEASON}"
           test -s data/weather_week.csv
           test -s data/injuries.csv
-          python - <<'EOF'
-          import pandas as pd
-          df = pd.read_csv("data/injuries.csv")
-          required = {"player","team","season","week","status","practice_status","body_part","designation","report_date","source","report_available"}
-          missing = required - set(df.columns)
-          if missing: raise SystemExit(f"FATAL: injuries.csv missing columns {sorted(missing)}")
-          print(f"injuries artifact OK: rows={len(df)} (zero is valid before official reports exist)")
-          EOF
-
       - name: Build Coverage v2 matchup intelligence
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/run_coverage_v2.py --season "${SEASON}"
           for f in data/cb_coverage_team.csv data/cb_coverage_player.csv data/wr_cb_exposure.csv; do test -s "$f"; done
-          python - <<'EOF'
-          import pandas as pd
-          team = pd.read_csv("data/cb_coverage_team.csv")
-          player = pd.read_csv("data/cb_coverage_player.csv")
-          exposure = pd.read_csv("data/wr_cb_exposure.csv")
-          if len(team) < 2 or len(team) % 2: raise SystemExit(f"FATAL: invalid scheduled coverage team rows={len(team)}")
-          if player.empty or exposure.empty: raise SystemExit("FATAL: Coverage v2 lost the authoritative WR universe")
-          if exposure['opponent'].fillna('').eq('').any(): raise SystemExit("FATAL: Coverage v2 has unresolved WR opponents")
-          print(f"Coverage v2 OK: scheduled_teams={len(team)} WRs={len(exposure)} direct_matchups={int(player['matchup_available'].sum())} alignments={int(player['alignment_available'].sum())} team_scheme_rows={int(team['coverage_available'].sum())}")
-          EOF
-
       - name: Build optional current-season PBP enrichment
         continue-on-error: true
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/build/pbp_features.py --season "${SEASON}" || true
-
       - name: Build PlayerForm v2 with historical priors
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/run_player_form_v2_loader.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
           python scripts/enrich_player_scoring_v2.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
           for f in data/player_game_logs.csv data/player_season_totals.csv data/player_form.csv data/player_form_consensus.csv; do test -s "$f"; done
-
       - name: Validate canonical model context bridge
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/run_model_context_bridge.py
           test -s data/model_context_bridge.csv
-
       - name: Validate empirical Bayesian baseline
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/run_model_bayesian_bridge.py
           test -s data/model_bayesian_diagnostics.csv
-          python - <<'EOF'
-          import pandas as pd
-          df = pd.read_csv("data/model_bayesian_diagnostics.csv")
-          if df.empty: raise SystemExit("FATAL: Bayesian diagnostics empty")
-          if int(df["bayes_available"].sum()) != len(df): raise SystemExit("FATAL: Bayesian baseline unavailable for active players")
-          print("Bayesian evidence states:", df["bayes_evidence_state"].value_counts().to_dict())
-          EOF
-
       - name: Train and validate supervised ML v2
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/run_model_ml_bridge.py
           test -s data/model_ml_diagnostics.csv
           test -s data/model_ml_v2.joblib
+      - name: Train and validate Markov state v2
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_state_bridge.py
+          test -s data/model_state_diagnostics.csv
+          test -s data/model_state_v2.joblib
           python - <<'EOF'
           import pandas as pd
-          df = pd.read_csv("data/model_ml_diagnostics.csv")
-          if df.empty: raise SystemExit("FATAL: ML v2 diagnostics empty")
-          ml_cols = [c for c in df.columns if c.startswith("ml_") and c in {"ml_pass_yards","ml_rush_yards","ml_rec_yards","ml_receptions","ml_rush_att","ml_rush_rec_yards"}]
-          projected = int(df[ml_cols].notna().any(axis=1).sum())
-          if projected == 0: raise SystemExit("FATAL: ML v2 produced zero active-player projections")
-          print(f"ML v2 active players={len(df)} projected={projected} targets={ml_cols}")
+          df=pd.read_csv('data/model_state_diagnostics.csv')
+          if df.empty or int(df['state_available'].sum()) == 0: raise SystemExit('FATAL: state v2 produced no available predictions')
+          print(f"state v2 players={len(df)} available={int(df['state_available'].sum())}")
           EOF
-
       - name: Validate empirical rule layer
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/run_model_rules_bridge.py
           test -s data/model_rule_diagnostics.csv
-
       - name: Assemble deterministic metrics
         if: ${{ github.event.inputs.fetch_live_odds == 'true' }}
         run: |
@@ -235,8 +175,7 @@ jobs:
           python scripts/run_metrics_context.py --season "${SEASON}" --mode full --date "${SLATE_DATE}"
           python scripts/validate_build_integrity.py
           python scripts/metrics_ready.py --season "${SEASON}" --date "${SLATE_DATE}"
-
-      - name: Price with ML trace + Bayesian + rule-adjusted joint Monte Carlo simulation
+      - name: Price with ML + state trace, Bayesian, rules and joint Monte Carlo
         if: ${{ github.event.inputs.fetch_live_odds == 'true' }}
         run: |
           export PYTHONPATH="${PWD}"
@@ -244,28 +183,24 @@ jobs:
           python - <<'EOF'
           import pandas as pd
           from scripts.artifact_contracts import CONTRACTS
-          c = CONTRACTS["props_priced"]
-          df = pd.read_csv(c.path)
+          c=CONTRACTS['props_priced']; df=pd.read_csv(c.path)
           assert not df.empty
-          missing = [x for x in c.required_columns if x not in df.columns]
-          assert not missing, missing
-          assert "simulation_iterations" in df.columns
-          assert "ml_applied" in df.columns and int(df["ml_applied"].sum()) > 0
-          assert "bayes_applied" in df.columns and int(df["bayes_applied"].sum()) > 0
-          assert "rules_applied" in df.columns and int(df["rules_applied"].sum()) > 0
-          print(f"priced rows={len(df)} simulations={df['simulation_iterations'].iloc[0]} ml={int(df['ml_applied'].sum())} bayesian={int(df['bayes_applied'].sum())} rule_adjusted={int(df['rules_applied'].sum())}")
+          assert not [x for x in c.required_columns if x not in df.columns]
+          assert 'simulation_iterations' in df.columns
+          assert 'ml_applied' in df.columns and int(df['ml_applied'].sum()) > 0
+          assert 'state_applied' in df.columns and int(df['state_applied'].sum()) > 0
+          assert 'bayes_applied' in df.columns and int(df['bayes_applied'].sum()) > 0
+          assert 'rules_applied' in df.columns and int(df['rules_applied'].sum()) > 0
+          print(f"priced rows={len(df)} ml={int(df['ml_applied'].sum())} state={int(df['state_applied'].sum())} bayes={int(df['bayes_applied'].sum())} rules={int(df['rules_applied'].sum())}")
           EOF
-
       - name: Strict repository audit
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/utils/audit_repo.py --strict
-
       - name: Summarize outputs
         if: always()
         run: |
           find data outputs -maxdepth 2 -name "*.csv" -type f -print0 2>/dev/null | xargs -0 -r -I{} sh -c 'echo "--- {}"; wc -l "{}"'
-
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4

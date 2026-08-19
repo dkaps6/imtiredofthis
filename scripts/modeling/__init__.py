@@ -14,6 +14,7 @@ from .contracts import (
     TeamContext,
 )
 from .ml_v2 import apply_ml_to_metrics, build_and_train
+from .state_v2 import apply_state_to_metrics, build_state_predictions, train_state_model
 
 __all__ = [
     "ComponentPrediction",
@@ -25,4 +26,7 @@ __all__ = [
     "build_bayesian_baseline",
     "apply_ml_to_metrics",
     "build_and_train",
+    "apply_state_to_metrics",
+    "build_state_predictions",
+    "train_state_model",
 ]
