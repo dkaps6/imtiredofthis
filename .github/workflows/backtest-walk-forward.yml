@@ -36,11 +36,11 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/backtest/audit_participation_source.py --seasons 2024,2025 --summary data/backtests/participation_source_audit.csv --by-week data/backtests/participation_field_coverage_by_week.csv
-      - name: Recover historical defensive box context
+      - name: Recover historical participation defensive context
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/backtest/enrich_historical_defense.py --team-weekly data/backtests/team_weekly_history.csv --seasons 2024,2025 --audit data/backtests/historical_defense_enrichment_audit.csv
+          python scripts/backtest/enrich_historical_defense.py --team-weekly data/backtests/team_weekly_history.csv --seasons 2024,2025 --audit data/backtests/historical_defense_enrichment_audit.csv --observations data/backtests/historical_defense_observations.csv
       - name: Validate historical inputs
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -91,6 +91,12 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import pandas as pd
+          d = Path('data/backtests/historical_defense_observations.csv')
+          if d.exists() and d.stat().st_size:
+              dx = pd.read_csv(d)
+              print('defense observation rows=', len(dx))
+              for c in ['light_box_rate','heavy_box_rate','coverage_man_rate','coverage_zone_rate']:
+                  print(c, int(pd.to_numeric(dx.get(c), errors='coerce').notna().sum()), '/', len(dx))
           i = Path('data/backtests/injuries_history.csv')
           print('injury rows=', len(pd.read_csv(i)) if i.exists() and i.stat().st_size else 0)
           w = Path('data/backtests/weather_history.csv')
@@ -118,6 +124,7 @@ jobs:
             data/backtests/participation_source_audit.csv
             data/backtests/participation_field_coverage_by_week.csv
             data/backtests/historical_defense_enrichment_audit.csv
+            data/backtests/historical_defense_observations.csv
             data/backtests/injuries_history.csv
             data/backtests/weather_history.csv
             data/backtests/player_game_logs_history.csv
