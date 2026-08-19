@@ -1,6 +1,7 @@
 """Build canonical historical player-game logs for walk-forward backtests.
 
-This intentionally reuses PlayerForm v2's nflverse normalization, but attaches
+This intentionally reuses PlayerForm v2's normalization, but loads historical
+player stats directly through nflreadpy's current weekly API and attaches
 opponents from the historical schedule artifact rather than today's production
 team_week_map.csv. The output contains regular-season completed-game
 observations only; the walk-forward context layer is responsible for enforcing
@@ -15,9 +16,25 @@ from typing import Iterable
 import pandas as pd
 
 from scripts._opponent_map import canon_team
-from scripts.player_form_v2 import _load_weekly, _normalize_weekly
+from scripts.player_form_v2 import _normalize_weekly, _to_pandas
 
 REGULAR_SEASON_MAX_WEEK = 18
+
+
+def _load_historical_weekly(season: int) -> pd.DataFrame:
+    """Load weekly player stats with the nflreadpy API used by pinned v0.1.5.
+
+    nflreadpy.load_player_stats uses ``summary_level='week'``. The old
+    ``stat_type='weekly'`` keyword belongs to a different API shape and causes
+    the historical run to fail before predictions begin.
+    """
+    import nflreadpy as nfl
+
+    raw = nfl.load_player_stats(seasons=[int(season)], summary_level="week")
+    out = _to_pandas(raw)
+    if out.empty:
+        raise RuntimeError(f"nflreadpy returned zero weekly player rows for {season}")
+    return out
 
 
 def build_historical_player_logs(
@@ -41,7 +58,7 @@ def build_historical_player_logs(
 
     frames: list[pd.DataFrame] = []
     for season in sorted(set(int(s) for s in seasons)):
-        normalized = _normalize_weekly(_load_weekly(season), season)
+        normalized = _normalize_weekly(_load_historical_weekly(season), season)
         # nflverse weekly player stats include postseason weeks (19+). This
         # backtest is explicitly regular season Weeks 1-18, and schedule_history
         # is intentionally REG-only, so postseason observations must be excluded
