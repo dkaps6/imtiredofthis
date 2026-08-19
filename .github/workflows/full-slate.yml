@@ -206,6 +206,22 @@ jobs:
           print("Bayesian evidence states:", df["bayes_evidence_state"].value_counts().to_dict())
           EOF
 
+      - name: Train and validate supervised ML v2
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_ml_bridge.py
+          test -s data/model_ml_diagnostics.csv
+          test -s data/model_ml_v2.joblib
+          python - <<'EOF'
+          import pandas as pd
+          df = pd.read_csv("data/model_ml_diagnostics.csv")
+          if df.empty: raise SystemExit("FATAL: ML v2 diagnostics empty")
+          ml_cols = [c for c in df.columns if c.startswith("ml_") and c in {"ml_pass_yards","ml_rush_yards","ml_rec_yards","ml_receptions","ml_rush_att","ml_rush_rec_yards"}]
+          projected = int(df[ml_cols].notna().any(axis=1).sum())
+          if projected == 0: raise SystemExit("FATAL: ML v2 produced zero active-player projections")
+          print(f"ML v2 active players={len(df)} projected={projected} targets={ml_cols}")
+          EOF
+
       - name: Validate empirical rule layer
         run: |
           export PYTHONPATH="${PWD}"
@@ -220,7 +236,7 @@ jobs:
           python scripts/validate_build_integrity.py
           python scripts/metrics_ready.py --season "${SEASON}" --date "${SLATE_DATE}"
 
-      - name: Price with Bayesian + rule-adjusted joint Monte Carlo simulation
+      - name: Price with ML trace + Bayesian + rule-adjusted joint Monte Carlo simulation
         if: ${{ github.event.inputs.fetch_live_odds == 'true' }}
         run: |
           export PYTHONPATH="${PWD}"
@@ -234,9 +250,10 @@ jobs:
           missing = [x for x in c.required_columns if x not in df.columns]
           assert not missing, missing
           assert "simulation_iterations" in df.columns
+          assert "ml_applied" in df.columns and int(df["ml_applied"].sum()) > 0
           assert "bayes_applied" in df.columns and int(df["bayes_applied"].sum()) > 0
           assert "rules_applied" in df.columns and int(df["rules_applied"].sum()) > 0
-          print(f"priced rows={len(df)} simulations={df['simulation_iterations'].iloc[0]} bayesian={int(df['bayes_applied'].sum())} rule_adjusted={int(df['rules_applied'].sum())}")
+          print(f"priced rows={len(df)} simulations={df['simulation_iterations'].iloc[0]} ml={int(df['ml_applied'].sum())} bayesian={int(df['bayes_applied'].sum())} rule_adjusted={int(df['rules_applied'].sum())}")
           EOF
 
       - name: Strict repository audit
