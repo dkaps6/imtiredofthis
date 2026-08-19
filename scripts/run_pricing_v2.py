@@ -96,22 +96,21 @@ def price(season: int) -> pd.DataFrame:
             missed.append((row.get("player"), raw_market)); continue
 
         mc_proj = float(np.mean(outcomes))
-        component_row = pd.DataFrame([{
-            "market": market,
-            "mc_proj": mc_proj,
-            "ml_proj": row.get("ml_proj"),
-            "state_proj": row.get("state_proj"),
-        }])
+        component_row = pd.DataFrame([{"market": market, "mc_proj": mc_proj, "ml_proj": row.get("ml_proj"), "state_proj": row.get("state_proj")}])
         ens = apply_ensemble(component_row, weights=weights).iloc[0]
         ensemble_proj = float(ens["ensemble_proj"])
-        # Keep Monte Carlo's distributional shape/variance but align its mean to
-        # the evidence-weighted projection. With no calibrated weights delta=0.
-        adjusted_outcomes = np.asarray(outcomes, dtype=float) + (ensemble_proj - mc_proj)
-        adjusted_outcomes = np.clip(adjusted_outcomes, 0.0, None)
+
+        # Preserve Monte Carlo's non-negative distribution shape while aligning
+        # its mean exactly to the calibrated ensemble projection. MC-only fallback
+        # has scale 1.0. If MC mean is zero, retain the original distribution.
+        base_outcomes = np.asarray(outcomes, dtype=float)
+        if np.isfinite(mc_proj) and mc_proj > 0 and np.isfinite(ensemble_proj):
+            adjusted_outcomes = base_outcomes * max(0.0, ensemble_proj / mc_proj)
+        else:
+            adjusted_outcomes = base_outcomes
 
         if market == "anytime_td":
             line = 0.5
-            # ATD is not currently an ML/state target, so ensemble defaults to MC.
             p_over = float(np.mean(adjusted_outcomes >= 1.0))
         else:
             try:
