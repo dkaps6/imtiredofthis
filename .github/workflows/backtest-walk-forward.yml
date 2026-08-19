@@ -36,6 +36,11 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/backtest/audit_participation_source.py --seasons 2024,2025 --summary data/backtests/participation_source_audit.csv --by-week data/backtests/participation_field_coverage_by_week.csv
+      - name: Audit historical WR-CB assignment source
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/audit_wr_cb_source.py --seasons 2024,2025 --summary data/backtests/wr_cb_source_audit.csv --inventory data/backtests/wr_cb_candidate_columns.csv --by-week data/backtests/wr_cb_source_coverage_by_week.csv
       - name: Recover historical participation defensive context
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -86,6 +91,8 @@ jobs:
           cat data/backtests/historical_input_validation.csv 2>/dev/null || true
           echo "Historical participation source audit:"
           cat data/backtests/participation_source_audit.csv 2>/dev/null || true
+          echo "Historical WR-CB source audit:"
+          cat data/backtests/wr_cb_source_audit.csv 2>/dev/null || true
           echo "Historical defensive enrichment audit:"
           cat data/backtests/historical_defense_enrichment_audit.csv 2>/dev/null || true
           python - <<'PY'
@@ -123,6 +130,9 @@ jobs:
             data/backtests/historical_input_validation.csv
             data/backtests/participation_source_audit.csv
             data/backtests/participation_field_coverage_by_week.csv
+            data/backtests/wr_cb_source_audit.csv
+            data/backtests/wr_cb_candidate_columns.csv
+            data/backtests/wr_cb_source_coverage_by_week.csv
             data/backtests/historical_defense_enrichment_audit.csv
             data/backtests/historical_defense_observations.csv
             data/backtests/injuries_history.csv
