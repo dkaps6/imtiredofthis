@@ -84,6 +84,15 @@ jobs:
             --predictions data/backtests/component_predictions.csv \
             --out-dir data/backtests/evaluation
 
+      - name: Audit historical feature coverage and MC passing inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests/diagnostics
+          python scripts/backtest/feature_coverage_audit.py \
+            --predictions data/backtests/component_predictions.csv \
+            --out-dir data/backtests/diagnostics
+
       - name: Show prediction inventory
         if: always()
         run: |
@@ -110,6 +119,14 @@ jobs:
               s = pd.read_csv(e)
               cols = ['market','model','n','coverage','mae','median_ae','rmse','bias','correlation','r2','market_winner']
               print(s[cols].to_string(index=False))
+          f = Path('data/backtests/diagnostics/historical_feature_coverage.csv')
+          if f.exists():
+              print('\nHistorical feature coverage:')
+              print(pd.read_csv(f).to_string(index=False))
+          q = Path('data/backtests/diagnostics/mc_passing_trace_summary.csv')
+          if q.exists():
+              print('\nMC passing trace summary:')
+              print(pd.read_csv(q).to_string(index=False))
           PY
 
       - name: Upload walk-forward artifacts
@@ -122,5 +139,6 @@ jobs:
             data/backtests/player_game_logs_history.csv
             data/backtests/component_predictions.csv
             data/backtests/evaluation/*.csv
+            data/backtests/diagnostics/*.csv
           if-no-files-found: warn
           retention-days: 14
