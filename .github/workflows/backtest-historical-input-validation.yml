@@ -1,0 +1,68 @@
+name: Backtest Historical Input Validation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/backtest/**"
+      - "tests/test_validate_historical_inputs.py"
+      - ".github/workflows/backtest-historical-input-validation.yml"
+
+jobs:
+  build-and-validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml
+
+      - name: Build 2024-2025 historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2025 \
+            --prior-season 2024 \
+            --weeks 1-18 \
+            --out-dir data/backtests
+
+      - name: Validate all historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/validate_historical_inputs.py \
+            --season 2025 \
+            --prior-season 2024 \
+            --weeks 1-18 \
+            --data-dir data/backtests \
+            --report data/backtests/historical_input_validation.csv
+
+      - name: Show generated inventory
+        if: always()
+        run: |
+          echo "Pregame universe files:"
+          find data/backtests/pregame_universe -maxdepth 1 -type f -name '2025_week_*.csv' -print 2>/dev/null | sort || true
+          echo "Validation report:"
+          cat data/backtests/historical_input_validation.csv 2>/dev/null || true
+
+      - name: Upload historical validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backtest-historical-input-validation
+          path: |
+            data/backtests/schedule_history.csv
+            data/backtests/team_weekly_history.csv
+            data/backtests/pregame_universe/2025_week_*.csv
+            data/backtests/historical_input_validation.csv
+          if-no-files-found: warn
+          retention-days: 7
