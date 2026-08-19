@@ -75,6 +75,15 @@ jobs:
             --out data/backtests/component_predictions.csv \
             --iterations "${{ inputs.iterations || '2000' }}"
 
+      - name: Evaluate OOS component performance
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests/evaluation
+          python scripts/backtest/evaluate_components.py \
+            --predictions data/backtests/component_predictions.csv \
+            --out-dir data/backtests/evaluation
+
       - name: Show prediction inventory
         if: always()
         run: |
@@ -95,6 +104,12 @@ jobs:
                   print('\ncoverage:')
                   for c in ['mc_proj','ml_proj','state_proj']:
                       print(c, int(x[c].notna().sum()), '/', len(x))
+          e = Path('data/backtests/evaluation/evaluation_summary.csv')
+          if e.exists():
+              print('\nOOS evaluation summary:')
+              s = pd.read_csv(e)
+              cols = ['market','model','n','coverage','mae','median_ae','rmse','bias','correlation','r2','market_winner']
+              print(s[cols].to_string(index=False))
           PY
 
       - name: Upload walk-forward artifacts
@@ -106,5 +121,6 @@ jobs:
             data/backtests/historical_input_validation.csv
             data/backtests/player_game_logs_history.csv
             data/backtests/component_predictions.csv
+            data/backtests/evaluation/*.csv
           if-no-files-found: warn
           retention-days: 14
