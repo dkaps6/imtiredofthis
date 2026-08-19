@@ -35,7 +35,10 @@ def test_player_inputs_ignore_target_week_outcome():
     ])
     universe = pd.DataFrame([{"player": "Alpha WR", "team": "BUF", "opponent": "MIA", "position": "WR", "role": "LWR"}])
     hist, pf, con = build_historical_player_inputs(logs, universe, 2025, 8, 2024)
-    assert hist["week"].max() == 7
+    current_hist = hist.loc[pd.to_numeric(hist["season"], errors="coerce").eq(2025)]
+    assert not current_hist.empty
+    assert current_hist["week"].max() == 7
+    assert not ((hist["season"] == 2025) & (hist["week"] >= 8)).any()
     assert pf.iloc[0]["tgt_share"] == pytest.approx(.30)
     assert con.iloc[0]["tgt_share_prior"] == pytest.approx(.20)
     assert con.iloc[0]["tgt_share_current"] == pytest.approx(.30)
