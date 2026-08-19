@@ -3,6 +3,7 @@ import pandas as pd
 from scripts.backtest.historical_inputs import (
     build_pregame_universe_for_week,
     build_schedule_history,
+    build_team_weekly_from_pbp,
 )
 
 
@@ -58,3 +59,23 @@ def test_schedule_history_expands_games_to_team_rows(monkeypatch):
     assert set(out["team"]) == {"BUF", "MIA"}
     assert set(out["opponent"]) == {"BUF", "MIA"}
     assert not out.duplicated(["season", "week", "team"]).any()
+
+
+def test_team_weekly_tracks_official_attempts_per_dropback(monkeypatch):
+    # BUF has four dropbacks: three official attempts plus one sack. The
+    # conversion must therefore be 0.75 rather than treating all dropbacks as
+    # pass attempts. Add one rush play so the offensive-play denominator exists.
+    pbp = pd.DataFrame([
+        {"season_type": "REG", "week": 1, "posteam": "BUF", "defteam": "MIA", "qb_dropback": 1, "rush_attempt": 0, "pass_attempt": 1, "sack": 0, "qb_hit": 0, "success": 1, "epa": .2, "yards_gained": 8},
+        {"season_type": "REG", "week": 1, "posteam": "BUF", "defteam": "MIA", "qb_dropback": 1, "rush_attempt": 0, "pass_attempt": 1, "sack": 0, "qb_hit": 0, "success": 1, "epa": .1, "yards_gained": 5},
+        {"season_type": "REG", "week": 1, "posteam": "BUF", "defteam": "MIA", "qb_dropback": 1, "rush_attempt": 0, "pass_attempt": 1, "sack": 0, "qb_hit": 0, "success": 0, "epa": -.1, "yards_gained": 0},
+        {"season_type": "REG", "week": 1, "posteam": "BUF", "defteam": "MIA", "qb_dropback": 1, "rush_attempt": 0, "pass_attempt": 0, "sack": 1, "qb_hit": 1, "success": 0, "epa": -.5, "yards_gained": -7},
+        {"season_type": "REG", "week": 1, "posteam": "BUF", "defteam": "MIA", "qb_dropback": 0, "rush_attempt": 1, "pass_attempt": 0, "sack": 0, "qb_hit": 0, "success": 1, "epa": .1, "yards_gained": 4},
+        {"season_type": "REG", "week": 1, "posteam": "MIA", "defteam": "BUF", "qb_dropback": 1, "rush_attempt": 0, "pass_attempt": 1, "sack": 0, "qb_hit": 0, "success": 1, "epa": .2, "yards_gained": 6},
+        {"season_type": "REG", "week": 1, "posteam": "MIA", "defteam": "BUF", "qb_dropback": 0, "rush_attempt": 1, "pass_attempt": 0, "sack": 0, "qb_hit": 0, "success": 1, "epa": .1, "yards_gained": 3},
+    ])
+    monkeypatch.setattr("scripts.backtest.historical_inputs.get_pbp", lambda season, min_rows=1: pbp.copy())
+    out = build_team_weekly_from_pbp([2025])
+    buf = out.loc[out["team"].eq("BUF")].iloc[0]
+    assert buf["dropback_rate"] == 0.8
+    assert buf["pass_attempts_per_dropback"] == 0.75
