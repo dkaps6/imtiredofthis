@@ -2,7 +2,8 @@
 
 The runner expects one explicit pregame-universe CSV per week. Those snapshots
 must be created from historical roster/depth information, not target-week box
-scores. This keeps participation knowledge out of the feature set.
+scores. Optional historical enrichments are selected at exact target-week grain;
+stale prior-week reports are never substituted.
 """
 from __future__ import annotations
 
@@ -20,6 +21,31 @@ def _read(path: Path, label: str) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
+def _read_optional(path: Path | None) -> pd.DataFrame:
+    if path is None or not path.exists() or path.stat().st_size == 0:
+        return pd.DataFrame()
+    return pd.read_csv(path)
+
+
+def _exact_week(frame: pd.DataFrame, season: int, week: int) -> pd.DataFrame:
+    """Return only an explicitly dated target-week pregame snapshot.
+
+    We intentionally do not backfill prior weeks. After exact filtering, temporal
+    columns are removed before entering historical_context because these rows are
+    target-week pregame facts, not completed-game observations.
+    """
+    if frame is None or frame.empty:
+        return pd.DataFrame()
+    x = frame.copy()
+    x.columns = [str(c).strip().lower() for c in x.columns]
+    if not {"season", "week"}.issubset(x.columns):
+        raise RuntimeError("historical enrichment requires season/week")
+    s = pd.to_numeric(x["season"], errors="coerce")
+    w = pd.to_numeric(x["week"], errors="coerce")
+    x = x.loc[s.eq(int(season)) & w.eq(int(week))].copy()
+    return x.drop(columns=["season", "week"], errors="ignore")
+
+
 def run_walk_forward(
     *,
     player_logs_path: Path,
@@ -30,16 +56,19 @@ def run_walk_forward(
     prior_season: int,
     weeks: list[int],
     out_path: Path,
+    injuries_path: Path | None = None,
     iterations: int = 5000,
 ) -> pd.DataFrame:
     player_logs = _read(player_logs_path, "player logs")
     team_weekly = _read(team_weekly_path, "historical team-week features")
     schedule = _read(schedule_path, "historical schedule")
+    injuries_history = _read_optional(injuries_path)
     all_rows = []
     for week in weeks:
         universe_path = universe_dir / f"{season}_week_{week:02d}.csv"
         universe = _read(universe_path, f"pregame universe for {season} week {week}")
-        print(f"[backtest] predicting {season} W{week:02d} players={len(universe)}")
+        injuries = _exact_week(injuries_history, season, week)
+        print(f"[backtest] predicting {season} W{week:02d} players={len(universe)} injuries={len(injuries)}")
         pred = predict_week(
             player_logs=player_logs,
             team_weekly=team_weekly,
@@ -48,6 +77,7 @@ def run_walk_forward(
             season=season,
             week=week,
             prior_season=prior_season,
+            injuries=injuries,
             iterations=iterations,
             seed=42 + week,
         )
@@ -89,6 +119,7 @@ def main() -> int:
     p.add_argument("--team-weekly", type=Path, default=Path("data/backtests/team_weekly_history.csv"))
     p.add_argument("--schedule", type=Path, default=Path("data/backtests/schedule_history.csv"))
     p.add_argument("--universe-dir", type=Path, default=Path("data/backtests/pregame_universe"))
+    p.add_argument("--injuries", type=Path, default=Path("data/backtests/injuries_history.csv"))
     p.add_argument("--out", type=Path, default=Path("data/backtests/component_predictions.csv"))
     p.add_argument("--iterations", type=int, default=5000)
     args = p.parse_args()
@@ -101,6 +132,7 @@ def main() -> int:
         prior_season=args.prior_season,
         weeks=_parse_weeks(args.weeks),
         out_path=args.out,
+        injuries_path=args.injuries,
         iterations=args.iterations,
     )
     return 0
