@@ -57,18 +57,24 @@ def run_walk_forward(
     weeks: list[int],
     out_path: Path,
     injuries_path: Path | None = None,
+    weather_path: Path | None = None,
     iterations: int = 5000,
 ) -> pd.DataFrame:
     player_logs = _read(player_logs_path, "player logs")
     team_weekly = _read(team_weekly_path, "historical team-week features")
     schedule = _read(schedule_path, "historical schedule")
     injuries_history = _read_optional(injuries_path)
+    weather_history = _read_optional(weather_path)
     all_rows = []
     for week in weeks:
         universe_path = universe_dir / f"{season}_week_{week:02d}.csv"
         universe = _read(universe_path, f"pregame universe for {season} week {week}")
         injuries = _exact_week(injuries_history, season, week)
-        print(f"[backtest] predicting {season} W{week:02d} players={len(universe)} injuries={len(injuries)}")
+        weather = _exact_week(weather_history, season, week)
+        print(
+            f"[backtest] predicting {season} W{week:02d} players={len(universe)} "
+            f"injuries={len(injuries)} weather_games={len(weather)}"
+        )
         pred = predict_week(
             player_logs=player_logs,
             team_weekly=team_weekly,
@@ -78,6 +84,7 @@ def run_walk_forward(
             week=week,
             prior_season=prior_season,
             injuries=injuries,
+            weather=weather,
             iterations=iterations,
             seed=42 + week,
         )
@@ -120,6 +127,7 @@ def main() -> int:
     p.add_argument("--schedule", type=Path, default=Path("data/backtests/schedule_history.csv"))
     p.add_argument("--universe-dir", type=Path, default=Path("data/backtests/pregame_universe"))
     p.add_argument("--injuries", type=Path, default=Path("data/backtests/injuries_history.csv"))
+    p.add_argument("--weather", type=Path, default=Path("data/backtests/weather_history.csv"))
     p.add_argument("--out", type=Path, default=Path("data/backtests/component_predictions.csv"))
     p.add_argument("--iterations", type=int, default=5000)
     args = p.parse_args()
@@ -133,6 +141,7 @@ def main() -> int:
         weeks=_parse_weeks(args.weeks),
         out_path=args.out,
         injuries_path=args.injuries,
+        weather_path=args.weather,
         iterations=args.iterations,
     )
     return 0
