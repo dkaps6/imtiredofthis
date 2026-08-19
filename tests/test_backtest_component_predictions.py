@@ -11,18 +11,21 @@ from scripts.backtest.historical_context import HistoricalContextBundle
 
 def _bundle():
     pf = pd.DataFrame([
-        {"player": "QB One", "player_clean_key": "qbone", "team": "BUF", "opponent": "MIA", "season": 2025, "week": 8, "position": "QB", "role": "QB1"},
+        {"player": "QB One", "player_clean_key": "qbone", "team": "BUF", "opponent": "MIA", "season": 2025, "week": 8, "position": "QB", "role": "QB1", "qb_projection_eligible": 1, "qb_pass_att_share": 0.96},
+        {"player": "QB Two", "player_clean_key": "qbtwo", "team": "BUF", "opponent": "MIA", "season": 2025, "week": 8, "position": "QB", "role": "QB2", "qb_projection_eligible": 0, "qb_pass_att_share": 0.04},
         {"player": "WR One", "player_clean_key": "wrone", "team": "BUF", "opponent": "MIA", "season": 2025, "week": 8, "position": "WR", "role": "LWR"},
     ])
     return HistoricalContextBundle(2025, 8, 2024, pd.DataFrame(), pd.DataFrame(), pf, pf.copy(), pd.DataFrame(), {}, [])
 
 
-def test_market_frame_uses_pregame_universe_not_results():
+def test_market_frame_uses_pregame_universe_and_qb_eligibility_not_results():
     out = build_market_frame(_bundle())
-    qb = set(out.loc[out["player"].eq("QB One"), "market"])
+    qb1 = set(out.loc[out["player"].eq("QB One"), "market"])
+    qb2 = set(out.loc[out["player"].eq("QB Two"), "market"])
     wr = set(out.loc[out["player"].eq("WR One"), "market"])
-    assert "pass_yards" in qb
-    assert "rec_yards" not in qb
+    assert "pass_yards" in qb1
+    assert "pass_yards" not in qb2
+    assert "rec_yards" not in qb1
     assert {"rec_yards", "receptions", "rush_yards", "rush_att", "rush_rec_yards"}.issubset(wr)
     assert out["event_id"].nunique() == 1
 
