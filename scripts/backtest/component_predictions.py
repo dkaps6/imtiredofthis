@@ -2,7 +2,8 @@
 
 This module uses the canonical production components at an explicit historical
 cutoff. Target-week outcomes are joined only after all component projections
-have been created.
+have been created. Diagnostic trace columns record which historical context was
+actually available and the inputs that produced Monte Carlo passing estimates.
 """
 from __future__ import annotations
 
@@ -32,6 +33,15 @@ TARGET_COLUMNS = {
     "rush_rec_yards": "rush_rec_yards",
 }
 
+OPPORTUNITY_COLUMNS = {
+    "pass_yards": "pass_att",
+    "rush_yards": "rushes",
+    "rec_yards": "targets",
+    "receptions": "targets",
+    "rush_att": "rushes",
+    "rush_rec_yards": "rush_rec_opportunities",
+}
+
 
 def _key(value) -> str:
     try:
@@ -47,6 +57,50 @@ def _game_key(team: str, opponent: str) -> str:
     return "|".join(sorted([str(team or "").upper().strip(), str(opponent or "").upper().strip()]))
 
 
+def _finite(value) -> bool:
+    try:
+        return bool(np.isfinite(float(value)))
+    except Exception:
+        return False
+
+
+def _context_trace_frame(bundle: HistoricalContextBundle) -> pd.DataFrame:
+    """One diagnostic row per pregame player describing context availability."""
+    rows = []
+    for p in bundle.players:
+        f = p.features or {}
+        offense = p.offense
+        defense = p.defense
+        matchup = int(f.get("matchup_available") or 0) == 1 and bool(str(f.get("primary_cb") or "").strip())
+        coverage = (
+            defense is not None
+            and _finite(defense.coverage_man_rate)
+            and _finite(defense.coverage_zone_rate)
+        )
+        rows.append({
+            "team": p.team,
+            "player_clean_key": _key(p.player),
+            "ctx_tgt_share_available": int(_finite(f.get("tgt_share"))),
+            "ctx_rush_share_available": int(_finite(f.get("rush_share"))),
+            "ctx_ypa_available": int(_finite(f.get("ypa"))),
+            "ctx_success_rate_available": int(offense is not None and defense is not None and _finite(offense.success_rate_off) and _finite(defense.success_rate_def)),
+            "ctx_pace_available": int(offense is not None and (_finite(offense.neutral_pace) or _finite(offense.neutral_pace_last5) or _finite(offense.sec_per_play_last5))),
+            "ctx_plays_available": int(offense is not None and _finite(offense.plays_est)),
+            "ctx_proe_available": int(offense is not None and _finite(offense.proe)),
+            "ctx_pressure_available": int(offense is not None and defense is not None and _finite(offense.pressure_rate_allowed) and _finite(defense.pressure_rate_generated)),
+            "ctx_explosive_available": int(defense is not None and _finite(defense.explosive_play_rate_allowed)),
+            "ctx_def_epa_available": int(defense is not None and (_finite(defense.def_pass_epa) or _finite(defense.def_rush_epa))),
+            "ctx_coverage_scheme_available": int(coverage),
+            "ctx_box_rates_available": int(defense is not None and _finite(defense.light_box_rate) and _finite(defense.heavy_box_rate)),
+            "ctx_wr_cb_matchup_available": int(matchup),
+            "ctx_injury_available": int(f.get("injury_report_available") or 0),
+            "ctx_weather_available": int(f.get("weather_forecast_available") or 0),
+            "mc_off_pressure_allowed": getattr(offense, "pressure_rate_allowed", None) if offense is not None else np.nan,
+            "mc_def_pressure_generated": getattr(defense, "pressure_rate_generated", None) if defense is not None else np.nan,
+        })
+    return pd.DataFrame(rows).drop_duplicates(["team", "player_clean_key"])
+
+
 def build_market_frame(bundle: HistoricalContextBundle) -> pd.DataFrame:
     """Expand the explicit pregame universe into supported model markets."""
     base = bundle.player_form.copy()
@@ -54,9 +108,7 @@ def build_market_frame(bundle: HistoricalContextBundle) -> pd.DataFrame:
     if base.empty:
         raise RuntimeError("historical bundle contains no pregame players")
     base["player_clean_key"] = base.get("player_clean_key", base["player"]).map(_key)
-    base["event_id"] = [
-        _game_key(t, o) for t, o in zip(base["team"], base["opponent"])
-    ]
+    base["event_id"] = [_game_key(t, o) for t, o in zip(base["team"], base["opponent"])]
     rows = []
     for _, player in base.iterrows():
         pos = str(player.get("position", "")).upper().strip()
@@ -94,25 +146,31 @@ def _attach_component_projection(frame: pd.DataFrame, predictions: pd.DataFrame,
     return out
 
 
-def build_mc_predictions(
-    bundle: HistoricalContextBundle,
-    *,
-    iterations: int = 5000,
-    seed: int = 42,
-) -> pd.DataFrame:
-    """Run the canonical Bayes -> rules -> joint-Monte-Carlo path at a cutoff."""
+def build_mc_predictions(bundle: HistoricalContextBundle, *, iterations: int = 5000, seed: int = 42) -> pd.DataFrame:
+    """Run canonical Bayes -> rules -> MC and preserve diagnostic inputs."""
     metrics = build_market_frame(bundle)
     bayes = build_bayesian_baseline(bundle.player_consensus)
     metrics = apply_bayesian_to_metrics(metrics, bayes)
 
-    # simulation_rules normally loads today's production context from disk.
-    # During a historical run we inject the already-validated cutoff bundle so
-    # the exact same production rule adapter is used without touching live files.
     with patch.object(simulation_rules, "load_model_contexts", return_value=(bundle.teams, bundle.players)):
         metrics = simulation_rules.apply_rules_to_metrics(metrics)
 
     if int(pd.to_numeric(metrics["rules_applied"], errors="coerce").fillna(0).sum()) == 0:
         raise RuntimeError("historical rules matched zero rows")
+
+    trace = _context_trace_frame(bundle)
+    metrics = metrics.merge(trace, on=["team", "player_clean_key"], how="left", validate="many_to_one")
+    metrics["mc_projected_plays"] = pd.to_numeric(metrics.get("rules_plays_est"), errors="coerce")
+    metrics["mc_pass_rate"] = pd.to_numeric(metrics.get("rules_pass_rate"), errors="coerce")
+    metrics["mc_expected_pass_attempts"] = metrics["mc_projected_plays"] * metrics["mc_pass_rate"]
+    metrics["mc_base_ypa"] = pd.to_numeric(metrics.get("ypa"), errors="coerce")
+    metrics["mc_bayes_ypa"] = pd.to_numeric(metrics.get("bayes_ypa"), errors="coerce")
+    metrics["mc_rules_ypa"] = pd.to_numeric(metrics.get("rules_ypa"), errors="coerce")
+    metrics["mc_pass_eff_mult"] = pd.to_numeric(metrics.get("rules_pass_eff_mult"), errors="coerce")
+    metrics["mc_pressure_mismatch"] = (
+        pd.to_numeric(metrics.get("mc_def_pressure_generated"), errors="coerce")
+        - pd.to_numeric(metrics.get("mc_off_pressure_allowed"), errors="coerce")
+    )
 
     sims = simulate(metrics, iterations=int(iterations), seed=int(seed))
     rows = []
@@ -124,7 +182,7 @@ def build_mc_predictions(
 
 
 def build_actual_rows(player_logs: pd.DataFrame, season: int, week: int) -> pd.DataFrame:
-    """Create target-week outcomes. This function is called only after prediction."""
+    """Create target-week outcomes after prediction, with diagnostic opportunities."""
     x = player_logs.copy()
     x.columns = [str(c).strip().lower() for c in x.columns]
     required = {"season", "week", "player", "team"}
@@ -135,38 +193,35 @@ def build_actual_rows(player_logs: pd.DataFrame, season: int, week: int) -> pd.D
     x["week"] = pd.to_numeric(x["week"], errors="coerce")
     x = x.loc[x["season"].eq(int(season)) & x["week"].eq(int(week))].copy()
     if x.empty:
-        return pd.DataFrame(columns=["team", "player_clean_key", "market", "actual"])
+        return pd.DataFrame(columns=["team", "player_clean_key", "market", "actual", "actual_opportunities"])
     x["player_clean_key"] = x.get("player_clean_key", x["player"]).map(_key)
     x["rush_rec_yards"] = pd.to_numeric(x.get("rush_yards"), errors="coerce").fillna(0.0) + pd.to_numeric(x.get("rec_yards"), errors="coerce").fillna(0.0)
+    x["rush_rec_opportunities"] = pd.to_numeric(x.get("rushes"), errors="coerce").fillna(0.0) + pd.to_numeric(x.get("targets"), errors="coerce").fillna(0.0)
     rows = []
     for _, r in x.iterrows():
         for market, col in TARGET_COLUMNS.items():
             if col not in x.columns:
                 continue
             actual = pd.to_numeric(pd.Series([r.get(col)]), errors="coerce").iloc[0]
+            opp_col = OPPORTUNITY_COLUMNS.get(market)
+            opportunities = pd.to_numeric(pd.Series([r.get(opp_col)]), errors="coerce").iloc[0] if opp_col else np.nan
             if pd.notna(actual):
                 rows.append({
-                    "team": r["team"], "player_clean_key": r["player_clean_key"],
-                    "market": market, "actual": float(actual),
+                    "team": r["team"],
+                    "player_clean_key": r["player_clean_key"],
+                    "market": market,
+                    "actual": float(actual),
+                    "actual_opportunities": float(opportunities) if pd.notna(opportunities) else np.nan,
                 })
     return pd.DataFrame(rows).drop_duplicates(["team", "player_clean_key", "market"])
 
 
 def predict_week(
-    *,
-    player_logs: pd.DataFrame,
-    team_weekly: pd.DataFrame,
-    pregame_universe: pd.DataFrame,
-    schedule: pd.DataFrame,
-    season: int,
-    week: int,
-    prior_season: int,
-    team_coverage: pd.DataFrame | None = None,
-    exposure: pd.DataFrame | None = None,
-    injuries: pd.DataFrame | None = None,
-    weather: pd.DataFrame | None = None,
-    iterations: int = 5000,
-    seed: int = 42,
+    *, player_logs: pd.DataFrame, team_weekly: pd.DataFrame, pregame_universe: pd.DataFrame,
+    schedule: pd.DataFrame, season: int, week: int, prior_season: int,
+    team_coverage: pd.DataFrame | None = None, exposure: pd.DataFrame | None = None,
+    injuries: pd.DataFrame | None = None, weather: pd.DataFrame | None = None,
+    iterations: int = 5000, seed: int = 42,
 ) -> pd.DataFrame:
     """Generate one leakage-safe OOS component table for a historical week."""
     bundle = build_historical_context_bundle(
@@ -178,14 +233,14 @@ def predict_week(
         team_coverage=team_coverage, exposure=exposure, injuries=injuries, weather=weather,
     )
 
-    # All three components are created before target-week outcomes are touched.
     mc = build_mc_predictions(bundle, iterations=iterations, seed=seed)
     _, ml_pred = build_ml(player_logs, bundle.player_consensus, int(season), int(week))
     _, state_pred = build_state_predictions(player_logs, bundle.player_consensus, int(season), int(week))
 
-    out = mc[[
-        "player", "player_clean_key", "team", "opponent", "season", "week", "position", "role", "event_id", "market", "mc_proj"
-    ]].copy()
+    diagnostic_cols = [c for c in mc.columns if c.startswith("ctx_") or c.startswith("mc_") or c.startswith("rules_")]
+    base_cols = ["player", "player_clean_key", "team", "opponent", "season", "week", "position", "role", "event_id", "market", "mc_proj"]
+    keep = list(dict.fromkeys([*base_cols, *diagnostic_cols]))
+    out = mc[keep].copy()
     out = _attach_component_projection(out, ml_pred, "ml")
     out = _attach_component_projection(out, state_pred, "state")
     out["prediction_cutoff"] = f"{int(season)}-W{int(week):02d} pregame"
@@ -193,7 +248,6 @@ def predict_week(
 
     actual = build_actual_rows(player_logs, int(season), int(week))
     out = out.merge(actual, on=["team", "player_clean_key", "market"], how="left", validate="one_to_one")
-    # Ensemble calibration requires an observed result, but missing state is valid.
     out = out.loc[pd.to_numeric(out["actual"], errors="coerce").notna()].reset_index(drop=True)
     return out
 
