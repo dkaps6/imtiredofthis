@@ -62,3 +62,47 @@ def test_historical_player_logs_fail_closed_without_schedule_match(monkeypatch):
         assert "could not resolve opponent" in str(exc)
     else:
         raise AssertionError("expected missing historical schedule match to fail closed")
+
+
+def test_historical_player_logs_exclude_postseason_before_schedule_join(monkeypatch):
+    raw = pd.DataFrame([
+        {
+            "season": 2024,
+            "week": 18,
+            "recent_team": "LAR",
+            "position": "QB",
+            "player_display_name": "Regular QB",
+            "player_id": "p1",
+            "attempts": 30,
+            "passing_yards": 250,
+            "rushing_attempts": 1,
+            "rushing_yards": 3,
+            "targets": 0,
+            "receptions": 0,
+            "receiving_yards": 0,
+        },
+        {
+            "season": 2024,
+            "week": 19,
+            "recent_team": "LAR",
+            "position": "QB",
+            "player_display_name": "Regular QB",
+            "player_id": "p1",
+            "attempts": 28,
+            "passing_yards": 240,
+            "rushing_attempts": 2,
+            "rushing_yards": 8,
+            "targets": 0,
+            "receptions": 0,
+            "receiving_yards": 0,
+        },
+    ])
+    schedule = pd.DataFrame([
+        {"season": 2024, "week": 18, "team": "LAR", "opponent": "SEA", "game_id": "g18"},
+        {"season": 2024, "week": 18, "team": "SEA", "opponent": "LAR", "game_id": "g18"},
+    ])
+    monkeypatch.setattr("scripts.backtest.historical_player_logs._load_weekly", lambda season: raw.copy())
+    out = build_historical_player_logs(seasons=[2024], schedule_history=schedule)
+    assert len(out) == 1
+    assert int(out.iloc[0]["week"]) == 18
+    assert out.iloc[0]["opponent"] == "SEA"
