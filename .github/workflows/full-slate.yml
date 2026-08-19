@@ -168,6 +168,19 @@ jobs:
           export PYTHONPATH="${PWD}"
           python scripts/run_model_rules_bridge.py
           test -s data/model_rule_diagnostics.csv
+      - name: Validate evidence-weighted ensemble framework
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_ensemble_bridge.py
+          test -s data/model_ensemble_diagnostics.csv
+          python - <<'EOF'
+          import pandas as pd
+          df=pd.read_csv('data/model_ensemble_diagnostics.csv')
+          if df.empty: raise SystemExit('FATAL: ensemble diagnostics empty')
+          sums=(df['mc_weight']+df['ml_weight']+df['state_weight']).round(9)
+          if not sums.eq(1.0).all(): raise SystemExit('FATAL: ensemble weights do not sum to one')
+          print('ensemble status:', df['ensemble_status'].value_counts().to_dict())
+          EOF
       - name: Assemble deterministic metrics
         if: ${{ github.event.inputs.fetch_live_odds == 'true' }}
         run: |
@@ -175,7 +188,7 @@ jobs:
           python scripts/run_metrics_context.py --season "${SEASON}" --mode full --date "${SLATE_DATE}"
           python scripts/validate_build_integrity.py
           python scripts/metrics_ready.py --season "${SEASON}" --date "${SLATE_DATE}"
-      - name: Price with ML + state trace, Bayesian, rules and joint Monte Carlo
+      - name: Price with evidence-weighted ensemble over canonical components
         if: ${{ github.event.inputs.fetch_live_odds == 'true' }}
         run: |
           export PYTHONPATH="${PWD}"
@@ -191,7 +204,8 @@ jobs:
           assert 'state_applied' in df.columns and int(df['state_applied'].sum()) > 0
           assert 'bayes_applied' in df.columns and int(df['bayes_applied'].sum()) > 0
           assert 'rules_applied' in df.columns and int(df['rules_applied'].sum()) > 0
-          print(f"priced rows={len(df)} ml={int(df['ml_applied'].sum())} state={int(df['state_applied'].sum())} bayes={int(df['bayes_applied'].sum())} rules={int(df['rules_applied'].sum())}")
+          assert 'ensemble_status' in df.columns
+          print(f"priced rows={len(df)} ensemble={df['ensemble_status'].value_counts().to_dict()} ml={int(df['ml_applied'].sum())} state={int(df['state_applied'].sum())} bayes={int(df['bayes_applied'].sum())} rules={int(df['rules_applied'].sum())}")
           EOF
       - name: Strict repository audit
         run: |
