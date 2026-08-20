@@ -19,11 +19,15 @@ on:
         description: "MC iterations per game-script decomposition variant/week"
         required: false
         default: "750"
+      pass_recal_iterations:
+        description: "MC iterations per pass-tendency candidate/week"
+        required: false
+        default: "750"
 
 jobs:
   walk-forward:
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -104,6 +108,12 @@ jobs:
         run: |
           rm -rf data/backtests/script_decomposition
           python scripts/backtest/run_script_decomposition.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --iterations "${{ inputs.script_iterations || '750' }}" --player-logs data/backtests/player_game_logs_history.csv --team-weekly data/backtests/team_weekly_history.csv --schedule data/backtests/schedule_history.csv --universe-dir data/backtests/pregame_universe --injuries data/backtests/injuries_history.csv --weather data/backtests/weather_history.csv --out-dir data/backtests/script_decomposition
+      - name: Run pass-tendency architecture recalibration
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests/pass_tendency_recalibration
+          python scripts/backtest/run_pass_tendency_recalibration.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --iterations "${{ inputs.pass_recal_iterations || '750' }}" --player-logs data/backtests/player_game_logs_history.csv --team-weekly data/backtests/team_weekly_history.csv --schedule data/backtests/schedule_history.csv --universe-dir data/backtests/pregame_universe --injuries data/backtests/injuries_history.csv --weather data/backtests/weather_history.csv --out-dir data/backtests/pass_tendency_recalibration
       - name: Show prediction inventory
         if: always()
         run: |
@@ -119,30 +129,19 @@ jobs:
           cat data/backtests/ablation/feature_ablation_summary.csv 2>/dev/null || true
           echo "Game-script decomposition summary:"
           cat data/backtests/script_decomposition/script_decomposition_summary.csv 2>/dev/null || true
+          echo "Pass-tendency recalibration summary:"
+          cat data/backtests/pass_tendency_recalibration/pass_tendency_summary.csv 2>/dev/null || true
           python - <<'PY'
           from pathlib import Path
           import pandas as pd
-          d = Path('data/backtests/historical_defense_observations.csv')
-          if d.exists() and d.stat().st_size:
-              dx = pd.read_csv(d)
-              print('defense observation rows=', len(dx))
-              for c in ['light_box_rate','heavy_box_rate','coverage_man_rate','coverage_zone_rate']:
-                  print(c, int(pd.to_numeric(dx.get(c), errors='coerce').notna().sum()), '/', len(dx))
-          i = Path('data/backtests/injuries_history.csv')
-          print('injury rows=', len(pd.read_csv(i)) if i.exists() and i.stat().st_size else 0)
-          w = Path('data/backtests/weather_history.csv')
-          if w.exists() and w.stat().st_size:
-              wx = pd.read_csv(w)
-              print('weather rows=', len(wx), 'forecast_ok=', int(pd.to_numeric(wx['forecast_ok'], errors='coerce').fillna(0).sum()))
-          q = Path('data/backtests/component_predictions.csv')
+          q=Path('data/backtests/component_predictions.csv')
           if q.exists():
-              x = pd.read_csv(q); print('prediction rows=', len(x))
-              for c in ['mc_proj','ml_proj','state_proj']:
-                  print(c, int(x[c].notna().sum()), '/', len(x))
-          e = Path('data/backtests/evaluation/evaluation_summary.csv')
+              x=pd.read_csv(q); print('prediction rows=',len(x))
+              for c in ['mc_proj','ml_proj','state_proj']: print(c,int(x[c].notna().sum()),'/',len(x))
+          e=Path('data/backtests/evaluation/evaluation_summary.csv')
           if e.exists():
-              s = pd.read_csv(e); cols = ['market','model','n','coverage','mae','median_ae','rmse','bias','correlation','r2','market_winner']; print(s[cols].to_string(index=False))
-          f = Path('data/backtests/diagnostics/historical_feature_coverage.csv')
+              s=pd.read_csv(e); cols=['market','model','n','coverage','mae','median_ae','rmse','bias','correlation','r2','market_winner']; print(s[cols].to_string(index=False))
+          f=Path('data/backtests/diagnostics/historical_feature_coverage.csv')
           if f.exists(): print(pd.read_csv(f).to_string(index=False))
           PY
       - name: Upload walk-forward artifacts
@@ -167,5 +166,6 @@ jobs:
             data/backtests/diagnostics/*.csv
             data/backtests/ablation/*.csv
             data/backtests/script_decomposition/*.csv
+            data/backtests/pass_tendency_recalibration/*.csv
           if-no-files-found: warn
           retention-days: 14
