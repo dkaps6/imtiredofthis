@@ -104,6 +104,12 @@ jobs:
         run: |
           rm -rf data/backtests/diagnostics
           python scripts/backtest/feature_coverage_audit.py --predictions data/backtests/component_predictions.csv --out-dir data/backtests/diagnostics
+      - name: Audit MC rushing opportunity allocation
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests/rushing_opportunity_diagnostics
+          python scripts/backtest/audit_rushing_opportunity.py --predictions data/backtests/component_predictions.csv --out-dir data/backtests/rushing_opportunity_diagnostics
       - name: Run historical feature ablation
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -137,40 +143,20 @@ jobs:
       - name: Show prediction inventory
         if: always()
         run: |
+          echo "Rushing opportunity diagnostics:"
+          cat data/backtests/rushing_opportunity_diagnostics/rushing_opportunity_summary.csv 2>/dev/null || true
           echo "Validation report:"
           cat data/backtests/historical_input_validation.csv 2>/dev/null || true
-          echo "Historical participation source audit:"
-          cat data/backtests/participation_source_audit.csv 2>/dev/null || true
-          echo "Historical WR-CB source audit:"
-          cat data/backtests/wr_cb_source_audit.csv 2>/dev/null || true
-          echo "Historical defensive enrichment audit:"
-          cat data/backtests/historical_defense_enrichment_audit.csv 2>/dev/null || true
           echo "Historical feature ablation summary:"
           cat data/backtests/ablation/feature_ablation_summary.csv 2>/dev/null || true
-          echo "Game-script decomposition summary:"
-          cat data/backtests/script_decomposition/script_decomposition_summary.csv 2>/dev/null || true
-          echo "Pass-tendency recalibration summary:"
-          cat data/backtests/pass_tendency_recalibration/pass_tendency_summary.csv 2>/dev/null || true
-          echo "Final pass-calibration summary:"
-          cat data/backtests/final_pass_calibration/final_pass_calibration_summary.csv 2>/dev/null || true
-          echo "Final pass-calibration recommendation:"
-          cat data/backtests/final_pass_calibration/final_pass_calibration_recommendation.csv 2>/dev/null || true
-          echo "Pressure-rule calibration summary:"
-          cat data/backtests/pressure_calibration/pressure_calibration_summary.csv 2>/dev/null || true
           echo "Pressure passing ranking:"
           cat data/backtests/pressure_calibration/pressure_calibration_passing_rank.csv 2>/dev/null || true
           python - <<'PY'
           from pathlib import Path
           import pandas as pd
-          q=Path('data/backtests/component_predictions.csv')
-          if q.exists():
-              x=pd.read_csv(q); print('prediction rows=',len(x))
-              for c in ['mc_proj','ml_proj','state_proj']: print(c,int(x[c].notna().sum()),'/',len(x))
           e=Path('data/backtests/evaluation/evaluation_summary.csv')
           if e.exists():
               s=pd.read_csv(e); cols=['market','model','n','coverage','mae','median_ae','rmse','bias','correlation','r2','market_winner']; print(s[cols].to_string(index=False))
-          f=Path('data/backtests/diagnostics/historical_feature_coverage.csv')
-          if f.exists(): print(pd.read_csv(f).to_string(index=False))
           PY
       - name: Upload walk-forward artifacts
         if: always()
@@ -192,6 +178,7 @@ jobs:
             data/backtests/component_predictions.csv
             data/backtests/evaluation/*.csv
             data/backtests/diagnostics/*.csv
+            data/backtests/rushing_opportunity_diagnostics/*.csv
             data/backtests/ablation/*.csv
             data/backtests/script_decomposition/*.csv
             data/backtests/pass_tendency_recalibration/*.csv
