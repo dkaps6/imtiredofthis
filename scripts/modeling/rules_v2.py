@@ -106,10 +106,12 @@ def project_game_script(offense: TeamContext, defense: TeamContext) -> GameScrip
     lead, neutral, trail = script_distribution(diff)
     plays = estimate_plays(offense)
 
-    pass_share = 0.55 + _clamp(_num(offense.proe), -0.10, 0.10)
-    # Trailing teams pass more; leading teams run more. Keep the adjustment modest.
-    pass_share += 0.08 * (trail - lead)
-    pass_share = _clamp(pass_share, 0.42, 0.70)
+    # Migration 21: the 2025 leakage-safe calibration sweep found that a stable
+    # 57% pass opportunity share materially outperformed the previous direct
+    # PROE + modeled lead/trail adjustment. Keep game-state probabilities for
+    # downstream diagnostics/risk flags, but do not use them (or PROE) to alter
+    # the baseline pass/rush opportunity split.
+    pass_share = 0.57
 
     pass_attempts = plays * pass_share
     rush_attempts = plays - pass_attempts
