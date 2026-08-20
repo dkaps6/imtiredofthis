@@ -1,0 +1,77 @@
+name: 2025 Rushing Probability Trace
+
+on:
+  workflow_dispatch:
+    inputs:
+      weeks:
+        description: "Weeks to trace (for example 1-18)"
+        required: false
+        default: "1-18"
+      iterations:
+        description: "MC iterations per week"
+        required: false
+        default: "2000"
+
+jobs:
+  trace-rushing-probability:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+      - name: Run focused regression tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_rushing_probability_trace.py tests/test_canonical_rushing_trace.py
+      - name: Build leakage-safe historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --out-dir data/backtests
+          python scripts/backtest/enrich_historical_defense.py --team-weekly data/backtests/team_weekly_history.csv --seasons 2024,2025 --audit data/backtests/historical_defense_enrichment_audit.csv --observations data/backtests/historical_defense_observations.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --data-dir data/backtests --report data/backtests/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs.py --seasons 2024,2025 --schedule data/backtests/schedule_history.csv --out data/backtests/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2024,2025 --out data/backtests/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/backtests/schedule_history.csv --out data/backtests/weather_history.csv
+      - name: Run Migration 27 surgical carry-probability trace
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests/rushing_probability_trace
+          python scripts/backtest/trace_rushing_allocation_probability.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --iterations "${{ inputs.iterations || '2000' }}" --player-logs data/backtests/player_game_logs_history.csv --team-weekly data/backtests/team_weekly_history.csv --schedule data/backtests/schedule_history.csv --universe-dir data/backtests/pregame_universe --injuries data/backtests/injuries_history.csv --weather data/backtests/weather_history.csv --out-dir data/backtests/rushing_probability_trace
+      - name: Show Migration 27 results
+        if: always()
+        run: |
+          echo "Rushing probability stage summary:"
+          cat data/backtests/rushing_probability_trace/rushing_probability_stage_summary.csv 2>/dev/null || true
+          echo "Rushing probability divergence summary:"
+          cat data/backtests/rushing_probability_trace/rushing_probability_divergence_summary.csv 2>/dev/null || true
+          echo "Largest allocation sampling deltas:"
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          p=Path('data/backtests/rushing_probability_trace/rushing_probability_player_trace.csv')
+          if p.exists():
+              x=pd.read_csv(p)
+              cols=['week','team','player_clean_key','team_rush_total_mean','raw_player_rush_share','raw_team_rush_share_sum','final_player_probability','expected_carries_from_final_probability','realized_multinomial_mean_carries','mc_proj','actual','allocation_sampling_delta']
+              cols=[c for c in cols if c in x.columns]
+              print(x.reindex(x.allocation_sampling_delta.abs().sort_values(ascending=False).index).head(30)[cols].to_string(index=False))
+          PY
+      - name: Upload Migration 27 artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-27-rushing-probability-trace
+          path: |
+            data/backtests/historical_input_validation.csv
+            data/backtests/rushing_probability_trace/*.csv
+          if-no-files-found: warn
+          retention-days: 14
