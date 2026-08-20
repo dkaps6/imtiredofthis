@@ -15,11 +15,15 @@ on:
         description: "MC iterations per feature-ablation variant/week"
         required: false
         default: "750"
+      script_iterations:
+        description: "MC iterations per game-script decomposition variant/week"
+        required: false
+        default: "750"
 
 jobs:
   walk-forward:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -94,6 +98,12 @@ jobs:
         run: |
           rm -rf data/backtests/ablation
           python scripts/backtest/run_feature_ablation.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --iterations "${{ inputs.ablation_iterations || '750' }}" --player-logs data/backtests/player_game_logs_history.csv --team-weekly data/backtests/team_weekly_history.csv --schedule data/backtests/schedule_history.csv --universe-dir data/backtests/pregame_universe --injuries data/backtests/injuries_history.csv --weather data/backtests/weather_history.csv --out-dir data/backtests/ablation
+      - name: Run game-script decomposition
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests/script_decomposition
+          python scripts/backtest/run_script_decomposition.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --iterations "${{ inputs.script_iterations || '750' }}" --player-logs data/backtests/player_game_logs_history.csv --team-weekly data/backtests/team_weekly_history.csv --schedule data/backtests/schedule_history.csv --universe-dir data/backtests/pregame_universe --injuries data/backtests/injuries_history.csv --weather data/backtests/weather_history.csv --out-dir data/backtests/script_decomposition
       - name: Show prediction inventory
         if: always()
         run: |
@@ -107,6 +117,8 @@ jobs:
           cat data/backtests/historical_defense_enrichment_audit.csv 2>/dev/null || true
           echo "Historical feature ablation summary:"
           cat data/backtests/ablation/feature_ablation_summary.csv 2>/dev/null || true
+          echo "Game-script decomposition summary:"
+          cat data/backtests/script_decomposition/script_decomposition_summary.csv 2>/dev/null || true
           python - <<'PY'
           from pathlib import Path
           import pandas as pd
@@ -154,5 +166,6 @@ jobs:
             data/backtests/evaluation/*.csv
             data/backtests/diagnostics/*.csv
             data/backtests/ablation/*.csv
+            data/backtests/script_decomposition/*.csv
           if-no-files-found: warn
           retention-days: 14
