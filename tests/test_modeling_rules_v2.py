@@ -71,6 +71,23 @@ def test_script_projection_is_bounded_and_sums_volume():
     assert (script.lead_prob + script.neutral_prob + script.trail_prob) == pytest.approx(1.0)
 
 
+def test_migration21_uses_calibrated_fixed_57_percent_pass_share():
+    offense = _team("IND", success_rate_off=0.60, proe=0.10)
+    defense = _team("HOU", success_rate_def=0.35)
+    script = project_game_script(offense, defense)
+    assert script.projected_pass_attempts / script.projected_plays == pytest.approx(0.57)
+    assert script.projected_rush_attempts / script.projected_plays == pytest.approx(0.43)
+
+
+def test_migration21_proe_and_script_state_do_not_change_opportunity_split():
+    defense = _team("HOU", success_rate_def=0.45)
+    pass_heavy = project_game_script(_team("IND", success_rate_off=0.60, proe=0.10), defense)
+    run_heavy = project_game_script(_team("IND", success_rate_off=0.30, proe=-0.10), defense)
+    assert pass_heavy.projected_pass_attempts / pass_heavy.projected_plays == pytest.approx(0.57)
+    assert run_heavy.projected_pass_attempts / run_heavy.projected_plays == pytest.approx(0.57)
+    assert pass_heavy.lead_prob != pytest.approx(run_heavy.lead_prob)
+
+
 def test_empirical_coverage_and_injury_rules_are_preserved():
     ypt, share = coverage_penalty(10.0, 0.25, tough_shadow=True)
     assert ypt == pytest.approx(9.4)
