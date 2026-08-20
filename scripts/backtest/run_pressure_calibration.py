@@ -42,7 +42,6 @@ def _pressure_rule_factory(params):
     base_fn = simulation_rules.matchup_multipliers
 
     def calibrated(offense, defense):
-        # Start from canonical rules, then remove only the canonical pressure effects.
         base = base_fn(offense, defense)
         pressure = offensive_pressure_mismatch(offense, defense)
         values = base.__dict__.copy()
@@ -94,6 +93,23 @@ def summarize(predictions: pd.DataFrame) -> pd.DataFrame:
     return s.sort_values(["market","mae"]).reset_index(drop=True)
 
 
+def passing_ranking(summary: pd.DataFrame) -> pd.DataFrame:
+    """Return the pressure variants ranked on the canonical passing market."""
+    passing = summary[summary.market.eq("pass_yards")].sort_values("mae").reset_index(drop=True)
+    if passing.empty:
+        available = sorted(summary.market.dropna().astype(str).unique().tolist()) if "market" in summary.columns else []
+        raise RuntimeError(
+            "pressure calibration produced no pass_yards ranking; "
+            f"available markets={available}"
+        )
+    expected = set(VARIANTS)
+    observed = set(passing.variant.astype(str))
+    missing = sorted(expected - observed)
+    if missing:
+        raise RuntimeError(f"pressure calibration pass_yards ranking missing variants: {missing}")
+    return passing
+
+
 def main():
     p=argparse.ArgumentParser(); p.add_argument("--season",type=int,default=2025); p.add_argument("--prior-season",type=int,default=2024); p.add_argument("--weeks",default="1-18"); p.add_argument("--iterations",type=int,default=1000)
     p.add_argument("--player-logs",type=Path,default=Path("data/backtests/player_game_logs_history.csv")); p.add_argument("--team-weekly",type=Path,default=Path("data/backtests/team_weekly_history.csv")); p.add_argument("--schedule",type=Path,default=Path("data/backtests/schedule_history.csv")); p.add_argument("--universe-dir",type=Path,default=Path("data/backtests/pregame_universe")); p.add_argument("--injuries",type=Path,default=Path("data/backtests/injuries_history.csv")); p.add_argument("--weather",type=Path,default=Path("data/backtests/weather_history.csv")); p.add_argument("--out-dir",type=Path,default=Path("data/backtests/pressure_calibration")); args=p.parse_args()
@@ -103,6 +119,6 @@ def main():
         for name,params in VARIANTS.items():
             r=_project_week(variant=name,params=params,player_logs=logs,team_weekly=team,schedule=schedule,universe=universe,injuries=injuries,weather=weather,season=args.season,week=week,prior_season=args.prior_season,iterations=args.iterations,seed=12000+week); all_rows.append(r); print(f"[pressure-cal] W{week:02d} {name} rows={len(r)}")
     pred=pd.concat(all_rows,ignore_index=True); summary=summarize(pred); args.out_dir.mkdir(parents=True,exist_ok=True); pred.to_csv(args.out_dir/"pressure_calibration_predictions.csv",index=False); summary.to_csv(args.out_dir/"pressure_calibration_summary.csv",index=False)
-    passing=summary[summary.market.eq("passing_yards")].sort_values("mae"); passing.to_csv(args.out_dir/"pressure_calibration_passing_rank.csv",index=False); print("\n[pressure-cal] passing ranking\n",passing.to_string(index=False)); return 0
+    passing=passing_ranking(summary); passing.to_csv(args.out_dir/"pressure_calibration_passing_rank.csv",index=False); print("\n[pressure-cal] passing ranking\n",passing.to_string(index=False)); return 0
 
 if __name__=="__main__": raise SystemExit(main())
