@@ -23,11 +23,15 @@ on:
         description: "MC iterations per pass-tendency candidate/week"
         required: false
         default: "750"
+      final_pass_iterations:
+        description: "MC iterations per final pass-calibration candidate/week"
+        required: false
+        default: "1000"
 
 jobs:
   walk-forward:
     runs-on: ubuntu-24.04
-    timeout-minutes: 240
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -114,6 +118,12 @@ jobs:
         run: |
           rm -rf data/backtests/pass_tendency_recalibration
           python scripts/backtest/run_pass_tendency_recalibration.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --iterations "${{ inputs.pass_recal_iterations || '750' }}" --player-logs data/backtests/player_game_logs_history.csv --team-weekly data/backtests/team_weekly_history.csv --schedule data/backtests/schedule_history.csv --universe-dir data/backtests/pregame_universe --injuries data/backtests/injuries_history.csv --weather data/backtests/weather_history.csv --out-dir data/backtests/pass_tendency_recalibration
+      - name: Run final pass-tendency calibration gate
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests/final_pass_calibration
+          python scripts/backtest/run_final_pass_calibration.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --iterations "${{ inputs.final_pass_iterations || '1000' }}" --player-logs data/backtests/player_game_logs_history.csv --team-weekly data/backtests/team_weekly_history.csv --schedule data/backtests/schedule_history.csv --universe-dir data/backtests/pregame_universe --injuries data/backtests/injuries_history.csv --weather data/backtests/weather_history.csv --out-dir data/backtests/final_pass_calibration
       - name: Show prediction inventory
         if: always()
         run: |
@@ -131,6 +141,10 @@ jobs:
           cat data/backtests/script_decomposition/script_decomposition_summary.csv 2>/dev/null || true
           echo "Pass-tendency recalibration summary:"
           cat data/backtests/pass_tendency_recalibration/pass_tendency_summary.csv 2>/dev/null || true
+          echo "Final pass-calibration summary:"
+          cat data/backtests/final_pass_calibration/final_pass_calibration_summary.csv 2>/dev/null || true
+          echo "Final pass-calibration recommendation:"
+          cat data/backtests/final_pass_calibration/final_pass_calibration_recommendation.csv 2>/dev/null || true
           python - <<'PY'
           from pathlib import Path
           import pandas as pd
@@ -167,5 +181,6 @@ jobs:
             data/backtests/ablation/*.csv
             data/backtests/script_decomposition/*.csv
             data/backtests/pass_tendency_recalibration/*.csv
+            data/backtests/final_pass_calibration/*.csv
           if-no-files-found: warn
           retention-days: 14
