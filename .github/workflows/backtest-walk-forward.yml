@@ -11,6 +11,10 @@ on:
         description: "Monte Carlo iterations per player/week"
         required: false
         default: "2000"
+      ablation_iterations:
+        description: "MC iterations per feature-ablation variant/week"
+        required: false
+        default: "750"
 
 jobs:
   walk-forward:
@@ -84,6 +88,12 @@ jobs:
         run: |
           rm -rf data/backtests/diagnostics
           python scripts/backtest/feature_coverage_audit.py --predictions data/backtests/component_predictions.csv --out-dir data/backtests/diagnostics
+      - name: Run historical feature ablation
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests/ablation
+          python scripts/backtest/run_feature_ablation.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --iterations "${{ inputs.ablation_iterations || '750' }}" --player-logs data/backtests/player_game_logs_history.csv --team-weekly data/backtests/team_weekly_history.csv --schedule data/backtests/schedule_history.csv --universe-dir data/backtests/pregame_universe --injuries data/backtests/injuries_history.csv --weather data/backtests/weather_history.csv --out-dir data/backtests/ablation
       - name: Show prediction inventory
         if: always()
         run: |
@@ -95,6 +105,8 @@ jobs:
           cat data/backtests/wr_cb_source_audit.csv 2>/dev/null || true
           echo "Historical defensive enrichment audit:"
           cat data/backtests/historical_defense_enrichment_audit.csv 2>/dev/null || true
+          echo "Historical feature ablation summary:"
+          cat data/backtests/ablation/feature_ablation_summary.csv 2>/dev/null || true
           python - <<'PY'
           from pathlib import Path
           import pandas as pd
@@ -141,5 +153,6 @@ jobs:
             data/backtests/component_predictions.csv
             data/backtests/evaluation/*.csv
             data/backtests/diagnostics/*.csv
+            data/backtests/ablation/*.csv
           if-no-files-found: warn
           retention-days: 14
