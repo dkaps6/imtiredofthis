@@ -3,15 +3,12 @@
 This module preserves the empirically developed rules from the legacy
 ``rules_engine.py``, ``elite_rules.py`` and ``agent_based.py`` while removing
 schema duplication and correcting pressure-matchup semantics.
-
-It is intentionally pure and side-effect free. Production integration happens
-in a later migration after parity/backtest checks.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 
 from .contracts import TeamContext
 
@@ -82,15 +79,8 @@ def estimate_plays(offense: TeamContext) -> float:
     pace = _num(offense.neutral_pace, 0.0)
     sec_last5 = _num(offense.sec_per_play_last5, 0.0)
     recent = _num(offense.neutral_pace_last5, 0.0)
-
-    # Pace here is seconds per play for one offense, not both teams combined.
-    # A team owns roughly half of the 3600-second game clock, so converting with
-    # 3600 / pace doubles the implied opportunity pool and routinely hits the
-    # 80-play ceiling. Use the same 1800-second team possession basis as the
-    # Monte Carlo fallback instead.
     if sec_last5 > 5.0:
-        recent_play_est = 1800.0 / sec_last5
-        recent_play_est = _clamp(recent_play_est, 50.0, 80.0)
+        recent_play_est = _clamp(1800.0 / sec_last5, 50.0, 80.0)
     elif recent > 20.0:
         recent_play_est = _clamp(1800.0 / recent, 50.0, 80.0)
     elif pace > 20.0:
@@ -105,14 +95,7 @@ def project_game_script(offense: TeamContext, defense: TeamContext) -> GameScrip
     pressure = offensive_pressure_mismatch(offense, defense)
     lead, neutral, trail = script_distribution(diff)
     plays = estimate_plays(offense)
-
-    # Migration 21: the 2025 leakage-safe calibration sweep found that a stable
-    # 57% pass opportunity share materially outperformed the previous direct
-    # PROE + modeled lead/trail adjustment. Keep game-state probabilities for
-    # downstream diagnostics/risk flags, but do not use them (or PROE) to alter
-    # the baseline pass/rush opportunity split.
     pass_share = 0.57
-
     pass_attempts = plays * pass_share
     rush_attempts = plays - pass_attempts
     return GameScriptProjection(
@@ -122,7 +105,8 @@ def project_game_script(offense: TeamContext, defense: TeamContext) -> GameScrip
         lead_prob=lead,
         neutral_prob=neutral,
         trail_prob=trail,
-        pressure_mismatch=abs(pressure) >= 0.05,
+        # Migration 23 aligns the diagnostic flag with the calibrated rule gate.
+        pressure_mismatch=abs(pressure) >= 0.075,
         blowout_risk=abs(diff) >= 0.06,
         shootout_risk=abs(diff) < 0.03 and plays >= 68.0,
     )
@@ -149,8 +133,6 @@ def matchup_multipliers(offense: TeamContext, defense: TeamContext) -> MatchupMu
         "volatility_mult": 1.0,
     }
 
-    # Preserve the tested legacy thresholds/magnitudes until the 2025 walk-forward
-    # backtest recalibrates them.
     if zone >= 0.60:
         values["te_target_mult"] *= 1.15
         values["rb_rec_target_mult"] *= 1.20
@@ -162,18 +144,18 @@ def matchup_multipliers(offense: TeamContext, defense: TeamContext) -> MatchupMu
         values["slot_target_mult"] *= 1.10
         values["te_target_mult"] *= 1.10
 
-    # Opponent pressure advantage: suppress pass efficiency, increase checkdowns,
-    # sacks/INT risk and uncertainty. This corrects the old defense-vs-defense diff.
-    if pressure > 0.05:
-        values["pass_eff_mult"] *= 0.94
-        values["rb_rec_target_mult"] *= 1.25
-        values["sack_mult"] *= 1.10
-        values["int_mult"] *= 1.10
-        values["volatility_mult"] *= 1.10
-    elif pressure < -0.05:
-        values["pass_eff_mult"] *= 1.03
+    # Migration 23: promote the leakage-safe 2025 pressure-calibration winner.
+    # Pressure remains predictive, but only meaningful mismatches activate a
+    # modest adjustment rather than the legacy 6% efficiency / 25% checkdown hit.
+    if pressure > 0.075:
+        values["pass_eff_mult"] *= 0.98
+        values["rb_rec_target_mult"] *= 1.10
+        values["sack_mult"] *= 1.05
+        values["int_mult"] *= 1.05
+        values["volatility_mult"] *= 1.05
+    elif pressure < -0.075:
+        values["pass_eff_mult"] *= 1.01
 
-    # Preserve legacy box-count efficiency rules.
     if light >= 0.60:
         values["rb_rush_eff_mult"] *= 1.07
     if heavy >= 0.60:
@@ -182,43 +164,19 @@ def matchup_multipliers(offense: TeamContext, defense: TeamContext) -> MatchupMu
     return MatchupMultipliers(**{k: _clamp(v, 0.50, 1.80) for k, v in values.items()})
 
 
-def redistribute_alpha_usage(
-    alpha_share: float,
-    wr2_share: float,
-    slot_te_share: float,
-    rb_share: float,
-    *,
-    alpha_limited: bool,
-) -> tuple[float, float, float, float]:
-    """Preserve the legacy 60/30/10 redistribution rule for an unavailable alpha."""
+def redistribute_alpha_usage(alpha_share: float, wr2_share: float, slot_te_share: float, rb_share: float, *, alpha_limited: bool) -> tuple[float, float, float, float]:
     if not alpha_limited:
         return alpha_share, wr2_share, slot_te_share, rb_share
     give = max(0.0, alpha_share) * 0.50
-    return (
-        alpha_share - give,
-        wr2_share + give * 0.60,
-        slot_te_share + give * 0.30,
-        rb_share + give * 0.10,
-    )
+    return alpha_share - give, wr2_share + give * 0.60, slot_te_share + give * 0.30, rb_share + give * 0.10
 
 
-def coverage_penalty(
-    yards_per_target: float,
-    target_share: float,
-    *,
-    tough_shadow: bool = False,
-    heavy_man: bool = False,
-    heavy_zone: bool = False,
-) -> tuple[float, float]:
-    """Preserve the legacy individual coverage adjustment rules."""
-    ypt = float(yards_per_target)
-    share = float(target_share)
+def coverage_penalty(yards_per_target: float, target_share: float, *, tough_shadow: bool = False, heavy_man: bool = False, heavy_zone: bool = False) -> tuple[float, float]:
+    ypt = float(yards_per_target); share = float(target_share)
     if tough_shadow or heavy_man:
-        ypt *= 0.94
-        share *= 0.92
+        ypt *= 0.94; share *= 0.92
     if heavy_zone:
-        ypt *= 1.04
-        share *= 1.06
+        ypt *= 1.04; share *= 1.06
     return ypt, share
 
 
