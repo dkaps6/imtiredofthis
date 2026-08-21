@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from scripts.simulation_v2 import lookup, simulate
+from scripts.simulation_v2 import _sharpen_wr_target_shares, lookup, simulate
 
 
 def _metrics():
@@ -40,6 +40,24 @@ def test_target_competition_creates_finite_volume():
     assert wr1 is not None and wr2 is not None
     # Both players receive finite opportunity from the same team pass volume.
     assert np.percentile(wr1 + wr2, 99) < 45
+
+
+def test_promoted_wr_hierarchy_preserves_wr_mass_and_sharpens_rank():
+    team = pd.DataFrame({"position": ["WR", "WR", "WR", "WR", "TE", "RB"]})
+    shares = np.array([0.24, 0.18, 0.14, 0.10, 0.12, 0.08])
+    got = _sharpen_wr_target_shares(team, shares)
+    assert np.isclose(got[:4].sum(), shares[:4].sum())
+    assert np.allclose(got[4:], shares[4:])
+    assert got[0] > shares[0]
+    assert got[1] > shares[1]
+    assert got[2] < shares[2]
+    assert got[3] < shares[3]
+
+
+def test_promoted_wr_hierarchy_is_noop_with_one_wr():
+    team = pd.DataFrame({"position": ["WR", "TE", "RB"]})
+    shares = np.array([0.25, 0.18, 0.12])
+    assert np.allclose(_sharpen_wr_target_shares(team, shares), shares)
 
 
 def test_keyed_allocation_trace_matches_exact_rush_lookup_without_changing_results():
