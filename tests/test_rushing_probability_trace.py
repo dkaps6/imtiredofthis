@@ -7,7 +7,7 @@ from scripts.backtest.trace_rushing_allocation_probability import _probability_t
 def test_probability_transform_matches_simulator_cap_and_residual():
     clean, raw_sum, probs, residual = _probability_transform(np.array([0.60, 0.30, 0.20]))
     assert np.allclose(clean, [0.60, 0.30, 0.20])
-    assert raw_sum == 1.10
+    assert np.isclose(raw_sum, 1.10)
     assert np.isclose(probs.sum(), 0.95)
     assert np.isclose(residual, 0.05)
     assert np.isclose(probs[0], 0.60 * 0.95 / 1.10)
