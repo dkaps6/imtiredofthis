@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from scripts.backtest.component_predictions import predict_week
-from scripts.backtest.walk_forward import _parse_weeks
+from scripts.backtest.walk_forward import _exact_week, _parse_weeks
 
 def read(p):
     if not p.exists() or not p.stat().st_size: raise RuntimeError(f"missing {p}")
@@ -24,7 +24,7 @@ def main():
     lc={str(c).lower():c for c in logs.columns}; attcol=lc.get('pass_att'); ydcol=lc.get('pass_yards');
     if not attcol or not ydcol: raise RuntimeError('historical player logs require pass_att and pass_yards')
     for w in _parse_weeks(a.weeks):
-        u=read(a.universe_dir/f'{a.season}_week_{w:02d}.csv'); iw=inj[(pd.to_numeric(inj.get('season'),errors='coerce')==a.season)&(pd.to_numeric(inj.get('week'),errors='coerce')==w)] if not inj.empty else inj; ww=weather[(pd.to_numeric(weather.get('season'),errors='coerce')==a.season)&(pd.to_numeric(weather.get('week'),errors='coerce')==w)] if not weather.empty and 'season' in weather and 'week' in weather else weather
+        u=read(a.universe_dir/f'{a.season}_week_{w:02d}.csv'); iw=_exact_week(inj,a.season,w); ww=_exact_week(weather,a.season,w)
         p=predict_week(player_logs=logs,team_weekly=team,pregame_universe=u,schedule=sched,season=a.season,week=w,prior_season=a.prior_season,injuries=iw,weather=ww,iterations=a.iterations,seed=42+w); p=p[p.market.eq('pass_yards')].copy()
         act=logs[(pd.to_numeric(logs[lc['season']],errors='coerce')==a.season)&(pd.to_numeric(logs[lc['week']],errors='coerce')==w)].copy(); act['player_clean_key']=act.get('player_clean_key',act[lc['player']]).astype(str).str.lower().str.replace(r'[^a-z0-9]','',regex=True); act['actual_pass_att']=pd.to_numeric(act[attcol],errors='coerce'); act['actual_pass_yards_raw']=pd.to_numeric(act[ydcol],errors='coerce'); act['actual_ypa']=act.actual_pass_yards_raw/act.actual_pass_att.replace(0,np.nan); act=act[[lc['team'],'player_clean_key','actual_pass_att','actual_pass_yards_raw','actual_ypa']].rename(columns={lc['team']:'team'}).drop_duplicates(['team','player_clean_key'])
         x=p.merge(act,on=['team','player_clean_key'],how='left'); x['week']=w; x['pred_attempts']=pd.to_numeric(x.get('mc_expected_pass_attempts'),errors='coerce'); x['pred_ypa']=pd.to_numeric(x.get('mc_rules_ypa'),errors='coerce'); x['oracle_attempts_pred_ypa']=x.actual_pass_att*x.pred_ypa; x['pred_attempts_oracle_ypa']=x.pred_attempts*x.actual_ypa; x['det_pass_yards']=x.pred_attempts*x.pred_ypa; x['attempt_error']=x.pred_attempts-x.actual_pass_att; x['ypa_error']=x.pred_ypa-x.actual_ypa; allrows.append(x)
