@@ -10,7 +10,7 @@ on:
       iterations:
         description: "MC iterations per rushing-allocation candidate/week"
         required: false
-        default: "1000"
+        default: "2000"
 
 jobs:
   calibrate-rushing-allocation:
@@ -36,16 +36,16 @@ jobs:
           python scripts/backtest/historical_player_logs.py --seasons 2024,2025 --schedule data/backtests/schedule_history.csv --out data/backtests/player_game_logs_history.csv
           python scripts/backtest/build_historical_injuries.py --seasons 2024,2025 --out data/backtests/injuries_history.csv
           python scripts/backtest/build_historical_weather.py --schedule data/backtests/schedule_history.csv --out data/backtests/weather_history.csv
-      - name: Run Migration 25 rushing pool trace and calibration
+      - name: Run Migration 29 rushing pool calibration on repaired canonical baseline
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           rm -rf data/backtests/rushing_allocation_calibration
-          python scripts/backtest/run_rushing_allocation_calibration.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --iterations "${{ inputs.iterations || '1000' }}" --player-logs data/backtests/player_game_logs_history.csv --team-weekly data/backtests/team_weekly_history.csv --schedule data/backtests/schedule_history.csv --universe-dir data/backtests/pregame_universe --injuries data/backtests/injuries_history.csv --weather data/backtests/weather_history.csv --out-dir data/backtests/rushing_allocation_calibration
-      - name: Show Migration 25 results
+          python scripts/backtest/run_rushing_allocation_calibration.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --iterations "${{ inputs.iterations || '2000' }}" --player-logs data/backtests/player_game_logs_history.csv --team-weekly data/backtests/team_weekly_history.csv --schedule data/backtests/schedule_history.csv --universe-dir data/backtests/pregame_universe --injuries data/backtests/injuries_history.csv --weather data/backtests/weather_history.csv --out-dir data/backtests/rushing_allocation_calibration
+      - name: Show Migration 29 results
         if: always()
         run: |
-          echo "Rushing allocation candidate ranking:"
+          echo "Rushing allocation candidate ranking on repaired baseline:"
           cat data/backtests/rushing_allocation_calibration/rushing_allocation_summary.csv 2>/dev/null || true
           echo "Rushing pool trace by candidate:"
           python - <<'PY'
@@ -56,11 +56,11 @@ jobs:
               x=pd.read_csv(p)
               print(x.groupby('variant')[['players_in_pool','raw_share_sum','post_gate_share_sum','normalized_player_share_sum','residual_share']].mean().to_string())
           PY
-      - name: Upload Migration 25 artifacts
+      - name: Upload Migration 29 artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: migration-25-rushing-allocation-calibration
+          name: migration-29-rushing-pool-calibration
           path: |
             data/backtests/historical_input_validation.csv
             data/backtests/rushing_allocation_calibration/*.csv
