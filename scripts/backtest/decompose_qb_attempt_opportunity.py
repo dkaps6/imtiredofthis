@@ -19,12 +19,19 @@ def met(a,p):
 def main():
     q=argparse.ArgumentParser();q.add_argument('--trace',type=Path,default=Path('data/backtests/qb_passing_error/qb_passing_player_trace.csv'));q.add_argument('--team-weekly',type=Path,default=Path('data/backtests/team_weekly_history.csv'));q.add_argument('--out-dir',type=Path,default=Path('data/backtests/qb_attempt_opportunity'));a=q.parse_args()
     z=read(a.trace); tw=read(a.team_weekly); lc={str(c).lower():c for c in tw.columns}
-    # Candidate historical team signals are joined only from rows strictly before each target week.
-    plays=next((lc[x] for x in ['plays','off_plays','total_plays'] if x in lc),None); patt=next((lc[x] for x in ['pass_att','attempts','pass_attempts'] if x in lc),None)
-    if not plays or not patt: raise RuntimeError(f'team_weekly missing plays/pass attempts; columns={list(tw.columns)}')
+    # team_weekly_history stores leakage-safe derived opportunity features rather than
+    # raw team pass attempts. Reconstruct historical official-attempt expectation as:
+    # plays_est * dropback_rate * pass_attempts_per_dropback.
+    plays=lc.get('plays_est') or next((lc[x] for x in ['plays','off_plays','total_plays'] if x in lc),None)
+    dropback=lc.get('dropback_rate')
+    att_per_drop=lc.get('pass_attempts_per_dropback')
+    if not plays or not dropback or not att_per_drop:
+        raise RuntimeError(f'team_weekly missing plays_est/dropback_rate/pass_attempts_per_dropback; columns={list(tw.columns)}')
     season_col=lc.get('season'); week_col=lc.get('week'); team_col=lc.get('team') or lc.get('recent_team')
     if not all([season_col,week_col,team_col]): raise RuntimeError('team_weekly missing season/week/team')
-    tw['_plays']=num(tw[plays]);tw['_pass_att']=num(tw[patt]);tw['_pass_rate']=tw._pass_att/tw._plays.replace(0,np.nan)
+    tw['_plays']=num(tw[plays]);tw['_dropback_rate']=num(tw[dropback]);tw['_att_per_drop']=num(tw[att_per_drop]).clip(.50,1.00)
+    tw['_pass_att']=tw._plays*tw._dropback_rate*tw._att_per_drop
+    tw['_pass_rate']=tw._dropback_rate*tw._att_per_drop
     out=[]
     for _,r in z.iterrows():
         season=int(r.get('season',2025)); week=int(r.week); team=str(r.team)
@@ -39,7 +46,6 @@ def main():
     x=pd.DataFrame(out); rows=[]
     for col in ['pred_attempts','hist1_team_pass_att','hist3_team_pass_att','hist5_team_pass_att','hist8_team_pass_att']:
         rows.append({'candidate':col,**met(x.actual_pass_att,x[col])})
-    # Diagnose compression: compare projected-vs-actual dispersion and quartile separation.
     summary=pd.DataFrame(rows); dispersion=pd.DataFrame([{'series':'actual_attempts','mean':num(x.actual_pass_att).mean(),'std':num(x.actual_pass_att).std(),'p10':num(x.actual_pass_att).quantile(.1),'p90':num(x.actual_pass_att).quantile(.9)},{'series':'pred_attempts','mean':num(x.pred_attempts).mean(),'std':num(x.pred_attempts).std(),'p10':num(x.pred_attempts).quantile(.1),'p90':num(x.pred_attempts).quantile(.9)}])
     x['pred_attempt_quartile']=pd.qcut(num(x.pred_attempts).rank(method='first'),4,labels=['Q1','Q2','Q3','Q4']); buckets=[]
     for b,g in x.groupby('pred_attempt_quartile',observed=True): buckets.append({'bucket':str(b),'n':len(g),'pred_attempts':num(g.pred_attempts).mean(),'actual_attempts':num(g.actual_pass_att).mean(),'attempt_bias':(num(g.pred_attempts)-num(g.actual_pass_att)).mean(),'hist3_pass_rate':num(g.hist3_pass_rate).mean(),'hist3_plays':num(g.hist3_plays).mean()})
