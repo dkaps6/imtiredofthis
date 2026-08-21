@@ -7,6 +7,8 @@ independent normal distributions.
 
 Migration 3: canonical football rules alter pre-simulation assumptions.
 Migration 4A: empirical-Bayesian baselines can feed those rule-adjusted inputs.
+Migration 38: calibrated WR hierarchy sharpening redistributes, but does not add,
+team WR target-share mass before canonical target allocation.
 """
 from __future__ import annotations
 
@@ -27,6 +29,9 @@ MARKET_MAP = {
     "player_rush_reception_yds": "rush_rec_yards", "player_rush_rec_yds": "rush_rec_yards", "rush_rec_yards": "rush_rec_yards",
     "player_anytime_td": "anytime_td", "anytime_td": "anytime_td", "atd": "anytime_td",
 }
+
+WR_POSITIONS = {"WR", "LWR", "RWR", "SWR"}
+WR_TARGET_HIERARCHY_MULTIPLIERS = (1.40, 1.14, 0.91, 0.78)
 
 
 @dataclass
@@ -89,6 +94,28 @@ def _top_n_shares(shares: np.ndarray, n: int = 5) -> np.ndarray:
     return out
 
 
+def _sharpen_wr_target_shares(team_df: pd.DataFrame, shares: np.ndarray) -> np.ndarray:
+    """Apply the Migration 37 winner while preserving total team WR target mass.
+
+    WRs are ranked by their leakage-safe pregame target shares. Multipliers are
+    applied to WR1/WR2/WR3/WR4+ and then renormalized back to the original WR
+    target-share total. RB/TE/FB and all other player shares are unchanged.
+    """
+    clean=np.nan_to_num(np.asarray(shares,dtype=float),nan=0.0,posinf=0.0,neginf=0.0); clean=np.clip(clean,0.0,0.95)
+    positions=team_df.get("position",pd.Series("",index=team_df.index)).fillna("").astype(str).str.upper().to_numpy()
+    wr_idx=np.flatnonzero(np.isin(positions,list(WR_POSITIONS)))
+    if len(wr_idx) <= 1: return clean
+    wr=clean[wr_idx].copy(); total=float(wr.sum())
+    if total <= 0.0: return clean
+    order=np.argsort(-wr,kind="stable"); mult=np.ones(len(wr),dtype=float)
+    for rank,idx in enumerate(order): mult[idx]=WR_TARGET_HIERARCHY_MULTIPLIERS[min(rank,len(WR_TARGET_HIERARCHY_MULTIPLIERS)-1)]
+    sharpened=wr*mult
+    if sharpened.sum() <= 0.0: return clean
+    sharpened*=total/float(sharpened.sum())
+    out=clean.copy(); out[wr_idx]=sharpened
+    return out
+
+
 def _player_key(row: pd.Series) -> str:
     value=row.get("player_clean_key")
     if pd.notna(value) and str(value).strip(): return str(value).strip()
@@ -109,7 +136,7 @@ def simulate(metrics: pd.DataFrame, *, iterations: int | None=None, seed: int | 
             if pd.isna(team) or not str(team).strip(): continue
             plays_mean,pass_rate_mean=_team_inputs(team_df); plays=np.rint(np.clip(rng.normal(plays_mean,3.5,iterations)+game_pace_shock,45,85)).astype(int); pass_rate=np.clip(rng.normal(pass_rate_mean,0.035,iterations),0.25,0.82); pass_att=rng.binomial(plays,pass_rate); rush_att=plays-pass_att
             pass_eff_shock=np.clip(rng.normal(1.0,0.09,iterations),0.65,1.35); rush_eff_shock=np.clip(rng.normal(1.0,0.10,iterations),0.60,1.40)
-            target_shares=np.array([_num(r,"rules_tgt_share","bayes_tgt_share","target_share","tgt_share",default=0.0) for _,r in team_df.iterrows()]); raw_rush_shares=np.array([_num(r,"rules_rush_share","bayes_rush_share","rush_share",default=0.0) for _,r in team_df.iterrows()]); rush_shares=_top_n_shares(raw_rush_shares,5)
+            raw_target_shares=np.array([_num(r,"rules_tgt_share","bayes_tgt_share","target_share","tgt_share",default=0.0) for _,r in team_df.iterrows()]); target_shares=_sharpen_wr_target_shares(team_df,raw_target_shares); raw_rush_shares=np.array([_num(r,"rules_rush_share","bayes_rush_share","rush_share",default=0.0) for _,r in team_df.iterrows()]); rush_shares=_top_n_shares(raw_rush_shares,5)
             targets=_allocate_counts(rng,pass_att,target_shares); carries=_allocate_counts(rng,rush_att,rush_shares)
             if allocation_trace is not None:
                 clean=np.clip(np.nan_to_num(rush_shares.astype(float),nan=0.0,posinf=0.0,neginf=0.0),0.0,0.95); raw_sum=float(clean.sum()); used=clean.copy()
