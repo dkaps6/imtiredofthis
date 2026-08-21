@@ -40,3 +40,22 @@ def test_target_competition_creates_finite_volume():
     assert wr1 is not None and wr2 is not None
     # Both players receive finite opportunity from the same team pass volume.
     assert np.percentile(wr1 + wr2, 99) < 45
+
+
+def test_keyed_allocation_trace_matches_exact_rush_lookup_without_changing_results():
+    df = _metrics()
+    baseline = simulate(df, iterations=2500, seed=31)
+    trace = []
+    traced = simulate(df, iterations=2500, seed=31, allocation_trace=trace)
+    assert len(trace) == 3
+    by_key = {row["player_clean_key"]: row for row in trace}
+    for _, row in df.iterrows():
+        base = lookup(baseline, row, "rush_att")
+        got = lookup(traced, row, "rush_att")
+        assert base is not None and got is not None
+        assert np.array_equal(base, got)
+        assert np.isclose(got.mean(), by_key[row.player_clean_key]["realized_multinomial_mean_carries"])
+        assert abs(
+            by_key[row.player_clean_key]["realized_multinomial_mean_carries"]
+            - by_key[row.player_clean_key]["expected_carries_from_final_probability"]
+        ) < 0.15
