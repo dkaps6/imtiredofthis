@@ -203,7 +203,11 @@ def simulate(
 
                 values[(str(game), pkey, "receptions")] = receptions.astype(float)
                 values[(str(game), pkey, "rec_yards")] = rec_yards
-                values[(str(game), pkey, "rush_att")] = carries.astype(float)
+                # Store only this player's carry vector. Previously the full
+                # team (iterations x players) allocation matrix was stored for
+                # every player, so lookup(..., "rush_att") averaged across all
+                # teammates and destroyed player-level rushing signal.
+                values[(str(game), pkey, "rush_att")] = carries[:, j].astype(float)
                 values[(str(game), pkey, "rush_yards")] = rush_yards
                 values[(str(game), pkey, "rush_rec_yards")] = rush_yards + rec_yards
 
