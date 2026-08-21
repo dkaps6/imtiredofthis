@@ -98,7 +98,20 @@ def _player_key(row: pd.Series) -> str:
     return "".join(ch.lower() for ch in str(row.get("player", "")) if ch.isalnum())
 
 
-def simulate(metrics: pd.DataFrame, *, iterations: int | None = None, seed: int | None = None) -> SimulationResult:
+def simulate(
+    metrics: pd.DataFrame,
+    *,
+    iterations: int | None = None,
+    seed: int | None = None,
+    allocation_trace: list[dict] | None = None,
+) -> SimulationResult:
+    """Run the canonical joint simulation.
+
+    ``allocation_trace`` is an opt-in diagnostic sink. When supplied, the
+    simulator appends keyed rushing-allocation facts from the exact team/player
+    rows and carry arrays used by production. The default remains ``None`` and
+    does not alter production behavior or random-number consumption.
+    """
     iterations = int(iterations or MC.get("iterations", 25000))
     seed = int(MC.get("seed", 42) if seed is None else seed)
     rng = np.random.default_rng(seed)
@@ -135,6 +148,32 @@ def simulate(metrics: pd.DataFrame, *, iterations: int | None = None, seed: int 
             targets = _allocate_counts(rng, pass_att, target_shares)
             carries = _allocate_counts(rng, rush_att, rush_shares)
 
+            if allocation_trace is not None:
+                clean = np.nan_to_num(rush_shares.astype(float), nan=0.0, posinf=0.0, neginf=0.0)
+                clean = np.clip(clean, 0.0, 0.95)
+                raw_sum = float(clean.sum())
+                used = clean.copy()
+                if raw_sum > 0.95:
+                    used *= 0.95 / raw_sum
+                residual = max(0.0, 1.0 - float(used.sum()))
+                probs = np.append(used, residual)
+                probs = probs / probs.sum()
+                team_rush_mean = float(np.mean(rush_att)) if len(rush_att) else np.nan
+                for j, (_, trace_row) in enumerate(team_df.iterrows()):
+                    allocation_trace.append({
+                        "event_id": str(game),
+                        "team": str(team),
+                        "player_clean_key": _player_key(trace_row),
+                        "sim_selected_market": str(trace_row.get("market", "")),
+                        "raw_player_rush_share": float(clean[j]),
+                        "raw_team_rush_share_sum": raw_sum,
+                        "final_player_probability": float(probs[j]),
+                        "residual_probability": float(probs[-1]),
+                        "team_rush_total_mean": team_rush_mean,
+                        "expected_carries_from_final_probability": team_rush_mean * float(probs[j]),
+                        "realized_multinomial_mean_carries": float(carries[:, j].mean()),
+                    })
+
             for j, (_, row) in enumerate(team_df.iterrows()):
                 pkey = _player_key(row)
                 if not pkey:
@@ -164,7 +203,11 @@ def simulate(metrics: pd.DataFrame, *, iterations: int | None = None, seed: int 
 
                 values[(str(game), pkey, "receptions")] = receptions.astype(float)
                 values[(str(game), pkey, "rec_yards")] = rec_yards
-                values[(str(game), pkey, "rush_att")] = carries.astype(float)
+                # Store only this player's carry vector. Previously the full
+                # team (iterations x players) allocation matrix was stored for
+                # every player, so lookup(..., "rush_att") averaged across all
+                # teammates and destroyed player-level rushing signal.
+                values[(str(game), pkey, "rush_att")] = carries[:, j].astype(float)
                 values[(str(game), pkey, "rush_yards")] = rush_yards
                 values[(str(game), pkey, "rush_rec_yards")] = rush_yards + rec_yards
 
