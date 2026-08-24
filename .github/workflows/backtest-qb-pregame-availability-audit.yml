@@ -31,7 +31,7 @@ jobs:
         run: python scripts/backtest/decompose_qb_passing_error.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --iterations "${{ inputs.iterations || '2000' }}"
       - name: Rebuild Migration 47 participation trace
         env: {PYTHONPATH: "${{ github.workspace }}"}
-        run: python scripts/backtest/decompose_qb_participation_role.py --season 2025 --weeks "${{ inputs.weeks || '1-18' }}"
+        run: python scripts/backtest/decompose_qb_participation_role.py
       - name: Run Migration 48 pregame availability audit
         env: {PYTHONPATH: "${{ github.workspace }}"}
         run: python scripts/backtest/audit_qb_pregame_availability.py
