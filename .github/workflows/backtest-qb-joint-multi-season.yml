@@ -1,0 +1,75 @@
+name: QB Joint Attempts YPA Multi-Season Robustness
+on:
+  workflow_dispatch:
+    inputs:
+      weeks: {description: "Weeks", required: false, default: "1-18"}
+      iterations: {description: "MC iterations", required: false, default: "2000"}
+      bootstrap: {description: "Paired bootstrap iterations", required: false, default: "10000"}
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+      - name: Build and validate 2024 inputs
+        env: {PYTHONPATH: "${{ github.workspace }}"}
+        run: |
+          TARGET_DIR=data/backtests/qb_multi_season/2024
+          python scripts/backtest/build_historical_inputs.py --season 2024 --prior-season 2023 --weeks "${{ inputs.weeks || '1-18' }}" --out-dir "$TARGET_DIR"
+          python scripts/backtest/enrich_historical_defense.py --team-weekly "$TARGET_DIR/team_weekly_history.csv" --seasons 2023,2024 --audit "$TARGET_DIR/historical_defense_enrichment_audit.csv" --observations "$TARGET_DIR/historical_defense_observations.csv"
+          python scripts/backtest/validate_historical_inputs.py --season 2024 --prior-season 2023 --weeks "${{ inputs.weeks || '1-18' }}" --data-dir "$TARGET_DIR" --report "$TARGET_DIR/historical_input_validation.csv"
+          python scripts/backtest/historical_player_logs.py --seasons 2023,2024 --schedule "$TARGET_DIR/schedule_history.csv" --out "$TARGET_DIR/player_game_logs_history.csv"
+          python scripts/backtest/build_historical_injuries.py --seasons 2023,2024 --out "$TARGET_DIR/injuries_history.csv"
+          python scripts/backtest/build_historical_weather.py --schedule "$TARGET_DIR/schedule_history.csv" --out "$TARGET_DIR/weather_history.csv"
+      - name: Run 2024 stable trace and joint model
+        env: {PYTHONPATH: "${{ github.workspace }}"}
+        run: |
+          TARGET_DIR=data/backtests/qb_multi_season/2024
+          python scripts/backtest/decompose_qb_passing_error.py --season 2024 --prior-season 2023 --weeks "${{ inputs.weeks || '1-18' }}" --iterations "${{ inputs.iterations || '2000' }}" --player-logs "$TARGET_DIR/player_game_logs_history.csv" --team-weekly "$TARGET_DIR/team_weekly_history.csv" --schedule "$TARGET_DIR/schedule_history.csv" --universe-dir "$TARGET_DIR/pregame_universe" --injuries "$TARGET_DIR/injuries_history.csv" --weather "$TARGET_DIR/weather_history.csv" --out-dir "$TARGET_DIR/qb_passing_error"
+          python scripts/backtest/decompose_qb_participation_role.py --trace "$TARGET_DIR/qb_passing_error/qb_passing_player_trace.csv" --player-logs "$TARGET_DIR/player_game_logs_history.csv" --out-dir "$TARGET_DIR/qb_participation_role"
+          python scripts/backtest/audit_qb_gamescript_market_signals.py --season 2024 --participation-trace "$TARGET_DIR/qb_participation_role/qb_participation_player_trace.csv" --out-dir "$TARGET_DIR/qb_gamescript_market"
+          python scripts/backtest/fit_qb_joint_attempts_ypa_walkforward.py --season 2024 --market-trace "$TARGET_DIR/qb_gamescript_market/qb_gamescript_market_trace.csv" --team-weekly "$TARGET_DIR/team_weekly_history.csv" --player-logs "$TARGET_DIR/player_game_logs_history.csv" --weather "$TARGET_DIR/weather_history.csv" --out-dir "$TARGET_DIR/qb_joint_attempts_ypa"
+          python scripts/backtest/validate_qb_joint_attempts_ypa_mc.py --season 2024 --prior-season 2023 --weeks "${{ inputs.weeks || '1-18' }}" --iterations "${{ inputs.iterations || '2000' }}" --candidate-trace "$TARGET_DIR/qb_joint_attempts_ypa/qb_joint_attempts_ypa_trace.csv" --player-logs "$TARGET_DIR/player_game_logs_history.csv" --team-weekly "$TARGET_DIR/team_weekly_history.csv" --schedule "$TARGET_DIR/schedule_history.csv" --universe-dir "$TARGET_DIR/pregame_universe" --injuries "$TARGET_DIR/injuries_history.csv" --weather "$TARGET_DIR/weather_history.csv" --out-dir "$TARGET_DIR/qb_joint_attempts_ypa_mc"
+      - name: Build and validate 2025 inputs
+        env: {PYTHONPATH: "${{ github.workspace }}"}
+        run: |
+          TARGET_DIR=data/backtests/qb_multi_season/2025
+          python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --out-dir "$TARGET_DIR"
+          python scripts/backtest/enrich_historical_defense.py --team-weekly "$TARGET_DIR/team_weekly_history.csv" --seasons 2024,2025 --audit "$TARGET_DIR/historical_defense_enrichment_audit.csv" --observations "$TARGET_DIR/historical_defense_observations.csv"
+          python scripts/backtest/validate_historical_inputs.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --data-dir "$TARGET_DIR" --report "$TARGET_DIR/historical_input_validation.csv"
+          python scripts/backtest/historical_player_logs.py --seasons 2024,2025 --schedule "$TARGET_DIR/schedule_history.csv" --out "$TARGET_DIR/player_game_logs_history.csv"
+          python scripts/backtest/build_historical_injuries.py --seasons 2024,2025 --out "$TARGET_DIR/injuries_history.csv"
+          python scripts/backtest/build_historical_weather.py --schedule "$TARGET_DIR/schedule_history.csv" --out "$TARGET_DIR/weather_history.csv"
+      - name: Run 2025 stable trace and joint model
+        env: {PYTHONPATH: "${{ github.workspace }}"}
+        run: |
+          TARGET_DIR=data/backtests/qb_multi_season/2025
+          python scripts/backtest/decompose_qb_passing_error.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --iterations "${{ inputs.iterations || '2000' }}" --player-logs "$TARGET_DIR/player_game_logs_history.csv" --team-weekly "$TARGET_DIR/team_weekly_history.csv" --schedule "$TARGET_DIR/schedule_history.csv" --universe-dir "$TARGET_DIR/pregame_universe" --injuries "$TARGET_DIR/injuries_history.csv" --weather "$TARGET_DIR/weather_history.csv" --out-dir "$TARGET_DIR/qb_passing_error"
+          python scripts/backtest/decompose_qb_participation_role.py --trace "$TARGET_DIR/qb_passing_error/qb_passing_player_trace.csv" --player-logs "$TARGET_DIR/player_game_logs_history.csv" --out-dir "$TARGET_DIR/qb_participation_role"
+          python scripts/backtest/audit_qb_gamescript_market_signals.py --season 2025 --participation-trace "$TARGET_DIR/qb_participation_role/qb_participation_player_trace.csv" --out-dir "$TARGET_DIR/qb_gamescript_market"
+          python scripts/backtest/fit_qb_joint_attempts_ypa_walkforward.py --season 2025 --market-trace "$TARGET_DIR/qb_gamescript_market/qb_gamescript_market_trace.csv" --team-weekly "$TARGET_DIR/team_weekly_history.csv" --player-logs "$TARGET_DIR/player_game_logs_history.csv" --weather "$TARGET_DIR/weather_history.csv" --out-dir "$TARGET_DIR/qb_joint_attempts_ypa"
+          python scripts/backtest/validate_qb_joint_attempts_ypa_mc.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --iterations "${{ inputs.iterations || '2000' }}" --candidate-trace "$TARGET_DIR/qb_joint_attempts_ypa/qb_joint_attempts_ypa_trace.csv" --player-logs "$TARGET_DIR/player_game_logs_history.csv" --team-weekly "$TARGET_DIR/team_weekly_history.csv" --schedule "$TARGET_DIR/schedule_history.csv" --universe-dir "$TARGET_DIR/pregame_universe" --injuries "$TARGET_DIR/injuries_history.csv" --weather "$TARGET_DIR/weather_history.csv" --out-dir "$TARGET_DIR/qb_joint_attempts_ypa_mc"
+      - name: Summarize Migration 54 robustness
+        env: {PYTHONPATH: "${{ github.workspace }}"}
+        run: python scripts/backtest/summarize_qb_joint_multi_season.py --root data/backtests/qb_multi_season --seasons 2024,2025 --bootstrap "${{ inputs.bootstrap || '10000' }}"
+      - name: Show results
+        if: always()
+        run: |
+          cat data/backtests/qb_multi_season/summary/qb_joint_multi_season_summary.csv 2>/dev/null || true
+          cat data/backtests/qb_multi_season/summary/qb_joint_multi_season_bootstrap.csv 2>/dev/null || true
+          cat data/backtests/qb_multi_season/summary/qb_joint_multi_season_subgroups.csv 2>/dev/null || true
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-54-qb-joint-multi-season-robustness
+          path: data/backtests/qb_multi_season/**/*.csv
+          if-no-files-found: warn
+          retention-days: 14
