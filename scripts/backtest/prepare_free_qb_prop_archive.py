@@ -12,8 +12,10 @@ Important scientific constraint: this source does not preserve a trustworthy
 fixed M60 30-minute snapshot.
 
 Migration 60B joins sportsbook rows to frozen football projections primarily by
-the nflverse/GSIS ``player_id`` carried in both datasets. Name matching is only
-a fallback for archive rows where that stable identifier is absent.
+the nflverse/GSIS ``player_id`` carried in both datasets. If the frozen projection
+CSV does not yet contain that ID, this loader attaches it from the same nflverse
+weekly data and canonical normalization used by the historical player pipeline.
+Name matching is only a fallback for archive rows where the stable ID is absent.
 """
 from __future__ import annotations
 
@@ -27,6 +29,7 @@ import pandas as pd
 import requests
 
 from scripts._opponent_map import canon_team
+from scripts.player_form_v2 import _normalize_weekly, _to_pandas
 from scripts.utils.canonical_names import canonicalize_player_name_safe
 
 SOURCE_TEMPLATE = (
@@ -88,7 +91,6 @@ def first_existing(df: pd.DataFrame, names: Iterable[str]) -> str | None:
 
 
 def to_american(v):
-    """Normalize obvious American or decimal prices to American odds."""
     try:
         x = float(v)
     except Exception:
@@ -103,9 +105,64 @@ def to_american(v):
 
 
 def download_parquet(url: str, timeout: int = 90) -> tuple[pd.DataFrame, int]:
-    r = requests.get(url, timeout=timeout, headers={"User-Agent": "imtiredofthis-m60b/1.1"})
+    r = requests.get(url, timeout=timeout, headers={"User-Agent": "imtiredofthis-m60b/1.2"})
     r.raise_for_status()
     return pd.read_parquet(io.BytesIO(r.content)), len(r.content)
+
+
+def attach_projection_player_ids(projections: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """Attach GSIS IDs without changing any football projection values."""
+    p = projections.copy()
+    p.columns = [str(c).strip().lower() for c in p.columns]
+    required = {"season", "week", "team", "player_clean_key"}
+    if not required.issubset(p.columns):
+        raise RuntimeError(f"projection files missing identity columns: {sorted(required-set(p.columns))}")
+    p["season"] = num(p.season).astype("Int64")
+    p["week"] = num(p.week).astype("Int64")
+    p["team"] = p.team.map(clean_team)
+    p["player_clean_key"] = p.player_clean_key.astype("string").fillna("").str.strip()
+
+    if "player_id" in p.columns:
+        p["player_id"] = p.player_id.map(clean_id)
+    else:
+        p["player_id"] = ""
+
+    need = p.player_id.eq("")
+    if need.any():
+        import nflreadpy as nfl
+
+        frames = []
+        for season in sorted(set(p.season.dropna().astype(int))):
+            raw = nfl.load_player_stats(seasons=[int(season)], summary_level="week")
+            logs = _normalize_weekly(_to_pandas(raw), int(season))
+            logs["team"] = logs.team.map(clean_team)
+            logs["player_id"] = logs.player_id.map(clean_id)
+            frames.append(logs[["season", "week", "team", "player_clean_key", "player_id"]])
+        ids = pd.concat(frames, ignore_index=True)
+        ids = ids.loc[ids.player_id.ne("")].drop_duplicates()
+        keys = ["season", "week", "team", "player_clean_key"]
+        amb = ids.groupby(keys).player_id.nunique().gt(1)
+        if amb.any():
+            sample = amb[amb].reset_index().head(10).to_dict(orient="records")
+            raise RuntimeError(f"ambiguous nflverse GSIS projection keys: {sample}")
+        ids = ids.drop_duplicates(keys).rename(columns={"player_id": "mapped_player_id"})
+        p = p.merge(ids, on=keys, how="left", validate="one_to_one")
+        p.loc[p.player_id.eq(""), "player_id"] = p.loc[p.player_id.eq(""), "mapped_player_id"].map(clean_id)
+        p = p.drop(columns=["mapped_player_id"])
+
+    matched = int(p.player_id.ne("").sum())
+    total = len(p)
+    coverage = matched / total if total else 0.0
+    stats = {
+        "projection_player_id_rows": matched,
+        "projection_rows": total,
+        "projection_player_id_coverage": coverage,
+    }
+    if coverage < 0.95:
+        sample = p.loc[p.player_id.eq(""), ["season", "week", "team", "player_clean_key"]].head(20).to_dict(orient="records")
+        raise RuntimeError(f"projection GSIS coverage below 95% ({coverage:.3%}); sample={sample}")
+    print(f"[m60b projection ids] matched={matched}/{total} coverage={coverage:.3%}")
+    return p, stats
 
 
 def normalize_source(raw: pd.DataFrame, season: int) -> tuple[pd.DataFrame, dict, pd.DataFrame, pd.DataFrame]:
@@ -173,8 +230,6 @@ def normalize_source(raw: pd.DataFrame, season: int) -> tuple[pd.DataFrame, dict
     audit["rows_with_source_player_id"] = int(x.source_player_id.ne("").sum())
     audit["source_player_id_column"] = id_col or ""
 
-    # Stable ID is authoritative. Name is retained only as a fallback identity
-    # for rows where the archive has no mapped GSIS ID.
     x["identity_key"] = np.where(
         x.source_player_id.ne(""),
         "id:" + x.source_player_id,
@@ -235,7 +290,6 @@ def attach_projection_games(props: pd.DataFrame, projections: pd.DataFrame) -> t
         "source_rows_with_player_id": int(props.source_player_id.astype(str).ne("").sum()),
     }
 
-    # Primary GSIS join.
     id_key = ["season", "week", "player_id"]
     id_map = p.loc[p.player_id.ne(""), id_key + ["game_id", "proj_team", "player_clean_key"]].drop_duplicates()
     amb_id = id_map.groupby(id_key).size().gt(1)
@@ -250,8 +304,6 @@ def attach_projection_games(props: pd.DataFrame, projections: pd.DataFrame) -> t
     with_id["join_method"] = np.where(with_id.game_id.notna(), "gsis_player_id", "unmatched_gsis_player_id")
     stats["gsis_matched_rows_before_team_check"] = int(with_id.game_id.notna().sum())
 
-    # Fallback is deliberately restricted to archive rows that do not have a
-    # GSIS ID. Never override a conflicting stable ID with a fuzzy/name match.
     no_id = props.loc[props.source_player_id.astype(str).eq("")].copy()
     if not no_id.empty:
         name_key = ["season", "week", "player_clean_key"]
@@ -292,6 +344,7 @@ def main() -> int:
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
     projections = pd.concat([pd.read_csv(Path(p)) for p in args.projection_file], ignore_index=True)
+    projections, projection_id_stats = attach_projection_player_ids(projections)
     seasons = sorted(set(num(projections.season).dropna().astype(int)))
 
     normalized, audits, period_parts, book_parts = [], [], [], []
@@ -325,7 +378,7 @@ def main() -> int:
             reason = "validated archive rows did not match any stable-QB projection games"
 
     audit_df = pd.DataFrame(audits)
-    for k, v in match_stats.items():
+    for k, v in {**projection_id_stats, **match_stats}.items():
         audit_df[k] = v
     audit_df.to_csv(args.out_dir / "m60b_free_source_audit.csv", index=False)
     if period_parts:
@@ -352,6 +405,7 @@ def main() -> int:
         "source_is_exact_30min_snapshot": False,
         "book_priority": "draftkings,fanduel",
         "seasons": ",".join(map(str, seasons)),
+        **projection_id_stats,
         **match_stats,
     }])
     status_df.to_csv(args.out_dir / "m60b_free_source_status.csv", index=False)
