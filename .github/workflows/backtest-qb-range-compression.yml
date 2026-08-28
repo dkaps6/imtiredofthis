@@ -1,0 +1,142 @@
+name: Migration 57 QB Range Compression Audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      weeks: {description: "Weeks", required: false, default: "1-18"}
+      iterations: {description: "Canonical current MC iterations", required: false, default: "2000"}
+  pull_request:
+    branches: [main]
+
+jobs:
+  audit:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'backtest-migration-57-qb-range-compression'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+
+      - name: Declare Migration 57 scope and precommitted rule
+        run: |
+          echo "Diagnostic only; no production model logic changes."
+          echo "2024 and 2025 are development seasons. 2023 holdout remains consumed and is not rescored."
+          echo "Question: do the raw walk-forward attempts/YPA residual models contain useful range suppressed by current caps/shrinkage?"
+          echo "Stages: raw, cap-only, shrink-only, and current cap+shrink."
+          echo "A less-compressed candidate earns a Migration 58 canonical test only if:"
+          echo "1) combined passing-yard MAE improves >=0.50 yards vs joint_cap_shrink;"
+          echo "2) passing-yard MAE is non-worse in both 2024 and 2025;"
+          echo "3) combined passing-yard correlation improves >=0.02 vs joint_cap_shrink."
+          echo "QB-history tiers are diagnostic only and cannot become post-hoc gates."
+
+      - name: Build leakage-safe traces and audit compression
+        env:
+          PYTHONPATH: "${{ github.workspace }}"
+        run: |
+          set -euo pipefail
+          WEEKS="${{ inputs.weeks || '1-18' }}"
+          ITERATIONS="${{ inputs.iterations || '2000' }}"
+          run_season () {
+            SEASON="$1"; PRIOR="$2"; D="data/backtests/qb_range_compression/${SEASON}"
+            python scripts/backtest/build_historical_inputs.py --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --out-dir "$D"
+            python scripts/backtest/enrich_historical_defense.py --team-weekly "$D/team_weekly_history.csv" --seasons "$PRIOR,$SEASON" --audit "$D/historical_defense_enrichment_audit.csv" --observations "$D/historical_defense_observations.csv"
+            python scripts/backtest/validate_historical_inputs.py --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --data-dir "$D" --report "$D/historical_input_validation.csv"
+            python scripts/backtest/historical_player_logs.py --seasons "$PRIOR,$SEASON" --schedule "$D/schedule_history.csv" --out "$D/player_game_logs_history.csv"
+            python scripts/backtest/build_historical_injuries.py --seasons "$PRIOR,$SEASON" --out "$D/injuries_history.csv"
+            python scripts/backtest/build_historical_weather.py --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv"
+            python scripts/backtest/decompose_qb_passing_error.py --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --iterations "$ITERATIONS" --player-logs "$D/player_game_logs_history.csv" --team-weekly "$D/team_weekly_history.csv" --schedule "$D/schedule_history.csv" --universe-dir "$D/pregame_universe" --injuries "$D/injuries_history.csv" --weather "$D/weather_history.csv" --out-dir "$D/qb_passing_error"
+            python scripts/backtest/decompose_qb_participation_role.py --trace "$D/qb_passing_error/qb_passing_player_trace.csv" --player-logs "$D/player_game_logs_history.csv" --out-dir "$D/qb_participation_role"
+            python scripts/backtest/audit_qb_gamescript_market_signals.py --season "$SEASON" --participation-trace "$D/qb_participation_role/qb_participation_player_trace.csv" --out-dir "$D/qb_gamescript_market"
+            python scripts/backtest/audit_qb_range_compression.py --season "$SEASON" --market-trace "$D/qb_gamescript_market/qb_gamescript_market_trace.csv" --team-weekly "$D/team_weekly_history.csv" --player-logs "$D/player_game_logs_history.csv" --weather "$D/weather_history.csv" --out-dir "$D/range_audit"
+          }
+          run_season 2024 2023
+          run_season 2025 2024
+
+      - name: Combine seasons and apply precommitted eligibility
+        env:
+          PYTHONPATH: "${{ github.workspace }}"
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import numpy as np
+          import pandas as pd
+
+          root=Path('data/backtests/qb_range_compression'); out=root/'summary'; out.mkdir(parents=True,exist_ok=True)
+          traces=[]; summaries=[]; binds=[]; tiers=[]
+          for season in (2024,2025):
+              d=root/str(season)/'range_audit'
+              traces.append(pd.read_csv(d/f'qb_range_compression_trace_{season}.csv'))
+              summaries.append(pd.read_csv(d/f'qb_range_compression_summary_{season}.csv'))
+              binds.append(pd.read_csv(d/f'qb_range_compression_bind_{season}.csv'))
+              tiers.append(pd.read_csv(d/f'qb_range_compression_qb_tiers_{season}.csv'))
+          x=pd.concat(traces,ignore_index=True); s=pd.concat(summaries,ignore_index=True); b=pd.concat(binds,ignore_index=True); t=pd.concat(tiers,ignore_index=True)
+          s.to_csv(out/'qb_range_compression_by_season.csv',index=False); b.to_csv(out/'qb_range_compression_bind_rates.csv',index=False); t.to_csv(out/'qb_range_compression_qb_tiers.csv',index=False)
+
+          def met(a,p):
+              z=pd.DataFrame({'a':pd.to_numeric(a,errors='coerce'),'p':pd.to_numeric(p,errors='coerce')}).dropna(); e=z.p-z.a
+              return {'n':len(z),'mae':float(e.abs().mean()),'rmse':float(np.sqrt(np.mean(e*e))),'bias':float(e.mean()),'correlation':float(z.p.corr(z.a)),'actual_sd':float(z.a.std(ddof=0)),'pred_sd':float(z.p.std(ddof=0)),'sd_ratio':float(z.p.std(ddof=0)/z.a.std(ddof=0))}
+          combos=['current_components','joint_cap_shrink','attempts_raw_only','attempts_cap_only','attempts_shrink_only','ypa_raw_only','ypa_cap_only','ypa_shrink_only','both_raw','both_cap_only','both_shrink_only']
+          combined=[]
+          for c in combos:
+              r={'season':'combined','target':'pass_yards','candidate':c,**met(x.actual_pass_yards_raw,x[f'pass_yards_{c}'])}
+              e=pd.to_numeric(x[f'pass_yards_{c}'],errors='coerce')-pd.to_numeric(x.actual_pass_yards_raw,errors='coerce')
+              r['catastrophic_100plus']=int(e.abs().ge(100).sum()); r['under_100plus']=int(e.le(-100).sum()); r['over_100plus']=int(e.ge(100).sum()); combined.append(r)
+          for st in ['base','raw','cap_only','shrink_only','cap_shrink']:
+              combined.append({'season':'combined','target':'attempts','candidate':st,**met(x.actual_pass_att,x[f'attempts_{st}'])})
+              combined.append({'season':'combined','target':'ypa','candidate':st,**met(x.actual_ypa,x[f'ypa_{st}'])})
+          cdf=pd.DataFrame(combined); cdf.to_csv(out/'qb_range_compression_combined.csv',index=False)
+
+          ref_comb=cdf[(cdf.target=='pass_yards')&(cdf.candidate=='joint_cap_shrink')].iloc[0]
+          season_pass=s[s.target.eq('pass_yards')]
+          candidates=[c for c in combos if c not in {'current_components','joint_cap_shrink'}]
+          verdict=[]
+          for c in candidates:
+              cr=cdf[(cdf.target=='pass_yards')&(cdf.candidate==c)].iloc[0]
+              vals={}
+              for year in (2024,2025):
+                  rr=season_pass[(season_pass.season==year)&(season_pass.candidate=='joint_cap_shrink')].iloc[0]
+                  cc=season_pass[(season_pass.season==year)&(season_pass.candidate==c)].iloc[0]
+                  vals[year]=float(rr.mae-cc.mae)
+              mae_gain=float(ref_comb.mae-cr.mae); corr_gain=float(cr.correlation-ref_comb.correlation)
+              qualifies=mae_gain>=0.50 and vals[2024]>=0 and vals[2025]>=0 and corr_gain>=0.02
+              verdict.append({'candidate':c,'combined_mae_improvement_vs_cap_shrink':mae_gain,'season_2024_mae_improvement':vals[2024],'season_2025_mae_improvement':vals[2025],'combined_correlation_improvement':corr_gain,'combined_sd_ratio':float(cr.sd_ratio),'qualifies_for_migration58_canonical_test':bool(qualifies)})
+          v=pd.DataFrame(verdict).sort_values('combined_mae_improvement_vs_cap_shrink',ascending=False); v['migration57_actionable_compression_signal']=bool(v.qualifies_for_migration58_canonical_test.any()); v.to_csv(out/'migration57_precommitted_verdict.csv',index=False)
+
+          # Pooled QB-history tiers, diagnostic only.
+          q=pd.qcut(pd.to_numeric(x.qb_recent_ypa,errors='coerce').rank(method='first'),3,labels=['lower_qb_history','middle_qb_history','higher_qb_history'])
+          tier_rows=[]
+          for label,g in x.groupby(q,observed=True):
+              for c in ['joint_cap_shrink','attempts_raw_only','ypa_raw_only','both_raw','both_cap_only','both_shrink_only']:
+                  tier_rows.append({'qb_tier':str(label),'candidate':c,**met(g.actual_pass_yards_raw,g[f'pass_yards_{c}'])})
+          pd.DataFrame(tier_rows).to_csv(out/'qb_range_compression_pooled_qb_tiers.csv',index=False)
+
+          print('=== COMBINED RANGE SUMMARY ==='); print(cdf.to_string(index=False))
+          print('\n=== CAP BIND RATES ==='); print(b.to_string(index=False))
+          print('\n=== PRECOMMITTED M58 ELIGIBILITY ==='); print(v.to_string(index=False))
+          PY
+
+      - name: Show Migration 57 results
+        if: always()
+        run: |
+          cat data/backtests/qb_range_compression/summary/qb_range_compression_combined.csv 2>/dev/null || true
+          cat data/backtests/qb_range_compression/summary/qb_range_compression_bind_rates.csv 2>/dev/null || true
+          cat data/backtests/qb_range_compression/summary/migration57_precommitted_verdict.csv 2>/dev/null || true
+          cat data/backtests/qb_range_compression/summary/qb_range_compression_pooled_qb_tiers.csv 2>/dev/null || true
+
+      - name: Upload Migration 57 artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-57-qb-range-compression-audit
+          path: |
+            data/backtests/qb_range_compression/summary/*.csv
+            data/backtests/qb_range_compression/2024/historical_input_validation.csv
+            data/backtests/qb_range_compression/2025/historical_input_validation.csv
+          if-no-files-found: warn
+          retention-days: 14
