@@ -1,0 +1,147 @@
+name: Migration 59 QB Raw Tail Attribution
+
+on:
+  workflow_dispatch:
+    inputs:
+      weeks: {description: "Weeks", required: false, default: "1-18"}
+      iterations: {description: "MC iterations", required: false, default: "2000"}
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'backtest-migration-59-qb-raw-tail-attribution'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+
+      - name: Declare Migration 59 diagnostic scope
+        run: |
+          echo "Migration 59 is diagnostic only. No production defaults, features, coefficients, caps, or shrinkage change."
+          echo "2024 and 2025 development seasons only. 2023 holdout is NOT rescored."
+          echo "Canonical modes: joint cap+shrink, raw attempts only, raw YPA only, BOTH RAW."
+          echo "Primary question: what creates the additional BOTH RAW 100+ yard overprojections?"
+          echo "Attribution categories are fixed before scoring: attempts alone, YPA alone, both individually, compounding only."
+          echo "A single mechanism is called dominant only if it explains >50% of new overprojections; otherwise interpretation is MIXED."
+
+      - name: Build and run canonical tail attribution
+        env:
+          PYTHONPATH: "${{ github.workspace }}"
+        run: |
+          set -euo pipefail
+          WEEKS="${{ inputs.weeks || '1-18' }}"
+          ITERATIONS="${{ inputs.iterations || '2000' }}"
+
+          run_season () {
+            SEASON="$1"; PRIOR="$2"; D="data/backtests/qb_raw_tail_attribution/${SEASON}"
+            python scripts/backtest/build_historical_inputs.py --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --out-dir "$D"
+            python scripts/backtest/enrich_historical_defense.py --team-weekly "$D/team_weekly_history.csv" --seasons "$PRIOR,$SEASON" --audit "$D/historical_defense_enrichment_audit.csv" --observations "$D/historical_defense_observations.csv"
+            python scripts/backtest/validate_historical_inputs.py --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --data-dir "$D" --report "$D/historical_input_validation.csv"
+            python scripts/backtest/historical_player_logs.py --seasons "$PRIOR,$SEASON" --schedule "$D/schedule_history.csv" --out "$D/player_game_logs_history.csv"
+            python scripts/backtest/build_historical_injuries.py --seasons "$PRIOR,$SEASON" --out "$D/injuries_history.csv"
+            python scripts/backtest/build_historical_weather.py --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv"
+
+            python scripts/backtest/decompose_qb_passing_error.py --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --iterations "$ITERATIONS" --player-logs "$D/player_game_logs_history.csv" --team-weekly "$D/team_weekly_history.csv" --schedule "$D/schedule_history.csv" --universe-dir "$D/pregame_universe" --injuries "$D/injuries_history.csv" --weather "$D/weather_history.csv" --out-dir "$D/qb_passing_error"
+            python scripts/backtest/decompose_qb_participation_role.py --trace "$D/qb_passing_error/qb_passing_player_trace.csv" --player-logs "$D/player_game_logs_history.csv" --out-dir "$D/qb_participation_role"
+            python scripts/backtest/audit_qb_gamescript_market_signals.py --season "$SEASON" --participation-trace "$D/qb_participation_role/qb_participation_player_trace.csv" --out-dir "$D/qb_gamescript_market"
+            python scripts/backtest/fit_qb_joint_attempts_ypa_walkforward.py --season "$SEASON" --market-trace "$D/qb_gamescript_market/qb_gamescript_market_trace.csv" --team-weekly "$D/team_weekly_history.csv" --player-logs "$D/player_game_logs_history.csv" --weather "$D/weather_history.csv" --out-dir "$D/qb_joint_attempts_ypa"
+            python scripts/backtest/fit_qb_both_raw_walkforward.py --season "$SEASON" --market-trace "$D/qb_gamescript_market/qb_gamescript_market_trace.csv" --team-weekly "$D/team_weekly_history.csv" --player-logs "$D/player_game_logs_history.csv" --weather "$D/weather_history.csv" --out-dir "$D/qb_both_raw"
+
+            python scripts/backtest/diagnose_qb_raw_tail_attribution_mc.py \
+              --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --iterations "$ITERATIONS" \
+              --joint-trace "$D/qb_joint_attempts_ypa/qb_joint_attempts_ypa_trace.csv" \
+              --raw-trace "$D/qb_both_raw/qb_both_raw_walkforward_trace.csv" \
+              --player-logs "$D/player_game_logs_history.csv" --team-weekly "$D/team_weekly_history.csv" \
+              --schedule "$D/schedule_history.csv" --universe-dir "$D/pregame_universe" \
+              --injuries "$D/injuries_history.csv" --weather "$D/weather_history.csv" --out-dir "$D/m59"
+          }
+
+          run_season 2024 2023
+          run_season 2025 2024
+
+      - name: Combine seasons and precommit interpretation
+        env:
+          PYTHONPATH: "${{ github.workspace }}"
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import numpy as np
+          import pandas as pd
+
+          root=Path('data/backtests/qb_raw_tail_attribution'); out=root/'summary'; out.mkdir(parents=True,exist_ok=True)
+          games=[]; metrics=[]; dirs=[]
+          for s in (2024,2025):
+              d=root/str(s)/'m59'
+              g=pd.read_csv(d/f'm59_game_attribution_{s}.csv'); g['season']=s; games.append(g)
+              metrics.append(pd.read_csv(d/f'm59_metrics_{s}.csv'))
+              dirs.append(pd.read_csv(d/f'm59_raw_delta_directions_{s}.csv'))
+          g=pd.concat(games,ignore_index=True); pd.concat(metrics,ignore_index=True).to_csv(out/'m59_by_season_metrics.csv',index=False)
+          pd.concat(dirs,ignore_index=True).to_csv(out/'m59_by_season_delta_directions.csv',index=False)
+          g.to_csv(out/'m59_combined_game_attribution.csv',index=False)
+
+          modes=['joint_cap_shrink','attempts_raw_only','ypa_raw_only','both_raw']
+          rows=[]
+          for m in modes:
+              a=pd.to_numeric(g.actual,errors='coerce'); p=pd.to_numeric(g[f'mc_proj_{m}'],errors='coerce'); z=pd.DataFrame({'a':a,'p':p}).dropna(); e=z.p-z.a
+              rows.append({'candidate':m,'n':len(z),'mae':e.abs().mean(),'rmse':np.sqrt((e*e).mean()),'bias':e.mean(),'correlation':z.p.corr(z.a),'catastrophic_100plus':e.abs().ge(100).sum(),'under_100plus':e.le(-100).sum(),'over_100plus':e.ge(100).sum()})
+          combined=pd.DataFrame(rows); combined.to_csv(out/'m59_combined_metrics.csv',index=False)
+
+          transitions=pd.crosstab(g.tail_joint_cap_shrink,g.tail_both_raw,margins=True).reset_index(); transitions.to_csv(out/'m59_combined_tail_transitions.csv',index=False)
+          new=g[g.new_over.astype(bool)].copy()
+          mech=new.groupby('new_over_mechanism',dropna=False).agg(n=('new_over','size'),mean_actual=('actual','mean'),mean_joint_proj=('mc_proj_joint_cap_shrink','mean'),mean_both_raw_proj=('mc_proj_both_raw','mean'),mean_attempt_delta=('delta_attempts_mode','mean'),mean_ypa_delta=('delta_ypa_mode','mean'),mean_interaction=('interaction_delta','mean')).reset_index().sort_values('n',ascending=False)
+          mech.to_csv(out/'m59_combined_new_over_mechanisms.csv',index=False)
+          new.sort_values('error_both_raw',ascending=False).to_csv(out/'m59_new_over_cases.csv',index=False)
+          g[g.rescued_under.astype(bool)].sort_values('error_joint_cap_shrink').to_csv(out/'m59_rescued_under_cases.csv',index=False)
+
+          n=len(new)
+          if n:
+              counts=new.new_over_mechanism.value_counts(); top=str(counts.index[0]); share=float(counts.iloc[0]/n)
+              interpretation=top if share>.50 else 'mixed_no_single_mechanism_over_50pct'
+          else:
+              top='none'; share=0.0; interpretation='no_new_overprojections'
+          decision=pd.DataFrame([{
+              'new_over_n':n,'rescued_under_n':int(g.rescued_under.astype(bool).sum()),
+              'new_under_n':int(g.new_under.astype(bool).sum()),'rescued_over_n':int(g.rescued_over.astype(bool).sum()),
+              'top_new_over_mechanism':top,'top_mechanism_share':share,'precommitted_interpretation':interpretation,
+              'next_migration_rule': (
+                  'investigate attempts confidence/selective variance' if interpretation=='attempts_alone_crosses_100' else
+                  'investigate YPA confidence/selective variance' if interpretation=='ypa_alone_crosses_100' else
+                  'investigate attempts-YPA coupling/double-counting' if interpretation in {'compounding_only_crosses_100','both_individually_cross_100'} else
+                  'no single mechanism; investigate shared tail calibration/classification'
+              )
+          }])
+          decision.to_csv(out/'m59_precommitted_interpretation.csv',index=False)
+          print('=== M59 COMBINED METRICS ==='); print(combined.to_string(index=False))
+          print('\n=== M59 TAIL TRANSITIONS ==='); print(transitions.to_string(index=False))
+          print('\n=== M59 NEW OVER MECHANISMS ==='); print(mech.to_string(index=False))
+          print('\n=== M59 PRECOMMITTED INTERPRETATION ==='); print(decision.to_string(index=False))
+          PY
+
+      - name: Show results
+        if: always()
+        run: |
+          cat data/backtests/qb_raw_tail_attribution/summary/m59_combined_metrics.csv 2>/dev/null || true
+          cat data/backtests/qb_raw_tail_attribution/summary/m59_combined_new_over_mechanisms.csv 2>/dev/null || true
+          cat data/backtests/qb_raw_tail_attribution/summary/m59_precommitted_interpretation.csv 2>/dev/null || true
+
+      - name: Upload Migration 59 artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-59-qb-raw-tail-attribution
+          path: |
+            data/backtests/qb_raw_tail_attribution/summary/*.csv
+            data/backtests/qb_raw_tail_attribution/2024/m59/*.csv
+            data/backtests/qb_raw_tail_attribution/2025/m59/*.csv
+            data/backtests/qb_raw_tail_attribution/2024/historical_input_validation.csv
+            data/backtests/qb_raw_tail_attribution/2025/historical_input_validation.csv
+          if-no-files-found: warn
+          retention-days: 14
