@@ -1,0 +1,63 @@
+{
+  "snapshot_id": "qb_frontier_canonical_v1",
+  "schema_version": 1,
+  "row_count": 643,
+  "seasons": [
+    2024,
+    2025
+  ],
+  "columns": 127,
+  "snapshot_file": "qb_frontier_canonical_v1.csv",
+  "snapshot_sha256": "396d924a308fb05baff9a44d7485fe87d3bf008a9134b65a66c06a7704a8f87c",
+  "source_m69_workflow_run_id": 33262455637,
+  "source_m69_artifact_id": 9717868133,
+  "source_m69_artifact_digest": "sha256:fbe7500d04e971c0d83ac468cecdf022407c3179e3904334521e380afa4070f4",
+  "source_m69_head_commit": "6de9030c60d481f9783a8b08926a3273afa39fd8",
+  "source_m69_merge_commit": "a081b24d60d6cc78954ed8ffd25fab57d1f98bc7",
+  "purpose": "Immutable canonical 2024-2025 QB research foundation. M70+ must load this snapshot instead of rebuilding M59-M65 unless a documented upstream foundation bug creates v2.",
+  "invariants": {
+    "target_games": 643,
+    "season_2024_rows": 332,
+    "season_2025_rows": 311,
+    "cat75_games": 188,
+    "cat100_games": 96
+  },
+  "source_files": {
+    "m69_summary/m69_game_forensic_atlas.csv": {
+      "bytes": 2575141,
+      "sha256": "5577d91dde0b6192754b2ac83b1e6fccfe1f8b30e55004d94cade8aa58a0ece0"
+    },
+    "m69_summary/m69_precommitted_interpretation.csv": {
+      "bytes": 367,
+      "sha256": "bfe19cb237101b9cd5ce963ec166256f33136bf768840ae1e58fb8e9fa644285"
+    },
+    "m65_summary/m65_game_level.csv": {
+      "bytes": 1311192,
+      "sha256": "e1355765fb996e32587f183d9a5a71a3f3aadae3ec7f2315a0b8b61c53ad081a"
+    },
+    "m64_summary/m64_game_level.csv": {
+      "bytes": 1054488,
+      "sha256": "0a0918711556839e68824c94f7a694d69cb2785e954d7bc5a9a3c150c8df0c87"
+    },
+    "m68_source/m68_pregame_new_information_features.csv": {
+      "bytes": 560999,
+      "sha256": "2d282255b31bd8c6098ebaed3ccea32ce5425e0d41d81285814b0404ddfe11f3"
+    },
+    "2024/m62/m62_enriched_games_2024.csv": {
+      "bytes": 366512,
+      "sha256": "45d91dec86edefe1a2942c14d2d0587712c2e2cc364e5527d8a66ec923fe664b"
+    },
+    "2025/m62/m62_enriched_games_2025.csv": {
+      "bytes": 344133,
+      "sha256": "fdb576e8330fd3a1ac9286d2ae2e5c466afccda4e5d6ec3f7cb11b4fbb419b9f"
+    },
+    "2024/qb_both_raw/qb_both_raw_walkforward_trace.csv": {
+      "bytes": 592419,
+      "sha256": "7a7fa9ff9c3ee392055ea827fcfc81842d45df60722ce305d2ee3ab1d18c24a3"
+    },
+    "2025/qb_both_raw/qb_both_raw_walkforward_trace.csv": {
+      "bytes": 563365,
+      "sha256": "b0d10478d3be7b333433dbe8a0d3805bc1e3819062a3a9934584052445eeac5b"
+    }
+  }
+}
