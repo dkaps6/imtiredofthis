@@ -1,0 +1,76 @@
+name: Freeze QB Frontier Canonical v1
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/backtest/freeze_qb_frontier_canonical_v1.py'
+      - '.github/workflows/freeze-qb-frontier-canonical-v1.yml'
+      - 'data/backtests/qb_frontier_canonical_v1/**'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  freeze:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install snapshot dependency
+        run: pip install pandas==1.5.3
+
+      - name: Download corrected authoritative M69 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: migration-69-qb-gamescript-forensic-atlas
+          path: data/backtests/_canonical_v1_source
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 33262455637
+
+      - name: Freeze immutable canonical v1
+        run: |
+          python scripts/backtest/freeze_qb_frontier_canonical_v1.py \
+            --artifact-root data/backtests/_canonical_v1_source \
+            --out-dir data/backtests/qb_frontier_canonical_v1
+
+      - name: Verify canonical invariants
+        run: |
+          python - <<'PY'
+          import hashlib, json, pandas as pd
+          from pathlib import Path
+          root = Path('data/backtests/qb_frontier_canonical_v1')
+          m = json.loads((root / 'manifest.json').read_text())
+          p = root / 'qb_frontier_canonical_v1.csv'
+          x = pd.read_csv(p, low_memory=False)
+          assert len(x) == 643
+          assert x.season.value_counts().to_dict() == {2024: 332, 2025: 311}
+          assert int(x.cat75.sum()) == 188
+          assert int(x.cat100.sum()) == 96
+          assert hashlib.sha256(p.read_bytes()).hexdigest() == m['snapshot_sha256']
+          print(m['snapshot_id'], m['snapshot_sha256'])
+          PY
+
+      - name: Commit frozen snapshot to PR branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/backtests/qb_frontier_canonical_v1
+          if git diff --cached --quiet; then
+            echo 'Canonical v1 already frozen; no commit needed.'
+          else
+            git commit -m 'Freeze qb_frontier_canonical_v1 from authoritative M69 artifact'
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          fi
