@@ -45,9 +45,13 @@ jobs:
           echo "9 100+ passing-yard misses reduce >=10%"
           echo "All nine gates are required for architecture eligibility. No post-hoc gate retuning."
           echo "Component oracles are diagnostic only and cannot rescue a failed architecture."
+          echo "Authoritative rerun uses nflverse fixed_drive when available and collision-safe correlation-column access; frozen modeling assumptions are unchanged."
 
-      - name: Compile M64 module
-        run: python -m py_compile scripts/backtest/validate_qb_possession_dropback_generative.py
+      - name: Compile M64 modules
+        run: |
+          python -m py_compile scripts/backtest/validate_qb_possession_dropback_generative.py
+          python -m py_compile scripts/backtest/validate_qb_possession_dropback_generative_fixed.py
+          python -m py_compile scripts/backtest/build_historical_injuries_optional.py
 
       - name: Build canonical reference rows
         env:
@@ -63,7 +67,7 @@ jobs:
             python scripts/backtest/enrich_historical_defense.py --team-weekly "$D/team_weekly_history.csv" --seasons "$PRIOR,$SEASON" --audit "$D/historical_defense_enrichment_audit.csv" --observations "$D/historical_defense_observations.csv"
             python scripts/backtest/validate_historical_inputs.py --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --data-dir "$D" --report "$D/historical_input_validation.csv"
             python scripts/backtest/historical_player_logs.py --seasons "$PRIOR,$SEASON" --schedule "$D/schedule_history.csv" --out "$D/player_game_logs_history.csv"
-            python scripts/backtest/build_historical_injuries.py --seasons "$PRIOR,$SEASON" --out "$D/injuries_history.csv"
+            python scripts/backtest/build_historical_injuries_optional.py --seasons "$PRIOR,$SEASON" --out "$D/injuries_history.csv"
             python scripts/backtest/build_historical_weather.py --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv"
 
             python scripts/backtest/decompose_qb_passing_error.py --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --iterations "$ITERATIONS" --player-logs "$D/player_game_logs_history.csv" --team-weekly "$D/team_weekly_history.csv" --schedule "$D/schedule_history.csv" --universe-dir "$D/pregame_universe" --injuries "$D/injuries_history.csv" --weather "$D/weather_history.csv" --out-dir "$D/qb_passing_error"
@@ -95,7 +99,7 @@ jobs:
         env:
           PYTHONPATH: "${{ github.workspace }}"
         run: |
-          python scripts/backtest/validate_qb_possession_dropback_generative.py \
+          python scripts/backtest/validate_qb_possession_dropback_generative_fixed.py \
             --season-file data/backtests/qb_possession_dropback/2024/m62/m62_enriched_games_2024.csv \
             --season-file data/backtests/qb_possession_dropback/2025/m62/m62_enriched_games_2025.csv \
             --player-logs data/backtests/qb_possession_dropback/2024/player_game_logs_history.csv \
