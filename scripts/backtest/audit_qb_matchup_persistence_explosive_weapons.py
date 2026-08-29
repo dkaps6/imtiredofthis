@@ -333,8 +333,18 @@ def defense_residual_features(hist_qb, passer_games, target_pid, season, week, d
         & num(hist_qb.pregame_prior_games).ge(MIN_QB_PRIOR)
     ].tail(HISTORY_WINDOW).copy()
     q = q[np.isfinite(num(q.qb_ypa_residual_vs_prior8))].copy()
-    if not len(q):
-        return {"def_prior_qb_games": 0}
+    if len(q) < MIN_DEF_PRIOR:
+        return {
+            "def_qb_resid_mean8": np.nan,
+            "def_qb_resid_recent3": np.nan,
+            "def_qb_resid_sd8": np.nan,
+            "def_qb_positive_resid_rate8": np.nan,
+            "def_prior_qb_games": int(len(q)),
+            "def_similar_qb_resid8": np.nan,
+            "def_similarity_weight_sum8": np.nan,
+            "def_similarity_max_weight8": np.nan,
+            "def_similarity_effective_n8": np.nan,
+        }
 
     residuals = num(q.qb_ypa_residual_vs_prior8).to_numpy(dtype=float)
     recent3 = residuals[-3:] if len(residuals) >= 3 else residuals
@@ -597,12 +607,19 @@ def main():
     results.to_csv(out / "m72_model_results.csv", index=False)
     pd.DataFrame(coverage_rows).to_csv(out / "m72_feature_coverage.csv", index=False)
     pd.concat(prediction_rows, ignore_index=True).to_csv(out / "m72_2025_predictions.csv", index=False)
+    season_label = ",".join(map(str, sorted(seasons)))
+    per_season = manifest[manifest.family.eq("pbp_history")].copy()
+    all_recovered = (
+        len(per_season) == len(set(seasons))
+        and per_season.status.astype(str).eq("recovered").all()
+    )
+    derived_status = "recovered" if all_recovered else "partial_from_recovered_pbp"
     manifest2 = pd.concat([
         manifest,
         pd.DataFrame([
-            {"season": "2023-2025", "family": "receiver_level_pbp", "status": "recovered", "rows": int(len(receiver_games))},
-            {"season": "2023-2025", "family": "defense_explosive_pbp", "status": "recovered", "rows": int(len(def_games))},
-            {"season": "2023-2025", "family": "individual_db_matchup", "status": "not_used_unreliable_live_historical_contract", "rows": 0},
+            {"season": season_label, "family": "receiver_level_pbp", "status": derived_status, "rows": int(len(receiver_games))},
+            {"season": season_label, "family": "defense_explosive_pbp", "status": derived_status, "rows": int(len(def_games))},
+            {"season": season_label, "family": "individual_db_matchup", "status": "not_used_unreliable_live_historical_contract", "rows": 0},
         ])
     ], ignore_index=True)
     manifest2.to_csv(out / "m72_source_manifest.csv", index=False)
