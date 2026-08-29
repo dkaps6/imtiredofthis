@@ -8,11 +8,12 @@ on:
       - 'scripts/backtest/run_qb_personnel_tracking_matchup.py'
       - 'scripts/backtest/run_qb_personnel_tracking_matchup_v2.py'
       - 'scripts/backtest/run_qb_personnel_tracking_matchup_v3.py'
+      - 'scripts/backtest/freeze_qb_frontier_canonical_v2_football_only.py'
       - '.github/workflows/backtest-qb-personnel-tracking-matchup.yml'
-      - 'data/backtests/qb_frontier_canonical_v1/**'
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   validate:
@@ -34,35 +35,64 @@ jobs:
       - name: Frozen M75 scientific scope
         run: |
           echo 'M75 introduces genuinely new player-level information; it is not another transform of M56-M74 team-level inputs.'
+          echo 'Foundation correction: canonical v1 is NOT the M75 baseline because review proved its BOTH-RAW residual corrections used sportsbook game-market fields.'
+          echo 'M75 freezes canonical v2 from the original pre-market mc_proj, pred_attempts, and pred_ypa already preserved in the authoritative M69 source artifact.'
+          echo 'Canonical v2 contains no market/spread/total/moneyline field and no market-trained residual correction.'
           echo 'New source A: weekly NFL Next Gen Stats receiving tracking: separation, cushion, intended air yards, expected YAC and YAC above expectation.'
-          echo 'New source B: weekly PFR advanced defensive player coverage, aggregated from DB coverage rows when position is available.'
+          echo 'New source B: weekly PFR advanced defensive player coverage, DB-only after a verified player-position bridge.'
           echo 'PFR coverage totals/rates are aggregated from underlying DB counts: yards/target, completion rate, reconstructed passer rating, target-weighted DADOT, and total YAC/completions.'
           echo 'Unavailable independent sources are recorded and skipped; they cannot abort or masquerade as qualified.'
-          echo 'Canonical qb_frontier_canonical_v1 supplies immutable QB Raw points and outcomes.'
           echo '2024 trains fixed models; 2025 is untouched evaluation. 2022/2023 are strictly-prior history only.'
           echo 'Target-week NGS/PFR outcomes are never features. Features use games strictly before the target week.'
           echo 'No sportsbook player-prop or game-market feature is used.'
-          echo 'Primary target is canonical YPA residual because receiver/secondary personnel is an efficiency mechanism; predicted YPA corrections are translated to passing yards using frozen canonical attempts.'
+          echo 'Primary target is football-only canonical YPA residual; predicted YPA corrections are translated to passing yards using football-only canonical attempts.'
           echo 'Frozen families: ngs_receiving_tracking, pfr_secondary_coverage, tracking_x_secondary, combined_personnel_tracking.'
-          echo 'tracking_x_secondary contains only the four frozen matchup interactions; combined contains source features plus those interactions.'
+          echo 'tracking_x_secondary requires all four precommitted interactions; no partial interaction subset is eligible.'
           echo 'Fixed models: Ridge alpha=50 and HistGB absolute-error 150 iter lr=.04 depth=2 leaf=15 L2=5 seed=75.'
           echo 'Full gate: median coverage>=.70; YPA residual corr>=.18; YPA MAE gain>=.10; passing MAE gain>=.75 yd; passing corr gain>=.015; 100+ misses non-increase.'
           echo 'Cross-model support: residual corr>=.08; passing MAE gain>=.20; 100+ misses non-increase.'
           echo 'No subset search, interaction zoo, threshold retuning, hyperparameter sweep, market leakage, or direct production promotion.'
 
-      - name: Compile M75
+      - name: Compile M75 and football-only freezer
         run: |
           python -m py_compile scripts/backtest/audit_qb_personnel_tracking_matchup.py
           python -m py_compile scripts/backtest/run_qb_personnel_tracking_matchup.py
           python -m py_compile scripts/backtest/run_qb_personnel_tracking_matchup_v2.py
           python -m py_compile scripts/backtest/run_qb_personnel_tracking_matchup_v3.py
+          python -m py_compile scripts/backtest/freeze_qb_frontier_canonical_v2_football_only.py
+
+      - name: Recover authoritative M69 source artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p data/backtests/qb_frontier_v2_source
+          curl -L --fail-with-body \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/9717868133/zip" \
+            -o /tmp/m69_authoritative.zip
+          unzip -q /tmp/m69_authoritative.zip -d data/backtests/qb_frontier_v2_source
+
+      - name: Freeze football-only canonical v2
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/freeze_qb_frontier_canonical_v2_football_only.py \
+            --artifact-root data/backtests/qb_frontier_v2_source \
+            --out-dir data/backtests/qb_frontier_canonical_v2_football_only
+          echo '--- football-only v2 oracle summary ---'
+          cat data/backtests/qb_frontier_canonical_v2_football_only/football_only_oracle_summary.csv
+          echo '--- football-only v2 manifest ---'
+          cat data/backtests/qb_frontier_canonical_v2_football_only/manifest.json
 
       - name: Run M75
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/backtest/run_qb_personnel_tracking_matchup_v3.py \
-            --canonical data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv \
+            --canonical data/backtests/qb_frontier_canonical_v2_football_only/qb_frontier_canonical_v2_football_only.csv \
             --seasons 2022,2023,2024,2025 \
             --out-dir data/backtests/qb_m75
 
@@ -83,6 +113,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: migration-75-qb-personnel-tracking-matchup
-          path: data/backtests/qb_m75/*.csv
+          path: |
+            data/backtests/qb_m75/*.csv
+            data/backtests/qb_frontier_canonical_v2_football_only/*
           if-no-files-found: warn
           retention-days: 14
