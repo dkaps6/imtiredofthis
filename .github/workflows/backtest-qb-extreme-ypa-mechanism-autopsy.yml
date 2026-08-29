@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/backtest/audit_qb_extreme_ypa_mechanisms.py'
+      - 'scripts/backtest/run_qb_extreme_ypa_mechanisms_official_attempts.py'
       - '.github/workflows/backtest-qb-extreme-ypa-mechanism-autopsy.yml'
       - 'data/backtests/qb_frontier_canonical_v1/**'
 
@@ -41,16 +42,19 @@ jobs:
           echo 'Context wrong-direction: actual and model each shift >=0.75 YPA from prior baseline in opposite directions.'
           echo 'Real performance shift threshold: 1.50 YPA from prior baseline.'
           echo 'Explosive concentration diagnostic: 20+ completions >=45% of passing yards and >=15pp above prior-8 share.'
+          echo 'PBP pass-attempt denominator is normalized to NFL official-style attempts: sacks and two-point conversions excluded.'
           echo 'Postgame PBP is diagnostic only and cannot become a live feature through M70.'
 
       - name: Compile M70
-        run: python -m py_compile scripts/backtest/audit_qb_extreme_ypa_mechanisms.py
+        run: |
+          python -m py_compile scripts/backtest/audit_qb_extreme_ypa_mechanisms.py
+          python -m py_compile scripts/backtest/run_qb_extreme_ypa_mechanisms_official_attempts.py
 
       - name: Run M70 from canonical snapshot
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/backtest/audit_qb_extreme_ypa_mechanisms.py \
+          python scripts/backtest/run_qb_extreme_ypa_mechanisms_official_attempts.py \
             --canonical data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv \
             --history-seasons 2023,2024,2025 \
             --out-dir data/backtests/qb_m70
