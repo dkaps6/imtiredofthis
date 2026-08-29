@@ -7,6 +7,7 @@ on:
       - 'scripts/backtest/audit_qb_personnel_tracking_matchup.py'
       - 'scripts/backtest/run_qb_personnel_tracking_matchup.py'
       - 'scripts/backtest/run_qb_personnel_tracking_matchup_v2.py'
+      - 'scripts/backtest/run_qb_personnel_tracking_matchup_v3.py'
       - '.github/workflows/backtest-qb-personnel-tracking-matchup.yml'
       - 'data/backtests/qb_frontier_canonical_v1/**'
 
@@ -35,6 +36,7 @@ jobs:
           echo 'M75 introduces genuinely new player-level information; it is not another transform of M56-M74 team-level inputs.'
           echo 'New source A: weekly NFL Next Gen Stats receiving tracking: separation, cushion, intended air yards, expected YAC and YAC above expectation.'
           echo 'New source B: weekly PFR advanced defensive player coverage, aggregated from DB coverage rows when position is available.'
+          echo 'PFR coverage totals/rates are aggregated from underlying DB counts: yards/target, completion rate, reconstructed passer rating, target-weighted DADOT, and total YAC/completions.'
           echo 'Unavailable independent sources are recorded and skipped; they cannot abort or masquerade as qualified.'
           echo 'Canonical qb_frontier_canonical_v1 supplies immutable QB Raw points and outcomes.'
           echo '2024 trains fixed models; 2025 is untouched evaluation. 2022/2023 are strictly-prior history only.'
@@ -53,12 +55,13 @@ jobs:
           python -m py_compile scripts/backtest/audit_qb_personnel_tracking_matchup.py
           python -m py_compile scripts/backtest/run_qb_personnel_tracking_matchup.py
           python -m py_compile scripts/backtest/run_qb_personnel_tracking_matchup_v2.py
+          python -m py_compile scripts/backtest/run_qb_personnel_tracking_matchup_v3.py
 
       - name: Run M75
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/backtest/run_qb_personnel_tracking_matchup_v2.py \
+          python scripts/backtest/run_qb_personnel_tracking_matchup_v3.py \
             --canonical data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv \
             --seasons 2022,2023,2024,2025 \
             --out-dir data/backtests/qb_m75
