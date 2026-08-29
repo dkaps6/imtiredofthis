@@ -32,7 +32,7 @@ jobs:
           echo "Pregame-candidate tests use only already-pregame M65/M68 columns."
           echo "Raw pass-yards error is decomposed into attempt-volume contribution, YPA contribution, and interaction."
           echo "Frozen volume mechanism priority: role -> opening-plan deviation -> score-state occupancy -> possessions -> attempt conversion -> run efficiency -> other/mixed."
-          echo "Opening plan deviation threshold is +/-12 percentage points versus playcaller prior first-15 baseline."
+          echo "Opening plan deviation threshold is +/-12 percentage points versus VERIFIED PLAYCALLER prior first-15 baseline only; no team/Q1 fallback."
           echo "Forced trailing/leading occupancy surprise threshold is +15 percentage points."
           echo "Possession surprise threshold is +/-2 drives."
           echo "Attempt conversion loss threshold is -8 percentage points."
@@ -42,8 +42,10 @@ jobs:
           echo "Realized defensive scheme from postseason participation is diagnostic only and can never become a live feature from M69."
           echo "No M69 output directly promotes a model or feature. Any hypothesis moves to M70/live-2026 prospective validation."
 
-      - name: Compile M69 module
-        run: python -m py_compile scripts/backtest/audit_qb_gamescript_forensic_atlas.py
+      - name: Compile M69 modules
+        run: |
+          python -m py_compile scripts/backtest/audit_qb_gamescript_forensic_atlas.py
+          python -m py_compile scripts/backtest/run_qb_gamescript_forensic_atlas_strict.py
 
       - name: Build canonical M59-M65 target rows
         env:
@@ -99,7 +101,7 @@ jobs:
         env:
           PYTHONPATH: "${{ github.workspace }}"
         run: |
-          python scripts/backtest/audit_qb_gamescript_forensic_atlas.py \
+          python scripts/backtest/run_qb_gamescript_forensic_atlas_strict.py \
             --m65-game-level data/backtests/qb_m69/m65_summary/m65_game_level.csv \
             --m68-features data/backtests/qb_m69/m68_source/m68_pregame_new_information_features.csv \
             --seasons 2024,2025 \
