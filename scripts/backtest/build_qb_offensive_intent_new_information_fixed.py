@@ -8,6 +8,7 @@ that provenance when constructing team-week injury features.
 """
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 import scripts.backtest.build_qb_offensive_intent_new_information as m
@@ -25,15 +26,12 @@ def load_sources_fixed(seasons: list[int]):
         try:
             q = m.lower(m.to_pd(nfl.load_injuries(seasons=[season])))
             if not q.empty:
-                # The season requested from the season-scoped nflverse asset is
-                # authoritative provenance for M67 alignment.  Preserve the raw
-                # value for diagnostics, but do not let provider/schema quirks
-                # silently relabel an entire target season.
                 q["_provider_season_raw"] = q.get("season", pd.Series(pd.NA, index=q.index))
                 q["_requested_season"] = int(season)
                 raw_vals = sorted(pd.to_numeric(q["_provider_season_raw"], errors="coerce").dropna().astype(int).unique().tolist())
+                st = sorted(q.get("season_type", pd.Series("", index=q.index)).astype(str).dropna().unique().tolist())
                 injury_frames.append(q)
-                print(f"[M67 fixed] injury requested_season={season} rows={len(q)} raw_seasons={raw_vals}")
+                print(f"[M67 fixed] injury requested_season={season} rows={len(q)} raw_seasons={raw_vals} season_types={st}")
             else:
                 injury_errors.append(f"{season}: empty")
         except Exception as exc:
@@ -64,7 +62,7 @@ def load_sources_fixed(seasons: list[int]):
             "source": "nflverse_injuries",
             "status": "recovered" if injury_ok else "unavailable",
             "live_2026_capability": "live_pregame",
-            "notes": "official report status/practice fields by offensive position; season-scoped loader with requested-season provenance",
+            "notes": "official report status/practice fields by offensive position; season-scoped loader with requested-season provenance; target weeks 1-18",
         },
         {
             "family": "actual_playcaller",
@@ -85,24 +83,70 @@ def load_sources_fixed(seasons: list[int]):
 
 
 def injury_team_week_fixed(inj: pd.DataFrame) -> pd.DataFrame:
-    """Frozen M67 injury aggregation with execution-safe season attribution."""
+    """Frozen M67 injury definitions with robust season/week attribution.
+
+    nflverse injury assets have inconsistent historical season_type encoding.
+    M67's scored universe is regular-season weeks 1-18, so use the explicit
+    requested-season provenance plus week boundary rather than provider
+    season_type. No injury feature definition is changed.
+    """
+    cols = ["season", "week", "team"] + m.AVAILABILITY_FEATURES
     if inj.empty:
-        return m.injury_team_week(inj)
+        return pd.DataFrame(columns=cols)
+
     x = inj.copy()
     if "_requested_season" in x.columns:
-        # Preserve the requested season from the season-specific provider asset.
-        # All downstream feature definitions remain exactly those in the frozen
-        # M67 injury_team_week implementation.
-        x["season"] = pd.to_numeric(x["_requested_season"], errors="coerce").astype("Int64")
-    out = _ORIGINAL_INJURY_TEAM_WEEK(x)
+        x["season"] = pd.to_numeric(x["_requested_season"], errors="coerce")
+    else:
+        x["season"] = pd.to_numeric(x.get("season"), errors="coerce")
+    x["week"] = pd.to_numeric(x.get("week"), errors="coerce")
+    x = x[x["season"].notna() & x["week"].between(1, 18, inclusive="both")].copy()
+    x["season"] = x["season"].astype(int)
+    x["week"] = x["week"].astype(int)
+    x["team"] = x["team"].map(m.canon_team)
+    x = x[x["team"].ne("")].copy()
+
+    pos = m.text(x.get("position", pd.Series("", index=x.index))).str.upper()
+    status = m.text(x.get("report_status", x.get("status", pd.Series("", index=x.index)))).str.upper()
+    practice = m.text(x.get("practice_status", pd.Series("", index=x.index))).str.upper()
+    x["_outd"] = status.str.contains("OUT|DOUBTFUL", regex=True)
+    x["_q"] = status.str.contains("QUESTIONABLE", regex=True)
+    x["_dnp"] = practice.str.contains("DNP|DID NOT", regex=True)
+    x["_limited"] = practice.str.contains("LIMITED", regex=True)
+    x["_ol"] = pos.isin(["C", "G", "T", "OL", "OG", "OT", "LT", "RT", "LG", "RG"])
+    x["_rb"] = pos.isin(["RB", "FB"])
+    x["_wrte"] = pos.isin(["WR", "TE"])
+    x["_skill"] = x["_rb"] | x["_wrte"]
+
+    rows: list[dict] = []
+    for (season, week, team), g in x.groupby(["season", "week", "team"], sort=True):
+        rows.append({
+            "season": int(season),
+            "week": int(week),
+            "team": m.canon_team(team),
+            "availability_report_rows": int(len(g)),
+            "availability_out_doubtful_total": int(g["_outd"].sum()),
+            "availability_questionable_total": int(g["_q"].sum()),
+            "availability_dnp_total": int(g["_dnp"].sum()),
+            "availability_limited_total": int(g["_limited"].sum()),
+            "availability_ol_out_doubtful": int((g["_outd"] & g["_ol"]).sum()),
+            "availability_ol_questionable": int((g["_q"] & g["_ol"]).sum()),
+            "availability_rb_out_doubtful": int((g["_outd"] & g["_rb"]).sum()),
+            "availability_wrte_out_doubtful": int((g["_outd"] & g["_wrte"]).sum()),
+            "availability_skill_out_doubtful": int((g["_outd"] & g["_skill"]).sum()),
+        })
+
+    out = pd.DataFrame(rows, columns=cols)
     if len(out):
         counts = out.groupby("season").size().to_dict()
         weeks = out.groupby("season")["week"].agg(["min", "max"]).to_dict("index")
         print(f"[M67 fixed] injury team-week rows by season={counts} week_ranges={weeks}")
+        for required in (2024, 2025):
+            if required in set(pd.to_numeric(inj.get("_requested_season", pd.Series(dtype=float)), errors="coerce").dropna().astype(int)) and counts.get(required, 0) == 0:
+                raise RuntimeError(f"M67 injury aggregation unexpectedly produced zero team-weeks for {required}")
     return out
 
 
-_ORIGINAL_INJURY_TEAM_WEEK = m.injury_team_week
 m.load_sources = load_sources_fixed
 m.injury_team_week = injury_team_week_fixed
 
