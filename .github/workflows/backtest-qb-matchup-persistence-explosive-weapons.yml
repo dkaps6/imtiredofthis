@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/backtest/audit_qb_matchup_persistence_explosive_weapons.py'
+      - 'scripts/backtest/audit_qb_efficiency_uncertainty.py'
       - '.github/workflows/backtest-qb-matchup-persistence-explosive-weapons.yml'
       - 'data/backtests/qb_frontier_canonical_v1/**'
 
