@@ -5,7 +5,7 @@ on:
     inputs:
       iterations: {description: "MC iterations", required: false, default: "2000"}
   pull_request:
-    branches: [main]
+    branches: [main, backtest-migration-62-qb-extreme-error-regime-audit]
 
 jobs:
   validate:
