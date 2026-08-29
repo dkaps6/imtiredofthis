@@ -40,6 +40,7 @@ jobs:
       - name: Compile M66 modules
         run: |
           python -m py_compile scripts/backtest/audit_qb_research_frontier.py
+          python -m py_compile scripts/backtest/audit_qb_research_frontier_fixed.py
           python -m py_compile scripts/backtest/audit_qb_mc_mean_median.py
 
       - name: Build paired M59-M65 canonical library
@@ -130,7 +131,7 @@ jobs:
         env:
           PYTHONPATH: "${{ github.workspace }}"
         run: |
-          python scripts/backtest/audit_qb_research_frontier.py \
+          python scripts/backtest/audit_qb_research_frontier_fixed.py \
             --m65-game-level data/backtests/qb_research_frontier/m65_summary/m65_game_level.csv \
             --m65-state-features data/backtests/qb_research_frontier/m65_summary/m65_state_training_features.csv \
             --mean-median-file data/backtests/qb_research_frontier/m66_mean_median_2024.csv \
