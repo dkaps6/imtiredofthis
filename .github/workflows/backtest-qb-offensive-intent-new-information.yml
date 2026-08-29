@@ -1,0 +1,134 @@
+name: Migration 67 QB Offensive Intent New Information
+
+on:
+  workflow_dispatch:
+    inputs:
+      iterations: {description: "MC iterations", required: false, default: "2000"}
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'backtest-migration-67-qb-offensive-intent-new-information-audit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn scipy joblib pyarrow
+
+      - name: Declare Migration 67 frozen scope
+        run: |
+          echo "M67 begins the new-information phase selected by M66."
+          echo "2024/2025 are the only scored target seasons. 2023 is history only; 2022 is not target-tested."
+          echo "No sportsbook player-prop line is a feature."
+          echo "No post-hoc feature subset search, model zoo, threshold retuning, or hyperparameter sweep."
+          echo "New families are frozen: PBP offensive intent; official injury availability; participation formation/personnel/continuity; live-new combined; all-new combined; existing+live; existing+all."
+          echo "Participation fields are historical-only for 2023+ and cannot be called live-deployable."
+          echo "Fixed models fit 2024 and test 2025: Ridge alpha=50 and HistGradientBoosting absolute error, 150 iterations, lr=.04, depth=2, min leaf=15, L2=5, seed=66."
+          echo "Passing signal: residual corr >=.20, MAE gain >=1.0 yd, corr gain >=.03, 100+ misses non-increase."
+          echo "Dropback signal: residual corr >=.20, DBR MAE gain >=.0075, corr gain >=.10 vs M64 neutral."
+          echo "Attempts signal: residual corr >=.20, attempt MAE gain >=.25, corr gain >=.05, 10+ misses reduce >=5%."
+          echo "Actionable family additionally requires median new-feature coverage >=.75."
+          echo "No M67 result directly promotes production logic."
+
+      - name: Compile M67 modules
+        run: |
+          python -m py_compile scripts/backtest/build_qb_offensive_intent_new_information.py
+          python -m py_compile scripts/backtest/audit_qb_offensive_intent_new_information.py
+
+      - name: Build canonical M59-M65 target rows
+        env:
+          PYTHONPATH: "${{ github.workspace }}"
+        run: |
+          set -euo pipefail
+          ITERATIONS="${{ inputs.iterations || '2000' }}"
+          WEEKS="1-18"
+
+          run_season () {
+            SEASON="$1"; PRIOR="$2"; D="data/backtests/qb_new_information/${SEASON}"
+            python scripts/backtest/build_historical_inputs.py --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --out-dir "$D"
+            python scripts/backtest/enrich_historical_defense.py --team-weekly "$D/team_weekly_history.csv" --seasons "$PRIOR,$SEASON" --audit "$D/historical_defense_enrichment_audit.csv" --observations "$D/historical_defense_observations.csv"
+            python scripts/backtest/validate_historical_inputs.py --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --data-dir "$D" --report "$D/historical_input_validation.csv"
+            python scripts/backtest/historical_player_logs.py --seasons "$PRIOR,$SEASON" --schedule "$D/schedule_history.csv" --out "$D/player_game_logs_history.csv"
+            python scripts/backtest/build_historical_injuries_optional.py --seasons "$PRIOR,$SEASON" --out "$D/injuries_history.csv"
+            python scripts/backtest/build_historical_weather.py --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv"
+
+            python scripts/backtest/decompose_qb_passing_error.py --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --iterations "$ITERATIONS" --player-logs "$D/player_game_logs_history.csv" --team-weekly "$D/team_weekly_history.csv" --schedule "$D/schedule_history.csv" --universe-dir "$D/pregame_universe" --injuries "$D/injuries_history.csv" --weather "$D/weather_history.csv" --out-dir "$D/qb_passing_error"
+            python scripts/backtest/decompose_qb_participation_role.py --trace "$D/qb_passing_error/qb_passing_player_trace.csv" --player-logs "$D/player_game_logs_history.csv" --out-dir "$D/qb_participation_role"
+            python scripts/backtest/audit_qb_gamescript_market_signals.py --season "$SEASON" --participation-trace "$D/qb_participation_role/qb_participation_player_trace.csv" --out-dir "$D/qb_gamescript_market"
+            python scripts/backtest/fit_qb_joint_attempts_ypa_walkforward.py --season "$SEASON" --market-trace "$D/qb_gamescript_market/qb_gamescript_market_trace.csv" --team-weekly "$D/team_weekly_history.csv" --player-logs "$D/player_game_logs_history.csv" --weather "$D/weather_history.csv" --out-dir "$D/qb_joint_attempts_ypa"
+            python scripts/backtest/fit_qb_both_raw_walkforward.py --season "$SEASON" --market-trace "$D/qb_gamescript_market/qb_gamescript_market_trace.csv" --team-weekly "$D/team_weekly_history.csv" --player-logs "$D/player_game_logs_history.csv" --weather "$D/weather_history.csv" --out-dir "$D/qb_both_raw"
+            python scripts/backtest/diagnose_qb_raw_tail_attribution_mc.py --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --iterations "$ITERATIONS" --joint-trace "$D/qb_joint_attempts_ypa/qb_joint_attempts_ypa_trace.csv" --raw-trace "$D/qb_both_raw/qb_both_raw_walkforward_trace.csv" --player-logs "$D/player_game_logs_history.csv" --team-weekly "$D/team_weekly_history.csv" --schedule "$D/schedule_history.csv" --universe-dir "$D/pregame_universe" --injuries "$D/injuries_history.csv" --weather "$D/weather_history.csv" --out-dir "$D/m59"
+            python scripts/backtest/audit_qb_extreme_error_regimes.py --season "$SEASON" --game-attribution "$D/m59/m59_game_attribution_${SEASON}.csv" --market-trace "$D/qb_gamescript_market/qb_gamescript_market_trace.csv" --player-logs "$D/player_game_logs_history.csv" --out-dir "$D/m62"
+          }
+
+          run_season 2024 2023
+          run_season 2025 2024
+
+          python scripts/backtest/validate_qb_possession_dropback_generative_fixed.py \
+            --season-file data/backtests/qb_new_information/2024/m62/m62_enriched_games_2024.csv \
+            --season-file data/backtests/qb_new_information/2025/m62/m62_enriched_games_2025.csv \
+            --player-logs data/backtests/qb_new_information/2024/player_game_logs_history.csv \
+            --player-logs data/backtests/qb_new_information/2025/player_game_logs_history.csv \
+            --out-dir data/backtests/qb_new_information/m64_summary
+
+          python scripts/backtest/validate_qb_dropback_state_occupancy.py \
+            --m64-game-level data/backtests/qb_new_information/m64_summary/m64_game_level.csv \
+            --out-dir data/backtests/qb_new_information/m65_summary
+
+      - name: Build genuinely new pregame information
+        env:
+          PYTHONPATH: "${{ github.workspace }}"
+        run: |
+          python scripts/backtest/build_qb_offensive_intent_new_information.py \
+            --master-game-level data/backtests/qb_new_information/m65_summary/m65_game_level.csv \
+            --seasons 2023,2024,2025 \
+            --out-dir data/backtests/qb_new_information/m67_source
+
+      - name: Run Migration 67 new-information frontier
+        env:
+          PYTHONPATH: "${{ github.workspace }}"
+        run: |
+          python scripts/backtest/audit_qb_offensive_intent_new_information.py \
+            --m65-game-level data/backtests/qb_new_information/m65_summary/m65_game_level.csv \
+            --m65-state-features data/backtests/qb_new_information/m65_summary/m65_state_training_features.csv \
+            --new-features data/backtests/qb_new_information/m67_source/m67_pregame_new_information_features.csv \
+            --out-dir data/backtests/qb_new_information/m67_summary
+
+      - name: Show Migration 67 results
+        if: always()
+        run: |
+          echo '--- M67 interpretation ---'
+          cat data/backtests/qb_new_information/m67_summary/m67_precommitted_interpretation.csv 2>/dev/null || true
+          echo '--- source manifest ---'
+          cat data/backtests/qb_new_information/m67_source/m67_source_manifest.csv 2>/dev/null || true
+          echo '--- feature coverage ---'
+          cat data/backtests/qb_new_information/m67_source/m67_feature_coverage.csv 2>/dev/null || true
+          echo '--- pass residual ---'
+          cat data/backtests/qb_new_information/m67_summary/m67_pass_residual_family_metrics.csv 2>/dev/null || true
+          echo '--- dropback ---'
+          cat data/backtests/qb_new_information/m67_summary/m67_dropback_family_metrics.csv 2>/dev/null || true
+          echo '--- attempts ---'
+          cat data/backtests/qb_new_information/m67_summary/m67_attempt_family_metrics.csv 2>/dev/null || true
+
+      - name: Upload Migration 67 artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-67-qb-offensive-intent-new-information
+          path: |
+            data/backtests/qb_new_information/m67_source/*.csv
+            data/backtests/qb_new_information/m67_summary/*.csv
+            data/backtests/qb_new_information/m65_summary/*.csv
+            data/backtests/qb_new_information/m64_summary/*.csv
+            data/backtests/qb_new_information/2024/historical_input_validation.csv
+            data/backtests/qb_new_information/2025/historical_input_validation.csv
+          if-no-files-found: warn
+          retention-days: 14
