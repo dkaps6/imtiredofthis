@@ -56,13 +56,15 @@ def safe_div(a, b):
 
 
 def mae(a, b):
-    a = np.asarray(a, dtype=float); b = np.asarray(b, dtype=float)
+    a = np.asarray(a, dtype=float)
+    b = np.asarray(b, dtype=float)
     ok = np.isfinite(a) & np.isfinite(b)
     return float(np.mean(np.abs(a[ok] - b[ok]))) if ok.any() else np.nan
 
 
 def rmse(a, b):
-    a = np.asarray(a, dtype=float); b = np.asarray(b, dtype=float)
+    a = np.asarray(a, dtype=float)
+    b = np.asarray(b, dtype=float)
     ok = np.isfinite(a) & np.isfinite(b)
     return float(np.sqrt(np.mean(np.square(a[ok] - b[ok])))) if ok.any() else np.nan
 
@@ -81,7 +83,7 @@ def prior_mask(df, season, week):
 def build_team_game_components(pbp):
     x = pbp.copy()
     x = m71.ensure(x, [
-        "season", "week", "game_id", "posteam", "defteam", "drive",
+        "season", "week", "game_id", "posteam", "defteam", "drive", "fixed_drive",
         "qb_dropback", "rush_attempt", "pass_attempt", "sack", "scramble",
         "two_point_attempt", "down", "first_down", "third_down_converted",
         "epa", "interception", "fumble_lost", "no_play",
@@ -89,10 +91,20 @@ def build_team_game_components(pbp):
     x["team"] = x.posteam.map(m71.canon)
     x["defense"] = x.defteam.map(m71.canon)
 
+    # M64 established nflverse `fixed_drive` as the authoritative corrected
+    # drive identifier. Use raw `drive` only as a per-row fallback.
+    fixed_drive = num(x.fixed_drive)
+    raw_drive = num(x.drive)
+    x["_drive_id"] = fixed_drive.where(fixed_drive.notna(), raw_drive)
+
     no_play = num(x.no_play).fillna(0).eq(1)
     two_pt = num(x.two_point_attempt).fillna(0).eq(1)
     raw_drop = num(x.qb_dropback)
-    fallback_drop = num(x.pass_attempt).fillna(0).eq(1) | num(x.sack).fillna(0).eq(1) | num(x.scramble).fillna(0).eq(1)
+    fallback_drop = (
+        num(x.pass_attempt).fillna(0).eq(1)
+        | num(x.sack).fillna(0).eq(1)
+        | num(x.scramble).fillna(0).eq(1)
+    )
     x["_dropback"] = np.where(raw_drop.notna(), raw_drop.fillna(0).eq(1), fallback_drop)
     x["_rush"] = num(x.rush_attempt).fillna(0).eq(1)
     x["_opportunity_play"] = (x._dropback | x._rush) & ~two_pt & ~no_play
@@ -108,19 +120,29 @@ def build_team_game_components(pbp):
         plays = float(len(g))
         dropbacks = float(g._dropback.sum())
         attempts = float(g._official_attempt.sum())
-        drives = num(g.drive).dropna().nunique()
+        drives = num(g._drive_id).dropna().nunique()
         drives = float(drives) if drives > 0 else np.nan
         down = num(g.down)
         early = g[down.isin([1, 2])]
         thirds = g[down.eq(3)]
         first_down_rate = float(num(g.first_down).fillna(0).mean()) if len(g) else np.nan
         third_conv = float(num(thirds.third_down_converted).fillna(0).mean()) if len(thirds) else np.nan
-        early_success = float((num(early.epa) > 0).mean()) if len(early) and num(early.epa).notna().any() else np.nan
+        early_success = (
+            float((num(early.epa) > 0).mean())
+            if len(early) and num(early.epa).notna().any()
+            else np.nan
+        )
         sacks = float(num(g.sack).fillna(0).eq(1).sum())
-        turnovers = float(num(g.interception).fillna(0).eq(1).sum() + num(g.fumble_lost).fillna(0).eq(1).sum())
+        turnovers = float(
+            num(g.interception).fillna(0).eq(1).sum()
+            + num(g.fumble_lost).fillna(0).eq(1).sum()
+        )
         rows.append({
-            "season": int(season), "week": int(week), "game_id": str(game_id),
-            "team": m71.canon(team), "defense": m71.canon(defense),
+            "season": int(season),
+            "week": int(week),
+            "game_id": str(game_id),
+            "team": m71.canon(team),
+            "defense": m71.canon(defense),
             "drives": drives,
             "plays": plays,
             "plays_per_drive": safe_div(plays, drives),
@@ -160,15 +182,13 @@ def shrink_mean(values, league_mean):
     return float((a.sum() + LEAGUE_PRIOR_GAMES * league_mean) / (len(a) + LEAGUE_PRIOR_GAMES))
 
 
-def league_prior(team_games, season, week, col):
-    h = team_games[prior_mask(team_games, season, week)]
-    a = num(h[col]).dropna()
-    return float(a.mean()) if len(a) else np.nan
-
-
 def component_expectation(team_games, season, week, team, defense, col):
     h = team_games[prior_mask(team_games, season, week)]
-    league = float(num(h[col]).dropna().mean()) if len(h) and num(h[col]).notna().any() else np.nan
+    league = (
+        float(num(h[col]).dropna().mean())
+        if len(h) and num(h[col]).notna().any()
+        else np.nan
+    )
     off = h[h.team.eq(team)].tail(HISTORY_WINDOW)
     allowed = h[h.defense.eq(defense)].tail(HISTORY_WINDOW)
     off_mean = shrink_mean(off[col], league)
@@ -227,7 +247,6 @@ def build_atlas(base, pbp):
         rec["identity_match_status"] = ident.iloc[i].identity_match_status
         rec["actual_team_attempts_pbp"] = float(actual.team_attempts)
 
-        # Realized target-QB share reconstructs the canonical actual attempts.
         pg = passer_share[
             passer_share.season.eq(season)
             & passer_share.week.eq(week)
@@ -235,40 +254,59 @@ def build_atlas(base, pbp):
             & passer_share.team.eq(team)
             & passer_share.passer_id.astype(str).eq(pid)
         ]
-        actual_share = float(pg.iloc[0].qb_share) if len(pg) and np.isfinite(pg.iloc[0].qb_share) else safe_div(float(r.actual_attempts), float(actual.team_attempts))
+        actual_share = (
+            float(pg.iloc[0].qb_share)
+            if len(pg) and np.isfinite(pg.iloc[0].qb_share)
+            else safe_div(float(r.actual_attempts), float(actual.team_attempts))
+        )
 
         for c in ["drives", "plays_per_drive", "dropback_rate", "attempt_conversion"] + SURVIVAL:
-            rec[f"actual_{c}"] = float(actual[c]) if c in actual.index and np.isfinite(actual[c]) else np.nan
+            rec[f"actual_{c}"] = (
+                float(actual[c])
+                if c in actual.index and np.isfinite(actual[c])
+                else np.nan
+            )
             rec[f"pred_{c}"] = component_expectation(team_games, season, week, team, defense, c)
-            rec[f"delta_{c}"] = rec[f"actual_{c}"] - rec[f"pred_{c}"] if np.isfinite(rec[f"actual_{c}"]) and np.isfinite(rec[f"pred_{c}"]) else np.nan
+            rec[f"delta_{c}"] = (
+                rec[f"actual_{c}"] - rec[f"pred_{c}"]
+                if np.isfinite(rec[f"actual_{c}"]) and np.isfinite(rec[f"pred_{c}"])
+                else np.nan
+            )
 
         pred_share, prior_share_games = qb_share_expectation(passer_share, season, week, pid)
         rec["actual_qb_share"] = actual_share
         rec["pred_qb_share"] = pred_share
-        rec["delta_qb_share"] = actual_share - pred_share if np.isfinite(actual_share) and np.isfinite(pred_share) else np.nan
+        rec["delta_qb_share"] = (
+            actual_share - pred_share
+            if np.isfinite(actual_share) and np.isfinite(pred_share)
+            else np.nan
+        )
         rec["qb_share_prior_games"] = prior_share_games
 
         vals = [rec.get(f"pred_{c}", np.nan) for c in COMPONENTS]
         actual_vals = [rec.get(f"actual_{c}", np.nan) for c in COMPONENTS]
-        if all(np.isfinite(v) for v in vals):
-            base_gen = float(np.prod(vals))
-        else:
-            base_gen = np.nan
+        base_gen = float(np.prod(vals)) if all(np.isfinite(v) for v in vals) else np.nan
         rec["generative_pred_attempts"] = base_gen
         rec["canonical_attempt_residual"] = float(r.actual_attempts - r.pred_attempts)
-        rec["generative_attempt_residual"] = float(r.actual_attempts - base_gen) if np.isfinite(base_gen) else np.nan
+        rec["generative_attempt_residual"] = (
+            float(r.actual_attempts - base_gen) if np.isfinite(base_gen) else np.nan
+        )
 
         contributions = {}
         if np.isfinite(base_gen) and all(np.isfinite(v) for v in actual_vals):
             for j, c in enumerate(COMPONENTS):
-                cf = vals.copy(); cf[j] = actual_vals[j]
+                cf = vals.copy()
+                cf[j] = actual_vals[j]
                 contributions[c] = float(np.prod(cf) - base_gen)
                 rec[f"contrib_{c}_attempts"] = contributions[c]
-            rec["contrib_interaction_remainder_attempts"] = float(r.actual_attempts - base_gen - sum(contributions.values()))
-            candidates = {**contributions, "interaction_remainder": rec["contrib_interaction_remainder_attempts"]}
-            dom = max(candidates, key=lambda k: abs(candidates[k]))
+            rec["contrib_interaction_remainder_attempts"] = float(
+                r.actual_attempts - base_gen - sum(contributions.values())
+            )
+            # The nonlinear remainder is retained as a diagnostic only. It is
+            # not a targetable football mechanism and cannot win the frozen gate.
+            dom = max(contributions, key=lambda k: abs(contributions[k]))
             rec["dominant_opportunity_mechanism"] = dom
-            rec["dominant_opportunity_contribution_attempts"] = candidates[dom]
+            rec["dominant_opportunity_contribution_attempts"] = contributions[dom]
         else:
             for c in COMPONENTS:
                 rec[f"contrib_{c}_attempts"] = np.nan
@@ -276,11 +314,13 @@ def build_atlas(base, pbp):
             rec["dominant_opportunity_mechanism"] = "unavailable"
             rec["dominant_opportunity_contribution_attempts"] = np.nan
 
-        # Exact point-projection oracles. Use implied canonical YPA so the base
-        # product is exactly the frozen passing-yard point projection.
         implied_pred_ypa = safe_div(float(r.pred_pass_yards), float(r.pred_attempts))
         rec["implied_pred_ypa"] = implied_pred_ypa
-        rec["oracle_actual_attempts_pred_ypa"] = float(r.actual_attempts) * implied_pred_ypa if np.isfinite(implied_pred_ypa) else np.nan
+        rec["oracle_actual_attempts_pred_ypa"] = (
+            float(r.actual_attempts) * implied_pred_ypa
+            if np.isfinite(implied_pred_ypa)
+            else np.nan
+        )
         rec["oracle_pred_attempts_actual_ypa"] = float(r.pred_attempts) * float(r.actual_ypa)
         rec["oracle_actual_attempts_actual_ypa"] = float(r.actual_attempts) * float(r.actual_ypa)
         rows.append(rec)
@@ -288,7 +328,9 @@ def build_atlas(base, pbp):
     out = pd.DataFrame(rows)
     if len(out) < 0.98 * len(base):
         raise RuntimeError(f"M73 realized component coverage too low: {len(out)}/{len(base)}")
-    recon_diff = np.abs(num(out.actual_attempts) - num(out.actual_team_attempts_pbp) * num(out.actual_qb_share))
+    recon_diff = np.abs(
+        num(out.actual_attempts) - num(out.actual_team_attempts_pbp) * num(out.actual_qb_share)
+    )
     if float((recon_diff <= 0.01).mean()) < 0.98:
         raise RuntimeError("M73 target-QB attempt reconstruction below 98% exact coverage")
     return out
@@ -335,37 +377,65 @@ def attempt_band_summary(atlas):
         "actual_40plus": num(atlas.actual_attempts) >= 40,
         "actual_45plus": num(atlas.actual_attempts) >= 45,
         "actual_50plus": num(atlas.actual_attempts) >= 50,
-        "canonical_miss8plus": (num(atlas.actual_attempts) - num(atlas.pred_attempts)).abs() >= LARGE_ATTEMPT_MISS,
-        "canonical_miss10plus": (num(atlas.actual_attempts) - num(atlas.pred_attempts)).abs() >= EXTREME_ATTEMPT_MISS,
+        "canonical_miss8plus": (
+            num(atlas.actual_attempts) - num(atlas.pred_attempts)
+        ).abs() >= LARGE_ATTEMPT_MISS,
+        "canonical_miss10plus": (
+            num(atlas.actual_attempts) - num(atlas.pred_attempts)
+        ).abs() >= EXTREME_ATTEMPT_MISS,
     }
     for name, mask in bands.items():
         q = atlas[mask].copy()
+        base_pass_mae = mae(q.actual_pass_yards, q.pred_pass_yards)
+        oracle_pass_mae = mae(q.actual_pass_yards, q.oracle_actual_attempts_pred_ypa)
         rows.append({
             "band": name,
             "games": int(len(q)),
             "attempt_mae": mae(q.actual_attempts, q.pred_attempts),
-            "attempt_bias": float((num(q.actual_attempts) - num(q.pred_attempts)).mean()) if len(q) else np.nan,
-            "pass_mae": mae(q.actual_pass_yards, q.pred_pass_yards),
-            "perfect_attempts_pass_mae": mae(q.actual_pass_yards, q.oracle_actual_attempts_pred_ypa),
-            "perfect_attempts_mae_gain": mae(q.actual_pass_yards, q.pred_pass_yards) - mae(q.actual_pass_yards, q.oracle_actual_attempts_pred_ypa) if len(q) else np.nan,
+            "attempt_bias": (
+                float((num(q.actual_attempts) - num(q.pred_attempts)).mean())
+                if len(q)
+                else np.nan
+            ),
+            "pass_mae": base_pass_mae,
+            "perfect_attempts_pass_mae": oracle_pass_mae,
+            "perfect_attempts_mae_gain": (
+                base_pass_mae - oracle_pass_mae if len(q) else np.nan
+            ),
         })
     return pd.DataFrame(rows)
 
 
 def mechanism_summary(atlas):
-    q = atlas[(num(atlas.actual_attempts) - num(atlas.pred_attempts)).abs() >= EXTREME_ATTEMPT_MISS].copy()
+    q = atlas[
+        (num(atlas.actual_attempts) - num(atlas.pred_attempts)).abs()
+        >= EXTREME_ATTEMPT_MISS
+    ].copy()
     rows = []
     if len(q):
         for mechanism, g in q.groupby("dominant_opportunity_mechanism"):
+            contrib = num(g.dominant_opportunity_contribution_attempts)
+            residual = num(g.canonical_attempt_residual)
+            sign_agreement = np.sign(contrib) == np.sign(residual)
             rows.append({
                 "mechanism": mechanism,
                 "games": int(len(g)),
                 "share_of_10plus_misses": float(len(g) / len(q)),
-                "median_abs_contribution_attempts": float(num(g.dominant_opportunity_contribution_attempts).abs().median()),
-                "mean_canonical_attempt_residual": float(num(g.canonical_attempt_residual).mean()),
-                "mean_pass_error": float((num(g.actual_pass_yards) - num(g.pred_pass_yards)).mean()),
+                "median_abs_contribution_attempts": float(contrib.abs().median()),
+                "contribution_direction_agreement": float(sign_agreement.mean()),
+                "mean_canonical_attempt_residual": float(residual.mean()),
+                "mean_pass_error": float(
+                    (num(g.actual_pass_yards) - num(g.pred_pass_yards)).mean()
+                ),
             })
-    return pd.DataFrame(rows).sort_values("games", ascending=False) if rows else pd.DataFrame(columns=["mechanism","games","share_of_10plus_misses","median_abs_contribution_attempts","mean_canonical_attempt_residual","mean_pass_error"])
+    cols = [
+        "mechanism", "games", "share_of_10plus_misses",
+        "median_abs_contribution_attempts", "contribution_direction_agreement",
+        "mean_canonical_attempt_residual", "mean_pass_error",
+    ]
+    if not rows:
+        return pd.DataFrame(columns=cols)
+    return pd.DataFrame(rows)[cols].sort_values("games", ascending=False)
 
 
 def survival_summary(atlas):
@@ -388,7 +458,14 @@ def survival_summary(atlas):
                 "mean_actual": float(num(q[f"actual_{c}"]).mean()) if len(q) else np.nan,
                 "mean_expected": float(num(q[f"pred_{c}"]).mean()) if len(q) else np.nan,
                 "mean_surprise": float(num(q[f"delta_{c}"]).mean()) if len(q) else np.nan,
-                "surprise_corr_with_attempt_residual": corr(num(q[f"delta_{c}"]), num(q.actual_attempts) - num(q.pred_attempts)) if len(q) else np.nan,
+                "surprise_corr_with_attempt_residual": (
+                    corr(
+                        num(q[f"delta_{c}"]),
+                        num(q.actual_attempts) - num(q.pred_attempts),
+                    )
+                    if len(q)
+                    else np.nan
+                ),
             })
     return pd.DataFrame(rows)
 
@@ -401,14 +478,6 @@ def interpretation(oracle, mechanisms, atlas):
     att_gain = raw - att
     ypa_gain = raw - ypa
 
-    if len(mechanisms):
-        top = mechanisms.iloc[0]
-        top_mech = str(top.mechanism)
-        top_share = float(top.share_of_10plus_misses)
-        top_med = float(top.median_abs_contribution_attempts)
-    else:
-        top_mech, top_share, top_med = "none", 0.0, np.nan
-
     if att_gain >= LARGE_ATTEMPT_HEADROOM_YARDS:
         headroom = "large"
     elif att_gain >= MODERATE_ATTEMPT_HEADROOM_YARDS:
@@ -416,11 +485,47 @@ def interpretation(oracle, mechanisms, atlas):
     else:
         headroom = "limited"
 
-    concentrated = bool(top_share >= DOMINANT_MECHANISM_SHARE and np.isfinite(top_med) and top_med >= DOMINANT_MECHANISM_MEDIAN_ATTEMPTS)
+    if len(mechanisms):
+        top = mechanisms.iloc[0]
+        display_mech = str(top.mechanism)
+        display_share = float(top.share_of_10plus_misses)
+        display_med = float(top.median_abs_contribution_attempts)
+
+        eligible = mechanisms[
+            num(mechanisms.share_of_10plus_misses).ge(DOMINANT_MECHANISM_SHARE)
+            & num(mechanisms.median_abs_contribution_attempts).ge(
+                DOMINANT_MECHANISM_MEDIAN_ATTEMPTS
+            )
+        ].copy()
+        if len(eligible):
+            eligible = eligible.sort_values(
+                ["share_of_10plus_misses", "median_abs_contribution_attempts"],
+                ascending=[False, False],
+            )
+            selected = eligible.iloc[0]
+            selected_mech = str(selected.mechanism)
+            selected_share = float(selected.share_of_10plus_misses)
+            selected_med = float(selected.median_abs_contribution_attempts)
+            concentrated = True
+        else:
+            selected_mech = "none"
+            selected_share = 0.0
+            selected_med = np.nan
+            concentrated = False
+    else:
+        display_mech, display_share, display_med = "none", 0.0, np.nan
+        selected_mech, selected_share, selected_med = "none", 0.0, np.nan
+        concentrated = False
+
     if headroom in {"large", "moderate"} and concentrated:
-        verdict = f"m73_attempt_headroom_{headroom}_dominant_{top_mech}_target_for_m74"
+        verdict = (
+            f"m73_attempt_headroom_{headroom}_dominant_{selected_mech}_target_for_m74"
+        )
     elif headroom in {"large", "moderate"}:
-        verdict = f"m73_attempt_headroom_{headroom}_mechanisms_diffuse_seek_new_opportunity_information"
+        verdict = (
+            f"m73_attempt_headroom_{headroom}_mechanisms_diffuse_"
+            "seek_new_opportunity_information"
+        )
     else:
         verdict = "m73_attempt_headroom_limited_deprioritize_attempt_point_correction"
 
@@ -432,9 +537,12 @@ def interpretation(oracle, mechanisms, atlas):
         "perfect_ypa_mae": ypa,
         "perfect_ypa_mae_gain": ypa_gain,
         "attempt_headroom": headroom,
-        "top_10plus_miss_mechanism": top_mech,
-        "top_mechanism_share": top_share,
-        "top_mechanism_median_abs_attempt_contribution": top_med,
+        "most_frequent_10plus_miss_mechanism": display_mech,
+        "most_frequent_mechanism_share": display_share,
+        "most_frequent_mechanism_median_abs_attempt_contribution": display_med,
+        "selected_dominant_mechanism": selected_mech,
+        "selected_mechanism_share": selected_share,
+        "selected_mechanism_median_abs_attempt_contribution": selected_med,
         "dominant_mechanism_concentrated": concentrated,
         "m73_interpretation": verdict,
         "production_actionable": False,
@@ -466,7 +574,10 @@ def main():
     out = a.out_dir
     out.mkdir(parents=True, exist_ok=True)
     atlas.to_csv(out / "m73_game_component_atlas.csv", index=False)
-    atlas[(num(atlas.actual_attempts) - num(atlas.pred_attempts)).abs() >= LARGE_ATTEMPT_MISS].to_csv(out / "m73_large_attempt_miss_atlas.csv", index=False)
+    atlas[
+        (num(atlas.actual_attempts) - num(atlas.pred_attempts)).abs()
+        >= LARGE_ATTEMPT_MISS
+    ].to_csv(out / "m73_large_attempt_miss_atlas.csv", index=False)
     oracle.to_csv(out / "m73_oracle_summary.csv", index=False)
     bands.to_csv(out / "m73_attempt_band_summary.csv", index=False)
     mechanisms.to_csv(out / "m73_mechanism_summary.csv", index=False)
