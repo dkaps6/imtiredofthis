@@ -3,7 +3,8 @@
 
 This runner keeps the frozen M75 hypotheses/gates unchanged while making source
 qualification explicit: an unavailable new source is reported and skipped rather
-than crashing the independent source families.
+than crashing the independent source families. The four precommitted matchup
+interactions are all-or-none; M75 never silently fits a post-hoc subset.
 """
 from __future__ import annotations
 
@@ -14,6 +15,8 @@ import numpy as np
 import pandas as pd
 
 from scripts.backtest import audit_qb_personnel_tracking_matchup as m
+
+FROZEN_INTERACTIONS = ["x_sep_ypt", "x_yacoe_yac", "x_adot_adot", "x_top1_weak_ypt"]
 
 
 def usable_cols(train: pd.DataFrame, cols: list[str]) -> list[str]:
@@ -55,14 +58,19 @@ def main():
 
     off_all = [c for c in features if c.startswith("off_ngs_")]
     def_all = [c for c in features if c.startswith("def_db_")]
-    x_all = ["x_sep_ypt", "x_yacoe_yac", "x_adot_adot", "x_top1_weak_ypt"]
     off = usable_cols(train, off_all)
     deff = usable_cols(train, def_all)
-    xx = usable_cols(train, x_all)
+    xx_usable = usable_cols(train, FROZEN_INTERACTIONS)
 
     ngs_qualified = bool(ngs_meta.get("usable")) and bool(off)
     pfr_qualified = bool(db_meta.get("usable")) and bool(deff)
-    interaction_qualified = ngs_qualified and pfr_qualified and bool(xx)
+    interaction_qualified = (
+        ngs_qualified
+        and pfr_qualified
+        and len(xx_usable) == len(FROZEN_INTERACTIONS)
+        and set(xx_usable) == set(FROZEN_INTERACTIONS)
+    )
+    xx = list(FROZEN_INTERACTIONS) if interaction_qualified else []
 
     source_df = pd.DataFrame([
         {
@@ -91,7 +99,6 @@ def main():
     db_week.to_csv(out / "m75_pfr_secondary_team_week.csv", index=False)
     features.to_csv(out / "m75_game_features.csv", index=False)
 
-    # Frozen families. Pure interaction is now distinct from the full combined family.
     families: dict[str, list[str]] = {}
     family_status = []
     if ngs_qualified:
@@ -108,13 +115,17 @@ def main():
         families["tracking_x_secondary"] = xx
         families["combined_personnel_tracking"] = list(dict.fromkeys(off + deff + xx))
         family_status += [
-            {"family": "tracking_x_secondary", "status": "eligible", "reason": "both_sources_qualified"},
-            {"family": "combined_personnel_tracking", "status": "eligible", "reason": "both_sources_qualified"},
+            {"family": "tracking_x_secondary", "status": "eligible", "reason": "all_four_frozen_interactions_qualified"},
+            {"family": "combined_personnel_tracking", "status": "eligible", "reason": "both_sources_and_all_four_interactions_qualified"},
         ]
     else:
+        missing_interactions = [c for c in FROZEN_INTERACTIONS if c not in xx_usable]
+        reason = "requires_both_sources_and_all_four_interactions"
+        if missing_interactions:
+            reason += ":" + "|".join(missing_interactions)
         family_status += [
-            {"family": "tracking_x_secondary", "status": "skipped", "reason": "requires_both_sources"},
-            {"family": "combined_personnel_tracking", "status": "skipped", "reason": "requires_both_sources"},
+            {"family": "tracking_x_secondary", "status": "skipped", "reason": reason},
+            {"family": "combined_personnel_tracking", "status": "skipped", "reason": reason},
         ]
     pd.DataFrame(family_status).to_csv(out / "m75_family_status.csv", index=False)
 
@@ -174,6 +185,7 @@ def main():
         "evaluation_rows_2025": len(test),
         "ngs_source_qualified": ngs_qualified,
         "pfr_secondary_source_qualified": pfr_qualified,
+        "all_four_interactions_qualified": interaction_qualified,
         "supported_families": "|".join(sorted(set(supported))),
         "m75_interpretation": verdict,
         "production_actionable": False,
