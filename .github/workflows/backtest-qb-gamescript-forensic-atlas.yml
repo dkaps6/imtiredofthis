@@ -29,7 +29,7 @@ jobs:
           echo "M69 is forensic discovery, NOT predictive model selection and NOT production promotion."
           echo "Target games are the already-consumed 2024/2025 development seasons; 2023 is history context only."
           echo "Postgame PBP/participation is explicitly allowed only to reconstruct what football mechanism occurred."
-          echo "Pregame-candidate tests use only already-pregame M62/M65/M68 columns."
+          echo "Pregame-candidate tests use only already-pregame BOTH RAW/M65/M68 columns."
           echo "Raw pass-yards error is decomposed exactly into attempt-volume, YPA, interaction, and MC-to-point-product remainder."
           echo "Frozen volume mechanism priority: role -> opening-plan deviation -> score-state occupancy -> possessions -> attempt conversion -> run efficiency -> other/mixed."
           echo "Opening plan deviation threshold is +/-12 percentage points versus VERIFIED PLAYCALLER prior first-15 baseline only; no team/Q1 fallback."
@@ -105,8 +105,8 @@ jobs:
           python scripts/backtest/run_qb_gamescript_forensic_atlas_corrected.py \
             --m65-game-level data/backtests/qb_m69/m65_summary/m65_game_level.csv \
             --m68-features data/backtests/qb_m69/m68_source/m68_pregame_new_information_features.csv \
-            --pregame-defense-file data/backtests/qb_m69/2024/m62/m62_enriched_games_2024.csv \
-            --pregame-defense-file data/backtests/qb_m69/2025/m62/m62_enriched_games_2025.csv \
+            --pregame-defense-file data/backtests/qb_m69/2024/qb_both_raw/qb_both_raw_walkforward_trace.csv \
+            --pregame-defense-file data/backtests/qb_m69/2025/qb_both_raw/qb_both_raw_walkforward_trace.csv \
             --seasons 2024,2025 \
             --out-dir data/backtests/qb_m69/m69_summary
 
@@ -140,6 +140,8 @@ jobs:
             data/backtests/qb_m69/m64_summary/*.csv
             data/backtests/qb_m69/2024/m62/m62_enriched_games_2024.csv
             data/backtests/qb_m69/2025/m62/m62_enriched_games_2025.csv
+            data/backtests/qb_m69/2024/qb_both_raw/qb_both_raw_walkforward_trace.csv
+            data/backtests/qb_m69/2025/qb_both_raw/qb_both_raw_walkforward_trace.csv
             data/backtests/qb_m69/2024/historical_input_validation.csv
             data/backtests/qb_m69/2025/historical_input_validation.csv
           if-no-files-found: warn
