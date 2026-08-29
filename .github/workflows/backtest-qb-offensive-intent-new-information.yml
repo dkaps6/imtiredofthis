@@ -41,6 +41,7 @@ jobs:
       - name: Compile M67 modules
         run: |
           python -m py_compile scripts/backtest/build_qb_offensive_intent_new_information.py
+          python -m py_compile scripts/backtest/build_qb_offensive_intent_new_information_fixed.py
           python -m py_compile scripts/backtest/audit_qb_offensive_intent_new_information.py
 
       - name: Build canonical M59-M65 target rows
@@ -87,7 +88,7 @@ jobs:
         env:
           PYTHONPATH: "${{ github.workspace }}"
         run: |
-          python scripts/backtest/build_qb_offensive_intent_new_information.py \
+          python scripts/backtest/build_qb_offensive_intent_new_information_fixed.py \
             --master-game-level data/backtests/qb_new_information/m65_summary/m65_game_level.csv \
             --seasons 2023,2024,2025 \
             --out-dir data/backtests/qb_new_information/m67_source
