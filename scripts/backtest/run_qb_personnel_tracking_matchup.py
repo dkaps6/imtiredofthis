@@ -40,8 +40,18 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
 
     base = m.lower(pd.read_csv(a.canonical, low_memory=False))
-    if len(base) != 643:
-        raise RuntimeError(f"M75 expected frozen 643-row canonical frontier, got {len(base)}")
+    required = {"season", "week", "team", "opponent", "player_clean_key", "actual_pass_yards", "actual_attempts", "pred_pass_yards", "pred_attempts"}
+    missing = sorted(required - set(base.columns))
+    if missing:
+        raise RuntimeError(f"M75 canonical frontier missing required columns: {missing}")
+    if base.duplicated(["season", "week", "team", "player_clean_key"]).any():
+        raise RuntimeError("M75 canonical frontier has duplicate stable-QB keys")
+    counts = m.num(base.season).value_counts().to_dict()
+    if int(counts.get(2024, 0)) < 250 or int(counts.get(2025, 0)) < 250:
+        raise RuntimeError(f"M75 premarket stable-QB population unexpectedly small: {counts}")
+    prohibited = [c for c in base.columns if any(k in c.lower() for k in ["market", "spread", "moneyline", "total_line"])]
+    if prohibited:
+        raise RuntimeError(f"M75 canonical market boundary violated: {prohibited}")
     base["team"] = base.team.map(m.canon)
     base["opponent"] = base.opponent.map(m.canon)
     seasons = [int(v) for v in a.seasons.split(",") if v.strip()]
@@ -181,6 +191,7 @@ def main():
         verdict = "m75_free_personnel_sources_not_qualified"
 
     pd.DataFrame([{
+        "canonical_rows": len(base),
         "train_rows_2024": len(train),
         "evaluation_rows_2025": len(test),
         "ngs_source_qualified": ngs_qualified,
