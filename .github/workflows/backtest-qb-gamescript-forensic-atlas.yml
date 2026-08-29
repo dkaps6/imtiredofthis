@@ -29,23 +29,24 @@ jobs:
           echo "M69 is forensic discovery, NOT predictive model selection and NOT production promotion."
           echo "Target games are the already-consumed 2024/2025 development seasons; 2023 is history context only."
           echo "Postgame PBP/participation is explicitly allowed only to reconstruct what football mechanism occurred."
-          echo "Pregame-candidate tests use only already-pregame M65/M68 columns."
-          echo "Raw pass-yards error is decomposed into attempt-volume contribution, YPA contribution, and interaction."
+          echo "Pregame-candidate tests use only already-pregame M62/M65/M68 columns."
+          echo "Raw pass-yards error is decomposed exactly into attempt-volume, YPA, interaction, and MC-to-point-product remainder."
           echo "Frozen volume mechanism priority: role -> opening-plan deviation -> score-state occupancy -> possessions -> attempt conversion -> run efficiency -> other/mixed."
           echo "Opening plan deviation threshold is +/-12 percentage points versus VERIFIED PLAYCALLER prior first-15 baseline only; no team/Q1 fallback."
+          echo "Role/participation uses canonical m64_actual_qb_attempt_share < .80."
           echo "Forced trailing/leading occupancy surprise threshold is +15 percentage points."
           echo "Possession surprise threshold is +/-2 drives."
           echo "Attempt conversion loss threshold is -8 percentage points."
           echo "Run takeover/failure diagnostic threshold is actual rush EPA +/-0.08."
           echo "M68 explanation screen: pregame defense profile vs actual first-15 DBR deviation from verified playcaller baseline."
           echo "Strong replicated descriptive scheme pair requires same sign, abs corr>=.10 in both 2024 and 2025, combined abs corr>=.15."
-          echo "Realized defensive scheme from postseason participation is diagnostic only and can never become a live feature from M69."
+          echo "Realized defensive scheme rates use explicitly labeled snaps only; postseason participation remains diagnostic only."
           echo "No M69 output directly promotes a model or feature. Any hypothesis moves to M70/live-2026 prospective validation."
 
       - name: Compile M69 modules
         run: |
           python -m py_compile scripts/backtest/audit_qb_gamescript_forensic_atlas.py
-          python -m py_compile scripts/backtest/run_qb_gamescript_forensic_atlas_strict.py
+          python -m py_compile scripts/backtest/run_qb_gamescript_forensic_atlas_corrected.py
 
       - name: Build canonical M59-M65 target rows
         env:
@@ -97,13 +98,15 @@ jobs:
             --leverage-sims 100 \
             --out-dir data/backtests/qb_m69/m68_source
 
-      - name: Run Migration 69 forensic atlas
+      - name: Run corrected Migration 69 forensic atlas
         env:
           PYTHONPATH: "${{ github.workspace }}"
         run: |
-          python scripts/backtest/run_qb_gamescript_forensic_atlas_strict.py \
+          python scripts/backtest/run_qb_gamescript_forensic_atlas_corrected.py \
             --m65-game-level data/backtests/qb_m69/m65_summary/m65_game_level.csv \
             --m68-features data/backtests/qb_m69/m68_source/m68_pregame_new_information_features.csv \
+            --pregame-defense-file data/backtests/qb_m69/2024/m62/m62_enriched_games_2024.csv \
+            --pregame-defense-file data/backtests/qb_m69/2025/m62/m62_enriched_games_2025.csv \
             --seasons 2024,2025 \
             --out-dir data/backtests/qb_m69/m69_summary
 
@@ -135,6 +138,8 @@ jobs:
             data/backtests/qb_m69/m68_source/*.csv
             data/backtests/qb_m69/m65_summary/*.csv
             data/backtests/qb_m69/m64_summary/*.csv
+            data/backtests/qb_m69/2024/m62/m62_enriched_games_2024.csv
+            data/backtests/qb_m69/2025/m62/m62_enriched_games_2025.csv
             data/backtests/qb_m69/2024/historical_input_validation.csv
             data/backtests/qb_m69/2025/historical_input_validation.csv
           if-no-files-found: warn
