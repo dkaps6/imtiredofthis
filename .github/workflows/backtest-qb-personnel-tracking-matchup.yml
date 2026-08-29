@@ -6,20 +6,18 @@ on:
     paths:
       - 'scripts/backtest/audit_qb_personnel_tracking_matchup.py'
       - 'scripts/backtest/run_qb_personnel_tracking_matchup.py'
-      - 'scripts/backtest/run_qb_personnel_tracking_matchup_v2.py'
       - 'scripts/backtest/run_qb_personnel_tracking_matchup_v3.py'
-      - 'scripts/backtest/freeze_qb_frontier_canonical_v2_football_only.py'
+      - 'scripts/backtest/freeze_qb_frontier_canonical_v3_football_only.py'
       - '.github/workflows/backtest-qb-personnel-tracking-matchup.yml'
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
   validate:
     if: github.head_ref == 'backtest-migration-75-qb-personnel-tracking-matchup'
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -30,69 +28,93 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install nflreadpy scikit-learn pyarrow
+          pip install nflreadpy scikit-learn pyarrow pytest pyyaml joblib
 
       - name: Frozen M75 scientific scope
         run: |
-          echo 'M75 introduces genuinely new player-level information; it is not another transform of M56-M74 team-level inputs.'
-          echo 'Foundation correction: canonical v1 is NOT the M75 baseline because review proved its BOTH-RAW residual corrections used sportsbook game-market fields.'
-          echo 'M75 freezes canonical v2 from the original pre-market mc_proj, pred_attempts, and pred_ypa already preserved in the authoritative M69 source artifact.'
-          echo 'Canonical v2 contains no market/spread/total/moneyline field and no market-trained residual correction.'
-          echo 'New source A: weekly NFL Next Gen Stats receiving tracking: separation, cushion, intended air yards, expected YAC and YAC above expectation.'
-          echo 'New source B: weekly PFR advanced defensive player coverage, DB-only after a verified player-position bridge.'
-          echo 'PFR coverage totals/rates are aggregated from underlying DB counts: yards/target, completion rate, reconstructed passer rating, target-weighted DADOT, and total YAC/completions.'
-          echo 'Unavailable independent sources are recorded and skipped; they cannot abort or masquerade as qualified.'
-          echo '2024 trains fixed models; 2025 is untouched evaluation. 2022/2023 are strictly-prior history only.'
-          echo 'Target-week NGS/PFR outcomes are never features. Features use games strictly before the target week.'
-          echo 'No sportsbook player-prop or game-market feature is used.'
-          echo 'Primary target is football-only canonical YPA residual; predicted YPA corrections are translated to passing yards using football-only canonical attempts.'
-          echo 'Frozen families: ngs_receiving_tracking, pfr_secondary_coverage, tracking_x_secondary, combined_personnel_tracking.'
-          echo 'tracking_x_secondary requires all four precommitted interactions; no partial interaction subset is eligible.'
+          echo 'M75 tests genuinely new NGS receiver tracking and PFR DB coverage information; it is not another transform of M56-M74 inputs.'
+          echo 'Foundation correction: canonical v1 used market-trained residual corrections, and v2 still inherited a cohort selected after a non-null market-total filter.'
+          echo 'Canonical v3 rebuilds the stable-QB cohort BEFORE any market join/filter using the pre-market historical component pipeline.'
+          echo 'Cohort rule: projected pass-yards QB must be realized team primary and handle >=80% of team official QB attempts.'
+          echo 'No sportsbook field is used for cohort selection, projection, model features, or output.'
+          echo '2024 trains the frozen M75 models; 2025 is untouched evaluation. 2022/2023 are strictly-prior history for new personnel sources.'
+          echo 'PFR secondary aggregation is DB-only after verified player-position bridge and reconstructed from underlying coverage counts.'
+          echo 'All four frozen receiver x secondary interactions are required together; no post-hoc subset is eligible.'
           echo 'Fixed models: Ridge alpha=50 and HistGB absolute-error 150 iter lr=.04 depth=2 leaf=15 L2=5 seed=75.'
-          echo 'Full gate: median coverage>=.70; YPA residual corr>=.18; YPA MAE gain>=.10; passing MAE gain>=.75 yd; passing corr gain>=.015; 100+ misses non-increase.'
-          echo 'Cross-model support: residual corr>=.08; passing MAE gain>=.20; 100+ misses non-increase.'
-          echo 'No subset search, interaction zoo, threshold retuning, hyperparameter sweep, market leakage, or direct production promotion.'
+          echo 'Full gate remains: coverage>=.70; YPA residual corr>=.18; YPA MAE gain>=.10; pass MAE gain>=.75; pass corr gain>=.015; 100+ misses non-increase.'
+          echo 'Cross-model support remains: residual corr>=.08; pass MAE gain>=.20; 100+ misses non-increase.'
+          echo 'No threshold/model/hyperparameter changes are allowed because the cohort correction is an upstream integrity fix.'
 
-      - name: Compile M75 and football-only freezer
+      - name: Compile M75 and v3 freezer
         run: |
           python -m py_compile scripts/backtest/audit_qb_personnel_tracking_matchup.py
           python -m py_compile scripts/backtest/run_qb_personnel_tracking_matchup.py
-          python -m py_compile scripts/backtest/run_qb_personnel_tracking_matchup_v2.py
           python -m py_compile scripts/backtest/run_qb_personnel_tracking_matchup_v3.py
-          python -m py_compile scripts/backtest/freeze_qb_frontier_canonical_v2_football_only.py
+          python -m py_compile scripts/backtest/freeze_qb_frontier_canonical_v3_football_only.py
 
-      - name: Recover authoritative M69 source artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          mkdir -p data/backtests/qb_frontier_v2_source
-          curl -L --fail-with-body \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/9717868133/zip" \
-            -o /tmp/m69_authoritative.zip
-          unzip -q /tmp/m69_authoritative.zip -d data/backtests/qb_frontier_v2_source
-
-      - name: Freeze football-only canonical v2
+      - name: Rebuild pre-market 2024 QB trace
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/backtest/freeze_qb_frontier_canonical_v2_football_only.py \
-            --artifact-root data/backtests/qb_frontier_v2_source \
-            --out-dir data/backtests/qb_frontier_canonical_v2_football_only
-          echo '--- football-only v2 oracle summary ---'
-          cat data/backtests/qb_frontier_canonical_v2_football_only/football_only_oracle_summary.csv
-          echo '--- football-only v2 manifest ---'
-          cat data/backtests/qb_frontier_canonical_v2_football_only/manifest.json
+          set -euo pipefail
+          D=data/backtests/m75_premarket_2024
+          mkdir -p "$D"
+          python scripts/backtest/build_historical_inputs.py --season 2024 --prior-season 2023 --weeks '1-18' --out-dir "$D"
+          python scripts/backtest/enrich_historical_defense.py --team-weekly "$D/team_weekly_history.csv" --seasons 2023,2024 --audit "$D/historical_defense_enrichment_audit.csv" --observations "$D/historical_defense_observations.csv"
+          python scripts/backtest/validate_historical_inputs.py --season 2024 --prior-season 2023 --weeks '1-18' --data-dir "$D" --report "$D/historical_input_validation.csv"
+          python scripts/backtest/historical_player_logs.py --seasons 2023,2024 --schedule "$D/schedule_history.csv" --out "$D/player_game_logs_history.csv"
+          python scripts/backtest/build_historical_injuries.py --seasons 2023,2024 --out "$D/injuries_history.csv" || true
+          python scripts/backtest/build_historical_weather.py --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv" || true
+          touch "$D/injuries_history.csv" "$D/weather_history.csv"
+          python scripts/backtest/decompose_qb_passing_error.py \
+            --season 2024 --prior-season 2023 --weeks '1-18' --iterations 2000 \
+            --player-logs "$D/player_game_logs_history.csv" --team-weekly "$D/team_weekly_history.csv" \
+            --schedule "$D/schedule_history.csv" --universe-dir "$D/pregame_universe" \
+            --injuries "$D/injuries_history.csv" --weather "$D/weather_history.csv" \
+            --out-dir "$D/qb_passing_error"
 
-      - name: Run M75
+      - name: Rebuild pre-market 2025 QB trace
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          D=data/backtests/m75_premarket_2025
+          mkdir -p "$D"
+          python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks '1-18' --out-dir "$D"
+          python scripts/backtest/enrich_historical_defense.py --team-weekly "$D/team_weekly_history.csv" --seasons 2024,2025 --audit "$D/historical_defense_enrichment_audit.csv" --observations "$D/historical_defense_observations.csv"
+          python scripts/backtest/validate_historical_inputs.py --season 2025 --prior-season 2024 --weeks '1-18' --data-dir "$D" --report "$D/historical_input_validation.csv"
+          python scripts/backtest/historical_player_logs.py --seasons 2024,2025 --schedule "$D/schedule_history.csv" --out "$D/player_game_logs_history.csv"
+          python scripts/backtest/build_historical_injuries.py --seasons 2024,2025 --out "$D/injuries_history.csv" || true
+          python scripts/backtest/build_historical_weather.py --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv" || true
+          touch "$D/injuries_history.csv" "$D/weather_history.csv"
+          python scripts/backtest/decompose_qb_passing_error.py \
+            --season 2025 --prior-season 2024 --weeks '1-18' --iterations 2000 \
+            --player-logs "$D/player_game_logs_history.csv" --team-weekly "$D/team_weekly_history.csv" \
+            --schedule "$D/schedule_history.csv" --universe-dir "$D/pregame_universe" \
+            --injuries "$D/injuries_history.csv" --weather "$D/weather_history.csv" \
+            --out-dir "$D/qb_passing_error"
+
+      - name: Freeze genuinely market-independent canonical v3
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/freeze_qb_frontier_canonical_v3_football_only.py \
+            --trace-2024 data/backtests/m75_premarket_2024/qb_passing_error/qb_passing_player_trace.csv \
+            --logs-2024 data/backtests/m75_premarket_2024/player_game_logs_history.csv \
+            --trace-2025 data/backtests/m75_premarket_2025/qb_passing_error/qb_passing_player_trace.csv \
+            --logs-2025 data/backtests/m75_premarket_2025/player_game_logs_history.csv \
+            --out-dir data/backtests/qb_frontier_canonical_v3_football_only
+          echo '--- football-only v3 oracle summary ---'
+          cat data/backtests/qb_frontier_canonical_v3_football_only/football_only_oracle_summary.csv
+          echo '--- football-only v3 manifest ---'
+          cat data/backtests/qb_frontier_canonical_v3_football_only/manifest.json
+
+      - name: Run M75 on canonical v3
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/backtest/run_qb_personnel_tracking_matchup_v3.py \
-            --canonical data/backtests/qb_frontier_canonical_v2_football_only/qb_frontier_canonical_v2_football_only.csv \
+            --canonical data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv \
             --seasons 2022,2023,2024,2025 \
             --out-dir data/backtests/qb_m75
 
@@ -115,6 +137,8 @@ jobs:
           name: migration-75-qb-personnel-tracking-matchup
           path: |
             data/backtests/qb_m75/*.csv
-            data/backtests/qb_frontier_canonical_v2_football_only/*
+            data/backtests/qb_frontier_canonical_v3_football_only/*
+            data/backtests/m75_premarket_2024/historical_input_validation.csv
+            data/backtests/m75_premarket_2025/historical_input_validation.csv
           if-no-files-found: warn
           retention-days: 14
