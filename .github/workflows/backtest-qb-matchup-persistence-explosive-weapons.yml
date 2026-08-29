@@ -1,0 +1,78 @@
+name: Migration 72 QB Matchup Persistence Explosive Weapons
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/backtest/audit_qb_matchup_persistence_explosive_weapons.py'
+      - '.github/workflows/backtest-qb-matchup-persistence-explosive-weapons.yml'
+      - 'data/backtests/qb_frontier_canonical_v1/**'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scikit-learn
+
+      - name: Frozen M72 scientific scope
+        run: |
+          echo 'M72 follows M71 and does not retune the prior QB library.'
+          echo 'M72 loads immutable qb_frontier_canonical_v1; it does not rebuild M59-M71.'
+          echo '2024 trains fixed models; 2025 is untouched evaluation; 2023 is history only.'
+          echo 'No sportsbook player-prop or game-market field is a feature.'
+          echo 'New hypothesis A: defense opponent-adjusted QB residual persistence, including similarity-weighted prior opposing QBs.'
+          echo 'New hypothesis B: offense receiving-weapon explosive/YAC/air propensity x defense explosive/YAC/air vulnerability.'
+          echo 'Receiving weapons include WR/TE/RB collectively from prior target history; M72 does not claim individual-CB matchup data.'
+          echo 'Existing coverage/pressure/defensive aggregate fields are a frozen control family only.'
+          echo 'Fixed models: Ridge alpha=50 and HGB absolute-error, 150 iter, lr=.04, depth=2, leaf=15, L2=5, seed=72.'
+          echo 'Residual predictions are clipped only to 2024 training-target P5/P95; no 2025 tuning.'
+          echo 'Full gate: coverage>=.75, pass-residual corr>=.20, pass-MAE gain>=1.0 yd, pass-corr gain>=.02, 100+ misses non-increase, and YPA or attempts residual corr>=.15.'
+          echo 'Cross-model support: other fixed model pass-residual corr>=.10, MAE gain>=.25, tails non-worse, component corr>=.05.'
+          echo 'No feature subset search, archetype sweep, hyperparameter sweep, threshold retuning, or production promotion.'
+
+      - name: Compile M72
+        run: python -m py_compile scripts/backtest/audit_qb_matchup_persistence_explosive_weapons.py
+
+      - name: Run M72
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/audit_qb_matchup_persistence_explosive_weapons.py \
+            --canonical data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv \
+            --history-seasons 2023,2024,2025 \
+            --out-dir data/backtests/qb_m72
+
+      - name: Print M72 results
+        if: always()
+        run: |
+          echo '--- M72 interpretation ---'
+          cat data/backtests/qb_m72/m72_precommitted_interpretation.csv 2>/dev/null || true
+          echo '--- M72 model results ---'
+          cat data/backtests/qb_m72/m72_model_results.csv 2>/dev/null || true
+          echo '--- M72 feature coverage ---'
+          cat data/backtests/qb_m72/m72_feature_coverage.csv 2>/dev/null || true
+          echo '--- M72 source manifest ---'
+          cat data/backtests/qb_m72/m72_source_manifest.csv 2>/dev/null || true
+
+      - name: Upload M72 artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-72-qb-matchup-persistence-explosive-weapons
+          path: data/backtests/qb_m72/*.csv
+          if-no-files-found: warn
+          retention-days: 14
