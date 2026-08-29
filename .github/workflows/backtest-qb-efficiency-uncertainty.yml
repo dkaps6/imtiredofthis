@@ -1,0 +1,85 @@
+name: Migration 71 QB Efficiency Uncertainty Audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/backtest/audit_qb_efficiency_uncertainty.py'
+      - 'scripts/backtest/run_qb_efficiency_uncertainty_fixed.py'
+      - '.github/workflows/backtest-qb-efficiency-uncertainty.yml'
+      - 'data/backtests/qb_frontier_canonical_v1/**'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scikit-learn
+
+      - name: Frozen M71 scientific scope
+        run: |
+          echo 'M71 follows M70 multi-mechanism extreme-YPA result; it does NOT fit a directional YPA correction.'
+          echo 'M71 loads immutable qb_frontier_canonical_v1 and does NOT rebuild M59-M70.'
+          echo 'Training/discovery season: 2024. Untouched M71 evaluation season: 2025. 2023 is history context only.'
+          echo 'No sportsbook player-prop OR game-market field is an M71 feature.'
+          echo 'Primary target: absolute canonical YPA forecast error. Extreme YPA error threshold: 1.50 YPA.'
+          echo 'Secondary mechanism target: absolute actual YPA shift from prior-8 QB baseline >=1.50 YPA.'
+          echo 'Frozen new families: QB intrinsic volatility, offense ecosystem volatility, opponent pass volatility, week-specific football context, combined-new.'
+          echo 'Frozen control: disagreement among already-built canonical pregame model outputs.'
+          echo 'Fixed models only: Ridge alpha=50 and HistGradientBoosting absolute-error / 150 iter / lr=.04 / depth=2 / leaf=15 / L2=5.'
+          echo 'Full gate: coverage>=.75, risk corr>=.20, Q4/Q1 YPA error>=1.25, monotonic quartiles, AUC>=.65, Q4 captures>=40% extreme YPA errors, pass-MAE Q4/Q1>=1.15, Q4 captures>=35% of 100+ pass misses.'
+          echo 'Family follow-up additionally requires the other fixed model to support the direction: corr>=.10, YPA Q4/Q1>=1.10, pass-MAE Q4/Q1>=1.05.'
+          echo 'Run-1 comparator plumbing fix only: every risk score is passed positionally; no scientific setting changed.'
+          echo 'No feature subset search, hyperparameter sweep, threshold retuning, or production promotion.'
+
+      - name: Compile M71
+        run: |
+          python -m py_compile scripts/backtest/audit_qb_efficiency_uncertainty.py
+          python -m py_compile scripts/backtest/run_qb_efficiency_uncertainty_fixed.py
+
+      - name: Run M71 from canonical snapshot
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/run_qb_efficiency_uncertainty_fixed.py \
+            --canonical data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv \
+            --history-seasons 2023,2024,2025 \
+            --out-dir data/backtests/qb_m71
+
+      - name: Print M71 results
+        if: always()
+        run: |
+          echo '--- M71 interpretation ---'
+          cat data/backtests/qb_m71/m71_precommitted_interpretation.csv 2>/dev/null || true
+          echo '--- M71 model results ---'
+          cat data/backtests/qb_m71/m71_model_results.csv 2>/dev/null || true
+          echo '--- M71 family gate summary ---'
+          cat data/backtests/qb_m71/m71_family_gate_summary.csv 2>/dev/null || true
+          echo '--- M71 feature coverage ---'
+          cat data/backtests/qb_m71/m71_feature_coverage.csv 2>/dev/null || true
+          echo '--- M71 source manifest ---'
+          cat data/backtests/qb_m71/m71_source_manifest.csv 2>/dev/null || true
+
+      - name: Upload M71 artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-71-qb-efficiency-uncertainty-audit
+          path: data/backtests/qb_m71/*.csv
+          if-no-files-found: warn
+          retention-days: 14
