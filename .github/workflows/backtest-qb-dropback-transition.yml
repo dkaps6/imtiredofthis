@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/backtest/audit_qb_dropback_transition.py'
+      - 'scripts/backtest/run_qb_dropback_transition_fixed.py'
       - 'scripts/backtest/audit_qb_opportunity_recoverability.py'
       - 'scripts/backtest/audit_qb_efficiency_uncertainty.py'
       - '.github/workflows/backtest-qb-dropback-transition.yml'
@@ -37,10 +38,11 @@ jobs:
           echo 'Corrected canonical attempts = Raw pred_attempts x corrected_DBR / expected_DBR; passing yards use frozen implied canonical YPA.'
           echo '2024 trains fixed models; 2025 is untouched evaluation. 2022/2023 are history only.'
           echo 'No sportsbook player-prop or game-market feature is used.'
+          echo 'The legacy M64 gamescript DBR output is explicitly removed from the state-control family because it used a spread-implied state mixture.'
           echo 'New family A: team DBR transition persistence.'
           echo 'New family B: opponent-adjusted defensive DBR inducement.'
           echo 'New family C: verified M68 opening/playcaller intent, residualized vs current DBR expectation.'
-          echo 'Existing M65 state predictions are a control family; state+new must beat same-model state control incrementally.'
+          echo 'Existing football-only M65 state predictions are a control family; state+new must beat same-model state control incrementally.'
           echo 'Fixed models: Ridge alpha=50 and HGB absolute-error 150 iter lr=.04 depth=2 leaf=15 L2=5 seed=74.'
           echo 'Predicted transition is clipped only to 2024 target P5/P95; corrected DBR physical bounds .20-.90.'
           echo 'Full gate: coverage>=.75; transition corr>=.20; DBR MAE gain>=.0075; DBR corr +.10; attempts MAE gain>=.30; attempts corr +.03; 10+ misses reduce>=5%; passing MAE gain>=1.0 yd; pass corr +.02; 100+ misses non-increase.'
@@ -49,13 +51,15 @@ jobs:
           echo 'No subset search, threshold retuning, hyperparameter sweep, market leakage, or production promotion.'
 
       - name: Compile M74
-        run: python -m py_compile scripts/backtest/audit_qb_dropback_transition.py
+        run: |
+          python -m py_compile scripts/backtest/audit_qb_dropback_transition.py
+          python -m py_compile scripts/backtest/run_qb_dropback_transition_fixed.py
 
       - name: Run M74
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/backtest/audit_qb_dropback_transition.py \
+          python scripts/backtest/run_qb_dropback_transition_fixed.py \
             --canonical data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv \
             --history-seasons 2022,2023,2024,2025 \
             --out-dir data/backtests/qb_m74
