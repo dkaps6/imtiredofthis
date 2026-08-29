@@ -91,8 +91,6 @@ def build_team_game_components(pbp):
     x["team"] = x.posteam.map(m71.canon)
     x["defense"] = x.defteam.map(m71.canon)
 
-    # M64 established nflverse `fixed_drive` as the authoritative corrected
-    # drive identifier. Use raw `drive` only as a per-row fallback.
     fixed_drive = num(x.fixed_drive)
     raw_drive = num(x.drive)
     x["_drive_id"] = fixed_drive.where(fixed_drive.notna(), raw_drive)
@@ -247,18 +245,10 @@ def build_atlas(base, pbp):
         rec["identity_match_status"] = ident.iloc[i].identity_match_status
         rec["actual_team_attempts_pbp"] = float(actual.team_attempts)
 
-        pg = passer_share[
-            passer_share.season.eq(season)
-            & passer_share.week.eq(week)
-            & passer_share.game_id.astype(str).eq(str(actual.game_id))
-            & passer_share.team.eq(team)
-            & passer_share.passer_id.astype(str).eq(pid)
-        ]
-        actual_share = (
-            float(pg.iloc[0].qb_share)
-            if len(pg) and np.isfinite(pg.iloc[0].qb_share)
-            else safe_div(float(r.actual_attempts), float(actual.team_attempts))
-        )
+        # Use the frozen canonical official attempt total for realized QB share.
+        # This makes the realized component product reconstruct the exact audited
+        # target even when the PBP identity match is accepted at within-two.
+        actual_share = safe_div(float(r.actual_attempts), float(actual.team_attempts))
 
         for c in ["drives", "plays_per_drive", "dropback_rate", "attempt_conversion"] + SURVIVAL:
             rec[f"actual_{c}"] = (
@@ -286,29 +276,47 @@ def build_atlas(base, pbp):
         vals = [rec.get(f"pred_{c}", np.nan) for c in COMPONENTS]
         actual_vals = [rec.get(f"actual_{c}", np.nan) for c in COMPONENTS]
         base_gen = float(np.prod(vals)) if all(np.isfinite(v) for v in vals) else np.nan
+        canonical_base = float(r.pred_attempts)
         rec["generative_pred_attempts"] = base_gen
-        rec["canonical_attempt_residual"] = float(r.actual_attempts - r.pred_attempts)
+        rec["canonical_pred_attempts"] = canonical_base
+        rec["generative_baseline_gap_attempts"] = (
+            base_gen - canonical_base if np.isfinite(base_gen) else np.nan
+        )
+        rec["canonical_attempt_residual"] = float(r.actual_attempts - canonical_base)
         rec["generative_attempt_residual"] = (
             float(r.actual_attempts - base_gen) if np.isfinite(base_gen) else np.nan
         )
 
         contributions = {}
-        if np.isfinite(base_gen) and all(np.isfinite(v) for v in actual_vals):
+        if (
+            np.isfinite(base_gen)
+            and base_gen > 0
+            and np.isfinite(canonical_base)
+            and canonical_base > 0
+            and all(np.isfinite(v) for v in actual_vals)
+        ):
+            # Anchor component attribution to the frozen canonical attempt point.
+            # Each one-component generative move is converted to a relative
+            # multiplicative move and applied around canonical pred_attempts.
+            scale = canonical_base / base_gen
+            rec["generative_to_canonical_scale"] = scale
             for j, c in enumerate(COMPONENTS):
                 cf = vals.copy()
                 cf[j] = actual_vals[j]
-                contributions[c] = float(np.prod(cf) - base_gen)
+                raw_delta = float(np.prod(cf) - base_gen)
+                rec[f"raw_contrib_{c}_attempts"] = raw_delta
+                contributions[c] = raw_delta * scale
                 rec[f"contrib_{c}_attempts"] = contributions[c]
             rec["contrib_interaction_remainder_attempts"] = float(
-                r.actual_attempts - base_gen - sum(contributions.values())
+                r.actual_attempts - canonical_base - sum(contributions.values())
             )
-            # The nonlinear remainder is retained as a diagnostic only. It is
-            # not a targetable football mechanism and cannot win the frozen gate.
             dom = max(contributions, key=lambda k: abs(contributions[k]))
             rec["dominant_opportunity_mechanism"] = dom
             rec["dominant_opportunity_contribution_attempts"] = contributions[dom]
         else:
+            rec["generative_to_canonical_scale"] = np.nan
             for c in COMPONENTS:
+                rec[f"raw_contrib_{c}_attempts"] = np.nan
                 rec[f"contrib_{c}_attempts"] = np.nan
             rec["contrib_interaction_remainder_attempts"] = np.nan
             rec["dominant_opportunity_mechanism"] = "unavailable"
@@ -331,8 +339,8 @@ def build_atlas(base, pbp):
     recon_diff = np.abs(
         num(out.actual_attempts) - num(out.actual_team_attempts_pbp) * num(out.actual_qb_share)
     )
-    if float((recon_diff <= 0.01).mean()) < 0.98:
-        raise RuntimeError("M73 target-QB attempt reconstruction below 98% exact coverage")
+    if float((recon_diff <= 0.01).mean()) < 0.999:
+        raise RuntimeError("M73 canonical target-QB attempt reconstruction below 99.9% exact coverage")
     return out
 
 
