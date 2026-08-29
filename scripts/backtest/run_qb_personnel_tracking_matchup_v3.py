@@ -4,6 +4,8 @@
 PFR coverage YAC is a total, while Yds/Tgt, Cmp%, Rat and DADOT are rates.
 This adapter reconstructs team-secondary weekly features from underlying DB
 coverage counts before the frozen strictly-prior M75 transforms are built.
+The PFR source is qualified only when a verified DB-position bridge exists;
+all-position defender aggregates are never allowed to masquerade as a secondary.
 No M75 model, target, threshold or family definition changes here.
 """
 from __future__ import annotations
@@ -55,11 +57,21 @@ def build_pfr_secondary_week_fixed(pfr, players):
     q["individual_ypt"] = m.num(q.def_yards_allowed_per_tgt)
     q["individual_rating"] = m.num(q.def_passer_rating_allowed) if "def_passer_rating_allowed" in q else np.nan
 
-    pos = q.position.fillna("").astype(str).str.upper() if "position" in q else pd.Series("", index=q.index)
+    if "position" not in q or not q.position.notna().any():
+        return pd.DataFrame(), {
+            "usable": False,
+            "reason": "db_position_bridge_unavailable",
+            "position_source": pos_source,
+        }
+    pos = q.position.fillna("").astype(str).str.upper()
     dbmask = pos.isin(["CB", "DB", "S", "FS", "SS", "NB"])
-    position_filtered = bool(dbmask.any())
-    if position_filtered:
-        q = q[dbmask].copy()
+    if not bool(dbmask.any()):
+        return pd.DataFrame(), {
+            "usable": False,
+            "reason": "no_recognized_db_positions_after_bridge",
+            "position_source": pos_source,
+        }
+    q = q[dbmask].copy()
 
     rows = []
     for (season, week, team), g in q.groupby(["season", "week", "team"], dropna=False):
@@ -82,8 +94,6 @@ def build_pfr_secondary_week_fixed(pfr, players):
             "db_cmp_pct": float(cmp_ / tgt) if tgt > 0 else np.nan,
             "db_rating": passer_rating(cmp_, tgt, yds, td, ints),
             "db_adot": m.wmean(g.adot_n, g.targets_n),
-            # PFR YAC is a total; normalize by completions so the frozen
-            # NGS YACOE x defensive-YAC interaction compares rate-like traits.
             "db_yac": float(yac / cmp_) if cmp_ > 0 else np.nan,
             "db_weak_ypt": float(m.num(meaningful.individual_ypt).max()) if len(meaningful) else np.nan,
             "db_weak_rating": float(m.num(meaningful.individual_rating).max()) if len(meaningful) else np.nan,
@@ -94,7 +104,7 @@ def build_pfr_secondary_week_fixed(pfr, players):
         "usable": bool(len(rows)),
         "reason": "ok" if len(rows) else "no_team_week_rows",
         "rows": len(rows),
-        "position_filtered": position_filtered,
+        "position_filtered": True,
         "position_source": pos_source,
         "aggregation": "DB-only counts: ypt=yards/targets; cmp%=cmp/targets; rating=reconstructed; adot=target-weighted; yac=total_yac/completions",
         "target_col": "def_targets",
