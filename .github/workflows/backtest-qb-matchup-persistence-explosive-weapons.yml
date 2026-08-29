@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/backtest/audit_qb_matchup_persistence_explosive_weapons.py'
+      - 'scripts/backtest/run_qb_matchup_persistence_explosive_weapons_fixed.py'
       - 'scripts/backtest/audit_qb_efficiency_uncertainty.py'
       - '.github/workflows/backtest-qb-matchup-persistence-explosive-weapons.yml'
       - 'data/backtests/qb_frontier_canonical_v1/**'
@@ -38,6 +39,7 @@ jobs:
           echo 'New hypothesis A: defense opponent-adjusted QB residual persistence, including similarity-weighted prior opposing QBs.'
           echo 'New hypothesis B: offense receiving-weapon explosive/YAC/air propensity x defense explosive/YAC/air vulnerability.'
           echo 'Receiving weapons include WR/TE/RB collectively from prior target history; M72 does not claim individual-CB matchup data.'
+          echo 'Historical matchup persistence uses stable primary QBs only: primary passer with >=80% of team official attempts.'
           echo 'Existing coverage/pressure/defensive aggregate fields are a frozen control family only.'
           echo 'Fixed models: Ridge alpha=50 and HGB absolute-error, 150 iter, lr=.04, depth=2, leaf=15, L2=5, seed=72.'
           echo 'Residual predictions are clipped only to 2024 training-target P5/P95; no 2025 tuning.'
@@ -46,13 +48,15 @@ jobs:
           echo 'No feature subset search, archetype sweep, hyperparameter sweep, threshold retuning, or production promotion.'
 
       - name: Compile M72
-        run: python -m py_compile scripts/backtest/audit_qb_matchup_persistence_explosive_weapons.py
+        run: |
+          python -m py_compile scripts/backtest/audit_qb_matchup_persistence_explosive_weapons.py
+          python -m py_compile scripts/backtest/run_qb_matchup_persistence_explosive_weapons_fixed.py
 
       - name: Run M72
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/backtest/audit_qb_matchup_persistence_explosive_weapons.py \
+          python scripts/backtest/run_qb_matchup_persistence_explosive_weapons_fixed.py \
             --canonical data/backtests/qb_frontier_canonical_v1/qb_frontier_canonical_v1.csv \
             --history-seasons 2023,2024,2025 \
             --out-dir data/backtests/qb_m72
