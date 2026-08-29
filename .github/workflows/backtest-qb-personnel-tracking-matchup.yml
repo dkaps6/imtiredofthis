@@ -8,6 +8,16 @@ on:
       - 'scripts/backtest/run_qb_personnel_tracking_matchup.py'
       - 'scripts/backtest/run_qb_personnel_tracking_matchup_v3.py'
       - 'scripts/backtest/freeze_qb_frontier_canonical_v3_football_only.py'
+      - 'scripts/backtest/build_historical_inputs.py'
+      - 'scripts/backtest/historical_inputs.py'
+      - 'scripts/backtest/enrich_historical_defense.py'
+      - 'scripts/backtest/validate_historical_inputs.py'
+      - 'scripts/backtest/historical_player_logs.py'
+      - 'scripts/backtest/build_historical_injuries.py'
+      - 'scripts/backtest/build_historical_weather.py'
+      - 'scripts/backtest/decompose_qb_passing_error.py'
+      - 'scripts/backtest/component_predictions.py'
+      - 'scripts/backtest/historical_context.py'
       - '.github/workflows/backtest-qb-personnel-tracking-matchup.yml'
 
 permissions:
@@ -60,7 +70,9 @@ jobs:
           D=data/backtests/m75_premarket_2024
           mkdir -p "$D"
           python scripts/backtest/build_historical_inputs.py --season 2024 --prior-season 2023 --weeks '1-18' --out-dir "$D"
-          python scripts/backtest/enrich_historical_defense.py --team-weekly "$D/team_weekly_history.csv" --seasons 2023,2024 --audit "$D/historical_defense_enrichment_audit.csv" --observations "$D/historical_defense_observations.csv"
+          if ! python scripts/backtest/enrich_historical_defense.py --team-weekly "$D/team_weekly_history.csv" --seasons 2023,2024 --audit "$D/historical_defense_enrichment_audit.csv" --observations "$D/historical_defense_observations.csv"; then
+            echo '::warning::Optional 2024 historical defensive enrichment failed; continuing with base team_weekly_history.csv.'
+          fi
           python scripts/backtest/validate_historical_inputs.py --season 2024 --prior-season 2023 --weeks '1-18' --data-dir "$D" --report "$D/historical_input_validation.csv"
           python scripts/backtest/historical_player_logs.py --seasons 2023,2024 --schedule "$D/schedule_history.csv" --out "$D/player_game_logs_history.csv"
           python scripts/backtest/build_historical_injuries.py --seasons 2023,2024 --out "$D/injuries_history.csv" || true
@@ -81,7 +93,9 @@ jobs:
           D=data/backtests/m75_premarket_2025
           mkdir -p "$D"
           python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks '1-18' --out-dir "$D"
-          python scripts/backtest/enrich_historical_defense.py --team-weekly "$D/team_weekly_history.csv" --seasons 2024,2025 --audit "$D/historical_defense_enrichment_audit.csv" --observations "$D/historical_defense_observations.csv"
+          if ! python scripts/backtest/enrich_historical_defense.py --team-weekly "$D/team_weekly_history.csv" --seasons 2024,2025 --audit "$D/historical_defense_enrichment_audit.csv" --observations "$D/historical_defense_observations.csv"; then
+            echo '::warning::Optional 2025 historical defensive enrichment failed; continuing with base team_weekly_history.csv.'
+          fi
           python scripts/backtest/validate_historical_inputs.py --season 2025 --prior-season 2024 --weeks '1-18' --data-dir "$D" --report "$D/historical_input_validation.csv"
           python scripts/backtest/historical_player_logs.py --seasons 2024,2025 --schedule "$D/schedule_history.csv" --out "$D/player_game_logs_history.csv"
           python scripts/backtest/build_historical_injuries.py --seasons 2024,2025 --out "$D/injuries_history.csv" || true
