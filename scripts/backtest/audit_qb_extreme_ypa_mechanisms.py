@@ -33,6 +33,7 @@ CONTEXT_MATERIAL_SHIFT = 1.25
 REAL_SHIFT = 1.50
 EXPLOSIVE_YARD_SHARE = 0.45
 EXPLOSIVE_YARD_SHARE_DELTA = 0.15
+NON_MECHANISM_LABELS = {"mixed_physical", "insufficient_qb_history", "unresolved"}
 
 
 def num(v):
@@ -205,7 +206,8 @@ def aggregate_prior(games):
         "prior_air_per_completion": safe_div(completed_air, completions), "prior_yac_per_completion": safe_div(yac, completions),
         "prior_completed_air_per_att": safe_div(completed_air, attempts), "prior_yac_per_att": safe_div(yac, attempts),
         "prior_adot": wavg("adot"), "prior_deep15_attempt_rate": wavg("deep15_attempt_rate"), "prior_deep20_attempt_rate": wavg("deep20_attempt_rate"),
-        "prior_explosive20_rate": wavg("explosive20_rate"), "prior_explosive20_yard_share": wavg("explosive20_yard_share"),
+        "prior_explosive20_rate": wavg("explosive20_rate"),
+        "prior_explosive20_yard_share": wavg("explosive20_yard_share", weight="pbp_pass_yards"),
         "prior_mean_cpoe": wavg("mean_cpoe"), "prior_pressure_rate": wavg("pressure_rate"),
     }
 
@@ -298,10 +300,9 @@ def add_deltas(x):
     return x
 
 
-def summaries(targets):
+def summaries(targets, tail75):
     rows=[]
-    for slice_name, q in [("100plus_ypa", targets), ("75plus_ypa", None)]:
-        if q is None: continue
+    for slice_name, q in [("100plus_ypa", targets), ("75plus_ypa", tail75)]:
         for season_label, g in [("combined",q), *[(str(s),q[q.season.eq(s)]) for s in sorted(q.season.unique())]]:
             for c in ["forecast_failure_type","physical_driver"]:
                 for v,n in g[c].value_counts(dropna=False).items():
@@ -327,6 +328,18 @@ def main():
 
     pbp,manifest=load_pbp(history)
     games=build_passer_games(pbp)
+    for field in ["pressure_rate", "play_action_rate"]:
+        available_rows = int(num(games[field]).notna().sum())
+        manifest = pd.concat([
+            manifest,
+            pd.DataFrame([{
+                "season": ",".join(map(str, history)),
+                "family": f"m70_diagnostic_{field}",
+                "status": "available" if available_rows else "unavailable_in_pbp_source",
+                "rows": available_rows,
+            }]),
+        ], ignore_index=True, sort=False)
+
     matched=match_targets(base,games)
     match_cov=float(matched.passer_match_status.isin(["exact","within2"]).mean())
     if match_cov < .98:
@@ -346,7 +359,9 @@ def main():
     fail_counts=target.forecast_failure_type.value_counts()
     context_fail=int(fail_counts.get("model_context_overadjustment",0)+fail_counts.get("model_context_wrong_direction",0))
     context_share=context_fail/len(target)
-    driver_counts=target.physical_driver.value_counts()
+
+    eligible_drivers = target[~target.physical_driver.isin(NON_MECHANISM_LABELS)].physical_driver
+    driver_counts=eligible_drivers.value_counts()
     top_driver=str(driver_counts.index[0]) if len(driver_counts) else ""
     top_driver_share=float(driver_counts.iloc[0]/len(target)) if len(driver_counts) else np.nan
     replicated=False
@@ -366,7 +381,10 @@ def main():
     out=a.out_dir; out.mkdir(parents=True,exist_ok=True)
     target.to_csv(out/"m70_extreme_ypa_game_autopsy.csv",index=False)
     tail75.to_csv(out/"m70_75plus_ypa_secondary_autopsy.csv",index=False)
-    summaries(target).to_csv(out/"m70_mechanism_summary.csv",index=False)
+    mechanism_summary=summaries(target,tail75)
+    if not mechanism_summary.slice.eq("75plus_ypa").any():
+        raise RuntimeError("M70 75+ secondary summary missing")
+    mechanism_summary.to_csv(out/"m70_mechanism_summary.csv",index=False)
     pd.DataFrame([{
         "target_games":len(target),"ypa_collapse_games":int(target.mechanism.eq("ypa_collapse").sum()),"ypa_explosion_games":int(target.mechanism.eq("ypa_explosion").sum()),
         "prior_history_eligible_games":int(target.prior_games.ge(MIN_QB_PRIOR_GAMES).sum()),"context_adjustment_failure_games":context_fail,"context_adjustment_failure_share":context_share,
