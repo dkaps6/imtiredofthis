@@ -1,0 +1,279 @@
+name: Migration 89 QB Data Integrity Casebook Synthesis
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/backtest-qb-m89-data-integrity-casebook-synthesis.yml"
+      - "scripts/backtest/correct_m89_team_semantics.py"
+      - "scripts/backtest/audit_m89_integrity_casebook.py"
+      - "scripts/backtest/run_m89_pregame_synthesis.py"
+      - "scripts/providers/injuries.py"
+      - "docs/migrations/M89_QB_DATA_INTEGRITY_CASEBOOK_SYNTHESIS.md"
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Frozen M89 contract
+        run: |
+          python -m py_compile scripts/backtest/correct_m89_team_semantics.py
+          python -m py_compile scripts/backtest/audit_m89_integrity_casebook.py
+          python -m py_compile scripts/backtest/run_m89_pregame_synthesis.py
+          python -m py_compile scripts/providers/injuries.py
+          python - <<'PY'
+          from pathlib import Path
+          doc=Path('docs/migrations/M89_QB_DATA_INTEGRITY_CASEBOOK_SYNTHESIS.md').read_text()
+          required=[
+              'Phase 0 — Data Integrity & Feature Semantics Gate',
+              'Phase 1 — Catastrophic Game Casebook',
+              'Phase 2 — Pregame Synthesis: football-only vs market-assisted',
+              '>= `99%` of matched QB-games must agree exactly on official pass attempts',
+              'true_proe',
+              'hit_sack_pressure_proxy',
+              'all 123 M82 OOS-ensemble 100+ yard misses',
+              'Train/freeze on 2023 only',
+              'Ridge regression only, fixed `alpha=20`',
+              'Residual correction cap fixed before evaluation at `+/- 45 yards`',
+              'M89 is the final broad QB research migration',
+              'sportsbook_features_in_football_model = false',
+          ]
+          missing=[x for x in required if x not in doc]
+          assert not missing, missing
+          injury=Path('scripts/providers/injuries.py').read_text()
+          assert 'ESPN_URL' in injury
+          assert 'stale cache NOT reused' in injury
+          assert 'keeping existing injuries.csv' not in injury
+          print('M89 frozen contract: PASS')
+          PY
+
+  m89-research:
+    needs: contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 420
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+
+      - name: Recover frozen M82, M86, and M88 artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/m82 /tmp/m86 /tmp/m88
+          gh api /repos/${{ github.repository }}/actions/artifacts/9734973786/zip > /tmp/m82.zip
+          gh api /repos/${{ github.repository }}/actions/artifacts/9735538162/zip > /tmp/m86.zip
+          gh api /repos/${{ github.repository }}/actions/artifacts/9736226603/zip > /tmp/m88.zip
+          unzip -q /tmp/m82.zip -d /tmp/m82
+          unzip -q /tmp/m86.zip -d /tmp/m86
+          unzip -q /tmp/m88.zip -d /tmp/m88
+          M82=$(find /tmp/m82 -name m82_qb_common_cohort_trace.csv -print -quit)
+          M86=$(find /tmp/m86 -name m86_qb_forensic_trace.csv -print -quit)
+          M88=$(find /tmp/m88 -name m88_2023_stable_qb_regime_trace.csv -print -quit)
+          test -n "$M82"; test -n "$M86"; test -n "$M88"
+          cp "$M82" /tmp/m82_qb_common_cohort_trace.csv
+          cp "$M86" /tmp/m86_qb_forensic_trace.csv
+          cp "$M88" /tmp/m88_2023_stable_qb_regime_trace.csv
+          python - <<'PY'
+          import pandas as pd
+          m82=pd.read_csv('/tmp/m82_qb_common_cohort_trace.csv',low_memory=False)
+          m86=pd.read_csv('/tmp/m86_qb_forensic_trace.csv',low_memory=False)
+          m88=pd.read_csv('/tmp/m88_2023_stable_qb_regime_trace.csv',low_memory=False)
+          assert len(m82)==884, len(m82)
+          assert ((m82['ensemble_proj']-m82['actual_pass_yards']).abs()>=100).sum()==123
+          assert len(m88)==447, len(m88)
+          print('Frozen artifacts recovered:',len(m82),len(m86),len(m88))
+          PY
+
+      - name: Phase 0/1 independent truth audit and catastrophic casebook
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p data/backtests/m89/integrity_casebook
+          python scripts/backtest/audit_m89_integrity_casebook.py \
+            --m82-trace /tmp/m82_qb_common_cohort_trace.csv \
+            --m86-trace /tmp/m86_qb_forensic_trace.csv \
+            --out-dir data/backtests/m89/integrity_casebook
+
+      - name: Build corrected 2023 development context
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p data/backtests/m89/2023
+          python scripts/backtest/build_historical_inputs.py --season 2023 --prior-season 2022 --weeks "1-18" --out-dir data/backtests/m89/2023
+          python scripts/backtest/correct_m89_team_semantics.py \
+            --team-weekly data/backtests/m89/2023/team_weekly_history.csv --seasons 2022,2023 \
+            --observations data/backtests/m89/2023/m89_corrected_team_observations.csv \
+            --audit data/backtests/m89/2023/m89_semantic_source_audit.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2023 --prior-season 2022 --weeks "1-18" --data-dir data/backtests/m89/2023 --report data/backtests/m89/2023/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs.py --seasons 2022,2023 --schedule data/backtests/m89/2023/schedule_history.csv --out data/backtests/m89/2023/player_game_logs_history.csv
+
+      - name: Build corrected 2024 inputs and run full stack
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p data/backtests/m89/2024
+          python scripts/backtest/build_historical_inputs.py --season 2024 --prior-season 2023 --weeks "1-18" --out-dir data/backtests/m89/2024
+          python scripts/backtest/correct_m89_team_semantics.py \
+            --team-weekly data/backtests/m89/2024/team_weekly_history.csv --seasons 2023,2024 \
+            --observations data/backtests/m89/2024/m89_corrected_team_observations.csv \
+            --audit data/backtests/m89/2024/m89_semantic_source_audit.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2024 --prior-season 2023 --weeks "1-18" --data-dir data/backtests/m89/2024 --report data/backtests/m89/2024/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs.py --seasons 2023,2024 --schedule data/backtests/m89/2024/schedule_history.csv --out data/backtests/m89/2024/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2023,2024 --out data/backtests/m89/2024/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/backtests/m89/2024/schedule_history.csv --out data/backtests/m89/2024/weather_history.csv
+          rm -f data/backtests/m89/2024/component_predictions.csv
+          python scripts/backtest/walk_forward.py \
+            --season 2024 --prior-season 2023 --weeks "1-18" \
+            --player-logs data/backtests/m89/2024/player_game_logs_history.csv \
+            --team-weekly data/backtests/m89/2024/team_weekly_history.csv \
+            --schedule data/backtests/m89/2024/schedule_history.csv \
+            --universe-dir data/backtests/m89/2024/pregame_universe \
+            --injuries data/backtests/m89/2024/injuries_history.csv \
+            --weather data/backtests/m89/2024/weather_history.csv \
+            --out data/backtests/m89/2024/component_predictions.csv \
+            --iterations 2000
+          python scripts/backtest/evaluate_components.py --predictions data/backtests/m89/2024/component_predictions.csv --out-dir data/backtests/m89/2024/evaluation
+
+      - name: Build corrected deployability-aware 2025 inputs and run full stack
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p data/backtests/m89/2025
+          python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks "1-18" --out-dir data/backtests/m89/2025
+          python scripts/backtest/correct_m89_team_semantics.py \
+            --team-weekly data/backtests/m89/2025/team_weekly_history.csv --seasons 2024,2025 \
+            --observations data/backtests/m89/2025/m89_corrected_team_observations.csv \
+            --audit data/backtests/m89/2025/m89_semantic_source_audit.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2025 --prior-season 2024 --weeks "1-18" --data-dir data/backtests/m89/2025 --report data/backtests/m89/2025/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs.py --seasons 2024,2025 --schedule data/backtests/m89/2025/schedule_history.csv --out data/backtests/m89/2025/player_game_logs_history.csv
+          # 2025 nflverse injury reports are not treated as a valid in-season source.
+          # Keep only 2024 historical rows; exact-week slicing therefore gives 0 target-week 2025 injury rows.
+          python scripts/backtest/build_historical_injuries.py --seasons 2024 --out data/backtests/m89/2025/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/backtests/m89/2025/schedule_history.csv --out data/backtests/m89/2025/weather_history.csv
+          rm -f data/backtests/m89/2025/component_predictions.csv
+          python scripts/backtest/walk_forward.py \
+            --season 2025 --prior-season 2024 --weeks "1-18" \
+            --player-logs data/backtests/m89/2025/player_game_logs_history.csv \
+            --team-weekly data/backtests/m89/2025/team_weekly_history.csv \
+            --schedule data/backtests/m89/2025/schedule_history.csv \
+            --universe-dir data/backtests/m89/2025/pregame_universe \
+            --injuries data/backtests/m89/2025/injuries_history.csv \
+            --weather data/backtests/m89/2025/weather_history.csv \
+            --out data/backtests/m89/2025/component_predictions.csv \
+            --iterations 2000
+          python scripts/backtest/evaluate_components.py --predictions data/backtests/m89/2025/component_predictions.csv --out-dir data/backtests/m89/2025/evaluation
+
+      - name: Reconcile corrected full stack on exact canonical cohort
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p data/backtests/m89/reconciliation
+          python scripts/backtest/reconcile_qb_full_stack.py \
+            --canonical data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv \
+            --predictions-2024 data/backtests/m89/2024/component_predictions.csv \
+            --predictions-2025 data/backtests/m89/2025/component_predictions.csv \
+            --out-dir data/backtests/m89/reconciliation
+          python - <<'PY'
+          from pathlib import Path
+          import numpy as np
+          import pandas as pd
+          root=Path('data/backtests/m89')
+          common=pd.read_csv(root/'reconciliation'/'m82_qb_common_cohort_trace.csv',low_memory=False)
+          parts=[]
+          for season in (2024,2025):
+              q=pd.read_csv(root/str(season)/'component_predictions.csv',low_memory=False)
+              q.columns=[str(c).strip().lower() for c in q.columns]
+              q=q[q['market'].astype(str).str.lower().eq('pass_yards')].copy()
+              keep=['season','week','team','player_clean_key','mc_expected_pass_attempts','mc_proj']
+              q=q[[c for c in keep if c in q.columns]].drop_duplicates(['season','week','team','player_clean_key'])
+              parts.append(q)
+          d=pd.concat(parts,ignore_index=True)
+          keys=['season','week','team','player_clean_key']
+          out=common.merge(d,on=keys,how='left',validate='one_to_one',suffixes=('','_m89'))
+          out['pred_attempts']=pd.to_numeric(out.get('mc_expected_pass_attempts'),errors='coerce')
+          out['implied_pred_ypa']=pd.to_numeric(out.get('mc_proj_m89',out.get('mc_proj')),errors='coerce')/out['pred_attempts'].replace(0,np.nan)
+          out.to_csv(root/'reconciliation'/'m89_corrected_qb_common_trace.csv',index=False)
+          assert len(out)==884, len(out)
+          print(pd.read_csv(root/'reconciliation'/'m82_qb_full_stack_scoreboard.csv').to_string(index=False))
+          PY
+
+      - name: Phase 2 frozen 2023-trained pregame synthesis
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p data/backtests/m89/synthesis
+          python scripts/backtest/run_m89_pregame_synthesis.py \
+            --trace-2023 /tmp/m88_2023_stable_qb_regime_trace.csv \
+            --trace-2024-2025 data/backtests/m89/reconciliation/m89_corrected_qb_common_trace.csv \
+            --team-2023 data/backtests/m89/2023/team_weekly_history.csv \
+            --logs-2023 data/backtests/m89/2023/player_game_logs_history.csv \
+            --team-2024 data/backtests/m89/2024/team_weekly_history.csv \
+            --logs-2024 data/backtests/m89/2024/player_game_logs_history.csv \
+            --team-2025 data/backtests/m89/2025/team_weekly_history.csv \
+            --logs-2025 data/backtests/m89/2025/player_game_logs_history.csv \
+            --out-dir data/backtests/m89/synthesis
+
+      - name: Verify M89 boundaries and print decision surfaces
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          root=Path('data/backtests/m89')
+          integrity=json.loads((root/'integrity_casebook'/'m89_integrity_casebook_summary.json').read_text())
+          gates=json.loads((root/'synthesis'/'m89_synthesis_gates.json').read_text())
+          case=pd.read_csv(root/'integrity_casebook'/'m89_catastrophic_casebook.csv',low_memory=False)
+          score=pd.read_csv(root/'synthesis'/'m89_synthesis_scoreboard.csv')
+          corrected=pd.read_csv(root/'reconciliation'/'m82_qb_full_stack_scoreboard.csv')
+          assert integrity['m82_rows']==884
+          assert integrity['catastrophic_rows']==123
+          assert integrity['postgame_casebook_features_used_for_prediction'] is False
+          assert gates['postgame_casebook_features_used_for_prediction'] is False
+          assert gates['sportsbook_features_in_football_model'] is False
+          assert len(case)==123
+          assert set(score['model'])=={'base','football_synthesis','market_assisted'}
+          print('--- M89 INTEGRITY ---'); print(json.dumps(integrity,indent=2))
+          print('--- M89 CORRECTED FULL STACK ---'); print(corrected.to_string(index=False))
+          print('--- M89 CASEBOOK TAXONOMY ---'); print(case['forensic_primary_label'].value_counts().to_string())
+          print('--- M89 SYNTHESIS ---'); print(score.to_string(index=False))
+          print('--- M89 GATES ---'); print(json.dumps(gates,indent=2))
+          PY
+
+      - name: Upload M89 artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m89-qb-data-integrity-casebook-synthesis
+          path: |
+            data/backtests/m89/integrity_casebook/*
+            data/backtests/m89/2023/historical_input_validation.csv
+            data/backtests/m89/2023/m89_semantic_source_audit.csv
+            data/backtests/m89/2023/m89_corrected_team_observations.csv
+            data/backtests/m89/2024/historical_input_validation.csv
+            data/backtests/m89/2024/m89_semantic_source_audit.csv
+            data/backtests/m89/2024/m89_corrected_team_observations.csv
+            data/backtests/m89/2024/component_predictions.csv
+            data/backtests/m89/2024/evaluation/*.csv
+            data/backtests/m89/2025/historical_input_validation.csv
+            data/backtests/m89/2025/m89_semantic_source_audit.csv
+            data/backtests/m89/2025/m89_corrected_team_observations.csv
+            data/backtests/m89/2025/component_predictions.csv
+            data/backtests/m89/2025/evaluation/*.csv
+            data/backtests/m89/reconciliation/*
+            data/backtests/m89/synthesis/*
+          if-no-files-found: warn
+          retention-days: 14
