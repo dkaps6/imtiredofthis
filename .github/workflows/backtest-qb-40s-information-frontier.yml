@@ -5,26 +5,17 @@ on:
     branches: [main]
     paths:
       - 'scripts/backtest/audit_qb_40s_information_frontier.py'
-      - 'scripts/backtest/freeze_qb_frontier_canonical_v3_football_only.py'
-      - 'scripts/backtest/build_historical_inputs.py'
-      - 'scripts/backtest/historical_inputs.py'
-      - 'scripts/backtest/enrich_historical_defense.py'
-      - 'scripts/backtest/validate_historical_inputs.py'
-      - 'scripts/backtest/historical_player_logs.py'
-      - 'scripts/backtest/build_historical_injuries.py'
-      - 'scripts/backtest/build_historical_weather.py'
-      - 'scripts/backtest/decompose_qb_passing_error.py'
-      - 'scripts/backtest/component_predictions.py'
       - '.github/workflows/backtest-qb-40s-information-frontier.yml'
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   audit:
     if: github.head_ref == 'backtest-migration-76-qb-40s-information-frontier'
     runs-on: ubuntu-24.04
-    timeout-minutes: 300
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -35,81 +26,45 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install nflreadpy scikit-learn pyarrow pytest pyyaml joblib
+          pip install pandas pyarrow nflreadpy
 
       - name: Frozen M76 scope
         run: |
           echo 'M76 is a data-frontier audit, not a predictive-model migration.'
-          echo 'Canonical source of truth: v3 football-only, 884 stable-primary QB games (444 in 2024; 440 in 2025).'
-          echo 'No sportsbook field may affect cohort membership, projections, source qualification, or outputs.'
           echo 'M76 fits ZERO predictive models and changes ZERO production logic.'
-          echo 'M76 quantifies the amount of attempt/YPA oracle-error recovery required to reach <50 passing-yard MAE.'
-          echo 'M76 attributes the 2024-vs-2025 difficulty gap at the attempt/YPA component level.'
-          echo 'M76 qualifies genuinely new point-in-time personnel identity sources: depth charts and weekly rosters.'
-          echo 'Strictly-prior snap counts and PFR pass-rush stats may support role/replacement quality but target-game outcomes are prohibited.'
-          echo 'Generic injury burden may not authorize M77 because it was already tested; the nflverse injury feed is known to end after 2024.'
-          echo 'M77 is allowed only if the exact-personnel identity/discontinuity contract qualifies.'
+          echo 'Canonical source is the exact authoritative M75 Run #15 canonical-v3 snapshot.'
+          echo 'Canonical expected SHA256: c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742.'
+          echo 'Canonical expected population: 884 rows = 444 in 2024 + 440 in 2025.'
+          echo 'No sportsbook field may affect cohort membership, projections, source qualification, or outputs.'
+          echo 'M76 quantifies oracle recovery needed to enter the 40s and attributes the 2024-vs-2025 difficulty gap.'
+          echo 'M76 qualifies exact personnel only from game-level point-in-time evidence, not schema presence.'
+          echo '2025+ depth snapshots must be strictly before kickoff; 2024 uses week-specific pregame depth-chart records.'
+          echo 'Snap counts and PFR pass-rush outcomes are supporting history only and must be strictly before target week.'
+          echo 'The M77 gate requires high game-level depth/roster coverage, cross-source identity bridge, position-group coverage, current-2026 source continuity, and strictly-prior role history.'
+          echo 'Generic injury burden cannot authorize M77; the nflverse injury feed ended after 2024.'
           echo 'The no-retest ledger prohibits another same-information DBR/attempt/YPA/model-subset migration.'
 
-      - name: Compile M76 and canonical v3 freezer
-        run: |
-          python -m py_compile scripts/backtest/audit_qb_40s_information_frontier.py
-          python -m py_compile scripts/backtest/freeze_qb_frontier_canonical_v3_football_only.py
+      - name: Compile M76
+        run: python -m py_compile scripts/backtest/audit_qb_40s_information_frontier.py
 
-      - name: Rebuild pre-market 2024 QB trace
+      - name: Recover pinned canonical v3 from authoritative M75 Run 15
         env:
-          PYTHONPATH: ${{ github.workspace }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          D=data/backtests/m76_premarket_2024
-          mkdir -p "$D"
-          python scripts/backtest/build_historical_inputs.py --season 2024 --prior-season 2023 --weeks '1-18' --out-dir "$D"
-          python scripts/backtest/enrich_historical_defense.py --team-weekly "$D/team_weekly_history.csv" --seasons 2023,2024 --audit "$D/historical_defense_enrichment_audit.csv" --observations "$D/historical_defense_observations.csv" || echo '[m76] optional 2024 defensive enrichment unavailable; continuing with base team history'
-          python scripts/backtest/validate_historical_inputs.py --season 2024 --prior-season 2023 --weeks '1-18' --data-dir "$D" --report "$D/historical_input_validation.csv"
-          python scripts/backtest/historical_player_logs.py --seasons 2023,2024 --schedule "$D/schedule_history.csv" --out "$D/player_game_logs_history.csv"
-          python scripts/backtest/build_historical_injuries.py --seasons 2023,2024 --out "$D/injuries_history.csv" || true
-          python scripts/backtest/build_historical_weather.py --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv" || true
-          touch "$D/injuries_history.csv" "$D/weather_history.csv"
-          python scripts/backtest/decompose_qb_passing_error.py \
-            --season 2024 --prior-season 2023 --weeks '1-18' --iterations 2000 \
-            --player-logs "$D/player_game_logs_history.csv" --team-weekly "$D/team_weekly_history.csv" \
-            --schedule "$D/schedule_history.csv" --universe-dir "$D/pregame_universe" \
-            --injuries "$D/injuries_history.csv" --weather "$D/weather_history.csv" \
-            --out-dir "$D/qb_passing_error"
-
-      - name: Rebuild pre-market 2025 QB trace
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          set -euo pipefail
-          D=data/backtests/m76_premarket_2025
-          mkdir -p "$D"
-          python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks '1-18' --out-dir "$D"
-          python scripts/backtest/enrich_historical_defense.py --team-weekly "$D/team_weekly_history.csv" --seasons 2024,2025 --audit "$D/historical_defense_enrichment_audit.csv" --observations "$D/historical_defense_observations.csv" || echo '[m76] optional 2025 defensive enrichment unavailable; continuing with base team history'
-          python scripts/backtest/validate_historical_inputs.py --season 2025 --prior-season 2024 --weeks '1-18' --data-dir "$D" --report "$D/historical_input_validation.csv"
-          python scripts/backtest/historical_player_logs.py --seasons 2024,2025 --schedule "$D/schedule_history.csv" --out "$D/player_game_logs_history.csv"
-          python scripts/backtest/build_historical_injuries.py --seasons 2024,2025 --out "$D/injuries_history.csv" || true
-          python scripts/backtest/build_historical_weather.py --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv" || true
-          touch "$D/injuries_history.csv" "$D/weather_history.csv"
-          python scripts/backtest/decompose_qb_passing_error.py \
-            --season 2025 --prior-season 2024 --weeks '1-18' --iterations 2000 \
-            --player-logs "$D/player_game_logs_history.csv" --team-weekly "$D/team_weekly_history.csv" \
-            --schedule "$D/schedule_history.csv" --universe-dir "$D/pregame_universe" \
-            --injuries "$D/injuries_history.csv" --weather "$D/weather_history.csv" \
-            --out-dir "$D/qb_passing_error"
-
-      - name: Freeze canonical v3 football-only
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/backtest/freeze_qb_frontier_canonical_v3_football_only.py \
-            --trace-2024 data/backtests/m76_premarket_2024/qb_passing_error/qb_passing_player_trace.csv \
-            --logs-2024 data/backtests/m76_premarket_2024/player_game_logs_history.csv \
-            --trace-2025 data/backtests/m76_premarket_2025/qb_passing_error/qb_passing_player_trace.csv \
-            --logs-2025 data/backtests/m76_premarket_2025/player_game_logs_history.csv \
-            --out-dir data/backtests/qb_frontier_canonical_v3_football_only
-          cat data/backtests/qb_frontier_canonical_v3_football_only/football_only_oracle_summary.csv
-          cat data/backtests/qb_frontier_canonical_v3_football_only/manifest.json
+          mkdir -p data/backtests/m76_canonical_source data/backtests/qb_frontier_canonical_v3_football_only
+          curl -L --fail-with-body \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/9723324503/zip" \
+            -o /tmp/m75_run15.zip
+          unzip -q /tmp/m75_run15.zip -d data/backtests/m76_canonical_source
+          CANON=$(find data/backtests/m76_canonical_source -name 'qb_frontier_canonical_v3_football_only.csv' -type f | head -1)
+          test -n "$CANON"
+          echo "c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742  $CANON" | sha256sum -c -
+          cp "$CANON" data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv
+          printf '%s\n' 'artifact_id=9723324503' 'run_id=33281866517' 'artifact_digest=sha256:ba5d43d2338570f7959ffda77b2acbd818be557748912320d51d2ae111e45281' 'canonical_sha256=c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742' > data/backtests/qb_frontier_canonical_v3_football_only/m76_canonical_provenance.txt
 
       - name: Run M76 information frontier
         env:
@@ -124,6 +79,10 @@ jobs:
         run: |
           echo '--- M76 interpretation ---'
           cat data/backtests/qb_m76/m76_precommitted_interpretation.csv 2>/dev/null || true
+          echo '--- M76 game-level personnel gate ---'
+          cat data/backtests/qb_m76/m76_personnel_gate_summary.csv 2>/dev/null || true
+          echo '--- M76 source snapshots ---'
+          cat data/backtests/qb_m76/m76_source_snapshot_hashes.csv 2>/dev/null || true
           echo '--- M76 season difficulty ---'
           cat data/backtests/qb_m76/m76_season_difficulty.csv 2>/dev/null || true
           echo '--- M76 source contracts ---'
@@ -132,8 +91,6 @@ jobs:
           cat data/backtests/qb_m76/m76_recovery_map.csv 2>/dev/null || true
           echo '--- M76 no-retest ledger ---'
           cat data/backtests/qb_m76/m76_no_retest_ledger.csv 2>/dev/null || true
-          echo '--- M76 unresolved frontiers ---'
-          cat data/backtests/qb_m76/m76_unresolved_data_frontiers.csv 2>/dev/null || true
 
       - name: Upload M76 artifact
         if: always()
@@ -143,7 +100,5 @@ jobs:
           path: |
             data/backtests/qb_m76/*
             data/backtests/qb_frontier_canonical_v3_football_only/*
-            data/backtests/m76_premarket_2024/historical_input_validation.csv
-            data/backtests/m76_premarket_2025/historical_input_validation.csv
           if-no-files-found: warn
           retention-days: 14
