@@ -20,7 +20,7 @@ jobs:
         run: |
           python -m py_compile scripts/backtest/audit_defensive_adaptive_gameplan.py
           grep -q "PREREGISTERED / DIAGNOSTIC ONLY" docs/migrations/M83_DEFENSIVE_ADAPTIVE_GAMEPLAN_AUDIT.md
-          grep -q "2025 QB outcomes remain" docs/migrations/M83_DEFENSIVE_ADAPTIVE_GAMEPLAN_AUDIT.md
+          grep -q "2025 QB target outcomes remain" docs/migrations/M83_DEFENSIVE_ADAPTIVE_GAMEPLAN_AUDIT.md
           grep -q "K_NEIGHBORS = 4" scripts/backtest/audit_defensive_adaptive_gameplan.py
           grep -q "MIN_MAE_GAIN_PCT = 0.05" scripts/backtest/audit_defensive_adaptive_gameplan.py
           grep -q "MIN_CORR_GAIN = 0.05" scripts/backtest/audit_defensive_adaptive_gameplan.py
