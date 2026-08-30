@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/backtest/audit_qb_official_inactive_availability.py'
+      - 'scripts/backtest/audit_qb_official_inactive_availability_v2.py'
       - 'data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv'
       - '.github/workflows/backtest-qb-official-inactive-availability.yml'
 
@@ -38,6 +39,7 @@ jobs:
           echo 'Future 2026 use: snapshot the live NFL Inactives endpoint before kickoff.'
           echo 'No sportsbook data. No target-game performance. No article timestamp as a predictor.'
           echo 'M77 depth-chart discontinuity remains rejected; M78 does not remix M77 features.'
+          echo 'Parser accepts both normal H2/H3/H4 team headings and verified NFL.com plain-text team labels immediately attached to inactive lists.'
           echo 'M79 is authorized only if BOTH seasons reach >=90% canonical team-week coverage, >=90% roster identity bridge, >=95% listed-position parsing, >=17 regular weeks discovered, >=18 official inactive articles, and the live 2026 endpoint is reachable.'
 
       - name: Verify frozen canonical v3
@@ -48,13 +50,15 @@ jobs:
           echo "c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742  $CANON" | sha256sum -c -
 
       - name: Compile M78
-        run: python -m py_compile scripts/backtest/audit_qb_official_inactive_availability.py
+        run: |
+          python -m py_compile scripts/backtest/audit_qb_official_inactive_availability.py
+          python -m py_compile scripts/backtest/audit_qb_official_inactive_availability_v2.py
 
       - name: Run M78 source audit
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/backtest/audit_qb_official_inactive_availability.py \
+          python scripts/backtest/audit_qb_official_inactive_availability_v2.py \
             --canonical data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv \
             --out-dir data/backtests/qb_m78
 
