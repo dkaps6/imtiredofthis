@@ -1,0 +1,135 @@
+name: Migration 88 QB 2023 Regime Replication
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/backtest-qb-m88-2023-regime-replication.yml"
+      - "scripts/backtest/replicate_qb_low_chaos_regimes_2023.py"
+      - "docs/migrations/M88_2023_LOW_CHAOS_REGIME_REPLICATION.md"
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Frozen M88 contract
+        run: |
+          python -m py_compile scripts/backtest/replicate_qb_low_chaos_regimes_2023.py
+          python - <<'PY'
+          from pathlib import Path
+          doc=Path('docs/migrations/M88_2023_LOW_CHAOS_REGIME_REPLICATION.md').read_text()
+          required=[
+              '2023 Weeks 1-18',
+              '2,000 Monte Carlo iterations',
+              '0.6062143950065955',
+              '0.18505508535326465',
+              '0.42486131276490247',
+              '6.426889901131469',
+              'REPLICATED_2023',
+              'Bootstrap configuration is frozen at 2,000 draws with seed 88',
+              'no 2023 threshold tuning',
+              'production_actionable = false',
+          ]
+          missing=[x for x in required if x not in doc]
+          assert not missing, missing
+          print('M88 frozen contract: PASS')
+          PY
+
+  replicate-2023:
+    needs: contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+
+      - name: Build clean 2023 historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p data/backtests/m88/2023
+          python scripts/backtest/build_historical_inputs.py --season 2023 --prior-season 2022 --weeks "1-18" --out-dir data/backtests/m88/2023
+          python scripts/backtest/enrich_historical_defense.py --team-weekly data/backtests/m88/2023/team_weekly_history.csv --seasons 2022,2023 --audit data/backtests/m88/2023/historical_defense_enrichment_audit.csv --observations data/backtests/m88/2023/historical_defense_observations.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2023 --prior-season 2022 --weeks "1-18" --data-dir data/backtests/m88/2023 --report data/backtests/m88/2023/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs.py --seasons 2022,2023 --schedule data/backtests/m88/2023/schedule_history.csv --out data/backtests/m88/2023/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2022,2023 --out data/backtests/m88/2023/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/backtests/m88/2023/schedule_history.csv --out data/backtests/m88/2023/weather_history.csv
+
+      - name: Run 2023 current full-stack walk-forward
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -f data/backtests/m88/2023/component_predictions.csv
+          python scripts/backtest/walk_forward.py \
+            --season 2023 --prior-season 2022 --weeks "1-18" \
+            --player-logs data/backtests/m88/2023/player_game_logs_history.csv \
+            --team-weekly data/backtests/m88/2023/team_weekly_history.csv \
+            --schedule data/backtests/m88/2023/schedule_history.csv \
+            --universe-dir data/backtests/m88/2023/pregame_universe \
+            --injuries data/backtests/m88/2023/injuries_history.csv \
+            --weather data/backtests/m88/2023/weather_history.csv \
+            --out data/backtests/m88/2023/component_predictions.csv \
+            --iterations 2000
+          python scripts/backtest/evaluate_components.py --predictions data/backtests/m88/2023/component_predictions.csv --out-dir data/backtests/m88/2023/evaluation
+
+      - name: Run frozen M88 replication
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p data/backtests/m88/replication
+          python scripts/backtest/replicate_qb_low_chaos_regimes_2023.py \
+            --predictions data/backtests/m88/2023/component_predictions.csv \
+            --player-logs data/backtests/m88/2023/player_game_logs_history.csv \
+            --out-dir data/backtests/m88/replication
+
+      - name: Verify M88 confirmation boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          root=Path('data/backtests/m88/replication')
+          d=json.loads((root/'m88_decision.json').read_text())
+          r=pd.read_csv(root/'m88_2023_regime_replication.csv')
+          t=pd.read_csv(root/'m88_2023_stable_qb_regime_trace.csv',low_memory=False)
+          assert d['confirmation_season']==2023, d
+          assert d['prior_history_season']==2022, d
+          assert d['sportsbook_features_used'] is False
+          assert d['pass_yard_correction_fit'] is False
+          assert d['target_game_pbp_used_as_pregame_feature'] is False
+          assert d['production_actionable'] is False
+          assert len(t)>=250, len(t)
+          assert set(r['regime'])=={'PASS_FUNNEL_SHORT_INTERMEDIATE_VOLUME','EFFICIENCY_SUPPRESSION'}
+          assert set(r['final_status']).issubset({'REPLICATED_2023','NOT_REPLICATED_2023','INSUFFICIENT_2023_COVERAGE'})
+          print('--- M88 2023 FULL-STACK SCOREBOARD ---')
+          print(pd.read_csv(root/'m88_2023_full_stack_scoreboard.csv').to_string(index=False))
+          print('--- M88 REGIME REPLICATION ---')
+          print(r.to_string(index=False))
+          print('--- M88 DECISION ---')
+          print(json.dumps(d,indent=2))
+          PY
+
+      - name: Upload M88 artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m88-2023-regime-replication
+          path: |
+            data/backtests/m88/2023/historical_input_validation.csv
+            data/backtests/m88/2023/historical_defense_enrichment_audit.csv
+            data/backtests/m88/2023/component_predictions.csv
+            data/backtests/m88/2023/evaluation/*.csv
+            data/backtests/m88/replication/*
+          if-no-files-found: warn
+          retention-days: 14
