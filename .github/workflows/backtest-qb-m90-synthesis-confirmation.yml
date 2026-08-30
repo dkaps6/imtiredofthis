@@ -1,0 +1,135 @@
+name: Migration 90 QB Synthesis Confirmation Promotion
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/backtest-qb-m90-synthesis-confirmation.yml"
+      - "scripts/backtest/historical_inputs.py"
+      - "scripts/backtest/correct_m89_team_semantics.py"
+      - "scripts/backtest/build_m89_2023_training_trace.py"
+      - "scripts/backtest/run_m89_pregame_synthesis.py"
+      - "scripts/backtest/run_m90_qb_synthesis_confirmation.py"
+      - "docs/migrations/M90_QB_SYNTHESIS_CONFIRMATION_PROMOTION.md"
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Frozen M90 contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('docs/migrations/M90_QB_SYNTHESIS_CONFIRMATION_PROMOTION.md').read_text()
+          assert 'Ridge alpha: 20.0' in p
+          assert 'Residual correction cap: ±45' in p
+          assert 'No new casebook taxonomy work' in p
+          assert 'PROMOTE_M89_FOOTBALL_SYNTHESIS' in p
+          print('M90 contract frozen')
+          PY
+
+  m90-confirmation:
+    needs: contract
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+      - name: Build corrected 2022 full-stack trace using 2021 prior history
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p data/backtests/m90/2022
+          python scripts/backtest/build_historical_inputs.py --season 2022 --prior-season 2021 --weeks "1-18" --out-dir data/backtests/m90/2022
+          python scripts/backtest/correct_m89_team_semantics.py \
+            --team-weekly data/backtests/m90/2022/team_weekly_history.csv --seasons 2021,2022 \
+            --observations data/backtests/m90/2022/m90_corrected_team_observations.csv \
+            --audit data/backtests/m90/2022/m90_semantic_source_audit.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2022 --prior-season 2021 --weeks "1-18" --data-dir data/backtests/m90/2022 --report data/backtests/m90/2022/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs.py --seasons 2021,2022 --schedule data/backtests/m90/2022/schedule_history.csv --out data/backtests/m90/2022/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2021,2022 --out data/backtests/m90/2022/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/backtests/m90/2022/schedule_history.csv --out data/backtests/m90/2022/weather_history.csv
+          python scripts/backtest/walk_forward.py \
+            --season 2022 --prior-season 2021 --weeks "1-18" \
+            --player-logs data/backtests/m90/2022/player_game_logs_history.csv \
+            --team-weekly data/backtests/m90/2022/team_weekly_history.csv \
+            --schedule data/backtests/m90/2022/schedule_history.csv \
+            --universe-dir data/backtests/m90/2022/pregame_universe \
+            --injuries data/backtests/m90/2022/injuries_history.csv \
+            --weather data/backtests/m90/2022/weather_history.csv \
+            --out data/backtests/m90/2022/component_predictions.csv \
+            --iterations 2000
+          python scripts/backtest/build_m89_2023_training_trace.py \
+            --predictions data/backtests/m90/2022/component_predictions.csv \
+            --player-logs data/backtests/m90/2022/player_game_logs_history.csv \
+            --out data/backtests/m90/2022/m90_2022_training_trace.csv
+      - name: Build corrected 2023 prospective confirmation trace
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p data/backtests/m90/2023
+          python scripts/backtest/build_historical_inputs.py --season 2023 --prior-season 2022 --weeks "1-18" --out-dir data/backtests/m90/2023
+          python scripts/backtest/correct_m89_team_semantics.py \
+            --team-weekly data/backtests/m90/2023/team_weekly_history.csv --seasons 2022,2023 \
+            --observations data/backtests/m90/2023/m90_corrected_team_observations.csv \
+            --audit data/backtests/m90/2023/m90_semantic_source_audit.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2023 --prior-season 2022 --weeks "1-18" --data-dir data/backtests/m90/2023 --report data/backtests/m90/2023/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs.py --seasons 2022,2023 --schedule data/backtests/m90/2023/schedule_history.csv --out data/backtests/m90/2023/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2022,2023 --out data/backtests/m90/2023/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/backtests/m90/2023/schedule_history.csv --out data/backtests/m90/2023/weather_history.csv
+          python scripts/backtest/walk_forward.py \
+            --season 2023 --prior-season 2022 --weeks "1-18" \
+            --player-logs data/backtests/m90/2023/player_game_logs_history.csv \
+            --team-weekly data/backtests/m90/2023/team_weekly_history.csv \
+            --schedule data/backtests/m90/2023/schedule_history.csv \
+            --universe-dir data/backtests/m90/2023/pregame_universe \
+            --injuries data/backtests/m90/2023/injuries_history.csv \
+            --weather data/backtests/m90/2023/weather_history.csv \
+            --out data/backtests/m90/2023/component_predictions.csv \
+            --iterations 2000
+          python scripts/backtest/build_m89_2023_training_trace.py \
+            --predictions data/backtests/m90/2023/component_predictions.csv \
+            --player-logs data/backtests/m90/2023/player_game_logs_history.csv \
+            --out data/backtests/m90/2023/m90_2023_confirmation_trace.csv
+      - name: Run frozen rotated confirmation
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p data/backtests/m90/confirmation
+          python scripts/backtest/run_m90_qb_synthesis_confirmation.py \
+            --train-trace data/backtests/m90/2022/m90_2022_training_trace.csv \
+            --test-trace data/backtests/m90/2023/m90_2023_confirmation_trace.csv \
+            --out-dir data/backtests/m90/confirmation
+      - name: Verify M90 disposition
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('data/backtests/m90/confirmation/m90_decision.json').read_text())
+          assert d['catastrophic_casebook_reopened'] is False
+          assert d['gates']['sportsbook_features_in_football_model'] is False
+          assert d['gates']['postgame_casebook_features_used_for_prediction'] is False
+          print(json.dumps(d,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: m90-qb-synthesis-confirmation
+          path: |
+            data/backtests/m90/2022/historical_input_validation.csv
+            data/backtests/m90/2022/m90_semantic_source_audit.csv
+            data/backtests/m90/2022/m90_2022_training_trace.csv
+            data/backtests/m90/2023/historical_input_validation.csv
+            data/backtests/m90/2023/m90_semantic_source_audit.csv
+            data/backtests/m90/2023/m90_2023_confirmation_trace.csv
+            data/backtests/m90/confirmation/*
+          retention-days: 14
