@@ -1,0 +1,87 @@
+name: Migration 77 QB Exact Personnel Discontinuity
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/backtest/test_qb_exact_personnel_discontinuity.py'
+      - 'scripts/backtest/audit_qb_40s_information_frontier.py'
+      - 'data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv'
+      - '.github/workflows/backtest-qb-exact-personnel-discontinuity.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    if: github.head_ref == 'backtest-migration-77-qb-exact-personnel-discontinuity'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pandas pyarrow nflreadpy scikit-learn
+
+      - name: Frozen M77 scope and promotion gate
+        run: |
+          echo 'M77 is ONE predictive test of genuinely new exact-personnel information.'
+          echo 'Canonical input is repo-pinned football-only v3: 884 rows = 444 in 2024 + 440 in 2025.'
+          echo '2024 is development/training. 2025 is untouched evaluation.'
+          echo 'One model family only: StandardScaler + Ridge(alpha=10, fit_intercept=False).'
+          echo 'Separate residual corrections: attempts and YPA.'
+          echo 'Personnel features only: OL/skill/DB/pass-rush continuity, replacement prior role, expected-rusher prior quality, and mechanistic interactions.'
+          echo 'No sportsbook fields. No target-game snap/PFR outcomes. No generic injury burden.'
+          echo 'No DBR/pass-rate/state, aggregate defense, playcaller, pace, volatility, or model-zoo fallback.'
+          echo 'PROMOTION requires ALL: 2025 feature coverage >=0.85; 2024 late-season directional MAE gain >0; 2025 pass MAE gain >=1.50 yards; paired bootstrap pass gain CI low >0; pass correlation gain >=0.02; 100+ yard misses do not increase; at least one of attempt/YPA MAE gains has paired bootstrap CI low >0.'
+          echo 'If M77 misses promotion, same personnel feature universe is rejected for retuning/model substitution.'
+
+      - name: Verify frozen canonical v3
+        run: |
+          set -euo pipefail
+          CANON=data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv
+          test -s "$CANON"
+          echo "c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742  $CANON" | sha256sum -c -
+
+      - name: Compile M77
+        run: |
+          python -m py_compile scripts/backtest/test_qb_exact_personnel_discontinuity.py
+
+      - name: Run M77
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/test_qb_exact_personnel_discontinuity.py \
+            --canonical data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv \
+            --out-dir data/backtests/qb_m77
+
+      - name: Print M77 outputs
+        if: always()
+        run: |
+          echo '--- interpretation ---'
+          cat data/backtests/qb_m77/m77_interpretation.csv 2>/dev/null || true
+          echo '--- promotion gate ---'
+          cat data/backtests/qb_m77/m77_promotion_gate.csv 2>/dev/null || true
+          echo '--- results ---'
+          cat data/backtests/qb_m77/m77_results.csv 2>/dev/null || true
+          echo '--- coefficients ---'
+          cat data/backtests/qb_m77/m77_coefficients.csv 2>/dev/null || true
+          echo '--- source contract ---'
+          cat data/backtests/qb_m77/m77_source_contract.json 2>/dev/null || true
+
+      - name: Upload M77 artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-77-qb-exact-personnel-discontinuity
+          path: data/backtests/qb_m77/*
+          if-no-files-found: warn
+          retention-days: 14
