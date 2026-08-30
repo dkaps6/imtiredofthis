@@ -75,7 +75,7 @@ jobs:
       - name: Build TeamForm with explicit preseason priors
         run: |
           export PYTHONPATH="${PWD}"
-          python scripts/providers/sharpfootball_pull.py --season "${SEASON}" --dump-html
+          python scripts/run_sharpfootball_v2.py --season "${SEASON}" --dump-html
           python scripts/team_form_prior_bridge.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}"
           python scripts/run_team_form_context.py --season "${SEASON}"
           test -s data/team_form.csv
