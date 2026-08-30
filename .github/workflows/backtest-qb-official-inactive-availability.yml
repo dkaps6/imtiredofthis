@@ -6,6 +6,7 @@ on:
     paths:
       - 'scripts/backtest/audit_qb_official_inactive_availability.py'
       - 'scripts/backtest/audit_qb_official_inactive_availability_v2.py'
+      - 'scripts/backtest/audit_qb_official_inactive_availability_v3.py'
       - 'data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv'
       - 'data/backtests/qb_m78_official_inactives_frozen/**'
       - '.github/workflows/backtest-qb-official-inactive-availability.yml'
@@ -37,8 +38,10 @@ jobs:
           echo 'M78 is SOURCE/DATA-CONTRACT ONLY. It fits zero predictive models.'
           echo 'New information: official game-day inactive identity, a fixed pre-kickoff fact.'
           echo 'Historical reconstruction: archived NFL.com official inactive reports for 2024 and 2025.'
-          echo 'Run #3 qualified 100% canonical team-week coverage in both seasons; that exact compact identity snapshot is now SHA-pinned in Git.'
-          echo 'Future 2026 use: snapshot the live NFL Inactives endpoint before kickoff.'
+          echo 'The Run #3 historical snapshot is frozen and SHA-pinned in Git.'
+          echo 'Hardened gate requires exact identity coverage for every canonical team-week and every observed game window.'
+          echo 'Position-parse coverage uses every candidate source bullet as the denominator.'
+          echo 'The 2026 live URL is reachability only until a real game-day payload is validated before kickoff.'
           echo 'No sportsbook data. No target-game performance. No article timestamp as a predictor.'
           echo 'M77 depth-chart discontinuity remains rejected; M78 does not remix M77 features.'
           echo 'M79 may use only the frozen M78 identity snapshot plus strictly-prior football information.'
@@ -91,14 +94,26 @@ jobs:
         run: |
           python -m py_compile scripts/backtest/audit_qb_official_inactive_availability.py
           python -m py_compile scripts/backtest/audit_qb_official_inactive_availability_v2.py
+          python -m py_compile scripts/backtest/audit_qb_official_inactive_availability_v3.py
 
-      - name: Revalidate live/historical source contract
+      - name: Revalidate hardened historical/live source contract
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/backtest/audit_qb_official_inactive_availability_v2.py \
+          python scripts/backtest/audit_qb_official_inactive_availability_v3.py \
             --canonical data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv \
             --out-dir data/backtests/qb_m78
+
+      - name: Require historical M79 authorization
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          c = json.loads(Path('data/backtests/qb_m78/m78_contract.json').read_text())
+          assert c['historical_m79_authorized'] is True, c
+          print('historical_m79_authorized=TRUE')
+          print('live_2026_payload_validated=', c['live_2026_payload_validated'])
+          PY
 
       - name: Print M78 outputs
         if: always()
