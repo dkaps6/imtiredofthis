@@ -5,6 +5,10 @@ MC/ML/State ensemble. Sportsbook lines are never features. The artifact is a
 transparent JSON export of the exact M89 preprocessing + Ridge architecture,
 refit after validation on all corrected 2023-2025 canonical rows for 2026
 prospective deployment.
+
+Player Identity v3 changes only how the live eight-game QB history is retrieved;
+the M89/M90 feature contract, coefficients, preprocessing, and residual cap are
+unchanged.
 """
 from __future__ import annotations
 
@@ -97,12 +101,16 @@ def load_player_logs(path: Path = Path("data/player_game_logs.csv")) -> pd.DataF
         return pd.DataFrame()
     df = pd.read_csv(path, low_memory=False)
     df.columns = [str(c).strip().lower() for c in df.columns]
+    if "player_identity_key" in df.columns:
+        df["_identity_key"] = df["player_identity_key"].astype("string").fillna("").str.strip()
+    else:
+        df["_identity_key"] = ""
     if "player_clean_key" in df.columns:
         df["_pkey"] = df["player_clean_key"].map(_pkey)
     elif "player" in df.columns:
         df["_pkey"] = df["player"].map(_pkey)
     else:
-        return pd.DataFrame()
+        df["_pkey"] = ""
     if "season" in df.columns:
         df["season"] = pd.to_numeric(df["season"], errors="coerce")
     if "week" in df.columns:
@@ -110,12 +118,36 @@ def load_player_logs(path: Path = Path("data/player_game_logs.csv")) -> pd.DataF
     return df
 
 
-def qb_prior(logs: pd.DataFrame, player_key: str, season: int, week: int) -> tuple[float, float, int]:
-    if logs is None or logs.empty or "_pkey" not in logs.columns:
+def qb_prior(
+    logs: pd.DataFrame,
+    player_key: str,
+    season: int,
+    week: int,
+    *,
+    player_identity_key: str = "",
+) -> tuple[float, float, int]:
+    """Return the eight-game pregame QB prior, preferring stable identity.
+
+    ``player_key`` remains as a backwards-compatible fallback for older research
+    fixtures, but production rows carrying Player Identity v3 never need to rely
+    on spelling-sensitive name matching.
+    """
+    if logs is None or logs.empty:
         return np.nan, np.nan, 0
-    q = logs.loc[logs["_pkey"].eq(_pkey(player_key))].copy()
+
+    identity = str(player_identity_key or "").strip()
+    if identity and "_identity_key" in logs.columns:
+        q = logs.loc[logs["_identity_key"].eq(identity)].copy()
+    elif "_pkey" in logs.columns:
+        q = logs.loc[logs["_pkey"].eq(_pkey(player_key))].copy()
+    else:
+        return np.nan, np.nan, 0
+
     if "season" in q.columns and "week" in q.columns:
-        q = q.loc[(q["season"].lt(int(season))) | (q["season"].eq(int(season)) & q["week"].lt(int(week)))].copy()
+        q = q.loc[
+            (q["season"].lt(int(season)))
+            | (q["season"].eq(int(season)) & q["week"].lt(int(week)))
+        ].copy()
         q = q.sort_values(["season", "week"]).tail(HISTORY_GAMES)
     else:
         q = q.tail(HISTORY_GAMES)
@@ -138,7 +170,7 @@ def qb_prior(logs: pd.DataFrame, player_key: str, season: int, week: int) -> tup
 
 def _context_row(context: pd.DataFrame, team: str) -> pd.Series:
     q = context.loc[context["team"].eq(canon_team(team))]
-    return q.iloc[0] if not q.empty else pd.Series(dtype=object)
+    return q.iloc[0] if not q.empty else pd.Series(dtype="object")
 
 
 def attempt_conversion(row: pd.Series, context: pd.DataFrame) -> float:
@@ -160,7 +192,10 @@ def controlled_environment(row: pd.Series, weather: pd.DataFrame | None = None) 
         team = canon_team(row.get("team")); opp = canon_team(row.get("opponent"))
         if {"home", "away"}.issubset(w.columns):
             w["home"] = w["home"].map(canon_team); w["away"] = w["away"].map(canon_team)
-            q = w.loc[((w["home"].eq(team)) & (w["away"].eq(opp))) | ((w["home"].eq(opp)) & (w["away"].eq(team)))]
+            q = w.loc[
+                ((w["home"].eq(team)) & (w["away"].eq(opp)))
+                | ((w["home"].eq(opp)) & (w["away"].eq(team)))
+            ]
             if not q.empty:
                 for name in ["controlled_environment", "controlled_venue", "is_dome", "indoor"]:
                     value = _num(q.iloc[0].get(name))
@@ -201,11 +236,22 @@ def build_feature_dict(
     conv = attempt_conversion(row, team_context)
     qb_share = _num(row.get("qb_pass_att_share"), 1.0)
     qb_share = float(np.clip(qb_share, 0.0, 1.0)) if np.isfinite(qb_share) else 1.0
-    pred_attempts = plays * dropback_rate * conv * qb_share if np.isfinite(plays) and np.isfinite(dropback_rate) else np.nan
+    pred_attempts = (
+        plays * dropback_rate * conv * qb_share
+        if np.isfinite(plays) and np.isfinite(dropback_rate)
+        else np.nan
+    )
     pred_ypa = mc_proj / pred_attempts if np.isfinite(pred_attempts) and pred_attempts > 0 else np.nan
 
     player_key = row.get("player_clean_key", row.get("player", ""))
-    qb_att, qb_ypa, _ = qb_prior(player_logs, str(player_key), int(season), int(week))
+    identity_key = row.get("player_identity_key", "")
+    qb_att, qb_ypa, _ = qb_prior(
+        player_logs,
+        str(player_key),
+        int(season),
+        int(week),
+        player_identity_key=str(identity_key or ""),
+    )
 
     return {
         "base_proj": float(base_proj),
@@ -226,7 +272,12 @@ def build_feature_dict(
         "def_success_allowed": _num(defense.get("def_pass_success_allowed"), _num(defense.get("success_rate_def"))),
         "def_ypa_allowed": _num(defense.get("def_ypa_allowed")),
         "def_pass_rate_faced": _num(defense.get("pass_rate_faced")),
-        "off_hit_sack_pressure": _num(off.get("hit_sack_pressure_rate_allowed"), _num(off.get("pressure_rate_allowed"))),
-        "def_hit_sack_pressure": _num(defense.get("hit_sack_pressure_rate_generated"), _num(defense.get("pressure_rate_generated"))),
+        "off_hit_sack_pressure": _num(
+            off.get("hit_sack_pressure_rate_allowed"), _num(off.get("pressure_rate_allowed"))
+        ),
+        "def_hit_sack_pressure": _num(
+            defense.get("hit_sack_pressure_rate_generated"),
+            _num(defense.get("pressure_rate_generated")),
+        ),
         "controlled_environment": controlled_environment(row, weather),
     }
