@@ -1,0 +1,127 @@
+name: Migration 76 QB 40s Information Frontier
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/backtest/audit_qb_40s_information_frontier.py'
+      - 'scripts/backtest/audit_qb_40s_information_frontier_v2.py'
+      - 'data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv'
+      - '.github/workflows/backtest-qb-40s-information-frontier.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  audit:
+    if: github.head_ref == 'backtest-migration-76-qb-40s-information-frontier'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pandas pyarrow nflreadpy
+
+      - name: Frozen M76 scope
+        run: |
+          echo 'M76 is a data-frontier audit, not a predictive-model migration.'
+          echo 'M76 fits ZERO predictive models and changes ZERO production logic.'
+          echo 'Canonical source is the durable repo-pinned M75 Run #15 canonical-v3 snapshot.'
+          echo 'Canonical expected SHA256: c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742.'
+          echo 'Canonical expected population: 884 rows = 444 in 2024 + 440 in 2025.'
+          echo 'No sportsbook field may affect cohort membership, projections, source qualification, or outputs.'
+          echo 'M76 quantifies oracle recovery needed to enter the 40s and attributes the 2024-vs-2025 difficulty gap.'
+          echo 'M76 qualifies exact personnel only from game-level point-in-time evidence, not schema presence.'
+          echo '2025+ depth snapshots must be strictly before kickoff; 2024 uses week-specific pregame depth-chart records.'
+          echo 'Snap counts and PFR pass-rush outcomes are supporting history only and must be strictly before target week with populated metrics.'
+          echo 'The M77 gate requires high game-level depth/roster coverage, cross-source identity bridge, position-group coverage, current-2026 source continuity, and strictly-prior populated role history.'
+          echo 'Generic injury burden cannot authorize M77; the nflverse injury feed ended after 2024.'
+          echo 'The no-retest ledger prohibits another same-information DBR/attempt/YPA/model-subset migration.'
+
+      - name: Compile M76
+        run: |
+          python -m py_compile scripts/backtest/audit_qb_40s_information_frontier.py
+          python -m py_compile scripts/backtest/audit_qb_40s_information_frontier_v2.py
+
+      - name: Ensure durable canonical v3 snapshot exists in git
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          CANON=data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv
+          mkdir -p "$(dirname "$CANON")"
+          if [ ! -s "$CANON" ]; then
+            echo 'Durable canonical snapshot not yet committed; recovering exact M75 Run #15 copy.'
+            mkdir -p /tmp/m75_source
+            curl -L --fail-with-body \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/9723324503/zip" \
+              -o /tmp/m75_run15.zip
+            unzip -q /tmp/m75_run15.zip -d /tmp/m75_source
+            SRC=$(find /tmp/m75_source -name 'qb_frontier_canonical_v3_football_only.csv' -type f | head -1)
+            test -n "$SRC"
+            echo "c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742  $SRC" | sha256sum -c -
+            cp "$SRC" "$CANON"
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add "$CANON"
+            git commit -m 'Persist canonical v3 football-only snapshot for M76+'
+            git push origin "HEAD:${GITHUB_HEAD_REF}"
+          fi
+          echo "c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742  $CANON" | sha256sum -c -
+          printf '%s\n' \
+            'source=M75 Run #15 canonical-v3 snapshot' \
+            'original_artifact_id=9723324503' \
+            'original_run_id=33281866517' \
+            'canonical_sha256=c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742' \
+            'storage=durable_git_csv' \
+            > data/backtests/qb_frontier_canonical_v3_football_only/m76_canonical_provenance.txt
+
+      - name: Run M76 information frontier
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/audit_qb_40s_information_frontier_v2.py \
+            --canonical data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv \
+            --out-dir data/backtests/qb_m76
+
+      - name: Print M76 outputs
+        if: always()
+        run: |
+          echo '--- M76 interpretation ---'
+          cat data/backtests/qb_m76/m76_precommitted_interpretation.csv 2>/dev/null || true
+          echo '--- M76 game-level personnel gate ---'
+          cat data/backtests/qb_m76/m76_personnel_gate_summary.csv 2>/dev/null || true
+          echo '--- M76 source snapshots ---'
+          cat data/backtests/qb_m76/m76_source_snapshot_hashes.csv 2>/dev/null || true
+          echo '--- M76 season difficulty ---'
+          cat data/backtests/qb_m76/m76_season_difficulty.csv 2>/dev/null || true
+          echo '--- M76 source contracts ---'
+          cat data/backtests/qb_m76/m76_source_contracts.csv 2>/dev/null || true
+          echo '--- M76 recovery map ---'
+          cat data/backtests/qb_m76/m76_recovery_map.csv 2>/dev/null || true
+          echo '--- M76 no-retest ledger ---'
+          cat data/backtests/qb_m76/m76_no_retest_ledger.csv 2>/dev/null || true
+
+      - name: Upload M76 artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-76-qb-40s-information-frontier
+          path: |
+            data/backtests/qb_m76/*
+            data/backtests/qb_frontier_canonical_v3_football_only/m76_canonical_provenance.txt
+          if-no-files-found: warn
+          retention-days: 14
