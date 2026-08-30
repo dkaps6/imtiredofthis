@@ -10,11 +10,18 @@ from __future__ import annotations
 from pathlib import Path
 
 from scripts.modeling.context_bridge_v3 import load_model_contexts, player_context_frame
+from scripts.team_context_v3 import materialize as materialize_team_context
 
 OUT = Path("data/model_context_bridge.csv")
 
 
 def main() -> int:
+    team_context, provenance = materialize_team_context()
+    if len(team_context) != 32 or team_context["team"].nunique() != 32:
+        raise RuntimeError("Team Context v3 failed 32-team materialization contract")
+    if provenance.empty:
+        raise RuntimeError("Team Context v3 provenance is empty")
+
     teams, players = load_model_contexts()
     if not teams:
         raise RuntimeError("Model context bridge produced zero TeamContext objects")
@@ -48,6 +55,7 @@ def main() -> int:
         f"[model_context_bridge] team_coverage_player_rows={cov} direct_wr_cb_rows={direct} "
         f"injury_report_player_rows={injured} weather_forecast_player_rows={weather}"
     )
+    print(f"[model_context_bridge] team_provenance_rows={len(provenance)}")
     print(f"[model_context_bridge] wrote {len(frame)} rows -> {OUT}")
     print("[model_context_bridge] projection-neutral: simulation_v2/pricing behavior unchanged")
     return 0
