@@ -3,20 +3,43 @@
 
 This runner does not create projections. It proves that the current Full Slate
 artifacts can be translated into the canonical modeling contracts introduced in
-Migration 1. Team-level context now comes exclusively from Team Context v3.
+Migration 1. Team-level context comes exclusively from Team Context v3, and the
+runtime provider artifacts must pass the 2026 readiness gate first.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from scripts.modeling.context_bridge_v3 import load_model_contexts, player_context_frame
+from scripts.runtime_context import resolve_prior_season, resolve_season, resolve_week
 from scripts.team_context_v3 import materialize as materialize_team_context
+from scripts.validate_2026_provider_artifacts import run_provider_readiness
 
 OUT = Path("data/model_context_bridge.csv")
+PROVIDER_OUT = Path("data/provider_readiness_v3.csv")
 
 
 def main() -> int:
-    team_context, provenance = materialize_team_context()
+    season = int(resolve_season())
+    prior = int(resolve_prior_season())
+    week = int(resolve_week())
+    live_odds = os.getenv("FETCH_LIVE_ODDS", "false").strip().lower() in {"1", "true", "yes", "on"}
+
+    provider_summary = run_provider_readiness(
+        season,
+        prior,
+        week,
+        live_odds_enabled=live_odds,
+    )
+    PROVIDER_OUT.parent.mkdir(parents=True, exist_ok=True)
+    provider_summary.to_csv(PROVIDER_OUT, index=False)
+    print(
+        f"[model_context_bridge] provider gate passed rows={len(provider_summary)} "
+        f"season={season} week={week} live_odds={live_odds}"
+    )
+
+    team_context, provenance = materialize_team_context(season=season, week=week)
     if len(team_context) != 32 or team_context["team"].nunique() != 32:
         raise RuntimeError("Team Context v3 failed 32-team materialization contract")
     if provenance.empty:
