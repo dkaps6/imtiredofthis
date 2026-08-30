@@ -5,11 +5,12 @@ on:
     branches: [main]
     paths:
       - 'scripts/backtest/audit_qb_40s_information_frontier.py'
+      - 'scripts/backtest/audit_qb_40s_information_frontier_v2.py'
+      - 'data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv.gz.b64'
       - '.github/workflows/backtest-qb-40s-information-frontier.yml'
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
   audit:
@@ -32,45 +33,44 @@ jobs:
         run: |
           echo 'M76 is a data-frontier audit, not a predictive-model migration.'
           echo 'M76 fits ZERO predictive models and changes ZERO production logic.'
-          echo 'Canonical source is the exact authoritative M75 Run #15 canonical-v3 snapshot.'
+          echo 'Canonical source is the durable repo-pinned M75 Run #15 canonical-v3 snapshot.'
           echo 'Canonical expected SHA256: c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742.'
           echo 'Canonical expected population: 884 rows = 444 in 2024 + 440 in 2025.'
           echo 'No sportsbook field may affect cohort membership, projections, source qualification, or outputs.'
           echo 'M76 quantifies oracle recovery needed to enter the 40s and attributes the 2024-vs-2025 difficulty gap.'
           echo 'M76 qualifies exact personnel only from game-level point-in-time evidence, not schema presence.'
           echo '2025+ depth snapshots must be strictly before kickoff; 2024 uses week-specific pregame depth-chart records.'
-          echo 'Snap counts and PFR pass-rush outcomes are supporting history only and must be strictly before target week.'
-          echo 'The M77 gate requires high game-level depth/roster coverage, cross-source identity bridge, position-group coverage, current-2026 source continuity, and strictly-prior role history.'
+          echo 'Snap counts and PFR pass-rush outcomes are supporting history only and must be strictly before target week with populated metrics.'
+          echo 'The M77 gate requires high game-level depth/roster coverage, cross-source identity bridge, position-group coverage, current-2026 source continuity, and strictly-prior populated role history.'
           echo 'Generic injury burden cannot authorize M77; the nflverse injury feed ended after 2024.'
           echo 'The no-retest ledger prohibits another same-information DBR/attempt/YPA/model-subset migration.'
 
       - name: Compile M76
-        run: python -m py_compile scripts/backtest/audit_qb_40s_information_frontier.py
+        run: |
+          python -m py_compile scripts/backtest/audit_qb_40s_information_frontier.py
+          python -m py_compile scripts/backtest/audit_qb_40s_information_frontier_v2.py
 
-      - name: Recover pinned canonical v3 from authoritative M75 Run 15
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Recover durable canonical v3 snapshot from repo
         run: |
           set -euo pipefail
-          mkdir -p data/backtests/m76_canonical_source data/backtests/qb_frontier_canonical_v3_football_only
-          curl -L --fail-with-body \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/9723324503/zip" \
-            -o /tmp/m75_run15.zip
-          unzip -q /tmp/m75_run15.zip -d data/backtests/m76_canonical_source
-          CANON=$(find data/backtests/m76_canonical_source -name 'qb_frontier_canonical_v3_football_only.csv' -type f | head -1)
-          test -n "$CANON"
-          echo "c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742  $CANON" | sha256sum -c -
-          cp "$CANON" data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv
-          printf '%s\n' 'artifact_id=9723324503' 'run_id=33281866517' 'artifact_digest=sha256:ba5d43d2338570f7959ffda77b2acbd818be557748912320d51d2ae111e45281' 'canonical_sha256=c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742' > data/backtests/qb_frontier_canonical_v3_football_only/m76_canonical_provenance.txt
+          SRC=data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv.gz.b64
+          OUT=data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv
+          test -s "$SRC"
+          base64 -d "$SRC" | gzip -dc > "$OUT"
+          echo 'c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742  '"$OUT" | sha256sum -c -
+          printf '%s\n' \
+            'source=M75 Run #15 canonical-v3 snapshot' \
+            'original_artifact_id=9723324503' \
+            'original_run_id=33281866517' \
+            'canonical_sha256=c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742' \
+            'storage=durable_git_snapshot_base64_gzip' \
+            > data/backtests/qb_frontier_canonical_v3_football_only/m76_canonical_provenance.txt
 
       - name: Run M76 information frontier
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/backtest/audit_qb_40s_information_frontier.py \
+          python scripts/backtest/audit_qb_40s_information_frontier_v2.py \
             --canonical data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv \
             --out-dir data/backtests/qb_m76
 
@@ -99,6 +99,6 @@ jobs:
           name: migration-76-qb-40s-information-frontier
           path: |
             data/backtests/qb_m76/*
-            data/backtests/qb_frontier_canonical_v3_football_only/*
+            data/backtests/qb_frontier_canonical_v3_football_only/m76_canonical_provenance.txt
           if-no-files-found: warn
           retention-days: 14
