@@ -5,9 +5,8 @@ on:
     branches: [main]
     paths:
       - 'scripts/backtest/audit_qb_official_inactive_availability.py'
-      - 'scripts/backtest/audit_qb_official_inactive_availability_v2.py'
       - 'scripts/backtest/audit_qb_official_inactive_availability_v3.py'
-      - 'scripts/backtest/diagnose_qb_official_inactive_unparsed_bullets.py'
+      - 'scripts/backtest/audit_qb_official_inactive_availability_v4.py'
       - 'data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv'
       - 'data/backtests/qb_m78_official_inactives_frozen/**'
       - '.github/workflows/backtest-qb-official-inactive-availability.yml'
@@ -20,110 +19,53 @@ jobs:
     if: github.head_ref == 'backtest-migration-78-qb-official-inactive-availability'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pandas pyarrow requests beautifulsoup4
-
       - name: Frozen M78 scope
         run: |
           echo 'M78 is SOURCE/DATA-CONTRACT ONLY. It fits zero predictive models.'
-          echo 'New information: official game-day inactive identity, a fixed pre-kickoff fact.'
-          echo 'Historical reconstruction: archived NFL.com official inactive reports for 2024 and 2025.'
-          echo 'The Run #3 historical snapshot is frozen and SHA-pinned in Git.'
-          echo 'Hardened gate requires exact identity coverage for every canonical team-week and every observed game window.'
-          echo 'Position-parse coverage uses every candidate source bullet as the denominator.'
-          echo 'The 2026 live URL is reachability only until a real game-day payload is validated before kickoff.'
-          echo 'No sportsbook data. No target-game performance. No article timestamp as a predictor.'
-          echo 'M77 depth-chart discontinuity remains rejected; M78 does not remix M77 features.'
-          echo 'M79 may use only the frozen M78 identity snapshot plus strictly-prior football information.'
-
+          echo 'Run #3 inactive snapshot is SUPERSEDED as M79 input after hardened audit found cross-team bleed and silently dropped source bullets.'
+          echo 'V4 rebuilds exact identities directly from official NFL.com source, deduplicates DOM bullets, supports composite/variant position labels, and selects the true inactive section by roster-match quality.'
+          echo 'Position quality is measured separately from identity completeness.'
+          echo 'No sportsbook data. No target-game performance.'
       - name: Verify frozen canonical v3
         run: |
           set -euo pipefail
           CANON=data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv
           test -s "$CANON"
           echo "c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742  $CANON" | sha256sum -c -
-
-      - name: Verify frozen M78 official-inactive snapshot
-        run: |
-          python - <<'PY'
-          import base64, gzip, hashlib, io, json
-          from pathlib import Path
-          import pandas as pd
-
-          root = Path('data/backtests/qb_m78_official_inactives_frozen')
-          manifest = json.loads((root / 'manifest.json').read_text())
-          assert manifest['source_run_id'] == 33285991961
-          assert manifest['source_artifact_id'] == 9724454612
-          assert manifest['source_artifact_sha256'] == 'f22d4cc736705dc13cf32d277ec4e6ab0c64110f39cbd577b7fe35ce6feab9d2'
-          assert manifest['part_count'] == 7
-          parts = [json.loads((root / f'part_{i:02d}.json').read_text()) for i in range(manifest['part_count'])]
-          assert [p['part'] for p in parts] == list(range(manifest['part_count']))
-          for p in parts:
-              assert '[...truncated' not in json.dumps(p)
-
-          for season in ('2024', '2025'):
-              encoded = ''.join(p[season] for p in parts)
-              gz = base64.b64decode(encoded, validate=True)
-              expected = manifest['seasons'][season]
-              assert hashlib.sha256(gz).hexdigest() == expected['gzip_sha256']
-              raw = gzip.decompress(gz)
-              assert hashlib.sha256(raw).hexdigest() == expected['csv_sha256']
-              df = pd.read_csv(io.BytesIO(raw), low_memory=False)
-              assert len(df) == expected['team_week_rows'] == 544
-              assert set(df.columns) == {'season','week','team','inactive_tokens','inactive_count'}
-              assert set(df['season'].astype(int)) == {int(season)}
-              assert int(df['inactive_count'].sum()) == expected['inactive_player_rows']
-              assert not df.duplicated(['season','week','team']).any()
-              assert df['inactive_tokens'].notna().all()
-              out = Path(f'/tmp/m78_official_inactives_teamweek_{season}.csv')
-              out.write_bytes(raw)
-              print(season, 'OK', len(df), int(df.inactive_count.sum()), expected['csv_sha256'])
-          PY
-
       - name: Compile M78
         run: |
           python -m py_compile scripts/backtest/audit_qb_official_inactive_availability.py
-          python -m py_compile scripts/backtest/audit_qb_official_inactive_availability_v2.py
           python -m py_compile scripts/backtest/audit_qb_official_inactive_availability_v3.py
-          python -m py_compile scripts/backtest/diagnose_qb_official_inactive_unparsed_bullets.py
-
-      - name: Revalidate hardened historical/live source contract
+          python -m py_compile scripts/backtest/audit_qb_official_inactive_availability_v4.py
+      - name: Rebuild corrected M78 source contract
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/backtest/audit_qb_official_inactive_availability_v3.py \
+          python scripts/backtest/audit_qb_official_inactive_availability_v4.py \
             --canonical data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv \
             --out-dir data/backtests/qb_m78
-
-      - name: Capture unparsed candidate bullets
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/backtest/diagnose_qb_official_inactive_unparsed_bullets.py \
-            --out-dir data/backtests/qb_m78
-
       - name: Require historical M79 authorization
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
-          c = json.loads(Path('data/backtests/qb_m78/m78_contract.json').read_text())
+          c=json.loads(Path('data/backtests/qb_m78/m78_contract.json').read_text())
           assert c['historical_m79_authorized'] is True, c
+          assert c['superseded_run3_snapshot_is_authority'] is False
           print('historical_m79_authorized=TRUE')
-          print('live_2026_payload_validated=', c['live_2026_payload_validated'])
+          print('corrected_candidate_sha256=',c['corrected_candidate_sha256'])
+          print('live_2026_payload_validated=',c['live_2026_payload_validated'])
           PY
-
       - name: Print M78 outputs
         if: always()
         run: |
@@ -131,13 +73,10 @@ jobs:
           cat data/backtests/qb_m78/m78_interpretation.csv 2>/dev/null || true
           echo '--- source gate ---'
           cat data/backtests/qb_m78/m78_source_gate.csv 2>/dev/null || true
-          echo '--- unparsed candidate bullets ---'
-          cat data/backtests/qb_m78/m78_unparsed_candidate_bullets.csv 2>/dev/null || true
           echo '--- contract ---'
           cat data/backtests/qb_m78/m78_contract.json 2>/dev/null || true
-          echo '--- frozen manifest ---'
-          cat data/backtests/qb_m78_official_inactives_frozen/manifest.json
-
+          echo '--- corrected candidate sample ---'
+          head -20 data/backtests/qb_m78/m78_corrected_candidate_teamweek.csv 2>/dev/null || true
       - name: Upload M78 artifact
         if: always()
         uses: actions/upload-artifact@v4
