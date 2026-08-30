@@ -3,13 +3,13 @@
 
 This runner does not create projections. It proves that the current Full Slate
 artifacts can be translated into the canonical modeling contracts introduced in
-Migration 1.
+Migration 1. Team-level context now comes exclusively from Team Context v3.
 """
 from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.modeling.context_bridge import load_model_contexts, player_context_frame
+from scripts.modeling.context_bridge_v3 import load_model_contexts, player_context_frame
 
 OUT = Path("data/model_context_bridge.csv")
 
@@ -42,7 +42,7 @@ def main() -> int:
 
     print(
         f"[model_context_bridge] teams={len(teams)} players={len(players)} "
-        f"season={seasons[0]} week={weeks[0]}"
+        f"season={seasons[0]} week={weeks[0]} team_source=TEAM_CONTEXT_V3"
     )
     print(
         f"[model_context_bridge] team_coverage_player_rows={cov} direct_wr_cb_rows={direct} "
