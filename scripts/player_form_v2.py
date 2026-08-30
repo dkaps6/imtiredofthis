@@ -43,7 +43,7 @@ def _load_weekly(season: int) -> pd.DataFrame:
     errors: list[str] = []
     try:
         import nflreadpy as nflv
-        raw = nflv.load_player_stats(seasons=[int(season)], stat_type="weekly")
+        raw = nflv.load_player_stats(seasons=[int(season)], summary_level="week")
         df = _to_pandas(raw)
         if not df.empty:
             return df
