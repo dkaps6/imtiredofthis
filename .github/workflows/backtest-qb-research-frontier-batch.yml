@@ -1,0 +1,167 @@
+name: Migration 80 QB Research Frontier Batch Audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/backtest/audit_qb_research_frontier_batch.py'
+      - 'data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv'
+      - '.github/workflows/backtest-qb-research-frontier-batch.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  contract:
+    if: github.head_ref == 'backtest-migration-80-qb-research-frontier-batch-audit'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Frozen M80 contract
+        run: |
+          echo 'M80 is DIAGNOSTIC/SOURCE-CONTRACT ONLY.'
+          echo 'ZERO predictive models. ZERO 2025 survivor selection. ZERO sportsbook inputs.'
+          echo 'Canonical v3 SHA: c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742'
+          echo 'Independent jobs: canonical-v3 tail/no-retest, FTN novel-only, route x shell feasibility, blocker x rusher acquisition.'
+          echo 'M1-M79 anti-loop rule: every future feature must name the closest prior migration and the materially new observable.'
+          echo 'FTN duplicate fields are explicitly excluded; source availability does not equal predictive approval.'
+          echo 'Route x shell cannot advance while the only qualified route source is postseason-only.'
+          echo 'Blocker x rusher cannot advance without complete historical + live exact-assignment data.'
+          echo 'Only an M80 candidate explicitly marked advance_to_m81_development=true may enter M81 development.'
+      - name: Verify canonical v3
+        run: |
+          CANON=data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv
+          test -s "$CANON"
+          echo 'c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742  '$CANON | sha256sum -c -
+      - name: Compile only
+        run: python -m py_compile scripts/backtest/audit_qb_research_frontier_batch.py
+
+  tail_crosswalk:
+    needs: contract
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pandas numpy pyarrow
+      - name: Canonical-v3 failure re-baseline + M1-M79 crosswalk
+        run: |
+          python scripts/backtest/audit_qb_research_frontier_batch.py \
+            --job tail --out data/backtests/qb_m80/tail
+          test -s data/backtests/qb_m80/tail/m80_canonical_v3_tail100.csv
+          test -s data/backtests/qb_m80/tail/m80_m1_m79_no_retest_crosswalk.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: m80-tail-crosswalk
+          path: data/backtests/qb_m80/tail/*
+          if-no-files-found: error
+
+  ftn_novel_only:
+    needs: contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pandas numpy pyarrow
+      - name: FTN novel-only source audit
+        run: |
+          python scripts/backtest/audit_qb_research_frontier_batch.py \
+            --job ftn --out data/backtests/qb_m80/ftn
+          cat data/backtests/qb_m80/ftn/m80_ftn_decision.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: m80-ftn-novel-only
+          path: data/backtests/qb_m80/ftn/*
+          if-no-files-found: error
+
+  route_shell:
+    needs: contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pandas numpy pyarrow
+      - name: Route x coverage-shell feasibility audit
+        run: |
+          python scripts/backtest/audit_qb_research_frontier_batch.py \
+            --job route --out data/backtests/qb_m80/route
+          cat data/backtests/qb_m80/route/m80_route_shell_decision.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: m80-route-shell
+          path: data/backtests/qb_m80/route/*
+          if-no-files-found: error
+
+  blocker_rusher:
+    needs: contract
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pandas numpy pyarrow
+      - name: True blocker x rusher acquisition audit
+        run: |
+          python scripts/backtest/audit_qb_research_frontier_batch.py \
+            --job blocker --out data/backtests/qb_m80/blocker
+          cat data/backtests/qb_m80/blocker/m80_blocker_rusher_decision.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: m80-blocker-rusher
+          path: data/backtests/qb_m80/blocker/*
+          if-no-files-found: error
+
+  master_decision:
+    needs: [tail_crosswalk, ftn_novel_only, route_shell, blocker_rusher]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pandas numpy pyarrow
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: m80-*
+          path: data/backtests/qb_m80_inputs
+          merge-multiple: false
+      - name: Build master frontier decision
+        run: |
+          python scripts/backtest/audit_qb_research_frontier_batch.py \
+            --job master \
+            --inputs data/backtests/qb_m80_inputs \
+            --out data/backtests/qb_m80/master
+          echo '--- MASTER FRONTIER ---'
+          cat data/backtests/qb_m80/master/m80_master_frontier_decision.csv
+          echo '--- CONTRACT ---'
+          cat data/backtests/qb_m80/master/m80_contract.json
+      - name: Assert M80 remains non-predictive
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('data/backtests/qb_m80/master/m80_contract.json')
+          d=json.loads(p.read_text())
+          assert d['predictive_model_fit'] is False
+          assert d['status']=='DIAGNOSTIC_SOURCE_FRONTIER'
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: migration-80-qb-research-frontier-batch
+          path: |
+            data/backtests/qb_m80/master/*
+            data/backtests/qb_m80_inputs/**/*
+          if-no-files-found: error
+          retention-days: 14
