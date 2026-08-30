@@ -148,7 +148,7 @@ def load_weekly(season: int) -> pd.DataFrame:
     src = _import_sources()
     if src["pkg"] == "nflreadpy":
         try:
-            raw = src["nflv"].load_player_stats(seasons=[season], stat_type="weekly")
+            raw = src["nflv"].load_player_stats(seasons=[season], summary_level="week")
             df = _to_pd(raw)
         except Exception:
             return pd.DataFrame()
