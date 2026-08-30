@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Build current-season NFL injury data with explicit preseason semantics."""
+"""Build current-season NFL injury data with explicit provider-state semantics."""
 from __future__ import annotations
 
 import argparse
 import io
+import json
 import re
 import sys
 from datetime import datetime, timezone
@@ -23,6 +24,7 @@ from scripts.runtime_context import resolve_season, resolve_week
 
 HDRS = {"User-Agent": "Mozilla/5.0 (+github.com/dkaps6/imtiredofthis)"}
 DEFAULT_OUT = Path("data") / "injuries.csv"
+STATUS_OUT = Path("data") / "injuries_source_status.json"
 SCHEMA = [
     "player", "team", "season", "week", "status", "practice_status",
     "body_part", "designation", "report_date", "source", "report_available",
@@ -173,29 +175,68 @@ def load_nflcom_fallback(season: int, week: int) -> pd.DataFrame:
     return normalize_nflcom_dataframe(pd.concat(tables, ignore_index=True), season, week)
 
 
-def build_injuries(season: int, week: int) -> tuple[pd.DataFrame, str]:
+def build_injuries_with_status(season: int, week: int) -> tuple[pd.DataFrame, dict]:
+    """Return injury rows plus an explicit provider-health state.
+
+    An empty official report is valid before weekly reports exist, but it is not
+    equivalent to a provider outage. At least one provider must have completed a
+    successful check before ``no_official_report`` can be emitted.
+    """
     errors: list[str] = []
+    successful_checks: list[str] = []
+
     try:
         df = load_nflverse_injuries(season, week)
+        successful_checks.append("nflverse")
         if not df.empty:
-            return df, "nflverse"
+            status = {
+                "season": int(season), "week": int(week), "state": "official_report",
+                "source": "nflverse", "rows": int(len(df)),
+                "successful_checks": successful_checks, "provider_errors": errors,
+                "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+            }
+            return df, status
     except Exception as exc:
         errors.append(f"nflverse={type(exc).__name__}: {exc}")
 
     try:
         df = load_nflcom_fallback(season, week)
+        successful_checks.append("nfl.com")
         if not df.empty:
-            return df, "nfl.com"
+            status = {
+                "season": int(season), "week": int(week), "state": "official_report",
+                "source": "nfl.com", "rows": int(len(df)),
+                "successful_checks": successful_checks, "provider_errors": errors,
+                "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+            }
+            return df, status
     except Exception as exc:
         errors.append(f"nfl.com={type(exc).__name__}: {exc}")
 
-    # No report is a valid state before official weekly injury reports exist.
-    # Do not fabricate healthy players and do not backfill stale prior-week data.
+    if successful_checks:
+        state = "no_official_report"
+        source = "no_official_report"
+    else:
+        state = "provider_outage"
+        source = "provider_outage"
+
+    status = {
+        "season": int(season), "week": int(week), "state": state,
+        "source": source, "rows": 0,
+        "successful_checks": successful_checks, "provider_errors": errors,
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+    }
     print(
-        f"[injuries_v2] no official injury rows available for season={season} week={week}; "
-        f"writing schema-valid empty artifact. provider_errors={errors or ['none']}"
+        f"[injuries_v3] season={season} week={week} state={state}; "
+        f"successful_checks={successful_checks or ['none']} provider_errors={errors or ['none']}"
     )
-    return _empty_injuries(), "no_official_report"
+    return _empty_injuries(), status
+
+
+def build_injuries(season: int, week: int) -> tuple[pd.DataFrame, str]:
+    """Backwards-compatible two-value API used by existing tests/callers."""
+    df, status = build_injuries_with_status(season, week)
+    return df, str(status["source"])
 
 
 def main() -> int:
@@ -207,12 +248,17 @@ def main() -> int:
 
     season = int(args.season) if args.season is not None else int(resolve_season())
     week = int(args.week) if args.week is not None else int(resolve_week())
-    df, source = build_injuries(season, week)
+    df, status = build_injuries_with_status(season, week)
 
     out = Path(args.out_csv)
     out.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out, index=False)
-    print(f"[injuries_v2] wrote {len(df)} rows -> {out}; season={season} week={week} source={source}")
+    STATUS_OUT.parent.mkdir(parents=True, exist_ok=True)
+    STATUS_OUT.write_text(json.dumps(status, indent=2, sort_keys=True), encoding="utf-8")
+    print(
+        f"[injuries_v3] wrote {len(df)} rows -> {out}; season={season} week={week} "
+        f"state={status['state']} source={status['source']} status={STATUS_OUT}"
+    )
     return 0
 
 
