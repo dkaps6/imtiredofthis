@@ -81,7 +81,9 @@ def build_team_weekly_from_pbp(seasons: Iterable[int]) -> pd.DataFrame:
     """Build long-form team-week observations from completed historical games.
 
     ``qb_dropback`` is a dropback opportunity, not an official pass attempt.
-    Sacks and scrambles can therefore make dropbacks materially exceed attempts.
+    nflverse PBP's ``pass_attempt`` indicator includes sacks, so official NFL pass
+    attempts are represented here by ``pass_attempt == 1`` with ``sack != 1``.
+    Scrambles are already excluded from ``pass_attempt`` but remain dropbacks.
     We preserve the team's dropback share for game-script modeling and separately
     record ``pass_attempts_per_dropback`` so the historical MC can convert the
     projected dropback workload into official passing attempts without leakage.
@@ -102,6 +104,9 @@ def build_team_weekly_from_pbp(seasons: Iterable[int]) -> pd.DataFrame:
         x["defteam"] = x["defteam"].map(canon_team)
         for c in ("qb_dropback", "rush_attempt", "pass_attempt", "sack", "qb_hit", "success", "epa", "yards_gained", "game_seconds_remaining", "play_id"):
             x[c] = _num(x, c)
+        x["official_pass_attempt"] = (
+            x["pass_attempt"].fillna(0).eq(1) & ~x["sack"].fillna(0).eq(1)
+        ).astype(int)
         x["off_play"] = (x["qb_dropback"].fillna(0).eq(1) | x["rush_attempt"].fillna(0).eq(1)).astype(int)
         x["pressure"] = (x["sack"].fillna(0).eq(1) | x["qb_hit"].fillna(0).eq(1)).astype(int)
         x["explosive"] = x["yards_gained"].fillna(0).ge(20).astype(int)
@@ -114,7 +119,7 @@ def build_team_weekly_from_pbp(seasons: Iterable[int]) -> pd.DataFrame:
             opp_drop = dg["qb_dropback"].fillna(0).eq(1)
             pass_rate = float(drop.mean()) if len(g) else np.nan
             pass_attempts_per_dropback = (
-                float(g.loc[drop, "pass_attempt"].fillna(0).mean()) if drop.any() else np.nan
+                float(g.loc[drop, "official_pass_attempt"].fillna(0).mean()) if drop.any() else np.nan
             )
             league_pass = float(league.loc[week, "league_pass_rate"]) if week in league.index else np.nan
 
