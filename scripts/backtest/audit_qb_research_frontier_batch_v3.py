@@ -187,7 +187,11 @@ def job_ftn(out):
             })
 
     s = pd.DataFrame(source)
-    inv = pd.DataFrame(inventory)
+    inv = pd.DataFrame(inventory, columns=[
+        "season", "scope", "field", "coverage", "semantic_disposition",
+        "closest_prior_m1_m79", "materially_new_observable", "m81_family",
+        "populated_rows", "distinct_values", "event_or_nonzero_rate", "mean_numeric",
+    ])
     s.to_csv(out / "m80_ftn_source_audit.csv", index=False)
     inv.to_csv(out / "m80_ftn_field_inventory.csv", index=False)
 
