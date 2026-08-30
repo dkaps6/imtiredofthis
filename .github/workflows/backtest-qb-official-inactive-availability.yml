@@ -7,6 +7,7 @@ on:
       - 'scripts/backtest/audit_qb_official_inactive_availability.py'
       - 'scripts/backtest/audit_qb_official_inactive_availability_v2.py'
       - 'scripts/backtest/audit_qb_official_inactive_availability_v3.py'
+      - 'scripts/backtest/diagnose_qb_official_inactive_unparsed_bullets.py'
       - 'data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv'
       - 'data/backtests/qb_m78_official_inactives_frozen/**'
       - '.github/workflows/backtest-qb-official-inactive-availability.yml'
@@ -95,6 +96,7 @@ jobs:
           python -m py_compile scripts/backtest/audit_qb_official_inactive_availability.py
           python -m py_compile scripts/backtest/audit_qb_official_inactive_availability_v2.py
           python -m py_compile scripts/backtest/audit_qb_official_inactive_availability_v3.py
+          python -m py_compile scripts/backtest/diagnose_qb_official_inactive_unparsed_bullets.py
 
       - name: Revalidate hardened historical/live source contract
         env:
@@ -102,6 +104,13 @@ jobs:
         run: |
           python scripts/backtest/audit_qb_official_inactive_availability_v3.py \
             --canonical data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv \
+            --out-dir data/backtests/qb_m78
+
+      - name: Capture unparsed candidate bullets
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/diagnose_qb_official_inactive_unparsed_bullets.py \
             --out-dir data/backtests/qb_m78
 
       - name: Require historical M79 authorization
@@ -122,6 +131,8 @@ jobs:
           cat data/backtests/qb_m78/m78_interpretation.csv 2>/dev/null || true
           echo '--- source gate ---'
           cat data/backtests/qb_m78/m78_source_gate.csv 2>/dev/null || true
+          echo '--- unparsed candidate bullets ---'
+          cat data/backtests/qb_m78/m78_unparsed_candidate_bullets.csv 2>/dev/null || true
           echo '--- contract ---'
           cat data/backtests/qb_m78/m78_contract.json 2>/dev/null || true
           echo '--- frozen manifest ---'
