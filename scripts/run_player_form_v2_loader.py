@@ -9,6 +9,7 @@ import pandas as pd
 import scripts.run_player_form_v2 as runner
 from scripts.player_stats_loader_v2 import load_weekly_player_stats
 from scripts.slate_universe_v2 import build_slate_universe
+from scripts.validate_player_identity_v3 import main as validate_player_identity_v3
 
 
 def _clean_id(series: pd.Series) -> pd.Series:
@@ -153,7 +154,14 @@ def main() -> int:
         )
 
     runner._enhanced_slate_universe = _slate
-    return runner.main()
+    rc = int(runner.main())
+    if rc != 0:
+        return rc
+
+    # Player Identity v3 is a production gate, not a best-effort enrichment.
+    # Scoring/Bayes/ML/State are not allowed to run on unresolved identity data.
+    validate_player_identity_v3()
+    return 0
 
 
 if __name__ == "__main__":
