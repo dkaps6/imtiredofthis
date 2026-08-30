@@ -7,6 +7,7 @@ on:
       - 'scripts/backtest/audit_qb_official_inactive_availability.py'
       - 'scripts/backtest/audit_qb_official_inactive_availability_v3.py'
       - 'scripts/backtest/audit_qb_official_inactive_availability_v4.py'
+      - 'scripts/backtest/audit_qb_official_inactive_availability_v5.py'
       - 'data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv'
       - 'data/backtests/qb_m78_official_inactives_frozen/**'
       - '.github/workflows/backtest-qb-official-inactive-availability.yml'
@@ -33,7 +34,7 @@ jobs:
         run: |
           echo 'M78 is SOURCE/DATA-CONTRACT ONLY. It fits zero predictive models.'
           echo 'Run #3 inactive snapshot is SUPERSEDED as M79 input after hardened audit found cross-team bleed and silently dropped source bullets.'
-          echo 'V4 rebuilds exact identities directly from official NFL.com source, deduplicates DOM bullets, supports composite/variant position labels, and selects the true inactive section by roster-match quality.'
+          echo 'V5 rebuilds exact identities directly from official NFL.com source, deduplicates DOM bullets, supports composite/variant position labels, selects the true inactive section by roster-match quality, and removes the invalid <=8 inactive-player assumption.'
           echo 'Position quality is measured separately from identity completeness.'
           echo 'No sportsbook data. No target-game performance.'
       - name: Verify frozen canonical v3
@@ -47,11 +48,12 @@ jobs:
           python -m py_compile scripts/backtest/audit_qb_official_inactive_availability.py
           python -m py_compile scripts/backtest/audit_qb_official_inactive_availability_v3.py
           python -m py_compile scripts/backtest/audit_qb_official_inactive_availability_v4.py
+          python -m py_compile scripts/backtest/audit_qb_official_inactive_availability_v5.py
       - name: Rebuild corrected M78 source contract
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/backtest/audit_qb_official_inactive_availability_v4.py \
+          python scripts/backtest/audit_qb_official_inactive_availability_v5.py \
             --canonical data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv \
             --out-dir data/backtests/qb_m78
       - name: Require historical M79 authorization
