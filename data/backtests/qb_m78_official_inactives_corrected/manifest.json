@@ -1,0 +1,11 @@
+{
+  "migration": "M78 corrected snapshot frozen for M79",
+  "source_run_id": 33288381864,
+  "source_artifact_id": 9725181841,
+  "source_artifact_digest": "sha256:af0d72a31bc522791bb887dea9ba4f2087e41949be1db15f92973c06140106e6",
+  "source_head_sha": "426fde17668aad049e887ba8da0776a28a4dc9ca",
+  "csv_sha256": "d39aaf0feea101f3e0d2721ebd4118ef33fb1a4d3c76670e2a4f17734e37b609",
+  "rows": 1088,
+  "season_rows": {"2024": 544, "2025": 544},
+  "semantics": "NFL official game-day inactive identities; fixed pre-kickoff fact. M78 Run #3 snapshot is superseded."
+}
