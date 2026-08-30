@@ -2,9 +2,15 @@
 """Run the Sharp Football collector with maintained 2026 schema adapters.
 
 Sharp's pace table changed in 2026 from older ``neutral pace`` style headers to
-``Offense`` + ``Neutral Script (Sec/Play)``.  Keep that provider-specific change
+``Offense`` + ``Neutral Script (Sec/Play)``. Keep that provider-specific change
 at the boundary and continue exposing the canonical ``team`` + ``neutral_pace``
 contract expected by TeamForm.
+
+The legacy generic alias pass also strips underscores while comparing names. If
+it is run twice, an already-canonical ``neutral_pace`` becomes ``neutralpace``
+and can be mistaken for its own alias, causing the canonical column to be
+coalesced with and then dropped from itself. The v2 pace alias adapter is
+idempotent and never drops an existing canonical target.
 """
 from __future__ import annotations
 
@@ -14,6 +20,8 @@ from typing import Any, Optional
 import pandas as pd
 
 import scripts.providers.sharpfootball_pull as sharp
+
+_ORIGINAL_RENAME_EXPECTED_COLS = sharp._rename_expected_cols
 
 
 def _flatten_col(col: Any) -> str:
@@ -76,8 +84,6 @@ def normalize_pace_table_v2(df: pd.DataFrame) -> pd.DataFrame:
 
     rename = {team_col: "team", neutral_col: "neutral_pace"}
 
-    # Preserve useful recent-pace variants if Sharp supplies them under a new
-    # label, but never confuse a pass-rate field for seconds/play.
     for col in pace.columns:
         name = str(col).upper()
         if col == neutral_col:
@@ -108,6 +114,34 @@ def normalize_pace_table_v2(df: pd.DataFrame) -> pd.DataFrame:
     return pace
 
 
+def rename_expected_cols_v2(kind: str, df: pd.DataFrame) -> pd.DataFrame:
+    """Idempotent pace aliases; delegate all non-pace tables unchanged."""
+    if kind != "pace":
+        return _ORIGINAL_RENAME_EXPECTED_COLS(kind, df)
+
+    alias_map = sharp.COLUMN_ALIAS_PATTERNS.get("pace", {})
+    out = df.copy()
+
+    # More-specific targets first so a future neutral_pace_last5 cannot be
+    # collapsed into neutral_pace merely because both share a prefix.
+    targets = sorted(alias_map, key=lambda value: len(sharp._slug(value)), reverse=True)
+    for target in targets:
+        aliases = alias_map.get(target, set())
+        normalized_aliases = {sharp._slug(target)} | {sharp._slug(a) for a in aliases}
+        for col in list(out.columns):
+            if col in ("team", "team_raw") or col == target:
+                continue
+            if sharp._slug(col) not in normalized_aliases:
+                continue
+            if target in out.columns:
+                out[target] = out[target].where(out[target].notna(), out[col])
+                out.drop(columns=[col], inplace=True)
+            else:
+                out = out.rename(columns={col: target})
+            break
+    return out
+
+
 def fallback_pace_table_v2(
     html: Optional[str] = None,
     season: Optional[int] = None,
@@ -126,6 +160,7 @@ def fallback_pace_table_v2(
         try:
             candidate = normalize_pace_table_v2(table)
             candidate = sharp._normalize_team_col(candidate)
+            candidate = rename_expected_cols_v2("pace", candidate)
             candidate = sharp._to_numeric(candidate)
             candidate = candidate.loc[
                 candidate["team"].astype(str).isin(sharp.TEAM_CODES),
@@ -140,6 +175,7 @@ def fallback_pace_table_v2(
 
 def main() -> None:
     sharp._normalize_pace_table = normalize_pace_table_v2
+    sharp._rename_expected_cols = rename_expected_cols_v2
     sharp._fallback_pace_table = fallback_pace_table_v2
     sharp.main()
 
