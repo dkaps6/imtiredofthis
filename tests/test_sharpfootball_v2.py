@@ -1,7 +1,7 @@
 import pandas as pd
 
 import scripts.providers.sharpfootball_pull as sharp
-from scripts.run_sharpfootball_v2 import normalize_pace_table_v2
+from scripts.run_sharpfootball_v2 import normalize_pace_table_v2, rename_expected_cols_v2
 
 
 def test_live_2026_sharp_pace_header_maps_to_canonical_neutral_pace():
@@ -30,3 +30,28 @@ def test_sharp_pace_adapter_prefers_seconds_per_play_not_neutral_pass_rate():
     })
     out = normalize_pace_table_v2(raw)
     assert out.loc[0, "neutral_pace"] == 27.9
+
+
+def test_pace_alias_normalization_is_idempotent_and_preserves_canonical_column():
+    frame = pd.DataFrame({
+        "team": ["NO", "DAL"],
+        "neutral_pace": [29.11, 30.22],
+        "plays_per_game": [63.0, 65.0],
+    })
+    once = rename_expected_cols_v2("pace", frame)
+    twice = rename_expected_cols_v2("pace", once)
+
+    assert "neutral_pace" in once.columns
+    assert "neutral_pace" in twice.columns
+    assert list(twice["neutral_pace"]) == [29.11, 30.22]
+
+
+def test_pace_alias_normalization_keeps_last5_distinct_from_neutral_pace():
+    frame = pd.DataFrame({
+        "team": ["BUF"],
+        "neutral_pace": [28.4],
+        "neutral_pace_last5": [27.6],
+    })
+    out = rename_expected_cols_v2("pace", rename_expected_cols_v2("pace", frame))
+    assert out.loc[0, "neutral_pace"] == 28.4
+    assert out.loc[0, "neutral_pace_last5"] == 27.6
