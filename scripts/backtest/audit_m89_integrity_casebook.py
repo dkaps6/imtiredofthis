@@ -161,26 +161,52 @@ def load_m82(path: Path) -> pd.DataFrame:
 
 
 def attach_m86_low_chaos(target: pd.DataFrame, path: Path | None) -> pd.DataFrame:
+    """Attach the exact frozen M86 low-chaos classification.
+
+    M86 emits both a boolean `high_event_chaos` and a string `chaos_class`.
+    Prefer the explicit string class so a numeric 0/1 flag can never be mistaken
+    for a label. Fall back to the inverse boolean only if the class is absent.
+    """
     out = target.copy()
     out["m86_low_event_chaos"] = 0
     if path is None or not path.exists():
         return out
     m = lower(pd.read_csv(path, low_memory=False))
-    for c in ["team","player_clean_key"]:
+    for c in ["team", "player_clean_key"]:
         if c in m.columns:
             m[c] = m[c].map(canon if c == "team" else key)
-    chaos_col = next((c for c in m.columns if "chaos" in c and ("class" in c or "event" in c or "flag" in c)), None)
-    if chaos_col is None:
-        chaos_col = next((c for c in m.columns if "chaos" in c), None)
-    if chaos_col is None:
+    required = {"season", "week", "team", "player_clean_key"}
+    if not required.issubset(m.columns):
         return out
-    q = m[["season","week","team","player_clean_key",chaos_col]].copy()
-    txt = q[chaos_col].astype(str).str.upper()
-    q["m86_low_event_chaos"] = txt.str.contains("LOW").astype(int)
-    return out.drop(columns=["m86_low_event_chaos"]).merge(
-        q[["season","week","team","player_clean_key","m86_low_event_chaos"]],
-        on=["season","week","team","player_clean_key"], how="left", validate="one_to_one"
-    ).fillna({"m86_low_event_chaos":0})
+
+    if "chaos_class" in m.columns:
+        low = m["chaos_class"].astype(str).str.upper().eq("LOW_EVENT_CHAOS")
+    elif "high_event_chaos" in m.columns:
+        raw = m["high_event_chaos"]
+        if pd.api.types.is_bool_dtype(raw):
+            high = raw.fillna(False)
+        else:
+            txt = raw.astype(str).str.strip().str.upper()
+            numeric = pd.to_numeric(raw, errors="coerce")
+            high = numeric.fillna(0).astype(bool)
+            high = high.where(~txt.isin(["TRUE", "FALSE"]), txt.eq("TRUE"))
+        low = ~high
+    else:
+        return out
+
+    q = m[["season", "week", "team", "player_clean_key"]].copy()
+    q["m86_low_event_chaos"] = low.astype(int).to_numpy()
+    q = q.drop_duplicates(["season", "week", "team", "player_clean_key"])
+    merged = out.drop(columns=["m86_low_event_chaos"]).merge(
+        q,
+        on=["season", "week", "team", "player_clean_key"],
+        how="left",
+        validate="one_to_one",
+    )
+    merged["m86_low_event_chaos"] = pd.to_numeric(
+        merged["m86_low_event_chaos"], errors="coerce"
+    ).fillna(0).astype(int)
+    return merged
 
 
 def _match_game_rows(pbp: pd.DataFrame, season: int, week: int, team: str) -> pd.DataFrame:
