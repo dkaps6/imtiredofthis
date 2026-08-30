@@ -1,0 +1,201 @@
+name: 2026 Full Slate No-Credit Smoke
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 2026-full-slate-smoke-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  SEASON: "2026"
+  PRIOR_SEASON: "2025"
+  SLATE_DATE: ""
+  FETCH_LIVE_ODDS: "false"
+  APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
+  ESPN_COOKIE: ${{ secrets.ESPN_COOKIE }}
+  MSF_KEY: ${{ secrets.MSF_KEY }}
+  MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
+  NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
+  NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
+
+jobs:
+  smoke:
+    name: 2026 no-credit full slate smoke
+    if: github.head_ref == 'production-2026-full-slate-smoke'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml
+
+      - name: Validate runtime context
+        run: |
+          export PYTHONPATH="${PWD}"
+          python - <<'EOF'
+          import os
+          from scripts.config import SEASON, PRIOR_SEASON, SLATE_DATE
+          assert SEASON == 2026 == int(os.environ['SEASON'])
+          assert PRIOR_SEASON == 2025 == int(os.environ['PRIOR_SEASON'])
+          assert SLATE_DATE == ''
+          assert os.environ['FETCH_LIVE_ODDS'].lower() == 'false'
+          print('2026 no-credit runtime context OK')
+          EOF
+
+      - name: Build Ourlads roles
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/providers/ourlads_depth.py --season "${SEASON}"
+          mkdir -p outputs
+          cp data/roles_ourlads.csv outputs/roles_ourlads.csv
+          test -s data/roles_ourlads.csv
+
+      - name: Build authoritative team-week map
+        env:
+          TEAM_WEEK_MAP_CSV: data/team_week_map.csv
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/utils/build_team_week_map_v2.py --season "${SEASON}" --out data/team_week_map.csv
+          test -s data/team_week_map.csv
+          python -c "from scripts.runtime_context import log_runtime_context,resolve_week; log_runtime_context(); print('week=', resolve_week())"
+
+      - name: Build TeamForm with explicit preseason priors
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/providers/sharpfootball_pull.py --season "${SEASON}" --dump-html
+          python scripts/team_form_prior_bridge.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}"
+          python scripts/run_team_form_context.py --season "${SEASON}"
+          test -s data/team_form.csv
+
+      - name: Build promoted QB M89/M90 context
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_qb_promoted_context.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}"
+          test -s data/qb_promoted_team_context.csv
+          test -s data/qb_promoted_context_audit.csv
+
+      - name: Build weather and injuries
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/build/build_weather_week_v2.py --season "${SEASON}" --date "${SLATE_DATE}"
+          python scripts/build/build_injuries_weekly.py data/injuries.csv --season "${SEASON}"
+          test -s data/weather_week.csv
+          test -s data/injuries.csv
+          test -s data/injuries_source_status.json
+
+      - name: Build Coverage v2 matchup intelligence
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_coverage_v2.py --season "${SEASON}"
+          for f in data/cb_coverage_team.csv data/cb_coverage_player.csv data/wr_cb_exposure.csv; do test -s "$f"; done
+
+      - name: Build optional current-season PBP enrichment
+        continue-on-error: true
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/build/pbp_features.py --season "${SEASON}" || true
+
+      - name: Build PlayerForm v2 and stable identities
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_player_form_v2_loader.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
+          python scripts/enrich_player_scoring_v2.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
+          for f in data/player_game_logs.csv data/player_season_totals.csv data/player_form.csv data/player_form_consensus.csv data/player_identity_validation.csv; do test -s "$f"; done
+
+      - name: Gate providers and materialize canonical Team Context v3
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_context_bridge.py
+          test -s data/provider_readiness_v3.csv
+          test -s data/team_context_v3.csv
+          test -s data/team_context_v3_provenance.csv
+          test -s data/model_context_bridge.csv
+
+      - name: Validate empirical Bayesian baseline
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_bayesian_bridge.py
+          test -s data/model_bayesian_diagnostics.csv
+
+      - name: Train and validate supervised ML v2
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_ml_bridge.py
+          test -s data/model_ml_diagnostics.csv
+          test -s data/model_ml_v2.joblib
+
+      - name: Train and validate Markov state v2
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_state_bridge.py
+          test -s data/model_state_diagnostics.csv
+          test -s data/model_state_v2.joblib
+          python - <<'EOF'
+          import pandas as pd
+          df = pd.read_csv('data/model_state_diagnostics.csv')
+          if df.empty or int(df['state_available'].sum()) == 0:
+              raise SystemExit('FATAL: state v2 produced no available predictions')
+          print(f"state v2 players={len(df)} available={int(df['state_available'].sum())}")
+          EOF
+
+      - name: Validate empirical rule layer
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_rules_bridge.py
+          test -s data/model_rule_diagnostics.csv
+
+      - name: Validate evidence-weighted ensemble framework
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_ensemble_bridge.py
+          test -s data/model_ensemble_diagnostics.csv
+          python - <<'EOF'
+          import pandas as pd
+          df = pd.read_csv('data/model_ensemble_diagnostics.csv')
+          if df.empty:
+              raise SystemExit('FATAL: ensemble diagnostics empty')
+          sums = (df['mc_weight'] + df['ml_weight'] + df['state_weight']).round(9)
+          if not sums.eq(1.0).all():
+              raise SystemExit('FATAL: ensemble weights do not sum to one')
+          print('ensemble status:', df['ensemble_status'].value_counts().to_dict())
+          EOF
+
+      - name: Strict repository audits
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/utils/audit_repo.py --strict
+          python scripts/audit_2026_production_readiness.py --strict
+
+      - name: Summarize outputs
+        if: always()
+        run: |
+          echo '=== provider status ==='
+          test -f data/provider_readiness_v3.csv && cat data/provider_readiness_v3.csv || true
+          echo '=== identity status ==='
+          test -f data/player_identity_validation.csv && cat data/player_identity_validation.csv || true
+          echo '=== generated artifacts ==='
+          find data outputs -maxdepth 2 -type f \( -name "*.csv" -o -name "*.json" \) -print0 2>/dev/null | xargs -0 -r -I{} sh -c 'echo "--- {}"; wc -l "{}"'
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full_slate_smoke_${{ github.run_id }}
+          path: |
+            data/**
+            outputs/**
+          if-no-files-found: warn
+          retention-days: 7
