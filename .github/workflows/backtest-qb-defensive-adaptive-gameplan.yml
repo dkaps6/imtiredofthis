@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/backtest-qb-defensive-adaptive-gameplan.yml"
       - "scripts/backtest/audit_defensive_adaptive_gameplan.py"
+      - "scripts/backtest/audit_defensive_adaptive_gameplan_v2.py"
       - "docs/migrations/M83_DEFENSIVE_ADAPTIVE_GAMEPLAN_AUDIT.md"
 
 jobs:
@@ -18,7 +19,7 @@ jobs:
           python-version: "3.11"
       - name: Frozen M83 contract
         run: |
-          python -m py_compile scripts/backtest/audit_defensive_adaptive_gameplan.py
+          python -m py_compile scripts/backtest/audit_defensive_adaptive_gameplan.py scripts/backtest/audit_defensive_adaptive_gameplan_v2.py
           grep -q "PREREGISTERED / DIAGNOSTIC ONLY" docs/migrations/M83_DEFENSIVE_ADAPTIVE_GAMEPLAN_AUDIT.md
           grep -q "2025 QB target outcomes remain" docs/migrations/M83_DEFENSIVE_ADAPTIVE_GAMEPLAN_AUDIT.md
           grep -q "K_NEIGHBORS = 4" scripts/backtest/audit_defensive_adaptive_gameplan.py
@@ -41,10 +42,10 @@ jobs:
           pip install pyarrow scikit-learn
       - name: Run M83 defensive adaptive gameplan audit
         env:
-          PYTHONPATH: ${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}/scripts/backtest:${{ github.workspace }}
         run: |
           rm -rf data/backtests/m83_defensive_adaptation
-          python scripts/backtest/audit_defensive_adaptive_gameplan.py --out data/backtests/m83_defensive_adaptation
+          python scripts/backtest/audit_defensive_adaptive_gameplan_v2.py --out data/backtests/m83_defensive_adaptation
       - name: Verify M83 output boundary
         run: |
           python - <<'PY'
