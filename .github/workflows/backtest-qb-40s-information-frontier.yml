@@ -6,11 +6,12 @@ on:
     paths:
       - 'scripts/backtest/audit_qb_40s_information_frontier.py'
       - 'scripts/backtest/audit_qb_40s_information_frontier_v2.py'
-      - 'data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv.gz.b64'
+      - 'data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv'
       - '.github/workflows/backtest-qb-40s-information-frontier.yml'
 
 permissions:
-  contents: read
+  contents: write
+  actions: read
 
 jobs:
   audit:
@@ -19,6 +20,8 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -50,20 +53,40 @@ jobs:
           python -m py_compile scripts/backtest/audit_qb_40s_information_frontier.py
           python -m py_compile scripts/backtest/audit_qb_40s_information_frontier_v2.py
 
-      - name: Recover durable canonical v3 snapshot from repo
+      - name: Ensure durable canonical v3 snapshot exists in git
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          SRC=data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv.gz.b64
-          OUT=data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv
-          test -s "$SRC"
-          base64 -d "$SRC" | gzip -dc > "$OUT"
-          echo 'c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742  '"$OUT" | sha256sum -c -
+          CANON=data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv
+          mkdir -p "$(dirname "$CANON")"
+          if [ ! -s "$CANON" ]; then
+            echo 'Durable canonical snapshot not yet committed; recovering exact M75 Run #15 copy.'
+            mkdir -p /tmp/m75_source
+            curl -L --fail-with-body \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/9723324503/zip" \
+              -o /tmp/m75_run15.zip
+            unzip -q /tmp/m75_run15.zip -d /tmp/m75_source
+            SRC=$(find /tmp/m75_source -name 'qb_frontier_canonical_v3_football_only.csv' -type f | head -1)
+            test -n "$SRC"
+            echo "c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742  $SRC" | sha256sum -c -
+            cp "$SRC" "$CANON"
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add "$CANON"
+            git commit -m 'Persist canonical v3 football-only snapshot for M76+'
+            git push origin "HEAD:${GITHUB_HEAD_REF}"
+          fi
+          echo "c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742  $CANON" | sha256sum -c -
           printf '%s\n' \
             'source=M75 Run #15 canonical-v3 snapshot' \
             'original_artifact_id=9723324503' \
             'original_run_id=33281866517' \
             'canonical_sha256=c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742' \
-            'storage=durable_git_snapshot_base64_gzip' \
+            'storage=durable_git_csv' \
             > data/backtests/qb_frontier_canonical_v3_football_only/m76_canonical_provenance.txt
 
       - name: Run M76 information frontier
