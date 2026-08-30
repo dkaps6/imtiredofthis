@@ -8,7 +8,7 @@ prospective deployment.
 
 Player Identity v3 changes only how the live eight-game QB history is retrieved;
 the M89/M90 feature contract, coefficients, preprocessing, and residual cap are
-unchanged.
+unchanged. Team Context v3 is the authoritative live team-level source.
 """
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ import pandas as pd
 from scripts._opponent_map import canon_team
 
 MODEL_PATH = Path("model/qb_pass_synthesis_v1.json")
+TEAM_CONTEXT_PATH = Path("data/team_context_v3.csv")
 HISTORY_GAMES = 8
 
 
@@ -83,16 +84,26 @@ def predict_correction(features: dict, artifact: dict | None = None) -> tuple[fl
     return float(base + correction), correction, str(art["version"])
 
 
-def load_team_context(path: Path = Path("data/qb_promoted_team_context.csv")) -> pd.DataFrame:
+def load_team_context(path: Path = TEAM_CONTEXT_PATH) -> pd.DataFrame:
     if not path.exists() or path.stat().st_size == 0:
-        raise RuntimeError(f"promoted QB team context missing: {path}")
+        raise RuntimeError(f"Team Context v3 missing: {path}")
     df = pd.read_csv(path, low_memory=False)
     df.columns = [str(c).strip().lower() for c in df.columns]
-    if "team" not in df.columns:
-        raise RuntimeError("promoted QB team context missing team")
+    required = {
+        "team", "team_context_version", "pass_attempts_per_dropback",
+        "true_proe", "neutral_pace_true", "pass_rate_off", "pass_rate_faced",
+        "def_pass_epa_allowed", "def_pass_success_allowed", "def_ypa_allowed",
+        "hit_sack_pressure_rate_allowed", "hit_sack_pressure_rate_generated",
+        "plays_est",
+    }
+    missing = required - set(df.columns)
+    if missing:
+        raise RuntimeError(f"Team Context v3 missing promoted QB fields: {sorted(missing)}")
     df["team"] = df["team"].map(canon_team)
     if df["team"].eq("").any() or df.duplicated("team").any():
-        raise RuntimeError("promoted QB team context has invalid/duplicate team keys")
+        raise RuntimeError("Team Context v3 has invalid/duplicate team keys")
+    if not df["team_context_version"].astype(str).eq("TEAM_CONTEXT_V3").all():
+        raise RuntimeError("Unexpected Team Context version for promoted QB pricing")
     return df
 
 
