@@ -24,12 +24,14 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          from scripts.backtest.run_m89_pregame_synthesis import ALPHA, RESIDUAL_CAP, FOOTBALL_FEATURES
           p=Path('docs/migrations/M90_QB_SYNTHESIS_CONFIRMATION_PROMOTION.md').read_text()
-          assert 'Ridge alpha: 20.0' in p
-          assert 'Residual correction cap: ±45' in p
+          assert ALPHA == 20.0
+          assert RESIDUAL_CAP == 45.0
+          assert len(FOOTBALL_FEATURES) == 21, FOOTBALL_FEATURES
           assert 'No new casebook taxonomy work' in p
           assert 'PROMOTE_M89_FOOTBALL_SYNTHESIS' in p
-          print('M90 contract frozen')
+          print('M90 exact M89 contract frozen:', FOOTBALL_FEATURES)
           PY
 
   m90-confirmation:
@@ -101,14 +103,20 @@ jobs:
             --predictions data/backtests/m90/2023/component_predictions.csv \
             --player-logs data/backtests/m90/2023/player_game_logs_history.csv \
             --out data/backtests/m90/2023/m90_2023_confirmation_trace.csv
-      - name: Run frozen rotated confirmation
+      - name: Run exact-M89 rotated confirmation
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           mkdir -p data/backtests/m90/confirmation
           python scripts/backtest/run_m90_qb_synthesis_confirmation.py \
+            --train-season 2022 \
+            --test-season 2023 \
             --train-trace data/backtests/m90/2022/m90_2022_training_trace.csv \
+            --train-team data/backtests/m90/2022/team_weekly_history.csv \
+            --train-logs data/backtests/m90/2022/player_game_logs_history.csv \
             --test-trace data/backtests/m90/2023/m90_2023_confirmation_trace.csv \
+            --test-team data/backtests/m90/2023/team_weekly_history.csv \
+            --test-logs data/backtests/m90/2023/player_game_logs_history.csv \
             --out-dir data/backtests/m90/confirmation
       - name: Verify M90 disposition
         run: |
@@ -117,6 +125,8 @@ jobs:
           from pathlib import Path
           d=json.loads(Path('data/backtests/m90/confirmation/m90_decision.json').read_text())
           assert d['catastrophic_casebook_reopened'] is False
+          assert d['single_largest_completion_retested'] is False
+          assert d['m89_feature_contract_reused_exactly'] is True
           assert d['gates']['sportsbook_features_in_football_model'] is False
           assert d['gates']['postgame_casebook_features_used_for_prediction'] is False
           print(json.dumps(d,indent=2))
