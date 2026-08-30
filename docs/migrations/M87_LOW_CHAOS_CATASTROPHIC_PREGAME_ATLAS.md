@@ -26,13 +26,25 @@ M87 asks separately what strictly-pregame characteristics distinguish low-chaos 
 
 ## Hard leakage boundary
 
-All atlas features must be available before kickoff. Allowed inputs are frozen M82/M86 model predictions and disagreement, canonical predicted attempts/YPA, strictly-prior team/offense/defense PBP aggregates, and strictly-prior opponent-offense aggregates. Target-game outcomes, target-game PBP events, realized receiver production, post-kickoff injury/participation information, and all sportsbook variables are forbidden.
+All atlas features must be available before kickoff. Allowed inputs are frozen M82/M86 model predictions and disagreement, canonical predicted attempts/YPA, strictly-prior team/offense/defense PBP aggregates, strictly-prior opponent-offense aggregates, target-week historical injury reports, and deterministic venue architecture.
+
+Target-game outcomes, target-game PBP events, realized receiver production, post-kickoff injury/participation information, observed kickoff weather, and all sportsbook variables are forbidden.
 
 M86 target-game event variables are used only to define the already-frozen low-chaos subset and may not enter the pregame feature screen.
 
 ## Frozen controls
 
-A control candidate must come from the same season, have M82 ensemble absolute error `< 50` yards, not be a 100+ tail, and have complete matching variables. For each target row select five nearest controls using standardized Euclidean distance over target week, ensemble projected passing yards, canonical predicted attempts, and canonical implied predicted YPA. Controls are selected separately for volume and efficiency atlases. Reuse is permitted because this is descriptive matching, not causal estimation.
+A control candidate must:
+
+- come from the same season;
+- also be `LOW_EVENT_CHAOS` under the already-frozen M86 postgame forensic classification;
+- have M82 ensemble absolute error `< 50` yards;
+- not be a 100+ tail;
+- have complete matching variables.
+
+For each target row select five nearest controls using standardized Euclidean distance over target week, ensemble projected passing yards, canonical predicted attempts, and canonical implied predicted YPA. Controls are selected separately for volume and efficiency atlases. Reuse is permitted because this is descriptive matching, not causal estimation.
+
+The low-chaos requirement on controls prevents the atlas from merely rediscovering which pregame profiles later happened to produce M86's high-event-chaos games.
 
 ## Strictly-prior history
 
@@ -40,32 +52,114 @@ For every target/control game, history uses the latest `8` prior regular-season 
 
 ## Frozen feature families
 
-Model-state diagnostics: ensemble projection, canonical predicted attempts, canonical implied predicted YPA, MC/ML/State prediction standard deviation and range, ML-minus-MC, State-minus-MC, and ensemble-minus-canonical.
+### A. Model-state diagnostics
 
-Target-offense recent structure: pass rate, neutral pass rate, shotgun rate, no-huddle rate, plays/game, pass EPA/dropback, success rate, YPA, explosive 20+ completion rate, deep-attempt rate (`air_yards >= 15`), sack rate/dropback, and QB scramble rate/dropback.
+- ensemble projection
+- canonical predicted attempts
+- canonical implied predicted YPA
+- MC/ML/State prediction standard deviation
+- MC/ML/State prediction range
+- ML minus MC projection
+- State minus MC projection
+- ensemble minus canonical projection
 
-Opponent-defense recent environment: pass rate faced, neutral pass rate faced, pass EPA allowed/dropback, success rate allowed, YPA allowed, explosive 20+ completion rate allowed, deep-attempt rate faced, sack rate generated, interception rate generated, and plays faced/game.
+These are existing-model representation diagnostics, not new football information.
 
-Opponent-offense game-script pressure: pass EPA/dropback, success rate, plays/game, neutral pass rate, and YPA.
+### B. Target-offense recent structure
+
+- pass rate
+- neutral pass rate
+- shotgun rate
+- no-huddle rate
+- plays per game
+- pass EPA per dropback
+- offensive success rate
+- yards per pass attempt
+- explosive 20+ completion rate per pass attempt
+- deep attempt rate (`air_yards >= 15`)
+- sack rate per dropback
+- QB scramble rate per dropback
+
+### C. Opponent-defense recent environment
+
+- pass rate faced
+- neutral pass rate faced
+- pass EPA allowed per dropback
+- offensive success rate allowed
+- yards per pass attempt allowed
+- explosive 20+ completion rate allowed
+- deep attempt rate faced
+- sack rate generated
+- interception rate generated
+- plays faced per game
+
+### D. Opponent-offense game-script pressure
+
+- pass EPA per dropback
+- offensive success rate
+- plays per game
+- neutral pass rate
+- yards per pass attempt
+
+### E. Pregame availability / venue context
+
+- target-team total injury-report count
+- target-team Out/Doubtful count
+- target-team Questionable count
+- opponent total injury-report count
+- opponent Out/Doubtful count
+- opponent Questionable count
+- target-team home indicator
+- controlled-environment indicator
+
+These variables are forensic context only. Generic injury burden has prior overlap with M78/M79 and may not be reopened merely because it characterizes the selected M87 subset.
 
 ## Frozen descriptive screen
 
 For each primary target family (`VOLUME_DOMINANT`, `EFFICIENCY_DOMINANT`), report target N, matched-control N, feature coverage, target/control means, combined SMD, and separate 2024/2025 SMDs.
 
-A feature is a `STABLE_FORENSIC_DIFFERENTIATOR` only if: target and control coverage each `>= 0.85`; absolute combined SMD `>= 0.50`; 2024 and 2025 SMD signs agree; and absolute SMD is at least `0.20` in each season. Thresholds are frozen before results and cannot be changed.
+A feature is a `STABLE_FORENSIC_DIFFERENTIATOR` only if all are true:
+
+1. target and control coverage each `>= 0.85`;
+2. absolute combined SMD `>= 0.50`;
+3. 2024 and 2025 SMD signs agree;
+4. absolute SMD is at least `0.20` in each season.
+
+Thresholds are frozen before results and cannot be changed.
 
 ## Existing-model rescue diagnostic
 
-For each low-chaos family report ensemble MAE, hindsight best MC/ML/State MAE, share with at least one component below 75 yards error, share with at least one component below 50 yards error, best-model distribution, and mean component disagreement. M87 may not build a model selector.
+For each low-chaos family report:
+
+- ensemble MAE;
+- hindsight best MC/ML/State MAE;
+- share with at least one component below 75 yards absolute error;
+- share with at least one component below 50 yards absolute error;
+- hindsight best-model distribution among MC, ML and State;
+- mean component disagreement.
+
+A family has a `MODEL_REPRESENTATION_CLUE` only if all are true:
+
+1. one single component model is hindsight-best on at least `60%` of target rows;
+2. the component-library hindsight MAE beats the ensemble MAE by at least `20` yards within that family;
+3. at least `50%` of target rows have one component below `75` yards absolute error.
+
+This remains post-hoc and nondeployable. M87 may not build or tune a model selector.
 
 ## Decision contract
 
-Possible dispositions: `STABLE_PREGAME_DIFFERENTIATORS_FOUND`, `MODEL_REPRESENTATION_CLUE_ONLY`, or `NO_STABLE_LOW_CHAOS_PREGAME_DIFFERENTIATOR`.
+Possible dispositions:
 
-A later predictive migration is allowed only if M87 identifies at least one stable differentiator or a clearly concentrated existing-model representation clue that can be translated into a genuinely pregame, preregistered hypothesis without tuning on M87 target outcomes.
+- `STABLE_PREGAME_DIFFERENTIATORS_FOUND`
+- `MODEL_REPRESENTATION_CLUE_ONLY`
+- `NO_STABLE_LOW_CHAOS_PREGAME_DIFFERENTIATOR`
+
+A later predictive migration is allowed only if M87 identifies at least one stable differentiator or a frozen `MODEL_REPRESENTATION_CLUE` that can be translated into a genuinely pregame hypothesis without tuning on the M87 target outcomes.
 
 ## Anti-loop
 
-M87 does not reopen previously failed families merely because one has a large descriptive SMD in the 38 selected tails. No Ridge/HGB/XGB/neural-network/selector search is permitted.
+M87 does not reopen previously failed families merely because one has a large descriptive SMD in the 38 selected tails. Any future test must distinguish already-tested information from genuinely new or architecturally unresolved information.
+
+No Ridge/HGB/XGB/neural-network/selector search is permitted in M87.
 
 `production_actionable = false`
