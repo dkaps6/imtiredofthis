@@ -127,6 +127,12 @@ A feature is a `STABLE_FORENSIC_DIFFERENTIATOR` only if all are true:
 
 Thresholds are frozen before results and cannot be changed.
 
+### Directional secondary atlas
+
+M87 must also describe `UNDERPROJECTED` and `OVERPROJECTED` subgroups within each primary family when a subgroup contains at least `5` rows. These directional rows use the same already-frozen matched controls and report descriptive SMDs only.
+
+Directional subgroup results are explicitly `advancement_eligible = false`. They may explain whether explosions and collapses look different, but they cannot independently open a predictive migration or alter the primary stable-differentiator gate after results are seen.
+
 ## Existing-model rescue diagnostic
 
 For each low-chaos family report:
