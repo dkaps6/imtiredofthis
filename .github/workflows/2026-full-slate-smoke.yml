@@ -77,7 +77,7 @@ jobs:
           export PYTHONPATH="${PWD}"
           python scripts/run_sharpfootball_v2.py --season "${SEASON}" --dump-html
           python scripts/team_form_prior_bridge.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}"
-          python scripts/run_team_form_context.py --season "${SEASON}"
+          python scripts/run_team_form_context.py --season "${SEASON}" --box-backfill-prev
           test -s data/team_form.csv
 
       - name: Build promoted QB M89/M90 context
