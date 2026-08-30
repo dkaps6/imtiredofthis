@@ -8,6 +8,7 @@ on:
       - "scripts/backtest/historical_inputs.py"
       - "scripts/backtest/correct_m89_team_semantics.py"
       - "scripts/backtest/build_m89_2023_training_trace.py"
+      - "scripts/backtest/build_m90_rotated_training_trace.py"
       - "scripts/backtest/run_m89_pregame_synthesis.py"
       - "scripts/backtest/run_m90_qb_synthesis_confirmation.py"
       - "docs/migrations/M90_QB_SYNTHESIS_CONFIRMATION_PROMOTION.md"
@@ -79,7 +80,8 @@ jobs:
             --weather data/backtests/m90/2022/weather_history.csv \
             --out data/backtests/m90/2022/component_predictions.csv \
             --iterations 2000
-          python scripts/backtest/build_m89_2023_training_trace.py \
+          python scripts/backtest/build_m90_rotated_training_trace.py \
+            --season 2022 \
             --predictions data/backtests/m90/2022/component_predictions.csv \
             --player-logs data/backtests/m90/2022/player_game_logs_history.csv \
             --out data/backtests/m90/2022/m90_2022_training_trace.csv
@@ -107,7 +109,8 @@ jobs:
             --weather data/backtests/m90/2023/weather_history.csv \
             --out data/backtests/m90/2023/component_predictions.csv \
             --iterations 2000
-          python scripts/backtest/build_m89_2023_training_trace.py \
+          python scripts/backtest/build_m90_rotated_training_trace.py \
+            --season 2023 \
             --predictions data/backtests/m90/2023/component_predictions.csv \
             --player-logs data/backtests/m90/2023/player_game_logs_history.csv \
             --out data/backtests/m90/2023/m90_2023_confirmation_trace.csv
