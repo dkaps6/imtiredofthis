@@ -1,27 +1,28 @@
 #!/usr/bin/env python3
 """M89 Phase 0: correct historical team-feature semantics.
 
-This correction layer keeps two source families deliberately separate:
+This correction layer keeps source families deliberately separate:
 
-- nflverse parsed PBP is the source for dropbacks, sacks/hits, game state,
-  expected-pass probability, pace, YAC/explosive mechanics, and EPA/success.
+- nflverse parsed PBP is the source for sacks, scrambles, game state,
+  expected-pass probability, pace, YAC/explosive mechanics, EPA/success,
+  and pressure proxies.
 - nflverse official weekly player stats are the source of truth for official
   pass attempts and official passing yards.
 
-That distinction is required because parsed PBP is not an official-stat ledger:
-its pass-attempt semantics include plays (notably sacks and some nullified play
-representations) that need not reproduce the official box score exactly.
+Parsed PBP is not an official-stat ledger. In particular, the PBP ``qb_dropback``
+flag can disagree by a play with the official box score, so it must not be used
+as an accounting denominator for official pass attempts.
 
 The script takes the existing leakage-safe team_weekly_history.csv and replaces
 or augments fields whose prior labels/construction were too strong:
 
-- `proe` becomes situation-adjusted pass rate over expected using xpass /
+- ``proe`` becomes situation-adjusted pass rate over expected using xpass /
   pass_probability when available.
-- `neutral_pace` becomes within-drive seconds/play in neutral game states.
+- ``neutral_pace`` becomes within-drive seconds/play in neutral game states.
 - pressure remains the public-PBP sack-or-QB-hit proxy and is explicitly named.
-- `pass_attempts_per_dropback` uses official team attempts divided by PBP
-  dropbacks, so the MC converts projected dropbacks to official attempts using
-  the correct statistical target.
+- ``pass_attempts_per_dropback`` keeps its legacy downstream column name but its
+  denominator is now a football-defined pass-opportunity count:
+  official attempts + PBP sacks + PBP QB scrambles.
 - team offensive/defensive YPA uses official weekly attempts/yards.
 
 Target-week cutoffs are still enforced later by the historical context factory;
@@ -146,24 +147,26 @@ def build_observations(seasons: list[int]) -> tuple[pd.DataFrame, pd.DataFrame]:
         x["posteam"] = x["posteam"].map(canon_team)
         x["defteam"] = x["defteam"].map(canon_team)
         for c in [
-            "qb_dropback", "rush_attempt", "pass_attempt", "sack", "qb_hit",
+            "qb_dropback", "rush_attempt", "pass_attempt", "sack", "qb_hit", "qb_scramble",
             "success", "epa", "passing_yards", "yards_gained", "air_yards",
             "xpass", "pass_probability", "qtr", "score_differential", "wp",
             "game_seconds_remaining", "play_id", "drive",
         ]:
             if c in x.columns:
                 x[c] = pd.to_numeric(x[c], errors="coerce")
+
         x["_off_play"] = (
             _num(x, "qb_dropback", 0).fillna(0).eq(1)
             | _num(x, "rush_attempt", 0).fillna(0).eq(1)
         ).astype(int)
         x["_dropback"] = _num(x, "qb_dropback", 0).fillna(0).eq(1)
+        x["_sack"] = _num(x, "sack", 0).fillna(0).eq(1)
+        x["_scramble"] = _num(x, "qb_scramble", 0).fillna(0).eq(1)
         # Parsed-PBP attempt is retained only for route/deep-play denominators.
         # It is NOT the official-attempt source of truth.
         x["_parsed_pass_attempt"] = _num(x, "pass_attempt", 0).fillna(0).eq(1)
         x["_hit_sack"] = (
-            _num(x, "sack", 0).fillna(0).eq(1)
-            | _num(x, "qb_hit", 0).fillna(0).eq(1)
+            x["_sack"] | _num(x, "qb_hit", 0).fillna(0).eq(1)
         ).astype(int)
         x["_deep20"] = (
             _num(x, "air_yards").ge(20) & x["_parsed_pass_attempt"]
@@ -211,6 +214,7 @@ def build_observations(seasons: list[int]) -> tuple[pd.DataFrame, pd.DataFrame]:
             "score_differential_available": int("score_differential" in x.columns),
             "wp_available": int("wp" in x.columns),
             "official_attempt_source": "nflverse_weekly_player_stats",
+            "pass_opportunity_semantic": "official_attempts_plus_pbp_sacks_plus_pbp_qb_scrambles",
             "pbp_team_weeks": int(len(pbp_keys)),
             "official_team_weeks_matched": int(len(pbp_keys & official_keys)),
             "official_team_week_coverage": float(len(pbp_keys & official_keys) / len(pbp_keys)) if pbp_keys else 0.0,
@@ -248,15 +252,25 @@ def build_observations(seasons: list[int]) -> tuple[pd.DataFrame, pd.DataFrame]:
                     proe_n = int(valid.sum())
 
             pace, pace_n = _neutral_pace(g)
-            dropbacks = int(drop.sum())
-            opp_dropbacks = int(opp_drop.sum())
-            att_per_dropback = float(official_att / dropbacks) if dropbacks else np.nan
-            opp_att_per_dropback = float(opp_official_att / opp_dropbacks) if opp_dropbacks else np.nan
-            if np.isfinite(att_per_dropback) and not (0.0 <= att_per_dropback <= 1.001):
-                raise RuntimeError(
-                    f"invalid official attempts/dropback {season} W{week} {team}: "
-                    f"attempts={official_att} dropbacks={dropbacks} ratio={att_per_dropback}"
-                )
+
+            # The accounting denominator is deliberately NOT parsed qb_dropback.
+            # Official attempts are exact weekly stats; sacks and scrambles are
+            # non-attempt pass outcomes from PBP. This guarantees a coherent
+            # opportunity count even when qb_dropback has a parser disagreement.
+            sacks = int(g["_sack"].sum())
+            scrambles = int(g["_scramble"].sum())
+            opp_sacks = int(defense_g["_sack"].sum())
+            opp_scrambles = int(defense_g["_scramble"].sum())
+            pass_opportunities = float(official_att + sacks + scrambles)
+            opp_pass_opportunities = float(opp_official_att + opp_sacks + opp_scrambles)
+            att_per_dropback = float(official_att / pass_opportunities) if pass_opportunities else np.nan
+            opp_att_per_dropback = float(opp_official_att / opp_pass_opportunities) if opp_pass_opportunities else np.nan
+
+            for label, ratio in [("offense", att_per_dropback), ("opponent", opp_att_per_dropback)]:
+                if np.isfinite(ratio) and not (0.0 <= ratio <= 1.0000001):
+                    raise RuntimeError(
+                        f"invalid official attempts/pass-opportunity {season} W{week} {team} {label}: ratio={ratio}"
+                    )
 
             rows.append({
                 "season": int(season),
@@ -277,13 +291,21 @@ def build_observations(seasons: list[int]) -> tuple[pd.DataFrame, pd.DataFrame]:
                 "pressure_semantic": "sack_or_qb_hit_proxy_not_full_pressure",
                 "pass_rate_off": float(drop.mean()) if len(g) else np.nan,
                 "pass_rate_faced": float(opp_drop.mean()) if len(defense_g) else np.nan,
+                # Legacy column name retained because the downstream stack expects it.
                 "pass_attempts_per_dropback": att_per_dropback,
+                "pass_attempt_conversion_semantic": "official_attempts_divided_by_official_attempts_plus_pbp_sacks_plus_pbp_qb_scrambles",
+                "pass_opportunities": pass_opportunities,
+                "pbp_sacks": sacks,
+                "pbp_qb_scrambles": scrambles,
                 "official_pass_attempts": official_att,
                 "official_pass_yards": official_yards,
                 "official_pass_stat_source": "nflverse_weekly_player_stats",
                 "opponent_official_pass_attempts": opp_official_att,
                 "opponent_official_pass_yards": opp_official_yards,
                 "opponent_pass_attempts_per_dropback": opp_att_per_dropback,
+                "opponent_pass_opportunities": opp_pass_opportunities,
+                "opponent_pbp_sacks": opp_sacks,
+                "opponent_pbp_qb_scrambles": opp_scrambles,
                 "deep20_attempt_rate_off": float(g.loc[parsed_pass_att, "_deep20"].mean()) if parsed_pass_att.any() else np.nan,
                 "deep20_completion_rate_allowed": float(defense_g.loc[opp_parsed_pass_att, "_complete20"].mean()) if opp_parsed_pass_att.any() else np.nan,
                 "off_ypa": float(official_yards / official_att) if official_att else np.nan,
