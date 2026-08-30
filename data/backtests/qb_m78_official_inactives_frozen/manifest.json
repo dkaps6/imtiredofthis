@@ -1,0 +1,26 @@
+{
+  "migration": "M78",
+  "source_run_id": 33285991961,
+  "source_artifact_id": 9724454612,
+  "source_artifact_sha256": "f22d4cc736705dc13cf32d277ec4e6ab0c64110f39cbd577b7fe35ce6feab9d2",
+  "canonical_v3_sha256": "c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742",
+  "chunk_chars": 3000,
+  "part_count": 7,
+  "seasons": {
+    "2024": {
+      "team_week_rows": 544,
+      "inactive_player_rows": 3428,
+      "csv_sha256": "0c347455e5df87df60d574c0b4657d874c089c184cc99b857c3116d54d5f3abe",
+      "gzip_sha256": "8f1209096e4cb03e28952eb2afff3d10d1205fb9a2cf1d1b8630a4339552b482"
+    },
+    "2025": {
+      "team_week_rows": 544,
+      "inactive_player_rows": 3423,
+      "csv_sha256": "b9c18abf2f359cdfe159cd24ecd987e704fe84252b77678d292468b80463359d",
+      "gzip_sha256": "b0017422bde3664e96d2cdf17c3b32a89da53b46f5a0701a93b3e6dc755d4f59"
+    }
+  },
+  "semantics": "NFL official game-day inactive identity; fixed pre-kickoff fact. Article timestamps and postgame outcomes are not predictors.",
+  "sportsbook_used": false,
+  "predictive_model_fit": false
+}

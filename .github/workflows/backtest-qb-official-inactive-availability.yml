@@ -1,0 +1,89 @@
+name: Migration 78 QB Official Inactive Availability
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/backtest/audit_qb_official_inactive_availability.py'
+      - 'scripts/backtest/audit_qb_official_inactive_availability_v3.py'
+      - 'scripts/backtest/audit_qb_official_inactive_availability_v4.py'
+      - 'scripts/backtest/audit_qb_official_inactive_availability_v5.py'
+      - 'data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv'
+      - 'data/backtests/qb_m78_official_inactives_frozen/**'
+      - '.github/workflows/backtest-qb-official-inactive-availability.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    if: github.head_ref == 'backtest-migration-78-qb-official-inactive-availability'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pandas pyarrow requests beautifulsoup4
+      - name: Frozen M78 scope
+        run: |
+          echo 'M78 is SOURCE/DATA-CONTRACT ONLY. It fits zero predictive models.'
+          echo 'Run #3 inactive snapshot is SUPERSEDED as M79 input after hardened audit found cross-team bleed and silently dropped source bullets.'
+          echo 'V5 rebuilds exact identities directly from official NFL.com source, deduplicates DOM bullets, supports composite/variant position labels, selects the true inactive section by roster-match quality, and removes the invalid <=8 inactive-player assumption.'
+          echo 'Position quality is measured separately from identity completeness.'
+          echo 'No sportsbook data. No target-game performance.'
+      - name: Verify frozen canonical v3
+        run: |
+          set -euo pipefail
+          CANON=data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv
+          test -s "$CANON"
+          echo "c4a481a760657bb7516d52b9aa9ba84af096063a4e78660b12a541f59fd7b742  $CANON" | sha256sum -c -
+      - name: Compile M78
+        run: |
+          python -m py_compile scripts/backtest/audit_qb_official_inactive_availability.py
+          python -m py_compile scripts/backtest/audit_qb_official_inactive_availability_v3.py
+          python -m py_compile scripts/backtest/audit_qb_official_inactive_availability_v4.py
+          python -m py_compile scripts/backtest/audit_qb_official_inactive_availability_v5.py
+      - name: Rebuild corrected M78 source contract
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/audit_qb_official_inactive_availability_v5.py \
+            --canonical data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv \
+            --out-dir data/backtests/qb_m78
+      - name: Require historical M79 authorization
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          c=json.loads(Path('data/backtests/qb_m78/m78_contract.json').read_text())
+          assert c['historical_m79_authorized'] is True, c
+          assert c['superseded_run3_snapshot_is_authority'] is False
+          print('historical_m79_authorized=TRUE')
+          print('corrected_candidate_sha256=',c['corrected_candidate_sha256'])
+          print('live_2026_payload_validated=',c['live_2026_payload_validated'])
+          PY
+      - name: Print M78 outputs
+        if: always()
+        run: |
+          echo '--- interpretation ---'
+          cat data/backtests/qb_m78/m78_interpretation.csv 2>/dev/null || true
+          echo '--- source gate ---'
+          cat data/backtests/qb_m78/m78_source_gate.csv 2>/dev/null || true
+          echo '--- contract ---'
+          cat data/backtests/qb_m78/m78_contract.json 2>/dev/null || true
+          echo '--- corrected candidate sample ---'
+          head -20 data/backtests/qb_m78/m78_corrected_candidate_teamweek.csv 2>/dev/null || true
+      - name: Upload M78 artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-78-qb-official-inactive-availability
+          path: data/backtests/qb_m78/*
+          if-no-files-found: warn
+          retention-days: 14
