@@ -23,15 +23,23 @@ jobs:
       - name: Frozen M90 contract
         run: |
           python - <<'PY'
+          import ast
           from pathlib import Path
-          from scripts.backtest.run_m89_pregame_synthesis import ALPHA, RESIDUAL_CAP, FOOTBALL_FEATURES
           p=Path('docs/migrations/M90_QB_SYNTHESIS_CONFIRMATION_PROMOTION.md').read_text()
-          assert ALPHA == 20.0
-          assert RESIDUAL_CAP == 45.0
-          assert len(FOOTBALL_FEATURES) == 21, FOOTBALL_FEATURES
+          src=Path('scripts/backtest/run_m89_pregame_synthesis.py').read_text()
+          tree=ast.parse(src)
+          vals={}
+          for node in tree.body:
+              if isinstance(node, ast.Assign) and len(node.targets)==1 and isinstance(node.targets[0], ast.Name):
+                  name=node.targets[0].id
+                  if name in {'ALPHA','RESIDUAL_CAP','FOOTBALL_FEATURES'}:
+                      vals[name]=ast.literal_eval(node.value)
+          assert vals['ALPHA'] == 20.0, vals
+          assert vals['RESIDUAL_CAP'] == 45.0, vals
+          assert len(vals['FOOTBALL_FEATURES']) == 21, vals['FOOTBALL_FEATURES']
           assert 'No new casebook taxonomy work' in p
           assert 'PROMOTE_M89_FOOTBALL_SYNTHESIS' in p
-          print('M90 exact M89 contract frozen:', FOOTBALL_FEATURES)
+          print('M90 exact M89 contract frozen:', vals['FOOTBALL_FEATURES'])
           PY
 
   m90-confirmation:
