@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Static 2026 production-readiness audit for the canonical Full Slate path.
 
-This is intentionally separate from scripts/utils/audit_repo.py while the 2026
-overhaul is in progress. It is allowed to report known blockers on main without
-breaking ordinary Repo CI. Once the listed P0/P1 issues are closed, this audit
-should be promoted into the required Full Slate/CI gate.
+Runtime provider health is validated separately by validate_2026_provider_artifacts.
+This audit protects the repository wiring so the canonical v3 identity/context/provider
+contracts cannot be accidentally bypassed by a later refactor.
 """
 from __future__ import annotations
 
@@ -19,8 +18,6 @@ FULL_SLATE = ROOT / ".github/workflows/full-slate.yml"
 ENSEMBLE_WEIGHTS = ROOT / "data/model_ensemble_weights.csv"
 QB_SYNTHESIS = ROOT / "model/qb_pass_synthesis_v1.json"
 
-# Files that can directly execute or materially feed the canonical Full Slate
-# path. Backtest-only files are intentionally excluded from stale-runtime scans.
 PRODUCTION_RUNTIME_FILES = (
     "scripts/config.py",
     "scripts/runtime_context.py",
@@ -33,6 +30,7 @@ PRODUCTION_RUNTIME_FILES = (
     "scripts/run_team_form_context.py",
     "scripts/make_team_form.py",
     "scripts/run_qb_promoted_context.py",
+    "scripts/team_context_v3.py",
     "scripts/build/build_weather_week_v2.py",
     "scripts/build/build_weather_week.py",
     "scripts/build/build_injuries_weekly.py",
@@ -45,7 +43,11 @@ PRODUCTION_RUNTIME_FILES = (
     "scripts/slate_universe_v2.py",
     "scripts/run_player_form_v2_loader.py",
     "scripts/enrich_player_scoring_v2.py",
+    "scripts/utils/player_identity_v3.py",
+    "scripts/validate_player_identity_v3.py",
+    "scripts/validate_2026_provider_artifacts.py",
     "scripts/modeling/context_bridge.py",
+    "scripts/modeling/context_bridge_v3.py",
     "scripts/modeling/bayesian_v2.py",
     "scripts/modeling/ml_v2.py",
     "scripts/modeling/state_v2.py",
@@ -57,12 +59,10 @@ PRODUCTION_RUNTIME_FILES = (
     "scripts/metrics_v2.py",
     "scripts/metrics_enrichment_v2.py",
     "scripts/run_metrics_context.py",
+    "scripts/run_model_context_bridge.py",
     "scripts/run_pricing_v2.py",
 )
 
-# Explicitly allowed 2025 references in 2026 production: prior-season defaults,
-# documentation/comments describing historical validation, and provider history.
-# Any executable current-season assignment/default must be reviewed separately.
 RUNTIME_2025_PATTERNS = (
     re.compile(r"\bseason\s*=\s*2025\b", re.I),
     re.compile(r"default\s*=\s*2025\b", re.I),
@@ -90,6 +90,7 @@ def _workflow_findings() -> list[dict[str, str]]:
         "scripts/utils/build_team_week_map_v2.py",
         "scripts/run_qb_promoted_context.py",
         "scripts/run_player_form_v2_loader.py",
+        "scripts/run_model_context_bridge.py",
         "scripts/run_pricing_v2.py",
     ):
         if token not in text:
@@ -108,7 +109,6 @@ def _runtime_literal_findings() -> list[dict[str, str]]:
             stripped = line.strip()
             if not stripped or stripped.startswith("#"):
                 continue
-            # Legitimate prior-season defaults are explicitly allowed.
             if "PRIOR_SEASON" in line or "prior_season" in line:
                 continue
             for pattern in RUNTIME_2025_PATTERNS:
@@ -165,6 +165,40 @@ def _promotion_findings() -> list[dict[str, str]]:
     return out
 
 
+def _v3_contract_findings() -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    checks = {
+        "scripts/run_model_context_bridge.py": (
+            "run_provider_readiness",
+            "materialize_team_context",
+            "context_bridge_v3",
+        ),
+        "scripts/modeling/qb_pass_synthesis_v1.py": (
+            "data/team_context_v3.csv",
+            "TEAM_CONTEXT_V3",
+        ),
+        "scripts/run_player_form_v2_loader.py": (
+            "validate_player_identity_v3",
+            "player_identity_validation.csv",
+        ),
+        "scripts/build/build_injuries_weekly.py": (
+            "injuries_source_status.json",
+            "provider_outage",
+            "no_official_report",
+        ),
+    }
+    for rel, tokens in checks.items():
+        path = ROOT / rel
+        if not path.exists():
+            out.append(_finding("P0", "v3_contract_file_missing", rel))
+            continue
+        text = _read(path)
+        for token in tokens:
+            if token not in text:
+                out.append(_finding("P0", "v3_contract_wiring", f"{rel} missing required v3 token: {token}"))
+    return out
+
+
 def _legacy_authority_findings() -> list[dict[str, str]]:
     out: list[dict[str, str]] = []
     engine = ROOT / "engine/engine.py"
@@ -194,6 +228,7 @@ def run() -> list[dict[str, str]]:
     findings += _runtime_literal_findings()
     findings += _ensemble_findings()
     findings += _promotion_findings()
+    findings += _v3_contract_findings()
     findings += _legacy_authority_findings()
     rank = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
     findings.sort(key=lambda x: (rank.get(x["severity"], 9), x["code"], x["message"]))
