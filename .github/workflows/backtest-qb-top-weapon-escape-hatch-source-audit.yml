@@ -1,0 +1,76 @@
+name: Migration 84 QB Top Weapon Escape Hatch Source Audit
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/backtest-qb-top-weapon-escape-hatch-source-audit.yml"
+      - "scripts/backtest/audit_top_weapon_escape_hatch_sources.py"
+      - "docs/migrations/M84_TOP_WEAPON_ESCAPE_HATCH_SOURCE_AUDIT.md"
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Frozen M84 contract
+        run: |
+          python -m py_compile scripts/backtest/audit_top_weapon_escape_hatch_sources.py
+          grep -q "PREREGISTERED / SOURCE AUDIT ONLY" docs/migrations/M84_TOP_WEAPON_ESCAPE_HATCH_SOURCE_AUDIT.md
+          grep -q "SOURCE_BLOCKED_EXACT_TOP_WEAPON_MATCHUP" docs/migrations/M84_TOP_WEAPON_ESCAPE_HATCH_SOURCE_AUDIT.md
+          grep -q "same_proxy_retest_allowed" scripts/backtest/audit_top_weapon_escape_hatch_sources.py
+
+  audit:
+    needs: contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyarrow
+      - name: Run M84 source audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests/m84_top_weapon_source_audit
+          python scripts/backtest/audit_top_weapon_escape_hatch_sources.py --out data/backtests/m84_top_weapon_source_audit
+      - name: Verify M84 boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          root=Path('data/backtests/m84_top_weapon_source_audit')
+          d=json.loads((root/'m84_decision.json').read_text())
+          m=pd.read_csv(root/'m84_source_qualification_matrix.csv')
+          assert d['migration']=='M84', d
+          assert d['production_actionable'] is False, d
+          assert d['qb_outcomes_read'] is False, d
+          assert d['receiver_target_game_outcomes_read'] is False, d
+          assert d['sportsbook_features_used'] is False, d
+          assert d['same_proxy_retest_allowed'] is False, d
+          assert len(m) >= 6
+          forbidden=[]
+          for p in root.glob('*.csv'):
+              x=pd.read_csv(p, low_memory=False)
+              forbidden += [(p.name,c) for c in x.columns if any(t in c.lower() for t in ['actual_pass_yards','actual_ypa','actual_attempts','sportsbook_line','prop_line'])]
+          assert not forbidden, forbidden
+          print(json.dumps(d, indent=2))
+          PY
+      - name: Upload M84 artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m84-top-weapon-escape-hatch-source-audit
+          path: data/backtests/m84_top_weapon_source_audit/*
+          if-no-files-found: warn
+          retention-days: 14
