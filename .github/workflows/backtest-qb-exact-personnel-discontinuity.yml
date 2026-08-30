@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/backtest/test_qb_exact_personnel_discontinuity.py'
+      - 'scripts/backtest/test_qb_exact_personnel_discontinuity_v2.py'
       - 'scripts/backtest/audit_qb_40s_information_frontier.py'
       - 'data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv'
       - '.github/workflows/backtest-qb-exact-personnel-discontinuity.yml'
@@ -39,6 +40,7 @@ jobs:
           echo 'One model family only: StandardScaler + Ridge(alpha=10, fit_intercept=False).'
           echo 'Separate residual corrections: attempts and YPA.'
           echo 'Personnel features only: OL/skill/DB/pass-rush continuity, replacement prior role, expected-rusher prior quality, and mechanistic interactions.'
+          echo 'Previous lineup means the team actual previous regular-season game, not merely previous canonical-QB cohort game.'
           echo 'No sportsbook fields. No target-game snap/PFR outcomes. No generic injury burden.'
           echo 'No DBR/pass-rate/state, aggregate defense, playcaller, pace, volatility, or model-zoo fallback.'
           echo 'PROMOTION requires ALL: 2025 feature coverage >=0.85; 2024 late-season directional MAE gain >0; 2025 pass MAE gain >=1.50 yards; paired bootstrap pass gain CI low >0; pass correlation gain >=0.02; 100+ yard misses do not increase; at least one of attempt/YPA MAE gains has paired bootstrap CI low >0.'
@@ -54,12 +56,13 @@ jobs:
       - name: Compile M77
         run: |
           python -m py_compile scripts/backtest/test_qb_exact_personnel_discontinuity.py
+          python -m py_compile scripts/backtest/test_qb_exact_personnel_discontinuity_v2.py
 
       - name: Run M77
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/backtest/test_qb_exact_personnel_discontinuity.py \
+          python scripts/backtest/test_qb_exact_personnel_discontinuity_v2.py \
             --canonical data/backtests/qb_frontier_canonical_v3_football_only/qb_frontier_canonical_v3_football_only.csv \
             --out-dir data/backtests/qb_m77
 
