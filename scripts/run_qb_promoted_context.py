@@ -27,7 +27,9 @@ HISTORY_GAMES = 8
 
 
 def _lower(df: pd.DataFrame) -> pd.DataFrame:
-    x = df.copy(); x.columns = [str(c).strip().lower() for c in x.columns]; return x
+    x = df.copy()
+    x.columns = [str(c).strip().lower() for c in x.columns]
+    return x
 
 
 def _num(df: pd.DataFrame, col: str, default=np.nan) -> pd.Series:
@@ -40,10 +42,12 @@ def _regular(df: pd.DataFrame) -> pd.DataFrame:
     x = df.copy()
     if "season_type" in x.columns:
         q = x.loc[x["season_type"].astype(str).str.upper().eq("REG")].copy()
-        if not q.empty: return q
+        if not q.empty:
+            return q
     if "game_type" in x.columns:
         q = x.loc[x["game_type"].astype(str).str.upper().eq("REG")].copy()
-        if not q.empty: return q
+        if not q.empty:
+            return q
     return x
 
 
@@ -57,17 +61,19 @@ def _play_counts(season: int) -> pd.DataFrame:
     rush = _num(x, "rush_attempt", 0).fillna(0).eq(1)
     x["_off_play"] = (qb | rush).astype(int)
     q = x.loc[x["posteam"].ne("") & x["_off_play"].eq(1)].copy()
-    out = q.groupby(["week", "posteam"], as_index=False).size().rename(columns={"posteam":"team", "size":"plays_est"})
+    out = q.groupby(["week", "posteam"], as_index=False).size().rename(
+        columns={"posteam": "team", "size": "plays_est"}
+    )
     out["season"] = int(season)
     out["week"] = pd.to_numeric(out["week"], errors="coerce").astype(int)
-    return out[["season","week","team","plays_est"]]
+    return out[["season", "week", "team", "plays_est"]]
 
 
 def _season_observations(season: int, *, required: bool) -> tuple[pd.DataFrame, pd.DataFrame, str]:
     try:
         obs, audit = build_observations([int(season)])
         plays = _play_counts(int(season))
-        obs = obs.merge(plays, on=["season","week","team"], how="left", validate="one_to_one")
+        obs = obs.merge(plays, on=["season", "week", "team"], how="left", validate="one_to_one")
         return obs, audit, "available"
     except Exception as exc:
         if required:
@@ -79,13 +85,17 @@ def _season_observations(season: int, *, required: bool) -> tuple[pd.DataFrame, 
 def _prior(obs: pd.DataFrame, team: str, season: int, week: int) -> pd.DataFrame:
     q = obs.loc[
         obs["team"].eq(canon_team(team))
-        & (obs["season"].lt(int(season)) | (obs["season"].eq(int(season)) & obs["week"].lt(int(week))))
-    ].sort_values(["season","week"])
+        & (
+            obs["season"].lt(int(season))
+            | (obs["season"].eq(int(season)) & obs["week"].lt(int(week)))
+        )
+    ].sort_values(["season", "week"])
     return q.tail(HISTORY_GAMES)
 
 
 def _mean(q: pd.DataFrame, name: str) -> float:
-    if name not in q.columns: return np.nan
+    if name not in q.columns:
+        return np.nan
     s = pd.to_numeric(q[name], errors="coerce")
     return float(s.mean()) if s.notna().any() else np.nan
 
@@ -106,7 +116,11 @@ def main() -> int:
 
     prior_obs, prior_audit, prior_status = _season_observations(prior, required=True)
     current_obs, current_audit, current_status = _season_observations(season, required=False)
-    obs = pd.concat([prior_obs, current_obs], ignore_index=True) if not current_obs.empty else prior_obs.copy()
+    obs = (
+        pd.concat([prior_obs, current_obs], ignore_index=True)
+        if not current_obs.empty
+        else prior_obs.copy()
+    )
     obs["team"] = obs["team"].map(canon_team)
 
     tf = _lower(pd.read_csv(TEAM_FORM, low_memory=False))
@@ -118,31 +132,49 @@ def main() -> int:
         raise RuntimeError("TeamForm has invalid/duplicate canonical teams")
 
     mappings = {
-        "true_proe":"true_proe",
-        "proe":"true_proe",
-        "neutral_pace_true":"neutral_pace_true",
-        "neutral_pace":"neutral_pace_true",
-        "pressure_rate_allowed":"hit_sack_pressure_rate_allowed",
-        "pressure_rate_generated":"hit_sack_pressure_rate_generated",
-        "hit_sack_pressure_rate_allowed":"hit_sack_pressure_rate_allowed",
-        "hit_sack_pressure_rate_generated":"hit_sack_pressure_rate_generated",
-        "pass_attempts_per_dropback":"pass_attempts_per_dropback",
-        "pass_rate_off":"pass_rate_off",
-        "pass_rate_faced":"pass_rate_faced",
-        "def_pass_epa_allowed":"def_pass_epa_allowed",
-        "def_pass_success_allowed":"def_pass_success_allowed",
-        "def_ypa_allowed":"def_ypa_allowed",
-        "off_ypa":"off_ypa",
-        "off_pass_epa":"off_pass_epa",
-        "plays_est":"plays_est",
+        "true_proe": "true_proe",
+        "proe": "true_proe",
+        "neutral_pace_true": "neutral_pace_true",
+        "neutral_pace": "neutral_pace_true",
+        "pressure_rate_allowed": "hit_sack_pressure_rate_allowed",
+        "pressure_rate_generated": "hit_sack_pressure_rate_generated",
+        "hit_sack_pressure_rate_allowed": "hit_sack_pressure_rate_allowed",
+        "hit_sack_pressure_rate_generated": "hit_sack_pressure_rate_generated",
+        "pass_attempts_per_dropback": "pass_attempts_per_dropback",
+        "pass_rate_off": "pass_rate_off",
+        "pass_rate_faced": "pass_rate_faced",
+        "def_pass_epa_allowed": "def_pass_epa_allowed",
+        "def_pass_success_allowed": "def_pass_success_allowed",
+        "def_ypa_allowed": "def_ypa_allowed",
+        "off_ypa": "off_ypa",
+        "off_pass_epa": "off_pass_epa",
+        "plays_est": "plays_est",
     }
     context_rows = []
     for idx, row in tf.iterrows():
         team = canon_team(row["team"])
         hist = _prior(obs, team, season, week)
         if hist.empty:
-            raise RuntimeError(f"no pregame promoted QB history for team={team} season={season} week={week}")
-        rec = {"team":team, "season":season, "week":week, "qb_context_history_games":int(len(hist))}
+            raise RuntimeError(
+                f"no pregame promoted QB history for team={team} season={season} week={week}"
+            )
+        hist_season = pd.to_numeric(hist["season"], errors="coerce")
+        current_games = int(hist_season.eq(season).sum())
+        prior_games = int(hist_season.eq(prior).sum())
+        latest = hist.sort_values(["season", "week"]).iloc[-1]
+        source_seasons = sorted({int(v) for v in hist_season.dropna().tolist()})
+
+        rec = {
+            "team": team,
+            "season": season,
+            "week": week,
+            "qb_context_history_games": int(len(hist)),
+            "qb_context_current_games": current_games,
+            "qb_context_prior_games": prior_games,
+            "qb_context_latest_season": int(latest["season"]),
+            "qb_context_latest_week": int(latest["week"]),
+            "qb_context_source_seasons": ",".join(str(v) for v in source_seasons),
+        }
         for target, source in mappings.items():
             value = _mean(hist, source)
             rec[target] = value
@@ -154,11 +186,14 @@ def main() -> int:
     context = pd.DataFrame(context_rows)
     conv = pd.to_numeric(context["pass_attempts_per_dropback"], errors="coerce")
     if conv.isna().any() or not conv.between(0.50, 1.0, inclusive="both").all():
-        bad = context.loc[conv.isna() | ~conv.between(0.50,1.0,inclusive="both"), ["team","pass_attempts_per_dropback"]]
+        bad = context.loc[
+            conv.isna() | ~conv.between(0.50, 1.0, inclusive="both"),
+            ["team", "pass_attempts_per_dropback"],
+        ]
         raise RuntimeError(f"invalid promoted attempt conversion rows: {bad.to_dict('records')}")
 
-    # Keep the legacy TeamForm file as the canonical bridge input, but stamp the
-    # promoted provenance so downstream audits can prove which semantics ran.
+    # Keep the legacy TeamForm file populated for compatibility while Team
+    # Context v3 becomes the canonical downstream authority.
     tf["qb_promoted_context_applied"] = 1
     tf["qb_promoted_context_version"] = "M89_M90_PROMOTED_V1"
     tf["qb_promoted_context_target_week"] = week
@@ -166,14 +201,21 @@ def main() -> int:
     OUT.parent.mkdir(parents=True, exist_ok=True)
     context.to_csv(OUT, index=False)
 
-    audit = pd.concat([prior_audit, current_audit], ignore_index=True) if not current_audit.empty else prior_audit.copy()
+    audit = (
+        pd.concat([prior_audit, current_audit], ignore_index=True)
+        if not current_audit.empty
+        else prior_audit.copy()
+    )
     audit["active_season"] = season
     audit["active_week"] = week
     audit["prior_history_status"] = prior_status
     audit["current_history_status"] = current_status
     audit["teams_contextualized"] = len(context)
     audit.to_csv(AUDIT, index=False)
-    print(f"[qb_promoted_context] season={season} week={week} teams={len(context)} prior={prior_status} current={current_status}")
+    print(
+        f"[qb_promoted_context] season={season} week={week} teams={len(context)} "
+        f"prior={prior_status} current={current_status}"
+    )
     print(f"[qb_promoted_context] attempt conversion range={conv.min():.4f}..{conv.max():.4f}")
     print(f"[qb_promoted_context] wrote {OUT}, overlaid {TEAM_FORM}, audit={AUDIT}")
     return 0
