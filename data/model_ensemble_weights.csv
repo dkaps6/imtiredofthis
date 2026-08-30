@@ -1,0 +1,2 @@
+market,mc_weight,ml_weight,state_weight,calibration_rows,calibration_mae,calibration_rmse,method,fit_scope,validated_season,promotion_lineage
+pass_yards,0.2087531266,0.2671212299,0.5241256435,474,61.033280,77.997841,promoted_nonnegative_oos_linear_blend_v2,all_2024_oos_frozen_for_2025,2025,M82_M89_M90_QB_PASS_YARDS
