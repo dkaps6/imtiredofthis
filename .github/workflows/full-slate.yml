@@ -112,6 +112,22 @@ jobs:
           python scripts/team_form_prior_bridge.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}"
           python scripts/run_team_form_context.py --season "${SEASON}"
           test -s data/team_form.csv
+      - name: Build promoted QB M89/M90 context
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_qb_promoted_context.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}"
+          test -s data/qb_promoted_team_context.csv
+          test -s data/qb_promoted_context_audit.csv
+          python - <<'EOF'
+          import pandas as pd
+          ctx=pd.read_csv('data/qb_promoted_team_context.csv')
+          if len(ctx) != 32 or ctx['team'].nunique() != 32:
+              raise SystemExit(f'FATAL: promoted QB context expected 32 teams, got rows={len(ctx)} teams={ctx["team"].nunique()}')
+          conv=pd.to_numeric(ctx['pass_attempts_per_dropback'],errors='coerce')
+          if conv.isna().any() or not conv.between(.50,1.0,inclusive='both').all():
+              raise SystemExit('FATAL: promoted QB attempt conversion is missing/out of range')
+          print(f'promoted QB context OK teams=32 attempt_conversion={conv.min():.4f}..{conv.max():.4f}')
+          EOF
       - name: Build weather and injuries
         run: |
           export PYTHONPATH="${PWD}"
@@ -188,12 +204,13 @@ jobs:
           python scripts/run_metrics_context.py --season "${SEASON}" --mode full --date "${SLATE_DATE}"
           python scripts/validate_build_integrity.py
           python scripts/metrics_ready.py --season "${SEASON}" --date "${SLATE_DATE}"
-      - name: Price with evidence-weighted ensemble over canonical components
+      - name: Price with promoted QB synthesis over canonical components
         if: ${{ github.event.inputs.fetch_live_odds == 'true' }}
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/run_pricing_v2.py --season "${SEASON}"
           python - <<'EOF'
+          import numpy as np
           import pandas as pd
           from scripts.artifact_contracts import CONTRACTS
           c=CONTRACTS['props_priced']; df=pd.read_csv(c.path)
@@ -205,6 +222,23 @@ jobs:
           assert 'bayes_applied' in df.columns and int(df['bayes_applied'].sum()) > 0
           assert 'rules_applied' in df.columns and int(df['rules_applied'].sum()) > 0
           assert 'ensemble_status' in df.columns
+          qb=df.loc[df['market'].astype(str).str.lower().eq('pass_yards')].copy()
+          if not qb.empty:
+              required=['qb_synthesis_applied','qb_synthesis_proj','qb_synthesis_correction','qb_synthesis_version','qb_attempt_conversion','qb_pred_attempts','qb_pred_ypa']
+              missing=[x for x in required if x not in qb.columns]
+              if missing: raise SystemExit(f'FATAL: promoted QB pricing audit columns missing: {missing}')
+              if not pd.to_numeric(qb['qb_synthesis_applied'],errors='coerce').eq(1).all():
+                  raise SystemExit('FATAL: not every priced pass_yards row used promoted QB synthesis')
+              if qb['qb_synthesis_version'].fillna('').astype(str).str.strip().eq('').any():
+                  raise SystemExit('FATAL: promoted QB synthesis version missing')
+              conv=pd.to_numeric(qb['qb_attempt_conversion'],errors='coerce')
+              if conv.isna().any() or not conv.between(.50,1.0,inclusive='both').all():
+                  raise SystemExit('FATAL: priced QB attempt conversion missing/out of range')
+              proj=pd.to_numeric(qb['qb_synthesis_proj'],errors='coerce')
+              final=pd.to_numeric(qb['model_proj'],errors='coerce')
+              if proj.isna().any() or final.isna().any() or not np.allclose(proj,final,rtol=0,atol=1e-8):
+                  raise SystemExit('FATAL: final QB model projection is not the promoted synthesis mean')
+              print(f"promoted QB pricing OK rows={len(qb)} version={sorted(qb['qb_synthesis_version'].unique().tolist())}")
           print(f"priced rows={len(df)} ensemble={df['ensemble_status'].value_counts().to_dict()} ml={int(df['ml_applied'].sum())} state={int(df['state_applied'].sum())} bayes={int(df['bayes_applied'].sum())} rules={int(df['rules_applied'].sum())}")
           EOF
       - name: Strict repository audit
