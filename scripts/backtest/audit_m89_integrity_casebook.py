@@ -3,6 +3,11 @@
 
 Postgame PBP is used only for source reconciliation and forensic explanation.
 Nothing emitted here is eligible as a Phase-2 pregame feature.
+
+Important nflverse semantic boundary:
+- ``qb_dropback`` is the broad dropback opportunity.
+- nflverse ``pass_attempt`` includes sacks.
+- official NFL pass attempts therefore use ``pass_attempt == 1`` AND ``sack != 1``.
 """
 from __future__ import annotations
 
@@ -30,6 +35,12 @@ def num(df: pd.DataFrame, col: str, default=np.nan) -> pd.Series:
     if col not in df.columns:
         return pd.Series(default, index=df.index, dtype=float)
     return pd.to_numeric(df[col], errors="coerce")
+
+
+def official_attempt_mask(df: pd.DataFrame) -> pd.Series:
+    raw = num(df, "pass_attempt", 0).fillna(0).eq(1)
+    sack = num(df, "sack", 0).fillna(0).eq(1)
+    return raw & ~sack
 
 
 def canon(v) -> str:
@@ -67,6 +78,7 @@ def load_all_pbp() -> pd.DataFrame:
 
 def load_weekly_stats() -> pd.DataFrame:
     import nflreadpy as nfl
+
     frames = []
     for season in SEASONS:
         raw = nfl.load_player_stats(seasons=[season], summary_level="week")
@@ -81,48 +93,59 @@ def load_weekly_stats() -> pd.DataFrame:
 
 def reconcile_actuals(pbp: pd.DataFrame, weekly: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     x = pbp.copy()
-    required = {"posteam", "passer_player_id", "pass_attempt", "passing_yards", "season", "week"}
+    required = {"posteam", "passer_player_id", "pass_attempt", "sack", "passing_yards", "season", "week"}
     missing = required - set(x.columns)
     if missing:
         raise RuntimeError(f"PBP missing reconciliation columns {sorted(missing)}")
+
     x["team"] = x["posteam"].map(canon)
     x["player_id"] = x["passer_player_id"].astype(str).replace({"nan":"", "None":"", "<NA>":""})
-    x["_pa"] = num(x, "pass_attempt", 0).fillna(0).eq(1)
+    x["_pa"] = official_attempt_mask(x)
     x["_py"] = num(x, "passing_yards", 0).fillna(0)
-    p = (x.loc[x["_pa"] & x["team"].ne("") & x["player_id"].ne("")]
-           .groupby(["season","week","team","player_id"], as_index=False)
-           .agg(pbp_attempts=("_pa","sum"), pbp_pass_yards=("_py","sum")))
+    p = (
+        x.loc[x["_pa"] & x["team"].ne("") & x["player_id"].ne("")]
+        .groupby(["season", "week", "team", "player_id"], as_index=False)
+        .agg(pbp_attempts=("_pa", "sum"), pbp_pass_yards=("_py", "sum"))
+    )
 
     w = weekly.copy()
-    w["team"] = w[next((c for c in ["recent_team","team","posteam"] if c in w.columns), "recent_team")].map(canon)
-    idcol = next((c for c in ["player_id","gsis_id","player_gsis_id"] if c in w.columns), None)
+    team_col = next((c for c in ["recent_team", "team", "posteam"] if c in w.columns), None)
+    if not team_col:
+        raise RuntimeError("weekly stats have no team field")
+    w["team"] = w[team_col].map(canon)
+    idcol = next((c for c in ["player_id", "gsis_id", "player_gsis_id"] if c in w.columns), None)
     if not idcol:
         raise RuntimeError("weekly stats have no player/GSIS id for truth reconciliation")
     w["player_id"] = w[idcol].astype(str).replace({"nan":"", "None":"", "<NA>":""})
-    attcol = next((c for c in ["attempts","passing_attempts","pass_attempts"] if c in w.columns), None)
-    ydcol = next((c for c in ["passing_yards","pass_yards"] if c in w.columns), None)
+    attcol = next((c for c in ["attempts", "passing_attempts", "pass_attempts"] if c in w.columns), None)
+    ydcol = next((c for c in ["passing_yards", "pass_yards"] if c in w.columns), None)
     if not attcol or not ydcol:
         raise RuntimeError("weekly stats missing passing attempts/yards")
     w["weekly_attempts"] = pd.to_numeric(w[attcol], errors="coerce")
     w["weekly_pass_yards"] = pd.to_numeric(w[ydcol], errors="coerce")
     w = w.loc[w["weekly_attempts"].fillna(0).gt(0) & w["team"].ne("") & w["player_id"].ne("")]
-    w = w[["season","week","team","player_id","weekly_attempts","weekly_pass_yards"]].drop_duplicates(["season","week","team","player_id"])
+    w = w[["season", "week", "team", "player_id", "weekly_attempts", "weekly_pass_yards"]].drop_duplicates(
+        ["season", "week", "team", "player_id"]
+    )
 
-    z = w.merge(p, on=["season","week","team","player_id"], how="outer", indicator=True, validate="one_to_one")
+    z = w.merge(p, on=["season", "week", "team", "player_id"], how="outer", indicator=True, validate="one_to_one")
     z["attempt_diff"] = z["pbp_attempts"] - z["weekly_attempts"]
     z["yards_diff"] = z["pbp_pass_yards"] - z["weekly_pass_yards"]
     matched = z["_merge"].eq("both")
     z["attempt_exact"] = matched & z["attempt_diff"].abs().le(1e-9)
     z["yards_exact"] = matched & z["yards_diff"].abs().le(1e-9)
     nmatch = int(matched.sum())
+    attempt_rate = float(z.loc[matched, "attempt_exact"].mean()) if nmatch else 0.0
+    yards_rate = float(z.loc[matched, "yards_exact"].mean()) if nmatch else 0.0
     summary = {
         "matched_qb_games": nmatch,
         "weekly_only": int(z["_merge"].eq("left_only").sum()),
         "pbp_only": int(z["_merge"].eq("right_only").sum()),
-        "attempt_exact_rate": float(z.loc[matched, "attempt_exact"].mean()) if nmatch else 0.0,
-        "yards_exact_rate": float(z.loc[matched, "yards_exact"].mean()) if nmatch else 0.0,
-        "attempt_gate_99pct": bool(nmatch and z.loc[matched, "attempt_exact"].mean() >= 0.99),
-        "yards_gate_99pct": bool(nmatch and z.loc[matched, "yards_exact"].mean() >= 0.99),
+        "attempt_exact_rate": attempt_rate,
+        "yards_exact_rate": yards_rate,
+        "attempt_gate_99pct": bool(nmatch and attempt_rate >= 0.99),
+        "yards_gate_99pct": bool(nmatch and yards_rate >= 0.99),
+        "official_attempt_definition": "pass_attempt == 1 and sack != 1",
     }
     return z, summary
 
@@ -142,12 +165,12 @@ def source_manifest() -> pd.DataFrame:
         ("game_total_spread_history", "nflverse schedules", "HISTORICAL_ONLY", "pregame/closing-style snapshot; timing must be labeled"),
         ("game_total_spread_2026", "TheOddsAPI / configured live market layer", "LIVE_2026", "market layer only, never football-model input unless separately labeled"),
     ]
-    return pd.DataFrame(rows, columns=["family","source","deployment_status","note"])
+    return pd.DataFrame(rows, columns=["family", "source", "deployment_status", "note"])
 
 
 def load_m82(path: Path) -> pd.DataFrame:
     x = lower(pd.read_csv(path, low_memory=False))
-    required = {"season","week","team","player_clean_key","actual_pass_yards","actual_attempts","ensemble_proj"}
+    required = {"season", "week", "team", "player_clean_key", "actual_pass_yards", "actual_attempts", "ensemble_proj"}
     missing = required - set(x.columns)
     if missing:
         raise RuntimeError(f"M82 trace missing {sorted(missing)}")
@@ -161,12 +184,7 @@ def load_m82(path: Path) -> pd.DataFrame:
 
 
 def attach_m86_low_chaos(target: pd.DataFrame, path: Path | None) -> pd.DataFrame:
-    """Attach the exact frozen M86 low-chaos classification.
-
-    M86 emits both a boolean `high_event_chaos` and a string `chaos_class`.
-    Prefer the explicit string class so a numeric 0/1 flag can never be mistaken
-    for a label. Fall back to the inverse boolean only if the class is absent.
-    """
+    """Attach the exact frozen M86 low-chaos classification."""
     out = target.copy()
     out["m86_low_event_chaos"] = 0
     if path is None or not path.exists():
@@ -183,13 +201,10 @@ def attach_m86_low_chaos(target: pd.DataFrame, path: Path | None) -> pd.DataFram
         low = m["chaos_class"].astype(str).str.upper().eq("LOW_EVENT_CHAOS")
     elif "high_event_chaos" in m.columns:
         raw = m["high_event_chaos"]
-        if pd.api.types.is_bool_dtype(raw):
-            high = raw.fillna(False)
-        else:
-            txt = raw.astype(str).str.strip().str.upper()
-            numeric = pd.to_numeric(raw, errors="coerce")
-            high = numeric.fillna(0).astype(bool)
-            high = high.where(~txt.isin(["TRUE", "FALSE"]), txt.eq("TRUE"))
+        txt = raw.astype(str).str.strip().str.upper()
+        numeric = pd.to_numeric(raw, errors="coerce")
+        high = numeric.fillna(0).astype(bool)
+        high = high.where(~txt.isin(["TRUE", "FALSE"]), txt.eq("TRUE"))
         low = ~high
     else:
         return out
@@ -203,9 +218,7 @@ def attach_m86_low_chaos(target: pd.DataFrame, path: Path | None) -> pd.DataFram
         how="left",
         validate="one_to_one",
     )
-    merged["m86_low_event_chaos"] = pd.to_numeric(
-        merged["m86_low_event_chaos"], errors="coerce"
-    ).fillna(0).astype(int)
+    merged["m86_low_event_chaos"] = pd.to_numeric(merged["m86_low_event_chaos"], errors="coerce").fillna(0).astype(int)
     return merged
 
 
@@ -220,22 +233,25 @@ def case_for_row(row: pd.Series, pbp: pd.DataFrame) -> dict:
     season, week, team = int(row.season), int(row.week), canon(row.team)
     ggame = _match_game_rows(pbp, season, week, team)
     if ggame.empty:
-        return {"case_status":"missing_pbp"}
+        return {"case_status": "missing_pbp"}
     posteam = ggame.get("posteam", pd.Series("", index=ggame.index)).map(canon)
     off = ggame.loc[posteam.eq(team)].copy()
     if off.empty:
-        return {"case_status":"missing_offense_pbp"}
+        return {"case_status": "missing_offense_pbp"}
 
-    pa = num(off, "pass_attempt", 0).fillna(0).eq(1)
-    passer = off.get("passer_player_id", pd.Series("", index=off.index)).astype(str).replace({"nan":"", "None":"", "<NA>":""})
+    raw_pa = num(off, "pass_attempt", 0).fillna(0).eq(1)
+    official_pa = official_attempt_mask(off)
+    passer = off.get("passer_player_id", pd.Series("", index=off.index)).astype(str).replace({"nan": "", "None": "", "<NA>": ""})
     candidates = []
-    for pid, pg in off.loc[pa & passer.ne("")].assign(_pid=passer.loc[pa & passer.ne("")]).groupby("_pid"):
-        candidates.append((pid, int(len(pg)), float(num(pg,"passing_yards",0).fillna(0).sum()), pg))
+    for pid, pg in off.loc[raw_pa & passer.ne("")].assign(_pid=passer.loc[raw_pa & passer.ne("")]).groupby("_pid"):
+        pg_official = pg.loc[official_attempt_mask(pg)].copy()
+        candidates.append((pid, int(len(pg_official)), float(num(pg_official, "passing_yards", 0).fillna(0).sum()), pg, pg_official))
     if not candidates:
-        return {"case_status":"missing_passer_attempts"}
+        return {"case_status": "missing_passer_attempts"}
+
     actual_attempts = float(row.get("actual_attempts", np.nan))
     candidates.sort(key=lambda t: (abs(t[1] - actual_attempts) if np.isfinite(actual_attempts) else -t[1], -t[1]))
-    pid, pbp_attempts, pbp_yards, qbp = candidates[0]
+    pid, pbp_attempts, pbp_yards, qb_dropback_rows, qbp = candidates[0]
 
     qbp = qbp.copy()
     qbp["_py"] = num(qbp, "passing_yards", 0).fillna(0)
@@ -244,15 +260,21 @@ def case_for_row(row: pd.Series, pbp: pd.DataFrame) -> dict:
     qbp["_yac"] = num(qbp, "yards_after_catch")
     qbp["_complete"] = num(qbp, "complete_pass", 0).fillna(0).eq(1)
     qbp["_int"] = num(qbp, "interception", 0).fillna(0).eq(1)
+
     longest = float(qbp.loc[qbp["_complete"], "_py"].max()) if qbp["_complete"].any() else 0.0
     max_yac = float(qbp.loc[qbp["_complete"], "_yac"].max()) if qbp["_complete"].any() and qbp["_yac"].notna().any() else np.nan
     yac_total = float(qbp.loc[qbp["_complete"], "_yac"].fillna(0).sum()) if qbp["_complete"].any() else 0.0
-    qyards = {q: float(qbp.loc[qbp["_qtr"].eq(q), "_py"].sum()) for q in [1,2,3,4,5]}
-    qatts = {q: int(qbp.loc[qbp["_qtr"].eq(q)].shape[0]) for q in [1,2,3,4,5]}
+    qyards = {q: float(qbp.loc[qbp["_qtr"].eq(q), "_py"].sum()) for q in [1, 2, 3, 4, 5]}
+    qatts = {q: int(qbp.loc[qbp["_qtr"].eq(q)].shape[0]) for q in [1, 2, 3, 4, 5]}
+
+    qbdb = qb_dropback_rows.copy()
+    qbdb["_qtr"] = num(qbdb, "qtr")
+    qdrops = {q: int(qbdb.loc[qbdb["_qtr"].eq(q)].shape[0]) for q in [1, 2, 3, 4, 5]}
     first_half_yards = qyards[1] + qyards[2]
     second_half_yards = qyards[3] + qyards[4] + qyards[5]
     first_half_att = qatts[1] + qatts[2]
     second_half_att = qatts[3] + qatts[4] + qatts[5]
+
     trailing = float(qbp["_score_diff"].lt(0).mean()) if qbp["_score_diff"].notna().any() else np.nan
     leading = float(qbp["_score_diff"].gt(0).mean()) if qbp["_score_diff"].notna().any() else np.nan
     neutral = float(qbp["_score_diff"].eq(0).mean()) if qbp["_score_diff"].notna().any() else np.nan
@@ -269,17 +291,14 @@ def case_for_row(row: pd.Series, pbp: pd.DataFrame) -> dict:
             top_receiver_yards = float(rg.iloc[0])
             top_receiver_share = float(top_receiver_yards / pbp_yards) if pbp_yards else np.nan
 
-    # Team-level drive/game events.
-    drop = num(off, "qb_dropback", 0).fillna(0).eq(1)
+    team_dropbacks = int(num(off, "qb_dropback", 0).fillna(0).eq(1).sum())
     sacks = int(num(off, "sack", 0).fillna(0).eq(1).sum())
     interceptions = int(num(qbp, "interception", 0).fillna(0).eq(1).sum())
     scrambles = int(num(off, "qb_scramble", 0).fillna(0).eq(1).sum()) if "qb_scramble" in off.columns else 0
     fourth_down = int(num(off, "down").eq(4).sum()) if "down" in off.columns else 0
     overtime = int(num(off, "qtr").gt(4).any()) if "qtr" in off.columns else 0
     drives = int(pd.to_numeric(off.get("drive"), errors="coerce").nunique()) if "drive" in off.columns else 0
-    max_drive_passes = 0
-    if "drive" in qbp.columns:
-        max_drive_passes = int(qbp.groupby("drive").size().max()) if len(qbp) else 0
+    max_drive_passes = int(qbp.groupby("drive").size().max()) if "drive" in qbp.columns and len(qbp) else 0
 
     ensemble = float(row.ensemble_proj)
     actual = float(row.actual_pass_yards)
@@ -293,7 +312,6 @@ def case_for_row(row: pd.Series, pbp: pd.DataFrame) -> dict:
     attempt_resid = float(row.actual_attempts) - pred_attempts if np.isfinite(pred_attempts) else np.nan
     ypa_resid = actual_ypa - pred_ypa if np.isfinite(pred_ypa) else np.nan
 
-    # Deterministic descriptive taxonomy. This is not a causal model.
     label = "MIXED"
     if overtime and abs(err) >= 100:
         label = "OVERTIME"
@@ -319,25 +337,49 @@ def case_for_row(row: pd.Series, pbp: pd.DataFrame) -> dict:
         label = "SUSTAINED_EFFICIENCY_COLLAPSE"
 
     return {
-        "case_status":"ok", "matched_passer_id":pid, "pbp_attempts":pbp_attempts, "pbp_pass_yards":pbp_yards,
-        "attempt_match_abs":abs(pbp_attempts-float(row.actual_attempts)), "yards_match_abs":abs(pbp_yards-actual),
-        "q1_yards":qyards[1], "q2_yards":qyards[2], "q3_yards":qyards[3], "q4_yards":qyards[4], "ot_yards":qyards[5],
-        "q1_attempts":qatts[1], "q2_attempts":qatts[2], "q3_attempts":qatts[3], "q4_attempts":qatts[4], "ot_attempts":qatts[5],
-        "first_half_yards":first_half_yards, "second_half_yards":second_half_yards,
-        "first_half_attempts":first_half_att, "second_half_attempts":second_half_att,
-        "trailing_attempt_share":trailing, "leading_attempt_share":leading, "tied_attempt_share":neutral,
-        "garbage_time_attempt_share":garbage, "longest_completion":longest,
-        "completions_20plus":int((qbp["_complete"] & qbp["_py"].ge(20)).sum()),
-        "completions_40plus":int((qbp["_complete"] & qbp["_py"].ge(40)).sum()),
-        "completions_60plus":int((qbp["_complete"] & qbp["_py"].ge(60)).sum()),
-        "yac_total":yac_total, "max_yac":max_yac,
-        "top_receiver":top_receiver, "top_receiver_yards":top_receiver_yards, "top_receiver_yard_share":top_receiver_share,
-        "actual_without_longest_completion":actual_without_longest, "error_without_longest_completion":err_without_longest,
-        "tail_survives_without_longest_completion":survives_without_longest,
-        "sacks_taken":sacks, "interceptions":interceptions, "scrambles":scrambles,
-        "fourth_down_plays":fourth_down, "overtime":overtime, "offensive_drives":drives, "max_pass_attempts_one_drive":max_drive_passes,
-        "attempt_residual":attempt_resid, "actual_ypa":actual_ypa, "pred_ypa_case":pred_ypa, "ypa_residual":ypa_resid,
-        "forensic_primary_label":label,
+        "case_status": "ok",
+        "matched_passer_id": pid,
+        "pbp_attempts": pbp_attempts,
+        "pbp_pass_yards": pbp_yards,
+        "pbp_dropbacks_with_passer_id": int(len(qb_dropback_rows)),
+        "team_dropbacks": team_dropbacks,
+        "attempt_match_abs": abs(pbp_attempts - float(row.actual_attempts)),
+        "yards_match_abs": abs(pbp_yards - actual),
+        "q1_yards": qyards[1], "q2_yards": qyards[2], "q3_yards": qyards[3], "q4_yards": qyards[4], "ot_yards": qyards[5],
+        "q1_attempts": qatts[1], "q2_attempts": qatts[2], "q3_attempts": qatts[3], "q4_attempts": qatts[4], "ot_attempts": qatts[5],
+        "q1_dropbacks": qdrops[1], "q2_dropbacks": qdrops[2], "q3_dropbacks": qdrops[3], "q4_dropbacks": qdrops[4], "ot_dropbacks": qdrops[5],
+        "first_half_yards": first_half_yards,
+        "second_half_yards": second_half_yards,
+        "first_half_attempts": first_half_att,
+        "second_half_attempts": second_half_att,
+        "trailing_attempt_share": trailing,
+        "leading_attempt_share": leading,
+        "tied_attempt_share": neutral,
+        "garbage_time_attempt_share": garbage,
+        "longest_completion": longest,
+        "completions_20plus": int((qbp["_complete"] & qbp["_py"].ge(20)).sum()),
+        "completions_40plus": int((qbp["_complete"] & qbp["_py"].ge(40)).sum()),
+        "completions_60plus": int((qbp["_complete"] & qbp["_py"].ge(60)).sum()),
+        "yac_total": yac_total,
+        "max_yac": max_yac,
+        "top_receiver": top_receiver,
+        "top_receiver_yards": top_receiver_yards,
+        "top_receiver_yard_share": top_receiver_share,
+        "actual_without_longest_completion": actual_without_longest,
+        "error_without_longest_completion": err_without_longest,
+        "tail_survives_without_longest_completion": survives_without_longest,
+        "sacks_taken": sacks,
+        "interceptions": interceptions,
+        "scrambles": scrambles,
+        "fourth_down_plays": fourth_down,
+        "overtime": overtime,
+        "offensive_drives": drives,
+        "max_pass_attempts_one_drive": max_drive_passes,
+        "attempt_residual": attempt_resid,
+        "actual_ypa": actual_ypa,
+        "pred_ypa_case": pred_ypa,
+        "ypa_residual": ypa_resid,
+        "forensic_primary_label": label,
     }
 
 
@@ -346,9 +388,7 @@ def build_casebook(m82: pd.DataFrame, pbp: pd.DataFrame, m86_path: Path | None) 
     if len(target) != 123:
         raise RuntimeError(f"M89 expected 123 M82 catastrophic rows; found {len(target)}")
     target = attach_m86_low_chaos(target, m86_path)
-    extra = []
-    for _, row in target.iterrows():
-        extra.append(case_for_row(row, pbp))
+    extra = [case_for_row(row, pbp) for _, row in target.iterrows()]
     return pd.concat([target.reset_index(drop=True), pd.DataFrame(extra)], axis=1)
 
 
@@ -362,7 +402,8 @@ def render_cases(x: pd.DataFrame, title: str, n: int | None = None) -> str:
             f"## {int(r.season)} W{int(r.week)} — {r.team} — {r.player_clean_key}",
             f"- Projection: ensemble {float(r.ensemble_proj):.1f}; actual {float(r.actual_pass_yards):.1f}; error {float(r.ensemble_error):+.1f} yards.",
             f"- Components: attempts residual {float(r.get('attempt_residual', np.nan)):+.1f}; YPA residual {float(r.get('ypa_residual', np.nan)):+.2f}.",
-            f"- Game shape: Q1/Q2/Q3/Q4/OT yards {float(r.get('q1_yards',0)):.0f}/{float(r.get('q2_yards',0)):.0f}/{float(r.get('q3_yards',0)):.0f}/{float(r.get('q4_yards',0)):.0f}/{float(r.get('ot_yards',0)):.0f}; trailing-attempt share {float(r.get('trailing_attempt_share',np.nan)):.1%}.",
+            f"- Game shape: official attempts Q1/Q2/Q3/Q4/OT {int(r.get('q1_attempts',0))}/{int(r.get('q2_attempts',0))}/{int(r.get('q3_attempts',0))}/{int(r.get('q4_attempts',0))}/{int(r.get('ot_attempts',0))}; yards {float(r.get('q1_yards',0)):.0f}/{float(r.get('q2_yards',0)):.0f}/{float(r.get('q3_yards',0)):.0f}/{float(r.get('q4_yards',0)):.0f}/{float(r.get('ot_yards',0)):.0f}.",
+            f"- Dropbacks: matched-passer rows {int(r.get('pbp_dropbacks_with_passer_id',0))}; team dropbacks {int(r.get('team_dropbacks',0))}; trailing official-attempt share {float(r.get('trailing_attempt_share',np.nan)):.1%}.",
             f"- Explosives: longest {float(r.get('longest_completion',0)):.0f}; 20+/40+/60+ = {int(r.get('completions_20plus',0))}/{int(r.get('completions_40plus',0))}/{int(r.get('completions_60plus',0))}; max YAC {float(r.get('max_yac',np.nan)):.1f}.",
             f"- Receiver concentration: {r.get('top_receiver','')} {float(r.get('top_receiver_yards',np.nan)):.0f} yards ({float(r.get('top_receiver_yard_share',np.nan)):.1%}).",
             f"- Remove largest completion: actual {float(r.get('actual_without_longest_completion',np.nan)):.1f}; error {float(r.get('error_without_longest_completion',np.nan)):+.1f}; still 100+ miss = {bool(r.get('tail_survives_without_longest_completion',0))}.",
@@ -391,7 +432,9 @@ def main() -> int:
     reconciliation.to_csv(args.out_dir / "m89_actual_stat_reconciliation.csv", index=False)
     manifest.to_csv(args.out_dir / "m89_source_availability_manifest.csv", index=False)
     casebook.to_csv(args.out_dir / "m89_catastrophic_casebook.csv", index=False)
-    casebook.groupby(["season","forensic_primary_label"], dropna=False).size().reset_index(name="n").to_csv(args.out_dir / "m89_casebook_taxonomy_counts.csv", index=False)
+    casebook.groupby(["season", "forensic_primary_label"], dropna=False).size().reset_index(name="n").to_csv(
+        args.out_dir / "m89_casebook_taxonomy_counts.csv", index=False
+    )
 
     low = casebook.loc[casebook["m86_low_event_chaos"].eq(1)].copy()
     (args.out_dir / "M89_LARGEST_30_CASEBOOK.md").write_text(render_cases(casebook, "M89 Largest 30 Catastrophic QB Case Files", 30), encoding="utf-8")
@@ -402,9 +445,11 @@ def main() -> int:
         "m82_rows": int(len(m82)),
         "catastrophic_rows": int(len(casebook)),
         "low_chaos_rows_recovered": int(casebook["m86_low_event_chaos"].sum()),
-        "tails_no_longer_100plus_without_largest_completion": int((casebook["tail_survives_without_longest_completion"].eq(0)).sum()),
-        "tails_still_100plus_without_largest_completion": int((casebook["tail_survives_without_longest_completion"].eq(1)).sum()),
+        "tails_no_longer_100plus_without_largest_completion": int(casebook["tail_survives_without_longest_completion"].eq(0).sum()),
+        "tails_still_100plus_without_largest_completion": int(casebook["tail_survives_without_longest_completion"].eq(1).sum()),
         "case_status_ok": int(casebook["case_status"].eq("ok").sum()),
+        "case_attempt_match_max_abs": float(pd.to_numeric(casebook["attempt_match_abs"], errors="coerce").max()),
+        "case_yards_match_max_abs": float(pd.to_numeric(casebook["yards_match_abs"], errors="coerce").max()),
         "postgame_casebook_features_used_for_prediction": False,
         "sportsbook_features_used_for_truth_reconciliation": False,
     }
