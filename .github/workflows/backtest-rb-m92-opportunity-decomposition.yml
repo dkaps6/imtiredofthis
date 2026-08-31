@@ -1,0 +1,66 @@
+name: M92 RB Opportunity Decomposition
+
+on:
+  push:
+    branches:
+      - research-rb-m92-opportunity-decomposition
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M91_RUN_ID: '33348554748'
+
+jobs:
+  rb-opportunity-decomposition:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install minimal dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4
+
+      - name: Download frozen M91 baseline artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m91_frozen
+          gh run download "$M91_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name migration-91-rb-temporal-baseline \
+            --dir data/backtests/rb_m91_frozen
+          find data/backtests/rb_m91_frozen -maxdepth 5 -type f | sort | head -100
+          test "$(find data/backtests/rb_m91_frozen -name rb_temporal_combined_predictions.csv | wc -l)" -eq 1
+
+      - name: Run M92 decomposition
+        run: |
+          python scripts/backtest/evaluate_rb_opportunity_decomposition.py \
+            --m91-root data/backtests/rb_m91_frozen \
+            --out-dir data/backtests/rb_m92
+
+      - name: Show M92 summary
+        if: always()
+        run: |
+          cat data/backtests/rb_m92/rb_opportunity_decomposition_summary.csv 2>/dev/null || true
+
+      - name: Upload M92 artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-92-rb-opportunity-decomposition
+          path: data/backtests/rb_m92/**
+          if-no-files-found: warn
+          retention-days: 14
