@@ -44,49 +44,60 @@ Wave 1 removed tracked runtime-shaped placeholders and retired provider remnants
 
 Wave 1 merged in PR #507 at `f3b4de379c537a81283ccd18626b8acff8762eed`. Canonical Full Slate Run #522 (`33345155252`) then passed from clean `main`, proving production does not depend on the removed placeholders.
 
-## Wave 2 — execution-surface retirement
+## Wave 2 — merged and validated
 
-Wave 2 removes obsolete executable entry points while preserving research evidence.
+Wave 2 removed obsolete executable entry points while preserving research evidence:
 
-### Removed standalone 2025-era model CLI
+- removed the isolated `model/cli.py` stack plus old `model/features`, `model/ingest`, and `model/pricing` helpers;
+- retained promoted `model/qb_pass_synthesis_v1.json`;
+- removed obsolete `config.yaml` and stale Makefile;
+- removed the redundant `2026-full-slate-smoke.yml` workflow;
+- removed all active `.github/workflows/backtest-qb-*` workflows and the frozen-QB-frontier workflow;
+- preserved QB migration documentation, backtest scripts/data, result lineage, and promoted production artifacts;
+- retained RB/WR rushing/receiving research workflows for the next modeling phases;
+- rewrote `README.md` around the actual 2026 production architecture.
 
-The isolated `model/cli.py` stack and its `model/features`, `model/ingest`, and `model/pricing` helpers had no active production references and represented an alternate pipeline. They are removed. The promoted `model/qb_pass_synthesis_v1.json` remains.
+Wave 2 merged in PR #508 at `17a0a2975e39f35a1c50dbcc5edcea99b6ffcfbc`. Canonical Full Slate Run #523 (`33345574794`) passed from clean `main`, proving the production path does not depend on the removed standalone model or historical QB workflow surfaces.
 
-The obsolete `config.yaml` and stale Makefile tied to old output/file conventions are also removed.
+## Wave 3 — retired engine and legacy providers
 
-### Removed redundant production smoke workflow
+Wave 3 removes another set of code that had no canonical production reachability and could create ambiguity about what supplies live 2026 data.
 
-`.github/workflows/2026-full-slate-smoke.yml` is removed. It served the production migration and is now redundant because the actual canonical Full Slate runs from `main` and has already passed after production and cleanup merges.
+### Legacy engine package removed
 
-### Removed frozen QB research from active GitHub Actions
+The entire `engine/` package is removed. It had already been intentionally fail-closed and code search found no production imports. Full Slate is now not merely the preferred authority; the old engine implementation is absent from the active repository tree. The static 2026 readiness audit already treats an absent legacy engine as valid and continues to verify that `AGENTS.md` establishes Full Slate as sole production authority.
 
-Broad QB mean research is frozen after M90. All `.github/workflows/backtest-qb-*` files and `freeze-qb-frontier-canonical-v1.yml` are removed from the active Actions surface so ordinary repository changes no longer create dozens of irrelevant skipped QB migration runs.
+### Legacy provider implementations removed
 
-This does **not** delete QB research history. The underlying migration documentation, research scripts, result lineage, and promoted artifacts remain available for audit/reproducibility.
+The following provider files are removed:
 
-### RB/WR research harnesses intentionally retained
+- `scripts/providers/apisports_pull.py`
+- `scripts/providers/gsis_pull.py`
+- `scripts/providers/msf_pull.py`
+- `scripts/providers/injuries.py`
+- `scripts/providers/build_schedule.py`
 
-Rushing and receiving trace/backtest workflows remain active because RB and WR refinement are next. Repository hygiene tests explicitly protect the canonical rushing and keyed rushing/receiving trace workflows from accidental deletion.
+Canonical production uses Ourlads and Sharp under `scripts/providers/`, schedule authority under `scripts/utils/build_team_week_map_v2.py`, and the v3 injury builder under `scripts/build/build_injuries_weekly.py`. These retired files were not used by Full Slate and conflict with the 2026 provider contract that forbids silently reactivating old API-Sports/GSIS/MySportsFeeds paths.
 
-### Documentation corrected
+The empty one-byte `.gitmore` marker is also removed.
 
-`README.md` is rewritten around the actual 2026 Full Slate path, current artifact contracts, sportsbook separation, no-credit/live-odds behavior, and Week 1 operating procedure. It no longer instructs users to run the retired 2025 standalone model.
+Repository hygiene tests now prevent the retired engine and provider paths from returning unnoticed.
 
-## Deferred Wave 3 review
+## Remaining Phase A review queue
 
-The following require dependency tracing before deletion or edits:
+The remaining cleanup is narrower and should be handled by dependency tracing rather than broad deletion:
 
-1. `engine/` — retired/fail-closed, but current audits/tests deliberately assert retirement behavior.
-2. legacy provider implementations such as API-Sports, GSIS, MySportsFeeds and redundant injury/schedule wrappers.
-3. duplicate/legacy top-level scripts such as old PlayerForm/metrics/pricing/weather entry points.
-4. unused legacy secret declarations still present in Full Slate; remove only after confirming no imported production dependency reads them.
-5. `docs/production/2026_MAIN_BRANCH_AUDIT.md` — preserve the original audit as historical baseline but add a current closure/status record.
-6. any remaining alternate entry point discovered by import/reference tracing.
+1. duplicate/legacy top-level scripts such as old PlayerForm/metrics/pricing/weather/game-line entry points;
+2. unused legacy secret declarations in Full Slate — remove only after confirming no imported production dependency reads them;
+3. legacy/experimental `scripts/models/**` and `scripts/model/rules_engine.py` — preserve anything required by RB/WR research or current tests;
+4. standalone `scripts/fantasypoints_wr_cb_scraper.py` — currently not canonical Coverage v2, but retain until WR source/refinement work determines whether it is still useful;
+5. `docs/production/2026_MAIN_BRANCH_AUDIT.md` — preserve it as the historical baseline and add a current closure/status record rather than rewriting history;
+6. any alternate execution path discovered through import/reference tracing.
 
-Wave 3 must not delete `scripts/backtest/**`, `docs/migrations/**`, or RB/WR research evidence wholesale. Research lineage and production execution are separate concerns.
+Do not delete `scripts/backtest/**`, `docs/migrations/**`, `data/backtests/**`, or RB/WR research evidence wholesale. Research lineage and production execution are separate concerns.
 
 ## Exit criteria for Phase A
 
-Phase A completes only when there is one obvious production entry point, generated runtime files are not tracked, retired provider caches cannot silently feed production, frozen QB research no longer pollutes normal CI, stale alternate pipelines are gone, current docs describe the 2026 system, strict Repo CI passes, and canonical Full Slate passes from clean `main` after the final cleanup wave.
+Phase A completes only when there is one obvious production entry point, generated runtime files are not tracked, retired provider caches/implementations cannot silently feed production, frozen QB research no longer pollutes normal CI, stale alternate pipelines are gone, current docs describe the 2026 system, strict Repo CI passes, and canonical Full Slate passes from clean `main` after the final cleanup wave.
 
 Only then do we resume RB, WR and dedicated TE refinement.
