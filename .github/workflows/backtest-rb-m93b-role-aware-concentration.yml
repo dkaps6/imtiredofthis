@@ -1,0 +1,74 @@
+name: M93B RB Role-Aware Concentration
+
+on:
+  push:
+    branches:
+      - research-rb-m93b-role-aware-concentration
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M91_RUN_ID: '33348554748'
+
+jobs:
+  rb-role-aware-concentration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install minimal dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2
+
+      - name: Download frozen M91 baseline artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m91_frozen
+          gh run download "$M91_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name migration-91-rb-temporal-baseline \
+            --dir data/backtests/rb_m91_frozen
+          test "$(find data/backtests/rb_m91_frozen -name component_predictions.csv | wc -l)" -eq 2
+          test "$(find data/backtests/rb_m91_frozen -name player_game_logs_history.csv | wc -l)" -eq 2
+
+      - name: Run M93B role-aware concentration
+        run: |
+          python -m py_compile \
+            scripts/backtest/evaluate_rb_backfield_concentration.py \
+            scripts/backtest/evaluate_rb_role_aware_concentration.py
+          python scripts/backtest/evaluate_rb_role_aware_concentration.py \
+            --m91-root data/backtests/rb_m91_frozen \
+            --out-dir data/backtests/rb_m93b
+
+      - name: Show M93B disposition
+        if: always()
+        run: |
+          echo '=== M93B disposition ==='
+          cat data/backtests/rb_m93b/m93b_disposition.csv 2>/dev/null || true
+          echo '=== M93B 2025 validation summary ==='
+          cat data/backtests/rb_m93b/m93b_validation_summary.csv 2>/dev/null || true
+          echo '=== M93B role signal coefficients ==='
+          cat data/backtests/rb_m93b/m93b_feature_coefficients.csv 2>/dev/null || true
+
+      - name: Upload M93B artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-93b-rb-role-aware-concentration
+          path: data/backtests/rb_m93b/**
+          if-no-files-found: warn
+          retention-days: 14
