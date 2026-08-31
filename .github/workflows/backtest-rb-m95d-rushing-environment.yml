@@ -7,6 +7,7 @@ on:
     paths:
       - 'scripts/backtest/evaluate_rb_rushing_environment_scheme.py'
       - 'scripts/backtest/evaluate_rb_rushing_environment_scheme_v2.py'
+      - 'scripts/backtest/evaluate_rb_rushing_environment_scheme_v3.py'
       - 'docs/migrations/M95D_RB_RUSHING_ENVIRONMENT_SCHEME.md'
       - '.github/workflows/backtest-rb-m95d-rushing-environment.yml'
   workflow_dispatch:
@@ -104,7 +105,8 @@ jobs:
         run: |
           python -m py_compile scripts/backtest/evaluate_rb_rushing_environment_scheme.py
           python -m py_compile scripts/backtest/evaluate_rb_rushing_environment_scheme_v2.py
-          python scripts/backtest/evaluate_rb_rushing_environment_scheme_v2.py \
+          python -m py_compile scripts/backtest/evaluate_rb_rushing_environment_scheme_v3.py
+          python scripts/backtest/evaluate_rb_rushing_environment_scheme_v3.py \
             --m95b-root data/backtests/rb_m95b_frozen \
             --pbp-root data/nflverse_pbp \
             --ftn-root data/ftn_charting \
