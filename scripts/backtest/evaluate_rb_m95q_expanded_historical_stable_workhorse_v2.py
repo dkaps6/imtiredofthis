@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Mechanical M95Q compatibility patch.
 
-M95Q Run #1 reached the frozen M95B offense enrichment but the generalized
-M95A reconstruction did not expose M95B's historical ``player_short_key``
-bridge column. This wrapper adds only that pre-existing deterministic name key
-before invoking the otherwise unchanged M95Q reconstruction.
+Run #1 exposed a deterministic M95A->M95B short-name bridge mismatch. Run #2
+then reached historical role enrichment and exposed pandas-1.5 named-aggregation
+syntax incompatibility in the source-coverage audit. This wrapper fixes only
+those mechanics; scientific definitions, frozen tail families and gates remain
+unchanged.
 """
 from __future__ import annotations
 
@@ -48,7 +49,38 @@ def build_matchup_trace_v2(logs, pbp_root, pfr_root, ngs_file):
     return x.reset_index(drop=True), profiles
 
 
+def enrich_stable_v2(trace, hold_scored, seasons):
+    g, k = m.g, m.k
+    rosters, injuries, depth, provider_audit = g.load_provider_sources(seasons)
+    rosters = g.add_roster_transition_features(rosters)
+    if hasattr(g, "add_depth_transition_features"):
+        depth = g.add_depth_transition_features(depth)
+
+    base = hold_scored.copy()
+    role_trace = trace.loc[trace["season"].isin(seasons)].copy()
+    cov = base[m.PLAYER_KEYS].merge(
+        rosters[m.PLAYER_KEYS + ["self_roster_present"]].drop_duplicates(m.PLAYER_KEYS),
+        on=m.PLAYER_KEYS,
+        how="left",
+    )
+    # pandas 1.5-safe equivalent of the original named SeriesGroupBy aggregation.
+    coverage = (
+        cov.groupby("season")["self_roster_present"]
+        .agg(["size", lambda s: int(m.num(s).fillna(0).gt(0).sum())])
+        .reset_index()
+    )
+    coverage.columns = ["season", "rows", "roster_matches"]
+    coverage["roster_join_rate"] = coverage["roster_matches"] / coverage["rows"]
+
+    z = g.enrich_base(base, role_trace, rosters, injuries, depth)
+    z["stable_workhorse_m95k"] = k.stable_workhorse(z).astype(int)
+    z["actual_20plus"] = m.num(z["actual_carries"]).ge(20).astype(int)
+    z["actual_25plus"] = m.num(z["actual_carries"]).ge(25).astype(int)
+    return z, provider_audit, coverage
+
+
 m.build_matchup_trace = build_matchup_trace_v2
+m.enrich_stable = enrich_stable_v2
 
 if __name__ == "__main__":
     raise SystemExit(m.main())
