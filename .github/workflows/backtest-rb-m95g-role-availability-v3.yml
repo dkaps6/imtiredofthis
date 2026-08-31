@@ -1,0 +1,83 @@
+name: M95G RB Role Availability v3
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-m95g-role-availability
+    paths:
+      - 'scripts/backtest/evaluate_rb_role_availability.py'
+      - 'scripts/backtest/evaluate_rb_role_availability_v3.py'
+      - '.github/workflows/backtest-rb-m95g-role-availability-v3.yml'
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M95F_RUN_ID: '33389924330'
+  M95B_RUN_ID: '33357785600'
+
+jobs:
+  rb-role-availability:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2 pyarrow==17.0.0 nflreadpy
+
+      - name: Download frozen research artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m95f_frozen data/backtests/rb_m95b_frozen
+          gh run download "$M95F_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95f-rb-workload-regime-calibration --dir data/backtests/rb_m95f_frozen
+          gh run download "$M95B_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95b-rb-offense-defense-matchup --dir data/backtests/rb_m95b_frozen
+          test -s data/backtests/rb_m95f_frozen/m95f_2024_temporal_oof_scores.csv
+          test -s data/backtests/rb_m95f_frozen/m95f_2024_holdout_trace.csv
+          test -s data/backtests/rb_m95f_frozen/m95f_2025_rb_trace.csv
+          test -s data/backtests/rb_m95b_frozen/m95b_rb_matchup_trace.csv
+
+      - name: Run M95G role availability experiment
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_role_availability.py
+          python -m py_compile scripts/backtest/evaluate_rb_role_availability_v3.py
+          python scripts/backtest/evaluate_rb_role_availability_v3.py \
+            --m95f-root data/backtests/rb_m95f_frozen \
+            --m95b-root data/backtests/rb_m95b_frozen \
+            --out-dir data/backtests/rb_m95g
+
+      - name: Show M95G headline results
+        if: always()
+        run: |
+          echo '=== M95G disposition ==='
+          cat data/backtests/rb_m95g/m95g_disposition.csv 2>/dev/null || true
+          echo '=== M95G source audit ==='
+          cat data/backtests/rb_m95g/m95g_source_audit.csv 2>/dev/null || true
+          echo '=== M95G source coverage ==='
+          cat data/backtests/rb_m95g/m95g_source_coverage.csv 2>/dev/null || true
+          echo '=== M95G selected architecture ==='
+          cat data/backtests/rb_m95g/m95g_selected_architecture.csv 2>/dev/null || true
+          echo '=== M95G probability audit ==='
+          cat data/backtests/rb_m95g/m95g_probability_audit.csv 2>/dev/null || true
+          echo '=== M95G role slices ==='
+          cat data/backtests/rb_m95g/m95g_role_slice_audit.csv 2>/dev/null || true
+
+      - name: Upload M95G artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-95g-rb-role-availability-v3
+          path: data/backtests/rb_m95g/**
+          if-no-files-found: warn
+          retention-days: 30
