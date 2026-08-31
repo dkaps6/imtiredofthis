@@ -59,50 +59,76 @@ Wave 2 removed obsolete executable entry points while preserving research eviden
 
 Wave 2 merged in PR #508 at `17a0a2975e39f35a1c50dbcc5edcea99b6ffcfbc`. Canonical Full Slate Run #523 (`33345574794`) passed from clean `main`, proving the production path does not depend on the removed standalone model or historical QB workflow surfaces.
 
-## Wave 3 — retired engine and legacy providers
+## Wave 3 — merged and validated
 
-Wave 3 removes another set of code that had no canonical production reachability and could create ambiguity about what supplies live 2026 data.
+Wave 3 removed code that had no canonical production reachability and could create ambiguity about live 2026 data:
 
-### Legacy engine package removed
+- removed the entire retired `engine/` package;
+- removed legacy live-provider implementations for API-Sports, GSIS, MySportsFeeds and the old injury path;
+- retained only current Ourlads/Sharp providers plus `scripts/providers/build_schedule.py` as a historical backtest dependency;
+- added hygiene guards preventing the historical schedule helper from entering Full Slate;
+- removed the empty `.gitmore` marker.
 
-The entire `engine/` package is removed. It had already been intentionally fail-closed and code search found no production imports. Full Slate is now not merely the preferred authority; the old engine implementation is absent from the active repository tree. The static audits treat complete absence as a valid/strong retirement state and still verify that the documented canonical authority is Full Slate.
+An initial attempt to remove `scripts/providers/build_schedule.py` was rejected by CI because `scripts/backtest/historical_inputs.py` still imports it. The file was restored as research-only. This is why cleanup is accepted by dependency evidence rather than file age.
 
-### Legacy live-provider implementations removed
+Wave 3 merged in PR #509 at `a9ea1d956ebd4e32c39bc9ccc7fae913c3bcfccb`. Repo CI Run #491 (`33346062432`) passed and canonical Full Slate Run #524 (`33346062433`) passed from clean `main`.
 
-The following old live-provider implementations are removed:
+## Wave 4 — final legacy execution-surface cleanup
 
-- `scripts/providers/apisports_pull.py`
-- `scripts/providers/gsis_pull.py`
-- `scripts/providers/msf_pull.py`
-- `scripts/providers/injuries.py`
+Wave 4 is the final narrow reachability pass before Phase A closes.
 
-Canonical production uses Ourlads and Sharp under `scripts/providers/`, schedule authority under `scripts/utils/build_team_week_map_v2.py`, and the v3 injury builder under `scripts/build/build_injuries_weekly.py`. These retired live-provider files were not used by Full Slate and conflict with the 2026 provider contract that forbids silently reactivating old API-Sports/GSIS/MySportsFeeds paths.
+### Retired top-level compatibility/duplicate scripts
 
-### Historical schedule helper retained as research-only
+Dependency tracing found no canonical Full Slate or retained research dependency on the following stale alternate entry points, so Wave 4 removes them:
 
-`scripts/providers/build_schedule.py` is intentionally retained because `scripts/backtest/historical_inputs.py` imports it to reconstruct historical schedules. It is **not** used by Full Slate, and repository hygiene tests explicitly require that it never appear in canonical Full Slate wiring. Live 2026 schedule authority remains `scripts/utils/build_team_week_map_v2.py`.
+- `scripts/build_game_lines_from_schedule.py`
+- `scripts/build_weather_week.py`
+- `scripts/enrich_player_form.py`
+- `scripts/enrich_team_form.py`
+- `scripts/export_excel.py`
+- `scripts/fetch_game_lines_oddsapi.py`
+- `scripts/make_metrics.py`
+- `scripts/make_player_form.py`
+- `scripts/pricing.py`
+- `scripts/run_all_builds.py`
+- `scripts/validate_metrics.py`
+- `scripts/volume.py`
 
-This distinction was discovered by CI after an initial over-aggressive removal, which is exactly why cleanup is being accepted wave-by-wave rather than by file age alone.
+Canonical v2/v3 replacements remain in the active production graph. `scripts/make_team_form.py` is **not** removed because the guarded production wrapper still imports it.
 
-The empty one-byte `.gitmore` marker is removed.
+### Retired legacy model surfaces
 
-Repository hygiene tests now prevent the retired engine and live-provider paths from returning unnoticed while preserving the historical research helper.
+The isolated `scripts/models/**` stack and `scripts/model/rules_engine.py` have no external production/research imports and are removed. Canonical modeling remains under `scripts/modeling/**`, `scripts/simulation_v2.py`, and the production bridge scripts.
 
-## Remaining Phase A review queue
+### Retired provider credentials
 
-The remaining cleanup is narrower and should be handled by dependency tracing rather than broad deletion:
+Full Slate no longer declares unused credentials for API-Sports, ESPN-cookie, MySportsFeeds or GSIS paths. The active `ODDS_API_KEY` remains because the downstream sportsbook layer uses TheOddsAPI when explicitly enabled.
 
-1. duplicate/legacy top-level scripts such as old PlayerForm/metrics/pricing/weather/game-line entry points;
-2. unused legacy secret declarations in Full Slate — remove only after confirming no imported production dependency reads them;
-3. legacy/experimental `scripts/models/**` and `scripts/model/rules_engine.py` — preserve anything required by RB/WR research or current tests;
-4. standalone `scripts/fantasypoints_wr_cb_scraper.py` — currently not canonical Coverage v2, but retain until WR source/refinement work determines whether it is still useful;
-5. `docs/production/2026_MAIN_BRANCH_AUDIT.md` — preserve it as the historical baseline and add a current closure/status record rather than rewriting history;
-6. any alternate execution path discovered through import/reference tracing.
+### Research surfaces intentionally retained
 
-Do not delete `scripts/backtest/**`, `docs/migrations/**`, `data/backtests/**`, or RB/WR research evidence wholesale. Research lineage and production execution are separate concerns.
+Wave 4 deliberately retains:
 
-## Exit criteria for Phase A
+- `scripts/backtest/**`, `docs/migrations/**`, and `data/backtests/**`;
+- RB/WR rushing and receiving workflows needed for the next research phase;
+- `scripts/providers/build_schedule.py` as historical reconstruction support only;
+- `scripts/fantasypoints_wr_cb_scraper.py` as WR research-only. It is explicitly barred from canonical Full Slate until its own season/week/archive contract is repaired and revalidated.
 
-Phase A completes only when there is one obvious production entry point, generated runtime files are not tracked, retired provider caches/implementations cannot silently feed production, frozen QB research no longer pollutes normal CI, stale alternate pipelines are gone, current docs describe the 2026 system, strict Repo CI passes, and canonical Full Slate passes from clean `main` after the final cleanup wave.
+`tests/test_repository_hygiene.py` now prevents the retired Wave 4 surfaces and obsolete provider credential declarations from quietly returning.
 
-Only then do we resume RB, WR and dedicated TE refinement.
+The original `docs/production/2026_MAIN_BRANCH_AUDIT.md` remains unchanged as the historical baseline. `docs/production/2026_MAIN_BRANCH_AUDIT_CLOSURE.md` records current disposition and evidence.
+
+## Wave 4 acceptance gate
+
+Wave 4 is accepted only when:
+
+1. Repo CI passes on the Wave 4 PR;
+2. the PR is merged to `main`;
+3. canonical no-credit Full Slate passes again from a clean `main` checkout.
+
+If CI exposes a genuine historical/RB/WR dependency, restore only that required dependency and quarantine it from production rather than weakening the gate.
+
+## Phase A exit criteria
+
+Phase A completes only when there is one obvious production entry point, generated runtime files are not tracked, retired provider caches/implementations cannot silently feed production, frozen QB research no longer pollutes normal CI, stale alternate pipelines are gone, current docs describe the 2026 system, strict Repo CI passes, and canonical Full Slate passes from clean `main` after Wave 4.
+
+After that final green run, Phase A closes and position-specific refinement resumes in order: RB, WR, then dedicated TE.
