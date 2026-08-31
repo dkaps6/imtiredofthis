@@ -2,12 +2,14 @@
 """Mechanical M95Q compatibility patch.
 
 Run #1 exposed a deterministic M95A->M95B short-name bridge mismatch. Run #2
-then reached historical role enrichment and exposed pandas-1.5 named-aggregation
-syntax incompatibility in the source-coverage audit. This wrapper fixes only
-those mechanics; scientific definitions, frozen tail families and gates remain
-unchanged.
+exposed pandas-1.5 aggregation syntax. Run #3 exposed that the original M95G
+prior-leader helper both hard-coded 2024/2025 and unpacked TEAM_KEYS in a
+legacy order. This wrapper fixes only those historical-reconstruction mechanics;
+scientific definitions, frozen tail families and predeclared gates are unchanged.
 """
 from __future__ import annotations
+
+import pandas as pd
 
 import scripts.backtest.evaluate_rb_m95q_expanded_historical_stable_workhorse as m
 
@@ -34,7 +36,6 @@ def build_matchup_trace_v2(logs, pbp_root, pfr_root, ngs_file):
     profiles = a._add_defense_composite(profiles)
     trace = a._truth_trace(rb_games, schedule, profiles)
     trace["player_clean_key"] = trace["player"].map(g.norm_name)
-    # Exact deterministic bridge expected by the frozen M95B enrichment.
     trace["player_short_key"] = trace["player"].map(b.short_name)
 
     bpbp = b.read_pbp(pbp_root)
@@ -47,6 +48,47 @@ def build_matchup_trace_v2(logs, pbp_root, pfr_root, ngs_file):
     x["actual_25plus"] = m.num(x["actual_carries"]).ge(25).astype(int)
     x["team"] = x["team"].map(g.canon)
     return x.reset_index(drop=True), profiles
+
+
+def previous_team_leaders_historical(trace):
+    """Exact M95G prior-game leader semantics, generalized across M95Q years."""
+    g = m.g
+    z = trace.copy()
+    if "actual_carries" not in z.columns:
+        if "actual_rush_att" in z.columns:
+            z["actual_carries"] = m.num(z["actual_rush_att"])
+        else:
+            raise RuntimeError("M95Q trace missing actual carry truth for prior-game leader construction")
+    rows = []
+    # TEAM_KEYS is [season, week, team]; keep that exact key order.
+    for (season, week, team), grp in z.groupby(g.TEAM_KEYS):
+        q = grp.loc[m.num(grp["actual_carries"]).notna()].copy()
+        if q.empty:
+            continue
+        q["actual_carries"] = m.num(q["actual_carries"])
+        q = q.sort_values(["actual_carries", "player_clean_key"], ascending=[False, True])
+        rows.append({
+            "season": int(season),
+            "week": int(week),
+            "team": g.canon(team),
+            "game_top1_key": str(q.iloc[0]["player_clean_key"]),
+            "game_top1_carries": float(q.iloc[0]["actual_carries"]),
+            "game_top2_key": str(q.iloc[1]["player_clean_key"]) if len(q) > 1 else "",
+            "game_top2_carries": float(q.iloc[1]["actual_carries"]) if len(q) > 1 else 0.0,
+        })
+    if not rows:
+        return pd.DataFrame(columns=g.TEAM_KEYS + [
+            "prior_top1_key", "prior_top1_carries", "prior_top2_key", "prior_top2_carries"
+        ])
+    game = pd.DataFrame(rows).sort_values(["season", "team", "week"])
+    grp = game.groupby(["season", "team"], sort=False)
+    game["prior_top1_key"] = grp["game_top1_key"].shift(1)
+    game["prior_top1_carries"] = grp["game_top1_carries"].shift(1)
+    game["prior_top2_key"] = grp["game_top2_key"].shift(1)
+    game["prior_top2_carries"] = grp["game_top2_carries"].shift(1)
+    return game[g.TEAM_KEYS + [
+        "prior_top1_key", "prior_top1_carries", "prior_top2_key", "prior_top2_carries"
+    ]]
 
 
 def enrich_stable_v2(trace, hold_scored, seasons):
@@ -63,7 +105,6 @@ def enrich_stable_v2(trace, hold_scored, seasons):
         on=m.PLAYER_KEYS,
         how="left",
     )
-    # pandas 1.5-safe equivalent of the original named SeriesGroupBy aggregation.
     coverage = (
         cov.groupby("season")["self_roster_present"]
         .agg(["size", lambda s: int(m.num(s).fillna(0).gt(0).sum())])
@@ -81,6 +122,7 @@ def enrich_stable_v2(trace, hold_scored, seasons):
 
 m.build_matchup_trace = build_matchup_trace_v2
 m.enrich_stable = enrich_stable_v2
+m.g.previous_team_leaders = previous_team_leaders_historical
 
 if __name__ == "__main__":
     raise SystemExit(m.main())
