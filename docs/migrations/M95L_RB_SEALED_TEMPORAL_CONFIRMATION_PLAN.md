@@ -40,3 +40,66 @@ Report at minimum:
 A scientific confirmation requires stable 20+ and stable 25+ to improve ranking without worsening Brier, full-population 20+/25+ not to regress materially, and the vacancy mechanism not to be contradicted. Tiny rare-event samples must be labeled as such rather than waived.
 
 If a faithful 2023 reconstruction cannot be completed, M95L must fail closed rather than substitute a weaker test.
+
+## Authoritative sealed result — Run #5
+
+- workflow run: `33429747106`
+- job: `99611940386`
+- SHA: `caa9401eb50f6980e2a2c35ddd8e54467f57cbef`
+- execution conclusion: **success**
+- confirmation period: **2023 Weeks 13-18**
+- M94C player join: **1.000000** after the source-verified GSIS identity bridge
+- feature search: **0**
+- coefficient search: **0**
+- sportsbook inputs: **0**
+- probability-mass preservation: **passed**
+- M94C central carry reference: **preserved**
+- scientific confirmation: **failed**
+- disposition: `M95K_SEALED_TEMPORAL_CONFIRMATION_FAILED`
+
+The sealed result is a scientific failure, not a mechanical failure. Mechanical reconstruction issues were fixed before Run #5 without changing the frozen modeling architecture or confirmation gates.
+
+### Stable-workhorse 20+
+
+- `n=73`, positive events `24`
+- M95F AUC `0.727041` -> M95L `0.545068` (`-0.181973`)
+- M95F Brier `0.233221` -> M95L `0.244446` (worse by `0.011225`)
+- M95F log loss `0.673392` -> M95L `0.710790`
+- mean probability remained `0.161895`, confirming the mass-preserving rerank did not create extra aggregate tail probability.
+
+### Stable-workhorse 25+
+
+- `n=73`, positive events `10`
+- M95F AUC `0.533333` -> M95L `0.442857` (`-0.090476`)
+- M95F Brier `0.123614` -> M95L `0.126356` (worse by `0.002742`)
+- M95F log loss `0.461608` -> M95L `0.478042`
+- mean probability remained `0.060139`.
+
+### Full population
+
+20+ (`n=453`, 44 positives):
+- AUC `0.880974` -> `0.856746`
+- Brier `0.074541` -> `0.076462`
+
+25+ (`n=453`, 14 positives):
+- AUC `0.813537` -> `0.808005`
+- Brier `0.028838` -> `0.029277`
+
+Both full-population nonregression gates failed.
+
+### Vacancy branch
+
+Vacancy 25+ had `n=24` and **zero positive events** in the sealed period, so AUC is undefined. The branch is correctly labeled `inconclusive_small_n`; it was not contradicted, but this period does not independently validate it.
+
+### Central-carry preservation
+
+M95L did not alter the M94C central carry projection. MAE and bias are identical to M94C in every carry slice. The sealed sample still shows the known high-workload underprojection:
+
+- actual 20+ games (`n=44`): MAE/bias magnitude `7.937524`
+- actual 25+ games (`n=14`): MAE/bias magnitude `11.632081`
+
+## Scientific disposition
+
+Do **not** promote the M95K stable-workhorse feed/carry-ceiling rerank. Its 2025 research improvement did not generalize to the untouched 2023 W13-18 confirmation period and materially worsened stable-workhorse ranking and calibration despite preserving probability mass.
+
+Do not tune M95K against the now-exposed 2023 confirmation labels. Any follow-up hypothesis must be treated as a new research migration with a new validation design. M95I vacancy evidence remains promising but unconfirmed by this sealed period because vacancy 25+ produced no positive events.
