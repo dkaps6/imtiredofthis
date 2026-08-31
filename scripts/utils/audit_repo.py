@@ -250,9 +250,11 @@ def _workflow_contract_errors():
         if "positive=True" not in etext or "uncalibrated_mc_only" not in etext:
             errors.append("canonical ensemble does not enforce nonnegative calibrated weights and explicit MC fallback")
 
+    # The old engine may remain temporarily only as an explicit fail-closed
+    # deprecation stub. Complete removal is an even stronger retirement state.
     engine = ROOT / "engine/engine.py"
-    if not engine.exists() or "The only canonical production pipeline" not in _read(engine):
-        errors.append("legacy engine is not explicitly retired in favor of Full Slate")
+    if engine.exists() and "The only canonical production pipeline" not in _read(engine):
+        errors.append("legacy engine exists but is not explicitly retired in favor of Full Slate")
     return errors
 
 
