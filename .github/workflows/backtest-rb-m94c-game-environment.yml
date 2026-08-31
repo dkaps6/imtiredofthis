@@ -1,0 +1,90 @@
+name: M94C RB Game Environment
+
+on:
+  push:
+    branches:
+      - research-rb-m94c-game-environment
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M91_RUN_ID: '33348554748'
+  M94B_RUN_ID: '33352829860'
+
+jobs:
+  rb-game-environment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2
+
+      - name: Download frozen M91 baseline artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m91_frozen
+          gh run download "$M91_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name migration-91-rb-temporal-baseline \
+            --dir data/backtests/rb_m91_frozen
+          test "$(find data/backtests/rb_m91_frozen -name component_predictions.csv | wc -l)" -eq 2
+
+      - name: Download frozen M94B game-state artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m94b_frozen
+          gh run download "$M94B_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name migration-94b-rb-explicit-game-state \
+            --dir data/backtests/rb_m94b_frozen
+          test "$(find data/backtests/rb_m94b_frozen -name m94b_game_state_history.csv | wc -l)" -eq 1
+          test "$(find data/backtests/rb_m94b_frozen -name m94b_2025_team_trace.csv | wc -l)" -eq 1
+          test "$(find data/backtests/rb_m94b_frozen -name m94b_2025_rb_trace.csv | wc -l)" -eq 1
+
+      - name: Run M94C game-environment test
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_game_environment.py
+          python scripts/backtest/evaluate_rb_game_environment.py \
+            --m91-root data/backtests/rb_m91_frozen \
+            --m94b-root data/backtests/rb_m94b_frozen \
+            --out-dir data/backtests/rb_m94c
+
+      - name: Show M94C results
+        if: always()
+        run: |
+          echo '=== M94C disposition ==='
+          cat data/backtests/rb_m94c/m94c_disposition.csv 2>/dev/null || true
+          echo '=== Team volume ==='
+          cat data/backtests/rb_m94c/m94c_team_volume_summary.csv 2>/dev/null || true
+          echo '=== Game environment ==='
+          cat data/backtests/rb_m94c/m94c_game_environment_summary.csv 2>/dev/null || true
+          echo '=== Carry-tail diagnostics ==='
+          cat data/backtests/rb_m94c/m94c_carry_tail_diagnostics.csv 2>/dev/null || true
+          echo '=== RB comparison ==='
+          cat data/backtests/rb_m94c/m94c_rb_vs_m94b.csv 2>/dev/null || true
+
+      - name: Upload M94C artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-94c-rb-game-environment
+          path: data/backtests/rb_m94c/**
+          if-no-files-found: warn
+          retention-days: 30
