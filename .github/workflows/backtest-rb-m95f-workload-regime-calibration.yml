@@ -1,0 +1,115 @@
+name: M95F RB Workload Regime Calibration
+
+on:
+  push:
+    branches:
+      - research-rb-m95f-workload-regime-calibration
+    paths:
+      - 'scripts/backtest/evaluate_rb_workload_regime_calibration.py'
+      - 'docs/migrations/M95F_RB_WORKLOAD_REGIME_CALIBRATION.md'
+      - '.github/workflows/backtest-rb-m95f-workload-regime-calibration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M95B_RUN_ID: '33357785600'
+  M94C_RUN_ID: '33353485070'
+  M94D_RUN_ID: '33354419964'
+
+jobs:
+  rb-workload-regime-calibration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2 pyarrow==17.0.0
+
+      - name: Download frozen research artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m95b_frozen data/backtests/rb_m94c_frozen data/backtests/rb_m94d_frozen
+          gh run download "$M95B_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-95b-rb-offense-defense-matchup \
+            --dir data/backtests/rb_m95b_frozen
+          gh run download "$M94C_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-94c-rb-game-environment \
+            --dir data/backtests/rb_m94c_frozen
+          gh run download "$M94D_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-94d-rb-joint-opportunity \
+            --dir data/backtests/rb_m94d_frozen
+          test -s data/backtests/rb_m95b_frozen/m95b_rb_matchup_trace.csv
+          test -s data/backtests/rb_m94c_frozen/m94c_2024_holdout_trace.csv
+          test -s data/backtests/rb_m94c_frozen/m94c_2025_team_trace.csv
+          test -s data/backtests/rb_m94d_frozen/m94d_2024_holdout_rb_trace.csv
+          test -s data/backtests/rb_m94d_frozen/m94d_2025_rb_trace.csv
+
+      - name: Restore nflverse PBP cache
+        uses: actions/cache@v4
+        with:
+          path: data/nflverse_pbp
+          key: m95e-nflverse-pbp-2023-2025-v1
+
+      - name: Ensure nflverse PBP 2023-2025
+        run: |
+          mkdir -p data/nflverse_pbp
+          for season in 2023 2024 2025; do
+            f="data/nflverse_pbp/play_by_play_${season}.parquet"
+            if [ ! -s "$f" ]; then
+              curl -fL --retry 4 --retry-delay 3 \
+                "https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_${season}.parquet" \
+                -o "$f"
+            fi
+          done
+
+      - name: Run M95F workload regime calibration
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_absolute_workload_distribution.py
+          python -m py_compile scripts/backtest/evaluate_rb_absolute_workload_distribution_v3.py
+          python -m py_compile scripts/backtest/evaluate_rb_workload_regime_calibration.py
+          python scripts/backtest/evaluate_rb_workload_regime_calibration.py \
+            --m95b-root data/backtests/rb_m95b_frozen \
+            --m94c-root data/backtests/rb_m94c_frozen \
+            --m94d-root data/backtests/rb_m94d_frozen \
+            --pbp-root data/nflverse_pbp \
+            --out-dir data/backtests/rb_m95f
+
+      - name: Show M95F headline results
+        if: always()
+        run: |
+          echo '=== M95F disposition ==='
+          cat data/backtests/rb_m95f/m95f_disposition.csv 2>/dev/null || true
+          echo '=== M95F probability audit ==='
+          cat data/backtests/rb_m95f/m95f_probability_audit.csv 2>/dev/null || true
+          echo '=== M95F carry comparison ==='
+          cat data/backtests/rb_m95f/m95f_carry_comparison.csv 2>/dev/null || true
+          echo '=== M95F tail diagnostics ==='
+          cat data/backtests/rb_m95f/m95f_tail_diagnostics.csv 2>/dev/null || true
+          echo '=== M95F distribution ==='
+          cat data/backtests/rb_m95f/m95f_distribution_summary.csv 2>/dev/null || true
+          echo '=== M95F stability audit ==='
+          cat data/backtests/rb_m95f/m95f_stability_audit.csv 2>/dev/null || true
+
+      - name: Upload M95F artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-95f-rb-workload-regime-calibration
+          path: data/backtests/rb_m95f/**
+          if-no-files-found: warn
+          retention-days: 30
