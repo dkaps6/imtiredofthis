@@ -1,0 +1,97 @@
+name: M95E RB Absolute Workload Distribution v2
+
+on:
+  push:
+    branches:
+      - research-rb-m95e-absolute-workload-distribution
+    paths:
+      - 'scripts/backtest/evaluate_rb_absolute_workload_distribution.py'
+      - 'scripts/backtest/evaluate_rb_absolute_workload_distribution_v2.py'
+      - 'docs/migrations/M95E_RB_ABSOLUTE_WORKLOAD_DISTRIBUTION.md'
+      - '.github/workflows/backtest-rb-m95e-absolute-workload-distribution-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  rb-absolute-workload-distribution:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      M95B_RUN_ID: '33357785600'
+      M94C_RUN_ID: '33353485070'
+      M94D_RUN_ID: '33354419964'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2 pyarrow==17.0.0
+      - name: Download frozen research artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m95b_frozen data/backtests/rb_m94c_frozen data/backtests/rb_m94d_frozen
+          gh run download "$M95B_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95b-rb-offense-defense-matchup --dir data/backtests/rb_m95b_frozen
+          gh run download "$M94C_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-94c-rb-game-environment --dir data/backtests/rb_m94c_frozen
+          gh run download "$M94D_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-94d-rb-joint-opportunity --dir data/backtests/rb_m94d_frozen
+          test -s data/backtests/rb_m95b_frozen/m95b_rb_matchup_trace.csv
+          test -s data/backtests/rb_m94c_frozen/m94c_2024_holdout_trace.csv
+          test -s data/backtests/rb_m94c_frozen/m94c_2025_team_trace.csv
+          test -s data/backtests/rb_m94d_frozen/m94d_2024_holdout_rb_trace.csv
+          test -s data/backtests/rb_m94d_frozen/m94d_2025_rb_trace.csv
+      - name: Restore nflverse PBP cache
+        uses: actions/cache@v4
+        with:
+          path: data/nflverse_pbp
+          key: m95e-nflverse-pbp-2023-2025-v1
+      - name: Ensure nflverse PBP 2023-2025
+        run: |
+          mkdir -p data/nflverse_pbp
+          for season in 2023 2024 2025; do
+            f="data/nflverse_pbp/play_by_play_${season}.parquet"
+            [ -s "$f" ] || curl -fL --retry 4 --retry-delay 3 "https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_${season}.parquet" -o "$f"
+          done
+      - name: Run M95E absolute workload experiment
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_absolute_workload_distribution.py
+          python -m py_compile scripts/backtest/evaluate_rb_absolute_workload_distribution_v2.py
+          python scripts/backtest/evaluate_rb_absolute_workload_distribution_v2.py \
+            --m95b-root data/backtests/rb_m95b_frozen \
+            --m94c-root data/backtests/rb_m94c_frozen \
+            --m94d-root data/backtests/rb_m94d_frozen \
+            --pbp-root data/nflverse_pbp \
+            --out-dir data/backtests/rb_m95e
+      - name: Show M95E headline results
+        if: always()
+        run: |
+          echo '=== M95E disposition ==='
+          cat data/backtests/rb_m95e/m95e_disposition.csv 2>/dev/null || true
+          echo '=== M95E carry comparison ==='
+          cat data/backtests/rb_m95e/m95e_carry_comparison.csv 2>/dev/null || true
+          echo '=== M95E tail diagnostics ==='
+          cat data/backtests/rb_m95e/m95e_2025_tail_diagnostics.csv 2>/dev/null || true
+          echo '=== M95E tail classification ==='
+          cat data/backtests/rb_m95e/m95e_tail_classification.csv 2>/dev/null || true
+          echo '=== M95E projection counts ==='
+          cat data/backtests/rb_m95e/m95e_2025_projection_counts.csv 2>/dev/null || true
+          echo '=== M95E RB-pool summary ==='
+          cat data/backtests/rb_m95e/m95e_2025_rb_pool_summary.csv 2>/dev/null || true
+          echo '=== M95E distribution summary ==='
+          cat data/backtests/rb_m95e/m95e_2025_distribution_summary.csv 2>/dev/null || true
+      - name: Upload M95E artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-95e-rb-absolute-workload-distribution-v2
+          path: data/backtests/rb_m95e/**
+          if-no-files-found: warn
+          retention-days: 30
