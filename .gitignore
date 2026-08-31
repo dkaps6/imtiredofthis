@@ -11,6 +11,8 @@ data/_debug/
 data/logs/
 data/_sharp_dump_*.html
 previous_state/
+logs/
+external/
 
 # Generated pipeline tables. These are rebuilt by Full Slate and uploaded as
 # workflow artifacts; they are not source code and must not become stale inputs.
@@ -20,9 +22,11 @@ outputs/**/*.csv
 outputs/**/*.parquet
 outputs/**/*.json
 
-# Keep intentional static fixtures/schedules/model calibration files if added.
+# Keep intentional static schedules/model calibration/weather metadata.
 !data/schedules/
 !data/schedules/**
+!data/model_ensemble_weights.csv
+!data/stadiums.csv
 !data/*.json
 
 # Local tooling
