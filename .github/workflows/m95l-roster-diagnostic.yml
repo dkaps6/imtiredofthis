@@ -1,0 +1,37 @@
+name: M95L Roster Diagnostic
+
+on:
+  push:
+    branches:
+      - research-rb-m95l-sealed-temporal-confirmation
+    paths:
+      - '.github/workflows/m95l-roster-diagnostic.yml'
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install nflreadpy pandas polars
+      - name: Inspect weekly roster rows
+        run: |
+          python - <<'PY'
+          import re
+          import nflreadpy as nfl
+          import pandas as pd
+          x = nfl.load_rosters_weekly(2023).to_pandas()
+          x.columns=[str(c).lower() for c in x.columns]
+          name_col='full_name' if 'full_name' in x.columns else 'football_name'
+          def norm(v): return re.sub(r'[^a-z0-9]','',str(v).lower())
+          x['_norm']=x[name_col].map(norm)
+          targets={'jeffwilson','kennygainwell','chrisrodriguezjr','kennethwalkeriii','chrisbrooks'}
+          z=x[(pd.to_numeric(x['week'],errors='coerce').between(13,18)) & x['_norm'].isin(targets)].copy()
+          keep=[c for c in ['season','week','team',name_col,'position','status','depth_chart_position','ngs_position_group'] if c in z.columns]
+          print(z[keep].sort_values(['week','team',name_col]).to_string(index=False))
+          print('\nSTATUS COUNTS')
+          if 'status' in z.columns: print(z.groupby(['_norm','status']).size().to_string())
+          PY
