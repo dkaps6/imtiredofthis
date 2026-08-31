@@ -130,3 +130,53 @@ def test_canonical_and_next_position_workflows_remain_available():
     }
     missing = sorted(required - tracked)
     assert not missing, f"required production/RB-WR research workflows missing: {missing}"
+
+
+def test_retired_legacy_script_and_model_surfaces_do_not_return():
+    tracked = _tracked_paths()
+    forbidden_prefixes = (
+        "scripts/models/",
+    )
+    forbidden_files = {
+        "scripts/model/rules_engine.py",
+        "scripts/build_game_lines_from_schedule.py",
+        "scripts/build_weather_week.py",
+        "scripts/enrich_player_form.py",
+        "scripts/enrich_team_form.py",
+        "scripts/export_excel.py",
+        "scripts/fetch_game_lines_oddsapi.py",
+        "scripts/make_metrics.py",
+        "scripts/make_player_form.py",
+        "scripts/pricing.py",
+        "scripts/run_all_builds.py",
+        "scripts/validate_metrics.py",
+        "scripts/volume.py",
+    }
+    offenders = sorted(
+        {path for path in tracked if path.startswith(forbidden_prefixes)}
+        | (tracked & forbidden_files)
+    )
+    assert not offenders, f"retired legacy script/model surfaces returned: {offenders}"
+
+
+def test_full_slate_exposes_only_active_provider_credentials():
+    text = open(".github/workflows/full-slate.yml", encoding="utf-8").read()
+    retired = {
+        "APISPORTS_KEY",
+        "ESPN_COOKIE",
+        "MSF_KEY",
+        "MSF_PASSWORD",
+        "NFLGSIS_USERNAME",
+        "NFLGSIS_PASSWORD",
+    }
+    offenders = sorted(token for token in retired if token in text)
+    assert not offenders, f"retired provider credentials returned to Full Slate: {offenders}"
+    assert "ODDS_API_KEY" in text, "active OddsAPI credential was removed from Full Slate"
+
+
+def test_standalone_fantasypoints_scraper_is_research_only():
+    tracked = _tracked_paths()
+    scraper = "scripts/fantasypoints_wr_cb_scraper.py"
+    assert scraper in tracked, "WR/CB research scraper was removed before WR refinement"
+    text = open(".github/workflows/full-slate.yml", encoding="utf-8").read()
+    assert scraper not in text, "standalone FantasyPoints scraper must not be wired into canonical Full Slate"
