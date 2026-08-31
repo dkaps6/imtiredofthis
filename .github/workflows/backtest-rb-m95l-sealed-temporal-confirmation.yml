@@ -7,6 +7,7 @@ on:
       - research-rb-m95l-sealed-temporal-confirmation
     paths:
       - 'scripts/backtest/evaluate_rb_m95l_sealed_temporal_confirmation.py'
+      - 'scripts/backtest/evaluate_rb_m95l_sealed_temporal_confirmation_v2.py'
       - '.github/workflows/backtest-rb-m95l-sealed-temporal-confirmation.yml'
       - 'docs/migrations/M95L_RB_SEALED_TEMPORAL_CONFIRMATION_PLAN.md'
 
@@ -88,7 +89,8 @@ jobs:
       - name: Run frozen M95L confirmation
         run: |
           python -m py_compile scripts/backtest/evaluate_rb_m95l_sealed_temporal_confirmation.py
-          python scripts/backtest/evaluate_rb_m95l_sealed_temporal_confirmation.py \
+          python -m py_compile scripts/backtest/evaluate_rb_m95l_sealed_temporal_confirmation_v2.py
+          python scripts/backtest/evaluate_rb_m95l_sealed_temporal_confirmation_v2.py \
             --m91-root data/backtests/rb_m95l_m91 \
             --m95b-root data/backtests/rb_m95b_frozen \
             --out-dir data/backtests/rb_m95l
