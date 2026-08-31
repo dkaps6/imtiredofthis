@@ -4,6 +4,11 @@
 Runtime provider health is validated separately by validate_2026_provider_artifacts.
 This audit protects the repository wiring so the canonical v3 identity/context/provider
 contracts cannot be accidentally bypassed by a later refactor.
+
+Important: this audit follows the *canonical production entrypoints*.  Legacy helper
+modules may retain historical literals when they are encapsulated by a production
+wrapper that injects runtime season/week and repairs provenance.  We validate that
+wrapper contract explicitly instead of flagging every historical literal in a helper.
 """
 from __future__ import annotations
 
@@ -18,6 +23,10 @@ FULL_SLATE = ROOT / ".github/workflows/full-slate.yml"
 ENSEMBLE_WEIGHTS = ROOT / "data/model_ensemble_weights.csv"
 QB_SYNTHESIS = ROOT / "model/qb_pass_synthesis_v1.json"
 
+# Files that directly own canonical runtime behavior.  Intentionally excluded:
+# - scripts/make_team_form.py: legacy builder encapsulated by run_team_form_context.py
+# - scripts/fantasypoints_wr_cb_scraper.py: standalone legacy scraper; not invoked by
+#   the canonical Coverage v2 runner.
 PRODUCTION_RUNTIME_FILES = (
     "scripts/config.py",
     "scripts/runtime_context.py",
@@ -26,9 +35,9 @@ PRODUCTION_RUNTIME_FILES = (
     "scripts/utils/make_team_week_map.py",
     "scripts/fetch_props_oddsapi.py",
     "scripts/providers/sharpfootball_pull.py",
+    "scripts/run_sharpfootball_v2.py",
     "scripts/team_form_prior_bridge.py",
     "scripts/run_team_form_context.py",
-    "scripts/make_team_form.py",
     "scripts/run_qb_promoted_context.py",
     "scripts/team_context_v3.py",
     "scripts/build/build_weather_week_v2.py",
@@ -36,7 +45,6 @@ PRODUCTION_RUNTIME_FILES = (
     "scripts/build/build_injuries_weekly.py",
     "scripts/run_coverage_v2.py",
     "scripts/build/build_coverage_v2.py",
-    "scripts/fantasypoints_wr_cb_scraper.py",
     "scripts/build/pbp_features.py",
     "scripts/player_stats_loader_v2.py",
     "scripts/player_form_v2.py",
@@ -88,6 +96,7 @@ def _workflow_findings() -> list[dict[str, str]]:
         'default: "2026"',
         'default: "2025"',
         "scripts/utils/build_team_week_map_v2.py",
+        "scripts/run_team_form_context.py",
         "scripts/run_qb_promoted_context.py",
         "scripts/run_player_form_v2_loader.py",
         "scripts/run_model_context_bridge.py",
@@ -113,13 +122,46 @@ def _runtime_literal_findings() -> list[dict[str, str]]:
                 continue
             for pattern in RUNTIME_2025_PATTERNS:
                 if pattern.search(line):
-                    severity = "P1" if "fantasypoints_wr_cb_scraper.py" in rel else "P0"
                     out.append(_finding(
-                        severity,
+                        "P0",
                         "stale_2025_runtime_literal",
                         f"{rel}:{line_no}: {stripped}",
                     ))
                     break
+    return out
+
+
+def _team_form_wrapper_findings() -> list[dict[str, str]]:
+    """Protect the runtime wrapper around the legacy TeamForm builder."""
+    out: list[dict[str, str]] = []
+    wrapper = ROOT / "scripts/run_team_form_context.py"
+    if not wrapper.exists():
+        return [_finding("P0", "team_form_wrapper_missing", str(wrapper.relative_to(ROOT)))]
+    text = _read(wrapper)
+    for token in (
+        "resolve_season",
+        "resolve_prior_season",
+        "resolve_week",
+        "_install_pbp_season_guard",
+        "_repair_success_explosive_context",
+        "_stamp_provenance",
+        '"--season"',
+        "make_team_form.main()",
+    ):
+        if token not in text:
+            out.append(_finding(
+                "P0",
+                "team_form_wrapper_contract",
+                f"run_team_form_context.py missing required runtime/provenance token: {token}",
+            ))
+
+    smoke = ROOT / ".github/workflows/2026-full-slate-smoke.yml"
+    if smoke.exists() and "--box-backfill-prev" not in _read(smoke):
+        out.append(_finding(
+            "P0",
+            "team_form_preseason_contract",
+            "2026 no-credit smoke must explicitly enable prior-season box backfill during preseason",
+        ))
     return out
 
 
@@ -179,6 +221,8 @@ def _v3_contract_findings() -> list[dict[str, str]]:
         ),
         "scripts/run_player_form_v2_loader.py": (
             "validate_player_identity_v3",
+        ),
+        "scripts/validate_player_identity_v3.py": (
             "player_identity_validation.csv",
         ),
         "scripts/build/build_injuries_weekly.py": (
@@ -204,20 +248,31 @@ def _legacy_authority_findings() -> list[dict[str, str]]:
     engine = ROOT / "engine/engine.py"
     if engine.exists():
         text = _read(engine)
-        if "2025" in text and ("run_pipeline" in text or "default=2025" in text):
+        retired_tokens = (
+            ".github/workflows/full-slate.yml",
+            "raise RuntimeError(DEPRECATION_MESSAGE)",
+            "intentionally non-runnable",
+        )
+        if not all(token in text for token in retired_tokens):
             out.append(_finding(
                 "P0",
                 "legacy_production_authority",
-                "engine/engine.py remains a runnable 2025-era orchestration path; Full Slate must be the sole canonical production authority",
+                "engine/engine.py is not demonstrably retired/fail-closed; Full Slate must be the sole canonical production authority",
             ))
+
     agents = ROOT / "AGENTS.md"
     if agents.exists():
         text = _read(agents)
-        if "engine/engine.py" in text and "Canonical" in text:
+        docs_ok = (
+            ".github/workflows/full-slate.yml" in text
+            and "The old `engine/engine.py` path is retired" in text
+            and "only canonical production orchestration path" in text
+        )
+        if not docs_ok:
             out.append(_finding(
                 "P2",
                 "stale_production_docs",
-                "AGENTS.md still points to the legacy engine as canonical production",
+                "AGENTS.md does not clearly establish Full Slate as sole canonical production and retire engine/engine.py",
             ))
     return out
 
@@ -226,6 +281,7 @@ def run() -> list[dict[str, str]]:
     findings: list[dict[str, str]] = []
     findings += _workflow_findings()
     findings += _runtime_literal_findings()
+    findings += _team_form_wrapper_findings()
     findings += _ensemble_findings()
     findings += _promotion_findings()
     findings += _v3_contract_findings()
