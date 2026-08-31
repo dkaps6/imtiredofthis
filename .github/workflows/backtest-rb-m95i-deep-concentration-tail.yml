@@ -1,0 +1,98 @@
+name: M95I RB Deep-Concentration Tail Integration
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-m95i-deep-concentration-tail
+    paths:
+      - 'scripts/backtest/evaluate_rb_deep_concentration_tail_integration.py'
+      - '.github/workflows/backtest-rb-m95i-deep-concentration-tail.yml'
+      - 'docs/migrations/M95I_RB_DEEP_CONCENTRATION_TAIL.md'
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M95F_RUN_ID: '33389924330'
+  M95B_RUN_ID: '33357785600'
+  M95H_RUN_ID: '33399681980'
+  M94C_RUN_ID: '33353485070'
+
+jobs:
+  rb-deep-concentration-tail:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2 pyarrow==17.0.0 nflreadpy
+
+      - name: Download frozen research artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m95f_frozen data/backtests/rb_m95b_frozen data/backtests/rb_m95h_frozen data/backtests/rb_m94c_frozen
+          gh run download "$M95F_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95f-rb-workload-regime-calibration --dir data/backtests/rb_m95f_frozen
+          gh run download "$M95B_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95b-rb-offense-defense-matchup --dir data/backtests/rb_m95b_frozen
+          gh run download "$M95H_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95h-rb-lead-role-entitlement-v2 --dir data/backtests/rb_m95h_frozen
+          gh run download "$M94C_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-94c-rb-game-environment --dir data/backtests/rb_m94c_frozen
+          test -s data/backtests/rb_m95f_frozen/m95f_2024_holdout_trace.csv
+          test -s data/backtests/rb_m95f_frozen/m95f_2025_rb_trace.csv
+          test -s data/backtests/rb_m95b_frozen/m95b_rb_matchup_trace.csv
+          test -s data/backtests/rb_m95h_frozen/m95h_2025_trace.csv
+          test -s data/backtests/rb_m94c_frozen/m94c_2025_rb_trace.csv
+          test -s data/backtests/rb_m94c_frozen/m94c_legacy_guard.csv
+
+      - name: Run M95I integration experiment
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_role_availability.py
+          python -m py_compile scripts/backtest/evaluate_rb_role_availability_v4.py
+          python -m py_compile scripts/backtest/evaluate_rb_role_availability_v5.py
+          python -m py_compile scripts/backtest/evaluate_rb_lead_role_entitlement.py
+          python -m py_compile scripts/backtest/evaluate_rb_lead_role_entitlement_v2.py
+          python -m py_compile scripts/backtest/evaluate_rb_deep_concentration_tail_integration.py
+          python scripts/backtest/evaluate_rb_deep_concentration_tail_integration.py \
+            --m95f-root data/backtests/rb_m95f_frozen \
+            --m95b-root data/backtests/rb_m95b_frozen \
+            --m95h-root data/backtests/rb_m95h_frozen \
+            --m94c-root data/backtests/rb_m94c_frozen \
+            --out-dir data/backtests/rb_m95i
+
+      - name: Show M95I headline results
+        if: always()
+        run: |
+          echo '=== M95I disposition ==='
+          cat data/backtests/rb_m95i/m95i_disposition.csv 2>/dev/null || true
+          echo '=== M95I selected architecture ==='
+          cat data/backtests/rb_m95i/m95i_selected_architecture.csv 2>/dev/null || true
+          echo '=== M95I 2025 carry metrics ==='
+          cat data/backtests/rb_m95i/m95i_2025_carry_metrics.csv 2>/dev/null || true
+          echo '=== M95I 2025 probability metrics ==='
+          cat data/backtests/rb_m95i/m95i_2025_probability_metrics.csv 2>/dev/null || true
+          echo '=== M95I 2025 stability ==='
+          cat data/backtests/rb_m95i/m95i_2025_stability_audit.csv 2>/dev/null || true
+          echo '=== M95I downstream sensitivity ==='
+          cat data/backtests/rb_m95i/m95i_downstream_yard_sensitivity.csv 2>/dev/null || true
+          echo '=== M95I legacy guard ==='
+          cat data/backtests/rb_m95i/m95i_legacy_guard.csv 2>/dev/null || true
+
+      - name: Upload M95I artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-95i-rb-deep-concentration-tail
+          path: data/backtests/rb_m95i/**
+          if-no-files-found: warn
+          retention-days: 30
