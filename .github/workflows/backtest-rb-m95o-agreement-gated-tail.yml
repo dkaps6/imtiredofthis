@@ -44,17 +44,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           mkdir -p data/backtests/rb_m95o/m95b data/backtests/rb_m95o/m95g data/backtests/rb_m95o/m94c data/backtests/rb_m95o/m95k data/backtests/rb_m95o/m95l
           gh run download "$M95B_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95b-rb-offense-defense-matchup --dir data/backtests/rb_m95o/m95b
           gh run download "$M95G_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95g-rb-role-availability-v5 --dir data/backtests/rb_m95o/m95g
           gh run download "$M94C_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-94c-rb-game-environment --dir data/backtests/rb_m95o/m94c
           gh run download "$M95K_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95k-rb-feed-tendency-carry-ceiling --dir data/backtests/rb_m95o/m95k
           gh run download "$M95L_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95l-rb-sealed-temporal-confirmation --dir data/backtests/rb_m95o/m95l
-          test -s data/backtests/rb_m95o/m95b/m95b_rb_matchup_trace.csv
-          test -s data/backtests/rb_m95o/m95g/m95g_2024_holdout_trace.csv
-          test -s data/backtests/rb_m95o/m94c/m94c_2024_holdout_trace.csv
-          test -s data/backtests/rb_m95o/m95k/m95k_2025_trace.csv
-          test -s data/backtests/rb_m95o/m95l/m95l_2023_confirmation_trace.csv
+          echo '=== downloaded artifact files ==='
+          find data/backtests/rb_m95o -maxdepth 3 -type f -print | sort
+          test "$(find data/backtests/rb_m95o/m95b -name m95b_rb_matchup_trace.csv | wc -l)" -eq 1
+          test "$(find data/backtests/rb_m95o/m95g -name m95g_2024_holdout_trace.csv | wc -l)" -eq 1
+          test "$(find data/backtests/rb_m95o/m94c -name m94c_2024_holdout_trace.csv | wc -l)" -eq 1
+          test "$(find data/backtests/rb_m95o/m95k -name m95k_2025_trace.csv | wc -l)" -eq 1
+          test "$(find data/backtests/rb_m95o/m95l -name m95l_2023_confirmation_trace.csv | wc -l)" -eq 1
 
       - name: Run M95O agreement-gated candidate
         run: |
