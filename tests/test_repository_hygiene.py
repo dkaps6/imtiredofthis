@@ -55,3 +55,48 @@ def test_promoted_static_production_artifacts_remain_tracked():
     }
     missing = sorted(required - tracked)
     assert not missing, f"required static production artifacts were untracked: {missing}"
+
+
+def test_obsolete_standalone_model_pipeline_does_not_return():
+    tracked = _tracked_paths()
+    forbidden = {
+        "config.yaml",
+        "model/cli.py",
+        "model/features/__init__.py",
+        "model/features/build.py",
+        "model/ingest/__init__.py",
+        "model/ingest/loaders.py",
+        "model/pricing/__init__.py",
+        "model/pricing/price.py",
+    }
+    offenders = sorted(forbidden & tracked)
+    assert not offenders, f"retired standalone model pipeline returned: {offenders}"
+
+
+def test_frozen_qb_research_is_not_an_active_actions_surface():
+    tracked = _tracked_paths()
+    qb_workflows = sorted(
+        path
+        for path in tracked
+        if path.startswith(".github/workflows/backtest-qb-")
+    )
+    assert not qb_workflows, (
+        "broad QB research is frozen after M90; historical scripts/docs may remain, "
+        f"but active QB workflow YAMLs must not return: {qb_workflows}"
+    )
+    assert ".github/workflows/freeze-qb-frontier-canonical-v1.yml" not in tracked
+    assert ".github/workflows/2026-full-slate-smoke.yml" not in tracked
+
+
+def test_canonical_and_next_position_workflows_remain_available():
+    tracked = _tracked_paths()
+    required = {
+        ".github/workflows/full-slate.yml",
+        ".github/workflows/repo-ci.yml",
+        ".github/workflows/audit-only.yml",
+        ".github/workflows/backtest-canonical-rushing-trace.yml",
+        ".github/workflows/backtest-keyed-rushing-trace.yml",
+        ".github/workflows/backtest-keyed-receiving-trace.yml",
+    }
+    missing = sorted(required - tracked)
+    assert not missing, f"required production/RB-WR research workflows missing: {missing}"
