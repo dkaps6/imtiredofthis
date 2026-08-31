@@ -1,0 +1,87 @@
+name: M95K RB Feed-Tendency Carry-Ceiling
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-m95k-feed-tendency-carry-ceiling
+    paths:
+      - 'scripts/backtest/evaluate_rb_feed_tendency_carry_ceiling.py'
+      - '.github/workflows/backtest-rb-m95k-feed-tendency-carry-ceiling.yml'
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M95B_RUN_ID: '33357785600'
+  M95G_RUN_ID: '33396339232'
+  M95I_RUN_ID: '33402566592'
+  M94C_RUN_ID: '33353485070'
+
+jobs:
+  rb-feed-tendency-carry-ceiling:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2
+
+      - name: Download frozen research artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m95b_frozen data/backtests/rb_m95g_frozen data/backtests/rb_m95i_frozen data/backtests/rb_m94c_frozen
+          gh run download "$M95B_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95b-rb-offense-defense-matchup --dir data/backtests/rb_m95b_frozen
+          gh run download "$M95G_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95g-rb-role-availability-v5 --dir data/backtests/rb_m95g_frozen
+          gh run download "$M95I_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95i-rb-deep-concentration-tail --dir data/backtests/rb_m95i_frozen
+          gh run download "$M94C_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-94c-rb-game-environment --dir data/backtests/rb_m94c_frozen
+          test -s data/backtests/rb_m95b_frozen/m95b_rb_matchup_trace.csv
+          test -s data/backtests/rb_m95g_frozen/m95g_2024_holdout_trace.csv
+          test -s data/backtests/rb_m95g_frozen/m95g_2025_rb_trace.csv
+          test -s data/backtests/rb_m95i_frozen/m95i_2025_trace.csv
+          test -s data/backtests/rb_m94c_frozen/m94c_2024_holdout_trace.csv
+          test -s data/backtests/rb_m94c_frozen/m94c_2025_team_trace.csv
+          test -s data/backtests/rb_m94c_frozen/m94c_legacy_guard.csv
+
+      - name: Run M95K feed-tendency carry-ceiling experiment
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_feed_tendency_carry_ceiling.py
+          python scripts/backtest/evaluate_rb_feed_tendency_carry_ceiling.py \
+            --m95b-root data/backtests/rb_m95b_frozen \
+            --m95g-root data/backtests/rb_m95g_frozen \
+            --m95i-root data/backtests/rb_m95i_frozen \
+            --m94c-root data/backtests/rb_m94c_frozen \
+            --out-dir data/backtests/rb_m95k
+
+      - name: Show M95K headline results
+        if: always()
+        run: |
+          echo '=== M95K selected architecture ==='
+          cat data/backtests/rb_m95k/m95k_selected_architecture.csv 2>/dev/null || true
+          echo '=== M95K probability metrics ==='
+          cat data/backtests/rb_m95k/m95k_2025_probability_metrics.csv 2>/dev/null || true
+          echo '=== M95K feed signal audit ==='
+          cat data/backtests/rb_m95k/m95k_feed_signal_audit.csv 2>/dev/null || true
+          echo '=== M95K disposition ==='
+          cat data/backtests/rb_m95k/m95k_disposition.csv 2>/dev/null || true
+
+      - name: Upload M95K artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-95k-rb-feed-tendency-carry-ceiling
+          path: data/backtests/rb_m95k/**
+          if-no-files-found: warn
+          retention-days: 30
