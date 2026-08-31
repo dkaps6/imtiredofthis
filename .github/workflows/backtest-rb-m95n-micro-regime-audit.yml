@@ -1,0 +1,73 @@
+name: M95N RB Micro-Regime Audit
+
+on:
+  push:
+    branches:
+      - research-rb-m95n-micro-regime-audit
+    paths:
+      - 'scripts/backtest/evaluate_rb_m95n_micro_regime_audit.py'
+      - 'docs/migrations/M95N_RB_MICRO_REGIME_AUDIT.md'
+      - '.github/workflows/backtest-rb-m95n-micro-regime-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  rb-micro-regime-audit:
+    runs-on: ubuntu-24.04
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      M95K_RUN_ID: '33411719023'
+      M95L_RUN_ID: '33429747106'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyyaml scikit-learn scipy
+
+      - name: Download authoritative M95K and M95L artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m95n/m95k data/backtests/rb_m95n/m95l
+          gh run download "$M95K_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-95k-rb-feed-tendency-carry-ceiling \
+            --dir data/backtests/rb_m95n/m95k
+          gh run download "$M95L_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-95l-rb-sealed-temporal-confirmation \
+            --dir data/backtests/rb_m95n/m95l
+          test "$(find data/backtests/rb_m95n/m95k -name m95k_2025_trace.csv | wc -l)" -eq 1
+          test "$(find data/backtests/rb_m95n/m95l -name m95l_2023_confirmation_trace.csv | wc -l)" -eq 1
+
+      - name: Run M95N micro-regime audit
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_m95n_micro_regime_audit.py
+          python scripts/backtest/evaluate_rb_m95n_micro_regime_audit.py \
+            --m95k-root data/backtests/rb_m95n/m95k \
+            --m95l-root data/backtests/rb_m95n/m95l \
+            --out-dir data/backtests/rb_m95n/results
+
+      - name: Show M95N headline results
+        run: |
+          echo '=== M95N disposition ==='
+          cat data/backtests/rb_m95n/results/m95n_disposition.csv
+          echo '=== M95N micro regimes ==='
+          cat data/backtests/rb_m95n/results/m95n_micro_regime_metrics.csv
+
+      - name: Upload M95N artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-95n-rb-micro-regime-audit
+          path: data/backtests/rb_m95n/results/**
+          retention-days: 30
