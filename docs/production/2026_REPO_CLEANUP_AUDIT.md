@@ -65,23 +65,28 @@ Wave 3 removes another set of code that had no canonical production reachability
 
 ### Legacy engine package removed
 
-The entire `engine/` package is removed. It had already been intentionally fail-closed and code search found no production imports. Full Slate is now not merely the preferred authority; the old engine implementation is absent from the active repository tree. The static 2026 readiness audit already treats an absent legacy engine as valid and continues to verify that `AGENTS.md` establishes Full Slate as sole production authority.
+The entire `engine/` package is removed. It had already been intentionally fail-closed and code search found no production imports. Full Slate is now not merely the preferred authority; the old engine implementation is absent from the active repository tree. The static audits treat complete absence as a valid/strong retirement state and still verify that the documented canonical authority is Full Slate.
 
-### Legacy provider implementations removed
+### Legacy live-provider implementations removed
 
-The following provider files are removed:
+The following old live-provider implementations are removed:
 
 - `scripts/providers/apisports_pull.py`
 - `scripts/providers/gsis_pull.py`
 - `scripts/providers/msf_pull.py`
 - `scripts/providers/injuries.py`
-- `scripts/providers/build_schedule.py`
 
-Canonical production uses Ourlads and Sharp under `scripts/providers/`, schedule authority under `scripts/utils/build_team_week_map_v2.py`, and the v3 injury builder under `scripts/build/build_injuries_weekly.py`. These retired files were not used by Full Slate and conflict with the 2026 provider contract that forbids silently reactivating old API-Sports/GSIS/MySportsFeeds paths.
+Canonical production uses Ourlads and Sharp under `scripts/providers/`, schedule authority under `scripts/utils/build_team_week_map_v2.py`, and the v3 injury builder under `scripts/build/build_injuries_weekly.py`. These retired live-provider files were not used by Full Slate and conflict with the 2026 provider contract that forbids silently reactivating old API-Sports/GSIS/MySportsFeeds paths.
 
-The empty one-byte `.gitmore` marker is also removed.
+### Historical schedule helper retained as research-only
 
-Repository hygiene tests now prevent the retired engine and provider paths from returning unnoticed.
+`scripts/providers/build_schedule.py` is intentionally retained because `scripts/backtest/historical_inputs.py` imports it to reconstruct historical schedules. It is **not** used by Full Slate, and repository hygiene tests explicitly require that it never appear in canonical Full Slate wiring. Live 2026 schedule authority remains `scripts/utils/build_team_week_map_v2.py`.
+
+This distinction was discovered by CI after an initial over-aggressive removal, which is exactly why cleanup is being accepted wave-by-wave rather than by file age alone.
+
+The empty one-byte `.gitmore` marker is removed.
+
+Repository hygiene tests now prevent the retired engine and live-provider paths from returning unnoticed while preserving the historical research helper.
 
 ## Remaining Phase A review queue
 
