@@ -50,7 +50,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: data/nflverse_pbp
-          key: m95a-nflverse-pbp-2022-2025-v1
+          key: m95b-nflverse-pbp-2022-2025-v1
 
       - name: Ensure nflverse PBP 2022-2025
         run: |
@@ -73,8 +73,12 @@ jobs:
               -o "data/pfr_adv_rush/advstats_week_rush_${season}.csv"
           done
           curl -fL --retry 4 --retry-delay 3 \
-            "https://github.com/nflverse/nflverse-data/releases/download/nextgen_stats/ngs_rushing.csv" \
-            -o data/ngs/ngs_rushing.csv
+            "https://github.com/nflverse/nflverse-data/releases/download/nextgen_stats/ngs_rushing.parquet" \
+            -o data/ngs/ngs_rushing.parquet
+          python - <<'PY'
+          import pandas as pd
+          pd.read_parquet('data/ngs/ngs_rushing.parquet').to_csv('data/ngs/ngs_rushing.csv', index=False)
+          PY
           test -s data/ngs/ngs_rushing.csv
 
       - name: Inspect advanced source schemas
