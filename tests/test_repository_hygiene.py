@@ -73,6 +73,24 @@ def test_obsolete_standalone_model_pipeline_does_not_return():
     assert not offenders, f"retired standalone model pipeline returned: {offenders}"
 
 
+def test_retired_engine_and_legacy_provider_paths_do_not_return():
+    tracked = _tracked_paths()
+    forbidden_prefixes = ("engine/",)
+    forbidden_files = {
+        "scripts/providers/apisports_pull.py",
+        "scripts/providers/build_schedule.py",
+        "scripts/providers/gsis_pull.py",
+        "scripts/providers/injuries.py",
+        "scripts/providers/msf_pull.py",
+        ".gitmore",
+    }
+    offenders = sorted(
+        {path for path in tracked if path.startswith(forbidden_prefixes)}
+        | (tracked & forbidden_files)
+    )
+    assert not offenders, f"retired engine/provider paths returned: {offenders}"
+
+
 def test_frozen_qb_research_is_not_an_active_actions_surface():
     tracked = _tracked_paths()
     qb_workflows = sorted(
