@@ -7,6 +7,7 @@ on:
       - research-rb-m95q-expanded-historical-stable-workhorse
     paths:
       - 'scripts/backtest/evaluate_rb_m95q_expanded_historical_stable_workhorse.py'
+      - 'scripts/backtest/evaluate_rb_m95q_expanded_historical_stable_workhorse_v2.py'
       - '.github/workflows/backtest-rb-m95q-expanded-historical-stable-workhorse.yml'
       - 'docs/migrations/M95Q_PLAN.md'
 
@@ -83,7 +84,8 @@ jobs:
       - name: Run M95Q expanded reconstruction
         run: |
           python -m py_compile scripts/backtest/evaluate_rb_m95q_expanded_historical_stable_workhorse.py
-          python scripts/backtest/evaluate_rb_m95q_expanded_historical_stable_workhorse.py \
+          python -m py_compile scripts/backtest/evaluate_rb_m95q_expanded_historical_stable_workhorse_v2.py
+          python scripts/backtest/evaluate_rb_m95q_expanded_historical_stable_workhorse_v2.py \
             --pbp-root data/backtests/rb_m95q/pbp \
             --pfr-root data/backtests/rb_m95q/pfr \
             --ngs-file data/backtests/rb_m95q/ngs/ngs_rushing.csv \
