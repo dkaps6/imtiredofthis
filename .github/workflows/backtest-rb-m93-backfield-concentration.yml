@@ -1,0 +1,73 @@
+name: M93 RB Backfield Concentration
+
+on:
+  push:
+    branches:
+      - research-rb-m93-backfield-concentration
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M91_RUN_ID: '33348554748'
+
+jobs:
+  rb-backfield-concentration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install minimal dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4
+
+      - name: Download frozen M91 baseline artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m91_frozen
+          gh run download "$M91_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name migration-91-rb-temporal-baseline \
+            --dir data/backtests/rb_m91_frozen
+          test "$(find data/backtests/rb_m91_frozen -name component_predictions.csv | wc -l)" -eq 2
+
+      - name: Run M93 concentration calibration
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_backfield_concentration.py
+          python scripts/backtest/evaluate_rb_backfield_concentration.py \
+            --m91-root data/backtests/rb_m91_frozen \
+            --out-dir data/backtests/rb_m93
+
+      - name: Show M93 results
+        if: always()
+        run: |
+          echo '=== 2024 development gamma grid ==='
+          cat data/backtests/rb_m93/m93_gamma_grid_2024.csv 2>/dev/null || true
+          echo '=== M93 summary ==='
+          cat data/backtests/rb_m93/m93_summary.csv 2>/dev/null || true
+          echo '=== Legacy rushing guard ==='
+          cat data/backtests/rb_m93/m93_legacy_rushing_guard.csv 2>/dev/null || true
+          echo '=== Disposition ==='
+          cat data/backtests/rb_m93/m93_disposition.csv 2>/dev/null || true
+
+      - name: Upload M93 artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-93-rb-backfield-concentration
+          path: data/backtests/rb_m93/**
+          if-no-files-found: warn
+          retention-days: 14
