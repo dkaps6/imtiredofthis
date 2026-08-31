@@ -1,0 +1,82 @@
+name: M95P RB Dynamic Workload Regime Audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-m95p-dynamic-workload-regime-audit
+    paths:
+      - 'scripts/backtest/evaluate_rb_m95p_dynamic_workload_regime.py'
+      - '.github/workflows/backtest-rb-m95p-dynamic-workload-regime.yml'
+      - 'docs/migrations/M95P_PLAN.md'
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M95G_RUN_ID: '33396339232'
+  M95K_RUN_ID: '33411719023'
+  M95L_RUN_ID: '33429747106'
+
+jobs:
+  rb-dynamic-workload-regime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scipy==1.11.4 'pyarrow>=17.0.0' nflreadpy==0.1.5 polars==0.20.5 'rapidfuzz>=3.0.0'
+
+      - name: Download authoritative frozen artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p data/backtests/rb_m95p/m95g data/backtests/rb_m95p/m95k data/backtests/rb_m95p/m95l
+          gh run download "$M95G_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95g-rb-role-availability-v5 --dir data/backtests/rb_m95p/m95g
+          gh run download "$M95K_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95k-rb-feed-tendency-carry-ceiling --dir data/backtests/rb_m95p/m95k
+          gh run download "$M95L_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95l-rb-sealed-temporal-confirmation --dir data/backtests/rb_m95p/m95l
+          test "$(find data/backtests/rb_m95p/m95g -name m95g_2024_holdout_trace.csv | wc -l)" -eq 1
+          test "$(find data/backtests/rb_m95p/m95k -name m95k_2025_trace.csv | wc -l)" -eq 1
+          test "$(find data/backtests/rb_m95p/m95l -name m95l_2023_confirmation_trace.csv | wc -l)" -eq 1
+
+      - name: Run M95P dynamic workload regime audit
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_m95p_dynamic_workload_regime.py
+          python scripts/backtest/evaluate_rb_m95p_dynamic_workload_regime.py \
+            --m95g-root data/backtests/rb_m95p/m95g \
+            --m95k-root data/backtests/rb_m95p/m95k \
+            --m95l-root data/backtests/rb_m95p/m95l \
+            --out-dir data/backtests/rb_m95p/results
+
+      - name: Show M95P headline results
+        if: always()
+        run: |
+          echo '=== M95P broad season context ==='
+          cat data/backtests/rb_m95p/results/m95p_broad_season_workload_context.csv 2>/dev/null || true
+          echo '=== M95P exact stable scope ==='
+          cat data/backtests/rb_m95p/results/m95p_exact_scope_summary.csv 2>/dev/null || true
+          echo '=== M95P regime quartiles ==='
+          cat data/backtests/rb_m95p/results/m95p_regime_quartile_diagnostic.csv 2>/dev/null || true
+          echo '=== M95P disposition ==='
+          cat data/backtests/rb_m95p/results/m95p_disposition.csv 2>/dev/null || true
+
+      - name: Upload M95P artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-95p-rb-dynamic-workload-regime
+          path: data/backtests/rb_m95p/results/**
+          if-no-files-found: warn
+          retention-days: 30
