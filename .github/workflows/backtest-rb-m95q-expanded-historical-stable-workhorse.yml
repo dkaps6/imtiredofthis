@@ -10,6 +10,7 @@ on:
       - 'scripts/backtest/evaluate_rb_m95q_expanded_historical_stable_workhorse_v2.py'
       - 'scripts/backtest/evaluate_rb_m95q_expanded_historical_stable_workhorse_v3.py'
       - 'scripts/backtest/evaluate_rb_m95q_expanded_historical_stable_workhorse_v4.py'
+      - 'scripts/backtest/historical_player_logs_m95q.py'
       - '.github/workflows/backtest-rb-m95q-expanded-historical-stable-workhorse.yml'
       - 'docs/migrations/M95Q_PLAN.md'
 
@@ -50,19 +51,21 @@ jobs:
           SEASON: ${{ matrix.season }}
         run: |
           PRIOR=$((SEASON-1))
+          if [ "$SEASON" -le 2020 ]; then WEEKS='1-17'; else WEEKS='1-18'; fi
           D="data/backtests/rb_m95q/m91/${SEASON}"
           mkdir -p "$D"
+          echo "M95Q rebuilding season=$SEASON prior=$PRIOR regular_weeks=$WEEKS"
           python scripts/backtest/build_historical_inputs.py \
-            --season "$SEASON" --prior-season "$PRIOR" --weeks '1-18' --out-dir "$D"
+            --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --out-dir "$D"
           python scripts/backtest/enrich_historical_defense.py \
             --team-weekly "$D/team_weekly_history.csv" \
             --seasons "$PRIOR,$SEASON" \
             --audit "$D/historical_defense_enrichment_audit.csv" \
             --observations "$D/historical_defense_observations.csv"
           python scripts/backtest/validate_historical_inputs.py \
-            --season "$SEASON" --prior-season "$PRIOR" --weeks '1-18' \
+            --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" \
             --data-dir "$D" --report "$D/historical_input_validation.csv"
-          python scripts/backtest/historical_player_logs.py \
+          python scripts/backtest/historical_player_logs_m95q.py \
             --seasons "$PRIOR,$SEASON" --schedule "$D/schedule_history.csv" \
             --out "$D/player_game_logs_history.csv"
           python scripts/backtest/build_historical_injuries.py \
@@ -71,7 +74,7 @@ jobs:
             --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv"
           rm -f "$D/component_predictions.csv"
           python scripts/backtest/walk_forward.py \
-            --season "$SEASON" --prior-season "$PRIOR" --weeks '1-18' \
+            --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" \
             --player-logs "$D/player_game_logs_history.csv" \
             --team-weekly "$D/team_weekly_history.csv" \
             --schedule "$D/schedule_history.csv" \
@@ -181,7 +184,8 @@ jobs:
             scripts/backtest/evaluate_rb_m95q_expanded_historical_stable_workhorse.py \
             scripts/backtest/evaluate_rb_m95q_expanded_historical_stable_workhorse_v2.py \
             scripts/backtest/evaluate_rb_m95q_expanded_historical_stable_workhorse_v3.py \
-            scripts/backtest/evaluate_rb_m95q_expanded_historical_stable_workhorse_v4.py
+            scripts/backtest/evaluate_rb_m95q_expanded_historical_stable_workhorse_v4.py \
+            scripts/backtest/historical_player_logs_m95q.py
           python scripts/backtest/evaluate_rb_m95q_expanded_historical_stable_workhorse_v4.py \
             --pbp-root data/backtests/rb_m95q/pbp \
             --pfr-root data/backtests/rb_m95q/pfr \
