@@ -1,0 +1,133 @@
+name: M95D RB Rushing Environment Scheme
+
+on:
+  push:
+    branches:
+      - research-rb-m95d-rushing-environment
+    paths:
+      - 'scripts/backtest/evaluate_rb_rushing_environment_scheme.py'
+      - 'docs/migrations/M95D_RB_RUSHING_ENVIRONMENT_SCHEME.md'
+      - '.github/workflows/backtest-rb-m95d-rushing-environment.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  rb-rushing-environment-scheme:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      M95B_RUN_ID: '33357785600'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2 pyarrow==17.0.0
+
+      - name: Download frozen M95B trace
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m95b_frozen
+          gh run download "$M95B_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name migration-95b-rb-offense-defense-matchup \
+            --dir data/backtests/rb_m95b_frozen
+          test -s data/backtests/rb_m95b_frozen/m95b_rb_matchup_trace.csv
+
+      - name: Restore nflverse structural-source cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            data/nflverse_pbp
+            data/ftn_charting
+            data/participation
+            data/pfr_adv_rush
+            data/pfr_adv_def
+          key: m95d-rushing-environment-sources-2022-2025-v1
+
+      - name: Ensure PBP FTN participation and PFR sources
+        run: |
+          mkdir -p data/nflverse_pbp data/ftn_charting data/participation data/pfr_adv_rush data/pfr_adv_def
+          for season in 2022 2023 2024 2025; do
+            pbp="data/nflverse_pbp/play_by_play_${season}.parquet"
+            [ -s "$pbp" ] || curl -fL --retry 4 --retry-delay 3 \
+              "https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_${season}.parquet" -o "$pbp"
+
+            ftn="data/ftn_charting/ftn_charting_${season}.parquet"
+            [ -s "$ftn" ] || curl -fL --retry 4 --retry-delay 3 \
+              "https://github.com/nflverse/nflverse-data/releases/download/ftn_charting/ftn_charting_${season}.parquet" -o "$ftn"
+
+            part="data/participation/pbp_participation_${season}.parquet"
+            [ -s "$part" ] || curl -fL --retry 4 --retry-delay 3 \
+              "https://github.com/nflverse/nflverse-data/releases/download/pbp_participation/pbp_participation_${season}.parquet" -o "$part"
+
+            rush="data/pfr_adv_rush/advstats_week_rush_${season}.csv"
+            [ -s "$rush" ] || curl -fL --retry 4 --retry-delay 3 \
+              "https://github.com/nflverse/nflverse-data/releases/download/pfr_advstats/advstats_week_rush_${season}.csv" -o "$rush"
+
+            deff="data/pfr_adv_def/advstats_week_def_${season}.csv"
+            if [ ! -s "$deff" ]; then
+              if ! curl -fL --retry 2 --retry-delay 2 \
+                "https://github.com/nflverse/nflverse-data/releases/download/pfr_advstats/advstats_week_def_${season}.csv" -o "$deff"; then
+                rm -f "$deff"
+                echo "PFR weekly defense source unavailable for ${season}; M95D will record this and continue."
+              fi
+            fi
+          done
+
+      - name: Inspect structural-source schemas
+        run: |
+          python - <<'PY'
+          import glob, pandas as pd
+          for p in ['data/ftn_charting/ftn_charting_2025.parquet','data/participation/pbp_participation_2025.parquet']:
+              x=pd.read_parquet(p)
+              print(p, 'rows=',len(x), 'columns=',list(x.columns))
+          for p in glob.glob('data/pfr_adv_def/advstats_week_def_2025.csv'):
+              x=pd.read_csv(p,nrows=3)
+              print(p, 'columns=',list(x.columns))
+          PY
+
+      - name: Run M95D rushing environment scheme experiment
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_rushing_environment_scheme.py
+          python scripts/backtest/evaluate_rb_rushing_environment_scheme.py \
+            --m95b-root data/backtests/rb_m95b_frozen \
+            --pbp-root data/nflverse_pbp \
+            --ftn-root data/ftn_charting \
+            --participation-root data/participation \
+            --pfr-rush-root data/pfr_adv_rush \
+            --pfr-def-root data/pfr_adv_def \
+            --out-dir data/backtests/rb_m95d
+
+      - name: Show M95D headline results
+        if: always()
+        run: |
+          echo '=== M95D disposition ==='
+          cat data/backtests/rb_m95d/m95d_disposition.csv 2>/dev/null || true
+          echo '=== M95D model comparison ==='
+          cat data/backtests/rb_m95d/m95d_model_comparison.csv 2>/dev/null || true
+          echo '=== M95D gains ==='
+          cat data/backtests/rb_m95d/m95d_gain_vs_m95c_environment.csv 2>/dev/null || true
+          echo '=== M95D source audit ==='
+          cat data/backtests/rb_m95d/m95d_source_feature_audit.csv 2>/dev/null || true
+
+      - name: Upload M95D artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-95d-rb-rushing-environment-scheme
+          path: data/backtests/rb_m95d/**
+          if-no-files-found: warn
+          retention-days: 30
