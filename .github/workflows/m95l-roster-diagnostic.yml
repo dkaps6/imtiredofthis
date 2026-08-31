@@ -23,15 +23,42 @@ jobs:
           import re
           import nflreadpy as nfl
           import pandas as pd
+
           x = nfl.load_rosters_weekly(2023).to_pandas()
-          x.columns=[str(c).lower() for c in x.columns]
-          name_col='full_name' if 'full_name' in x.columns else 'football_name'
-          def norm(v): return re.sub(r'[^a-z0-9]','',str(v).lower())
-          x['_norm']=x[name_col].map(norm)
-          targets={'jeffwilson','kennygainwell','chrisrodriguezjr','kennethwalkeriii','chrisbrooks'}
-          z=x[(pd.to_numeric(x['week'],errors='coerce').between(13,18)) & x['_norm'].isin(targets)].copy()
-          keep=[c for c in ['season','week','team',name_col,'position','status','depth_chart_position','ngs_position_group'] if c in z.columns]
-          print(z[keep].sort_values(['week','team',name_col]).to_string(index=False))
+          x.columns = [str(c).lower() for c in x.columns]
+          name_col = 'full_name' if 'full_name' in x.columns else 'football_name'
+          x['week_num'] = pd.to_numeric(x['week'], errors='coerce')
+          x['_name'] = x[name_col].astype(str)
+          x['_norm'] = x['_name'].map(lambda v: re.sub(r'[^a-z0-9]', '', str(v).lower()))
+
+          print('COLUMNS')
+          print(','.join(x.columns))
+
+          # Search by surnames instead of assumed first-name/suffix forms so the
+          # diagnostic reveals the provider's canonical roster naming.
+          surname_pat = r'(wilson|gainwell|rodriguez|walker|brooks)'
+          z = x[x['_name'].str.contains(surname_pat, case=False, regex=True, na=False)].copy()
+          if 'position' in z.columns:
+              z = z[z['position'].astype(str).str.upper().isin(['RB','FB'])]
+
+          keep = [c for c in [
+              'season','week','team',name_col,'first_name','last_name','position','status',
+              'depth_chart_position','gsis_it_id','gsis_id','pfr_id','espn_id'
+          ] if c in z.columns]
+
+          print('\nUNIQUE MATCHED PLAYERS')
+          uniq_cols = [c for c in [name_col,'team','position','gsis_it_id','gsis_id','pfr_id','espn_id'] if c in z.columns]
+          print(z[uniq_cols].drop_duplicates().sort_values([name_col]).to_string(index=False))
+
+          print('\nWEEKS 13-18 MATCHED ROWS')
+          late = z[z['week_num'].between(13,18)].copy()
+          sort_cols = [c for c in ['week','team',name_col] if c in late.columns]
+          print(late[keep].sort_values(sort_cols).to_string(index=False))
+
+          print('\nWEEK PRESENCE BY NORMALIZED NAME')
+          print(z.groupby(['_norm'])['week_num'].apply(lambda s: ','.join(str(int(v)) for v in sorted(set(s.dropna())))).to_string())
+
           print('\nSTATUS COUNTS')
-          if 'status' in z.columns: print(z.groupby(['_norm','status']).size().to_string())
+          if 'status' in z.columns:
+              print(z.groupby(['_norm','status']).size().to_string())
           PY
