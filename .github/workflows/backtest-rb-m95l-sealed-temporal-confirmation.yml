@@ -8,6 +8,7 @@ on:
     paths:
       - 'scripts/backtest/evaluate_rb_m95l_sealed_temporal_confirmation.py'
       - 'scripts/backtest/evaluate_rb_m95l_sealed_temporal_confirmation_v2.py'
+      - 'scripts/backtest/reconcile_m95l_2023_identity.py'
       - '.github/workflows/backtest-rb-m95l-sealed-temporal-confirmation.yml'
       - 'docs/migrations/M95L_RB_SEALED_TEMPORAL_CONFIRMATION_PLAN.md'
 
@@ -70,6 +71,13 @@ jobs:
           python scripts/backtest/build_historical_weather.py \
             --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv"
 
+      - name: Reconcile verified M95L 2023 player identities
+        run: |
+          D=data/backtests/rb_m95l_m91/2023
+          python -m py_compile scripts/backtest/reconcile_m95l_2023_identity.py
+          python scripts/backtest/reconcile_m95l_2023_identity.py --root "$D"
+          test -s "$D/m95l_identity_bridge_audit.csv"
+
       - name: Score 2023 prospectively from 2022 history
         run: |
           D=data/backtests/rb_m95l_m91/2023
@@ -118,5 +126,6 @@ jobs:
             data/backtests/rb_m95l/**
             data/backtests/rb_m95l_m91/2023/component_predictions.csv
             data/backtests/rb_m95l_m91/2023/historical_input_validation.csv
+            data/backtests/rb_m95l_m91/2023/m95l_identity_bridge_audit.csv
           if-no-files-found: warn
           retention-days: 30
