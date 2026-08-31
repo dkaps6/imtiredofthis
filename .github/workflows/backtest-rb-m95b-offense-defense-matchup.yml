@@ -6,6 +6,7 @@ on:
       - research-rb-m95b-offense-defense-matchup
     paths:
       - 'scripts/backtest/evaluate_rb_offense_defense_matchup.py'
+      - 'scripts/backtest/evaluate_rb_offense_defense_matchup_v2.py'
       - 'docs/migrations/M95B_RB_OFFENSE_DEFENSE_MATCHUP.md'
       - '.github/workflows/backtest-rb-m95b-offense-defense-matchup.yml'
   workflow_dispatch:
@@ -94,7 +95,8 @@ jobs:
       - name: Run M95B offense-defense matchup engine
         run: |
           python -m py_compile scripts/backtest/evaluate_rb_offense_defense_matchup.py
-          python scripts/backtest/evaluate_rb_offense_defense_matchup.py \
+          python -m py_compile scripts/backtest/evaluate_rb_offense_defense_matchup_v2.py
+          python scripts/backtest/evaluate_rb_offense_defense_matchup_v2.py \
             --m95a-root data/backtests/rb_m95a_frozen \
             --pbp-root data/nflverse_pbp \
             --pfr-root data/pfr_adv_rush \
