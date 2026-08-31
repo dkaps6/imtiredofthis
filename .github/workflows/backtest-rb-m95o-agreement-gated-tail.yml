@@ -1,0 +1,87 @@
+name: M95O RB Agreement-Gated Tail Candidate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-m95o-agreement-gated-tail
+    paths:
+      - 'scripts/backtest/evaluate_rb_m95o_agreement_gated_tail.py'
+      - '.github/workflows/backtest-rb-m95o-agreement-gated-tail.yml'
+      - 'docs/migrations/M95O_PLAN.md'
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M95B_RUN_ID: '33357785600'
+  M95G_RUN_ID: '33396339232'
+  M94C_RUN_ID: '33353485070'
+  M95K_RUN_ID: '33411719023'
+  M95L_RUN_ID: '33429747106'
+
+jobs:
+  rb-agreement-gated-tail:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2
+
+      - name: Download authoritative frozen artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m95o/m95b data/backtests/rb_m95o/m95g data/backtests/rb_m95o/m94c data/backtests/rb_m95o/m95k data/backtests/rb_m95o/m95l
+          gh run download "$M95B_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95b-rb-offense-defense-matchup --dir data/backtests/rb_m95o/m95b
+          gh run download "$M95G_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95g-rb-role-availability-v5 --dir data/backtests/rb_m95o/m95g
+          gh run download "$M94C_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-94c-rb-game-environment --dir data/backtests/rb_m95o/m94c
+          gh run download "$M95K_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95k-rb-feed-tendency-carry-ceiling --dir data/backtests/rb_m95o/m95k
+          gh run download "$M95L_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95l-rb-sealed-temporal-confirmation --dir data/backtests/rb_m95o/m95l
+          test -s data/backtests/rb_m95o/m95b/m95b_rb_matchup_trace.csv
+          test -s data/backtests/rb_m95o/m95g/m95g_2024_holdout_trace.csv
+          test -s data/backtests/rb_m95o/m94c/m94c_2024_holdout_trace.csv
+          test -s data/backtests/rb_m95o/m95k/m95k_2025_trace.csv
+          test -s data/backtests/rb_m95o/m95l/m95l_2023_confirmation_trace.csv
+
+      - name: Run M95O agreement-gated candidate
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_m95o_agreement_gated_tail.py
+          python scripts/backtest/evaluate_rb_m95o_agreement_gated_tail.py \
+            --m95b-root data/backtests/rb_m95o/m95b \
+            --m95g-root data/backtests/rb_m95o/m95g \
+            --m94c-root data/backtests/rb_m95o/m94c \
+            --m95k-root data/backtests/rb_m95o/m95k \
+            --m95l-root data/backtests/rb_m95o/m95l \
+            --out-dir data/backtests/rb_m95o/results
+
+      - name: Show M95O headline results
+        if: always()
+        run: |
+          echo '=== M95O year context ==='
+          cat data/backtests/rb_m95o/results/m95o_year_context.csv 2>/dev/null || true
+          echo '=== M95O probability metrics ==='
+          cat data/backtests/rb_m95o/results/m95o_probability_metrics.csv 2>/dev/null || true
+          echo '=== M95O disposition ==='
+          cat data/backtests/rb_m95o/results/m95o_disposition.csv 2>/dev/null || true
+
+      - name: Upload M95O artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-95o-rb-agreement-gated-tail
+          path: data/backtests/rb_m95o/results/**
+          if-no-files-found: warn
+          retention-days: 30
