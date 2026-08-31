@@ -1,0 +1,76 @@
+name: M95C RB Quality-Environment Decomposition
+
+on:
+  push:
+    branches:
+      - research-rb-m95c-quality-environment-decomposition
+    paths:
+      - 'scripts/backtest/evaluate_rb_quality_environment_decomposition.py'
+      - 'docs/migrations/M95C_RB_QUALITY_ENVIRONMENT_DECOMPOSITION.md'
+      - '.github/workflows/backtest-rb-m95c-quality-environment-decomposition.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  rb-quality-environment-decomposition:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      M95B_RUN_ID: '33357785600'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2
+
+      - name: Download frozen M95B research trace
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m95b_frozen
+          gh run download "$M95B_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name migration-95b-rb-offense-defense-matchup \
+            --dir data/backtests/rb_m95b_frozen
+          test -s data/backtests/rb_m95b_frozen/m95b_rb_matchup_trace.csv
+          test -s data/backtests/rb_m95b_frozen/m95b_model_comparison.csv
+
+      - name: Run M95C quality-environment decomposition
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_quality_environment_decomposition.py
+          python scripts/backtest/evaluate_rb_quality_environment_decomposition.py \
+            --m95b-root data/backtests/rb_m95b_frozen \
+            --out-dir data/backtests/rb_m95c
+
+      - name: Show M95C headline results
+        if: always()
+        run: |
+          echo '=== M95C disposition ==='
+          cat data/backtests/rb_m95c/m95c_disposition.csv 2>/dev/null || true
+          echo '=== M95C model comparison ==='
+          cat data/backtests/rb_m95c/m95c_model_comparison.csv 2>/dev/null || true
+          echo '=== M95C gains vs controls ==='
+          cat data/backtests/rb_m95c/m95c_gain_vs_controls.csv 2>/dev/null || true
+          echo '=== M95C creator/environment slices ==='
+          cat data/backtests/rb_m95c/m95c_creator_environment_slices.csv 2>/dev/null || true
+
+      - name: Upload M95C artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-95c-rb-quality-environment-decomposition
+          path: data/backtests/rb_m95c/**
+          if-no-files-found: warn
+          retention-days: 30
