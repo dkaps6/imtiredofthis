@@ -1,6 +1,8 @@
 name: Full Slate
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       season:
@@ -20,11 +22,14 @@ on:
         required: false
         type: boolean
         default: false
+
 concurrency:
   group: full-slate-${{ github.ref }}
   cancel-in-progress: true
+
 permissions:
   contents: read
+
 env:
   PYTHONDONTWRITEBYTECODE: "1"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
@@ -35,10 +40,11 @@ env:
   MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
   NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
   NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
-  SEASON: ${{ github.event.inputs.season }}
-  PRIOR_SEASON: ${{ github.event.inputs.prior_season }}
-  SLATE_DATE: ${{ github.event.inputs.date }}
-  FETCH_LIVE_ODDS: ${{ github.event.inputs.fetch_live_odds }}
+  SEASON: ${{ github.event.inputs.season || '2026' }}
+  PRIOR_SEASON: ${{ github.event.inputs.prior_season || '2025' }}
+  SLATE_DATE: ${{ github.event.inputs.date || '' }}
+  FETCH_LIVE_ODDS: ${{ github.event.inputs.fetch_live_odds || 'false' }}
+
 jobs:
   full_slate:
     name: Full slate (single job)
@@ -48,11 +54,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install nflreadpy pyyaml
+
       - name: Validate season context
         run: |
           export PYTHONPATH="${PWD}"
@@ -65,9 +73,11 @@ jobs:
           assert SLATE_DATE == os.environ.get("SLATE_DATE", "").strip()
           print(f"current={SEASON} prior={PRIOR_SEASON} slate={SLATE_DATE or '<latest>'}")
           EOF
+
       - name: Live odds mode status
         run: |
-          if [ "${{ github.event.inputs.fetch_live_odds }}" = "true" ]; then echo "LIVE ODDS ENABLED"; else echo "LIVE ODDS PAUSED"; fi
+          if [ "${FETCH_LIVE_ODDS}" = "true" ]; then echo "LIVE ODDS ENABLED"; else echo "LIVE ODDS PAUSED"; fi
+
       - name: Build Ourlads roles
         run: |
           export PYTHONPATH="${PWD}"
@@ -75,6 +85,7 @@ jobs:
           mkdir -p outputs
           cp data/roles_ourlads.csv outputs/roles_ourlads.csv
           test -s data/roles_ourlads.csv
+
       - name: Build authoritative team-week map
         env:
           TEAM_WEEK_MAP_CSV: data/team_week_map.csv
@@ -83,19 +94,32 @@ jobs:
           python scripts/utils/build_team_week_map_v2.py --season "${SEASON}" --out data/team_week_map.csv
           test -s data/team_week_map.csv
           python -c "from scripts.runtime_context import log_runtime_context,resolve_week; log_runtime_context(); print('week=',resolve_week())"
-      - name: Fetch player props and game odds
-        if: ${{ github.event.inputs.fetch_live_odds == 'true' }}
+
+      - name: Fetch and gate player props and game odds
+        id: live_odds
+        if: ${{ env.FETCH_LIVE_ODDS == 'true' }}
         env:
           TEAM_WEEK_MAP_CSV: data/team_week_map.csv
           ROLES_CSV: data/roles_ourlads.csv
         run: |
           export PYTHONPATH="${PWD}"
-          python scripts/fetch_props_oddsapi.py --season "${SEASON}" --date "${SLATE_DATE}"
-          test -s outputs/props_raw.csv
-          test -s outputs/odds_game.csv
-          test -s data/opponent_map_from_props.csv
+          python scripts/run_live_odds_gate.py --season "${SEASON}" --date "${SLATE_DATE}"
+          test -s data/live_odds_status.json
+          python - <<'EOF'
+          import json, os
+          status=json.load(open('data/live_odds_status.json', encoding='utf-8'))
+          available=str(bool(status.get('available'))).lower()
+          state=str(status.get('status','unknown'))
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as fh:
+              fh.write(f"available={available}\n")
+              fh.write(f"status={state}\n")
+          print(f"live odds gate: status={state} available={available}")
+          if not status.get('available'):
+              print('No current active-slate player prop markets are posted; sportsbook pricing will be skipped cleanly.')
+          EOF
+
       - name: Validate live opponent map
-        if: ${{ github.event.inputs.fetch_live_odds == 'true' }}
+        if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' }}
         run: |
           export PYTHONPATH="${PWD}"
           python - <<'EOF'
@@ -105,13 +129,15 @@ jobs:
           if df['team'].isna().any() or df['opponent'].isna().any(): raise SystemExit('FATAL: unresolved opponent map')
           print(f'opponent map OK: rows={len(df)}')
           EOF
+
       - name: Build TeamForm with explicit preseason priors
         run: |
           export PYTHONPATH="${PWD}"
-          python scripts/providers/sharpfootball_pull.py --season "${SEASON}" --dump-html
+          python scripts/run_sharpfootball_v2.py --season "${SEASON}" --dump-html
           python scripts/team_form_prior_bridge.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}"
-          python scripts/run_team_form_context.py --season "${SEASON}"
+          python scripts/run_team_form_context.py --season "${SEASON}" --box-backfill-prev
           test -s data/team_form.csv
+
       - name: Build promoted QB M89/M90 context
         run: |
           export PYTHONPATH="${PWD}"
@@ -128,6 +154,7 @@ jobs:
               raise SystemExit('FATAL: promoted QB attempt conversion is missing/out of range')
           print(f'promoted QB context OK teams=32 attempt_conversion={conv.min():.4f}..{conv.max():.4f}')
           EOF
+
       - name: Build weather and injuries
         run: |
           export PYTHONPATH="${PWD}"
@@ -135,38 +162,51 @@ jobs:
           python scripts/build/build_injuries_weekly.py data/injuries.csv --season "${SEASON}"
           test -s data/weather_week.csv
           test -s data/injuries.csv
+          test -s data/injuries_source_status.json
+
       - name: Build Coverage v2 matchup intelligence
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/run_coverage_v2.py --season "${SEASON}"
           for f in data/cb_coverage_team.csv data/cb_coverage_player.csv data/wr_cb_exposure.csv; do test -s "$f"; done
+
       - name: Build optional current-season PBP enrichment
         continue-on-error: true
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/build/pbp_features.py --season "${SEASON}" || true
-      - name: Build PlayerForm v2 with historical priors
+
+      - name: Build PlayerForm v2 and stable identities
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/run_player_form_v2_loader.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
           python scripts/enrich_player_scoring_v2.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
-          for f in data/player_game_logs.csv data/player_season_totals.csv data/player_form.csv data/player_form_consensus.csv; do test -s "$f"; done
-      - name: Validate canonical model context bridge
+          for f in data/player_game_logs.csv data/player_season_totals.csv data/player_form.csv data/player_form_consensus.csv data/player_identity_validation.csv; do test -s "$f"; done
+
+      - name: Gate providers and materialize canonical Team Context v3
+        env:
+          FETCH_LIVE_ODDS: ${{ steps.live_odds.outputs.available == 'true' && 'true' || 'false' }}
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/run_model_context_bridge.py
+          test -s data/provider_readiness_v3.csv
+          test -s data/team_context_v3.csv
+          test -s data/team_context_v3_provenance.csv
           test -s data/model_context_bridge.csv
+
       - name: Validate empirical Bayesian baseline
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/run_model_bayesian_bridge.py
           test -s data/model_bayesian_diagnostics.csv
+
       - name: Train and validate supervised ML v2
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/run_model_ml_bridge.py
           test -s data/model_ml_diagnostics.csv
           test -s data/model_ml_v2.joblib
+
       - name: Train and validate Markov state v2
         run: |
           export PYTHONPATH="${PWD}"
@@ -179,11 +219,13 @@ jobs:
           if df.empty or int(df['state_available'].sum()) == 0: raise SystemExit('FATAL: state v2 produced no available predictions')
           print(f"state v2 players={len(df)} available={int(df['state_available'].sum())}")
           EOF
+
       - name: Validate empirical rule layer
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/run_model_rules_bridge.py
           test -s data/model_rule_diagnostics.csv
+
       - name: Validate evidence-weighted ensemble framework
         run: |
           export PYTHONPATH="${PWD}"
@@ -197,15 +239,17 @@ jobs:
           if not sums.eq(1.0).all(): raise SystemExit('FATAL: ensemble weights do not sum to one')
           print('ensemble status:', df['ensemble_status'].value_counts().to_dict())
           EOF
+
       - name: Assemble deterministic metrics
-        if: ${{ github.event.inputs.fetch_live_odds == 'true' }}
+        if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' }}
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/run_metrics_context.py --season "${SEASON}" --mode full --date "${SLATE_DATE}"
           python scripts/validate_build_integrity.py
           python scripts/metrics_ready.py --season "${SEASON}" --date "${SLATE_DATE}"
+
       - name: Price with promoted QB synthesis over canonical components
-        if: ${{ github.event.inputs.fetch_live_odds == 'true' }}
+        if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' }}
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/run_pricing_v2.py --season "${SEASON}"
@@ -241,14 +285,25 @@ jobs:
               print(f"promoted QB pricing OK rows={len(qb)} version={sorted(qb['qb_synthesis_version'].unique().tolist())}")
           print(f"priced rows={len(df)} ensemble={df['ensemble_status'].value_counts().to_dict()} ml={int(df['ml_applied'].sum())} state={int(df['state_applied'].sum())} bayes={int(df['bayes_applied'].sum())} rules={int(df['rules_applied'].sum())}")
           EOF
-      - name: Strict repository audit
+
+      - name: Strict repository audits
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/utils/audit_repo.py --strict
+          python scripts/audit_2026_production_readiness.py --strict
+
       - name: Summarize outputs
         if: always()
         run: |
-          find data outputs -maxdepth 2 -name "*.csv" -type f -print0 2>/dev/null | xargs -0 -r -I{} sh -c 'echo "--- {}"; wc -l "{}"'
+          echo '=== live odds status ==='
+          test -f data/live_odds_status.json && cat data/live_odds_status.json || echo 'live odds not requested'
+          echo '=== provider status ==='
+          test -f data/provider_readiness_v3.csv && cat data/provider_readiness_v3.csv || true
+          echo '=== identity status ==='
+          test -f data/player_identity_validation.csv && cat data/player_identity_validation.csv || true
+          echo '=== generated artifacts ==='
+          find data outputs -maxdepth 2 -type f \( -name "*.csv" -o -name "*.json" \) -print0 2>/dev/null | xargs -0 -r -I{} sh -c 'echo "--- {}"; wc -l "{}"'
+
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
