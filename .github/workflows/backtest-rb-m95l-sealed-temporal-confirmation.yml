@@ -1,0 +1,120 @@
+name: M95L RB Sealed Temporal Confirmation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-m95l-sealed-temporal-confirmation
+    paths:
+      - 'scripts/backtest/evaluate_rb_m95l_sealed_temporal_confirmation.py'
+      - '.github/workflows/backtest-rb-m95l-sealed-temporal-confirmation.yml'
+      - 'docs/migrations/M95L_RB_SEALED_TEMPORAL_CONFIRMATION_PLAN.md'
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M95B_RUN_ID: '33357785600'
+
+jobs:
+  rb-sealed-temporal-confirmation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib pyarrow
+
+      - name: Download frozen M95B research trace
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m95b_frozen
+          gh run download "$M95B_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-95b-rb-offense-defense-matchup \
+            --dir data/backtests/rb_m95b_frozen
+          test -s data/backtests/rb_m95b_frozen/m95b_rb_matchup_trace.csv
+
+      - name: Build leakage-safe 2023 inputs from 2022 history
+        run: |
+          D=data/backtests/rb_m95l_m91/2023
+          mkdir -p "$D"
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2023 --prior-season 2022 --weeks '1-18' --out-dir "$D"
+          python scripts/backtest/enrich_historical_defense.py \
+            --team-weekly "$D/team_weekly_history.csv" \
+            --seasons 2022,2023 \
+            --audit "$D/historical_defense_enrichment_audit.csv" \
+            --observations "$D/historical_defense_observations.csv"
+          python scripts/backtest/validate_historical_inputs.py \
+            --season 2023 --prior-season 2022 --weeks '1-18' \
+            --data-dir "$D" --report "$D/historical_input_validation.csv"
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2022,2023 --schedule "$D/schedule_history.csv" \
+            --out "$D/player_game_logs_history.csv"
+          python scripts/backtest/build_historical_injuries.py \
+            --seasons 2022,2023 --out "$D/injuries_history.csv"
+          python scripts/backtest/build_historical_weather.py \
+            --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv"
+
+      - name: Score 2023 prospectively from 2022 history
+        run: |
+          D=data/backtests/rb_m95l_m91/2023
+          rm -f "$D/component_predictions.csv"
+          python scripts/backtest/walk_forward.py \
+            --season 2023 --prior-season 2022 --weeks '1-18' \
+            --player-logs "$D/player_game_logs_history.csv" \
+            --team-weekly "$D/team_weekly_history.csv" \
+            --schedule "$D/schedule_history.csv" \
+            --universe-dir "$D/pregame_universe" \
+            --injuries "$D/injuries_history.csv" \
+            --weather "$D/weather_history.csv" \
+            --out "$D/component_predictions.csv" \
+            --iterations 2000
+          test -s "$D/component_predictions.csv"
+
+      - name: Run frozen M95L confirmation
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_m95l_sealed_temporal_confirmation.py
+          python scripts/backtest/evaluate_rb_m95l_sealed_temporal_confirmation.py \
+            --m91-root data/backtests/rb_m95l_m91 \
+            --m95b-root data/backtests/rb_m95b_frozen \
+            --out-dir data/backtests/rb_m95l
+
+      - name: Show M95L headline results
+        if: always()
+        run: |
+          echo '=== M95L frozen architecture ==='
+          cat data/backtests/rb_m95l/m95l_frozen_architecture.csv 2>/dev/null || true
+          echo '=== M95L source audit ==='
+          cat data/backtests/rb_m95l/m95l_source_audit.csv 2>/dev/null || true
+          echo '=== M95L probability metrics ==='
+          cat data/backtests/rb_m95l/m95l_probability_metrics.csv 2>/dev/null || true
+          echo '=== M95L carry preservation ==='
+          cat data/backtests/rb_m95l/m95l_carry_preservation.csv 2>/dev/null || true
+          echo '=== M95L disposition ==='
+          cat data/backtests/rb_m95l/m95l_disposition.csv 2>/dev/null || true
+
+      - name: Upload M95L artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-95l-rb-sealed-temporal-confirmation
+          path: |
+            data/backtests/rb_m95l/**
+            data/backtests/rb_m95l_m91/2023/component_predictions.csv
+            data/backtests/rb_m95l_m91/2023/historical_input_validation.csv
+          if-no-files-found: warn
+          retention-days: 30
