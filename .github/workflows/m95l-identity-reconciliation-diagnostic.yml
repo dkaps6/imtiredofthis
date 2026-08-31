@@ -1,0 +1,178 @@
+name: M95L Identity Reconciliation Diagnostic
+
+on:
+  push:
+    branches:
+      - research-rb-m95l-sealed-temporal-confirmation
+    paths:
+      - '.github/workflows/m95l-identity-reconciliation-diagnostic.yml'
+  workflow_dispatch:
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M95B_RUN_ID: '33357785600'
+
+jobs:
+  diagnose-identity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib pyarrow rapidfuzz
+
+      - name: Download frozen M95B research trace
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m95b_frozen
+          gh run download "$M95B_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-95b-rb-offense-defense-matchup \
+            --dir data/backtests/rb_m95b_frozen
+          test -s data/backtests/rb_m95b_frozen/m95b_rb_matchup_trace.csv
+
+      - name: Build leakage-safe 2023 inputs from 2022 history
+        run: |
+          D=data/backtests/rb_m95l_m91/2023
+          mkdir -p "$D"
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2023 --prior-season 2022 --weeks '1-18' --out-dir "$D"
+          python scripts/backtest/enrich_historical_defense.py \
+            --team-weekly "$D/team_weekly_history.csv" \
+            --seasons 2022,2023 \
+            --audit "$D/historical_defense_enrichment_audit.csv" \
+            --observations "$D/historical_defense_observations.csv"
+          python scripts/backtest/validate_historical_inputs.py \
+            --season 2023 --prior-season 2022 --weeks '1-18' \
+            --data-dir "$D" --report "$D/historical_input_validation.csv"
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2022,2023 --schedule "$D/schedule_history.csv" \
+            --out "$D/player_game_logs_history.csv"
+          python scripts/backtest/build_historical_injuries.py \
+            --seasons 2022,2023 --out "$D/injuries_history.csv"
+          python scripts/backtest/build_historical_weather.py \
+            --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv"
+
+      - name: Score 2023 prospectively from 2022 history
+        run: |
+          D=data/backtests/rb_m95l_m91/2023
+          rm -f "$D/component_predictions.csv"
+          python scripts/backtest/walk_forward.py \
+            --season 2023 --prior-season 2022 --weeks '1-18' \
+            --player-logs "$D/player_game_logs_history.csv" \
+            --team-weekly "$D/team_weekly_history.csv" \
+            --schedule "$D/schedule_history.csv" \
+            --universe-dir "$D/pregame_universe" \
+            --injuries "$D/injuries_history.csv" \
+            --weather "$D/weather_history.csv" \
+            --out "$D/component_predictions.csv" \
+            --iterations 2000
+          test -s "$D/component_predictions.csv"
+
+      - name: Diagnose exact M95B-to-M94C identity mismatches only
+        run: |
+          mkdir -p data/backtests/rb_m95l_identity_diagnostic
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          import pandas as pd
+          import nflreadpy as nfl
+          from rapidfuzz.fuzz import ratio
+
+          # Import v2 first so the already-approved mechanical M94C reconstruction
+          # patch is active. This diagnostic stops before any sealed tail metrics.
+          import scripts.backtest.evaluate_rb_m95l_sealed_temporal_confirmation_v2 as v2  # noqa: F401
+          import scripts.backtest.evaluate_rb_m95l_sealed_temporal_confirmation as m
+          import scripts.backtest.evaluate_rb_role_availability as g
+
+          root = Path('data/backtests/rb_m95l_m91')
+          frozen = Path('data/backtests/rb_m95b_frozen')
+          out = Path('data/backtests/rb_m95l_identity_diagnostic')
+
+          trace = m.load_m95b_trace(frozen)
+          team_env, rb_env, _, _ = m.reconstruct_m94c_2023(root)
+
+          hold = trace.loc[m.num(trace['week']).between(m.CONFIRM_START, m.CONFIRM_END), m.PLAYER_KEYS].drop_duplicates().copy()
+          rbk = rb_env.loc[m.num(rb_env['week']).between(m.CONFIRM_START, m.CONFIRM_END), m.PLAYER_KEYS].drop_duplicates().copy()
+          cov = hold.merge(rbk, on=m.PLAYER_KEYS, how='left', indicator=True)
+          missing = cov.loc[cov['_merge'].eq('left_only'), m.PLAYER_KEYS].copy()
+
+          print(f'hold_rows={len(hold)} joined={len(hold)-len(missing)} missing={len(missing)} join_rate={(len(hold)-len(missing))/len(hold):.6%}')
+          print('\nEXACT UNMATCHED M95B KEYS')
+          print(missing.to_string(index=False))
+
+          # Component predictions are the direct pregame player universe feeding M94C.
+          comp = pd.read_csv(root / '2023' / 'component_predictions.csv', low_memory=False)
+          comp.columns = [str(c).strip().lower() for c in comp.columns]
+          for c in ['team']:
+              if c in comp.columns:
+                  comp[c] = comp[c].map(g.canon)
+          if 'player_clean_key' in comp.columns:
+              comp['player_clean_key'] = comp['player_clean_key'].astype(str)
+          comp['week'] = pd.to_numeric(comp['week'], errors='coerce')
+          comp['season'] = pd.to_numeric(comp['season'], errors='coerce')
+
+          raw = nfl.load_rosters_weekly(2023).to_pandas()
+          raw.columns = [str(c).strip().lower() for c in raw.columns]
+          name_col = 'full_name' if 'full_name' in raw.columns else 'football_name'
+          team_col = next(c for c in ['team','club_code','team_abbr','team_abbreviation'] if c in raw.columns)
+          pos_col = next(c for c in ['position','position_group'] if c in raw.columns)
+          raw['season'] = pd.to_numeric(raw['season'], errors='coerce')
+          raw['week'] = pd.to_numeric(raw['week'], errors='coerce')
+          raw['team'] = raw[team_col].map(g.canon)
+          raw['provider_name'] = raw[name_col].astype(str)
+          raw['provider_key'] = raw['provider_name'].map(g.norm_name)
+          raw = raw.loc[raw[pos_col].astype(str).str.upper().isin(['RB','HB','FB'])].copy()
+
+          rows = []
+          for r in missing.itertuples(index=False):
+              cq = comp.loc[(comp['season'].eq(r.season)) & (comp['week'].eq(r.week)) & (comp['team'].eq(r.team))].copy()
+              ckeys = sorted(set(cq['player_clean_key'].dropna().astype(str))) if 'player_clean_key' in cq.columns else []
+              rq = raw.loc[(raw['season'].eq(r.season)) & (raw['week'].eq(r.week)) & (raw['team'].eq(r.team))].copy()
+              roster_entries = []
+              for rr in rq.itertuples(index=False):
+                  gsis = getattr(rr, 'gsis_id', '') if 'gsis_id' in rq.columns else ''
+                  status = getattr(rr, 'status', '') if 'status' in rq.columns else ''
+                  roster_entries.append((str(rr.provider_name), str(rr.provider_key), str(gsis), str(status), ratio(str(r.player_clean_key), str(rr.provider_key))))
+              roster_entries.sort(key=lambda x: x[4], reverse=True)
+              best = roster_entries[0] if roster_entries else ('','','','',None)
+              rows.append({
+                  'season': r.season,
+                  'week': r.week,
+                  'team': r.team,
+                  'trace_player_clean_key': r.player_clean_key,
+                  'component_player_keys_same_team_week': '|'.join(ckeys),
+                  'best_roster_name': best[0],
+                  'best_roster_key': best[1],
+                  'best_roster_gsis_id': best[2],
+                  'best_roster_status': best[3],
+                  'best_name_similarity': best[4],
+                  'all_roster_rb_candidates': ' || '.join(f'{a}:{b}:{c}:{d}:sim={e}' for a,b,c,d,e in roster_entries),
+              })
+
+          diag = pd.DataFrame(rows)
+          diag.to_csv(out / 'm95l_identity_reconciliation.csv', index=False)
+          missing.to_csv(out / 'm95l_unmatched_keys.csv', index=False)
+          print('\nIDENTITY RECONCILIATION TABLE')
+          print(diag.to_string(index=False))
+          print('\nNOTE: no actual carries, sealed W13-18 tail probabilities, AUC, Brier, or disposition are computed or printed.')
+          PY
+
+      - name: Upload identity diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: m95l-identity-reconciliation-diagnostic
+          path: data/backtests/rb_m95l_identity_diagnostic/**
+          if-no-files-found: error
+          retention-days: 30
