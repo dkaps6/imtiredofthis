@@ -1,0 +1,86 @@
+name: M94D RB Joint Opportunity v2
+
+on:
+  push:
+    branches:
+      - research-rb-m94d-joint-opportunity-v2
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M91_RUN_ID: '33348554748'
+  M93B_RUN_ID: '33351189240'
+  M94C_RUN_ID: '33353485070'
+
+jobs:
+  rb-joint-opportunity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2
+      - name: Download frozen M91 baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m91_frozen
+          gh run download "$M91_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-91-rb-temporal-baseline --dir data/backtests/rb_m91_frozen
+          test "$(find data/backtests/rb_m91_frozen -name component_predictions.csv | wc -l)" -eq 2
+      - name: Download frozen M93B role signal
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m93b_frozen
+          gh run download "$M93B_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-93b-rb-role-aware-concentration --dir data/backtests/rb_m93b_frozen
+          test "$(find data/backtests/rb_m93b_frozen -name m93b_features_2024.csv | wc -l)" -eq 1
+          test "$(find data/backtests/rb_m93b_frozen -name m93b_features_2025.csv | wc -l)" -eq 1
+          test "$(find data/backtests/rb_m93b_frozen -name m93b_disposition.csv | wc -l)" -eq 1
+      - name: Download frozen M94C game environment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m94c_frozen
+          gh run download "$M94C_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-94c-rb-game-environment --dir data/backtests/rb_m94c_frozen
+          test "$(find data/backtests/rb_m94c_frozen -name m94c_2024_holdout_trace.csv | wc -l)" -eq 1
+          test "$(find data/backtests/rb_m94c_frozen -name m94c_2025_team_trace.csv | wc -l)" -eq 1
+      - name: Run M94D joint opportunity test
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_joint_opportunity.py scripts/backtest/evaluate_rb_joint_opportunity_v2.py
+          python scripts/backtest/evaluate_rb_joint_opportunity_v2.py \
+            --m91-root data/backtests/rb_m91_frozen \
+            --m93b-root data/backtests/rb_m93b_frozen \
+            --m94c-root data/backtests/rb_m94c_frozen \
+            --out-dir data/backtests/rb_m94d
+      - name: Show M94D results
+        if: always()
+        run: |
+          echo '=== M94D disposition ==='
+          cat data/backtests/rb_m94d/m94d_disposition.csv 2>/dev/null || true
+          echo '=== M94D tails ==='
+          cat data/backtests/rb_m94d/m94d_2025_tail_diagnostics.csv 2>/dev/null || true
+          echo '=== M94D validation ==='
+          cat data/backtests/rb_m94d/m94d_rb_summary.csv 2>/dev/null || true
+          echo '=== M94D calibration ==='
+          cat data/backtests/rb_m94d/m94d_2025_joint_calibration.csv 2>/dev/null || true
+          echo '=== M94D legacy guard ==='
+          cat data/backtests/rb_m94d/m94d_legacy_guard.csv 2>/dev/null || true
+      - name: Upload M94D artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-94d-rb-joint-opportunity
+          path: data/backtests/rb_m94d/**
+          if-no-files-found: warn
+          retention-days: 30
