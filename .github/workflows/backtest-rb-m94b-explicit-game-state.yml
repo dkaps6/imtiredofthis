@@ -1,0 +1,77 @@
+name: M94B RB Explicit Game State
+
+on:
+  push:
+    branches:
+      - research-rb-m94b-explicit-game-state
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M91_RUN_ID: '33348554748'
+
+jobs:
+  rb-explicit-game-state:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2 nflreadpy
+
+      - name: Download frozen M91 baseline artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m91_frozen
+          gh run download "$M91_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name migration-91-rb-temporal-baseline \
+            --dir data/backtests/rb_m91_frozen
+          test "$(find data/backtests/rb_m91_frozen -name component_predictions.csv | wc -l)" -eq 2
+          test "$(find data/backtests/rb_m91_frozen -name team_weekly_history.csv | wc -l)" -eq 2
+          test "$(find data/backtests/rb_m91_frozen -name schedule_history.csv | wc -l)" -eq 2
+
+      - name: Run M94B explicit game-state test
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_explicit_game_state.py
+          python scripts/backtest/evaluate_rb_explicit_game_state.py \
+            --m91-root data/backtests/rb_m91_frozen \
+            --out-dir data/backtests/rb_m94b
+
+      - name: Show M94B disposition
+        if: always()
+        run: |
+          echo '=== M94B disposition ==='
+          cat data/backtests/rb_m94b/m94b_disposition.csv 2>/dev/null || true
+          echo '=== Team rush volume ==='
+          cat data/backtests/rb_m94b/m94b_team_volume_summary.csv 2>/dev/null || true
+          echo '=== State prediction ==='
+          cat data/backtests/rb_m94b/m94b_state_prediction_summary.csv 2>/dev/null || true
+          echo '=== Oracle decomposition ==='
+          cat data/backtests/rb_m94b/m94b_oracle_decomposition.csv 2>/dev/null || true
+          echo '=== RB validation ==='
+          cat data/backtests/rb_m94b/m94b_rb_validation_summary.csv 2>/dev/null || true
+
+      - name: Upload M94B artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-94b-rb-explicit-game-state
+          path: data/backtests/rb_m94b/**
+          if-no-files-found: warn
+          retention-days: 30
