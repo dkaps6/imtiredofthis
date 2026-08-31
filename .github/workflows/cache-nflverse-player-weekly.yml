@@ -1,0 +1,47 @@
+name: M95R Historical Player Source Cache
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-m95r-dynamic-population-prior
+    paths:
+      - 'scripts/backtest/build_nflverse_player_weekly_cache.py'
+      - '.github/workflows/cache-nflverse-player-weekly.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  persist-player-weekly-cache:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install cache dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 pyarrow nflreadpy==0.1.5
+      - name: Build deterministic 2018-2025 source snapshot
+        run: |
+          python -m py_compile scripts/backtest/build_nflverse_player_weekly_cache.py
+          python scripts/backtest/build_nflverse_player_weekly_cache.py \
+            --seasons 2018-2025 \
+            --out-dir data/research_cache/nflverse_player_weekly
+          test -s data/research_cache/nflverse_player_weekly/manifest.csv
+      - name: Commit durable cache to research branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/research_cache/nflverse_player_weekly
+          if git diff --cached --quiet; then
+            echo 'Cache already identical; nothing to commit.'
+          else
+            git commit -m 'M95R: persist nflverse player weekly cache 2018-2025'
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi
