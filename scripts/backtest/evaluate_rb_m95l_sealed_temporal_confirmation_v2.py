@@ -14,6 +14,14 @@ also applies the same verified alias bridge to M95G's direct weekly roster,
 injury, and depth source normalizer so the frozen role architecture sees the same
 players under the same M95B keys.
 
+Run #4 passed those source stages and exposed the next mechanical issue before
+any sealed metrics were written: the M95I reconstruction enriched hold_base while
+it still contained cal_prob_20/cal_prob_25, then merged those same columns back,
+creating pandas _x/_y names and leaving no plain cal_prob_20 for the frozen meta
+model. The intended code path is to reattach the frozen calibrated probabilities
+after role enrichment, so this wrapper removes only those duplicated transport
+columns from the enriched role frame before the existing explicit merge.
+
 No model family, coefficient, feature set, cutoff, probability rule, gate, carry
 mean, sportsbook input, or confirmation outcome is changed or inspected here.
 """
@@ -48,6 +56,22 @@ def _m95l_role_norm(value: object) -> str:
 # This changes identity spelling only inside the sealed M95L process. The
 # previously validated M95G/H/I/K source files and production code stay untouched.
 m.g.norm_name = _m95l_role_norm
+
+
+# The existing build_m95i_rotation explicitly merges these two frozen M95F
+# columns back after role enrichment. Keep that intended merge one-to-one by
+# preventing an accidental duplicate copy from surviving h.enrich().
+_ORIGINAL_ENRICH_ROLE_FRAME = m.enrich_role_frame
+
+
+def _m95l_enrich_role_frame(base: pd.DataFrame, trace: pd.DataFrame,
+                             rosters: pd.DataFrame, injuries: pd.DataFrame,
+                             depth: pd.DataFrame) -> pd.DataFrame:
+    out = _ORIGINAL_ENRICH_ROLE_FRAME(base, trace, rosters, injuries, depth)
+    return out.drop(columns=["cal_prob_20", "cal_prob_25"], errors="ignore")
+
+
+m.enrich_role_frame = _m95l_enrich_role_frame
 
 
 def _fixed_m94c_week_prediction(x: pd.DataFrame, pred: pd.DataFrame, oof_margin: pd.DataFrame,
