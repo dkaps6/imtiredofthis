@@ -1,0 +1,119 @@
+name: M95B RB Offense-Defense Matchup
+
+on:
+  push:
+    branches:
+      - research-rb-m95b-offense-defense-matchup
+    paths:
+      - 'scripts/backtest/evaluate_rb_offense_defense_matchup.py'
+      - 'docs/migrations/M95B_RB_OFFENSE_DEFENSE_MATCHUP.md'
+      - '.github/workflows/backtest-rb-m95b-offense-defense-matchup.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  rb-offense-defense-matchup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      M95A_RUN_ID: '33355604433'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2 pyarrow==17.0.0
+
+      - name: Download frozen M95A trace
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m95a_frozen
+          gh run download "$M95A_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name migration-95a-rb-matchup-truth \
+            --dir data/backtests/rb_m95a_frozen
+          test -s data/backtests/rb_m95a_frozen/m95a_rb_game_trace.csv
+
+      - name: Restore nflverse PBP cache
+        uses: actions/cache@v4
+        with:
+          path: data/nflverse_pbp
+          key: m95a-nflverse-pbp-2022-2025-v1
+
+      - name: Ensure nflverse PBP 2022-2025
+        run: |
+          mkdir -p data/nflverse_pbp
+          for season in 2022 2023 2024 2025; do
+            f="data/nflverse_pbp/play_by_play_${season}.parquet"
+            if [ ! -s "$f" ]; then
+              curl -fL --retry 4 --retry-delay 3 \
+                "https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_${season}.parquet" \
+                -o "$f"
+            fi
+          done
+
+      - name: Download free advanced rushing sources
+        run: |
+          mkdir -p data/pfr_adv_rush data/ngs
+          for season in 2022 2023 2024 2025; do
+            curl -fL --retry 4 --retry-delay 3 \
+              "https://github.com/nflverse/nflverse-data/releases/download/pfr_advstats/advstats_week_rush_${season}.csv" \
+              -o "data/pfr_adv_rush/advstats_week_rush_${season}.csv"
+          done
+          curl -fL --retry 4 --retry-delay 3 \
+            "https://github.com/nflverse/nflverse-data/releases/download/nextgen_stats/ngs_rushing.csv" \
+            -o data/ngs/ngs_rushing.csv
+          test -s data/ngs/ngs_rushing.csv
+
+      - name: Inspect advanced source schemas
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          p=pd.read_csv('data/pfr_adv_rush/advstats_week_rush_2025.csv', nrows=3)
+          n=pd.read_csv('data/ngs/ngs_rushing.csv', nrows=3)
+          print('PFR columns:', list(p.columns))
+          print('NGS columns:', list(n.columns))
+          PY
+
+      - name: Run M95B offense-defense matchup engine
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_offense_defense_matchup.py
+          python scripts/backtest/evaluate_rb_offense_defense_matchup.py \
+            --m95a-root data/backtests/rb_m95a_frozen \
+            --pbp-root data/nflverse_pbp \
+            --pfr-root data/pfr_adv_rush \
+            --ngs-file data/ngs/ngs_rushing.csv \
+            --out-dir data/backtests/rb_m95b
+
+      - name: Show M95B headline results
+        if: always()
+        run: |
+          echo '=== M95B disposition ==='
+          cat data/backtests/rb_m95b/m95b_disposition.csv 2>/dev/null || true
+          echo '=== M95B model comparison ==='
+          cat data/backtests/rb_m95b/m95b_model_comparison.csv 2>/dev/null || true
+          echo '=== M95B incremental gain ==='
+          cat data/backtests/rb_m95b/m95b_incremental_gain.csv 2>/dev/null || true
+          echo '=== M95B feature audit ==='
+          cat data/backtests/rb_m95b/m95b_feature_audit.csv 2>/dev/null || true
+
+      - name: Upload M95B artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-95b-rb-offense-defense-matchup
+          path: data/backtests/rb_m95b/**
+          if-no-files-found: warn
+          retention-days: 30
