@@ -1,0 +1,81 @@
+name: M95J RB Regime Workload Conversion
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-m95j-regime-workload-conversion
+    paths:
+      - 'scripts/backtest/evaluate_rb_regime_workload_conversion.py'
+      - '.github/workflows/backtest-rb-m95j-regime-workload-conversion.yml'
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M95G_RUN_ID: '33396339232'
+  M95I_RUN_ID: '33402566592'
+  M94C_RUN_ID: '33353485070'
+
+jobs:
+  rb-regime-workload-conversion:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2
+
+      - name: Download frozen research artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m95g_frozen data/backtests/rb_m95i_frozen data/backtests/rb_m94c_frozen
+          gh run download "$M95G_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95g-rb-role-availability-v5 --dir data/backtests/rb_m95g_frozen
+          gh run download "$M95I_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95i-rb-deep-concentration-tail --dir data/backtests/rb_m95i_frozen
+          gh run download "$M94C_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-94c-rb-game-environment --dir data/backtests/rb_m94c_frozen
+          test -s data/backtests/rb_m95g_frozen/m95g_2024_holdout_trace.csv
+          test -s data/backtests/rb_m95g_frozen/m95g_2025_rb_trace.csv
+          test -s data/backtests/rb_m95i_frozen/m95i_2025_trace.csv
+          test -s data/backtests/rb_m94c_frozen/m94c_2024_holdout_trace.csv
+          test -s data/backtests/rb_m94c_frozen/m94c_2025_team_trace.csv
+
+      - name: Run M95J regime-specific conversion
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_regime_workload_conversion.py
+          python scripts/backtest/evaluate_rb_regime_workload_conversion.py \
+            --m95g-root data/backtests/rb_m95g_frozen \
+            --m95i-root data/backtests/rb_m95i_frozen \
+            --m94c-root data/backtests/rb_m94c_frozen \
+            --out-dir data/backtests/rb_m95j
+
+      - name: Show M95J headline results
+        if: always()
+        run: |
+          echo '=== M95J 25+ frequency ==='
+          cat data/backtests/rb_m95j/m95j_25plus_frequency.csv 2>/dev/null || true
+          echo '=== M95J selected architecture ==='
+          cat data/backtests/rb_m95j/m95j_selected_architecture.csv 2>/dev/null || true
+          echo '=== M95J probability metrics ==='
+          cat data/backtests/rb_m95j/m95j_2025_probability_metrics.csv 2>/dev/null || true
+          echo '=== M95J disposition ==='
+          cat data/backtests/rb_m95j/m95j_disposition.csv 2>/dev/null || true
+
+      - name: Upload M95J artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-95j-rb-regime-workload-conversion
+          path: data/backtests/rb_m95j/**
+          if-no-files-found: warn
+          retention-days: 30
