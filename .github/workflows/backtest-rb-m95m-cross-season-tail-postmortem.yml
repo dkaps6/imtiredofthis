@@ -1,0 +1,91 @@
+name: M95M RB Cross-Season Tail Postmortem
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-m95m-cross-season-tail-postmortem
+    paths:
+      - 'scripts/backtest/evaluate_rb_m95m_cross_season_tail_postmortem.py'
+      - '.github/workflows/backtest-rb-m95m-cross-season-tail-postmortem.yml'
+      - 'docs/migrations/M95M_RB_CROSS_SEASON_TAIL_POSTMORTEM_PLAN.md'
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M95K_RUN_ID: '33411719023'
+  M95L_RUN_ID: '33429747106'
+
+jobs:
+  rb-cross-season-tail-postmortem:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyyaml scikit-learn scipy
+
+      - name: Download authoritative M95K and M95L artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m95m/m95k data/backtests/rb_m95m/m95l
+          gh run download "$M95K_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-95k-rb-feed-tendency-carry-ceiling \
+            --dir data/backtests/rb_m95m/m95k
+          gh run download "$M95L_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-95l-rb-sealed-temporal-confirmation \
+            --dir data/backtests/rb_m95m/m95l
+          test "$(find data/backtests/rb_m95m/m95k -name m95k_2025_trace.csv | wc -l)" -eq 1
+          test "$(find data/backtests/rb_m95m/m95l -name m95l_2023_confirmation_trace.csv | wc -l)" -eq 1
+
+      - name: Run M95M descriptive failure decomposition
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_m95m_cross_season_tail_postmortem.py
+          python scripts/backtest/evaluate_rb_m95m_cross_season_tail_postmortem.py \
+            --m95k-root data/backtests/rb_m95m/m95k \
+            --m95l-root data/backtests/rb_m95m/m95l \
+            --out-dir data/backtests/rb_m95m/results
+
+      - name: Show M95M headline results
+        if: always()
+        run: |
+          echo '=== M95M population comparison ==='
+          cat data/backtests/rb_m95m/results/m95m_population_comparison.csv 2>/dev/null || true
+          echo '=== M95M disposition ==='
+          cat data/backtests/rb_m95m/results/m95m_disposition.csv 2>/dev/null || true
+          echo '=== M95M strongest signal changes ==='
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          p=Path('data/backtests/rb_m95m/results/m95m_signal_stability.csv')
+          if p.exists():
+              x=pd.read_csv(p)
+              if 'auc_change_2023_minus_2025full' in x.columns:
+                  q=x.loc[x.signal_family.eq('feed_ceiling')].drop_duplicates(['signal','target']).copy()
+                  q['abs_change']=pd.to_numeric(q['auc_change_2023_minus_2025full'],errors='coerce').abs()
+                  cols=['signal','target','2025_full_research','2025_w13_18_same_window','2023_w13_18_sealed','auc_change_2023_minus_2025full']
+                  print(q.nlargest(20,'abs_change')[cols].to_string(index=False))
+          PY
+
+      - name: Upload M95M artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-95m-rb-cross-season-tail-postmortem
+          path: data/backtests/rb_m95m/results/**
+          if-no-files-found: warn
+          retention-days: 30
