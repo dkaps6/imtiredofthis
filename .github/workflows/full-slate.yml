@@ -33,13 +33,7 @@ permissions:
 env:
   PYTHONDONTWRITEBYTECODE: "1"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
-  APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
   ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-  ESPN_COOKIE: ${{ secrets.ESPN_COOKIE }}
-  MSF_KEY: ${{ secrets.MSF_KEY }}
-  MSF_PASSWORD: ${{ secrets.MSF_PASSWORD }}
-  NFLGSIS_USERNAME: ${{ secrets.NFLGSIS_USERNAME }}
-  NFLGSIS_PASSWORD: ${{ secrets.NFLGSIS_PASSWORD }}
   SEASON: ${{ github.event.inputs.season || '2026' }}
   PRIOR_SEASON: ${{ github.event.inputs.prior_season || '2025' }}
   SLATE_DATE: ${{ github.event.inputs.date || '' }}
