@@ -1,0 +1,112 @@
+name: M95Q RB Expanded Historical Stable Workhorse
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-m95q-expanded-historical-stable-workhorse
+    paths:
+      - 'scripts/backtest/evaluate_rb_m95q_expanded_historical_stable_workhorse.py'
+      - '.github/workflows/backtest-rb-m95q-expanded-historical-stable-workhorse.yml'
+      - 'docs/migrations/M95Q_PLAN.md'
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M95G_RUN_ID: '33396339232'
+
+jobs:
+  rb-expanded-historical-stable-workhorse:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyarrow scikit-learn joblib
+
+      - name: Download authoritative M95G parity artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m95q/m95g
+          gh run download "$M95G_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-95g-rb-role-availability-v5 \
+            --dir data/backtests/rb_m95q/m95g
+          test "$(find data/backtests/rb_m95q/m95g -name m95g_2024_holdout_trace.csv | wc -l)" -eq 1
+
+      - name: Download historical nflverse PBP 2018-2024
+        run: |
+          mkdir -p data/backtests/rb_m95q/pbp
+          for season in 2018 2019 2020 2021 2022 2023 2024; do
+            f="data/backtests/rb_m95q/pbp/play_by_play_${season}.parquet"
+            curl -fL --retry 4 --retry-delay 3 \
+              "https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_${season}.parquet" \
+              -o "$f"
+            test -s "$f"
+          done
+
+      - name: Download historical advanced rushing sources
+        run: |
+          mkdir -p data/backtests/rb_m95q/pfr data/backtests/rb_m95q/ngs
+          for season in 2018 2019 2020 2021 2022 2023 2024; do
+            f="data/backtests/rb_m95q/pfr/advstats_week_rush_${season}.csv"
+            if ! curl -fL --retry 2 --retry-delay 2 \
+              "https://github.com/nflverse/nflverse-data/releases/download/pfr_advstats/advstats_week_rush_${season}.csv" \
+              -o "$f"; then
+              rm -f "$f"
+              echo "PFR weekly rushing unavailable for $season; source degradation will be audited"
+            fi
+          done
+          curl -fL --retry 4 --retry-delay 3 \
+            "https://github.com/nflverse/nflverse-data/releases/download/nextgen_stats/ngs_rushing.parquet" \
+            -o data/backtests/rb_m95q/ngs/ngs_rushing.parquet
+          python - <<'PY'
+          import pandas as pd
+          pd.read_parquet('data/backtests/rb_m95q/ngs/ngs_rushing.parquet').to_csv(
+              'data/backtests/rb_m95q/ngs/ngs_rushing.csv', index=False)
+          PY
+          test -s data/backtests/rb_m95q/ngs/ngs_rushing.csv
+
+      - name: Run M95Q expanded reconstruction
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_m95q_expanded_historical_stable_workhorse.py
+          python scripts/backtest/evaluate_rb_m95q_expanded_historical_stable_workhorse.py \
+            --pbp-root data/backtests/rb_m95q/pbp \
+            --pfr-root data/backtests/rb_m95q/pfr \
+            --ngs-file data/backtests/rb_m95q/ngs/ngs_rushing.csv \
+            --m95g-root data/backtests/rb_m95q/m95g \
+            --out-dir data/backtests/rb_m95q/results
+
+      - name: Show M95Q headline results
+        if: always()
+        run: |
+          echo '=== M95Q 2024 parity ==='
+          cat data/backtests/rb_m95q/results/m95q_2024_parity_audit.csv 2>/dev/null || true
+          echo '=== M95Q stable summary ==='
+          cat data/backtests/rb_m95q/results/m95q_stable_workhorse_summary.csv 2>/dev/null || true
+          echo '=== M95Q comparability ==='
+          cat data/backtests/rb_m95q/results/m95q_historical_comparability.csv 2>/dev/null || true
+          echo '=== M95Q disposition ==='
+          cat data/backtests/rb_m95q/results/m95q_disposition.csv 2>/dev/null || true
+
+      - name: Upload M95Q artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-95q-rb-expanded-historical-stable-workhorse
+          path: data/backtests/rb_m95q/results/**
+          if-no-files-found: warn
+          retention-days: 30
