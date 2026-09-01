@@ -7,6 +7,7 @@ on:
       - research-rb-market-benchmark
     paths:
       - 'scripts/backtest/evaluate_rb_market_benchmark.py'
+      - 'scripts/backtest/evaluate_rb_market_benchmark_v2.py'
       - 'docs/migrations/RB_MARKET_BENCHMARK_PLAN.md'
       - '.github/workflows/backtest-rb-market-benchmark.yml'
 
@@ -47,8 +48,8 @@ jobs:
 
       - name: Run frozen market benchmark
         run: |
-          python -m py_compile scripts/backtest/evaluate_rb_market_benchmark.py
-          python scripts/backtest/evaluate_rb_market_benchmark.py \
+          python -m py_compile scripts/backtest/evaluate_rb_market_benchmark_v2.py
+          python scripts/backtest/evaluate_rb_market_benchmark_v2.py \
             --m94c-root data/backtests/rb_m94c_frozen \
             --out-dir data/backtests/rb_market_benchmark
 
@@ -66,6 +67,8 @@ jobs:
           cat data/backtests/rb_market_benchmark/rb_market_source_audit.csv
           echo '=== join audit ==='
           cat data/backtests/rb_market_benchmark/rb_market_join_audit.csv
+          echo '=== by week ==='
+          cat data/backtests/rb_market_benchmark/rb_market_by_week.csv
 
       - name: Upload benchmark artifact
         uses: actions/upload-artifact@v4
