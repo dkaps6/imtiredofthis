@@ -1,0 +1,63 @@
+name: RB-STACK6C Rotation Source Audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-stack6c-rotation-source-audit
+    paths:
+      - 'scripts/backtest/audit_rb_stack6c_rotation_source.py'
+      - 'docs/migrations/RB_STACK6C_ROTATION_SOURCE_AUDIT_PLAN.md'
+      - '.github/workflows/backtest-rb-stack6c-rotation-source-audit.yml'
+
+permissions:
+  contents: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install frozen source-audit dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 pyarrow==17.0.0 nflreadpy
+
+      - name: Compile
+        run: python -m py_compile scripts/backtest/audit_rb_stack6c_rotation_source.py
+
+      - name: Run no-fit rotation source audit
+        run: |
+          rm -rf data/backtests/rb_stack6c_rotation_source
+          python scripts/backtest/audit_rb_stack6c_rotation_source.py \
+            --seasons 2024,2025 \
+            --out-dir data/backtests/rb_stack6c_rotation_source
+
+      - name: Show results
+        if: always()
+        run: |
+          echo '=== source ==='
+          cat data/backtests/rb_stack6c_rotation_source/stack6c_rotation_source_audit.csv 2>/dev/null || true
+          echo '=== gates ==='
+          cat data/backtests/rb_stack6c_rotation_source/stack6c_rotation_source_gates.csv 2>/dev/null || true
+          echo '=== prior3 coverage ==='
+          cat data/backtests/rb_stack6c_rotation_source/stack6c_rotation_prior3_coverage.csv 2>/dev/null || true
+          echo '=== manifest ==='
+          cat data/backtests/rb_stack6c_rotation_source/stack6c_rotation_source_manifest.csv 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-stack6c-rotation-source-audit
+          path: data/backtests/rb_stack6c_rotation_source/**
+          if-no-files-found: warn
+          retention-days: 30
