@@ -1,0 +1,66 @@
+name: RB-ENV1 Environment Quality Atlas
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-nd2b-allocation-env-atlas
+    paths:
+      - 'scripts/backtest/evaluate_rb_env1_environment_quality_atlas.py'
+      - 'docs/migrations/RB_ENV1_ENVIRONMENT_QUALITY_ATLAS_PLAN.md'
+      - '.github/workflows/backtest-rb-env1-environment-quality-atlas.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M95B_RUN_ID: '33357785600'
+  M95C_RUN_ID: '33358467022'
+
+jobs:
+  atlas:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4
+      - name: Download frozen M95B/M95C
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/env1_m95b data/backtests/env1_m95c
+          gh run download "$M95B_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95b-rb-offense-defense-matchup --dir data/backtests/env1_m95b
+          gh run download "$M95C_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95c-rb-quality-environment-decomposition --dir data/backtests/env1_m95c
+          test -s data/backtests/env1_m95b/m95b_rb_matchup_trace.csv
+          test -s data/backtests/env1_m95c/m95c_prediction_trace.csv
+      - name: Run frozen atlas
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_env1_environment_quality_atlas.py
+          python scripts/backtest/evaluate_rb_env1_environment_quality_atlas.py \
+            --m95b-root data/backtests/env1_m95b \
+            --m95c-root data/backtests/env1_m95c \
+            --out-dir data/backtests/rb_env1
+      - name: Show outputs
+        if: always()
+        run: |
+          echo '=== headline ==='
+          cat data/backtests/rb_env1/env1_headline.csv 2>/dev/null || true
+          echo '=== environment summary ==='
+          cat data/backtests/rb_env1/env1_environment_summary.csv 2>/dev/null || true
+          echo '=== quadrants ==='
+          cat data/backtests/rb_env1/env1_environment_quality_quadrants.csv 2>/dev/null || true
+          echo '=== integrity ==='
+          cat data/backtests/rb_env1/env1_integrity.csv 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-env1-environment-quality-atlas
+          path: data/backtests/rb_env1/**
+          retention-days: 30
