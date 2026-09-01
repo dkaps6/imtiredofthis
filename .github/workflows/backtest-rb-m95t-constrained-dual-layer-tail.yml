@@ -1,0 +1,96 @@
+name: M95T RB Constrained Dual-Layer Tail
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-m95t-constrained-dual-layer-tail
+    paths:
+      - 'scripts/backtest/evaluate_rb_m95t_constrained_dual_layer_tail.py'
+      - '.github/workflows/backtest-rb-m95t-constrained-dual-layer-tail.yml'
+      - 'docs/migrations/M95T_PLAN.md'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M95R_RUN_ID: '33453141931'
+  M95Q_RUN_ID: '33450395426'
+  M95K_RUN_ID: '33411719023'
+  M95L_RUN_ID: '33429747106'
+
+jobs:
+  rb-constrained-dual-layer-tail:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install numpy==1.26.4 pandas==1.5.3 scipy==1.11.4 scikit-learn==1.4.2 pyarrow
+
+      - name: Verify frozen historical cache
+        run: |
+          test -s data/research_cache/nflverse_player_weekly/manifest.csv
+          for y in 2018 2019 2020 2021 2022 2023 2024 2025; do
+            test -s "data/research_cache/nflverse_player_weekly/player_weekly_${y}.parquet"
+          done
+          cat data/research_cache/nflverse_player_weekly/manifest.csv
+
+      - name: Download authoritative research artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m95t/{m95r,m95q,m95k,m95l}
+          gh run download "$M95R_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-95r-rb-dynamic-population-prior \
+            --dir data/backtests/rb_m95t/m95r
+          gh run download "$M95Q_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-95q-rb-expanded-historical-stable-workhorse \
+            --dir data/backtests/rb_m95t/m95q
+          gh run download "$M95K_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-95k-rb-feed-tendency-carry-ceiling \
+            --dir data/backtests/rb_m95t/m95k
+          gh run download "$M95L_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-95l-rb-sealed-temporal-confirmation \
+            --dir data/backtests/rb_m95t/m95l
+          test -s data/backtests/rb_m95t/m95r/m95r_exact_panel.csv
+          test -s data/backtests/rb_m95t/m95q/m95q_enriched_holdouts.csv
+          test -s data/backtests/rb_m95t/m95k/m95k_2025_trace.csv
+          find data/backtests/rb_m95t/m95l -name m95l_2023_confirmation_trace.csv -print -quit | grep -q .
+
+      - name: Run frozen M95T candidate
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_m95t_constrained_dual_layer_tail.py
+          python scripts/backtest/evaluate_rb_m95t_constrained_dual_layer_tail.py \
+            --m95r-dir data/backtests/rb_m95t/m95r \
+            --m95q-dir data/backtests/rb_m95t/m95q \
+            --m95k-dir data/backtests/rb_m95t/m95k \
+            --m95l-dir data/backtests/rb_m95t/m95l \
+            --cache-dir data/research_cache/nflverse_player_weekly \
+            --out-dir data/backtests/rb_m95t/results
+
+      - name: Show headline results
+        run: |
+          echo '=== M95T disposition ==='
+          cat data/backtests/rb_m95t/results/m95t_disposition.csv
+          echo '=== M95T 20+ metrics ==='
+          cat data/backtests/rb_m95t/results/m95t_20plus_metrics.csv
+          echo '=== M95T rushing-yard translation guard ==='
+          cat data/backtests/rb_m95t/results/m95t_rush_yard_translation_guard.csv
+
+      - name: Upload M95T artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-95t-rb-constrained-dual-layer-tail
+          path: data/backtests/rb_m95t/results/**
+          retention-days: 90
