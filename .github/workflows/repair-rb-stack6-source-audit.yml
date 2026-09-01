@@ -1,0 +1,41 @@
+name: Repair RB STACK6 Source Audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-stack6-secondary-role-source-audit
+    paths:
+      - '.github/workflows/repair-rb-stack6-source-audit.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Repair chronology audit and clarify presence-share denominator
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/backtest/audit_rb_secondary_role_source.py')
+          s = p.read_text()
+          old = '''    z["feature_source_max_week"] = z.groupby(["team","player_id"],sort=False)["week"].shift(1)\n    z["leakage_safe_prior_only"] = (num(z.feature_source_max_week) < num(z.week)).fillna(True).astype(int)\n    return z, feat\n'''
+          new = '''    z["target_order"] = num(z["season"]) * 100 + num(z["week"])\n    z["feature_source_max_order"] = z.groupby(["team","player_id"],sort=False)["target_order"].shift(1)\n    z["leakage_safe_prior_only"] = (num(z.feature_source_max_order) < num(z.target_order)).fillna(True).astype(int)\n    return z, feat\n'''
+          if old not in s:
+              raise SystemExit('chronology patch target not found')
+          s = s.replace(old, new)
+          s = s.replace('"rb_onfield_share_proxy":len(g)/max(team_plays,1)', '"rb_onfield_share_proxy":len(g)/max(team_plays,1)')
+          p.write_text(s)
+          PY
+      - name: Commit repair
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/backtest/audit_rb_secondary_role_source.py
+          git commit -m 'RB STACK6: fix cross-season leakage chronology audit'
+          git push origin HEAD:research-rb-stack6-secondary-role-source-audit
