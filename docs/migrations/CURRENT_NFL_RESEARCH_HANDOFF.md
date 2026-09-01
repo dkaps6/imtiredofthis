@@ -5,10 +5,10 @@ This is the authoritative continuity checkpoint for the `NFL stuff` project. A f
 ## Repository / current state
 
 - Repo: `dkaps6/imtiredofthis`
-- Current research branch: `research-rb-m95t-constrained-dual-layer-tail`
+- Current research branch: `research-rb-m96a-opportunity-efficiency-attribution`
 - Stable continuity ref: `research-current-state`
 - Last known production `main` SHA: `7532a2c29dde78a5c3758eb1427561cfed801d67`
-- No M91-M95T RB research has been promoted to production.
+- No M91-M96A RB research has been promoted to production.
 - Phase A production/data cleanup Waves 1-4 is complete.
 - M94C remains the RB central carry/opportunity reference during tail research.
 - M95F remains the safer stable-workhorse tail baseline after M95L/M95O.
@@ -21,6 +21,7 @@ This is the authoritative continuity checkpoint for the `NFL stuff` project. A f
 - **M95R tested a precommitted rolling dynamic population-prior residual layer; it helped 2023, was neutral in 2024, but badly overcorrected 2025 and is not promoted.**
 - **M95S separated population-mass calibration from player ranking: M95R overcorrection was visible in 2025 pregame context, while frozen M95K ranking helped 2025 but harmed 2023. The next step is one final constrained historical candidate, M95T.**
 - **M95T was the final retrospective carry-tail candidate. It improved pooled Brier/logloss/AUC and repaired 2023 directionally, but failed the frozen cross-season stability gates because 2025 calibration still worsened materially. Per the stopping rule, new retrospective RB carry-tail candidates stop here; M94C/M95F is the conservative workload foundation for M96 rushing-yard synthesis.**
+- **M96A attributed 2025 rushing-yard error jointly to opportunity and efficiency: perfect carries recovered 7.68 MAE yards, perfect efficiency 6.73, and opportunity was the larger absolute component in 59.7% of games. The precommitted 1-yard dominance margin was missed by 0.048 yards, so M96B must model workload and efficiency as separate distributions rather than declaring either side solved.**
 
 ## Non-negotiable modeling rules
 
@@ -453,34 +454,60 @@ The rushing-yard translation sanity guard confirmed why workload matters but als
 
 **Stopping-rule decision:** new retrospective RB carry-tail candidate development ends at M95T. M94C remains the central carry/opportunity foundation and M95F remains the stable-workhorse tail baseline. M95I vacancy/transition remains separate diagnostic evidence. The next task is not another tail formula; it is explicit rushing-yard synthesis.
 
-# NEXT MIGRATION — M96
+# Latest completed migration: M96A — opportunity vs efficiency attribution
 
-Name: **M96 — RB Rushing-Yard Synthesis / Opportunity-to-Yardage Translation**
+Full results: `docs/migrations/M96A_RB_OPPORTUNITY_EFFICIENCY_ATTRIBUTION_RESULTS.md`.
+
+Authoritative:
+
+- workflow `M96A RB Opportunity-Efficiency Attribution`
+- run **`33459376333`**
+- job **`99706110345`**
+- tested SHA **`9e3b152e7e756b8a29798ef82cfa9a0730c51f89`**
+- artifact **`9782611047`**
+- artifact SHA256 **`a2d4f99b9e7b3f2b75c8694e79c6856dd09e4b5ee9921b2d53488e89cdab3d6e`**
+- execution success
+- disposition **`JOINT_ADVANCE_M96B_SEPARATE_WORKLOAD_AND_EFFICIENCY_DISTRIBUTIONS`**
+- model fit `0`; feature search `0`; coefficient search `0`; sportsbook `0`; production change `0`
+
+M96A used complete M94C 2025 rushing-yard truth (`1,393/1,393`) and exact frozen M94C/M95F/M95I workload outputs. The first green run was not accepted because M95F carried only 1,340 nonmissing yard-truth rows; Run #2 fixed only the truth-source mechanics and retained the frozen candidate/routing contract.
+
+All-RB M94C rushing-yard MAE was **`21.0312`**. Perfect actual carries with frozen pregame efficiency reduced MAE to **`13.3535`** (recovery `7.6777` yards). Perfect game efficiency with frozen projected carries reduced MAE to **`14.3055`** (recovery `6.7256`). Opportunity was the larger absolute residual component in **`59.73%`** of games, but the oracle recovery advantage was only **`0.9520`** yards versus the frozen `1.0`-yard dominance requirement. The route is therefore JOINT.
+
+The regime split is highly informative: 0-5 and 20+/25+ carry games are primarily opportunity-sensitive; 11-19 carry games are primarily efficiency-sensitive. Actual 20+ games recover `11.37` MAE yards with perfect opportunity versus `3.60` with perfect efficiency. Stable-workhorse yardage is more efficiency-sensitive overall (`8.48` opportunity recovery vs `12.54` efficiency recovery). Carries are therefore not solved, but neither are they the only remaining RB bottleneck.
+
+Collapsing M95F's carry distribution to one expectation worsened all-RB yard MAE (`21.0312 -> 22.4455`) while improving true 20+ carry games (`40.0051 -> 36.3540`) and 25+ games (`49.3105 -> 44.8607`). This confirms that the post-M94C tail work belongs in a **distribution layer**, not as a universal point-mean boost. The frozen M95I deterministic vacancy point branch did not beat M94C globally; M95I's previously validated vacancy probability/ranking evidence remains separate research signal.
+
+# NEXT MIGRATION — M96B
+
+Name: **M96B — RB Joint Workload × Efficiency Distribution Synthesis**
 
 Primary question:
 
-> Given the selected conservative workload foundation, can we translate projected opportunity plus leakage-safe efficiency/environment information into materially better player-game rushing-yard predictions and rushing-yard tail probabilities without sacrificing ordinary games?
+> Can a joint but decomposed pregame model preserve M94C's strong central workload behavior, use M95F/M95I only where their distributional/regime evidence is valid, and combine that with the retained M95C efficiency/environment signal to materially improve rushing-yard point accuracy and 75+/100+ tail probabilities across time?
 
 Required design:
 
-- M96 is a new synthesis phase, **not another retrospective M95 carry-tail candidate**.
-- Use M94C central carries/opportunity as the default projected workload foundation; M95F remains the stable-workhorse carry-tail distribution baseline.
-- Keep M95I vacancy/transition evidence separate; do not silently promote it without its own integration/confirmation contract.
-- Reuse the validated/retained rushing-efficiency and environment signals from M95A-D / the existing production yardage layer: blocking/environment, YBC/YAC, expected rushing yards/RYOE where leakage-safe, box/front/motion/RPO context where available, and opponent run-defense context.
-- Explicitly decompose rushing yards as **opportunity x efficiency/distribution**, rather than assuming better carries automatically solves yards.
-- Run an oracle-opportunity diagnostic using actual carries only as a postgame ceiling analysis; actual carries may never enter the pregame candidate.
-- Compare baseline production yardage, M94C-opportunity translation, and any precommitted M96 synthesis across the broadest exact comparable historical panel available.
-- Primary point metrics: rushing-yard MAE, RMSE, bias and correlation by season and pooled.
-- Primary tail diagnostics: 75+ and 100+ rushing-yard calibration/discrimination, with event counts.
-- Preserve ordinary-game performance; do not fix high-end misses by blindly boosting everybody's yards per carry or carry count.
-- No sportsbook/player-line input during football-model construction.
-- No production change until M96 is frozen and the final RB synthesis/prospective 2026 validation contract is satisfied.
-- Use the durable 2018-2025 player weekly cache; do not redownload historical player sheets unless deliberately refreshing the frozen source.
+- Keep **M94C central carries** as the point/central opportunity anchor unless a later precommitted candidate earns replacement.
+- Preserve **M95F as workload-tail/distribution information**, not as a universally higher deterministic carry mean. M96A explicitly showed its mixture expectation hurts overall yard MAE despite helping true 20+/25+ games.
+- Keep **M95I vacancy/role-transition probability evidence separate**; do not silently apply the M95I deterministic transform to stable incumbents.
+- Build the efficiency side beginning with M95C's retained result: blocking/offensive environment was the most stable mean-efficiency signal, while runner-created/explosive information was more useful for high-yardage upside.
+- Represent rushing yards as **workload distribution × efficiency distribution**. Do not use one scalar YPC multiplier as if efficiency variance were solved.
+- The central point/median must be protected from tail inflation. Any tail distribution that raises aggregate expected yards must prove the point gain rather than inherit it automatically from M95F's mixture mean.
+- Explicitly audit 0-5, 6-10, 11-14, 15-19, 20+, 25+, stable-workhorse, incumbent and vacancy regimes because M96A showed the dominant error source changes by workload state.
+- Primary point metrics: rushing-yard MAE, RMSE, bias, correlation by season and pooled.
+- Tail metrics: 75+/100+ discrimination **and calibration**, plus distributional coverage/quantiles.
+- Use the broadest leakage-safe temporal panel available; 2025 is development/diagnostic evidence, not pristine confirmation.
+- No sportsbook/player-line inputs during football-model construction.
+- No production promotion until a frozen RB synthesis survives temporal/prospective 2026 confirmation.
+- Do not reopen generic M95 tail coefficient search. Only a carry failure specifically demonstrated downstream by M96 may be revisited.
 
 Decision path:
 
-- If a rushing-yard synthesis materially improves point accuracy and tail behavior across seasons without ordinary-game regression, freeze it for 2026 prospective/shadow confirmation and final RB integration.
-- If no synthesis survives the frozen guards, retain the conservative existing yardage layer with M94C/M95F opportunity inputs, document the ceiling, and close RB rather than reopening M95 carry-tail tuning.
+- If the joint synthesis improves point and distributional rushing-yard metrics without material ordinary-game or season-specific regression, freeze it for prospective/shadow confirmation.
+- If efficiency improvements work but workload distribution remains unstable, retain M94C central workload and promote only the validated efficiency layer to the next confirmation stage.
+- If the joint model exposes a specific opportunity slice as the dominant remaining error, reopen only that narrowly demonstrated workload mechanism.
+- If no synthesis survives the guards, document the ceiling and retain the conservative RB stack rather than restarting broad M95 search.
 
 ## Fresh-chat startup procedure
 
