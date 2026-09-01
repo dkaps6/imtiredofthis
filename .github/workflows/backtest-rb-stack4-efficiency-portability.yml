@@ -1,0 +1,67 @@
+name: RB-STACK4 Efficiency Portability
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-stack4-efficiency-portability
+    paths:
+      - 'scripts/backtest/evaluate_rb_stack4_efficiency_portability.py'
+      - 'docs/migrations/RB_STACK4_EFFICIENCY_PORTABILITY_PLAN.md'
+      - '.github/workflows/backtest-rb-stack4-efficiency-portability.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  STACK3_RUN_ID: '33539468967'
+  M96C_RUN_ID: '33462888850'
+  MARKET_RUN_ID: '33499129109'
+
+jobs:
+  stack4:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4
+      - name: Compile
+        run: python -m py_compile scripts/backtest/evaluate_rb_stack4_efficiency_portability.py
+      - name: Download frozen artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_stack4/stack3 data/backtests/rb_stack4/m96c data/backtests/rb_stack4/market
+          gh run download "$STACK3_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-stack3-frozen-state-composition --dir data/backtests/rb_stack4/stack3
+          gh run download "$M96C_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-96c-rb-m94c-efficiency-residual --dir data/backtests/rb_stack4/m96c
+          gh run download "$MARKET_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-market-benchmark-2025 --dir data/backtests/rb_stack4/market
+          test -s data/backtests/rb_stack4/stack3/stack3_2025_casebook.csv
+          test -s data/backtests/rb_stack4/m96c/m96c_oof_trace.csv
+          test -s data/backtests/rb_stack4/market/rb_market_casebook.csv
+      - name: Evaluate
+        run: |
+          rm -rf data/backtests/rb_stack4/results
+          python scripts/backtest/evaluate_rb_stack4_efficiency_portability.py \
+            --stack3-root data/backtests/rb_stack4/stack3 \
+            --m96c-root data/backtests/rb_stack4/m96c \
+            --market-root data/backtests/rb_stack4/market \
+            --out-dir data/backtests/rb_stack4/results
+      - name: Show outputs
+        if: always()
+        run: |
+          cat data/backtests/rb_stack4/results/stack4_coverage.csv 2>/dev/null || true
+          cat data/backtests/rb_stack4/results/stack4_market_metrics.csv 2>/dev/null || true
+          cat data/backtests/rb_stack4/results/stack4_disposition.csv 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-stack4-efficiency-portability
+          path: data/backtests/rb_stack4/results/**
+          retention-days: 30
