@@ -1,0 +1,92 @@
+name: M96A RB Opportunity-Efficiency Attribution
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-m96a-opportunity-efficiency-attribution
+    paths:
+      - 'scripts/backtest/evaluate_rb_m96a_opportunity_efficiency_attribution.py'
+      - '.github/workflows/backtest-rb-m96a-opportunity-efficiency-attribution.yml'
+      - 'docs/migrations/M96A_PLAN.md'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M94C_RUN_ID: '33353485070'
+  M95F_RUN_ID: '33389924330'
+  M95I_RUN_ID: '33402566592'
+
+jobs:
+  rb-opportunity-efficiency-attribution:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2
+
+      - name: Download frozen workload artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m94c_frozen data/backtests/rb_m95f_frozen data/backtests/rb_m95i_frozen
+          gh run download "$M94C_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-94c-rb-game-environment --dir data/backtests/rb_m94c_frozen
+          gh run download "$M95F_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95f-rb-workload-regime-calibration --dir data/backtests/rb_m95f_frozen
+          gh run download "$M95I_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95i-rb-deep-concentration-tail --dir data/backtests/rb_m95i_frozen
+          test -s data/backtests/rb_m94c_frozen/m94c_2025_rb_trace.csv
+          test -s data/backtests/rb_m95f_frozen/m95f_2025_rb_trace.csv
+          test -s data/backtests/rb_m95i_frozen/m95i_2025_trace.csv
+
+      - name: Run M96A attribution audit
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_m96a_opportunity_efficiency_attribution.py
+          python scripts/backtest/evaluate_rb_m96a_opportunity_efficiency_attribution.py \
+            --m94c-root data/backtests/rb_m94c_frozen \
+            --m95f-root data/backtests/rb_m95f_frozen \
+            --m95i-root data/backtests/rb_m95i_frozen \
+            --out-dir data/backtests/rb_m96a
+
+      - name: Show M96A results
+        if: always()
+        run: |
+          echo '=== M96A disposition ==='
+          cat data/backtests/rb_m96a/m96a_disposition.csv 2>/dev/null || true
+          echo '=== M96A source parity ==='
+          cat data/backtests/rb_m96a/m96a_source_parity.csv 2>/dev/null || true
+          echo '=== M96A all-RB point rows ==='
+          python - <<'PY'
+          import pandas as pd
+          p='data/backtests/rb_m96a/m96a_point_metrics.csv'
+          try:
+              x=pd.read_csv(p); print(x.loc[x['slice'].eq('all_rb')].to_string(index=False))
+          except Exception as e: print(e)
+          PY
+          echo '=== M96A oracle attribution ==='
+          cat data/backtests/rb_m96a/m96a_oracle_attribution.csv 2>/dev/null || true
+          echo '=== M96A tail discrimination ==='
+          cat data/backtests/rb_m96a/m96a_tail_discrimination.csv 2>/dev/null || true
+          echo '=== M96A yard quantile coverage ==='
+          cat data/backtests/rb_m96a/m96a_m95f_yard_quantile_coverage.csv 2>/dev/null || true
+
+      - name: Upload M96A artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-96a-rb-opportunity-efficiency-attribution
+          path: data/backtests/rb_m96a/**
+          if-no-files-found: warn
+          retention-days: 30
