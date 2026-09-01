@@ -1,0 +1,75 @@
+name: RB Market Benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-market-benchmark
+    paths:
+      - 'scripts/backtest/evaluate_rb_market_benchmark.py'
+      - 'docs/migrations/RB_MARKET_BENCHMARK_PLAN.md'
+      - '.github/workflows/backtest-rb-market-benchmark.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M94C_RUN_ID: '33353485070'
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 pyarrow requests
+
+      - name: Download frozen M94C artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m94c_frozen
+          gh run download "$M94C_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-94c-rb-game-environment \
+            --dir data/backtests/rb_m94c_frozen
+          test -s data/backtests/rb_m94c_frozen/m94c_2025_rb_trace.csv
+
+      - name: Run frozen market benchmark
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_market_benchmark.py
+          python scripts/backtest/evaluate_rb_market_benchmark.py \
+            --m94c-root data/backtests/rb_m94c_frozen \
+            --out-dir data/backtests/rb_market_benchmark
+
+      - name: Show results
+        run: |
+          echo '=== summary ==='
+          cat data/backtests/rb_market_benchmark/rb_market_summary.csv
+          echo '=== head to head ==='
+          cat data/backtests/rb_market_benchmark/rb_market_head_to_head.csv
+          echo '=== disagreement ==='
+          cat data/backtests/rb_market_benchmark/rb_market_disagreement_buckets.csv
+          echo '=== directional signal ==='
+          cat data/backtests/rb_market_benchmark/rb_market_directional_signal.csv
+          echo '=== source audit ==='
+          cat data/backtests/rb_market_benchmark/rb_market_source_audit.csv
+          echo '=== join audit ==='
+          cat data/backtests/rb_market_benchmark/rb_market_join_audit.csv
+
+      - name: Upload benchmark artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-market-benchmark-2025
+          path: data/backtests/rb_market_benchmark/**
+          retention-days: 30
