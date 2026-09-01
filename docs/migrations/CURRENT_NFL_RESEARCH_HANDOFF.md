@@ -970,3 +970,8 @@ Do not revert to whole-model replacement contests. New information should normal
 Probability/distribution layers quantify uncertainty around the football state; they do not substitute for role, availability, allocation, team opportunity, runner ability, matchup or game-context knowledge.
 
 The current next migration remains `RB-STACK1 — Production-Equivalent RB Historical Baseline + Integration Audit`, but RB-STACK1 must preserve the enriched-M94C/backfield-allocation track rather than postponing or forgetting it. Establish the production-equivalent parent first so the integration tests have the correct baseline, then immediately test the enriched M94C/allocation capability as an add-on to that parent.
+
+
+## Latest RB STACK continuity supplement
+
+For the authoritative STACK1-STACK5 integration, market-gap forensics, retained capability map, and next STACK6 migration, read `docs/migrations/RB_STACK1_TO_STACK5_CONTINUITY_2026_09_01.md`. This supplement supersedes older RB next-step text where there is a conflict.
