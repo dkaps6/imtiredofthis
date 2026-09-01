@@ -1,0 +1,42 @@
+name: Advance RB STACK5 Pointer
+
+on:
+  push:
+    branches:
+      - research-rb-stack5-market-gap-forensics
+    paths:
+      - '.github/workflows/advance-rb-stack5-pointer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  handoff-pointer:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Add STACK1-STACK5 supplement pointer
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md')
+          text = p.read_text()
+          marker = 'RB_STACK1_TO_STACK5_CONTINUITY_2026_09_01.md'
+          if marker not in text:
+              text += '\n\n## Latest RB STACK continuity supplement\n\nFor the authoritative STACK1-STACK5 integration, market-gap forensics, retained capability map, and next STACK6 migration, read `docs/migrations/RB_STACK1_TO_STACK5_CONTINUITY_2026_09_01.md`. This supplement supersedes older RB next-step text where there is a conflict.\n'
+              p.write_text(text)
+          PY
+      - name: Commit pointer
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md
+          if git diff --cached --quiet; then
+            echo 'No pointer change needed'
+            exit 0
+          fi
+          git commit -m 'RB: point canonical handoff to STACK1-STACK5 supplement'
+          git push origin HEAD:research-rb-stack5-market-gap-forensics
