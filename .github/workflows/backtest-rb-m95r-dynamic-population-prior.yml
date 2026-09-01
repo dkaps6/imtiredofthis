@@ -1,0 +1,69 @@
+name: M95R RB Dynamic Population Prior
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-m95r-dynamic-population-prior
+    paths:
+      - 'scripts/backtest/evaluate_rb_m95r_dynamic_population_prior.py'
+      - '.github/workflows/backtest-rb-m95r-dynamic-population-prior.yml'
+      - 'docs/migrations/M95R_RB_DYNAMIC_POPULATION_PRIOR.md'
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M95Q_RUN_ID: '33450395426'
+  M95P_RUN_ID: '33437999902'
+
+jobs:
+  rb-dynamic-population-prior:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy==1.26.4 pandas==1.5.3 scipy==1.11.4 scikit-learn==1.4.2
+      - name: Download authoritative M95Q and M95P artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m95r/m95q data/backtests/rb_m95r/m95p
+          gh run download "$M95Q_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-95q-rb-expanded-historical-stable-workhorse \
+            --dir data/backtests/rb_m95r/m95q
+          gh run download "$M95P_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-95p-rb-dynamic-workload-regime \
+            --dir data/backtests/rb_m95r/m95p
+          test -s data/backtests/rb_m95r/m95q/m95q_enriched_holdouts.csv
+          test -s data/backtests/rb_m95r/m95p/m95p_exact_stable_workhorse_regime_trace.csv
+          test -s data/backtests/rb_m95r/m95p/m95p_team_week_broad_census_2018_2025.csv
+      - name: Run frozen M95R candidate
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_m95r_dynamic_population_prior.py
+          python scripts/backtest/evaluate_rb_m95r_dynamic_population_prior.py \
+            --m95q-dir data/backtests/rb_m95r/m95q \
+            --m95p-dir data/backtests/rb_m95r/m95p \
+            --out-dir data/backtests/rb_m95r/results
+      - name: Show headline results
+        if: always()
+        run: |
+          echo '=== M95R metrics ==='
+          cat data/backtests/rb_m95r/results/m95r_metrics.csv 2>/dev/null || true
+          echo '=== M95R disposition ==='
+          cat data/backtests/rb_m95r/results/m95r_disposition.csv 2>/dev/null || true
+      - name: Upload M95R artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-95r-rb-dynamic-population-prior
+          path: data/backtests/rb_m95r/results/**
+          if-no-files-found: warn
+          retention-days: 90
