@@ -1,0 +1,42 @@
+name: Advance RB STACK5 Handoff V2
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-stack5-market-gap-forensics
+    paths:
+      - '.github/workflows/advance-rb-stack5-handoff-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  handoff:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Add STACK5 continuity pointer
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md')
+          text = p.read_text()
+          marker = '# LATEST CONTINUITY POINTER — RB STACK1 THROUGH STACK5'
+          block = '''\n\n# LATEST CONTINUITY POINTER — RB STACK1 THROUGH STACK5\n\nThe authoritative continuation through RB STACK5 is `docs/migrations/RB_STACK1_TO_STACK5_CONTINUITY_2026_09_01.md`. This supplement supersedes older RB-next-step text where conflicts exist while preserving all earlier capability-ledger findings. The current best retrospective-development RB point parent is P3: full historical stack for Week 1, then STACK2 enriched M94C opportunity/allocation multiplied by full-stack implied efficiency/context. Next justified migration is RB-STACK6 / ND3 secondary-back role and substitution state.\n'''
+          if marker not in text:
+              p.write_text(text + block)
+          PY
+      - name: Commit handoff pointer
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md
+          if git diff --cached --quiet; then
+            echo 'no handoff changes'
+            exit 0
+          fi
+          git commit -m 'RB: point canonical handoff through STACK5'
+          git push origin HEAD:research-rb-stack5-market-gap-forensics
