@@ -1,0 +1,67 @@
+name: M95S RB Mass Ranking Decomposition
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-m95s-mass-ranking-decomposition
+    paths:
+      - 'scripts/backtest/evaluate_rb_m95s_mass_ranking_decomposition.py'
+      - '.github/workflows/backtest-rb-m95s-mass-ranking-decomposition.yml'
+      - 'docs/migrations/M95S_PLAN.md'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  rb-mass-ranking-decomposition:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      M95R_RUN_ID: '33453141931'
+      M95P_RUN_ID: '33437999902'
+      M95K_RUN_ID: '33411719023'
+      M95L_RUN_ID: '33429747106'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy==1.26.4 pandas==1.5.3 scipy==1.11.4 scikit-learn==1.4.2
+      - name: Download authoritative research artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m95s/{m95r,m95p,m95k,m95l}
+          gh run download "$M95R_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95r-rb-dynamic-population-prior --dir data/backtests/rb_m95s/m95r
+          gh run download "$M95P_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95p-rb-dynamic-workload-regime --dir data/backtests/rb_m95s/m95p
+          gh run download "$M95K_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95k-rb-feed-tendency-carry-ceiling --dir data/backtests/rb_m95s/m95k
+          gh run download "$M95L_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95l-rb-sealed-temporal-confirmation --dir data/backtests/rb_m95s/m95l
+          test -s data/backtests/rb_m95s/m95r/m95r_exact_panel.csv
+          test -s data/backtests/rb_m95s/m95p/m95p_team_week_broad_census_2018_2025.csv
+          test -s data/backtests/rb_m95s/m95k/m95k_2025_trace.csv
+          find data/backtests/rb_m95s/m95l -name m95l_2023_confirmation_trace.csv -print -quit | grep -q .
+      - name: Run frozen M95S diagnostic
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_m95s_mass_ranking_decomposition.py
+          python scripts/backtest/evaluate_rb_m95s_mass_ranking_decomposition.py \
+            --m95r-dir data/backtests/rb_m95s/m95r \
+            --m95p-dir data/backtests/rb_m95s/m95p \
+            --m95k-dir data/backtests/rb_m95s/m95k \
+            --m95l-dir data/backtests/rb_m95s/m95l \
+            --out-dir data/backtests/rb_m95s/results
+      - name: Show headline results
+        run: |
+          cat data/backtests/rb_m95s/results/m95s_disposition.csv
+          cat data/backtests/rb_m95s/results/m95s_mass_normalized_ranking_audit.csv
+      - name: Upload M95S artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-95s-rb-mass-ranking-decomposition
+          path: data/backtests/rb_m95s/results/**
+          retention-days: 90
