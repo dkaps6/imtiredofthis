@@ -1,5 +1,6 @@
 name: RB-STACK6D Availability Source Audit
 
+# Frozen protocol: docs/migrations/RB_STACK6D_AVAILABILITY_SOURCE_AUDIT_PLAN.md
 on:
   workflow_dispatch:
   push:
