@@ -1,0 +1,54 @@
+name: RB-ND2A Role-State Source Audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-nd2a-role-state-source-audit
+    paths:
+      - 'scripts/backtest/audit_rb_nd2a_role_state_sources.py'
+      - 'docs/migrations/RB_ND2A_ROLE_STATE_SOURCE_AUDIT_PLAN.md'
+      - '.github/workflows/backtest-rb-nd2a-role-state-source-audit.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M94C_RUN_ID: '33353485070'
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 pyarrow nflreadpy
+      - name: Download M94C
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/nd2a_m94c
+          gh run download "$M94C_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-94c-rb-game-environment --dir data/backtests/nd2a_m94c
+          test -s data/backtests/nd2a_m94c/m94c_2025_rb_trace.csv
+      - name: Run audit
+        run: |
+          python -m py_compile scripts/backtest/audit_rb_nd2a_role_state_sources.py
+          python scripts/backtest/audit_rb_nd2a_role_state_sources.py --m94c-root data/backtests/nd2a_m94c --out-dir data/backtests/rb_nd2a_role_sources
+      - name: Show outputs
+        run: |
+          cat data/backtests/rb_nd2a_role_sources/nd2a_m94c_role_hole.csv
+          cat data/backtests/rb_nd2a_role_sources/nd2a_m94c_coverage.csv
+          cat data/backtests/rb_nd2a_role_sources/nd2a_depth_audit.csv
+          cat data/backtests/rb_nd2a_role_sources/nd2a_participation_audit.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rb-nd2a-role-state-source-audit
+          path: data/backtests/rb_nd2a_role_sources/**
+          retention-days: 30
