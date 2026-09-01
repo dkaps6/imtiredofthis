@@ -15,6 +15,7 @@ import pandas as pd
 
 from scripts.modeling.ensemble_v2 import fit_market_weights, apply_ensemble
 from scripts.utils.canonical_names import canonicalize_player_name_safe
+from scripts._opponent_map import canon_team
 
 RB_POS = {"RB", "FB", "HB"}
 MARKETS = {"rush_att", "rush_yards"}
@@ -73,7 +74,6 @@ def prep_components(x: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_ensembles(c24: pd.DataFrame, c25: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    # Canonical market-specific all-position weights, frozen from 2024 OOS.
     w24 = fit_market_weights(c24)
     frozen = apply_ensemble(c25, weights=w24).rename(columns={
         "ensemble_proj": "ensemble_2024_frozen",
@@ -83,7 +83,6 @@ def build_ensembles(c24: pd.DataFrame, c25: pd.DataFrame) -> tuple[pd.DataFrame,
         "ensemble_weight_state": "ensemble_2024_w_state",
     })
 
-    # Leakage-safe weekly adaptive diagnostic: 2024 + prior 2025 weeks only.
     chunks, weight_rows = [], []
     for week in sorted(pd.to_numeric(c25["week"], errors="coerce").dropna().astype(int).unique()):
         train = pd.concat([c24, c25.loc[pd.to_numeric(c25["week"], errors="coerce") < week]], ignore_index=True)
@@ -101,7 +100,6 @@ def build_ensembles(c24: pd.DataFrame, c25: pd.DataFrame) -> tuple[pd.DataFrame,
         chunks.append(scored)
     expanding = pd.concat(chunks, ignore_index=True) if chunks else pd.DataFrame()
 
-    # Merge adaptive columns onto the frozen frame by stable row identity.
     keys = ["season", "week", "team", "player_clean_key", "market"]
     ecols = keys + [c for c in expanding.columns if c.startswith("ensemble_expanding")]
     frozen = frozen.merge(expanding[ecols].drop_duplicates(keys), on=keys, how="left", validate="one_to_one")
@@ -128,7 +126,6 @@ def add_m94c(rb: pd.DataFrame, m94: pd.DataFrame) -> tuple[pd.DataFrame, pd.Data
 
 
 def context_coverage(rb: pd.DataFrame) -> pd.DataFrame:
-    # One row per player-week; context fields repeat by market.
     keys = ["season", "week", "team", "player_clean_key"]
     x = rb.sort_values(keys).drop_duplicates(keys)
     rows = []
@@ -173,9 +170,12 @@ def listed_market_benchmark(trace: pd.DataFrame, casebook: pd.DataFrame) -> pd.D
     cb = casebook.copy()
     cb["player_clean_key"] = cb["player"].map(_key)
     cb["week"] = pd.to_numeric(cb["week"], errors="coerce")
-    cb["team"] = cb["team"].astype(str)
-    keys = ["week", "team", "player_clean_key"]
+    # Mechanical identity normalization only. The original benchmark uses LA/JAC
+    # while historical football components use LAR/JAX. No projection changes.
+    cb["team"] = cb["team"].map(canon_team)
     y = trace.loc[trace["market"].eq("rush_yards")].copy()
+    y["team"] = y["team"].map(canon_team)
+    keys = ["week", "team", "player_clean_key"]
     y = y.merge(cb[keys + ["consensus_line"]].drop_duplicates(keys), on=keys, how="inner", validate="one_to_one")
     y["vegas_consensus"] = pd.to_numeric(y["consensus_line"], errors="coerce")
     arms = {
@@ -206,7 +206,6 @@ def main() -> int:
         raise RuntimeError("STACK1 produced zero 2025 RB/FB rows")
     rb, join_audit = add_m94c(rb, read(args.m94c))
 
-    # Attach actual carries to rushing-yard rows for diagnostic workload slicing.
     carries = rb.loc[rb["market"].eq("rush_att"), ["week", "team", "player_clean_key", "actual"]].rename(columns={"actual": "actual_rush_att"})
     rb = rb.drop(columns=["actual_rush_att"], errors="ignore").merge(carries, on=["week", "team", "player_clean_key"], how="left", validate="many_to_one")
 
