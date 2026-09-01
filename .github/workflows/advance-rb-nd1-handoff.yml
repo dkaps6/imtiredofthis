@@ -1,0 +1,37 @@
+name: RB-ND1 Advance Handoff
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-nd1-forensic-atlas
+    paths:
+      - 'scripts/backtest/advance_rb_nd1_handoff.py'
+      - '.github/workflows/advance-rb-nd1-handoff.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  advance-handoff:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Update handoff
+        run: python scripts/backtest/advance_rb_nd1_handoff.py
+      - name: Commit handoff
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md
+          if git diff --cached --quiet; then
+            echo 'handoff already current'
+          else
+            git commit -m 'RB-ND1: advance canonical handoff to RB-ND2'
+            git push origin HEAD:research-rb-nd1-forensic-atlas
+          fi
