@@ -5,10 +5,10 @@ This is the authoritative continuity checkpoint for the `NFL stuff` project. A f
 ## Repository / current state
 
 - Repo: `dkaps6/imtiredofthis`
-- Current research branch: `research-rb-m96b-modular-joint-synthesis`
+- Current research branch: `research-rb-m96c-m94c-efficiency-residual`
 - Stable continuity ref: `research-current-state`
 - Last known production `main` SHA: `7532a2c29dde78a5c3758eb1427561cfed801d67`
-- No M91-M96B RB research has been promoted to production.
+- No M91-M96C RB research has been promoted to production.
 - Phase A production/data cleanup Waves 1-4 is complete.
 - M94C remains the RB central carry/opportunity reference during tail research.
 - M95F remains the safer stable-workhorse tail baseline after M95L/M95O.
@@ -23,6 +23,7 @@ This is the authoritative continuity checkpoint for the `NFL stuff` project. A f
 - **M95T was the final retrospective carry-tail candidate. It improved pooled Brier/logloss/AUC and repaired 2023 directionally, but failed the frozen cross-season stability gates because 2025 calibration still worsened materially. Per the stopping rule, new retrospective RB carry-tail candidates stop here; M94C/M95F is the conservative workload foundation for M96 rushing-yard synthesis.**
 - **M96A attributed 2025 rushing-yard error jointly to opportunity and efficiency: perfect carries recovered 7.68 MAE yards, perfect efficiency 6.73, and opportunity was the larger absolute component in 59.7% of games. The precommitted 1-yard dominance margin was missed by 0.048 yards, so M96B must model workload and efficiency as separate distributions rather than declaring either side solved.**
 - **M96B formalized the modular/puzzle approach. Simple additive stacking did not produce a broad winner: M94C remained the point anchor; the transplanted M95C environment residual slightly worsened point MAE; M95F workload-tail fusion improved 75+/100+ metrics only directionally and below the retention gate; the isolated M95D upside residual was destructive when added to M94C; and M95I vacancy information remained a promising diagnostic only. The key lesson is that positive modules may be redundant, conditional, or interactive rather than directly additive.**
+- **M96C trained efficiency residuals directly against M94C using strict 2025 expanding-week OOF evaluation. No global E/P/D block cleared the frozen gate. Opponent-defense efficiency D was best globally (MAE `21.5719 -> 21.3474`) and improved 0-14 carry games, but materially worsened true 15+/20+ workload games. E/P showed the same sign flip. This supports a pregame conditional efficiency router rather than a universal correction. Isolated explosive X again failed as a separable tail increment. M96D is next.**
 
 ## Non-negotiable modeling rules
 
@@ -591,37 +592,103 @@ Do not conclude that M95 work was wasted, and do not force a combined stack mere
 
 **Current surviving global point architecture after M96B remains M94C/C.** No new global rushing-yard tail fusion earned retention in M96B. Generic carry-tail tuning remains closed.
 
-# NEXT MIGRATION — M96C
+# Latest completed migration: M96C — M94C-anchored RB efficiency residual synthesis
 
-Name: **M96C — M94C-Anchored RB Efficiency Residual Synthesis**
+Full results: `docs/migrations/M96C_RB_M94C_EFFICIENCY_RESIDUAL_RESULTS.md`.
+
+Authoritative:
+
+- workflow `M96C RB M94C Efficiency Residual`
+- run **`33462888850`**
+- job **`99716610968`**
+- tested SHA **`708f9ff23b96cde8e023b6317fcaec30b76e76b0`**
+- artifact **`9783799265`**
+- artifact SHA256 **`6109a8b3afc6d2fdb963db9149bf3fb238cc476e291bf743cc4b496ad39abf72`**
+- execution success
+- disposition **`M96C_NO_GLOBAL_WINNER_CONDITIONAL_EFFICIENCY_SIGNAL_SUPPORTED`**
+- model fit `1`; feature search `0`; weight search `0`; hyperparameter search `0`; sportsbook `0`; production change `0`
+
+Source/protocol:
+
+- frozen M94C player-level rush-yard point exists in the authoritative artifact for 2025 only, so M96C did **not** invent a synthetic 2024 M94C player point;
+- strict expanding-week 2025 OOF: test Weeks 6-18, each week trained only on earlier 2025 weeks;
+- M94C rush attempts and central rush-yard point frozen;
+- residual model predicted YPC/efficiency error only; correction multiplied by frozen M94C carries;
+- train residual winsorization/clipping used training-only 5th/95th percentiles;
+- M95D->M94C 2025 join `1340/1357 = 98.7472%`; exact yard and carry truth parity max diff `0.0`.
+
+Frozen blocks:
+
+- E blocking/environment `14` features;
+- P player-created efficiency `8` available features;
+- D opponent run efficiency/resistance `16` features;
+- X explosive/upside `16` features, tail-only primary role.
+
+Weeks 6-18 OOF all-RB (`n=961`):
+
+- C/M94C MAE **`21.5719`**, RMSE `30.4500`, bias `+0.3820`, corr `.6045`.
+- E MAE `21.5063` (gain `+0.0656`), but RMSE worsened `0.2509`.
+- P MAE `21.4261` (gain `+0.1458`), RMSE worsened `0.1654`.
+- D was best: MAE **`21.3474`** (gain **`+0.2245`**), RMSE `30.4341` (gain `+0.0159`).
+- E+P MAE `21.5880`; E+D `21.5676`; P+D `21.4684`; E+P+D `21.6526`. Additive block stacking did not create a winner.
+- No arm reached the frozen `>=0.25` all-RB MAE gain and all arms failed the workload non-degradation gate.
+
+The key sign flip was D by actual workload (postgame diagnostic only):
+
+- 0-5 carries: MAE `13.4145 -> 12.7837`, gain `+0.6308`.
+- 6-10: `21.8220 -> 21.3148`, gain `+0.5071`.
+- 11-14: `25.7482 -> 25.0106`, gain `+0.7376`.
+- 15-19: `29.5957 -> 30.3544`, **regression `0.7587`**.
+- 20+: `39.7267 -> 41.8936`, **regression `2.1669`**.
+- 25+ diagnostic: regression `1.3432`.
+
+E and P showed the same broad pattern: low/mid-workload value, higher-workload damage. This means the efficiency information is not useless; it is **conditional**. M96A already showed 20+/25+ yard misses are opportunity-dominant, while middle workload games are more efficiency-sensitive. M96C independently fits that architecture.
+
+Do **not** use actual carries as the future router. Actual workload is postgame truth and is used only to diagnose the sign flip. Any router must use pregame M94C/M95F/role-state signals and be frozen before outcome scoring.
+
+X tail-only audit failed:
+
+- 75+ AUC `.806478 -> .800355`, Brier `.114757 -> .115719`.
+- 100+ AUC `.790822 -> .785170`, Brier `.067047 -> .067255`.
+- X is rejected as an isolated separable increment in this form; prior native-model interaction evidence is not erased.
+
+Capability ledger after M96C:
+
+- **C/M94C:** RETAIN global center.
+- **E:** CONDITIONAL_CLUE only.
+- **P:** CONDITIONAL_CLUE only.
+- **D:** CONDITIONAL_CLUE only; strongest simple efficiency block.
+- **X:** REJECT isolated tail increment.
+- **M95F:** still workload-distribution evidence, not a universal yard mean boost.
+- **M95I/V:** remains vacancy/transition diagnostic evidence and must be compared directly against the best baseline in a separately frozen conditional test.
+
+Scientific interpretation: M96C did not find a safe universal efficiency correction, but it found exactly the kind of module specialization the puzzle framework is designed to exploit. The next step is not another global coefficient blend; it is a pregame router that decides when an efficiency expert should be active without sacrificing high-workload games.
+
+# NEXT MIGRATION — M96D
+
+Name: **M96D — Pregame Conditional Efficiency Routing Audit**
 
 Primary question:
 
-> Can leakage-safe player/offense/defense rushing-efficiency information predict the rushing-yard residual left after M94C's frozen opportunity/yard center, without changing carries and without damaging ordinary workload regimes?
+> Can pregame workload/role-state information identify the player-games where an M94C-anchored efficiency expert (especially D, with E/P as controlled alternatives) should be active, preserving low/mid-workload gains without damaging high-workload/tail games?
 
 Required design:
 
-- Freeze M94C carries and M94C central rush-yard prediction.
-- Fit directly on `actual_rush_yards - M94C_rush_yards` (or an algebraically equivalent efficiency residual). **Do not transplant the old M95C delta**; M96B just falsified that plug-in approach.
-- Use only predeclared feature blocks from already-audited M95B/C/D lineage:
-  - offensive/blocking/environment mean-efficiency block;
-  - player-created efficiency block;
-  - opponent run-efficiency/resistance block;
-  - explosive/upside block only for tail unless it separately earns point value.
-- Treat feature blocks as modules. Run frozen block ablations and compatible combinations; no broad feature soup and no after-result weight search.
-- A block must show incremental value relative to its parent combination **and** satisfy non-degradation gates on ordinary workload slices before retention.
-- No carry adjustment in M96C.
-- Report MAE/RMSE/bias/correlation and 75+/100+ tail metrics by season and key workload regimes.
-- Use strict temporal evaluation. 2024/2025 are already inspected/development evidence, not pristine confirmation.
-- Keep V parked as a vacancy-specific diagnostic. A future conditional-expert test must compare V directly against the best M94C-based yard-tail baseline; do not promote it from the M96B parent comparison.
+- M94C carries and central rush-yard point remain frozen.
+- No actual carries, actual yards, or any postgame variable may enter the router.
+- No sportsbook inputs.
 - Do not reopen generic M95 carry-tail coefficient search.
-- Any M96C survivor remains research-only until genuinely prospective/untouched 2026 confirmation.
+- Router inputs must come from already-validated pregame workload/role state: M94C projected carries, M95F 20+/25+ probability/distribution summaries, stable-workhorse/role state, vacancy flag/entitlement state where available, and only predeclared workload indicators.
+- The router must be precommitted and small. Use a diagnostic gate grid or simple leakage-safe conditional model; no per-player/week hand selection and no after-result threshold tuning.
+- D is the primary efficiency expert because it was the strongest M96C simple block. E and P are controlled alternatives; do not assume combinations are additive.
+- Compare C vs routed-D and any other predeclared routed arms on global MAE/RMSE/bias plus workload-tail/75+/100+ guards.
+- Preserve high-workload behavior: a routed candidate cannot earn retention by improving low workload while recreating M96C's 20+ damage.
+- 2025 remains development evidence. Any retained routed architecture must still face genuinely prospective 2026 confirmation before production.
 
-Decision/stopping path:
+Decision path:
 
-- If one or more predeclared efficiency blocks improve the M94C residual without material ordinary-game/season regression, keep the smallest compatible modular combination and freeze it for the next confirmation/conditional-tail stage.
-- If different blocks help different regimes but conflict globally, test a precommitted conditional-expert architecture rather than averaging them blindly.
-- If the predeclared efficiency blocks cannot improve M94C safely, retain the conservative point layer and move toward prospective confirmation / conditional routing instead of opening an unlimited M96 alphabet.
+- If a pregame router preserves the M96C low/mid efficiency gains while removing the high-workload regressions, freeze the smallest successful routed architecture for prospective confirmation.
+- If routing cannot separate the regimes safely, retain C/M94C and stop retrospective RB efficiency refinement rather than opening unlimited variants.
 
 ## Fresh-chat startup procedure
 
