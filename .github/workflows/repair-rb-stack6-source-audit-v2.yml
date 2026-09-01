@@ -1,0 +1,39 @@
+name: Repair RB STACK6 Source Audit V2
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-stack6-secondary-role-source-audit
+    paths:
+      - '.github/workflows/repair-rb-stack6-source-audit-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fix first-observation leakage boolean
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/backtest/audit_rb_secondary_role_source.py')
+          s=p.read_text()
+          old='z["leakage_safe_prior_only"] = (num(z.feature_source_max_order) < num(z.target_order)).fillna(True).astype(int)'
+          new='prior_order = num(z.feature_source_max_order)\n    z["leakage_safe_prior_only"] = (prior_order.isna() | prior_order.lt(num(z.target_order))).astype(int)'
+          if old not in s:
+              raise SystemExit('v2 leakage patch target not found')
+          p.write_text(s.replace(old,new))
+          PY
+      - name: Commit repair
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/backtest/audit_rb_secondary_role_source.py
+          git commit -m 'RB STACK6: treat no-prior rows as leakage-safe missing history'
+          git push origin HEAD:research-rb-stack6-secondary-role-source-audit
