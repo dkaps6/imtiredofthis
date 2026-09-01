@@ -1,5 +1,6 @@
 name: RB-STACK6C Rotation Source Audit
 
+# Frozen protocol: docs/migrations/RB_STACK6C_ROTATION_SOURCE_AUDIT_PLAN.md
 on:
   workflow_dispatch:
   push:
