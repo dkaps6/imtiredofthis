@@ -1,0 +1,71 @@
+name: RB-STACK3 Frozen State Composition
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-stack3-frozen-state-composition
+    paths:
+      - 'scripts/backtest/evaluate_rb_stack3_frozen_state_composition.py'
+      - 'docs/migrations/RB_STACK3_FROZEN_STATE_COMPOSITION_PLAN.md'
+      - '.github/workflows/backtest-rb-stack3-frozen-state-composition.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  STACK2_RUN_ID: '33538770934'
+  M95F_RUN_ID: '33389924330'
+  M95I_RUN_ID: '33402566592'
+  MARKET_RUN_ID: '33499129109'
+
+jobs:
+  stack3:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4
+      - name: Compile
+        run: python -m py_compile scripts/backtest/evaluate_rb_stack3_frozen_state_composition.py
+      - name: Download frozen artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_stack3/stack2 data/backtests/rb_stack3/m95f data/backtests/rb_stack3/m95i data/backtests/rb_stack3/market
+          gh run download "$STACK2_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-stack2-enriched-allocation-integration --dir data/backtests/rb_stack3/stack2
+          gh run download "$M95F_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95f-rb-workload-regime-calibration --dir data/backtests/rb_stack3/m95f
+          gh run download "$M95I_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95i-rb-deep-concentration-tail --dir data/backtests/rb_stack3/m95i
+          gh run download "$MARKET_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-market-benchmark-2025 --dir data/backtests/rb_stack3/market
+          test -s data/backtests/rb_stack3/stack2/stack2_2025_casebook.csv
+          test -s data/backtests/rb_stack3/m95f/m95f_2025_rb_trace.csv
+          test -s data/backtests/rb_stack3/m95i/m95i_2025_trace.csv
+          test -s data/backtests/rb_stack3/market/rb_market_casebook.csv
+      - name: Evaluate
+        run: |
+          rm -rf data/backtests/rb_stack3/results
+          python scripts/backtest/evaluate_rb_stack3_frozen_state_composition.py \
+            --stack2-root data/backtests/rb_stack3/stack2 \
+            --m95f-root data/backtests/rb_stack3/m95f \
+            --m95i-root data/backtests/rb_stack3/m95i \
+            --market-root data/backtests/rb_stack3/market \
+            --out-dir data/backtests/rb_stack3/results
+      - name: Show outputs
+        if: always()
+        run: |
+          cat data/backtests/rb_stack3/results/stack3_coverage.csv 2>/dev/null || true
+          cat data/backtests/rb_stack3/results/stack3_market_metrics.csv 2>/dev/null || true
+          cat data/backtests/rb_stack3/results/stack3_disposition.csv 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-stack3-frozen-state-composition
+          path: data/backtests/rb_stack3/results/**
+          retention-days: 30
