@@ -1,0 +1,55 @@
+name: M96D RB Pregame Efficiency Router
+
+on:
+  push:
+    branches: [research-rb-m96d-pregame-efficiency-router]
+    paths:
+      - 'scripts/backtest/evaluate_rb_m96d_pregame_efficiency_router.py'
+      - 'docs/migrations/M96D_RB_PREGAME_CONDITIONAL_EFFICIENCY_ROUTING_PLAN.md'
+      - '.github/workflows/backtest-rb-m96d-pregame-efficiency-router.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  rb-pregame-efficiency-router:
+    runs-on: ubuntu-24.04
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      M96C_RUN_ID: '33462888850'
+      M95D_RUN_ID: '33359898917'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2
+      - name: Download frozen M96C and M95D artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m96c_frozen data/backtests/rb_m95d_frozen
+          gh run download "$M96C_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-96c-rb-m94c-efficiency-residual --dir data/backtests/rb_m96c_frozen
+          gh run download "$M95D_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-95d-rb-rushing-environment-scheme --dir data/backtests/rb_m95d_frozen
+          test -s data/backtests/rb_m96c_frozen/m96c_oof_trace.csv
+          test -s data/backtests/rb_m95d_frozen/m95d_rb_environment_trace.csv
+      - name: Run frozen M96D routing audit
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_m96d_pregame_efficiency_router.py
+          python scripts/backtest/evaluate_rb_m96d_pregame_efficiency_router.py --m96c-root data/backtests/rb_m96c_frozen --m95d-root data/backtests/rb_m95d_frozen --out-dir data/backtests/rb_m96d
+      - name: Show results
+        run: |
+          cat data/backtests/rb_m96d/m96d_disposition.csv
+          cat data/backtests/rb_m96d/m96d_retention_gate.csv
+          cat data/backtests/rb_m96d/m96d_arm_summary.csv
+          cat data/backtests/rb_m96d/m96d_activation.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: migration-96d-rb-pregame-efficiency-router
+          path: data/backtests/rb_m96d/**
+          retention-days: 30
