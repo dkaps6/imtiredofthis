@@ -5,7 +5,7 @@ This is the authoritative continuity checkpoint for the `NFL stuff` project. A f
 ## Repository / current state
 
 - Repo: `dkaps6/imtiredofthis`
-- Current research branch: `research-rb-m96d-pregame-efficiency-router`
+- Current research branch: `research-rb-m96e-workload-risk-guard`
 - Stable continuity ref: `research-current-state`
 - Last known production `main` SHA: `7532a2c29dde78a5c3758eb1427561cfed801d67`
 - No M91-M96C RB research has been promoted to production.
@@ -684,31 +684,47 @@ M96D tested one frozen deterministic pregame router: turn M96C opponent-defense 
 
 The controlled role-only diagnostic was stronger globally (MAE `21.3641`, gain `+0.2078`; RMSE/correlation also improved) but still leaked damage into rare unexpected high-workload games. Pregame strata showed why: non-entrenched backs had only `3.16%` actual 20+ incidence overall, yet those rare spikes matter disproportionately. This supports exactly one final router type using already-frozen M95F workload-tail distribution and M95I transition/vacancy evidence as a safety guard around the role-based D expert. It does **not** reopen carry-tail tuning.
 
-# NEXT MIGRATION — M96E
+# Latest completed migration: M96E — Role Router with Frozen Workload-Risk Guard
 
-Name: **M96E — Role Router with Frozen Workload-Risk Guard**
+Full results: `docs/migrations/M96E_RB_ROLE_WORKLOAD_RISK_GUARD_RESULTS.md`.
 
-Primary question:
+Authoritative:
 
-> Can the stronger non-entrenched role-based D router retain its global rushing-yard improvement while using frozen M95F/M95I pregame workload-risk signals to suppress D specifically when an unexpected 20+/25+ workload spike or transition is plausible?
+- workflow `M96E RB Role Workload Risk Guard`
+- run **`33467630395`**
+- job **`99730679349`**
+- tested SHA **`db1a139a270b7c246d1b5b07dc1a3490cb8fa3a0`**
+- artifact **`9785416331`**
+- artifact SHA256 **`c73a728570516b77c04c4a68ec1541e4a94fb830e144f40f16df63dbcc36dfbe`**
+- execution success
+- disposition **`M96E_FINAL_RETROSPECTIVE_ROUTER_FAILED_STOP`**
+- model fit `0`; threshold search `0`; feature search `0`; sportsbook `0`; production change `0`
 
-Required design:
+M96E was the final precommitted retrospective efficiency-router test. It started from M96D's stronger non-entrenched role-based D router and suppressed D whenever frozen M95F/M95I pregame workload-risk evidence indicated meaningful 20+ workload or vacancy-transition risk. M94C carries and center were unchanged; M95F/M95I were not refit.
 
-- M94C carries/yard center frozen; M96C D frozen.
-- Start from the M96D role-only insight; do not reuse actual carry buckets as router inputs.
-- M95F calibrated 20+/25+ probabilities/distribution summaries and M95I vacancy/transition state are safety guards only. No carry-tail coefficient/model retuning.
-- Freeze one primary guard before scoring; no threshold grid selection after results.
-- No sportsbook inputs or postgame router features.
-- Preserve all-RB MAE/RMSE improvement and require actual 20+/25+ diagnostic non-degradation.
-- 2025 remains development evidence; any survivor is research-only pending prospective 2026 confirmation.
+Weeks 6-18 all-RB (`n=961`): C MAE `21.571881`; M96E `21.430091`, gain `+0.141791`. RMSE improved `30.449965 -> 30.431137`; correlation improved `.604528 -> .605692`; late W13-18 MAE improved `+0.097105`. 75+ AUC changed only `-.000407`; 100+ improved `+.001508`.
 
-Stopping rule:
+Crucially, the safety guard worked: actual 20+ MAE regression fell to only `+0.059047` and 25+ to `+0.159106`, both inside the frozen <=`.50` gate. The guard protected 69/75 actual 20+ and 20/21 actual 25+ games in evaluation-only accounting.
 
-- If M96E passes, freeze the routed architecture for prospective 2026 confirmation.
-- If it fails, stop retrospective RB efficiency refinement, retain C/M94C as point architecture plus existing workload/vacancy diagnostics, write `AUTONOMOUS_RB_RESEARCH_STOP`, and move no further without prospective evidence.
+However, the frozen all-RB materiality gate required MAE gain >=`.150000`; observed was `.141791`, short by `.008209`. Eight of nine checks passed, but the materiality line is **not waived**. M96E is not retained/promoted.
+
+Final retrospective RB architecture:
+- **C/M94C** remains the conservative global rushing-yard point and central opportunity anchor.
+- **M95F** remains workload-distribution/stable-workhorse tail evidence, not a universal point-mean boost.
+- **M95I** remains vacancy/transition diagnostic evidence.
+- **D/M96C** is validated as conditional scientific signal but did not earn a retained point-module role after the final safety/materiality test.
+- **E/P** remain conditional clues only.
+- **X** remains rejected as an isolated separable tail increment.
+- no M91-M96E RB research is production-promoted by this closure.
+
+# AUTONOMOUS_RB_RESEARCH_STOP
+
+Retrospective RB efficiency refinement is now frozen. The final precommitted router solved most of the high-workload safety issue but missed the predeclared global materiality gate. Further threshold/feature variants on exposed 2025 outcomes would be overfitting rather than independent evidence.
+
+The next legitimate RB evidence must come from genuinely prospective/untouched 2026 games, or from a separately justified new data source tested without retuning against the exposed historical outcomes. Until then, do **not** open M96F or additional retrospective RB router variants.
 
 ## Fresh-chat startup procedure
 
 Tell a new chat:
 
-> Continue my NFL stuff project from the `research-current-state` branch in GitHub repo `dkaps6/imtiredofthis`. Read `docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md` first, verify the latest authoritative GitHub Actions run/artifact, and continue directly from the `NEXT MIGRATION` section. Preserve all modeling/validation rules and do not restart old research.
+> Continue my NFL stuff project from the `research-current-state` branch in GitHub repo `dkaps6/imtiredofthis`. Read `docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md` first and verify the latest authoritative GitHub Actions run/artifact. Respect `AUTONOMOUS_RB_RESEARCH_STOP`: RB retrospective refinement is frozen pending genuinely prospective 2026 evidence. Preserve all modeling/validation rules and do not restart old research.
