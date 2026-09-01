@@ -5,7 +5,7 @@ This is the authoritative continuity checkpoint for the `NFL stuff` project. A f
 ## Repository / current state
 
 - Repo: `dkaps6/imtiredofthis`
-- Current research branch: `research-rb-m96c-m94c-efficiency-residual`
+- Current research branch: `research-rb-m96d-pregame-efficiency-router`
 - Stable continuity ref: `research-current-state`
 - Last known production `main` SHA: `7532a2c29dde78a5c3758eb1427561cfed801d67`
 - No M91-M96C RB research has been promoted to production.
@@ -664,31 +664,48 @@ Capability ledger after M96C:
 
 Scientific interpretation: M96C did not find a safe universal efficiency correction, but it found exactly the kind of module specialization the puzzle framework is designed to exploit. The next step is not another global coefficient blend; it is a pregame router that decides when an efficiency expert should be active without sacrificing high-workload games.
 
-# NEXT MIGRATION — M96D
+# Latest completed migration: M96D — Pregame Conditional Efficiency Routing Audit
 
-Name: **M96D — Pregame Conditional Efficiency Routing Audit**
+Full results: `docs/migrations/M96D_RB_PREGAME_CONDITIONAL_EFFICIENCY_ROUTING_RESULTS.md`.
+
+Authoritative:
+
+- workflow `M96D RB Pregame Efficiency Router`
+- run **`33467325153`**
+- job **`99729782983`**
+- tested SHA **`dc57217aaa8312edc6c97c43486330ba9894bbc4`**
+- artifact **`9785311314`**
+- artifact SHA256 **`e65ef0cc861e8f27863e5d5fda8ba91b34d921d37724cf431212a9cb4026bf30`**
+- execution success
+- disposition **`M96D_PRIMARY_ROUTER_FAILED`**
+- model fit `0`; threshold search `0`; feature search `0`; sportsbook `0`; production change `0`
+
+M96D tested one frozen deterministic pregame router: turn M96C opponent-defense efficiency D on only below 15 M94C projected carries and when the back is not an entrenched workhorse. It improved all-RB Weeks 6-18 MAE `21.5719 -> 21.4165` (`+0.1554`), preserved RMSE/bias/tail AUC gates and improved late-season MAE, but failed the high-workload safety gate: actual 20+ MAE regressed `0.7489` and 25+ `0.5373` yards. No threshold was retuned.
+
+The controlled role-only diagnostic was stronger globally (MAE `21.3641`, gain `+0.2078`; RMSE/correlation also improved) but still leaked damage into rare unexpected high-workload games. Pregame strata showed why: non-entrenched backs had only `3.16%` actual 20+ incidence overall, yet those rare spikes matter disproportionately. This supports exactly one final router type using already-frozen M95F workload-tail distribution and M95I transition/vacancy evidence as a safety guard around the role-based D expert. It does **not** reopen carry-tail tuning.
+
+# NEXT MIGRATION — M96E
+
+Name: **M96E — Role Router with Frozen Workload-Risk Guard**
 
 Primary question:
 
-> Can pregame workload/role-state information identify the player-games where an M94C-anchored efficiency expert (especially D, with E/P as controlled alternatives) should be active, preserving low/mid-workload gains without damaging high-workload/tail games?
+> Can the stronger non-entrenched role-based D router retain its global rushing-yard improvement while using frozen M95F/M95I pregame workload-risk signals to suppress D specifically when an unexpected 20+/25+ workload spike or transition is plausible?
 
 Required design:
 
-- M94C carries and central rush-yard point remain frozen.
-- No actual carries, actual yards, or any postgame variable may enter the router.
-- No sportsbook inputs.
-- Do not reopen generic M95 carry-tail coefficient search.
-- Router inputs must come from already-validated pregame workload/role state: M94C projected carries, M95F 20+/25+ probability/distribution summaries, stable-workhorse/role state, vacancy flag/entitlement state where available, and only predeclared workload indicators.
-- The router must be precommitted and small. Use a diagnostic gate grid or simple leakage-safe conditional model; no per-player/week hand selection and no after-result threshold tuning.
-- D is the primary efficiency expert because it was the strongest M96C simple block. E and P are controlled alternatives; do not assume combinations are additive.
-- Compare C vs routed-D and any other predeclared routed arms on global MAE/RMSE/bias plus workload-tail/75+/100+ guards.
-- Preserve high-workload behavior: a routed candidate cannot earn retention by improving low workload while recreating M96C's 20+ damage.
-- 2025 remains development evidence. Any retained routed architecture must still face genuinely prospective 2026 confirmation before production.
+- M94C carries/yard center frozen; M96C D frozen.
+- Start from the M96D role-only insight; do not reuse actual carry buckets as router inputs.
+- M95F calibrated 20+/25+ probabilities/distribution summaries and M95I vacancy/transition state are safety guards only. No carry-tail coefficient/model retuning.
+- Freeze one primary guard before scoring; no threshold grid selection after results.
+- No sportsbook inputs or postgame router features.
+- Preserve all-RB MAE/RMSE improvement and require actual 20+/25+ diagnostic non-degradation.
+- 2025 remains development evidence; any survivor is research-only pending prospective 2026 confirmation.
 
-Decision path:
+Stopping rule:
 
-- If a pregame router preserves the M96C low/mid efficiency gains while removing the high-workload regressions, freeze the smallest successful routed architecture for prospective confirmation.
-- If routing cannot separate the regimes safely, retain C/M94C and stop retrospective RB efficiency refinement rather than opening unlimited variants.
+- If M96E passes, freeze the routed architecture for prospective 2026 confirmation.
+- If it fails, stop retrospective RB efficiency refinement, retain C/M94C as point architecture plus existing workload/vacancy diagnostics, write `AUTONOMOUS_RB_RESEARCH_STOP`, and move no further without prospective evidence.
 
 ## Fresh-chat startup procedure
 
