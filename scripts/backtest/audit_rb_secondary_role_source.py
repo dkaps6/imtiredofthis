@@ -181,8 +181,9 @@ def lag_features(pg):
     for c in feat:
         z[f"prior1_{c}"]=z.groupby(["team","player_id"],sort=False)[c].shift(1)
         z[f"prior3_{c}"]=z.groupby(["team","player_id"],sort=False)[c].transform(lambda s: s.shift(1).rolling(3,min_periods=1).mean())
-    z["feature_source_max_week"] = z.groupby(["team","player_id"],sort=False)["week"].shift(1)
-    z["leakage_safe_prior_only"] = (num(z.feature_source_max_week) < num(z.week)).fillna(True).astype(int)
+    z["target_order"] = num(z["season"]) * 100 + num(z["week"])
+    z["feature_source_max_order"] = z.groupby(["team","player_id"],sort=False)["target_order"].shift(1)
+    z["leakage_safe_prior_only"] = (num(z.feature_source_max_order) < num(z.target_order)).fillna(True).astype(int)
     return z, feat
 
 
