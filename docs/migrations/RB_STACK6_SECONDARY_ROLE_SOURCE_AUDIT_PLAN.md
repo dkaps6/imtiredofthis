@@ -52,6 +52,10 @@ Proceed only if:
 
 Failure is a source/mechanical finding, not a model failure. Do not weaken these gates.
 
-## Mechanical audit correction
+## Mechanical audit corrections
 
-The first source run exposed a chronology-check bug only: a valid prior observation from 2024 Week 18 was compared numerically to 2025 Week 1 as `18 < 1`. The repair compares a season-week ordinal instead. No source definition, feature family, sportsbook rule, or scientific threshold changed. The player-level on-field proxy is treated only as RB-presence allocation and will not be interpreted as true offensive snap share; STACK2's qualified snap data remains the snap-share source in downstream modeling.
+The first source run exposed a chronology-check bug only: a valid prior observation from 2024 Week 18 was compared numerically to 2025 Week 1 as `18 < 1`. The first repair compares a season-week ordinal instead.
+
+The second source run exposed a separate boolean-check bug: Pandas evaluates `NaN < target` as `False` before `fillna`, so every player's first historical observation was incorrectly labeled leakage. The corrected audit explicitly treats `no prior observation` as safe missing history, and otherwise requires `prior season-week ordinal < target season-week ordinal`.
+
+Neither correction changes a source definition, feature family, sportsbook rule, or scientific threshold. The player-level on-field proxy is treated only as RB-presence allocation and will not be interpreted as true offensive snap share; STACK2's qualified snap data remains the snap-share source in downstream modeling.
