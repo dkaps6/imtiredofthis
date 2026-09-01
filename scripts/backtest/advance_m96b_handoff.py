@@ -178,3 +178,5 @@ Decision/stopping path:
 
 s = s[:start] + new + s[end:]
 p.write_text(s)
+
+# Deliberate no-op marker: workflow exists before this push, so this commit triggers it.
