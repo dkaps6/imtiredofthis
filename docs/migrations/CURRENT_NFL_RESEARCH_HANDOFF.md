@@ -5,10 +5,10 @@ This is the authoritative continuity checkpoint for the `NFL stuff` project. A f
 ## Repository / current state
 
 - Repo: `dkaps6/imtiredofthis`
-- Current research branch: `research-rb-m95q-expanded-historical-stable-workhorse`
+- Current research branch: `research-rb-m95r-dynamic-population-prior`
 - Stable continuity ref: `research-current-state`
 - Last known production `main` SHA: `7532a2c29dde78a5c3758eb1427561cfed801d67`
-- No M91-M95Q RB research has been promoted to production.
+- No M91-M95R RB research has been promoted to production.
 - Phase A production/data cleanup Waves 1-4 is complete.
 - M94C remains the RB central carry/opportunity reference during tail research.
 - M95F remains the safer stable-workhorse tail baseline after M95L/M95O.
@@ -18,6 +18,7 @@ This is the authoritative continuity checkpoint for the `NFL stuff` project. A f
 - M95O showed a fixed agreement gate does not transfer because workload priors/probability scale move across seasons.
 - M95P found pregame dynamic workload-regime signal and showed 2023 was not a uniquely abnormal broad RB season.
 - **M95Q successfully expanded exact comparable stable-workhorse temporal depth to 2020-2022 and passed its 2024 reconstruction controls.**
+- **M95R tested a precommitted rolling dynamic population-prior residual layer; it helped 2023, was neutral in 2024, but badly overcorrected 2025 and is not promoted.**
 
 ## Non-negotiable modeling rules
 
@@ -253,7 +254,7 @@ Exact 2023-2025 stable-workhorse 20+ rates were relatively close, but M95F calib
 
 Important M95P rule: the broad lead-RB census is context only, not an exact M95F/M95K backtest substitute. This motivated M95Q.
 
-# Latest completed migration: M95Q — expanded exact historical stable-workhorse reconstruction
+## M95Q — expanded exact historical stable-workhorse reconstruction
 
 Full results: `docs/migrations/M95Q_RB_EXPANDED_HISTORICAL_STABLE_WORKHORSE_RESULTS.md`.
 
@@ -338,47 +339,85 @@ The new panel also reinforces nonstationarity: M95F 20+ ranking ranges from stro
 
 M95Q does **not** rescue M95K, promote M95O, or justify a production formula.
 
+
+## Latest completed migration: M95R — expanded-panel dynamic population-prior candidate
+
+Full results: `docs/migrations/M95R_RB_DYNAMIC_POPULATION_PRIOR_RESULTS.md`.
+
+Authoritative:
+
+- workflow `M95R RB Dynamic Population Prior`
+- run **`33453141931`**
+- job **`99687269044`**
+- tested SHA **`272e7537f9642a977e84ffeeda4b9d7d17832c71`**
+- artifact **`9780473734`**
+- artifact SHA256 **`0d114c1f7cc1d2132c7ebd2c7074bd840b36d669c4a31c33e151cbb85be76821`**
+- execution success
+- disposition **`M95R_RETAIN_DIAGNOSTIC_DO_NOT_PROMOTE`**
+- feature search `0`; hyperparameter search `0`; sportsbook `0`; production change `0`
+
+M95R froze M95F as the 20+ backbone and allowed only a bounded additive log-odds population/workload residual using five predeclared pregame workload-regime variables. Ridge lambda was `10.0`; delta was capped at `+/-0.75`; evaluation was strict expanding-season: 2023 trained on 2020-22, 2024 on 2020-23, 2025 on 2020-24.
+
+Primary W13-18 results:
+
+- 2023: Brier `.233221 -> .221407`, logloss `.673392 -> .638868`, AUC `.727041 -> .702381`; calibration underprediction improved by `3.90 pp`.
+- 2024: essentially neutral, Brier `.206384 -> .206530`, AUC `.704444 -> .702963`.
+- 2025: **failed materially**. M95F was already almost centered (actual `28.24%`, predicted `29.43%`); R raised mean probability to `43.12%`, worsening Brier `.194926 -> .216791` and absolute calibration gap by `13.69 pp`.
+- pooled: R moved mean probability closer to pooled actual but worsened Brier `.210576 -> .214863`, logloss `.610548 -> .618125`, and AUC `.664417 -> .642000`.
+- 2025 full secondary: actual `21.94%`, M95F mean `29.60%`, R mean `43.48%`; Brier `.186593 -> .231516`.
+
+Scientific lesson: matching population-average tail mass is not sufficient. R assigned too much mass to the wrong player-games in 2025. The workload regime changed faster than the multi-season residual calibrator could adapt. This exact R architecture is frozen as failed evidence and must not be retuned against exposed 2023-25 outcomes.
+
+### Durable player-source cache
+
+The raw nflverse weekly player source sheets are now permanently cached so future historical research does not repeatedly redownload the full player universe.
+
+- workflow `M95R Historical Player Source Cache`
+- successful run **`33453001235`**
+- job **`99686833509`**
+- cache workflow SHA **`07e0ceb5b6f0e8eda704c4735ba7b2ff2efa32ee`**
+- persisted cache commit **`402c4a28593e0c79438ea10c88d832a98f0a6f2e`**
+- path `data/research_cache/nflverse_player_weekly/`
+- seasons `2018-2025`; one parquet snapshot per season plus SHA256 manifest; 150 source columns per season.
+
 # Current scientific interpretation
 
-The system already individualizes player-week football inputs. The evidence points to three interacting levels:
+The system already individualizes player-week football inputs. The strongest current RB interpretation has four layers:
 
-1. **Global backbone** — M94C central carries / M95F stable-workhorse tail baseline.
-2. **Role regime** — vacancy/transition is structurally different from stable incumbent workload (M95I).
-3. **Population/game regime** — the meaning/calibration of historical feed and current context changes with contemporaneous league/team workload state (M95N-O-P-Q).
+1. **Global opportunity backbone** — M94C central carries remains the reference.
+2. **Stable-workhorse tail baseline** — M95F remains safer than the failed derivative candidates.
+3. **Role regime** — vacancy/transition remains structurally separate (M95I diagnostic).
+4. **Population/game regime** — real and useful, but its calibration moves faster than fixed or slow cross-season gates/priors can safely follow.
 
-The main bottleneck is no longer lack of exact historical depth. M95Q solved that sufficiently for the next research candidate. The next step is to precommit a dynamic population-prior architecture and evaluate it across the expanded panel with strict temporal ordering.
+M95K showed historical feed/ceiling can improve player ordering in favorable regimes, especially 2025, but failed sealed 2023. M95N-P established regime dependence. M95O showed fixed thresholds fail. M95R now shows a slow rolling residual population calibrator also fails: it repaired 2023 underprediction but became stale and injected excessive tail mass in 2025.
 
-# NEXT MIGRATION — M95R
+The key next question is therefore not simply whether dynamic context matters. It is **how to separate population-level tail mass from player-level ranking and how quickly the population anchor must adapt**.
 
-Name: **M95R — Expanded-Panel Dynamic Population-Prior Candidate**
+# NEXT MIGRATION — M95S
+
+Name: **M95S — Population-Mass vs Player-Ranking Decomposition Audit**
 
 Primary question:
 
-> Can a pregame workload-population prior adapt M95F stable-workhorse 20+ probabilities across seasons and game environments without recreating M95K's cross-season instability or harming the M94C/M95F backbone?
+> Did M95R fail because a slow cross-season population-mass correction was stale even while player-level ranking signals remained useful, and can the regime shift be detected pregame using faster within-season workload anchors?
 
 Required design:
 
-- **Precommit the candidate before fitting**; do not search feature combinations after seeing results.
-- Use the exact comparable stable-workhorse panel now available from M95Q plus the already-authoritative 2023-2025 traces.
-- Keep M94C central carries unchanged.
-- M95F is the stable-workhorse tail baseline.
-- M95I vacancy/role-transition remains separate; do not mix vacancy rows into the stable candidate.
-- Candidate inputs must be pregame-only and limited to population/workload-regime signals supported by M95P/M95N, such as:
-  - league season-to-date / recent lead-RB 20+ workload rate;
-  - team recent lead-RB 20+/25+ workload rates;
-  - team recent mean lead-RB carries;
-  - current pregame role/context state already available before kickoff.
-- No sportsbook input.
-- No target-week/postgame variables in the prior or gate.
-- Use strict rolling/leave-future-out temporal evaluation; no random pooled split.
-- Evaluate calibration first (Brier/logloss/mean-probability gap) and discrimination second (AUC), with 20+ as the primary stable-workhorse target.
-- Treat 25+ as a secondary pooled diagnostic unless event counts support a predeclared valid gate; do not let a tiny seasonal 25+ sample drive selection.
-- Include season-by-season and pooled results, regime slices, event counts, and a casebook of meaningful probability changes.
-- Fail closed if gains depend on one season or if ordinary/global baseline behavior regresses materially.
-- Do not retune exact M95K on opened 2023 labels.
-- No production change in M95R itself.
-
-Any architecture that survives M95R remains research-only until it receives genuinely prospective/untouched confirmation.
+- diagnostic/postmortem only first; **do not immediately fit another tuned candidate**;
+- use the exact 2020-2025 stable-workhorse panel and preserved M95F/M95K/M95R traces;
+- keep M94C central carries unchanged;
+- decompose error into:
+  1. population mass/calibration error;
+  2. within-population player ordering/discrimination error;
+- quantify by season and week how quickly M95F's population calibration gap changes;
+- compare strictly pregame contemporaneous anchors using only information available before kickoff, including season-to-date and short recent league/team workload state;
+- measure whether 2025's change was visible before M95R's large upward residual shifts;
+- audit M95K/feed ranking conditional on a fixed/mass-normalized baseline so ranking value is not confused with population calibration;
+- include lag/response diagnostics for 1-, 2-, 4- and season-to-date workload windows as a **predeclared diagnostic grid**, not a candidate-selection search;
+- identify whether population mass needs within-season recency while player ordering can use longer historical persistence;
+- 20+ remains primary; 25+ diagnostic only because event counts remain sparse;
+- no sportsbook input; no production change; no retuning M95K or M95R against exposed labels;
+- if M95S supports a separable architecture, only then precommit a new candidate in the following migration.
 
 ## Fresh-chat startup procedure
 
