@@ -1,0 +1,55 @@
+name: RB-STACK6 Secondary Role Source Audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-stack6-secondary-role-source-audit
+    paths:
+      - 'scripts/backtest/audit_rb_secondary_role_source.py'
+      - 'docs/migrations/RB_STACK6_SECONDARY_ROLE_SOURCE_AUDIT_PLAN.md'
+      - '.github/workflows/backtest-rb-stack6-secondary-role-source-audit.yml'
+
+permissions:
+  contents: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 pyarrow==17.0.0 nflreadpy
+      - name: Compile
+        run: python -m py_compile scripts/backtest/audit_rb_secondary_role_source.py
+      - name: Audit source
+        run: |
+          rm -rf data/backtests/rb_stack6_source
+          python scripts/backtest/audit_rb_secondary_role_source.py \
+            --seasons 2024,2025 \
+            --out-dir data/backtests/rb_stack6_source
+      - name: Show result
+        if: always()
+        run: |
+          echo '=== source audit ==='
+          cat data/backtests/rb_stack6_source/stack6_source_audit.csv 2>/dev/null || true
+          echo '=== disposition ==='
+          cat data/backtests/rb_stack6_source/stack6_disposition.csv 2>/dev/null || true
+          echo '=== feature coverage ==='
+          head -35 data/backtests/rb_stack6_source/stack6_prior_feature_coverage.csv 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-stack6-secondary-role-source-audit
+          path: data/backtests/rb_stack6_source/**
+          if-no-files-found: warn
+          retention-days: 30
