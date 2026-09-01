@@ -1,0 +1,81 @@
+name: M96C RB M94C Efficiency Residual
+
+on:
+  push:
+    branches:
+      - research-rb-m96c-m94c-efficiency-residual
+    paths:
+      - 'scripts/backtest/evaluate_rb_m96c_efficiency_residual.py'
+      - 'docs/migrations/M96C_RB_M94C_EFFICIENCY_RESIDUAL.md'
+      - '.github/workflows/backtest-rb-m96c-efficiency-residual.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M94C_RUN_ID: '33353485070'
+  M95D_RUN_ID: '33359898917'
+
+jobs:
+  rb-efficiency-residual:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2
+
+      - name: Download frozen M94C and M95D artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_m94c_frozen data/backtests/rb_m95d_frozen
+          gh run download "$M94C_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-94c-rb-game-environment \
+            --dir data/backtests/rb_m94c_frozen
+          gh run download "$M95D_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-95d-rb-rushing-environment-scheme \
+            --dir data/backtests/rb_m95d_frozen
+          test -s data/backtests/rb_m94c_frozen/m94c_2025_rb_trace.csv
+          test -s data/backtests/rb_m95d_frozen/m95d_rb_environment_trace.csv
+
+      - name: Run frozen M96C efficiency residual synthesis
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_m96c_efficiency_residual.py
+          python scripts/backtest/evaluate_rb_m96c_efficiency_residual.py \
+            --m94c-root data/backtests/rb_m94c_frozen \
+            --m95d-root data/backtests/rb_m95d_frozen \
+            --out-dir data/backtests/rb_m96c
+
+      - name: Show M96C results
+        if: always()
+        run: |
+          echo '=== disposition ==='
+          cat data/backtests/rb_m96c/m96c_disposition.csv 2>/dev/null || true
+          echo '=== point gate ==='
+          cat data/backtests/rb_m96c/m96c_point_gate.csv 2>/dev/null || true
+          echo '=== capability ledger ==='
+          cat data/backtests/rb_m96c/m96c_capability_ledger.csv 2>/dev/null || true
+          echo '=== tail X gate ==='
+          cat data/backtests/rb_m96c/m96c_tail_x_gate.csv 2>/dev/null || true
+
+      - name: Upload M96C artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-96c-rb-m94c-efficiency-residual
+          path: data/backtests/rb_m96c/**
+          if-no-files-found: warn
+          retention-days: 30
