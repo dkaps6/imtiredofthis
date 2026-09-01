@@ -44,3 +44,7 @@ M95S is a diagnostic/postmortem migration, not a tuned candidate. It tests wheth
 - A ranking signal is not considered universal if its AUC direction flips between 2023 and 2025 after mass normalization.
 - Evidence that 2025's M95R failure was detectable pregame requires the contemporaneous workload anchors to be materially lower than the positive R mass shift during periods where M95F was already overpredicting the realized stable-workhorse tail rate.
 - This migration cannot promote a model. It can only narrow the architecture for M95T or recommend stopping with M94C/M95F.
+
+## Protocol lock
+
+This document is frozen before the authoritative M95S run. Any post-run change may document mechanics/results only and may not alter the diagnostic grid or interpretation rules above.
