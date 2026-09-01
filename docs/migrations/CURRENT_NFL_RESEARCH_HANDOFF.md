@@ -864,3 +864,87 @@ A specific family should still be stopped when further variants would amount to 
 Tell a new chat:
 
 > Continue my NFL stuff project from the `research-current-state` branch in GitHub repo `dkaps6/imtiredofthis`. Read `docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md` first and verify the latest authoritative GitHub Actions run/artifact. Continue from `NEXT MIGRATION — RB-ND2`. The old autonomous stop applies only to exposed M96 router retuning, not the new role-state/player-share data family. Preserve all modeling/validation rules and keep sportsbook data downstream only.
+
+# LATEST CONTINUITY UPDATE — RB ENV1 / ND2B / PRODUCTION-STACK AUDIT
+
+**This section is newer than the earlier `NEXT MIGRATION — RB-ND2` section and overrides its sequencing where they conflict. A fresh chat must read this section before continuing.**
+
+## Research philosophy refinement
+
+New RB evidence should be treated as a capability/add-on to the strongest current football system unless it explicitly proves the existing component should be replaced. Do **not** default to replacement contests. Ask: what part of the current system does this information improve, where does it help, what does it damage, and can it be safely integrated with existing validated capabilities?
+
+Probability distributions quantify uncertainty around the football projection; they do not replace football state knowledge. Establish role, availability, team opportunity, backfield allocation, runner ability, offensive/defensive environment and game context first; then use workload/efficiency/explosive distributions around those assumptions.
+
+## RB-ENV1 — environment × runner-quality atlas
+
+Full results: `docs/migrations/RB_ENV1_ENVIRONMENT_QUALITY_ATLAS_RESULTS.md`.
+
+Authoritative:
+- workflow `RB-ENV1 Environment Quality Atlas`
+- run `33508752571`
+- job `99859029342`
+- tested SHA `375e6a776d91132563937fec1d02d85ea56ae69d`
+- artifact `9800707982`
+- artifact SHA256 `2373625d06e58019d761acdd925dff7f1458835718d66cb1c3f206a3da143df6`
+- success; no fit/search/sportsbook/production change
+
+Pooled 2024-2025 (`n=2580`): BAD pregame spot averaged `30.8866` rush yards versus GOOD `44.8932`, a `+14.0065` yard difference. 75+ rate moved `10.25% -> 21.05%`; 100+ `4.66% -> 9.91%`. The relationship replicated in both seasons. Linear correlation with raw yards was only about `.125` and with 8+ carry YPC only about `.052`, so environment is meaningful but not deterministic and should not override role/opportunity.
+
+Strong RB + good spot pooled averaged `52.96` yards with a `25.90%` 75+ rate versus weak RB + bad spot `23.86` yards / `5.36%`. Bad-spot monster games were often explained by large workload and/or explosive variance; many good-spot failures were workload/allocation collapses. Durable order: opportunity/allocation first, then environment/ability, then tail variance.
+
+## RB-ND2B — timestamp-safe role-source audit
+
+Full results: `docs/migrations/RB_ND2B_BACKFIELD_SOURCE_ASOF_AUDIT_RESULTS.md`.
+
+Authoritative:
+- workflow `RB-ND2B Backfield Source AsOf Audit`
+- run `33509092341`
+- job `99860131990`
+- tested SHA `cafb52854b4476eb27cd12d5064d5e6f52247b73`
+- artifact `9800848065`
+- artifact SHA256 `e8f5d3dd60da7464a5000485061087a3b2ef7bdcb66ec9254025e829c1f4be77`
+- success; no model/search/sportsbook/production change
+
+The 2025 historical depth source has `554,215` records and begins `2025-08-03`. Using the latest snapshot strictly before kickoff gives `100%` coverage across all `544` regular-season team-games, median snapshot age `10.77h`, p90 `17.90h`. Exact M94C RB/FB rows receive pregame depth-rank coverage `94.9749%`; Week 1 `96.4706%`. Prior-week offensive-snap coverage is `83.7156%` for Weeks 2-18. Thus the missing current-role layer is genuinely reconstructable without target-game leakage.
+
+Depth `pos_rank` is not a deterministic one-player RB1/RB2/RB3 share rule; combine it with lagged snap/carry share, competitor state, availability, continuity, rookie/new-team context, etc.
+
+## Critical production-vs-research stack distinction
+
+Full audit: `docs/migrations/RB_PRODUCTION_VS_RESEARCH_STACK_AUDIT_2026_09_01.md`.
+
+Canonical production `main` remains `7532a2c29dde78a5c3758eb1427561cfed801d67`. `.github/workflows/full-slate.yml` is the only production orchestrator.
+
+The real production slate is richer than M94C. It builds current Ourlads roles, TeamForm/context, injuries, weather, Coverage v2, PlayerForm, Team Context v3, empirical Bayesian baselines, supervised ML v2, Markov State v2, empirical football rules, Monte Carlo, and an evidence-weighted MC/ML/State ensemble before downstream sportsbook comparison. The canonical rule layer includes game-script/play-volume mechanics, success/pressure context, box/coverage effects, injury handling and RB rushing-efficiency multipliers.
+
+Historical `walk_forward.py` / `component_predictions.py` also constructs MC (with Bayesian + canonical rules), ML and State components at each historical cutoff.
+
+**However M94/M94B/M94C intentionally isolated team rushing opportunity and used frozen M91 `ml_proj` as their player/team baseline.** M94 baseline team carries are the sum of `ml_proj`; M94C strength features aggregate `ml_proj`; after M94C changes team rushing volume, individual carries use the player's inherited ML share; rushing yards use baseline ML implied YPC. Therefore **M94C is not equivalent to the final production MC + ML + State + Bayesian/rules ensemble.**
+
+This does not invalidate M94C's scientific findings; it means the project has accumulated production machinery and M95/M96 capabilities that have not yet been assembled into one production-equivalent RB historical architecture.
+
+## LATEST NEXT MIGRATION — RB-STACK1
+
+Name: **RB-STACK1 — Production-Equivalent RB Historical Baseline + Integration Audit**
+
+Primary question:
+
+> On a leakage-safe historical panel, what does the complete canonical football stack (Bayesian/rules + MC + ML + State + calibrated ensemble where valid) actually achieve for RB rush attempts and rushing yards, and which retained RB capabilities add incremental value to that full system?
+
+Required sequencing:
+
+1. Reconstruct/verify a production-equivalent historical RB baseline using the same canonical components and semantic contracts as `full-slate.yml`.
+2. Audit historical coverage of production roles, injuries, weather, context and rule inputs; no silent placeholder behavior.
+3. Score RB carries and rush yards overall and by role/workload/committee/Week-1 slices.
+4. Compare full-stack baseline to M91 ML-only and M94C so we know what each piece already contributes.
+5. Then test **add-ons**, not presumed replacements: timestamp-safe backfield allocation; M94C team opportunity where incremental; M95F workload distribution; M95I vacancy/transition; retained M95C/M96 efficiency/environment capabilities.
+6. Use precommitted ablations/non-degradation gates. Preserve a strong parent component when a new module helps only one regime.
+7. Sportsbook remains downstream benchmark only.
+
+The explicit backfield-allocation engine remains a high-priority add-on, but do not judge it only against M94C. Establish the production-equivalent parent first, then test `full stack + allocation` and compatible module combinations.
+
+## Fresh-chat startup override
+
+Tell a new chat:
+
+> Continue my NFL stuff project from `research-current-state` in GitHub repo `dkaps6/imtiredofthis`. Read `docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md` completely, especially the bottom section `LATEST CONTINUITY UPDATE — RB ENV1 / ND2B / PRODUCTION-STACK AUDIT`, plus `docs/migrations/RB_PRODUCTION_VS_RESEARCH_STACK_AUDIT_2026_09_01.md`. The current next migration is `RB-STACK1 — Production-Equivalent RB Historical Baseline + Integration Audit`. Treat new RB findings as additive capability modules unless replacement is explicitly proven. Keep sportsbook data downstream only and preserve all temporal/leakage/integrity rules.
