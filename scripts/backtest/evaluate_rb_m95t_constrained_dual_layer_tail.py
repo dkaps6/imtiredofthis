@@ -107,8 +107,7 @@ def load_p25(qdir: Path, kdir: Path, ldir: Path) -> pd.DataFrame:
     out["season"] = num(out["season"]).astype(int)
     out["week"] = num(out["week"]).astype(int)
     out["p25_base"] = num(out["p25_base"]).clip(EPS, 1 - EPS)
-    out = out.sort_values(KEYS).drop_duplicates(KEYS, keep="first")
-    return out
+    return out.sort_values(KEYS).drop_duplicates(KEYS, keep="first")
 
 
 def load_cached_rb_history(cache_dir: Path) -> pd.DataFrame:
@@ -129,13 +128,15 @@ def load_cached_rb_history(cache_dir: Path) -> pd.DataFrame:
             dup = z.loc[z.duplicated(KEYS, keep=False), KEYS].head(10).to_dict("records")
             raise RuntimeError(f"duplicate cached RB player-week rows: {dup}")
         frames.append(z)
-    h = pd.concat(frames, ignore_index=True, sort=False).sort_values(KEYS).reset_index(drop=True)
-    return h
+    return pd.concat(frames, ignore_index=True, sort=False).sort_values(KEYS).reset_index(drop=True)
 
 
 def build_league_anchors(history: pd.DataFrame) -> pd.DataFrame:
     lead = (
-        history.sort_values(KEYS + ["actual_carries"], ascending=[True, True, True, True, False])
+        history.sort_values(
+            ["season", "week", "team", "actual_carries", "player_clean_key"],
+            ascending=[True, True, True, False, True],
+        )
         .groupby(["season", "week", "team"], as_index=False)
         .first()[["season", "week", "team", "actual_carries"]]
     )
@@ -161,9 +162,8 @@ def build_league_anchors(history: pd.DataFrame) -> pd.DataFrame:
 
 def apply_candidate(panel: pd.DataFrame) -> pd.DataFrame:
     out = []
-    for (season, week), g0 in panel.groupby(["season", "week"], sort=True):
+    for (_, _), g0 in panel.groupby(["season", "week"], sort=True):
         g = g0.copy()
-        n = len(g)
         g["base_rank"] = g["p20_base"].rank(method="average", pct=True)
         r1 = num(g["feed20_rate"]).rank(method="average", pct=True)
         r2 = num(g["carry_ceiling95"]).rank(method="average", pct=True)
@@ -172,9 +172,7 @@ def apply_candidate(panel: pd.DataFrame) -> pd.DataFrame:
         high_feed = g["feed_rank"].ge(0.50)
         g["aligned"] = high_base.eq(high_feed).astype(int)
         g["rank_delta_raw"] = np.where(
-            g["aligned"].eq(1),
-            RANK_BLEND * (g["feed_rank"] - g["base_rank"]),
-            0.0,
+            g["aligned"].eq(1), RANK_BLEND * (g["feed_rank"] - g["base_rank"]), 0.0
         )
         g["rank_delta"] = num(g["rank_delta_raw"]).clip(-RANK_DELTA_CAP, RANK_DELTA_CAP)
         p = g["p20_base"].to_numpy(float)
@@ -185,12 +183,11 @@ def apply_candidate(panel: pd.DataFrame) -> pd.DataFrame:
         g["p20_rank_only"] = rank_only
         g["rank_mass_error"] = float(np.mean(rank_only) - base_mean)
 
-        prior4 = float(num(g["league_prior4_20"]).dropna().iloc[0]) if num(g["league_prior4_20"]).notna().any() else np.nan
-        std = float(num(g["league_std_20"]).dropna().iloc[0]) if num(g["league_std_20"]).notna().any() else np.nan
-        if not np.isfinite(prior4) or not np.isfinite(std) or std <= 0:
-            ratio = 1.0
-        else:
-            ratio = float(np.clip(prior4 / std, RATIO_LO, RATIO_HI))
+        prior4s = num(g["league_prior4_20"]).dropna()
+        stds = num(g["league_std_20"]).dropna()
+        prior4 = float(prior4s.iloc[0]) if len(prior4s) else np.nan
+        std = float(stds.iloc[0]) if len(stds) else np.nan
+        ratio = 1.0 if (not np.isfinite(prior4) or not np.isfinite(std) or std <= 0) else float(np.clip(prior4 / std, RATIO_LO, RATIO_HI))
         mass_factor = float(1.0 + MASS_SHRINK * (ratio - 1.0))
         target20 = float(np.clip(base_mean * mass_factor, 0.05, 0.70))
         g["regime_ratio"] = ratio
@@ -220,24 +217,23 @@ def main() -> int:
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
     panel = load_exact_panel(args.m95r_dir)
-    p25 = load_p25(args.m95q_dir, args.m95k_dir, args.m95l_dir)
-    panel = panel.merge(p25, on=KEYS, how="left", validate="one_to_one")
-
+    panel = panel.merge(load_p25(args.m95q_dir, args.m95k_dir, args.m95l_dir), on=KEYS, how="left", validate="one_to_one")
     history = load_cached_rb_history(args.cache_dir)
     feed = add_composites(build_feed_features(history[KEYS + ["actual_carries"]], FEED_SHRINK_K))
     panel = panel.merge(feed, on=KEYS, how="left", validate="one_to_one")
-    yards = history[KEYS + ["actual_rush_yards"]].drop_duplicates(KEYS)
-    panel = panel.merge(yards, on=KEYS, how="left", validate="one_to_one")
-    anchors = build_league_anchors(history)
-    panel = panel.merge(anchors, on=["season", "week"], how="left", validate="many_to_one")
+    panel = panel.merge(history[KEYS + ["actual_rush_yards"]].drop_duplicates(KEYS), on=KEYS, how="left", validate="one_to_one")
+    panel = panel.merge(build_league_anchors(history), on=["season", "week"], how="left", validate="many_to_one")
 
+    coverage_rows = []
     for season, g in panel.groupby("season"):
         feed_cov = float(g[["feed20_rate", "carry_ceiling95"]].notna().all(axis=1).mean())
         yard_cov = float(g["actual_rush_yards"].notna().mean())
+        coverage_rows.append({"season": int(season), "n": len(g), "feed_coverage": feed_cov, "rushyard_coverage": yard_cov})
         if feed_cov < 0.98:
             raise RuntimeError(f"M95T feed join coverage below 98% season={season}: {feed_cov:.4%}")
         if yard_cov < 0.98:
             raise RuntimeError(f"M95T rush-yard truth coverage below 98% season={season}: {yard_cov:.4%}")
+    pd.DataFrame(coverage_rows).to_csv(args.out_dir / "m95t_source_coverage.csv", index=False)
 
     primary = panel.loc[num(panel["week"]).between(13, 18)].copy()
     cand = apply_candidate(primary)
@@ -284,9 +280,8 @@ def main() -> int:
         ok = num(g["actual_carries"]).notna() & num(g["actual_rush_yards"]).notna()
         spr = float(spearmanr(num(g.loc[ok, "actual_carries"]), num(g.loc[ok, "actual_rush_yards"])).statistic) if ok.sum() >= 5 else np.nan
         row = {
-            "season": season, "n": int(len(g)),
-            "carry_rushyard_pearson": pear, "carry_rushyard_spearman": spr,
-            "events75": int(g["actual_75plus_rush_yards"].sum()),
+            "season": season, "n": int(len(g)), "carry_rushyard_pearson": pear,
+            "carry_rushyard_spearman": spr, "events75": int(g["actual_75plus_rush_yards"].sum()),
             "events100": int(g["actual_100plus_rush_yards"].sum()),
             "base_auc75": auc_score(g["actual_75plus_rush_yards"], g["p20_base"]),
             "cand_auc75": auc_score(g["actual_75plus_rush_yards"], g["p20_m95t"]),
@@ -309,11 +304,7 @@ def main() -> int:
     max_ll_reg = float(np.maximum(-season_rows["logloss_gain"], 0).max())
     max_gap_reg = float(np.maximum(-season_rows["abs_gap_gain"], 0).max())
     trouble = season_rows.loc[season_rows["season"].astype(int).isin([2023, 2025])]
-    trouble_guard = int(
-        (trouble["brier_gain"] >= -0.0075).all()
-        and (trouble["logloss_gain"] >= -0.020).all()
-        and (trouble["abs_gap_gain"] >= -0.025).all()
-    )
+    trouble_guard = int((trouble["brier_gain"] >= -0.0075).all() and (trouble["logloss_gain"] >= -0.020).all() and (trouble["abs_gap_gain"] >= -0.025).all())
     yard75_guard = int((not np.isfinite(ypool["auc75_gain"])) or ypool["auc75_gain"] >= -0.01)
     yard100_guard = int((not np.isfinite(ypool["auc100_gain"])) or ypool["auc100_gain"] >= -0.01)
     gates = {
@@ -334,30 +325,25 @@ def main() -> int:
     disposition = "M95T_PASS_FREEZE_FOR_M96_AND_2026_PROSPECTIVE_CONFIRMATION" if passed else "M95T_FAIL_STOP_NEW_RB_TAIL_CANDIDATES_RETAIN_M94C_M95F_PROCEED_M96"
     disp = {
         "m95t_role": "final_retrospective_stable_workhorse_tail_candidate",
-        "primary_target": "stable_workhorse_20plus",
-        "seasons": "2020,2021,2022,2023,2024,2025",
-        "model_fit": 0, "feature_search": 0, "coefficient_search": 0,
-        "hyperparameter_search": 0, "sportsbook_inputs": 0, "production_change": 0,
-        "feed_shrink_k": FEED_SHRINK_K, "ratio_lo": RATIO_LO, "ratio_hi": RATIO_HI,
-        "mass_shrink": MASS_SHRINK, "rank_blend": RANK_BLEND,
-        "rank_delta_cap": RANK_DELTA_CAP, "season_brier_nonnegative": brier_nonneg,
-        "season_logloss_nonnegative": logloss_nonneg,
+        "primary_target": "stable_workhorse_20plus", "seasons": "2020,2021,2022,2023,2024,2025",
+        "model_fit": 0, "feature_search": 0, "coefficient_search": 0, "hyperparameter_search": 0,
+        "sportsbook_inputs": 0, "production_change": 0, "feed_shrink_k": FEED_SHRINK_K,
+        "ratio_lo": RATIO_LO, "ratio_hi": RATIO_HI, "mass_shrink": MASS_SHRINK,
+        "rank_blend": RANK_BLEND, "rank_delta_cap": RANK_DELTA_CAP,
+        "season_brier_nonnegative": brier_nonneg, "season_logloss_nonnegative": logloss_nonneg,
         "max_brier_regression": max_brier_reg, "max_logloss_regression": max_ll_reg,
         "max_abs_gap_regression": max_gap_reg, "rank_mass_error_max": mass_err,
         **gates, "retrospective_pass": int(passed), "disposition": disposition,
         "next_phase": "M96_RB_RUSHING_YARD_SYNTHESIS_MANDATORY",
     }
     pd.DataFrame([disp]).to_csv(args.out_dir / "m95t_disposition.csv", index=False)
-
-    audit = {
+    pd.DataFrame([{
         "candidate": "M95F backbone + within-week aligned feed rerank + fast relative league population anchor",
-        "population_anchor": "prior4 lead20 / season-to-date lead20; clipped 0.70-1.30; 50% shrink; max +/-15% relative mass",
-        "player_rerank": "k=4 M95K feed20_rate + carry_ceiling95 within-week percentile; aligned half only; 0.50*(feed-base rank); +/-0.25 logodds cap; mass-preserved",
-        "central_carries_changed": 0, "vacancy_changed": 0,
-        "target_week_postgame_inputs": 0, "sportsbook_inputs": 0,
-        "yardage_claim": "translation guard only; M96 required for rushing-yard point synthesis",
-    }
-    pd.DataFrame([audit]).to_csv(args.out_dir / "m95t_method_audit.csv", index=False)
+        "population_anchor": "prior4 lead20 / season-to-date lead20; clip 0.70-1.30; 50% shrink; max +/-15% relative mass",
+        "player_rerank": "k=4 M95K feed20_rate + carry_ceiling95 within-week percentile; aligned only; 0.50*(feed-base rank); +/-0.25 logodds; mass-preserved",
+        "central_carries_changed": 0, "vacancy_changed": 0, "target_week_postgame_inputs": 0,
+        "sportsbook_inputs": 0, "yardage_claim": "translation guard only; M96 required for rushing-yard point synthesis",
+    }]).to_csv(args.out_dir / "m95t_method_audit.csv", index=False)
 
     print("\n[M95T] 20+ metrics")
     print(mdf.to_string(index=False))
