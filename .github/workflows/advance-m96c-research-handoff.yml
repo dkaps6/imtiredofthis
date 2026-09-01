@@ -1,0 +1,37 @@
+name: M96C Advance Research Handoff
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-m96c-m94c-efficiency-residual
+    paths:
+      - 'scripts/backtest/advance_m96c_handoff.py'
+      - '.github/workflows/advance-m96c-research-handoff.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  advance-handoff:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Update canonical research handoff
+        run: python scripts/backtest/advance_m96c_handoff.py
+
+      - name: Commit handoff
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md
+          if git diff --cached --quiet; then
+            echo 'No handoff changes required.'
+            exit 0
+          fi
+          git commit -m 'M96C: advance canonical research handoff to M96D'
+          git push origin HEAD:research-rb-m96c-m94c-efficiency-residual
