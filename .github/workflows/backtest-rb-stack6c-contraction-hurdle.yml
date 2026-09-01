@@ -1,5 +1,6 @@
 name: RB-STACK6C Contraction Hurdle
 
+# Frozen protocol: docs/migrations/RB_STACK6C_CONTRACTION_HURDLE_PLAN.md
 on:
   workflow_dispatch:
   push:
