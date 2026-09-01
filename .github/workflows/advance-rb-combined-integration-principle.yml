@@ -1,0 +1,66 @@
+name: Advance RB Combined Integration Principle
+
+on:
+  push:
+    branches:
+      - research-rb-nd2b-allocation-env-atlas
+    paths:
+      - '.github/workflows/advance-rb-combined-integration-principle.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  handoff:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Append combined RB integration principle
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md')
+          text = p.read_text(encoding='utf-8')
+          marker = '# RB COMBINED INTEGRATION PRINCIPLE — DO NOT DROP EITHER TRACK'
+          if marker in text:
+              print('combined principle already present')
+              raise SystemExit(0)
+          block = '''
+
+# RB COMBINED INTEGRATION PRINCIPLE — DO NOT DROP EITHER TRACK
+
+**This is a permanent sequencing/modeling rule and must survive future chats and new ideas.**
+
+Two independently meaningful ideas must be pursued **together**, not one replacing the other when a new insight appears:
+
+1. **Production-equivalent parent stack:** reconstruct and score the complete canonical football stack historically (Bayesian/rules + MC + ML + State + calibrated ensemble where valid), because M94C is not production-equivalent and future RB work must improve the system we actually intend to run.
+2. **Enrich M94C with missing football information:** preserve M94C's validated team-opportunity/game-state capability, but feed/correct it with current pregame football state it was missing: timestamp-safe depth charts, RB1/RB2/RB3 hierarchy, lagged snaps/participation, current carry/touch shares, competing-RB strength/usage, injuries/availability, vacancy, roster/team changes, rookie/draft priors, backfield concentration, QB/non-RB rushing competition, OL availability and other justified football context.
+
+These tracks are **complementary**. The project must test:
+
+- full production-equivalent stack alone;
+- enriched M94C opportunity/allocation module alone versus its parent;
+- full stack + enriched M94C opportunity/allocation;
+- then compatible retained modules such as M95F workload distribution, M95I vacancy/transition, and M95C/M96 environment/efficiency capabilities through precommitted ablations.
+
+Do not revert to whole-model replacement contests. New information should normally be evaluated as: **what specific capability can make the current parent system better, where does it help, what does it hurt, and can it coexist with the other validated pieces?** Replacement is allowed only if explicitly proven.
+
+Probability/distribution layers quantify uncertainty around the football state; they do not substitute for role, availability, allocation, team opportunity, runner ability, matchup or game-context knowledge.
+
+The current next migration remains `RB-STACK1 — Production-Equivalent RB Historical Baseline + Integration Audit`, but RB-STACK1 must preserve the enriched-M94C/backfield-allocation track rather than postponing or forgetting it. Establish the production-equivalent parent first so the integration tests have the correct baseline, then immediately test the enriched M94C/allocation capability as an add-on to that parent.
+'''
+          p.write_text(text.rstrip() + block + '\n', encoding='utf-8')
+          PY
+      - name: Commit handoff
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if git diff --quiet -- docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md; then
+            echo 'No handoff changes'
+            exit 0
+          fi
+          git add docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md
+          git commit -m 'RB: lock combined full-stack and enriched-M94C integration rule'
+          git push origin HEAD:research-rb-nd2b-allocation-env-atlas
