@@ -1,5 +1,6 @@
 name: RB-STACK6B Compact Role Model
 
+# Frozen protocol: docs/migrations/RB_STACK6B_COMPACT_ROLE_MODEL_PLAN.md
 on:
   workflow_dispatch:
   push:
