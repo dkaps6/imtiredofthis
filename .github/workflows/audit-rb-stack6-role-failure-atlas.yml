@@ -1,0 +1,54 @@
+name: RB-STACK6 Role Failure Atlas
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-stack6-secondary-role-model
+    paths:
+      - 'scripts/backtest/audit_rb_stack6_role_failure_atlas.py'
+      - '.github/workflows/audit-rb-stack6-role-failure-atlas.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  STACK6_RUN_ID: '33549529203'
+
+jobs:
+  atlas:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: pip install pandas==1.5.3 numpy==1.26.4 scipy
+      - name: Compile
+        run: python -m py_compile scripts/backtest/audit_rb_stack6_role_failure_atlas.py
+      - name: Download frozen STACK6 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_stack6_atlas/source
+          gh run download "$STACK6_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-stack6-secondary-role-model --dir data/backtests/rb_stack6_atlas/source
+          test -s data/backtests/rb_stack6_atlas/source/stack6_2025_casebook.csv
+      - name: Audit
+        run: |
+          rm -rf data/backtests/rb_stack6_atlas/results
+          python scripts/backtest/audit_rb_stack6_role_failure_atlas.py --stack6-root data/backtests/rb_stack6_atlas/source --out-dir data/backtests/rb_stack6_atlas/results
+      - name: Show
+        if: always()
+        run: |
+          cat data/backtests/rb_stack6_atlas/results/stack6_failure_atlas_support.csv 2>/dev/null || true
+          cat data/backtests/rb_stack6_atlas/results/stack6_failure_atlas_disposition.csv 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-stack6-role-failure-atlas
+          path: data/backtests/rb_stack6_atlas/results/**
+          if-no-files-found: warn
+          retention-days: 30
