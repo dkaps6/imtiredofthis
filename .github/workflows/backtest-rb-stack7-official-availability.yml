@@ -1,0 +1,69 @@
+name: RB-STACK7 Official Availability
+
+on:
+  push:
+    branches:
+      - research-rb-stack7-official-availability
+    paths:
+      - 'scripts/backtest/evaluate_rb_stack7_official_availability.py'
+      - 'docs/migrations/RB_STACK7_OFFICIAL_GAMEDAY_AVAILABILITY_PLAN.md'
+      - '.github/workflows/backtest-rb-stack7-official-availability.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  STACK6_RUN_ID: '33546598092'
+  MARKET_RUN_ID: '33499129109'
+
+jobs:
+  official-availability:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4
+      - name: Compile
+        run: python -m py_compile scripts/backtest/evaluate_rb_stack7_official_availability.py
+      - name: Download frozen inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_stack7/stack6 data/backtests/rb_stack7/market
+          gh run download "$STACK6_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-stack6-secondary-role-allocation --dir data/backtests/rb_stack7/stack6
+          gh run download "$MARKET_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-market-benchmark-2025 --dir data/backtests/rb_stack7/market
+          test -s data/backtests/rb_stack7/stack6/stack6_2025_casebook.csv
+          test -s data/backtests/rb_stack7/market/rb_market_casebook.csv
+          test -s data/backtests/qb_m78_official_inactives_corrected/m78_corrected_candidate_teamweek.csv
+      - name: Evaluate
+        run: |
+          rm -rf data/backtests/rb_stack7/results
+          python scripts/backtest/evaluate_rb_stack7_official_availability.py \
+            --stack6-root data/backtests/rb_stack7/stack6 \
+            --official-csv data/backtests/qb_m78_official_inactives_corrected/m78_corrected_candidate_teamweek.csv \
+            --market-root data/backtests/rb_stack7/market \
+            --out-dir data/backtests/rb_stack7/results
+      - name: Show outputs
+        if: always()
+        run: |
+          cat data/backtests/rb_stack7/results/stack7_source_audit.csv 2>/dev/null || true
+          cat data/backtests/rb_stack7/results/stack7_primary_gate.csv 2>/dev/null || true
+          cat data/backtests/rb_stack7/results/stack7_transition_atlas.csv 2>/dev/null || true
+          cat data/backtests/rb_stack7/results/stack7_market_metrics_DOWNSTREAM.csv 2>/dev/null || true
+          cat data/backtests/rb_stack7/results/stack7_disposition.csv 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-stack7-official-availability
+          path: data/backtests/rb_stack7/results/**
+          if-no-files-found: warn
+          retention-days: 30
