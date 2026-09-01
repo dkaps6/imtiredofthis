@@ -975,3 +975,8 @@ The current next migration remains `RB-STACK1 — Production-Equivalent RB Histo
 ## Latest RB STACK continuity supplement
 
 For the authoritative STACK1-STACK5 integration, market-gap forensics, retained capability map, and next STACK6 migration, read `docs/migrations/RB_STACK1_TO_STACK5_CONTINUITY_2026_09_01.md`. This supplement supersedes older RB next-step text where there is a conflict.
+
+
+# LATEST CONTINUITY POINTER — RB STACK1 THROUGH STACK5
+
+The authoritative continuation through RB STACK5 is `docs/migrations/RB_STACK1_TO_STACK5_CONTINUITY_2026_09_01.md`. This supplement supersedes older RB-next-step text where conflicts exist while preserving all earlier capability-ledger findings. The current best retrospective-development RB point parent is P3: full historical stack for Week 1, then STACK2 enriched M94C opportunity/allocation multiplied by full-stack implied efficiency/context. Next justified migration is RB-STACK6 / ND3 secondary-back role and substitution state.
