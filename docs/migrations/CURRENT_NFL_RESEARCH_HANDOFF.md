@@ -948,3 +948,25 @@ The explicit backfield-allocation engine remains a high-priority add-on, but do 
 Tell a new chat:
 
 > Continue my NFL stuff project from `research-current-state` in GitHub repo `dkaps6/imtiredofthis`. Read `docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md` completely, especially the bottom section `LATEST CONTINUITY UPDATE — RB ENV1 / ND2B / PRODUCTION-STACK AUDIT`, plus `docs/migrations/RB_PRODUCTION_VS_RESEARCH_STACK_AUDIT_2026_09_01.md`. The current next migration is `RB-STACK1 — Production-Equivalent RB Historical Baseline + Integration Audit`. Treat new RB findings as additive capability modules unless replacement is explicitly proven. Keep sportsbook data downstream only and preserve all temporal/leakage/integrity rules.
+
+# RB COMBINED INTEGRATION PRINCIPLE — DO NOT DROP EITHER TRACK
+
+**This is a permanent sequencing/modeling rule and must survive future chats and new ideas.**
+
+Two independently meaningful ideas must be pursued **together**, not one replacing the other when a new insight appears:
+
+1. **Production-equivalent parent stack:** reconstruct and score the complete canonical football stack historically (Bayesian/rules + MC + ML + State + calibrated ensemble where valid), because M94C is not production-equivalent and future RB work must improve the system we actually intend to run.
+2. **Enrich M94C with missing football information:** preserve M94C's validated team-opportunity/game-state capability, but feed/correct it with current pregame football state it was missing: timestamp-safe depth charts, RB1/RB2/RB3 hierarchy, lagged snaps/participation, current carry/touch shares, competing-RB strength/usage, injuries/availability, vacancy, roster/team changes, rookie/draft priors, backfield concentration, QB/non-RB rushing competition, OL availability and other justified football context.
+
+These tracks are **complementary**. The project must test:
+
+- full production-equivalent stack alone;
+- enriched M94C opportunity/allocation module alone versus its parent;
+- full stack + enriched M94C opportunity/allocation;
+- then compatible retained modules such as M95F workload distribution, M95I vacancy/transition, and M95C/M96 environment/efficiency capabilities through precommitted ablations.
+
+Do not revert to whole-model replacement contests. New information should normally be evaluated as: **what specific capability can make the current parent system better, where does it help, what does it hurt, and can it coexist with the other validated pieces?** Replacement is allowed only if explicitly proven.
+
+Probability/distribution layers quantify uncertainty around the football state; they do not substitute for role, availability, allocation, team opportunity, runner ability, matchup or game-context knowledge.
+
+The current next migration remains `RB-STACK1 — Production-Equivalent RB Historical Baseline + Integration Audit`, but RB-STACK1 must preserve the enriched-M94C/backfield-allocation track rather than postponing or forgetting it. Establish the production-equivalent parent first so the integration tests have the correct baseline, then immediately test the enriched M94C/allocation capability as an add-on to that parent.
