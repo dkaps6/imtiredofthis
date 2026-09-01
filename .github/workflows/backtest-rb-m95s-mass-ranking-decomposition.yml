@@ -1,5 +1,6 @@
 name: M95S RB Mass Ranking Decomposition
 
+# M95S protocol locked before authoritative execution.
 on:
   workflow_dispatch:
   push:
