@@ -1,0 +1,53 @@
+name: M95R Advance Research Handoff
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-m95r-dynamic-population-prior
+    paths:
+      - '.github/workflows/advance-m95r-research-handoff.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  advance-handoff:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Update canonical handoff
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md')
+          s=p.read_text()
+          s=re.sub(r'- Current research branch: `[^`]+`', '- Current research branch: `research-rb-m95r-dynamic-population-prior`', s, count=1)
+          s=s.replace('No M91-M95Q RB research has been promoted to production.', 'No M91-M95R RB research has been promoted to production.')
+          qbullet='- **M95Q successfully expanded exact comparable stable-workhorse temporal depth to 2020-2022 and passed its 2024 reconstruction controls.**'
+          rbullet='- **M95R tested a precommitted rolling dynamic population-prior residual layer; it helped 2023, was neutral in 2024, but badly overcorrected 2025 and is not promoted.**'
+          if rbullet not in s and qbullet in s:
+              s=s.replace(qbullet, qbullet+'\n'+rbullet)
+          s=s.replace('# Latest completed migration: M95Q — expanded exact historical stable-workhorse reconstruction', '## M95Q — expanded exact historical stable-workhorse reconstruction')
+          r='''\n## Latest completed migration: M95R — expanded-panel dynamic population-prior candidate\n\nFull results: `docs/migrations/M95R_RB_DYNAMIC_POPULATION_PRIOR_RESULTS.md`.\n\nAuthoritative:\n\n- workflow `M95R RB Dynamic Population Prior`\n- run **`33453141931`**\n- job **`99687269044`**\n- tested SHA **`272e7537f9642a977e84ffeeda4b9d7d17832c71`**\n- artifact **`9780473734`**\n- artifact SHA256 **`0d114c1f7cc1d2132c7ebd2c7074bd840b36d669c4a31c33e151cbb85be76821`**\n- execution success\n- disposition **`M95R_RETAIN_DIAGNOSTIC_DO_NOT_PROMOTE`**\n- feature search `0`; hyperparameter search `0`; sportsbook `0`; production change `0`\n\nM95R froze M95F as the 20+ backbone and allowed only a bounded additive log-odds population/workload residual using five predeclared pregame workload-regime variables. Ridge lambda was `10.0`; delta was capped at `+/-0.75`; evaluation was strict expanding-season: 2023 trained on 2020-22, 2024 on 2020-23, 2025 on 2020-24.\n\nPrimary W13-18 results:\n\n- 2023: Brier `.233221 -> .221407`, logloss `.673392 -> .638868`, AUC `.727041 -> .702381`; calibration underprediction improved by `3.90 pp`.\n- 2024: essentially neutral, Brier `.206384 -> .206530`, AUC `.704444 -> .702963`.\n- 2025: **failed materially**. M95F was already almost centered (actual `28.24%`, predicted `29.43%`); R raised mean probability to `43.12%`, worsening Brier `.194926 -> .216791` and absolute calibration gap by `13.69 pp`.\n- pooled: R moved mean probability closer to pooled actual but worsened Brier `.210576 -> .214863`, logloss `.610548 -> .618125`, and AUC `.664417 -> .642000`.\n- 2025 full secondary: actual `21.94%`, M95F mean `29.60%`, R mean `43.48%`; Brier `.186593 -> .231516`.\n\nScientific lesson: matching population-average tail mass is not sufficient. R assigned too much mass to the wrong player-games in 2025. The workload regime changed faster than the multi-season residual calibrator could adapt. This exact R architecture is frozen as failed evidence and must not be retuned against exposed 2023-25 outcomes.\n\n### Durable player-source cache\n\nThe raw nflverse weekly player source sheets are now permanently cached so future historical research does not repeatedly redownload the full player universe.\n\n- workflow `M95R Historical Player Source Cache`\n- successful run **`33453001235`**\n- job **`99686833509`**\n- cache workflow SHA **`07e0ceb5b6f0e8eda704c4735ba7b2ff2efa32ee`**\n- persisted cache commit **`402c4a28593e0c79438ea10c88d832a98f0a6f2e`**\n- path `data/research_cache/nflverse_player_weekly/`\n- seasons `2018-2025`; one parquet snapshot per season plus SHA256 manifest; 150 source columns per season.\n\n'''
+          marker='# Current scientific interpretation'
+          if '## Latest completed migration: M95R' not in s:
+              s=s.replace(marker, r+marker, 1)
+          start=s.index('# Current scientific interpretation')
+          nxt=s.index('# NEXT MIGRATION — M95R', start)
+          interp='''# Current scientific interpretation\n\nThe system already individualizes player-week football inputs. The strongest current RB interpretation has four layers:\n\n1. **Global opportunity backbone** — M94C central carries remains the reference.\n2. **Stable-workhorse tail baseline** — M95F remains safer than the failed derivative candidates.\n3. **Role regime** — vacancy/transition remains structurally separate (M95I diagnostic).\n4. **Population/game regime** — real and useful, but its calibration moves faster than fixed or slow cross-season gates/priors can safely follow.\n\nM95K showed historical feed/ceiling can improve player ordering in favorable regimes, especially 2025, but failed sealed 2023. M95N-P established regime dependence. M95O showed fixed thresholds fail. M95R now shows a slow rolling residual population calibrator also fails: it repaired 2023 underprediction but became stale and injected excessive tail mass in 2025.\n\nThe key next question is therefore not simply whether dynamic context matters. It is **how to separate population-level tail mass from player-level ranking and how quickly the population anchor must adapt**.\n\n'''
+          s=s[:start]+interp+s[nxt:]
+          start=s.index('# NEXT MIGRATION — M95R')
+          end=s.index('## Fresh-chat startup procedure', start)
+          nextsec='''# NEXT MIGRATION — M95S\n\nName: **M95S — Population-Mass vs Player-Ranking Decomposition Audit**\n\nPrimary question:\n\n> Did M95R fail because a slow cross-season population-mass correction was stale even while player-level ranking signals remained useful, and can the regime shift be detected pregame using faster within-season workload anchors?\n\nRequired design:\n\n- diagnostic/postmortem only first; **do not immediately fit another tuned candidate**;\n- use the exact 2020-2025 stable-workhorse panel and preserved M95F/M95K/M95R traces;\n- keep M94C central carries unchanged;\n- decompose error into:\n  1. population mass/calibration error;\n  2. within-population player ordering/discrimination error;\n- quantify by season and week how quickly M95F's population calibration gap changes;\n- compare strictly pregame contemporaneous anchors using only information available before kickoff, including season-to-date and short recent league/team workload state;\n- measure whether 2025's change was visible before M95R's large upward residual shifts;\n- audit M95K/feed ranking conditional on a fixed/mass-normalized baseline so ranking value is not confused with population calibration;\n- include lag/response diagnostics for 1-, 2-, 4- and season-to-date workload windows as a **predeclared diagnostic grid**, not a candidate-selection search;\n- identify whether population mass needs within-season recency while player ordering can use longer historical persistence;\n- 20+ remains primary; 25+ diagnostic only because event counts remain sparse;\n- no sportsbook input; no production change; no retuning M95K or M95R against exposed labels;\n- if M95S supports a separable architecture, only then precommit a new candidate in the following migration.\n\n'''
+          s=s[:start]+nextsec+s[end:]
+          p.write_text(s)
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md
+          git commit -m 'M95R: advance canonical research handoff to M95S'
+          git push origin HEAD:${GITHUB_REF_NAME}
