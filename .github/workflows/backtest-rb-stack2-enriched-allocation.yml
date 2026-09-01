@@ -1,0 +1,73 @@
+name: RB-STACK2 Enriched Allocation Integration
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-stack2-enriched-allocation-integration
+    paths:
+      - 'scripts/backtest/evaluate_rb_stack2_enriched_allocation.py'
+      - 'docs/migrations/RB_STACK2_ENRICHED_ALLOCATION_INTEGRATION_PLAN.md'
+      - '.github/workflows/backtest-rb-stack2-enriched-allocation.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M94C_RUN_ID: '33353485070'
+  STACK1_RUN_ID: '33535308110'
+  RB_MARKET_RUN_ID: '33499129109'
+
+jobs:
+  stack2:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scikit-learn
+      - name: Compile
+        run: python -m py_compile scripts/backtest/evaluate_rb_stack2_enriched_allocation.py
+      - name: Download frozen parent artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_stack2/m94c data/backtests/rb_stack2/stack1 data/backtests/rb_stack2/market
+          gh run download "$M94C_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-94c-rb-game-environment --dir data/backtests/rb_stack2/m94c
+          gh run download "$STACK1_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-stack1-production-equivalent-baseline --dir data/backtests/rb_stack2/stack1
+          gh run download "$RB_MARKET_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-market-benchmark-2025 --dir data/backtests/rb_stack2/market
+          test -s data/backtests/rb_stack2/m94c/m94c_2025_rb_trace.csv
+          test -s data/backtests/rb_stack2/stack1/results/stack1_2025_rb_trace.csv || test -s data/backtests/rb_stack2/stack1/stack1_2025_rb_trace.csv
+          test -s data/backtests/rb_stack2/market/rb_market_casebook.csv
+      - name: Evaluate STACK2
+        run: |
+          rm -rf data/backtests/rb_stack2/results
+          python scripts/backtest/evaluate_rb_stack2_enriched_allocation.py \
+            --m94c-root data/backtests/rb_stack2/m94c \
+            --stack1-root data/backtests/rb_stack2/stack1 \
+            --market-root data/backtests/rb_stack2/market \
+            --out-dir data/backtests/rb_stack2/results
+      - name: Show outputs
+        if: always()
+        run: |
+          echo '=== coverage ==='
+          cat data/backtests/rb_stack2/results/stack2_coverage.csv 2>/dev/null || true
+          echo '=== allocation ==='
+          cat data/backtests/rb_stack2/results/stack2_allocation_metrics.csv 2>/dev/null || true
+          echo '=== market ==='
+          cat data/backtests/rb_stack2/results/stack2_market_899_metrics.csv 2>/dev/null || true
+          echo '=== disposition ==='
+          cat data/backtests/rb_stack2/results/stack2_disposition.csv 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-stack2-enriched-allocation-integration
+          path: data/backtests/rb_stack2/results/**
+          retention-days: 30
