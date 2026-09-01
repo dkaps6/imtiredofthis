@@ -1,0 +1,43 @@
+name: M95S Advance Research Handoff
+
+on:
+  push:
+    branches:
+      - research-rb-m95s-mass-ranking-decomposition
+    paths:
+      - '.github/workflows/advance-m95s-research-handoff.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  advance-handoff:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Update canonical handoff
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md')
+          s=p.read_text()
+          s=s.replace('Current research branch: `research-rb-m95r-dynamic-population-prior`','Current research branch: `research-rb-m95s-mass-ranking-decomposition`')
+          s=s.replace('No M91-M95R RB research has been promoted to production.','No M91-M95S RB research has been promoted to production.')
+          marker='- **M95R tested a precommitted rolling dynamic population-prior residual layer; it helped 2023, was neutral in 2024, but badly overcorrected 2025 and is not promoted.**'
+          add=marker+'\n- **M95S separated population-mass calibration from player ranking: M95R overcorrection was visible in 2025 pregame context, while frozen M95K ranking helped 2025 but harmed 2023. The next step is one final constrained historical candidate, M95T.**'
+          if marker in s and 'M95S separated population-mass' not in s:
+              s=s.replace(marker,add)
+          next_marker='# NEXT MIGRATION — M95S'
+          if next_marker in s:
+              prefix=s.split(next_marker)[0].rstrip()
+              tail='''# Latest completed migration: M95S — population-mass vs player-ranking decomposition\n\nFull results: `docs/migrations/M95S_RB_MASS_RANKING_DECOMPOSITION_RESULTS.md`.\n\nAuthoritative:\n\n- workflow `M95S RB Mass Ranking Decomposition`\n- run **`33454116869`**\n- job **`99690286310`**\n- tested SHA **`78f08a5fdb8e5ff34143e1a6dc72d6d901daa2f2`**\n- artifact **`9780815195`**\n- artifact SHA256 **`aa1c29ea8f665699278a484d5d0e41fc768ab337c0e06b9eabd58e7500f4eb88`**\n- execution success\n- disposition **`M95S_DECOMPOSITION_SUPPORTED_ADVANCE_TO_CONSTRAINED_M95T`**\n- model fit `0`; feature search `0`; coefficient search `0`; sportsbook `0`; production change `0`\n\nM95S found that early 2025 M95F was already overpredicting realized stable-workhorse 20+ rate by an average `15.3812 pp` across Weeks 2-9 while M95R added another `13.4238 pp` of mass; contemporaneous league prior-four lead20 averaged only `13.2826%`. The stale R correction was therefore visibly contradicted by current pregame workload state.\n\nFrozen player ranking remained conditional: 2023 frozen M95K/M95L AUC gain was `-0.181973`, while authoritative 2025 M95K gain was `+0.059979`, with probability mass already preserved. Team recent workload was useful for raw player outcomes but not as a positive residual mass correction, indicating substantial double-count risk if reused on top of M95F.\n\nScientific synthesis: population tail mass should react to current league/population state; player ranking should be separately bounded/conditional and mass-preserving.\n\n# NEXT MIGRATION — M95T\n\nName: **M95T — Constrained Dual-Layer Stable-Workhorse Tail Candidate**\n\nPrimary question:\n\n> Can one precommitted architecture combine a fast, strongly shrunk population-mass anchor with a separately bounded/mass-preserving player-ranking layer and improve stable-workhorse 20+ probabilities across the expanded historical panel without material season-specific regression?\n\nRequired design:\n\n- This is the **final retrospective RB-tail candidate** in the M95 sequence.\n- Precommit all formulas/gates before execution; no post-result coefficient search.\n- Keep M94C central carries unchanged.\n- Keep M95F as the base player-game tail backbone.\n- Population layer may use only pregame league/population workload state supported by M95P/S; it must be fast, strongly shrunk, and bounded.\n- Do not reuse team recent workload as a blanket positive mass booster; M95S shows double-count risk on top of M95F.\n- Player layer may use frozen feed/ceiling ordering only through a predeclared conditional/bounded mechanism; total stable-workhorse probability mass must be preserved after reranking.\n- Vacancy/transition remains separate under M95I semantics.\n- 20+ is primary; 25+ secondary diagnostic only.\n- Evaluate 2020-2025 season by season plus pooled, with calibration/Brier/logloss primary and AUC secondary.\n- Fail closed if improvement depends on one season or causes material regression in any season.\n- No sportsbook input; no production change during historical development.\n- No retuning M95K/M95R to exposed 2023/2025 labels.\n\nStopping rule:\n\n- If M95T fails the precommitted cross-season gates, stop new RB-tail candidate development and retain M94C/M95F while moving to WR research.\n- If M95T passes, freeze it immediately before 2026 regular-season outcomes and run prospective/shadow confirmation. No further retrospective tuning before prospective confirmation.\n\n## Fresh-chat startup procedure\n\nTell a new chat:\n\n> Continue my NFL stuff project from the `research-current-state` branch in GitHub repo `dkaps6/imtiredofthis`. Read `docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md` first, verify the latest authoritative GitHub Actions run/artifact, and continue directly from the `NEXT MIGRATION` section. Preserve all modeling/validation rules and do not restart old research.\n'''
+              s=prefix+'\n\n'+tail
+          p.write_text(s)
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md
+          git commit -m 'M95S: advance canonical research handoff to M95T'
+          git push origin HEAD:${GITHUB_REF_NAME}
