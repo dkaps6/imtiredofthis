@@ -22,7 +22,15 @@ jobs:
           fetch-depth: 0
 
       - name: Update canonical research handoff
-        run: python scripts/backtest/advance_m96b_handoff.py
+        run: |
+          if grep -q '^# NEXT MIGRATION — M96B' docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md; then
+            python scripts/backtest/advance_m96b_handoff.py
+          elif grep -q '^# Latest completed migration: M96B' docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md && grep -q '^# NEXT MIGRATION — M96C' docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md; then
+            echo 'M96B handoff already advanced; idempotent success.'
+          else
+            echo 'Unexpected handoff state; refusing silent rewrite.' >&2
+            exit 1
+          fi
 
       - name: Commit handoff
         run: |
