@@ -1,0 +1,57 @@
+name: RB-STACK5 Market Gap Forensics
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-stack5-market-gap-forensics
+    paths:
+      - 'scripts/backtest/evaluate_rb_stack5_market_gap_forensics.py'
+      - 'docs/migrations/RB_STACK5_MARKET_GAP_FORENSICS_PLAN.md'
+      - '.github/workflows/backtest-rb-stack5-market-gap-forensics.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  STACK4_RUN_ID: '33539814046'
+  MARKET_RUN_ID: '33499129109'
+
+jobs:
+  stack5:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4
+      - name: Compile
+        run: python -m py_compile scripts/backtest/evaluate_rb_stack5_market_gap_forensics.py
+      - name: Download frozen artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_stack5/stack4 data/backtests/rb_stack5/market
+          gh run download "$STACK4_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-stack4-efficiency-portability --dir data/backtests/rb_stack5/stack4
+          gh run download "$MARKET_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-market-benchmark-2025 --dir data/backtests/rb_stack5/market
+          test -s data/backtests/rb_stack5/stack4/stack4_2025_casebook.csv
+          test -s data/backtests/rb_stack5/market/rb_market_casebook.csv
+      - name: Evaluate
+        run: |
+          rm -rf data/backtests/rb_stack5/results
+          python scripts/backtest/evaluate_rb_stack5_market_gap_forensics.py \
+            --stack4-root data/backtests/rb_stack5/stack4 \
+            --market-root data/backtests/rb_stack5/market \
+            --out-dir data/backtests/rb_stack5/results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-stack5-market-gap-forensics
+          path: data/backtests/rb_stack5/results/**
+          retention-days: 30
