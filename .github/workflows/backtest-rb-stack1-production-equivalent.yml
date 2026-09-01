@@ -1,0 +1,168 @@
+name: RB-STACK1 Production-Equivalent Baseline
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-stack1-production-equivalent-baseline
+    paths:
+      - 'scripts/backtest/evaluate_rb_stack1_production_equivalent.py'
+      - '.github/workflows/backtest-rb-stack1-production-equivalent.yml'
+      - 'docs/migrations/RB_STACK1_PLAN.md'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M94C_RUN_ID: '33353485070'
+  RB_MARKET_RUN_ID: '33499129109'
+
+jobs:
+  stack1:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+
+      - name: Compile frozen STACK1 evaluator
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_stack1_production_equivalent.py
+
+      - name: Reconstruct 2024 OOS historical football stack inputs
+        run: |
+          rm -rf data/backtests/rb_stack1/2024
+          mkdir -p data/backtests/rb_stack1/2024
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2024 --prior-season 2023 --weeks '1-18' \
+            --out-dir data/backtests/rb_stack1/2024
+          python scripts/backtest/enrich_historical_defense.py \
+            --team-weekly data/backtests/rb_stack1/2024/team_weekly_history.csv \
+            --seasons 2023,2024 \
+            --audit data/backtests/rb_stack1/2024/historical_defense_enrichment_audit.csv \
+            --observations data/backtests/rb_stack1/2024/historical_defense_observations.csv
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2023,2024 \
+            --schedule data/backtests/rb_stack1/2024/schedule_history.csv \
+            --out data/backtests/rb_stack1/2024/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py \
+            --seasons 2023,2024 \
+            --out data/backtests/rb_stack1/2024/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py \
+            --schedule data/backtests/rb_stack1/2024/schedule_history.csv \
+            --out data/backtests/rb_stack1/2024/weather_history.csv
+
+      - name: Run 2024 leakage-safe OOS canonical components
+        run: |
+          rm -f data/backtests/rb_stack1/2024/component_predictions.csv
+          python scripts/backtest/walk_forward.py \
+            --season 2024 --prior-season 2023 --weeks '1-18' \
+            --player-logs data/backtests/rb_stack1/2024/player_game_logs_history.csv \
+            --team-weekly data/backtests/rb_stack1/2024/team_weekly_history.csv \
+            --schedule data/backtests/rb_stack1/2024/schedule_history.csv \
+            --universe-dir data/backtests/rb_stack1/2024/pregame_universe \
+            --injuries data/backtests/rb_stack1/2024/injuries_history.csv \
+            --weather data/backtests/rb_stack1/2024/weather_history.csv \
+            --out data/backtests/rb_stack1/2024/component_predictions.csv \
+            --iterations 2000
+          test -s data/backtests/rb_stack1/2024/component_predictions.csv
+
+      - name: Reconstruct 2025 OOS historical football stack inputs
+        run: |
+          rm -rf data/backtests/rb_stack1/2025
+          mkdir -p data/backtests/rb_stack1/2025
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2025 --prior-season 2024 --weeks '1-18' \
+            --out-dir data/backtests/rb_stack1/2025
+          python scripts/backtest/enrich_historical_defense.py \
+            --team-weekly data/backtests/rb_stack1/2025/team_weekly_history.csv \
+            --seasons 2024,2025 \
+            --audit data/backtests/rb_stack1/2025/historical_defense_enrichment_audit.csv \
+            --observations data/backtests/rb_stack1/2025/historical_defense_observations.csv
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2024,2025 \
+            --schedule data/backtests/rb_stack1/2025/schedule_history.csv \
+            --out data/backtests/rb_stack1/2025/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py \
+            --seasons 2024,2025 \
+            --out data/backtests/rb_stack1/2025/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py \
+            --schedule data/backtests/rb_stack1/2025/schedule_history.csv \
+            --out data/backtests/rb_stack1/2025/weather_history.csv
+
+      - name: Run 2025 leakage-safe OOS canonical components
+        run: |
+          rm -f data/backtests/rb_stack1/2025/component_predictions.csv
+          python scripts/backtest/walk_forward.py \
+            --season 2025 --prior-season 2024 --weeks '1-18' \
+            --player-logs data/backtests/rb_stack1/2025/player_game_logs_history.csv \
+            --team-weekly data/backtests/rb_stack1/2025/team_weekly_history.csv \
+            --schedule data/backtests/rb_stack1/2025/schedule_history.csv \
+            --universe-dir data/backtests/rb_stack1/2025/pregame_universe \
+            --injuries data/backtests/rb_stack1/2025/injuries_history.csv \
+            --weather data/backtests/rb_stack1/2025/weather_history.csv \
+            --out data/backtests/rb_stack1/2025/component_predictions.csv \
+            --iterations 2000
+          test -s data/backtests/rb_stack1/2025/component_predictions.csv
+
+      - name: Download frozen M94C and downstream market benchmark
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_stack1/m94c data/backtests/rb_stack1/market
+          gh run download "$M94C_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-94c-rb-game-environment \
+            --dir data/backtests/rb_stack1/m94c
+          gh run download "$RB_MARKET_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name rb-market-benchmark-2025 \
+            --dir data/backtests/rb_stack1/market
+          test -s data/backtests/rb_stack1/m94c/m94c_2025_rb_trace.csv
+          test -s data/backtests/rb_stack1/market/rb_market_casebook.csv
+
+      - name: Evaluate complete RB parent stack
+        run: |
+          rm -rf data/backtests/rb_stack1/results
+          python scripts/backtest/evaluate_rb_stack1_production_equivalent.py \
+            --components-2024 data/backtests/rb_stack1/2024/component_predictions.csv \
+            --components-2025 data/backtests/rb_stack1/2025/component_predictions.csv \
+            --m94c data/backtests/rb_stack1/m94c/m94c_2025_rb_trace.csv \
+            --market-casebook data/backtests/rb_stack1/market/rb_market_casebook.csv \
+            --out-dir data/backtests/rb_stack1/results
+
+      - name: Show STACK1 results
+        if: always()
+        run: |
+          echo '=== disposition ==='
+          cat data/backtests/rb_stack1/results/stack1_disposition.csv 2>/dev/null || true
+          echo '=== all RB metrics ==='
+          cat data/backtests/rb_stack1/results/stack1_metrics_all.csv 2>/dev/null || true
+          echo '=== listed market subset ==='
+          cat data/backtests/rb_stack1/results/stack1_listed_market_metrics.csv 2>/dev/null || true
+          echo '=== context coverage ==='
+          cat data/backtests/rb_stack1/results/stack1_context_coverage.csv 2>/dev/null || true
+          echo '=== 2024 frozen weights ==='
+          cat data/backtests/rb_stack1/results/stack1_weights_2024.csv 2>/dev/null || true
+          echo '=== M94C join ==='
+          cat data/backtests/rb_stack1/results/stack1_join_audit.csv 2>/dev/null || true
+
+      - name: Upload STACK1 artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-stack1-production-equivalent-baseline
+          path: |
+            data/backtests/rb_stack1/results/**
+            data/backtests/rb_stack1/2024/historical_defense_enrichment_audit.csv
+            data/backtests/rb_stack1/2025/historical_defense_enrichment_audit.csv
+          if-no-files-found: warn
+          retention-days: 30
