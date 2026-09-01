@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import re
+
+p = Path('docs/migrations/CURRENT_NFL_RESEARCH_HANDOFF.md')
+s = p.read_text()
+s = s.replace(
+    'Current research branch: `research-rb-m95s-mass-ranking-decomposition`',
+    'Current research branch: `research-rb-m95t-constrained-dual-layer-tail`',
+)
+s = s.replace(
+    'No M91-M95S RB research has been promoted to production.',
+    'No M91-M95T RB research has been promoted to production.',
+)
+marker = '- **M95S separated population-mass calibration from player ranking: M95R overcorrection was visible in 2025 pregame context, while frozen M95K ranking helped 2025 but harmed 2023. The next step is one final constrained historical candidate, M95T.**'
+add = marker + '\n- **M95T was the final retrospective carry-tail candidate. It improved pooled Brier/logloss/AUC and repaired 2023 directionally, but failed the frozen cross-season stability gates because 2025 calibration still worsened materially. Per the stopping rule, new retrospective RB carry-tail candidates stop here; M94C/M95F is the conservative workload foundation for M96 rushing-yard synthesis.**'
+if marker in s and 'M95T was the final retrospective carry-tail candidate' not in s:
+    s = s.replace(marker, add)
+
+replacement = '''# Latest completed migration: M95T — constrained dual-layer stable-workhorse tail candidate
+
+Full results: `docs/migrations/M95T_RB_CONSTRAINED_DUAL_LAYER_TAIL_RESULTS.md`.
+
+Authoritative:
+
+- workflow `M95T RB Constrained Dual-Layer Tail`
+- run **`33455690862`**
+- job **`99695055863`**
+- tested SHA **`540edb67d9d5451764e997f19213b80285c15fab`**
+- artifact **`9781352939`**
+- artifact SHA256 **`bd54485d18de4f4df1f7613d9587281234bf07f8ce9de6df36b68bca26167c70`**
+- execution success
+- disposition **`M95T_FAIL_STOP_NEW_RB_TAIL_CANDIDATES_RETAIN_M94C_M95F_PROCEED_M96`**
+- model fit `0`; feature search `0`; coefficient search `0`; hyperparameter search `0`; sportsbook `0`; production change `0`
+
+M95T combined a fast relative league workload-mass anchor with a separately bounded within-week feed/carry-ceiling reranker. The rerank was exactly mass-preserving before the population layer and M94C central carries remained untouched.
+
+Comparable W13-18 stable-workhorse panel (`n=412`):
+
+- pooled Brier `.208196 -> .207208` (gain `+.000988`)
+- pooled logloss `.607393 -> .603946` (gain `+.003447`)
+- pooled AUC `.659138 -> .661866` (gain `+.002728`)
+- pooled absolute calibration gap `.054464 -> .039068`
+- 2023 improved materially: Brier `.233221 -> .228334`, logloss `.673392 -> .657658`, AUC `.727041 -> .741497`
+- 2024 improved modestly
+- 2022 improved modestly
+- 2020 and 2025 regressed slightly on Brier/logloss
+- critically, 2025 mean p20 rose `29.43% -> 33.54%` against actual `28.24%`, worsening absolute calibration gap by `4.103 pp`
+
+Frozen cross-season gates therefore failed: only 3/6 seasons had non-negative Brier gain (required >=4), the max absolute-calibration-gap regression exceeded `2.5 pp`, and the predeclared 2023/2025 trouble-year guard failed. The gate is not waived and the candidate is not retuned.
+
+The rushing-yard translation sanity guard confirmed why workload matters but also why carry research is not the end product. Across the exact late-season panel, carries vs rushing yards correlated `.789267` Pearson / `.788957` Spearman. M95T did not materially destroy 75+/100+ rushing-yard discrimination (pooled AUC changes `-.006312` and `-.003702`), but this is not a rushing-yard point model.
+
+**Stopping-rule decision:** new retrospective RB carry-tail candidate development ends at M95T. M94C remains the central carry/opportunity foundation and M95F remains the stable-workhorse tail baseline. M95I vacancy/transition remains separate diagnostic evidence. The next task is not another tail formula; it is explicit rushing-yard synthesis.
+
+# NEXT MIGRATION — M96
+
+Name: **M96 — RB Rushing-Yard Synthesis / Opportunity-to-Yardage Translation**
+
+Primary question:
+
+> Given the selected conservative workload foundation, can we translate projected opportunity plus leakage-safe efficiency/environment information into materially better player-game rushing-yard predictions and rushing-yard tail probabilities without sacrificing ordinary games?
+
+Required design:
+
+- M96 is a new synthesis phase, **not another retrospective M95 carry-tail candidate**.
+- Use M94C central carries/opportunity as the default projected workload foundation; M95F remains the stable-workhorse carry-tail distribution baseline.
+- Keep M95I vacancy/transition evidence separate; do not silently promote it without its own integration/confirmation contract.
+- Reuse the validated/retained rushing-efficiency and environment signals from M95A-D / the existing production yardage layer: blocking/environment, YBC/YAC, expected rushing yards/RYOE where leakage-safe, box/front/motion/RPO context where available, and opponent run-defense context.
+- Explicitly decompose rushing yards as **opportunity x efficiency/distribution**, rather than assuming better carries automatically solves yards.
+- Run an oracle-opportunity diagnostic using actual carries only as a postgame ceiling analysis; actual carries may never enter the pregame candidate.
+- Compare baseline production yardage, M94C-opportunity translation, and any precommitted M96 synthesis across the broadest exact comparable historical panel available.
+- Primary point metrics: rushing-yard MAE, RMSE, bias and correlation by season and pooled.
+- Primary tail diagnostics: 75+ and 100+ rushing-yard calibration/discrimination, with event counts.
+- Preserve ordinary-game performance; do not fix high-end misses by blindly boosting everybody's yards per carry or carry count.
+- No sportsbook/player-line input during football-model construction.
+- No production change until M96 is frozen and the final RB synthesis/prospective 2026 validation contract is satisfied.
+- Use the durable 2018-2025 player weekly cache; do not redownload historical player sheets unless deliberately refreshing the frozen source.
+
+Decision path:
+
+- If a rushing-yard synthesis materially improves point accuracy and tail behavior across seasons without ordinary-game regression, freeze it for 2026 prospective/shadow confirmation and final RB integration.
+- If no synthesis survives the frozen guards, retain the conservative existing yardage layer with M94C/M95F opportunity inputs, document the ceiling, and close RB rather than reopening M95 carry-tail tuning.
+
+## Fresh-chat startup procedure'''
+
+pat = r'# NEXT MIGRATION — M95T.*?## Fresh-chat startup procedure'
+s2, n = re.subn(pat, replacement, s, flags=re.S)
+if n != 1:
+    raise SystemExit(f'expected one M95T NEXT section, replaced={n}')
+p.write_text(s2)
+print('M95T handoff advanced to M96')
