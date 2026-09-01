@@ -7,6 +7,7 @@ on:
       - research-rb-m96a-opportunity-efficiency-attribution
     paths:
       - 'scripts/backtest/evaluate_rb_m96a_opportunity_efficiency_attribution.py'
+      - 'scripts/backtest/evaluate_rb_m96a_opportunity_efficiency_attribution_v2.py'
       - '.github/workflows/backtest-rb-m96a-opportunity-efficiency-attribution.yml'
       - 'docs/migrations/M96A_PLAN.md'
 
@@ -54,7 +55,8 @@ jobs:
       - name: Run M96A attribution audit
         run: |
           python -m py_compile scripts/backtest/evaluate_rb_m96a_opportunity_efficiency_attribution.py
-          python scripts/backtest/evaluate_rb_m96a_opportunity_efficiency_attribution.py \
+          python -m py_compile scripts/backtest/evaluate_rb_m96a_opportunity_efficiency_attribution_v2.py
+          python scripts/backtest/evaluate_rb_m96a_opportunity_efficiency_attribution_v2.py \
             --m94c-root data/backtests/rb_m94c_frozen \
             --m95f-root data/backtests/rb_m95f_frozen \
             --m95i-root data/backtests/rb_m95i_frozen \
