@@ -20,11 +20,11 @@ M95I is not promoted wholesale. Stable incumbents do not receive the M95I transf
 
 To keep M96A interpretable, no new efficiency model is fit and M95C environment features are not added yet.
 
-The pregame efficiency forecast is the exact frozen efficiency implied by the authoritative M94C yardage output:
+The primary pregame efficiency forecast is the **exact finite M94C-implied efficiency**:
 
 `pred_ypc = candidate_rush_yards / candidate_rush_att`
 
-with the same defensive numerical guard already used by the M95I downstream sensitivity audit (`2.0 <= pred_ypc <= 7.0` when projected carries are positive).
+No 2–7 clamp is applied to the authoritative calculation because doing so would change M94C's own frozen yard projection on the handful of rows outside that range. The earlier M95I 2–7 clamp is reported only as a secondary sensitivity check. The authoritative M94C point arm must reproduce `candidate_rush_yards` to numerical tolerance.
 
 This means any difference among the three primary arms is workload-only.
 
@@ -101,12 +101,21 @@ The quantile translation intentionally holds efficiency deterministic. Undercove
 - Do not waive M94C's inherited legacy rush-yard guard.
 - 2025 is already inspected research data; M96A is attribution/development evidence, not pristine confirmation.
 
-## Decision rule
+## Precommitted routing rule
 
-M96A does not promote a model. It routes the next research step.
+M96A does not promote a model. It routes the next research step using the **M94C arm's all-RB oracle MAE recovery** and the exact residual-component audit.
 
-- **Opportunity-dominant:** perfect-opportunity oracle improves all-RB MAE materially more than perfect-efficiency oracle, or opportunity component dominates per-game absolute residuals. Return to a narrowly defined opportunity issue informed by the slice diagnostics.
-- **Efficiency-dominant:** perfect-efficiency oracle materially exceeds the opportunity oracle. Advance to M96B efficiency/environment synthesis, beginning with retained M95C environment signal.
-- **Joint:** neither component clearly dominates and both oracles recover meaningful error. Advance to a joint M96B synthesis with workload distribution and efficiency distribution kept separate.
+Let:
+
+- `opportunity_gain = pregame_MAE - perfect_opportunity_MAE`
+- `efficiency_gain = pregame_MAE - perfect_efficiency_MAE`
+
+Routing is:
+
+- **Opportunity-dominant** only if `opportunity_gain >= efficiency_gain + 1.0 rushing yard` **and** opportunity is the larger absolute residual component in at least 55% of player-games.
+- **Efficiency-dominant** only if `efficiency_gain >= opportunity_gain + 1.0 rushing yard` **and** efficiency is the larger absolute residual component in at least 55% of player-games.
+- **Joint** otherwise.
+
+The 1-yard / 55% requirements are fixed before the authoritative run so a small numerical edge cannot dictate the research roadmap.
 
 Regardless of route, M94C remains the central workload reference unless a later precommitted candidate earns replacement.
