@@ -1,0 +1,76 @@
+name: RB-ND1 Forensic Failure Atlas
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-nd1-forensic-atlas
+    paths:
+      - 'scripts/backtest/audit_rb_nd1_forensic_failure_atlas.py'
+      - 'docs/migrations/RB_ND1_FORENSIC_FAILURE_ATLAS_PLAN.md'
+      - '.github/workflows/backtest-rb-nd1-forensic-atlas.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M94C_RUN_ID: '33353485070'
+  M96E_RUN_ID: '33467630395'
+  MARKET_RUN_ID: '33499129109'
+
+jobs:
+  forensic-atlas:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 pyarrow nflreadpy
+
+      - name: Download frozen parent artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_nd1_parents/m94c data/backtests/rb_nd1_parents/m96e data/backtests/rb_nd1_parents/market
+          gh run download "$M94C_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-94c-rb-game-environment --dir data/backtests/rb_nd1_parents/m94c
+          gh run download "$M96E_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-96e-rb-role-workload-risk-guard --dir data/backtests/rb_nd1_parents/m96e
+          gh run download "$MARKET_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-market-benchmark-2025 --dir data/backtests/rb_nd1_parents/market
+          test -s data/backtests/rb_nd1_parents/m94c/m94c_2025_rb_trace.csv
+          test -s data/backtests/rb_nd1_parents/m96e/m96e_router_trace.csv
+          test -s data/backtests/rb_nd1_parents/market/rb_market_casebook.csv
+
+      - name: Run frozen forensic audit
+        run: |
+          python -m py_compile scripts/backtest/audit_rb_nd1_forensic_failure_atlas.py
+          python scripts/backtest/audit_rb_nd1_forensic_failure_atlas.py \
+            --m94c-root data/backtests/rb_nd1_parents/m94c \
+            --m96e-root data/backtests/rb_nd1_parents/m96e \
+            --market-root data/backtests/rb_nd1_parents/market \
+            --out-dir data/backtests/rb_nd1_forensic_atlas
+
+      - name: Show compact outputs
+        run: |
+          cat data/backtests/rb_nd1_forensic_atlas/rb_nd1_source_audit.csv
+          cat data/backtests/rb_nd1_forensic_atlas/rb_nd1_contribution_summary.csv
+          cat data/backtests/rb_nd1_forensic_atlas/rb_nd1_flag_summary.csv
+          cat data/backtests/rb_nd1_forensic_atlas/rb_nd1_m96e_market_headline.csv
+          head -20 data/backtests/rb_nd1_forensic_atlas/rb_nd1_mechanism_summary.csv
+          head -20 data/backtests/rb_nd1_forensic_atlas/rb_nd1_market_by_mechanism.csv
+          head -20 data/backtests/rb_nd1_forensic_atlas/rb_nd1_m96e_by_mechanism.csv
+
+      - name: Upload forensic artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-nd1-forensic-failure-atlas
+          path: data/backtests/rb_nd1_forensic_atlas/**
+          retention-days: 30
