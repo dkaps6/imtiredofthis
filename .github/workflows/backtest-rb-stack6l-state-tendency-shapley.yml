@@ -1,0 +1,69 @@
+name: RB STACK6L State Tendency Shapley
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-stack6l-state-tendency-shapley
+    paths:
+      - 'scripts/backtest/evaluate_rb_stack6l_state_tendency_shapley.py'
+      - 'docs/migrations/RB_STACK6L_STATE_TENDENCY_SHAPLEY_PLAN.md'
+      - '.github/workflows/backtest-rb-stack6l-state-tendency-shapley.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  oracle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      M94C_RUN_ID: '33353485070'
+      STACK6H_RUN_ID: '33632678179'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install frozen dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 nflreadpy
+      - name: Compile
+        run: python -m py_compile scripts/backtest/evaluate_rb_stack6l_state_tendency_shapley.py
+      - name: Download frozen artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_stack6l/m94c data/backtests/rb_stack6l/stack6h
+          gh run download "$M94C_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-94c-rb-game-environment --dir data/backtests/rb_stack6l/m94c
+          gh run download "$STACK6H_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-stack6h-current-pool-oracle --dir data/backtests/rb_stack6l/stack6h
+          test -s data/backtests/rb_stack6l/m94c/m94c_2025_team_trace.csv
+          test -s data/backtests/rb_stack6l/stack6h/stack6h_team_trace.csv
+      - name: Run frozen STACK6L oracle
+        run: |
+          rm -rf data/backtests/rb_stack6l/results
+          python scripts/backtest/evaluate_rb_stack6l_state_tendency_shapley.py \
+            --m94c-root data/backtests/rb_stack6l/m94c \
+            --stack6h-root data/backtests/rb_stack6l/stack6h \
+            --out-dir data/backtests/rb_stack6l/results
+      - name: Show outputs
+        if: always()
+        run: |
+          echo '=== integrity ==='
+          cat data/backtests/rb_stack6l/results/stack6l_integrity.csv 2>/dev/null || true
+          echo '=== overall subsets ==='
+          awk -F, 'NR==1 || $1=="ALL_W6_18"' data/backtests/rb_stack6l/results/stack6l_subset_scores.csv 2>/dev/null || true
+          echo '=== shapley ==='
+          cat data/backtests/rb_stack6l/results/stack6l_shapley.csv 2>/dev/null || true
+          echo '=== disposition ==='
+          cat data/backtests/rb_stack6l/results/stack6l_disposition.csv 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-stack6l-state-tendency-shapley
+          path: data/backtests/rb_stack6l/results/**
+          if-no-files-found: warn
+          retention-days: 30
