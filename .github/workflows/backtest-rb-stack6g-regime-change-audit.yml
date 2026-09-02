@@ -1,0 +1,69 @@
+name: RB STACK6G Regime Change Source Audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-stack6g-regime-change-audit
+    paths:
+      - 'scripts/backtest/audit_rb_stack6g_regime_change.py'
+      - 'docs/migrations/RB_STACK6G_REGIME_CHANGE_SOURCE_AUDIT_PLAN.md'
+      - 'docs/migrations/RB_STACK6G_SUPPORT_GATE_ADDENDUM.md'
+      - '.github/workflows/backtest-rb-stack6g-regime-change-audit.yml'
+      - 'docs/migrations/RB_STACK6G_RUN_TRIGGER.md'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      STACK6_RUN_ID: '33549529203'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install frozen dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2 pyarrow==17.0.0 nflreadpy
+      - name: Compile audit
+        run: python -m py_compile scripts/backtest/audit_rb_stack6g_regime_change.py
+      - name: Download frozen P3 casebook
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_stack6g/stack6
+          gh run download "$STACK6_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-stack6-secondary-role-model --dir data/backtests/rb_stack6g/stack6
+          test -s data/backtests/rb_stack6g/stack6/stack6_2025_casebook.csv
+      - name: Run frozen STACK6G source/forensic audit
+        run: |
+          rm -rf data/backtests/rb_stack6g/results
+          python scripts/backtest/audit_rb_stack6g_regime_change.py \
+            --stack6-root data/backtests/rb_stack6g/stack6 \
+            --out-dir data/backtests/rb_stack6g/results
+      - name: Show outputs
+        if: always()
+        run: |
+          echo '=== source coverage ==='
+          cat data/backtests/rb_stack6g/results/stack6g_source_coverage_by_season.csv 2>/dev/null || true
+          echo '=== QB forensic summary ==='
+          cat data/backtests/rb_stack6g/results/stack6g_qb_regime_summary_2025.csv 2>/dev/null || true
+          echo '=== playcaller source ==='
+          cat data/backtests/rb_stack6g/results/stack6g_playcaller_source_summary.csv 2>/dev/null || true
+          echo '=== disposition ==='
+          cat data/backtests/rb_stack6g/results/stack6g_disposition.csv 2>/dev/null || true
+          echo '=== integrity ==='
+          cat data/backtests/rb_stack6g/results/stack6g_integrity.csv 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-stack6g-regime-change-audit
+          path: data/backtests/rb_stack6g/results/**
+          if-no-files-found: warn
+          retention-days: 30
