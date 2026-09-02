@@ -1,6 +1,7 @@
 name: RB-STACK6D Availability Source Audit
 
 # Frozen protocol: docs/migrations/RB_STACK6D_AVAILABILITY_SOURCE_AUDIT_PLAN.md
+# Frozen implementation correction: docs/migrations/RB_STACK6D_AVAILABILITY_SOURCE_AUDIT_CORRECTION.md
 on:
   workflow_dispatch:
   push:
@@ -8,7 +9,9 @@ on:
       - research-rb-stack6d-availability-source-audit
     paths:
       - 'scripts/backtest/audit_rb_stack6d_availability_source.py'
+      - 'scripts/backtest/audit_rb_stack6d_availability_source_corrected.py'
       - 'docs/migrations/RB_STACK6D_AVAILABILITY_SOURCE_AUDIT_PLAN.md'
+      - 'docs/migrations/RB_STACK6D_AVAILABILITY_SOURCE_AUDIT_CORRECTION.md'
       - '.github/workflows/backtest-rb-stack6d-availability-source-audit.yml'
 
 permissions:
@@ -36,7 +39,9 @@ jobs:
           pip install pandas==1.5.3 numpy==1.26.4 pyarrow==17.0.0 nflreadpy
 
       - name: Compile
-        run: python -m py_compile scripts/backtest/audit_rb_stack6d_availability_source.py
+        run: |
+          python -m py_compile scripts/backtest/audit_rb_stack6d_availability_source.py
+          python -m py_compile scripts/backtest/audit_rb_stack6d_availability_source_corrected.py
 
       - name: Download frozen P3 population artifact
         env:
@@ -46,10 +51,10 @@ jobs:
           gh run download "$STACK6_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-stack6-secondary-role-model --dir data/backtests/rb_stack6d/stack6
           test -s data/backtests/rb_stack6d/stack6/stack6_2025_casebook.csv
 
-      - name: Run no-fit availability source audit
+      - name: Run corrected no-fit availability source audit
         run: |
           rm -rf data/backtests/rb_stack6d/results
-          python scripts/backtest/audit_rb_stack6d_availability_source.py \
+          python scripts/backtest/audit_rb_stack6d_availability_source_corrected.py \
             --seasons 2024,2025 \
             --stack6-root data/backtests/rb_stack6d/stack6 \
             --out-dir data/backtests/rb_stack6d/results
@@ -61,6 +66,8 @@ jobs:
           cat data/backtests/rb_stack6d/results/stack6d_availability_source_audit.csv 2>/dev/null || true
           echo '=== gates ==='
           cat data/backtests/rb_stack6d/results/stack6d_availability_source_gates.csv 2>/dev/null || true
+          echo '=== season timing ==='
+          cat data/backtests/rb_stack6d/results/stack6d_injury_timing_by_season.csv 2>/dev/null || true
           echo '=== roster timing ==='
           cat data/backtests/rb_stack6d/results/stack6d_weekly_roster_timing_columns.csv 2>/dev/null || true
           echo '=== roster semantics ==='
