@@ -1,0 +1,63 @@
+name: RB STACK6T Fine State Context Oracle
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-stack6t-fine-state-context-oracle
+    paths:
+      - 'scripts/backtest/evaluate_rb_stack6t_fine_state_context_oracle.py'
+      - 'docs/migrations/RB_STACK6T_FINE_STATE_CONTEXT_ORACLE_PLAN.md'
+      - '.github/workflows/backtest-rb-stack6t-fine-state-context-oracle.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  oracle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      STACK6H_RUN_ID: '33632678179'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install frozen dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 pyarrow==17.0.0 nflreadpy
+      - name: Compile
+        run: python -m py_compile scripts/backtest/evaluate_rb_stack6t_fine_state_context_oracle.py
+      - name: Download frozen STACK6H artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_stack6t/stack6h
+          gh run download "$STACK6H_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-stack6h-current-pool-oracle --dir data/backtests/rb_stack6t/stack6h
+          test -s data/backtests/rb_stack6t/stack6h/stack6h_team_trace.csv
+      - name: Run frozen STACK6T oracle
+        run: |
+          rm -rf data/backtests/rb_stack6t/results
+          python scripts/backtest/evaluate_rb_stack6t_fine_state_context_oracle.py \
+            --stack6h-root data/backtests/rb_stack6t/stack6h \
+            --out-dir data/backtests/rb_stack6t/results
+      - name: Show outputs
+        if: always()
+        run: |
+          echo '=== integrity ==='
+          cat data/backtests/rb_stack6t/results/stack6t_integrity.csv 2>/dev/null || true
+          echo '=== attribution ==='
+          cat data/backtests/rb_stack6t/results/stack6t_attribution.csv 2>/dev/null || true
+          echo '=== disposition ==='
+          cat data/backtests/rb_stack6t/results/stack6t_disposition.csv 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-stack6t-fine-state-context-oracle
+          path: data/backtests/rb_stack6t/results/**
+          if-no-files-found: warn
+          retention-days: 30
