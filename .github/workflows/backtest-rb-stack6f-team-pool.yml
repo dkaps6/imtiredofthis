@@ -7,7 +7,9 @@ on:
       - research-rb-stack6f-team-pool
     paths:
       - 'scripts/backtest/evaluate_rb_stack6f_team_pool.py'
+      - 'scripts/backtest/evaluate_rb_stack6f_team_pool_corrected.py'
       - 'docs/migrations/RB_STACK6F_TEAM_RB_POOL_PLAN.md'
+      - 'docs/migrations/RB_STACK6F_IMPLEMENTATION_CORRECTION.md'
       - '.github/workflows/backtest-rb-stack6f-team-pool.yml'
 
 permissions:
@@ -35,7 +37,9 @@ jobs:
           pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2 pyarrow==17.0.0 nflreadpy
 
       - name: Compile evaluator
-        run: python -m py_compile scripts/backtest/evaluate_rb_stack6f_team_pool.py
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_stack6f_team_pool.py
+          python -m py_compile scripts/backtest/evaluate_rb_stack6f_team_pool_corrected.py
 
       - name: Download frozen P3 artifact
         env:
@@ -48,7 +52,7 @@ jobs:
       - name: Evaluate frozen team RB pool model
         run: |
           rm -rf data/backtests/rb_stack6f/results
-          python scripts/backtest/evaluate_rb_stack6f_team_pool.py \
+          python scripts/backtest/evaluate_rb_stack6f_team_pool_corrected.py \
             --stack6-root data/backtests/rb_stack6f/stack6 \
             --out-dir data/backtests/rb_stack6f/results
 
