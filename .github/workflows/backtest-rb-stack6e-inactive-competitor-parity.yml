@@ -1,0 +1,79 @@
+name: RB-STACK6E Inactive Competitor Parity
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-stack6e-inactive-competitor-parity
+    paths:
+      - 'scripts/backtest/evaluate_rb_stack6e_inactive_competitor_parity.py'
+      - 'docs/migrations/RB_STACK6E_INACTIVE_COMPETITOR_PARITY_PLAN.md'
+      - '.github/workflows/backtest-rb-stack6e-inactive-competitor-parity.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  STACK6_RUN_ID: '33549529203'
+  MARKET_RUN_ID: '33499129109'
+
+jobs:
+  stack6e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install frozen dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2 pyarrow==17.0.0 nflreadpy
+
+      - name: Compile frozen evaluator
+        run: python -m py_compile scripts/backtest/evaluate_rb_stack6e_inactive_competitor_parity.py
+
+      - name: Download frozen P3 and downstream market artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_stack6e/stack6 data/backtests/rb_stack6e/market
+          gh run download "$STACK6_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-stack6-secondary-role-model --dir data/backtests/rb_stack6e/stack6
+          gh run download "$MARKET_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-market-benchmark-2025 --dir data/backtests/rb_stack6e/market
+          test -s data/backtests/rb_stack6e/stack6/stack6_2025_casebook.csv
+          test -s data/backtests/rb_stack6e/market/rb_market_casebook.csv
+
+      - name: Evaluate frozen STACK6E parity repair
+        run: |
+          rm -rf data/backtests/rb_stack6e/results
+          python scripts/backtest/evaluate_rb_stack6e_inactive_competitor_parity.py \
+            --stack6-root data/backtests/rb_stack6e/stack6 \
+            --market-root data/backtests/rb_stack6e/market \
+            --out-dir data/backtests/rb_stack6e/results
+
+      - name: Show results
+        if: always()
+        run: |
+          echo '=== source/state ==='
+          cat data/backtests/rb_stack6e/results/stack6e_source_state_audit.csv 2>/dev/null || true
+          echo '=== scores ==='
+          cat data/backtests/rb_stack6e/results/stack6e_score_table.csv 2>/dev/null || true
+          echo '=== gates ==='
+          cat data/backtests/rb_stack6e/results/stack6e_retention_gates.csv 2>/dev/null || true
+          echo '=== disposition ==='
+          cat data/backtests/rb_stack6e/results/stack6e_disposition.csv 2>/dev/null || true
+          echo '=== downstream market ==='
+          cat data/backtests/rb_stack6e/results/stack6e_market_metrics.csv 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-stack6e-inactive-competitor-parity
+          path: data/backtests/rb_stack6e/results/**
+          if-no-files-found: warn
+          retention-days: 30
