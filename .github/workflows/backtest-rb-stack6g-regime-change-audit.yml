@@ -7,8 +7,10 @@ on:
       - research-rb-stack6g-regime-change-audit
     paths:
       - 'scripts/backtest/audit_rb_stack6g_regime_change.py'
+      - 'scripts/backtest/audit_rb_stack6g_regime_change_corrected.py'
       - 'docs/migrations/RB_STACK6G_REGIME_CHANGE_SOURCE_AUDIT_PLAN.md'
       - 'docs/migrations/RB_STACK6G_SUPPORT_GATE_ADDENDUM.md'
+      - 'docs/migrations/RB_STACK6G_IMPLEMENTATION_CORRECTION.md'
       - '.github/workflows/backtest-rb-stack6g-regime-change-audit.yml'
       - 'docs/migrations/RB_STACK6G_RUN_TRIGGER.md'
 
@@ -33,7 +35,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2 pyarrow==17.0.0 nflreadpy
       - name: Compile audit
-        run: python -m py_compile scripts/backtest/audit_rb_stack6g_regime_change.py
+        run: |
+          python -m py_compile scripts/backtest/audit_rb_stack6g_regime_change.py
+          python -m py_compile scripts/backtest/audit_rb_stack6g_regime_change_corrected.py
       - name: Download frozen P3 casebook
         env:
           GH_TOKEN: ${{ github.token }}
@@ -44,7 +48,7 @@ jobs:
       - name: Run frozen STACK6G source/forensic audit
         run: |
           rm -rf data/backtests/rb_stack6g/results
-          python scripts/backtest/audit_rb_stack6g_regime_change.py \
+          python scripts/backtest/audit_rb_stack6g_regime_change_corrected.py \
             --stack6-root data/backtests/rb_stack6g/stack6 \
             --out-dir data/backtests/rb_stack6g/results
       - name: Show outputs
