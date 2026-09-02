@@ -7,7 +7,9 @@ on:
       - research-rb-stack6h-current-pool-oracle
     paths:
       - 'scripts/backtest/evaluate_rb_stack6h_current_pool_oracle.py'
+      - 'scripts/backtest/evaluate_rb_stack6h_current_pool_oracle_corrected.py'
       - 'docs/migrations/RB_STACK6H_CURRENT_POOL_ORACLE_PLAN.md'
+      - 'docs/migrations/RB_STACK6H_IMPLEMENTATION_CORRECTION.md'
       - '.github/workflows/backtest-rb-stack6h-current-pool-oracle.yml'
       - 'docs/migrations/RB_STACK6H_RUN_TRIGGER.md'
 
@@ -33,7 +35,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2 pyarrow==17.0.0 nflreadpy
       - name: Compile
-        run: python -m py_compile scripts/backtest/evaluate_rb_stack6h_current_pool_oracle.py
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_stack6h_current_pool_oracle.py
+          python -m py_compile scripts/backtest/evaluate_rb_stack6h_current_pool_oracle_corrected.py
       - name: Download frozen artifacts
         env:
           GH_TOKEN: ${{ github.token }}
@@ -46,7 +50,7 @@ jobs:
       - name: Run frozen STACK6H oracle
         run: |
           rm -rf data/backtests/rb_stack6h/results
-          python scripts/backtest/evaluate_rb_stack6h_current_pool_oracle.py \
+          python scripts/backtest/evaluate_rb_stack6h_current_pool_oracle_corrected.py \
             --stack6-root data/backtests/rb_stack6h/stack6 \
             --m94c-root data/backtests/rb_stack6h/m94c \
             --out-dir data/backtests/rb_stack6h/results
