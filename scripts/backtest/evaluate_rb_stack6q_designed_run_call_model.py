@@ -278,7 +278,6 @@ def main() -> int:
     pbp = load_pbp()
     off, deff = build_games(pbp)
 
-    models = {}
     train_meta = []
     state_eval_frames = {}
     feature_coverage_rows = []
@@ -291,7 +290,6 @@ def main() -> int:
         model = learner()
         model.fit(tr.loc[elig, FEATURES], tr.loc[elig, "target_designed_rate"])
         te[f"pred_{state}_designed_rate"] = np.clip(model.predict(te[FEATURES]), 0.0, 0.80)
-        models[state] = model
         state_eval_frames[state] = te
         train_meta.append({
             "state": state, "training_rows": int(elig.sum()),
@@ -339,7 +337,6 @@ def main() -> int:
         raise RuntimeError(f"STACK6Q STACK6H trace missing {missing_h}")
     t = t.merge(h[hcols], on=["season", "week", "team"], how="inner", validate="one_to_one")
 
-    # Source / identity checks.
     off25 = off.loc[off.season.eq(2025), ["season", "week", "team", "rush_attempts"]].copy()
     t = t.merge(off25, on=["season", "week", "team"], how="left", validate="one_to_one")
     m94c_vs_h = float((num(t.candidate_team_rush_att) - num(t.t_hat)).abs().max())
@@ -352,10 +349,9 @@ def main() -> int:
             rows.append({"population": pop, "arm": arm, **metric(frame.actual_team_rush_att, frame[col])})
         z = pd.DataFrame(rows)
         b = z.loc[z.arm.eq("M94C")].iloc[0]
-        q = z.loc[z.arm.eq("STACK6Q")].iloc[0]
         z["mae_gain_vs_m94c"] = float(b.mae) - z.mae
         z["rmse_gain_vs_m94c"] = float(b.rmse) - z.rmse
-        z["corr_gain_vs_m94c"] = z.corr - float(b["corr"])
+        z["corr_gain_vs_m94c"] = z["corr"] - float(b["corr"])
         return z
 
     overall = scores(w, "ALL_W6_18")
