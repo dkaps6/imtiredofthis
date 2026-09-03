@@ -102,6 +102,23 @@ jobs:
           python scripts/run_team_form_context.py --season "${SEASON}" --box-backfill-prev
           test -s data/team_form.csv
 
+      - name: Build promoted QB M89/M90 context
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_qb_promoted_context.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}"
+          test -s data/qb_promoted_team_context.csv
+          test -s data/qb_promoted_context_audit.csv
+          python - <<'PY'
+          import pandas as pd
+          ctx=pd.read_csv('data/qb_promoted_team_context.csv')
+          if len(ctx) != 32 or ctx['team'].nunique() != 32:
+              raise SystemExit(f'FATAL promoted QB context expected 32 teams, got rows={len(ctx)} teams={ctx["team"].nunique()}')
+          conv=pd.to_numeric(ctx['pass_attempts_per_dropback'],errors='coerce')
+          if conv.isna().any() or not conv.between(.50,1.0,inclusive='both').all():
+              raise SystemExit('FATAL promoted QB attempt conversion missing/out of range')
+          print(f'promoted QB context OK teams=32 attempt_conversion={conv.min():.4f}..{conv.max():.4f}')
+          PY
+
       - name: Build weather and injuries
         run: |
           export PYTHONPATH="${PWD}"
@@ -172,6 +189,10 @@ jobs:
           if a.isna().any() or b.isna().any(): raise SystemExit('FATAL non-finite RB projection')
           if not np.allclose(a,b,rtol=0,atol=1e-10): raise SystemExit(f'FATAL P3 Week1 parity drift max={float((a-b).abs().max())}')
           if (b<0).any(): raise SystemExit('FATAL negative rushing yard projection')
+          if not x['rush_yards_ensemble_status'].astype(str).eq('calibrated').all():
+              raise SystemExit('FATAL Week1 rush_yards contains uncalibrated ensemble rows')
+          if not x['rush_att_ensemble_status'].astype(str).eq('calibrated').all():
+              raise SystemExit('FATAL Week1 rush_att contains uncalibrated ensemble rows')
           print(f'RB WEEK1 GATE PASS rows={len(x)} teams={x.team.nunique()} players={x.player_clean_key.nunique()}')
           print(x[['team','player','stack_att','stack_yards','rb_synthesis_proj','rb_synthesis_route']].sort_values(['team','stack_yards'],ascending=[True,False]).to_string(index=False))
           PY
@@ -200,5 +221,7 @@ jobs:
             data/cb_coverage_team.csv
             data/cb_coverage_player.csv
             data/wr_cb_exposure.csv
+            data/qb_promoted_team_context.csv
+            data/qb_promoted_context_audit.csv
           if-no-files-found: warn
           retention-days: 30
