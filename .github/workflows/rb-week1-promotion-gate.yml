@@ -7,8 +7,10 @@ on:
       - '.github/workflows/rb-week1-promotion-gate.yml'
       - 'scripts/run_rb_week1_no_odds.py'
       - 'scripts/modeling/rb_rush_synthesis_v1.py'
+      - 'scripts/run_sharpfootball_v2.py'
       - 'data/model_ensemble_weights.csv'
       - 'tests/test_rb_rush_synthesis_v1.py'
+      - 'tests/test_sharpfootball_v2.py'
   workflow_dispatch:
 
 permissions:
@@ -39,11 +41,11 @@ jobs:
           pip install -r requirements.txt
           pip install nflreadpy pyyaml pytest
 
-      - name: Compile promoted RB code
+      - name: Compile promoted RB code and source adapters
         run: |
           export PYTHONPATH="${PWD}"
-          python -m py_compile scripts/modeling/rb_rush_synthesis_v1.py scripts/run_rb_week1_no_odds.py
-          pytest -q tests/test_rb_rush_synthesis_v1.py
+          python -m py_compile scripts/modeling/rb_rush_synthesis_v1.py scripts/run_rb_week1_no_odds.py scripts/run_sharpfootball_v2.py
+          pytest -q tests/test_rb_rush_synthesis_v1.py tests/test_sharpfootball_v2.py
 
       - name: Verify frozen RB ensemble weights
         run: |
@@ -179,5 +181,7 @@ jobs:
             data/player_identity_validation.csv
             data/team_week_map.csv
             data/roles_ourlads.csv
+            data/sharp_pace_2026.csv
+            data/sharp_team_form.csv
           if-no-files-found: warn
           retention-days: 30
