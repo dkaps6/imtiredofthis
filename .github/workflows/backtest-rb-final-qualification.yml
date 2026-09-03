@@ -1,0 +1,72 @@
+name: RB Final Qualification
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-final-qualification
+    paths:
+      - 'scripts/backtest/evaluate_rb_final_qualification.py'
+      - 'docs/migrations/RB_FINAL_QUALIFICATION_PLAN.md'
+      - '.github/workflows/backtest-rb-final-qualification.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  STACK3_RUN_ID: '33539468967'
+  STACK5_RUN_ID: '33540065380'
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install frozen dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4
+      - name: Compile
+        run: python -m py_compile scripts/backtest/evaluate_rb_final_qualification.py
+      - name: Download exact frozen artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_final/stack3 data/backtests/rb_final/stack5
+          gh run download "$STACK3_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-stack3-frozen-state-composition --dir data/backtests/rb_final/stack3
+          gh run download "$STACK5_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-stack5-market-gap-forensics --dir data/backtests/rb_final/stack5
+          test -s data/backtests/rb_final/stack3/stack3_2025_casebook.csv
+          test -s data/backtests/rb_final/stack5/stack5_899_casebook.csv
+      - name: Run frozen final qualification
+        run: |
+          rm -rf data/backtests/rb_final/results
+          python scripts/backtest/evaluate_rb_final_qualification.py \
+            --stack3-root data/backtests/rb_final/stack3 \
+            --stack5-root data/backtests/rb_final/stack5 \
+            --out-dir data/backtests/rb_final/results
+      - name: Show outputs
+        if: always()
+        run: |
+          echo '=== integrity ==='
+          cat data/backtests/rb_final/results/rb_final_integrity.csv 2>/dev/null || true
+          echo '=== gates ==='
+          cat data/backtests/rb_final/results/rb_final_gates.csv 2>/dev/null || true
+          echo '=== disposition ==='
+          cat data/backtests/rb_final/results/rb_final_disposition.csv 2>/dev/null || true
+          echo '=== market overall ==='
+          cat data/backtests/rb_final/results/rb_final_market_overall.csv 2>/dev/null || true
+          echo '=== market bins ==='
+          cat data/backtests/rb_final/results/rb_final_market_bins.csv 2>/dev/null || true
+          echo '=== market time ==='
+          cat data/backtests/rb_final/results/rb_final_market_time_slices.csv 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-final-qualification
+          path: data/backtests/rb_final/results/**
+          retention-days: 30
