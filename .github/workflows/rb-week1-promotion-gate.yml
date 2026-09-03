@@ -54,16 +54,16 @@ jobs:
           p='data/model_ensemble_weights.csv'
           x=pd.read_csv(p)
           expected={
-              'rush_att': (0.3164921224162454,0.6528958000000000,0.0306120775837546),
-              'rush_yards': (0.5569538100000000,0.4430461900000000,0.0),
+              'rush_att': (0.3164919683016017,0.6528957474344519,0.030612284263946517),
+              'rush_yards': (0.5569542426070742,0.4430457573929258,0.0),
           }
           for market,want in expected.items():
               q=x.loc[x.market.astype(str).str.lower().eq(market)]
               if len(q)!=1: raise SystemExit(f'FATAL {market}: expected one frozen weight row, got {len(q)}')
               got=tuple(float(q.iloc[0][c]) for c in ['mc_weight','ml_weight','state_weight'])
-              if not np.allclose(got,want,rtol=0,atol=2e-7):
+              if not np.allclose(got,want,rtol=0,atol=1e-12):
                   raise SystemExit(f'FATAL {market}: weight drift got={got} expected={want}')
-              if abs(sum(got)-1.0)>2e-7: raise SystemExit(f'FATAL {market}: weights do not sum to one')
+              if abs(sum(got)-1.0)>1e-12: raise SystemExit(f'FATAL {market}: weights do not sum to one')
               print(market, got)
           PY
 
