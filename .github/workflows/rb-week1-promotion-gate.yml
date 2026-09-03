@@ -1,0 +1,183 @@
+name: RB Week 1 Production Promotion Gate
+
+on:
+  push:
+    branches: [production-rb-p3-synthesis-v1]
+    paths:
+      - '.github/workflows/rb-week1-promotion-gate.yml'
+      - 'scripts/run_rb_week1_no_odds.py'
+      - 'scripts/modeling/rb_rush_synthesis_v1.py'
+      - 'data/model_ensemble_weights.csv'
+      - 'tests/test_rb_rush_synthesis_v1.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  SEASON: '2026'
+  PRIOR_SEASON: '2025'
+  WEEK: '1'
+  SLATE_DATE: '2026-09-03'
+  FETCH_LIVE_ODDS: 'false'
+
+jobs:
+  week1_gate:
+    name: RB P3 Week 1 no-odds gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml
+
+      - name: Compile promoted RB code
+        run: |
+          export PYTHONPATH="${PWD}"
+          python -m py_compile scripts/modeling/rb_rush_synthesis_v1.py scripts/run_rb_week1_no_odds.py
+          pytest -q tests/test_rb_rush_synthesis_v1.py
+
+      - name: Verify frozen RB ensemble weights
+        run: |
+          export PYTHONPATH="${PWD}"
+          python - <<'PY'
+          import numpy as np
+          import pandas as pd
+          p='data/model_ensemble_weights.csv'
+          x=pd.read_csv(p)
+          expected={
+              'rush_att': (0.3164921224162454,0.6528958000000000,0.0306120775837546),
+              'rush_yards': (0.5569538100000000,0.4430461900000000,0.0),
+          }
+          for market,want in expected.items():
+              q=x.loc[x.market.astype(str).str.lower().eq(market)]
+              if len(q)!=1: raise SystemExit(f'FATAL {market}: expected one frozen weight row, got {len(q)}')
+              got=tuple(float(q.iloc[0][c]) for c in ['mc_weight','ml_weight','state_weight'])
+              if not np.allclose(got,want,rtol=0,atol=2e-7):
+                  raise SystemExit(f'FATAL {market}: weight drift got={got} expected={want}')
+              if abs(sum(got)-1.0)>2e-7: raise SystemExit(f'FATAL {market}: weights do not sum to one')
+              print(market, got)
+          PY
+
+      - name: Build Ourlads roles
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/providers/ourlads_depth.py --season "${SEASON}"
+          test -s data/roles_ourlads.csv
+
+      - name: Build authoritative Week 1 team map
+        env:
+          TEAM_WEEK_MAP_CSV: data/team_week_map.csv
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/utils/build_team_week_map_v2.py --season "${SEASON}" --out data/team_week_map.csv
+          test -s data/team_week_map.csv
+          python - <<'PY'
+          import pandas as pd
+          x=pd.read_csv('data/team_week_map.csv')
+          q=x.loc[(pd.to_numeric(x.season,errors='coerce')==2026)&(pd.to_numeric(x.week,errors='coerce')==1)]
+          if len(q)!=32 or q.team.nunique()!=32:
+              raise SystemExit(f'FATAL Week1 map expected 32 team rows, got rows={len(q)} teams={q.team.nunique()}')
+          if q.opponent.isna().any(): raise SystemExit('FATAL Week1 map has unresolved opponent')
+          print(f'Week1 map OK rows={len(q)} teams={q.team.nunique()}')
+          PY
+
+      - name: Build TeamForm with preseason priors
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_sharpfootball_v2.py --season "${SEASON}" --dump-html
+          python scripts/team_form_prior_bridge.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}"
+          python scripts/run_team_form_context.py --season "${SEASON}" --box-backfill-prev
+          test -s data/team_form.csv
+
+      - name: Build weather and injuries
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/build/build_weather_week_v2.py --season "${SEASON}" --date "${SLATE_DATE}"
+          python scripts/build/build_injuries_weekly.py data/injuries.csv --season "${SEASON}"
+          test -s data/weather_week.csv
+          test -s data/injuries.csv
+
+      - name: Build PlayerForm v2 from football-only Week 1 universe
+        env:
+          FETCH_LIVE_ODDS: 'false'
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_player_form_v2_loader.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
+          python scripts/enrich_player_scoring_v2.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
+          for f in data/player_game_logs.csv data/player_season_totals.csv data/player_form.csv data/player_form_consensus.csv data/player_identity_validation.csv; do test -s "$f"; done
+
+      - name: Materialize model context
+        env:
+          FETCH_LIVE_ODDS: 'false'
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_context_bridge.py
+          test -s data/team_context_v3.csv
+
+      - name: Train canonical ML and State components
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_bayesian_bridge.py
+          python scripts/run_model_ml_bridge.py
+          python scripts/run_model_state_bridge.py
+          python scripts/run_model_rules_bridge.py
+          test -s data/model_ml_diagnostics.csv
+          test -s data/model_state_diagnostics.csv
+
+      - name: Execute 2026 Week 1 RB no-odds P3 dry run
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_rb_week1_no_odds.py --season "${SEASON}" --week "${WEEK}" --iterations 25000 --out data/rb_rush_synthesis_context.csv
+          test -s data/rb_rush_synthesis_context.csv
+
+      - name: Audit Week 1 RB output contract
+        run: |
+          export PYTHONPATH="${PWD}"
+          python - <<'PY'
+          import numpy as np
+          import pandas as pd
+          x=pd.read_csv('data/rb_rush_synthesis_context.csv')
+          if x.empty: raise SystemExit('FATAL RB context empty')
+          if x.team.nunique()!=32: raise SystemExit(f'FATAL expected 32 RB teams, got {x.team.nunique()}')
+          if not pd.to_numeric(x['sportsbook_inputs_used'],errors='coerce').eq(0).all(): raise SystemExit('FATAL sportsbook input leakage flag')
+          if not pd.to_numeric(x['football_only_no_odds'],errors='coerce').eq(1).all(): raise SystemExit('FATAL no-odds contract flag')
+          if not x['rb_synthesis_route'].astype(str).eq('WEEK1_STACK_OVERRIDE').all(): raise SystemExit('FATAL non-Week1 P3 route present')
+          a=pd.to_numeric(x['stack_yards'],errors='coerce')
+          b=pd.to_numeric(x['rb_synthesis_proj'],errors='coerce')
+          if a.isna().any() or b.isna().any(): raise SystemExit('FATAL non-finite RB projection')
+          if not np.allclose(a,b,rtol=0,atol=1e-10): raise SystemExit(f'FATAL P3 Week1 parity drift max={float((a-b).abs().max())}')
+          if (b<0).any(): raise SystemExit('FATAL negative rushing yard projection')
+          print(f'RB WEEK1 GATE PASS rows={len(x)} teams={x.team.nunique()} players={x.player_clean_key.nunique()}')
+          print(x[['team','player','stack_att','stack_yards','rb_synthesis_proj','rb_synthesis_route']].sort_values(['team','stack_yards'],ascending=[True,False]).to_string(index=False))
+          PY
+
+      - name: Strict repository audits
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/utils/audit_repo.py --strict
+          python scripts/audit_2026_production_readiness.py --strict
+          pytest -q
+
+      - name: Upload Week 1 promotion evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-week1-production-promotion-gate
+          path: |
+            data/rb_rush_synthesis_context.csv
+            data/model_ml_diagnostics.csv
+            data/model_state_diagnostics.csv
+            data/player_identity_validation.csv
+            data/team_week_map.csv
+            data/roles_ourlads.csv
+          if-no-files-found: warn
+          retention-days: 30
