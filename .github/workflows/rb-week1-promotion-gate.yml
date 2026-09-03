@@ -110,6 +110,18 @@ jobs:
           test -s data/weather_week.csv
           test -s data/injuries.csv
 
+      - name: Build Coverage v2 matchup intelligence
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_coverage_v2.py --season "${SEASON}"
+          for f in data/cb_coverage_team.csv data/cb_coverage_player.csv data/wr_cb_exposure.csv; do test -s "$f"; done
+
+      - name: Build optional current-season PBP enrichment
+        continue-on-error: true
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/build/pbp_features.py --season "${SEASON}" || true
+
       - name: Build PlayerForm v2 from football-only Week 1 universe
         env:
           FETCH_LIVE_ODDS: 'false'
@@ -185,5 +197,8 @@ jobs:
             data/roles_ourlads.csv
             data/sharp_pace_2026.csv
             data/sharp_team_form.csv
+            data/cb_coverage_team.csv
+            data/cb_coverage_player.csv
+            data/wr_cb_exposure.csv
           if-no-files-found: warn
           retention-days: 30
