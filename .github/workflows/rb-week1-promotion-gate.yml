@@ -22,7 +22,7 @@ env:
   SEASON: '2026'
   PRIOR_SEASON: '2025'
   WEEK: '1'
-  SLATE_DATE: '2026-09-03'
+  SLATE_DATE: ''
   FETCH_LIVE_ODDS: 'false'
 
 jobs:
@@ -53,8 +53,7 @@ jobs:
           python - <<'PY'
           import numpy as np
           import pandas as pd
-          p='data/model_ensemble_weights.csv'
-          x=pd.read_csv(p)
+          x=pd.read_csv('data/model_ensemble_weights.csv')
           expected={
               'rush_att': (0.3164919683016017,0.6528957474344519,0.030612284263946517),
               'rush_yards': (0.5569542426070742,0.4430457573929258,0.0),
@@ -84,12 +83,15 @@ jobs:
           test -s data/team_week_map.csv
           python - <<'PY'
           import pandas as pd
+          from scripts.runtime_context import resolve_week
           x=pd.read_csv('data/team_week_map.csv')
           q=x.loc[(pd.to_numeric(x.season,errors='coerce')==2026)&(pd.to_numeric(x.week,errors='coerce')==1)]
           if len(q)!=32 or q.team.nunique()!=32:
               raise SystemExit(f'FATAL Week1 map expected 32 team rows, got rows={len(q)} teams={q.team.nunique()}')
           if q.opponent.isna().any(): raise SystemExit('FATAL Week1 map has unresolved opponent')
-          print(f'Week1 map OK rows={len(q)} teams={q.team.nunique()}')
+          resolved=resolve_week(season=2026, slate_date='')
+          if resolved != 1: raise SystemExit(f'FATAL upcoming-slate resolver expected Week1, got Week{resolved}')
+          print(f'Week1 map OK rows={len(q)} teams={q.team.nunique()} upcoming_week={resolved}')
           PY
 
       - name: Build TeamForm with preseason priors
