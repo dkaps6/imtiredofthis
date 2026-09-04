@@ -64,8 +64,11 @@ def build_internal_rb_metrics(season: int, week: int) -> pd.DataFrame:
         raise RuntimeError(f"no schedule rows for season={season} week={week}")
 
     roles["team"] = roles["team"].map(canon_team)
-    if "player_clean_key" not in roles.columns:
-        roles["player_clean_key"] = roles["player"].map(_key)
+    # Always re-normalize the Ourlads display name into the same punctuation-free
+    # key used by PlayerForm/ML.  Ourlads can preserve apostrophes/hyphens in its
+    # own player_clean_key (for example D'Andre Swift, De'Von Achane, and
+    # Jacory Croskey-Merritt), which otherwise creates false identity misses.
+    roles["player_clean_key"] = roles["player"].map(_key)
     pos = roles.get("position", pd.Series("", index=roles.index)).fillna("").astype(str).str.upper().str.strip()
     group = roles.get("position_group", pd.Series("", index=roles.index)).fillna("").astype(str).str.upper().str.strip()
     model_role = roles.get("model_role", roles.get("role", pd.Series("", index=roles.index))).fillna("").astype(str).str.upper()
