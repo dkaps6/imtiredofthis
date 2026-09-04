@@ -174,6 +174,29 @@ def project_week1(season: int, week: int, *, iterations: int | None = None) -> p
     keys = ["season", "week", "event_id", "player", "player_clean_key", "team", "opponent", "position"]
     wide = comp.pivot_table(index=keys, columns="market", values="ensemble_proj", aggfunc="first").reset_index()
     wide = wide.rename(columns={"rush_att": "stack_att", "rush_yards": "stack_yards"})
+
+    # Preserve the ensemble provenance for each internal RB market through the
+    # player-wide pivot.  The promotion audit must be able to prove that both
+    # rush_att and rush_yards used the frozen calibrated STACK1 weights rather
+    # than merely trusting that the projection step checked them transiently.
+    for value_col in (
+        "ensemble_status",
+        "ensemble_method",
+        "ensemble_weight_mc",
+        "ensemble_weight_ml",
+        "ensemble_weight_state",
+        "ensemble_calibration_rows",
+    ):
+        meta = comp.pivot_table(index=keys, columns="market", values=value_col, aggfunc="first").reset_index()
+        meta = meta.rename(
+            columns={
+                c: f"{c}_{value_col}"
+                for c in meta.columns
+                if c not in keys
+            }
+        )
+        wide = wide.merge(meta, on=keys, how="left", validate="one_to_one")
+
     if wide[["stack_att", "stack_yards"]].isna().any().any():
         raise RuntimeError("RB Week-1 component pivot has missing stack_att/stack_yards")
 
