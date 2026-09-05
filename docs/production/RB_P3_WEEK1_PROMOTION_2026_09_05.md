@@ -110,22 +110,33 @@ Production must fail rather than silently fall back if:
 
 ## Final integration gate
 
-A stricter no-Odds-API end-to-end test was added after the successful adapter
-run. It builds synthetic downstream line/odds fields only after the football
-context exists, invokes the real `run_pricing_v2.price()` path for the live
-Week 1 RB universe, and requires every final rushing-yard mean to equal P3.
+A stricter no-Odds-API end-to-end test builds synthetic downstream line/odds
+fields only after the football context exists, invokes the real
+`run_pricing_v2.price()` path for the live Week 1 RB universe, and requires every
+final rushing-yard mean to equal P3. The synthetic market fields are grading
+inputs only and never enter P3 construction.
 
-Candidate run: `33993595929`, SHA
-`1daba60e3a6cd53319ba3223a1fc5f7e7184222e`.
+Canonical final integration evidence:
 
-**Status at document creation: in progress.** This document must be updated with
-that run's final conclusion before merge to `main`.
+- run `33993595929`
+- job `101380033691`
+- SHA `1daba60e3a6cd53319ba3223a1fc5f7e7184222e`
+- artifact `9977398453`
+- artifact digest `sha256:e97c9534823e5f29ab1e3c51aa794de2e6d47bc0ca999b18a89349d872fd4ddd`
+- conclusion: **success**
+
+All workflow steps passed, including compilation, frozen-weight verification,
+2026 Week 1 source/context construction, the 107-player no-odds P3 dry run,
+row-level P3 output audit, production pricing-adapter coverage, strict repository
+audits, and the full test suite containing the end-to-end real-pricing test.
 
 ## Disposition
 
 - Week 1 RB research architecture: **FROZEN**.
 - Week 1 no-odds production context: **QUALIFIED**.
-- Week 1 pricing adapter: **QUALIFIED** by run `33993422377`.
-- Final end-to-end synthetic pricing gate: **PENDING** at document creation.
+- Week 1 pricing adapter: **QUALIFIED**.
+- Final end-to-end synthetic pricing gate: **QUALIFIED** by run `33993595929`.
+- Week 1 RB rushing-yard production promotion: **APPROVED FOR MAIN**, subject to
+  the post-merge canonical Full Slate dry-run gate.
 - Weeks 2–18 enriched allocation: **NOT PROMOTED by this ledger entry**.
 - No sportsbook variable is authorized upstream of the football projection.
