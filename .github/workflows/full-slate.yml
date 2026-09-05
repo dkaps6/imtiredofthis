@@ -234,6 +234,25 @@ jobs:
           print('ensemble status:', df['ensemble_status'].value_counts().to_dict())
           EOF
 
+      - name: Build promoted RB P3 football-only context
+        run: |
+          export PYTHONPATH="${PWD}"
+          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
+          if [ "${WEEK_RESOLVED}" != "1" ]; then
+            echo "FATAL: promoted RB production path is currently locked to Week 1; resolved week=${WEEK_RESOLVED}"
+            exit 1
+          fi
+          python scripts/run_rb_week1_no_odds.py --season "${SEASON}" --week "${WEEK_RESOLVED}" --iterations 25000 --out data/rb_rush_synthesis_context.csv
+          test -s data/rb_rush_synthesis_context.csv
+          python - <<'EOF'
+          import pandas as pd
+          x=pd.read_csv('data/rb_rush_synthesis_context.csv')
+          if x.empty or x.team.nunique()!=32: raise SystemExit('FATAL: promoted RB context incomplete')
+          if not pd.to_numeric(x['sportsbook_inputs_used'],errors='coerce').eq(0).all(): raise SystemExit('FATAL: RB sportsbook leakage flag')
+          if not x['rb_synthesis_route'].astype(str).eq('WEEK1_STACK_OVERRIDE').all(): raise SystemExit('FATAL: non-Week1 RB route')
+          print(f"promoted RB context OK players={x.player_clean_key.nunique()} teams={x.team.nunique()}")
+          EOF
+
       - name: Assemble deterministic metrics
         if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' }}
         run: |
@@ -242,7 +261,7 @@ jobs:
           python scripts/validate_build_integrity.py
           python scripts/metrics_ready.py --season "${SEASON}" --date "${SLATE_DATE}"
 
-      - name: Price with promoted QB synthesis over canonical components
+      - name: Price with promoted QB and RB synthesis over canonical components
         if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' }}
         run: |
           export PYTHONPATH="${PWD}"
@@ -260,6 +279,7 @@ jobs:
           assert 'bayes_applied' in df.columns and int(df['bayes_applied'].sum()) > 0
           assert 'rules_applied' in df.columns and int(df['rules_applied'].sum()) > 0
           assert 'ensemble_status' in df.columns
+
           qb=df.loc[df['market'].astype(str).str.lower().eq('pass_yards')].copy()
           if not qb.empty:
               required=['qb_synthesis_applied','qb_synthesis_proj','qb_synthesis_correction','qb_synthesis_version','qb_attempt_conversion','qb_pred_attempts','qb_pred_ypa']
@@ -277,6 +297,26 @@ jobs:
               if proj.isna().any() or final.isna().any() or not np.allclose(proj,final,rtol=0,atol=1e-8):
                   raise SystemExit('FATAL: final QB model projection is not the promoted synthesis mean')
               print(f"promoted QB pricing OK rows={len(qb)} version={sorted(qb['qb_synthesis_version'].unique().tolist())}")
+
+          rb=df.loc[df['market'].astype(str).str.lower().eq('rush_yards')].copy()
+          if not rb.empty:
+              required=['rb_synthesis_applied','rb_synthesis_proj','rb_synthesis_version','rb_synthesis_route']
+              missing=[x for x in required if x not in rb.columns]
+              if missing: raise SystemExit(f'FATAL: promoted RB pricing audit columns missing: {missing}')
+              if not pd.to_numeric(rb['rb_synthesis_applied'],errors='coerce').eq(1).all():
+                  raise SystemExit('FATAL: not every priced rush_yards row used promoted RB synthesis')
+              if not rb['rb_synthesis_version'].astype(str).eq('RB_P3_SYNTHESIS_V1').all():
+                  raise SystemExit('FATAL: promoted RB synthesis version drift')
+              if not rb['rb_synthesis_route'].astype(str).eq('WEEK1_STACK_OVERRIDE').all():
+                  raise SystemExit('FATAL: promoted RB pricing used a non-Week1 route')
+              if not rb['ensemble_status'].astype(str).eq('calibrated').all():
+                  raise SystemExit('FATAL: priced RB rushing rows contain uncalibrated generic ensemble diagnostics')
+              proj=pd.to_numeric(rb['rb_synthesis_proj'],errors='coerce')
+              final=pd.to_numeric(rb['model_proj'],errors='coerce')
+              if proj.isna().any() or final.isna().any() or not np.allclose(proj,final,rtol=0,atol=1e-8):
+                  raise SystemExit('FATAL: final RB model projection is not the promoted P3 synthesis mean')
+              print(f"promoted RB pricing OK side_rows={len(rb)} players={rb.player_clean_key.nunique()}")
+
           print(f"priced rows={len(df)} ensemble={df['ensemble_status'].value_counts().to_dict()} ml={int(df['ml_applied'].sum())} state={int(df['state_applied'].sum())} bayes={int(df['bayes_applied'].sum())} rules={int(df['rules_applied'].sum())}")
           EOF
 
