@@ -69,3 +69,14 @@ def test_load_rejects_duplicate_identity(tmp_path: Path):
     bad.to_csv(path, index=False)
     with pytest.raises(RuntimeError, match="duplicate promoted RB context identities"):
         load_rb_context(path)
+
+
+def test_canonical_pricing_and_full_slate_are_wired_to_p3():
+    pricing = Path("scripts/run_pricing_v2.py").read_text(encoding="utf-8")
+    workflow = Path(".github/workflows/full-slate.yml").read_text(encoding="utf-8")
+    assert "load_rb_context" in pricing
+    assert "lookup_rb_projection" in pricing
+    assert "target_mean = rb_synthesis_proj" in pricing
+    assert "promoted RB production pricing is currently locked to Week 1" in pricing
+    assert "Build promoted RB P3 football-only context" in workflow
+    assert "final RB model projection is not the promoted P3 synthesis mean" in workflow
