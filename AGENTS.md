@@ -30,10 +30,12 @@ Current production order:
 10. build PlayerForm prior/current evidence;
 11. build canonical context, Bayesian, ML, State and rule components;
 12. materialize promoted ensemble calibration status;
-13. assemble deterministic metrics;
-14. run joint simulation/pricing;
-15. for QB passing yards, apply the promoted M89/M90 football-only synthesis before sportsbook comparison;
-16. run strict audits and upload artifacts.
+13. build the promoted football-only RB P3 Week-1 rushing context;
+14. assemble deterministic sportsbook pricing rows when live props are available;
+15. run joint simulation/pricing;
+16. for QB passing yards, apply the promoted M89/M90 football-only synthesis before sportsbook comparison;
+17. for 2026 Week-1 RB rushing yards, apply the promoted `RB_P3_SYNTHESIS_V1` football-only mean before sportsbook comparison;
+18. run strict audits and upload artifacts.
 
 Do not bypass this order when producing live 2026 projections.
 
@@ -79,11 +81,17 @@ Promoted production concepts currently include:
 - WR hierarchy target-share sharpening while preserving team WR target mass;
 - supervised ML v2 and State v2 component models;
 - M89 corrected QB stat/context semantics;
-- M89/M90 football-only QB passing-yards residual synthesis.
+- M89/M90 football-only QB passing-yards residual synthesis;
+- frozen STACK1 RB ensemble calibration for `rush_att` and `rush_yards`;
+- `RB_P3_SYNTHESIS_V1` for **2026 Week-1 RB rushing yards only**, using the exact STACK3 Week-1 route `WEEK1_STACK_OVERRIDE`.
 
 A model is not fully integrated merely because its Python module runs. Its **validated calibration/weights, feature semantics and provenance** must also survive a clean production checkout.
 
 Broad QB mean-projection research is frozen after M90. Production fixes are allowed; a new generic QB feature hunt is not.
+
+The RB P3 Week-1 promotion is also frozen. Its historical high-end ceiling-compression limitation remains documented and must be tracked prospectively. **Weeks 2–18 P3 enriched allocation is not promoted by the Week-1 decision** because its historical availability/injury source-timestamp contract remains unresolved. Production must fail closed rather than silently route future weeks through the Week-1 parent or an unqualified W2–18 implementation.
+
+Authoritative RB promotion lineage is documented in `docs/production/RB_P3_WEEK1_PROMOTION_2026_09_05.md`.
 
 ---
 
@@ -94,9 +102,12 @@ Sportsbook player lines/odds are comparison/decision information unless a model 
 For the independent football projection:
 
 - sportsbook variables must not construct QB synthesis features;
+- sportsbook variables must not construct RB P3 context, carries, efficiency or synthesis means;
 - sportsbook variables must not train MC/ML/State ensemble weights;
 - postgame forensic/casebook variables must never enter pregame prediction;
 - market-assisted outputs must remain separately labeled and must not silently replace the football model.
+
+For promoted Week-1 RB rushing yards, `data/rb_rush_synthesis_context.csv` must be built and validated before sportsbook comparison. Final sportsbook lines/odds may grade and price the already-frozen football distribution but may not alter `rb_synthesis_proj`.
 
 Audit other markets during the 2026 overhaul because legacy game-odds context may still influence some non-QB simulation paths.
 
@@ -134,6 +145,7 @@ Protect these schemas/meanings unless a migration explicitly versions them:
 - `data/roles_ourlads.csv` — current roster/depth roles;
 - `data/team_form.csv` — active-slate team context with provenance;
 - `data/qb_promoted_team_context.csv` — M89/M90 corrected QB team context;
+- `data/rb_rush_synthesis_context.csv` — promoted football-only P3 RB rushing context for the qualified target week;
 - `data/player_game_logs.csv` — historical weekly player evidence;
 - `data/player_form.csv` / `data/player_form_consensus.csv` — current pregame player evidence;
 - `data/model_ml_diagnostics.csv` / `data/model_state_diagnostics.csv` — current component diagnostics;
@@ -159,7 +171,7 @@ The workflow is manually dispatchable. Inputs include:
 
 Prefer a **no-live-odds dry run** first during production changes so provider/context/model plumbing can be checked without Odds API credits. Then run a controlled live-odds slate.
 
-When live odds are disabled, PlayerForm should build its universe from Ourlads + authoritative schedule and must not consume stale props placeholders.
+When live odds are disabled, PlayerForm should build its universe from Ourlads + authoritative schedule and must not consume stale props placeholders. The promoted RB P3 Week-1 context must still build successfully in no-odds mode.
 
 ---
 
@@ -174,6 +186,10 @@ A production run should fail rather than claim success when:
 - promoted QB context cannot be built for all required teams;
 - an official-attempt conversion is missing/out of range;
 - a priced QB pass-yards row bypasses the promoted synthesis;
+- Week-1 RB P3 context is missing, empty, duplicated, contains identity/opponent mismatch, or reports sportsbook input use;
+- a Week-1 `rush_yards` row does not have a calibrated generic STACK1 ensemble diagnostic;
+- a priced Week-1 `rush_yards` row bypasses `RB_P3_SYNTHESIS_V1` or uses a route other than `WEEK1_STACK_OVERRIDE`;
+- `run_pricing_v2.py` is asked to price promoted RB rushing yards outside Week 1 before a separate W2–18 promotion exists;
 - a source is labeled current while its source season is actually prior/stale.
 
 Expected QB pricing audit columns include:
@@ -190,6 +206,21 @@ Expected QB pricing audit columns include:
 - `qb_pred_ypa`
 
 The final QB `model_proj` must equal the promoted synthesis mean within numerical tolerance.
+
+Expected promoted RB Week-1 pricing audit columns include:
+
+- `mc_proj`
+- `ml_proj`
+- `state_proj`
+- `ensemble_proj`
+- `rb_synthesis_applied`
+- `rb_synthesis_proj`
+- `rb_synthesis_version`
+- `rb_synthesis_route`
+- `rb_stack_implied_ypc`
+- `rb_ypc_fallback_used`
+
+The final Week-1 RB `model_proj` for `rush_yards` must equal `rb_synthesis_proj` within numerical tolerance. MC/ML/State/ensemble values remain visible as diagnostics; P3 is the authoritative final football mean for this market/week.
 
 ---
 

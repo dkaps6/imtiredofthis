@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Run the Sharp Football collector with maintained 2026 schema adapters.
+"""Run the Sharp Football collector with maintained pace-schema adapters.
 
-Sharp's pace table changed in 2026 from older ``neutral pace`` style headers to
-``Offense`` + ``Neutral Script (Sec/Play)``. Keep that provider-specific change
-at the boundary and continue exposing the canonical ``team`` + ``neutral_pace``
-contract expected by TeamForm.
+Sharp's pace table has changed headers over time.  Keep provider-specific
+changes at this boundary and continue exposing the canonical ``team`` +
+``neutral_pace`` contract expected by TeamForm.
+
+As of 2026-09-03 the live table exposes:
+``Offense`` + ``Play Clock Used`` + ``Neutral`` + ``Neutral Pass Rate``.
+Sharp defines ``Neutral`` as neutral-situation play clock used (lower is faster),
+so that exact column maps to canonical ``neutral_pace``.  ``Play Clock Used`` is
+the all-situation value and must not be substituted for neutral pace.
 
 The legacy generic alias pass also strips underscores while comparing names. If
 it is run twice, an already-canonical ``neutral_pace`` becomes ``neutralpace``
@@ -56,6 +61,10 @@ def normalize_pace_table_v2(df: pd.DataFrame) -> pd.DataFrame:
 
     neutral_col = None
     exact = (
+        # Current live Sharp schema.  This is neutral play-clock-used pace,
+        # distinct from the adjacent all-situation Play Clock Used column.
+        "NEUTRAL",
+        # Historical/live variants retained for source continuity.
         "NEUTRAL SCRIPT (SEC/PLAY)",
         "NEUTRAL SCRIPT SEC/PLAY",
         "NEUTRAL SCRIPT (SECONDS/PLAY)",
@@ -74,6 +83,7 @@ def normalize_pace_table_v2(df: pd.DataFrame) -> pd.DataFrame:
                 "NEUTRAL" in name
                 and ("SEC" in name or "SECOND" in name or "PACE" in name)
                 and "DB RATE" not in name
+                and "PASS RATE" not in name
             ):
                 neutral_col = col
                 break
@@ -111,6 +121,13 @@ def normalize_pace_table_v2(df: pd.DataFrame) -> pd.DataFrame:
 
     if pace["neutral_pace"].notna().sum() == 0:
         raise RuntimeError("[sharp_v2] neutral pace column normalized to all missing")
+    # Semantic guard: Sharp neutral play-clock-used values are seconds on the
+    # 40-second play clock.  This catches accidental mapping to percentages,
+    # ranks, or pass-rate fields without fabricating/substituting data.
+    usable = pace["neutral_pace"].dropna()
+    if not usable.between(10.0, 40.0, inclusive="both").all():
+        bad = usable.loc[~usable.between(10.0, 40.0, inclusive="both")].head(10).tolist()
+        raise RuntimeError(f"[sharp_v2] neutral pace values outside play-clock seconds range: {bad}")
     return pace
 
 

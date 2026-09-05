@@ -1,2 +1,4 @@
 market,mc_weight,ml_weight,state_weight,calibration_rows,calibration_mae,calibration_rmse,method,fit_scope,validated_season,promotion_lineage
 pass_yards,0.2087531266,0.2671212299,0.5241256435,474,61.033280,77.997841,promoted_nonnegative_oos_linear_blend_v2,all_2024_oos_frozen_for_2025,2025,M82_M89_M90_QB_PASS_YARDS
+rush_att,0.3164919683016017,0.6528957474344519,0.030612284263946517,1984,3.0978903449572006,4.327989846082319,nonnegative_oos_linear_blend_v2,all_2024_oos_frozen_for_2025,2025,RB_STACK1_RUN_33535308110_FOR_P3
+rush_yards,0.5569542426070742,0.4430457573929258,0.0,3207,12.58974057133939,21.953886992248943,nonnegative_oos_linear_blend_v2,all_2024_oos_frozen_for_2025,2025,RB_STACK1_RUN_33535308110_FOR_P3

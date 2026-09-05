@@ -7,15 +7,16 @@ Production order:
 3. empirical football/context rules,
 4. joint Monte Carlo distribution,
 5. evidence-weighted ensemble mean (only when OOS-calibrated weights exist),
-6. M89/M90-promoted football-only QB passing-yards residual synthesis,
+6. promoted football-only position/stat synthesis (QB passing, RB rushing),
 7. sportsbook comparison.
 
 For QB pass_yards, Monte Carlo's pass-opportunity count is first converted to
 official pass attempts using the M89 semantic contract (official attempts /
 [official attempts + sacks + QB scrambles]) before the ensemble is formed.
-The promoted synthesis then corrects the ensemble mean using football-only
-pregame features. Sportsbook lines/odds never construct a player projection,
-ensemble weight, or synthesis correction.
+For RB rush_yards, Week-1 production uses the frozen P3 football-only context
+built before sportsbook pricing and sets that projection as the final football
+mean.  Sportsbook lines/odds never construct a player projection, ensemble
+weight, or synthesis correction.
 """
 from __future__ import annotations
 
@@ -36,6 +37,7 @@ from scripts.modeling.qb_pass_synthesis_v1 import (
     load_team_context as load_qb_team_context,
     predict_correction as predict_qb_synthesis,
 )
+from scripts.modeling.rb_pricing_adapter_v1 import load_rb_context, lookup_rb_projection
 from scripts.modeling.state_v2 import apply_state_to_metrics
 from scripts.modeling.simulation_rules import apply_rules_to_metrics
 from scripts.pricing_v2 import _fair_market_prob, _fair_odds
@@ -115,8 +117,12 @@ def price(season: int) -> pd.DataFrame:
         lambda value: MARKET_MAP.get(value, value)
     )
     has_qb_pass = bool(canonical_markets.eq("pass_yards").any())
+    has_rb_rush = bool(canonical_markets.eq("rush_yards").any())
+
     qb_artifact = qb_team_context = qb_player_logs = None
+    rb_context = None
     weather = pd.DataFrame()
+
     if has_qb_pass:
         # Promotion is fail-closed: once pass-yards synthesis is part of production,
         # missing artifact/context is a fatal data-contract error, not a silent
@@ -131,15 +137,42 @@ def price(season: int) -> pd.DataFrame:
             f"teams={len(qb_team_context)} player_logs={len(qb_player_logs)}"
         )
 
+    if has_rb_rush:
+        rush_weeks = sorted(
+            set(
+                pd.to_numeric(
+                    df.loc[canonical_markets.eq("rush_yards"), "week"], errors="coerce"
+                ).dropna().astype(int).tolist()
+            )
+        )
+        if rush_weeks != [1]:
+            raise RuntimeError(
+                "promoted RB production pricing is currently locked to Week 1; "
+                f"refusing unsupported rush_yards weeks={rush_weeks}"
+            )
+        rb_context = load_rb_context()
+        ctx = rb_context.loc[
+            rb_context["season"].eq(int(season)) & rb_context["week"].eq(1)
+        ].copy()
+        if ctx.empty:
+            raise RuntimeError(f"promoted RB context has no season={season} Week-1 rows")
+        print(
+            f"[pricing] promoted RB P3 synthesis enabled version={sorted(ctx['rb_synthesis_version'].unique().tolist())} "
+            f"players={ctx['player_clean_key'].nunique()} teams={ctx['team'].nunique()}"
+        )
+
     sims = simulate(df)
     rows, missed = [], []
     qb_synthesis_rows = 0
+    rb_synthesis_rows = 0
+
     for _, row in df.iterrows():
         raw_market = str(row.get("market", "") or "").lower()
         market = MARKET_MAP.get(raw_market, raw_market)
         outcomes = lookup(sims, row, raw_market)
         if outcomes is None or len(outcomes) == 0:
-            missed.append((row.get("player"), raw_market)); continue
+            missed.append((row.get("player"), raw_market))
+            continue
 
         base_outcomes = np.asarray(outcomes, dtype=float)
         qb_attempt_rate = np.nan
@@ -172,12 +205,20 @@ def price(season: int) -> pd.DataFrame:
         ensemble_proj = float(ens["ensemble_proj"])
 
         target_mean = ensemble_proj
+
         qb_synthesis_proj = np.nan
         qb_synthesis_correction = np.nan
         qb_synthesis_applied = 0
         qb_synthesis_version = ""
         qb_pred_attempts = np.nan
         qb_pred_ypa = np.nan
+
+        rb_synthesis_proj = np.nan
+        rb_synthesis_applied = 0
+        rb_synthesis_version = ""
+        rb_synthesis_route = ""
+        rb_stack_implied_ypc = np.nan
+        rb_ypc_fallback_used = 0
 
         if market == "pass_yards":
             try:
@@ -207,10 +248,34 @@ def price(season: int) -> pd.DataFrame:
                     f"team={row.get('team')} opponent={row.get('opponent')}: {exc}"
                 ) from exc
 
+        if market == "rush_yards":
+            try:
+                if str(ens["ensemble_status"]) != "calibrated":
+                    raise RuntimeError(
+                        f"rush_yards generic ensemble is not calibrated: status={ens['ensemble_status']}"
+                    )
+                rb_meta = lookup_rb_projection(row, rb_context)
+                rb_synthesis_proj = float(rb_meta["rb_synthesis_proj"])
+                rb_synthesis_route = str(rb_meta["rb_synthesis_route"])
+                rb_synthesis_version = str(rb_meta["rb_synthesis_version"])
+                rb_synthesis_applied = int(rb_meta["rb_synthesis_applied"])
+                rb_stack_implied_ypc = _finite(rb_meta.get("rb_stack_implied_ypc"))
+                rb_ypc_fallback_used = int(_finite(rb_meta.get("rb_ypc_fallback_used"), 0))
+                if not np.isfinite(rb_synthesis_proj):
+                    raise RuntimeError("non-finite promoted RB synthesis projection")
+                target_mean = rb_synthesis_proj
+                rb_synthesis_rows += 1
+            except Exception as exc:
+                raise RuntimeError(
+                    f"promoted RB synthesis failed player={row.get('player')} "
+                    f"team={row.get('team')} opponent={row.get('opponent')}: {exc}"
+                ) from exc
+
         # Preserve Monte Carlo's non-negative distribution shape while aligning
-        # its mean to the final football projection. For QB pass_yards this is the
-        # promoted synthesis mean; for every other market it remains the canonical
-        # ensemble mean. Sportsbook information still enters only after this step.
+        # its mean to the final football projection. For promoted QB pass_yards
+        # and RB rush_yards this is the position-specific synthesis mean; for
+        # every other market it remains the canonical ensemble mean. Sportsbook
+        # information still enters only after this step.
         if np.isfinite(mc_proj) and mc_proj > 0 and np.isfinite(target_mean):
             adjusted_outcomes = base_outcomes * max(0.0, target_mean / mc_proj)
         else:
@@ -223,7 +288,8 @@ def price(season: int) -> pd.DataFrame:
             try:
                 line = float(row.get("line"))
             except Exception:
-                missed.append((row.get("player"), raw_market)); continue
+                missed.append((row.get("player"), raw_market))
+                continue
             p_over = float(np.mean(adjusted_outcomes > line))
         p_under = 1.0 - p_over
         model_proj = float(np.mean(adjusted_outcomes))
@@ -231,17 +297,37 @@ def price(season: int) -> pd.DataFrame:
         mkt_over, mkt_under = _fair_market_prob(row.get("over_odds"), row.get("under_odds"))
 
         common = {
-            "event_id": row.get("event_id"), "player": row.get("player"), "player_clean_key": row.get("player_clean_key"),
-            "team": row.get("team"), "opponent": row.get("opponent"), "market": market, "source_market": raw_market,
-            "vegas_line": line, "model_proj": model_proj, "mc_proj": mc_proj, "model_sd": model_sd,
+            "event_id": row.get("event_id"),
+            "player": row.get("player"),
+            "player_clean_key": row.get("player_clean_key"),
+            "team": row.get("team"),
+            "opponent": row.get("opponent"),
+            "market": market,
+            "source_market": raw_market,
+            "vegas_line": line,
+            "model_proj": model_proj,
+            "mc_proj": mc_proj,
+            "model_sd": model_sd,
             "simulation_iterations": sims.iterations,
-            "ensemble_proj": ensemble_proj, "ensemble_status": ens["ensemble_status"], "ensemble_method": ens["ensemble_method"],
-            "ensemble_weight_mc": ens["ensemble_weight_mc"], "ensemble_weight_ml": ens["ensemble_weight_ml"],
-            "ensemble_weight_state": ens["ensemble_weight_state"], "ensemble_calibration_rows": ens["ensemble_calibration_rows"],
-            "ml_proj": row.get("ml_proj"), "ml_applied": int(row.get("ml_applied", 0) or 0), "ml_method": row.get("ml_method"), "ml_training_cutoff": row.get("ml_training_cutoff"),
-            "state_proj": row.get("state_proj"), "state_applied": int(row.get("state_applied", 0) or 0), "state_method": row.get("state_method"), "state_training_cutoff": row.get("state_training_cutoff"),
-            "bayes_applied": int(row.get("bayes_applied", 0) or 0), "bayes_evidence_state": row.get("bayes_evidence_state"),
-            "rules_applied": int(row.get("rules_applied", 0) or 0), "rules_role": row.get("rules_role"),
+            "ensemble_proj": ensemble_proj,
+            "ensemble_status": ens["ensemble_status"],
+            "ensemble_method": ens["ensemble_method"],
+            "ensemble_weight_mc": ens["ensemble_weight_mc"],
+            "ensemble_weight_ml": ens["ensemble_weight_ml"],
+            "ensemble_weight_state": ens["ensemble_weight_state"],
+            "ensemble_calibration_rows": ens["ensemble_calibration_rows"],
+            "ml_proj": row.get("ml_proj"),
+            "ml_applied": int(row.get("ml_applied", 0) or 0),
+            "ml_method": row.get("ml_method"),
+            "ml_training_cutoff": row.get("ml_training_cutoff"),
+            "state_proj": row.get("state_proj"),
+            "state_applied": int(row.get("state_applied", 0) or 0),
+            "state_method": row.get("state_method"),
+            "state_training_cutoff": row.get("state_training_cutoff"),
+            "bayes_applied": int(row.get("bayes_applied", 0) or 0),
+            "bayes_evidence_state": row.get("bayes_evidence_state"),
+            "rules_applied": int(row.get("rules_applied", 0) or 0),
+            "rules_role": row.get("rules_role"),
             "qb_synthesis_applied": qb_synthesis_applied,
             "qb_synthesis_proj": qb_synthesis_proj,
             "qb_synthesis_correction": qb_synthesis_correction,
@@ -250,13 +336,34 @@ def price(season: int) -> pd.DataFrame:
             "qb_pass_att_share": qb_share,
             "qb_pred_attempts": qb_pred_attempts,
             "qb_pred_ypa": qb_pred_ypa,
-            "season": int(season), "week": row.get("week"), "book": row.get("book"), "book_title": row.get("book_title"),
-            "vegas_over_odds": row.get("over_odds"), "vegas_under_odds": row.get("under_odds"),
+            "rb_synthesis_applied": rb_synthesis_applied,
+            "rb_synthesis_proj": rb_synthesis_proj,
+            "rb_synthesis_version": rb_synthesis_version,
+            "rb_synthesis_route": rb_synthesis_route,
+            "rb_stack_implied_ypc": rb_stack_implied_ypc,
+            "rb_ypc_fallback_used": rb_ypc_fallback_used,
+            "season": int(season),
+            "week": row.get("week"),
+            "book": row.get("book"),
+            "book_title": row.get("book_title"),
+            "vegas_over_odds": row.get("over_odds"),
+            "vegas_under_odds": row.get("under_odds"),
         }
-        for side, prob, market_prob, vegas_odds in (("OVER", p_over, mkt_over, row.get("over_odds")), ("UNDER", p_under, mkt_under, row.get("under_odds"))):
+        for side, prob, market_prob, vegas_odds in (
+            ("OVER", p_over, mkt_over, row.get("over_odds")),
+            ("UNDER", p_under, mkt_under, row.get("under_odds")),
+        ):
             edge = prob - market_prob if pd.notna(market_prob) else np.nan
             rec = dict(common)
-            rec.update({"side": side, "fair_prob": prob, "market_prob": market_prob, "vegas_odds": vegas_odds, "fair_odds": _fair_odds(prob), "edge_pct": edge, "edge_abs": abs(edge) if pd.notna(edge) else np.nan})
+            rec.update({
+                "side": side,
+                "fair_prob": prob,
+                "market_prob": market_prob,
+                "vegas_odds": vegas_odds,
+                "fair_odds": _fair_odds(prob),
+                "edge_pct": edge,
+                "edge_abs": abs(edge) if pd.notna(edge) else np.nan,
+            })
             rows.append(rec)
 
     out = pd.DataFrame(rows)
@@ -264,6 +371,9 @@ def price(season: int) -> pd.DataFrame:
         raise RuntimeError("Monte Carlo pricing produced 0 rows")
     if has_qb_pass and qb_synthesis_rows == 0:
         raise RuntimeError("promoted QB synthesis applied to zero pass_yards pricing rows")
+    if has_rb_rush and rb_synthesis_rows == 0:
+        raise RuntimeError("promoted RB synthesis applied to zero rush_yards pricing rows")
+
     if missed:
         debug = DATA / "_debug" / "pricing_unsimulated_props.csv"
         debug.parent.mkdir(parents=True, exist_ok=True)
@@ -271,15 +381,28 @@ def price(season: int) -> pd.DataFrame:
         print(f"[pricing] WARN unsimulated player/markets={len(set(missed))} -> {debug}")
     print("[pricing] ensemble status:", out["ensemble_status"].value_counts().to_dict())
     if has_qb_pass:
-        print(f"[pricing] promoted QB synthesis applied input_rows={qb_synthesis_rows} output_side_rows={int(out['qb_synthesis_applied'].sum())}")
+        print(
+            f"[pricing] promoted QB synthesis applied input_rows={qb_synthesis_rows} "
+            f"output_side_rows={int(out['qb_synthesis_applied'].sum())}"
+        )
+    if has_rb_rush:
+        print(
+            f"[pricing] promoted RB synthesis applied input_rows={rb_synthesis_rows} "
+            f"output_side_rows={int(out['rb_synthesis_applied'].sum())}"
+        )
     return out
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(); parser.add_argument("--season", type=int, default=None); args = parser.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--season", type=int, default=None)
+    args = parser.parse_args()
     season = int(args.season if args.season is not None else resolve_season())
-    out = price(season); OUTPUTS.mkdir(parents=True, exist_ok=True); out.to_csv(OUT, index=False)
-    print(f"[pricing] wrote rows={len(out)} -> {OUT}"); return 0
+    out = price(season)
+    OUTPUTS.mkdir(parents=True, exist_ok=True)
+    out.to_csv(OUT, index=False)
+    print(f"[pricing] wrote rows={len(out)} -> {OUT}")
+    return 0
 
 
 if __name__ == "__main__":
