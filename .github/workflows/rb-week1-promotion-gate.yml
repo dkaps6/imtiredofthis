@@ -6,10 +6,13 @@ on:
     paths:
       - '.github/workflows/rb-week1-promotion-gate.yml'
       - 'scripts/run_rb_week1_no_odds.py'
+      - 'scripts/run_pricing_v2.py'
       - 'scripts/modeling/rb_rush_synthesis_v1.py'
+      - 'scripts/modeling/rb_pricing_adapter_v1.py'
       - 'scripts/run_sharpfootball_v2.py'
       - 'data/model_ensemble_weights.csv'
       - 'tests/test_rb_rush_synthesis_v1.py'
+      - 'tests/test_rb_pricing_adapter_v1.py'
       - 'tests/test_sharpfootball_v2.py'
   workflow_dispatch:
 
@@ -44,8 +47,8 @@ jobs:
       - name: Compile promoted RB code and source adapters
         run: |
           export PYTHONPATH="${PWD}"
-          python -m py_compile scripts/modeling/rb_rush_synthesis_v1.py scripts/run_rb_week1_no_odds.py scripts/run_sharpfootball_v2.py
-          pytest -q tests/test_rb_rush_synthesis_v1.py tests/test_sharpfootball_v2.py
+          python -m py_compile scripts/modeling/rb_rush_synthesis_v1.py scripts/modeling/rb_pricing_adapter_v1.py scripts/run_rb_week1_no_odds.py scripts/run_pricing_v2.py scripts/run_sharpfootball_v2.py
+          pytest -q tests/test_rb_rush_synthesis_v1.py tests/test_rb_pricing_adapter_v1.py tests/test_sharpfootball_v2.py
 
       - name: Verify frozen RB ensemble weights
         run: |
@@ -194,7 +197,27 @@ jobs:
           if not x['rush_att_ensemble_status'].astype(str).eq('calibrated').all():
               raise SystemExit('FATAL Week1 rush_att contains uncalibrated ensemble rows')
           print(f'RB WEEK1 GATE PASS rows={len(x)} teams={x.team.nunique()} players={x.player_clean_key.nunique()}')
-          print(x[['team','player','stack_att','stack_yards','rb_synthesis_proj','rb_synthesis_route']].sort_values(['team','stack_yards'],ascending=[True,False]).to_string(index=False))
+          PY
+
+      - name: Audit production pricing adapter against every Week 1 RB
+        run: |
+          export PYTHONPATH="${PWD}"
+          python - <<'PY'
+          import numpy as np
+          import pandas as pd
+          from scripts.modeling.rb_pricing_adapter_v1 import load_rb_context, lookup_rb_projection
+          ctx=load_rb_context()
+          checked=0
+          for _, row in ctx.iterrows():
+              got=lookup_rb_projection(row, ctx)
+              if not np.isclose(float(got['rb_synthesis_proj']), float(row['rb_synthesis_proj']), rtol=0, atol=1e-12):
+                  raise SystemExit(f"FATAL pricing adapter projection drift player={row['player']}")
+              if str(got['rb_synthesis_route']) != 'WEEK1_STACK_OVERRIDE':
+                  raise SystemExit(f"FATAL pricing adapter route drift player={row['player']}")
+              checked += 1
+          if checked != len(ctx) or ctx['team'].nunique()!=32:
+              raise SystemExit(f'FATAL pricing adapter coverage checked={checked} context={len(ctx)} teams={ctx.team.nunique()}')
+          print(f'RB PRICING ADAPTER GATE PASS players={checked} teams={ctx.team.nunique()}')
           PY
 
       - name: Strict repository audits
