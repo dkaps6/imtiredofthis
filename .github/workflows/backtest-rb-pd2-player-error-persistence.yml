@@ -1,0 +1,53 @@
+name: RB-PD2 Player Error Persistence
+
+on:
+  push:
+    branches:
+      - research-rb-pd2-player-error-persistence
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Compile frozen evaluator
+        run: python -m py_compile scripts/backtest/evaluate_rb_pd2_player_error_persistence.py
+      - name: Download exact canonical RB evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/stack1 evidence/stack2
+          gh run download 33535308110 --repo "${GITHUB_REPOSITORY}" --name rb-stack1-production-equivalent-baseline --dir evidence/stack1
+          gh run download 33538770934 --repo "${GITHUB_REPOSITORY}" --name rb-stack2-enriched-allocation-integration --dir evidence/stack2
+          test -s evidence/stack1/results/stack1_2025_rb_trace.csv
+          test -s evidence/stack2/stack2_2025_casebook.csv
+      - name: Run frozen walk-forward individual-error persistence diagnostic
+        run: |
+          python scripts/backtest/evaluate_rb_pd2_player_error_persistence.py --stack1-root evidence/stack1 --stack2-root evidence/stack2 --out-dir data/backtests/rb_pd2_player_error_persistence
+      - name: Show result
+        if: always()
+        run: |
+          cat data/backtests/rb_pd2_player_error_persistence/rb_pd2_result.json 2>/dev/null || true
+          cat data/backtests/rb_pd2_player_error_persistence/rb_pd2_metrics.csv 2>/dev/null || true
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-pd2-player-error-persistence
+          path: |
+            data/backtests/rb_pd2_player_error_persistence/*
+            docs/migrations/RB_PD2_PLAYER_ERROR_PERSISTENCE_PLAN.md
+          if-no-files-found: warn
