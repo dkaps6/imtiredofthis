@@ -1,0 +1,46 @@
+name: RB Carry Mechanism Role Context Concentration
+
+on:
+  push:
+    branches:
+      - audit-rb-carry-mechanism-role-context-concentration
+    paths:
+      - 'scripts/backtest/evaluate_rb_carry_mechanism_role_context_concentration.py'
+      - 'docs/migrations/RB_CARRY_MECHANISM_ROLE_CONTEXT_CONCENTRATION_PLAN.md'
+      - '.github/workflows/audit-rb-carry-mechanism-role-context-concentration.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - run: python -m py_compile scripts/backtest/evaluate_rb_carry_mechanism_role_context_concentration.py
+      - name: Download frozen RB mechanism evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/rb
+          gh run download 34065409969 --repo "${GITHUB_REPOSITORY}" --name rb-individual-mechanism-decomposition --dir evidence/rb
+      - name: Evaluate frozen RB role-context audit
+        run: |
+          python scripts/backtest/evaluate_rb_carry_mechanism_role_context_concentration.py \
+            --rb-root evidence/rb \
+            --out-dir data/backtests/rb_carry_mechanism_role_context_concentration
+      - run: cat data/backtests/rb_carry_mechanism_role_context_concentration/rb_carry_role_context_result.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rb-carry-mechanism-role-context-concentration
+          path: |
+            data/backtests/rb_carry_mechanism_role_context_concentration/*
+            docs/migrations/RB_CARRY_MECHANISM_ROLE_CONTEXT_CONCENTRATION_PLAN.md
