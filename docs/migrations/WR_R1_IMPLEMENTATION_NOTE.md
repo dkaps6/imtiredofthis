@@ -1,1 +1,0 @@
-Implementation note: WR-R1 must execute exactly the frozen plan in `WR_R1_MULTISEASON_2020_2025_PLAN.md`; this file adds no scientific degrees of freedom.
