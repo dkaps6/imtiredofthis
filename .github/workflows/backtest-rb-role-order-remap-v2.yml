@@ -1,0 +1,35 @@
+name: RB Role Order Remap V2
+on:
+  push:
+    branches: [research-rb-role-order-remap-v2-individual]
+    paths:
+      - 'scripts/backtest/evaluate_rb_role_order_remap_v2.py'
+      - 'docs/migrations/RB_ROLE_ORDER_REMAP_V2_INDIVIDUAL_PLAN.md'
+      - '.github/workflows/backtest-rb-role-order-remap-v2.yml'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - run: python -m py_compile scripts/backtest/evaluate_rb_role_order_remap_v2.py
+      - env: {GH_TOKEN: '${{ github.token }}'}
+        run: |
+          mkdir -p evidence/stack1 evidence/stack2
+          gh run download 33535308110 --repo "${GITHUB_REPOSITORY}" --name rb-stack1-production-equivalent-baseline --dir evidence/stack1
+          gh run download 33538770934 --repo "${GITHUB_REPOSITORY}" --name rb-stack2-enriched-allocation-integration --dir evidence/stack2
+      - run: python scripts/backtest/evaluate_rb_role_order_remap_v2.py --stack1-root evidence/stack1 --stack2-root evidence/stack2 --out-dir data/backtests/rb_role_order_remap_v2
+      - run: cat data/backtests/rb_role_order_remap_v2/rb_role_order_remap_v2_result.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rb-role-order-remap-v2
+          path: |
+            data/backtests/rb_role_order_remap_v2/*
+            docs/migrations/RB_ROLE_ORDER_REMAP_V2_INDIVIDUAL_PLAN.md
