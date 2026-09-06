@@ -52,6 +52,7 @@ jobs:
 
       - name: Run frozen no-fit role-order remap evaluation
         run: |
+          export PYTHONPATH="${PWD}"
           python scripts/backtest/run_rb_role_order_remap_v1_overlap_repair.py \
             --stack1-root evidence/stack1 \
             --stack2-root evidence/stack2 \
