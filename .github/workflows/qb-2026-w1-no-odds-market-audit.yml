@@ -1,0 +1,219 @@
+name: QB 2026 W1 No-Odds Market Audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-qb-2026-w1-no-odds-market-audit
+    paths:
+      - ".github/workflows/qb-2026-w1-no-odds-market-audit.yml"
+      - "scripts/research/qb_2026_w1_market_audit.py"
+      - "docs/migrations/QB_2026_W1_NO_ODDS_MARKET_AUDIT_PLAN.md"
+      - "data/manual_market/qb_2026_w1_target_players.csv"
+      - "data/manual_market/qb_2026_w1_fanduel_lines.csv"
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  SEASON: "2026"
+  PRIOR_SEASON: "2025"
+  SLATE_DATE: ""
+  FETCH_LIVE_ODDS: "false"
+
+jobs:
+  qb_week1_audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout isolated QB audit branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml
+
+      - name: Compile audit harness
+        run: python -m py_compile scripts/research/qb_2026_w1_market_audit.py
+
+      - name: Validate frozen production parent and runtime
+        run: |
+          export PYTHONPATH="${PWD}"
+          python - <<'EOF'
+          import os
+          from scripts.config import SEASON, PRIOR_SEASON
+          from scripts.runtime_context import resolve_week
+          assert SEASON == 2026 and PRIOR_SEASON == 2025
+          w=resolve_week(season=2026)
+          if w != 1: raise SystemExit(f'FATAL: QB audit requires Week 1, resolved {w}')
+          print('QB audit runtime season=2026 prior=2025 week=1')
+          EOF
+
+      - name: Build Ourlads roles
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/providers/ourlads_depth.py --season 2026
+          test -s data/roles_ourlads.csv
+
+      - name: Build authoritative Week-1 schedule
+        env:
+          TEAM_WEEK_MAP_CSV: data/team_week_map.csv
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/utils/build_team_week_map_v2.py --season 2026 --out data/team_week_map.csv
+          test -s data/team_week_map.csv
+          python - <<'EOF'
+          import pandas as pd
+          x=pd.read_csv('data/team_week_map.csv')
+          w=x.loc[(pd.to_numeric(x['season'],errors='coerce')==2026)&(pd.to_numeric(x['week'],errors='coerce')==1)]
+          if w['team'].nunique()!=32: raise SystemExit(f'FATAL: Week1 schedule teams={w["team"].nunique()}')
+          print('Week1 schedule OK teams=32')
+          EOF
+
+      - name: Build TeamForm with explicit preseason priors
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_sharpfootball_v2.py --season 2026 --dump-html
+          python scripts/team_form_prior_bridge.py --season 2026 --prior-season 2025
+          python scripts/run_team_form_context.py --season 2026 --box-backfill-prev
+          test -s data/team_form.csv
+
+      - name: Build promoted M89/M90 QB context
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_qb_promoted_context.py --season 2026 --prior-season 2025
+          test -s data/qb_promoted_team_context.csv
+          test -s data/qb_promoted_context_audit.csv
+          python - <<'EOF'
+          import pandas as pd
+          x=pd.read_csv('data/qb_promoted_team_context.csv')
+          if len(x)!=32 or x['team'].nunique()!=32: raise SystemExit('FATAL: promoted QB context incomplete')
+          conv=pd.to_numeric(x['pass_attempts_per_dropback'],errors='coerce')
+          if conv.isna().any() or not conv.between(.50,1.0,inclusive='both').all(): raise SystemExit('FATAL: attempt conversion invalid')
+          print(f'QB promoted context OK conversion={conv.min():.4f}..{conv.max():.4f}')
+          EOF
+
+      - name: Build weather and injuries
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/build/build_weather_week_v2.py --season 2026 --date ""
+          python scripts/build/build_injuries_weekly.py data/injuries.csv --season 2026
+          test -s data/weather_week.csv
+          test -s data/injuries.csv
+
+      - name: Build coverage context
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_coverage_v2.py --season 2026
+          for f in data/cb_coverage_team.csv data/cb_coverage_player.csv data/wr_cb_exposure.csv; do test -s "$f"; done
+
+      - name: Build optional 2026 PBP enrichment
+        continue-on-error: true
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/build/pbp_features.py --season 2026 || true
+
+      - name: Build PlayerForm and identities
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_player_form_v2_loader.py --season 2026 --prior-season 2025 --date ""
+          python scripts/enrich_player_scoring_v2.py --season 2026 --prior-season 2025 --date ""
+          for f in data/player_game_logs.csv data/player_form.csv data/player_form_consensus.csv data/player_identity_validation.csv; do test -s "$f"; done
+
+      - name: Materialize canonical model context
+        env:
+          FETCH_LIVE_ODDS: "false"
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_context_bridge.py
+          test -s data/team_context_v3.csv
+          test -s data/model_context_bridge.csv
+
+      - name: Build Bayesian ML State Rules and ensemble components
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_bayesian_bridge.py
+          python scripts/run_model_ml_bridge.py
+          python scripts/run_model_state_bridge.py
+          python scripts/run_model_rules_bridge.py
+          python scripts/run_model_ensemble_bridge.py
+          for f in data/model_bayesian_diagnostics.csv data/model_ml_diagnostics.csv data/model_state_diagnostics.csv data/model_rule_diagnostics.csv data/model_ensemble_diagnostics.csv; do test -s "$f"; done
+
+      - name: Football pass A with synthetic line 111.5
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/research/qb_2026_w1_market_audit.py write-synthetic --line 111.5 --odds -110
+          python scripts/run_metrics_context.py --season 2026 --week 1 --mode full
+          python scripts/run_pricing_v2.py --season 2026
+          cp outputs/props_priced_clean.csv data/qb_2026_w1_synthetic_a_priced.csv
+
+      - name: Football pass B with synthetic line 444.5
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/research/qb_2026_w1_market_audit.py write-synthetic --line 444.5 --odds -110
+          python scripts/run_metrics_context.py --season 2026 --week 1 --mode full
+          python scripts/run_pricing_v2.py --season 2026
+          cp outputs/props_priced_clean.csv data/qb_2026_w1_synthetic_b_priced.csv
+
+      - name: Freeze promoted football-only QB projections before market lines
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/research/qb_2026_w1_market_audit.py freeze \
+            --a data/qb_2026_w1_synthetic_a_priced.csv \
+            --b data/qb_2026_w1_synthetic_b_priced.csv \
+            --out data/qb_2026_w1_no_odds_projections.csv
+          test -s data/qb_2026_w1_no_odds_projections.csv
+
+      - name: Downstream manual FanDuel comparison only after football freeze
+        run: |
+          export PYTHONPATH="${PWD}"
+          test -s data/qb_2026_w1_no_odds_projections.csv
+          python scripts/research/qb_2026_w1_market_audit.py write-actual
+          python scripts/run_metrics_context.py --season 2026 --week 1 --mode full
+          python scripts/run_pricing_v2.py --season 2026
+          cp outputs/props_priced_clean.csv data/qb_2026_w1_actual_market_priced.csv
+          python scripts/research/qb_2026_w1_market_audit.py compare \
+            --priced data/qb_2026_w1_actual_market_priced.csv \
+            --frozen data/qb_2026_w1_no_odds_projections.csv \
+            --out data/qb_2026_w1_market_comparison.csv
+
+      - name: Show frozen projections and downstream market comparison
+        run: |
+          echo '--- FROZEN FOOTBALL PROJECTIONS ---'
+          python - <<'EOF'
+          import pandas as pd
+          x=pd.read_csv('data/qb_2026_w1_no_odds_projections.csv')
+          cols=[c for c in ['player','team','opponent','model_proj','qb_pred_attempts','qb_pred_ypa','qb_synthesis_correction','model_sd'] if c in x.columns]
+          print(x[cols].sort_values('model_proj',ascending=False).to_string(index=False))
+          EOF
+          echo '--- DOWNSTREAM MARKET COMPARISON ---'
+          cat data/qb_2026_w1_market_comparison.csv
+
+      - name: Upload QB Week-1 audit evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-2026-w1-no-odds-market-audit
+          path: |
+            data/qb_2026_w1_no_odds_projections.csv
+            data/qb_2026_w1_market_comparison.csv
+            data/qb_2026_w1_synthetic_a_priced.csv
+            data/qb_2026_w1_synthetic_b_priced.csv
+            data/qb_2026_w1_actual_market_priced.csv
+            data/qb_promoted_context_audit.csv
+            data/model_bayesian_diagnostics.csv
+            data/model_ml_diagnostics.csv
+            data/model_state_diagnostics.csv
+            data/model_rule_diagnostics.csv
+            data/model_ensemble_diagnostics.csv
+            data/player_identity_validation.csv
+          if-no-files-found: error
+          retention-days: 30
