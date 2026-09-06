@@ -1,0 +1,37 @@
+name: QB-WR Residual Coupling
+on:
+  push:
+    branches: [audit-qb-wr-residual-coupling]
+    paths:
+      - 'scripts/backtest/evaluate_qb_wr_residual_coupling.py'
+      - 'docs/migrations/QB_WR_RESIDUAL_COUPLING_PLAN.md'
+      - '.github/workflows/audit-qb-wr-residual-coupling.yml'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - run: python -m py_compile scripts/backtest/evaluate_qb_wr_residual_coupling.py
+      - env: {GH_TOKEN: '${{ github.token }}'}
+        run: |
+          mkdir -p evidence/m89 evidence/wr_r1
+          gh run download 33331073376 --repo "${GITHUB_REPOSITORY}" --name m89-qb-data-integrity-casebook-synthesis --dir evidence/m89
+          gh run download 34058453941 --repo "${GITHUB_REPOSITORY}" --name wr-r1-multiseason-2020-2025 --dir evidence/wr_r1
+      - run: python scripts/backtest/evaluate_qb_wr_residual_coupling.py --m89-root evidence/m89 --wr-r1-root evidence/wr_r1 --out-dir data/backtests/qb_wr_residual_coupling
+      - run: |
+          cat data/backtests/qb_wr_residual_coupling/qb_wr_residual_coupling_result.json
+          cat data/backtests/qb_wr_residual_coupling/qb_wr_residual_coupling_metrics.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qb-wr-residual-coupling
+          path: |
+            data/backtests/qb_wr_residual_coupling/*
+            docs/migrations/QB_WR_RESIDUAL_COUPLING_PLAN.md
