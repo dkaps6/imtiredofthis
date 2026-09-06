@@ -8,6 +8,7 @@ on:
     paths:
       - ".github/workflows/backtest-wr-r1-multiseason-2020-2025.yml"
       - "scripts/backtest/evaluate_wr_r1_multiseason_replication.py"
+      - "scripts/backtest/run_wr_r1_historical_player_logs.py"
       - "docs/migrations/WR_R1_MULTISEASON_2020_2025_PLAN.md"
 
 jobs:
@@ -43,9 +44,11 @@ jobs:
           pip install -r m38_parent/requirements.txt
           pip install nflreadpy pytest pyyaml scikit-learn joblib
 
-      - name: Compile frozen WR-R1 evaluator
+      - name: Compile frozen WR-R1 evaluator and mechanical player-log wrapper
         working-directory: research
-        run: python -m py_compile scripts/backtest/evaluate_wr_r1_multiseason_replication.py
+        run: |
+          python -m py_compile scripts/backtest/evaluate_wr_r1_multiseason_replication.py
+          python -m py_compile scripts/backtest/run_wr_r1_historical_player_logs.py
 
       - name: Build leakage-safe inputs and run exact M37/M38 across 2020-2025
         shell: bash
@@ -75,7 +78,7 @@ jobs:
               --season "${SEASON}" --prior-season "${PRIOR}" --weeks "${WEEKS}" \
               --data-dir "${I}" --report "${I}/historical_input_validation.csv"
 
-            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/historical_player_logs.py \
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent:${GITHUB_WORKSPACE}/research" python research/scripts/backtest/run_wr_r1_historical_player_logs.py \
               --seasons "${PRIOR},${SEASON}" \
               --schedule "${I}/schedule_history.csv" \
               --out "${I}/player_game_logs_history.csv"
