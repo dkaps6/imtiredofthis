@@ -1,0 +1,118 @@
+name: WR-ND1 Post-M38 Residual Decomposition
+
+on:
+  push:
+    branches: [research-wr-nd1-post-m38-decomposition]
+    paths:
+      - 'scripts/backtest/evaluate_wr_nd1_post_m38_decomposition.py'
+      - 'docs/migrations/WR_ND1_POST_M38_RESIDUAL_DECOMPOSITION_PLAN.md'
+      - '.github/workflows/backtest-wr-nd1-post-m38-decomposition.yml'
+  workflow_dispatch:
+    inputs:
+      weeks:
+        description: "Evaluation weeks"
+        required: false
+        default: "1-18"
+      iterations:
+        description: "Canonical MC reference iterations"
+        required: false
+        default: "2000"
+
+permissions:
+  contents: read
+
+jobs:
+  wr_nd1:
+    name: WR-ND1 frozen diagnostic
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+
+      - name: Compile frozen diagnostic
+        run: |
+          python -m py_compile scripts/backtest/evaluate_wr_nd1_post_m38_decomposition.py
+
+      - name: Build leakage-safe historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --out-dir data/backtests
+          python scripts/backtest/enrich_historical_defense.py --team-weekly data/backtests/team_weekly_history.csv --seasons 2024,2025 --audit data/backtests/historical_defense_enrichment_audit.csv --observations data/backtests/historical_defense_observations.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --data-dir data/backtests --report data/backtests/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs.py --seasons 2024,2025 --schedule data/backtests/schedule_history.csv --out data/backtests/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2024,2025 --out data/backtests/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/backtests/schedule_history.csv --out data/backtests/weather_history.csv
+
+      - name: Run WR-ND1 exact post-M38 Shapley decomposition
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/evaluate_wr_nd1_post_m38_decomposition.py \
+            --season 2025 \
+            --prior-season 2024 \
+            --weeks "${{ inputs.weeks || '1-18' }}" \
+            --iterations "${{ inputs.iterations || '2000' }}" \
+            --out-dir data/backtests/wr_nd1_post_m38
+
+      - name: Audit frozen output contract
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+
+          root=Path('data/backtests/wr_nd1_post_m38')
+          required=[
+              'wr_nd1_player_factors.csv',
+              'wr_nd1_stage_metrics.csv',
+              'wr_nd1_shapley_summary.csv',
+              'wr_nd1_slice_shapley.csv',
+              'wr_nd1_summary.json',
+          ]
+          missing=[x for x in required if not (root/x).exists() or not (root/x).stat().st_size]
+          if missing: raise SystemExit(f'FATAL missing WR-ND1 outputs: {missing}')
+          s=json.loads((root/'wr_nd1_summary.json').read_text())
+          if s.get('sportsbook_inputs_used') is not False: raise SystemExit('FATAL sportsbook leakage flag')
+          if s.get('model_fitting_used') is not False: raise SystemExit('FATAL model-fitting flag')
+          if s.get('production_changed') is not False: raise SystemExit('FATAL production-change flag')
+          if s.get('m38_multipliers') != [1.4,1.14,0.91,0.78]: raise SystemExit('FATAL M38 multiplier drift')
+          if float(s.get('m38_max_wr_share_mass_drift',999)) > 1e-12: raise SystemExit('FATAL M38 WR-mass drift')
+          sh=pd.read_csv(root/'wr_nd1_shapley_summary.csv')
+          for outcome in ['targets','receptions','rec_yards']:
+              q=sh.loc[sh.outcome.eq(outcome)]
+              if q.empty: raise SystemExit(f'FATAL missing Shapley outcome {outcome}')
+              recovery=float(q.total_mae_recovery.iloc[0]); phi=float(q.shapley_mae_recovery.sum())
+              if abs(recovery-phi)>1e-8: raise SystemExit(f'FATAL Shapley identity {outcome}: {phi} vs {recovery}')
+          print(json.dumps(s,indent=2))
+          PY
+
+      - name: Show WR-ND1 results
+        if: always()
+        run: |
+          echo '=== stage metrics ==='
+          cat data/backtests/wr_nd1_post_m38/wr_nd1_stage_metrics.csv 2>/dev/null || true
+          echo '=== overall Shapley ==='
+          cat data/backtests/wr_nd1_post_m38/wr_nd1_shapley_summary.csv 2>/dev/null || true
+          echo '=== summary ==='
+          cat data/backtests/wr_nd1_post_m38/wr_nd1_summary.json 2>/dev/null || true
+
+      - name: Upload WR-ND1 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-nd1-post-m38-decomposition
+          path: |
+            data/backtests/historical_input_validation.csv
+            data/backtests/wr_nd1_post_m38/*
+          if-no-files-found: warn
+          retention-days: 30
