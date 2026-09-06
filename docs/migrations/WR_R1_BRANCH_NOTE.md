@@ -1,0 +1,1 @@
+WR-R1 implementation branch marker. Scientific plan is frozen in `WR_R1_MULTISEASON_2020_2025_PLAN.md` at parent commit `e789c9218ce3eb154dbc83283e7261c9f9966cef`.
