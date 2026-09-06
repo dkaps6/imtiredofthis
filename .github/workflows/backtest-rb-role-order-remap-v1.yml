@@ -1,0 +1,73 @@
+name: RB Role-Order Remap V1
+
+on:
+  push:
+    branches:
+      - research-rb-role-order-remap-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout frozen research branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile frozen evaluator
+        run: python -m py_compile scripts/backtest/evaluate_rb_role_order_remap_v1.py
+
+      - name: Download exact canonical STACK1 and STACK2 evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/stack1 evidence/stack2
+          gh run download 33535308110 \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name rb-stack1-production-equivalent-baseline \
+            --dir evidence/stack1
+          gh run download 33538770934 \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name rb-stack2-enriched-allocation-integration \
+            --dir evidence/stack2
+          test -s evidence/stack1/results/stack1_2025_rb_trace.csv
+          test -s evidence/stack2/stack2_2025_casebook.csv
+          test -s evidence/stack2/stack2_coverage.csv
+
+      - name: Run frozen no-fit role-order remap evaluation
+        run: |
+          python scripts/backtest/evaluate_rb_role_order_remap_v1.py \
+            --stack1-root evidence/stack1 \
+            --stack2-root evidence/stack2 \
+            --out-dir data/backtests/rb_role_order_remap_v1
+
+      - name: Show result
+        if: always()
+        run: |
+          cat data/backtests/rb_role_order_remap_v1/rb_role_order_remap_v1_result.json 2>/dev/null || true
+          echo '--- metrics ---'
+          cat data/backtests/rb_role_order_remap_v1/rb_role_order_remap_v1_metrics.csv 2>/dev/null || true
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-role-order-remap-v1
+          path: |
+            data/backtests/rb_role_order_remap_v1/*
+            docs/migrations/RB_ROLE_ORDER_REMAP_V1_PLAN.md
+          if-no-files-found: warn
