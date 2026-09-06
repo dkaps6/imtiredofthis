@@ -1,0 +1,46 @@
+name: QB Individual Mechanism Stability
+
+on:
+  push:
+    branches:
+      - audit-qb-individual-mechanism-stability
+    paths:
+      - 'scripts/backtest/evaluate_qb_individual_mechanism_stability.py'
+      - 'docs/migrations/QB_INDIVIDUAL_MECHANISM_STABILITY_PLAN.md'
+      - '.github/workflows/audit-qb-individual-mechanism-stability.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - run: python -m py_compile scripts/backtest/evaluate_qb_individual_mechanism_stability.py
+      - name: Download frozen M89 evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/m89
+          gh run download 33331073376 --repo "${GITHUB_REPOSITORY}" --name m89-qb-data-integrity-casebook-synthesis --dir evidence/m89
+      - name: Evaluate frozen QB stability audit
+        run: |
+          python scripts/backtest/evaluate_qb_individual_mechanism_stability.py \
+            --m89-root evidence/m89 \
+            --out-dir data/backtests/qb_individual_mechanism_stability
+      - run: cat data/backtests/qb_individual_mechanism_stability/qb_individual_mechanism_stability_result.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qb-individual-mechanism-stability
+          path: |
+            data/backtests/qb_individual_mechanism_stability/*
+            docs/migrations/QB_INDIVIDUAL_MECHANISM_STABILITY_PLAN.md
