@@ -28,8 +28,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Compile frozen evaluator
-        run: python -m py_compile scripts/backtest/evaluate_rb_role_order_remap_v1.py
+      - name: Compile frozen evaluator and mechanical overlap repair
+        run: |
+          python -m py_compile scripts/backtest/evaluate_rb_role_order_remap_v1.py
+          python -m py_compile scripts/backtest/run_rb_role_order_remap_v1_overlap_repair.py
 
       - name: Download exact canonical STACK1 and STACK2 evidence
         env:
@@ -50,7 +52,7 @@ jobs:
 
       - name: Run frozen no-fit role-order remap evaluation
         run: |
-          python scripts/backtest/evaluate_rb_role_order_remap_v1.py \
+          python scripts/backtest/run_rb_role_order_remap_v1_overlap_repair.py \
             --stack1-root evidence/stack1 \
             --stack2-root evidence/stack2 \
             --out-dir data/backtests/rb_role_order_remap_v1
