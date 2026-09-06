@@ -25,7 +25,7 @@ jobs:
           mkdir -p evidence/stack1 evidence/stack2
           gh run download 33535308110 --repo "${GITHUB_REPOSITORY}" --name rb-stack1-production-equivalent-baseline --dir evidence/stack1
           gh run download 33538770934 --repo "${GITHUB_REPOSITORY}" --name rb-stack2-enriched-allocation-integration --dir evidence/stack2
-      - run: python scripts/backtest/evaluate_rb_role_order_remap_v2.py --stack1-root evidence/stack1 --stack2-root evidence/stack2 --out-dir data/backtests/rb_role_order_remap_v2
+      - run: PYTHONPATH="${PWD}" python scripts/backtest/evaluate_rb_role_order_remap_v2.py --stack1-root evidence/stack1 --stack2-root evidence/stack2 --out-dir data/backtests/rb_role_order_remap_v2
       - run: cat data/backtests/rb_role_order_remap_v2/rb_role_order_remap_v2_result.json
       - uses: actions/upload-artifact@v4
         with:
