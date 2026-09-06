@@ -1,0 +1,187 @@
+name: RB 2026 W1 Current Role Carry Authority Audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - audit-rb-2026-w1-current-role-carry-authority
+    paths:
+      - ".github/workflows/rb-2026-w1-current-role-carry-authority-audit.yml"
+      - "scripts/research/rb_2026_w1_current_role_carry_audit.py"
+      - "docs/migrations/RB_2026_W1_CURRENT_ROLE_CARRY_AUTHORITY_AUDIT_PLAN.md"
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  SEASON: "2026"
+  PRIOR_SEASON: "2025"
+  SLATE_DATE: ""
+  FETCH_LIVE_ODDS: "false"
+
+jobs:
+  rb_role_audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout isolated RB audit branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml
+
+      - name: Compile frozen no-fit audit
+        run: python -m py_compile scripts/research/rb_2026_w1_current_role_carry_audit.py
+
+      - name: Validate frozen production parent semantics
+        run: |
+          export PYTHONPATH="${PWD}"
+          python - <<'EOF'
+          from scripts.config import SEASON, PRIOR_SEASON
+          assert SEASON == 2026 and PRIOR_SEASON == 2025
+          print('RB audit production semantics season=2026 prior=2025')
+          EOF
+
+      - name: Build current Ourlads roles
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/providers/ourlads_depth.py --season 2026
+          test -s data/roles_ourlads.csv
+
+      - name: Build authoritative Week-1 schedule
+        env:
+          TEAM_WEEK_MAP_CSV: data/team_week_map.csv
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/utils/build_team_week_map_v2.py --season 2026 --out data/team_week_map.csv
+          test -s data/team_week_map.csv
+          python - <<'EOF'
+          import pandas as pd
+          from scripts.runtime_context import resolve_week
+          x=pd.read_csv('data/team_week_map.csv')
+          w=x.loc[(pd.to_numeric(x['season'],errors='coerce')==2026)&(pd.to_numeric(x['week'],errors='coerce')==1)]
+          if w['team'].nunique()!=32: raise SystemExit(f'FATAL: Week1 schedule teams={w["team"].nunique()}')
+          resolved=resolve_week(season=2026)
+          if resolved != 1: raise SystemExit(f'FATAL: resolved week={resolved}')
+          print('Week1 schedule/runtime OK teams=32')
+          EOF
+
+      - name: Build TeamForm with explicit preseason priors
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_sharpfootball_v2.py --season 2026 --dump-html
+          python scripts/team_form_prior_bridge.py --season 2026 --prior-season 2025
+          python scripts/run_team_form_context.py --season 2026 --box-backfill-prev
+          test -s data/team_form.csv
+
+      - name: Build promoted QB context required by canonical team context
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_qb_promoted_context.py --season 2026 --prior-season 2025
+          test -s data/qb_promoted_team_context.csv
+
+      - name: Build weather and injuries
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/build/build_weather_week_v2.py --season 2026 --date ""
+          python scripts/build/build_injuries_weekly.py data/injuries.csv --season 2026
+          test -s data/weather_week.csv
+          test -s data/injuries.csv
+
+      - name: Build coverage context
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_coverage_v2.py --season 2026
+          for f in data/cb_coverage_team.csv data/cb_coverage_player.csv data/wr_cb_exposure.csv; do test -s "$f"; done
+
+      - name: Build optional current-season PBP enrichment
+        continue-on-error: true
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/build/pbp_features.py --season 2026 || true
+
+      - name: Build PlayerForm and identities
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_player_form_v2_loader.py --season 2026 --prior-season 2025 --date ""
+          python scripts/enrich_player_scoring_v2.py --season 2026 --prior-season 2025 --date ""
+          for f in data/player_game_logs.csv data/player_form.csv data/player_form_consensus.csv data/player_identity_validation.csv; do test -s "$f"; done
+
+      - name: Materialize canonical model context without odds
+        env:
+          FETCH_LIVE_ODDS: "false"
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_context_bridge.py
+          test -s data/team_context_v3.csv
+          test -s data/model_context_bridge.csv
+
+      - name: Build Bayesian ML State Rules and ensemble components
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_bayesian_bridge.py
+          python scripts/run_model_ml_bridge.py
+          python scripts/run_model_state_bridge.py
+          python scripts/run_model_rules_bridge.py
+          python scripts/run_model_ensemble_bridge.py
+          for f in data/model_bayesian_diagnostics.csv data/model_ml_diagnostics.csv data/model_state_diagnostics.csv data/model_rule_diagnostics.csv data/model_ensemble_diagnostics.csv; do test -s "$f"; done
+
+      - name: Build promoted RB P3 Week-1 football-only context
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_rb_week1_no_odds.py --season 2026 --week 1 --iterations 25000 --out data/rb_rush_synthesis_context.csv
+          test -s data/rb_rush_synthesis_context.csv
+          python - <<'EOF'
+          import pandas as pd
+          x=pd.read_csv('data/rb_rush_synthesis_context.csv')
+          if x['team'].nunique()!=32: raise SystemExit('FATAL: P3 does not cover 32 teams')
+          if not pd.to_numeric(x['sportsbook_inputs_used'],errors='coerce').eq(0).all(): raise SystemExit('FATAL: sportsbook leakage flag')
+          if not x['rb_synthesis_version'].astype(str).eq('RB_P3_SYNTHESIS_V1').all(): raise SystemExit('FATAL: RB version drift')
+          if not x['rb_synthesis_route'].astype(str).eq('WEEK1_STACK_OVERRIDE').all(): raise SystemExit('FATAL: RB route drift')
+          print(f'P3 context OK rows={len(x)} teams={x.team.nunique()}')
+          EOF
+
+      - name: Run frozen current-role carry-authority audit
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/research/rb_2026_w1_current_role_carry_audit.py --season 2026 --week 1
+          test -s data/rb_2026_w1_current_role_carry_audit.csv
+          test -s data/rb_2026_w1_current_role_team_summary.csv
+          test -s data/rb_2026_w1_current_role_audit_summary.json
+
+      - name: Show RB audit result
+        run: |
+          echo '--- AUDIT SUMMARY ---'
+          cat data/rb_2026_w1_current_role_audit_summary.json
+          echo '--- TEAM SUMMARY ---'
+          cat data/rb_2026_w1_current_role_team_summary.csv
+
+      - name: Upload RB current-role audit evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-2026-w1-current-role-carry-authority-audit
+          path: |
+            data/rb_2026_w1_current_role_carry_audit.csv
+            data/rb_2026_w1_current_role_team_summary.csv
+            data/rb_2026_w1_current_role_audit_summary.json
+            data/rb_rush_synthesis_context.csv
+            data/roles_ourlads.csv
+            data/player_form.csv
+            data/player_identity_validation.csv
+            data/model_bayesian_diagnostics.csv
+            data/model_ml_diagnostics.csv
+            data/model_state_diagnostics.csv
+            data/model_rule_diagnostics.csv
+            data/model_ensemble_diagnostics.csv
+          if-no-files-found: error
+          retention-days: 30
