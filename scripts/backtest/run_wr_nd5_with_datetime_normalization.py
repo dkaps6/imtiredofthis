@@ -14,6 +14,7 @@ import pandas as pd
 
 from scripts.backtest import evaluate_wr_nd5_snap_depth_entitlement as nd5
 
+# Mechanical rerun lineage: no scientific protocol changes below.
 
 def _attach_depth_signals(casebook: pd.DataFrame, depth: pd.DataFrame, dates: pd.DataFrame) -> pd.DataFrame:
     x = casebook.merge(dates, on=["season", "week", "team"], how="left", validate="many_to_one")
