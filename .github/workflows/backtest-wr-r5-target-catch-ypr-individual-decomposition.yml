@@ -1,0 +1,49 @@
+name: WR-R5 Target Catch YPR Individual Decomposition
+
+on:
+  push:
+    branches:
+      - research-wr-r5-target-catch-ypr-individual-decomposition
+    paths:
+      - 'scripts/backtest/evaluate_wr_r5_target_catch_ypr_individual_decomposition.py'
+      - 'docs/migrations/WR_R5_TARGET_CATCH_YPR_INDIVIDUAL_DECOMPOSITION_PLAN.md'
+      - '.github/workflows/backtest-wr-r5-target-catch-ypr-individual-decomposition.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - run: python -m py_compile scripts/backtest/evaluate_wr_r5_target_catch_ypr_individual_decomposition.py
+      - name: Download frozen evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/nd5 evidence/wr_r1
+          gh run download 34055534002 --repo "${GITHUB_REPOSITORY}" --name wr-nd5-snap-depth-entitlement-datetime-fix --dir evidence/nd5
+          gh run download 34058453941 --repo "${GITHUB_REPOSITORY}" --name wr-r1-multiseason-2020-2025 --dir evidence/wr_r1
+      - name: Evaluate frozen WR-R5 decomposition
+        run: |
+          python scripts/backtest/evaluate_wr_r5_target_catch_ypr_individual_decomposition.py \
+            --nd5-root evidence/nd5 \
+            --wr-r1-root evidence/wr_r1 \
+            --out-dir data/backtests/wr_r5_target_catch_ypr_individual_decomposition
+      - run: |
+          cat data/backtests/wr_r5_target_catch_ypr_individual_decomposition/wr_r5_result.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wr-r5-target-catch-ypr-individual-decomposition
+          path: |
+            data/backtests/wr_r5_target_catch_ypr_individual_decomposition/*
+            docs/migrations/WR_R5_TARGET_CATCH_YPR_INDIVIDUAL_DECOMPOSITION_PLAN.md
