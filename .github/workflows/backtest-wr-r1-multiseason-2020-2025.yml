@@ -1,0 +1,141 @@
+name: WR-R1 Multi-Season 2020-2025 Replication
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-wr-nd6-player-level-explosive-ceiling
+    paths:
+      - ".github/workflows/backtest-wr-r1-multiseason-2020-2025.yml"
+      - "scripts/backtest/evaluate_wr_r1_multiseason_replication.py"
+      - "docs/migrations/WR_R1_MULTISEASON_2020_2025_PLAN.md"
+
+jobs:
+  replicate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout research branch
+        uses: actions/checkout@v4
+        with:
+          path: research
+
+      - name: Checkout exact M37 comparison parent
+        uses: actions/checkout@v4
+        with:
+          ref: ba83fd05412a36309822cac6aa9cc5003388b073
+          path: m37_parent
+
+      - name: Checkout exact M38 promoted parent
+        uses: actions/checkout@v4
+        with:
+          ref: b98518d97b3038f471aee9ae3201009b2c70bb29
+          path: m38_parent
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r m38_parent/requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+
+      - name: Compile frozen WR-R1 evaluator
+        working-directory: research
+        run: python -m py_compile scripts/backtest/evaluate_wr_r1_multiseason_replication.py
+
+      - name: Build leakage-safe inputs and run exact M37/M38 across 2020-2025
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="${GITHUB_WORKSPACE}/research/data/backtests/wr_r1_multiseason"
+          mkdir -p "${ROOT}"
+
+          for SEASON in 2020 2021 2022 2023 2024 2025; do
+            PRIOR=$((SEASON-1))
+            if [ "${SEASON}" = "2020" ]; then WEEKS="1-17"; else WEEKS="1-18"; fi
+            D="${ROOT}/${SEASON}"
+            I="${D}/inputs"
+            mkdir -p "${I}"
+            echo "=== WR-R1 season=${SEASON} prior=${PRIOR} weeks=${WEEKS} ==="
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/build_historical_inputs.py \
+              --season "${SEASON}" --prior-season "${PRIOR}" --weeks "${WEEKS}" --out-dir "${I}"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/enrich_historical_defense.py \
+              --team-weekly "${I}/team_weekly_history.csv" \
+              --seasons "${PRIOR},${SEASON}" \
+              --audit "${I}/historical_defense_enrichment_audit.csv" \
+              --observations "${I}/historical_defense_observations.csv"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/validate_historical_inputs.py \
+              --season "${SEASON}" --prior-season "${PRIOR}" --weeks "${WEEKS}" \
+              --data-dir "${I}" --report "${I}/historical_input_validation.csv"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/historical_player_logs.py \
+              --seasons "${PRIOR},${SEASON}" \
+              --schedule "${I}/schedule_history.csv" \
+              --out "${I}/player_game_logs_history.csv"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/build_historical_injuries.py \
+              --seasons "${PRIOR},${SEASON}" \
+              --out "${I}/injuries_history.csv"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/build_historical_weather.py \
+              --schedule "${I}/schedule_history.csv" \
+              --out "${I}/weather_history.csv"
+
+            rm -f "${D}/m37.csv" "${D}/m38.csv"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m37_parent" python m37_parent/scripts/backtest/walk_forward.py \
+              --season "${SEASON}" --prior-season "${PRIOR}" --weeks "${WEEKS}" \
+              --player-logs "${I}/player_game_logs_history.csv" \
+              --team-weekly "${I}/team_weekly_history.csv" \
+              --schedule "${I}/schedule_history.csv" \
+              --universe-dir "${I}/pregame_universe" \
+              --injuries "${I}/injuries_history.csv" \
+              --weather "${I}/weather_history.csv" \
+              --out "${D}/m37.csv" --iterations 2000
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/walk_forward.py \
+              --season "${SEASON}" --prior-season "${PRIOR}" --weeks "${WEEKS}" \
+              --player-logs "${I}/player_game_logs_history.csv" \
+              --team-weekly "${I}/team_weekly_history.csv" \
+              --schedule "${I}/schedule_history.csv" \
+              --universe-dir "${I}/pregame_universe" \
+              --injuries "${I}/injuries_history.csv" \
+              --weather "${I}/weather_history.csv" \
+              --out "${D}/m38.csv" --iterations 2000
+          done
+
+      - name: Evaluate frozen WR-R1 replication
+        working-directory: research
+        run: |
+          rm -rf data/backtests/wr_r1_multiseason/result
+          PYTHONPATH="${GITHUB_WORKSPACE}/research" python scripts/backtest/evaluate_wr_r1_multiseason_replication.py \
+            --root data/backtests/wr_r1_multiseason \
+            --out-dir data/backtests/wr_r1_multiseason/result
+
+      - name: Show WR-R1 result
+        if: always()
+        working-directory: research
+        run: |
+          cat data/backtests/wr_r1_multiseason/result/wr_r1_result.json 2>/dev/null || true
+          echo "--- receiving-yard deltas ---"
+          cat data/backtests/wr_r1_multiseason/result/wr_r1_rec_yards_deltas.csv 2>/dev/null || true
+          echo "--- metric summary ---"
+          cat data/backtests/wr_r1_multiseason/result/wr_r1_metric_summary.csv 2>/dev/null || true
+
+      - name: Upload WR-R1 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-r1-multiseason-2020-2025
+          path: |
+            research/data/backtests/wr_r1_multiseason/result/*
+            research/data/backtests/wr_r1_multiseason/*/inputs/historical_input_validation.csv
+          if-no-files-found: warn
+          retention-days: 30
