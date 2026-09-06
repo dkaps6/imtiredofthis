@@ -1,0 +1,67 @@
+name: WR-R2 Player Tracking Residuals
+
+on:
+  push:
+    branches:
+      - research-wr-r2-player-tracking-residuals
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout frozen WR-R2 branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile frozen evaluator
+        run: python -m py_compile scripts/backtest/evaluate_wr_r2_player_tracking_residuals.py
+
+      - name: Download exact WR-R1 multi-season evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/wr_r1
+          gh run download 34058453941 \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name wr-r1-multiseason-2020-2025 \
+            --dir evidence/wr_r1
+          test -s evidence/wr_r1/result/wr_r1_paired_wr_casebook.csv
+
+      - name: Evaluate frozen player-level NGS tracking signals
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/backtest/evaluate_wr_r2_player_tracking_residuals.py \
+            --wr-r1-root evidence/wr_r1 \
+            --out-dir data/backtests/wr_r2_player_tracking_residuals
+
+      - name: Show result
+        if: always()
+        run: |
+          cat data/backtests/wr_r2_player_tracking_residuals/wr_r2_result.json 2>/dev/null || true
+          echo '--- signal metrics ---'
+          cat data/backtests/wr_r2_player_tracking_residuals/wr_r2_signal_metrics.csv 2>/dev/null || true
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-r2-player-tracking-residuals
+          path: |
+            data/backtests/wr_r2_player_tracking_residuals/*
+            docs/migrations/WR_R2_PLAYER_TRACKING_RESIDUALS_PLAN.md
+          if-no-files-found: warn
