@@ -14,6 +14,7 @@ No sportsbook data, no model fitting, and no production change.
 
 - Parent/result commit: `634bb3abd6fee55269a4845c3d6b9d8491ea48e9`
 - STACK1 production-equivalent source run: `33535308110`
+- STACK2 timestamp-safe metadata source run: `33538770934` (rookie flag only; no candidate projection value comes from STACK2)
 - exact 2025 canonical player rows: `1,393`.
 
 ## Frozen history construction
