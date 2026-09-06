@@ -1,0 +1,51 @@
+name: QB-PD2 Player Error Persistence
+
+on:
+  push:
+    branches:
+      - research-qb-pd2-player-error-persistence
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Compile frozen evaluator
+        run: python -m py_compile scripts/backtest/evaluate_qb_pd2_player_error_persistence.py
+      - name: Download exact M89 validation evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/m89
+          gh run download 33331073376 --repo "${GITHUB_REPOSITORY}" --name m89-qb-data-integrity-casebook-synthesis --dir evidence/m89
+          test -s evidence/m89/synthesis/m89_2024_2025_synthesis_trace.csv
+      - name: Run frozen walk-forward player-error persistence diagnostic
+        run: |
+          python scripts/backtest/evaluate_qb_pd2_player_error_persistence.py --m89-root evidence/m89 --out-dir data/backtests/qb_pd2_player_error_persistence
+      - name: Show result
+        if: always()
+        run: |
+          cat data/backtests/qb_pd2_player_error_persistence/qb_pd2_result.json 2>/dev/null || true
+          cat data/backtests/qb_pd2_player_error_persistence/qb_pd2_metrics.csv 2>/dev/null || true
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-pd2-player-error-persistence
+          path: |
+            data/backtests/qb_pd2_player_error_persistence/*
+            docs/migrations/QB_PD2_PLAYER_ERROR_PERSISTENCE_PLAN.md
+          if-no-files-found: warn
