@@ -1,0 +1,35 @@
+name: QB Player Bias Persistence
+on:
+  push:
+    branches: [audit-qb-player-bias-persistence]
+    paths:
+      - 'scripts/backtest/evaluate_qb_player_bias_persistence.py'
+      - 'docs/migrations/QB_PLAYER_BIAS_PERSISTENCE_PLAN.md'
+      - '.github/workflows/audit-qb-player-bias-persistence.yml'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - run: python -m py_compile scripts/backtest/evaluate_qb_player_bias_persistence.py
+      - env: {GH_TOKEN: '${{ github.token }}'}
+        run: |
+          mkdir -p evidence/m89
+          gh run download 33331073376 --repo "${GITHUB_REPOSITORY}" --name m89-qb-data-integrity-casebook-synthesis --dir evidence/m89
+          test -s evidence/m89/synthesis/m89_2024_2025_synthesis_trace.csv
+      - run: python scripts/backtest/evaluate_qb_player_bias_persistence.py --m89-root evidence/m89 --out-dir data/backtests/qb_player_bias_persistence
+      - run: cat data/backtests/qb_player_bias_persistence/qb_player_bias_result.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qb-player-bias-persistence
+          path: |
+            data/backtests/qb_player_bias_persistence/*
+            docs/migrations/QB_PLAYER_BIAS_PERSISTENCE_PLAN.md
