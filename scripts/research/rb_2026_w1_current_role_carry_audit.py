@@ -131,8 +131,15 @@ def run(season: int, week: int, out_rows: Path, out_teams: Path, out_summary: Pa
     joined["depth_rank"] = pd.to_numeric(joined.get("depth_index"), errors="coerce")
     missing_depth = joined["depth_rank"].isna()
     joined.loc[missing_depth, "depth_rank"] = joined.loc[missing_depth, "ourlads_role"].map(_rank_number)
-    joined["model_role_rank"] = joined.get("model_role", pd.Series(np.nan, index=joined.index)).map(_rank_number)
-    joined["effective_role_rank"] = joined.get("effective_role", pd.Series(np.nan, index=joined.index)).map(_rank_number)
+    joined["depth_rank"] = pd.to_numeric(joined["depth_rank"], errors="coerce")
+    joined["model_role_rank"] = pd.to_numeric(
+        joined.get("model_role", pd.Series(np.nan, index=joined.index)).map(_rank_number),
+        errors="coerce",
+    )
+    joined["effective_role_rank"] = pd.to_numeric(
+        joined.get("effective_role", pd.Series(np.nan, index=joined.index)).map(_rank_number),
+        errors="coerce",
+    )
     joined["stack_att"] = pd.to_numeric(joined["stack_att"], errors="coerce")
     joined["stack_yards"] = pd.to_numeric(joined["stack_yards"], errors="coerce")
     joined["rb_synthesis_proj"] = pd.to_numeric(joined["rb_synthesis_proj"], errors="coerce")
@@ -143,14 +150,17 @@ def run(season: int, week: int, out_rows: Path, out_teams: Path, out_summary: Pa
         joined["stack_att"] / joined["team_rb_projected_carries"],
         np.nan,
     )
-    joined["projected_carry_rank"] = joined.groupby("team")["stack_att"].rank(method="first", ascending=False)
+    joined["projected_carry_rank"] = pd.to_numeric(
+        joined.groupby("team")["stack_att"].rank(method="first", ascending=False),
+        errors="coerce",
+    )
     joined["depth_vs_model_role_mismatch"] = (
         joined["depth_rank"].notna() & joined["model_role_rank"].notna() &
-        ~np.isclose(joined["depth_rank"], joined["model_role_rank"])
+        ~np.isclose(joined["depth_rank"].to_numpy(dtype=float), joined["model_role_rank"].to_numpy(dtype=float), equal_nan=True)
     ).astype(int)
     joined["depth_vs_projected_carry_rank_mismatch"] = (
         joined["depth_rank"].notna() & joined["projected_carry_rank"].notna() &
-        ~np.isclose(joined["depth_rank"], joined["projected_carry_rank"])
+        ~np.isclose(joined["depth_rank"].to_numpy(dtype=float), joined["projected_carry_rank"].to_numpy(dtype=float), equal_nan=True)
     ).astype(int)
     status = joined.get("ourlads_status", pd.Series("", index=joined.index)).fillna("").astype(str).str.lower()
     joined["inactive_positive_projection"] = (status.eq("inactive") & joined["stack_att"].gt(0)).astype(int)
