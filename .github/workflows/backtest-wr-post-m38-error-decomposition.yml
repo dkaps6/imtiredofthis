@@ -8,6 +8,7 @@ on:
     paths:
       - ".github/workflows/backtest-wr-post-m38-error-decomposition.yml"
       - "scripts/backtest/evaluate_wr_post_m38_error_decomposition.py"
+      - "scripts/backtest/run_wr_post_m38_with_actual_anomaly_filter.py"
       - "docs/migrations/WR_POST_M38_ERROR_DECOMPOSITION_PLAN.md"
 
 jobs:
@@ -41,6 +42,7 @@ jobs:
         working-directory: research
         run: |
           python -m py_compile scripts/backtest/evaluate_wr_post_m38_error_decomposition.py
+          python -m py_compile scripts/backtest/run_wr_post_m38_with_actual_anomaly_filter.py
 
       - name: Rebuild M38 historical inputs
         working-directory: m38_parent
@@ -92,7 +94,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/research
         run: |
           rm -rf data/backtests/wr_post_m38_error_decomposition
-          python scripts/backtest/evaluate_wr_post_m38_error_decomposition.py \
+          python scripts/backtest/run_wr_post_m38_with_actual_anomaly_filter.py \
             --predictions ../m38_parent/data/backtests/component_predictions.csv \
             --player-logs ../m38_parent/data/backtests/player_game_logs_history.csv \
             --out-dir data/backtests/wr_post_m38_error_decomposition
@@ -102,6 +104,8 @@ jobs:
         working-directory: research
         run: |
           cat data/backtests/wr_post_m38_error_decomposition/wr_post_m38_result.json 2>/dev/null || true
+          echo "--- Factorization anomaly audit ---"
+          cat data/backtests/wr_post_m38_error_decomposition/wr_post_m38_factorization_anomalies.csv 2>/dev/null || true
           echo "--- Shapley summary ---"
           cat data/backtests/wr_post_m38_error_decomposition/wr_post_m38_shapley.csv 2>/dev/null || true
 
