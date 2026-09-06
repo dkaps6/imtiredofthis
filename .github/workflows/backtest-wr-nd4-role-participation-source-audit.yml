@@ -8,6 +8,7 @@ on:
     paths:
       - ".github/workflows/backtest-wr-nd4-role-participation-source-audit.yml"
       - "scripts/backtest/audit_wr_nd4_role_participation_sources.py"
+      - "scripts/backtest/run_wr_nd4_role_participation_source_audit.py"
       - "docs/migrations/WR_ND4_ROLE_PARTICIPATION_SOURCE_AUDIT_PLAN.md"
 
 jobs:
@@ -41,6 +42,7 @@ jobs:
         working-directory: research
         run: |
           python -m py_compile scripts/backtest/audit_wr_nd4_role_participation_sources.py
+          python -m py_compile scripts/backtest/run_wr_nd4_role_participation_source_audit.py
 
       - name: Rebuild exact M38 historical inputs
         working-directory: m38_parent
@@ -92,7 +94,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/research
         run: |
           rm -rf data/backtests/wr_nd4_role_participation_source_audit
-          python scripts/backtest/audit_wr_nd4_role_participation_sources.py \
+          python scripts/backtest/run_wr_nd4_role_participation_source_audit.py \
             --predictions ../m38_parent/data/backtests/component_predictions.csv \
             --player-logs ../m38_parent/data/backtests/player_game_logs_history.csv \
             --schedule ../m38_parent/data/backtests/schedule_history.csv \
