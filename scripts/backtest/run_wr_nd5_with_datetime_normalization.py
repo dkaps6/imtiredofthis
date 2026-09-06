@@ -9,12 +9,23 @@ parent reconstruction, and all frozen gates are unchanged.
 """
 from __future__ import annotations
 
+import importlib.util
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
-from scripts.backtest import evaluate_wr_nd5_snap_depth_entitlement as nd5
+# Load the evaluator from this research checkout explicitly.  PYTHONPATH places
+# the exact M38 parent first so its model modules remain authoritative; importing
+# `scripts.backtest` normally would therefore resolve to the parent's package,
+# which does not contain the research-only ND5 evaluator.
+_EVALUATOR = Path(__file__).with_name("evaluate_wr_nd5_snap_depth_entitlement.py")
+_spec = importlib.util.spec_from_file_location("wr_nd5_frozen_evaluator", _EVALUATOR)
+if _spec is None or _spec.loader is None:
+    raise RuntimeError(f"unable to load frozen ND5 evaluator: {_EVALUATOR}")
+nd5 = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(nd5)
 
-# Mechanical rerun lineage: no scientific protocol changes below.
 
 def _attach_depth_signals(casebook: pd.DataFrame, depth: pd.DataFrame, dates: pd.DataFrame) -> pd.DataFrame:
     x = casebook.merge(dates, on=["season", "week", "team"], how="left", validate="many_to_one")
