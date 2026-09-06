@@ -1,1 +1,0 @@
-This file is intentionally temporary and will be removed after branch creation.
