@@ -45,17 +45,13 @@ jobs:
       - name: Compile audit harness
         run: python -m py_compile scripts/research/qb_2026_w1_market_audit.py
 
-      - name: Validate frozen production parent and runtime
+      - name: Validate frozen production parent
         run: |
           export PYTHONPATH="${PWD}"
           python - <<'EOF'
-          import os
           from scripts.config import SEASON, PRIOR_SEASON
-          from scripts.runtime_context import resolve_week
           assert SEASON == 2026 and PRIOR_SEASON == 2025
-          w=resolve_week(season=2026)
-          if w != 1: raise SystemExit(f'FATAL: QB audit requires Week 1, resolved {w}')
-          print('QB audit runtime season=2026 prior=2025 week=1')
+          print('QB audit runtime season=2026 prior=2025; week validated after schedule materialization')
           EOF
 
       - name: Build Ourlads roles
@@ -64,7 +60,7 @@ jobs:
           python scripts/providers/ourlads_depth.py --season 2026
           test -s data/roles_ourlads.csv
 
-      - name: Build authoritative Week-1 schedule
+      - name: Build authoritative Week-1 schedule and validate runtime week
         env:
           TEAM_WEEK_MAP_CSV: data/team_week_map.csv
         run: |
@@ -73,10 +69,13 @@ jobs:
           test -s data/team_week_map.csv
           python - <<'EOF'
           import pandas as pd
+          from scripts.runtime_context import resolve_week
           x=pd.read_csv('data/team_week_map.csv')
           w=x.loc[(pd.to_numeric(x['season'],errors='coerce')==2026)&(pd.to_numeric(x['week'],errors='coerce')==1)]
           if w['team'].nunique()!=32: raise SystemExit(f'FATAL: Week1 schedule teams={w["team"].nunique()}')
-          print('Week1 schedule OK teams=32')
+          resolved=resolve_week(season=2026)
+          if resolved != 1: raise SystemExit(f'FATAL: QB audit requires Week 1, resolved {resolved}')
+          print('Week1 schedule/runtime OK teams=32 week=1')
           EOF
 
       - name: Build TeamForm with explicit preseason priors
