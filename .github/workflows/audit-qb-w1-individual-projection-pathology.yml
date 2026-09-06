@@ -1,0 +1,72 @@
+name: QB W1 Individual Projection Pathology
+
+on:
+  push:
+    branches:
+      - audit-qb-w1-individual-projection-pathology
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout frozen audit branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile frozen evaluator
+        run: python -m py_compile scripts/backtest/evaluate_qb_w1_individual_projection_pathology.py
+
+      - name: Download exact Week-1 and M89 evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/w1 evidence/m89
+          gh run download 34059395746 \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name qb-2026-w1-no-odds-market-audit \
+            --dir evidence/w1
+          gh run download 33331073376 \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name m89-qb-data-integrity-casebook-synthesis \
+            --dir evidence/m89
+          test -s evidence/w1/qb_2026_w1_market_comparison.csv
+          test -s evidence/m89/synthesis/m89_2024_2025_synthesis_trace.csv
+
+      - name: Run frozen individual projection pathology audit
+        run: |
+          python scripts/backtest/evaluate_qb_w1_individual_projection_pathology.py \
+            --w1-root evidence/w1 \
+            --m89-root evidence/m89 \
+            --out-dir data/backtests/qb_w1_individual_projection_pathology
+
+      - name: Show result
+        if: always()
+        run: |
+          cat data/backtests/qb_w1_individual_projection_pathology/qb_w1_individual_projection_pathology_result.json 2>/dev/null || true
+          echo '--- highest pathology rows ---'
+          head -20 data/backtests/qb_w1_individual_projection_pathology/qb_2026_w1_individual_pathology.csv 2>/dev/null || true
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-w1-individual-projection-pathology
+          path: |
+            data/backtests/qb_w1_individual_projection_pathology/*
+            docs/migrations/QB_W1_INDIVIDUAL_PROJECTION_PATHOLOGY_PLAN.md
+          if-no-files-found: warn
