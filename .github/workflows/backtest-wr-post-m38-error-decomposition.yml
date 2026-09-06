@@ -2,6 +2,13 @@ name: WR Post-M38 Error Decomposition
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - research-wr-post-m38-error-decomposition
+    paths:
+      - ".github/workflows/backtest-wr-post-m38-error-decomposition.yml"
+      - "scripts/backtest/evaluate_wr_post_m38_error_decomposition.py"
+      - "docs/migrations/WR_POST_M38_ERROR_DECOMPOSITION_PLAN.md"
 
 jobs:
   decompose:
