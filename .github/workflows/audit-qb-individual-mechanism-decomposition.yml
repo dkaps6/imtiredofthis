@@ -1,0 +1,32 @@
+name: QB Individual Mechanism Decomposition
+on:
+  push:
+    branches: [audit-qb-individual-mechanism-decomposition]
+    paths:
+      - 'scripts/backtest/evaluate_qb_individual_mechanism_decomposition.py'
+      - 'docs/migrations/QB_INDIVIDUAL_MECHANISM_DECOMPOSITION_PLAN.md'
+      - '.github/workflows/audit-qb-individual-mechanism-decomposition.yml'
+permissions: {contents: read, actions: read}
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - run: python -m py_compile scripts/backtest/evaluate_qb_individual_mechanism_decomposition.py
+      - env: {GH_TOKEN: '${{ github.token }}'}
+        run: |
+          mkdir -p evidence/m89
+          gh run download 33331073376 --repo "${GITHUB_REPOSITORY}" --name m89-qb-data-integrity-casebook-synthesis --dir evidence/m89
+      - run: python scripts/backtest/evaluate_qb_individual_mechanism_decomposition.py --m89-root evidence/m89 --out-dir data/backtests/qb_individual_mechanism_decomposition
+      - run: cat data/backtests/qb_individual_mechanism_decomposition/qb_mechanism_result.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qb-individual-mechanism-decomposition
+          path: |
+            data/backtests/qb_individual_mechanism_decomposition/*
+            docs/migrations/QB_INDIVIDUAL_MECHANISM_DECOMPOSITION_PLAN.md
