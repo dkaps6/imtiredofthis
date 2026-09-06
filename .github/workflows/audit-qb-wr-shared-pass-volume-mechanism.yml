@@ -1,0 +1,50 @@
+name: QB-WR Shared Pass Volume Mechanism
+
+on:
+  push:
+    branches:
+      - audit-qb-wr-shared-pass-volume-mechanism
+    paths:
+      - 'scripts/backtest/evaluate_qb_wr_shared_pass_volume_mechanism.py'
+      - 'docs/migrations/QB_WR_SHARED_PASS_VOLUME_MECHANISM_PLAN.md'
+      - '.github/workflows/audit-qb-wr-shared-pass-volume-mechanism.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - run: python -m py_compile scripts/backtest/evaluate_qb_wr_shared_pass_volume_mechanism.py
+      - name: Download frozen evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/m89 evidence/nd5 evidence/wr_r1
+          gh run download 33331073376 --repo "${GITHUB_REPOSITORY}" --name m89-qb-data-integrity-casebook-synthesis --dir evidence/m89
+          gh run download 34055534002 --repo "${GITHUB_REPOSITORY}" --name wr-nd5-snap-depth-entitlement-datetime-fix --dir evidence/nd5
+          gh run download 34058453941 --repo "${GITHUB_REPOSITORY}" --name wr-r1-multiseason-2020-2025 --dir evidence/wr_r1
+      - name: Evaluate frozen shared-volume audit
+        run: |
+          python scripts/backtest/evaluate_qb_wr_shared_pass_volume_mechanism.py \
+            --m89-root evidence/m89 \
+            --nd5-root evidence/nd5 \
+            --wr-r1-root evidence/wr_r1 \
+            --out-dir data/backtests/qb_wr_shared_pass_volume_mechanism
+      - run: cat data/backtests/qb_wr_shared_pass_volume_mechanism/qb_wr_shared_pass_volume_result.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qb-wr-shared-pass-volume-mechanism
+          path: |
+            data/backtests/qb_wr_shared_pass_volume_mechanism/*
+            docs/migrations/QB_WR_SHARED_PASS_VOLUME_MECHANISM_PLAN.md
