@@ -1,0 +1,107 @@
+name: WR-ND2 YPT Mechanics Decomposition
+
+on:
+  push:
+    branches: [research-wr-nd2-ypt-mechanics]
+    paths:
+      - 'scripts/backtest/evaluate_wr_nd2_ypt_mechanics.py'
+      - 'docs/migrations/WR_ND2_YPT_MECHANICS_PLAN.md'
+      - '.github/workflows/backtest-wr-nd2-ypt-mechanics.yml'
+  workflow_dispatch:
+    inputs:
+      weeks:
+        description: "Evaluation weeks"
+        required: false
+        default: "1-18"
+      iterations:
+        description: "Canonical MC reference iterations"
+        required: false
+        default: "2000"
+
+permissions:
+  contents: read
+
+jobs:
+  wr_nd2:
+    name: WR-ND2 frozen diagnostic
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+
+      - name: Compile frozen diagnostic
+        run: |
+          python -m py_compile scripts/backtest/evaluate_wr_nd2_ypt_mechanics.py
+
+      - name: Build leakage-safe historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --out-dir data/backtests
+          python scripts/backtest/enrich_historical_defense.py --team-weekly data/backtests/team_weekly_history.csv --seasons 2024,2025 --audit data/backtests/historical_defense_enrichment_audit.csv --observations data/backtests/historical_defense_observations.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2025 --prior-season 2024 --weeks "${{ inputs.weeks || '1-18' }}" --data-dir data/backtests --report data/backtests/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs.py --seasons 2024,2025 --schedule data/backtests/schedule_history.csv --out data/backtests/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2024,2025 --out data/backtests/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/backtests/schedule_history.csv --out data/backtests/weather_history.csv
+
+      - name: Run WR-ND2 exact YPT mechanics decomposition
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/evaluate_wr_nd2_ypt_mechanics.py \
+            --season 2025 \
+            --prior-season 2024 \
+            --weeks "${{ inputs.weeks || '1-18' }}" \
+            --iterations "${{ inputs.iterations || '2000' }}" \
+            --out-dir data/backtests/wr_nd2_ypt_mechanics
+
+      - name: Audit frozen output contract
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          root=Path('data/backtests/wr_nd2_ypt_mechanics')
+          required=['wr_nd2_player_factors.csv','wr_nd2_shapley_summary.csv','wr_nd2_slice_shapley.csv','wr_nd2_efficiency_descriptives.csv','wr_nd2_factorization_anomalies.csv','wr_nd2_summary.json']
+          missing=[x for x in required if not (root/x).exists()]
+          if missing: raise SystemExit(f'FATAL missing WR-ND2 outputs: {missing}')
+          s=json.loads((root/'wr_nd2_summary.json').read_text())
+          if s.get('sportsbook_inputs_used') is not False or s.get('model_fitting_used') is not False or s.get('production_changed') is not False:
+              raise SystemExit('FATAL WR-ND2 contract flag')
+          if abs(float(s['identity']['base_mae'])-22.022544815892125)>1e-9: raise SystemExit('FATAL parent MAE drift')
+          if float(s['base_ypt_factorization_max_abs_drift'])>1e-10: raise SystemExit('FATAL YPT factorization drift')
+          sh=pd.read_csv(root/'wr_nd2_shapley_summary.csv')
+          if set(sh.component)!=set(['TEAM_TARGET_VOLUME','WR_TARGET_MASS','WITHIN_WR_ALLOCATION','CATCH_RATE','YARDS_PER_RECEPTION']): raise SystemExit('FATAL component drift')
+          if abs(float(sh.shapley_mae_recovery.sum())-float(sh.total_mae_recovery.iloc[0]))>1e-8: raise SystemExit('FATAL Shapley sum identity')
+          print(json.dumps(s,indent=2))
+          PY
+
+      - name: Show WR-ND2 results
+        if: always()
+        run: |
+          echo '=== overall Shapley ==='
+          cat data/backtests/wr_nd2_ypt_mechanics/wr_nd2_shapley_summary.csv 2>/dev/null || true
+          echo '=== efficiency descriptives ==='
+          cat data/backtests/wr_nd2_ypt_mechanics/wr_nd2_efficiency_descriptives.csv 2>/dev/null || true
+          echo '=== summary ==='
+          cat data/backtests/wr_nd2_ypt_mechanics/wr_nd2_summary.json 2>/dev/null || true
+
+      - name: Upload WR-ND2 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-nd2-ypt-mechanics
+          path: |
+            data/backtests/historical_input_validation.csv
+            data/backtests/wr_nd2_ypt_mechanics/*
+          if-no-files-found: warn
+          retention-days: 30
