@@ -1,0 +1,35 @@
+name: WR-R3 Player Bias Persistence
+on:
+  push:
+    branches: [research-wr-r3-player-bias-persistence]
+    paths:
+      - 'scripts/backtest/evaluate_wr_r3_player_bias_persistence.py'
+      - 'docs/migrations/WR_R3_PLAYER_BIAS_PERSISTENCE_PLAN.md'
+      - '.github/workflows/backtest-wr-r3-player-bias-persistence.yml'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - run: python -m py_compile scripts/backtest/evaluate_wr_r3_player_bias_persistence.py
+      - env: {GH_TOKEN: '${{ github.token }}'}
+        run: |
+          mkdir -p evidence/wr_r1
+          gh run download 34058453941 --repo "${GITHUB_REPOSITORY}" --name wr-r1-multiseason-2020-2025 --dir evidence/wr_r1
+          test -s evidence/wr_r1/result/wr_r1_paired_wr_casebook.csv
+      - run: python scripts/backtest/evaluate_wr_r3_player_bias_persistence.py --wr-r1-root evidence/wr_r1 --out-dir data/backtests/wr_r3_player_bias_persistence
+      - run: cat data/backtests/wr_r3_player_bias_persistence/wr_r3_result.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wr-r3-player-bias-persistence
+          path: |
+            data/backtests/wr_r3_player_bias_persistence/*
+            docs/migrations/WR_R3_PLAYER_BIAS_PERSISTENCE_PLAN.md
