@@ -5,6 +5,7 @@ on:
     branches: [research-wr-nd1-post-m38-decomposition]
     paths:
       - 'scripts/backtest/evaluate_wr_nd1_post_m38_decomposition.py'
+      - 'scripts/backtest/run_wr_nd1_with_actual_anomaly_filter.py'
       - 'docs/migrations/WR_ND1_POST_M38_RESIDUAL_DECOMPOSITION_PLAN.md'
       - '.github/workflows/backtest-wr-nd1-post-m38-decomposition.yml'
   workflow_dispatch:
@@ -41,6 +42,7 @@ jobs:
       - name: Compile frozen diagnostic
         run: |
           python -m py_compile scripts/backtest/evaluate_wr_nd1_post_m38_decomposition.py
+          python -m py_compile scripts/backtest/run_wr_nd1_with_actual_anomaly_filter.py
 
       - name: Build leakage-safe historical inputs
         env:
@@ -57,7 +59,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/backtest/evaluate_wr_nd1_post_m38_decomposition.py \
+          python scripts/backtest/run_wr_nd1_with_actual_anomaly_filter.py \
             --season 2025 \
             --prior-season 2024 \
             --weeks "${{ inputs.weeks || '1-18' }}" \
@@ -78,15 +80,20 @@ jobs:
               'wr_nd1_shapley_summary.csv',
               'wr_nd1_slice_shapley.csv',
               'wr_nd1_summary.json',
+              'wr_nd1_factorization_anomalies.csv',
           ]
-          missing=[x for x in required if not (root/x).exists() or not (root/x).stat().st_size]
+          missing=[x for x in required if not (root/x).exists()]
           if missing: raise SystemExit(f'FATAL missing WR-ND1 outputs: {missing}')
+          for x in required[:-1]:
+              if not (root/x).stat().st_size: raise SystemExit(f'FATAL empty WR-ND1 output: {x}')
           s=json.loads((root/'wr_nd1_summary.json').read_text())
           if s.get('sportsbook_inputs_used') is not False: raise SystemExit('FATAL sportsbook leakage flag')
           if s.get('model_fitting_used') is not False: raise SystemExit('FATAL model-fitting flag')
           if s.get('production_changed') is not False: raise SystemExit('FATAL production-change flag')
           if s.get('m38_multipliers') != [1.4,1.14,0.91,0.78]: raise SystemExit('FATAL M38 multiplier drift')
           if float(s.get('m38_max_wr_share_mass_drift',999)) > 1e-12: raise SystemExit('FATAL M38 WR-mass drift')
+          if 'factorization_anomalies_excluded_from_target_result_view' not in s:
+              raise SystemExit('FATAL missing factorization anomaly audit count')
           sh=pd.read_csv(root/'wr_nd1_shapley_summary.csv')
           for outcome in ['targets','receptions','rec_yards']:
               q=sh.loc[sh.outcome.eq(outcome)]
@@ -99,6 +106,8 @@ jobs:
       - name: Show WR-ND1 results
         if: always()
         run: |
+          echo '=== factorization anomalies ==='
+          cat data/backtests/wr_nd1_post_m38/wr_nd1_factorization_anomalies.csv 2>/dev/null || true
           echo '=== stage metrics ==='
           cat data/backtests/wr_nd1_post_m38/wr_nd1_stage_metrics.csv 2>/dev/null || true
           echo '=== overall Shapley ==='
