@@ -1,0 +1,117 @@
+name: QB 2026 Week1 No-Odds Audit
+
+on:
+  push:
+    branches: [audit-qb-2026-week1-no-odds]
+    paths:
+      - "scripts/run_qb_week1_no_odds.py"
+      - ".github/workflows/audit-qb-2026-week1-no-odds.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  project:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml
+
+      - name: Compile no-odds runner
+        run: python -m py_compile scripts/run_qb_week1_no_odds.py
+
+      - name: Build Ourlads roles and Week-1 schedule
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/providers/ourlads_depth.py --season 2026
+          python scripts/utils/build_team_week_map_v2.py --season 2026 --out data/team_week_map.csv
+          test -s data/roles_ourlads.csv
+          test -s data/team_week_map.csv
+
+      - name: Build TeamForm and promoted QB context
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_sharpfootball_v2.py --season 2026 --dump-html
+          python scripts/team_form_prior_bridge.py --season 2026 --prior-season 2025
+          python scripts/run_team_form_context.py --season 2026 --box-backfill-prev
+          python scripts/run_qb_promoted_context.py --season 2026 --prior-season 2025
+          test -s data/team_form.csv
+          test -s data/qb_promoted_team_context.csv
+          test -s data/qb_promoted_context_audit.csv
+
+      - name: Build weather injuries and coverage
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/build/build_weather_week_v2.py --season 2026 --date ""
+          python scripts/build/build_injuries_weekly.py data/injuries.csv --season 2026
+          python scripts/run_coverage_v2.py --season 2026
+          test -s data/weather_week.csv
+          test -s data/injuries.csv
+
+      - name: Build optional current-season PBP enrichment
+        continue-on-error: true
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/build/pbp_features.py --season 2026 || true
+
+      - name: Build PlayerForm and canonical Team Context v3
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_player_form_v2_loader.py --season 2026 --prior-season 2025 --date ""
+          python scripts/enrich_player_scoring_v2.py --season 2026 --prior-season 2025 --date ""
+          python scripts/run_model_context_bridge.py
+          test -s data/player_game_logs.csv
+          test -s data/player_form.csv
+          test -s data/team_context_v3.csv
+
+      - name: Build canonical model components
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_bayesian_bridge.py
+          python scripts/run_model_ml_bridge.py
+          python scripts/run_model_state_bridge.py
+          python scripts/run_model_rules_bridge.py
+          python scripts/run_model_ensemble_bridge.py
+          test -s data/model_ml_diagnostics.csv
+          test -s data/model_state_diagnostics.csv
+
+      - name: Generate independent no-odds QB projections
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_qb_week1_no_odds.py \
+            --season 2026 --week 1 --iterations 25000 \
+            --out data/qb_week1_no_odds_projections.csv
+
+      - name: Audit result
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          x=pd.read_csv('data/qb_week1_no_odds_projections.csv')
+          assert len(x)==32 and x.team.nunique()==32
+          assert pd.to_numeric(x.sportsbook_inputs_used,errors='coerce').eq(0).all()
+          assert pd.to_numeric(x.football_only_no_odds,errors='coerce').eq(1).all()
+          print(x[['team','player','opponent','qb_synthesis_proj','qb_synthesis_correction','qb_pred_attempts','qb_pred_ypa','model_sd','p25','p50','p75']].to_string(index=False))
+          PY
+
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-2026-week1-no-odds
+          path: |
+            data/qb_week1_no_odds_projections.csv
+            data/qb_promoted_context_audit.csv
+            data/qb_promoted_team_context.csv
+          retention-days: 30
