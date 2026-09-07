@@ -1,115 +1,92 @@
 #!/usr/bin/env python3
-"""RB-PD2 frozen walk-forward individual player-error persistence diagnostic."""
+"""RB-PD3 frozen walk-forward player residual calibration test."""
 from __future__ import annotations
-
-import argparse
-import json
-import re
+import argparse,json,re
 from pathlib import Path
-
-import numpy as np
-import pandas as pd
-
-EXPECTED_ROWS=1393
-HIST=8
-MIN_PRIOR=4
-MIN_ROWS=700
+import numpy as np,pandas as pd
+EXPECTED_ROWS=1393; HIST=8; MIN_PRIOR=4; ALPHA=.25; CARRY_CAP=2.0; EFF_YARD_CAP=8.0
 TEAM_ALIAS={"JAC":"JAX","JAX":"JAX","LA":"LAR","LAR":"LAR"}
-
-
-def _one(root:Path,name:str)->Path:
-    h=list(root.rglob(name))
-    if len(h)!=1: raise RuntimeError(f"expected one {name}, got {len(h)}")
-    return h[0]
-
-def _read(p:Path)->pd.DataFrame:
-    x=pd.read_csv(p,low_memory=False); x.columns=[str(c).strip().lower() for c in x.columns]
-    if x.empty: raise RuntimeError(f"empty {p}")
-    return x
-
-def _key(v)->str: return re.sub(r"[^a-z0-9]","",str(v or "").lower())
-def _team(v)->str:
-    r=str(v or "").strip().upper(); return TEAM_ALIAS.get(r,r)
-def _num(s)->pd.Series: return pd.to_numeric(s,errors="coerce")
-
-
-def wide_stack1(s:pd.DataFrame)->pd.DataFrame:
-    q=s.loc[_num(s["season"]).eq(2025)&_num(s["week"]).between(1,18)&s["market"].astype(str).str.lower().isin(["rush_att","rush_yards"])].copy()
-    q["team"]=q["team"].map(_team); q["player_key"]=q.get("player_clean_key",q.get("player","")).map(_key)
-    keys=["season","week","team","player_key"]; rows=[]
-    for k,g in q.groupby(keys,sort=False,dropna=False):
-        r=dict(zip(keys,k)); r["player"]=g.iloc[0].get("player","")
-        for market,suf in [("rush_att","carry"),("rush_yards","yard")]:
-            z=g.loc[g["market"].astype(str).str.lower().eq(market)]
-            if len(z)!=1: raise RuntimeError(f"duplicate/missing {market} {k}: {len(z)}")
-            rr=z.iloc[0]; r[f"pred_{suf}"]=float(pd.to_numeric(pd.Series([rr.get("ensemble_2024_frozen")]),errors="coerce").iloc[0]); r[f"actual_{suf}"]=float(pd.to_numeric(pd.Series([rr.get("actual")]),errors="coerce").iloc[0])
-        rows.append(r)
-    x=pd.DataFrame(rows)
-    if len(x)!=EXPECTED_ROWS: raise RuntimeError(f"STACK1 row drift {len(x)}")
-    x["season"]=_num(x["season"]).astype(int); x["week"]=_num(x["week"]).astype(int)
-    return x
-
-
-def attach_rookie(x:pd.DataFrame,s2:pd.DataFrame)->pd.DataFrame:
-    d=s2.loc[_num(s2["season"]).eq(2025)&_num(s2["week"]).between(1,18)].copy(); d["team"]=d["team"].map(_team); d["player_key"]=d.get("player_clean_key",d.get("player","")).map(_key)
-    keep=[c for c in ["season","week","team","player_key","rookie_flag"] if c in d.columns]
-    if "rookie_flag" not in keep: raise RuntimeError("STACK2 missing rookie_flag")
-    d=d[keep].drop_duplicates(["season","week","team","player_key"],keep="last")
-    out=x.merge(d,on=["season","week","team","player_key"],how="left",validate="one_to_one",indicator=True)
-    if len(out)!=EXPECTED_ROWS or not out["_merge"].eq("both").all(): raise RuntimeError(f"STACK2 identity drift matched={int(out['_merge'].eq('both').sum())}")
-    out=out.drop(columns="_merge"); out["rookie_flag"]=_num(out["rookie_flag"]).fillna(0)
-    return out
-
-
-def build_walkforward(x:pd.DataFrame)->pd.DataFrame:
-    q=x.sort_values(["week","player_key"],kind="stable").copy(); q["carry_error"]=_num(q["pred_carry"])-_num(q["actual_carry"]); q["carry_abs"] = q["carry_error"].abs(); q["yard_error"]=_num(q["pred_yard"])-_num(q["actual_yard"]); q["yard_abs"]=q["yard_error"].abs()
-    hist:dict[str,list[dict]]={}; rows=[]
-    for r in q.itertuples(index=False):
-        h=hist.get(r.player_key,[])[-HIST:]
-        rec={"season":r.season,"week":r.week,"team":r.team,"player":r.player,"player_key":r.player_key,"rookie_flag":r.rookie_flag,"target_carry_error":r.carry_error,"target_carry_abs_error":r.carry_abs,"target_yard_error":r.yard_error,"target_yard_abs_error":r.yard_abs,"prior_games":len(h)}
-        if h:
-            d=pd.DataFrame(h); rec["prior8_carry_bias"]=float(d["carry_error"].mean()); rec["prior8_carry_mae"]=float(d["carry_abs"].mean()); rec["prior8_yard_bias"]=float(d["yard_error"].mean()); rec["prior8_yard_mae"]=float(d["yard_abs"].mean()); rec["last_prior_week"]=int(d.iloc[-1]["week"])
-        else:
-            for c in ["prior8_carry_bias","prior8_carry_mae","prior8_yard_bias","prior8_yard_mae","last_prior_week"]: rec[c]=np.nan
-        rows.append(rec); hist.setdefault(r.player_key,[]).append({"week":r.week,"carry_error":r.carry_error,"carry_abs":r.carry_abs,"yard_error":r.yard_error,"yard_abs":r.yard_abs})
-    out=pd.DataFrame(rows)
-    if len(out)!=EXPECTED_ROWS or len(out.loc[out["last_prior_week"].notna()&_num(out["last_prior_week"]).ge(_num(out["week"]))]): raise RuntimeError("walk-forward integrity/leakage failure")
-    return out
-
-
-def _gap(g,feat,outcome):
-    f=_num(g[feat]); y=_num(g[outcome]); q25=float(f.quantile(.25)); q75=float(f.quantile(.75)); return float(y.loc[f.ge(q75)].mean()-y.loc[f.le(q25)].mean())
-def _slice_gap(g,feat,outcome,lo,hi):
-    q=g.loc[g["week"].between(lo,hi)]; return _gap(q,feat,outcome) if len(q)>=100 and _num(q[feat]).nunique()>=4 else np.nan
-
-
-def score(wf):
-    g=wf.loc[wf["prior_games"].ge(MIN_PRIOR)].copy(); rows=[]
-    specs=[
-        ("CARRY_DIRECTIONAL_PERSISTENCE","prior8_carry_bias","target_carry_error",1.0,"sign",0.5),
-        ("CARRY_DIFFICULTY_PERSISTENCE","prior8_carry_mae","target_carry_abs_error",0.75,"nosign",0),
-        ("YARD_DIRECTIONAL_PERSISTENCE","prior8_yard_bias","target_yard_error",6.0,"sign",3.0),
-        ("YARD_DIFFICULTY_PERSISTENCE","prior8_yard_mae","target_yard_abs_error",5.0,"nosign",0),
-    ]
-    for name,feat,outcome,mingap,kind,signmin in specs:
-        sp=float(_num(g[feat]).corr(_num(g[outcome]),method="spearman")); gap=_gap(g,feat,outcome); early=_slice_gap(g,feat,outcome,5,12); late=_slice_gap(g,feat,outcome,13,18)
-        if kind=="sign":
-            q=g.loc[_num(g[feat]).abs().ge(signmin)]; sign=float((np.sign(_num(q[feat]))==np.sign(_num(q[outcome]))).mean()) if len(q) else np.nan; signok=np.isfinite(sign) and sign>=.55
-        else: sign=np.nan; signok=True
-        passes=bool(len(g)>=MIN_ROWS and sp>=.08 and gap>=mingap and signok and np.isfinite(early) and early>0 and np.isfinite(late) and late>0)
-        rows.append({"diagnostic":name,"rows":len(g),"spearman":sp,"quartile_gap":gap,"sign_agreement":sign,"gap_weeks5_12":early,"gap_weeks13_18":late,"passes":passes})
-    m=pd.DataFrame(rows); winners=m.loc[m["passes"],"diagnostic"].tolist()
-    rookie=[]
-    for val in [1,0]:
-        q=g.loc[_num(g["rookie_flag"]).eq(val)]; rookie.append({"rookie_flag":val,"rows":len(q),"carry_mae":float(_num(q["target_carry_abs_error"]).mean()) if len(q) else np.nan,"yard_mae":float(_num(q["target_yard_abs_error"]).mean()) if len(q) else np.nan})
-    summary={"migration":"RB_PD2_PLAYER_ERROR_PERSISTENCE","source_rows":len(wf),"scoreable_rows":len(g),"players":int(wf["player_key"].nunique()),"history_window":HIST,"minimum_prior_games":MIN_PRIOR,"walk_forward_leakage_violations":0,"sportsbook_inputs_used":False,"model_fitting_used":False,"production_changed":False,"passing_diagnostics":winners,"rookie_descriptive":rookie,"disposition":"RB_PLAYER_ERROR_PERSISTENCE_DETECTED" if winners else "NO_ACTIONABLE_RB_PLAYER_ERROR_PERSISTENCE"}
-    return m,summary
-
-
+def one(root,name):
+ h=list(root.rglob(name))
+ if len(h)!=1: raise RuntimeError(f"expected one {name}, got {len(h)}")
+ return h[0]
+def read(p):
+ x=pd.read_csv(p,low_memory=False); x.columns=[str(c).strip().lower() for c in x.columns]
+ if x.empty: raise RuntimeError(f"empty {p}")
+ return x
+def key(v): return re.sub(r"[^a-z0-9]","",str(v or "").lower())
+def team(v):
+ r=str(v or "").strip().upper(); return TEAM_ALIAS.get(r,r)
+def num(s): return pd.to_numeric(s,errors="coerce")
+def wide(s):
+ q=s.loc[num(s.season).eq(2025)&num(s.week).between(1,18)&s.market.astype(str).str.lower().isin(["rush_att","rush_yards"])].copy(); q["team"]=q.team.map(team); q["player_key"]=q.get("player_clean_key",q.get("player","")).map(key); rows=[]
+ for k,g in q.groupby(["season","week","team","player_key"],sort=False,dropna=False):
+  r=dict(zip(["season","week","team","player_key"],k)); r["player"]=g.iloc[0].get("player","")
+  for m,suf in [("rush_att","carry"),("rush_yards","yard")]:
+   z=g.loc[g.market.astype(str).str.lower().eq(m)]
+   if len(z)!=1: raise RuntimeError(f"duplicate/missing {m} {k}: {len(z)}")
+   rr=z.iloc[0]; r[f"pred_{suf}"]=float(pd.to_numeric(pd.Series([rr.get("ensemble_2024_frozen")]),errors="coerce").iloc[0]); r[f"actual_{suf}"]=float(pd.to_numeric(pd.Series([rr.get("actual")]),errors="coerce").iloc[0])
+  rows.append(r)
+ x=pd.DataFrame(rows)
+ if len(x)!=EXPECTED_ROWS: raise RuntimeError(f"row drift {len(x)}")
+ x["season"]=num(x.season).astype(int); x["week"]=num(x.week).astype(int); return x
+def attach_rookie(x,s2):
+ d=s2.loc[num(s2.season).eq(2025)&num(s2.week).between(1,18)].copy(); d["team"]=d.team.map(team); d["player_key"]=d.get("player_clean_key",d.get("player","")).map(key)
+ if "rookie_flag" not in d: raise RuntimeError("missing rookie_flag")
+ d=d[["season","week","team","player_key","rookie_flag"]].drop_duplicates(["season","week","team","player_key"],keep="last")
+ o=x.merge(d,on=["season","week","team","player_key"],how="left",validate="one_to_one",indicator=True)
+ if len(o)!=EXPECTED_ROWS or not o._merge.eq("both").all(): raise RuntimeError("identity drift")
+ o=o.drop(columns="_merge"); o["rookie_flag"]=num(o.rookie_flag).fillna(0); return o
+def build(x):
+ q=x.sort_values(["week","player_key"],kind="stable").copy(); hist={}; rows=[]; leak=0
+ for r in q.itertuples(index=False):
+  h=hist.get(r.player_key,[])[-HIST:]; rec={"season":r.season,"week":r.week,"team":r.team,"player":r.player,"player_key":r.player_key,"rookie_flag":r.rookie_flag,"pred_carry":r.pred_carry,"actual_carry":r.actual_carry,"pred_yard":r.pred_yard,"actual_yard":r.actual_yard,"prior_games":len(h)}
+  if h:
+   d=pd.DataFrame(h); rec["last_prior_week"]=int(d.iloc[-1].week); rec["prior8_carry_bias"]=float(d.carry_error.mean()); rec["prior8_eff_resid_bias"]=float(d.eff_resid.mean())
+  else: rec.update(last_prior_week=np.nan,prior8_carry_bias=np.nan,prior8_eff_resid_bias=np.nan)
+  if pd.notna(rec["last_prior_week"]) and rec["last_prior_week"]>=r.week: leak+=1
+  cb=float(r.pred_carry-r.actual_carry); yb=float(r.pred_yard-r.actual_yard); ypc=float(r.pred_yard/r.pred_carry) if np.isfinite(r.pred_carry) and r.pred_carry>0 else 0.0; eff=float(yb-cb*ypc)
+  hist.setdefault(r.player_key,[]).append({"week":r.week,"carry_error":cb,"yard_error":yb,"eff_resid":eff})
+  rows.append(rec)
+ o=pd.DataFrame(rows)
+ if len(o)!=EXPECTED_ROWS or leak: raise RuntimeError(f"walkforward integrity failure leak={leak}")
+ return o
+def metric(a,p):
+ z=pd.DataFrame({"a":num(a),"p":num(p)}).dropna(); e=z.p-z.a; ae=e.abs();
+ return {"n":len(z),"mae":float(ae.mean()),"rmse":float(np.sqrt(np.mean(e*e))),"bias":float(e.mean()),"corr":float(z.p.corr(z.a)) if len(z)>2 else np.nan,"median_abs":float(ae.median()),"p75_abs":float(ae.quantile(.75)),"p90_abs":float(ae.quantile(.90)),"miss20":float(ae.ge(20).mean()),"miss30":float(ae.ge(30).mean()),"miss40":float(ae.ge(40).mean()),"miss3":float(ae.ge(3).mean()),"miss5":float(ae.ge(5).mean()),"miss7":float(ae.ge(7).mean())}
 def main():
-    ap=argparse.ArgumentParser(); ap.add_argument("--stack1-root",type=Path,required=True); ap.add_argument("--stack2-root",type=Path,required=True); ap.add_argument("--out-dir",type=Path,default=Path("data/backtests/rb_pd2_player_error_persistence")); a=ap.parse_args()
-    s1=_read(_one(a.stack1_root,"stack1_2025_rb_trace.csv")); s2=_read(_one(a.stack2_root,"stack2_2025_casebook.csv")); x=attach_rookie(wide_stack1(s1),s2); wf=build_walkforward(x); metrics,summary=score(wf)
-    a.out_dir.mkdir(parents=True,exist_ok=True); wf.to_csv(a.out_dir/"rb_pd2_walkforward_casebook.csv",index=False); metrics.to_csv(a.out_dir/"rb_pd2_metrics.csv",index=False); (a.out_dir/"rb_pd2_result.json").write_text(json.dumps(summary,indent=2,sort_keys=True),encoding="utf-8")
-    print(metrics.to_string(index=False)); print(json.dumps(summary,indent=2,sort_keys=True)); return 0
-
+ ap=argparse.ArgumentParser(); ap.add_argument("--stack1-root",type=Path,required=True); ap.add_argument("--stack2-root",type=Path,required=True); ap.add_argument("--out-dir",type=Path,required=True); a=ap.parse_args()
+ x=attach_rookie(wide(read(one(a.stack1_root,"stack1_2025_rb_trace.csv"))),read(one(a.stack2_root,"stack2_2025_casebook.csv"))); wf=build(x); g=wf.loc[wf.prior_games.ge(MIN_PRIOR)].copy()
+ g["carry_adj"]=(ALPHA*num(g.prior8_carry_bias)).clip(-CARRY_CAP,CARRY_CAP); g["cand_carry"]=(num(g.pred_carry)-g.carry_adj).clip(lower=0)
+ base_ypc=np.where(num(g.pred_carry)>0,num(g.pred_yard)/num(g.pred_carry),0.0); g["eff_adj"]=(ALPHA*num(g.prior8_eff_resid_bias)).clip(-EFF_YARD_CAP,EFF_YARD_CAP); g["cand_yard"]=(base_ypc*num(g.cand_carry)-g.eff_adj).clip(lower=0)
+ rows=[]
+ slices=[("POOLED",g),("W5_12",g.loc[g.week.between(5,12)]),("W13_18",g.loc[g.week.between(13,18)])]
+ q75=float(num(g.pred_carry).quantile(.75)); slices.append(("TOP_CARRY_Q",g.loc[num(g.pred_carry).ge(q75)]))
+ for sl,z in slices:
+  for market,act,b0,cand in [("carry","actual_carry","pred_carry","cand_carry"),("yard","actual_yard","pred_yard","cand_yard")]:
+   rows.append({"slice":sl,"market":market,"variant":"B0",**metric(z[act],z[b0])}); rows.append({"slice":sl,"market":market,"variant":"CAND",**metric(z[act],z[cand])})
+ m=pd.DataFrame(rows)
+ def get(sl,market,var,col): return float(m.loc[(m.slice==sl)&(m.market==market)&(m.variant==var),col].iloc[0])
+ gates={
+ "carry_mae_improve_ge_0_05":get("POOLED","carry","B0","mae")-get("POOLED","carry","CAND","mae")>=.05,
+ "yard_mae_improve_ge_0_25":get("POOLED","yard","B0","mae")-get("POOLED","yard","CAND","mae")>=.25,
+ "carry_p90_not_worse":get("POOLED","carry","CAND","p90_abs")<=get("POOLED","carry","B0","p90_abs")+1e-12,
+ "yard_p90_not_worse":get("POOLED","yard","CAND","p90_abs")<=get("POOLED","yard","B0","p90_abs")+1e-12,
+ "carry_5miss_guard":get("POOLED","carry","CAND","miss5")-get("POOLED","carry","B0","miss5")<=.005,
+ "yard_30miss_guard":get("POOLED","yard","CAND","miss30")-get("POOLED","yard","B0","miss30")<=.005,
+ "yard_40miss_guard":get("POOLED","yard","CAND","miss40")-get("POOLED","yard","B0","miss40")<=.005,
+ "early_carry_guard":get("W5_12","carry","CAND","mae")-get("W5_12","carry","B0","mae")<=.10,
+ "late_carry_guard":get("W13_18","carry","CAND","mae")-get("W13_18","carry","B0","mae")<=.10,
+ "early_yard_guard":get("W5_12","yard","CAND","mae")-get("W5_12","yard","B0","mae")<=.50,
+ "late_yard_guard":get("W13_18","yard","CAND","mae")-get("W13_18","yard","B0","mae")<=.50,
+ "topq_carry_guard":get("TOP_CARRY_Q","carry","CAND","mae")-get("TOP_CARRY_Q","carry","B0","mae")<=.10,
+ "topq_yard_guard":get("TOP_CARRY_Q","yard","CAND","mae")-get("TOP_CARRY_Q","yard","B0","mae")<=.50}
+ integrity={"source_rows_exact":len(wf)==EXPECTED_ROWS,"scoreable_rows_ge_700":len(g)>=700,"walkforward_leakage_violations":0,"sportsbook_inputs_used":False,"alpha":ALPHA,"carry_cap":CARRY_CAP,"eff_yard_cap":EFF_YARD_CAP}; passed=all(gates.values()) and integrity["source_rows_exact"] and integrity["scoreable_rows_ge_700"]
+ players=[]
+ for pk,z in g.groupby("player_key"):
+  if len(z)<6: continue
+  players.append({"player_key":pk,"player":z.player.iloc[-1],"games":len(z),"b0_carry_mae":metric(z.actual_carry,z.pred_carry)["mae"],"cand_carry_mae":metric(z.actual_carry,z.cand_carry)["mae"],"b0_yard_mae":metric(z.actual_yard,z.pred_yard)["mae"],"cand_yard_mae":metric(z.actual_yard,z.cand_yard)["mae"]})
+ result={"migration":"RB_PD3_PLAYER_RESIDUAL_CALIBRATION","production_changed":False,"sportsbook_inputs_used":False,"scoreable_rows":len(g),"integrity":integrity,"scientific_gates":gates,"disposition":"RB_PD3_PLAYER_RESIDUAL_CALIBRATION_PASS" if passed else "RB_PD3_PLAYER_RESIDUAL_CALIBRATION_FAIL"}
+ a.out_dir.mkdir(parents=True,exist_ok=True); g.to_csv(a.out_dir/"rb_pd3_casebook.csv",index=False); m.to_csv(a.out_dir/"rb_pd3_metrics.csv",index=False); pd.DataFrame(players).to_csv(a.out_dir/"rb_pd3_player_scorecard.csv",index=False); (a.out_dir/"rb_pd3_result.json").write_text(json.dumps(result,indent=2,sort_keys=True)+"\n")
+ print(json.dumps(result,indent=2,sort_keys=True)); print(m.to_string(index=False)); return 0
 if __name__=="__main__": raise SystemExit(main())
