@@ -32,14 +32,18 @@ def build_slate_universe(
     roles = pf._load_roles()
     if roles.empty:
         raise RuntimeError("Ourlads role universe is empty")
-    required_roles = {"team", "player", "player_clean_key"}
+    name_col = "display_name" if "display_name" in roles.columns else "player" if "player" in roles.columns else None
+    if name_col is None:
+        raise RuntimeError(f"Ourlads normalized role universe missing display/player name column: {list(roles.columns)}")
+    required_roles = {"team", "player_clean_key"}
     missing_roles = required_roles - set(roles.columns)
     if missing_roles:
         raise RuntimeError(f"Ourlads role universe missing columns: {sorted(missing_roles)}")
 
     roles = roles.copy()
     roles["team"] = roles["team"].map(canon_team)
-    player = roles["player"].astype("string").fillna("").str.strip()
+    roles["player"] = roles[name_col].astype("string").fillna("").str.strip()
+    player = roles["player"]
     key = roles["player_clean_key"].astype("string").fillna("").str.strip()
     if roles["team"].eq("").any() or player.eq("").any() or key.eq("").any():
         raise RuntimeError("Ourlads role universe contains unresolved team/player identity")
@@ -93,9 +97,8 @@ def build_slate_universe(
         )
 
     # Attach full current Ourlads metadata after identity/schedule resolution.
-    base = base.merge(roles, on=["team", "player_clean_key"], how="left", suffixes=("", "_role"), validate="one_to_one")
-    if "player_role" in base.columns:
-        base["player"] = base["player"].replace("", pd.NA).combine_first(base["player_role"])
+    role_meta = roles.drop(columns=["player"], errors="ignore")
+    base = base.merge(role_meta, on=["team", "player_clean_key"], how="left", validate="one_to_one")
     base["season"] = int(season)
     base["week"] = int(week)
     base = base.drop_duplicates(["team", "player_clean_key"])
