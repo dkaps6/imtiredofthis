@@ -15,9 +15,8 @@ from sklearn.preprocessing import StandardScaler
 EXPECTED_ROWS = 884
 CONTEXT = [
     "qb_prior_attempts", "qb_prior_ypa", "off_true_proe", "off_neutral_pace",
-    "def_pass_epa_allowed", "def_pass_success_allowed", "def_ypa_allowed",
-    "off_pass_epa", "off_pass_success", "off_ypa", "off_plays", "off_pass_rate",
-    "def_pass_rate_faced",
+    "def_pass_epa_allowed", "def_success_allowed", "def_ypa_allowed",
+    "off_plays", "off_pass_rate", "def_pass_rate_faced",
 ]
 
 
@@ -84,7 +83,7 @@ def main() -> int:
     a = ap.parse_args()
 
     mech = pd.read_csv(one(a.qb_mechanism_root, "qb_mechanism_casebook.csv"), low_memory=False)
-    feat = pd.read_csv(one(a.m89_root, "m89_synthesis_feature_trace.csv"), low_memory=False)
+    feat = pd.read_csv(one(a.m89_root, "m89_2024_2025_synthesis_trace.csv"), low_memory=False)
     mech.columns = [str(c).strip().lower() for c in mech.columns]
     feat.columns = [str(c).strip().lower() for c in feat.columns]
     if len(mech) != EXPECTED_ROWS:
@@ -96,7 +95,7 @@ def main() -> int:
     if need_m - set(mech.columns):
         raise RuntimeError(f"mechanism casebook missing {sorted(need_m-set(mech.columns))}")
     if need_f - set(feat.columns):
-        raise RuntimeError(f"M89 feature trace missing {sorted(need_f-set(feat.columns))}")
+        raise RuntimeError(f"M89 synthesis trace missing {sorted(need_f-set(feat.columns))}")
 
     for d in (mech, feat):
         d["season"] = num(d["season"])
@@ -106,7 +105,7 @@ def main() -> int:
 
     f = feat.loc[feat.season.isin([2024,2025]), keys + CONTEXT].copy()
     if f.duplicated(keys).any():
-        raise RuntimeError("duplicate M89 synthesis-feature keys for 2024-2025")
+        raise RuntimeError("duplicate M89 synthesis-trace keys for 2024-2025")
     x = mech.merge(f, on=keys, how="left", validate="one_to_one", indicator=True)
     if len(x) != EXPECTED_ROWS or not x["_merge"].eq("both").all():
         raise RuntimeError(f"mechanism/feature alignment failed rows={len(x)} matched={int(x['_merge'].eq('both').sum())}")
@@ -168,6 +167,8 @@ def main() -> int:
 
     result = {
         "migration": "QB_R1_PLAYER_CONTEXT_MECHANISM_ROUTER",
+        "source_file": "m89_2024_2025_synthesis_trace.csv",
+        "context_features": CONTEXT,
         "rows": int(len(x)),
         "train_2024_rows": int(len(train)),
         "test_2025_rows": int(len(test)),
