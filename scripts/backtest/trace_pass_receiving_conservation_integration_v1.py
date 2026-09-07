@@ -54,6 +54,10 @@ def main() -> int:
             cons_rows.append({"season":int(a.season),"week":int(week),**r})
 
         # Individual receiver means.  C2 intentionally preserves B0 target shares.
+        # Player-result pairing deliberately uses the canonical name key on both
+        # sides to preserve the exact scoring semantics of the source Joint V1
+        # experiment. Current historical logs carry GSIS IDs, but the frozen
+        # pregame universe does not carry those IDs through this projection path.
         for (game,team),tdf in players.groupby(["event_id","team"],dropna=False,sort=False):
             tdf=tdf.reset_index(drop=True); raw=np.array([simulation_v2._num(r,"rules_tgt_share","bayes_tgt_share","target_share","tgt_share",default=0.0) for _,r in tdf.iterrows()],dtype=float)
             probs=simulation_v2._sharpen_wr_target_shares(tdf,raw); pos=tdf.get("position",pd.Series("",index=tdf.index)).fillna("").astype(str).str.upper().str.strip().to_numpy(); pc=np.isin(pos,list(simulation_v2.PASS_CATCHER_POSITIONS)); probs=np.where(pc,probs,0.0)
@@ -62,7 +66,7 @@ def main() -> int:
             pass_mean=float(np.mean(b0.team_states[(str(game),str(team),"pass_att")]))
             for idx,(_,r) in enumerate(tdf.iterrows()):
                 if not pc[idx]: continue
-                pkey=str(r.get("player_clean_key","") or ""); identity_raw=r.get("player_identity_key",""); identity="" if pd.isna(identity_raw) else str(identity_raw).strip(); join_key=f"id:{identity}" if identity else f"name:{pkey}"; position=str(r.get("position","") or "").upper().strip()
+                pkey=str(r.get("player_clean_key","") or ""); identity_raw=r.get("player_identity_key",""); identity="" if pd.isna(identity_raw) else str(identity_raw).strip(); join_key=f"name:{pkey}"; position=str(r.get("position","") or "").upper().strip()
                 b0_rec=j.sim_arr(b0,game,pkey,"receptions"); c2_rec=j.sim_arr(c2,game,pkey,"receptions"); b0_y=j.sim_arr(b0,game,pkey,"rec_yards"); c2_y=j.sim_arr(c2,game,pkey,"rec_yards"); b0_r=j.sim_arr(b0,game,pkey,"rush_yards"); c2_r=j.sim_arr(c2,game,pkey,"rush_yards")
                 br=float(np.mean(b0_r)) if b0_r is not None else np.nan; cr=float(np.mean(c2_r)) if c2_r is not None else np.nan; by=float(np.mean(b0_y)) if b0_y is not None else np.nan; cy=float(np.mean(c2_y)) if c2_y is not None else np.nan
                 player_rows.append({
@@ -93,7 +97,7 @@ def main() -> int:
 
     out=a.out_dir; out.mkdir(parents=True,exist_ok=True)
     pd.DataFrame(player_rows).to_csv(out/"integration_v1_player_projection_trace.csv",index=False); pd.DataFrame(qb_rows).to_csv(out/"integration_v1_qb_distribution_trace.csv",index=False); pd.DataFrame(cons_rows).to_csv(out/"integration_v1_conservation_trace.csv",index=False); pd.DataFrame(integrity_rows).to_csv(out/"integration_v1_integrity_counts.csv",index=False)
-    j.actual_usage(logs,a.season,set(int(w) for w in weeks)).to_csv(out/"integration_v1_actual_usage.csv",index=False)
+    actual=j.actual_usage(logs,a.season,set(int(w) for w in weeks)); actual["join_key"]="name:"+actual["player_clean_key"].fillna("").astype(str).str.strip(); actual.to_csv(out/"integration_v1_actual_usage.csv",index=False)
     print(f"[integration-v1] wrote player={len(player_rows)} qb={len(qb_rows)} -> {out}"); return 0
 
 if __name__=="__main__": raise SystemExit(main())
