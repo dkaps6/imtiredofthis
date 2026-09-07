@@ -76,14 +76,18 @@ def build_internal_qb_metrics(season: int, week: int) -> pd.DataFrame:
     roles["player_clean_key"] = roles["player"].map(_key)
     pos = roles.get("position", pd.Series("", index=roles.index)).fillna("").astype(str).str.upper().str.strip()
     group = roles.get("position_group", pd.Series("", index=roles.index)).fillna("").astype(str).str.upper().str.strip()
-    role = roles.get("role", pd.Series("", index=roles.index)).fillna("").astype(str).str.upper().str.strip()
-    model_role = roles.get("model_role", pd.Series("", index=roles.index)).fillna("").astype(str).str.upper().str.strip()
-    depth_idx = pd.to_numeric(roles.get("depth_index", np.nan), errors="coerce")
     status = roles.get("status", pd.Series("active", index=roles.index)).fillna("active").astype(str).str.lower()
 
     qbs = roles.loc[(pos.eq("QB") | group.eq("QB")) & ~status.eq("inactive")].copy()
-    qbs["_starter_priority"] = np.where(role.eq("QB1") | model_role.eq("QB1"), 0, np.where(depth_idx.eq(1), 1, 2))
-    qbs["_depth_idx"] = depth_idx
+    q_role = qbs.get("role", pd.Series("", index=qbs.index)).fillna("").astype(str).str.upper().str.strip()
+    q_model_role = qbs.get("model_role", pd.Series("", index=qbs.index)).fillna("").astype(str).str.upper().str.strip()
+    q_depth_idx = pd.to_numeric(qbs.get("depth_index", pd.Series(np.nan, index=qbs.index)), errors="coerce")
+    qbs["_starter_priority"] = np.where(
+        q_role.eq("QB1") | q_model_role.eq("QB1"),
+        0,
+        np.where(q_depth_idx.eq(1), 1, 2),
+    )
+    qbs["_depth_idx"] = q_depth_idx
     qbs = qbs.sort_values(["team", "_starter_priority", "_depth_idx"], na_position="last", kind="stable")
     qbs = qbs.drop_duplicates("team", keep="first")
     qbs = qbs.merge(cur, on="team", how="inner", validate="one_to_one")
