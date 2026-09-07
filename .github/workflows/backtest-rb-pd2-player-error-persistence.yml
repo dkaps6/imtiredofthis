@@ -1,9 +1,9 @@
-name: RB-PD2 Player Error Persistence
+name: RB-PD3 Player Residual Calibration
 
 on:
   push:
     branches:
-      - research-rb-pd2-player-error-persistence
+      - research-rb-pd3-player-residual-calibration
   workflow_dispatch:
 
 permissions:
@@ -34,20 +34,20 @@ jobs:
           gh run download 33538770934 --repo "${GITHUB_REPOSITORY}" --name rb-stack2-enriched-allocation-integration --dir evidence/stack2
           test -s evidence/stack1/results/stack1_2025_rb_trace.csv
           test -s evidence/stack2/stack2_2025_casebook.csv
-      - name: Run frozen walk-forward individual-error persistence diagnostic
+      - name: Run frozen RB-PD3 calibration
         run: |
-          python scripts/backtest/evaluate_rb_pd2_player_error_persistence.py --stack1-root evidence/stack1 --stack2-root evidence/stack2 --out-dir data/backtests/rb_pd2_player_error_persistence
+          python scripts/backtest/evaluate_rb_pd2_player_error_persistence.py --stack1-root evidence/stack1 --stack2-root evidence/stack2 --out-dir data/backtests/rb_pd3_player_residual_calibration
       - name: Show result
         if: always()
         run: |
-          cat data/backtests/rb_pd2_player_error_persistence/rb_pd2_result.json 2>/dev/null || true
-          cat data/backtests/rb_pd2_player_error_persistence/rb_pd2_metrics.csv 2>/dev/null || true
+          cat data/backtests/rb_pd3_player_residual_calibration/rb_pd3_result.json 2>/dev/null || true
+          cat data/backtests/rb_pd3_player_residual_calibration/rb_pd3_metrics.csv 2>/dev/null || true
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rb-pd2-player-error-persistence
+          name: rb-pd3-player-residual-calibration
           path: |
-            data/backtests/rb_pd2_player_error_persistence/*
+            data/backtests/rb_pd3_player_residual_calibration/*
             docs/migrations/RB_PD2_PLAYER_ERROR_PERSISTENCE_PLAN.md
           if-no-files-found: warn
