@@ -10,6 +10,11 @@ A legitimate preseason/early-week state where no player prop markets are posted
 is non-fatal. The wrapper writes data/live_odds_status.json with available=false
 so the football model can continue while sportsbook comparison/pricing is
 skipped cleanly. Provider/auth failures remain fatal.
+
+When live player props are available, core QB/RB/WR/TE yardage/reception player
+identity is repaired and validated against the event-scoped Ourlads roster.
+Unresolved core player -> team/opponent identity is fatal before any downstream
+model stage can consume the sportsbook artifact.
 """
 from __future__ import annotations
 
@@ -19,11 +24,11 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-from typing import Iterable
 
 import pandas as pd
 
 from scripts._opponent_map import canon_team
+from scripts.repair_live_prop_identity_v1 import repair_live_prop_identity
 from scripts.runtime_context import resolve_week
 
 DATA = Path("data")
@@ -59,7 +64,7 @@ def _clear_stale_odds_artifacts() -> None:
     raw_dir = OUTPUTS / "props_raw"
     if raw_dir.exists():
         targets.update(raw_dir.glob("*.csv"))
-    targets.add(STATUS)
+    targets.update({STATUS, DATA / "live_prop_identity_audit.csv", DATA / "live_prop_identity_status.json"})
     for path in sorted(targets):
         try:
             path.unlink(missing_ok=True)
@@ -108,8 +113,6 @@ def _filter_event_csv(path: Path, allowed_event_ids: set[str]) -> int:
         return 0
     df = _safe_read_csv(path)
     if df.empty:
-        # Preserve a parseable file if a schema exists; otherwise remove the
-        # unusable/headerless artifact rather than leave a false-positive file.
         if len(df.columns):
             df.to_csv(path, index=False)
         else:
@@ -211,6 +214,12 @@ def run_gate(season: int, date: str = "") -> dict:
         state = "available"
         available = True
 
+    identity_status: dict = {}
+    if available:
+        # Deterministic boundary repair only: no odds are changed and no model
+        # feature is created. This must pass before live props are considered usable.
+        identity_status = repair_live_prop_identity()
+
     payload = {
         "status": state,
         "available": bool(available),
@@ -222,6 +231,9 @@ def run_gate(season: int, date: str = "") -> dict:
         "actual_prop_rows": int(actual_props),
         "game_odds_rows": int(len(scoped_games)),
         "fetch_returncode": 0,
+        "core_prop_identity_disposition": identity_status.get("disposition", "not_applicable"),
+        "core_prop_identity_unresolved_rows": int(identity_status.get("core_unresolved_rows", 0)),
+        "core_prop_identity_rows": int(identity_status.get("core_rows", 0)),
     }
     _write_status(payload)
     return payload
