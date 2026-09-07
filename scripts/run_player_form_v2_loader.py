@@ -7,8 +7,11 @@ import os
 import pandas as pd
 
 import scripts.run_player_form_v2 as runner
+from scripts.materialize_live_props_for_model_v1 import materialize as materialize_live_props_for_model
 from scripts.player_stats_loader_v2 import load_weekly_player_stats
+from scripts.repair_injuries_nflcom_v1 import repair_if_needed as repair_injury_identity
 from scripts.slate_universe_v2 import build_slate_universe
+from scripts.validate_full_slate_pre_model_v1 import main as validate_pre_model_semantics
 from scripts.validate_player_identity_v3 import main as validate_player_identity_v3
 
 
@@ -131,6 +134,14 @@ def attach_schedule_with_game_identity(logs: pd.DataFrame, schedule: pd.DataFram
 def main() -> int:
     live_odds = _live_odds_enabled()
     print(f"[player_form_v2] FETCH_LIVE_ODDS={'true' if live_odds else 'false'}")
+
+    # Repair provider representation defects and validate every critical artifact
+    # before historical/player modeling is allowed to start. No sportsbook line
+    # or football projection is altered here.
+    repair_injury_identity()
+    if live_odds:
+        materialize_live_props_for_model()
+    validate_pre_model_semantics()
 
     # Maintained weekly-stat provider.
     runner.pf._load_weekly = load_weekly_player_stats
