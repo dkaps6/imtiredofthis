@@ -89,15 +89,26 @@ def _dedupe_exact_rows(path: Path) -> dict[str, int]:
     return {"before": before, "after": int(len(clean)), "removed": int(removed)}
 
 
-def _json_key(value: object) -> str:
+def _normalize_json_value(value: object) -> object:
+    """Recursively convert pandas/JSON NaN-like values to JSON null."""
     if isinstance(value, dict):
-        normalized = {}
-        for key, item in value.items():
-            if isinstance(item, float) and pd.isna(item):
-                item = None
-            normalized[key] = item
-        value = normalized
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        return {key: _normalize_json_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_normalize_json_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_normalize_json_value(item) for item in value]
+    if isinstance(value, float) and pd.isna(value):
+        return None
+    return value
+
+
+def _json_key(value: object) -> str:
+    return json.dumps(
+        _normalize_json_value(value),
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
 
 
 def _dedupe_grouped_offers(path: Path = OUTPUTS / "props_raw.csv") -> dict[str, int]:
@@ -118,11 +129,12 @@ def _dedupe_grouped_offers(path: Path = OUTPUTS / "props_raw.csv") -> dict[str, 
         seen: set[str] = set()
         unique: list[object] = []
         for offer in offers:
-            key = _json_key(offer)
+            normalized = _normalize_json_value(offer)
+            key = _json_key(normalized)
             if key in seen:
                 continue
             seen.add(key)
-            unique.append(offer)
+            unique.append(normalized)
         after_total += len(unique)
         encoded.append(json.dumps(unique, allow_nan=False))
     df["offers_json"] = encoded
@@ -206,8 +218,6 @@ def harden_live_odds_artifacts() -> dict:
     names = _sanitize_name_maps()
     raw_removed = int(sum(v["removed"] for v in raw_audit.values()))
 
-    # Postconditions: all mechanically repaired raw/enriched outputs must now be
-    # duplicate-free and grouped offers must contain no repeated offer payloads.
     for path in RAW_OFFER_ARTIFACTS:
         df = _read(path)
         if not df.empty and df.duplicated().any():
