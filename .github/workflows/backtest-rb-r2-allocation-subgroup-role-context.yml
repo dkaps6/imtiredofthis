@@ -1,0 +1,49 @@
+name: RB-R2 Allocation Subgroup Role Context
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-r2-allocation-subgroup-role-context
+    paths:
+      - ".github/workflows/backtest-rb-r2-allocation-subgroup-role-context.yml"
+      - "scripts/backtest/evaluate_rb_r2_allocation_subgroup_role_context.py"
+      - "docs/migrations/RB_R2_ALLOCATION_SUBGROUP_ROLE_CONTEXT_PLAN.md"
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install numpy==1.26.4 pandas==1.5.3
+      - name: Compile evaluator
+        run: python -m py_compile scripts/backtest/evaluate_rb_r2_allocation_subgroup_role_context.py
+      - name: Download frozen RB-R1 evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/rb_r1
+          gh run download 34070566812 --repo "${GITHUB_REPOSITORY}" --name rb-r1-room-volume-vs-individual-allocation --dir evidence/rb_r1
+      - name: Evaluate RB-R2
+        run: |
+          rm -rf data/backtests/rb_r2_allocation_subgroup_role_context
+          python scripts/backtest/evaluate_rb_r2_allocation_subgroup_role_context.py \
+            --rb-r1-root evidence/rb_r1 \
+            --out-dir data/backtests/rb_r2_allocation_subgroup_role_context
+      - name: Show result
+        if: always()
+        run: cat data/backtests/rb_r2_allocation_subgroup_role_context/rb_r2_result.json 2>/dev/null || true
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r2-allocation-subgroup-role-context
+          path: |
+            data/backtests/rb_r2_allocation_subgroup_role_context/*
+            docs/migrations/RB_R2_ALLOCATION_SUBGROUP_ROLE_CONTEXT_PLAN.md
+          if-no-files-found: warn
+          retention-days: 30
