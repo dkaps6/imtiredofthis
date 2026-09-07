@@ -1,0 +1,49 @@
+name: WR-R6 Player Target Residual Persistence
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-wr-r6-player-target-residual-persistence
+    paths:
+      - ".github/workflows/backtest-wr-r6-player-target-residual-persistence.yml"
+      - "scripts/backtest/evaluate_wr_r6_player_target_residual_persistence.py"
+      - "docs/migrations/WR_R6_PLAYER_TARGET_RESIDUAL_PERSISTENCE_PLAN.md"
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install pandas==1.5.3 numpy==1.26.4 scipy==1.11.4
+      - name: Compile frozen evaluator
+        run: python -m py_compile scripts/backtest/evaluate_wr_r6_player_target_residual_persistence.py
+      - name: Download frozen WR-R5 evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/wr_r5
+          gh run download 34066489537 --repo "${GITHUB_REPOSITORY}" --name wr-r5-target-catch-ypr-individual-decomposition --dir evidence/wr_r5
+      - name: Evaluate WR-R6
+        run: |
+          rm -rf data/backtests/wr_r6_player_target_residual_persistence
+          python scripts/backtest/evaluate_wr_r6_player_target_residual_persistence.py \
+            --wr-r5-root evidence/wr_r5 \
+            --out-dir data/backtests/wr_r6_player_target_residual_persistence
+      - name: Show result
+        if: always()
+        run: cat data/backtests/wr_r6_player_target_residual_persistence/wr_r6_result.json 2>/dev/null || true
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-r6-player-target-residual-persistence
+          path: |
+            data/backtests/wr_r6_player_target_residual_persistence/*
+            docs/migrations/WR_R6_PLAYER_TARGET_RESIDUAL_PERSISTENCE_PLAN.md
+          if-no-files-found: warn
+          retention-days: 30
