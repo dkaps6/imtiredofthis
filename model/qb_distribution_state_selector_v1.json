@@ -1,0 +1,47 @@
+{
+  "version": "QB_DISTRIBUTION_STATE_SELECTOR_V1",
+  "lineage": {
+    "phase_j_run": 34151640191,
+    "phase_j_launch_sha": "23598078ec3469d8aafa1928ade4ee812c0dd809",
+    "phase_c_run": 34147777341,
+    "c2_run": 34142510405,
+    "training_rows": 884,
+    "training_seasons": [2024, 2025]
+  },
+  "feature_contract": [
+    "pass_opportunity_spot",
+    "pass_efficiency_spot",
+    "rush_opportunity_spot",
+    "rush_efficiency_spot",
+    "pred_qb_attempts",
+    "week"
+  ],
+  "ridge_alpha": 20.0,
+  "scaler_mean": [
+    0.016232642516769917,
+    0.010523832297865368,
+    0.019884209176551256,
+    0.006394975515367656,
+    28.098696290490597,
+    9.190045248868778
+  ],
+  "scaler_scale": [
+    0.6259283231953263,
+    0.7782019992547938,
+    0.6433259866154764,
+    0.7963341220250982,
+    2.8569961560510744,
+    5.202904731494837
+  ],
+  "ridge_coef": [
+    1.4241823778301774,
+    0.25640036316197856,
+    -0.6220813558249276,
+    -0.6729107171825769,
+    -2.4713688113250067,
+    0.1587981715562085
+  ],
+  "ridge_intercept": 4.150172487789945,
+  "selector_rule": "use_c2_if_predicted_delta_pass_attempts_gt_0",
+  "sportsbook_inputs_used": 0
+}
