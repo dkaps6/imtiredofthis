@@ -1,0 +1,54 @@
+name: RB-R3 Dynamic Workload Allocation
+
+on:
+  push:
+    branches: [research-rb-r3-dynamic-workload-allocation]
+    paths:
+      - "docs/migrations/RB_R3_DYNAMIC_WORKLOAD_ALLOCATION_PLAN.md"
+      - "scripts/backtest/evaluate_rb_r3_dynamic_workload_allocation.py"
+      - ".github/workflows/backtest-rb-r3-dynamic-workload-allocation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install numpy==1.26.4 pandas==1.5.3 scipy==1.11.4
+      - name: Compile evaluator
+        run: python -m py_compile scripts/backtest/evaluate_rb_r3_dynamic_workload_allocation.py
+      - name: Download frozen RB-R1 evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/rb_r1
+          gh run download 34070566812 --repo "${GITHUB_REPOSITORY}" --name rb-r1-room-volume-vs-individual-allocation --dir evidence/rb_r1
+      - name: Evaluate RB-R3
+        run: |
+          rm -rf data/backtests/rb_r3_dynamic_workload_allocation
+          python scripts/backtest/evaluate_rb_r3_dynamic_workload_allocation.py \
+            --rb-r1-root evidence/rb_r1 \
+            --out-dir data/backtests/rb_r3_dynamic_workload_allocation
+      - name: Show result
+        run: |
+          cat data/backtests/rb_r3_dynamic_workload_allocation/rb_r3_result.json
+          cat data/backtests/rb_r3_dynamic_workload_allocation/rb_r3_signal_summary.csv
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r3-dynamic-workload-allocation
+          path: |
+            data/backtests/rb_r3_dynamic_workload_allocation/*
+            docs/migrations/RB_R3_DYNAMIC_WORKLOAD_ALLOCATION_PLAN.md
+          retention-days: 30
