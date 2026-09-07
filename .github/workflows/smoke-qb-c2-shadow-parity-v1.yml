@@ -1,0 +1,43 @@
+name: Smoke QB C2 Shadow Parity V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [research-cross-position-catastrophic-casebook-v1]
+    paths:
+      - '.github/workflows/smoke-qb-c2-shadow-parity-v1.yml'
+      - 'scripts/simulation_c2_qb_candidate.py'
+
+jobs:
+  parity:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Compile and compare canonical arrays
+        run: |
+          python -m py_compile scripts/simulation_c2_qb_candidate.py
+          python - <<'PY'
+          import numpy as np,pandas as pd
+          from scripts.simulation_v2 import simulate
+          from scripts.simulation_c2_qb_candidate import simulate_with_states,apply_c2,lookup
+          rows=[]
+          for team,opp in [('AAA','BBB'),('BBB','AAA')]:
+            for i,(p,pos,ts,rs) in enumerate([('QB1','QB',0.0,.10),('WR1','WR',.28,.02),('WR2','WR',.18,.01),('TE1','TE',.14,.01),('RB1','RB',.10,.55)]):
+              rows.append({'event_id':'G1','team':team,'opponent':opp,'player':p+team,'player_clean_key':(p+team).lower(),'position':pos,'rules_plays_est':64,'rules_pass_rate':.58,'rules_tgt_share':ts,'rules_rush_share':rs,'rules_catch_rate':.66,'rules_ypt':7.8,'rules_ypc':4.3,'rules_ypa':7.1,'rules_volatility_mult':1.0,'offensive_td_rate':.10,'qb_projection_eligible':1 if pos=='QB' else 0})
+          x=pd.DataFrame(rows)
+          b=simulate(x,iterations=2000,seed=42);s=simulate_with_states(x,iterations=2000,seed=42)
+          assert b.iterations==s.iterations and set(b.values)==set(s.values)
+          for k in b.values:
+            if not np.array_equal(b.values[k],s.values[k]):
+              raise SystemExit(f'BASE PARITY FAILURE {k} max={np.max(np.abs(b.values[k]-s.values[k]))}')
+          anchors={('G1','AAA'):230.0,('G1','BBB'):245.0};c=apply_c2(s,x,anchor_map=anchors,seed=5601)
+          for team,anchor in [('AAA',230.0),('BBB',245.0)]:
+            q=x[(x.team==team)&(x.position=='QB')].iloc[0];arr=lookup(c,q,'pass_yards');assert arr is not None
+            assert abs(float(np.mean(arr))-anchor)<1e-8
+          print('BASE_BYTE_PARITY=PASS C2_ANCHOR_PARITY=PASS keys=',len(b.values))
+          PY
