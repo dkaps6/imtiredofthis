@@ -54,10 +54,21 @@ Build leakage-safe football models whose independent player/game distributions a
 - Artifact: `9977465711`.
 - P3 parity: 1,393 rows; rushing-yards MAE 19.949524; carry MAE 3.357494.
 
-### Unresolved rushing concern — NOT ABANDONED
-- Current Ourlads `depth_role` exists but `model_role`/historical usage can dominate carry allocation.
-- The current-depth/role authority question in W1 carry allocation remains open and requires its own frozen audit/candidate lane.
-- No receiving architecture change is allowed to erase or substitute for this rushing concern.
+### Current-role carry audit — COMPLETED, follow-up still open
+Canonical branch: `audit-rb-2026-w1-current-role-carry-authority`.
+- Result commit: `f27eccbe3007ae25ffe55c3f44e22ccaa00961c4`.
+- Run: `34060593280`.
+- Job: `101560300616`.
+- Artifact: `9997365508`.
+- Digest: `sha256:8c856deab95fdb61358754eacbe6a2c0bd6a7aedd8a63b3f8109e2638425ffd9`.
+- Official disposition: `CURRENT_ROLE_PRESERVED_BUT_NOT_DIRECT_ALLOCATION_INPUT`.
+- 107 rows / 32 teams / 100% Ourlads-to-P3 identity coverage / P3 parent parity max abs diff 0.0.
+- Depth-role vs model-role mismatches: 26 rows.
+- Depth-role vs projected carry-order mismatches: 45 rows.
+- Teams where current depth-rank-1 back was not projected carry leader: 7 (ARI, CLE, GB, HOU, KC, NE, SEA).
+- Inactive players with positive projection: 0.
+
+The structural concern is therefore established, not merely suspected: current Ourlads `depth_role` is retained, but neither `simulation_v2.py` nor `simulation_rules.py` directly gives it carry-allocation authority. The next legitimate step remains a frozen leakage-safe historical integration test using timestamp-safe pregame RB depth state. No ad-hoc 2026 override or sportsbook matching is authorized.
 
 ### Receiving baseline established
 Receiving ecosystem audit, 2020-2025 RB rows: 13,282.
@@ -68,7 +79,8 @@ Receiving ecosystem audit, 2020-2025 RB rows: 13,282.
 - rush+receiving-yards MAE 26.62563
 
 ### Open RB work
-- Dedicated RB receiving lane is authorized: role/routes/checkdowns/screens/two-minute/third-down/pressure/game-script/YAC mechanisms.
+- Timestamp-safe historical depth-state integration test for carry allocation.
+- Dedicated RB receiving lane: role/routes/checkdowns/screens/two-minute/third-down/pressure/game-script/YAC mechanisms.
 - Rushing and receiving mechanics remain separately auditable until the final joint RB distribution.
 - Final RB output must include carries, rushing yards, targets, receptions, receiving yards, and rush+receiving yards.
 
@@ -101,7 +113,7 @@ Promoted QB vs modeled receiver sum, 2024-2025 n=884:
 - median absolute gap 13.74895
 - p90 absolute gap 36.27954
 
-### Active V1
+### Active Joint V1
 Branch: `research-joint-pass-receiving-conservation-v1`.
 Frozen plan commit: `6148f6ff3165f0c103059976d20b14eb06c853c5`.
 Frozen implementation-spec commit: `4eb809a51f90bf0e741c9e5e6598be0c68f5ce27`.
@@ -115,11 +127,16 @@ Predeclared factorial architectures:
 
 No production change is authorized from V1 without passing the frozen full-stack gates and then a separate production-integration migration.
 
-## Additional receiving pass-volume semantic concern — queued
+## Receiving pass-volume attempt semantics — ACTIVE PARALLEL LANE
 
-The historical component path explicitly documents that `rules_pass_rate` represents dropbacks/plays and separately derives `pass_attempts_per_dropback` for official QB attempts. Current `simulation_v2` still uses its team `pass_att` draw directly for receiver target allocation. This means receiver targets may currently be allocated from dropbacks rather than official pass attempts.
+The historical component path explicitly documents that `rules_pass_rate` represents dropbacks/plays and separately derives `pass_attempts_per_dropback` for official QB attempts. Current `simulation_v2` still uses its team pass-count draw directly for receiver target allocation. This means receiver targets may currently be allocated from dropbacks rather than official pass attempts.
 
-This is **not folded into Joint V1 after the plan was frozen**. It is queued for a separately frozen receiving-attempt-semantics audit/candidate so attribution remains clean.
+This was **not folded into Joint V1 after its plan was frozen**. A separate isolated candidate has been frozen and launched:
+- Branch: `research-receiving-attempt-semantics-v1`.
+- Frozen plan commit: `db53721150ea0d7e46b732792e577282b3fcc5bd`.
+- Workflow head: `056d8ba5ecd5b985d38317f48291e84328264f1a`.
+- First run: `34076777066`.
+- C4 converts dropbacks to official attempts before receiver target allocation while leaving RB rushing mechanics untouched.
 
 ## Future shared game models — queued, not abandoned
 
