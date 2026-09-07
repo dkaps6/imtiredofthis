@@ -22,7 +22,26 @@ def one(root,name):
     return h
 
 def read_all(root,name):
-    return pd.concat([pd.read_csv(p,low_memory=False) for p in one(root,name)],ignore_index=True,sort=False)
+    """Read the six frozen season outputs while allowing intentionally empty cohort files.
+
+    Some outputs are structurally in-scope for all six seasons but scientifically
+    scoreable only in a narrower frozen cohort (for example the M89/M90 QB
+    distribution trace is intentionally empty for 2020-2023).  Empty season files
+    therefore represent zero eligible rows, not missing evidence.  File-count
+    lineage is still enforced by ``one`` above.
+    """
+    frames=[]
+    for p in one(root,name):
+        try:
+            df=pd.read_csv(p,low_memory=False)
+        except pd.errors.EmptyDataError:
+            continue
+        if len(df.columns)==0:
+            continue
+        frames.append(df)
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames,ignore_index=True,sort=False)
 def canon_team(v):
     x=str(v or "").strip().upper(); return {"JAC":"JAX","LA":"LAR"}.get(x,x)
 
