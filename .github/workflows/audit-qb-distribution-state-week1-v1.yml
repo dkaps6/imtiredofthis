@@ -1,0 +1,64 @@
+name: Audit QB Distribution State Week1 V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [research-cross-position-catastrophic-casebook-v1]
+    paths:
+      - '.github/workflows/audit-qb-distribution-state-week1-v1.yml'
+      - 'scripts/run_qb_distribution_state_context.py'
+      - 'model/qb_distribution_state_selector_v1.json'
+      - 'scripts/modeling/qb_distribution_state_v1.py'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyyaml
+      - name: Compile deployment components
+        run: |
+          python -m py_compile scripts/run_qb_distribution_state_context.py scripts/modeling/qb_distribution_state_v1.py
+          python - <<'PY'
+          from scripts.modeling.qb_distribution_state_v1 import load_artifact
+          a=load_artifact(); print(a['version'],a['lineage'])
+          PY
+      - name: Build authoritative 2026 schedule map
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/utils/build_team_week_map_v2.py --season 2026 --out data/team_week_map.csv
+      - name: Build strict-prior Week1 QB state context
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_qb_distribution_state_context.py --season 2026 --week 1
+      - name: Audit Week1 context
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          p='data/qb_distribution_state_context.csv';x=pd.read_csv(p)
+          req=['pass_opportunity_spot','pass_efficiency_spot','rush_opportunity_spot','rush_efficiency_spot']
+          assert len(x)==32 and x.team.nunique()==32
+          assert x.opponent.nunique()==32
+          assert not x[req].isna().any().any()
+          assert pd.to_numeric(x.sportsbook_inputs_used,errors='coerce').eq(0).all()
+          print(x[['team','opponent']+req].sort_values('team').to_string(index=False))
+          PY
+      - name: Upload audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-distribution-state-week1-v1
+          path: |
+            data/team_week_map.csv
+            data/qb_distribution_state_context.csv
+            data/qb_distribution_state_context_audit.csv
+          retention-days: 30
