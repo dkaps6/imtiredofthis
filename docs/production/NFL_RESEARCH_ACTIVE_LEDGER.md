@@ -1,6 +1,6 @@
 # NFL Research Active Ledger
 
-Purpose: preserve the currently authorized production anchors, unresolved concerns, active experiments, and future lanes so a new architecture experiment never silently abandons prior evidence.
+Purpose: preserve the currently authorized production anchors, unresolved concerns, active experiments, failed experiments, and future lanes so a new architecture experiment never silently abandons prior evidence.
 
 Last updated: 2026-09-06/07 project session.
 
@@ -35,9 +35,18 @@ Build leakage-safe football models whose independent player/game distributions a
 - Exact M37 comparison parent: `ba83fd05412a36309822cac6aa9cc5003388b073`.
 - Full-stack integration protocol: `docs/migrations/WR_FULL_STACK_INTEGRATION_PROTOCOL.md`.
 
-### Preserved research
+### Multi-season confirmation — PRESERVED
+WR-R1 canonical run `34058453941`, job `101554556794`, artifact `9997412312`, digest `sha256:d75bf1233bdd48d119508c0631a0f904e0256239e471bb72804d705d73ed6cfe`.
+- Disposition: `M38_MULTISEASON_CONFIRMED`.
+- WR rec-yard rows 2020-2025: 12,396.
+- M38 beat M37 in all 6 seasons.
+- pooled 2020-2025 MAE: 24.215219 -> 23.247553, improvement 0.967666 yards.
+- pooled 2024-2025 MAE: 23.220444 -> 22.366178, improvement 0.854267 yards.
+- 2025 exact all-receiver parity: n=4,647, MAE=17.099904733366.
+This result is not superseded by the receiving-ecosystem work; the joint architecture explicitly preserves M38 within-WR hierarchy unless a separately frozen full-stack replacement beats it.
+
+### Other preserved research
 - ND1-ND6 dispositions remain evidence; failed gates are not to be lowered or repackaged.
-- WR-R1 establishes the 2020-2025 replication backbone; run `34058453941`.
 - WR-R9 NGS source audit run `34073245454`: `NGS_RECEIVING_SOURCE_PARTIAL_ONLY`.
   - pooled join coverage 0.457406, below frozen 0.60 full-backbone gate;
   - source remains legitimate for a separately frozen selected-cohort diagnostic and is not discarded.
@@ -54,21 +63,41 @@ Build leakage-safe football models whose independent player/game distributions a
 - Artifact: `9977465711`.
 - P3 parity: 1,393 rows; rushing-yards MAE 19.949524; carry MAE 3.357494.
 
-### Current-role carry audit — COMPLETED, follow-up still open
+### Current-role carry audit — COMPLETED
 Canonical branch: `audit-rb-2026-w1-current-role-carry-authority`.
 - Result commit: `f27eccbe3007ae25ffe55c3f44e22ccaa00961c4`.
 - Run: `34060593280`.
 - Job: `101560300616`.
 - Artifact: `9997365508`.
 - Digest: `sha256:8c856deab95fdb61358754eacbe6a2c0bd6a7aedd8a63b3f8109e2638425ffd9`.
-- Official disposition: `CURRENT_ROLE_PRESERVED_BUT_NOT_DIRECT_ALLOCATION_INPUT`.
+- Disposition: `CURRENT_ROLE_PRESERVED_BUT_NOT_DIRECT_ALLOCATION_INPUT`.
 - 107 rows / 32 teams / 100% Ourlads-to-P3 identity coverage / P3 parent parity max abs diff 0.0.
 - Depth-role vs model-role mismatches: 26 rows.
 - Depth-role vs projected carry-order mismatches: 45 rows.
-- Teams where current depth-rank-1 back was not projected carry leader: 7 (ARI, CLE, GB, HOU, KC, NE, SEA).
-- Inactive players with positive projection: 0.
+- Current depth-rank-1 back not projected carry leader: 7 teams (ARI, CLE, GB, HOU, KC, NE, SEA).
 
-The structural concern is therefore established, not merely suspected: current Ourlads `depth_role` is retained, but neither `simulation_v2.py` nor `simulation_rules.py` directly gives it carry-allocation authority. The next legitimate step remains a frozen leakage-safe historical integration test using timestamp-safe pregame RB depth state. No ad-hoc 2026 override or sportsbook matching is authorized.
+### Direct depth remaps — REJECTED, NEVER TO BE REPACKAGED
+Role-Order Remap V1:
+- run `34063904515`, job `101569200535`, artifact `9998334300`.
+- disposition `ROLE_ORDER_REMAP_V1_NOT_ACTIONABLE`.
+- baseline carry MAE 3.482576 -> candidate 4.106428; rushing-yard MAE 20.424163 -> 22.836638.
+
+Role-Order Remap V2 Individual:
+- canonical run `34065137207`, job `101572457042`, artifact `9998696792`, digest `sha256:ea37c8f18152605b26b0bc91ed1279d1461ee33c60dc6a302c1a85bd2c732f10`.
+- disposition `ROLE_ORDER_REMAP_V2_REJECTED`.
+- baseline carry MAE 3.482576 -> candidate 4.509012; rushing-yard MAE 20.424163 -> 24.374262.
+The conclusion is specific: current depth information matters, but hard-remapping current depth order onto carry magnitudes is not a valid correction.
+
+### Individual-player persistence diagnostic — SUPPORTED
+RB-PD2 canonical run `34064637295`, job `101571138337`, artifact `9998549410`, digest `sha256:3ab28410b055ef2dcf35635e86dd93a9f45cbeba971764bad313df13080996c2`.
+- result commit `a4173a7a06cd72c93c1064cd377977c9fd404c16`.
+- disposition `RB_PLAYER_ERROR_PERSISTENCE_DETECTED`.
+- 1,393 canonical rows; 882 scoreable rows; 148 players; last 8 strictly prior same-player games, minimum 4.
+- carry directional persistence: Spearman .15433, quartile gap +1.507 carries, sign agreement 62.52%.
+- carry difficulty persistence: Spearman .24127, abs-error quartile gap +1.789 carries.
+- yard directional persistence: Spearman .14358, quartile gap +12.432 yards, sign agreement 60.43%.
+- yard difficulty persistence: Spearman .33056, abs-error quartile gap +16.696 yards.
+All four frozen diagnostics passed. This supports a separately frozen conservative player-residual calibration/uncertainty test; it does not itself authorize a player correction.
 
 ### Receiving baseline established
 Receiving ecosystem audit, 2020-2025 RB rows: 13,282.
@@ -79,7 +108,7 @@ Receiving ecosystem audit, 2020-2025 RB rows: 13,282.
 - rush+receiving-yards MAE 26.62563
 
 ### Open RB work
-- Timestamp-safe historical depth-state integration test for carry allocation.
+- Next rushing lane: separately frozen conservative use of strictly prior player-error persistence at its natural layers; no further naive depth remap.
 - Dedicated RB receiving lane: role/routes/checkdowns/screens/two-minute/third-down/pressure/game-script/YAC mechanisms.
 - Rushing and receiving mechanics remain separately auditable until the final joint RB distribution.
 - Final RB output must include carries, rushing yards, targets, receptions, receiving yards, and rush+receiving yards.
@@ -117,7 +146,7 @@ Promoted QB vs modeled receiver sum, 2024-2025 n=884:
 Branch: `research-joint-pass-receiving-conservation-v1`.
 Frozen plan commit: `6148f6ff3165f0c103059976d20b14eb06c853c5`.
 Frozen implementation-spec commit: `4eb809a51f90bf0e741c9e5e6598be0c68f5ce27`.
-First scientific run: `34076564092`.
+Scientific run: `34076564092`, job `101603723220`.
 
 Predeclared factorial architectures:
 - B0 current
@@ -135,7 +164,7 @@ This was **not folded into Joint V1 after its plan was frozen**. A separate isol
 - Branch: `research-receiving-attempt-semantics-v1`.
 - Frozen plan commit: `db53721150ea0d7e46b732792e577282b3fcc5bd`.
 - Workflow head: `056d8ba5ecd5b985d38317f48291e84328264f1a`.
-- First run: `34076777066`.
+- Scientific run: `34076777066`, job `101604330317`.
 - C4 converts dropbacks to official attempts before receiver target allocation while leaving RB rushing mechanics untouched.
 
 ## Future shared game models — queued, not abandoned
