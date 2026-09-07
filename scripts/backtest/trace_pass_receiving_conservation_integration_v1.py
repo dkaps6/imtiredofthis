@@ -19,8 +19,7 @@ from scripts import simulation_v2
 
 
 def main() -> int:
-    p=argparse.ArgumentParser()
-    p.add_argument("--season",type=int,required=True); p.add_argument("--prior-season",type=int,required=True); p.add_argument("--weeks",required=True)
+    p=argparse.ArgumentParser(); p.add_argument("--season",type=int,required=True); p.add_argument("--prior-season",type=int,required=True); p.add_argument("--weeks",required=True)
     p.add_argument("--iterations",type=int,default=2000); p.add_argument("--player-logs",type=Path,required=True); p.add_argument("--team-weekly",type=Path,required=True)
     p.add_argument("--schedule",type=Path,required=True); p.add_argument("--universe-dir",type=Path,required=True); p.add_argument("--injuries",type=Path,required=True)
     p.add_argument("--weather",type=Path,required=True); p.add_argument("--m89-root",type=Path,required=True); p.add_argument("--out-dir",type=Path,required=True)
@@ -63,7 +62,7 @@ def main() -> int:
             pass_mean=float(np.mean(b0.team_states[(str(game),str(team),"pass_att")]))
             for idx,(_,r) in enumerate(tdf.iterrows()):
                 if not pc[idx]: continue
-                pkey=str(r.get("player_clean_key","") or ""); identity=str(r.get("player_identity_key","") or "").strip(); join_key=f"id:{identity}" if identity else f"name:{pkey}"; position=str(r.get("position","") or "").upper().strip()
+                pkey=str(r.get("player_clean_key","") or ""); identity_raw=r.get("player_identity_key",""); identity="" if pd.isna(identity_raw) else str(identity_raw).strip(); join_key=f"id:{identity}" if identity else f"name:{pkey}"; position=str(r.get("position","") or "").upper().strip()
                 b0_rec=j.sim_arr(b0,game,pkey,"receptions"); c2_rec=j.sim_arr(c2,game,pkey,"receptions"); b0_y=j.sim_arr(b0,game,pkey,"rec_yards"); c2_y=j.sim_arr(c2,game,pkey,"rec_yards"); b0_r=j.sim_arr(b0,game,pkey,"rush_yards"); c2_r=j.sim_arr(c2,game,pkey,"rush_yards")
                 br=float(np.mean(b0_r)) if b0_r is not None else np.nan; cr=float(np.mean(c2_r)) if c2_r is not None else np.nan; by=float(np.mean(b0_y)) if b0_y is not None else np.nan; cy=float(np.mean(c2_y)) if c2_y is not None else np.nan
                 player_rows.append({
