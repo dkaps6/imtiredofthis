@@ -60,35 +60,7 @@ jobs:
 
       - name: Apply mechanical M89 cohort alignment repair
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('research/scripts/backtest/trace_joint_pass_receiving_v1.py')
-          s = p.read_text()
-          old = '''            if int(args.season) in (2024, 2025):
-                hit = m89.loc[(m89.season.eq(int(args.season))) & (m89.week.eq(int(week))) & (m89.team.eq(canon_team(team)))]
-                if len(hit) != 1:
-                    raise RuntimeError(f"M89 anchor mismatch season={args.season} week={week} team={team} rows={len(hit)}")
-                anchor_map[k] = float(hit.iloc[0].football_synthesis)
-            else:
-                anchor_map[k] = float(np.mean(qarr))
-'''
-          new = '''            if int(args.season) in (2024, 2025):
-                hit = m89.loc[(m89.season.eq(int(args.season))) & (m89.week.eq(int(week))) & (m89.team.eq(canon_team(team)))]
-                if len(hit) > 1:
-                    raise RuntimeError(f"duplicate M89 anchor season={args.season} week={week} team={team} rows={len(hit)}")
-                # Mechanical cohort alignment only: the frozen plan limits M89/M90 QB
-                # distribution evaluation to its exact available common-era cohort.
-                # Receiver evaluation remains full-slate. Team-games outside the M89
-                # cohort therefore retain the exact B0 QB MC mean anchor and are already
-                # excluded from the QB scoreboard below.
-                anchor_map[k] = float(hit.iloc[0].football_synthesis) if len(hit) == 1 else float(np.mean(qarr))
-            else:
-                anchor_map[k] = float(np.mean(qarr))
-'''
-          if old not in s:
-              raise SystemExit('expected M89 mismatch block not found; refusing non-mechanical patch')
-          p.write_text(s.replace(old, new, 1))
-          PY
+          python -c "from pathlib import Path; p=Path('research/scripts/backtest/trace_joint_pass_receiving_v1.py'); s=p.read_text(); old='            if int(args.season) in (2024, 2025):\n                hit = m89.loc[(m89.season.eq(int(args.season))) & (m89.week.eq(int(week))) & (m89.team.eq(canon_team(team)))]\n                if len(hit) != 1:\n                    raise RuntimeError(f\"M89 anchor mismatch season={args.season} week={week} team={team} rows={len(hit)}\")\n                anchor_map[k] = float(hit.iloc[0].football_synthesis)\n            else:\n                anchor_map[k] = float(np.mean(qarr))\n'; new='            if int(args.season) in (2024, 2025):\n                hit = m89.loc[(m89.season.eq(int(args.season))) & (m89.week.eq(int(week))) & (m89.team.eq(canon_team(team)))]\n                if len(hit) > 1:\n                    raise RuntimeError(f\"duplicate M89 anchor season={args.season} week={week} team={team} rows={len(hit)}\")\n                anchor_map[k] = float(hit.iloc[0].football_synthesis) if len(hit) == 1 else float(np.mean(qarr))\n            else:\n                anchor_map[k] = float(np.mean(qarr))\n'; assert old in s, 'expected M89 mismatch block not found; refusing non-mechanical patch'; p.write_text(s.replace(old,new,1))"
           python -m py_compile research/scripts/backtest/trace_joint_pass_receiving_v1.py
 
       - name: Build leakage-safe inputs and run frozen B0 C1 C2 C3 across 2020-2025
