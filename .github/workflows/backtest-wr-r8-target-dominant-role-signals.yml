@@ -1,0 +1,56 @@
+name: WR-R8 Target-Dominant Role Signals
+
+on:
+  push:
+    branches: [research-wr-r8-target-dominant-role-signals]
+    paths:
+      - "docs/migrations/WR_R8_TARGET_DOMINANT_ROLE_SIGNALS_PLAN.md"
+      - "scripts/backtest/evaluate_wr_r8_target_dominant_role_signals.py"
+      - ".github/workflows/backtest-wr-r8-target-dominant-role-signals.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install numpy==1.26.4 pandas==1.5.3 scipy==1.11.4
+      - name: Compile evaluator
+        run: python -m py_compile scripts/backtest/evaluate_wr_r8_target_dominant_role_signals.py
+      - name: Download frozen evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/wr_r5 evidence/nd5
+          gh run download 34066489537 --repo "${GITHUB_REPOSITORY}" --name wr-r5-target-catch-ypr-individual-decomposition --dir evidence/wr_r5
+          gh run download 34055534002 --repo "${GITHUB_REPOSITORY}" --name wr-nd5-snap-depth-entitlement-datetime-fix --dir evidence/nd5
+      - name: Evaluate WR-R8
+        run: |
+          rm -rf data/backtests/wr_r8_target_dominant_role_signals
+          python scripts/backtest/evaluate_wr_r8_target_dominant_role_signals.py \
+            --wr-r5-root evidence/wr_r5 \
+            --nd5-root evidence/nd5 \
+            --out-dir data/backtests/wr_r8_target_dominant_role_signals
+      - name: Show result
+        run: |
+          cat data/backtests/wr_r8_target_dominant_role_signals/wr_r8_result.json
+          cat data/backtests/wr_r8_target_dominant_role_signals/wr_r8_signal_summary.csv
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-r8-target-dominant-role-signals
+          path: |
+            data/backtests/wr_r8_target_dominant_role_signals/*
+            docs/migrations/WR_R8_TARGET_DOMINANT_ROLE_SIGNALS_PLAN.md
+          retention-days: 30
