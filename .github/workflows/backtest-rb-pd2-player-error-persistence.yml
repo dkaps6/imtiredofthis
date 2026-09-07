@@ -3,7 +3,7 @@ name: RB-PD3 Player Residual Calibration
 on:
   push:
     branches:
-      - research-rb-pd3-player-residual-calibration
+      - research-rb-pd4-role-stability-gated-calibration
   workflow_dispatch:
 
 permissions:
