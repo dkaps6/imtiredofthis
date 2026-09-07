@@ -44,12 +44,12 @@ jobs:
       - name: Verify frozen inputs
         run: |
           test -s evidence/phase_c/data/backtests/cross_position_catastrophic_casebook_v1_phase_c/cross_position_all_rows_game_spot.csv
-          test -s evidence/phase_e/phase_e_shared_state_casebook.csv
+          test -s evidence/phase_e/data/backtests/cross_position_phase_e_v1/phase_e_shared_state_casebook.csv
       - name: Run Phase-F separate pool response
         run: |
           python scripts/backtest/cross_position_phase_f_v1.py \
             --phase-c-all-rows evidence/phase_c/data/backtests/cross_position_catastrophic_casebook_v1_phase_c/cross_position_all_rows_game_spot.csv \
-            --phase-e-casebook evidence/phase_e/phase_e_shared_state_casebook.csv \
+            --phase-e-casebook evidence/phase_e/data/backtests/cross_position_phase_e_v1/phase_e_shared_state_casebook.csv \
             --out-dir data/backtests/cross_position_phase_f_v1
       - name: Show Phase-F result
         if: always()
