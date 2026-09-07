@@ -6,6 +6,8 @@
 
 This file defines how automation should operate the repository after the 2026 production overhaul began. Historical migrations and backtests remain available for research lineage, but they are **not** alternate production entry points.
 
+> **Active research continuity:** before doing new NFL research or resuming a prior chat, read root `CURRENT_NFL_RESEARCH_HANDOFF.md` first. It is the canonical cross-chat ledger of current QB/RB/WR/TE status, exact runs/artifacts, failed-lineage stopping rules, the active opportunity/entitlement architecture, and authorized next steps. After every substantive research milestone, update that handoff on `main` so a future session can resume without relying on chat memory.
+
 ---
 
 ## 0) Canonical production authority
