@@ -1,0 +1,148 @@
+name: Receiving Ecosystem Conservation Audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - audit-receiving-ecosystem-conservation
+    paths:
+      - '.github/workflows/audit-receiving-ecosystem-conservation.yml'
+      - 'scripts/backtest/trace_receiving_ecosystem.py'
+      - 'scripts/backtest/evaluate_receiving_ecosystem_conservation.py'
+      - 'scripts/backtest/run_receiving_ecosystem_historical_player_logs.py'
+      - 'docs/migrations/RECEIVING_ECOSYSTEM_CONSERVATION_PLAN.md'
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v4
+        with:
+          path: research
+
+      - name: Checkout exact M38 receiving parent
+        uses: actions/checkout@v4
+        with:
+          ref: b98518d97b3038f471aee9ae3201009b2c70bb29
+          path: m38_parent
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r m38_parent/requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+
+      - name: Compile frozen audit code
+        working-directory: research
+        run: |
+          python -m py_compile scripts/backtest/trace_receiving_ecosystem.py
+          python -m py_compile scripts/backtest/evaluate_receiving_ecosystem_conservation.py
+          python -m py_compile scripts/backtest/run_receiving_ecosystem_historical_player_logs.py
+
+      - name: Build leakage-safe inputs and trace exact M38 receiving ecosystem 2020-2025
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="${GITHUB_WORKSPACE}/research/data/backtests/receiving_ecosystem_conservation"
+          mkdir -p "${ROOT}"
+
+          for SEASON in 2020 2021 2022 2023 2024 2025; do
+            PRIOR=$((SEASON-1))
+            if [ "${SEASON}" = "2020" ]; then WEEKS="1-17"; else WEEKS="1-18"; fi
+            D="${ROOT}/${SEASON}"
+            I="${D}/inputs"
+            T="${D}/trace"
+            mkdir -p "${I}" "${T}"
+            echo "=== ecosystem season=${SEASON} prior=${PRIOR} weeks=${WEEKS} ==="
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/build_historical_inputs.py \
+              --season "${SEASON}" --prior-season "${PRIOR}" --weeks "${WEEKS}" --out-dir "${I}"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/enrich_historical_defense.py \
+              --team-weekly "${I}/team_weekly_history.csv" \
+              --seasons "${PRIOR},${SEASON}" \
+              --audit "${I}/historical_defense_enrichment_audit.csv" \
+              --observations "${I}/historical_defense_observations.csv"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/validate_historical_inputs.py \
+              --season "${SEASON}" --prior-season "${PRIOR}" --weeks "${WEEKS}" \
+              --data-dir "${I}" --report "${I}/historical_input_validation.csv"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent:${GITHUB_WORKSPACE}/research" python research/scripts/backtest/run_receiving_ecosystem_historical_player_logs.py \
+              --seasons "${PRIOR},${SEASON}" \
+              --schedule "${I}/schedule_history.csv" \
+              --out "${I}/player_game_logs_history.csv"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/build_historical_injuries.py \
+              --seasons "${PRIOR},${SEASON}" \
+              --out "${I}/injuries_history.csv"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/build_historical_weather.py \
+              --schedule "${I}/schedule_history.csv" \
+              --out "${I}/weather_history.csv"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent:${GITHUB_WORKSPACE}/research" python research/scripts/backtest/trace_receiving_ecosystem.py \
+              --season "${SEASON}" --prior-season "${PRIOR}" --weeks "${WEEKS}" \
+              --iterations 2000 \
+              --player-logs "${I}/player_game_logs_history.csv" \
+              --team-weekly "${I}/team_weekly_history.csv" \
+              --schedule "${I}/schedule_history.csv" \
+              --universe-dir "${I}/pregame_universe" \
+              --injuries "${I}/injuries_history.csv" \
+              --weather "${I}/weather_history.csv" \
+              --out-dir "${T}"
+          done
+
+      - name: Download frozen M89 QB synthesis evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p research/evidence/m89
+          gh run download 33331073376 --repo "${GITHUB_REPOSITORY}" --name m89-qb-data-integrity-casebook-synthesis --dir research/evidence/m89
+
+      - name: Evaluate frozen ecosystem audit
+        working-directory: research
+        run: |
+          rm -rf data/backtests/receiving_ecosystem_conservation/result
+          python scripts/backtest/evaluate_receiving_ecosystem_conservation.py \
+            --root data/backtests/receiving_ecosystem_conservation \
+            --m89-root evidence/m89 \
+            --out-dir data/backtests/receiving_ecosystem_conservation/result
+
+      - name: Show frozen result
+        if: always()
+        working-directory: research
+        run: |
+          cat data/backtests/receiving_ecosystem_conservation/result/receiving_ecosystem_conservation_result.json 2>/dev/null || true
+          echo '--- promoted QB / receiver conservation ---'
+          cat data/backtests/receiving_ecosystem_conservation/result/promoted_qb_receiver_conservation_summary.csv 2>/dev/null || true
+          echo '--- RB receiving baseline ---'
+          cat data/backtests/receiving_ecosystem_conservation/result/rb_receiving_player_baseline_summary.csv 2>/dev/null || true
+          echo '--- TE receiving baseline ---'
+          cat data/backtests/receiving_ecosystem_conservation/result/te_receiving_player_baseline_summary.csv 2>/dev/null || true
+
+      - name: Upload ecosystem evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: receiving-ecosystem-conservation-audit
+          path: |
+            research/data/backtests/receiving_ecosystem_conservation/result/*
+            research/data/backtests/receiving_ecosystem_conservation/*/trace/receiving_ecosystem_projection_trace.csv
+            research/data/backtests/receiving_ecosystem_conservation/*/trace/receiving_ecosystem_actual_usage.csv
+            research/data/backtests/receiving_ecosystem_conservation/*/trace/raw_sim_pass_receiving_conservation.csv
+            research/data/backtests/receiving_ecosystem_conservation/*/inputs/historical_input_validation.csv
+            research/docs/migrations/RECEIVING_ECOSYSTEM_CONSERVATION_PLAN.md
+          if-no-files-found: warn
+          retention-days: 30
