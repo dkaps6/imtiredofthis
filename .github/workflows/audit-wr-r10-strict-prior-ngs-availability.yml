@@ -1,0 +1,56 @@
+name: WR-R10 Strict-Prior NGS Availability
+
+on:
+  push:
+    branches: [research-wr-r10-strict-prior-ngs-availability]
+    paths:
+      - 'docs/migrations/WR_R10_STRICT_PRIOR_NGS_AVAILABILITY_PLAN.md'
+      - 'scripts/backtest/audit_wr_r10_strict_prior_ngs_availability.py'
+      - '.github/workflows/audit-wr-r10-strict-prior-ngs-availability.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install nflreadpy
+      - name: Compile frozen auditor
+        run: python -m py_compile scripts/backtest/audit_wr_r10_strict_prior_ngs_availability.py
+      - name: Download exact WR-R1 evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/wr_r1
+          gh run download 34058453941 --repo "${GITHUB_REPOSITORY}" --name wr-r1-multiseason-2020-2025 --dir evidence/wr_r1
+      - name: Run strict-prior availability audit
+        run: |
+          export PYTHONPATH="${PWD}"
+          rm -rf data/backtests/wr_r10_strict_prior_ngs_availability
+          python scripts/backtest/audit_wr_r10_strict_prior_ngs_availability.py --wr-r1-root evidence/wr_r1 --out-dir data/backtests/wr_r10_strict_prior_ngs_availability
+      - name: Show result
+        if: always()
+        run: |
+          cat data/backtests/wr_r10_strict_prior_ngs_availability/wr_r10_result.json 2>/dev/null || true
+          cat data/backtests/wr_r10_strict_prior_ngs_availability/wr_r10_availability_summary.csv 2>/dev/null || true
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-r10-strict-prior-ngs-availability
+          path: |
+            data/backtests/wr_r10_strict_prior_ngs_availability/*
+            docs/migrations/WR_R10_STRICT_PRIOR_NGS_AVAILABILITY_PLAN.md
+          retention-days: 30
+          if-no-files-found: warn
