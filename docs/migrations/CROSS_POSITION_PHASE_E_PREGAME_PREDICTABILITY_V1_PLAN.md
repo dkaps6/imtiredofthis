@@ -65,6 +65,8 @@ Apply:
 - corrected WR+TE target pool = baseline + beta_receiver * delta_pass_attempts
 - corrected RB carries = baseline + beta_rb * delta_pass_attempts
 
+The WR+TE pool correction is split back to WR and TE **proportionally to their baseline predicted WR/TE target-pool shares in that team-game**. This preserves the baseline WR-vs-TE pool composition and does not create a new individual entitlement rule.
+
 This is a diagnostic opportunity correction only. No yardage efficiency, entitlement share, or production simulation is changed.
 
 ## Frozen scorecard
