@@ -59,23 +59,23 @@ No hyperparameter search and no alternate model family.
 
 ### Exact features
 
-All are pregame or derived only from pregame rows:
+All are pregame or derived only from pregame rows. The list below is aligned to the exact qualified TE-R4 artifact schema **before any TE-R5 model result exists**; TE-R4 materializes prior-3 any-team participation plus prior-1 same-team participation, but does not materialize a prior-3 same-team snap value.
 
 1. `b0_te_room_share`
 2. `log_b0_te_pool = log1p(b0_te_pool)`
 3. `pool_ratio = candidate_te_pool / max(b0_te_pool, 0.25)` clipped `[0.50, 2.00]`
 4. `room_size`
 5. `prior1_same_team_offense_pct`
-6. `prior3_same_team_offense_pct`
+6. `prior1_same_team_offense_snaps`
 7. `prior1_anyteam_offense_pct`
 8. `prior3_anyteam_offense_pct`
-9. `log1p_prior_count_same_team`
-10. `log1p_prior_count_anyteam`
-11. `prior1_same_team_available`
-12. `prior3_same_team_available`
-13. `snap_share_prior1_same_team`
-14. `snap_share_prior3_same_team`
-15. `snap_share_prior1_anyteam`
+9. `prior1_anyteam_offense_snaps`
+10. `prior3_anyteam_offense_snaps`
+11. `log1p_prior_count_same_team`
+12. `log1p_prior_count_anyteam`
+13. `prior1_same_team_available`
+14. `prior3_same_team_available`
+15. `snap_share_prior1_same_team`
 16. `snap_share_prior3_anyteam`
 
 Missing numeric participation values are filled with 0 only after the explicit availability indicators/counts are retained. Room-relative snap shares are computed only from same target-game TE rows' strictly-prior participation values.
