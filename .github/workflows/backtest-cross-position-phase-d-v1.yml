@@ -1,0 +1,63 @@
+name: Cross-Position Phase D V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-cross-position-catastrophic-casebook-v1
+    paths:
+      - '.github/workflows/backtest-cross-position-phase-d-v1.yml'
+      - 'scripts/backtest/cross_position_phase_d_v1.py'
+      - 'docs/migrations/CROSS_POSITION_PHASE_D_GAME_STATE_AND_PLAYER_SENSITIVITY_V1_PLAN.md'
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  phase-d:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Compile frozen Phase-D evaluator
+        run: python -m py_compile scripts/backtest/cross_position_phase_d_v1.py
+      - name: Download exact authoritative Phase-C evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/phase_c
+          gh run download 34147777341 --repo "${GITHUB_REPOSITORY}" --name cross-position-catastrophic-casebook-v1-phase-c --dir evidence/phase_c
+      - name: Verify frozen Phase-C input
+        run: |
+          test -s evidence/phase_c/data/backtests/cross_position_catastrophic_casebook_v1_phase_c/cross_position_all_rows_game_spot.csv
+          test -s evidence/phase_c/data/backtests/cross_position_catastrophic_casebook_v1_phase_c/cross_position_phase_c_result.json
+      - name: Run Phase-D game-state and player-sensitivity forensics
+        run: |
+          python scripts/backtest/cross_position_phase_d_v1.py \
+            --phase-c-all-rows evidence/phase_c/data/backtests/cross_position_catastrophic_casebook_v1_phase_c/cross_position_all_rows_game_spot.csv \
+            --out-dir data/backtests/cross_position_phase_d_v1
+      - name: Show Phase-D result
+        if: always()
+        run: |
+          cat data/backtests/cross_position_phase_d_v1/phase_d_result.json 2>/dev/null || true
+          cat data/backtests/cross_position_phase_d_v1/phase_d_same_game_correlations.csv 2>/dev/null || true
+          cat data/backtests/cross_position_phase_d_v1/phase_d_game_state_signatures.csv 2>/dev/null || true
+          cat data/backtests/cross_position_phase_d_v1/phase_d_star_q4_environment_sensitivity.csv 2>/dev/null || true
+      - name: Upload Phase-D evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cross-position-phase-d-v1
+          path: |
+            data/backtests/cross_position_phase_d_v1/*
+            docs/migrations/CROSS_POSITION_PHASE_D_GAME_STATE_AND_PLAYER_SENSITIVITY_V1_PLAN.md
+          if-no-files-found: warn
+          retention-days: 30
