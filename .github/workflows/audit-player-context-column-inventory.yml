@@ -1,0 +1,50 @@
+name: Player Context Column Inventory
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - audit-player-context-column-inventory
+    paths:
+      - ".github/workflows/audit-player-context-column-inventory.yml"
+
+jobs:
+  inventory:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pandas
+        run: pip install pandas==1.5.3
+      - name: Download frozen evidence artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/m89 evidence/nd5 evidence/wr_r5 evidence/rb_ind evidence/rb_role
+          gh run download 33331073376 --repo "${GITHUB_REPOSITORY}" --name m89-qb-data-integrity-casebook-synthesis --dir evidence/m89
+          gh run download 34055534002 --repo "${GITHUB_REPOSITORY}" --name wr-nd5-snap-depth-entitlement-datetime-fix --dir evidence/nd5
+          gh run download 34066489537 --repo "${GITHUB_REPOSITORY}" --name wr-r5-target-catch-ypr-individual-decomposition --dir evidence/wr_r5
+          gh run download 34065409969 --repo "${GITHUB_REPOSITORY}" --name rb-individual-mechanism-decomposition --dir evidence/rb_ind
+          gh run download 34066662563 --repo "${GITHUB_REPOSITORY}" --name rb-carry-mechanism-role-context-concentration --dir evidence/rb_role
+      - name: Print evidence inventory
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          for p in sorted(Path('evidence').rglob('*')):
+              if not p.is_file():
+                  continue
+              print('\n=== FILE', p, 'size=', p.stat().st_size, '===')
+              if p.suffix.lower() == '.csv':
+                  try:
+                      x = pd.read_csv(p, nrows=5, low_memory=False)
+                      print('COLUMNS:', list(x.columns))
+                      print('SAMPLE_ROWS:', x.head(2).to_dict(orient='records'))
+                  except Exception as e:
+                      print('CSV_READ_ERROR:', repr(e))
+              elif p.suffix.lower() == '.json':
+                  print(p.read_text(errors='replace')[:5000])
+          PY
