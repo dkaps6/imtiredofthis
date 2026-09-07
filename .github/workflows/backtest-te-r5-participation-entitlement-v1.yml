@@ -1,0 +1,55 @@
+name: TE-R5 Participation Entitlement V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-te-r5-participation-entitlement-v1
+    paths:
+      - '.github/workflows/backtest-te-r5-participation-entitlement-v1.yml'
+      - 'scripts/backtest/evaluate_te_r5_participation_entitlement_v1.py'
+      - 'docs/migrations/TE_R5_PARTICIPATION_ENTITLEMENT_V1_PLAN.md'
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Compile frozen evaluator
+        run: python -m py_compile scripts/backtest/evaluate_te_r5_participation_entitlement_v1.py
+      - name: Download exact TE-R3 and TE-R4 evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/te_r3 evidence/te_r4
+          gh run download 34126813280 --repo "${GITHUB_REPOSITORY}" --name te-r3-target-pool-context-model --dir evidence/te_r3
+          gh run download 34127474412 --repo "${GITHUB_REPOSITORY}" --name te-r4-strict-prior-participation-source --dir evidence/te_r4
+      - name: Run frozen TE-R5 entitlement candidate
+        run: |
+          python scripts/backtest/evaluate_te_r5_participation_entitlement_v1.py --te-r3-root evidence/te_r3 --te-r4-root evidence/te_r4 --out-dir data/backtests/te_r5_participation_entitlement_v1
+      - name: Show result
+        if: always()
+        run: |
+          cat data/backtests/te_r5_participation_entitlement_v1/te_r5_result.json 2>/dev/null || true
+          cat data/backtests/te_r5_participation_entitlement_v1/te_r5_season_scorecard.csv 2>/dev/null || true
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: te-r5-participation-entitlement-v1
+          path: |
+            data/backtests/te_r5_participation_entitlement_v1/*
+            docs/migrations/TE_R5_PARTICIPATION_ENTITLEMENT_V1_PLAN.md
+          if-no-files-found: warn
+          retention-days: 30
