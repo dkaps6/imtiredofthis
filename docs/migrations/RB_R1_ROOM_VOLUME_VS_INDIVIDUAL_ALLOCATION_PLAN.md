@@ -12,12 +12,15 @@ This is a diagnostic routing study. It does not modify production.
 ## Frozen evidence
 - Source run: `34065409969`
 - Source artifact name: `rb-individual-mechanism-decomposition`
-- Primary input: `rb_individual_mechanism_casebook.csv`
-- Exact expected player-game rows: **1,393**
+- Primary casebook input: `rb_mechanism_casebook.csv`
+- Frozen player-profile input: `rb_individual_mechanisms.csv`
+- Exact expected source player-game rows before scoreability filtering: **1,393**
 - No sportsbook inputs.
 
+The filename correction above was made before RB-R1 execution after auditing the source evaluator. It changes no statistic, threshold, population, or scientific rule.
+
 ## Identity / room definition
-For each `(season, week, team)` represented in the frozen casebook:
+For each `(season, week, team)` represented in the frozen scoreable casebook:
 - projected RB-room carries = sum of `pred_att` across all included RB-family player rows;
 - actual RB-room carries = sum of `actual_att` across the same frozen player universe;
 - projected player room share = `pred_att / projected RB-room carries`;
@@ -42,7 +45,7 @@ within floating-point tolerance on every row. If reconciliation fails, no scient
 
 ## Primary summaries
 Report for:
-1. all 1,393 player-games;
+1. all scoreable player-games;
 2. player-games belonging to the previously identified **CARRIES-dominant** qualifying players;
 3. YPC-dominant players as a diagnostic contrast;
 4. mixed players as a diagnostic contrast.
@@ -56,7 +59,7 @@ For each slice report:
 - signed carry bias.
 
 ## Player profiles
-Use the exact player mechanism labels inherited from the frozen source profile/casebook. Qualifying player for RB-R1 requires >= 8 player-games.
+Use the exact player mechanism labels from frozen `rb_individual_mechanisms.csv`. The source profile already required >= 8 scoreable player-games; RB-R1 preserves that same qualification.
 
 For every qualifying player calculate mean absolute room-volume and allocation components. Classify the player's carry-miss submechanism:
 - `ROOM_VOLUME` if room-volume absolute mean >= 1.25 × allocation absolute mean;
