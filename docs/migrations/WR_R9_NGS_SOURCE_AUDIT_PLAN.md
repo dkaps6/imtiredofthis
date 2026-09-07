@@ -10,6 +10,8 @@ The next legitimate information family is richer route/coverage/ball-flight/afte
 ## Frozen source
 Use `nflreadpy.load_nextgen_stats(seasons=[2020,2021,2022,2023,2024,2025], stat_type="receiving")`.
 
+Audit regular-season rows only: 2020 weeks 1-17 and 2021-2025 weeks 1-18. If `season_type` is present it must be `REG`; week limits remain an additional guard.
+
 The source is treated as realized weekly/postgame information. It is **never eligible for the same target game**. A future scientific experiment may use only chronologically prior completed games (for example `shift(1)` rolling histories).
 
 ## Frozen reference cohort
