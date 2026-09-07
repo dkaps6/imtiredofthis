@@ -1,0 +1,58 @@
+name: WR-R9 NGS Receiving Source Audit
+
+on:
+  push:
+    branches: [research-wr-r9-ngs-source-audit]
+    paths:
+      - "docs/migrations/WR_R9_NGS_SOURCE_AUDIT_PLAN.md"
+      - "scripts/backtest/audit_wr_r9_ngs_source.py"
+      - ".github/workflows/audit-wr-r9-ngs-source.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install nflreadpy
+      - name: Compile source auditor
+        run: python -m py_compile scripts/backtest/audit_wr_r9_ngs_source.py
+      - name: Download frozen WR-R1 evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/wr_r1
+          gh run download 34058453941 --repo "${GITHUB_REPOSITORY}" --name wr-r1-multiseason-2020-2025 --dir evidence/wr_r1
+      - name: Audit NGS receiving source
+        run: |
+          export PYTHONPATH="${PWD}"
+          rm -rf data/backtests/wr_r9_ngs_source_audit
+          python scripts/backtest/audit_wr_r9_ngs_source.py \
+            --wr-r1-root evidence/wr_r1 \
+            --out-dir data/backtests/wr_r9_ngs_source_audit
+      - name: Show result
+        run: |
+          cat data/backtests/wr_r9_ngs_source_audit/wr_r9_ngs_source_result.json
+          cat data/backtests/wr_r9_ngs_source_audit/wr_r9_ngs_join_coverage.csv 2>/dev/null || true
+          cat data/backtests/wr_r9_ngs_source_audit/wr_r9_ngs_field_coverage.csv 2>/dev/null || true
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-r9-ngs-source-audit
+          path: |
+            data/backtests/wr_r9_ngs_source_audit/*
+            docs/migrations/WR_R9_NGS_SOURCE_AUDIT_PLAN.md
+          retention-days: 30
