@@ -1,0 +1,49 @@
+name: RB-R1 Room Volume vs Individual Allocation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-r1-room-volume-vs-individual-allocation
+    paths:
+      - ".github/workflows/backtest-rb-r1-room-volume-vs-individual-allocation.yml"
+      - "scripts/backtest/evaluate_rb_r1_room_volume_vs_individual_allocation.py"
+      - "docs/migrations/RB_R1_ROOM_VOLUME_VS_INDIVIDUAL_ALLOCATION_PLAN.md"
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install numpy==1.26.4 pandas==1.5.3
+      - name: Compile evaluator
+        run: python -m py_compile scripts/backtest/evaluate_rb_r1_room_volume_vs_individual_allocation.py
+      - name: Download frozen RB individual-mechanism evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/rb
+          gh run download 34065409969 --repo "${GITHUB_REPOSITORY}" --name rb-individual-mechanism-decomposition --dir evidence/rb
+      - name: Evaluate frozen RB-R1 decomposition
+        run: |
+          rm -rf data/backtests/rb_r1_room_volume_vs_individual_allocation
+          python scripts/backtest/evaluate_rb_r1_room_volume_vs_individual_allocation.py \
+            --rb-root evidence/rb \
+            --out-dir data/backtests/rb_r1_room_volume_vs_individual_allocation
+      - name: Show result
+        if: always()
+        run: cat data/backtests/rb_r1_room_volume_vs_individual_allocation/rb_r1_result.json 2>/dev/null || true
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r1-room-volume-vs-individual-allocation
+          path: |
+            data/backtests/rb_r1_room_volume_vs_individual_allocation/*
+            docs/migrations/RB_R1_ROOM_VOLUME_VS_INDIVIDUAL_ALLOCATION_PLAN.md
+          if-no-files-found: warn
+          retention-days: 30
