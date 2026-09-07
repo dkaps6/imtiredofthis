@@ -1,0 +1,57 @@
+name: TE-R3 Target Pool Context Model
+
+on:
+  push:
+    branches:
+      - research-te-r3-target-pool-context-model
+    paths:
+      - '.github/workflows/backtest-te-r3-target-pool-context-model.yml'
+      - 'scripts/backtest/evaluate_te_r3_target_pool_context_model.py'
+      - 'docs/migrations/TE_R3_TARGET_POOL_CONTEXT_MODEL_PLAN.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Compile frozen evaluator
+        run: python -m py_compile scripts/backtest/evaluate_te_r3_target_pool_context_model.py
+      - name: Download exact Joint V1 evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/joint_v1
+          gh run download 34081764151 --repo "${GITHUB_REPOSITORY}" --name joint-pass-receiving-conservation-v1 --dir evidence/joint_v1
+          test -s evidence/joint_v1/data/backtests/joint_pass_receiving_v1/result/joint_v1_paired_player_casebook.csv
+      - name: Run frozen TE-R3 model
+        run: |
+          python scripts/backtest/evaluate_te_r3_target_pool_context_model.py \
+            --joint-root evidence/joint_v1 \
+            --out-dir data/backtests/te_r3_target_pool_context_model
+      - name: Show result
+        if: always()
+        run: |
+          cat data/backtests/te_r3_target_pool_context_model/te_r3_result.json 2>/dev/null || true
+          cat data/backtests/te_r3_target_pool_context_model/te_r3_scorecard.csv 2>/dev/null || true
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: te-r3-target-pool-context-model
+          path: |
+            data/backtests/te_r3_target_pool_context_model/*
+            docs/migrations/TE_R3_TARGET_POOL_CONTEXT_MODEL_PLAN.md
+          if-no-files-found: warn
