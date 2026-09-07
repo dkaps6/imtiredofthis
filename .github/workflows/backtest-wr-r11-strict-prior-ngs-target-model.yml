@@ -1,0 +1,63 @@
+name: WR-R11 Strict-Prior NGS Target Model
+
+on:
+  push:
+    branches: [research-wr-r11-strict-prior-ngs-target-model]
+    paths:
+      - 'docs/migrations/WR_R11_STRICT_PRIOR_NGS_TARGET_MODEL_PLAN.md'
+      - 'scripts/backtest/evaluate_wr_r11_strict_prior_ngs_target_model.py'
+      - '.github/workflows/backtest-wr-r11-strict-prior-ngs-target-model.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install scikit-learn
+      - name: Compile frozen evaluator
+        run: python -m py_compile scripts/backtest/evaluate_wr_r11_strict_prior_ngs_target_model.py
+      - name: Download exact Joint V1 baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/joint_v1
+          gh run download 34081764151 --repo "${GITHUB_REPOSITORY}" --name joint-pass-receiving-conservation-v1 --dir evidence/joint_v1
+          test -s evidence/joint_v1/data/backtests/joint_pass_receiving_v1/result/joint_v1_paired_player_casebook.csv
+      - name: Download exact WR-R10 strict-prior features
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/wr_r10
+          gh run download 34123975300 --repo "${GITHUB_REPOSITORY}" --name wr-r10-strict-prior-ngs-availability --dir evidence/wr_r10
+          test -s evidence/wr_r10/data/backtests/wr_r10_strict_prior_ngs_availability/wr_r10_strict_prior_feature_casebook.csv
+      - name: Run frozen walk-forward NGS target candidate
+        run: |
+          rm -rf data/backtests/wr_r11_strict_prior_ngs_target_model
+          python scripts/backtest/evaluate_wr_r11_strict_prior_ngs_target_model.py --joint-root evidence/joint_v1 --r10-root evidence/wr_r10 --out-dir data/backtests/wr_r11_strict_prior_ngs_target_model
+      - name: Show result
+        if: always()
+        run: |
+          cat data/backtests/wr_r11_strict_prior_ngs_target_model/wr_r11_result.json 2>/dev/null || true
+          cat data/backtests/wr_r11_strict_prior_ngs_target_model/wr_r11_metric_summary.csv 2>/dev/null || true
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-r11-strict-prior-ngs-target-model
+          path: |
+            data/backtests/wr_r11_strict_prior_ngs_target_model/*
+            docs/migrations/WR_R11_STRICT_PRIOR_NGS_TARGET_MODEL_PLAN.md
+          retention-days: 30
+          if-no-files-found: warn
