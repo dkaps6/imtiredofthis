@@ -1,0 +1,57 @@
+name: TE-R5 Production Entitlement Adapter V1
+
+on:
+  push:
+    branches:
+      - research-cross-position-catastrophic-casebook-v1
+    paths:
+      - 'scripts/backtest/evaluate_te_r5_production_entitlement_adapter_v1.py'
+      - 'docs/migrations/TE_R5_PRODUCTION_ENTITLEMENT_ADAPTER_V1_PLAN.md'
+      - '.github/workflows/backtest-te-r5-production-entitlement-adapter-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  te-r5-production-adapter:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Compile frozen evaluator
+        run: python -m py_compile scripts/backtest/evaluate_te_r5_production_entitlement_adapter_v1.py
+      - name: Download authoritative TE-R5 evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/te_r5
+          gh run download 34132127351 --repo "${GITHUB_REPOSITORY}" --name te-r5-participation-entitlement-v1 --dir evidence/te_r5
+      - name: Verify frozen inputs
+        run: |
+          test -s evidence/te_r5/data/backtests/te_r5_participation_entitlement_v1/te_r5_oos_player_casebook.csv
+          test -s evidence/te_r5/data/backtests/te_r5_participation_entitlement_v1/te_r5_result.json
+      - name: Run frozen production-safe TE entitlement adapter
+        run: |
+          python scripts/backtest/evaluate_te_r5_production_entitlement_adapter_v1.py \
+            --te-r5-root evidence/te_r5 \
+            --out-dir data/backtests/te_r5_production_entitlement_adapter_v1
+      - name: Show result
+        run: |
+          cat data/backtests/te_r5_production_entitlement_adapter_v1/te_r5_production_adapter_result.json
+          cat data/backtests/te_r5_production_entitlement_adapter_v1/te_r5_production_adapter_season_scorecard.csv
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: te-r5-production-entitlement-adapter-v1
+          path: |
+            data/backtests/te_r5_production_entitlement_adapter_v1/*
+            docs/migrations/TE_R5_PRODUCTION_ENTITLEMENT_ADAPTER_V1_PLAN.md
+          retention-days: 30
