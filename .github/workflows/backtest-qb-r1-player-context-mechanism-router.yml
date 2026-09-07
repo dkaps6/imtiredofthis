@@ -1,0 +1,51 @@
+name: QB-R1 Player Context Mechanism Router
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-qb-r1-player-context-mechanism-router
+    paths:
+      - ".github/workflows/backtest-qb-r1-player-context-mechanism-router.yml"
+      - "scripts/backtest/evaluate_qb_r1_player_context_mechanism_router.py"
+      - "docs/migrations/QB_R1_PLAYER_CONTEXT_MECHANISM_ROUTER_PLAN.md"
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install numpy==1.26.4 pandas==1.5.3 scikit-learn==1.4.2 scipy==1.11.4
+      - name: Compile evaluator
+        run: python -m py_compile scripts/backtest/evaluate_qb_r1_player_context_mechanism_router.py
+      - name: Download frozen QB evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/qb_mech evidence/m89
+          gh run download 34065369449 --repo "${GITHUB_REPOSITORY}" --name qb-individual-mechanism-decomposition --dir evidence/qb_mech
+          gh run download 33331073376 --repo "${GITHUB_REPOSITORY}" --name m89-qb-data-integrity-casebook-synthesis --dir evidence/m89
+      - name: Evaluate QB-R1
+        run: |
+          rm -rf data/backtests/qb_r1_player_context_mechanism_router
+          python scripts/backtest/evaluate_qb_r1_player_context_mechanism_router.py \
+            --qb-mechanism-root evidence/qb_mech \
+            --m89-root evidence/m89 \
+            --out-dir data/backtests/qb_r1_player_context_mechanism_router
+      - name: Show result
+        if: always()
+        run: cat data/backtests/qb_r1_player_context_mechanism_router/qb_r1_result.json 2>/dev/null || true
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-r1-player-context-mechanism-router
+          path: |
+            data/backtests/qb_r1_player_context_mechanism_router/*
+            docs/migrations/QB_R1_PLAYER_CONTEXT_MECHANISM_ROUTER_PLAN.md
+          if-no-files-found: warn
+          retention-days: 30
