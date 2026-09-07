@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Repair and validate live sportsbook player -> team/opponent identity.
 
-This is a deterministic production boundary adapter. It does not change lines,
-odds, projections, or any football feature. It only reconciles provider naming
-variants against the event-scoped Ourlads roster and fails closed when a core
-player market cannot be assigned to exactly one team in that event.
+The active 2026 Ourlads roster plus the sportsbook event participants are the
+identity authority. Historical team affiliation is intentionally irrelevant:
+trades, free agency and rookies must resolve to their current team.
+
+This adapter never changes lines, odds or football projections. It only repairs
+provider naming variants and fails closed when a real core player offer cannot
+be assigned to exactly one of the two teams in its event. Bookmaker-missing
+placeholder rows are preserved but excluded from player-identity failure counts.
 """
 from __future__ import annotations
 
@@ -48,14 +52,6 @@ def _missing_text(value) -> bool:
 
 
 def _name_keys(value) -> set[str]:
-    """Return exact and provider-tolerant first/last matching keys.
-
-    Ourlads intentionally drops suffixes/middle surname tokens in some depth-chart
-    names (for example Marvin Harrison Jr. -> Marvin Harrison and Amon-Ra St.
-    Brown -> Amon-Ra Brown). We therefore keep an exact normalized key plus a
-    relaxed first/last key, and only accept a relaxed match when it identifies
-    exactly one of the two teams in the player's event.
-    """
     if _missing_text(value):
         return set()
     raw = str(value).strip().lower().replace("’", "'")
@@ -69,14 +65,15 @@ def _name_keys(value) -> set[str]:
     if not tokens:
         return set()
     keys = {"".join(tokens)}
+    # Ourlads occasionally drops a middle surname token (for example St. in
+    # Amon-Ra St. Brown), so keep a first+last key as a provider-tolerant key.
     if len(tokens) >= 2:
         keys.add(tokens[0] + tokens[-1])
     return {k for k in keys if k}
 
 
 def _build_roster_index(roles: pd.DataFrame) -> dict[str, set[str]]:
-    required = {"team", "player"}
-    missing = required - set(roles.columns)
+    missing = {"team", "player"} - set(roles.columns)
     if missing:
         raise RuntimeError(f"roles_ourlads missing live-prop identity columns: {sorted(missing)}")
     roster: dict[str, set[str]] = {}
@@ -93,10 +90,9 @@ def _build_roster_index(roles: pd.DataFrame) -> dict[str, set[str]]:
 
 def _event_map(enriched: pd.DataFrame, raw_data: pd.DataFrame) -> dict[str, tuple[str, str]]:
     candidates: list[pd.DataFrame] = []
-    if not enriched.empty and {"event_id", "home_team_abbr", "away_team_abbr"}.issubset(enriched.columns):
-        candidates.append(enriched[["event_id", "home_team_abbr", "away_team_abbr"]])
-    if {"event_id", "home_team_abbr", "away_team_abbr"}.issubset(raw_data.columns):
-        candidates.append(raw_data[["event_id", "home_team_abbr", "away_team_abbr"]])
+    for frame in (enriched, raw_data):
+        if not frame.empty and {"event_id", "home_team_abbr", "away_team_abbr"}.issubset(frame.columns):
+            candidates.append(frame[["event_id", "home_team_abbr", "away_team_abbr"]])
     if not candidates:
         raise RuntimeError("No event home/away identity available for live props")
     x = pd.concat(candidates, ignore_index=True).dropna(subset=["event_id"]).drop_duplicates()
@@ -117,30 +113,37 @@ def _event_map(enriched: pd.DataFrame, raw_data: pd.DataFrame) -> dict[str, tupl
     return out
 
 
+def _player_col(df: pd.DataFrame) -> str:
+    for col in ("canonical_player_name", "player_canonical", "player", "player_name_raw"):
+        if col in df.columns:
+            return col
+    raise RuntimeError(f"No player-name column available in live props columns={list(df.columns)}")
+
+
+def _is_placeholder(row: dict) -> bool:
+    try:
+        if int(float(row.get("bookmaker_missing", 0) or 0)) == 1:
+            return True
+    except (TypeError, ValueError):
+        pass
+    return False
+
+
 def _infer_team(player, event_id, roster: dict[str, set[str]], events: dict[str, tuple[str, str]]) -> str:
     pair = events.get(str(event_id))
-    if pair is None:
-        return ""
     keys = _name_keys(player)
-    if not keys:
+    if pair is None or not keys:
         return ""
     matches = [team for team in pair if keys & roster.get(team, set())]
     matches = list(dict.fromkeys(matches))
     return matches[0] if len(matches) == 1 else ""
 
 
-def _opp(team: str, event_id, events: dict[str, tuple[str, str]]) -> str:
+def _opponent(team: str, event_id, events: dict[str, tuple[str, str]]) -> str:
     pair = events.get(str(event_id))
     if not pair or team not in pair:
         return ""
     return pair[1] if pair[0] == team else pair[0]
-
-
-def _player_col(df: pd.DataFrame) -> str:
-    for col in ("canonical_player_name", "player_canonical", "player", "player_name_raw"):
-        if col in df.columns:
-            return col
-    raise RuntimeError(f"No player-name column available in live props columns={list(df.columns)}")
 
 
 def _repair_frame(
@@ -155,21 +158,27 @@ def _repair_frame(
         return df, 0
     out = df.copy()
     pcol = _player_col(out)
-    resolved = []
+    resolved: list[tuple[str, str]] = []
     changed = 0
     for row in out.itertuples(index=False):
         data = row._asdict()
+        if _is_placeholder(data) or _missing_text(data.get(pcol)):
+            resolved.append(("", ""))
+            continue
+        pair = events.get(str(data.get("event_id")))
         existing = ""
         for c in team_cols:
             if c in out.columns and not _missing_text(data.get(c)):
                 candidate = canon_team(data.get(c))
-                if candidate in CANON_TEAM_CODES:
+                # Existing identity is accepted only if it is one of the two
+                # teams in this current sportsbook event.
+                if candidate in CANON_TEAM_CODES and pair and candidate in pair:
                     existing = candidate
                     break
         team = existing or _infer_team(data.get(pcol), data.get("event_id"), roster, events)
         if not existing and team:
             changed += 1
-        resolved.append((team, _opp(team, data.get("event_id"), events) if team else ""))
+        resolved.append((team, _opponent(team, data.get("event_id"), events) if team else ""))
     teams = [x[0] for x in resolved]
     opps = [x[1] for x in resolved]
     for c in team_cols:
@@ -205,34 +214,43 @@ def repair_live_prop_identity() -> dict:
     else:
         changed_enriched = 0
 
-    # Fail closed on the markets that actually feed the core player projection/pricing path.
     pcol = _player_col(compact)
     market = compact.get("market", pd.Series("", index=compact.index)).astype("string")
-    core = compact.loc[market.isin(CORE_MARKETS)].copy()
+    player = compact[pcol].astype("string").fillna("").str.strip()
+    bookmaker_missing = pd.to_numeric(
+        compact.get("bookmaker_missing", pd.Series(0, index=compact.index)), errors="coerce"
+    ).fillna(0).eq(1)
+    placeholder_mask = market.isin(CORE_MARKETS) & (bookmaker_missing | player.eq(""))
+    actual_core_mask = market.isin(CORE_MARKETS) & ~bookmaker_missing & player.ne("")
+    core = compact.loc[actual_core_mask].copy()
     if core.empty:
-        raise RuntimeError("Live props contain zero core QB/RB/WR/TE yardage/reception rows")
-    core_player = core[pcol].astype("string").fillna("").str.strip()
-    blank_player = core_player.eq("")
-    team = core.get("team_abbr", pd.Series("", index=core.index)).astype("string").fillna("").str.strip()
-    opp = core.get("opponent_abbr", pd.Series("", index=core.index)).astype("string").fillna("").str.strip()
-    unresolved = blank_player | team.eq("") | opp.eq("")
+        raise RuntimeError("Live props contain zero actual core QB/RB/WR/TE yardage/reception player rows")
+
+    core_team = core.get("team_abbr", pd.Series("", index=core.index)).astype("string").fillna("").str.strip()
+    core_opp = core.get("opponent_abbr", pd.Series("", index=core.index)).astype("string").fillna("").str.strip()
+    unresolved = core_team.eq("") | core_opp.eq("")
 
     audit = core[[c for c in ("event_id", "market", pcol, "team_abbr", "opponent_abbr") if c in core.columns]].copy()
     audit = audit.rename(columns={pcol: "player"})
     audit["identity_resolved"] = (~unresolved).astype(int).to_numpy()
-    audit = audit.drop_duplicates().sort_values(["identity_resolved", "market", "player"], ascending=[True, True, True])
+    audit = audit.drop_duplicates().sort_values(
+        ["identity_resolved", "market", "player"], ascending=[True, True, True]
+    )
     AUDIT_CSV.parent.mkdir(parents=True, exist_ok=True)
     audit.to_csv(AUDIT_CSV, index=False)
 
     status = {
-        "core_rows": int(len(core)),
-        "core_unique_players": int(core_player[~blank_player].nunique()),
+        "core_actual_rows": int(len(core)),
+        "core_unique_players": int(core[pcol].astype(str).nunique()),
+        "core_placeholder_rows_ignored": int(placeholder_mask.sum()),
         "core_unresolved_rows": int(unresolved.sum()),
         "core_unresolved_players": sorted(core.loc[unresolved, pcol].dropna().astype(str).unique().tolist()),
         "event_count": int(len(events)),
         "repaired_compact_rows": int(changed_compact),
         "repaired_raw_offer_rows": int(changed_raw),
         "repaired_enriched_rows": int(changed_enriched),
+        "roster_authority": "current_ourlads_plus_current_event_participants",
+        "historical_team_affiliation_used": False,
         "disposition": "LIVE_PROP_IDENTITY_READY" if not unresolved.any() else "LIVE_PROP_IDENTITY_FAILURE",
     }
     STATUS_JSON.write_text(json.dumps(status, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -242,7 +260,6 @@ def repair_live_prop_identity() -> dict:
     if not enriched.empty:
         enriched.to_csv(DATA / "props_enriched.csv", index=False)
 
-    # Keep the duplicate output enrichment artifact synchronized when present.
     out_enriched_path = OUTPUTS / "props_enriched.csv"
     if out_enriched_path.exists() and out_enriched_path.stat().st_size > 0:
         out_enriched = _read(out_enriched_path)
@@ -255,7 +272,7 @@ def repair_live_prop_identity() -> dict:
     print("[live_prop_identity] " + json.dumps(status, sort_keys=True))
     if unresolved.any():
         raise RuntimeError(
-            f"Core live prop player/team identity unresolved rows={int(unresolved.sum())}; "
+            f"Actual core live prop player/team identity unresolved rows={int(unresolved.sum())}; "
             f"players={status['core_unresolved_players'][:30]}"
         )
     return status
