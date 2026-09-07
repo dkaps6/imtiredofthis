@@ -18,6 +18,15 @@ This diagnostic predicts *which mechanism matters*, not a passing-yard correctio
 - Mechanism casebook expected rows: **884** (2024-2025).
 - Sportsbook/game-market features prohibited.
 
+## Pre-science mechanical source repair
+QB-R1 run `34070770339` failed before any model fit or scientific output because the plan referenced a non-existent artifact filename, `m89_synthesis_feature_trace.csv`. A direct artifact inventory then established the authoritative football-only file as:
+
+`m89_2024_2025_synthesis_trace.csv`
+
+The same inventory also established the exact available schema. Three originally listed offensive efficiency columns (`off_pass_epa`, `off_pass_success`, `off_ypa`) do not exist in that frozen trace, and the available defense-success field is named `def_success_allowed` rather than `def_pass_success_allowed`.
+
+Therefore, **before any successful QB-R1 scientific execution**, the source contract is mechanically corrected to the exact ten intended fields that actually exist in the frozen football-only M89 trace. The three unavailable columns are dropped rather than replaced with newly selected variables. No target, algorithm, temporal split, gate, threshold, player-signal definition, or outcome is changed.
+
 ## Target
 From exact QB mechanism casebook:
 
@@ -38,17 +47,14 @@ No other dominance ratio will be tried.
 This is a prior/context signal only. It is not a fixed player correction.
 
 ## Explicit football context feature set
-Only already-established leakage-safe M89 synthesis-trace fields may be used:
+Only already-established leakage-safe fields present in exact `m89_2024_2025_synthesis_trace.csv` may be used:
 - `qb_prior_attempts`
 - `qb_prior_ypa`
 - `off_true_proe`
 - `off_neutral_pace`
 - `def_pass_epa_allowed`
-- `def_pass_success_allowed`
+- `def_success_allowed`
 - `def_ypa_allowed`
-- `off_pass_epa`
-- `off_pass_success`
-- `off_ypa`
 - `off_plays`
 - `off_pass_rate`
 - `def_pass_rate_faced`
@@ -60,8 +66,8 @@ One algorithm only: Ridge regression, alpha = **10.0**, with median imputation a
 
 Three preregistered feature views:
 1. `PLAYER_ONLY`: `prior4_player_attempt_share`.
-2. `CONTEXT_ONLY`: the 13 explicit football-context fields above.
-3. `COMBINED`: player signal + all 13 context fields.
+2. `CONTEXT_ONLY`: the 10 explicit football-context fields above.
+3. `COMBINED`: player signal + all 10 context fields.
 
 No hyperparameter sweep, feature selection, alternate windows, or model zoo.
 
