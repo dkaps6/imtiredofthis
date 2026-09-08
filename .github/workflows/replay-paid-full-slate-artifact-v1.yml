@@ -7,11 +7,14 @@ on:
     paths:
       - '.github/workflows/replay-paid-full-slate-artifact-v1.yml'
       - 'data/manual_name_overrides.csv'
+      - 'data/player_identity_aliases.csv'
       - 'scripts/harden_live_odds_artifacts_v1.py'
       - 'scripts/repair_live_prop_identity_v1.py'
       - 'scripts/materialize_live_props_for_model_v1.py'
       - 'scripts/materialize_pricing_offers_v1.py'
       - 'scripts/metrics_v2.py'
+      - 'scripts/enrich_player_scoring_v2.py'
+      - 'scripts/simulation_v2.py'
       - 'scripts/run_pricing_v2.py'
       - 'scripts/modeling/rb_pricing_adapter_v1.py'
       - 'scripts/player_identity_roster_history_v1.py'
@@ -124,11 +127,17 @@ jobs:
               'data/player_form_consensus.csv',
               'data/player_identity_validation.csv',
               'data/player_identity_semantic_audit.csv',
+              'data/player_scoring_td_position_priors.csv',
           ]
           for p in required:
               df=pd.read_csv(p)
               if df.empty: raise SystemExit(f'FATAL: replay produced zero rows: {p}')
               print(p, 'rows=', len(df))
+          td=json.load(open('data/player_scoring_td_prior_status.json',encoding='utf-8'))
+          if td.get('sportsbook_inputs_used') is not False:
+              raise SystemExit('FATAL: TD position prior does not certify sportsbook-independent construction')
+          if int(td.get('position_prior_fallback_rows',0)) <= 0:
+              raise SystemExit('FATAL: expected explicit TD position-prior fallback rows were not recorded')
           q=pd.read_csv('data/live_odds_placeholder_rows.csv')
           status=json.load(open('data/live_odds_status.json',encoding='utf-8'))
           expected=int(status.get('production_quarantined_rows',-1))
@@ -186,10 +195,15 @@ jobs:
             data/live_pricing_offer_audit.json
             data/injuries_source_status.json
             data/injuries_identity_audit.csv
+            data/injury_team_scope.csv
             data/player_identity_validation.csv
             data/player_identity_semantic_audit.csv
             data/player_identity_semantic_audit.json
+            data/player_identity_roster_history_audit.json
+            data/player_scoring_td_position_priors.csv
+            data/player_scoring_td_prior_status.json
             data/provider_readiness_v3.csv
+            data/model_context_bridge.csv
             data/model_bayesian_diagnostics.csv
             data/model_ml_diagnostics.csv
             data/model_state_diagnostics.csv
@@ -198,6 +212,7 @@ jobs:
             data/rb_rush_synthesis_context.csv
             data/_debug/metrics_unmatched_player_form.csv
             data/_debug/metrics_missing_identity.csv
+            data/_debug/pricing_unsimulated_props.csv
             outputs/props_raw_compact.csv
             outputs/props_pricing_offers.csv
             outputs/props_priced_clean.csv
