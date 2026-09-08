@@ -16,7 +16,7 @@ This is the durable continuity ledger for the RB receiving-yards / receptions re
 4. Distinguish receiving identity (who can command RB targets) from weekly receiving state (when that role activates).
 5. Do not manufacture opportunity. RB receiving allocation is a finite room and conservation is mandatory.
 6. Do not change frozen science gates after seeing results.
-7. Distinguish coded/tested research, scientifically supported research, and certified/production-active code.
+7. Distinguish coded/tested research, scientifically supported research, shadow/deployable artifacts, and certified/production-active code.
 
 ## Research lineage
 
@@ -225,35 +225,156 @@ Every frozen R18 gate passed. Sportsbook inputs added 0. Production parameters c
 
 R18 proves the R17 distribution shape can be composed mechanically with the canonical MC output without mutating the mean, target allocation, non-RB markets, or other RB component markets. It still does NOT make the mechanism live.
 
-## Deployability audit after R18
+## R19 — deployable 2026 tail scorer refit — PASS, SHADOW ONLY
 
-The next blocking problem is scoring R16 tail probabilities on a real 2026 slate.
+Frozen plan: `docs/migrations/RB_R19_DEPLOYABLE_TAIL_SCORER_REFIT_V1_PLAN.md`
+Plan commit: `30d3a18310c955d960ad393b5e44464b1dc3ba25`
+Implementation: `scripts/backtest/build_rb_r19_deployable_tail_scorer_refit_v1.py`
+Implementation commit: `d71725597a44d8b3b78c20c5eaa79a9dc51f63b8`
+Workflow: `.github/workflows/research-rb-r19-deployable-tail-scorer-refit-v1.yml`
+Workflow commit/head SHA: `6ac1342f737f142acac6a3e4b459f442faf1442a`
+Actions run: `34288244770`
+Job: `102268690877`
+Artifact: `10080377483`
+Artifact digest: `sha256:11432b9d7b7f2367935a862b63c30df9f40955e479806ab67d90921b63a907c7`
+Disposition: `RB_R19_DEPLOYABLE_TAIL_SCORER_REFIT_PASS_SHADOW_ONLY`
+PASS: true
 
-Directly available/derivable from current production-football surfaces:
-- `baseline_pred_targets`: current finite M38 target entitlement multiplied by projected team pass attempts (`rules_plays_est * rules_pass_rate`)
-- `baseline_pred_rec_yards`: baseline predicted targets multiplied by current `rules_ypt`
-- `frozen_ypt`: current/baseline YPT mapping (`rules_ypt`), matching the R12 frozen-efficiency concept
+R19 answered the deployability question without changing production. It recreated and serialized the exact forward chain needed to score a 2026 slate:
+`R8 identity -> R9 reliability/target-delta feature -> R11 high5 state probability -> R16 cat30/cat50 tail probability -> R17 residual pools`.
 
-Deployable but requires carrying/refitting frozen research mechanisms into a scored artifact:
-- `prior_rb_room_share`: strict-prior RB receiving-room history from the R8 identity snapshot machinery
-- `r9_raw_r8_residual`: exact R8 Ridge identity residual prediction using the frozen 19-feature set
-- `state_probability`: exact R11/R12 TOP20 high5 logistic probability using baseline targets, prior RB-room share, R9 target delta, and raw R8 residual
-- `identity_top20`: current-slate percentile classification from strict-prior RB-room share
+### Historical parity
 
-Important: these are reconstructable using pregame football information, but they are NOT yet first-class certified full-slate fields. Do not approximate them with ad hoc current PlayerForm columns.
+R11 2025 parity:
+- eligible rows 285
+- matched rows 285
+- coverage 1.0
+- max abs probability delta `2.220446049250313e-16`
+- mean abs probability delta `2.858337348486697e-17`
+
+R16 probability parity, all exact-key coverage 1.0:
+- train 2023 -> test 2024, cat30: 1,394/1,394; max abs delta `9.71445146547012e-17`
+- train 2023 -> test 2024, cat50: 1,394/1,394; max abs delta `9.974659986866641e-17`
+- train 2023-2024 -> test 2025, cat30: 1,393/1,393; max abs delta `9.71445146547012e-17`
+- train 2023-2024 -> test 2025, cat50: 1,393/1,393; max abs delta `9.974659986866641e-17`
+
+R17 historical pool-count lineage reproduced exactly:
+- 2023: non-tail 1,272; tail30-49 56; tail50+ 28
+- 2023-2024: non-tail 2,580; tail30-49 122; tail50+ 48
+
+Final completed-history 2023-2025 residual pools serialized:
+- non-tail: 3,890; SHA256 `f677e91cd25cdbd6db044e9decccec6312943b99f8ffc25a827527e54d4d7b1d`
+- tail30-49: 174; SHA256 `3da7bf656fcab3c111c8d5fb60e38fb7f735d7fcce639dabad899431f613c225`
+- tail50+: 79; SHA256 `ee203d3ffa01b8687e7774d817d0dce6cdc8b56ca62321a5583d5287dfd5ee43`
+
+### Final 2026 refits
+
+R8/R9 identity:
+- final training season 2025
+- training rows 2,134
+- OOF reliability rows 1,502
+- raw reliability slope 1.2984460655735952
+- frozen reliability clip produced final reliability 1.0
+- OOF raw/shrunk residual MAE 0.9780920658968174
+- OOF raw correlation 0.5053735994294682
+
+R11 high5:
+- training rows 1,141
+- training seasons 2022-2025
+- high5 event rate 0.32602979842243646
+- TOP20 only; REST80 state probability remains exactly 0
+
+R16 final tail fits:
+- training rows 4,143
+- training seasons 2023-2025
+- cat30 training rate 0.06106685976345643
+- cat50 training rate 0.019068307989379675
+
+Strict-prior audit:
+- training rows checked 2,134
+- player time violations 0
+- same-team time violations 0
+
+Serialization roundtrip:
+- R8 Ridge max abs delta 0.0
+- R11 high5 max abs delta 0.0
+- R16 cat30 max abs delta 0.0
+- R16 cat50 max abs delta 0.0
+- overall max abs delta 0.0
+
+Every frozen R19 gate passed:
+- r11_2025_parity_coverage
+- r11_2025_probability_parity
+- r16_probability_parity
+- r17_pool_count_parity
+- final_r9_feature_complete
+- final_r9_reliability_range
+- final_r11_fit_valid
+- final_r16_cat30_fit_valid
+- final_r16_cat50_fit_valid
+- residual_pools_valid
+- serialization_roundtrip
+- strict_prior_audit
+- future_outcome_zero
+- sportsbook_zero
+- production_parameters_zero
+
+Sportsbook inputs added: 0.
+Production parameters changed: 0.
+
+### R19 artifact contract actually materialized
+
+Artifact includes:
+- `rb_r19_tail_scorer_model_v1.json`
+- `rb_r19_residual_pools_v1.npz`
+- final R8/R9 coefficient audit
+- final R9 OOF reliability audit
+- R11 parity CSV
+- R16 parity CSV
+- result JSON and historical input audits
+
+Serialized scorer:
+- candidate `RB_R19_DEPLOYABLE_TAIL_SCORER_REFIT_V1`
+- version 1
+- status `SHADOW_ONLY`
+- fit_for_season 2026
+- git SHA `6ac1342f737f142acac6a3e4b459f442faf1442a`
+- exact R8/R9, R11, and R16 scaler/model parameters
+- exact residual-pool hashes and companion NPZ
+- explicit fail-closed live-input contract
+- `sportsbook_inputs_added = 0`
+- `production_parameters_changed = 0`
+
+Required live inputs fail closed on:
+- event_id
+- team
+- player_clean_key
+- position/position_family
+- certified finite RB target entitlement or target share
+- certified team pass-attempt projection OR rules_plays_est + rules_pass_rate
+- rules_ypt/frozen_ypt
+- strict-prior R8 identity history source
+
+R9 target delta remains a scorer feature only. R19 does not alter live RB receiving mean or target entitlement.
 
 ## Production boundary
 
-Do not state that R9/R11/R12/R13/R14/R15/R16/R17/R18 are active production RB receiving code unless a later explicit promotion ledger says so. RB receiving research has not been silently integrated into the certified full-slate production stack.
+Do not state that R9/R11/R12/R13/R14/R15/R16/R17/R18/R19 are active production RB receiving code unless a later explicit promotion ledger says so. R19 is a parity-verified **2026 SHADOW scorer artifact**, not a production promotion. Canonical `scripts/simulation_v2.py` remains unchanged by this lane.
 
 ## Exact next step
 
-Freeze an R19 deployable-feature/refit contract before code execution. R19 should:
-1. reproduce the exact R8 identity snapshot feature definitions using strict-prior 2023-2025 completed-game history;
-2. refit the R8 Ridge identity residual on the final allowed training window, derive R9 reliability/target delta without changing the live mean;
-3. refit the R11 high5 state model for TOP20 backs;
-4. refit R16 cat30/cat50 tail classifiers on the final allowed 2023-2025 training window;
-5. freeze the 2023-2025 residual pools required by R17;
-6. materialize a versioned, football-only 2026 scorer artifact with coefficients/scalers/pool hashes and fail-closed feature requirements;
-7. prove historical feature parity against the existing R16/R17 lineage before scoring any 2026 slate;
-8. keep the scorer shadow-only until a separately frozen full-slate prospective/parity gate passes.
+Freeze and execute **R20: real-2026-slate shadow scoring + full-slate fail-closed parity/data-quality validation** before any promotion discussion.
+
+R20 must, without changing production:
+1. load the immutable R19 model JSON and residual-pool NPZ and verify their hashes/lineage;
+2. build the exact strict-prior R8 identity features for a real 2026 slate using only completed games before the scored slate;
+3. derive current baseline RB targets and receiving-yard means only from the certified football projection surfaces;
+4. score R11 state probability, R16 p30/p50, and R17/R18 tail distribution in shadow mode;
+5. fail closed on missing/duplicate/nonfinite player, team, entitlement, YPT, or history inputs rather than substituting generic PlayerForm proxies;
+6. preserve every RB receiving mean exactly after the shadow adapter;
+7. preserve canonical target allocation, receptions, rushing outputs, all non-RB outputs, and simulation dependence/rank ordering exactly as required by R18;
+8. run the current certified full-slate stack validator and prove the existing production/certified outputs are byte/value-identical when the shadow lane is disabled/unconsumed;
+9. emit a player-level 2026 shadow casebook with identity percentile/TOP20, R9 residual/target delta feature, R11 state probability, R16 p30/p50, canonical mean, and adapted distribution diagnostics;
+10. use zero sportsbook inputs and change zero production parameters.
+
+R20 is a prospective deployment/parity gate, not permission to tune on 2026 outcomes. A PASS may justify a separately governed promotion discussion or prospective grading plan; it must not silently activate the adapter.
