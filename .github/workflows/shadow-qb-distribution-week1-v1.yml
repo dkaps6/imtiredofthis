@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/shadow-qb-distribution-week1-v1.yml'
       - 'scripts/run_qb_distribution_shadow_full_roster_v2.py'
+      - 'scripts/run_qb_distribution_shadow_full_roster_v3.py'
       - 'scripts/run_qb_distribution_state_context.py'
       - 'scripts/utils/build_team_week_map_v2.py'
       - 'scripts/simulation_c2_qb_candidate.py'
@@ -94,6 +95,7 @@ jobs:
           pip install pyyaml
           python -m py_compile \
             scripts/run_qb_distribution_shadow_full_roster_v2.py \
+            scripts/run_qb_distribution_shadow_full_roster_v3.py \
             scripts/run_qb_distribution_state_context.py \
             scripts/simulation_c2_qb_candidate.py \
             scripts/modeling/qb_distribution_state_v1.py
@@ -111,7 +113,7 @@ jobs:
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
-          python scripts/run_qb_distribution_shadow_full_roster_v2.py \
+          python scripts/run_qb_distribution_shadow_full_roster_v3.py \
             --universe evidence/full_slate/data/football_simulation_universe.csv \
             --priced evidence/full_slate/outputs/props_priced_clean.csv \
             --state-context data/qb_distribution_state_context.csv \
@@ -125,6 +127,8 @@ jobs:
           cat full_slate_run_id.txt 2>/dev/null || true
           echo '=== Shadow result ==='
           cat outputs/qb_distribution_shadow_v1_result.json 2>/dev/null || true
+          echo '=== Football-only primary QB audit ==='
+          cat data/qb_c2_shadow_primary_qb_audit.csv 2>/dev/null || true
           echo '=== Shadow QB rows ==='
           test -s outputs/qb_distribution_shadow_v1.csv && cat outputs/qb_distribution_shadow_v1.csv || true
 
@@ -137,6 +141,7 @@ jobs:
             full_slate_run_id.txt
             data/qb_distribution_state_context.csv
             data/qb_distribution_state_context_audit.csv
+            data/qb_c2_shadow_primary_qb_audit.csv
             outputs/qb_distribution_shadow_v1.csv
             outputs/qb_distribution_shadow_v1_result.json
             docs/migrations/QB_DISTRIBUTION_SHADOW_WEEK1_V1_PLAN.md
