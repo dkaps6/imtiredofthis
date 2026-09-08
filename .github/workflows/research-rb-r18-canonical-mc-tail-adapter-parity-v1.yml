@@ -1,0 +1,79 @@
+name: RB R18 Canonical MC Tail Adapter Parity V1
+
+on:
+  push:
+    branches:
+      - research-cross-position-catastrophic-casebook-v1
+    paths:
+      - scripts/modeling/rb_r17_tail_distribution_adapter_v1.py
+      - scripts/backtest/evaluate_rb_r18_canonical_mc_tail_adapter_parity_v1.py
+      - .github/workflows/research-rb-r18-canonical-mc-tail-adapter-parity-v1.yml
+  workflow_dispatch:
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Download corrected R12 lineage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rb-receiving-state-v1b-mechanical-correction
+          path: corrected-artifact
+          github-token: ${{ github.token }}
+          repository: dkaps6/imtiredofthis
+          run-id: 34273055095
+      - name: Download immutable R16 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rb-r16-upside-tail-state-v1
+          path: r16-artifact
+          github-token: ${{ github.token }}
+          repository: dkaps6/imtiredofthis
+          run-id: 34286363931
+      - name: Locate immutable inputs
+        id: locate
+        shell: bash
+        run: |
+          set -euo pipefail
+          PRED="$(find corrected-artifact -type f -path '*r12_state_gated/rb_r12_predictions.csv' -print -quit)"
+          R16="$(find r16-artifact -type f -name 'rb_r16_tail_predictions.csv' -print -quit)"
+          test -n "$PRED"
+          test -n "$R16"
+          echo "pred=$PRED" >> "$GITHUB_OUTPUT"
+          echo "r16=$R16" >> "$GITHUB_OUTPUT"
+      - name: Run frozen R18 parity and historical replay
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/evaluate_rb_r18_canonical_mc_tail_adapter_parity_v1.py \
+            --predictions '${{ steps.locate.outputs.pred }}' \
+            --r16-tail-predictions '${{ steps.locate.outputs.r16 }}' \
+            --out-dir data/backtests/rb_r18_canonical_mc_tail_adapter_parity_v1
+      - name: Show R18 result
+        if: always()
+        run: |
+          cat data/backtests/rb_r18_canonical_mc_tail_adapter_parity_v1/rb_r18_result.json 2>/dev/null || true
+          echo '=== historical replay ==='
+          cat data/backtests/rb_r18_canonical_mc_tail_adapter_parity_v1/rb_r18_historical_replay_summary.csv 2>/dev/null || true
+          echo '=== fixture audit ==='
+          cat data/backtests/rb_r18_canonical_mc_tail_adapter_parity_v1/rb_r18_fixture_player_audit.csv 2>/dev/null || true
+      - name: Upload R18 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r18-canonical-mc-tail-adapter-parity-v1
+          path: data/backtests/rb_r18_canonical_mc_tail_adapter_parity_v1/*
+          if-no-files-found: warn
+          retention-days: 30
