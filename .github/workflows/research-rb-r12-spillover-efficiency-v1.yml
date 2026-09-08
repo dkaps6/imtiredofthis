@@ -1,0 +1,61 @@
+name: RB R12 Spillover Efficiency V1
+
+on:
+  push:
+    branches:
+      - research-cross-position-catastrophic-casebook-v1
+    paths:
+      - scripts/backtest/diagnose_rb_r12_spillover_efficiency_v1.py
+      - .github/workflows/research-rb-r12-spillover-efficiency-v1.yml
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4
+      - name: Download corrected RB-only state artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rb-receiving-state-v1b-mechanical-correction
+          path: corrected-artifact
+          github-token: ${{ github.token }}
+          repository: dkaps6/imtiredofthis
+          run-id: 34273055095
+      - name: Locate corrected R12 predictions
+        id: locate
+        shell: bash
+        run: |
+          set -euo pipefail
+          PRED="$(find corrected-artifact -type f -path '*r12_state_gated/rb_r12_predictions.csv' -print -quit)"
+          test -n "$PRED"
+          echo "pred=$PRED" >> "$GITHUB_OUTPUT"
+          echo "$PRED"
+      - name: Run spillover and efficiency diagnostic
+        run: |
+          python scripts/backtest/diagnose_rb_r12_spillover_efficiency_v1.py \
+            --predictions '${{ steps.locate.outputs.pred }}' \
+            --out-dir data/backtests/rb_r12_spillover_efficiency_v1
+      - name: Show result
+        run: |
+          cat data/backtests/rb_r12_spillover_efficiency_v1/rb_r12_spillover_efficiency_result.json
+          echo '=== stages ==='
+          cat data/backtests/rb_r12_spillover_efficiency_v1/rb_r12_spillover_stage_summary.csv
+          echo '=== efficiency oracles ==='
+          cat data/backtests/rb_r12_spillover_efficiency_v1/rb_r12_efficiency_oracle_summary.csv
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r12-spillover-efficiency-v1
+          path: data/backtests/rb_r12_spillover_efficiency_v1/*
+          retention-days: 30
