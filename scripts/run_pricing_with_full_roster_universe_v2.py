@@ -35,9 +35,21 @@ def _canonical_identity_frame(df: pd.DataFrame) -> pd.DataFrame:
     if blank.any():
         sample = out.loc[blank, [c for c in ("player", "team") if c in out.columns]].head(20).to_dict("records")
         raise RuntimeError(f"suffix-safe full-roster identity key unresolved: {sample}")
-    collisions = out.duplicated(["team", "player_clean_key"], keep=False)
-    if collisions.any():
-        sample = out.loc[collisions, ["player", "team", "player_clean_key"]].sort_values(
+
+    # Pricing legitimately contains many rows per player (book/market/line). A
+    # collision exists only when DISTINCT display names on the SAME team collapse
+    # to one suffix-insensitive key. Repeated rows for Marvin Harrison Jr. are one
+    # identity and must not be treated as an ambiguity.
+    names = (
+        out.assign(_display=out["player"].astype("string").fillna("").str.strip())
+        .groupby(["team", "player_clean_key"], dropna=False)["_display"]
+        .nunique(dropna=False)
+    )
+    bad_keys = names.loc[names.gt(1)]
+    if not bad_keys.empty:
+        bad_index = set(bad_keys.index.tolist())
+        mask = [(str(t), str(k)) in bad_index for t, k in zip(out["team"], out["player_clean_key"])]
+        sample = out.loc[mask, ["player", "team", "player_clean_key"]].drop_duplicates().sort_values(
             ["team", "player_clean_key", "player"], kind="mergesort"
         ).head(20).to_dict("records")
         raise RuntimeError(f"suffix-safe full-roster identity is ambiguous within current team: {sample}")
