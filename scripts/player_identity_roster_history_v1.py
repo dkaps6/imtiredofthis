@@ -17,11 +17,16 @@ import pandas as pd
 
 from scripts._opponent_map import canon_team
 from scripts.utils.canonical_names import canonicalize_player_name_safe
-from scripts.utils.player_identity_v3 import attach_historical_identity, build_identity_registry
+from scripts.utils.player_identity_v3 import (
+    attach_historical_identity,
+    build_identity_registry,
+    player_name_key,
+)
 
 DATA = Path("data")
 AUDIT = DATA / "player_identity_roster_history_audit.json"
 SNAPSHOT = DATA / "player_identity_roster_history.csv"
+ALIASES = DATA / "player_identity_aliases.csv"
 SKILL_POSITIONS = {"QB", "RB", "FB", "WR", "TE"}
 
 
@@ -97,6 +102,76 @@ def _load_one(season: int) -> pd.DataFrame:
     ]].drop_duplicates(["season", "week", "team", "player_identity_key"], keep="last")
 
 
+def _apply_verified_aliases(history: pd.DataFrame, current_season: int) -> tuple[pd.DataFrame, int]:
+    """Append current identity aliases only after verifying their historical GSIS anchor.
+
+    Alias rows contain person identity metadata only. They are deliberately stamped
+    as current-season week 0 and never carry usage/performance fields, so they can
+    change name/team resolution without broadening the model prior.
+    """
+    if not ALIASES.exists() or ALIASES.stat().st_size == 0:
+        return history, 0
+    aliases = pd.read_csv(ALIASES, dtype="string").fillna("")
+    required = {
+        "current_name", "historical_name", "player_id", "current_team", "position",
+        "reason", "verified_source", "verified_date",
+    }
+    missing = required - set(aliases.columns)
+    if missing:
+        raise RuntimeError(f"identity alias config missing columns: {sorted(missing)}")
+    if aliases.empty:
+        return history, 0
+    if aliases[list(required)].apply(lambda s: s.str.strip().eq("")).any().any():
+        raise RuntimeError("identity alias config contains blank required values")
+    if aliases["player_id"].duplicated().any() or aliases["current_name"].map(
+        lambda v: player_name_key(v, strip_suffix=True)
+    ).duplicated().any():
+        raise RuntimeError("identity alias config contains duplicate player IDs or current names")
+
+    rows: list[pd.DataFrame] = []
+    for rec in aliases.to_dict("records"):
+        pid = str(rec["player_id"]).strip()
+        current_name = str(rec["current_name"]).strip()
+        historical_name = str(rec["historical_name"]).strip()
+        team = canon_team(rec["current_team"])
+        position = _position(rec["position"])
+        source_rows = history.loc[history["player_id"].astype(str).eq(pid)].copy()
+        if source_rows.empty:
+            raise RuntimeError(f"verified identity alias player_id not found in historical roster source: {pid}")
+        hist_base = player_name_key(historical_name, strip_suffix=True)
+        source_bases = set(source_rows["player"].map(lambda v: player_name_key(v, strip_suffix=True)))
+        if hist_base not in source_bases:
+            raise RuntimeError(
+                f"verified identity alias historical name does not match GSIS source: "
+                f"player_id={pid} historical_name={historical_name} source_names={sorted(source_rows['player'].astype(str).unique())[:10]}"
+            )
+        source_positions = set(source_rows["position"].map(_position))
+        if position not in source_positions:
+            raise RuntimeError(
+                f"verified identity alias position mismatch player_id={pid} alias={position} source={sorted(source_positions)}"
+            )
+        canon_name, clean_key = canonicalize_player_name_safe(current_name)
+        alias = pd.DataFrame([{
+            "season": int(current_season),
+            "week": 0,
+            "team": team,
+            "position": position,
+            "player": canon_name,
+            "player_clean_key": clean_key,
+            "player_id": pid,
+        }])
+        alias = attach_historical_identity(alias, id_col="player_id", name_col="player", team_col="team")
+        if str(alias.iloc[0]["player_identity_key"]) != f"gsis:{pid}":
+            raise RuntimeError(f"verified identity alias failed GSIS round trip: {current_name} -> {pid}")
+        rows.append(alias[[
+            "season", "week", "team", "position", "player", "player_clean_key",
+            "player_id", "player_identity_key", "identity_full_name_key", "identity_base_name_key",
+        ]])
+
+    out = pd.concat([history, *rows], ignore_index=True, sort=False)
+    return out, len(rows)
+
+
 def load_identity_roster_history(seasons: Iterable[int]) -> pd.DataFrame:
     requested = sorted({int(s) for s in seasons})
     if not requested:
@@ -111,8 +186,10 @@ def load_identity_roster_history(seasons: Iterable[int]) -> pd.DataFrame:
     if out.empty:
         raise RuntimeError("identity roster history produced zero rows")
 
-    # Stable ID must remain one person identity. Multiple historical teams are
-    # expected and are exactly what allows offseason-trade resolution.
+    out, alias_rows = _apply_verified_aliases(out, max(requested) + 1)
+
+    # Stable ID must remain one person identity. Multiple historical/current teams
+    # are expected and are exactly what allows offseason-trade resolution.
     collisions = out.groupby("player_id")["player_identity_key"].nunique()
     bad = collisions.loc[collisions.gt(1)]
     if not bad.empty:
@@ -128,6 +205,7 @@ def load_identity_roster_history(seasons: Iterable[int]) -> pd.DataFrame:
         "stable_player_ids": int(out["player_id"].nunique()),
         "registry_rows": int(len(registry)),
         "season_rows": season_rows,
+        "verified_alias_rows": int(alias_rows),
         "model_feature_columns_supplied": [],
         "identity_only": True,
         "snapshot": str(SNAPSHOT),
