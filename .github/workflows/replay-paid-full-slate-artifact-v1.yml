@@ -21,6 +21,7 @@ on:
       - 'scripts/run_pricing_with_full_roster_universe_v2.py'
       - 'scripts/validate_rb_rush_rec_conservation_v1.py'
       - 'scripts/validate_team_target_pool_v1.py'
+      - 'scripts/validate_team_target_pool_full_universe_v2.py'
       - 'scripts/audit_market_model_lineage_v1.py'
       - 'scripts/validate_anytime_td_model_status_v1.py'
       - 'scripts/validate_full_slate_mechanical_certification_v1.py'
@@ -188,11 +189,11 @@ jobs:
           python scripts/validate_anytime_td_model_status_v1.py
           python scripts/validate_full_slate_mechanical_certification_v1.py
 
-      - name: Model-quality certification - finite receiving entitlement
+      - name: Model-quality certification - full-roster receiving entitlement
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
-          python scripts/validate_team_target_pool_v1.py
+          python scripts/validate_team_target_pool_full_universe_v2.py
 
       - name: Upload replay evidence
         if: always()
