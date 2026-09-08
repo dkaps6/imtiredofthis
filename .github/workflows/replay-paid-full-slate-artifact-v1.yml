@@ -8,6 +8,7 @@ on:
       - '.github/workflows/replay-paid-full-slate-artifact-v1.yml'
       - 'data/manual_name_overrides.csv'
       - 'data/player_identity_aliases.csv'
+      - 'data/models/wr_r15_production_model_v1/wr_r15_production_model_v1.json'
       - 'config/qb_starter_authority_v1.csv'
       - 'model/qb_distribution_state_selector_v1.json'
       - 'scripts/harden_live_odds_artifacts_v1.py'
@@ -24,18 +25,23 @@ on:
       - 'scripts/run_pricing_with_rb_conservation_v1.py'
       - 'scripts/run_pricing_with_full_roster_universe_v1.py'
       - 'scripts/run_pricing_with_full_roster_universe_v2.py'
+      - 'scripts/run_pricing_with_full_roster_universe_v3.py'
       - 'scripts/stamp_qb_c2_pricing_lineage_v1.py'
       - 'scripts/validate_rb_rush_rec_conservation_v1.py'
       - 'scripts/validate_team_target_pool_v1.py'
       - 'scripts/validate_team_target_pool_full_universe_v2.py'
       - 'scripts/audit_market_model_lineage_v1.py'
+      - 'scripts/audit_market_model_lineage_v2.py'
       - 'scripts/validate_anytime_td_model_status_v1.py'
       - 'scripts/validate_full_slate_mechanical_certification_v1.py'
+      - 'scripts/validate_certified_full_slate_stack_v1.py'
+      - 'scripts/validate_certified_full_slate_stack_v2.py'
       - 'scripts/modeling/rb_pricing_adapter_v1.py'
       - 'scripts/modeling/qb_c2_production_adapter_v1.py'
       - 'scripts/modeling/qb_distribution_state_v1.py'
       - 'scripts/modeling/target_entitlement_v1.py'
       - 'scripts/modeling/te_r5p_entitlement_adapter_v1.py'
+      - 'scripts/modeling/wr_r15_entitlement_adapter_v1.py'
       - 'scripts/player_identity_roster_history_v1.py'
       - 'scripts/validate_manual_name_overrides_v1.py'
       - 'scripts/repair_injuries_nflcom_v1.py'
@@ -181,7 +187,7 @@ jobs:
           test -s data/qb_distribution_state_context.csv
           test -s data/qb_distribution_state_context_audit.csv
 
-      - name: Materialize exact bookmaker offers, assemble metrics, and price from full football roster
+      - name: Materialize exact bookmaker offers, assemble metrics, and price from promoted Full Slate stack
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
@@ -189,46 +195,66 @@ jobs:
           python scripts/run_metrics_context.py --season 2026 --mode full --date ''
           python scripts/validate_build_integrity.py
           python scripts/metrics_ready.py --season 2026 --date ''
-          python scripts/run_pricing_with_full_roster_universe_v2.py --season 2026
+          python scripts/run_pricing_with_full_roster_universe_v3.py --season 2026
           test -s outputs/props_priced_clean.csv
           test -s data/football_simulation_universe_audit.json
+          test -s data/wr_r15_full_slate_entitlement_audit.json
           test -s data/qb_c2_production_integration_audit.json
           python - <<'PY'
           import json
           q=json.load(open('data/qb_c2_production_integration_audit.json',encoding='utf-8'))
+          w=json.load(open('data/wr_r15_full_slate_entitlement_audit.json',encoding='utf-8'))
           if q.get('disposition') != 'QB_C2_PRODUCTION_DISTRIBUTION_INTEGRATION_PASS':
               raise SystemExit(f"FATAL: QB C2 production integration not certified: {q.get('disposition')}")
           if int(q.get('football_qb_rows',0)) != 32 or int(q.get('selected_qb_rows',0)) <= 0:
               raise SystemExit(f"FATAL: QB C2 coverage invalid: {q}")
           if float(q.get('max_raw_qb_mean_gap',1.0)) > 1e-10:
               raise SystemExit(f"FATAL: QB C2 raw mean drift: {q.get('max_raw_qb_mean_gap')}")
-          if int(q.get('state_capture_changed_arrays',-1)) != 0:
-              raise SystemExit(f"FATAL: QB C2 state-capture seam changed arrays: {q.get('state_capture_changed_arrays')}")
-          if float(q.get('state_capture_max_element_gap',1.0)) > 1e-12:
-              raise SystemExit(f"FATAL: QB C2 state-capture element drift: {q.get('state_capture_max_element_gap')}")
-          if int(q.get('sportsbook_inputs_to_selector',1)) != 0 or int(q.get('sportsbook_inputs_to_starter_selection',1)) != 0:
+          if int(q.get('state_capture_changed_arrays',-1)) != 0 or float(q.get('state_capture_max_element_gap',1.0)) > 1e-12:
+              raise SystemExit(f"FATAL: QB C2 state-capture parity drift: {q}")
+          if int(q.get('sportsbook_inputs_to_selector',1)) != 0 or int(q.get('sportsbook_inputs_to_starter_selection',1)) != 0 or int(q.get('sportsbook_inputs_to_c2_generation',1)) != 0:
               raise SystemExit('FATAL: QB C2 sportsbook leakage flag')
           if int(q.get('receiver_outputs_replaced',1)) != 0 or int(q.get('rb_outputs_replaced',1)) != 0:
               raise SystemExit('FATAL: QB C2 replaced non-QB outputs')
-          print('QB_C2_PRODUCTION_INTEGRATION_CERTIFIED', json.dumps(q,sort_keys=True))
+          if q.get('wr_r15_consumed_before_c2') is not True:
+              raise SystemExit('FATAL: C2 did not consume WR-R15 upstream state')
+          required={
+              'disposition':'WR_R15_FULL_SLATE_ENTITLEMENT_READY',
+              'model_version':'WR_R15_PRODUCTION_MODEL_V1',
+              'm38_wr1_anchor_preserved':True,
+              'wr2plus_pool_preserved':True,
+              'wr_room_mass_preserved':True,
+              'non_wr_entitlement_preserved':True,
+              'team_total_player_entitlement_preserved':True,
+              'sportsbook_inputs_used':False,
+              'current_or_future_outcomes_used':False,
+          }
+          for k,v in required.items():
+              if w.get(k)!=v: raise SystemExit(f'FATAL WR-R15 contract {k}: expected={v!r} actual={w.get(k)!r}')
+          if int(w.get('current_wr1_anchor_rows',0)) != 32:
+              raise SystemExit('FATAL: expected exactly 32 M38 WR1 anchors')
+          if float(w.get('max_wr1_anchor_entitlement_delta',1.0)) != 0.0 or float(w.get('max_non_wr_entitlement_delta',1.0)) != 0.0:
+              raise SystemExit('FATAL: WR-R15 changed WR1 or non-WR entitlement')
+          print('M38_R15_TE_R5P_C2_PRODUCTION_INTEGRATION_CERTIFIED')
           PY
           python scripts/stamp_qb_c2_pricing_lineage_v1.py
           test -s data/qb_c2_pricing_lineage_stamp_audit.json
 
-      - name: Final mechanical semantic, lineage, ATD provenance and consumption certification
+      - name: Final mechanical semantic, governed lineage, ATD provenance and consumption certification
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
           python scripts/validate_rb_rush_rec_conservation_v1.py
-          python scripts/audit_market_model_lineage_v1.py
+          python scripts/audit_market_model_lineage_v2.py
           python scripts/validate_anytime_td_model_status_v1.py
           python scripts/validate_full_slate_mechanical_certification_v1.py
 
-      - name: Model-quality certification - full-roster receiving entitlement
+      - name: Model-quality certification - full-roster receiving entitlement and promoted stack
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
           python scripts/validate_team_target_pool_full_universe_v2.py
+          python scripts/validate_certified_full_slate_stack_v2.py
 
       - name: Upload replay evidence
         if: always()
@@ -273,6 +299,9 @@ jobs:
             data/te_r5p_full_slate_entitlement_trace.csv
             data/te_r5p_full_slate_entitlement_audit.json
             data/te_r5p_full_slate_simulation_delta.csv
+            data/wr_r15_full_slate_entitlement_trace.csv
+            data/wr_r15_full_slate_entitlement_audit.json
+            data/wr_r15_full_slate_simulation_delta.csv
             data/qb_distribution_state_context.csv
             data/qb_distribution_state_context_audit.csv
             data/qb_c2_production_starter_audit.csv
@@ -286,6 +315,7 @@ jobs:
             data/anytime_td_model_status_v1.json
             data/team_target_pool_audit.csv
             data/team_target_pool_audit.json
+            data/certified_full_slate_stack_audit.json
             data/rb_rush_synthesis_context.csv
             data/rb_rush_rec_conservation_input_audit.csv
             data/rb_rush_rec_conservation_input_audit.json
