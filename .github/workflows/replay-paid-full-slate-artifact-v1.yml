@@ -11,6 +11,9 @@ on:
       - 'scripts/repair_live_prop_identity_v1.py'
       - 'scripts/materialize_live_props_for_model_v1.py'
       - 'scripts/materialize_pricing_offers_v1.py'
+      - 'scripts/metrics_v2.py'
+      - 'scripts/identity_roster_history_v1.py'
+      - 'scripts/validate_manual_name_overrides_v1.py'
       - 'scripts/repair_injuries_nflcom_v1.py'
       - 'scripts/validate_full_slate_pre_model_v1.py'
       - 'scripts/validate_player_identity_semantics_v1.py'
@@ -191,6 +194,8 @@ jobs:
             data/model_rule_diagnostics.csv
             data/model_ensemble_diagnostics.csv
             data/rb_rush_synthesis_context.csv
+            data/_debug/metrics_unmatched_player_form.csv
+            data/_debug/metrics_missing_identity.csv
             outputs/props_raw_compact.csv
             outputs/props_pricing_offers.csv
             outputs/props_priced_clean.csv
