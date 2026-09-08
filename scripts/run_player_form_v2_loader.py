@@ -8,10 +8,13 @@ import pandas as pd
 
 import scripts.run_player_form_v2 as runner
 from scripts.materialize_live_props_for_model_v1 import materialize as materialize_live_props_for_model
+from scripts.player_identity_roster_history_v1 import load_identity_roster_history
 from scripts.player_stats_loader_v2 import load_weekly_player_stats
 from scripts.repair_injuries_nflcom_v1 import repair_if_needed as repair_injury_identity
+from scripts.runtime_context import resolve_prior_season
 from scripts.slate_universe_v2 import build_slate_universe
 from scripts.validate_full_slate_pre_model_v1 import main as validate_pre_model_semantics
+from scripts.validate_manual_name_overrides_v1 import validate as validate_manual_name_overrides
 from scripts.validate_player_identity_v3 import main as validate_player_identity_v3
 
 
@@ -131,9 +134,39 @@ def attach_schedule_with_game_identity(logs: pd.DataFrame, schedule: pd.DataFram
     return out
 
 
+def _install_identity_only_roster_history() -> None:
+    """Broaden person identity history without broadening the model prior."""
+    prior = int(resolve_prior_season())
+    first_season = max(2021, prior - 4)
+    seasons = list(range(first_season, prior + 1))
+    roster_history = load_identity_roster_history(seasons)
+    original_builder = runner.pf.build_identity_registry
+
+    def _identity_registry_with_rosters(eligible_usage_logs: pd.DataFrame) -> pd.DataFrame:
+        # The roster frame intentionally contains no targets/carries/yards. It is
+        # identity metadata only; PlayerForm's prior/current metric totals remain
+        # sourced from the original validated usage-log window.
+        combined = pd.concat(
+            [roster_history, eligible_usage_logs],
+            ignore_index=True,
+            sort=False,
+        )
+        return original_builder(combined)
+
+    runner.pf.build_identity_registry = _identity_registry_with_rosters
+    print(
+        "[player_identity_v3] identity_only_roster_history=1 "
+        f"seasons={seasons} rows={len(roster_history)}; model_prior_window_unchanged=1"
+    )
+
+
 def main() -> int:
     live_odds = _live_odds_enabled()
     print(f"[player_form_v2] FETCH_LIVE_ODDS={'true' if live_odds else 'false'}")
+
+    # Verified alias files are production configuration. Fail before touching
+    # model identity if a CSV row was shifted/malformed or does not round-trip.
+    validate_manual_name_overrides()
 
     # Repair provider representation defects and validate every critical artifact
     # before historical/player modeling is allowed to start. No sportsbook line
@@ -145,6 +178,10 @@ def main() -> int:
 
     # Maintained weekly-stat provider.
     runner.pf._load_weekly = load_weekly_player_stats
+
+    # Broaden stable person-ID history only. This does NOT alter PlayerForm's
+    # previous-season/current-season football evidence used by _blend().
+    _install_identity_only_roster_history()
 
     # Collision-safe historical schedule/game identity attachment.
     def _attach(logs: pd.DataFrame) -> pd.DataFrame:
