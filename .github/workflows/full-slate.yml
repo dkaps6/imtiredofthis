@@ -2,9 +2,7 @@ name: Full Slate
 
 on:
   push:
-    # Research branch is included temporarily so this production wiring change
-    # receives a no-credit smoke run before the workflow is returned to main-only.
-    branches: [main, research-cross-position-catastrophic-casebook-v1]
+    branches: [main]
   workflow_dispatch:
     inputs:
       season:
