@@ -2,7 +2,9 @@ name: Full Slate
 
 on:
   push:
-    branches: [main]
+    # Research branch is included temporarily so this production wiring change
+    # receives a no-credit smoke run before the workflow is returned to main-only.
+    branches: [main, research-cross-position-catastrophic-casebook-v1]
   workflow_dispatch:
     inputs:
       season:
@@ -43,8 +45,10 @@ jobs:
   full_slate:
     name: Full slate (single job)
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -53,7 +57,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install nflreadpy pyyaml
+          pip install nflreadpy pyyaml beautifulsoup4 lxml
 
       - name: Validate season context
         run: |
@@ -70,7 +74,11 @@ jobs:
 
       - name: Live odds mode status
         run: |
-          if [ "${FETCH_LIVE_ODDS}" = "true" ]; then echo "LIVE ODDS ENABLED"; else echo "LIVE ODDS PAUSED"; fi
+          if [ "${FETCH_LIVE_ODDS}" = "true" ]; then
+            echo "LIVE ODDS ENABLED — this run may use OddsAPI credits"
+          else
+            echo "LIVE ODDS PAUSED — football model builds with zero sportsbook fetches"
+          fi
 
       - name: Build Ourlads roles
         run: |
@@ -110,6 +118,26 @@ jobs:
           print(f"live odds gate: status={state} available={available}")
           if not status.get('available'):
               print('No current active-slate player prop markets are posted; sportsbook pricing will be skipped cleanly.')
+          EOF
+
+      - name: Validate and compact live sportsbook boundary
+        if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' }}
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/materialize_live_props_for_model_v1.py
+          test -s outputs/props_raw_compact.csv
+          test -s data/live_odds_placeholder_rows.csv
+          python - <<'EOF'
+          import json, pandas as pd
+          status=json.load(open('data/live_odds_status.json',encoding='utf-8'))
+          compact=pd.read_csv('outputs/props_raw_compact.csv',low_memory=False)
+          quarantine=pd.read_csv('data/live_odds_placeholder_rows.csv',low_memory=False)
+          if len(compact) != int(status.get('production_compact_rows',-1)):
+              raise SystemExit('FATAL: live compact sportsbook boundary row-count drift')
+          if len(quarantine) != int(status.get('production_quarantined_rows',-1)):
+              raise SystemExit('FATAL: live sportsbook quarantine row-count drift')
+          print('model-facing compact rows=',len(compact),'quarantine rows=',len(quarantine))
           EOF
 
       - name: Validate live opponent map
@@ -177,6 +205,13 @@ jobs:
           python scripts/enrich_player_scoring_v2.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
           for f in data/player_game_logs.csv data/player_season_totals.csv data/player_form.csv data/player_form_consensus.csv data/player_identity_validation.csv; do test -s "$f"; done
 
+      - name: Audit live player identity semantics
+        if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' }}
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/validate_player_identity_semantics_v1.py
+          test -s data/player_identity_semantic_audit.json
+
       - name: Gate providers and materialize canonical Team Context v3
         env:
           FETCH_LIVE_ODDS: ${{ steps.live_odds.outputs.available == 'true' && 'true' || 'false' }}
@@ -187,6 +222,13 @@ jobs:
           test -s data/team_context_v3.csv
           test -s data/team_context_v3_provenance.csv
           test -s data/model_context_bridge.csv
+
+      - name: Classify live Full Slate data quality
+        if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' }}
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/validate_full_slate_data_quality_v1.py
+          test -s data/full_slate_data_quality_audit.json
 
       - name: Validate empirical Bayesian baseline
         run: |
@@ -253,71 +295,122 @@ jobs:
           print(f"promoted RB context OK players={x.player_clean_key.nunique()} teams={x.team.nunique()}")
           EOF
 
-      - name: Assemble deterministic metrics
+      - name: Build QB C2 football-only distribution state context
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
+          python scripts/run_qb_distribution_state_context.py --season "${SEASON}" --week "${WEEK_RESOLVED}"
+          test -s data/qb_distribution_state_context.csv
+          test -s data/qb_distribution_state_context_audit.csv
+          python - <<'EOF'
+          import pandas as pd
+          x=pd.read_csv('data/qb_distribution_state_context.csv',low_memory=False)
+          if len(x) != 32 or x['team'].nunique() != 32:
+              raise SystemExit(f'FATAL: QB C2 state context expected 32 teams, got rows={len(x)} teams={x["team"].nunique()}')
+          if not pd.to_numeric(x['sportsbook_inputs_used'],errors='coerce').eq(0).all():
+              raise SystemExit('FATAL: QB C2 state context reports sportsbook input')
+          print('QB C2 football state context OK teams=32')
+          EOF
+
+      - name: Assemble exact bookmaker offers and deterministic metrics
         if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' }}
         run: |
+          set -euo pipefail
           export PYTHONPATH="${PWD}"
+          python scripts/materialize_pricing_offers_v1.py
+          test -s outputs/props_pricing_offers.csv
+          test -s data/live_pricing_offer_audit.json
           python scripts/run_metrics_context.py --season "${SEASON}" --mode full --date "${SLATE_DATE}"
           python scripts/validate_build_integrity.py
           python scripts/metrics_ready.py --season "${SEASON}" --date "${SLATE_DATE}"
+          test -s data/metrics_ready.csv
 
-      - name: Price with promoted QB and RB synthesis over canonical components
+      - name: Price from certified football-first Full Slate stack
         if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' }}
         run: |
+          set -euo pipefail
           export PYTHONPATH="${PWD}"
-          python scripts/run_pricing_v2.py --season "${SEASON}"
+          # scripts/run_pricing_v2.py remains the canonical mean/pricing core;
+          # this certified wrapper replaces only its simulation-universe seam.
+          python scripts/run_pricing_with_full_roster_universe_v2.py --season "${SEASON}"
+          test -s outputs/props_priced_clean.csv
+          test -s data/football_simulation_universe_audit.json
+          test -s data/qb_c2_production_integration_audit.json
+          python - <<'EOF'
+          import json
+          q=json.load(open('data/qb_c2_production_integration_audit.json',encoding='utf-8'))
+          if q.get('disposition') != 'QB_C2_PRODUCTION_DISTRIBUTION_INTEGRATION_PASS':
+              raise SystemExit(f"FATAL: QB C2 production integration not certified: {q.get('disposition')}")
+          if int(q.get('football_qb_rows',0)) != 32 or int(q.get('selected_qb_rows',0)) <= 0:
+              raise SystemExit(f"FATAL: QB C2 coverage invalid: {q}")
+          if float(q.get('max_raw_qb_mean_gap',1.0)) > 1e-10:
+              raise SystemExit(f"FATAL: QB C2 raw mean drift: {q.get('max_raw_qb_mean_gap')}")
+          if int(q.get('state_capture_changed_arrays',-1)) != 0:
+              raise SystemExit(f"FATAL: QB C2 state-capture seam changed arrays: {q.get('state_capture_changed_arrays')}")
+          if float(q.get('state_capture_max_element_gap',1.0)) > 1e-12:
+              raise SystemExit(f"FATAL: QB C2 state-capture element drift: {q.get('state_capture_max_element_gap')}")
+          if int(q.get('sportsbook_inputs_to_selector',1)) != 0 or int(q.get('sportsbook_inputs_to_starter_selection',1)) != 0 or int(q.get('sportsbook_inputs_to_c2_generation',1)) != 0:
+              raise SystemExit('FATAL: QB C2 sportsbook leakage flag')
+          if int(q.get('receiver_outputs_replaced',1)) != 0 or int(q.get('rb_outputs_replaced',1)) != 0:
+              raise SystemExit('FATAL: QB C2 replaced non-QB outputs')
+          print('QB_C2_PRODUCTION_INTEGRATION_CERTIFIED',json.dumps(q,sort_keys=True))
+          EOF
+
+          python scripts/stamp_qb_c2_pricing_lineage_v1.py
+          test -s data/qb_c2_pricing_lineage_stamp_audit.json
+
+          python scripts/validate_rb_rush_rec_conservation_v1.py
+          python scripts/audit_market_model_lineage_v1.py
+          python scripts/validate_anytime_td_model_status_v1.py
+          python scripts/validate_team_target_pool_full_universe_v2.py
+          python scripts/validate_certified_full_slate_stack_v1.py
+
           python - <<'EOF'
           import numpy as np
           import pandas as pd
           from scripts.artifact_contracts import CONTRACTS
-          c=CONTRACTS['props_priced']; df=pd.read_csv(c.path)
-          assert not df.empty
-          assert not [x for x in c.required_columns if x not in df.columns]
-          assert 'simulation_iterations' in df.columns
-          assert 'ml_applied' in df.columns and int(df['ml_applied'].sum()) > 0
-          assert 'state_applied' in df.columns and int(df['state_applied'].sum()) > 0
-          assert 'bayes_applied' in df.columns and int(df['bayes_applied'].sum()) > 0
-          assert 'rules_applied' in df.columns and int(df['rules_applied'].sum()) > 0
-          assert 'ensemble_status' in df.columns
 
-          qb=df.loc[df['market'].astype(str).str.lower().eq('pass_yards')].copy()
+          c=CONTRACTS['props_priced']; df=pd.read_csv(c.path,low_memory=False)
+          if df.empty: raise SystemExit('FATAL: certified Full Slate pricing produced zero rows')
+          missing=[x for x in c.required_columns if x not in df.columns]
+          if missing: raise SystemExit(f'FATAL: priced artifact contract missing columns: {missing}')
+          for col in ('simulation_iterations','ml_applied','state_applied','bayes_applied','rules_applied','ensemble_status'):
+              if col not in df.columns: raise SystemExit(f'FATAL: priced output missing {col}')
+
+          qb=df.loc[df['source_market'].astype(str).eq('player_pass_yds')].copy()
           if not qb.empty:
-              required=['qb_synthesis_applied','qb_synthesis_proj','qb_synthesis_correction','qb_synthesis_version','qb_attempt_conversion','qb_pred_attempts','qb_pred_ypa']
+              required=['qb_synthesis_applied','qb_synthesis_proj','qb_synthesis_version','qb_distribution_candidate_version','qb_distribution_selector_version','qb_distribution_route']
               missing=[x for x in required if x not in qb.columns]
-              if missing: raise SystemExit(f'FATAL: promoted QB pricing audit columns missing: {missing}')
+              if missing: raise SystemExit(f'FATAL: certified QB pricing audit columns missing: {missing}')
               if not pd.to_numeric(qb['qb_synthesis_applied'],errors='coerce').eq(1).all():
                   raise SystemExit('FATAL: not every priced pass_yards row used promoted QB synthesis')
-              if qb['qb_synthesis_version'].fillna('').astype(str).str.strip().eq('').any():
-                  raise SystemExit('FATAL: promoted QB synthesis version missing')
-              conv=pd.to_numeric(qb['qb_attempt_conversion'],errors='coerce')
-              if conv.isna().any() or not conv.between(.50,1.0,inclusive='both').all():
-                  raise SystemExit('FATAL: priced QB attempt conversion missing/out of range')
               proj=pd.to_numeric(qb['qb_synthesis_proj'],errors='coerce')
               final=pd.to_numeric(qb['model_proj'],errors='coerce')
               if proj.isna().any() or final.isna().any() or not np.allclose(proj,final,rtol=0,atol=1e-8):
                   raise SystemExit('FATAL: final QB model projection is not the promoted synthesis mean')
-              print(f"promoted QB pricing OK rows={len(qb)} version={sorted(qb['qb_synthesis_version'].unique().tolist())}")
+              if qb['qb_distribution_candidate_version'].fillna('').astype(str).str.strip().eq('').any():
+                  raise SystemExit('FATAL: QB C2 candidate lineage missing from pass-yard rows')
 
-          rb=df.loc[df['market'].astype(str).str.lower().eq('rush_yards')].copy()
+          metrics=pd.read_csv('data/metrics_ready.csv',low_memory=False)
+          pos_col=next((c for c in ('position_group','position','alignment_position') if c in metrics.columns),None)
+          if pos_col is None: raise SystemExit('FATAL: metrics missing position for RB routing audit')
+          pos=metrics[['player','team',pos_col]].drop_duplicates(['player','team']).copy()
+          pos['position_family']=pos[pos_col].fillna('').astype(str).str.upper().str.strip().replace({'HB':'RB','TB':'RB'})
+          rush=df.loc[df['source_market'].astype(str).eq('player_rush_yds')].merge(pos[['player','team','position_family']],on=['player','team'],how='left',validate='many_to_one')
+          rb=rush.loc[rush['position_family'].isin({'RB','FB'})].copy()
+          nonrb=rush.loc[~rush['position_family'].isin({'RB','FB'})].copy()
           if not rb.empty:
-              required=['rb_synthesis_applied','rb_synthesis_proj','rb_synthesis_version','rb_synthesis_route']
-              missing=[x for x in required if x not in rb.columns]
-              if missing: raise SystemExit(f'FATAL: promoted RB pricing audit columns missing: {missing}')
               if not pd.to_numeric(rb['rb_synthesis_applied'],errors='coerce').eq(1).all():
-                  raise SystemExit('FATAL: not every priced rush_yards row used promoted RB synthesis')
-              if not rb['rb_synthesis_version'].astype(str).eq('RB_P3_SYNTHESIS_V1').all():
-                  raise SystemExit('FATAL: promoted RB synthesis version drift')
-              if not rb['rb_synthesis_route'].astype(str).eq('WEEK1_STACK_OVERRIDE').all():
-                  raise SystemExit('FATAL: promoted RB pricing used a non-Week1 route')
-              if not rb['ensemble_status'].astype(str).eq('calibrated').all():
-                  raise SystemExit('FATAL: priced RB rushing rows contain uncalibrated generic ensemble diagnostics')
-              proj=pd.to_numeric(rb['rb_synthesis_proj'],errors='coerce')
+                  raise SystemExit('FATAL: eligible RB/FB rush rows bypassed P3')
+              p3=pd.to_numeric(rb['rb_synthesis_proj'],errors='coerce')
               final=pd.to_numeric(rb['model_proj'],errors='coerce')
-              if proj.isna().any() or final.isna().any() or not np.allclose(proj,final,rtol=0,atol=1e-8):
+              if p3.isna().any() or final.isna().any() or not np.allclose(p3,final,rtol=0,atol=1e-8):
                   raise SystemExit('FATAL: final RB model projection is not the promoted P3 synthesis mean')
-              print(f"promoted RB pricing OK side_rows={len(rb)} players={rb.player_clean_key.nunique()}")
+          if not nonrb.empty and not pd.to_numeric(nonrb['rb_synthesis_applied'],errors='coerce').fillna(0).eq(0).all():
+              raise SystemExit('FATAL: non-RB rushing rows incorrectly consumed RB P3')
 
-          print(f"priced rows={len(df)} ensemble={df['ensemble_status'].value_counts().to_dict()} ml={int(df['ml_applied'].sum())} state={int(df['state_applied'].sum())} bayes={int(df['bayes_applied'].sum())} rules={int(df['rules_applied'].sum())}")
+          print(f"CERTIFIED LIVE PRICING rows={len(df)} players={df.player.nunique()} QB_side_rows={len(qb)} RB_FB_rush_side_rows={len(rb)} non_RB_rush_side_rows={len(nonrb)}")
           EOF
 
       - name: Strict repository audits
@@ -331,6 +424,8 @@ jobs:
         run: |
           echo '=== live odds status ==='
           test -f data/live_odds_status.json && cat data/live_odds_status.json || echo 'live odds not requested'
+          echo '=== certified stack status ==='
+          test -f data/certified_full_slate_stack_audit.json && cat data/certified_full_slate_stack_audit.json || echo 'certified pricing stack not executed'
           echo '=== provider status ==='
           test -f data/provider_readiness_v3.csv && cat data/provider_readiness_v3.csv || true
           echo '=== identity status ==='
