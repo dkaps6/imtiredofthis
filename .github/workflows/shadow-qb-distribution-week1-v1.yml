@@ -29,26 +29,23 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Dispatch exact-branch Full Slate with live current-season odds
+      - name: Dispatch exact-branch no-credit paid-artifact replay
         id: dispatch
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           echo "launcher_sha=${GITHUB_SHA}"
-          gh workflow run full-slate.yml \
+          echo 'NO OddsAPI fetch: dispatching replay-paid-full-slate-artifact-v1.yml, which reuses run 34152868136.'
+          gh workflow run replay-paid-full-slate-artifact-v1.yml \
             --repo "${GITHUB_REPOSITORY}" \
-            --ref "${GITHUB_REF_NAME}" \
-            -f season=2026 \
-            -f prior_season=2025 \
-            -f date='' \
-            -f fetch_live_odds=true
+            --ref "${GITHUB_REF_NAME}"
 
           RUN_ID=''
           for i in $(seq 1 24); do
             RUN_ID=$(gh run list \
               --repo "${GITHUB_REPOSITORY}" \
-              --workflow full-slate.yml \
+              --workflow replay-paid-full-slate-artifact-v1.yml \
               --branch "${GITHUB_REF_NAME}" \
               --event workflow_dispatch \
               --limit 20 \
@@ -58,15 +55,15 @@ jobs:
             sleep 5
           done
           if [ -z "${RUN_ID}" ]; then
-            echo 'FATAL: could not resolve dispatched Full Slate run for launcher SHA'
+            echo 'FATAL: could not resolve dispatched no-credit replay for launcher SHA'
             exit 1
           fi
-          echo "full_slate_run_id=${RUN_ID}" | tee full_slate_run_id.txt
+          echo "replay_run_id=${RUN_ID}" | tee full_slate_run_id.txt
           echo "run_id=${RUN_ID}" >> "${GITHUB_OUTPUT}"
-          gh run watch "${RUN_ID}" --repo "${GITHUB_REPOSITORY}" --exit-status || true
+          gh run watch "${RUN_ID}" --repo "${GITHUB_REPOSITORY}" --exit-status
           gh run view "${RUN_ID}" --repo "${GITHUB_REPOSITORY}" --json status,conclusion,headSha,url
 
-      - name: Download exact Full Slate artifact
+      - name: Download exact no-credit replay artifact
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ steps.dispatch.outputs.run_id }}
@@ -75,8 +72,21 @@ jobs:
           mkdir -p evidence/full_slate
           gh run download "${RUN_ID}" \
             --repo "${GITHUB_REPOSITORY}" \
-            --name "run_${RUN_ID}" \
+            --name paid-full-slate-replay-v1 \
             --dir evidence/full_slate
+          test -s evidence/full_slate/data/live_odds_status.json
+          test -s evidence/full_slate/data/model_rule_simulation_inputs.csv
+          test -s evidence/full_slate/outputs/props_priced_clean.csv
+          python - <<'PY'
+          import json
+          p='evidence/full_slate/data/live_odds_status.json'
+          x=json.load(open(p,encoding='utf-8'))
+          if x.get('odds_api_refetched') is not False:
+              raise SystemExit(f'FATAL: replay did not certify no-refetch: {x.get("odds_api_refetched")}')
+          if int(x.get('replay_source_run',0)) != 34152868136:
+              raise SystemExit(f'FATAL: unexpected paid source run: {x.get("replay_source_run")}')
+          print('NO_CREDIT_REPLAY_CERTIFIED source_run=34152868136')
+          PY
           find evidence/full_slate -maxdepth 3 -type f | sort | head -200
 
       - name: Install frozen shadow dependencies
@@ -100,32 +110,9 @@ jobs:
           test -s data/qb_distribution_state_context.csv
 
       - name: Run real-slate QB distribution shadow audit
-        id: science
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
-          if [ ! -s evidence/full_slate/outputs/props_priced_clean.csv ] || [ ! -s evidence/full_slate/data/model_rule_simulation_inputs.csv ]; then
-            mkdir -p outputs
-            python - <<'PY'
-          import json
-          from pathlib import Path
-          p=Path('evidence/full_slate/data/live_odds_status.json')
-          live={}
-          if p.exists():
-              try: live=json.loads(p.read_text())
-              except Exception: pass
-          result={
-              'disposition':'QB_DISTRIBUTION_SHADOW_BLOCKED_NO_PRICED_LIVE_SLATE',
-              'live_odds_status':live,
-              'production_pricing_modified':0,
-              'sportsbook_inputs_to_selector':0,
-          }
-          Path('outputs/qb_distribution_shadow_v1_result.json').write_text(json.dumps(result,indent=2,sort_keys=True))
-          print(json.dumps(result,indent=2,sort_keys=True))
-          PY
-            exit 0
-          fi
-
           python scripts/run_qb_distribution_shadow_v1.py \
             --rule-inputs evidence/full_slate/data/model_rule_simulation_inputs.csv \
             --priced evidence/full_slate/outputs/props_priced_clean.csv \
@@ -136,7 +123,7 @@ jobs:
       - name: Show frozen deployment result
         if: always()
         run: |
-          echo '=== Full Slate source run ==='
+          echo '=== No-credit replay source run ==='
           cat full_slate_run_id.txt 2>/dev/null || true
           echo '=== Shadow result ==='
           cat outputs/qb_distribution_shadow_v1_result.json 2>/dev/null || true
