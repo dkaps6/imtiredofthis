@@ -7,6 +7,7 @@ on:
       - research-cross-position-catastrophic-casebook-v1
     paths:
       - scripts/backtest/evaluate_rb_r7_fixed_room_within_participation_v1.py
+      - scripts/backtest/historical_player_logs_schedule_bounded_v1.py
       - .github/workflows/research-rb-r7-fixed-room-within-participation-v1.yml
 
 jobs:
@@ -33,7 +34,7 @@ jobs:
           python scripts/backtest/build_historical_inputs.py --season 2020 --prior-season 2019 --weeks '1-17' --out-dir data/backtests_2020
           python scripts/backtest/enrich_historical_defense.py --team-weekly data/backtests_2020/team_weekly_history.csv --seasons 2019,2020 --audit data/backtests_2020/historical_defense_enrichment_audit.csv --observations data/backtests_2020/historical_defense_observations.csv
           python scripts/backtest/validate_historical_inputs.py --season 2020 --prior-season 2019 --weeks '1-17' --data-dir data/backtests_2020 --report data/backtests_2020/historical_input_validation.csv
-          python scripts/backtest/historical_player_logs.py --seasons 2019,2020 --schedule data/backtests_2020/schedule_history.csv --out data/backtests_2020/player_game_logs_history.csv
+          python scripts/backtest/historical_player_logs_schedule_bounded_v1.py --seasons 2019,2020 --schedule data/backtests_2020/schedule_history.csv --out data/backtests_2020/player_game_logs_history.csv
           python scripts/backtest/build_historical_injuries.py --seasons 2019,2020 --out data/backtests_2020/injuries_history.csv
           python scripts/backtest/build_historical_weather.py --schedule data/backtests_2020/schedule_history.csv --out data/backtests_2020/weather_history.csv
 
@@ -45,7 +46,7 @@ jobs:
           python scripts/backtest/build_historical_inputs.py --season 2021 --prior-season 2020 --weeks '1-18' --out-dir data/backtests_2021
           python scripts/backtest/enrich_historical_defense.py --team-weekly data/backtests_2021/team_weekly_history.csv --seasons 2020,2021 --audit data/backtests_2021/historical_defense_enrichment_audit.csv --observations data/backtests_2021/historical_defense_observations.csv
           python scripts/backtest/validate_historical_inputs.py --season 2021 --prior-season 2020 --weeks '1-18' --data-dir data/backtests_2021 --report data/backtests_2021/historical_input_validation.csv
-          python scripts/backtest/historical_player_logs.py --seasons 2020,2021 --schedule data/backtests_2021/schedule_history.csv --out data/backtests_2021/player_game_logs_history.csv
+          python scripts/backtest/historical_player_logs_schedule_bounded_v1.py --seasons 2020,2021 --schedule data/backtests_2021/schedule_history.csv --out data/backtests_2021/player_game_logs_history.csv
           python scripts/backtest/build_historical_injuries.py --seasons 2020,2021 --out data/backtests_2021/injuries_history.csv
           python scripts/backtest/build_historical_weather.py --schedule data/backtests_2021/schedule_history.csv --out data/backtests_2021/weather_history.csv
 
@@ -57,7 +58,7 @@ jobs:
           python scripts/backtest/build_historical_inputs.py --season 2022 --prior-season 2021 --weeks '1-18' --out-dir data/backtests_2022
           python scripts/backtest/enrich_historical_defense.py --team-weekly data/backtests_2022/team_weekly_history.csv --seasons 2021,2022 --audit data/backtests_2022/historical_defense_enrichment_audit.csv --observations data/backtests_2022/historical_defense_observations.csv
           python scripts/backtest/validate_historical_inputs.py --season 2022 --prior-season 2021 --weeks '1-18' --data-dir data/backtests_2022 --report data/backtests_2022/historical_input_validation.csv
-          python scripts/backtest/historical_player_logs.py --seasons 2021,2022 --schedule data/backtests_2022/schedule_history.csv --out data/backtests_2022/player_game_logs_history.csv
+          python scripts/backtest/historical_player_logs_schedule_bounded_v1.py --seasons 2021,2022 --schedule data/backtests_2022/schedule_history.csv --out data/backtests_2022/player_game_logs_history.csv
           python scripts/backtest/build_historical_injuries.py --seasons 2021,2022 --out data/backtests_2022/injuries_history.csv
           python scripts/backtest/build_historical_weather.py --schedule data/backtests_2022/schedule_history.csv --out data/backtests_2022/weather_history.csv
 
