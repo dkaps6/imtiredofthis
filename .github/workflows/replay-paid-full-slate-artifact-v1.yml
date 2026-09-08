@@ -17,8 +17,12 @@ on:
       - 'scripts/simulation_v2.py'
       - 'scripts/run_pricing_v2.py'
       - 'scripts/run_pricing_with_rb_conservation_v1.py'
+      - 'scripts/run_pricing_with_full_roster_universe_v1.py'
       - 'scripts/validate_rb_rush_rec_conservation_v1.py'
       - 'scripts/validate_team_target_pool_v1.py'
+      - 'scripts/audit_market_model_lineage_v1.py'
+      - 'scripts/validate_anytime_td_model_status_v1.py'
+      - 'scripts/validate_full_slate_mechanical_certification_v1.py'
       - 'scripts/modeling/rb_pricing_adapter_v1.py'
       - 'scripts/player_identity_roster_history_v1.py'
       - 'scripts/validate_manual_name_overrides_v1.py'
@@ -162,7 +166,7 @@ jobs:
           python scripts/run_model_ensemble_bridge.py
           python scripts/run_rb_week1_no_odds.py --season 2026 --week 1 --iterations 25000 --out data/rb_rush_synthesis_context.csv
 
-      - name: Materialize exact bookmaker offers, assemble metrics, and price
+      - name: Materialize exact bookmaker offers, assemble metrics, and price from full football roster
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
@@ -170,15 +174,18 @@ jobs:
           python scripts/run_metrics_context.py --season 2026 --mode full --date ''
           python scripts/validate_build_integrity.py
           python scripts/metrics_ready.py --season 2026 --date ''
-          python scripts/run_pricing_with_rb_conservation_v1.py --season 2026
+          python scripts/run_pricing_with_full_roster_universe_v1.py --season 2026
           test -s outputs/props_priced_clean.csv
+          test -s data/football_simulation_universe_audit.json
 
-      - name: Final mechanical semantic and consumption certification
+      - name: Final mechanical semantic, lineage, ATD provenance and consumption certification
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
           python scripts/validate_rb_rush_rec_conservation_v1.py
-          python scripts/validate_full_slate_post_pricing_v1.py
+          python scripts/audit_market_model_lineage_v1.py
+          python scripts/validate_anytime_td_model_status_v1.py
+          python scripts/validate_full_slate_mechanical_certification_v1.py
 
       - name: Model-quality certification - finite receiving entitlement
         run: |
@@ -220,6 +227,13 @@ jobs:
             data/model_rule_diagnostics.csv
             data/model_ensemble_diagnostics.csv
             data/model_rule_simulation_inputs.csv
+            data/football_simulation_universe.csv
+            data/football_simulation_universe_audit.csv
+            data/football_simulation_universe_audit.json
+            data/market_model_lineage_current.csv
+            data/market_model_lineage_current.json
+            data/anytime_td_model_status_v1.csv
+            data/anytime_td_model_status_v1.json
             data/team_target_pool_audit.csv
             data/team_target_pool_audit.json
             data/rb_rush_synthesis_context.csv
