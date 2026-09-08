@@ -78,6 +78,8 @@ jobs:
             --dir evidence/full_slate
           test -s evidence/full_slate/data/live_odds_status.json
           test -s evidence/full_slate/data/football_simulation_universe.csv
+          test -s evidence/full_slate/data/target_entitlement_v1_trace.csv
+          test -s evidence/full_slate/data/target_entitlement_v1_audit.json
           test -s evidence/full_slate/outputs/props_priced_clean.csv
           python - <<'PY'
           import json
@@ -86,7 +88,14 @@ jobs:
               raise SystemExit(f'FATAL: replay did not certify no-refetch: {x.get("odds_api_refetched")}')
           if int(x.get('replay_source_run',0)) != 34152868136:
               raise SystemExit(f'FATAL: unexpected paid source run: {x.get("replay_source_run")}')
-          print('NO_CREDIT_REPLAY_CERTIFIED source_run=34152868136')
+          e=json.load(open('evidence/full_slate/data/target_entitlement_v1_audit.json',encoding='utf-8'))
+          if e.get('projection_neutral_gate') != 'PASS':
+              raise SystemExit(f'FATAL: Full Slate entitlement seam not certified: {e.get("projection_neutral_gate")}')
+          if not e.get('te_r5p_team_pool_preserved') or not e.get('te_r5p_non_te_entitlement_preserved'):
+              raise SystemExit('FATAL: Full Slate TE-R5P conservation not certified')
+          if e.get('sportsbook_inputs_used') is not False:
+              raise SystemExit('FATAL: entitlement audit indicates sportsbook leakage')
+          print('NO_CREDIT_REPLAY_CERTIFIED source_run=34152868136 exact_entitlement_trace=1')
           PY
 
       - name: Install frozen shadow dependencies
@@ -118,6 +127,7 @@ jobs:
             --universe evidence/full_slate/data/football_simulation_universe.csv \
             --priced evidence/full_slate/outputs/props_priced_clean.csv \
             --state-context data/qb_distribution_state_context.csv \
+            --entitlement-trace evidence/full_slate/data/target_entitlement_v1_trace.csv \
             --season 2026 \
             --week 1 \
             --starter-authority config/qb_starter_authority_v1.csv \
@@ -129,6 +139,8 @@ jobs:
         run: |
           echo '=== No-credit replay source run ==='
           cat full_slate_run_id.txt 2>/dev/null || true
+          echo '=== Exact production entitlement audit ==='
+          cat data/qb_c2_shadow_entitlement_audit.json 2>/dev/null || true
           echo '=== Shadow result ==='
           cat outputs/qb_distribution_shadow_v1_result.json 2>/dev/null || true
           echo '=== Football-only primary QB audit ==='
@@ -146,6 +158,7 @@ jobs:
             config/qb_starter_authority_v1.csv
             data/qb_distribution_state_context.csv
             data/qb_distribution_state_context_audit.csv
+            data/qb_c2_shadow_entitlement_audit.json
             data/qb_c2_shadow_primary_qb_audit.csv
             outputs/qb_distribution_shadow_v1.csv
             outputs/qb_distribution_shadow_v1_result.json
