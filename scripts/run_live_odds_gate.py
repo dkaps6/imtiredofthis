@@ -52,6 +52,24 @@ CRITICAL_EVENT_ARTIFACTS = [
     DATA / "opponent_map_from_props.csv",
 ]
 
+LIVE_DERIVED_ARTIFACTS = {
+    STATUS,
+    DATA / "live_prop_identity_audit.csv",
+    DATA / "live_prop_identity_status.json",
+    DATA / "live_odds_artifact_hardening.json",
+    DATA / "live_odds_placeholder_rows.csv",
+    DATA / "live_pricing_offer_audit.json",
+    DATA / "full_slate_pre_model_semantic_audit.csv",
+    DATA / "full_slate_pre_model_semantic_audit.json",
+    DATA / "full_slate_data_quality_audit.csv",
+    DATA / "full_slate_data_quality_audit.json",
+    DATA / "full_slate_post_pricing_audit.csv",
+    DATA / "player_identity_semantic_audit.csv",
+    DATA / "player_identity_semantic_audit.json",
+    DATA / "model_rule_simulation_inputs.csv",
+    OUTPUTS / "paid_full_slate_replay_result.json",
+}
+
 
 def _safe_read_csv(path: Path) -> pd.DataFrame:
     if not path.exists() or path.stat().st_size == 0:
@@ -63,20 +81,13 @@ def _safe_read_csv(path: Path) -> pd.DataFrame:
 
 
 def _clear_stale_odds_artifacts() -> None:
-    """Remove tracked/leftover sportsbook files before any live fetch."""
+    """Remove sportsbook and sportsbook-derived evidence before any live fetch."""
     targets = set(CRITICAL_EVENT_ARTIFACTS)
     targets.update(OUTPUTS.glob("props_*.csv"))
     raw_dir = OUTPUTS / "props_raw"
     if raw_dir.exists():
         targets.update(raw_dir.glob("*.csv"))
-    targets.update(
-        {
-            STATUS,
-            DATA / "live_prop_identity_audit.csv",
-            DATA / "live_prop_identity_status.json",
-            DATA / "live_odds_artifact_hardening.json",
-        }
-    )
+    targets.update(LIVE_DERIVED_ARTIFACTS)
     for path in sorted(targets):
         try:
             path.unlink(missing_ok=True)
@@ -214,8 +225,6 @@ def run_gate(season: int, date: str = "") -> dict:
     allowed_ids = _allowed_event_ids(raw_game_odds, active_pairs)
     _scope_all_event_artifacts(allowed_ids)
 
-    # Semantic boundary gate. This is intentionally before PlayerForm and before
-    # the sportsbook artifact can be considered available to downstream models.
     hardening_status = harden_live_odds_artifacts()
 
     scoped_games = _safe_read_csv(OUTPUTS / "odds_game.csv")
@@ -234,8 +243,6 @@ def run_gate(season: int, date: str = "") -> dict:
 
     identity_status: dict = {}
     if available:
-        # Deterministic boundary repair only: no odds are changed and no model
-        # feature is created. This must pass before live props are considered usable.
         identity_status = repair_live_prop_identity()
 
     payload = {
