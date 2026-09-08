@@ -20,6 +20,12 @@ from scripts.backtest.enrich_historical_defense import (
 )
 
 MIN_PARTICIPATION_SEASON = 2016
+AUDIT_CONTEXT_COLS = [
+    "light_box_rate",
+    "heavy_box_rate",
+    "coverage_man_rate",
+    "coverage_zone_rate",
+]
 
 
 def main() -> int:
@@ -44,6 +50,9 @@ def main() -> int:
         defense = pd.DataFrame(columns=["season", "week", "team"])
 
     enriched = enrich_team_weekly(base, defense)
+    for col in AUDIT_CONTEXT_COLS:
+        if col not in enriched.columns:
+            enriched[col] = pd.Series(float("nan"), index=enriched.index, dtype=float)
     enriched.to_csv(args.team_weekly, index=False)
 
     args.observations.parent.mkdir(parents=True, exist_ok=True)
