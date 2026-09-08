@@ -1,0 +1,61 @@
+name: RB R10 Receiving State Forensic V1
+
+on:
+  push:
+    branches:
+      - research-cross-position-catastrophic-casebook-v1
+    paths:
+      - scripts/backtest/diagnose_rb_r10_receiving_state_v1.py
+      - .github/workflows/research-rb-r10-receiving-state-forensic-v1.yml
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install diagnostic dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4
+      - name: Download authoritative R10 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rb-r10-modern-stability-v1
+          path: r10-artifact
+          github-token: ${{ github.token }}
+          repository: dkaps6/imtiredofthis
+          run-id: 34269618181
+      - name: Locate R10 predictions
+        id: locate
+        shell: bash
+        run: |
+          set -euo pipefail
+          PRED="$(find r10-artifact -type f -name rb_r10_predictions.csv -print -quit)"
+          test -n "$PRED"
+          echo "pred=$PRED" >> "$GITHUB_OUTPUT"
+          echo "R10 predictions: $PRED"
+      - name: Run diagnostic-only receiving-state forensic
+        run: |
+          python scripts/backtest/diagnose_rb_r10_receiving_state_v1.py \
+            --predictions '${{ steps.locate.outputs.pred }}' \
+            --out-dir data/backtests/rb_r10_receiving_state_forensic_v1
+      - name: Show forensic result
+        run: |
+          cat data/backtests/rb_r10_receiving_state_forensic_v1/rb_r10_receiving_state_forensic_result.json
+          echo '=== state summary ==='
+          cat data/backtests/rb_r10_receiving_state_forensic_v1/rb_r10_state_summary.csv
+          echo '=== signal capture ==='
+          cat data/backtests/rb_r10_receiving_state_forensic_v1/rb_r10_pregame_signal_capture.csv
+      - name: Upload forensic evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r10-receiving-state-forensic-v1
+          path: data/backtests/rb_r10_receiving_state_forensic_v1/*
+          retention-days: 30
