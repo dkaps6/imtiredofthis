@@ -24,6 +24,7 @@ on:
       - 'scripts/run_pricing_with_rb_conservation_v1.py'
       - 'scripts/run_pricing_with_full_roster_universe_v1.py'
       - 'scripts/run_pricing_with_full_roster_universe_v2.py'
+      - 'scripts/stamp_qb_c2_pricing_lineage_v1.py'
       - 'scripts/validate_rb_rush_rec_conservation_v1.py'
       - 'scripts/validate_team_target_pool_v1.py'
       - 'scripts/validate_team_target_pool_full_universe_v2.py'
@@ -211,6 +212,8 @@ jobs:
               raise SystemExit('FATAL: QB C2 replaced non-QB outputs')
           print('QB_C2_PRODUCTION_INTEGRATION_CERTIFIED', json.dumps(q,sort_keys=True))
           PY
+          python scripts/stamp_qb_c2_pricing_lineage_v1.py
+          test -s data/qb_c2_pricing_lineage_stamp_audit.json
 
       - name: Final mechanical semantic, lineage, ATD provenance and consumption certification
         run: |
@@ -276,6 +279,7 @@ jobs:
             data/qb_c2_state_capture_parity.csv
             data/qb_c2_production_integration_audit.csv
             data/qb_c2_production_integration_audit.json
+            data/qb_c2_pricing_lineage_stamp_audit.json
             data/market_model_lineage_current.csv
             data/market_model_lineage_current.json
             data/anytime_td_model_status_v1.csv
