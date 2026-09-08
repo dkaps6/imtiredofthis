@@ -13,6 +13,7 @@ on:
       - 'scripts/simulation_c2_qb_candidate.py'
       - 'scripts/modeling/qb_distribution_state_v1.py'
       - 'model/qb_distribution_state_selector_v1.json'
+      - 'config/qb_starter_authority_v1.csv'
       - 'docs/migrations/QB_DISTRIBUTION_SHADOW_WEEK1_V1_PLAN.md'
   workflow_dispatch:
 
@@ -117,6 +118,9 @@ jobs:
             --universe evidence/full_slate/data/football_simulation_universe.csv \
             --priced evidence/full_slate/outputs/props_priced_clean.csv \
             --state-context data/qb_distribution_state_context.csv \
+            --season 2026 \
+            --week 1 \
+            --starter-authority config/qb_starter_authority_v1.csv \
             --out outputs/qb_distribution_shadow_v1.csv \
             --result outputs/qb_distribution_shadow_v1_result.json
 
@@ -139,6 +143,7 @@ jobs:
           name: qb-distribution-shadow-week1-v1
           path: |
             full_slate_run_id.txt
+            config/qb_starter_authority_v1.csv
             data/qb_distribution_state_context.csv
             data/qb_distribution_state_context_audit.csv
             data/qb_c2_shadow_primary_qb_audit.csv
