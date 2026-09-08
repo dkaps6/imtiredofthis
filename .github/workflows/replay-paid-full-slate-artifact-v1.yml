@@ -18,6 +18,7 @@ on:
       - 'scripts/run_pricing_v2.py'
       - 'scripts/run_pricing_with_rb_conservation_v1.py'
       - 'scripts/validate_rb_rush_rec_conservation_v1.py'
+      - 'scripts/validate_team_target_pool_v1.py'
       - 'scripts/modeling/rb_pricing_adapter_v1.py'
       - 'scripts/player_identity_roster_history_v1.py'
       - 'scripts/validate_manual_name_overrides_v1.py'
@@ -172,12 +173,18 @@ jobs:
           python scripts/run_pricing_with_rb_conservation_v1.py --season 2026
           test -s outputs/props_priced_clean.csv
 
-      - name: Final semantic and consumption certification
+      - name: Final mechanical semantic and consumption certification
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
           python scripts/validate_rb_rush_rec_conservation_v1.py
           python scripts/validate_full_slate_post_pricing_v1.py
+
+      - name: Model-quality certification - finite receiving entitlement
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/validate_team_target_pool_v1.py
 
       - name: Upload replay evidence
         if: always()
@@ -212,6 +219,9 @@ jobs:
             data/model_state_diagnostics.csv
             data/model_rule_diagnostics.csv
             data/model_ensemble_diagnostics.csv
+            data/model_rule_simulation_inputs.csv
+            data/team_target_pool_audit.csv
+            data/team_target_pool_audit.json
             data/rb_rush_synthesis_context.csv
             data/rb_rush_rec_conservation_input_audit.csv
             data/rb_rush_rec_conservation_input_audit.json
