@@ -1,0 +1,83 @@
+name: WR R14 Participation Entitlement V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-cross-position-catastrophic-casebook-v1
+    paths:
+      - scripts/backtest/evaluate_wr_r14_participation_entitlement_v1.py
+      - .github/workflows/research-wr-r14-participation-entitlement-v1.yml
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml scikit-learn joblib
+
+      - name: Build leakage-safe 2024 training inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests_2024
+          python scripts/backtest/build_historical_inputs.py --season 2024 --prior-season 2023 --weeks '1-18' --out-dir data/backtests_2024
+          python scripts/backtest/enrich_historical_defense.py --team-weekly data/backtests_2024/team_weekly_history.csv --seasons 2023,2024 --audit data/backtests_2024/historical_defense_enrichment_audit.csv --observations data/backtests_2024/historical_defense_observations.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2024 --prior-season 2023 --weeks '1-18' --data-dir data/backtests_2024 --report data/backtests_2024/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs.py --seasons 2023,2024 --schedule data/backtests_2024/schedule_history.csv --out data/backtests_2024/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2023,2024 --out data/backtests_2024/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/backtests_2024/schedule_history.csv --out data/backtests_2024/weather_history.csv
+
+      - name: Build untouched 2025 confirmation inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests_2025
+          python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks '1-18' --out-dir data/backtests_2025
+          python scripts/backtest/enrich_historical_defense.py --team-weekly data/backtests_2025/team_weekly_history.csv --seasons 2024,2025 --audit data/backtests_2025/historical_defense_enrichment_audit.csv --observations data/backtests_2025/historical_defense_observations.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2025 --prior-season 2024 --weeks '1-18' --data-dir data/backtests_2025 --report data/backtests_2025/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs.py --seasons 2024,2025 --schedule data/backtests_2025/schedule_history.csv --out data/backtests_2025/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2024,2025 --out data/backtests_2025/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/backtests_2025/schedule_history.csv --out data/backtests_2025/weather_history.csv
+
+      - name: Train on 2024 and confirm WR R14 on untouched 2025
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/evaluate_wr_r14_participation_entitlement_v1.py \
+            --train-dir data/backtests_2024 \
+            --test-dir data/backtests_2025 \
+            --train-logs data/backtests_2024/player_game_logs_history.csv \
+            --test-logs data/backtests_2025/player_game_logs_history.csv \
+            --iterations 2000 \
+            --out-dir data/backtests/wr_r14_participation_v1
+
+      - name: Show frozen confirmation result
+        if: always()
+        run: |
+          echo '=== WR R14 result ==='
+          cat data/backtests/wr_r14_participation_v1/wr_r14_result.json 2>/dev/null || true
+          echo '=== WR R14 market summary ==='
+          cat data/backtests/wr_r14_participation_v1/wr_r14_market_summary.csv 2>/dev/null || true
+          echo '=== WR R14 coefficients ==='
+          cat data/backtests/wr_r14_participation_v1/wr_r14_coefficients.csv 2>/dev/null || true
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-r14-participation-entitlement-v1
+          path: |
+            data/backtests_2024/historical_input_validation.csv
+            data/backtests_2025/historical_input_validation.csv
+            data/backtests/wr_r14_participation_v1/*
+          if-no-files-found: warn
+          retention-days: 30
