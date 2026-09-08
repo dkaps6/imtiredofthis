@@ -1,0 +1,86 @@
+name: Receiving Finite Room V1
+
+on:
+  push:
+    branches:
+      - research-cross-position-catastrophic-casebook-v1
+    paths:
+      - '.github/workflows/backtest-receiving-finite-room-v1.yml'
+      - 'scripts/backtest/run_receiving_finite_room_v1.py'
+  workflow_dispatch:
+    inputs:
+      weeks:
+        description: "2025 weeks"
+        required: false
+        default: "1-18"
+      iterations:
+        description: "MC iterations per week/variant"
+        required: false
+        default: "2000"
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+
+jobs:
+  finite-room-v1:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml beautifulsoup4 lxml scikit-learn joblib
+      - name: Build leakage-safe 2025 historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          WEEKS="${{ inputs.weeks || '1-18' }}"
+          python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks "$WEEKS" --out-dir data/backtests
+          python scripts/backtest/enrich_historical_defense.py --team-weekly data/backtests/team_weekly_history.csv --seasons 2024,2025 --audit data/backtests/historical_defense_enrichment_audit.csv --observations data/backtests/historical_defense_observations.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2025 --prior-season 2024 --weeks "$WEEKS" --data-dir data/backtests --report data/backtests/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs.py --seasons 2024,2025 --schedule data/backtests/schedule_history.csv --out data/backtests/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2024,2025 --out data/backtests/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/backtests/schedule_history.csv --out data/backtests/weather_history.csv
+      - name: Run frozen finite receiving-room V1
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          WEEKS="${{ inputs.weeks || '1-18' }}"
+          ITERS="${{ inputs.iterations || '2000' }}"
+          rm -rf data/backtests/receiving_finite_room_v1
+          python scripts/backtest/run_receiving_finite_room_v1.py \
+            --season 2025 --prior-season 2024 --weeks "$WEEKS" --iterations "$ITERS" \
+            --player-logs data/backtests/player_game_logs_history.csv \
+            --team-weekly data/backtests/team_weekly_history.csv \
+            --schedule data/backtests/schedule_history.csv \
+            --universe-dir data/backtests/pregame_universe \
+            --injuries data/backtests/injuries_history.csv \
+            --weather data/backtests/weather_history.csv \
+            --out-dir data/backtests/receiving_finite_room_v1
+      - name: Show finite-room result
+        if: always()
+        run: |
+          cat data/backtests/receiving_finite_room_v1/finite_room_result.json 2>/dev/null || true
+          cat data/backtests/receiving_finite_room_v1/finite_room_scorecard.csv 2>/dev/null || true
+      - name: Upload finite-room evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: receiving-finite-room-v1
+          path: |
+            data/backtests/historical_input_validation.csv
+            data/backtests/receiving_finite_room_v1/*.csv
+            data/backtests/receiving_finite_room_v1/*.json
+          if-no-files-found: warn
+          retention-days: 30
