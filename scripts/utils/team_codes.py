@@ -41,6 +41,7 @@ ALIASES = {
     "OAK": "LV",
     "SD": "LAC",
     "STL": "LAR",
+    "SL": "LAR",
     "WFT": "WAS",
     "WASFT": "WAS",
     "N.O.": "NO",
