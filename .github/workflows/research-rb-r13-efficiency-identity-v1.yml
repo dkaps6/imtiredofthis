@@ -1,0 +1,66 @@
+name: RB R13 Efficiency Identity V1
+
+on:
+  push:
+    branches:
+      - research-cross-position-catastrophic-casebook-v1
+    paths:
+      - scripts/backtest/diagnose_rb_r13_efficiency_identity_v1.py
+      - .github/workflows/research-rb-r13-efficiency-identity-v1.yml
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Download corrected RB-only state artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rb-receiving-state-v1b-mechanical-correction
+          path: corrected-artifact
+          github-token: ${{ github.token }}
+          repository: dkaps6/imtiredofthis
+          run-id: 34273055095
+      - name: Locate corrected R12 predictions
+        id: locate
+        shell: bash
+        run: |
+          set -euo pipefail
+          PRED="$(find corrected-artifact -type f -path '*r12_state_gated/rb_r12_predictions.csv' -print -quit)"
+          test -n "$PRED"
+          echo "pred=$PRED" >> "$GITHUB_OUTPUT"
+          echo "$PRED"
+      - name: Run strict-prior RB efficiency identity diagnostic
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/diagnose_rb_r13_efficiency_identity_v1.py \
+            --predictions '${{ steps.locate.outputs.pred }}' \
+            --history-start 2013 \
+            --out-dir data/backtests/rb_r13_efficiency_identity_v1
+      - name: Show R13 result
+        if: always()
+        run: |
+          cat data/backtests/rb_r13_efficiency_identity_v1/rb_r13_efficiency_result.json 2>/dev/null || true
+          echo '=== primary YPT summary ==='
+          cat data/backtests/rb_r13_efficiency_identity_v1/rb_r13_primary_ypt_summary.csv 2>/dev/null || true
+      - name: Upload R13 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r13-efficiency-identity-v1
+          path: data/backtests/rb_r13_efficiency_identity_v1/*
+          if-no-files-found: warn
+          retention-days: 30
