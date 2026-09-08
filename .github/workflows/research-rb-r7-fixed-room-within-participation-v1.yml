@@ -7,7 +7,7 @@ on:
       - research-cross-position-catastrophic-casebook-v1
     paths:
       - scripts/backtest/evaluate_rb_r7_fixed_room_within_participation_v1.py
-      - scripts/backtest/historical_player_logs_schedule_bounded_v1.py
+      - scripts/backtest/run_rb_r7_fixed_room_within_participation_v1b.py
       - .github/workflows/research-rb-r7-fixed-room-within-participation-v1.yml
 
 jobs:
@@ -66,7 +66,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/backtest/evaluate_rb_r7_fixed_room_within_participation_v1.py \
+          python scripts/backtest/run_rb_r7_fixed_room_within_participation_v1b.py \
             --data-2020 data/backtests_2020 --logs-2020 data/backtests_2020/player_game_logs_history.csv \
             --data-2021 data/backtests_2021 --logs-2021 data/backtests_2021/player_game_logs_history.csv \
             --data-2022 data/backtests_2022 --logs-2022 data/backtests_2022/player_game_logs_history.csv \
