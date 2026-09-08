@@ -9,8 +9,12 @@ on:
       - 'scripts/harden_live_odds_artifacts_v1.py'
       - 'scripts/repair_live_prop_identity_v1.py'
       - 'scripts/materialize_live_props_for_model_v1.py'
+      - 'scripts/materialize_pricing_offers_v1.py'
       - 'scripts/repair_injuries_nflcom_v1.py'
       - 'scripts/validate_full_slate_pre_model_v1.py'
+      - 'scripts/validate_player_identity_semantics_v1.py'
+      - 'scripts/validate_full_slate_data_quality_v1.py'
+      - 'scripts/validate_full_slate_post_pricing_v1.py'
       - 'scripts/slate_universe_v2.py'
       - 'scripts/run_player_form_v2_loader.py'
   workflow_dispatch:
@@ -91,16 +95,21 @@ jobs:
               'odds_api_refetched': False,
           })
           p.write_text(json.dumps(status, indent=2, sort_keys=True) + '\n', encoding='utf-8')
-          print(json.dumps(materialize(), indent=2, sort_keys=True))
+          result = materialize()
+          if int(result.get('quarantined_rows', -1)) <= 0:
+              raise SystemExit('FATAL: paid snapshot unexpectedly preserved zero quarantine rows')
+          print(json.dumps(result, indent=2, sort_keys=True))
           PY
 
-      - name: Build PlayerForm with pre-model semantic gate
+      - name: Build PlayerForm and audit current roster identities
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
           python scripts/run_player_form_v2_loader.py --season 2026 --prior-season 2025 --date ''
           python scripts/enrich_player_scoring_v2.py --season 2026 --prior-season 2025 --date ''
+          python scripts/validate_player_identity_semantics_v1.py
           python - <<'PY'
+          import json
           import pandas as pd
           required=[
               'data/full_slate_pre_model_semantic_audit.csv',
@@ -108,18 +117,26 @@ jobs:
               'data/player_form.csv',
               'data/player_form_consensus.csv',
               'data/player_identity_validation.csv',
+              'data/player_identity_semantic_audit.csv',
           ]
           for p in required:
               df=pd.read_csv(p)
               if df.empty: raise SystemExit(f'FATAL: replay produced zero rows: {p}')
               print(p, 'rows=', len(df))
+          q=pd.read_csv('data/live_odds_placeholder_rows.csv')
+          status=json.load(open('data/live_odds_status.json',encoding='utf-8'))
+          expected=int(status.get('production_quarantined_rows',-1))
+          if len(q) != expected or expected <= 0:
+              raise SystemExit(f'FATAL: quarantine ledger was overwritten/drifted expected={expected} artifact={len(q)}')
+          print('immutable quarantine rows=',len(q),'reasons=',q['quarantine_reason'].value_counts().to_dict())
           PY
 
-      - name: Run canonical model components from repaired snapshot
+      - name: Run canonical model components and classify data quality
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
           python scripts/run_model_context_bridge.py
+          python scripts/validate_full_slate_data_quality_v1.py
           python scripts/run_model_bayesian_bridge.py
           python scripts/run_model_ml_bridge.py
           python scripts/run_model_state_bridge.py
@@ -127,42 +144,22 @@ jobs:
           python scripts/run_model_ensemble_bridge.py
           python scripts/run_rb_week1_no_odds.py --season 2026 --week 1 --iterations 25000 --out data/rb_rush_synthesis_context.csv
 
-      - name: Assemble and price repaired paid snapshot
+      - name: Materialize exact bookmaker offers, assemble metrics, and price
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
+          python scripts/materialize_pricing_offers_v1.py
           python scripts/run_metrics_context.py --season 2026 --mode full --date ''
           python scripts/validate_build_integrity.py
           python scripts/metrics_ready.py --season 2026 --date ''
           python scripts/run_pricing_v2.py --season 2026
           test -s outputs/props_priced_clean.csv
 
-      - name: Final semantic/consumption audit
+      - name: Final semantic and consumption certification
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
-          python - <<'PY'
-          import json
-          import pandas as pd
-          p=pd.read_csv('outputs/props_priced_clean.csv')
-          if p.empty: raise SystemExit('FATAL: priced output has zero rows')
-          for col in ('ml_applied','state_applied','bayes_applied','rules_applied'):
-              if col not in p.columns or int(pd.to_numeric(p[col],errors='coerce').fillna(0).sum()) <= 0:
-                  raise SystemExit(f'FATAL: {col} has zero applied rows')
-          if 'ensemble_status' not in p.columns:
-              raise SystemExit('FATAL: ensemble_status missing')
-          print('priced rows=',len(p),'players=',p['player'].nunique() if 'player' in p else 'n/a')
-          print({c:int(pd.to_numeric(p[c],errors='coerce').fillna(0).sum()) for c in ('ml_applied','state_applied','bayes_applied','rules_applied')})
-          result={
-              'disposition':'PAID_FULL_SLATE_REPLAY_COMPLETE',
-              'source_run':34152868136,
-              'odds_api_refetched':False,
-              'priced_rows':int(len(p)),
-          }
-          Path='outputs/paid_full_slate_replay_result.json'
-          open(Path,'w',encoding='utf-8').write(json.dumps(result,indent=2,sort_keys=True)+'\n')
-          print(json.dumps(result,indent=2,sort_keys=True))
-          PY
+          python scripts/validate_full_slate_post_pricing_v1.py
 
       - name: Upload replay evidence
         if: always()
@@ -172,14 +169,20 @@ jobs:
           path: |
             data/full_slate_pre_model_semantic_audit.csv
             data/full_slate_pre_model_semantic_audit.json
+            data/full_slate_data_quality_audit.csv
+            data/full_slate_data_quality_audit.json
+            data/full_slate_post_pricing_audit.csv
             data/live_odds_status.json
             data/live_odds_artifact_hardening.json
             data/live_prop_identity_status.json
             data/live_prop_identity_audit.csv
             data/live_odds_placeholder_rows.csv
+            data/live_pricing_offer_audit.json
             data/injuries_source_status.json
             data/injuries_identity_audit.csv
             data/player_identity_validation.csv
+            data/player_identity_semantic_audit.csv
+            data/player_identity_semantic_audit.json
             data/provider_readiness_v3.csv
             data/model_bayesian_diagnostics.csv
             data/model_ml_diagnostics.csv
@@ -187,6 +190,8 @@ jobs:
             data/model_rule_diagnostics.csv
             data/model_ensemble_diagnostics.csv
             data/rb_rush_synthesis_context.csv
+            outputs/props_raw_compact.csv
+            outputs/props_pricing_offers.csv
             outputs/props_priced_clean.csv
             outputs/paid_full_slate_replay_result.json
           if-no-files-found: warn
