@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """Semantic audit for current-slate roster, sportsbook, and historical identities.
 
-Structural identity validation answers "does every row have a key?". This audit
-answers the more important production questions: does every live sportsbook
-player map to exactly one current roster row, and do temporary roster identities
-look like genuine no-registry players rather than missed veteran aliases/trades?
-No fuzzy candidate is auto-attached to history; suspicious cases are surfaced for
-review so the model can never silently inherit another player's usage.
+Structural identity validation answers whether every row has a key. This audit
+checks whether live sportsbook players map to exactly one current roster row and
+whether temporary identities resemble a genuinely unresolved historical alias.
+Review candidates are never auto-attached to history.
 """
 from __future__ import annotations
 
@@ -28,7 +26,6 @@ SLATE = DATA / "player_identity_slate.csv"
 COMPACT = OUTPUTS / "props_raw_compact.csv"
 AUDIT = DATA / "player_identity_semantic_audit.csv"
 SUMMARY = DATA / "player_identity_semantic_audit.json"
-
 SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v", "vi", "vii"}
 
 
@@ -57,9 +54,7 @@ def _tokens(value) -> list[str]:
 
 def _first_last(value) -> tuple[str, str]:
     parts = _tokens(value)
-    if not parts:
-        return "", ""
-    return parts[0], parts[-1]
+    return (parts[0], parts[-1]) if parts else ("", "")
 
 
 def _position(value) -> str:
@@ -71,13 +66,26 @@ def _position(value) -> str:
     return x
 
 
-def _plausible_registry_candidates(player: str, position: str, registry: pd.DataFrame) -> list[dict]:
-    """Return review candidates; never auto-resolve them.
+def _first_name_variant(a: str, b: str) -> bool:
+    """Conservative review-only nickname/long-form signal.
 
-    Same surname + first initial + position is intentionally conservative enough
-    to catch Chris/Christopher, Kenny/Kenneth, Jeff/Jeffery and similar provider
-    variants while remaining an audit signal rather than an automatic join.
+    Same first initial was far too broad (for example Kevin/Keon, Jalon/Jayden,
+    Kaytron/Kazmeir). Exact first names or a >=4-character prefix relationship
+    catches provider shortening such as Josh/Joshua and Chris/Christopher without
+    turning unrelated players into certification blockers. Non-prefix nicknames
+    must be handled through the verified identity alias configuration.
     """
+    a = str(a or "").lower().strip()
+    b = str(b or "").lower().strip()
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
+    return len(shorter) >= 4 and longer.startswith(shorter)
+
+
+def _plausible_registry_candidates(player: str, position: str, registry: pd.DataFrame) -> list[dict]:
     first, last = _first_last(player)
     if not first or not last or registry.empty:
         return []
@@ -86,7 +94,7 @@ def _plausible_registry_candidates(player: str, position: str, registry: pd.Data
     for row in registry.itertuples(index=False):
         rplayer = getattr(row, "player", "")
         rfirst, rlast = _first_last(rplayer)
-        if not rfirst or rlast != last or rfirst[0] != first[0]:
+        if not rfirst or rlast != last or not _first_name_variant(first, rfirst):
             continue
         rpos = _position(getattr(row, "position", ""))
         if position and rpos and rpos != position:
@@ -95,14 +103,12 @@ def _plausible_registry_candidates(player: str, position: str, registry: pd.Data
         if not identity or identity in seen:
             continue
         seen.add(identity)
-        candidates.append(
-            {
-                "player": str(rplayer),
-                "identity": identity,
-                "last_team": canon_team(getattr(row, "team", "")),
-                "position": rpos,
-            }
-        )
+        candidates.append({
+            "player": str(rplayer),
+            "identity": identity,
+            "last_team": canon_team(getattr(row, "team", "")),
+            "position": rpos,
+        })
     return candidates[:10]
 
 
@@ -123,9 +129,7 @@ def audit() -> dict:
     form = form.copy()
     form["team"] = form["team"].map(canon_team)
     form["position_group_semantic"] = form["position"].map(_position)
-    form["name_base_key_semantic"] = form["player"].map(
-        lambda value: player_name_key(value, strip_suffix=True)
-    )
+    form["name_base_key_semantic"] = form["player"].map(lambda v: player_name_key(v, strip_suffix=True))
     if form[["team", "name_base_key_semantic"]].astype("string").fillna("").eq("").any().any():
         raise RuntimeError("PlayerForm has blank current roster name/team keys")
     if form.duplicated(["team", "name_base_key_semantic"]).any():
@@ -135,50 +139,35 @@ def audit() -> dict:
         ].head(20).to_dict("records")
         raise RuntimeError(f"current roster is ambiguous at normalized team/name grain: {sample}")
 
-    slate_required = {"player", "team"}
-    if not slate_required.issubset(slate.columns):
-        raise RuntimeError(f"player_identity_slate missing columns: {sorted(slate_required - set(slate.columns))}")
+    if not {"player", "team"}.issubset(slate.columns):
+        raise RuntimeError("player_identity_slate missing player/team")
     slate = slate.copy()
     slate["team"] = slate["team"].map(canon_team)
-    slate["name_base_key_semantic"] = slate["player"].map(
-        lambda value: player_name_key(value, strip_suffix=True)
-    )
+    slate["name_base_key_semantic"] = slate["player"].map(lambda v: player_name_key(v, strip_suffix=True))
     form_keys = set(zip(form["team"], form["name_base_key_semantic"]))
     slate_keys = set(zip(slate["team"], slate["name_base_key_semantic"]))
     if form_keys != slate_keys:
-        missing_form = list(slate_keys - form_keys)[:20]
-        extra_form = list(form_keys - slate_keys)[:20]
         raise RuntimeError(
             "PlayerForm current roster drifted from Player Identity slate; "
-            f"missing_from_form={missing_form} extra_in_form={extra_form}"
+            f"missing_from_form={list(slate_keys-form_keys)[:20]} extra_in_form={list(form_keys-slate_keys)[:20]}"
         )
 
     prop_markets: dict[tuple[str, str], set[str]] = {}
     prop_rows = 0
     if not compact.empty:
-        required_props = {"player", "team_abbr", "market"}
-        if not required_props.issubset(compact.columns):
-            raise RuntimeError(
-                f"compact sportsbook artifact missing roster-audit columns: {sorted(required_props - set(compact.columns))}"
-            )
+        need = {"player", "team_abbr", "market"}
+        if not need.issubset(compact.columns):
+            raise RuntimeError(f"compact sportsbook artifact missing roster-audit columns: {sorted(need-set(compact.columns))}")
         compact = compact.copy()
         compact["team_semantic"] = compact["team_abbr"].map(canon_team)
-        compact["name_base_key_semantic"] = compact["player"].map(
-            lambda value: player_name_key(value, strip_suffix=True)
-        )
-        mismatches: list[dict] = []
+        compact["name_base_key_semantic"] = compact["player"].map(lambda v: player_name_key(v, strip_suffix=True))
+        mismatches = []
         for row in compact.itertuples(index=False):
-            key = (str(getattr(row, "team_semantic")), str(getattr(row, "name_base_key_semantic")))
+            key = (str(row.team_semantic), str(row.name_base_key_semantic))
             if key not in form_keys:
-                mismatches.append(
-                    {
-                        "player": getattr(row, "player", ""),
-                        "team": getattr(row, "team_semantic", ""),
-                        "market": getattr(row, "market", ""),
-                    }
-                )
+                mismatches.append({"player": row.player, "team": row.team_semantic, "market": row.market})
                 continue
-            prop_markets.setdefault(key, set()).add(str(getattr(row, "market", "")))
+            prop_markets.setdefault(key, set()).add(str(row.market))
             prop_rows += 1
         if mismatches:
             raise RuntimeError(
@@ -193,28 +182,21 @@ def audit() -> dict:
         if "position" not in registry.columns:
             registry["position"] = ""
 
-    audit_rows: list[dict] = []
-    suspicious = 0
-    temp = 0
-    temp_props = 0
-    stable = 0
-    trade = 0
+    audit_rows = []
+    suspicious = temp = temp_props = stable = trade = 0
     for row in form.itertuples(index=False):
-        player = str(getattr(row, "player"))
-        team = str(getattr(row, "team"))
-        position = str(getattr(row, "position_group_semantic"))
-        identity = str(getattr(row, "player_identity_key"))
-        resolution = str(getattr(row, "identity_resolution"))
-        confidence = float(getattr(row, "identity_confidence"))
-        key = (team, str(getattr(row, "name_base_key_semantic")))
+        player = str(row.player)
+        team = str(row.team)
+        position = str(row.position_group_semantic)
+        identity = str(row.player_identity_key)
+        resolution = str(row.identity_resolution)
+        confidence = float(row.identity_confidence)
+        key = (team, str(row.name_base_key_semantic))
         markets = sorted(prop_markets.get(key, set()))
-        is_temp = identity.startswith("temp:")
         candidates: list[dict] = []
-
-        if is_temp:
+        if identity.startswith("temp:"):
             temp += 1
-            if markets:
-                temp_props += 1
+            temp_props += int(bool(markets))
             candidates = _plausible_registry_candidates(player, position, registry)
             if candidates:
                 semantic_status = "TEMP_POSSIBLE_HISTORICAL_ALIAS_REVIEW_REQUIRED"
@@ -228,33 +210,25 @@ def audit() -> dict:
                 semantic_status = "STABLE_TRADE_RESOLVED"
             else:
                 semantic_status = "STABLE_CURRENT_TEAM_RESOLVED"
-
-        audit_rows.append(
-            {
-                "player": player,
-                "team": team,
-                "position": position,
-                "player_identity_key": identity,
-                "identity_resolution": resolution,
-                "identity_confidence": confidence,
-                "semantic_status": semantic_status,
-                "sportsbook_market_count": len(markets),
-                "sportsbook_markets": "|".join(markets),
-                "historical_candidate_count": len(candidates),
-                "historical_candidates_json": json.dumps(candidates, sort_keys=True),
-            }
-        )
+        audit_rows.append({
+            "player": player,
+            "team": team,
+            "position": position,
+            "player_identity_key": identity,
+            "identity_resolution": resolution,
+            "identity_confidence": confidence,
+            "semantic_status": semantic_status,
+            "sportsbook_market_count": len(markets),
+            "sportsbook_markets": "|".join(markets),
+            "historical_candidate_count": len(candidates),
+            "historical_candidates_json": json.dumps(candidates, sort_keys=True),
+        })
 
     out = pd.DataFrame(audit_rows)
     AUDIT.parent.mkdir(parents=True, exist_ok=True)
     out.to_csv(AUDIT, index=False)
-
     result = {
-        "disposition": (
-            "IDENTITY_SEMANTIC_REVIEW_REQUIRED"
-            if suspicious
-            else "IDENTITY_SEMANTICALLY_CONSISTENT_WITH_NEW_UNMAPPED_PLAYERS"
-        ),
+        "disposition": "IDENTITY_SEMANTIC_REVIEW_REQUIRED" if suspicious else "IDENTITY_SEMANTICALLY_CONSISTENT_WITH_NEW_UNMAPPED_PLAYERS",
         "slate_players": int(len(form)),
         "stable_players": int(stable),
         "trade_resolved_players": int(trade),
@@ -264,6 +238,7 @@ def audit() -> dict:
         "sportsbook_compact_rows_checked": int(prop_rows),
         "sportsbook_current_roster_mismatches": 0,
         "playerform_slate_key_match": True,
+        "alias_review_heuristic": "same_surname_position_and_exact_or_prefix_first_name",
         "audit": str(AUDIT),
     }
     SUMMARY.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
