@@ -1,0 +1,203 @@
+name: WR R15 Full Slate Integration V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-cross-position-catastrophic-casebook-v1
+    paths:
+      - data/models/wr_r15_production_model_v1/wr_r15_production_model_v1.json
+      - scripts/modeling/wr_r15_entitlement_adapter_v1.py
+      - scripts/run_pricing_with_full_roster_universe_v3.py
+      - .github/workflows/replay-wr-r15-full-slate-integration-v1.yml
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  SEASON: '2026'
+  PRIOR_SEASON: '2025'
+
+jobs:
+  integrate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml beautifulsoup4 lxml scikit-learn joblib
+
+      - name: Download already-paid Full Slate artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/paid
+          gh run download 34152868136 --repo "${GITHUB_REPOSITORY}" --name run_34152868136 --dir evidence/paid
+          test -s evidence/paid/data/live_odds_status.json
+          test -s evidence/paid/outputs/props_raw.csv
+          cp -a evidence/paid/data/. data/
+          mkdir -p outputs
+          cp -a evidence/paid/outputs/. outputs/
+          echo 'NO CREDIT REPLAY: no OddsAPI fetch occurs in this workflow.'
+
+      - name: Harden frozen sportsbook boundary
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.harden_live_odds_artifacts_v1 import harden_live_odds_artifacts
+          from scripts.repair_live_prop_identity_v1 import repair_live_prop_identity
+          from scripts.materialize_live_props_for_model_v1 import materialize
+          harden_live_odds_artifacts()
+          repair_live_prop_identity()
+          materialize()
+          p=Path('data/live_odds_status.json')
+          s=json.loads(p.read_text(encoding='utf-8'))
+          s['replay_source_run']=34152868136
+          s['odds_api_refetched']=False
+          p.write_text(json.dumps(s,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          PY
+
+      - name: Build current football-first slate context
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/run_player_form_v2_loader.py --season 2026 --prior-season 2025 --date ''
+          python scripts/enrich_player_scoring_v2.py --season 2026 --prior-season 2025 --date ''
+          python scripts/validate_player_identity_semantics_v1.py
+          python scripts/run_model_context_bridge.py
+          python scripts/validate_full_slate_data_quality_v1.py
+          python scripts/run_model_bayesian_bridge.py
+          python scripts/run_model_ml_bridge.py
+          python scripts/run_model_state_bridge.py
+          python scripts/run_model_rules_bridge.py
+          python scripts/run_model_ensemble_bridge.py
+          python scripts/run_rb_week1_no_odds.py --season 2026 --week 1 --iterations 25000 --out data/rb_rush_synthesis_context.csv
+          python scripts/run_qb_distribution_state_context.py --season 2026 --week 1
+
+      - name: Materialize exact books and metrics
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/materialize_pricing_offers_v1.py
+          python scripts/run_metrics_context.py --season 2026 --mode full --date ''
+          python scripts/validate_build_integrity.py
+          python scripts/metrics_ready.py --season 2026 --date ''
+
+      - name: Run M38 plus TE-R5P plus WR-R15 plus C2 Full Slate
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/run_pricing_with_full_roster_universe_v3.py --season 2026
+          test -s outputs/props_priced_clean.csv
+          test -s data/wr_r15_full_slate_entitlement_audit.json
+          test -s data/wr_r15_full_slate_entitlement_trace.csv
+          test -s data/wr_r15_full_slate_simulation_delta.csv
+          test -s data/te_r5p_full_slate_entitlement_audit.json
+          test -s data/qb_c2_production_integration_audit.json
+
+      - name: Fail-closed WR R15 production contract gate
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python - <<'PY'
+          import json
+          import pandas as pd
+          w=json.load(open('data/wr_r15_full_slate_entitlement_audit.json',encoding='utf-8'))
+          e=json.load(open('data/target_entitlement_v1_audit.json',encoding='utf-8'))
+          f=json.load(open('data/football_simulation_universe_audit.json',encoding='utf-8'))
+          q=json.load(open('data/qb_c2_production_integration_audit.json',encoding='utf-8'))
+          required={
+            'disposition':'WR_R15_FULL_SLATE_ENTITLEMENT_READY',
+            'model_version':'WR_R15_PRODUCTION_MODEL_V1',
+            'm38_wr1_anchor_preserved':True,
+            'wr2plus_pool_preserved':True,
+            'wr_room_mass_preserved':True,
+            'non_wr_entitlement_preserved':True,
+            'team_total_player_entitlement_preserved':True,
+            'target_residual_bucket_preserved':True,
+            'sportsbook_inputs_used':False,
+            'current_or_future_outcomes_used':False,
+          }
+          for k,v in required.items():
+              if w.get(k)!=v: raise SystemExit(f'FATAL WR-R15 contract {k}: expected={v!r} actual={w.get(k)!r}')
+          if int(w.get('current_wr1_anchor_rows',0)) != 32:
+              raise SystemExit(f'FATAL WR-R15 expected 32 WR1 anchors: {w.get("current_wr1_anchor_rows")}')
+          for k in ('max_wr1_anchor_entitlement_delta','max_non_wr_entitlement_delta'):
+              if float(w.get(k,1.0)) != 0.0: raise SystemExit(f'FATAL WR-R15 exact-zero gate {k}={w.get(k)}')
+          for k in ('max_wr2plus_pool_gap','max_wr_room_mass_gap','max_team_player_entitlement_gap'):
+              if float(w.get(k,1.0)) > 1e-12: raise SystemExit(f'FATAL WR-R15 conservation gate {k}={w.get(k)}')
+          if e.get('projection_neutral_gate')!='PASS' or int(e.get('projection_invariance_changed_arrays',-1))!=0:
+              raise SystemExit(f'FATAL explicit entitlement baseline parity: {e}')
+          if e.get('wr_r15_entitlement_scope_gate')!='PASS':
+              raise SystemExit('FATAL WR-R15 entitlement scope not certified')
+          if f.get('wr_r15_full_slate_consumed') is not True or f.get('wr_r15_model_version')!='WR_R15_PRODUCTION_MODEL_V1':
+              raise SystemExit(f'FATAL football universe does not record WR-R15: {f}')
+          if f.get('sportsbook_inputs_used_to_generate_football_distributions') is not False:
+              raise SystemExit('FATAL sportsbook leakage into football distributions')
+          if int(f.get('football_players',0))!=469 or int(f.get('football_teams',0))!=32:
+              raise SystemExit(f'FATAL football universe drift: {f}')
+          if q.get('disposition')!='QB_C2_PRODUCTION_DISTRIBUTION_INTEGRATION_PASS':
+              raise SystemExit(f'FATAL C2 integration failed after WR-R15: {q}')
+          if q.get('wr_r15_consumed_before_c2') is not True:
+              raise SystemExit('FATAL C2 audit does not record WR-R15 upstream')
+          if int(q.get('state_capture_changed_arrays',-1))!=0 or float(q.get('state_capture_max_element_gap',1.0))>1e-12:
+              raise SystemExit(f'FATAL C2 state parity drift after WR-R15: {q}')
+          print('WR_R15_FULL_SLATE_PRODUCTION_CONTRACT_PASS',json.dumps(w,sort_keys=True))
+          PY
+
+      - name: Re-certify RB and target conservation
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/validate_rb_rush_rec_conservation_v1.py
+          python scripts/validate_team_target_pool_full_universe_v2.py
+          python - <<'PY'
+          import json
+          t=json.load(open('data/team_target_pool_audit.json',encoding='utf-8'))
+          if t.get('disposition')!='EXPLICIT_TARGET_ENTITLEMENT_POOL_VALID':
+              raise SystemExit(f'FATAL target pool after WR-R15: {t}')
+          if float(t.get('explicit_max_physical_gap',1.0))>1e-12:
+              raise SystemExit(f'FATAL physical target gap after WR-R15: {t}')
+          print('WR_R15_TARGET_POOL_CERTIFIED',json.dumps(t,sort_keys=True))
+          PY
+
+      - name: Upload WR R15 integration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-r15-full-slate-integration-v1
+          path: |
+            data/football_simulation_universe.csv
+            data/football_simulation_universe_audit.json
+            data/target_entitlement_v1_trace.csv
+            data/target_entitlement_v1_audit.json
+            data/target_entitlement_v1_projection_invariance.csv
+            data/te_r5p_full_slate_entitlement_trace.csv
+            data/te_r5p_full_slate_entitlement_audit.json
+            data/te_r5p_full_slate_simulation_delta.csv
+            data/wr_r15_full_slate_entitlement_trace.csv
+            data/wr_r15_full_slate_entitlement_audit.json
+            data/wr_r15_full_slate_simulation_delta.csv
+            data/qb_c2_state_capture_parity.csv
+            data/qb_c2_production_integration_audit.json
+            data/team_target_pool_audit.json
+            data/rb_rush_rec_conservation_input_audit.json
+            data/rb_rush_rec_conservation_final_audit.csv
+            outputs/props_pricing_offers.csv
+            outputs/props_priced_clean.csv
+          if-no-files-found: warn
+          retention-days: 30
