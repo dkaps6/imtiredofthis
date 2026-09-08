@@ -8,6 +8,8 @@ on:
       - '.github/workflows/replay-paid-full-slate-artifact-v1.yml'
       - 'data/manual_name_overrides.csv'
       - 'data/player_identity_aliases.csv'
+      - 'config/qb_starter_authority_v1.csv'
+      - 'model/qb_distribution_state_selector_v1.json'
       - 'scripts/harden_live_odds_artifacts_v1.py'
       - 'scripts/repair_live_prop_identity_v1.py'
       - 'scripts/materialize_live_props_for_model_v1.py'
@@ -15,7 +17,9 @@ on:
       - 'scripts/metrics_v2.py'
       - 'scripts/enrich_player_scoring_v2.py'
       - 'scripts/simulation_v2.py'
+      - 'scripts/simulation_c2_qb_candidate.py'
       - 'scripts/simulation_explicit_entitlement_v1.py'
+      - 'scripts/run_qb_distribution_state_context.py'
       - 'scripts/run_pricing_v2.py'
       - 'scripts/run_pricing_with_rb_conservation_v1.py'
       - 'scripts/run_pricing_with_full_roster_universe_v1.py'
@@ -27,7 +31,10 @@ on:
       - 'scripts/validate_anytime_td_model_status_v1.py'
       - 'scripts/validate_full_slate_mechanical_certification_v1.py'
       - 'scripts/modeling/rb_pricing_adapter_v1.py'
+      - 'scripts/modeling/qb_c2_production_adapter_v1.py'
+      - 'scripts/modeling/qb_distribution_state_v1.py'
       - 'scripts/modeling/target_entitlement_v1.py'
+      - 'scripts/modeling/te_r5p_entitlement_adapter_v1.py'
       - 'scripts/player_identity_roster_history_v1.py'
       - 'scripts/validate_manual_name_overrides_v1.py'
       - 'scripts/repair_injuries_nflcom_v1.py'
@@ -169,6 +176,9 @@ jobs:
           python scripts/run_model_rules_bridge.py
           python scripts/run_model_ensemble_bridge.py
           python scripts/run_rb_week1_no_odds.py --season 2026 --week 1 --iterations 25000 --out data/rb_rush_synthesis_context.csv
+          python scripts/run_qb_distribution_state_context.py --season 2026 --week 1
+          test -s data/qb_distribution_state_context.csv
+          test -s data/qb_distribution_state_context_audit.csv
 
       - name: Materialize exact bookmaker offers, assemble metrics, and price from full football roster
         run: |
@@ -181,6 +191,26 @@ jobs:
           python scripts/run_pricing_with_full_roster_universe_v2.py --season 2026
           test -s outputs/props_priced_clean.csv
           test -s data/football_simulation_universe_audit.json
+          test -s data/qb_c2_production_integration_audit.json
+          python - <<'PY'
+          import json
+          q=json.load(open('data/qb_c2_production_integration_audit.json',encoding='utf-8'))
+          if q.get('disposition') != 'QB_C2_PRODUCTION_DISTRIBUTION_INTEGRATION_PASS':
+              raise SystemExit(f"FATAL: QB C2 production integration not certified: {q.get('disposition')}")
+          if int(q.get('football_qb_rows',0)) != 32 or int(q.get('selected_qb_rows',0)) <= 0:
+              raise SystemExit(f"FATAL: QB C2 coverage invalid: {q}")
+          if float(q.get('max_raw_qb_mean_gap',1.0)) > 1e-10:
+              raise SystemExit(f"FATAL: QB C2 raw mean drift: {q.get('max_raw_qb_mean_gap')}")
+          if int(q.get('state_capture_changed_arrays',-1)) != 0:
+              raise SystemExit(f"FATAL: QB C2 state-capture seam changed arrays: {q.get('state_capture_changed_arrays')}")
+          if float(q.get('state_capture_max_element_gap',1.0)) > 1e-12:
+              raise SystemExit(f"FATAL: QB C2 state-capture element drift: {q.get('state_capture_max_element_gap')}")
+          if int(q.get('sportsbook_inputs_to_selector',1)) != 0 or int(q.get('sportsbook_inputs_to_starter_selection',1)) != 0:
+              raise SystemExit('FATAL: QB C2 sportsbook leakage flag')
+          if int(q.get('receiver_outputs_replaced',1)) != 0 or int(q.get('rb_outputs_replaced',1)) != 0:
+              raise SystemExit('FATAL: QB C2 replaced non-QB outputs')
+          print('QB_C2_PRODUCTION_INTEGRATION_CERTIFIED', json.dumps(q,sort_keys=True))
+          PY
 
       - name: Final mechanical semantic, lineage, ATD provenance and consumption certification
         run: |
@@ -237,6 +267,15 @@ jobs:
             data/target_entitlement_v1_trace.csv
             data/target_entitlement_v1_audit.json
             data/target_entitlement_v1_projection_invariance.csv
+            data/te_r5p_full_slate_entitlement_trace.csv
+            data/te_r5p_full_slate_entitlement_audit.json
+            data/te_r5p_full_slate_simulation_delta.csv
+            data/qb_distribution_state_context.csv
+            data/qb_distribution_state_context_audit.csv
+            data/qb_c2_production_starter_audit.csv
+            data/qb_c2_state_capture_parity.csv
+            data/qb_c2_production_integration_audit.csv
+            data/qb_c2_production_integration_audit.json
             data/market_model_lineage_current.csv
             data/market_model_lineage_current.json
             data/anytime_td_model_status_v1.csv
