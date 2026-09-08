@@ -1,0 +1,81 @@
+name: RB Receiving State V1B Mechanical Correction
+
+on:
+  push:
+    branches:
+      - research-cross-position-catastrophic-casebook-v1
+    paths:
+      - scripts/backtest/filter_rb_prediction_rows_v1.py
+      - .github/workflows/research-rb-receiving-state-v1b-mechanical-correction.yml
+  workflow_dispatch:
+
+jobs:
+  corrected-rb-only-replay:
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.4.2
+      - name: Download authoritative R10 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rb-r10-modern-stability-v1
+          path: r10-artifact
+          github-token: ${{ github.token }}
+          repository: dkaps6/imtiredofthis
+          run-id: 34269618181
+      - name: Locate authoritative R10 predictions
+        id: locate
+        shell: bash
+        run: |
+          set -euo pipefail
+          PRED="$(find r10-artifact -type f -name rb_r10_predictions.csv -print -quit)"
+          test -n "$PRED"
+          echo "pred=$PRED" >> "$GITHUB_OUTPUT"
+      - name: Mechanical RB/FB-only filter
+        run: |
+          python scripts/backtest/filter_rb_prediction_rows_v1.py \
+            --input '${{ steps.locate.outputs.pred }}' \
+            --output data/backtests/rb_receiving_state_v1b/rb_r10_predictions_rb_only.csv \
+            --audit data/backtests/rb_receiving_state_v1b/rb_only_filter_audit.json
+      - name: Re-run exact R10 receiving-state forensic on RB-only rows
+        run: |
+          python scripts/backtest/diagnose_rb_r10_receiving_state_v1.py \
+            --predictions data/backtests/rb_receiving_state_v1b/rb_r10_predictions_rb_only.csv \
+            --out-dir data/backtests/rb_receiving_state_v1b/r10_forensic
+      - name: Re-run exact R11 high-state diagnostic on RB-only rows
+        run: |
+          python scripts/backtest/diagnose_rb_r11_high_state_probability_v1.py \
+            --predictions data/backtests/rb_receiving_state_v1b/rb_r10_predictions_rb_only.csv \
+            --out-dir data/backtests/rb_receiving_state_v1b/r11_state_probability
+      - name: Re-run exact frozen R12 candidate on RB-only rows
+        run: |
+          python scripts/backtest/evaluate_rb_r12_state_gated_identity_v1.py \
+            --predictions data/backtests/rb_receiving_state_v1b/rb_r10_predictions_rb_only.csv \
+            --out-dir data/backtests/rb_receiving_state_v1b/r12_state_gated
+      - name: Show corrected lineage results
+        if: always()
+        run: |
+          echo '=== mechanical filter audit ==='
+          cat data/backtests/rb_receiving_state_v1b/rb_only_filter_audit.json 2>/dev/null || true
+          echo '=== corrected R10 forensic ==='
+          cat data/backtests/rb_receiving_state_v1b/r10_forensic/rb_r10_receiving_state_forensic_result.json 2>/dev/null || true
+          echo '=== corrected R11 diagnostic ==='
+          cat data/backtests/rb_receiving_state_v1b/r11_state_probability/rb_r11_state_probability_result.json 2>/dev/null || true
+          echo '=== corrected R12 candidate ==='
+          cat data/backtests/rb_receiving_state_v1b/r12_state_gated/rb_r12_result.json 2>/dev/null || true
+      - name: Upload corrected evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-receiving-state-v1b-mechanical-correction
+          path: data/backtests/rb_receiving_state_v1b/**
+          retention-days: 30
