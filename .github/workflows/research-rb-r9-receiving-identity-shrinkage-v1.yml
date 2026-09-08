@@ -1,0 +1,96 @@
+name: RB R9 Receiving Identity Shrinkage V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-cross-position-catastrophic-casebook-v1
+    paths:
+      - scripts/backtest/evaluate_rb_r9_receiving_identity_shrinkage_v1.py
+      - .github/workflows/research-rb-r9-receiving-identity-shrinkage-v1.yml
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 420
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml scikit-learn joblib
+
+      - name: Build 2015 training inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests_2015
+          python scripts/backtest/build_historical_inputs.py --season 2015 --prior-season 2014 --weeks '1-17' --out-dir data/backtests_2015
+          python scripts/backtest/enrich_historical_defense.py --team-weekly data/backtests_2015/team_weekly_history.csv --seasons 2014,2015 --audit data/backtests_2015/historical_defense_enrichment_audit.csv --observations data/backtests_2015/historical_defense_observations.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2015 --prior-season 2014 --weeks '1-17' --data-dir data/backtests_2015 --report data/backtests_2015/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs_schedule_bounded_v1.py --seasons 2014,2015 --schedule data/backtests_2015/schedule_history.csv --out data/backtests_2015/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2014,2015 --out data/backtests_2015/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/backtests_2015/schedule_history.csv --out data/backtests_2015/weather_history.csv
+
+      - name: Build 2016 fresh-confirmation inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests_2016
+          python scripts/backtest/build_historical_inputs.py --season 2016 --prior-season 2015 --weeks '1-17' --out-dir data/backtests_2016
+          python scripts/backtest/enrich_historical_defense.py --team-weekly data/backtests_2016/team_weekly_history.csv --seasons 2015,2016 --audit data/backtests_2016/historical_defense_enrichment_audit.csv --observations data/backtests_2016/historical_defense_observations.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2016 --prior-season 2015 --weeks '1-17' --data-dir data/backtests_2016 --report data/backtests_2016/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs_schedule_bounded_v1.py --seasons 2015,2016 --schedule data/backtests_2016/schedule_history.csv --out data/backtests_2016/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2015,2016 --out data/backtests_2016/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/backtests_2016/schedule_history.csv --out data/backtests_2016/weather_history.csv
+
+      - name: Build 2017 supporting-replication inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests_2017
+          python scripts/backtest/build_historical_inputs.py --season 2017 --prior-season 2016 --weeks '1-17' --out-dir data/backtests_2017
+          python scripts/backtest/enrich_historical_defense.py --team-weekly data/backtests_2017/team_weekly_history.csv --seasons 2016,2017 --audit data/backtests_2017/historical_defense_enrichment_audit.csv --observations data/backtests_2017/historical_defense_observations.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2017 --prior-season 2016 --weeks '1-17' --data-dir data/backtests_2017 --report data/backtests_2017/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs_schedule_bounded_v1.py --seasons 2016,2017 --schedule data/backtests_2017/schedule_history.csv --out data/backtests_2017/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2016,2017 --out data/backtests_2017/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/backtests_2017/schedule_history.csv --out data/backtests_2017/weather_history.csv
+
+      - name: Run frozen RB R9 shrinkage OOS test
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/evaluate_rb_r9_receiving_identity_shrinkage_v1.py \
+            --data-2015 data/backtests_2015 --logs-2015 data/backtests_2015/player_game_logs_history.csv \
+            --data-2016 data/backtests_2016 --logs-2016 data/backtests_2016/player_game_logs_history.csv \
+            --data-2017 data/backtests_2017 --logs-2017 data/backtests_2017/player_game_logs_history.csv \
+            --history-start 2013 --iterations 2000 --bootstrap-reps 2000 \
+            --out-dir data/backtests/rb_r9_receiving_identity_shrinkage_v1
+
+      - name: Show R9 result
+        if: always()
+        run: |
+          echo '=== RB R9 result ==='
+          cat data/backtests/rb_r9_receiving_identity_shrinkage_v1/rb_r9_result.json 2>/dev/null || true
+          echo '=== RB R9 market summary ==='
+          cat data/backtests/rb_r9_receiving_identity_shrinkage_v1/rb_r9_market_summary.csv 2>/dev/null || true
+          echo '=== RB R9 identity buckets ==='
+          cat data/backtests/rb_r9_receiving_identity_shrinkage_v1/rb_r9_identity_bucket_summary.csv 2>/dev/null || true
+
+      - name: Upload R9 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r9-receiving-identity-shrinkage-v1
+          path: |
+            data/backtests_2015/historical_input_validation.csv
+            data/backtests_2016/historical_input_validation.csv
+            data/backtests_2017/historical_input_validation.csv
+            data/backtests/rb_r9_receiving_identity_shrinkage_v1/*
+          if-no-files-found: warn
+          retention-days: 30
