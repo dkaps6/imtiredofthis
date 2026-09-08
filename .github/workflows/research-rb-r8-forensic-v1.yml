@@ -1,0 +1,106 @@
+name: RB R8 Forensic V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-cross-position-catastrophic-casebook-v1
+    paths:
+      - scripts/backtest/audit_rb_r8_forensic_v1.py
+      - .github/workflows/research-rb-r8-forensic-v1.yml
+
+jobs:
+  forensic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 420
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml scikit-learn joblib
+
+      - name: Build 2017 inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests_2017
+          python scripts/backtest/build_historical_inputs.py --season 2017 --prior-season 2016 --weeks '1-17' --out-dir data/backtests_2017
+          python scripts/backtest/enrich_historical_defense.py --team-weekly data/backtests_2017/team_weekly_history.csv --seasons 2016,2017 --audit data/backtests_2017/historical_defense_enrichment_audit.csv --observations data/backtests_2017/historical_defense_observations.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2017 --prior-season 2016 --weeks '1-17' --data-dir data/backtests_2017 --report data/backtests_2017/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs_schedule_bounded_v1.py --seasons 2016,2017 --schedule data/backtests_2017/schedule_history.csv --out data/backtests_2017/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2016,2017 --out data/backtests_2017/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/backtests_2017/schedule_history.csv --out data/backtests_2017/weather_history.csv
+
+      - name: Build 2018 inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests_2018
+          python scripts/backtest/build_historical_inputs.py --season 2018 --prior-season 2017 --weeks '1-17' --out-dir data/backtests_2018
+          python scripts/backtest/enrich_historical_defense.py --team-weekly data/backtests_2018/team_weekly_history.csv --seasons 2017,2018 --audit data/backtests_2018/historical_defense_enrichment_audit.csv --observations data/backtests_2018/historical_defense_observations.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2018 --prior-season 2017 --weeks '1-17' --data-dir data/backtests_2018 --report data/backtests_2018/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs_schedule_bounded_v1.py --seasons 2017,2018 --schedule data/backtests_2018/schedule_history.csv --out data/backtests_2018/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2017,2018 --out data/backtests_2018/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/backtests_2018/schedule_history.csv --out data/backtests_2018/weather_history.csv
+
+      - name: Build 2019 inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests_2019
+          python scripts/backtest/build_historical_inputs.py --season 2019 --prior-season 2018 --weeks '1-17' --out-dir data/backtests_2019
+          python scripts/backtest/enrich_historical_defense.py --team-weekly data/backtests_2019/team_weekly_history.csv --seasons 2018,2019 --audit data/backtests_2019/historical_defense_enrichment_audit.csv --observations data/backtests_2019/historical_defense_observations.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2019 --prior-season 2018 --weeks '1-17' --data-dir data/backtests_2019 --report data/backtests_2019/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs_schedule_bounded_v1.py --seasons 2018,2019 --schedule data/backtests_2019/schedule_history.csv --out data/backtests_2019/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2018,2019 --out data/backtests_2019/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/backtests_2019/schedule_history.csv --out data/backtests_2019/weather_history.csv
+
+      - name: Reproduce frozen R8 evidence
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests/rb_r8_receiving_identity_v1
+          python scripts/backtest/evaluate_rb_r8_receiving_identity_v1.py \
+            --data-2017 data/backtests_2017 --logs-2017 data/backtests_2017/player_game_logs_history.csv \
+            --data-2018 data/backtests_2018 --logs-2018 data/backtests_2018/player_game_logs_history.csv \
+            --data-2019 data/backtests_2019 --logs-2019 data/backtests_2019/player_game_logs_history.csv \
+            --history-start 2015 --iterations 2000 --bootstrap-reps 2000 \
+            --out-dir data/backtests/rb_r8_receiving_identity_v1
+
+      - name: Run R8 forensic diagnostic
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests/rb_r8_forensic_v1
+          python scripts/backtest/audit_rb_r8_forensic_v1.py \
+            --predictions data/backtests/rb_r8_receiving_identity_v1/rb_r8_predictions.csv \
+            --history-start 2015 \
+            --out-dir data/backtests/rb_r8_forensic_v1
+
+      - name: Show forensic result
+        if: always()
+        run: |
+          echo '=== RB R8 forensic result ==='
+          cat data/backtests/rb_r8_forensic_v1/rb_r8_forensic_result.json 2>/dev/null || true
+          echo '=== Movement quintiles ==='
+          cat data/backtests/rb_r8_forensic_v1/rb_r8_forensic_movement_quintiles.csv 2>/dev/null || true
+          echo '=== History reliability ==='
+          cat data/backtests/rb_r8_forensic_v1/rb_r8_forensic_history_reliability.csv 2>/dev/null || true
+
+      - name: Upload forensic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r8-forensic-v1
+          path: |
+            data/backtests/rb_r8_receiving_identity_v1/rb_r8_result.json
+            data/backtests/rb_r8_receiving_identity_v1/rb_r8_predictions.csv
+            data/backtests/rb_r8_forensic_v1/*
+          if-no-files-found: warn
+          retention-days: 30
