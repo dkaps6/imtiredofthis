@@ -329,15 +329,17 @@ jobs:
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
-          # scripts/run_pricing_v2.py remains the canonical mean/pricing core;
-          # this certified wrapper replaces only its simulation-universe seam.
-          python scripts/run_pricing_with_full_roster_universe_v2.py --season "${SEASON}"
+          # V3 preserves the certified football-first path and adds promoted WR-R15
+          # after M38/explicit entitlement and TE-R5P, before QB C2 selection.
+          python scripts/run_pricing_with_full_roster_universe_v3.py --season "${SEASON}"
           test -s outputs/props_priced_clean.csv
           test -s data/football_simulation_universe_audit.json
+          test -s data/wr_r15_full_slate_entitlement_audit.json
           test -s data/qb_c2_production_integration_audit.json
           python - <<'EOF'
           import json
           q=json.load(open('data/qb_c2_production_integration_audit.json',encoding='utf-8'))
+          w=json.load(open('data/wr_r15_full_slate_entitlement_audit.json',encoding='utf-8'))
           if q.get('disposition') != 'QB_C2_PRODUCTION_DISTRIBUTION_INTEGRATION_PASS':
               raise SystemExit(f"FATAL: QB C2 production integration not certified: {q.get('disposition')}")
           if int(q.get('football_qb_rows',0)) != 32 or int(q.get('selected_qb_rows',0)) <= 0:
@@ -352,17 +354,36 @@ jobs:
               raise SystemExit('FATAL: QB C2 sportsbook leakage flag')
           if int(q.get('receiver_outputs_replaced',1)) != 0 or int(q.get('rb_outputs_replaced',1)) != 0:
               raise SystemExit('FATAL: QB C2 replaced non-QB outputs')
-          print('QB_C2_PRODUCTION_INTEGRATION_CERTIFIED',json.dumps(q,sort_keys=True))
+          if q.get('wr_r15_consumed_before_c2') is not True:
+              raise SystemExit('FATAL: QB C2 did not consume the post-R15 football state')
+          required={
+              'disposition':'WR_R15_FULL_SLATE_ENTITLEMENT_READY',
+              'model_version':'WR_R15_PRODUCTION_MODEL_V1',
+              'm38_wr1_anchor_preserved':True,
+              'wr2plus_pool_preserved':True,
+              'wr_room_mass_preserved':True,
+              'non_wr_entitlement_preserved':True,
+              'team_total_player_entitlement_preserved':True,
+              'sportsbook_inputs_used':False,
+              'current_or_future_outcomes_used':False,
+          }
+          for k,v in required.items():
+              if w.get(k)!=v: raise SystemExit(f'FATAL: WR-R15 contract drift {k}: {w.get(k)!r}')
+          if int(w.get('current_wr1_anchor_rows',0)) != 32:
+              raise SystemExit('FATAL: WR-R15 does not preserve exactly 32 M38 WR1 anchors')
+          if float(w.get('max_wr1_anchor_entitlement_delta',1.0)) != 0.0 or float(w.get('max_non_wr_entitlement_delta',1.0)) != 0.0:
+              raise SystemExit('FATAL: WR-R15 changed WR1 or non-WR entitlement')
+          print('M38_R15_TE_R5P_C2_PRODUCTION_INTEGRATION_CERTIFIED')
           EOF
 
           python scripts/stamp_qb_c2_pricing_lineage_v1.py
           test -s data/qb_c2_pricing_lineage_stamp_audit.json
 
           python scripts/validate_rb_rush_rec_conservation_v1.py
-          python scripts/audit_market_model_lineage_v1.py
+          python scripts/audit_market_model_lineage_v2.py
           python scripts/validate_anytime_td_model_status_v1.py
           python scripts/validate_team_target_pool_full_universe_v2.py
-          python scripts/validate_certified_full_slate_stack_v1.py
+          python scripts/validate_certified_full_slate_stack_v2.py
 
           python - <<'EOF'
           import numpy as np
