@@ -1,0 +1,56 @@
+name: WR R12 Conserved Room Empirical Bayes V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-cross-position-catastrophic-casebook-v1
+    paths:
+      - scripts/backtest/evaluate_wr_room_empirical_bayes_v1.py
+      - .github/workflows/backtest-wr-room-empirical-bayes-v1.yml
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml scikit-learn joblib
+      - name: Build leakage-safe 2025 historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests
+          python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks '1-18' --out-dir data/backtests
+          python scripts/backtest/enrich_historical_defense.py --team-weekly data/backtests/team_weekly_history.csv --seasons 2024,2025 --audit data/backtests/historical_defense_enrichment_audit.csv --observations data/backtests/historical_defense_observations.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2025 --prior-season 2024 --weeks '1-18' --data-dir data/backtests --report data/backtests/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs.py --seasons 2024,2025 --schedule data/backtests/schedule_history.csv --out data/backtests/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2024,2025 --out data/backtests/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/backtests/schedule_history.csv --out data/backtests/weather_history.csv
+      - name: Evaluate frozen conserved WR-room entitlement candidate
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/evaluate_wr_room_empirical_bayes_v1.py --season 2025 --prior-season 2024 --weeks '1-18' --iterations 2000 --out-dir data/backtests/wr_room_empirical_bayes_v1
+      - name: Show frozen decision
+        if: always()
+        run: |
+          cat data/backtests/wr_room_empirical_bayes_v1/wr_r12_decision.csv 2>/dev/null || true
+          cat data/backtests/wr_room_empirical_bayes_v1/wr_r12_market_summary.csv 2>/dev/null || true
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-r12-conserved-room-empirical-bayes-v1
+          path: |
+            data/backtests/historical_input_validation.csv
+            data/backtests/wr_room_empirical_bayes_v1/*.csv
+          if-no-files-found: warn
+          retention-days: 30
