@@ -6,6 +6,7 @@ on:
       - research-cross-position-catastrophic-casebook-v1
     paths:
       - '.github/workflows/replay-paid-full-slate-artifact-v1.yml'
+      - 'data/manual_name_overrides.csv'
       - 'scripts/harden_live_odds_artifacts_v1.py'
       - 'scripts/repair_live_prop_identity_v1.py'
       - 'scripts/materialize_live_props_for_model_v1.py'
