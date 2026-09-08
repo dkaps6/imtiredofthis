@@ -1,0 +1,117 @@
+name: RB R20 Real Slate Shadow Integration V1
+
+on:
+  push:
+    branches:
+      - research-cross-position-catastrophic-casebook-v1
+    paths:
+      - scripts/backtest/evaluate_rb_r20_real_slate_shadow_integration_v1.py
+      - .github/workflows/research-rb-r20-real-slate-shadow-integration-v1.yml
+  workflow_dispatch:
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scikit-learn pyyaml scipy
+
+      - name: Download immutable governed 2026 Week-1 full-slate replay
+        uses: actions/download-artifact@v4
+        with:
+          name: paid-full-slate-replay-v1
+          path: r20-full-slate-artifact
+          github-token: ${{ github.token }}
+          repository: dkaps6/imtiredofthis
+          run-id: 34243241733
+
+      - name: Download immutable R19 shadow scorer
+        uses: actions/download-artifact@v4
+        with:
+          name: rb-r19-deployable-tail-scorer-refit-v1
+          path: r19-artifact
+          github-token: ${{ github.token }}
+          repository: dkaps6/imtiredofthis
+          run-id: 34288244770
+
+      - name: Capture immutable GitHub artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p r20-metadata
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/34243241733/artifacts?per_page=100" > r20-metadata/governed-replay.json
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/34152868136/artifacts?per_page=100" > r20-metadata/raw-paid.json
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/34288244770/artifacts?per_page=100" > r20-metadata/r19.json
+
+      - name: Materialize immutable replay into validator workspace
+        run: |
+          set -euo pipefail
+          test -s r20-full-slate-artifact/data/football_simulation_universe.csv
+          test -s r20-full-slate-artifact/data/target_entitlement_v1_trace.csv
+          test -s r20-full-slate-artifact/data/certified_full_slate_stack_audit.json
+          test -s r20-full-slate-artifact/outputs/paid_full_slate_replay_result.json
+          test -s r20-full-slate-artifact/outputs/props_priced_clean.csv
+          mkdir -p data outputs
+          cp -a r20-full-slate-artifact/data/. data/
+          cp -a r20-full-slate-artifact/outputs/. outputs/
+          echo 'R20 uses immutable no-credit replay; no OddsAPI fetch occurs.'
+
+      - name: Locate immutable R19 files
+        id: locate
+        shell: bash
+        run: |
+          set -euo pipefail
+          MODEL="$(find r19-artifact -type f -name 'rb_r19_tail_scorer_model_v1.json' -print -quit)"
+          POOLS="$(find r19-artifact -type f -name 'rb_r19_residual_pools_v1.npz' -print -quit)"
+          test -n "$MODEL"
+          test -n "$POOLS"
+          test -s "$MODEL"
+          test -s "$POOLS"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "pools=$POOLS" >> "$GITHUB_OUTPUT"
+
+      - name: Run frozen R20 real-slate shadow integration gate
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python scripts/backtest/evaluate_rb_r20_real_slate_shadow_integration_v1.py \
+            --full-slate-dir r20-full-slate-artifact \
+            --r19-model '${{ steps.locate.outputs.model }}' \
+            --r19-pools '${{ steps.locate.outputs.pools }}' \
+            --replay-artifact-metadata r20-metadata/governed-replay.json \
+            --raw-paid-artifact-metadata r20-metadata/raw-paid.json \
+            --r19-artifact-metadata r20-metadata/r19.json \
+            --out-dir data/backtests/rb_r20_real_slate_shadow_integration_v1
+
+      - name: Show R20 result
+        if: always()
+        run: |
+          cat data/backtests/rb_r20_real_slate_shadow_integration_v1/rb_r20_result.json 2>/dev/null || true
+          echo '=== source hashes ==='
+          cat data/backtests/rb_r20_real_slate_shadow_integration_v1/rb_r20_source_hash_audit.csv 2>/dev/null || true
+          echo '=== shadow casebook head ==='
+          head -25 data/backtests/rb_r20_real_slate_shadow_integration_v1/rb_r20_shadow_casebook.csv 2>/dev/null || true
+
+      - name: Upload R20 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r20-real-slate-shadow-integration-v1
+          path: data/backtests/rb_r20_real_slate_shadow_integration_v1/*
+          if-no-files-found: warn
+          retention-days: 30
