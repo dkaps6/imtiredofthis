@@ -8,6 +8,7 @@ on:
     paths:
       - scripts/backtest/evaluate_rb_r9_receiving_identity_shrinkage_v1.py
       - scripts/backtest/enrich_historical_defense_supported_v1.py
+      - scripts/backtest/repair_historical_universe_missing_teams_v1.py
       - .github/workflows/research-rb-r9-receiving-identity-shrinkage-v1.yml
 
 jobs:
@@ -33,6 +34,7 @@ jobs:
           rm -rf data/backtests_2015
           python scripts/backtest/build_historical_inputs.py --season 2015 --prior-season 2014 --weeks '1-17' --out-dir data/backtests_2015
           python scripts/backtest/enrich_historical_defense_supported_v1.py --team-weekly data/backtests_2015/team_weekly_history.csv --seasons 2014,2015 --audit data/backtests_2015/historical_defense_enrichment_audit.csv --observations data/backtests_2015/historical_defense_observations.csv
+          python scripts/backtest/repair_historical_universe_missing_teams_v1.py --data-dir data/backtests_2015 --season 2015 --weeks '1-17' --audit data/backtests_2015/historical_universe_missing_team_repair_audit.csv
           python scripts/backtest/validate_historical_inputs.py --season 2015 --prior-season 2014 --weeks '1-17' --data-dir data/backtests_2015 --report data/backtests_2015/historical_input_validation.csv
           python scripts/backtest/historical_player_logs_schedule_bounded_v1.py --seasons 2014,2015 --schedule data/backtests_2015/schedule_history.csv --out data/backtests_2015/player_game_logs_history.csv
           python scripts/backtest/build_historical_injuries.py --seasons 2014,2015 --out data/backtests_2015/injuries_history.csv
@@ -45,6 +47,7 @@ jobs:
           rm -rf data/backtests_2016
           python scripts/backtest/build_historical_inputs.py --season 2016 --prior-season 2015 --weeks '1-17' --out-dir data/backtests_2016
           python scripts/backtest/enrich_historical_defense_supported_v1.py --team-weekly data/backtests_2016/team_weekly_history.csv --seasons 2015,2016 --audit data/backtests_2016/historical_defense_enrichment_audit.csv --observations data/backtests_2016/historical_defense_observations.csv
+          python scripts/backtest/repair_historical_universe_missing_teams_v1.py --data-dir data/backtests_2016 --season 2016 --weeks '1-17' --audit data/backtests_2016/historical_universe_missing_team_repair_audit.csv
           python scripts/backtest/validate_historical_inputs.py --season 2016 --prior-season 2015 --weeks '1-17' --data-dir data/backtests_2016 --report data/backtests_2016/historical_input_validation.csv
           python scripts/backtest/historical_player_logs_schedule_bounded_v1.py --seasons 2015,2016 --schedule data/backtests_2016/schedule_history.csv --out data/backtests_2016/player_game_logs_history.csv
           python scripts/backtest/build_historical_injuries.py --seasons 2015,2016 --out data/backtests_2016/injuries_history.csv
@@ -57,6 +60,7 @@ jobs:
           rm -rf data/backtests_2017
           python scripts/backtest/build_historical_inputs.py --season 2017 --prior-season 2016 --weeks '1-17' --out-dir data/backtests_2017
           python scripts/backtest/enrich_historical_defense_supported_v1.py --team-weekly data/backtests_2017/team_weekly_history.csv --seasons 2016,2017 --audit data/backtests_2017/historical_defense_enrichment_audit.csv --observations data/backtests_2017/historical_defense_observations.csv
+          python scripts/backtest/repair_historical_universe_missing_teams_v1.py --data-dir data/backtests_2017 --season 2017 --weeks '1-17' --audit data/backtests_2017/historical_universe_missing_team_repair_audit.csv
           python scripts/backtest/validate_historical_inputs.py --season 2017 --prior-season 2016 --weeks '1-17' --data-dir data/backtests_2017 --report data/backtests_2017/historical_input_validation.csv
           python scripts/backtest/historical_player_logs_schedule_bounded_v1.py --seasons 2016,2017 --schedule data/backtests_2017/schedule_history.csv --out data/backtests_2017/player_game_logs_history.csv
           python scripts/backtest/build_historical_injuries.py --seasons 2016,2017 --out data/backtests_2017/injuries_history.csv
@@ -91,10 +95,13 @@ jobs:
           path: |
             data/backtests_2015/historical_input_validation.csv
             data/backtests_2015/historical_defense_enrichment_audit.csv
+            data/backtests_2015/historical_universe_missing_team_repair_audit.csv
             data/backtests_2016/historical_input_validation.csv
             data/backtests_2016/historical_defense_enrichment_audit.csv
+            data/backtests_2016/historical_universe_missing_team_repair_audit.csv
             data/backtests_2017/historical_input_validation.csv
             data/backtests_2017/historical_defense_enrichment_audit.csv
+            data/backtests_2017/historical_universe_missing_team_repair_audit.csv
             data/backtests/rb_r9_receiving_identity_shrinkage_v1/*
           if-no-files-found: warn
           retention-days: 30
