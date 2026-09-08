@@ -1,0 +1,124 @@
+name: RB R19 Deployable Tail Scorer Refit V1
+
+on:
+  push:
+    branches:
+      - research-cross-position-catastrophic-casebook-v1
+    paths:
+      - scripts/backtest/build_rb_r19_deployable_tail_scorer_refit_v1.py
+      - .github/workflows/research-rb-r19-deployable-tail-scorer-refit-v1.yml
+  workflow_dispatch:
+
+jobs:
+  refit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 420
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml scikit-learn joblib
+
+      - name: Download immutable R10 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rb-r10-modern-stability-v1
+          path: r10-artifact
+          github-token: ${{ github.token }}
+          repository: dkaps6/imtiredofthis
+          run-id: 34269618181
+
+      - name: Download mechanically corrected R12 lineage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rb-receiving-state-v1b-mechanical-correction
+          path: corrected-artifact
+          github-token: ${{ github.token }}
+          repository: dkaps6/imtiredofthis
+          run-id: 34273055095
+
+      - name: Download immutable R16 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rb-r16-upside-tail-state-v1
+          path: r16-artifact
+          github-token: ${{ github.token }}
+          repository: dkaps6/imtiredofthis
+          run-id: 34286363931
+
+      - name: Build completed 2025 historical inputs using R10 lineage
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests_2025
+          python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks '1-18' --out-dir data/backtests_2025
+          python scripts/backtest/enrich_historical_defense_supported_v1.py --team-weekly data/backtests_2025/team_weekly_history.csv --seasons 2024,2025 --audit data/backtests_2025/historical_defense_enrichment_audit.csv --observations data/backtests_2025/historical_defense_observations.csv
+          python scripts/backtest/repair_historical_universe_missing_teams_v1.py --data-dir data/backtests_2025 --season 2025 --weeks '1-18' --audit data/backtests_2025/historical_universe_missing_team_repair_audit.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2025 --prior-season 2024 --weeks '1-18' --data-dir data/backtests_2025 --report data/backtests_2025/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs_schedule_bounded_v1.py --seasons 2024,2025 --schedule data/backtests_2025/schedule_history.csv --out data/backtests_2025/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2024,2025 --out data/backtests_2025/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/backtests_2025/schedule_history.csv --out data/backtests_2025/weather_history.csv
+
+      - name: Locate immutable parent files
+        id: locate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$(find r10-artifact -type f -name 'rb_r10_predictions.csv' -print -quit)"
+          R10C="$(find corrected-artifact -type f -name 'rb_r10_predictions_rb_only.csv' -print -quit)"
+          R11="$(find corrected-artifact -type f -path '*r11_state_probability/rb_r11_state_probability_predictions.csv' -print -quit)"
+          R12="$(find corrected-artifact -type f -path '*r12_state_gated/rb_r12_predictions.csv' -print -quit)"
+          R16="$(find r16-artifact -type f -name 'rb_r16_tail_predictions.csv' -print -quit)"
+          test -n "$R10C"
+          test -n "$R11"
+          test -n "$R12"
+          test -n "$R16"
+          echo "r10c=$R10C" >> "$GITHUB_OUTPUT"
+          echo "r11=$R11" >> "$GITHUB_OUTPUT"
+          echo "r12=$R12" >> "$GITHUB_OUTPUT"
+          echo "r16=$R16" >> "$GITHUB_OUTPUT"
+
+      - name: Run frozen R19 final refit and serialization
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_rb_r19_deployable_tail_scorer_refit_v1.py \
+            --data-2025 data/backtests_2025 \
+            --logs-2025 data/backtests_2025/player_game_logs_history.csv \
+            --corrected-r10-predictions '${{ steps.locate.outputs.r10c }}' \
+            --corrected-r11-predictions '${{ steps.locate.outputs.r11 }}' \
+            --corrected-r12-predictions '${{ steps.locate.outputs.r12 }}' \
+            --r16-tail-predictions '${{ steps.locate.outputs.r16 }}' \
+            --history-start 2013 \
+            --out-dir data/backtests/rb_r19_deployable_tail_scorer_refit_v1
+
+      - name: Show R19 result
+        if: always()
+        run: |
+          cat data/backtests/rb_r19_deployable_tail_scorer_refit_v1/rb_r19_result.json 2>/dev/null || true
+          echo '=== R11 parity ==='
+          cat data/backtests/rb_r19_deployable_tail_scorer_refit_v1/rb_r19_r11_probability_parity.csv 2>/dev/null || true
+          echo '=== R16 parity ==='
+          cat data/backtests/rb_r19_deployable_tail_scorer_refit_v1/rb_r19_r16_probability_parity.csv 2>/dev/null || true
+
+      - name: Upload R19 evidence and scorer artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r19-deployable-tail-scorer-refit-v1
+          path: |
+            data/backtests_2025/historical_input_validation.csv
+            data/backtests_2025/historical_defense_enrichment_audit.csv
+            data/backtests_2025/historical_universe_missing_team_repair_audit.csv
+            data/backtests/rb_r19_deployable_tail_scorer_refit_v1/*
+          if-no-files-found: warn
+          retention-days: 30
