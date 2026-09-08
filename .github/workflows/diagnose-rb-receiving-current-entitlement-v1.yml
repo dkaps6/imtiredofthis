@@ -1,0 +1,75 @@
+name: RB Receiving Current Entitlement Decomposition V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-cross-position-catastrophic-casebook-v1
+    paths:
+      - scripts/backtest/decompose_rb_receiving_current_entitlement_v1.py
+      - .github/workflows/diagnose-rb-receiving-current-entitlement-v1.yml
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml scikit-learn joblib
+
+      - name: Build leakage-safe 2025 inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests_2025
+          python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks '1-18' --out-dir data/backtests_2025
+          python scripts/backtest/enrich_historical_defense.py --team-weekly data/backtests_2025/team_weekly_history.csv --seasons 2024,2025 --audit data/backtests_2025/historical_defense_enrichment_audit.csv --observations data/backtests_2025/historical_defense_observations.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2025 --prior-season 2024 --weeks '1-18' --data-dir data/backtests_2025 --report data/backtests_2025/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs.py --seasons 2024,2025 --schedule data/backtests_2025/schedule_history.csv --out data/backtests_2025/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2024,2025 --out data/backtests_2025/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/backtests_2025/schedule_history.csv --out data/backtests_2025/weather_history.csv
+
+      - name: Decompose RB receiving error
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/decompose_rb_receiving_current_entitlement_v1.py \
+            --season 2025 \
+            --prior-season 2024 \
+            --weeks '1-18' \
+            --player-logs data/backtests_2025/player_game_logs_history.csv \
+            --team-weekly data/backtests_2025/team_weekly_history.csv \
+            --schedule data/backtests_2025/schedule_history.csv \
+            --universe-dir data/backtests_2025/pregame_universe \
+            --injuries data/backtests_2025/injuries_history.csv \
+            --weather data/backtests_2025/weather_history.csv \
+            --out-dir data/backtests/rb_receiving_decomposition_current_v1
+
+      - name: Show diagnostic result
+        if: always()
+        run: |
+          echo '=== RB receiving stage summary ==='
+          cat data/backtests/rb_receiving_decomposition_current_v1/rb_receiving_stage_summary.csv 2>/dev/null || true
+          echo '=== RB receiving oracle headroom ==='
+          cat data/backtests/rb_receiving_decomposition_current_v1/rb_receiving_oracle_headroom.csv 2>/dev/null || true
+          echo '=== RB receiving phase summary ==='
+          cat data/backtests/rb_receiving_decomposition_current_v1/rb_receiving_phase_summary.csv 2>/dev/null || true
+
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-receiving-current-entitlement-decomposition-v1
+          path: |
+            data/backtests_2025/historical_input_validation.csv
+            data/backtests/rb_receiving_decomposition_current_v1/*
+          if-no-files-found: warn
+          retention-days: 30
