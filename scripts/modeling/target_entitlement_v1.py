@@ -44,6 +44,19 @@ def materialize_target_entitlement(metrics: pd.DataFrame) -> tuple[pd.DataFrame,
         raise RuntimeError(f"target entitlement missing columns: {sorted(missing)}")
     game_col = _game_column(out)
 
+    # Projection-neutrality requires matching simulation_v2's exact player order
+    # BEFORE M38 is applied. M38 uses stable share ranking, so tied target-share
+    # priors (common for position-prior players) inherit the dataframe order as
+    # the tie breaker. The canonical simulator first sorts by game/team/player
+    # key; materializing in roster/source order would assign WR1/WR2/WR3/WR4
+    # multipliers to different tied players and silently change projections.
+    player_cols = [game_col, "team", "player_clean_key"]
+    dup = out.duplicated(player_cols, keep=False)
+    if dup.any():
+        sample = out.loc[dup, player_cols + ["player", "position"]].head(20).to_dict("records")
+        raise RuntimeError(f"explicit target entitlement requires one football row per player/game/team: {sample}")
+    out = out.sort_values(player_cols).copy()
+
     out["entitlement_tgt_share"] = np.nan
     out["entitlement_raw_team_sum"] = np.nan
     out["entitlement_post_m38_team_sum"] = np.nan
