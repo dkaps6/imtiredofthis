@@ -18,6 +18,8 @@ DATA = Path("data")
 OUTPUTS = Path("outputs")
 PRICING_INPUT = OUTPUTS / "props_pricing_offers.csv"
 PRICED = OUTPUTS / "props_priced_clean.csv"
+METRICS = DATA / "metrics_ready.csv"
+MODEL_CONTEXT = DATA / "model_context_bridge.csv"
 OUT = OUTPUTS / "paid_full_slate_replay_result.json"
 AUDIT_CSV = DATA / "full_slate_post_pricing_audit.csv"
 
@@ -51,6 +53,23 @@ def _norm_line(series: pd.Series) -> pd.Series:
     return pd.to_numeric(series, errors="coerce").round(8)
 
 
+def _position_family(value) -> str:
+    if value is None or pd.isna(value):
+        return ""
+    pos = str(value).upper().strip()
+    if pos in {"HB", "TB"} or pos.startswith("RB"):
+        return "RB"
+    if pos.startswith("FB"):
+        return "FB"
+    if pos.startswith("QB"):
+        return "QB"
+    if pos.startswith("WR") or pos in {"LWR", "RWR", "SWR"}:
+        return "WR"
+    if pos.startswith("TE"):
+        return "TE"
+    return pos
+
+
 def _key_tuples(df: pd.DataFrame, *, output: bool = False) -> pd.Series:
     market_col = "source_market" if output else "market"
     line_col = "vegas_line" if output else "line"
@@ -59,17 +78,40 @@ def _key_tuples(df: pd.DataFrame, *, output: bool = False) -> pd.Series:
     if missing:
         raise RuntimeError(f"offer reconciliation missing columns: {missing}")
     return pd.Series(
-        list(
-            zip(
-                df["event_id"].astype(str),
-                df["player"].astype(str),
-                df[market_col].astype(str),
-                df["book"].astype(str),
-                _norm_line(df[line_col]),
-            )
-        ),
+        list(zip(
+            df["event_id"].astype(str),
+            df["player"].astype(str),
+            df[market_col].astype(str),
+            df["book"].astype(str),
+            _norm_line(df[line_col]),
+        )),
         index=df.index,
     )
+
+
+def _attach_pricing_positions(priced: pd.DataFrame) -> pd.DataFrame:
+    metrics = _read(METRICS)
+    pos_col = next((c for c in ("position_group", "position", "alignment_position") if c in metrics.columns), None)
+    if pos_col is None:
+        raise RuntimeError("metrics_ready has no position column for final promoted-routing audit")
+    need = {"player", "team", pos_col}
+    if not need.issubset(metrics.columns):
+        raise RuntimeError(f"metrics_ready missing position routing columns: {sorted(need-set(metrics.columns))}")
+    positions = metrics[["player", "team", pos_col]].copy()
+    positions["position_family_audit"] = positions[pos_col].map(_position_family)
+    if positions["position_family_audit"].eq("").any():
+        sample = positions.loc[positions["position_family_audit"].eq(""), ["player", "team", pos_col]].head(20).to_dict("records")
+        raise RuntimeError(f"blank current position in pricing routing audit: {sample}")
+    ambiguity = positions.groupby(["player", "team"])["position_family_audit"].nunique()
+    bad = ambiguity.loc[ambiguity.ne(1)]
+    if not bad.empty:
+        raise RuntimeError(f"ambiguous current position at player/team grain: {bad.head(20).to_dict()}")
+    positions = positions.drop_duplicates(["player", "team"])[["player", "team", "position_family_audit"]]
+    out = priced.merge(positions, on=["player", "team"], how="left", validate="many_to_one")
+    if out["position_family_audit"].isna().any():
+        sample = out.loc[out["position_family_audit"].isna(), ["player", "team", "source_market"]].drop_duplicates().head(20).to_dict("records")
+        raise RuntimeError(f"priced output missing current position mapping: {sample}")
+    return out
 
 
 def audit() -> dict:
@@ -99,9 +141,7 @@ def audit() -> dict:
     inp = inp.assign(offer_key=input_key)
 
     side_counts = priced.groupby("offer_key")["side"].agg(list)
-    bad_sides = side_counts.loc[
-        side_counts.map(lambda values: sorted(map(str, values)) != ["OVER", "UNDER"])
-    ]
+    bad_sides = side_counts.loc[side_counts.map(lambda values: sorted(map(str, values)) != ["OVER", "UNDER"])]
     if not bad_sides.empty:
         raise RuntimeError(f"priced offers do not contain exactly OVER+UNDER: {bad_sides.head(20).to_dict()}")
     if priced.duplicated(["offer_key", "side"]).any():
@@ -117,29 +157,22 @@ def audit() -> dict:
             f"missing={list(missing_keys)[:20]} extra={list(extra_keys)[:20]}"
         )
     if len(priced) != 2 * len(inp):
-        raise RuntimeError(
-            f"priced side-row count mismatch expected={2*len(inp)} actual={len(priced)}"
-        )
+        raise RuntimeError(f"priced side-row count mismatch expected={2*len(inp)} actual={len(priced)}")
 
     odds_lookup: dict[tuple, tuple[float, float]] = {}
     for r in inp.itertuples(index=False):
-        key = getattr(r, "offer_key")
-        odds_lookup[key] = (
+        odds_lookup[getattr(r, "offer_key")] = (
             pd.to_numeric(pd.Series([getattr(r, "over_odds", np.nan)]), errors="coerce").iloc[0],
             pd.to_numeric(pd.Series([getattr(r, "under_odds", np.nan)]), errors="coerce").iloc[0],
         )
     for r in priced.itertuples(index=False):
         key = getattr(r, "offer_key")
         expected = odds_lookup[key][0 if str(r.side) == "OVER" else 1]
-        actual = pd.to_numeric(
-            pd.Series([getattr(r, "vegas_odds", np.nan)]), errors="coerce"
-        ).iloc[0]
+        actual = pd.to_numeric(pd.Series([getattr(r, "vegas_odds", np.nan)]), errors="coerce").iloc[0]
         market = str(getattr(r, "source_market"))
         if market == ANYTIME and str(r.side) == "UNDER" and pd.isna(expected) and pd.isna(actual):
             continue
-        if pd.isna(expected) != pd.isna(actual) or (
-            pd.notna(expected) and abs(float(expected) - float(actual)) > 1e-9
-        ):
+        if pd.isna(expected) != pd.isna(actual) or (pd.notna(expected) and abs(float(expected) - float(actual)) > 1e-9):
             raise RuntimeError(
                 f"sportsbook odds changed between adapter and pricing key={key} side={r.side} "
                 f"expected={expected} actual={actual}"
@@ -164,33 +197,39 @@ def audit() -> dict:
             if consumption[market][component] <= 0:
                 raise RuntimeError(f"{component} consumed zero rows for priced market={market}")
 
-    pass_rows = priced.loc[
-        priced["source_market"].astype(str).eq("player_pass_yds")
-    ].copy()
+    pass_rows = priced.loc[priced["source_market"].astype(str).eq("player_pass_yds")].copy()
     if not pass_rows.empty:
-        if (
-            "qb_synthesis_applied" not in pass_rows.columns
-            or not pd.to_numeric(pass_rows["qb_synthesis_applied"], errors="coerce").eq(1).all()
-        ):
+        if "qb_synthesis_applied" not in pass_rows.columns or not pd.to_numeric(pass_rows["qb_synthesis_applied"], errors="coerce").eq(1).all():
             raise RuntimeError("not every pass-yards side row used promoted QB synthesis")
         qproj = pd.to_numeric(pass_rows["qb_synthesis_proj"], errors="coerce")
         final = pd.to_numeric(pass_rows["model_proj"], errors="coerce")
         if qproj.isna().any() or not np.allclose(qproj, final, rtol=0, atol=1e-8):
             raise RuntimeError("final pass-yards projection differs from promoted QB synthesis")
 
-    rush_rows = priced.loc[
-        priced["source_market"].astype(str).eq("player_rush_yds")
-    ].copy()
-    if not rush_rows.empty:
-        if (
-            "rb_synthesis_applied" not in rush_rows.columns
-            or not pd.to_numeric(rush_rows["rb_synthesis_applied"], errors="coerce").eq(1).all()
-        ):
-            raise RuntimeError("not every rush-yards side row used promoted RB synthesis")
-        if not rush_rows["rb_synthesis_version"].astype(str).eq("RB_P3_SYNTHESIS_V1").all():
-            raise RuntimeError("rush-yards pricing did not use RB_P3_SYNTHESIS_V1 everywhere")
-        if not rush_rows["rb_synthesis_route"].astype(str).eq("WEEK1_STACK_OVERRIDE").all():
-            raise RuntimeError("rush-yards pricing used a non-Week1 RB route")
+    # RB P3 is position-specific, not a generic rush-yards model. Require every
+    # current RB/FB rush prop to use P3 and every QB/WR/TE rush prop not to use it.
+    priced = _attach_pricing_positions(priced)
+    rush_rows = priced.loc[priced["source_market"].astype(str).eq("player_rush_yds")].copy()
+    rb_rush = rush_rows.loc[rush_rows["position_family_audit"].isin({"RB", "FB"})].copy()
+    non_rb_rush = rush_rows.loc[~rush_rows["position_family_audit"].isin({"RB", "FB"})].copy()
+    if not rb_rush.empty:
+        applied = pd.to_numeric(rb_rush.get("rb_synthesis_applied", 0), errors="coerce").fillna(0)
+        if not applied.eq(1).all():
+            sample = rb_rush.loc[~applied.eq(1), ["player", "team", "position_family_audit"]].drop_duplicates().head(20).to_dict("records")
+            raise RuntimeError(f"eligible RB/FB rush-yards rows did not all use promoted RB synthesis: {sample}")
+        if not rb_rush["rb_synthesis_version"].astype(str).eq("RB_P3_SYNTHESIS_V1").all():
+            raise RuntimeError("eligible RB/FB rush-yards pricing did not use RB_P3_SYNTHESIS_V1 everywhere")
+        if not rb_rush["rb_synthesis_route"].astype(str).eq("WEEK1_STACK_OVERRIDE").all():
+            raise RuntimeError("eligible RB/FB rush-yards pricing used a non-Week1 RB route")
+        rb_proj = pd.to_numeric(rb_rush["rb_synthesis_proj"], errors="coerce")
+        final = pd.to_numeric(rb_rush["model_proj"], errors="coerce")
+        if rb_proj.isna().any() or not np.allclose(rb_proj, final, rtol=0, atol=1e-8):
+            raise RuntimeError("final RB/FB rush-yards projection differs from promoted RB synthesis")
+    if not non_rb_rush.empty:
+        applied = pd.to_numeric(non_rb_rush.get("rb_synthesis_applied", 0), errors="coerce").fillna(0)
+        if not applied.eq(0).all():
+            sample = non_rb_rush.loc[~applied.eq(0), ["player", "team", "position_family_audit"]].drop_duplicates().head(20).to_dict("records")
+            raise RuntimeError(f"non-RB rushing rows incorrectly consumed RB P3: {sample}")
 
     live = _json(DATA / "live_odds_status.json")
     quarantine = pd.read_csv(DATA / "live_odds_placeholder_rows.csv", low_memory=False)
@@ -201,42 +240,44 @@ def audit() -> dict:
     blockers = int(quality.get("certification_blockers", 0))
     quality_disposition = str(quality.get("disposition", "unknown"))
 
-    rows.extend(
-        [
-            {
-                "check": "pricing_offer_reconciliation",
-                "status": "PASS",
-                "detail": f"book_line_rows={len(inp)} priced_side_rows={len(priced)}",
-            },
-            {
-                "check": "sportsbook_value_preservation",
-                "status": "PASS",
-                "detail": "book/line/side odds exact",
-            },
-            {
-                "check": "model_component_consumption",
-                "status": "PASS",
-                "detail": json.dumps(consumption, sort_keys=True),
-            },
-            {
-                "check": "quarantine_preservation",
-                "status": "PASS",
-                "detail": f"rows={len(quarantine)}",
-            },
-            {
-                "check": "data_quality_certification",
-                "status": "PASS" if blockers == 0 else "BLOCKED",
-                "detail": quality_disposition,
-            },
-        ]
-    )
+    # Runtime proof for the declared direct-WR/CB limitation. When the data
+    # quality layer says the feature is unavailable/gated off, the model context
+    # must contain zero eligible direct matchup flags; otherwise certification is fatal.
+    coverage_components = {
+        str(c.get("component")): str(c.get("status"))
+        for c in quality.get("components", []) if isinstance(c, dict)
+    }
+    coverage_status = coverage_components.get("coverage_v2", "")
+    direct_context_rows = -1
+    if coverage_status == "DIRECT_MATCHUP_UNAVAILABLE_GATED_OFF":
+        bridge = _read(MODEL_CONTEXT)
+        direct_flags = pd.to_numeric(bridge.get("matchup_available", 0), errors="coerce").fillna(0)
+        direct_context_rows = int(direct_flags.eq(1).sum())
+        if direct_context_rows != 0 or not direct_flags.eq(0).all():
+            raise RuntimeError(
+                f"direct WR/CB feature declared unavailable but model context has eligible rows={direct_context_rows}"
+            )
+
+    rows.extend([
+        {"check": "pricing_offer_reconciliation", "status": "PASS", "detail": f"book_line_rows={len(inp)} priced_side_rows={len(priced)}"},
+        {"check": "sportsbook_value_preservation", "status": "PASS", "detail": "book/line/side odds exact"},
+        {"check": "model_component_consumption", "status": "PASS", "detail": json.dumps(consumption, sort_keys=True)},
+        {
+            "check": "position_specific_synthesis_routing",
+            "status": "PASS",
+            "detail": f"qb_pass_side_rows={len(pass_rows)} rb_fb_rush_side_rows={len(rb_rush)} non_rb_rush_side_rows={len(non_rb_rush)}",
+        },
+        {
+            "check": "direct_wr_cb_consumption_gate",
+            "status": "PASS",
+            "detail": f"coverage_status={coverage_status} direct_context_rows={direct_context_rows}",
+        },
+        {"check": "quarantine_preservation", "status": "PASS", "detail": f"rows={len(quarantine)}"},
+        {"check": "data_quality_certification", "status": "PASS" if blockers == 0 else "BLOCKED", "detail": quality_disposition},
+    ])
     pd.DataFrame(rows).to_csv(AUDIT_CSV, index=False)
 
-    disposition = (
-        "PAID_FULL_SLATE_REPLAY_PRODUCTION_CERTIFIED"
-        if blockers == 0
-        else "PAID_FULL_SLATE_REPLAY_EXECUTED_NOT_PRODUCTION_CERTIFIED"
-    )
+    disposition = "PAID_FULL_SLATE_REPLAY_PRODUCTION_CERTIFIED" if blockers == 0 else "PAID_FULL_SLATE_REPLAY_EXECUTED_NOT_PRODUCTION_CERTIFIED"
     result = {
         "disposition": disposition,
         "source_run": 34152868136,
@@ -247,6 +288,10 @@ def audit() -> dict:
         "priced_side_rows": int(len(priced)),
         "priced_players": int(priced["player"].nunique()),
         "component_consumption_by_market": consumption,
+        "qb_pass_side_rows": int(len(pass_rows)),
+        "rb_fb_rush_side_rows": int(len(rb_rush)),
+        "non_rb_rush_side_rows": int(len(non_rb_rush)),
+        "direct_wr_cb_context_rows_consumed": int(max(direct_context_rows, 0)),
         "data_quality_disposition": quality_disposition,
         "certification_blockers": blockers,
     }
