@@ -2,10 +2,9 @@
 """Fail-closed semantic audit for Full Slate artifacts before PlayerForm/modeling.
 
 A successful GitHub step is not evidence that a data product is usable. This gate
-validates the *contents* of every critical pre-model artifact: row grain, active
-team coverage, current runtime, required football features, live prop identity,
-and provider degradation states. Optional-but-unavailable information is surfaced
-as WARN in a durable audit; structural failures raise and stop the run.
+validates critical pre-model artifacts and distinguishes execution readiness from
+fully available optional provider features. Structural failures raise; declared
+limitations remain visible and are never disguised as an unconditional PASS.
 """
 from __future__ import annotations
 
@@ -117,7 +116,7 @@ def audit(season: int, week: int, *, live_odds_enabled: bool) -> pd.DataFrame:
     legacy_all_null = [c for c in tf.columns if tf[c].isna().all()]
     rows.append(_row(
         "team_form",
-        "PASS_WITH_OPTIONAL_NULLS" if legacy_all_null else "PASS",
+        "WARN_OPTIONAL_FEATURES_UNAVAILABLE" if legacy_all_null else "PASS",
         f"rows=32 guarded_fields_complete=1 all_null_optional_columns={legacy_all_null}",
     ))
 
@@ -145,8 +144,7 @@ def audit(season: int, week: int, *, live_odds_enabled: bool) -> pd.DataFrame:
         raise RuntimeError("weather artifact does not exactly cover the active schedule")
     forecast_ok = int(pd.to_numeric(wx["forecast_ok"], errors="coerce").fillna(0).ne(0).sum())
     rows.append(_row(
-        "weather",
-        "PASS" if forecast_ok == len(wx) else "WARN_FORECAST_PARTIAL",
+        "weather", "PASS" if forecast_ok == len(wx) else "WARN_FORECAST_PARTIAL",
         f"games={len(wx)} forecast_ok={forecast_ok}/{len(wx)}",
     ))
 
@@ -172,7 +170,22 @@ def audit(season: int, week: int, *, live_odds_enabled: bool) -> pd.DataFrame:
             raise RuntimeError("official injury report contains non-scheduled team identity")
         if not pd.to_numeric(injuries["season"], errors="coerce").eq(season).all() or not pd.to_numeric(injuries["week"], errors="coerce").eq(week).all():
             raise RuntimeError("injury rows contain stale season/week")
-        rows.append(_row("injuries", "PASS", f"official_rows={len(injuries)} teams={injury_teams.nunique()} source={injury_status.get('source','')}"))
+        scope_proven = bool(injury_status.get("all_scheduled_teams_checked", False))
+        if scope_proven:
+            scope = _read(DATA / "injury_team_scope.csv")
+            if set(scope["team"].map(canon_team)) != teams or len(scope) != len(teams):
+                raise RuntimeError("injury source claims full scope but scope ledger does not match schedule")
+            rows.append(_row(
+                "injuries", "PASS_REPORT_SCOPE_CERTIFIED",
+                f"official_rows={len(injuries)} teams_with_rows={injury_teams.nunique()} teams_checked={len(scope)} "
+                f"explicit_no_injuries={int(scope['scope_state'].astype(str).eq('NO_INJURIES_REPORTED_BY_SOURCE').sum())} "
+                f"source={injury_status.get('source','')}",
+            ))
+        else:
+            rows.append(_row(
+                "injuries", "WARN_PARTIAL_SCOPE_UNPROVEN",
+                f"official_rows={len(injuries)} teams_with_rows={injury_teams.nunique()}/{len(teams)} source={injury_status.get('source','')}",
+            ))
     elif state == "no_official_report":
         if not injuries.empty:
             raise RuntimeError("injury provider says no_official_report but injuries.csv contains rows")
@@ -199,9 +212,15 @@ def audit(season: int, week: int, *, live_odds_enabled: bool) -> pd.DataFrame:
     if not set(exposure["team"]).issubset(teams):
         raise RuntimeError("WR-CB exposure contains off-slate teams")
     team_cov_rows = int(pd.to_numeric(exposure["team_coverage_available"], errors="coerce").fillna(0).eq(1).sum())
-    direct = int(pd.to_numeric(exposure["matchup_available"], errors="coerce").fillna(0).eq(1).sum())
-    cov_status = "PASS" if direct > 0 else "WARN_TEAM_COVERAGE_ONLY"
-    rows.append(_row("coverage_v2", cov_status, f"team_rows={len(cov)} wr_rows={len(exposure)} team_coverage_rows={team_cov_rows} direct_matchup_rows={direct}"))
+    direct_flags = pd.to_numeric(exposure["matchup_available"], errors="coerce").fillna(0)
+    direct = int(direct_flags.eq(1).sum())
+    if direct == 0 and not direct_flags.eq(0).all():
+        raise RuntimeError("WR-CB direct matchup flags contain invalid unavailable states")
+    rows.append(_row(
+        "coverage_v2",
+        "PASS_WITH_DIRECT_MATCHUPS" if direct > 0 else "WARN_DIRECT_MATCHUP_UNAVAILABLE_GATED",
+        f"team_rows={len(cov)} wr_rows={len(exposure)} team_coverage_rows={team_cov_rows} direct_matchup_rows={direct}",
+    ))
 
     if live_odds_enabled:
         live_path = DATA / "live_odds_status.json"
@@ -233,13 +252,11 @@ def audit(season: int, week: int, *, live_odds_enabled: bool) -> pd.DataFrame:
             if actual.duplicated().any():
                 raise RuntimeError("compact live prop artifact contains exact duplicate rows after hardening")
             rows.append(_row(
-                "live_odds",
-                "PASS",
+                "live_odds", "PASS",
                 f"actual_rows={len(actual)} core_rows={live.get('core_prop_identity_rows',0)} hardening=1 unresolved=0 duplicates_removed={live.get('raw_artifact_exact_duplicates_removed',0)}",
             ))
     else:
         rows.append(_row("live_odds", "SKIP_NO_CREDIT_MODE", "FETCH_LIVE_ODDS=false"))
-
     return pd.DataFrame(rows)
 
 
@@ -249,7 +266,11 @@ def main() -> int:
     live = os.getenv("FETCH_LIVE_ODDS", "false").strip().lower() in {"1", "true", "yes", "on"}
     try:
         out = audit(season, week, live_odds_enabled=live)
-        disposition = "FULL_SLATE_PRE_MODEL_SEMANTIC_GATE_PASS"
+        warnings = out["status"].astype(str).str.startswith("WARN")
+        disposition = (
+            "FULL_SLATE_PRE_MODEL_EXECUTION_READY_WITH_DECLARED_LIMITATIONS"
+            if warnings.any() else "FULL_SLATE_PRE_MODEL_SEMANTIC_GATE_PASS"
+        )
         fatal_error = ""
     except Exception as exc:
         out = pd.DataFrame([_row("semantic_gate", "FAIL", str(exc))])
@@ -257,7 +278,10 @@ def main() -> int:
         fatal_error = str(exc)
         OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
         out.to_csv(OUT_CSV, index=False)
-        OUT_JSON.write_text(json.dumps({"disposition": disposition, "season": season, "week": week, "live_odds_enabled": live, "fatal_error": fatal_error}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        OUT_JSON.write_text(json.dumps({
+            "disposition": disposition, "season": season, "week": week,
+            "live_odds_enabled": live, "fatal_error": fatal_error,
+        }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         print(out.to_string(index=False))
         raise
 
