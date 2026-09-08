@@ -61,9 +61,19 @@ Fresh 2016:
 
 Identity answers who is a receiving weapon, not when a high-usage receiving game occurs. R10 performed state forensic/stability work. R11 tested strict-prior high-state probability and supported that high receiving states are partly predictable pregame.
 
+R11 high-state features were frozen as:
+- baseline_pred_targets
+- prior_rb_room_share
+- target_delta (R9 minus baseline projected targets)
+- r9_raw_r8_residual
+
+Only TOP20 receiving-identity RBs receive nonzero R11/R12 state probabilities; REST80 state probability is explicitly zero in R12.
+
 ### R12 -> state-gated identity
 
 Theory: identity should express more strongly when the pregame state model says a high-usage receiving game is plausible. R12 improved multiple research metrics, including modern receiving-yard MAE roughly 10.79 -> 10.54 versus R9 and top receiving-back target MAE, but did not clear every frozen promotion requirement. R12 remains research-only/unpromoted.
+
+R12 creates `frozen_ypt` from the baseline receiving-yards / baseline-target mapping and conserves the exact team RB target pool.
 
 ### R13-R15B -> efficiency hypotheses rejected
 
@@ -93,6 +103,15 @@ Artifact digest: `sha256:ca44a174dafadcaf27496b00efe4e933941211037b0eacea0431d72
 Disposition: `RB_R16_UPSIDE_TAIL_SIGNAL_SUPPORTED_DIAGNOSTIC_ONLY`
 
 R16 kept the baseline receiving mean frozen and tested whether strict-prior opportunity/state/identity information predicts upside receiving-yard tails.
+
+R16 full features:
+- baseline_pred_targets
+- baseline_pred_rec_yards
+- state_probability
+- prior_rb_room_share
+- r9_raw_r8_residual
+- frozen_ypt
+- identity_top20
 
 Primary label: baseline actual-minus-prediction >=30 receiving yards.
 
@@ -125,8 +144,6 @@ Every frozen R16 support gate passed.
 
 Important nuance: target-only was already informative (primary AUC 0.655782) and had stronger top-quintile capture on the 30+ label than the full model. The full state/identity model nevertheless improved overall primary discrimination and showed materially larger incremental value for the more extreme 50+ tail. Interpretation: R16 is strongest as incremental extreme-tail information layered on opportunity, not as a replacement for opportunity.
 
-R16 support authorized only a separately frozen distribution candidate. It did not promote an RB receiving mean or R12.
-
 ## R17 — mean-preserving tail mixture — SUPPORTED
 
 Frozen plan: `docs/migrations/RB_R17_MEAN_PRESERVING_TAIL_MIXTURE_V1_PLAN.md`
@@ -142,29 +159,7 @@ Artifact digest: `sha256:b3feaf53d882238d1cd3446e646742d0fffa6bc30c589db6aa045d6
 Disposition: `RB_R17_DISTRIBUTION_SIGNAL_SUPPORTED_RESEARCH_ONLY`
 Science PASS: true
 
-### R17 hypothesis and mechanism
-
-R17 asked whether OOS R16 probabilities for >=30-yard and >=50-yard underprojection could improve the receiving-yard predictive distribution while preserving the frozen baseline mean exactly.
-
-Comparator: unconditional historical empirical residual bootstrap, floored at zero and mean-preserved.
-
-Candidate: nested R16-conditioned historical residual mixture with pools:
-- residual <30
-- residual 30-49
-- residual >=50
-
-For each OOS player-game:
-- w50 = min(R16 p50, R16 p30)
-- w30 = max(R16 p30 - w50, 0)
-- wnon = 1 - R16 p30
-
-Both variants used 2,000 deterministic draws per player-game, seed 917, and were rescaled after nonnegative clipping so their simulated mean equaled the frozen receiving mean.
-
-### Immutable combined result
-
-n = 2,787.
-
-Comparator -> candidate:
+Combined comparator -> candidate:
 - CRPS: 7.525223 -> 7.524093
 - Brier30: 0.0574860 -> 0.0571548
 - Brier50: 0.01802747 -> 0.01802536
@@ -172,64 +167,93 @@ Comparator -> candidate:
 - q95 pinball: 2.484965 -> 2.404085
 - 80% coverage: 75.924% -> 77.144%
 - 90% coverage: 86.473% -> 87.585%
-- max mean delta: ~1.07e-14 yards, effectively exact
+- max mean delta: ~1.07e-14 yards
 
-Every frozen R17 support gate passed:
-- exact mean preservation
-- combined CRPS nonworse/improved
-- fold CRPS guard
-- combined 30+ Brier strict improvement
-- combined 50+ Brier strict improvement
-- q90 strict improvement
-- q95 strict improvement
-- 80% coverage guard
-- 90% coverage guard
-- sportsbook zero
+Every frozen R17 support gate passed.
 
-### Fold detail and caution
+Caution: the global CRPS gain is tiny and combined 50+ Brier gain is nearly zero. 2025 Brier50 slightly worsened. The clearest R17 value is upper-quantile loss and interval calibration, not a large global score change.
 
-2024 comparator -> candidate:
-- CRPS 7.701697 -> 7.704214 (tiny worsening, ~0.033%, inside frozen 1% guard)
-- Brier30 0.0586462 -> 0.0583843
-- Brier50 0.01413339 -> 0.01412036
-- q90 3.681502 -> 3.627218
-- q95 2.480735 -> 2.398073
-- coverage80 75.466% -> 76.901%
-- coverage90 86.514% -> 87.661%
+## R18 — canonical MC tail-adapter parity — SUPPORTED
 
-2025 comparator -> candidate:
-- CRPS 7.348622 -> 7.343842
-- Brier30 0.0563250 -> 0.0559244
-- Brier50 0.02192436 -> 0.02193316 (tiny worsening; combined gate still passed)
-- q90 3.649084 -> 3.554132
-- q95 2.489197 -> 2.410100
-- coverage80 76.382% -> 77.387%
-- coverage90 86.432% -> 87.509%
+Frozen plan: `docs/migrations/RB_R18_CANONICAL_MC_TAIL_ADAPTER_PARITY_V1_PLAN.md`
+Plan commit: `1398eed191994079f9e5f1050adccd097cce633e`
+Adapter: `scripts/modeling/rb_r17_tail_distribution_adapter_v1.py`
+Adapter commit: `551ea7772310dcbf67d0671e74e5f069f71ad37c`
+Evaluator: `scripts/backtest/evaluate_rb_r18_canonical_mc_tail_adapter_parity_v1.py`
+Evaluator commit: `9e5f3de0eecca7de9adef2de0f60862d148e45ed`
+Workflow: `.github/workflows/research-rb-r18-canonical-mc-tail-adapter-parity-v1.yml`
+Workflow commit: `1fc889728ce3afdef22f6638203b0b9eda76099d`
+Actions run: `34287356990`
+Job: `102265907467`
+Artifact: `10079996458`
+Artifact digest: `sha256:3d2ded174147b5b2e5b8ecc7550b8600a1d3e930fce4eb0220ef9fe653e35949`
+Disposition: `RB_R18_CANONICAL_MC_TAIL_ADAPTER_PARITY_PASS_RESEARCH_ONLY`
+Science PASS: true
 
-Interpretation: R17 converts R16's classification signal into a modestly better mean-preserving probability distribution. The clearest gains are upper quantile loss and interval calibration. The combined CRPS gain is extremely small, and 50+ Brier is fragile: the combined gain is nearly zero and the 2025 fold worsened slightly. Do not overstate R17 as a large global distribution improvement.
+R18 did NOT modify canonical `scripts/simulation_v2.py`. The adapter is a post-simulation shadow transformation.
 
-Training pool audit:
-- 2024 test / 2023 train: 1,356 train rows; 1,272 non-tail, 56 residual 30-49, 28 residual 50+
-- 2025 test / 2023-24 train: 2,750 train rows; 2,580 non-tail, 122 residual 30-49, 48 residual 50+
+Architecture:
+- generate the R17 tail-mixture target distribution around each canonical RB receiving-yard sample mean;
+- mean-preserve it;
+- rank-preserving quantile-map it onto the canonical RB receiving-yard draws so the canonical dependence ordering is retained;
+- change RB `rush_rec_yards` only by the exact receiving-yard draw delta;
+- leave all other outputs untouched.
 
-Sportsbook inputs added: 0.
-Production parameters changed: 0.
+Canonical fixture result (4 RBs; 10,000 iterations):
+- canonical_mean_parity: PASS; max mean delta 0.0 yards
+- non_rb_exact: PASS
+- rb_component_exact: PASS
+- rush_rec_identity: PASS
+- allocation_trace_exact: PASS
+- nonnegative receiving yards: PASS
+- finite draws: PASS
+- rank preservation: PASS; minimum Spearman 0.9999999999999999
+- deterministic replay: PASS
+- adapted RB count: 4
+- canonical simulation blob exactly unchanged: `887e9c776ab112276ec8281195b0fed790ea0551`
 
-R17 PASS authorizes only a separately frozen production-parity / canonical-simulation integration test. It does not itself authorize promotion.
+Historical R17 code-path replay was exact:
+- combined CRPS 7.524092768426105
+- Brier30 0.05715478937926085
+- Brier50 0.018025357463222102
+- q90 pinball 3.590688254090627
+- q95 pinball 2.4040846023906104
+
+2024 replay Brier50 0.014120358321377332; 2025 0.021933159906676238. The explicit frozen 50+ fragility guard passed.
+
+Every frozen R18 gate passed. Sportsbook inputs added 0. Production parameters changed 0.
+
+R18 proves the R17 distribution shape can be composed mechanically with the canonical MC output without mutating the mean, target allocation, non-RB markets, or other RB component markets. It still does NOT make the mechanism live.
+
+## Deployability audit after R18
+
+The next blocking problem is scoring R16 tail probabilities on a real 2026 slate.
+
+Directly available/derivable from current production-football surfaces:
+- `baseline_pred_targets`: current finite M38 target entitlement multiplied by projected team pass attempts (`rules_plays_est * rules_pass_rate`)
+- `baseline_pred_rec_yards`: baseline predicted targets multiplied by current `rules_ypt`
+- `frozen_ypt`: current/baseline YPT mapping (`rules_ypt`), matching the R12 frozen-efficiency concept
+
+Deployable but requires carrying/refitting frozen research mechanisms into a scored artifact:
+- `prior_rb_room_share`: strict-prior RB receiving-room history from the R8 identity snapshot machinery
+- `r9_raw_r8_residual`: exact R8 Ridge identity residual prediction using the frozen 19-feature set
+- `state_probability`: exact R11/R12 TOP20 high5 logistic probability using baseline targets, prior RB-room share, R9 target delta, and raw R8 residual
+- `identity_top20`: current-slate percentile classification from strict-prior RB-room share
+
+Important: these are reconstructable using pregame football information, but they are NOT yet first-class certified full-slate fields. Do not approximate them with ad hoc current PlayerForm columns.
 
 ## Production boundary
 
-Do not state that R9/R11/R12/R13/R14/R15/R16/R17 are active production RB receiving code unless a later explicit promotion ledger says so. RB receiving research has not been silently integrated into the certified full-slate production stack.
+Do not state that R9/R11/R12/R13/R14/R15/R16/R17/R18 are active production RB receiving code unless a later explicit promotion ledger says so. RB receiving research has not been silently integrated into the certified full-slate production stack.
 
 ## Exact next step
 
-Freeze and execute an R18 production-parity/shadow-simulation test before touching canonical `scripts/simulation_v2.py`. R18 must determine whether the supported R17 tail-shape mechanism can be layered onto the actual canonical RB receiving-yard simulation while:
-- preserving each RB's simulation mean,
-- preserving finite target allocation and all target counts,
-- leaving all non-RB outcomes exactly unchanged,
-- leaving RB receptions/rushing exactly unchanged,
-- improving or safely preserving probabilistic receiving-yard performance,
-- guarding the fragile 50+ tail in each fold,
-- using zero sportsbook inputs.
-
-A PASS in R18 may justify a separately governed production candidate/refit for 2026. It is not automatic production promotion.
+Freeze an R19 deployable-feature/refit contract before code execution. R19 should:
+1. reproduce the exact R8 identity snapshot feature definitions using strict-prior 2023-2025 completed-game history;
+2. refit the R8 Ridge identity residual on the final allowed training window, derive R9 reliability/target delta without changing the live mean;
+3. refit the R11 high5 state model for TOP20 backs;
+4. refit R16 cat30/cat50 tail classifiers on the final allowed 2023-2025 training window;
+5. freeze the 2023-2025 residual pools required by R17;
+6. materialize a versioned, football-only 2026 scorer artifact with coefficients/scalers/pool hashes and fail-closed feature requirements;
+7. prove historical feature parity against the existing R16/R17 lineage before scoring any 2026 slate;
+8. keep the scorer shadow-only until a separately frozen full-slate prospective/parity gate passes.
