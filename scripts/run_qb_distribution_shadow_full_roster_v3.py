@@ -7,16 +7,25 @@ This adapter derives exactly one primary QB per team from *football-only*
 depth_role, writes a temporary universe, and delegates to the frozen V2 shadow.
 No sportsbook identity is used to choose a quarterback and production pricing is
 not modified.
+
+Before delegation, the downstream paid-snapshot pass-yard offer identity is
+compared against the football-only QB1 authority. A mismatch is classified as a
+stale downstream-offer blocker rather than a C2 scientific failure. This keeps
+sportsbook identity downstream and prevents an old offer row from defining the
+quarterback being tested.
 """
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 import subprocess
 import sys
 
 import numpy as np
 import pandas as pd
+
+from scripts.utils.player_identity_v3 import player_name_key
 
 
 def _role_rank(value: object) -> int:
@@ -30,6 +39,13 @@ def _role_rank(value: object) -> int:
     return 99
 
 
+def _key(value: object) -> str:
+    try:
+        return str(player_name_key(value, strip_suffix=True) or "").strip()
+    except Exception:
+        return ""
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--universe", required=True)
@@ -40,7 +56,9 @@ def main() -> int:
     args = ap.parse_args()
 
     universe = pd.read_csv(args.universe, low_memory=False)
+    priced = pd.read_csv(args.priced, low_memory=False)
     universe.columns = [str(c).lower() for c in universe.columns]
+    priced.columns = [str(c).lower() for c in priced.columns]
     if "depth_role" not in universe.columns or "position" not in universe.columns:
         raise RuntimeError("football universe missing Ourlads depth_role/position")
 
@@ -66,6 +84,7 @@ def main() -> int:
         audit_rows.append({
             "team": str(team),
             "primary_player": str(universe.at[primary_idx,"player"]),
+            "primary_player_key": _key(universe.at[primary_idx,"player"]),
             "depth_role": str(universe.at[primary_idx,"depth_role"]),
             "sportsbook_inputs_used": 0,
         })
@@ -76,10 +95,48 @@ def main() -> int:
     if not audit["sportsbook_inputs_used"].eq(0).all():
         raise RuntimeError("football-only QB1 authority leakage flag")
 
+    # Downstream identity audit only. The paid artifact is intentionally old and
+    # may contain a pass-yard offer for a player who is no longer the football QB1.
+    pass_rows = priced.loc[priced["market"].astype(str).str.lower().eq("pass_yards")].copy()
+    pass_rows["priced_player_key"] = pass_rows["player"].map(_key)
+    pass_rows = pass_rows.sort_values(["team","player","side"], kind="mergesort").drop_duplicates(
+        ["team","priced_player_key"], keep="first"
+    )
+    offered = pass_rows.groupby("team", sort=True).agg(
+        priced_qb_count=("priced_player_key","nunique"),
+        priced_primary_player=("player","first"),
+        priced_primary_player_key=("priced_player_key","first"),
+    ).reset_index()
+    audit = audit.merge(offered, on="team", how="left", validate="one_to_one")
+    audit["priced_qb_count"] = pd.to_numeric(audit["priced_qb_count"], errors="coerce").fillna(0).astype(int)
+    audit["downstream_identity_match"] = (
+        audit["priced_qb_count"].eq(1)
+        & audit["priced_primary_player_key"].fillna("").eq(audit["primary_player_key"])
+    )
+    audit.to_csv("data/qb_c2_shadow_primary_qb_audit.csv", index=False)
+
+    mismatches = audit.loc[~audit["downstream_identity_match"], [
+        "team","primary_player","priced_primary_player","priced_qb_count"
+    ]].to_dict("records")
+    if mismatches:
+        result = {
+            "disposition": "QB_DISTRIBUTION_FULL_ROSTER_SHADOW_BLOCKED_STALE_DOWNSTREAM_IDENTITY",
+            "football_only_qb1_teams": 32,
+            "downstream_identity_mismatch_teams": int(len(mismatches)),
+            "mismatches": mismatches,
+            "sportsbook_inputs_to_qb_selection": 0,
+            "production_pricing_modified": 0,
+            "scientific_candidate_rejected": False,
+            "reason": "paid replay artifact pass-yard player identity does not match current football-only QB1 authority",
+        }
+        Path(args.result).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.result).write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print(json.dumps(result, indent=2, sort_keys=True))
+        raise SystemExit(3)
+
     tmp = Path("data/qb_c2_shadow_universe_with_primary_identity.csv")
     tmp.parent.mkdir(parents=True, exist_ok=True)
     universe.to_csv(tmp, index=False)
-    audit.to_csv("data/qb_c2_shadow_primary_qb_audit.csv", index=False)
 
     cmd = [
         sys.executable,
@@ -90,7 +147,7 @@ def main() -> int:
         "--out", args.out,
         "--result", args.result,
     ]
-    print("[qb_c2_primary_identity] football_only_qb1_teams=32 sportsbook_inputs_used=0")
+    print("[qb_c2_primary_identity] football_only_qb1_teams=32 sportsbook_inputs_used=0 downstream_identity_match=32")
     return int(subprocess.run(cmd, check=False).returncode)
 
 
