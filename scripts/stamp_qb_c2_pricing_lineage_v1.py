@@ -132,9 +132,11 @@ def main() -> int:
     if int(pass_mask.sum()) <= 0:
         raise RuntimeError("QB C2 pricing lineage found zero pass-yard side rows")
 
+    # Use Series rows rather than namedtuples because leading-underscore helper
+    # column names are not stable namedtuple attributes in pandas.
     lookup = {
-        (str(r._team_key), str(r._player_key)): r
-        for r in c2.itertuples(index=False)
+        (str(r["_team_key"]), str(r["_player_key"])): r
+        for _, r in c2.iterrows()
     }
     missing_rows: list[dict] = []
     matched_identities: set[tuple[str, str]] = set()
@@ -145,15 +147,15 @@ def main() -> int:
             missing_rows.append({"team": row.get("team"), "player": row.get("player")})
             continue
         matched_identities.add(identity)
-        selected = int(getattr(cr, "selector_c2_selected"))
+        selected = int(cr.get("selector_c2_selected"))
         priced.at[idx, "qb_distribution_specialist_applied"] = selected
         priced.at[idx, "qb_distribution_specialist_version"] = SPECIALIST_VERSION if selected else ""
         priced.at[idx, "qb_distribution_candidate_version"] = SPECIALIST_VERSION
-        priced.at[idx, "qb_distribution_selector_version"] = str(getattr(cr, "selector_version"))
-        priced.at[idx, "qb_distribution_selector_delta_pass_attempts"] = float(getattr(cr, "selector_delta_pass_attempts"))
-        priced.at[idx, "qb_distribution_starter_authority_source"] = str(getattr(cr, "starter_authority_source"))
+        priced.at[idx, "qb_distribution_selector_version"] = str(cr.get("selector_version"))
+        priced.at[idx, "qb_distribution_selector_delta_pass_attempts"] = float(cr.get("selector_delta_pass_attempts"))
+        priced.at[idx, "qb_distribution_starter_authority_source"] = str(cr.get("starter_authority_source"))
         priced.at[idx, "qb_distribution_route"] = "C2_SELECTED" if selected else CANONICAL_FALLBACK
-        priced.at[idx, "qb_distribution_raw_mean_gap"] = float(getattr(cr, "raw_mean_gap"))
+        priced.at[idx, "qb_distribution_raw_mean_gap"] = float(cr.get("raw_mean_gap"))
 
     if missing_rows:
         raise RuntimeError(f"priced pass-yard rows missing QB C2 audit identity: {missing_rows[:20]}")
