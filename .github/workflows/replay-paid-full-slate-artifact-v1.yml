@@ -15,6 +15,7 @@ on:
       - 'scripts/metrics_v2.py'
       - 'scripts/enrich_player_scoring_v2.py'
       - 'scripts/simulation_v2.py'
+      - 'scripts/simulation_explicit_entitlement_v1.py'
       - 'scripts/run_pricing_v2.py'
       - 'scripts/run_pricing_with_rb_conservation_v1.py'
       - 'scripts/run_pricing_with_full_roster_universe_v1.py'
@@ -26,6 +27,7 @@ on:
       - 'scripts/validate_anytime_td_model_status_v1.py'
       - 'scripts/validate_full_slate_mechanical_certification_v1.py'
       - 'scripts/modeling/rb_pricing_adapter_v1.py'
+      - 'scripts/modeling/target_entitlement_v1.py'
       - 'scripts/player_identity_roster_history_v1.py'
       - 'scripts/validate_manual_name_overrides_v1.py'
       - 'scripts/repair_injuries_nflcom_v1.py'
@@ -232,6 +234,9 @@ jobs:
             data/football_simulation_universe.csv
             data/football_simulation_universe_audit.csv
             data/football_simulation_universe_audit.json
+            data/target_entitlement_v1_trace.csv
+            data/target_entitlement_v1_audit.json
+            data/target_entitlement_v1_projection_invariance.csv
             data/market_model_lineage_current.csv
             data/market_model_lineage_current.json
             data/anytime_td_model_status_v1.csv
