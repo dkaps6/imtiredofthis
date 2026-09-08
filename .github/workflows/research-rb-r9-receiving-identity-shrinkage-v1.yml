@@ -9,6 +9,7 @@ on:
       - scripts/backtest/evaluate_rb_r9_receiving_identity_shrinkage_v1.py
       - scripts/backtest/enrich_historical_defense_supported_v1.py
       - scripts/backtest/repair_historical_universe_missing_teams_v1.py
+      - scripts/utils/team_codes.py
       - .github/workflows/research-rb-r9-receiving-identity-shrinkage-v1.yml
 
 jobs:
