@@ -6,7 +6,7 @@ on:
       - research-cross-position-catastrophic-casebook-v1
     paths:
       - '.github/workflows/shadow-qb-distribution-week1-v1.yml'
-      - 'scripts/run_qb_distribution_shadow_v1.py'
+      - 'scripts/run_qb_distribution_shadow_full_roster_v2.py'
       - 'scripts/run_qb_distribution_state_context.py'
       - 'scripts/utils/build_team_week_map_v2.py'
       - 'scripts/simulation_c2_qb_candidate.py'
@@ -41,7 +41,6 @@ jobs:
           gh workflow run replay-paid-full-slate-artifact-v1.yml \
             --repo "${GITHUB_REPOSITORY}" \
             --ref "${GITHUB_REF_NAME}"
-
           RUN_ID=''
           for i in $(seq 1 24); do
             RUN_ID=$(gh run list \
@@ -76,19 +75,17 @@ jobs:
             --name paid-full-slate-replay-v1 \
             --dir evidence/full_slate
           test -s evidence/full_slate/data/live_odds_status.json
-          test -s evidence/full_slate/data/model_rule_simulation_inputs.csv
+          test -s evidence/full_slate/data/football_simulation_universe.csv
           test -s evidence/full_slate/outputs/props_priced_clean.csv
           python - <<'PY'
           import json
-          p='evidence/full_slate/data/live_odds_status.json'
-          x=json.load(open(p,encoding='utf-8'))
+          x=json.load(open('evidence/full_slate/data/live_odds_status.json',encoding='utf-8'))
           if x.get('odds_api_refetched') is not False:
               raise SystemExit(f'FATAL: replay did not certify no-refetch: {x.get("odds_api_refetched")}')
           if int(x.get('replay_source_run',0)) != 34152868136:
               raise SystemExit(f'FATAL: unexpected paid source run: {x.get("replay_source_run")}')
           print('NO_CREDIT_REPLAY_CERTIFIED source_run=34152868136')
           PY
-          find evidence/full_slate -maxdepth 3 -type f | sort | head -200
 
       - name: Install frozen shadow dependencies
         run: |
@@ -96,7 +93,7 @@ jobs:
           pip install -r requirements.txt
           pip install pyyaml
           python -m py_compile \
-            scripts/run_qb_distribution_shadow_v1.py \
+            scripts/run_qb_distribution_shadow_full_roster_v2.py \
             scripts/run_qb_distribution_state_context.py \
             scripts/simulation_c2_qb_candidate.py \
             scripts/modeling/qb_distribution_state_v1.py
@@ -110,12 +107,12 @@ jobs:
           python scripts/run_qb_distribution_state_context.py --season 2026 --week 1
           test -s data/qb_distribution_state_context.csv
 
-      - name: Run real-slate QB distribution shadow audit
+      - name: Run full-roster real-slate QB distribution shadow audit
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
-          python scripts/run_qb_distribution_shadow_v1.py \
-            --rule-inputs evidence/full_slate/data/model_rule_simulation_inputs.csv \
+          python scripts/run_qb_distribution_shadow_full_roster_v2.py \
+            --universe evidence/full_slate/data/football_simulation_universe.csv \
             --priced evidence/full_slate/outputs/props_priced_clean.csv \
             --state-context data/qb_distribution_state_context.csv \
             --out outputs/qb_distribution_shadow_v1.csv \
