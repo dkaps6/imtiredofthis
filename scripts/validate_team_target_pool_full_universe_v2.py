@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Audit receiving target entitlement on the sportsbook-independent full roster.
 
-V1 read the offer-derived rule-input frame.  This version reads the certified
-football_simulation_universe artifact, where Ourlads + schedule define players
-before any market lookup.  It applies no normalization and remains a model-
-quality blocker when raw entitlement exceeds the physical target budget.
+The football_simulation_universe retains raw PlayerForm/Bayes/rules target-share
+inputs for provenance.  Once TEAM_TARGET_ENTITLEMENT_V1 is materialized, those
+raw pre-entitlement sums are diagnostics rather than the physical pool consumed
+by simulation.  This validator therefore certifies the explicit entitlement
+trace when present and projection-neutral, while preserving the raw over-
+entitlement telemetry.  On legacy runs without an explicit trace, the original
+raw-pool fail-closed behavior remains in force.
 """
 from __future__ import annotations
 
@@ -17,6 +20,8 @@ import pandas as pd
 DATA = Path("data")
 UNIVERSE = DATA / "football_simulation_universe.csv"
 UNIVERSE_AUDIT = DATA / "football_simulation_universe_audit.json"
+ENTITLEMENT_TRACE = DATA / "target_entitlement_v1_trace.csv"
+ENTITLEMENT_AUDIT = DATA / "target_entitlement_v1_audit.json"
 OUT_CSV = DATA / "team_target_pool_audit.csv"
 OUT_JSON = DATA / "team_target_pool_audit.json"
 FORBIDDEN = {
@@ -78,37 +83,127 @@ def main() -> int:
     out["playerform_pool_exceeds_one"] = out["playerform_sum"].gt(1.0 + 1e-9).astype(int)
     out["bayes_pool_exceeds_one"] = out["bayes_sum"].gt(1.0 + 1e-9).astype(int)
     out["rules_pool_exceeds_one"] = out["rules_sum"].gt(1.0 + 1e-9).astype(int)
-    out["simulator_uniform_scale_if_capped_095"] = np.where(
+    out["legacy_uniform_scale_if_capped_095"] = np.where(
         out["rules_sum"] > 0.95, 0.95 / out["rules_sum"], 1.0
     )
+
+    explicit = bool(source.get("explicit_target_entitlement_materialized", False))
+    explicit_payload: dict[str, object] = {}
+    explicit_bad = pd.DataFrame()
+    if explicit:
+        trace = _read(ENTITLEMENT_TRACE)
+        if not ENTITLEMENT_AUDIT.exists() or ENTITLEMENT_AUDIT.stat().st_size <= 0:
+            raise RuntimeError("explicit entitlement is declared but its audit JSON is missing")
+        ent = json.loads(ENTITLEMENT_AUDIT.read_text(encoding="utf-8"))
+        if ent.get("disposition") != "EXPLICIT_TARGET_ENTITLEMENT_MATERIALIZED":
+            raise RuntimeError(f"explicit entitlement audit not certified: {ent.get('disposition')}")
+        if ent.get("sportsbook_inputs_used") is not False:
+            raise RuntimeError("explicit entitlement does not certify sportsbook-independent construction")
+        if ent.get("projection_neutral_gate") != "PASS":
+            raise RuntimeError("explicit entitlement failed projection-neutral gate")
+        if int(ent.get("projection_invariance_changed_arrays", -1)) != 0:
+            raise RuntimeError("explicit entitlement changed legacy projection arrays")
+        if float(ent.get("projection_invariance_max_mean_gap", np.inf)) > 1e-12:
+            raise RuntimeError("explicit entitlement changed legacy projection means")
+
+        trace_required = {
+            "team", "player_clean_key", "entitlement_tgt_share", "modeled_player_sum",
+            "residual_share", "team_scale", "entitlement_version",
+        }
+        trace_missing = trace_required - set(trace.columns)
+        if trace_missing:
+            raise RuntimeError(f"explicit entitlement trace missing columns: {sorted(trace_missing)}")
+        if trace.duplicated(["team", "player_clean_key"]).any():
+            raise RuntimeError("explicit entitlement trace has duplicate player/team rows")
+        if len(trace) != len(frame):
+            raise RuntimeError(f"explicit entitlement trace/player universe mismatch: {len(trace)} != {len(frame)}")
+        if trace["team"].nunique() != 32:
+            raise RuntimeError(f"explicit entitlement expected 32 teams, found {trace['team'].nunique()}")
+        if set(zip(trace["team"], trace["player_clean_key"])) != set(zip(frame["team"], frame["player_clean_key"])):
+            raise RuntimeError("explicit entitlement player/team keys do not exactly match football universe")
+
+        for c in ("entitlement_tgt_share", "modeled_player_sum", "residual_share", "team_scale"):
+            trace[c] = pd.to_numeric(trace[c], errors="coerce")
+            if trace[c].isna().any() or not np.isfinite(trace[c]).all():
+                raise RuntimeError(f"invalid explicit entitlement values in {c}")
+        if trace["entitlement_tgt_share"].lt(-1e-12).any() or trace["team_scale"].le(0).any():
+            raise RuntimeError("explicit entitlement contains negative share or non-positive scale")
+
+        physical = trace.groupby("team", as_index=False).agg(
+            entitlement_sum=("entitlement_tgt_share", "sum"),
+            declared_modeled_sum=("modeled_player_sum", "first"),
+            residual_share=("residual_share", "first"),
+            team_scale=("team_scale", "first"),
+            entitlement_players=("player_clean_key", "nunique"),
+        )
+        physical["physical_sum"] = physical["entitlement_sum"] + physical["residual_share"]
+        physical["entitlement_gap"] = (physical["entitlement_sum"] - physical["declared_modeled_sum"]).abs()
+        physical["physical_gap"] = (physical["physical_sum"] - 1.0).abs()
+        explicit_bad = physical.loc[
+            physical["entitlement_gap"].gt(1e-9)
+            | physical["physical_gap"].gt(1e-9)
+            | physical["entitlement_sum"].gt(1.0 + 1e-9)
+            | physical["residual_share"].lt(-1e-12)
+        ]
+        if len(physical) != 32:
+            raise RuntimeError(f"explicit entitlement physical audit expected 32 teams, found {len(physical)}")
+
+        out = out.merge(physical, on="team", how="left", validate="one_to_one")
+        explicit_payload = {
+            "entitlement_version": str(trace["entitlement_version"].iloc[0]),
+            "explicit_modeled_sum_min": float(physical["entitlement_sum"].min()),
+            "explicit_modeled_sum_max": float(physical["entitlement_sum"].max()),
+            "explicit_residual_min": float(physical["residual_share"].min()),
+            "explicit_residual_max": float(physical["residual_share"].max()),
+            "explicit_physical_sum_min": float(physical["physical_sum"].min()),
+            "explicit_physical_sum_max": float(physical["physical_sum"].max()),
+            "explicit_max_physical_gap": float(physical["physical_gap"].max()),
+            "projection_invariance_changed_arrays": int(ent.get("projection_invariance_changed_arrays", -1)),
+            "projection_invariance_max_mean_gap": float(ent.get("projection_invariance_max_mean_gap", np.inf)),
+            "projection_invariance_max_element_gap": float(ent.get("projection_invariance_max_element_gap", np.inf)),
+        }
+
     out = out.sort_values("rules_sum", ascending=False).reset_index(drop=True)
     OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
     out.to_csv(OUT_CSV, index=False)
 
-    bad = out.loc[out["rules_pool_exceeds_one"].eq(1)]
+    raw_bad = out.loc[out["rules_pool_exceeds_one"].eq(1)]
+    if explicit:
+        disposition = "EXPLICIT_TARGET_ENTITLEMENT_POOL_VALID" if explicit_bad.empty else "EXPLICIT_TARGET_ENTITLEMENT_POOL_INVALID"
+    else:
+        disposition = "TARGET_ENTITLEMENT_POOL_INVALID_RESEARCH_REPAIR_REQUIRED" if not raw_bad.empty else "TARGET_ENTITLEMENT_POOL_VALID"
+
     payload = {
-        "disposition": "TARGET_ENTITLEMENT_POOL_INVALID_RESEARCH_REPAIR_REQUIRED" if not bad.empty else "TARGET_ENTITLEMENT_POOL_VALID",
+        "disposition": disposition,
         "source": "CERTIFIED_FULL_FOOTBALL_SIMULATION_UNIVERSE",
         "football_player_rows": int(len(frame)),
         "teams": int(len(out)),
-        "teams_rules_over_1": int(len(bad)),
-        "teams_bayes_over_1": int(out["bayes_pool_exceeds_one"].sum()),
-        "teams_playerform_over_1": int(out["playerform_pool_exceeds_one"].sum()),
-        "rules_sum_min": float(out["rules_sum"].min()),
-        "rules_sum_median": float(out["rules_sum"].median()),
-        "rules_sum_mean": float(out["rules_sum"].mean()),
-        "rules_sum_max": float(out["rules_sum"].max()),
-        "minimum_uniform_scale_applied_by_simulator": float(out["simulator_uniform_scale_if_capped_095"].min()),
+        "raw_teams_rules_over_1": int(len(raw_bad)),
+        "raw_teams_bayes_over_1": int(out["bayes_pool_exceeds_one"].sum()),
+        "raw_teams_playerform_over_1": int(out["playerform_pool_exceeds_one"].sum()),
+        "raw_rules_sum_min": float(out["rules_sum"].min()),
+        "raw_rules_sum_median": float(out["rules_sum"].median()),
+        "raw_rules_sum_mean": float(out["rules_sum"].mean()),
+        "raw_rules_sum_max": float(out["rules_sum"].max()),
+        "legacy_minimum_uniform_scale_if_capped_095": float(out["legacy_uniform_scale_if_capped_095"].min()),
+        "explicit_target_entitlement_materialized": explicit,
+        "raw_pre_entitlement_overage_is_provenance_only": explicit,
         "sportsbook_inputs_used": False,
         "normalization_applied_by_audit": False,
         "provider_event_identity_used_for_pool": False,
         "audit": str(OUT_CSV),
+        **explicit_payload,
     }
     OUT_JSON.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print("[team_target_pool_full_universe] " + json.dumps(payload, sort_keys=True))
-    if not bad.empty:
+
+    if explicit and not explicit_bad.empty:
         raise SystemExit(
-            f"Full-roster receiving entitlement pool is physically invalid for {len(bad)}/32 teams; "
+            f"Explicit full-roster target entitlement is physically invalid for {len(explicit_bad)}/32 teams; see {OUT_CSV}."
+        )
+    if (not explicit) and not raw_bad.empty:
+        raise SystemExit(
+            f"Full-roster receiving entitlement pool is physically invalid for {len(raw_bad)}/32 teams; "
             f"see {OUT_CSV}. No automatic normalization was applied."
         )
     return 0
