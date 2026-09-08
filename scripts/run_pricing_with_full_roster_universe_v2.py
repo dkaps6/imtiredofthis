@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Full-roster identity, provider lookup, and explicit target-entitlement contract.
+"""Full-roster football-first simulation with explicit conserved entitlement.
 
-This wrapper now proves three separate boundaries before pricing:
-1. the football simulation universe is the complete Ourlads/PlayerForm roster;
-2. suffix/provider identities are lookup aliases only;
-3. the legacy M38 + team-cap target allocation is materialized explicitly before
-   Monte Carlo and must reproduce the pre-refactor distribution under a matched
-   seed before pricing continues.
+The wrapper enforces two distinct contracts:
+1. the explicit M38 + team-cap entitlement refactor must remain exactly neutral
+   to the legacy simulator under a matched seed;
+2. after that neutral seam is certified, the frozen TE-R5P specialist may
+   redistribute only the already-existing TE-room target mass.
 
-No TE-R5P/WR/RB receiving research is promoted here.
+Sportsbook offers remain downstream lookup/pricing inputs and are never used to
+construct either the football universe or TE-R5P entitlement.
 """
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ import pandas as pd
 
 import scripts.run_pricing_with_full_roster_universe_v1 as base
 from scripts.modeling.target_entitlement_v1 import materialize_target_entitlement
+from scripts.modeling.te_r5p_entitlement_adapter_v1 import apply_te_r5p_entitlement
 from scripts.simulation_explicit_entitlement_v1 import simulate as explicit_simulate
 from scripts.simulation_v2 import MARKET_MAP, lookup, simulate as legacy_simulate
 from scripts.utils.player_identity_v3 import player_name_key
@@ -28,6 +29,9 @@ DATA = Path("data")
 ENTITLEMENT_TRACE = DATA / "target_entitlement_v1_trace.csv"
 ENTITLEMENT_AUDIT = DATA / "target_entitlement_v1_audit.json"
 ENTITLEMENT_INVARIANCE = DATA / "target_entitlement_v1_projection_invariance.csv"
+TE_R5P_TRACE = DATA / "te_r5p_full_slate_entitlement_trace.csv"
+TE_R5P_AUDIT = DATA / "te_r5p_full_slate_entitlement_audit.json"
+TE_R5P_SIM_DELTA = DATA / "te_r5p_full_slate_simulation_delta.csv"
 _ORIGINAL_BUILD = base._build_full_universe
 
 
@@ -49,9 +53,6 @@ def _canonical_identity_frame(df: pd.DataFrame) -> pd.DataFrame:
         sample = out.loc[blank, [c for c in ("player", "team") if c in out.columns]].head(20).to_dict("records")
         raise RuntimeError(f"suffix-safe full-roster identity key unresolved: {sample}")
 
-    # Multiple books/markets for the same player are repeated observations, not
-    # identity collisions. Only distinct display names on the same team that
-    # collapse to one base key are ambiguous.
     names = (
         out.assign(_display=out["player"].astype("string").fillna("").str.strip())
         .groupby(["team", "player_clean_key"], dropna=False)["_display"]
@@ -133,13 +134,27 @@ def _install_provider_player_aliases_and_validate(result, metrics: pd.DataFrame)
 
 def _build_with_explicit_entitlement(pricing_metrics: pd.DataFrame):
     universe, aliases, audit = _ORIGINAL_BUILD(pricing_metrics)
-    explicit, trace = materialize_target_entitlement(universe)
+    baseline, baseline_trace = materialize_target_entitlement(universe)
+    explicit, te_trace, te_audit = apply_te_r5p_entitlement(baseline)
+
     ENTITLEMENT_TRACE.parent.mkdir(parents=True, exist_ok=True)
+    final_by_key = explicit.set_index(["event_id", "team", "player_clean_key"])
+    trace = baseline_trace.copy()
+    keys = pd.MultiIndex.from_frame(trace[["event_id", "team", "player_clean_key"]])
+    trace["baseline_entitlement_tgt_share"] = trace["entitlement_tgt_share"].astype(float)
+    trace["entitlement_tgt_share"] = final_by_key.loc[keys, "entitlement_tgt_share"].to_numpy(float)
+    trace["te_r5p_applied"] = final_by_key.loc[keys, "te_r5p_applied"].to_numpy(bool)
+    trace["te_r5p_model_version"] = final_by_key.loc[keys, "te_r5p_model_version"].astype(str).to_numpy()
+    trace["entitlement_version"] = "TEAM_TARGET_ENTITLEMENT_V1_PLUS_TE_R5P_V1"
     trace.to_csv(ENTITLEMENT_TRACE, index=False)
+    te_trace.to_csv(TE_R5P_TRACE, index=False)
+    TE_R5P_AUDIT.write_text(json.dumps(te_audit, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
     team = trace.drop_duplicates(["event_id", "team"])
     payload = {
         "disposition": "EXPLICIT_TARGET_ENTITLEMENT_MATERIALIZED",
-        "version": "TEAM_TARGET_ENTITLEMENT_V1_PROJECTION_NEUTRAL",
+        "version": "TEAM_TARGET_ENTITLEMENT_V1_PLUS_TE_R5P_V1",
+        "baseline_refactor_version": "TEAM_TARGET_ENTITLEMENT_V1_PROJECTION_NEUTRAL",
         "football_players": int(len(explicit)),
         "teams": int(team["team"].nunique()),
         "games": int(team["event_id"].nunique()),
@@ -151,40 +166,61 @@ def _build_with_explicit_entitlement(pricing_metrics: pd.DataFrame):
         "residual_min": float(team["residual_share"].min()),
         "residual_max": float(team["residual_share"].max()),
         "m38_applied_before_entitlement": True,
+        "production_specialists": ["TE_R5P_PRODUCTION_MODEL_V1"],
+        "te_r5p_entitlement_audit": str(TE_R5P_AUDIT),
+        "te_r5p_entitlement_trace": str(TE_R5P_TRACE),
+        "te_r5p_team_pool_preserved": bool(te_audit["team_te_pool_preserved"]),
+        "te_r5p_non_te_entitlement_preserved": bool(te_audit["non_te_entitlement_preserved"]),
         "sportsbook_inputs_used": False,
-        "new_scientific_parameters_introduced": False,
+        "new_scientific_parameters_introduced": True,
         "trace": str(ENTITLEMENT_TRACE),
     }
     ENTITLEMENT_AUDIT.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     audit.update({
         "explicit_target_entitlement_version": payload["version"],
         "explicit_target_entitlement_materialized": True,
+        "te_r5p_full_slate_consumed": True,
+        "te_r5p_model_version": te_audit["model_version"],
     })
     return explicit, aliases, audit
 
 
 def _projection_neutral_simulate(metrics: pd.DataFrame, *, iterations=None, seed=None, allocation_trace=None):
+    if "baseline_entitlement_tgt_share" not in metrics.columns:
+        raise RuntimeError("TE-R5P Full Slate simulation missing projection-neutral baseline entitlement")
+
+    # First certify the architecture refactor itself against the legacy simulator.
     legacy_input = metrics.drop(
-        columns=[c for c in metrics.columns if c.startswith("entitlement_")], errors="ignore"
+        columns=[
+            c for c in metrics.columns
+            if c.startswith("entitlement_") or c.startswith("baseline_entitlement_") or c.startswith("te_r5p_")
+        ],
+        errors="ignore",
     )
+    baseline_metrics = metrics.copy()
+    baseline_metrics["entitlement_tgt_share"] = pd.to_numeric(
+        baseline_metrics["baseline_entitlement_tgt_share"], errors="raise"
+    ).astype(float)
     legacy = legacy_simulate(legacy_input, iterations=iterations, seed=seed)
-    explicit = explicit_simulate(metrics, iterations=iterations, seed=seed, allocation_trace=allocation_trace)
+    baseline_explicit = explicit_simulate(baseline_metrics, iterations=iterations, seed=seed)
+
     legacy_keys = set(legacy.values)
-    explicit_keys = set(explicit.values)
-    if legacy_keys != explicit_keys:
+    baseline_keys = set(baseline_explicit.values)
+    if legacy_keys != baseline_keys:
         raise RuntimeError(
-            "explicit entitlement changed simulation key universe; "
-            f"missing={list(legacy_keys-explicit_keys)[:20]} extra={list(explicit_keys-legacy_keys)[:20]}"
+            "projection-neutral entitlement baseline changed simulation key universe; "
+            f"missing={list(legacy_keys-baseline_keys)[:20]} extra={list(baseline_keys-legacy_keys)[:20]}"
         )
+
     rows = []
     max_mean_gap = 0.0
     max_element_gap = 0.0
     changed_arrays = 0
     for key in sorted(legacy_keys):
         a = np.asarray(legacy.values[key], dtype=float)
-        b = np.asarray(explicit.values[key], dtype=float)
+        b = np.asarray(baseline_explicit.values[key], dtype=float)
         if a.shape != b.shape or not np.isfinite(a).all() or not np.isfinite(b).all():
-            raise RuntimeError(f"explicit entitlement invalid simulation arrays key={key}")
+            raise RuntimeError(f"projection-neutral baseline produced invalid arrays key={key}")
         mean_gap = abs(float(a.mean()) - float(b.mean()))
         element_gap = float(np.max(np.abs(a-b))) if len(a) else 0.0
         changed_arrays += int(element_gap > 0)
@@ -193,26 +229,65 @@ def _projection_neutral_simulate(metrics: pd.DataFrame, *, iterations=None, seed
         rows.append({
             "event_id": key[0], "player_clean_key": key[1], "market": key[2],
             "legacy_mean": float(a.mean()) if len(a) else np.nan,
-            "explicit_mean": float(b.mean()) if len(b) else np.nan,
+            "baseline_explicit_mean": float(b.mean()) if len(b) else np.nan,
             "mean_gap": mean_gap, "max_element_gap": element_gap,
         })
     pd.DataFrame(rows).to_csv(ENTITLEMENT_INVARIANCE, index=False)
-    if max_mean_gap > 0.005:
+    if changed_arrays != 0 or max_mean_gap > 1e-12 or max_element_gap > 1e-12:
         raise RuntimeError(
-            f"explicit target entitlement is not projection-neutral: max_mean_gap={max_mean_gap}"
+            "explicit target entitlement baseline is not exactly projection-neutral: "
+            f"changed_arrays={changed_arrays} max_mean_gap={max_mean_gap} max_element_gap={max_element_gap}"
         )
+
+    # Then consume TE-R5P as an intentional football-only specialist change.
+    final = explicit_simulate(metrics, iterations=iterations, seed=seed, allocation_trace=allocation_trace)
+    final_keys = set(final.values)
+    if final_keys != baseline_keys:
+        raise RuntimeError(
+            "TE-R5P changed simulation key universe; "
+            f"missing={list(baseline_keys-final_keys)[:20]} extra={list(final_keys-baseline_keys)[:20]}"
+        )
+
+    pos_map = {
+        (str(r.event_id), str(r.player_clean_key)): str(r.position)
+        for r in metrics[["event_id", "player_clean_key", "position"]].drop_duplicates().itertuples(index=False)
+    }
+    delta_rows = []
+    for key in sorted(final_keys):
+        a = np.asarray(baseline_explicit.values[key], dtype=float)
+        b = np.asarray(final.values[key], dtype=float)
+        if a.shape != b.shape or not np.isfinite(b).all():
+            raise RuntimeError(f"TE-R5P produced invalid simulation arrays key={key}")
+        delta_rows.append({
+            "event_id": key[0],
+            "player_clean_key": key[1],
+            "position": pos_map.get((str(key[0]), str(key[1])), ""),
+            "market": key[2],
+            "baseline_mean": float(a.mean()) if len(a) else np.nan,
+            "te_r5p_mean": float(b.mean()) if len(b) else np.nan,
+            "mean_delta": float(b.mean() - a.mean()) if len(a) else np.nan,
+            "abs_mean_delta": abs(float(b.mean() - a.mean())) if len(a) else np.nan,
+        })
+    delta = pd.DataFrame(delta_rows)
+    delta.to_csv(TE_R5P_SIM_DELTA, index=False)
+
     status = json.loads(ENTITLEMENT_AUDIT.read_text(encoding="utf-8"))
     status.update({
+        "projection_invariance_scope": "legacy_vs_explicit_baseline_before_position_specialists",
         "projection_invariance_keys": int(len(rows)),
         "projection_invariance_changed_arrays": int(changed_arrays),
         "projection_invariance_max_mean_gap": max_mean_gap,
         "projection_invariance_max_element_gap": max_element_gap,
         "projection_neutral_gate": "PASS",
         "invariance_audit": str(ENTITLEMENT_INVARIANCE),
+        "te_r5p_simulation_delta_audit": str(TE_R5P_SIM_DELTA),
+        "te_r5p_changed_distribution_keys": int((delta["abs_mean_delta"].fillna(0).gt(1e-12)).sum()),
+        "te_r5p_max_abs_mean_delta": float(delta["abs_mean_delta"].max()) if len(delta) else 0.0,
+        "te_r5p_te_max_abs_mean_delta": float(delta.loc[delta["position"].eq("TE"), "abs_mean_delta"].max()) if delta["position"].eq("TE").any() else 0.0,
     })
     ENTITLEMENT_AUDIT.write_text(json.dumps(status, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print("[target_entitlement_v1] " + json.dumps(status, sort_keys=True))
-    return explicit
+    print("[target_entitlement_v1_plus_te_r5p] " + json.dumps(status, sort_keys=True))
+    return final
 
 
 def main() -> int:
