@@ -1,0 +1,65 @@
+name: RB R15 Efficiency Context V1
+
+on:
+  push:
+    branches:
+      - research-cross-position-catastrophic-casebook-v1
+    paths:
+      - scripts/backtest/diagnose_rb_r15_efficiency_context_v1.py
+      - .github/workflows/research-rb-r15-efficiency-context-v1.yml
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Download corrected RB-only state artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rb-receiving-state-v1b-mechanical-correction
+          path: corrected-artifact
+          github-token: ${{ github.token }}
+          repository: dkaps6/imtiredofthis
+          run-id: 34273055095
+      - name: Locate corrected R12 predictions
+        id: locate
+        shell: bash
+        run: |
+          set -euo pipefail
+          PRED="$(find corrected-artifact -type f -path '*r12_state_gated/rb_r12_predictions.csv' -print -quit)"
+          test -n "$PRED"
+          echo "pred=$PRED" >> "$GITHUB_OUTPUT"
+      - name: Run strict-prior team/opponent context diagnostic
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/diagnose_rb_r15_efficiency_context_v1.py \
+            --predictions '${{ steps.locate.outputs.pred }}' \
+            --pbp-start 2018 \
+            --out-dir data/backtests/rb_r15_efficiency_context_v1
+      - name: Show R15 result
+        if: always()
+        run: |
+          cat data/backtests/rb_r15_efficiency_context_v1/rb_r15_result.json 2>/dev/null || true
+          echo '=== primary context signals ==='
+          cat data/backtests/rb_r15_efficiency_context_v1/rb_r15_primary_summary.csv 2>/dev/null || true
+      - name: Upload R15 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r15-efficiency-context-v1
+          path: data/backtests/rb_r15_efficiency_context_v1/*
+          if-no-files-found: warn
+          retention-days: 30
