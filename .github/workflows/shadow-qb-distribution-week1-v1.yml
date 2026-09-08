@@ -8,6 +8,7 @@ on:
       - '.github/workflows/shadow-qb-distribution-week1-v1.yml'
       - 'scripts/run_qb_distribution_shadow_v1.py'
       - 'scripts/run_qb_distribution_state_context.py'
+      - 'scripts/utils/build_team_week_map_v2.py'
       - 'scripts/simulation_c2_qb_candidate.py'
       - 'scripts/modeling/qb_distribution_state_v1.py'
       - 'model/qb_distribution_state_selector_v1.json'
@@ -103,9 +104,9 @@ jobs:
       - name: Build strict-prior 2026 Week1 selector context
         run: |
           set -euo pipefail
-          test -s evidence/full_slate/data/team_week_map.csv
-          cp evidence/full_slate/data/team_week_map.csv data/team_week_map.csv
           export PYTHONPATH="${PWD}"
+          python scripts/utils/build_team_week_map_v2.py --season 2026 --out data/team_week_map.csv
+          test -s data/team_week_map.csv
           python scripts/run_qb_distribution_state_context.py --season 2026 --week 1
           test -s data/qb_distribution_state_context.csv
 
