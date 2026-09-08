@@ -4,6 +4,12 @@ This module deliberately does not replace production simulation_v2. It replays
 that simulator byte-for-byte while capturing its shared team states, then applies
 the frozen C2 receiving process. Candidate pricing may expose only the resulting
 primary-QB pass_yards array; receiver/rushing production arrays remain canonical.
+
+When the current production Full Slate supplies ``entitlement_tgt_share``, that
+column is the already-conserved, already-M38/TE-R5P-adjusted target probability
+actually consumed by production. In that case the shadow must use it directly
+and must not apply M38 a second time. Without explicit entitlement the historical
+legacy behavior remains unchanged.
 """
 from __future__ import annotations
 from dataclasses import dataclass
@@ -22,6 +28,18 @@ class StateSimulationResult:
     iterations:int
     team_states:Dict[tuple[str,str,str],np.ndarray]
 
+def _target_shares(team_df:pd.DataFrame)->np.ndarray:
+    """Return the exact target probabilities appropriate to this simulation state."""
+    if 'entitlement_tgt_share' in team_df.columns:
+        ent=pd.to_numeric(team_df['entitlement_tgt_share'],errors='coerce').to_numpy(dtype=float)
+        if len(ent)!=len(team_df) or not np.isfinite(ent).all() or (ent<0).any():
+            raise RuntimeError('QB C2 shadow received invalid explicit entitlement_tgt_share')
+        if float(ent.sum())>0.950000000001:
+            raise RuntimeError(f'QB C2 explicit team entitlement exceeds 0.95: {float(ent.sum())}')
+        return ent
+    raw=np.array([_num(r,'rules_tgt_share','bayes_tgt_share','target_share','tgt_share',default=0.) for _,r in team_df.iterrows()])
+    return _sharpen_wr_target_shares(team_df,raw)
+
 def simulate_with_states(metrics:pd.DataFrame,*,iterations:int|None=None,seed:int|None=None)->StateSimulationResult:
     iterations=int(iterations or MC.get('iterations',25000));seed=int(MC.get('seed',42) if seed is None else seed);rng=np.random.default_rng(seed);values={};states={}
     if metrics.empty:return StateSimulationResult(values,iterations,states)
@@ -37,7 +55,7 @@ def simulate_with_states(metrics:pd.DataFrame,*,iterations:int|None=None,seed:in
             plays_mean,pass_rate_mean=_team_inputs(tdf);plays=np.rint(np.clip(rng.normal(plays_mean,3.5,iterations)+game_pace_shock,45,85)).astype(int);pass_rate=np.clip(rng.normal(pass_rate_mean,.035,iterations),.25,.82);pass_att=rng.binomial(plays,pass_rate);rush_att=plays-pass_att
             pass_eff=np.clip(rng.normal(1.,.09,iterations),.65,1.35);rush_eff=np.clip(rng.normal(1.,.10,iterations),.60,1.40)
             gs=str(game);ts=str(team);states[(gs,ts,'plays')]=plays.copy();states[(gs,ts,'pass_rate')]=pass_rate.copy();states[(gs,ts,'pass_att')]=pass_att.copy();states[(gs,ts,'rush_att')]=rush_att.copy();states[(gs,ts,'pass_eff_shock')]=pass_eff.copy();states[(gs,ts,'rush_eff_shock')]=rush_eff.copy()
-            raw_t=np.array([_num(r,'rules_tgt_share','bayes_tgt_share','target_share','tgt_share',default=0.) for _,r in tdf.iterrows()]);tshares=_sharpen_wr_target_shares(tdf,raw_t);raw_r=np.array([_num(r,'rules_rush_share','bayes_rush_share','rush_share',default=0.) for _,r in tdf.iterrows()]);rshares=_top_n_shares(raw_r,5)
+            tshares=_target_shares(tdf);raw_r=np.array([_num(r,'rules_rush_share','bayes_rush_share','rush_share',default=0.) for _,r in tdf.iterrows()]);rshares=_top_n_shares(raw_r,5)
             targets=_allocate_counts(rng,pass_att,tshares);carries=_allocate_counts(rng,rush_att,rshares)
             for j,(_,row) in enumerate(tdf.iterrows()):
                 pkey=_player_key(row)
@@ -71,7 +89,7 @@ def apply_c2(base:StateSimulationResult,metrics:pd.DataFrame,*,anchor_map:dict[t
         for team,tdf0 in gdf.groupby('team',dropna=False):
             if pd.isna(team) or not str(team).strip():continue
             gs=str(game);ts=str(team);tdf=tdf0.reset_index(drop=True);pass_att=np.asarray(base.team_states[(gs,ts,'pass_att')],int);pass_eff=np.asarray(base.team_states[(gs,ts,'pass_eff_shock')],float)
-            raw=np.array([_num(r,'rules_tgt_share','bayes_tgt_share','target_share','tgt_share',default=0.) for _,r in tdf.iterrows()],float);shares=_sharpen_wr_target_shares(tdf,raw);positions=tdf.get('position',pd.Series('',index=tdf.index)).fillna('').astype(str).str.upper().str.strip().to_numpy();mask=np.isin(positions,list(PASS_CATCHER_POSITIONS));shares=np.where(mask,shares,0.);targets=_allocate_counts(rng,pass_att,shares);res_t=np.maximum(0,pass_att-targets.sum(1));yards={}
+            shares=_target_shares(tdf);positions=tdf.get('position',pd.Series('',index=tdf.index)).fillna('').astype(str).str.upper().str.strip().to_numpy();mask=np.isin(positions,list(PASS_CATCHER_POSITIONS));shares=np.where(mask,shares,0.);targets=_allocate_counts(rng,pass_att,shares);res_t=np.maximum(0,pass_att-targets.sum(1));yards={}
             for j,(_,row) in enumerate(tdf.iterrows()):
                 if not mask[j]:continue
                 pk=_player_key(row)
