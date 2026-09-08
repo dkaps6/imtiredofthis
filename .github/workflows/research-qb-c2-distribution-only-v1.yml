@@ -1,0 +1,42 @@
+name: Research QB C2 Distribution Only v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-cross-position-catastrophic-casebook-v1
+    paths:
+      - 'scripts/backtest/evaluate_qb_c2_distribution_only_v1.py'
+      - '.github/workflows/research-qb-c2-distribution-only-v1.yml'
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download canonical repaired C2 evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/c2
+          gh run download 34142510405 --repo "${GITHUB_REPOSITORY}" --name pass-receiving-conservation-integration-v1 --dir evidence/c2
+          test -s evidence/c2/data/backtests/pass_receiving_conservation_integration_v1/result/integration_v1_result.json
+      - name: Certify QB-only frozen candidate
+        run: |
+          python scripts/backtest/evaluate_qb_c2_distribution_only_v1.py \
+            --integration-result evidence/c2/data/backtests/pass_receiving_conservation_integration_v1/result/integration_v1_result.json \
+            --out data/backtests/qb_c2_distribution_only_v1/result.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qb-c2-distribution-only-v1
+          path: data/backtests/qb_c2_distribution_only_v1/result.json
+          retention-days: 30
