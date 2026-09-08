@@ -2,9 +2,9 @@
 """Materialize the actual model lineage consumed by the current priced Full Slate.
 
 This is a governance/audit artifact, not a projection model. Its purpose is to
-make the distinction between promoted specialist models, generic canonical
-components, and research that exists but is not yet consumed impossible to hide
-behind a single 'production' label.
+make the distinction between point-mean authority, distribution authority,
+promoted specialists, generic canonical components, and research that is not yet
+consumed impossible to hide behind a single 'production' label.
 """
 from __future__ import annotations
 
@@ -18,6 +18,9 @@ OUTPUTS = Path("outputs")
 PRICED = OUTPUTS / "props_priced_clean.csv"
 OUT_CSV = DATA / "market_model_lineage_current.csv"
 OUT_JSON = DATA / "market_model_lineage_current.json"
+
+QB_C2_VERSION = "C2_QB_MEAN_NEUTRAL_DISTRIBUTION_V1"
+QB_C2_SELECTOR = "QB_DISTRIBUTION_STATE_SELECTOR_V1"
 
 
 def _read(path: Path) -> pd.DataFrame:
@@ -45,11 +48,101 @@ def _pos(value) -> str:
     return p or "OTHER"
 
 
+def _certify_qb_c2(priced: pd.DataFrame) -> tuple[dict, dict]:
+    c2 = _read_json(DATA / "qb_c2_production_integration_audit.json")
+    stamp = _read_json(DATA / "qb_c2_pricing_lineage_stamp_audit.json")
+    if c2.get("disposition") != "QB_C2_PRODUCTION_DISTRIBUTION_INTEGRATION_PASS":
+        raise RuntimeError(f"QB C2 production integration not certified: {c2.get('disposition')}")
+    if int(c2.get("football_qb_rows", 0)) != 32 or int(c2.get("selected_qb_rows", 0)) <= 0:
+        raise RuntimeError(f"QB C2 production coverage invalid: {c2}")
+    if c2.get("production_distribution_specialist") != QB_C2_VERSION:
+        raise RuntimeError("QB C2 production distribution version drift")
+    if c2.get("selector_version") != QB_C2_SELECTOR:
+        raise RuntimeError("QB C2 selector version drift")
+    if float(c2.get("max_raw_qb_mean_gap", 1.0)) > 1e-10:
+        raise RuntimeError("QB C2 raw mean-neutrality gate failed")
+    if int(c2.get("state_capture_changed_arrays", -1)) != 0:
+        raise RuntimeError("QB C2 state-capture parity changed arrays")
+    if float(c2.get("state_capture_max_element_gap", 1.0)) > 1e-12:
+        raise RuntimeError("QB C2 state-capture parity has element drift")
+    if int(c2.get("receiver_outputs_replaced", 1)) != 0 or int(c2.get("rb_outputs_replaced", 1)) != 0:
+        raise RuntimeError("QB C2 production adapter replaced non-QB outputs")
+    for field in (
+        "sportsbook_inputs_to_starter_selection",
+        "sportsbook_inputs_to_selector",
+        "sportsbook_inputs_to_c2_generation",
+    ):
+        if int(c2.get(field, 1)) != 0:
+            raise RuntimeError(f"QB C2 sportsbook leakage flag {field}={c2.get(field)}")
+
+    if stamp.get("disposition") != "QB_C2_PRICING_LINEAGE_STAMP_CERTIFIED":
+        raise RuntimeError(f"QB C2 pricing stamp not certified: {stamp.get('disposition')}")
+    if bool(stamp.get("pricing_values_modified", True)):
+        raise RuntimeError("QB C2 pricing stamp reports pricing values modified")
+    if int(stamp.get("protected_columns_changed", 1)) != 0:
+        raise RuntimeError("QB C2 pricing stamp changed protected columns")
+    if int(stamp.get("pass_yard_qbs", 0)) != 32:
+        raise RuntimeError("QB C2 pricing stamp does not cover 32 QBs")
+    if int(stamp.get("c2_selected_qbs", -1)) != int(c2.get("selected_qb_rows", -2)):
+        raise RuntimeError("QB C2 selected-QB count differs between simulation and pricing stamp")
+    if stamp.get("specialist_version") != QB_C2_VERSION or stamp.get("selector_version") != QB_C2_SELECTOR:
+        raise RuntimeError("QB C2 pricing stamp version drift")
+
+    required = {
+        "qb_distribution_specialist_applied",
+        "qb_distribution_specialist_version",
+        "qb_distribution_candidate_version",
+        "qb_distribution_selector_version",
+        "qb_distribution_selector_delta_pass_attempts",
+        "qb_distribution_starter_authority_source",
+        "qb_distribution_route",
+        "qb_distribution_raw_mean_gap",
+    }
+    missing = sorted(required - set(priced.columns))
+    if missing:
+        raise RuntimeError(f"priced output missing QB C2 lineage columns: {missing}")
+
+    qb = priced.loc[priced["source_market"].astype(str).eq("player_pass_yds")].copy()
+    if qb.empty:
+        raise RuntimeError("QB C2 lineage found zero priced pass-yard rows")
+    if qb[["team", "player"]].drop_duplicates().shape[0] != 32:
+        raise RuntimeError("QB C2 priced pass-yard rows do not cover 32 unique QBs")
+    if not qb["qb_distribution_candidate_version"].astype(str).eq(QB_C2_VERSION).all():
+        raise RuntimeError("priced QB rows do not all record frozen C2 candidate version")
+    if not qb["qb_distribution_selector_version"].astype(str).eq(QB_C2_SELECTOR).all():
+        raise RuntimeError("priced QB rows do not all record frozen C2 selector version")
+    applied = pd.to_numeric(qb["qb_distribution_specialist_applied"], errors="coerce")
+    if applied.isna().any() or not applied.isin([0, 1]).all():
+        raise RuntimeError("priced QB C2 applied flag invalid")
+    selected = qb.loc[applied.eq(1)]
+    selected_qbs = int(selected[["team", "player"]].drop_duplicates().shape[0])
+    if selected_qbs != int(c2["selected_qb_rows"]):
+        raise RuntimeError(f"priced QB C2 selected count drift expected={c2['selected_qb_rows']} actual={selected_qbs}")
+    if not selected["qb_distribution_specialist_version"].astype(str).eq(QB_C2_VERSION).all():
+        raise RuntimeError("selected priced QB rows missing C2 specialist version")
+    unselected = qb.loc[applied.eq(0)]
+    if unselected["qb_distribution_specialist_version"].fillna("").astype(str).str.strip().ne("").any():
+        raise RuntimeError("unselected priced QB rows incorrectly claim C2 specialist consumption")
+    if not selected["qb_distribution_route"].astype(str).eq("C2_SELECTED").all():
+        raise RuntimeError("selected priced QB rows have wrong distribution route")
+    if not unselected["qb_distribution_route"].astype(str).eq("CANONICAL_QB_DISTRIBUTION").all():
+        raise RuntimeError("unselected priced QB rows have wrong canonical fallback route")
+    gap = pd.to_numeric(qb["qb_distribution_raw_mean_gap"], errors="coerce")
+    if gap.isna().any() or float(gap.abs().max()) > 1e-10:
+        raise RuntimeError("priced QB C2 lineage raw mean gap failed")
+
+    non_qb_market = priced.loc[~priced["source_market"].astype(str).eq("player_pass_yds")]
+    if not pd.to_numeric(non_qb_market["qb_distribution_specialist_applied"], errors="coerce").fillna(0).eq(0).all():
+        raise RuntimeError("non-pass-yards priced rows claim QB C2 specialist")
+    return c2, stamp
+
+
 def main() -> int:
     priced = _read(PRICED)
     metrics = _read(DATA / "metrics_ready.csv")
     football = _read_json(DATA / "football_simulation_universe_audit.json")
     te = _read_json(DATA / "te_r5p_full_slate_entitlement_audit.json")
+    c2, c2_stamp = _certify_qb_c2(priced)
 
     te_consumed = bool(
         football.get("te_r5p_full_slate_consumed") is True
@@ -77,7 +170,7 @@ def main() -> int:
         raise RuntimeError("lineage audit could not attach position to every priced player")
 
     rows: list[dict] = []
-    def add(market, position, owner, specialist, science, active_research, limitation):
+    def add(market, position, mean_owner, distribution_owner, specialist, science, active_research, limitation):
         part = p.loc[p["source_market"].astype(str).eq(market)]
         if position != "ALL":
             part = part.loc[part["position_family"].eq(position)]
@@ -85,7 +178,8 @@ def main() -> int:
             "market": market,
             "position_family": position,
             "priced_side_rows": int(len(part)),
-            "final_mean_owner": owner,
+            "final_mean_owner": mean_owner,
+            "distribution_owner": distribution_owner,
             "specialist_model_active": int(bool(specialist)),
             "scientific_status": science,
             "active_or_next_research": active_research,
@@ -94,14 +188,16 @@ def main() -> int:
 
     add(
         "player_pass_yds", "QB",
-        "QB_PASS_SYNTHESIS_V1 / M89-M90 over canonical joint MC components",
-        True, "PROMOTED_SPECIALIST_ACTIVE",
-        "C2 shared pass/receiving conservation supported but full-stack integration still pending",
-        "QB mean is specialist-promoted; joint receiver distribution is not yet C2-integrated",
+        "QB_PASS_SYNTHESIS_V1 / M89-M90",
+        "QB_DISTRIBUTION_STATE_SELECTOR_V1 -> C2_QB_MEAN_NEUTRAL_DISTRIBUTION_V1 when selected; canonical QB distribution otherwise",
+        True, "PROMOTED_QB_MEAN_PLUS_DISTRIBUTION_SPECIALISTS_ACTIVE",
+        "shared QB-receiver C2 conservation remains a separate future integration; continue QB mean/distribution prospective scoring",
+        "M89/M90 owns the point mean; C2 currently changes only selected QB pass-yard distribution shape, not receiver arrays",
     )
     add(
         "player_rush_yds", "RB/FB",
         "RB_P3_SYNTHESIS_V1 / WEEK1_STACK_OVERRIDE",
+        "P3-scaled canonical rushing distribution",
         True, "PROMOTED_SPECIALIST_ACTIVE",
         "multiseason shared-room RB entitlement remains research",
         "Week-1 route only; room entitlement beyond P3 still pending",
@@ -110,6 +206,7 @@ def main() -> int:
         add(
             "player_rush_yds", position,
             "canonical calibrated rush-yards ensemble + joint MC",
+            "canonical joint MC rushing distribution",
             False, "GENERIC_CANONICAL_ACTIVE",
             "position-specific rushing specialist not promoted for this family",
             "RB P3 is correctly gated off for non-RB/FB rushing",
@@ -118,13 +215,15 @@ def main() -> int:
         add(
             market, "WR",
             "finite conserved team target pool + WR M38 relative hierarchy + canonical joint MC efficiency",
+            "finite-pool canonical receiving joint MC with M38 WR entitlement hierarchy",
             True, "PARTIAL_SPECIALIST_ACTIVE_FINITE_POOL_CERTIFIED",
             "dedicated WR-room entitlement around M38; receiving ensemble calibration",
-            "team opportunity is now finite, but WR room allocation beyond M38 remains the next specialist lane",
+            "team opportunity is finite, but WR room allocation beyond M38 remains the next specialist lane",
         )
         add(
             market, "TE",
             "finite conserved team target pool + TE_R5P_PRODUCTION_MODEL_V1 entitlement + canonical joint MC efficiency",
+            "finite-pool canonical receiving joint MC after TE-R5P entitlement redistribution",
             True, "PROMOTED_TE_ENTITLEMENT_SPECIALIST_ACTIVE",
             "TE efficiency/distribution calibration beyond entitlement if it passes independent frozen gates",
             "TE-R5P reallocates only the existing TE room; team/TE-room mass and non-TE entitlement are conserved",
@@ -132,6 +231,7 @@ def main() -> int:
         add(
             market, "RB/FB",
             "finite conserved team target pool + canonical RB receiving entitlement + joint MC efficiency",
+            "finite-pool canonical RB receiving joint MC",
             False, "GENERIC_CANONICAL_ACTIVE_FINITE_POOL_CERTIFIED",
             "dedicated finite RB receiving-room entitlement while preserving P3 rushing",
             "team opportunity is finite, but RB receiving-room allocation has no promoted specialist yet",
@@ -139,16 +239,18 @@ def main() -> int:
     add(
         "player_rush_reception_yds", "RB/FB",
         "RB P3-conserved rushing component + finite-pool canonical receiving joint MC",
+        "P3-scaled rushing distribution + finite-pool canonical receiving distribution",
         True, "PARTIAL_SPECIALIST_ACTIVE_FINITE_POOL_CERTIFIED",
         "dedicated RB receiving entitlement; joint-market calibration later",
         "rushing is P3-consistent and receiving pool is finite; receiving allocation specialist remains pending",
     )
     add(
         "player_anytime_td", "ALL",
-        "generic joint MC offensive_td_rate + red-zone/script modifiers",
+        "generic joint MC offensive_td_rate + red-zone modifiers",
+        "generic joint MC Bernoulli TD distribution",
         False, "ATD_GENERIC_ACTIVE_NOT_DEDICATED_SCIENCE_CERTIFIED",
         "dedicated football-only anytime-TD opportunity/entitlement calibration",
-        "old sportsbook-assisted TD scorer is retired; current ATD lane has no dedicated walk-forward certification",
+        "current ATD execution is football-only but has no dedicated walk-forward probability certification",
     )
 
     out = pd.DataFrame(rows)
@@ -160,7 +262,7 @@ def main() -> int:
 
     qb = p.loc[p["source_market"].astype(str).eq("player_pass_yds")]
     if not qb.empty and not pd.to_numeric(qb.get("qb_synthesis_applied", 0), errors="coerce").fillna(0).eq(1).all():
-        raise RuntimeError("lineage claims QB specialist active but priced rows disagree")
+        raise RuntimeError("lineage claims QB M89/M90 specialist active but priced rows disagree")
     rb = p.loc[p["source_market"].astype(str).eq("player_rush_yds") & p["position_family"].eq("RB/FB")]
     if not rb.empty and not pd.to_numeric(rb.get("rb_synthesis_applied", 0), errors="coerce").fillna(0).eq(1).all():
         raise RuntimeError("lineage claims RB P3 active but priced rows disagree")
@@ -184,6 +286,15 @@ def main() -> int:
         "te_r5p_final_fit_run": int(te.get("source_final_fit_run")),
         "te_r5p_team_pool_preserved": bool(te.get("team_te_pool_preserved")),
         "te_r5p_non_te_entitlement_preserved": bool(te.get("non_te_entitlement_preserved")),
+        "qb_c2_distribution_consumed": True,
+        "qb_c2_distribution_specialist_version": QB_C2_VERSION,
+        "qb_c2_selector_version": QB_C2_SELECTOR,
+        "qb_c2_selected_qbs_current_slate": int(c2.get("selected_qb_rows")),
+        "qb_c2_state_capture_exact": int(c2.get("state_capture_changed_arrays", -1)) == 0,
+        "qb_c2_max_raw_mean_gap": float(c2.get("max_raw_qb_mean_gap")),
+        "qb_c2_pricing_lineage_stamp_certified": c2_stamp.get("disposition") == "QB_C2_PRICING_LINEAGE_STAMP_CERTIFIED",
+        "qb_c2_distribution_audit": "data/qb_c2_production_integration_audit.json",
+        "c2_full_stack_receiver_conservation_consumed": False,
         "c2_full_stack_consumed": False,
         "anytime_td_dedicated_science_certified": False,
         "sportsbook_inputs_used_to_define_lineage": False,
