@@ -16,6 +16,8 @@ on:
       - 'scripts/enrich_player_scoring_v2.py'
       - 'scripts/simulation_v2.py'
       - 'scripts/run_pricing_v2.py'
+      - 'scripts/run_pricing_with_rb_conservation_v1.py'
+      - 'scripts/validate_rb_rush_rec_conservation_v1.py'
       - 'scripts/modeling/rb_pricing_adapter_v1.py'
       - 'scripts/player_identity_roster_history_v1.py'
       - 'scripts/validate_manual_name_overrides_v1.py'
@@ -167,13 +169,14 @@ jobs:
           python scripts/run_metrics_context.py --season 2026 --mode full --date ''
           python scripts/validate_build_integrity.py
           python scripts/metrics_ready.py --season 2026 --date ''
-          python scripts/run_pricing_v2.py --season 2026
+          python scripts/run_pricing_with_rb_conservation_v1.py --season 2026
           test -s outputs/props_priced_clean.csv
 
       - name: Final semantic and consumption certification
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
+          python scripts/validate_rb_rush_rec_conservation_v1.py
           python scripts/validate_full_slate_post_pricing_v1.py
 
       - name: Upload replay evidence
@@ -210,6 +213,9 @@ jobs:
             data/model_rule_diagnostics.csv
             data/model_ensemble_diagnostics.csv
             data/rb_rush_synthesis_context.csv
+            data/rb_rush_rec_conservation_input_audit.csv
+            data/rb_rush_rec_conservation_input_audit.json
+            data/rb_rush_rec_conservation_final_audit.csv
             data/_debug/metrics_unmatched_player_form.csv
             data/_debug/metrics_missing_identity.csv
             data/_debug/pricing_unsimulated_props.csv
