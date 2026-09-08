@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """Full-roster football-first simulation with explicit conserved entitlement.
 
-The wrapper enforces two distinct contracts:
-1. the explicit M38 + team-cap entitlement refactor must remain exactly neutral
+This wrapper now enforces three independently-audited specialist contracts:
+1. the explicit M38 + team-cap entitlement refactor is exactly projection-neutral
    to the legacy simulator under a matched seed;
-2. after that neutral seam is certified, the frozen TE-R5P specialist may
-   redistribute only the already-existing TE-room target mass.
+2. TE-R5P intentionally redistributes only the already-conserved TE-room mass;
+3. the frozen Phase-J C2 selector may replace only selected starting-QB
+   ``pass_yards`` distribution shapes while preserving the canonical raw mean.
 
-Sportsbook offers remain downstream lookup/pricing inputs and are never used to
-construct either the football universe or TE-R5P entitlement.
+M89/M90 remains the QB passing point-mean authority and RB P3 remains the RB
+rushing mean authority. Sportsbook offers remain downstream lookup/pricing inputs
+and are never used to construct the football universe, entitlement, starter
+selection, C2 selection, or C2 distribution.
 """
 from __future__ import annotations
 
@@ -19,8 +22,13 @@ import numpy as np
 import pandas as pd
 
 import scripts.run_pricing_with_full_roster_universe_v1 as base
+from scripts.modeling.qb_c2_production_adapter_v1 import (
+    AUDIT_JSON as QB_C2_AUDIT_JSON,
+    apply_qb_c2_selector,
+)
 from scripts.modeling.target_entitlement_v1 import materialize_target_entitlement
 from scripts.modeling.te_r5p_entitlement_adapter_v1 import apply_te_r5p_entitlement
+from scripts.simulation_c2_qb_candidate import simulate_with_states
 from scripts.simulation_explicit_entitlement_v1 import simulate as explicit_simulate
 from scripts.simulation_v2 import MARKET_MAP, lookup, simulate as legacy_simulate
 from scripts.utils.player_identity_v3 import player_name_key
@@ -32,6 +40,7 @@ ENTITLEMENT_INVARIANCE = DATA / "target_entitlement_v1_projection_invariance.csv
 TE_R5P_TRACE = DATA / "te_r5p_full_slate_entitlement_trace.csv"
 TE_R5P_AUDIT = DATA / "te_r5p_full_slate_entitlement_audit.json"
 TE_R5P_SIM_DELTA = DATA / "te_r5p_full_slate_simulation_delta.csv"
+QB_C2_STATE_PARITY = DATA / "qb_c2_state_capture_parity.csv"
 _ORIGINAL_BUILD = base._build_full_universe
 
 
@@ -185,11 +194,50 @@ def _build_with_explicit_entitlement(pricing_metrics: pd.DataFrame):
     return explicit, aliases, audit
 
 
+def _compare_results_exact(left, right, *, label: str, out_path: Path | None = None) -> dict:
+    left_keys = set(left.values)
+    right_keys = set(right.values)
+    if left_keys != right_keys:
+        raise RuntimeError(
+            f"{label} changed simulation key universe; "
+            f"missing={list(left_keys-right_keys)[:20]} extra={list(right_keys-left_keys)[:20]}"
+        )
+    rows = []
+    changed_arrays = 0
+    max_mean_gap = 0.0
+    max_element_gap = 0.0
+    for key in sorted(left_keys):
+        a = np.asarray(left.values[key], dtype=float)
+        b = np.asarray(right.values[key], dtype=float)
+        if a.shape != b.shape or not np.isfinite(a).all() or not np.isfinite(b).all():
+            raise RuntimeError(f"{label} produced invalid arrays key={key}")
+        mean_gap = abs(float(a.mean()) - float(b.mean()))
+        element_gap = float(np.max(np.abs(a-b))) if len(a) else 0.0
+        changed_arrays += int(element_gap > 0)
+        max_mean_gap = max(max_mean_gap, mean_gap)
+        max_element_gap = max(max_element_gap, element_gap)
+        rows.append({
+            "event_id": key[0], "player_clean_key": key[1], "market": key[2],
+            "left_mean": float(a.mean()) if len(a) else np.nan,
+            "right_mean": float(b.mean()) if len(b) else np.nan,
+            "mean_gap": mean_gap, "max_element_gap": element_gap,
+        })
+    if out_path is not None:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(rows).to_csv(out_path, index=False)
+    return {
+        "keys": int(len(rows)),
+        "changed_arrays": int(changed_arrays),
+        "max_mean_gap": max_mean_gap,
+        "max_element_gap": max_element_gap,
+    }
+
+
 def _projection_neutral_simulate(metrics: pd.DataFrame, *, iterations=None, seed=None, allocation_trace=None):
     if "baseline_entitlement_tgt_share" not in metrics.columns:
         raise RuntimeError("TE-R5P Full Slate simulation missing projection-neutral baseline entitlement")
 
-    # First certify the architecture refactor itself against the legacy simulator.
+    # 1) Certify the explicit finite-entitlement architecture against legacy.
     legacy_input = metrics.drop(
         columns=[
             c for c in metrics.columns
@@ -203,57 +251,37 @@ def _projection_neutral_simulate(metrics: pd.DataFrame, *, iterations=None, seed
     ).astype(float)
     legacy = legacy_simulate(legacy_input, iterations=iterations, seed=seed)
     baseline_explicit = explicit_simulate(baseline_metrics, iterations=iterations, seed=seed)
+    neutral = _compare_results_exact(legacy, baseline_explicit, label="explicit entitlement baseline")
 
-    legacy_keys = set(legacy.values)
-    baseline_keys = set(baseline_explicit.values)
-    if legacy_keys != baseline_keys:
-        raise RuntimeError(
-            "projection-neutral entitlement baseline changed simulation key universe; "
-            f"missing={list(legacy_keys-baseline_keys)[:20]} extra={list(baseline_keys-legacy_keys)[:20]}"
-        )
-
-    rows = []
-    max_mean_gap = 0.0
-    max_element_gap = 0.0
-    changed_arrays = 0
-    for key in sorted(legacy_keys):
+    neutral_rows = []
+    for key in sorted(legacy.values):
         a = np.asarray(legacy.values[key], dtype=float)
         b = np.asarray(baseline_explicit.values[key], dtype=float)
-        if a.shape != b.shape or not np.isfinite(a).all() or not np.isfinite(b).all():
-            raise RuntimeError(f"projection-neutral baseline produced invalid arrays key={key}")
-        mean_gap = abs(float(a.mean()) - float(b.mean()))
-        element_gap = float(np.max(np.abs(a-b))) if len(a) else 0.0
-        changed_arrays += int(element_gap > 0)
-        max_mean_gap = max(max_mean_gap, mean_gap)
-        max_element_gap = max(max_element_gap, element_gap)
-        rows.append({
+        neutral_rows.append({
             "event_id": key[0], "player_clean_key": key[1], "market": key[2],
             "legacy_mean": float(a.mean()) if len(a) else np.nan,
             "baseline_explicit_mean": float(b.mean()) if len(b) else np.nan,
-            "mean_gap": mean_gap, "max_element_gap": element_gap,
+            "mean_gap": abs(float(a.mean()) - float(b.mean())),
+            "max_element_gap": float(np.max(np.abs(a-b))) if len(a) else 0.0,
         })
-    pd.DataFrame(rows).to_csv(ENTITLEMENT_INVARIANCE, index=False)
-    if changed_arrays != 0 or max_mean_gap > 1e-12 or max_element_gap > 1e-12:
+    pd.DataFrame(neutral_rows).to_csv(ENTITLEMENT_INVARIANCE, index=False)
+    if neutral["changed_arrays"] != 0 or neutral["max_mean_gap"] > 1e-12 or neutral["max_element_gap"] > 1e-12:
         raise RuntimeError(
             "explicit target entitlement baseline is not exactly projection-neutral: "
-            f"changed_arrays={changed_arrays} max_mean_gap={max_mean_gap} max_element_gap={max_element_gap}"
+            f"{neutral}"
         )
 
-    # Then consume TE-R5P as an intentional football-only specialist change.
+    # 2) Consume TE-R5P as the intentional receiving-entitlement specialist.
     final = explicit_simulate(metrics, iterations=iterations, seed=seed, allocation_trace=allocation_trace)
-    final_keys = set(final.values)
-    if final_keys != baseline_keys:
-        raise RuntimeError(
-            "TE-R5P changed simulation key universe; "
-            f"missing={list(baseline_keys-final_keys)[:20]} extra={list(final_keys-baseline_keys)[:20]}"
-        )
+    if set(final.values) != set(baseline_explicit.values):
+        raise RuntimeError("TE-R5P changed simulation key universe")
 
     pos_map = {
         (str(r.event_id), str(r.player_clean_key)): str(r.position)
         for r in metrics[["event_id", "player_clean_key", "position"]].drop_duplicates().itertuples(index=False)
     }
     delta_rows = []
-    for key in sorted(final_keys):
+    for key in sorted(final.values):
         a = np.asarray(baseline_explicit.values[key], dtype=float)
         b = np.asarray(final.values[key], dtype=float)
         if a.shape != b.shape or not np.isfinite(b).all():
@@ -274,10 +302,10 @@ def _projection_neutral_simulate(metrics: pd.DataFrame, *, iterations=None, seed
     status = json.loads(ENTITLEMENT_AUDIT.read_text(encoding="utf-8"))
     status.update({
         "projection_invariance_scope": "legacy_vs_explicit_baseline_before_position_specialists",
-        "projection_invariance_keys": int(len(rows)),
-        "projection_invariance_changed_arrays": int(changed_arrays),
-        "projection_invariance_max_mean_gap": max_mean_gap,
-        "projection_invariance_max_element_gap": max_element_gap,
+        "projection_invariance_keys": neutral["keys"],
+        "projection_invariance_changed_arrays": neutral["changed_arrays"],
+        "projection_invariance_max_mean_gap": neutral["max_mean_gap"],
+        "projection_invariance_max_element_gap": neutral["max_element_gap"],
         "projection_neutral_gate": "PASS",
         "invariance_audit": str(ENTITLEMENT_INVARIANCE),
         "te_r5p_simulation_delta_audit": str(TE_R5P_SIM_DELTA),
@@ -287,7 +315,37 @@ def _projection_neutral_simulate(metrics: pd.DataFrame, *, iterations=None, seed
     })
     ENTITLEMENT_AUDIT.write_text(json.dumps(status, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print("[target_entitlement_v1_plus_te_r5p] " + json.dumps(status, sort_keys=True))
-    return final
+
+    # 3) Capture the exact same canonical+TE-R5P execution with shared team
+    # states. This seam MUST be byte-identical before C2 is allowed to act.
+    stateful = simulate_with_states(metrics, iterations=iterations, seed=seed)
+    state_parity = _compare_results_exact(
+        final, stateful, label="QB C2 state-capture seam", out_path=QB_C2_STATE_PARITY
+    )
+    if state_parity["changed_arrays"] != 0 or state_parity["max_mean_gap"] > 1e-12 or state_parity["max_element_gap"] > 1e-12:
+        raise RuntimeError(f"QB C2 state-capture seam is not exact: {state_parity}")
+
+    seasons = pd.to_numeric(metrics["season"], errors="coerce").dropna().astype(int).unique().tolist()
+    weeks = pd.to_numeric(metrics["week"], errors="coerce").dropna().astype(int).unique().tolist()
+    if len(seasons) != 1 or len(weeks) != 1:
+        raise RuntimeError(f"QB C2 production integration requires one season/week, got seasons={seasons} weeks={weeks}")
+
+    selected, _, qb_payload = apply_qb_c2_selector(
+        stateful, metrics, season=int(seasons[0]), week=int(weeks[0])
+    )
+    qb_payload.update({
+        "state_capture_parity_keys": state_parity["keys"],
+        "state_capture_changed_arrays": state_parity["changed_arrays"],
+        "state_capture_max_mean_gap": state_parity["max_mean_gap"],
+        "state_capture_max_element_gap": state_parity["max_element_gap"],
+        "state_capture_parity_audit": str(QB_C2_STATE_PARITY),
+        "te_r5p_consumed_before_c2": True,
+        "explicit_entitlement_consumed_before_c2": True,
+    })
+    QB_C2_AUDIT_JSON.write_text(json.dumps(qb_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    selected.qb_distribution_audit = qb_payload
+    print("[qb_c2_production_state_parity] " + json.dumps(state_parity, sort_keys=True))
+    return selected
 
 
 def main() -> int:
