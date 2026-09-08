@@ -22,33 +22,22 @@ def one(root,name):
     return h
 
 def read_all(root,name):
-    """Read the six frozen season outputs while allowing intentionally empty cohort files.
-
-    Some outputs are structurally in-scope for all six seasons but scientifically
-    scoreable only in a narrower frozen cohort (for example the M89/M90 QB
-    distribution trace is intentionally empty for 2020-2023).  Empty season files
-    therefore represent zero eligible rows, not missing evidence.  File-count
-    lineage is still enforced by ``one`` above.
-    """
+    """Read six frozen season outputs, allowing intentionally empty cohort files."""
     frames=[]
     for p in one(root,name):
-        try:
-            df=pd.read_csv(p,low_memory=False)
-        except pd.errors.EmptyDataError:
-            continue
-        if len(df.columns)==0:
-            continue
+        try: df=pd.read_csv(p,low_memory=False)
+        except pd.errors.EmptyDataError: continue
+        if len(df.columns)==0: continue
         frames.append(df)
-    if not frames:
-        return pd.DataFrame()
-    return pd.concat(frames,ignore_index=True,sort=False)
+    return pd.concat(frames,ignore_index=True,sort=False) if frames else pd.DataFrame()
 def canon_team(v):
     x=str(v or "").strip().upper(); return {"JAC":"JAX","LA":"LAR"}.get(x,x)
+def canon_name(v):
+    return str(v or "").strip().lower()
 
 def bootstrap_prob(q,n=10000,seed=5601):
     d=num(q["b0_crps"])-num(q["c2_crps"]); d=d.dropna().to_numpy(float); rng=np.random.default_rng(seed)
     if not len(d): return np.nan
-    # chunk to keep memory bounded
     wins=0; done=0
     while done<n:
         m=min(500,n-done); idx=rng.integers(0,len(d),size=(m,len(d))); means=d[idx].mean(axis=1); wins+=int((means>0).sum()); done+=m
@@ -61,11 +50,24 @@ def main()->int:
         for c in ["season","week"]:
             if c in df.columns: df[c]=num(df[c]).astype("Int64")
     proj["team_c"]=proj["team"].map(canon_team); actual["team_c"]=actual["team"].map(canon_team)
-    keys=["season","week","team_c","join_key"]
+
+    # Historical scoring repair only: the pregame universe and historical weekly
+    # logs can carry different stable-ID namespaces for the same player. The prior
+    # identity-only inner join therefore collapsed the scoreable receiver cohort to
+    # zero. Use the already-canonical player_clean_key within season/week/team for
+    # scoring, and fail closed on any ambiguous projection key. The frozen 2025
+    # baseline count/MAE gates below independently certify exact historical lineage.
+    proj["score_name_key"]=proj["player_clean_key"].map(canon_name)
+    actual["score_name_key"]=actual["player_clean_key"].map(canon_name)
+    keys=["season","week","team_c","score_name_key"]
+    if proj["score_name_key"].eq("").any(): raise RuntimeError("blank projection scoring name key")
+    if proj.duplicated(keys).any():
+        bad=proj.loc[proj.duplicated(keys,keep=False),keys+["player","player_identity_key"]].head(20)
+        raise RuntimeError(f"ambiguous projection scoring keys\n{bad.to_string(index=False)}")
     act=actual.groupby(keys,as_index=False).agg(targets=("targets","sum"),receptions=("receptions","sum"),rec_yards=("rec_yards","sum"),rush_yards=("rush_yards","sum"),rush_rec_yards=("rush_rec_yards","sum"))
-    paired=proj.merge(act,on=keys,how="inner",validate="many_to_one")
+    paired=proj.merge(act,on=keys,how="inner",validate="one_to_one")
     paired=paired.loc[paired.position_group.isin(POSITIONS)].copy()
-    if paired.duplicated(["season","week","team_c","join_key"]).any(): raise RuntimeError("duplicate paired receiver rows")
+    if paired.duplicated(keys).any(): raise RuntimeError("duplicate paired receiver rows")
 
     score=[]
     for scope,frame in [("POOLED",paired)]+[(f"SEASON_{s}",paired.loc[paired.season.eq(s)]) for s in SEASONS]:
