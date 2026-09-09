@@ -67,11 +67,16 @@ jobs:
           set -euo pipefail
           test -s docs/research/RB_R26L_2026_WEEK1_REGIME_TRANSPORTABILITY_V1_FROZEN_PLAN.md
           test -s docs/research/RB_R26L_2026_WEEK1_REGIME_TRANSPORTABILITY_V1_IMPLEMENTATION_LOCK.md
+          test -s docs/research/RB_R26L_2026_WEEK1_REGIME_TRANSPORTABILITY_V1_MECHANICAL_REPAIR.md
           test -s scripts/backtest/audit_rb_r26l_2026_week1_regime_transportability_v1.py
+          test -s scripts/backtest/run_rb_r26l_2026_week1_regime_transportability_v1.py
           python -m py_compile scripts/backtest/audit_rb_r26l_2026_week1_regime_transportability_v1.py
+          python -m py_compile scripts/backtest/run_rb_r26l_2026_week1_regime_transportability_v1.py
           sha256sum docs/research/RB_R26L_2026_WEEK1_REGIME_TRANSPORTABILITY_V1_FROZEN_PLAN.md | tee r26l_plan.sha256
           sha256sum docs/research/RB_R26L_2026_WEEK1_REGIME_TRANSPORTABILITY_V1_IMPLEMENTATION_LOCK.md | tee r26l_lock.sha256
+          sha256sum docs/research/RB_R26L_2026_WEEK1_REGIME_TRANSPORTABILITY_V1_MECHANICAL_REPAIR.md | tee r26l_repair_note.sha256
           sha256sum scripts/backtest/audit_rb_r26l_2026_week1_regime_transportability_v1.py | tee r26l_code.sha256
+          sha256sum scripts/backtest/run_rb_r26l_2026_week1_regime_transportability_v1.py | tee r26l_compat_runner.sha256
           git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
             scripts/modeling \
             scripts/run_rb_week1_no_odds.py \
@@ -110,7 +115,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf data/backtests/r26l_2026_week1_regime_transportability_v1
-          python scripts/backtest/audit_rb_r26l_2026_week1_regime_transportability_v1.py \
+          python scripts/backtest/run_rb_r26l_2026_week1_regime_transportability_v1.py \
             --r26j-root parent_r26j \
             --production-root current_prod \
             --protected-clean-marker r26l_protected_clean.txt \
@@ -158,6 +163,8 @@ jobs:
           path: |
             r26l_plan.sha256
             r26l_lock.sha256
+            r26l_repair_note.sha256
             r26l_code.sha256
+            r26l_compat_runner.sha256
             r26l_protected_clean.txt
             data/backtests/r26l_2026_week1_regime_transportability_v1/*
