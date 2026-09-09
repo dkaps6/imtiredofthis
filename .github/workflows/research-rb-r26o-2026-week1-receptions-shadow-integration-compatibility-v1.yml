@@ -20,6 +20,8 @@ env:
   R26O_REPAIR_PLAN_COMMIT: e5ac65c8dcb2b73f59706880e893c9f72f5d115d
   R26O_SECOND_REPAIR_PLAN_COMMIT: 2c5fc54c0c88aff28e581a901331d175adc87adf
   R26O_DTYPE_WRAPPER_COMMIT: 960fbb0bc6a29724b3d0b7901c92ac905bd69f0e
+  R26O_GATE15_REPAIR_PLAN_COMMIT: c40de155c3f19785f8398cbcb9aaa2ab2445c2f4
+  R26O_AUDIT_PAYLOAD_WRAPPER_COMMIT: 85c3f2ca6bc73c302a3a33f3b6e75f4df42ae78a
   R26N_STAGE_HELPER_COMMIT: 0b4c2df7c14b16bd0e945b425aac7f35e015fa3d
   QB_SELECTOR_SHA256: 04946438c0cdbcddc7ce4f95f88d37a582daf3affe9f04b1991149e7ce98c3b1
 
@@ -37,6 +39,12 @@ env:
   R22_ARTIFACT_ID: 10084118525
   R22_ARTIFACT_NAME: rb-r22-week1-production-integration-v2
   R22_DIGEST: sha256:2391bd9914e9d0029c63529829496fb9b462d008bdcc3f8c37bb3e1079580bd1
+
+  R26P_RUN_ID: 34399525657
+  R26P_ARTIFACT_ID: 10122862934
+  R26P_ARTIFACT_NAME: rb-r26p-r26o-gate15-contract-forensic-v1
+  R26P_DIGEST: sha256:2e596f3a3bcbef156983664d332ded94ef41dae1402d1a96ab0b61d185c68d47
+  R26P_REQUIRED_DISPOSITION: R26P_GATE15_EVIDENCE_WIRING_DEFECT_CONFIRMED_MECHANICAL_RERUN_AUTHORIZED
 
 jobs:
   shadow-integration:
@@ -58,7 +66,7 @@ jobs:
           pip install -r requirements.txt
           pip install nflreadpy pyyaml scipy scikit-learn
 
-      - name: Verify frozen R26O contract implementation repair lineage and protected production boundary
+      - name: Verify frozen R26O contract implementation full repair lineage and protected production boundary
         run: |
           set -euo pipefail
           PLAN=docs/research/RB_R26O_2026_WEEK1_RECEPTIONS_SHADOW_INTEGRATION_COMPATIBILITY_V1_FROZEN_PLAN.md
@@ -68,15 +76,13 @@ jobs:
           REPAIR_NOTE=docs/research/RB_R26O_RUN1_MECHANICAL_REPAIR_V1.md
           SECOND_REPAIR_NOTE=docs/research/RB_R26O_RUN2_MECHANICAL_DTYPE_REPAIR_V1.md
           DTYPE_WRAPPER=scripts/backtest/run_rb_r26o_with_r22_identity_dtype_compat_v1.py
+          GATE15_REPAIR_NOTE=docs/research/RB_R26O_GATE15_EVIDENCE_WIRING_REPAIR_V1.md
+          AUDIT_PAYLOAD_WRAPPER=scripts/backtest/run_rb_r26o_with_r22_audit_payload_compat_v1.py
 
-          test -s "$PLAN"
-          test -s "$LOCK"
-          test -s "$CODE"
-          test -s "$STAGE"
-          test -s "$REPAIR_NOTE"
-          test -s "$SECOND_REPAIR_NOTE"
-          test -s "$DTYPE_WRAPPER"
-          python -m py_compile "$CODE" "$STAGE" "$DTYPE_WRAPPER"
+          test -s "$PLAN" && test -s "$LOCK" && test -s "$CODE" && test -s "$STAGE"
+          test -s "$REPAIR_NOTE" && test -s "$SECOND_REPAIR_NOTE" && test -s "$DTYPE_WRAPPER"
+          test -s "$GATE15_REPAIR_NOTE" && test -s "$AUDIT_PAYLOAD_WRAPPER"
+          python -m py_compile "$CODE" "$STAGE" "$DTYPE_WRAPPER" "$AUDIT_PAYLOAD_WRAPPER"
 
           git diff --quiet "$R26O_PLAN_COMMIT" HEAD -- "$PLAN"
           git diff --quiet "$R26O_CODE_COMMIT" HEAD -- "$CODE"
@@ -84,6 +90,8 @@ jobs:
           git diff --quiet "$R26O_REPAIR_PLAN_COMMIT" HEAD -- "$REPAIR_NOTE"
           git diff --quiet "$R26O_SECOND_REPAIR_PLAN_COMMIT" HEAD -- "$SECOND_REPAIR_NOTE"
           git diff --quiet "$R26O_DTYPE_WRAPPER_COMMIT" HEAD -- "$DTYPE_WRAPPER"
+          git diff --quiet "$R26O_GATE15_REPAIR_PLAN_COMMIT" HEAD -- "$GATE15_REPAIR_NOTE"
+          git diff --quiet "$R26O_AUDIT_PAYLOAD_WRAPPER_COMMIT" HEAD -- "$AUDIT_PAYLOAD_WRAPPER"
 
           sha256sum "$PLAN" | tee r26o_plan.sha256
           sha256sum "$LOCK" | tee r26o_lock.sha256
@@ -92,6 +100,8 @@ jobs:
           sha256sum "$REPAIR_NOTE" | tee r26o_repair_note.sha256
           sha256sum "$SECOND_REPAIR_NOTE" | tee r26o_second_repair_note.sha256
           sha256sum "$DTYPE_WRAPPER" | tee r26o_dtype_wrapper.sha256
+          sha256sum "$GATE15_REPAIR_NOTE" | tee r26o_gate15_repair_note.sha256
+          sha256sum "$AUDIT_PAYLOAD_WRAPPER" | tee r26o_audit_payload_wrapper.sha256
 
           git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
             scripts/modeling \
@@ -111,7 +121,7 @@ jobs:
           echo PASS > r26o_protected_clean.txt
           echo R26O_PROTECTED_PRODUCTION_BOUNDARY_PASS
 
-      - name: Verify and download immutable R26O parents
+      - name: Verify and download immutable R26O parents plus R26P authorization
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -119,18 +129,21 @@ jobs:
           R26N_ACTUAL="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26N_ARTIFACT_ID}" --jq '.digest')"
           PRODUCTION_ACTUAL="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${PRODUCTION_ARTIFACT_ID}" --jq '.digest')"
           R22_ACTUAL="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R22_ARTIFACT_ID}" --jq '.digest')"
+          R26P_ACTUAL="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26P_ARTIFACT_ID}" --jq '.digest')"
           PRODUCTION_HEAD="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${PRODUCTION_ARTIFACT_ID}" --jq '.workflow_run.head_sha')"
 
           test "$R26N_ACTUAL" = "$R26N_DIGEST"
           test "$PRODUCTION_ACTUAL" = "$PRODUCTION_DIGEST"
           test "$R22_ACTUAL" = "$R22_DIGEST"
+          test "$R26P_ACTUAL" = "$R26P_DIGEST"
           test "$PRODUCTION_HEAD" = "$PRODUCTION_BASE_SHA"
 
-          rm -rf parent_r26n parent_production parent_r22 staged_production
-          mkdir -p parent_r26n parent_production parent_r22
+          rm -rf parent_r26n parent_production parent_r22 parent_r26p staged_production
+          mkdir -p parent_r26n parent_production parent_r22 parent_r26p
           gh run download "$R26N_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26N_ARTIFACT_NAME" --dir parent_r26n
           gh run download "$PRODUCTION_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$PRODUCTION_ARTIFACT_NAME" --dir parent_production
           gh run download "$R22_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R22_ARTIFACT_NAME" --dir parent_r22
+          gh run download "$R26P_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26P_ARTIFACT_NAME" --dir parent_r26p
 
           test -s parent_r26n/data/backtests/r26n_2026_week1_unmodified_r26_structural_candidate_v1/r26n_disposition.json
           test -s parent_r26n/data/backtests/r26n_2026_week1_unmodified_r26_structural_candidate_v1/r26n_candidate_entitlement_overlay.csv
@@ -140,8 +153,22 @@ jobs:
           test -s parent_production/data/models/rb_r19_production_v1/rb_r19_residual_pools_v1.npz
           test -s parent_r22/data/rb_r22_week1_production_integration_audit_v2.json
           test -s parent_r22/data/rb_receiving_tail_production_audit.json
+          test -s parent_r26p/data/backtests/r26p_r26o_gate15_contract_forensic_v1/r26p_disposition.json
 
-          echo "R26O_IMMUTABLE_PARENTS_PASS r26n=$R26N_ACTUAL production=$PRODUCTION_ACTUAL r22=$R22_ACTUAL production_head=$PRODUCTION_HEAD"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('parent_r26p/data/backtests/r26p_r26o_gate15_contract_forensic_v1/r26p_disposition.json').read_text())
+          assert d['disposition']=='R26P_GATE15_EVIDENCE_WIRING_DEFECT_CONFIRMED_MECHANICAL_RERUN_AUTHORIZED'
+          assert d['all_forensic_tests_pass'] is True
+          assert d['mechanical_r26o_rerun_authorized'] is True
+          assert d['tests_passed']==17 and d['tests_total']==17
+          assert d['2026_outcomes_used']==0 and d['sportsbook_football_inputs_used']==0
+          assert d['production_change_authorized'] is False
+          print('R26O_R26P_RERUN_AUTHORITY_PASS')
+          PY
+
+          echo "R26O_IMMUTABLE_PARENTS_PASS r26n=$R26N_ACTUAL production=$PRODUCTION_ACTUAL r22=$R22_ACTUAL r26p=$R26P_ACTUAL production_head=$PRODUCTION_HEAD"
 
       - name: Stage exact current production identity compatibility
         run: |
@@ -171,11 +198,11 @@ jobs:
           printf '%s  %s\n' "$ACTUAL" staged_production/model/qb_distribution_state_selector_v1.json | tee r26o_qb_selector.sha256
           echo "R26O_QB_SELECTOR_STAGING_PASS sha256=$ACTUAL source=${PRODUCTION_BASE_SHA}:model/qb_distribution_state_selector_v1.json"
 
-      - name: Execute frozen R26O receptions-only shadow integration with dtype-only compatibility
+      - name: Execute unchanged frozen R26O with R26P-authorized evidence wiring
         run: |
           set -euo pipefail
           rm -rf data/backtests/r26o_2026_week1_receptions_shadow_integration_compatibility_v1
-          python scripts/backtest/run_rb_r26o_with_r22_identity_dtype_compat_v1.py \
+          python scripts/backtest/run_rb_r26o_with_r22_audit_payload_compat_v1.py \
             --production-root staged_production \
             --r26n-root parent_r26n \
             --r22-root parent_r22 \
@@ -228,6 +255,8 @@ jobs:
             r26o_repair_note.sha256
             r26o_second_repair_note.sha256
             r26o_dtype_wrapper.sha256
+            r26o_gate15_repair_note.sha256
+            r26o_audit_payload_wrapper.sha256
             r26o_qb_selector.sha256
             r26o_protected_clean.txt
             r26o_identity_staging_audit.json
