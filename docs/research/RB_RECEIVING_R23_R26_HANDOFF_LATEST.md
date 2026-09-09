@@ -1,25 +1,27 @@
-# RB Receiving Research Handoff — R23 through R26I
+# RB Receiving Research Handoff — R23 through R26J
 
 Status: ACTIVE
 Last updated: 2026-09-09
 Production authority: `main@f8417f55b04ce0e19baf260e9d532765034c47f1`
-Current research branch: `research-rb-r26i-week1-selective-restoration-v1`
-Current frontier: R26J 2020 Week-1 comparability/offseason-regime source audit.
+Current research branch: `research-rb-r26j-2020-week1-comparability-source-audit-v1`
+Current frontier: freeze an R26K-style outcome/mechanism atlas using only R26J-predeclared structural dimensions; no child prediction yet.
 
 ## Standing governance
 
 This lane follows `docs/research/RESEARCH_COMPONENT_PRESERVATION_DOCTRINE.md`.
 
-A failed full candidate does not imply all mechanics are discarded. Preserve exact failed dispositions/gates, inherit independently supported mechanics, and change only the unsupported component. Do not move thresholds, redefine cohorts, or weaken gates after outcomes are visible.
+A failed full candidate does not imply all mechanics are discarded. Preserve exact failed dispositions/gates, inherit independently supported mechanics, and change only the unsupported component. Do not move thresholds, redefine cohorts, weaken gates, or create season exemptions after outcomes are visible.
 
 After RB is resolved/bounded, perform the parked component-salvage audit of older failed/mixed QB/WR/TE research.
 
 ## Production authority that must not be disturbed
 
+- Production base: `main@f8417f55b04ce0e19baf260e9d532765034c47f1`.
 - RB rushing: `RB_P3_SYNTHESIS_V1`, Week-1 production authority.
 - RB receiving tail/distribution: R22 production-certified/main-active.
 - R22 preserves receptions and receiving-yard means.
 - RB receiving entitlement/receptions/receiving-yard mean remain unresolved research lanes.
+- No R23-R26J research result has changed production.
 
 ## R23-R25
 
@@ -98,7 +100,7 @@ Five of six seasons improve. Sole failure: 2020 `1.303640 -> 1.420534`, +8.97% h
 Run `34365496225`; artifact `10109658591`; digest `sha256:bce3f1a81ff516f962109dcadc9ad1e6efa2273c3a96851e94abbe9e4c332022`.
 Disposition `WEEK1_FAILURE_MECHANISM_IDENTIFIED_REPLICATED`.
 
-2020 room-total receiving error improved while summed player allocation error worsened. Balanced turnover (`exits == entrants`) identified as replicated risk state.
+2020 room-total receiving error improved while summed player allocation error worsened. Balanced turnover (`exits == entrants`) identified as a replicated risk state, but later work showed it is not sufficient by itself.
 
 ## R26G — blanket balanced-turnover guard
 
@@ -146,9 +148,7 @@ Structural integrity all passed. Max child RB-room target-mass gap `5.3290705182
 Pooled vacancy incumbents:
 - baseline rec MAE `1.424485`
 - R26 `1.312299`
-- R26I `1.328356`
-
-R26I remained materially better than baseline, but surrendered part of R26's gain.
+- R26I `1.328356`.
 
 Roles:
 - RB1 `1.803491 -> 1.637160`
@@ -171,31 +171,108 @@ Failed gates:
 - 2020 <=2% season safety;
 - four R26 preservation gates (pooled rec, pooled targets, 2021-25 rec, global W1 rec).
 
-Interpretation under component preservation:
-- do NOT discard R26 Week-1 logic; it remains broadly strong;
+Interpretation:
+- do not discard R26 Week-1 logic; it remains broadly strong;
 - R26H state distinctions are useful pooled but insufficient to explain 2020;
 - conservative fallback costs too much later-season signal;
-- 2020 likely represents a deeper offseason/roster/source regime difference not captured by balanced turnover, exit significance, or entrant-history class.
+- audit 2020's pregame regime before another child.
 
-## Current frontier — R26J 2020 comparability/offseason-regime audit
+## R26J — 2020 Week-1 comparability source audit
 
-Next step is diagnostic/source-first, not another child prediction.
+Frozen plan: `docs/research/RB_R26J_2020_WEEK1_COMPARABILITY_SOURCE_AUDIT_V1_FROZEN_PLAN.md`.
+Result: `docs/research/RB_R26J_2020_WEEK1_COMPARABILITY_SOURCE_AUDIT_V1_RESULT.md`.
 
-Freeze before outcome slicing. Use strict-prior/pregame-only state to compare 2020 Week 1 against 2021-2025 on:
-- current/prior RB-room size and continuity;
-- number/proportion of entrants;
-- veteran vs no-prior-NFL entrant composition;
-- number of exits and multiple meaningful exits;
-- max and summed vacated prior target volume/share;
-- returning room receiving-identity concentration where safely available;
-- role-replacement symmetry if measurable from strict-prior identity;
-- any 2020 COVID-era roster/source/timing semantic difference.
+Canonical valid execution:
+- branch `research-rb-r26j-2020-week1-comparability-source-audit-v1`
+- frozen-plan commit `ff7e2c535a2283c02e0bb1c4db19becb721e3de7`
+- valid head `1dc136253bc0b7b27acb72014d7fbffb8f65900c`
+- run `34374987828`
+- job `102545404859`
+- artifact `10113466373`
+- digest `sha256:7d886f228487e052ee1617cc5f42b974cd9da6a9d448f3a86b1de82cb4fc4f46`
+- disposition `2020_SOURCE_REGIME_DISTINCT_FOR_MECHANISM_FOLLOWUP`.
 
-Do not exclude 2020 merely because it is inconvenient. A later comparability decision requires a separately frozen contract and evidence.
+Initial run `34370743209` failed mechanically before science because R26C's exited-player source state did not guarantee a `player_key` column after feature-frame materialization. Repair commit `1dc136253b...` changed only exited-row counting to `groupby(...).size()`; all frozen science stayed unchanged.
+
+R26J was explicitly **source-only/pregame-only**:
+- `actual_*` selected fields: `[]`
+- target-game outcome/participation features: `0`
+- sportsbook: `0`
+- same-week historical depth: false
+- production changes: false
+- predictions regenerated: false
+- R9 refit: false
+- R26C reconstruction: `1.0`
+- all 10 integrity gates passed.
+
+Population: 170 Week-1 vacancy rooms across 2020-2025.
+
+Frozen distinctness requirement: at least 3 independent structurally distinct dimensions spanning at least 2 of A-D.
+Actual result: **10 dimensions spanning all 4 A-D sections**.
+
+Distinct 2020 dimensions:
+
+### A — room continuity / turnover
+- `current_room_n`: 2020 `4.4643` vs 2021-25 `3.9987`; above the full later-season range.
+- `continuing_n`: 2020 `2.25` vs `2.0026`; above the later-season range.
+- `entrants_n`: 2020 `2.2143` vs `1.9960`; above the later-season range.
+
+### B — entrant composition
+- `veteran_entry_n`: 2020 `0.8571` vs `0.5598`; ~53.1% higher and above the later-season range.
+- `veteran_entry_share`: 2020 `0.1870` vs `0.1424`; ~31.3% higher and above the later-season range.
+
+### C — exited receiving state
+- `exit_history_coverage`: 2020 `0.9524` vs `0.9119`; above the later-season range.
+- `sum_exit_last8_targets_pg`: 2020 `3.5864` vs `3.3128`; above the later-season range.
+
+### D — baseline returning-room state
+- `baseline_room_hhi`: 2020 `0.25247` vs `0.28348`; below the entire later-season range.
+- `baseline_top_room_share`: 2020 `0.32547` vs `0.35501`; below the later-season range.
+- `incumbent_n`: 2020 `2.25` vs `2.0026`; above the later-season range.
+
+Coherent football interpretation:
+**2020 Week-1 vacancy rooms were larger, carried more continuing backs and more entrants (especially established veterans), had more recently vacated receiving work, and entered with a flatter baseline receiving allocation across incumbents.**
+
+That is a plausible football mechanism for why R26 could improve room totals while misallocating individual receptions in 2020.
+
+Important non-distinctions:
+- R9 reliability was exactly 1.0 every season;
+- R26 allocation-shift magnitude was not unusual;
+- balanced-turnover frequency alone did not satisfy the frozen distinctness rule;
+- meaningful-exit count was not unusual;
+- max exited-player prior share/target rate was not unusual;
+- source quality was not degraded in 2020.
+
+Governance consequence:
+- R26J **does authorize** a frozen outcome/mechanism follow-up.
+- R26J **does not authorize** excluding 2020, weakening its safety gate, shadowing R26, production promotion, R9 refit, or another router directly.
+
+## Current frontier — R26K-style outcome/mechanism atlas
+
+Next action must be frozen before error slicing.
+
+Use only R26J-predeclared structural dimensions/states and the immutable R26/R26J evidence. Then evaluate how those states relate to R26-vs-baseline individual allocation error and whether the harmful mechanism replicates outside 2020.
+
+Primary hypotheses to test without inventing new thresholds after seeing outcomes:
+1. larger vacancy rooms with more incumbents + entrants create harder within-room identity allocation;
+2. high veteran-entry presence interacts with flatter baseline concentration;
+3. high recently-vacated receiving volume plus flat incumbent baseline causes R26 to redistribute in the wrong player order;
+4. the mechanism should be assessed for replication in comparable 2021-2025 room states, not treated as a 2020-only exception.
+
+R26K should be mechanism/diagnostic only. A later child design is authorized only if a football-coherent state replicates under a frozen rule.
 
 ## After Week-1 component is resolved/bounded
 
 Study Weeks 2+ separately with current-season recency/role/availability; do not force offseason Week-1 logic onto in-season churn.
+
+Then return to remaining major lanes:
+1. RB receiving efficiency/yard mean after opportunity is resolved/bounded;
+2. QB attempts/dropbacks/pass-rate/YPA/sack-scramble decomposition;
+3. selective WR/TE efficiency/distribution;
+4. unified coherent game simulation;
+5. ATD;
+6. game ML/spread/total;
+7. final Week-1 prediction package.
 
 ## Parked items
 
