@@ -25,6 +25,26 @@ def test_scoring_enrichment_preserves_playerform_prior_current_columns(tmp_path,
             "position": "WR", "identity_full_name_key": "alphawr", "identity_base_name_key": "alphawr",
             "rushing_tds": 0, "receiving_tds": 1,
         },
+        # Minimal prior-season rows for the other production skill groups keep
+        # this fixture compatible with the fail-closed TD-prior coverage gate.
+        {
+            "season": 2025, "week": 18, "player": "Beta QB", "player_clean_key": "betaqb",
+            "player_identity_key": "gsis:00-0099001", "player_id": "00-0099001", "team": "IND",
+            "position": "QB", "identity_full_name_key": "betaqb", "identity_base_name_key": "betaqb",
+            "rushing_tds": 1, "receiving_tds": 0,
+        },
+        {
+            "season": 2025, "week": 18, "player": "Gamma RB", "player_clean_key": "gammarb",
+            "player_identity_key": "gsis:00-0099002", "player_id": "00-0099002", "team": "IND",
+            "position": "RB", "identity_full_name_key": "gammarb", "identity_base_name_key": "gammarb",
+            "rushing_tds": 1, "receiving_tds": 0,
+        },
+        {
+            "season": 2025, "week": 18, "player": "Delta TE", "player_clean_key": "deltate",
+            "player_identity_key": "gsis:00-0099003", "player_id": "00-0099003", "team": "IND",
+            "position": "TE", "identity_full_name_key": "deltate", "identity_base_name_key": "deltate",
+            "rushing_tds": 0, "receiving_tds": 1,
+        },
         {
             "season": 2026, "week": 1, "player": "Alpha WR", "player_clean_key": "alphawr",
             "player_identity_key": identity, "player_id": "00-0099000", "team": "IND",
