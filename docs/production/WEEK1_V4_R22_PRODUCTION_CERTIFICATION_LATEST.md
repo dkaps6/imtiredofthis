@@ -2,14 +2,14 @@
 
 Date: 2026-09-08/09 UTC
 Branch: `production-week1-v4-r22`
-Base production authority: current `main` at branch cut (`69b96aa0a0180a04107eabea33e08e26e0325eaa`)
-Status: CLEAN PRODUCTION CANDIDATE; V4/R22 EXECUTION + GOVERNANCE PASS; FINAL STATIC REPO AUDIT REPAIR IN PROGRESS
+Base production authority at branch cut: `main` (`69b96aa0a0180a04107eabea33e08e26e0325eaa`)
+Current status: CLEAN PRODUCTION CERTIFICATION PASS; PROMOTION PR #512 OPEN; EXACT-HEAD PR CI IN PROGRESS
 
 ## Purpose
 
 Promote the already-certified football-first V3 stack plus RB-R22 Week-1 receiving-tail distribution into a clean production branch without merging the large research-history branch into `main`.
 
-The clean branch intentionally carries only production runtime, frozen/promoted model assets, canonical Full Slate wiring, validators, and provenance required for Week 1.
+The clean branch intentionally carries only production runtime, frozen/promoted model assets, canonical Full Slate wiring, validators, provenance, and a minimal compatibility shim required for Week 1.
 
 ## Certified football stack represented by this branch
 
@@ -54,8 +54,13 @@ Important commits:
 - `b419c2ecdf19ff16505dee482fd8d945fa118032` — remove QB production runtime dependency on research/backtest tree.
 - `a8785fb7c9a220c418b045151d85fb47b9e7301e` — extract frozen RB receiving identity runtime from research tree.
 - `9f21792dc841f08a0e4143aa6a32f56395e11cd3` — add production-safe compatibility shim for the exact R8 identity runtime objects required by R22.
+- `7a4fe1e3b832006740dbd244728dc016ca0d9d2f` — document clean-production certification lineage.
+- `cc7aa770cf43852dfe08e585467d3a44e190ddf3` — update static repo audit to validate the promoted V4 Full Slate chain.
+- `64ee5b4b02e9676766b20ea0498dda71bab80ee6` — update 2026 production-readiness audit to validate the promoted V4 chain rather than requiring direct `run_pricing_v2.py` workflow invocation.
 
-The latter two changes are mechanical runtime packaging only. They do not alter any R22 model coefficient, feature ordering, probability model, residual pool, seed, target entitlement, mean, or frozen scientific gate.
+The runtime packaging/audit changes above do not alter any R22 model coefficient, feature ordering, probability model, residual pool, seed, target entitlement, mean, or frozen scientific gate.
+
+The only file retained under `scripts/backtest/` on this clean branch is `evaluate_rb_r8_receiving_identity_v1.py`, a 15-line compatibility shim that re-exports `FEATURES`, `EPS`, `_identity_atlas`, and `_attach_identity` from the production-safe runtime module. It is not the historical R8 backtest implementation.
 
 ## Clean-production certification attempts
 
@@ -85,7 +90,7 @@ Failure:
 
 Repair:
 - extracted only the frozen strict-prior identity state/snapshot logic into production-safe `scripts/modeling/rb_receiving_identity_runtime_v1.py`;
-- added a minimal compatibility shim at the historical import path exposing only `FEATURES`, `EPS`, `_identity_atlas`, `_attach_identity`.
+- added the minimal compatibility shim described above.
 
 No football/science gate changed.
 
@@ -97,18 +102,7 @@ Artifact: `10085814044`
 Artifact digest: `sha256:88565626e1f9101b909b52b88539230c5cc873e52fadf9c9ab55cec43bc14413`
 Conclusion: FAIL only at final static repo audit.
 
-Successful steps:
-1. setup/dependencies
-2. exact R19 production assets
-3. immutable already-paid Week-1 source artifact
-4. sportsbook boundary hardening
-5. player evidence + stable identity
-6. certified football components
-7. preserved V3 control
-8. canonical V4 candidate through the public Full Slate pricing entrypoint
-9. production governance + stack certification
-
-Confirmed V4/R22 outputs in this run:
+Confirmed V4/R22 outputs:
 - `RB_R22_WEEK1_RECEIVING_TAIL_PRICING_LINEAGE_PASS`
 - 94 adapted RB keys
 - 138 priced receiving-yard side rows stamped
@@ -122,19 +116,43 @@ Confirmed V4/R22 outputs in this run:
 - 202 allowed probability changes
 - 0 unexpected probability changes
 
-Only failing item:
+Failure was the stale `scripts/utils/audit_repo.py` requirement that Full Slate invoke `scripts/run_pricing_v2.py` directly. Repair commit: `cc7aa770cf43852dfe08e585467d3a44e190ddf3`.
 
-`python scripts/utils/audit_repo.py --strict`
+### Run `34304159567` — first repo audit fixed; second readiness audit stale
 
-reported:
+Head: `cc7aa770cf43852dfe08e585467d3a44e190ddf3`
+Artifact: `10086090067`
+Artifact digest: `sha256:728a545d4c2c13faf8f8e3a1ef5bffc4c4dcd4aa4f0c1b57a6e29448b0bbb4cd`
+Conclusion: FAIL only at `scripts/audit_2026_production_readiness.py --strict`.
 
-`full-slate workflow does not invoke scripts/run_pricing_v2.py`
+All football, V4/R22, governance, same-checkout differential, and the repaired repo audit passed. The remaining P0 was the second stale direct-`run_pricing_v2.py` workflow-token expectation. Repair commit: `64ee5b4b02e9676766b20ea0498dda71bab80ee6`.
 
-This is a stale static-audit wiring expectation. The promoted Full Slate intentionally invokes `scripts/run_pricing_with_full_roster_universe_v3.py`, whose public Week-1 entrypoint routes to `run_pricing_with_full_roster_universe_v4_production.py`; V4 preserves the certified V3 core and applies R22 afterward.
+### Run `34305881612` — AUTHORITATIVE CLEAN PRODUCTION CERTIFICATION PASS
 
-The audit must be updated to verify this exact promoted chain rather than requiring the old direct pricing entrypoint. This is a governance-contract repair, not a football-model change.
+Head: `64ee5b4b02e9676766b20ea0498dda71bab80ee6`
+Job: `102322344207`
+Artifact: `10086673577`
+Artifact digest: `sha256:2fc1827e1b67f19342005adacf95fc3b68f5a88b03b29bd13b858b72749819d3`
+Conclusion: SUCCESS
 
-## Current canonical Week-1 pricing chain on this branch
+Every certification step passed, including:
+1. setup/dependencies
+2. exact R19 production assets
+3. immutable already-paid Week-1 replay
+4. sportsbook boundary hardening
+5. player evidence + stable identity
+6. certified football components
+7. preserved V3 control
+8. canonical V4 candidate through the public Full Slate entrypoint
+9. production governance + stack certification
+10. strict repository audit
+11. strict 2026 production-readiness audit
+12. final Week-1 V4 contract
+13. evidence upload
+
+This is the authoritative clean-branch certification for promotion review.
+
+## Current canonical Week-1 pricing chain
 
 `.github/workflows/full-slate.yml`
 → `scripts/run_pricing_with_full_roster_universe_v3.py` (public compatibility entrypoint)
@@ -143,21 +161,36 @@ The audit must be updated to verify this exact promoted chain rather than requir
 → exact R22 receiving-tail adapter
 → downstream sportsbook pricing/lineage.
 
+`run_pricing_v2.py` remains a subordinate audited dependency used by the full-roster runtime; it is no longer the direct Full Slate workflow authority.
+
+## Promotion status
+
+Promotion PR: `#512` — `Promote Week 1 V4 / R22 production stack`
+
+At PR creation:
+- head `64ee5b4b02e9676766b20ea0498dda71bab80ee6`
+- base `main` `69b96aa0a0180a04107eabea33e08e26e0325eaa`
+- branch was 10 commits ahead / 0 behind `main`
+- GitHub mergeability resolved to `true`
+- exact-head `Repo CI` and `Backtest Historical Input Validation` were in progress
+
+Do not merge until exact-head PR checks are green and no new integrity/governance concern appears.
+
 ## Remaining production steps
 
-1. Repair the static repository audit to validate the promoted V4 chain strictly rather than requiring direct `run_pricing_v2.py` workflow invocation.
-2. Rerun the clean no-credit production certification.
-3. Require the final Week-1 V4 contract step to pass.
-4. If green, promote the clean branch to `main`.
-5. Run canonical `.github/workflows/full-slate.yml` from `main` once more as the actual production authority.
-6. Only then label V4/R22 production-active on `main`.
+1. Require exact-head PR `Repo CI` and `Backtest Historical Input Validation` to pass.
+2. If green and head is unchanged, merge PR #512 to `main` using exact-head protection.
+3. Run canonical `.github/workflows/full-slate.yml` from `main` as actual production authority.
+4. Verify final `main` Full Slate outputs/lineage and lock the exact production baseline.
+5. Only then label V4/R22 production-active on `main` and begin the next research lane.
 
 ## Science intentionally still open after Week-1 V4 promotion
 
 - RB receiving entitlement/receptions and receiving-yard mean refinement (R22 is distribution-shape only).
-- WR/TE receiving efficiency/distribution calibration.
-- fully shared QB↔receiver conservation / coherent game-state simulation.
-- dedicated anytime-TD probability model.
-- game-level moneyline/spread/total model built from the certified joint football state.
+- Targeted QB attempts/dropbacks/pass-rate/YPA/sack-scramble decomposition sanity while preserving M89/M90 authority absent a separately frozen replacement.
+- WR/TE receiving efficiency/distribution calibration around the promoted entitlement stack.
+- Fully shared QB↔receiver conservation / coherent game-state simulation.
+- Dedicated anytime-TD probability model.
+- Game-level moneyline/spread/total model built from the certified joint football state.
 
-Do not conflate these open science lanes with the clean-production mechanical certification described above.
+Do not conflate these open science lanes with the clean-production certification above.
