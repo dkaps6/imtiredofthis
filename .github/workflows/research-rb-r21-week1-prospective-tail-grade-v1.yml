@@ -1,0 +1,77 @@
+name: RB R21 Week 1 Prospective Tail Grade V1
+
+on:
+  workflow_dispatch:
+
+jobs:
+  grade:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy
+
+      - name: Download immutable R21 Week-1 forecast lock
+        uses: actions/download-artifact@v4
+        with:
+          name: rb-r21-week1-prospective-forecast-lock-v1
+          path: r21-lock-artifact
+          github-token: ${{ github.token }}
+          repository: dkaps6/imtiredofthis
+          run-id: 34294227588
+
+      - name: Capture immutable R21 lock artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p r21-grade-metadata
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/34294227588/artifacts?per_page=100" > r21-grade-metadata/r21-lock.json
+
+      - name: Verify sealed lock files are present
+        run: |
+          set -euo pipefail
+          test -s r21-lock-artifact/rb_r21_forecast_lock_result.json
+          test -s r21-lock-artifact/rb_r21_forecast_ledger.csv
+          test -s r21-lock-artifact/rb_r21_locked_rec_yards_draws_v1.npz
+          echo 'Phase B will grade only the sealed pre-outcome R21 arrays; it does not regenerate Week-1 forecasts.'
+
+      - name: Run frozen R21 Week-1 prospective grade
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python scripts/backtest/grade_rb_r21_week1_prospective_tail_v1.py \
+            --lock-dir r21-lock-artifact \
+            --lock-artifact-metadata r21-grade-metadata/r21-lock.json \
+            --out-dir data/backtests/rb_r21_week1_prospective_tail_grade_v1
+
+      - name: Show R21 Week-1 grade
+        if: always()
+        run: |
+          cat data/backtests/rb_r21_week1_prospective_tail_grade_v1/rb_r21_week1_result.json 2>/dev/null || true
+          echo '=== metrics ==='
+          cat data/backtests/rb_r21_week1_prospective_tail_grade_v1/rb_r21_week1_metrics.csv 2>/dev/null || true
+          echo '=== outcome match audit ==='
+          head -100 data/backtests/rb_r21_week1_prospective_tail_grade_v1/rb_r21_week1_outcome_match_audit.csv 2>/dev/null || true
+
+      - name: Upload R21 Week-1 grade evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r21-week1-prospective-tail-grade-v1
+          path: data/backtests/rb_r21_week1_prospective_tail_grade_v1/*
+          if-no-files-found: warn
+          retention-days: 90
