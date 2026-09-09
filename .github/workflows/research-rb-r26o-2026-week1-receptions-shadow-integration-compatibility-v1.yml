@@ -1,0 +1,203 @@
+name: RB R26O 2026 Week 1 Receptions Shadow Integration Compatibility V1
+
+on:
+  push:
+    branches:
+      - research-rb-r26o-2026-week1-receptions-shadow-integration-compatibility-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONPATH: ${{ github.workspace }}
+  PRODUCTION_BASE_SHA: f8417f55b04ce0e19baf260e9d532765034c47f1
+  R26O_PLAN_COMMIT: 96e4a6977458b55ec00cb29fbc9de05c56c89b88
+  R26O_CODE_COMMIT: 6a171cb32e77c7d6691ceb75da9861a5d6dd7bc4
+  R26N_STAGE_HELPER_COMMIT: 0b4c2df7c14b16bd0e945b425aac7f35e015fa3d
+
+  R26N_RUN_ID: 34396075045
+  R26N_ARTIFACT_ID: 10121598376
+  R26N_ARTIFACT_NAME: rb-r26n-2026-week1-unmodified-r26-structural-candidate-v1
+  R26N_DIGEST: sha256:887929203053cb62904aaaeda9d995c9645163814da181972799f08fe4465c62
+
+  PRODUCTION_RUN_ID: 34317211395
+  PRODUCTION_ARTIFACT_ID: 10090547415
+  PRODUCTION_ARTIFACT_NAME: run_34317211395
+  PRODUCTION_DIGEST: sha256:7eab77e41c5879d4f54d87497eee0d1186010784cfc4ef966178930e16fb7c3b
+
+  R22_RUN_ID: 34298516960
+  R22_ARTIFACT_ID: 10084118525
+  R22_ARTIFACT_NAME: rb-r22-week1-production-integration-v2
+  R22_DIGEST: sha256:2391bd9914e9d0029c63529829496fb9b462d008bdcc3f8c37bb3e1079580bd1
+
+jobs:
+  shadow-integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install R26O dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml scipy scikit-learn
+
+      - name: Verify frozen R26O contract implementation and protected production boundary
+        run: |
+          set -euo pipefail
+          PLAN=docs/research/RB_R26O_2026_WEEK1_RECEPTIONS_SHADOW_INTEGRATION_COMPATIBILITY_V1_FROZEN_PLAN.md
+          LOCK=docs/research/RB_R26O_2026_WEEK1_RECEPTIONS_SHADOW_INTEGRATION_COMPATIBILITY_V1_IMPLEMENTATION_LOCK.md
+          CODE=scripts/backtest/evaluate_rb_r26o_2026_week1_receptions_shadow_integration_v1.py
+          STAGE=scripts/backtest/stage_r26n_production_identity_key_repair_v1.py
+
+          test -s "$PLAN"
+          test -s "$LOCK"
+          test -s "$CODE"
+          test -s "$STAGE"
+          python -m py_compile "$CODE" "$STAGE"
+
+          git diff --quiet "$R26O_PLAN_COMMIT" HEAD -- "$PLAN"
+          git diff --quiet "$R26O_CODE_COMMIT" HEAD -- "$CODE"
+          git diff --quiet "$R26N_STAGE_HELPER_COMMIT" HEAD -- "$STAGE"
+
+          sha256sum "$PLAN" | tee r26o_plan.sha256
+          sha256sum "$LOCK" | tee r26o_lock.sha256
+          sha256sum "$CODE" | tee r26o_code.sha256
+          sha256sum "$STAGE" | tee r26o_stage_helper.sha256
+
+          git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
+            scripts/modeling \
+            scripts/run_rb_week1_no_odds.py \
+            scripts/run_pricing_with_full_roster_universe_v3.py \
+            scripts/run_pricing_with_full_roster_universe_v3_core.py \
+            scripts/run_pricing_with_full_roster_universe_v4.py \
+            scripts/run_pricing_with_full_roster_universe_v4_production.py \
+            scripts/simulation_v2.py \
+            scripts/simulation_c2_qb_candidate.py \
+            scripts/apply_rb_receiving_tail_production_v1.py \
+            data/models \
+            model \
+            .github/workflows/full-slate.yml \
+            .github/workflows/production-week1-v4-r22-certification.yml
+
+          echo PASS > r26o_protected_clean.txt
+          echo R26O_PROTECTED_PRODUCTION_BOUNDARY_PASS
+
+      - name: Verify and download immutable R26O parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          R26N_ACTUAL="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26N_ARTIFACT_ID}" --jq '.digest')"
+          PRODUCTION_ACTUAL="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${PRODUCTION_ARTIFACT_ID}" --jq '.digest')"
+          R22_ACTUAL="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R22_ARTIFACT_ID}" --jq '.digest')"
+          PRODUCTION_HEAD="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${PRODUCTION_ARTIFACT_ID}" --jq '.workflow_run.head_sha')"
+
+          test "$R26N_ACTUAL" = "$R26N_DIGEST"
+          test "$PRODUCTION_ACTUAL" = "$PRODUCTION_DIGEST"
+          test "$R22_ACTUAL" = "$R22_DIGEST"
+          test "$PRODUCTION_HEAD" = "$PRODUCTION_BASE_SHA"
+
+          rm -rf parent_r26n parent_production parent_r22 staged_production
+          mkdir -p parent_r26n parent_production parent_r22
+          gh run download "$R26N_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26N_ARTIFACT_NAME" --dir parent_r26n
+          gh run download "$PRODUCTION_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$PRODUCTION_ARTIFACT_NAME" --dir parent_production
+          gh run download "$R22_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R22_ARTIFACT_NAME" --dir parent_r22
+
+          test -s parent_r26n/data/backtests/r26n_2026_week1_unmodified_r26_structural_candidate_v1/r26n_disposition.json
+          test -s parent_r26n/data/backtests/r26n_2026_week1_unmodified_r26_structural_candidate_v1/r26n_candidate_entitlement_overlay.csv
+          test -s parent_production/data/player_form_consensus.csv
+          test -s parent_production/data/model_context_bridge.csv
+          test -s parent_production/data/models/rb_r19_production_v1/rb_r19_tail_scorer_model_v1.json
+          test -s parent_production/data/models/rb_r19_production_v1/rb_r19_residual_pools_v1.npz
+          test -s parent_r22/data/rb_r22_week1_production_integration_audit_v2.json
+          test -s parent_r22/data/rb_receiving_tail_production_audit.json
+
+          echo "R26O_IMMUTABLE_PARENTS_PASS r26n=$R26N_ACTUAL production=$PRODUCTION_ACTUAL r22=$R22_ACTUAL production_head=$PRODUCTION_HEAD"
+
+      - name: Stage exact current production identity compatibility
+        run: |
+          set -euo pipefail
+          python scripts/backtest/stage_r26n_production_identity_key_repair_v1.py \
+            --source-root parent_production \
+            --staged-root staged_production \
+            --audit r26o_identity_staging_audit.json
+          test -s r26o_identity_staging_audit.json
+          python - <<'PY'
+          import pandas as pd
+          src=pd.read_csv('parent_production/data/model_context_bridge.csv', nrows=1)
+          staged=pd.read_csv('staged_production/data/model_context_bridge.csv', nrows=1)
+          assert 'player_clean_key' not in src.columns
+          assert 'player_clean_key' in staged.columns
+          print('R26O_IMMUTABLE_PRODUCTION_PARENT_UNTOUCHED_PASS')
+          PY
+
+      - name: Execute frozen R26O receptions-only shadow integration
+        run: |
+          set -euo pipefail
+          rm -rf data/backtests/r26o_2026_week1_receptions_shadow_integration_compatibility_v1
+          python scripts/backtest/evaluate_rb_r26o_2026_week1_receptions_shadow_integration_v1.py \
+            --production-root staged_production \
+            --r26n-root parent_r26n \
+            --r22-root parent_r22 \
+            --protected-clean-marker r26o_protected_clean.txt \
+            --out-dir data/backtests/r26o_2026_week1_receptions_shadow_integration_compatibility_v1
+
+      - name: Assert frozen R26O authority ceiling
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('data/backtests/r26o_2026_week1_receptions_shadow_integration_compatibility_v1')
+          d=json.loads((root/'r26o_disposition.json').read_text())
+          assert d['disposition'] in {
+              'R26O_2026_WEEK1_RECEPTIONS_SHADOW_INTEGRATION_PASS_READY_FOR_PROSPECTIVE_SEAL',
+              'R26O_2026_WEEK1_RECEPTIONS_SHADOW_INTEGRATION_FAIL_NO_SHADOW',
+          }
+          assert d['2026_outcomes_used'] == 0
+          assert d['sportsbook_football_inputs_used'] == 0
+          assert d['same_week_depth_used'] is False
+          assert d['r9_refit'] is False
+          assert d['receiving_yard_means_changed'] is False
+          assert d['r22_changed_by_shadow_splice'] is False
+          assert d['production_parameters_changed'] is False
+          assert d['live_shadow_production_activation_authorized'] is False
+          assert d['production_promotion_authorized'] is False
+          qualified=d['disposition']=='R26O_2026_WEEK1_RECEPTIONS_SHADOW_INTEGRATION_PASS_READY_FOR_PROSPECTIVE_SEAL'
+          assert d['prospective_seal_design_authorized'] is qualified
+          print('R26O_AUTHORITY_CONTRACT_PASS disposition=' + d['disposition'])
+          PY
+
+      - name: Show R26O evidence
+        run: |
+          cat data/backtests/r26o_2026_week1_receptions_shadow_integration_compatibility_v1/r26o_disposition.json
+          echo '=== R26O gates ==='
+          cat data/backtests/r26o_2026_week1_receptions_shadow_integration_compatibility_v1/r26o_gate_matrix.csv
+          echo '=== R26O shadow manifest head ==='
+          head -30 data/backtests/r26o_2026_week1_receptions_shadow_integration_compatibility_v1/r26o_rb_receptions_shadow_manifest.csv
+
+      - name: Upload R26O evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r26o-2026-week1-receptions-shadow-integration-compatibility-v1
+          retention-days: 90
+          path: |
+            r26o_plan.sha256
+            r26o_lock.sha256
+            r26o_code.sha256
+            r26o_stage_helper.sha256
+            r26o_protected_clean.txt
+            r26o_identity_staging_audit.json
+            data/backtests/r26o_2026_week1_receptions_shadow_integration_compatibility_v1/*
