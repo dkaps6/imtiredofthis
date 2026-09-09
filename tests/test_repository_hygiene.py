@@ -31,6 +31,8 @@ def test_root_data_csvs_are_runtime_except_explicit_static_artifacts():
     allowed = {
         "data/model_ensemble_weights.csv",
         "data/stadiums.csv",
+        "data/manual_name_overrides.csv",
+        "data/player_identity_aliases.csv",
     }
 
     root_data_csvs = {
@@ -51,6 +53,8 @@ def test_promoted_static_production_artifacts_remain_tracked():
     required = {
         "data/model_ensemble_weights.csv",
         "data/stadiums.csv",
+        "data/manual_name_overrides.csv",
+        "data/player_identity_aliases.csv",
         "model/qb_pass_synthesis_v1.json",
     }
     missing = sorted(required - tracked)
