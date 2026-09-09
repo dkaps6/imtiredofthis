@@ -1,0 +1,136 @@
+name: RB R26I Week 1 Selective Restoration V1
+
+on:
+  push:
+    branches:
+      - research-rb-r26i-week1-selective-restoration-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  PRODUCTION_BASE_SHA: f8417f55b04ce0e19baf260e9d532765034c47f1
+  R26_RUN_ID: '34356222339'
+  R26_ARTIFACT_ID: '10106271075'
+  R26_ARTIFACT_NAME: rb-r26-vacancy-gated-r9-retrospective-v1
+  R26_DIGEST: sha256:607fca6e11c301ecb2a3bf74e3dfea8ae415bb33cf3c150a6d89eaedada2809e
+  R26H_RUN_ID: '34369024680'
+  R26H_ARTIFACT_ID: '10111095834'
+  R26H_ARTIFACT_NAME: rb-r26h-week1-balanced-turnover-role-state-atlas-v1
+  R26H_DIGEST: sha256:c3fa00de4262bb98b1f73d6931005f963d0ded4cc9a9fe53734ae421e34ef18f
+
+jobs:
+  qualify-selective-restoration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install qualification dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4
+
+      - name: Verify frozen R26I contract and production boundary
+        run: |
+          set -euo pipefail
+          test -s docs/research/RB_R26I_WEEK1_SELECTIVE_RESTORATION_V1_FROZEN_PLAN.md
+          test -s docs/research/RB_R26I_WEEK1_SELECTIVE_RESTORATION_V1_IMPLEMENTATION_LOCK.md
+          test -s scripts/backtest/finalize_rb_r26i_week1_selective_restoration_v1.py
+          python -m py_compile scripts/backtest/finalize_rb_r26i_week1_selective_restoration_v1.py
+          sha256sum docs/research/RB_R26I_WEEK1_SELECTIVE_RESTORATION_V1_FROZEN_PLAN.md | tee r26i_plan.sha256
+          sha256sum docs/research/RB_R26I_WEEK1_SELECTIVE_RESTORATION_V1_IMPLEMENTATION_LOCK.md | tee r26i_lock.sha256
+          sha256sum scripts/backtest/finalize_rb_r26i_week1_selective_restoration_v1.py | tee r26i_code.sha256
+          git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
+            scripts/modeling \
+            scripts/run_rb_week1_no_odds.py \
+            scripts/run_pricing_with_full_roster_universe_v3.py \
+            scripts/run_pricing_with_full_roster_universe_v3_core.py \
+            scripts/run_pricing_with_full_roster_universe_v4_production.py \
+            scripts/simulation_v2.py \
+            scripts/simulation_c2_qb_candidate.py \
+            data/models \
+            model \
+            .github/workflows/full-slate.yml \
+            .github/workflows/production-week1-v4-r22-certification.yml
+          echo PASS > r26i_protected_clean.txt
+          echo R26I_PROTECTED_PRODUCTION_BOUNDARY_PASS
+
+      - name: Verify and download immutable parent evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          R26_ACTUAL="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26_ARTIFACT_ID}" --jq '.digest')"
+          R26H_ACTUAL="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26H_ARTIFACT_ID}" --jq '.digest')"
+          test "$R26_ACTUAL" = "$R26_DIGEST"
+          test "$R26H_ACTUAL" = "$R26H_DIGEST"
+          rm -rf parent_r26 parent_r26h
+          mkdir -p parent_r26 parent_r26h
+          gh run download "$R26_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26_ARTIFACT_NAME" --dir parent_r26
+          gh run download "$R26H_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26H_ARTIFACT_NAME" --dir parent_r26h
+          test "$(find parent_r26 -name r26_predictions.csv -type f | wc -l)" -eq 6
+          test "$(find parent_r26 -name r26_structural_audit.csv -type f | wc -l)" -eq 6
+          test "$(find parent_r26h -name r26h_disposition.json -type f | wc -l)" -eq 1
+          test "$(find parent_r26h -name r26h_balanced_room_state.csv -type f | wc -l)" -eq 1
+          echo "R26I_IMMUTABLE_PARENT_EVIDENCE_PASS r26=$R26_ACTUAL r26h=$R26H_ACTUAL"
+
+      - name: Execute frozen R26I qualification
+        run: |
+          set -euo pipefail
+          rm -rf data/backtests/r26i_week1_selective_restoration_v1
+          python scripts/backtest/finalize_rb_r26i_week1_selective_restoration_v1.py \
+            --r26-root parent_r26 \
+            --r26h-root parent_r26h \
+            --protected-clean-marker r26i_protected_clean.txt \
+            --out-dir data/backtests/r26i_week1_selective_restoration_v1
+
+      - name: Assert R26I disposition contract
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d = json.loads(Path('data/backtests/r26i_week1_selective_restoration_v1/r26i_disposition.json').read_text())
+          assert d['candidate'] == 'RB_R26I_WEEK1_SELECTIVE_RESTORATION_V1'
+          assert d['production_promotion_authorized'] is False
+          assert d['all_season_use_authorized'] is False
+          assert d['inheritance']['r26_predictions_regenerated'] is False
+          assert d['inheritance']['r9_refit'] is False
+          assert d['inheritance']['sportsbook_inputs_added'] == 0
+          assert d['inheritance']['production_parameters_changed'] is False
+          assert d['inheritance']['receiving_yard_means_changed'] is False
+          assert d['inheritance']['r22_changed'] is False
+          assert d['disposition'] in {
+              'WEEK1_SELECTIVE_RESTORATION_INTEGRITY_FAILURE',
+              'WEEK1_SELECTIVE_RESTORATION_RETROSPECTIVE_SUPPORT_FOR_2026_SHADOW',
+              'WEEK1_SELECTIVE_RESTORATION_MIXED_NO_SHADOW',
+          }
+          print('R26I_DISPOSITION_CONTRACT_PASS disposition=' + d['disposition'])
+          PY
+
+      - name: Show R26I result
+        run: |
+          cat data/backtests/r26i_week1_selective_restoration_v1/r26i_disposition.json
+          echo '=== season metrics ==='
+          cat data/backtests/r26i_week1_selective_restoration_v1/r26i_week1_season_metrics.csv
+
+      - name: Upload R26I evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r26i-week1-selective-restoration-v1
+          retention-days: 90
+          path: |
+            r26i_plan.sha256
+            r26i_lock.sha256
+            r26i_code.sha256
+            r26i_protected_clean.txt
+            data/backtests/r26i_week1_selective_restoration_v1/*
