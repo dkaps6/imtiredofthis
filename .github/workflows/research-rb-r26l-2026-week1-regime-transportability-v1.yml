@@ -101,15 +101,23 @@ jobs:
           PROD_ACTUAL="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${PROD_ARTIFACT_ID}" --jq '.digest')"
           test "$R26J_ACTUAL" = "$R26J_DIGEST"
           test "$PROD_ACTUAL" = "$PROD_DIGEST"
-          rm -rf parent_r26j current_prod
+          rm -rf parent_r26j current_prod current_prod_secondary
           mkdir -p parent_r26j current_prod
           gh run download "$R26J_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26J_ARTIFACT_NAME" --dir parent_r26j
           gh run download "$PROD_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$PROD_ARTIFACT_NAME" --dir current_prod
           test -s parent_r26j/data/backtests/r26j_2020_week1_comparability_source_audit_v1/r26j_source_disposition.json
           test -s parent_r26j/data/backtests/r26j_2020_week1_comparability_source_audit_v1/r26j_week1_vacancy_room_source_state.csv
           test -s current_prod/data/roles_ourlads.csv
+          test -s current_prod/outputs/roles_ourlads.csv
           test -s current_prod/data/player_form_consensus.csv
+          cmp --silent current_prod/data/roles_ourlads.csv current_prod/outputs/roles_ourlads.csv
+          mkdir -p current_prod_secondary/data
+          cp current_prod/data/roles_ourlads.csv current_prod_secondary/data/roles_ourlads.csv
+          cp current_prod/data/player_form_consensus.csv current_prod_secondary/data/player_form_consensus.csv
+          test "$(find current_prod_secondary -type f -name roles_ourlads.csv | wc -l)" -eq 1
+          test "$(find current_prod_secondary -type f -name player_form_consensus.csv | wc -l)" -eq 1
           echo "R26L_IMMUTABLE_PARENTS_PASS r26j=$R26J_ACTUAL prod=$PROD_ACTUAL"
+          echo R26L_SECONDARY_PRODUCTION_STAGING_PASS
 
       - name: Execute prospective source-only transportability audit
         run: |
@@ -117,7 +125,7 @@ jobs:
           rm -rf data/backtests/r26l_2026_week1_regime_transportability_v1
           python scripts/backtest/run_rb_r26l_2026_week1_regime_transportability_v1.py \
             --r26j-root parent_r26j \
-            --production-root current_prod \
+            --production-root current_prod_secondary \
             --protected-clean-marker r26l_protected_clean.txt \
             --out-dir data/backtests/r26l_2026_week1_regime_transportability_v1
 

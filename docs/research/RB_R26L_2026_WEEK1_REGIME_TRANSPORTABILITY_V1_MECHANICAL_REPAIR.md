@@ -49,6 +49,33 @@ boundary:
 - no R9 refit;
 - no production changes.
 
+## Failed attempt 3
+
+Run `34389135420` passed the weekly-roster repair, frozen hashes,
+production-boundary check, immutable parent digests, and strict-prior identity
+loading through 2025. It then failed before any disposition while opening the
+secondary production-current diagnostics because the immutable Full Slate
+artifact contains two copies of `roles_ourlads.csv`:
+
+- `data/roles_ourlads.csv`
+- `outputs/roles_ourlads.csv`
+
+The two files are byte-identical. `player_form_consensus.csv` exists once under
+`data/`.
+
+## Secondary-diagnostic staging repair
+
+The workflow now verifies the exact immutable production artifact digest first,
+downloads the artifact unchanged, asserts the two role files are byte-identical,
+and stages only these canonical data files into an isolated diagnostic root:
+
+- `data/roles_ourlads.csv`
+- `data/player_form_consensus.csv`
+
+The frozen evaluator receives that staging root only for its already-declared
+secondary, non-decisive production-current diagnostics. No production evidence
+value is modified and no field is added to the seven-feature primary classifier.
+
 ## Science unchanged
 
 The following remain byte-for-byte governed by the frozen evaluator/plan:
@@ -62,5 +89,4 @@ The following remain byte-for-byte governed by the frozen evaluator/plan:
 - disposition definitions;
 - authority ceiling.
 
-No 2026 aggregate feature value or R26L scientific disposition was available
-before this repair was specified.
+No R26L scientific disposition was available before these mechanical repairs.
