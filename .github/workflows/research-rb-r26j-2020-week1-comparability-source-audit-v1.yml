@@ -1,0 +1,136 @@
+name: RB R26J 2020 Week 1 Comparability Source Audit V1
+
+on:
+  push:
+    branches:
+      - research-rb-r26j-2020-week1-comparability-source-audit-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  PRODUCTION_BASE_SHA: f8417f55b04ce0e19baf260e9d532765034c47f1
+  R26_RUN_ID: '34356222339'
+  R26_ARTIFACT_ID: '10106271075'
+  R26_ARTIFACT_NAME: rb-r26-vacancy-gated-r9-retrospective-v1
+  R26_DIGEST: sha256:607fca6e11c301ecb2a3bf74e3dfea8ae415bb33cf3c150a6d89eaedada2809e
+  R26C_RUN_ID: '34361409319'
+  R26C_ARTIFACT_ID: '10108036449'
+  R26C_ARTIFACT_NAME: rb-r26c-exit-significance-source-audit-v1
+  R26C_DIGEST: sha256:1c7ee705179d91b7e3e53c39b57783314bd87876df6c784d5d1930ee5cf79156
+
+jobs:
+  audit-source-regime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install source-audit dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4
+
+      - name: Verify frozen R26J contract and production boundary
+        run: |
+          set -euo pipefail
+          test -s docs/research/RB_R26J_2020_WEEK1_COMPARABILITY_SOURCE_AUDIT_V1_FROZEN_PLAN.md
+          test -s docs/research/RB_R26J_2020_WEEK1_COMPARABILITY_SOURCE_AUDIT_V1_IMPLEMENTATION_LOCK.md
+          test -s scripts/backtest/audit_rb_r26j_2020_week1_comparability_sources_v1.py
+          python -m py_compile scripts/backtest/audit_rb_r26j_2020_week1_comparability_sources_v1.py
+          sha256sum docs/research/RB_R26J_2020_WEEK1_COMPARABILITY_SOURCE_AUDIT_V1_FROZEN_PLAN.md | tee r26j_plan.sha256
+          sha256sum docs/research/RB_R26J_2020_WEEK1_COMPARABILITY_SOURCE_AUDIT_V1_IMPLEMENTATION_LOCK.md | tee r26j_lock.sha256
+          sha256sum scripts/backtest/audit_rb_r26j_2020_week1_comparability_sources_v1.py | tee r26j_code.sha256
+          git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
+            scripts/modeling \
+            scripts/run_rb_week1_no_odds.py \
+            scripts/run_pricing_with_full_roster_universe_v3.py \
+            scripts/run_pricing_with_full_roster_universe_v3_core.py \
+            scripts/run_pricing_with_full_roster_universe_v4_production.py \
+            scripts/simulation_v2.py \
+            scripts/simulation_c2_qb_candidate.py \
+            data/models \
+            model \
+            .github/workflows/full-slate.yml \
+            .github/workflows/production-week1-v4-r22-certification.yml
+          echo PASS > r26j_protected_clean.txt
+          echo R26J_PROTECTED_PRODUCTION_BOUNDARY_PASS
+
+      - name: Verify and download immutable source parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          R26_ACTUAL="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26_ARTIFACT_ID}" --jq '.digest')"
+          R26C_ACTUAL="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26C_ARTIFACT_ID}" --jq '.digest')"
+          test "$R26_ACTUAL" = "$R26_DIGEST"
+          test "$R26C_ACTUAL" = "$R26C_DIGEST"
+          rm -rf parent_r26 parent_r26c
+          mkdir -p parent_r26 parent_r26c
+          gh run download "$R26_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26_ARTIFACT_NAME" --dir parent_r26
+          gh run download "$R26C_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26C_ARTIFACT_NAME" --dir parent_r26c
+          test "$(find parent_r26 -name r26_predictions.csv -type f | wc -l)" -eq 6
+          test "$(find parent_r26c -name r26c_source_disposition.json -type f | wc -l)" -eq 1
+          test "$(find parent_r26c -name r26c_vacancy_teamweek_aggregate.csv -type f | wc -l)" -eq 1
+          test "$(find parent_r26c -name r26c_exited_player_source_state.csv -type f | wc -l)" -eq 1
+          echo "R26J_IMMUTABLE_SOURCE_PARENTS_PASS r26=$R26_ACTUAL r26c=$R26C_ACTUAL"
+
+      - name: Execute source-only 2020 comparability audit
+        run: |
+          set -euo pipefail
+          rm -rf data/backtests/r26j_2020_week1_comparability_source_audit_v1
+          python scripts/backtest/audit_rb_r26j_2020_week1_comparability_sources_v1.py \
+            --r26-root parent_r26 \
+            --r26c-root parent_r26c \
+            --protected-clean-marker r26j_protected_clean.txt \
+            --out-dir data/backtests/r26j_2020_week1_comparability_source_audit_v1
+
+      - name: Assert source-only disposition contract
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('data/backtests/r26j_2020_week1_comparability_source_audit_v1/r26j_source_disposition.json').read_text())
+          assert d['all_integrity_gates_pass'] is True
+          assert d['selected_actual_fields'] == []
+          assert d['sportsbook_inputs_used'] == 0
+          assert d['future_outcome_features_used'] == 0
+          assert d['exclude_2020_authorized'] is False
+          assert d['prospective_shadow_authorized'] is False
+          assert d['production_promotion_authorized'] is False
+          assert d['production_parameters_changed'] is False
+          assert d['r9_refit'] is False
+          assert d['predictions_regenerated'] is False
+          assert d['disposition'] in {
+              '2020_SOURCE_REGIME_DISTINCT_FOR_MECHANISM_FOLLOWUP',
+              '2020_SOURCE_REGIME_NOT_DISTINCT_ENOUGH_FOR_EXEMPTION',
+          }
+          print('R26J_SOURCE_CONTRACT_PASS disposition=' + d['disposition'])
+          PY
+
+      - name: Show R26J source result
+        run: |
+          cat data/backtests/r26j_2020_week1_comparability_source_audit_v1/r26j_source_disposition.json
+          echo '=== distinctions ==='
+          cat data/backtests/r26j_2020_week1_comparability_source_audit_v1/r26j_2020_distinction_atlas.csv
+
+      - name: Upload R26J source evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r26j-2020-week1-comparability-source-audit-v1
+          retention-days: 90
+          path: |
+            r26j_plan.sha256
+            r26j_lock.sha256
+            r26j_code.sha256
+            r26j_protected_clean.txt
+            data/backtests/r26j_2020_week1_comparability_source_audit_v1/*
