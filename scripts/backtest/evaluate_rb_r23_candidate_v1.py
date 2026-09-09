@@ -49,9 +49,13 @@ def prepared(bundle) -> pd.DataFrame:
     with patch.object(simulation_rules, "load_model_contexts", return_value=(bundle.teams, bundle.players)):
         metrics = simulation_rules.apply_rules_to_metrics(metrics)
     metrics["player_clean_key"] = metrics["player_clean_key"].fillna("").astype(str)
-    metrics, _ = materialize_target_entitlement(metrics)
     keys = ["event_id", "team", "player_clean_key"]
-    return metrics.sort_values(keys).drop_duplicates(keys, keep="last").copy()
+    # build_market_frame is market-expanded. Collapse to the canonical one-row
+    # football state before explicit entitlement, matching the established
+    # historical receiving diagnostics and the target-entitlement contract.
+    metrics = metrics.sort_values(keys).drop_duplicates(keys, keep="last").copy()
+    metrics, _ = materialize_target_entitlement(metrics)
+    return metrics.copy()
 
 
 def _prior(logs: pd.DataFrame, season: int, week: int, team: str, player_key: str | None = None) -> pd.DataFrame:
