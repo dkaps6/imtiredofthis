@@ -7,6 +7,7 @@ on:
     paths:
       - docs/production/TE_R5_WEEK1_FULL_STACK_CONFIRMATION_V1_PLAN.md
       - scripts/modeling/te_r5_week1_full_stack_confirmation_v1.py
+      - scripts/modeling/run_te_r5_week1_full_stack_confirmation_v1.py
       - .github/workflows/te-r5-week1-full-stack-confirmation-v1.yml
   workflow_dispatch:
 
@@ -108,7 +109,7 @@ jobs:
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
-          python scripts/modeling/te_r5_week1_full_stack_confirmation_v1.py \
+          python scripts/modeling/run_te_r5_week1_full_stack_confirmation_v1.py \
             --joint-root joint-artifact \
             --r3-root r3-artifact \
             --r4-root r4-artifact \
