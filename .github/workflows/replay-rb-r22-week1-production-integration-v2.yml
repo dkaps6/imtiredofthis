@@ -6,6 +6,7 @@ on:
       - research-cross-position-catastrophic-casebook-v1
     paths:
       - 'scripts/run_pricing_with_full_roster_universe_v4_production.py'
+      - 'scripts/run_pricing_with_full_roster_universe_v3_core.py'
       - 'scripts/validate_rb_r22_week1_production_integration_v2.py'
       - '.github/workflows/replay-rb-r22-week1-production-integration-v2.yml'
   workflow_dispatch:
@@ -129,7 +130,7 @@ jobs:
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
-          python scripts/run_pricing_with_full_roster_universe_v3.py --season 2026
+          python scripts/run_pricing_with_full_roster_universe_v3_core.py --season 2026
           python scripts/stamp_qb_c2_pricing_lineage_v1.py
           mkdir -p evidence
           cp outputs/props_priced_clean.csv evidence/v3_same_checkout.csv
