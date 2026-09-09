@@ -16,6 +16,8 @@ env:
   PLAN_COMMIT: 6316ba89dc3b88394d27302567435f6105afaff1
   CODE_COMMIT: 516b351869f2cffad6fe934a06cce046bd9249ec
   LOCK_COMMIT: 5d76b8789cde3d260e2427f529500bd7d707c5f0
+  REPAIR_NOTE_COMMIT: a8fd995eadf2c9414ef47ea84505324f1f08b5e7
+  IDENTITY_HELPER_COMMIT: 0b4c2df7c14b16bd0e945b425aac7f35e015fa3d
   PROTECTED_HEAD: f8417f55b04ce0e19baf260e9d532765034c47f1
   PROD_RUN: "34317211395"
   PROD_ARTIFACT: "10090547415"
@@ -61,11 +63,15 @@ jobs:
           PLAN=docs/research/RB_WEEK1_PREGAME_OPERATIONAL_READINESS_V1_FROZEN_PLAN.md
           CODE=scripts/backtest/build_rb_week1_pregame_operational_readiness_v1.py
           LOCK=docs/research/RB_WEEK1_PREGAME_OPERATIONAL_READINESS_V1_IMPLEMENTATION_LOCK.md
-          test -s "$PLAN" && test -s "$CODE" && test -s "$LOCK"
-          python -m py_compile "$CODE"
+          REPAIR=docs/research/RB_WEEK1_PREGAME_READINESS_RUN1_MECHANICAL_REPAIR_V1.md
+          HELPER=scripts/backtest/stage_r26n_production_identity_key_repair_v1.py
+          test -s "$PLAN" && test -s "$CODE" && test -s "$LOCK" && test -s "$REPAIR" && test -s "$HELPER"
+          python -m py_compile "$CODE" "$HELPER"
           git diff --quiet "$PLAN_COMMIT" HEAD -- "$PLAN"
           git diff --quiet "$CODE_COMMIT" HEAD -- "$CODE"
           git diff --quiet "$LOCK_COMMIT" HEAD -- "$LOCK"
+          git diff --quiet "$REPAIR_NOTE_COMMIT" HEAD -- "$REPAIR"
+          git diff --quiet "$IDENTITY_HELPER_COMMIT" HEAD -- "$HELPER"
           git diff --quiet "$PROTECTED_HEAD" HEAD -- \
             scripts/run_pricing_with_full_roster_universe_v1.py \
             scripts/run_pricing_with_full_roster_universe_v3_core.py \
@@ -78,6 +84,8 @@ jobs:
           sha256sum "$PLAN" | tee rb_week1_readiness_plan.sha256
           sha256sum "$CODE" | tee rb_week1_readiness_code.sha256
           sha256sum "$LOCK" | tee rb_week1_readiness_lock.sha256
+          sha256sum "$REPAIR" | tee rb_week1_readiness_repair_note.sha256
+          sha256sum "$HELPER" | tee rb_week1_readiness_identity_helper.sha256
           echo PASS > rb_week1_readiness_protected_code_clean.txt
 
       - name: Verify and download exact parent artifacts
@@ -98,7 +106,7 @@ jobs:
           verify_artifact "$R22_ARTIFACT" "$R22_DIGEST" ""
           verify_artifact "$R26Q_ARTIFACT" "$R26Q_DIGEST" "$R26Q_HEAD"
           verify_artifact "$R26R_ARTIFACT" "$R26R_DIGEST" "$R26R_HEAD"
-          rm -rf parent_production parent_r22 parent_r26q parent_r26r
+          rm -rf parent_production staged_production parent_r22 parent_r26q parent_r26r
           mkdir -p parent_production parent_r22 parent_r26q parent_r26r
           gh run download "$PROD_RUN" --repo "$GITHUB_REPOSITORY" --name "$PROD_NAME" --dir parent_production
           gh run download "$R22_RUN" --repo "$GITHUB_REPOSITORY" --name "$R22_NAME" --dir parent_r22
@@ -111,7 +119,7 @@ jobs:
           test -s parent_r26r/data/backtests/r26r_2026_week1_prospective_observation_snapshot_v1/r26r_disposition.json
           echo PASS > rb_week1_readiness_parents_verified.txt
 
-      - name: Stage exact protected selector into immutable production-data root
+      - name: Stage exact protected selector into downloaded production data root
         run: |
           set -euo pipefail
           mkdir -p parent_production/model
@@ -120,6 +128,18 @@ jobs:
           STAGED_SHA="$(sha256sum parent_production/model/qb_distribution_state_selector_v1.json | awk '{print $1}')"
           test "$PROD_SELECTOR_SHA" = "$STAGED_SHA"
           printf '%s\n' "$STAGED_SHA" > rb_week1_readiness_selector.sha256
+
+      - name: Apply frozen production identity-key compatibility staging
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/backtest/stage_r26n_production_identity_key_repair_v1.py \
+            --source-root parent_production \
+            --staged-root staged_production \
+            --audit rb_week1_readiness_identity_staging_audit.json
+          test -s staged_production/data/model_context_bridge.csv
+          test -s rb_week1_readiness_identity_staging_audit.json
+          python -c "import json; d=json.load(open('rb_week1_readiness_identity_staging_audit.json')); assert d['pass'] is True and d['source_root_untouched'] is True and d['football_values_changed'] is False and d['players_added_or_removed'] is False and d['fuzzy_matching_used'] is False; print('IDENTITY_STAGING_PASS rows=',d['staged_rows'])"
 
       - name: Capture fresh pregame Ourlads roles
         run: |
@@ -142,7 +162,7 @@ jobs:
           export PYTHONPATH="${PWD}"
           rm -rf data/backtests/rb_week1_pregame_operational_readiness_v1
           python scripts/backtest/build_rb_week1_pregame_operational_readiness_v1.py \
-            --production-root parent_production \
+            --production-root staged_production \
             --r22-root parent_r22 \
             --r26q-root parent_r26q \
             --r26r-root parent_r26r \
@@ -182,13 +202,7 @@ jobs:
             echo '=== gates ==='
             cat "$ROOT/rb_week1_pregame_readiness_gate_matrix.csv"
             echo '=== largest R26 movements ==='
-            python - <<'PY'
-            import pandas as pd
-            p='data/backtests/rb_week1_pregame_operational_readiness_v1/rb_week1_pregame_player_view.csv'
-            x=pd.read_csv(p)
-            cols=['team','player','current_ourlads_role','p3_rush_attempts_mean','p3_rush_yards_mean','prod_rec_yards_mean','prod_baseline_receptions_mean','r26_receptions_mean','r26_minus_baseline_receptions_mean','market_line_median']
-            print(x.sort_values('r26_minus_baseline_receptions_mean',ascending=False)[cols].head(25).to_string(index=False))
-            PY
+            python -c "import pandas as pd; p='$ROOT/rb_week1_pregame_player_view.csv'; x=pd.read_csv(p); cols=['team','player','current_ourlads_role','p3_rush_attempts_mean','p3_rush_yards_mean','prod_rec_yards_mean','prod_baseline_receptions_mean','r26_receptions_mean','r26_minus_baseline_receptions_mean','market_line_median']; print(x.sort_values('r26_minus_baseline_receptions_mean',ascending=False)[cols].head(25).to_string(index=False))"
           fi
 
       - name: Upload Week 1 RB pregame readiness package
@@ -201,8 +215,11 @@ jobs:
             rb_week1_readiness_plan.sha256
             rb_week1_readiness_code.sha256
             rb_week1_readiness_lock.sha256
+            rb_week1_readiness_repair_note.sha256
+            rb_week1_readiness_identity_helper.sha256
             rb_week1_readiness_selector.sha256
             rb_week1_readiness_protected_code_clean.txt
             rb_week1_readiness_parents_verified.txt
+            rb_week1_readiness_identity_staging_audit.json
             current_roles_ourlads.csv
             data/backtests/rb_week1_pregame_operational_readiness_v1/*
