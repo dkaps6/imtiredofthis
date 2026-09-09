@@ -17,6 +17,8 @@ env:
   PRODUCTION_BASE_SHA: f8417f55b04ce0e19baf260e9d532765034c47f1
   R26N_PLAN_COMMIT: 919285fd0e2042461a5a89472f6832c01da857b4
   R26N_IMPLEMENTATION_COMMIT: 5299ce54575ffcfe33ad203db0ee00285181291f
+  R26N_REPAIR_PLAN_COMMIT: 8268327683e9d826c05d2d72a4467e353f4fa9f1
+  R26N_REPAIR_HELPER_COMMIT: 0b4c2df7c14b16bd0e945b425aac7f35e015fa3d
 
   R26M_RUN_ID: 34390505549
   R26M_ARTIFACT_ID: 10119429741
@@ -59,28 +61,35 @@ jobs:
           pip install -r requirements.txt
           pip install nflreadpy pyyaml scipy scikit-learn
 
-      - name: Verify frozen R26N contract and protected production boundary
+      - name: Verify frozen R26N contract repair lineage and protected production boundary
         run: |
           set -euo pipefail
           PLAN=docs/research/RB_R26N_2026_WEEK1_UNMODIFIED_R26_STRUCTURAL_CANDIDATE_V1_FROZEN_PLAN.md
           LOCK=docs/research/RB_R26N_2026_WEEK1_UNMODIFIED_R26_STRUCTURAL_CANDIDATE_V1_IMPLEMENTATION_LOCK.md
           CODE=scripts/backtest/build_rb_r26n_2026_week1_unmodified_r26_structural_candidate_v1.py
+          REPAIR_NOTE=docs/research/RB_R26N_RUN1_MECHANICAL_REPAIR_V1.md
+          REPAIR_HELPER=scripts/backtest/stage_r26n_production_identity_key_repair_v1.py
 
           test -s "$PLAN"
           test -s "$LOCK"
           test -s "$CODE"
-          python -m py_compile "$CODE"
+          test -s "$REPAIR_NOTE"
+          test -s "$REPAIR_HELPER"
+          python -m py_compile "$CODE" "$REPAIR_HELPER"
 
-          # Freeze-before-results lineage: the plan and implementation must be byte-identical
-          # to the commits named in the implementation lock.
+          # Original science and candidate builder remain byte-identical to their locks.
           git diff --quiet "$R26N_PLAN_COMMIT" HEAD -- "$PLAN"
           git diff --quiet "$R26N_IMPLEMENTATION_COMMIT" HEAD -- "$CODE"
+          # Mechanical repair intent was frozen before helper implementation.
+          git diff --quiet "$R26N_REPAIR_PLAN_COMMIT" HEAD -- "$REPAIR_NOTE"
+          git diff --quiet "$R26N_REPAIR_HELPER_COMMIT" HEAD -- "$REPAIR_HELPER"
 
           sha256sum "$PLAN" | tee r26n_plan.sha256
           sha256sum "$LOCK" | tee r26n_lock.sha256
           sha256sum "$CODE" | tee r26n_code.sha256
+          sha256sum "$REPAIR_NOTE" | tee r26n_repair_note.sha256
+          sha256sum "$REPAIR_HELPER" | tee r26n_repair_helper.sha256
 
-          # Research-only branch: protected production/model authorities remain exact.
           git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
             scripts/modeling \
             scripts/run_rb_week1_no_odds.py \
@@ -117,7 +126,7 @@ jobs:
           test "$R19_ACTUAL" = "$R19_DIGEST"
           test "$PRODUCTION_HEAD" = "$PRODUCTION_BASE_SHA"
 
-          rm -rf parent_r26m parent_production parent_r26l parent_r19
+          rm -rf parent_r26m parent_production parent_r26l parent_r19 staged_production
           mkdir -p parent_r26m parent_production parent_r26l parent_r19
 
           gh run download "$R26M_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26M_ARTIFACT_NAME" --dir parent_r26m
@@ -139,12 +148,30 @@ jobs:
 
           echo "R26N_IMMUTABLE_PARENTS_PASS r26m=$R26M_ACTUAL production=$PRODUCTION_ACTUAL r26l=$R26L_ACTUAL r19=$R19_ACTUAL production_head=$PRODUCTION_HEAD"
 
+      - name: Stage frozen R26N run-1 mechanical identity-key repair
+        run: |
+          set -euo pipefail
+          python scripts/backtest/stage_r26n_production_identity_key_repair_v1.py \
+            --source-root parent_production \
+            --staged-root staged_production \
+            --audit r26n_identity_key_repair_audit.json
+          test -s r26n_identity_key_repair_audit.json
+          # Immutable downloaded parent must still lack the derived key column.
+          python - <<'PY'
+          import pandas as pd
+          src=pd.read_csv('parent_production/data/model_context_bridge.csv', nrows=1)
+          staged=pd.read_csv('staged_production/data/model_context_bridge.csv', nrows=1)
+          assert 'player_clean_key' not in src.columns
+          assert 'player_clean_key' in staged.columns
+          print('R26N_IMMUTABLE_PARENT_UNTOUCHED_PASS')
+          PY
+
       - name: Materialize frozen R26N structural candidate
         run: |
           set -euo pipefail
           rm -rf data/backtests/r26n_2026_week1_unmodified_r26_structural_candidate_v1
           python scripts/backtest/build_rb_r26n_2026_week1_unmodified_r26_structural_candidate_v1.py \
-            --production-root parent_production \
+            --production-root staged_production \
             --r26m-root parent_r26m \
             --r26l-root parent_r26l \
             --r19-root parent_r19 \
@@ -182,6 +209,7 @@ jobs:
 
       - name: Show R26N evidence
         run: |
+          cat r26n_identity_key_repair_audit.json
           cat data/backtests/r26n_2026_week1_unmodified_r26_structural_candidate_v1/r26n_disposition.json
           echo '=== R26N gate matrix ==='
           cat data/backtests/r26n_2026_week1_unmodified_r26_structural_candidate_v1/r26n_gate_matrix.csv
@@ -197,5 +225,8 @@ jobs:
             r26n_plan.sha256
             r26n_lock.sha256
             r26n_code.sha256
+            r26n_repair_note.sha256
+            r26n_repair_helper.sha256
             r26n_protected_clean.txt
+            r26n_identity_key_repair_audit.json
             data/backtests/r26n_2026_week1_unmodified_r26_structural_candidate_v1/*
