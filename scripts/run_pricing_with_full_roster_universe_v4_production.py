@@ -15,7 +15,7 @@ import pandas as pd
 
 import scripts.run_pricing_with_full_roster_universe_v1 as base
 import scripts.run_pricing_with_full_roster_universe_v2 as v2
-import scripts.run_pricing_with_full_roster_universe_v3 as v3
+import scripts.run_pricing_with_full_roster_universe_v3_core as v3
 from scripts.modeling.rb_receiving_tail_production_adapter_v1 import (
     AUDIT_JSON as RB_REC_AUDIT_JSON,
     TRACE_CSV as RB_REC_TRACE_CSV,
@@ -66,11 +66,6 @@ def _stamp_pricing_lineage() -> dict:
         if bool(r.rb_receiving_tail_applied)
     }
 
-    # Pricing rows retain provider-form display names/keys, while the football
-    # simulation universe intentionally uses suffix-safe canonical player keys.
-    # Provider aliases are installed only after simulation by V2. Stamp lineage
-    # through that same governed identity contract so suffixes such as "III" or
-    # "Jr." cannot make an adapted football distribution look unadapted.
     canonical_pricing_keys = priced["player"].map(v2._suffix_safe_key)
     blank = canonical_pricing_keys.astype("string").fillna("").str.strip().eq("")
     if blank.any():
@@ -78,8 +73,6 @@ def _stamp_pricing_lineage() -> dict:
         raise RuntimeError(f"R22 pricing lineage suffix-safe identity unresolved: {sample}")
     priced["rb_receiving_tail_canonical_player_key"] = canonical_pricing_keys
 
-    # Fail closed if one suffix-safe key maps to multiple current provider names
-    # on the same team; this mirrors the full-roster identity ambiguity guard.
     ambiguity = (
         priced.assign(_provider_name=priced["player"].astype("string").fillna("").str.strip())
         .groupby([priced["team"].astype(str).str.upper(), canonical_pricing_keys], dropna=False)["_provider_name"]
