@@ -1,0 +1,136 @@
+name: RB R26P R26O Gate15 Contract Forensic V1
+
+on:
+  push:
+    branches:
+      - research-rb-r26p-r26o-gate15-contract-forensic-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  R26P_PLAN_COMMIT: 51eac07260752809bf9426e38a1b5c46abafe771
+  R26P_CODE_COMMIT: 8c787208a70615bd4c5f596a3457f7fa08f5447a
+  R26O_PLAN_COMMIT: 96e4a6977458b55ec00cb29fbc9de05c56c89b88
+  R26O_CODE_COMMIT: 6a171cb32e77c7d6691ceb75da9861a5d6dd7bc4
+  PRODUCTION_BASE_SHA: f8417f55b04ce0e19baf260e9d532765034c47f1
+  R26O_RUN_ID: 34398759284
+  R26O_ARTIFACT_ID: 10122672501
+  R26O_ARTIFACT_NAME: rb-r26o-2026-week1-receptions-shadow-integration-compatibility-v1
+  R26O_DIGEST: sha256:6d72de1eb8902fd8d956feb01b4d1a3cb5847aa58417ad4f416f3e1102e96e82
+  R22_RUN_ID: 34298516960
+  R22_ARTIFACT_ID: 10084118525
+  R22_ARTIFACT_NAME: rb-r22-week1-production-integration-v2
+  R22_DIGEST: sha256:2391bd9914e9d0029c63529829496fb9b462d008bdcc3f8c37bb3e1079580bd1
+
+jobs:
+  forensic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install minimal forensic dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4
+
+      - name: Verify frozen R26P and immutable source contracts
+        run: |
+          set -euo pipefail
+          PLAN=docs/research/RB_R26P_R26O_GATE15_CONTRACT_FORENSIC_V1_FROZEN_PLAN.md
+          CODE=scripts/backtest/audit_rb_r26p_r26o_gate15_contract_forensic_v1.py
+          R26O_PLAN=docs/research/RB_R26O_2026_WEEK1_RECEPTIONS_SHADOW_INTEGRATION_COMPATIBILITY_V1_FROZEN_PLAN.md
+          R26O_CODE=scripts/backtest/evaluate_rb_r26o_2026_week1_receptions_shadow_integration_v1.py
+          R22_CODE=scripts/modeling/rb_receiving_tail_production_adapter_v1.py
+
+          test -s "$PLAN" && test -s "$CODE" && test -s "$R26O_PLAN" && test -s "$R26O_CODE" && test -s "$R22_CODE"
+          python -m py_compile "$CODE"
+          git diff --quiet "$R26P_PLAN_COMMIT" HEAD -- "$PLAN"
+          git diff --quiet "$R26P_CODE_COMMIT" HEAD -- "$CODE"
+          git diff --quiet "$R26O_PLAN_COMMIT" HEAD -- "$R26O_PLAN"
+          git diff --quiet "$R26O_CODE_COMMIT" HEAD -- "$R26O_CODE"
+          git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- "$R22_CODE"
+
+          sha256sum "$PLAN" | tee r26p_plan.sha256
+          sha256sum "$CODE" | tee r26p_code.sha256
+          sha256sum "$R26O_PLAN" | tee r26p_r26o_plan.sha256
+          sha256sum "$R26O_CODE" | tee r26p_r26o_code.sha256
+          sha256sum "$R22_CODE" | tee r26p_r22_code.sha256
+          echo PASS > r26p_protected_clean.txt
+          echo R26P_IMMUTABLE_SOURCE_CONTRACTS_PASS
+
+      - name: Verify and download immutable R26O and R22 artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          R26O_ACTUAL="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26O_ARTIFACT_ID}" --jq '.digest')"
+          R22_ACTUAL="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R22_ARTIFACT_ID}" --jq '.digest')"
+          test "$R26O_ACTUAL" = "$R26O_DIGEST"
+          test "$R22_ACTUAL" = "$R22_DIGEST"
+          rm -rf parent_r26o parent_r22
+          mkdir -p parent_r26o parent_r22
+          gh run download "$R26O_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26O_ARTIFACT_NAME" --dir parent_r26o
+          gh run download "$R22_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R22_ARTIFACT_NAME" --dir parent_r22
+          test -s parent_r26o/data/backtests/r26o_2026_week1_receptions_shadow_integration_compatibility_v1/r26o_disposition.json
+          test -s parent_r26o/data/backtests/r26o_2026_week1_receptions_shadow_integration_compatibility_v1/r26o_gate_matrix.csv
+          test -s parent_r22/data/rb_receiving_tail_production_audit.json
+          echo "R26P_IMMUTABLE_PARENTS_PASS r26o=$R26O_ACTUAL r22=$R22_ACTUAL"
+
+      - name: Execute frozen R26P read-only forensic
+        run: |
+          rm -rf data/backtests/r26p_r26o_gate15_contract_forensic_v1
+          python scripts/backtest/audit_rb_r26p_r26o_gate15_contract_forensic_v1.py \
+            --r26o-root parent_r26o \
+            --r22-root parent_r22 \
+            --protected-clean-marker r26p_protected_clean.txt \
+            --out-dir data/backtests/r26p_r26o_gate15_contract_forensic_v1
+
+      - name: Assert R26P authority ceiling
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('data/backtests/r26p_r26o_gate15_contract_forensic_v1/r26p_disposition.json')
+          d=json.loads(p.read_text())
+          assert d['disposition'] in {
+            'R26P_GATE15_EVIDENCE_WIRING_DEFECT_CONFIRMED_MECHANICAL_RERUN_AUTHORIZED',
+            'R26P_GATE15_FORENSIC_INCONCLUSIVE_NO_R26O_RERUN'
+          }
+          assert d['r26o_executed_disposition_preserved']=='R26O_2026_WEEK1_RECEPTIONS_SHADOW_INTEGRATION_FAIL_NO_SHADOW'
+          assert d['2026_outcomes_used']==0
+          assert d['sportsbook_football_inputs_used']==0
+          assert d['production_change_authorized'] is False
+          print('R26P_AUTHORITY_CONTRACT_PASS disposition='+d['disposition'])
+          PY
+
+      - name: Show R26P evidence
+        run: |
+          cat data/backtests/r26p_r26o_gate15_contract_forensic_v1/r26p_disposition.json
+          echo '=== R26P matrix ==='
+          cat data/backtests/r26p_r26o_gate15_contract_forensic_v1/r26p_forensic_matrix.csv
+
+      - name: Upload R26P evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r26p-r26o-gate15-contract-forensic-v1
+          retention-days: 90
+          path: |
+            r26p_plan.sha256
+            r26p_code.sha256
+            r26p_r26o_plan.sha256
+            r26p_r26o_code.sha256
+            r26p_r22_code.sha256
+            r26p_protected_clean.txt
+            data/backtests/r26p_r26o_gate15_contract_forensic_v1/*
