@@ -59,28 +59,35 @@ def build_historical_player_logs(
     frames: list[pd.DataFrame] = []
     for season in sorted(set(int(s) for s in seasons)):
         normalized = _normalize_weekly(_load_historical_weekly(season), season)
-        # nflverse weekly player stats include postseason weeks (19+). This
-        # backtest is explicitly regular season Weeks 1-18, and schedule_history
-        # is intentionally REG-only, so postseason observations must be excluded
-        # before opponent attachment rather than treated as missing schedule data.
-        normalized = normalized.loc[
-            pd.to_numeric(normalized["week"], errors="coerce").between(1, REGULAR_SEASON_MAX_WEEK)
-        ].copy()
+        normalized["week"] = pd.to_numeric(normalized["week"], errors="coerce").astype("Int64")
+        normalized["team"] = normalized["team"].map(canon_team)
+
+        # The regular-season schedule artifact is the authority for game scope.
+        # A generic week<=18 filter is insufficient for the pre-2021 17-game-week
+        # era because nflverse weekly player stats can expose postseason rows under
+        # a week number that is not present in that season's REG schedule. Keep
+        # only exact season/week/team keys that actually exist in the REG schedule.
+        # This is a scope/integrity filter, not a model feature or outcome filter.
+        season_sched = sched.loc[sched["season"].eq(season)].copy()
+        if season_sched.empty:
+            raise RuntimeError(f"historical schedule has no regular-season rows for {season}")
+        before = len(normalized)
         normalized = normalized.merge(
-            sched.loc[sched["season"].eq(season)],
+            season_sched,
             on=["season", "week", "team"],
-            how="left",
+            how="inner",
             validate="many_to_one",
         )
-        missing = normalized["opponent"].isna() | normalized["opponent"].astype(str).eq("")
-        if missing.any():
-            sample = normalized.loc[missing, ["season", "week", "team"]].drop_duplicates().head(10)
-            raise RuntimeError(
-                "historical player logs could not resolve opponent for regular-season schedule rows: "
-                + sample.to_dict(orient="records").__repr__()
-            )
+        excluded = before - len(normalized)
+        if normalized.empty:
+            raise RuntimeError(f"historical player logs produced zero schedule-matched regular-season rows for {season}")
+        if normalized["opponent"].isna().any() or normalized["opponent"].astype(str).eq("").any():
+            raise RuntimeError(f"historical player logs contain unresolved opponent after REG schedule match for {season}")
         frames.append(normalized)
-        print(f"[backtest_player_logs] season={season} regular_season_rows={len(normalized)}")
+        print(
+            f"[backtest_player_logs] season={season} regular_season_rows={len(normalized)} "
+            f"excluded_non_reg_schedule_rows={excluded}"
+        )
 
     out = pd.concat(frames, ignore_index=True, sort=False) if frames else pd.DataFrame()
     if out.empty:
