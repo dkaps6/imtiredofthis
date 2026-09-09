@@ -1,0 +1,97 @@
+name: RB R23 Receiving Entitlement Mean V1
+
+on:
+  push:
+    branches:
+      - research-rb-r23-receiving-entitlement-mean-v1
+    paths:
+      - 'scripts/backtest/evaluate_rb_r23_candidate_v1.py'
+      - 'scripts/backtest/finalize_rb_r23_candidate_v1.py'
+      - 'docs/research/RB_R23_RECEIVING_ENTITLEMENT_MEAN_FROZEN_PLAN.md'
+      - '.github/workflows/rb-r23-receiving-entitlement-mean-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+
+jobs:
+  confirm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml scipy scikit-learn
+      - name: Verify frozen plan and implementation
+        run: |
+          set -euo pipefail
+          test -s docs/research/RB_R23_RECEIVING_ENTITLEMENT_MEAN_FROZEN_PLAN.md
+          test -s scripts/backtest/evaluate_rb_r23_candidate_v1.py
+          test -s scripts/backtest/finalize_rb_r23_candidate_v1.py
+          sha256sum docs/research/RB_R23_RECEIVING_ENTITLEMENT_MEAN_FROZEN_PLAN.md | tee r23_plan.sha256
+          sha256sum scripts/backtest/evaluate_rb_r23_candidate_v1.py scripts/backtest/finalize_rb_r23_candidate_v1.py | tee r23_code.sha256
+      - name: Build and evaluate frozen folds
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          for SEASON in 2023 2024 2025; do
+            PRIOR=$((SEASON-1))
+            D="data/r23_candidate_${SEASON}"
+            O="data/backtests/r23_candidate_${SEASON}"
+            rm -rf "$D" "$O"
+            python scripts/backtest/build_historical_inputs.py --season "$SEASON" --prior-season "$PRIOR" --weeks '1-18' --out-dir "$D"
+            python scripts/backtest/enrich_historical_defense.py --team-weekly "$D/team_weekly_history.csv" --seasons "$PRIOR,$SEASON" --audit "$D/historical_defense_enrichment_audit.csv" --observations "$D/historical_defense_observations.csv"
+            python scripts/backtest/validate_historical_inputs.py --season "$SEASON" --prior-season "$PRIOR" --weeks '1-18' --data-dir "$D" --report "$D/historical_input_validation.csv"
+            python scripts/backtest/historical_player_logs.py --seasons "$PRIOR,$SEASON" --schedule "$D/schedule_history.csv" --out "$D/player_game_logs_history.csv"
+            python scripts/backtest/build_historical_injuries.py --seasons "$PRIOR,$SEASON" --out "$D/injuries_history.csv"
+            python scripts/backtest/build_historical_weather.py --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv"
+            python scripts/backtest/evaluate_rb_r23_candidate_v1.py --season "$SEASON" --prior-season "$PRIOR" --weeks '1-18' --player-logs "$D/player_game_logs_history.csv" --team-weekly "$D/team_weekly_history.csv" --schedule "$D/schedule_history.csv" --universe-dir "$D/pregame_universe" --injuries "$D/injuries_history.csv" --weather "$D/weather_history.csv" --out-dir "$O"
+          done
+      - name: Apply frozen pooled scientific gates
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/finalize_rb_r23_candidate_v1.py \
+            --dirs data/backtests/r23_candidate_2023 data/backtests/r23_candidate_2024 data/backtests/r23_candidate_2025 \
+            --out data/backtests/r23_candidate_final/r23_final_disposition.json
+      - name: Assert structural integrity
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          for season in (2023,2024,2025):
+              p=Path(f'data/backtests/r23_candidate_{season}/r23_predictions.csv')
+              a=Path(f'data/backtests/r23_candidate_{season}/r23_conservation_audit.csv')
+              x=pd.read_csv(p); z=pd.read_csv(a)
+              assert len(x)>0
+              assert int(x['sportsbook_inputs_used'].fillna(0).sum()) == 0
+              assert int(x['future_outcomes_used'].fillna(0).sum()) == 0
+              assert float(z['room_mass_gap'].abs().max()) < 1e-10
+          print('R23 structural integrity: PASS; sportsbook=0 future=0 RB-room mass conserved')
+          PY
+      - name: Upload R23 confirmation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r23-receiving-entitlement-mean-v1
+          retention-days: 90
+          path: |
+            r23_plan.sha256
+            r23_code.sha256
+            data/r23_candidate_2023/historical_input_validation.csv
+            data/r23_candidate_2024/historical_input_validation.csv
+            data/r23_candidate_2025/historical_input_validation.csv
+            data/backtests/r23_candidate_2023/*
+            data/backtests/r23_candidate_2024/*
+            data/backtests/r23_candidate_2025/*
+            data/backtests/r23_candidate_final/*
