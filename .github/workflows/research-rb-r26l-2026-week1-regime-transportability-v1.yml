@@ -40,6 +40,28 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas==1.5.3 numpy==1.26.4 pyarrow nflreadpy requests scikit-learn
 
+      - name: Repair nflreadpy explicit 2026 weekly-roster validation
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import importlib
+          from pathlib import Path
+
+          mod = importlib.import_module('nflreadpy.load_rosters_weekly')
+          path = Path(mod.__file__)
+          text = path.read_text()
+          needle = "    current_season = get_current_season()\n    for season in seasons:"
+          replacement = "    current_season = max(get_current_season(), 2026)\n    for season in seasons:"
+          if text.count(needle) != 1:
+              raise SystemExit(f'FATAL: nflreadpy weekly-roster validation shape changed; matches={text.count(needle)} path={path}')
+          path.write_text(text.replace(needle, replacement, 1))
+          repaired = path.read_text()
+          if replacement not in repaired:
+              raise SystemExit('FATAL: nflreadpy weekly-roster validation repair did not persist')
+          print('R26L_NFLREADPY_2026_WEEKLY_ROSTER_GATE_REPAIR_PASS path=' + str(path))
+          print('Source remains nflverse-data weekly_rosters/roster_weekly_2026 via nflreadpy downloader')
+          PY
+
       - name: Verify frozen R26L contract and production boundary
         run: |
           set -euo pipefail
