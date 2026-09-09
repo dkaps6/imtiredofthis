@@ -1,0 +1,151 @@
+name: RB R26H Week 1 Balanced Turnover Role State Atlas V1
+
+on:
+  push:
+    branches:
+      - research-rb-r26h-week1-balanced-turnover-role-state-atlas-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  PRODUCTION_BASE_SHA: f8417f55b04ce0e19baf260e9d532765034c47f1
+  R26_RUN_ID: '34356222339'
+  R26_ARTIFACT_ID: '10106271075'
+  R26_ARTIFACT_NAME: rb-r26-vacancy-gated-r9-retrospective-v1
+  R26_DIGEST: sha256:607fca6e11c301ecb2a3bf74e3dfea8ae415bb33cf3c150a6d89eaedada2809e
+  R26C_RUN_ID: '34361409319'
+  R26C_ARTIFACT_ID: '10108036449'
+  R26C_ARTIFACT_NAME: rb-r26c-exit-significance-source-audit-v1
+  R26C_DIGEST: sha256:1c7ee705179d91b7e3e53c39b57783314bd87876df6c784d5d1930ee5cf79156
+  R26F_RUN_ID: '34365496225'
+  R26F_ARTIFACT_ID: '10109658591'
+  R26F_ARTIFACT_NAME: rb-r26f-2020-week1-vacancy-forensics-v1
+  R26F_DIGEST: sha256:bce3f1a81ff516f962109dcadc9ad1e6efa2273c3a96851e94abbe9e4c332022
+  R26G_RUN_ID: '34365957361'
+  R26G_ARTIFACT_ID: '10109840313'
+  R26G_ARTIFACT_NAME: rb-r26g-week1-balanced-turnover-guard-v1
+  R26G_DIGEST: sha256:0523055f7b39500d5d6b9fbc7ed85185cae41bf4518889e7f6c58104021c15ca
+
+jobs:
+  diagnose-role-state:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install diagnostic dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4
+
+      - name: Verify frozen R26H contract and production boundary
+        run: |
+          set -euo pipefail
+          test -s docs/research/RB_R26H_WEEK1_BALANCED_TURNOVER_ROLE_STATE_ATLAS_V1_FROZEN_PLAN.md
+          test -s scripts/backtest/audit_rb_r26h_week1_balanced_turnover_role_state_v1.py
+          python -m py_compile scripts/backtest/audit_rb_r26h_week1_balanced_turnover_role_state_v1.py
+          sha256sum docs/research/RB_R26H_WEEK1_BALANCED_TURNOVER_ROLE_STATE_ATLAS_V1_FROZEN_PLAN.md | tee r26h_plan.sha256
+          sha256sum scripts/backtest/audit_rb_r26h_week1_balanced_turnover_role_state_v1.py | tee r26h_code.sha256
+          git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
+            scripts/modeling \
+            scripts/run_rb_week1_no_odds.py \
+            scripts/run_pricing_with_full_roster_universe_v3.py \
+            scripts/run_pricing_with_full_roster_universe_v3_core.py \
+            scripts/run_pricing_with_full_roster_universe_v4_production.py \
+            scripts/simulation_v2.py \
+            scripts/simulation_c2_qb_candidate.py \
+            data/models \
+            model \
+            .github/workflows/full-slate.yml \
+            .github/workflows/production-week1-v4-r22-certification.yml
+          echo R26H_PROTECTED_PRODUCTION_BOUNDARY_PASS
+
+      - name: Verify and download immutable parent evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for spec in \
+            "R26 $R26_ARTIFACT_ID $R26_DIGEST" \
+            "R26C $R26C_ARTIFACT_ID $R26C_DIGEST" \
+            "R26F $R26F_ARTIFACT_ID $R26F_DIGEST" \
+            "R26G $R26G_ARTIFACT_ID $R26G_DIGEST"; do
+            set -- $spec
+            label="$1"; aid="$2"; expected="$3"
+            actual="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${aid}" --jq '.digest')"
+            test "$actual" = "$expected"
+            echo "$label digest verified: $actual"
+          done
+          rm -rf parent_r26 parent_r26c parent_r26f parent_r26g
+          mkdir -p parent_r26 parent_r26c parent_r26f parent_r26g
+          gh run download "$R26_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26_ARTIFACT_NAME" --dir parent_r26
+          gh run download "$R26C_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26C_ARTIFACT_NAME" --dir parent_r26c
+          gh run download "$R26F_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26F_ARTIFACT_NAME" --dir parent_r26f
+          gh run download "$R26G_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26G_ARTIFACT_NAME" --dir parent_r26g
+          test "$(find parent_r26 -name r26_predictions.csv -type f | wc -l)" -eq 6
+          test "$(find parent_r26c -name r26c_vacancy_teamweek_aggregate.csv -type f | wc -l)" -eq 1
+          test "$(find parent_r26f -name r26f_disposition.json -type f | wc -l)" -eq 1
+          test "$(find parent_r26g -name r26g_disposition.json -type f | wc -l)" -eq 1
+          echo R26H_IMMUTABLE_PARENT_EVIDENCE_PASS
+
+      - name: Execute frozen R26H atlas
+        run: |
+          set -euo pipefail
+          rm -rf data/backtests/r26h_week1_balanced_turnover_role_state_atlas_v1
+          python scripts/backtest/audit_rb_r26h_week1_balanced_turnover_role_state_v1.py \
+            --r26-root parent_r26 \
+            --r26c-root parent_r26c \
+            --r26f-root parent_r26f \
+            --r26g-root parent_r26g \
+            --out-dir data/backtests/r26h_week1_balanced_turnover_role_state_atlas_v1
+
+      - name: Assert diagnostic integrity
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('data/backtests/r26h_week1_balanced_turnover_role_state_atlas_v1/r26h_disposition.json').read_text())
+          assert d['target_game_features_added'] == 0
+          assert d['sportsbook_inputs_added'] == 0
+          assert d['r26_predictions_regenerated'] is False
+          assert d['r9_refit'] is False
+          assert d['production_parameters_changed'] is False
+          assert d['receiving_yard_means_changed'] is False
+          assert d['r22_changed'] is False
+          assert d['prospective_shadow_authorized'] is False
+          assert d['production_promotion_authorized'] is False
+          assert d['exit_state_room_coverage'] >= .99
+          assert d['disposition'] in {
+              'BALANCED_TURNOVER_ROLE_STATE_CHILD_DESIGN_SIGNAL',
+              'BALANCED_TURNOVER_ROLE_STATE_MIXED_NO_CHILD_SIGNAL',
+          }
+          print('R26H_DIAGNOSTIC_INTEGRITY_PASS disposition=' + d['disposition'])
+          PY
+
+      - name: Show R26H diagnostic
+        run: |
+          cat data/backtests/r26h_week1_balanced_turnover_role_state_atlas_v1/r26h_disposition.json
+          echo '=== pooled states ==='
+          cat data/backtests/r26h_week1_balanced_turnover_role_state_atlas_v1/r26h_state_summary.csv
+          echo '=== season/state ==='
+          cat data/backtests/r26h_week1_balanced_turnover_role_state_atlas_v1/r26h_state_season_metrics.csv
+
+      - name: Upload R26H evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r26h-week1-balanced-turnover-role-state-atlas-v1
+          retention-days: 90
+          path: |
+            r26h_plan.sha256
+            r26h_code.sha256
+            data/backtests/r26h_week1_balanced_turnover_role_state_atlas_v1/*
