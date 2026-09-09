@@ -10,6 +10,15 @@ A legitimate preseason/early-week state where no player prop markets are posted
 is non-fatal. The wrapper writes data/live_odds_status.json with available=false
 so the football model can continue while sportsbook comparison/pricing is
 skipped cleanly. Provider/auth failures remain fatal.
+
+When live player props are available, sportsbook artifacts are semantically
+hardened before identity repair: deterministic cartesian duplicate artifacts are
+removed and audited, repeated entries inside grouped offers_json are removed,
+blank no-market name sentinels are excluded, and conflicting event identities or
+unresolved real player names fail closed. Core QB/RB/WR/TE yardage/reception
+player identity is then repaired and validated against the event-scoped Ourlads
+roster. Unresolved core player -> team/opponent identity is fatal before any
+downstream model stage can consume the sportsbook artifact.
 """
 from __future__ import annotations
 
@@ -19,11 +28,12 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-from typing import Iterable
 
 import pandas as pd
 
 from scripts._opponent_map import canon_team
+from scripts.harden_live_odds_artifacts_v1 import harden_live_odds_artifacts
+from scripts.repair_live_prop_identity_v1 import repair_live_prop_identity
 from scripts.runtime_context import resolve_week
 
 DATA = Path("data")
@@ -42,6 +52,24 @@ CRITICAL_EVENT_ARTIFACTS = [
     DATA / "opponent_map_from_props.csv",
 ]
 
+LIVE_DERIVED_ARTIFACTS = {
+    STATUS,
+    DATA / "live_prop_identity_audit.csv",
+    DATA / "live_prop_identity_status.json",
+    DATA / "live_odds_artifact_hardening.json",
+    DATA / "live_odds_placeholder_rows.csv",
+    DATA / "live_pricing_offer_audit.json",
+    DATA / "full_slate_pre_model_semantic_audit.csv",
+    DATA / "full_slate_pre_model_semantic_audit.json",
+    DATA / "full_slate_data_quality_audit.csv",
+    DATA / "full_slate_data_quality_audit.json",
+    DATA / "full_slate_post_pricing_audit.csv",
+    DATA / "player_identity_semantic_audit.csv",
+    DATA / "player_identity_semantic_audit.json",
+    DATA / "model_rule_simulation_inputs.csv",
+    OUTPUTS / "paid_full_slate_replay_result.json",
+}
+
 
 def _safe_read_csv(path: Path) -> pd.DataFrame:
     if not path.exists() or path.stat().st_size == 0:
@@ -53,13 +81,13 @@ def _safe_read_csv(path: Path) -> pd.DataFrame:
 
 
 def _clear_stale_odds_artifacts() -> None:
-    """Remove tracked/leftover sportsbook files before any live fetch."""
+    """Remove sportsbook and sportsbook-derived evidence before any live fetch."""
     targets = set(CRITICAL_EVENT_ARTIFACTS)
     targets.update(OUTPUTS.glob("props_*.csv"))
     raw_dir = OUTPUTS / "props_raw"
     if raw_dir.exists():
         targets.update(raw_dir.glob("*.csv"))
-    targets.add(STATUS)
+    targets.update(LIVE_DERIVED_ARTIFACTS)
     for path in sorted(targets):
         try:
             path.unlink(missing_ok=True)
@@ -108,8 +136,6 @@ def _filter_event_csv(path: Path, allowed_event_ids: set[str]) -> int:
         return 0
     df = _safe_read_csv(path)
     if df.empty:
-        # Preserve a parseable file if a schema exists; otherwise remove the
-        # unusable/headerless artifact rather than leave a false-positive file.
         if len(df.columns):
             df.to_csv(path, index=False)
         else:
@@ -157,7 +183,9 @@ def _write_status(payload: dict) -> None:
         "[live_odds_gate] "
         f"status={payload.get('status')} available={payload.get('available')} "
         f"season={payload.get('season')} week={payload.get('week')} "
-        f"active_events={payload.get('active_event_count')} actual_prop_rows={payload.get('actual_prop_rows')}"
+        f"active_events={payload.get('active_event_count')} actual_prop_rows={payload.get('actual_prop_rows')} "
+        f"duplicate_rows_removed={payload.get('raw_artifact_exact_duplicates_removed', 0)} "
+        f"duplicate_offers_removed={payload.get('grouped_offer_entries_removed', 0)}"
     )
 
 
@@ -197,6 +225,8 @@ def run_gate(season: int, date: str = "") -> dict:
     allowed_ids = _allowed_event_ids(raw_game_odds, active_pairs)
     _scope_all_event_artifacts(allowed_ids)
 
+    hardening_status = harden_live_odds_artifacts()
+
     scoped_games = _safe_read_csv(OUTPUTS / "odds_game.csv")
     scoped_props = _safe_read_csv(OUTPUTS / "props_raw.csv")
     actual_props = _actual_prop_rows(scoped_props)
@@ -211,6 +241,10 @@ def run_gate(season: int, date: str = "") -> dict:
         state = "available"
         available = True
 
+    identity_status: dict = {}
+    if available:
+        identity_status = repair_live_prop_identity()
+
     payload = {
         "status": state,
         "available": bool(available),
@@ -222,6 +256,16 @@ def run_gate(season: int, date: str = "") -> dict:
         "actual_prop_rows": int(actual_props),
         "game_odds_rows": int(len(scoped_games)),
         "fetch_returncode": 0,
+        "artifact_hardening_disposition": hardening_status.get("disposition", "missing"),
+        "game_identity_event_count": int(hardening_status.get("game_identity_event_count", 0)),
+        "provider_source_duplicate_rows": int(hardening_status.get("provider_source_duplicate_rows", 0)),
+        "raw_artifact_exact_duplicates_removed": int(hardening_status.get("raw_artifact_exact_duplicates_removed", 0)),
+        "grouped_offer_entries_removed": int(hardening_status.get("grouped_offer_entries_removed", 0)),
+        "blank_name_sentinels_removed": int(hardening_status.get("blank_name_sentinels_removed", 0)),
+        "unresolved_real_player_names": int(hardening_status.get("unresolved_real_player_names", 0)),
+        "core_prop_identity_disposition": identity_status.get("disposition", "not_applicable"),
+        "core_prop_identity_unresolved_rows": int(identity_status.get("core_unresolved_rows", 0)),
+        "core_prop_identity_rows": int(identity_status.get("core_rows", 0)),
     }
     _write_status(payload)
     return payload

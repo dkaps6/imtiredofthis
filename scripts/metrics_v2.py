@@ -16,6 +16,7 @@ import pandas as pd
 from scripts._opponent_map import canon_team
 from scripts.runtime_context import resolve_season, resolve_slate_date, resolve_week
 from scripts.utils.canonical_names import canonicalize_player_name_safe
+from scripts.utils.player_identity_v3 import player_name_key
 
 DATA = Path("data")
 OUTPUTS = Path("outputs")
@@ -186,19 +187,65 @@ def _join_player_form(base: pd.DataFrame, season: int, week: int) -> pd.DataFram
     scoped = pf.loc[(pf["season"] == int(season)) & (pf["week"] == int(week))].copy() if {"season", "week"}.issubset(pf.columns) else pf.copy()
     if scoped.empty:
         raise RuntimeError(f"player_form_consensus has no rows for season={season} week={week}")
+
+    # Player Identity v3 explicitly treats Jr/Sr/II/III/etc. as provider aliases.
+    # Ourlads may omit a suffix while a sportsbook preserves it.  Metrics must
+    # therefore use the same deterministic suffix-insensitive identity contract
+    # rather than legacy literal player_clean_key equality.  Team remains part
+    # of the join key, and any same-team base-name collision is fatal.
+    base = base.copy()
+    base["metrics_identity_base_key"] = base["player"].map(
+        lambda v: player_name_key(v, strip_suffix=True)
+    )
+    scoped["metrics_identity_base_key"] = scoped["player"].map(
+        lambda v: player_name_key(v, strip_suffix=True)
+    )
+    if base["metrics_identity_base_key"].astype("string").fillna("").str.strip().eq("").any():
+        raise RuntimeError("sportsbook metrics identity produced blank suffix-insensitive player key")
+    if scoped["metrics_identity_base_key"].astype("string").fillna("").str.strip().eq("").any():
+        raise RuntimeError("PlayerForm metrics identity produced blank suffix-insensitive player key")
+
+    collisions = scoped.duplicated(["team", "metrics_identity_base_key"], keep=False)
+    if collisions.any():
+        sample = scoped.loc[
+            collisions,
+            ["player", "team", "metrics_identity_base_key"],
+        ].sort_values(["team", "metrics_identity_base_key", "player"]).head(20).to_dict("records")
+        raise RuntimeError(
+            "suffix-insensitive PlayerForm identity is ambiguous within current team; "
+            f"sample={sample}"
+        )
+
     # Avoid duplicate identity columns from the player form; props/schedule owns
-    # the current event identity.
+    # the current event identity. Stable Player Identity v3 fields remain features
+    # after the deterministic current-roster bridge succeeds.
     skip = {"player", "team", "opponent", "team_abbr", "opponent_abbr", "season", "week"}
-    features = [c for c in scoped.columns if c not in skip and c != "player_clean_key"]
-    right = scoped[["player_clean_key", "team", *features]].drop_duplicates(["player_clean_key", "team"], keep="last")
-    merged = base.merge(right, on=["player_clean_key", "team"], how="left", indicator="_pf_merge")
-    unmatched = merged.loc[merged["_pf_merge"].eq("left_only"), [c for c in ("player", "team", "market", "line") if c in merged.columns]].drop_duplicates()
+    features = [
+        c for c in scoped.columns
+        if c not in skip and c not in {"player_clean_key", "metrics_identity_base_key"}
+    ]
+    right = scoped[["metrics_identity_base_key", "team", *features]].copy()
+    merged = base.merge(
+        right,
+        on=["metrics_identity_base_key", "team"],
+        how="left",
+        validate="many_to_one",
+        indicator="_pf_merge",
+    )
+    unmatched_cols = [
+        c for c in (
+            "player", "team", "market", "line", "player_clean_key",
+            "metrics_identity_base_key",
+        ) if c in merged.columns
+    ]
+    unmatched = merged.loc[merged["_pf_merge"].eq("left_only"), unmatched_cols].drop_duplicates()
     merged.drop(columns=["_pf_merge"], inplace=True)
     if not unmatched.empty:
         path = DATA / "_debug" / "metrics_unmatched_player_form.csv"
         path.parent.mkdir(parents=True, exist_ok=True)
         unmatched.to_csv(path, index=False)
         raise RuntimeError(f"{len(unmatched)} prop identities failed PlayerForm join; see {path}")
+    merged.drop(columns=["metrics_identity_base_key"], inplace=True, errors="ignore")
     return merged
 
 

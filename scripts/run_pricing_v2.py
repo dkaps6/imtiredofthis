@@ -66,6 +66,29 @@ def _runtime_week(row: pd.Series) -> int:
     return int(week) if np.isfinite(week) else int(resolve_week())
 
 
+def _position_family(row: pd.Series) -> str:
+    """Return the current PlayerForm position family used for promoted routing."""
+    for col in ("position_group", "position", "alignment_position"):
+        value = row.get(col)
+        if value is None or pd.isna(value):
+            continue
+        pos = str(value).upper().strip()
+        if not pos:
+            continue
+        if pos in {"HB", "TB"} or pos.startswith("RB"):
+            return "RB"
+        if pos.startswith("FB"):
+            return "FB"
+        if pos.startswith("QB"):
+            return "QB"
+        if pos.startswith("WR") or pos in {"LWR", "RWR", "SWR"}:
+            return "WR"
+        if pos.startswith("TE"):
+            return "TE"
+        return pos
+    return ""
+
+
 def price(season: int) -> pd.DataFrame:
     metrics_path = DATA / "metrics_ready.csv"
     if not metrics_path.exists() or metrics_path.stat().st_size == 0:
@@ -116,8 +139,16 @@ def price(season: int) -> pd.DataFrame:
     canonical_markets = df.get("market", pd.Series("", index=df.index)).fillna("").astype(str).str.lower().map(
         lambda value: MARKET_MAP.get(value, value)
     )
+    position_source = (
+        df["position_group"]
+        if "position_group" in df.columns
+        else df["position"] if "position" in df.columns else pd.Series("", index=df.index)
+    )
+    position_family = position_source.fillna("").astype(str).str.upper().str.strip()
+    position_family = position_family.replace({"HB": "RB", "TB": "RB"})
+    rb_rush_mask = canonical_markets.eq("rush_yards") & position_family.isin({"RB", "FB"})
     has_qb_pass = bool(canonical_markets.eq("pass_yards").any())
-    has_rb_rush = bool(canonical_markets.eq("rush_yards").any())
+    has_rb_rush = bool(rb_rush_mask.any())
 
     qb_artifact = qb_team_context = qb_player_logs = None
     rb_context = None
@@ -141,14 +172,14 @@ def price(season: int) -> pd.DataFrame:
         rush_weeks = sorted(
             set(
                 pd.to_numeric(
-                    df.loc[canonical_markets.eq("rush_yards"), "week"], errors="coerce"
+                    df.loc[rb_rush_mask, "week"], errors="coerce"
                 ).dropna().astype(int).tolist()
             )
         )
         if rush_weeks != [1]:
             raise RuntimeError(
                 "promoted RB production pricing is currently locked to Week 1; "
-                f"refusing unsupported rush_yards weeks={rush_weeks}"
+                f"refusing unsupported RB/FB rush_yards weeks={rush_weeks}"
             )
         rb_context = load_rb_context()
         ctx = rb_context.loc[
@@ -248,7 +279,12 @@ def price(season: int) -> pd.DataFrame:
                     f"team={row.get('team')} opponent={row.get('opponent')}: {exc}"
                 ) from exc
 
-        if market == "rush_yards":
+        # P3 is an RB-room/backfield synthesis. A rush-yards market alone does
+        # not make a player an RB: QB/WR rushing props must stay on the generic
+        # calibrated rushing distribution. Current PlayerForm position is the
+        # routing authority; eligible RB/FB rows remain fail-closed on P3 lookup.
+        row_position = _position_family(row)
+        if market == "rush_yards" and row_position in {"RB", "FB"}:
             try:
                 if str(ens["ensemble_status"]) != "calibrated":
                     raise RuntimeError(
@@ -273,9 +309,9 @@ def price(season: int) -> pd.DataFrame:
 
         # Preserve Monte Carlo's non-negative distribution shape while aligning
         # its mean to the final football projection. For promoted QB pass_yards
-        # and RB rush_yards this is the position-specific synthesis mean; for
-        # every other market it remains the canonical ensemble mean. Sportsbook
-        # information still enters only after this step.
+        # and eligible RB/FB rush_yards this is the position-specific synthesis
+        # mean; for every other market it remains the canonical ensemble mean.
+        # Sportsbook information still enters only after this step.
         if np.isfinite(mc_proj) and mc_proj > 0 and np.isfinite(target_mean):
             adjusted_outcomes = base_outcomes * max(0.0, target_mean / mc_proj)
         else:
@@ -372,7 +408,7 @@ def price(season: int) -> pd.DataFrame:
     if has_qb_pass and qb_synthesis_rows == 0:
         raise RuntimeError("promoted QB synthesis applied to zero pass_yards pricing rows")
     if has_rb_rush and rb_synthesis_rows == 0:
-        raise RuntimeError("promoted RB synthesis applied to zero rush_yards pricing rows")
+        raise RuntimeError("promoted RB synthesis applied to zero eligible RB/FB rush_yards pricing rows")
 
     if missed:
         debug = DATA / "_debug" / "pricing_unsimulated_props.csv"
