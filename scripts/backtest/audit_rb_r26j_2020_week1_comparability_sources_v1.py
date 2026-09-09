@@ -185,12 +185,13 @@ def meaningful_exit_count(exits: pd.DataFrame) -> pd.DataFrame:
         & (z.prior_targets_pg.gt(1.0) | z.prior_rb_room_share.ge(.25))
     ).astype(int)
     keys = ["season", "week", "team"]
+    counts = z.groupby(keys, as_index=False).size().rename(columns={"size": "exit_player_rows"})
     out = z.groupby(keys, as_index=False).agg(
-        exit_player_rows=("player_key", "count"),
         exit_positive_history_n=("positive_history", "sum"),
         meaningful_exit_n=("meaningful_exit", "sum"),
         prior_depth_room_coverage=("prior_depth_available", lambda s: float(num(s).fillna(0).eq(1).mean())),
     )
+    out = out.merge(counts, on=keys, how="left", validate="one_to_one")
     out["multiple_meaningful_exit_flag"] = out.meaningful_exit_n.ge(2).astype(int)
     return out
 
