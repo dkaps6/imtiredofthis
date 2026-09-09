@@ -1,0 +1,225 @@
+name: RB R26R 2026 Week 1 Prospective Observation Snapshot V1
+
+on:
+  push:
+    branches:
+      - research-rb-r26r-2026-week1-prospective-observation-snapshot-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  SEASON: "2026"
+  PRIOR_SEASON: "2025"
+  SLATE_DATE: ""
+  ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+  R26R_PLAN_COMMIT: 5ebdc456dfb58fee3cf9c2087401d332895908e9
+  R26R_CODE_COMMIT: 81aa92e2c74c46ea7191ba36444498f11219c4de
+  R26R_LOCK_COMMIT: 5259db7d561752469f2fcaf9f513f747d1b7d56a
+  PROTECTED_PRODUCTION_HEAD: f8417f55b04ce0e19baf260e9d532765034c47f1
+  R26Q_RUN_ID: "34400524030"
+  R26Q_ARTIFACT_ID: "10123251043"
+  R26Q_ARTIFACT_NAME: rb-r26q-2026-week1-receptions-prospective-seal-v1
+  R26Q_DIGEST: sha256:dd3ec0e8e3831ab7f2255c2e5abf343cda8a7943d33a1d4863e52372d6f858a1
+  R26Q_HEAD: 68661da94f03cab2f96182d47636cf55e088b5de
+
+jobs:
+  observe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install observation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml beautifulsoup4 lxml
+
+      - name: Verify frozen R26R contracts and protected market utilities
+        run: |
+          set -euo pipefail
+          PLAN=docs/research/RB_R26R_2026_WEEK1_PROSPECTIVE_OBSERVATION_SNAPSHOT_V1_FROZEN_PLAN.md
+          CODE=scripts/backtest/observe_rb_r26r_2026_week1_receptions_market_snapshot_v1.py
+          LOCK=docs/research/RB_R26R_2026_WEEK1_PROSPECTIVE_OBSERVATION_SNAPSHOT_V1_IMPLEMENTATION_LOCK.md
+          test -s "$PLAN" && test -s "$CODE" && test -s "$LOCK"
+          python -m py_compile "$CODE"
+          git diff --quiet "$R26R_PLAN_COMMIT" HEAD -- "$PLAN"
+          git diff --quiet "$R26R_CODE_COMMIT" HEAD -- "$CODE"
+          git diff --quiet "$R26R_LOCK_COMMIT" HEAD -- "$LOCK"
+          git diff --quiet "$PROTECTED_PRODUCTION_HEAD" HEAD -- \
+            scripts/providers/ourlads_depth.py \
+            scripts/utils/build_team_week_map_v2.py \
+            scripts/run_live_odds_gate.py \
+            scripts/fetch_props_oddsapi.py \
+            scripts/harden_live_odds_artifacts_v1.py \
+            scripts/repair_live_prop_identity_v1.py \
+            scripts/materialize_live_props_for_model_v1.py \
+            scripts/materialize_pricing_offers_v1.py \
+            scripts/runtime_context.py
+          sha256sum "$PLAN" | tee r26r_plan.sha256
+          sha256sum "$CODE" | tee r26r_code.sha256
+          sha256sum "$LOCK" | tee r26r_lock.sha256
+          echo PASS > r26r_protected_market_utilities_clean.txt
+          echo R26R_FROZEN_CONTRACT_AND_PROTECTED_MARKET_BOUNDARY_PASS
+
+      - name: Verify and download immutable R26Q parent
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ACTUAL_DIGEST="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26Q_ARTIFACT_ID}" --jq '.digest')"
+          ACTUAL_HEAD="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26Q_ARTIFACT_ID}" --jq '.workflow_run.head_sha')"
+          test "$ACTUAL_DIGEST" = "$R26Q_DIGEST"
+          test "$ACTUAL_HEAD" = "$R26Q_HEAD"
+          rm -rf parent_r26q
+          mkdir -p parent_r26q
+          gh run download "$R26Q_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26Q_ARTIFACT_NAME" --dir parent_r26q
+          test -s parent_r26q/data/backtests/r26q_2026_week1_receptions_prospective_seal_v1/r26q_disposition.json
+          test -s parent_r26q/data/backtests/r26q_2026_week1_receptions_prospective_seal_v1/sealed_r26o/data/backtests/r26o_2026_week1_receptions_shadow_integration_compatibility_v1/r26o_rb_receptions_shadow_arrays.npz
+          echo PASS > r26r_parent_verified.txt
+          printf '%s\n' "$ACTUAL_HEAD" > r26r_parent_head.txt
+          echo "R26R_IMMUTABLE_R26Q_PARENT_PASS digest=$ACTUAL_DIGEST head=$ACTUAL_HEAD"
+
+      - name: Build current roster and Week 1 schedule for market identity only
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/providers/ourlads_depth.py --season "${SEASON}"
+          python scripts/utils/build_team_week_map_v2.py --season "${SEASON}" --out data/team_week_map.csv
+          test -s data/roles_ourlads.csv
+          test -s data/team_week_map.csv
+          python - <<'PY'
+          import pandas as pd
+          roles=pd.read_csv('data/roles_ourlads.csv',low_memory=False)
+          sched=pd.read_csv('data/team_week_map.csv',low_memory=False)
+          w=sched.loc[pd.to_numeric(sched['season'],errors='coerce').eq(2026) & pd.to_numeric(sched['week'],errors='coerce').eq(1)]
+          if w['team'].nunique()!=32:
+              raise SystemExit(f'R26R Week1 schedule not 32 teams: {w["team"].nunique()}')
+          if roles['team'].nunique()!=32:
+              raise SystemExit(f'R26R Ourlads roles not 32 teams: {roles["team"].nunique()}')
+          print('R26R current roster/schedule identity layer ready; candidate remains sealed')
+          PY
+
+      - name: Capture hardened live sportsbook snapshot
+        id: live
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/run_live_odds_gate.py --season "${SEASON}" --date "${SLATE_DATE}"
+          test -s data/live_odds_status.json
+          python - <<'PY'
+          import json, os
+          s=json.load(open('data/live_odds_status.json',encoding='utf-8'))
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as fh:
+              fh.write('available=' + str(bool(s.get('available'))).lower() + '\n')
+          print('R26R live market status=',s.get('status'),'available=',s.get('available'))
+          PY
+
+      - name: Materialize exact book-line offers
+        if: ${{ steps.live.outputs.available == 'true' }}
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/materialize_live_props_for_model_v1.py
+          python scripts/materialize_pricing_offers_v1.py
+          test -s outputs/props_pricing_offers.csv
+          test -s data/live_pricing_offer_audit.json
+          python - <<'PY'
+          import json
+          a=json.load(open('data/live_pricing_offer_audit.json',encoding='utf-8'))
+          assert a.get('consensus_line_created') is False
+          print('R26R exact pricing offers rows=',a.get('pricing_book_line_rows'))
+          PY
+
+      - name: Execute frozen R26R prospective observation
+        id: r26r
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          rm -rf data/backtests/r26r_2026_week1_prospective_observation_snapshot_v1
+          EXTRA=()
+          if [ -s outputs/props_pricing_offers.csv ]; then
+            EXTRA+=(--pricing-offers outputs/props_pricing_offers.csv)
+          fi
+          if [ -s data/live_pricing_offer_audit.json ]; then
+            EXTRA+=(--pricing-audit data/live_pricing_offer_audit.json)
+          fi
+          python scripts/backtest/observe_rb_r26r_2026_week1_receptions_market_snapshot_v1.py \
+            --r26q-root parent_r26q \
+            --parent-verified-marker r26r_parent_verified.txt \
+            --parent-head-marker r26r_parent_head.txt \
+            --live-status data/live_odds_status.json \
+            --roles data/roles_ourlads.csv \
+            --out-dir data/backtests/r26r_2026_week1_prospective_observation_snapshot_v1 \
+            "${EXTRA[@]}"
+
+      - name: Assert R26R authority ceiling and disposition
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('data/backtests/r26r_2026_week1_prospective_observation_snapshot_v1/r26r_disposition.json')
+          if not p.is_file():
+              raise SystemExit('R26R disposition missing; evaluator failed mechanically before evidence materialized')
+          d=json.loads(p.read_text())
+          allowed={
+              'R26R_2026_WEEK1_PROSPECTIVE_OBSERVATION_SNAPSHOT_PASS_MARKET_CAPTURED',
+              'R26R_2026_WEEK1_PROSPECTIVE_OBSERVATION_SNAPSHOT_NO_RECEPTIONS_MARKET_YET',
+              'R26R_2026_WEEK1_PROSPECTIVE_OBSERVATION_SNAPSHOT_FAIL_NO_OBSERVATION',
+          }
+          assert d['disposition'] in allowed
+          assert d['2026_week1_outcomes_used'] == 0
+          assert d['sportsbook_football_inputs_used'] == 0
+          assert d['football_values_regenerated'] is False
+          assert d['r9_refit'] is False
+          assert d['current_roster_used_for_candidate'] is False
+          assert d['production_parameters_changed'] is False
+          assert d['production_promotion_authorized'] is False
+          assert d['live_shadow_production_activation_authorized'] is False
+          assert d['tuning_authorized'] is False
+          if d['disposition'].endswith('FAIL_NO_OBSERVATION'):
+              raise SystemExit('R26R emitted frozen FAIL disposition')
+          print('R26R_AUTHORITY_CONTRACT_PASS disposition=' + d['disposition'])
+          PY
+
+      - name: Show R26R evidence
+        if: always()
+        run: |
+          if [ -s data/backtests/r26r_2026_week1_prospective_observation_snapshot_v1/r26r_disposition.json ]; then
+            cat data/backtests/r26r_2026_week1_prospective_observation_snapshot_v1/r26r_disposition.json
+            echo '=== R26R gates ==='
+            cat data/backtests/r26r_2026_week1_prospective_observation_snapshot_v1/r26r_gate_matrix.csv
+            echo '=== R26R player summary ==='
+            cat data/backtests/r26r_2026_week1_prospective_observation_snapshot_v1/r26r_receptions_player_market_summary.csv
+          fi
+
+      - name: Upload R26R prospective observation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r26r-2026-week1-prospective-observation-snapshot-v1
+          retention-days: 90
+          path: |
+            r26r_plan.sha256
+            r26r_code.sha256
+            r26r_lock.sha256
+            r26r_protected_market_utilities_clean.txt
+            r26r_parent_verified.txt
+            r26r_parent_head.txt
+            data/live_odds_status.json
+            data/live_prop_identity_status.json
+            data/live_pricing_offer_audit.json
+            outputs/props_pricing_offers.csv
+            data/backtests/r26r_2026_week1_prospective_observation_snapshot_v1/*
