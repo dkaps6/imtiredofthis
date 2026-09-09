@@ -113,7 +113,7 @@ jobs:
             --r3-root r3-artifact \
             --r4-root r4-artifact \
             --r5-root r5-artifact \
-            --full-slate-root full-slate-artifact \
+            --full-slate-root full-slate-artifact/data \
             --metadata-dir te-r5-metadata \
             --out-dir data/backtests/te_r5_week1_full_stack_confirmation_v1
 
