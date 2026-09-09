@@ -1,0 +1,93 @@
+name: RB R26 Role Transition Source Audit V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-r26-role-transition-entitlement-v1
+    paths:
+      - docs/research/RB_R26_ROLE_TRANSITION_SOURCE_AUDIT_PLAN.md
+      - scripts/backtest/audit_rb_r26_role_transition_sources_v1.py
+      - .github/workflows/research-rb-r26-role-transition-source-audit-v1.yml
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  PRODUCTION_BASE_SHA: f8417f55b04ce0e19baf260e9d532765034c47f1
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install source-audit dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 pyarrow nflreadpy requests
+
+      - name: Assert source-audit-only production boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e "$PRODUCTION_BASE_SHA^{commit}"
+          git diff --name-only "$PRODUCTION_BASE_SHA" HEAD > /tmp/r26_changed.txt
+          cat /tmp/r26_changed.txt
+          python - <<'PY'
+          from pathlib import Path
+          changed = [x.strip() for x in Path('/tmp/r26_changed.txt').read_text().splitlines() if x.strip()]
+          protected_exact = {
+              '.github/workflows/full-slate.yml',
+              'scripts/simulation_v2.py',
+              'scripts/run_pricing_with_full_roster_universe_v3.py',
+              'scripts/run_pricing_with_full_roster_universe_v3_core.py',
+              'scripts/run_pricing_with_full_roster_universe_v4.py',
+              'scripts/run_pricing_with_full_roster_universe_v4_production.py',
+              'scripts/audit_market_model_lineage_v3.py',
+              'scripts/validate_certified_full_slate_stack_v3.py',
+          }
+          protected_prefixes = ('data/models/', 'model/', 'scripts/modeling/')
+          bad = [p for p in changed if p in protected_exact or p.startswith(protected_prefixes)]
+          if bad:
+              raise SystemExit(f'R26 source audit touched protected production paths: {bad}')
+          print('R26_SOURCE_AUDIT_PROTECTED_PRODUCTION_BOUNDARY_PASS')
+          PY
+
+      - name: Compile audit
+        run: python -m py_compile scripts/backtest/audit_rb_r26_role_transition_sources_v1.py
+
+      - name: Audit 2014-2025 pregame role-state sources
+        run: |
+          rm -rf data/backtests/rb_r26_role_transition_source_audit
+          python scripts/backtest/audit_rb_r26_role_transition_sources_v1.py \
+            --seasons 2014-2025 \
+            --out-dir data/backtests/rb_r26_role_transition_source_audit
+
+      - name: Show source summary
+        if: always()
+        run: |
+          echo '=== R26 source disposition ==='
+          cat data/backtests/rb_r26_role_transition_source_audit/r26_source_audit_disposition.json 2>/dev/null || true
+          echo '=== R26 role source summary ==='
+          cat data/backtests/rb_r26_role_transition_source_audit/r26_role_source_summary.csv 2>/dev/null || true
+          echo '=== R26 temporal exposure ledger ==='
+          cat data/backtests/rb_r26_role_transition_source_audit/r26_temporal_exposure_ledger.csv 2>/dev/null || true
+
+      - name: Upload R26 source evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r26-role-transition-source-audit-v1
+          path: data/backtests/rb_r26_role_transition_source_audit/*
+          if-no-files-found: warn
+          retention-days: 30
