@@ -4,6 +4,12 @@
 Compares V4 against a V3 control generated earlier in the SAME checkout from the
 same immutable inputs and deterministic MC seed. This isolates R22 from unrelated
 historical code drift between old replay artifacts and the current certified V3 stack.
+
+Provider pricing identities may retain suffixes (for example III/Jr.) that the
+football simulation intentionally removes from its canonical player key. The gate
+therefore resolves adapted-player membership through the same suffix-safe identity
+contract used by the certified provider-alias lookup path; sportsbook identity is
+lookup-only and never enters football generation.
 """
 from __future__ import annotations
 
@@ -13,6 +19,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+from scripts.utils.player_identity_v3 import player_name_key
 
 CONTROL = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("evidence/v3_same_checkout.csv")
 CANDIDATE = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("outputs/props_priced_clean.csv")
@@ -40,6 +48,13 @@ def _eq(a: pd.Series, b: pd.Series, tol: float = 1e-10) -> pd.Series:
     return (x.isna() & y.isna()) | (x.notna() & y.notna() & ((x-y).abs() <= tol))
 
 
+def _suffix_safe_key(value) -> str:
+    try:
+        return str(player_name_key(value, strip_suffix=True) or "").strip()
+    except Exception:
+        return ""
+
+
 def main() -> int:
     control = _read(CONTROL)
     candidate = _read(CANDIDATE)
@@ -53,6 +68,8 @@ def main() -> int:
     for df, label in [(control,"control"),(candidate,"candidate")]:
         missing=[c for c in KEYS if c not in df.columns]
         if missing: raise RuntimeError(f"{label} missing comparison keys: {missing}")
+        if "player" not in df.columns:
+            raise RuntimeError(f"{label} missing display player required for suffix-safe identity audit")
         if df.duplicated(KEYS).any(): raise RuntimeError(f"{label} has duplicate pricing keys")
 
     merged = control.merge(candidate, on=KEYS, how="outer", suffixes=("_control","_candidate"), indicator=True, validate="one_to_one")
@@ -62,7 +79,37 @@ def main() -> int:
     team_col = "team_candidate" if "team_candidate" in merged.columns else "team"
     if team_col not in merged.columns:
         raise RuntimeError("R22 differential comparison lacks team identity")
-    merged["adapted_rb"] = [(str(t).upper(), str(p)) in adapted_keys for t,p in zip(merged[team_col], merged.player_clean_key)]
+    player_display_col = "player_candidate" if "player_candidate" in merged.columns else "player_control" if "player_control" in merged.columns else "player"
+    if player_display_col not in merged.columns:
+        raise RuntimeError("R22 differential comparison lacks display player identity")
+
+    canonical_key = merged[player_display_col].map(_suffix_safe_key)
+    blank = canonical_key.astype("string").fillna("").str.strip().eq("")
+    if blank.any():
+        sample = merged.loc[blank, [c for c in [player_display_col, "player_clean_key", team_col] if c in merged.columns]].head(20).to_dict("records")
+        raise RuntimeError(f"R22 differential suffix-safe identity unresolved: {sample}")
+    merged["canonical_player_key"] = canonical_key
+
+    # Control/candidate player display names must resolve to the same canonical
+    # football identity. Provider key spelling may differ only by the already-
+    # governed suffix-safe alias contract.
+    provider_identity_consistent = True
+    if "player_control" in merged.columns and "player_candidate" in merged.columns:
+        c0 = merged["player_control"].map(_suffix_safe_key)
+        c1 = merged["player_candidate"].map(_suffix_safe_key)
+        provider_identity_consistent = bool((c0 == c1).all())
+
+    names = (
+        merged.assign(_provider_name=merged[player_display_col].astype("string").fillna("").str.strip())
+        .groupby([merged[team_col].astype(str).str.upper(), canonical_key], dropna=False)["_provider_name"]
+        .nunique(dropna=False)
+    )
+    suffix_identity_unambiguous = bool(not names.gt(1).any())
+
+    merged["adapted_rb"] = [
+        (str(t).upper(), str(p)) in adapted_keys
+        for t,p in zip(merged[team_col], canonical_key)
+    ]
     merged["allowed_distribution_change"] = merged.adapted_rb & merged.market.astype(str).isin(["rec_yards","rush_rec_yards"])
 
     mean_checks={}
@@ -104,6 +151,8 @@ def main() -> int:
 
     gates={
         "row_universe_exact":row_universe_exact,
+        "provider_identity_consistent":provider_identity_consistent,
+        "suffix_safe_identity_unambiguous":suffix_identity_unambiguous,
         "adapter_integration_valid":adapter.get("integration_valid") is True,
         "exact_94_rb_adapted":int(adapter.get("adapted_rb_rows",-1))==94,
         "adapter_mean_parity":float(adapter.get("max_mean_delta",1.0))<=1e-8,
@@ -131,13 +180,15 @@ def main() -> int:
     merged["unexpected_probability_change"]=unexpected
     merged["allowed_probability_change_observed"]=allowed_changed
     OUT_CSV.parent.mkdir(parents=True,exist_ok=True)
-    keep=KEYS+[team_col,"adapted_rb","allowed_distribution_change","unexpected_probability_change","allowed_probability_change_observed"]
+    keep=KEYS+[team_col,player_display_col,"canonical_player_key","adapted_rb","allowed_distribution_change","unexpected_probability_change","allowed_probability_change_observed"]
     for col in ["model_proj","mc_proj","fair_prob","fair_odds","edge_pct","edge_abs"]:
         for s in ["_control","_candidate"]:
             x=f"{col}{s}"
             if x in merged.columns: keep.append(x)
     merged[keep].to_csv(OUT_CSV,index=False)
 
+    provider_alias_rows = int((merged["player_clean_key"].astype(str) != canonical_key.astype(str)).sum())
+    adapted_provider_alias_rows = int((merged.adapted_rb & (merged["player_clean_key"].astype(str) != canonical_key.astype(str))).sum())
     payload={
         "candidate":"RB_R22_WEEK1_RECEIVING_TAIL_PRODUCTION_INTEGRATION_V1",
         "comparison_contract":"SAME_CHECKOUT_SAME_INPUTS_SAME_SEED_V3_VS_V4",
@@ -147,10 +198,12 @@ def main() -> int:
         "adapted_rb_player_keys":int(len(adapted_keys)),
         "allowed_probability_change_rows":int(allowed_changed.sum()),
         "unexpected_probability_change_rows":int(unexpected.sum()),
+        "provider_alias_rows":provider_alias_rows,
+        "adapted_provider_alias_rows":adapted_provider_alias_rows,
         "mean_checks":mean_checks,"gates":gates,
         "adapter_disposition":adapter.get("disposition"),
         "pricing_lineage_disposition":pricing.get("disposition"),
-        "governance_note":"This is a mechanical repair of the comparison method only; frozen R22 football/integration gates were not weakened.",
+        "governance_note":"Mechanical suffix-safe identity repair only; the frozen R22 football/integration gates are unchanged and two additional identity-consistency guards are stricter than the original differential audit.",
     }
     OUT_JSON.write_text(json.dumps(payload,indent=2,sort_keys=True)+"\n",encoding="utf-8")
     print(json.dumps(payload,indent=2,sort_keys=True))
