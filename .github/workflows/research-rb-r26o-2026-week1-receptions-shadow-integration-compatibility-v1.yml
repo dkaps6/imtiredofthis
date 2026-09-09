@@ -18,6 +18,8 @@ env:
   R26O_PLAN_COMMIT: 96e4a6977458b55ec00cb29fbc9de05c56c89b88
   R26O_CODE_COMMIT: 6a171cb32e77c7d6691ceb75da9861a5d6dd7bc4
   R26O_REPAIR_PLAN_COMMIT: e5ac65c8dcb2b73f59706880e893c9f72f5d115d
+  R26O_SECOND_REPAIR_PLAN_COMMIT: 2c5fc54c0c88aff28e581a901331d175adc87adf
+  R26O_DTYPE_WRAPPER_COMMIT: 960fbb0bc6a29724b3d0b7901c92ac905bd69f0e
   R26N_STAGE_HELPER_COMMIT: 0b4c2df7c14b16bd0e945b425aac7f35e015fa3d
   QB_SELECTOR_SHA256: 04946438c0cdbcddc7ce4f95f88d37a582daf3affe9f04b1991149e7ce98c3b1
 
@@ -64,24 +66,32 @@ jobs:
           CODE=scripts/backtest/evaluate_rb_r26o_2026_week1_receptions_shadow_integration_v1.py
           STAGE=scripts/backtest/stage_r26n_production_identity_key_repair_v1.py
           REPAIR_NOTE=docs/research/RB_R26O_RUN1_MECHANICAL_REPAIR_V1.md
+          SECOND_REPAIR_NOTE=docs/research/RB_R26O_RUN2_MECHANICAL_DTYPE_REPAIR_V1.md
+          DTYPE_WRAPPER=scripts/backtest/run_rb_r26o_with_r22_identity_dtype_compat_v1.py
 
           test -s "$PLAN"
           test -s "$LOCK"
           test -s "$CODE"
           test -s "$STAGE"
           test -s "$REPAIR_NOTE"
-          python -m py_compile "$CODE" "$STAGE"
+          test -s "$SECOND_REPAIR_NOTE"
+          test -s "$DTYPE_WRAPPER"
+          python -m py_compile "$CODE" "$STAGE" "$DTYPE_WRAPPER"
 
           git diff --quiet "$R26O_PLAN_COMMIT" HEAD -- "$PLAN"
           git diff --quiet "$R26O_CODE_COMMIT" HEAD -- "$CODE"
           git diff --quiet "$R26N_STAGE_HELPER_COMMIT" HEAD -- "$STAGE"
           git diff --quiet "$R26O_REPAIR_PLAN_COMMIT" HEAD -- "$REPAIR_NOTE"
+          git diff --quiet "$R26O_SECOND_REPAIR_PLAN_COMMIT" HEAD -- "$SECOND_REPAIR_NOTE"
+          git diff --quiet "$R26O_DTYPE_WRAPPER_COMMIT" HEAD -- "$DTYPE_WRAPPER"
 
           sha256sum "$PLAN" | tee r26o_plan.sha256
           sha256sum "$LOCK" | tee r26o_lock.sha256
           sha256sum "$CODE" | tee r26o_code.sha256
           sha256sum "$STAGE" | tee r26o_stage_helper.sha256
           sha256sum "$REPAIR_NOTE" | tee r26o_repair_note.sha256
+          sha256sum "$SECOND_REPAIR_NOTE" | tee r26o_second_repair_note.sha256
+          sha256sum "$DTYPE_WRAPPER" | tee r26o_dtype_wrapper.sha256
 
           git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
             scripts/modeling \
@@ -161,11 +171,11 @@ jobs:
           printf '%s  %s\n' "$ACTUAL" staged_production/model/qb_distribution_state_selector_v1.json | tee r26o_qb_selector.sha256
           echo "R26O_QB_SELECTOR_STAGING_PASS sha256=$ACTUAL source=${PRODUCTION_BASE_SHA}:model/qb_distribution_state_selector_v1.json"
 
-      - name: Execute frozen R26O receptions-only shadow integration
+      - name: Execute frozen R26O receptions-only shadow integration with dtype-only compatibility
         run: |
           set -euo pipefail
           rm -rf data/backtests/r26o_2026_week1_receptions_shadow_integration_compatibility_v1
-          python scripts/backtest/evaluate_rb_r26o_2026_week1_receptions_shadow_integration_v1.py \
+          python scripts/backtest/run_rb_r26o_with_r22_identity_dtype_compat_v1.py \
             --production-root staged_production \
             --r26n-root parent_r26n \
             --r22-root parent_r22 \
@@ -216,6 +226,8 @@ jobs:
             r26o_code.sha256
             r26o_stage_helper.sha256
             r26o_repair_note.sha256
+            r26o_second_repair_note.sha256
+            r26o_dtype_wrapper.sha256
             r26o_qb_selector.sha256
             r26o_protected_clean.txt
             r26o_identity_staging_audit.json
