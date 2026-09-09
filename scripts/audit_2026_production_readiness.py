@@ -2,13 +2,20 @@
 """Static 2026 production-readiness audit for the canonical Full Slate path.
 
 Runtime provider health is validated separately by validate_2026_provider_artifacts.
-This audit protects the repository wiring so the canonical v3 identity/context/provider
-contracts cannot be accidentally bypassed by a later refactor.
+This audit protects repository wiring so the canonical identity/context/provider
+contracts and the promoted Week-1 V4/R22 pricing chain cannot be accidentally
+bypassed by a later refactor.
 
-Important: this audit follows the *canonical production entrypoints*.  Legacy helper
+Important: this audit follows the *canonical production entrypoints*. Legacy helper
 modules may retain historical literals when they are encapsulated by a production
-wrapper that injects runtime season/week and repairs provenance.  We validate that
+wrapper that injects runtime season/week and repairs provenance. We validate that
 wrapper contract explicitly instead of flagging every historical literal in a helper.
+
+The old ``run_pricing_v2.py`` implementation remains a material imported dependency
+and is still audited for its promoted QB/pricing machinery, but it is no longer the
+required top-level Full Slate entrypoint. Canonical Week-1 authority is:
+Full Slate -> public full-roster V3 compatibility entrypoint -> certified V4 ->
+preserved V3 core -> R22 receiving-tail adapter -> downstream sportsbook pricing.
 """
 from __future__ import annotations
 
@@ -23,7 +30,7 @@ FULL_SLATE = ROOT / ".github/workflows/full-slate.yml"
 ENSEMBLE_WEIGHTS = ROOT / "data/model_ensemble_weights.csv"
 QB_SYNTHESIS = ROOT / "model/qb_pass_synthesis_v1.json"
 
-# Files that directly own canonical runtime behavior.  Intentionally excluded:
+# Files that directly own canonical runtime behavior. Intentionally excluded:
 # - scripts/make_team_form.py: legacy builder encapsulated by run_team_form_context.py
 # - scripts/fantasypoints_wr_cb_scraper.py: standalone legacy scraper; not invoked by
 #   the canonical Coverage v2 runner.
@@ -68,6 +75,7 @@ PRODUCTION_RUNTIME_FILES = (
     "scripts/metrics_enrichment_v2.py",
     "scripts/run_metrics_context.py",
     "scripts/run_model_context_bridge.py",
+    # Material subordinate dependency retained beneath the full-roster stack.
     "scripts/run_pricing_v2.py",
 )
 
@@ -100,10 +108,73 @@ def _workflow_findings() -> list[dict[str, str]]:
         "scripts/run_qb_promoted_context.py",
         "scripts/run_player_form_v2_loader.py",
         "scripts/run_model_context_bridge.py",
-        "scripts/run_pricing_v2.py",
+        "scripts/run_pricing_with_full_roster_universe_v3.py",
     ):
         if token not in text:
             out.append(_finding("P0", "workflow_contract", f"Full Slate missing required token: {token}"))
+    return out
+
+
+def _pricing_chain_findings() -> list[dict[str, str]]:
+    """Fail closed unless the exact promoted Week-1 pricing authority is wired.
+
+    This deliberately verifies both sides of the migration:
+    * Full Slate must enter through the full-roster V3 compatibility entrypoint.
+    * That entrypoint must delegate to V4.
+    * V4 must consume the preserved V3 core and the R22 adapter/assets.
+    * The full-roster base must still retain run_pricing_v2 as subordinate pricing
+      machinery, so replacing the top-level entrypoint does not silently discard the
+      previously audited ML/state/Bayes/ensemble/QB synthesis pricing contract.
+    """
+    out: list[dict[str, str]] = []
+    checks = {
+        "scripts/run_pricing_with_full_roster_universe_v3.py": (
+            "run_pricing_with_full_roster_universe_v4_production",
+            "raise SystemExit(main())",
+        ),
+        "scripts/run_pricing_with_full_roster_universe_v4_production.py": (
+            "run_pricing_with_full_roster_universe_v3_core as v3",
+            "apply_rb_receiving_tail_production",
+            "RB_R22_WEEK1_RECEIVING_TAIL_PRICING_LINEAGE_PASS",
+            "production_mean_parameters_changed",
+            "sportsbook_inputs_to_adapter",
+        ),
+        "scripts/run_pricing_with_full_roster_universe_v3_core.py": (
+            "TE_R5P_PRODUCTION_MODEL_V1",
+            "WR_R15_PRODUCTION_MODEL_V1",
+            "apply_qb_c2_selector",
+        ),
+        "scripts/run_pricing_with_full_roster_universe_v1.py": (
+            "import scripts.run_pricing_v2 as pricing",
+            "sportsbook_rows_used_to_define_player_universe",
+            "sportsbook_inputs_used_to_generate_football_distributions",
+        ),
+        "scripts/modeling/rb_receiving_tail_production_adapter_v1.py": (
+            "RB_R22_WEEK1_RECEIVING_TAIL_PRODUCTION_V1",
+        ),
+    }
+    for rel, tokens in checks.items():
+        path = ROOT / rel
+        if not path.exists():
+            out.append(_finding("P0", "pricing_chain_file_missing", rel))
+            continue
+        text = _read(path)
+        for token in tokens:
+            if token not in text:
+                out.append(_finding(
+                    "P0",
+                    "pricing_chain_contract",
+                    f"{rel} missing promoted pricing-chain token: {token}",
+                ))
+
+    for rel in (
+        "data/models/rb_r19_production_v1/rb_r19_tail_scorer_model_v1.json",
+        "data/models/rb_r19_production_v1/rb_r19_residual_pools_v1.npz",
+        "data/models/rb_r19_production_v1/PROVENANCE.json",
+    ):
+        path = ROOT / rel
+        if not path.exists() or path.stat().st_size <= 0:
+            out.append(_finding("P0", "r22_asset_missing", f"missing/empty frozen R22 dependency: {rel}"))
     return out
 
 
@@ -280,6 +351,7 @@ def _legacy_authority_findings() -> list[dict[str, str]]:
 def run() -> list[dict[str, str]]:
     findings: list[dict[str, str]] = []
     findings += _workflow_findings()
+    findings += _pricing_chain_findings()
     findings += _runtime_literal_findings()
     findings += _team_form_wrapper_findings()
     findings += _ensemble_findings()

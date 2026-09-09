@@ -2,10 +2,16 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
-import pytest
 
 from scripts.artifact_io import read_valid_csv
 from scripts.slate_universe_v2 import build_slate_universe
+
+
+_TEAMS = [
+    "ARI", "ATL", "BAL", "BUF", "CAR", "CHI", "CIN", "CLE",
+    "DAL", "DEN", "DET", "GB", "HOU", "IND", "JAX", "KC",
+    "LAC", "LAR", "LV", "MIA", "MIN", "NE", "NO", "NYG",
+]
 
 
 def _fake_pf(tmp_path: Path):
@@ -15,11 +21,11 @@ def _fake_pf(tmp_path: Path):
     data.mkdir()
 
     roles = pd.DataFrame({
-        "display_name": ["Player A", "Player B"],
-        "player_clean_key": ["playera", "playerb"],
-        "team": ["DAL", "PHI"],
-        "position": ["WR", "WR"],
-        "role": ["WR1", "WR1"],
+        "display_name": [f"Player {i}" for i in range(len(_TEAMS))],
+        "player_clean_key": [f"player{i}" for i in range(len(_TEAMS))],
+        "team": _TEAMS,
+        "position": ["WR"] * len(_TEAMS),
+        "role": ["WR1"] * len(_TEAMS),
     })
 
     return SimpleNamespace(
@@ -32,12 +38,14 @@ def _fake_pf(tmp_path: Path):
 
 
 def _schedule():
-    return pd.DataFrame({
-        "season": [2026, 2026],
-        "week": [1, 1],
-        "team": ["DAL", "PHI"],
-        "opponent": ["PHI", "DAL"],
-    })
+    rows = []
+    for i in range(0, len(_TEAMS), 2):
+        a, b = _TEAMS[i], _TEAMS[i + 1]
+        rows.extend([
+            {"season": 2026, "week": 1, "team": a, "opponent": b},
+            {"season": 2026, "week": 1, "team": b, "opponent": a},
+        ])
+    return pd.DataFrame(rows)
 
 
 def test_no_odds_mode_ignores_invalid_props_and_uses_roster_schedule(tmp_path):
@@ -49,21 +57,32 @@ def test_no_odds_mode_ignores_invalid_props_and_uses_roster_schedule(tmp_path):
         1,
         live_odds_enabled=False,
     )
-    assert len(out) == 2
-    assert set(out["team"]) == {"DAL", "PHI"}
-    assert dict(zip(out["team"], out["opponent"])) == {"DAL": "PHI", "PHI": "DAL"}
+    assert len(out) == len(_TEAMS)
+    assert set(out["team"]) == set(_TEAMS)
+    assert out["opponent"].notna().all()
 
 
-def test_live_odds_mode_rejects_invalid_props_placeholder(tmp_path):
+def test_live_odds_mode_does_not_define_playerform_universe(tmp_path):
     pf = _fake_pf(tmp_path)
-    with pytest.raises(RuntimeError, match="Required artifact live props_raw is invalid"):
-        build_slate_universe(
-            pf,
-            _schedule,
-            2026,
-            1,
-            live_odds_enabled=True,
-        )
+    without_odds = build_slate_universe(
+        pf,
+        _schedule,
+        2026,
+        1,
+        live_odds_enabled=False,
+    )
+    with_odds = build_slate_universe(
+        pf,
+        _schedule,
+        2026,
+        1,
+        live_odds_enabled=True,
+    )
+    cols = ["player", "player_clean_key", "team", "opponent", "season", "week"]
+    pd.testing.assert_frame_equal(
+        without_odds[cols].sort_values(["team", "player_clean_key"]).reset_index(drop=True),
+        with_odds[cols].sort_values(["team", "player_clean_key"]).reset_index(drop=True),
+    )
 
 
 def test_optional_csv_placeholder_returns_none(tmp_path):

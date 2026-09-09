@@ -1,0 +1,291 @@
+{
+  "candidate": "RB_R19_DEPLOYABLE_TAIL_SCORER_REFIT_V1",
+  "version": 1,
+  "status": "SHADOW_ONLY",
+  "fit_for_season": 2026,
+  "git_sha": "6ac1342f737f142acac6a3e4b459f442faf1442a",
+  "source_lineage": {
+    "r10": {
+      "run_id": 34269618181,
+      "artifact_id": 10073920506,
+      "digest": "sha256:e76840ad1f915a18e729319c6a5d76b4786dff2e215da7de63522acbbb33ac6b"
+    },
+    "corrected_r12": {
+      "run_id": 34273055095,
+      "artifact_id": 10074589299,
+      "digest": "sha256:ef1727b218ed8898e9b483e0f4558c537118f60a05259e274b603ce3940af661"
+    },
+    "r16": {
+      "run_id": 34286363931,
+      "artifact_id": 10079630404,
+      "digest": "sha256:ca44a174dafadcaf27496b00efe4e933941211037b0eacea0431d72a9b4fa099"
+    }
+  },
+  "models": {
+    "r8_r9_identity": {
+      "feature_order": [
+        "prior_targets_pg",
+        "prior_receptions_pg",
+        "prior_target_share",
+        "prior_rb_room_share",
+        "prior_5plus_target_rate",
+        "prior_7plus_target_rate",
+        "last8_targets_pg",
+        "last8_receptions_pg",
+        "last8_target_share",
+        "last8_rb_room_share",
+        "prev_season_targets_pg",
+        "prev_season_receptions_pg",
+        "prev_season_target_share",
+        "prev_season_rb_room_share",
+        "same_team_prior_targets_pg",
+        "same_team_prior_rb_room_share",
+        "log1p_prior_games",
+        "log1p_same_team_prior_games",
+        "prev_season_available"
+      ],
+      "scaler_mean": [
+        1.7853379254859914,
+        1.3997509349996842,
+        0.05560617404098126,
+        0.2995631881544932,
+        0.11279100785905635,
+        0.03976536448209052,
+        1.6457446333734993,
+        1.2841321908332215,
+        0.05231165914180706,
+        0.2979603749750454,
+        1.362986606772441,
+        1.0809121301789035,
+        0.04363688639851943,
+        0.24255641852866575,
+        1.5836538653081207,
+        0.2763198080885842,
+        2.915814732951943,
+        2.346343608378584,
+        0.6893158388003748
+      ],
+      "scaler_scale": [
+        1.4189783511801686,
+        1.1464997972700648,
+        0.043756642119897084,
+        0.21344329062443387,
+        0.1597732805816322,
+        0.08661075992117785,
+        1.4480132660646325,
+        1.1828752155049742,
+        0.045583872162743025,
+        0.240698041459986,
+        1.4599921920239975,
+        1.206500717988766,
+        0.046980857687368885,
+        0.25132751293134387,
+        1.4155580842379096,
+        0.22897785762824352,
+        1.4079288583957812,
+        1.3774809356348778,
+        0.46277371703599424
+      ],
+      "coefficients": [
+        0.2187380550824112,
+        -0.20331491696545573,
+        0.04400817691499154,
+        0.05405747514483301,
+        -0.18321699199754998,
+        -0.08898309710509664,
+        -0.04370266258451137,
+        0.20770394459566588,
+        0.019739972475249074,
+        -0.010614159435114703,
+        0.01023826733258713,
+        0.02912959130582849,
+        -0.23100316344211408,
+        0.3014034223813763,
+        0.1441635188896708,
+        0.36929525715548195,
+        0.06050119245839918,
+        0.05727370864830502,
+        -0.125655884547802
+      ],
+      "intercept": -0.7982242119758224,
+      "model": "StandardScaler+Ridge",
+      "alpha": 20.0,
+      "train_clip": 2.0,
+      "prediction_clip": 1.0,
+      "training_season": 2025,
+      "r9_reliability": 1.0
+    },
+    "r11_high5": {
+      "feature_order": [
+        "baseline_pred_targets",
+        "prior_rb_room_share",
+        "target_delta",
+        "r9_raw_r8_residual"
+      ],
+      "scaler_mean": [
+        2.6760628482310684,
+        0.6443081275127331,
+        1.0659696476203098,
+        0.02304124607058852
+      ],
+      "scaler_scale": [
+        0.7611357653620429,
+        0.08654722633491059,
+        0.7724891637338593,
+        0.3990985712716268
+      ],
+      "coefficients": [
+        0.4905275239390012,
+        0.14049850745231698,
+        -0.041559691405355016,
+        0.21895491746156825
+      ],
+      "intercept": -0.7967567282842849,
+      "model": "StandardScaler+LogisticRegression",
+      "C": 1.0,
+      "penalty": "l2",
+      "solver": "lbfgs",
+      "max_iter": 2000,
+      "random_state": 911,
+      "training_seasons": [
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "population": "TOP20 receiving identity only; REST80 probability exactly 0"
+    },
+    "r16_cat30": {
+      "feature_order": [
+        "baseline_pred_targets",
+        "baseline_pred_rec_yards",
+        "state_probability",
+        "prior_rb_room_share",
+        "r9_raw_r8_residual",
+        "frozen_ypt",
+        "identity_top20"
+      ],
+      "scaler_mean": [
+        1.704987570454853,
+        10.687800933590225,
+        0.06579564089888056,
+        0.3643482451530521,
+        -0.5168505982090935,
+        6.438824778220711,
+        0.20516533912623702
+      ],
+      "scaler_scale": [
+        0.7564959314792072,
+        4.742638530464357,
+        0.1494856561780059,
+        0.19867048005494214,
+        0.4664541557323186,
+        1.426495541706531,
+        0.4038223901017045
+      ],
+      "coefficients": [
+        -0.02264521781973504,
+        0.04544294302182614,
+        -0.01587439860798784,
+        0.5562257038138739,
+        0.16617667828827554,
+        -0.052982513331745196,
+        -0.11577833228729487
+      ],
+      "intercept": -2.905340930679662,
+      "model": "StandardScaler+LogisticRegression",
+      "C": 1.0,
+      "penalty": "l2",
+      "solver": "lbfgs",
+      "max_iter": 3000,
+      "random_state": 916,
+      "training_seasons": [
+        2023,
+        2024,
+        2025
+      ],
+      "label": "actual_rec_yards-baseline_pred_rec_yards>=30"
+    },
+    "r16_cat50": {
+      "feature_order": [
+        "baseline_pred_targets",
+        "baseline_pred_rec_yards",
+        "state_probability",
+        "prior_rb_room_share",
+        "r9_raw_r8_residual",
+        "frozen_ypt",
+        "identity_top20"
+      ],
+      "scaler_mean": [
+        1.704987570454853,
+        10.687800933590225,
+        0.06579564089888056,
+        0.3643482451530521,
+        -0.5168505982090935,
+        6.438824778220711,
+        0.20516533912623702
+      ],
+      "scaler_scale": [
+        0.7564959314792072,
+        4.742638530464357,
+        0.1494856561780059,
+        0.19867048005494214,
+        0.4664541557323186,
+        1.426495541706531,
+        0.4038223901017045
+      ],
+      "coefficients": [
+        -0.6501087951978727,
+        0.7927010027688924,
+        -0.33997359460657983,
+        0.7637314845096363,
+        0.3509953849094598,
+        -0.17534335002523027,
+        -0.07696264483683907
+      ],
+      "intercept": -4.318846108044415,
+      "model": "StandardScaler+LogisticRegression",
+      "C": 1.0,
+      "penalty": "l2",
+      "solver": "lbfgs",
+      "max_iter": 3000,
+      "random_state": 916,
+      "training_seasons": [
+        2023,
+        2024,
+        2025
+      ],
+      "label": "actual_rec_yards-baseline_pred_rec_yards>=50"
+    }
+  },
+  "residual_pools": {
+    "non_tail": {
+      "count": 3890,
+      "sha256_f64_sorted": "f677e91cd25cdbd6db044e9decccec6312943b99f8ffc25a827527e54d4d7b1d"
+    },
+    "tail_30_49": {
+      "count": 174,
+      "sha256_f64_sorted": "3da7bf656fcab3c111c8d5fb60e38fb7f735d7fcce639dabad899431f613c225"
+    },
+    "tail_50_plus": {
+      "count": 79,
+      "sha256_f64_sorted": "ee203d3ffa01b8687e7774d817d0dce6cdc8b56ca62321a5583d5287dfd5ee43"
+    }
+  },
+  "residual_pool_file": "rb_r19_residual_pools_v1.npz",
+  "required_live_inputs_fail_closed": [
+    "event_id",
+    "team",
+    "player_clean_key",
+    "position_or_position_family",
+    "certified_finite_target_entitlement_or_target_share",
+    "certified_team_pass_attempt_projection_or_rules_plays_est_plus_rules_pass_rate",
+    "rules_ypt_or_frozen_ypt",
+    "strict_prior_R8_identity_history_source"
+  ],
+  "identity_top20_rule": "current-slate season/week rank(pct,average) of strict-prior prior_rb_room_share > 0.80",
+  "state_probability_rule": "R11 high5 probability for TOP20 only; REST80=0 exactly",
+  "r9_mean_policy": "R9 target delta is a scorer feature only; R19 does not modify live receiving mean or target entitlement",
+  "sportsbook_inputs_added": 0,
+  "production_parameters_changed": 0
+}

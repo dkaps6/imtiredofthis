@@ -14,6 +14,7 @@ def _context() -> pd.DataFrame:
             "week": 1,
             "player": "D'Andre Swift",
             "player_clean_key": "dandreswift",
+            "player_base_key": "dandreswift",
             "team": "CHI",
             "opponent": "CAR",
             "rb_synthesis_proj": 51.25,

@@ -1,8 +1,8 @@
 """Production adapter from frozen RB P3 football projections into pricing.
 
-This module is deliberately sportsbook-blind.  It only loads the precomputed
+This module is deliberately sportsbook-blind. It only loads the precomputed
 football-only RB synthesis context and resolves the authoritative rushing-yard
-mean for a player/week.  Sportsbook line/odds information remains downstream
+mean for a player/week. Sportsbook line/odds information remains downstream
 inside ``run_pricing_v2.py``.
 """
 from __future__ import annotations
@@ -12,13 +12,16 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from scripts.utils.player_identity_v3 import player_name_key
+
 RB_CONTEXT_PATH = Path("data/rb_rush_synthesis_context.csv")
 WEEK1_ROUTE = "WEEK1_STACK_OVERRIDE"
 RB_VERSION = "RB_P3_SYNTHESIS_V1"
 
 
-def _key(value) -> str:
-    return "".join(ch.lower() for ch in str(value or "") if ch.isalnum())
+def _base_key(value) -> str:
+    """Use the same suffix-insensitive person-name contract as Player Identity v3."""
+    return player_name_key(value, strip_suffix=True)
 
 
 def load_rb_context(path: Path = RB_CONTEXT_PATH) -> pd.DataFrame:
@@ -53,10 +56,11 @@ def load_rb_context(path: Path = RB_CONTEXT_PATH) -> pd.DataFrame:
 
     out["team"] = out["team"].fillna("").astype(str).str.upper().str.strip()
     out["opponent"] = out["opponent"].fillna("").astype(str).str.upper().str.strip()
-    out["player_clean_key"] = out.get("player_clean_key", out["player"]).map(_key)
-    out["player_clean_key"] = out["player_clean_key"].map(_key)
+    out["player_base_key"] = out["player"].map(_base_key)
+    if out["player_base_key"].astype(str).str.len().eq(0).any():
+        raise RuntimeError("promoted RB synthesis context contains blank normalized player identity")
 
-    # The currently promoted live production contract is Week 1.  Do not allow
+    # The currently promoted live production contract is Week 1. Do not allow
     # a future week to silently use the Week-1 parent while W2-18 source safety
     # remains unresolved.
     wk1 = out["week"].eq(1)
@@ -66,10 +70,10 @@ def load_rb_context(path: Path = RB_CONTEXT_PATH) -> pd.DataFrame:
         if not out.loc[wk1, "rb_synthesis_version"].astype(str).eq(RB_VERSION).all():
             raise RuntimeError("Week-1 RB context version drift")
 
-    dup = out.duplicated(["season", "week", "team", "player_clean_key"], keep=False)
+    dup = out.duplicated(["season", "week", "team", "player_base_key"], keep=False)
     if dup.any():
-        sample = out.loc[dup, ["season", "week", "team", "player", "player_clean_key"]].head(10)
-        raise RuntimeError(f"duplicate promoted RB context identities:\n{sample.to_string(index=False)}")
+        sample = out.loc[dup, ["season", "week", "team", "player", "player_base_key"]].head(10)
+        raise RuntimeError(f"duplicate promoted RB context identities after suffix normalization:\n{sample.to_string(index=False)}")
     return out
 
 
@@ -78,13 +82,15 @@ def lookup_rb_projection(row: pd.Series, context: pd.DataFrame) -> dict[str, obj
     week = int(float(row.get("week")))
     team = str(row.get("team") or "").upper().strip()
     opponent = str(row.get("opponent") or "").upper().strip()
-    player_key = _key(row.get("player_clean_key") or row.get("player"))
+    player_key = _base_key(row.get("player"))
+    if not player_key:
+        raise RuntimeError(f"promoted RB synthesis pricing row has blank player identity: {row.get('player')!r}")
 
     q = context.loc[
         context["season"].eq(season)
         & context["week"].eq(week)
         & context["team"].eq(team)
-        & context["player_clean_key"].eq(player_key)
+        & context["player_base_key"].eq(player_key)
     ].copy()
     if len(q) != 1:
         raise RuntimeError(

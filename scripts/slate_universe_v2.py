@@ -1,21 +1,11 @@
-"""Build the active PlayerForm slate universe in live-market or no-market mode."""
+"""Build the active PlayerForm slate universe from football roster + schedule only."""
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Callable
 
 import pandas as pd
 
 from scripts._opponent_map import canon_team
-from scripts.artifact_io import read_valid_csv
-
-
-def _canon_player_frame(pf, frame: pd.DataFrame) -> pd.DataFrame:
-    out = frame.copy()
-    canon = out["player"].map(pf._canon_name)
-    out["player"] = canon.map(lambda t: t[0])
-    out["player_clean_key"] = canon.map(lambda t: t[1])
-    return out
 
 
 def build_slate_universe(
@@ -26,20 +16,49 @@ def build_slate_universe(
     *,
     live_odds_enabled: bool,
 ) -> pd.DataFrame:
-    """Return one roster/slate row per team/player for the requested NFL week.
+    """Return one football-defined player row per team/player for the active week.
 
-    Contract:
-    - no-odds mode never consumes props/odds/opponent-map placeholders;
-    - no-odds mode derives the universe from Ourlads and opponent from schedule;
-    - live-odds mode requires a valid, non-empty props artifact;
-    - schedule remains authoritative for team opponent identity in both modes;
-    - unresolved team/opponent identity is always fatal.
+    Production contract:
+    - sportsbook availability NEVER defines which players the football model knows;
+    - the active player universe is current Ourlads offensive-skill roles;
+    - the authoritative schedule supplies opponent identity;
+    - live props, when enabled, are validated/quarantined separately upstream and
+      are joined only later when deciding which already-modeled markets to price;
+    - unresolved current team/opponent/player identity is fatal.
+
+    ``live_odds_enabled`` is retained only for runtime logging/backward-compatible
+    call signatures. It has no effect on the PlayerForm universe.
     """
     roles = pf._load_roles()
     if roles.empty:
         raise RuntimeError("Ourlads role universe is empty")
+    name_col = "display_name" if "display_name" in roles.columns else "player" if "player" in roles.columns else None
+    if name_col is None:
+        raise RuntimeError(f"Ourlads normalized role universe missing display/player name column: {list(roles.columns)}")
+    required_roles = {"team", "player_clean_key"}
+    missing_roles = required_roles - set(roles.columns)
+    if missing_roles:
+        raise RuntimeError(f"Ourlads role universe missing columns: {sorted(missing_roles)}")
+
+    roles = roles.copy()
+    roles["team"] = roles["team"].map(canon_team)
+    roles["player"] = roles[name_col].astype("string").fillna("").str.strip()
+    player = roles["player"]
+    key = roles["player_clean_key"].astype("string").fillna("").str.strip()
+    if roles["team"].eq("").any() or player.eq("").any() or key.eq("").any():
+        raise RuntimeError("Ourlads role universe contains unresolved team/player identity")
+    if roles.duplicated(["team", "player_clean_key"]).any():
+        sample = roles.loc[
+            roles.duplicated(["team", "player_clean_key"], keep=False),
+            ["team", "player", "player_clean_key"],
+        ].head(20).to_dict("records")
+        raise RuntimeError(f"Ourlads role universe contains duplicate current identities: {sample}")
 
     schedule = load_schedule()
+    required_sched = {"season", "week", "team", "opponent"}
+    missing_sched = required_sched - set(schedule.columns)
+    if missing_sched:
+        raise RuntimeError(f"active schedule missing columns: {sorted(missing_sched)}")
     cur = schedule.loc[
         (pd.to_numeric(schedule["season"], errors="coerce") == int(season))
         & (pd.to_numeric(schedule["week"], errors="coerce") == int(week)),
@@ -49,64 +68,25 @@ def build_slate_universe(
     cur["opponent"] = cur["opponent"].map(canon_team)
     if cur.empty:
         raise RuntimeError(f"No schedule rows available for active slate season={season} week={week}")
+    if cur["team"].eq("").any() or cur["opponent"].eq("").any():
+        raise RuntimeError("active schedule contains unresolved team/opponent identity")
     if cur["team"].duplicated().any():
         dupes = cur.loc[cur["team"].duplicated(keep=False)].to_dict("records")
         raise RuntimeError(f"Active schedule is not unique by team: {dupes[:20]}")
 
-    if not live_odds_enabled:
-        print("[slate_universe_v2] live odds disabled; building player universe from Ourlads + authoritative schedule")
-        base = roles.rename(columns={"display_name": "player"})[["player", "player_clean_key", "team"]].copy()
-        base["team"] = base["team"].map(canon_team)
-        base = base.merge(cur, on="team", how="left", validate="many_to_one")
-    else:
-        props = read_valid_csv(
-            pf.PROPS,
-            required_columns=("player",),
-            min_rows=1,
-            required=True,
-            label="live props_raw",
-        )
-        assert props is not None
-        props = _canon_player_frame(pf, props)
-        props["team"] = pf._first(props, ["team_abbr", "team", "player_team_abbr"], "").map(canon_team)
-        keep = [c for c in ("event_id", "player", "player_clean_key", "team") if c in props.columns]
-        base = props[keep].drop_duplicates().copy()
-
-        # Use live enriched/team identity only when valid. These are helpers, not
-        # authority: the active schedule still provides final opponent identity.
-        enriched = read_valid_csv(
-            pf.DATA / "props_enriched.csv",
-            min_rows=1,
-            required=False,
-            label="props_enriched",
-        )
-        if enriched is not None:
-            name_col = "player_canonical" if "player_canonical" in enriched.columns else "player_name_raw" if "player_name_raw" in enriched.columns else None
-            if name_col:
-                enriched["player_clean_key"] = enriched[name_col].map(pf._canon_name).map(lambda t: t[1])
-                if "player_team_abbr" in enriched.columns:
-                    enriched["team_enriched"] = enriched["player_team_abbr"].map(canon_team)
-                    join = [c for c in ("event_id", "player_clean_key") if c in base.columns and c in enriched.columns] or ["player_clean_key"]
-                    right = enriched[join + ["team_enriched"]].drop_duplicates(join, keep="last")
-                    base = base.merge(right, on=join, how="left")
-                    base["team"] = base["team"].replace("", pd.NA).combine_first(base["team_enriched"])
-
-        # Ourlads can resolve team when player identity is unique across the roster.
-        role_unique = roles.groupby("player_clean_key")["team"].nunique()
-        unique_keys = set(role_unique.loc[role_unique.eq(1)].index)
-        role_team = roles.loc[
-            roles["player_clean_key"].isin(unique_keys),
-            ["player_clean_key", "team"],
-        ].drop_duplicates("player_clean_key")
-        base = base.merge(role_team.rename(columns={"team": "team_roster"}), on="player_clean_key", how="left")
-        base["team"] = base["team"].replace("", pd.NA).combine_first(base["team_roster"])
-        base = base.merge(cur, on="team", how="left", validate="many_to_one")
+    # Football model universe is independent of sportsbook posting coverage.
+    base = roles[["player", "player_clean_key", "team"]].copy()
+    base = base.merge(cur, on="team", how="inner", validate="many_to_one")
+    if base.empty:
+        raise RuntimeError("Ourlads + active schedule produced zero PlayerForm players")
 
     missing = (
         base["team"].isna()
         | base["team"].astype("string").str.strip().eq("")
         | base["opponent"].isna()
         | base["opponent"].astype("string").str.strip().eq("")
+        | base["player_clean_key"].isna()
+        | base["player_clean_key"].astype("string").str.strip().eq("")
     )
     if missing.any():
         path = pf.DATA / "_debug" / "player_form_unresolved_slate_identity.csv"
@@ -116,18 +96,18 @@ def build_slate_universe(
             f"PlayerForm slate identity unresolved for {int(missing.sum())} rows; see {path}"
         )
 
-    # Attach current Ourlads metadata after slate identity is resolved.
-    base = base.merge(roles, on=["team", "player_clean_key"], how="left", suffixes=("", "_role"))
-    if "display_name" in base.columns:
-        base["player"] = base["player"].replace("", pd.NA).combine_first(base["display_name"])
+    # Attach full current Ourlads metadata after identity/schedule resolution.
+    role_meta = roles.drop(columns=["player"], errors="ignore")
+    base = base.merge(role_meta, on=["team", "player_clean_key"], how="left", validate="one_to_one")
     base["season"] = int(season)
     base["week"] = int(week)
-
-    drop = [c for c in ("team_enriched", "team_roster") if c in base.columns]
-    base.drop(columns=drop, inplace=True, errors="ignore")
     base = base.drop_duplicates(["team", "player_clean_key"])
+
+    if base["team"].nunique() < 24:
+        raise RuntimeError(f"PlayerForm active slate universe has implausible team coverage: {base['team'].nunique()}")
     print(
-        f"[slate_universe_v2] mode={'live_odds' if live_odds_enabled else 'roster_schedule'} "
-        f"season={season} week={week} players={len(base)} teams={base['team'].nunique()}"
+        "[slate_universe_v2] sportsbook_independent=1 "
+        f"live_odds_enabled={int(bool(live_odds_enabled))} season={season} week={week} "
+        f"players={len(base)} teams={base['team'].nunique()} source=OURLADS_PLUS_SCHEDULE"
     )
     return base
