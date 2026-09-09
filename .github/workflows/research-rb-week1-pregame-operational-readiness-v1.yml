@@ -1,0 +1,208 @@
+name: RB Week 1 Pregame Operational Readiness V1
+
+on:
+  push:
+    branches:
+      - research-rb-week1-pregame-operational-readiness-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PLAN_COMMIT: 6316ba89dc3b88394d27302567435f6105afaff1
+  CODE_COMMIT: 516b351869f2cffad6fe934a06cce046bd9249ec
+  LOCK_COMMIT: 5d76b8789cde3d260e2427f529500bd7d707c5f0
+  PROTECTED_HEAD: f8417f55b04ce0e19baf260e9d532765034c47f1
+  PROD_RUN: "34317211395"
+  PROD_ARTIFACT: "10090547415"
+  PROD_NAME: run_34317211395
+  PROD_DIGEST: sha256:7eab77e41c5879d4f54d87497eee0d1186010784cfc4ef966178930e16fb7c3b
+  R22_RUN: "34298516960"
+  R22_ARTIFACT: "10084118525"
+  R22_NAME: rb-r22-week1-production-integration-v2
+  R22_DIGEST: sha256:2391bd9914e9d0029c63529829496fb9b462d008bdcc3f8c37bb3e1079580bd1
+  R26Q_RUN: "34400524030"
+  R26Q_ARTIFACT: "10123251043"
+  R26Q_NAME: rb-r26q-2026-week1-receptions-prospective-seal-v1
+  R26Q_DIGEST: sha256:dd3ec0e8e3831ab7f2255c2e5abf343cda8a7943d33a1d4863e52372d6f858a1
+  R26Q_HEAD: 68661da94f03cab2f96182d47636cf55e088b5de
+  R26R_RUN: "34401814588"
+  R26R_ARTIFACT: "10124274040"
+  R26R_NAME: rb-r26r-2026-week1-prospective-observation-snapshot-v1
+  R26R_DIGEST: sha256:b4d3e573909803e892d57858c9b0c4bdac089bcf078c1d6f6e53366e4622303e
+  R26R_HEAD: 469aa40c90c738e12a82ee32ccca70c9cdbbc29f
+
+jobs:
+  readiness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install locked dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml beautifulsoup4 lxml
+
+      - name: Verify frozen readiness contract and protected code boundary
+        run: |
+          set -euo pipefail
+          PLAN=docs/research/RB_WEEK1_PREGAME_OPERATIONAL_READINESS_V1_FROZEN_PLAN.md
+          CODE=scripts/backtest/build_rb_week1_pregame_operational_readiness_v1.py
+          LOCK=docs/research/RB_WEEK1_PREGAME_OPERATIONAL_READINESS_V1_IMPLEMENTATION_LOCK.md
+          test -s "$PLAN" && test -s "$CODE" && test -s "$LOCK"
+          python -m py_compile "$CODE"
+          git diff --quiet "$PLAN_COMMIT" HEAD -- "$PLAN"
+          git diff --quiet "$CODE_COMMIT" HEAD -- "$CODE"
+          git diff --quiet "$LOCK_COMMIT" HEAD -- "$LOCK"
+          git diff --quiet "$PROTECTED_HEAD" HEAD -- \
+            scripts/run_pricing_with_full_roster_universe_v1.py \
+            scripts/run_pricing_with_full_roster_universe_v3_core.py \
+            scripts/modeling/rb_receiving_tail_production_adapter_v1.py \
+            scripts/modeling/rb_receiving_identity_runtime_v1.py \
+            scripts/modeling/rb_rush_synthesis_v1.py \
+            scripts/run_rb_week1_no_odds.py \
+            scripts/providers/ourlads_depth.py \
+            model/qb_distribution_state_selector_v1.json
+          sha256sum "$PLAN" | tee rb_week1_readiness_plan.sha256
+          sha256sum "$CODE" | tee rb_week1_readiness_code.sha256
+          sha256sum "$LOCK" | tee rb_week1_readiness_lock.sha256
+          echo PASS > rb_week1_readiness_protected_code_clean.txt
+
+      - name: Verify and download exact parent artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          verify_artifact () {
+            local id="$1" expected_digest="$2" expected_head="$3"
+            local digest head
+            digest="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}" --jq '.digest')"
+            head="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}" --jq '.workflow_run.head_sha')"
+            test "$digest" = "$expected_digest"
+            if [ -n "$expected_head" ]; then test "$head" = "$expected_head"; fi
+            echo "artifact=${id} digest=${digest} head=${head}"
+          }
+          verify_artifact "$PROD_ARTIFACT" "$PROD_DIGEST" "$PROTECTED_HEAD"
+          verify_artifact "$R22_ARTIFACT" "$R22_DIGEST" ""
+          verify_artifact "$R26Q_ARTIFACT" "$R26Q_DIGEST" "$R26Q_HEAD"
+          verify_artifact "$R26R_ARTIFACT" "$R26R_DIGEST" "$R26R_HEAD"
+          rm -rf parent_production parent_r22 parent_r26q parent_r26r
+          mkdir -p parent_production parent_r22 parent_r26q parent_r26r
+          gh run download "$PROD_RUN" --repo "$GITHUB_REPOSITORY" --name "$PROD_NAME" --dir parent_production
+          gh run download "$R22_RUN" --repo "$GITHUB_REPOSITORY" --name "$R22_NAME" --dir parent_r22
+          gh run download "$R26Q_RUN" --repo "$GITHUB_REPOSITORY" --name "$R26Q_NAME" --dir parent_r26q
+          gh run download "$R26R_RUN" --repo "$GITHUB_REPOSITORY" --name "$R26R_NAME" --dir parent_r26r
+          test -s parent_production/data/player_form_consensus.csv
+          test -s parent_production/data/rb_rush_synthesis_context.csv
+          test -s parent_r22/data/rb_r22_week1_production_integration_audit_v2.json
+          test -s parent_r26q/data/backtests/r26q_2026_week1_receptions_prospective_seal_v1/r26q_disposition.json
+          test -s parent_r26r/data/backtests/r26r_2026_week1_prospective_observation_snapshot_v1/r26r_disposition.json
+          echo PASS > rb_week1_readiness_parents_verified.txt
+
+      - name: Stage exact protected selector into immutable production-data root
+        run: |
+          set -euo pipefail
+          mkdir -p parent_production/model
+          git show "$PROTECTED_HEAD:model/qb_distribution_state_selector_v1.json" > parent_production/model/qb_distribution_state_selector_v1.json
+          PROD_SELECTOR_SHA="$(git show "$PROTECTED_HEAD:model/qb_distribution_state_selector_v1.json" | sha256sum | awk '{print $1}')"
+          STAGED_SHA="$(sha256sum parent_production/model/qb_distribution_state_selector_v1.json | awk '{print $1}')"
+          test "$PROD_SELECTOR_SHA" = "$STAGED_SHA"
+          printf '%s\n' "$STAGED_SHA" > rb_week1_readiness_selector.sha256
+
+      - name: Capture fresh pregame Ourlads roles
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/providers/ourlads_depth.py --season 2026
+          test -s data/roles_ourlads.csv
+          cp data/roles_ourlads.csv current_roles_ourlads.csv
+          python - <<'PY'
+          import pandas as pd
+          x=pd.read_csv('current_roles_ourlads.csv',low_memory=False)
+          if x.empty or x['team'].nunique()!=32:
+              raise SystemExit(f'fresh Ourlads snapshot invalid rows={len(x)} teams={x.team.nunique()}')
+          print('fresh Ourlads rows=',len(x),'teams=',x.team.nunique())
+          PY
+
+      - name: Execute frozen pregame RB readiness audit
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          rm -rf data/backtests/rb_week1_pregame_operational_readiness_v1
+          python scripts/backtest/build_rb_week1_pregame_operational_readiness_v1.py \
+            --production-root parent_production \
+            --r22-root parent_r22 \
+            --r26q-root parent_r26q \
+            --r26r-root parent_r26r \
+            --current-roles current_roles_ourlads.csv \
+            --out-dir data/backtests/rb_week1_pregame_operational_readiness_v1
+
+      - name: Assert authority ceiling and readiness disposition
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('data/backtests/rb_week1_pregame_operational_readiness_v1/rb_week1_pregame_readiness_disposition.json')
+          if not p.is_file(): raise SystemExit('readiness disposition missing')
+          d=json.loads(p.read_text())
+          allowed={
+            'RB_WEEK1_PREGAME_OPERATIONAL_READINESS_PASS_EXACT_ROSTER_READY',
+            'RB_WEEK1_PREGAME_OPERATIONAL_READINESS_PASS_WITH_ROSTER_DRIFT_WARNING',
+          }
+          if d['disposition'] not in allowed: raise SystemExit('readiness emitted FAIL disposition')
+          assert d['gate_count']==22 and d['gate_pass_count']==22
+          assert d['week1_outcomes_used']==0
+          assert d['sportsbook_football_inputs_used']==0
+          assert d['production_parameters_changed'] is False
+          assert d['production_promotion_performed'] is False
+          assert d['live_shadow_activation_performed'] is False
+          assert d['r26_candidate_regenerated'] is False
+          print('RB_WEEK1_PREGAME_READINESS_AUTHORITY_PASS',d['disposition'])
+          PY
+
+      - name: Show readiness evidence
+        if: always()
+        run: |
+          ROOT=data/backtests/rb_week1_pregame_operational_readiness_v1
+          if [ -s "$ROOT/rb_week1_pregame_readiness_disposition.json" ]; then
+            cat "$ROOT/rb_week1_pregame_readiness_disposition.json"
+            echo '=== gates ==='
+            cat "$ROOT/rb_week1_pregame_readiness_gate_matrix.csv"
+            echo '=== largest R26 movements ==='
+            python - <<'PY'
+            import pandas as pd
+            p='data/backtests/rb_week1_pregame_operational_readiness_v1/rb_week1_pregame_player_view.csv'
+            x=pd.read_csv(p)
+            cols=['team','player','current_ourlads_role','p3_rush_attempts_mean','p3_rush_yards_mean','prod_rec_yards_mean','prod_baseline_receptions_mean','r26_receptions_mean','r26_minus_baseline_receptions_mean','market_line_median']
+            print(x.sort_values('r26_minus_baseline_receptions_mean',ascending=False)[cols].head(25).to_string(index=False))
+            PY
+          fi
+
+      - name: Upload Week 1 RB pregame readiness package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-week1-pregame-operational-readiness-v1
+          retention-days: 90
+          path: |
+            rb_week1_readiness_plan.sha256
+            rb_week1_readiness_code.sha256
+            rb_week1_readiness_lock.sha256
+            rb_week1_readiness_selector.sha256
+            rb_week1_readiness_protected_code_clean.txt
+            rb_week1_readiness_parents_verified.txt
+            current_roles_ourlads.csv
+            data/backtests/rb_week1_pregame_operational_readiness_v1/*
