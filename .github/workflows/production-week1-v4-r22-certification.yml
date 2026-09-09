@@ -1,0 +1,203 @@
+name: Production Week 1 V4 R22 Certification
+
+on:
+  push:
+    branches:
+      - production-week1-v4-r22
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  SEASON: '2026'
+  PRIOR_SEASON: '2025'
+  SLATE_DATE: ''
+  FETCH_LIVE_ODDS: 'true'
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml beautifulsoup4 lxml scipy scikit-learn
+
+      - name: Verify exact R19 production assets
+        run: |
+          set -euo pipefail
+          test -s data/models/rb_r19_production_v1/rb_r19_tail_scorer_model_v1.json
+          test -s data/models/rb_r19_production_v1/rb_r19_residual_pools_v1.npz
+          test -s data/models/rb_r19_production_v1/PROVENANCE.json
+          test "$(sha256sum data/models/rb_r19_production_v1/rb_r19_tail_scorer_model_v1.json | awk '{print $1}')" = "9ed6a98b0022e86992fb468df40a9fd79a54bc87885777ac5955a898b5c292ba"
+          test "$(sha256sum data/models/rb_r19_production_v1/rb_r19_residual_pools_v1.npz | awk '{print $1}')" = "c69a268a5a1683e846bcb5f59fe55bcae20d70c679792449ea77e6548b37a362"
+
+      - name: Download immutable already-paid Week 1 source artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/paid
+          gh run download 34152868136 --repo "${GITHUB_REPOSITORY}" --name run_34152868136 --dir evidence/paid
+          test -s evidence/paid/data/live_odds_status.json
+          test -s evidence/paid/outputs/props_raw.csv
+          cp -a evidence/paid/data/. data/
+          mkdir -p outputs
+          cp -a evidence/paid/outputs/. outputs/
+          echo 'Production certification uses immutable paid snapshot; no OddsAPI fetch occurs.'
+
+      - name: Harden immutable sportsbook boundary
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.harden_live_odds_artifacts_v1 import harden_live_odds_artifacts
+          from scripts.repair_live_prop_identity_v1 import repair_live_prop_identity
+          from scripts.materialize_live_props_for_model_v1 import materialize
+          hard=harden_live_odds_artifacts(); ident=repair_live_prop_identity()
+          p=Path('data/live_odds_status.json')
+          status=json.loads(p.read_text(encoding='utf-8'))
+          status.update({
+              'artifact_hardening_disposition': hard.get('disposition','missing'),
+              'game_identity_event_count': int(hard.get('game_identity_event_count',0)),
+              'provider_source_duplicate_rows': int(hard.get('provider_source_duplicate_rows',0)),
+              'raw_artifact_exact_duplicates_removed': int(hard.get('raw_artifact_exact_duplicates_removed',0)),
+              'grouped_offer_entries_removed': int(hard.get('grouped_offer_entries_removed',0)),
+              'blank_name_sentinels_removed': int(hard.get('blank_name_sentinels_removed',0)),
+              'unresolved_real_player_names': int(hard.get('unresolved_real_player_names',0)),
+              'core_prop_identity_disposition': ident.get('disposition','missing'),
+              'core_prop_identity_unresolved_rows': int(ident.get('core_unresolved_rows',0)),
+              'core_prop_identity_rows': int(ident.get('core_actual_rows',0)),
+              'replay_source_run': 34152868136,
+              'odds_api_refetched': False,
+              'production_week1_v4_r22_certification': True,
+          })
+          p.write_text(json.dumps(status,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          result=materialize()
+          if int(result.get('quarantined_rows',-1)) <= 0:
+              raise SystemExit('FATAL: sportsbook quarantine disappeared')
+          PY
+
+      - name: Build player evidence and stable identity
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/run_player_form_v2_loader.py --season 2026 --prior-season 2025 --date ''
+          python scripts/enrich_player_scoring_v2.py --season 2026 --prior-season 2025 --date ''
+          python scripts/validate_player_identity_semantics_v1.py
+
+      - name: Build certified football components
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_context_bridge.py
+          python scripts/validate_full_slate_data_quality_v1.py
+          python scripts/run_model_bayesian_bridge.py
+          python scripts/run_model_ml_bridge.py
+          python scripts/run_model_state_bridge.py
+          python scripts/run_model_rules_bridge.py
+          python scripts/run_model_ensemble_bridge.py
+          python scripts/run_rb_week1_no_odds.py --season 2026 --week 1 --iterations 25000 --out data/rb_rush_synthesis_context.csv
+          python scripts/run_qb_distribution_state_context.py --season 2026 --week 1
+          python scripts/materialize_pricing_offers_v1.py
+          python scripts/run_metrics_context.py --season 2026 --mode full --date ''
+          python scripts/validate_build_integrity.py
+          python scripts/metrics_ready.py --season 2026 --date ''
+
+      - name: Generate preserved V3 control
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/run_pricing_with_full_roster_universe_v3_core.py --season 2026
+          python scripts/stamp_qb_c2_pricing_lineage_v1.py
+          mkdir -p evidence
+          cp outputs/props_priced_clean.csv evidence/v3_same_checkout.csv
+
+      - name: Generate canonical V4 candidate through public Full Slate entrypoint
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/run_pricing_with_full_roster_universe_v3.py --season 2026
+          python scripts/stamp_qb_c2_pricing_lineage_v1.py
+          test -s data/rb_receiving_tail_production_audit.json
+          test -s data/rb_receiving_tail_production_trace.csv
+          test -s data/rb_receiving_tail_pricing_lineage_audit.json
+
+      - name: Run production governance and stack certification
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/validate_rb_rush_rec_conservation_v1.py
+          python scripts/audit_market_model_lineage_v2.py
+          python scripts/validate_anytime_td_model_status_v1.py
+          python scripts/validate_full_slate_mechanical_certification_v1.py
+          python scripts/validate_team_target_pool_full_universe_v2.py
+          python scripts/validate_certified_full_slate_stack_v2.py
+          python scripts/validate_rb_r22_week1_production_integration_v2.py evidence/v3_same_checkout.csv outputs/props_priced_clean.csv
+
+      - name: Strict production audits
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/utils/audit_repo.py --strict
+          python scripts/audit_2026_production_readiness.py --strict
+
+      - name: Assert final Week 1 V4 contract
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          r22=json.load(open('data/rb_r22_week1_production_integration_audit_v2.json',encoding='utf-8'))
+          stack=json.load(open('data/certified_full_slate_stack_audit.json',encoding='utf-8'))
+          lineage=json.load(open('data/market_model_lineage_current.json',encoding='utf-8'))
+          assert r22.get('pass') is True
+          assert r22.get('disposition') == 'RB_R22_WEEK1_RECEIVING_TAIL_PRODUCTION_INTEGRATION_PASS'
+          assert int(r22.get('adapted_rb_player_keys',0)) == 94
+          assert int(r22.get('unexpected_probability_change_rows',1)) == 0
+          assert r22.get('gates',{}).get('priced_receptions_exact_vs_same_checkout_v3') is True
+          assert r22.get('gates',{}).get('sportsbook_zero_to_adapter') is True
+          assert r22.get('gates',{}).get('outcomes_zero_to_adapter') is True
+          assert stack.get('rb_r22_receiving_tail_active') is True
+          assert stack.get('rb_r22_receptions_unchanged') is True
+          assert lineage.get('rb_r22_receiving_tail_consumed') is True
+          assert lineage.get('rb_r22_sportsbook_inputs_used') is False
+          print('PRODUCTION_WEEK1_V4_R22_CERTIFIED')
+          PY
+
+      - name: Upload certification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-week1-v4-r22-certification
+          path: |
+            evidence/v3_same_checkout.csv
+            data/rb_receiving_tail_production_audit.json
+            data/rb_receiving_tail_production_trace.csv
+            data/rb_receiving_tail_pricing_lineage_audit.json
+            data/rb_r22_week1_production_integration_audit_v2.json
+            data/rb_r22_week1_pricing_delta_audit_v2.csv
+            data/market_model_lineage_current.csv
+            data/market_model_lineage_current.json
+            data/certified_full_slate_stack_audit.json
+            data/football_simulation_universe_audit.json
+            data/te_r5p_full_slate_entitlement_audit.json
+            data/wr_r15_full_slate_entitlement_audit.json
+            data/qb_c2_production_integration_audit.json
+            data/qb_c2_pricing_lineage_stamp_audit.json
+            outputs/props_priced_clean.csv
+          if-no-files-found: warn
+          retention-days: 90
