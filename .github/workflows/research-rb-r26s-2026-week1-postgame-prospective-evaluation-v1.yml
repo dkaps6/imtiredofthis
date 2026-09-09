@@ -16,6 +16,8 @@ env:
   R26S_PLAN_COMMIT: 63722c61ca1b408b8ae77eba383e5fa8daecf9f2
   R26S_CODE_COMMIT: e42099dbf11cdd510eb64e43a0910444c75ec7f8
   R26S_LOCK_COMMIT: 3a706fa52f91f6584f6fd6594563239dd6ea3b53
+  R26S_REPAIR_NOTE_COMMIT: b78d4e1671e30eee392ed07a219d409aa00f8b41
+  R26S_COMPAT_COMMIT: adb4b07fa3d7f0585c477d217a58095ac0b9ae10
   PROTECTED_PRODUCTION_HEAD: f8417f55b04ce0e19baf260e9d532765034c47f1
   R26Q_RUN_ID: "34400524030"
   R26Q_ARTIFACT_ID: "10123251043"
@@ -53,15 +55,21 @@ jobs:
           PLAN=docs/research/RB_R26S_2026_WEEK1_POSTGAME_PROSPECTIVE_EVALUATION_V1_FROZEN_PLAN.md
           CODE=scripts/backtest/evaluate_rb_r26s_2026_week1_postgame_prospective_v1.py
           LOCK=docs/research/RB_R26S_2026_WEEK1_POSTGAME_PROSPECTIVE_EVALUATION_V1_IMPLEMENTATION_LOCK.md
-          test -s "$PLAN" && test -s "$CODE" && test -s "$LOCK"
-          python -m py_compile "$CODE"
+          REPAIR=docs/research/RB_R26S_RUN1_R26Q_GATECOUNT_CONTRACT_MECHANICAL_REPAIR_V1.md
+          COMPAT=scripts/backtest/stage_r26s_r26q_gatecount_compat_v1.py
+          test -s "$PLAN" && test -s "$CODE" && test -s "$LOCK" && test -s "$REPAIR" && test -s "$COMPAT"
+          python -m py_compile "$CODE" "$COMPAT"
           git diff --quiet "$R26S_PLAN_COMMIT" HEAD -- "$PLAN"
           git diff --quiet "$R26S_CODE_COMMIT" HEAD -- "$CODE"
           git diff --quiet "$R26S_LOCK_COMMIT" HEAD -- "$LOCK"
+          git diff --quiet "$R26S_REPAIR_NOTE_COMMIT" HEAD -- "$REPAIR"
+          git diff --quiet "$R26S_COMPAT_COMMIT" HEAD -- "$COMPAT"
           git diff --quiet "$PROTECTED_PRODUCTION_HEAD" HEAD -- scripts/player_form_v2.py
           sha256sum "$PLAN" | tee r26s_plan.sha256
           sha256sum "$CODE" | tee r26s_code.sha256
           sha256sum "$LOCK" | tee r26s_lock.sha256
+          sha256sum "$REPAIR" | tee r26s_repair_note.sha256
+          sha256sum "$COMPAT" | tee r26s_compat.sha256
           echo PASS > r26s_protected_outcome_normalizer_clean.txt
           echo R26S_FROZEN_CONTRACT_AND_PROTECTED_OUTCOME_BOUNDARY_PASS
 
@@ -78,7 +86,7 @@ jobs:
           test "$Q_HEAD" = "$R26Q_HEAD"
           test "$R_DIGEST" = "$R26R_DIGEST"
           test "$R_HEAD" = "$R26R_HEAD"
-          rm -rf parent_r26q parent_r26r
+          rm -rf parent_r26q parent_r26q_compat parent_r26r
           mkdir -p parent_r26q parent_r26r
           gh run download "$R26Q_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26Q_ARTIFACT_NAME" --dir parent_r26q
           gh run download "$R26R_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26R_ARTIFACT_NAME" --dir parent_r26r
@@ -91,13 +99,24 @@ jobs:
           echo PASS > r26s_parents_verified.txt
           echo "R26S_IMMUTABLE_PARENTS_PASS q=$Q_DIGEST r=$R_DIGEST"
 
+      - name: Stage frozen R26Q gate-count compatibility copy
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/backtest/stage_r26s_r26q_gatecount_compat_v1.py \
+            --source-root parent_r26q \
+            --staged-root parent_r26q_compat \
+            --audit-json r26s_r26q_gatecount_compat_audit.json
+          test -s r26s_r26q_gatecount_compat_audit.json
+          echo R26S_R26Q_GATECOUNT_COMPAT_STAGING_PASS
+
       - name: Execute locked R26S prospective evaluation
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
           rm -rf data/backtests/r26s_2026_week1_postgame_prospective_evaluation_v1
           python scripts/backtest/evaluate_rb_r26s_2026_week1_postgame_prospective_v1.py \
-            --r26q-root parent_r26q \
+            --r26q-root parent_r26q_compat \
             --r26r-root parent_r26r \
             --out-dir data/backtests/r26s_2026_week1_postgame_prospective_evaluation_v1
 
@@ -154,6 +173,9 @@ jobs:
             r26s_plan.sha256
             r26s_code.sha256
             r26s_lock.sha256
+            r26s_repair_note.sha256
+            r26s_compat.sha256
+            r26s_r26q_gatecount_compat_audit.json
             r26s_protected_outcome_normalizer_clean.txt
             r26s_parents_verified.txt
             r26s_r26q_parent_head.txt
