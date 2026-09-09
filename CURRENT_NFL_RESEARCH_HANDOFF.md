@@ -2,424 +2,338 @@
 
 **Repository:** `dkaps6/imtiredofthis`  
 **Purpose:** canonical cross-chat continuity ledger for the active NFL player-projection research program.  
-**Last updated:** 2026-09-09 ~15:40 ET.  
-**Protected production-code / Full-Slate authority used by the current RB study:** `f8417f55b04ce0e19baf260e9d532765034c47f1`.  
-**Current research frontier branch:** `research-rb-r26n-2026-week1-unmodified-r26-structural-candidate-v1`.
+**Last updated:** 2026-09-09 after corrected R26O 38/38 PASS.  
+**Protected production-code / Full-Slate authority:** `f8417f55b04ce0e19baf260e9d532765034c47f1`.  
+**Current research frontier:** R26O receptions-only shadow integration has passed; next authorized step is a separately frozen **pre-outcome prospective seal**.
 
-> **Future ChatGPT sessions / agents: read this file first, then `AGENTS.md`, then the exact active branch plan/result documents named below before making any model or workflow change. Update this file on `main` after every substantive result, mechanical repair, frozen plan, promotion, failure, or change in authorized next step.**
+> **Future ChatGPT sessions / agents:** read this file first, then `AGENTS.md`, then the exact active R26 result/plan files named below. Do not alter production or reinterpret prior failures. Update this file on `main` after each substantive frozen plan, result, repair, promotion, failure, or change in authorized next step.
 
 ---
 
-## 1. User's north star
+## 1. User's controlling objective
 
-The user's controlling objective is simple:
+Project individual NFL player outcomes as accurately as possible pregame: yards, receptions, carries, and downstream fair probabilities. Football projections must remain sportsbook-independent; sportsbook data is downstream pricing/benchmarking only.
 
-> If a QB, RB, WR, or TE is projected for **X yards / X receptions / X carries**, make X as close as possible to the actual game outcome, player by player, pregame.
+Current architecture:
 
-The ultimate market objective is to make the football-only player distributions and fair probabilities outperform sportsbook player-prop pricing. Sportsbook data is **downstream only**. Large model-vs-market discrepancies are audit triggers, never automatic corrections.
+> **GAME / TEAM OPPORTUNITY → POSITION/ROOM POOL → INDIVIDUAL PLAYER ENTITLEMENT → PLAYER+MATCHUP EFFICIENCY → JOINT MONTE CARLO DISTRIBUTION**
 
-For the current RB receiving/receptions lane, the emphasis is real football opportunity and allocation accuracy—not merely directional market agreement.
+The current RB receiving lane is specifically solving **who inside a changing backfield should own a finite RB receiving-opportunity pool**, rather than applying broad positive target/reception corrections.
 
 ---
 
 ## 2. Non-negotiable methodology
 
-- Canonical production authority is `.github/workflows/full-slate.yml`; read `AGENTS.md` before touching production.
-- Historical tests are strict walk-forward / leakage-safe.
-- Sportsbook inputs are prohibited upstream of football projections.
-- Freeze hypothesis, candidate, cohort, thresholds, gates, and outcome definitions **before** results.
-- Mechanical/data/integrity failures may receive only the minimum plumbing repair and exact rerun; they are not scientific failures.
-- Mechanical repair intent should be frozen/documented before implementation when practical.
-- Scientific failures are preserved. Do not lower gates, tune nearby thresholds, window-hunt, or rescue a near miss.
-- Failed experiments remain evidence and must not be silently reopened.
-- Full-stack/production promotion always requires a separately frozen integration confirmation.
-- Current RB R26-series authority is explicitly prospective and does **not** use 2026 game outcomes.
+- Canonical production authority is `.github/workflows/full-slate.yml`.
+- Historical science is strict walk-forward / leakage-safe.
+- Freeze hypotheses, candidate, population, metrics, thresholds and gates before results.
+- Mechanical failures may receive only the minimum documented plumbing repair and exact rerun; they are not scientific failures.
+- Scientific failures remain preserved; do not lower gates or retune around them.
+- No sportsbook football inputs upstream of projections.
+- Current R26 prospective work uses **zero 2026 outcomes**.
+- Production promotion always requires separately frozen authority; research PASS does not silently change `main`.
 
 ---
 
-## 3. Current project architecture
+## 3. Protected current production stack
 
-The active architecture remains:
+### Current Full Slate population authority
 
-> **GAME / TEAM OPPORTUNITY → POSITION/ROOM POOL → INDIVIDUAL PLAYER ENTITLEMENT → PLAYER+MATCHUP EFFICIENCY → JOINT MONTE CARLO DISTRIBUTION**
+- production head: `f8417f55b04ce0e19baf260e9d532765034c47f1`
+- Full Slate run: `34317211395`
+- artifact: `10090547415`
+- artifact name: `run_34317211395`
+- digest: `sha256:7eab77e41c5879d4f54d87497eee0d1186010784cfc4ef966178930e16fb7c3b`
+- player rows: `468`
+- teams: `32`
+- games: `16`
 
-Do not treat a player's final yardage as an independent primary object when a finite team/room opportunity pool can be modeled and conserved first.
+### Protected model authorities
 
-Strong repeated evidence supporting this architecture includes:
-- QB/receiver shared pass-volume residual coupling;
-- WR target/opportunity error dominance and the durable M38 hierarchy;
-- TE team-pool-first evidence;
-- RB carry/yard coupling and failures of static depth remaps;
-- C2 pass/receiving conservation improving QB distribution quality without moving the promoted QB mean.
+- QB passing-yard mean: **M89/M90**
+- QB distribution: **mean-neutral C2**
+- WR: **M38 WR1 anchor + WR-R15 WR2+ entitlement**
+- TE: **TE-R5P**
+- RB rushing: **RB-P3**
+- RB receiving-yard distribution/tails: **R22**, using pinned R19 assets
 
----
-
-## 4. Current production authorities that must remain protected
-
-### Production code / current Full Slate state
-
-Protected production-code reference used throughout the current R26N research:
-`f8417f55b04ce0e19baf260e9d532765034c47f1`
-
-Current Full Slate artifact used as the exact 2026 Week-1 population authority:
-- run `34317211395`
-- artifact `10090547415`
-- artifact name `run_34317211395`
-- digest `sha256:7eab77e41c5879d4f54d87497eee0d1186010784cfc4ef966178930e16fb7c3b`
-- head `f8417f55b04ce0e19baf260e9d532765034c47f1`
-- current player rows `468`
-- teams `32`
-- games `16`
-
-### QB
-
-`QB_PASS_SYNTHESIS_V1 / M89-M90` remains the passing-yard mean authority. Do not replace it casually.
-
-### WR
-
-M38 target-share hierarchy remains the canonical WR entitlement prior/winner.
-
-### TE
-
-TE-R5P is the promoted TE entitlement specialist in the current stack.
-
-### WR specialist
-
-WR-R15 is the promoted conserved WR specialist in the current stack.
-
-### RB rushing
-
-`RB_P3_SYNTHESIS_V1`, 2026 Week-1 route `WEEK1_STACK_OVERRIDE`, remains the qualified RB rushing-yard mean authority.
-
-### RB receiving-yard distribution
-
-R22 / R19 receiving-tail production authority remains protected. The current R26N study did **not** alter, regenerate, or refit receiving-yard means/distributions.
+R26N/R26O have **not** altered RB receiving-yard means, R22 distributions, QB arrays, rushing arrays, or production parameters.
 
 ---
 
-# 5. CURRENT RB RECEIVING / RECEPTIONS FRONTIER — R26 SERIES
+# 4. RB R26 historical foundation — preserve the failed science
 
-This is the highest-priority current handoff state.
+R26 tested vacancy-gated R9 redistribution of a fixed RB/FB receiving-opportunity pool.
 
-## R26 historical mechanism
-
-R26 tested a vacancy-gated R9 redistribution mechanism inside the RB/FB receiving opportunity room.
-
-Historical R26 parent:
+### R26 parent
 - run `34356222339`
 - artifact `10106271075`
 - digest `sha256:607fca6e11c301ecb2a3bf74e3dfea8ae415bb33cf3c150a6d89eaedada2809e`
 - disposition `RETROSPECTIVE_MIXED_OR_FAIL_NO_SHADOW`
+- 19/20-style broad support, but historical temporal safety failed because 2020 behaved differently.
 
-The mechanism broadly helped but failed a frozen temporal safety gate because 2020 behaved differently.
-
-## R26E Week-1 qualification
-
-Latest valid R26E authority:
+### R26E Week-1 qualification
 - run `34368268224`
 - artifact `10110785184`
 - digest `sha256:2b64fe25a1024136f2bb2cdde42bc74de290b6b9df63b4bb6cd675f6095b8bb7`
 - disposition `WEEK1_COMPONENT_NOT_QUALIFIED_NO_SHADOW`
-- gate pattern `19/20`
-- only failed gate: `14_no_w1_season_worsens_more_than_5pct`
-- 2020 Week-1 relative MAE change: `+0.08966783207056839`
-- 2021–2025 each improved
+- 19/20 gates
+- only blocker: 2020 Week-1 worsened about 8.97%; 2021-2025 improved.
 
-Do **not** erase the 2020 failure.
+**Do not erase or exclude 2020 retroactively.**
 
-## R26J — 2020 source comparability
-
+### R26J 2020 source comparability
 - run `34374987828`
 - artifact `10113466373`
 - digest `sha256:7d886f228487e052ee1617cc5f42b974cd9da6a9d448f3a86b1de82cb4fc4f46`
 - disposition `2020_SOURCE_REGIME_DISTINCT_FOR_MECHANISM_FOLLOWUP`
 
-2020 was source/regime-distinct across multiple dimensions, justifying follow-up—but not automatic exclusion.
-
-## R26K — mechanism atlas
-
+### R26K mechanism atlas
 - run `34376961740`
 - artifact `10114261724`
 - digest `sha256:74a3d9ac58fca360f6d2d23e19b28e1254f38e49e3be23878ee1b37cebe22c88`
 - disposition `2020_SPECIFIC_MECHANISM_NO_REPLICATED_ROUTER`
 
-No replicated historical state was found that authorized a new 2020-style router/guard. Therefore:
-- do not exclude 2020;
-- do not invent a historical regime router;
-- preserve the original R26 failed gate.
+Conclusion: 2020 was distinct, but no historical router/guard replicated. Do not invent one.
 
 ---
 
-# 6. R26L — 2026 WEEK-1 REGIME TRANSPORTABILITY — COMPLETE
+# 5. R26L — 2026 source-regime transportability — PASS
 
-Branch:
-`research-rb-r26l-2026-week1-regime-transportability-v1`
+Branch: `research-rb-r26l-2026-week1-regime-transportability-v1`
 
-Canonical successful run:
 - run `34389455694`
 - artifact `10119058769`
 - digest `sha256:3351dfb5bbf6b571174a94ddf0a03179d70786edbb91d316e4fdf2c3cf005c46`
 - disposition `2026_SOURCE_REGIME_MODERN_LIKE_FOR_PROSPECTIVE_QUALIFICATION`
 
-Key evidence:
-- `6 of 7` frozen features closer to 2021–2025 than to 2020;
-- zero features beyond 2020 in the anomalous direction;
-- mean normalized distance to modern `0.7255585711888131`;
-- mean normalized distance to 2020 `1.2220245842254218`;
-- modern/2020 distance ratio approximately `0.594`;
-- 2026 Week-1 vacancy teams `31`;
-- exact non-vacancy team `CIN`.
-
-Important interpretation:
-“Modern-like” does not mean every 2026 metric lies inside every modern historical range. It means the frozen distance rule places the current state materially closer to the modern regime than anomalous 2020.
-
-R26L used:
-- 2026 outcomes `0`;
-- sportsbook football inputs `0`;
-- same-week depth `false`;
-- no R9 refit;
-- no production/R22/receiving-mean change.
+Frozen evidence:
+- 6/7 source-regime features closer to 2021-2025 than anomalous 2020
+- normalized modern/2020 distance ratio about `0.594`
+- zero features beyond 2020 in the anomalous direction
+- 31 2026 Week-1 vacancy teams
+- sole non-vacancy team: `CIN`
+- zero outcomes / sportsbook inputs / same-week depth / R9 refit
 
 ---
 
-# 7. R26M — PROSPECTIVE QUALIFICATION SYNTHESIS — COMPLETE
+# 6. R26M — prospective synthesis — PASS
 
-Branch:
-`research-rb-r26m-2026-week1-prospective-qualification-synthesis-v1`
+Branch: `research-rb-r26m-2026-week1-prospective-qualification-synthesis-v1`
 
-Frozen/implementation lineage:
-- frozen-plan commit `4201985b23ba96b58e81a1b78a37bd91edc66cb4`
-- evaluator commit `fbdad82591e038d89235f70d6b9f4e0c638c3504`
-- implementation-lock commit `4d9a1f2c52431f580cb8e30486339d1ff7f73436`
-- launch commit `d4756157331b0bd2281f5e6580816344bd84e645`
-
-Canonical run:
 - run `34390505549`
 - artifact `10119429741`
 - digest `sha256:1306a3a2e58a0b129ac7e9fe34ad6407d87c491494e8fc27dd0284ba96996b76`
 - disposition `2026_WEEK1_UNMODIFIED_R26_SHADOW_CANDIDATE_DESIGN_QUALIFIED`
-- canonical result commit `9ae4e6639865a4ca25f48f33a1d49e1318eefb78`
 
-R26M preserved all parent failures/limits and authorized only design of an unmodified 2026 Week-1 R26 structural candidate.
-
-It did **not** authorize:
-- excluding 2020;
-- a new historical router;
-- a live shadow;
-- production promotion;
-- receiving-yard/R22 changes.
+R26M preserved the historical 2020 failure and authorized only prospective construction of the **unmodified** R26 Week-1 candidate.
 
 ---
 
-# 8. R26N — 2026 WEEK-1 UNMODIFIED-R26 STRUCTURAL CANDIDATE — COMPLETE / PASS
+# 7. R26N — exact 2026 structural candidate — PASS 28/28
 
-This is the newest substantive checkpoint.
+Branch: `research-rb-r26n-2026-week1-unmodified-r26-structural-candidate-v1`
 
-Branch:
-`research-rb-r26n-2026-week1-unmodified-r26-structural-candidate-v1`
+Read:
+- `docs/research/RB_R26N_2026_WEEK1_UNMODIFIED_R26_STRUCTURAL_CANDIDATE_V1_FROZEN_PLAN.md`
+- `docs/research/RB_R26N_2026_WEEK1_UNMODIFIED_R26_STRUCTURAL_CANDIDATE_V1_RESULT.md`
+- both R26N mechanical repair notes
 
-Frozen plan:
-`docs/research/RB_R26N_2026_WEEK1_UNMODIFIED_R26_STRUCTURAL_CANDIDATE_V1_FROZEN_PLAN.md`
-
-Canonical result:
-`docs/research/RB_R26N_2026_WEEK1_UNMODIFIED_R26_STRUCTURAL_CANDIDATE_V1_RESULT.md`
-
-Original frozen implementation:
-`scripts/backtest/build_rb_r26n_2026_week1_unmodified_r26_structural_candidate_v1.py`
-
-### Frozen lineage
-
-- plan commit `919285fd0e2042461a5a89472f6832c01da857b4`
-- original builder commit `5299ce54575ffcfe33ad203db0ee00285181291f`
-- implementation-lock commit `be1f2bc5219c378aeb081ceaf00bcb54b02a91a2`
-- final successful launch head `3b7a00e282cb925bd7a33175bc0b7d08d1467b2f`
-- canonical result commit `cefc91b5c7cee31d51208821c71835f4ea57af06`
-
-### Canonical successful run / artifact
-
+Canonical:
+- frozen plan commit `919285fd0e2042461a5a89472f6832c01da857b4`
+- frozen builder commit `5299ce54575ffcfe33ad203db0ee00285181291f`
+- successful head `3b7a00e282cb925bd7a33175bc0b7d08d1467b2f`
 - run `34396075045`
 - job `102616001356`
 - artifact `10121598376`
-- artifact name `rb-r26n-2026-week1-unmodified-r26-structural-candidate-v1`
 - digest `sha256:887929203053cb62904aaaeda9d995c9645163814da181972799f08fe4465c62`
+- disposition `R26N_2026_WEEK1_STRUCTURAL_CANDIDATE_PASS_READY_FOR_SHADOW_INTEGRATION_DESIGN`
+- **28/28 frozen gates passed**
 
-### Disposition
+Structural state:
+- 468 players / 32 teams / 16 games
+- 107 RB/FB rows
+- 31 vacancy teams
+- CIN exact non-vacancy baseline
+- 104 RB/FB rows changed
+- fixed RB-room pool conserved exactly
+- non-RB entitlement exact
+- R9 training season 2025, reliability 1.0, no refit
+- strict-prior history only
+- zero outcomes / sportsbook inputs / same-week depth
+- R22 and receiving-yard means/distributions untouched
 
-`R26N_2026_WEEK1_STRUCTURAL_CANDIDATE_PASS_READY_FOR_SHADOW_INTEGRATION_DESIGN`
+R19 serialized R8/R9 authority:
+- run `34288244770`
+- artifact `10080377483`
+- digest `sha256:11432b9d7b7f2367935a862b63c30df9f40955e479806ab67d90921b63a907c7`
+- inner model SHA `9ed6a98b0022e86992fb468df40a9fd79a54bc87885777ac5955a898b5c292ba`
 
-**All 28 frozen structural gates passed.**
+---
 
-### Exact 2026 structural candidate state
+# 8. R26O — receptions-only MC shadow integration — FINAL PASS 38/38
 
-- production population `468`
-- teams `32`
-- games `16`
-- RB/FB rows `107`
-- vacancy teams `31`
-- non-vacancy teams `[CIN]`
-- changed RB/FB rows `104`
-- R9 training season `2025`
-- R9 reliability `1.0`
+**This is the current decisive scientific checkpoint.**
+
+Branch: `research-rb-r26o-2026-week1-receptions-shadow-integration-compatibility-v1`
+
+Read first:
+- `docs/research/RB_R26O_2026_WEEK1_RECEPTIONS_SHADOW_INTEGRATION_COMPATIBILITY_V1_FROZEN_PLAN.md`
+- `docs/research/RB_R26O_2026_WEEK1_RECEPTIONS_SHADOW_INTEGRATION_COMPATIBILITY_V1_RESULT.md`
+- R26O mechanical repair notes
+- `docs/research/RB_R26P_R26O_GATE15_CONTRACT_FORENSIC_V1_RESULT.md` on the R26P branch if auditing Gate 15
+
+Frozen R26O:
+- plan `96e4a6977458b55ec00cb29fbc9de05c56c89b88`
+- evaluator `6a171cb32e77c7d6691ceb75da9861a5d6dd7bc4`
+- 38 gates
+- 25,000 Monte Carlo draws
+- seed 42
+- frozen MC compatibility tolerance `0.05 receptions`
+
+## Preserved first scientific R26O execution — FAIL 37/38
+
+- head `550d3d532e9f27c34b90ecd027f3811292674862`
+- run `34398759284`
+- job `102625073624`
+- artifact `10122672501`
+- digest `sha256:6d72de1eb8902fd8d956feb01b4d1a3cb5847aa58417ad4f416f3e1102e96e82`
+- disposition `R26O_2026_WEEK1_RECEPTIONS_SHADOW_INTEGRATION_FAIL_NO_SHADOW`
+- 37/38 gates
+- sole failed Gate 15 recorded `mean_parity=null`, `max_mean_delta=null`
+
+This failure remains preserved and was **not** simply relabeled.
+
+## R26P Gate-15 governance forensic — PASS 17/17
+
+Branch: `research-rb-r26p-r26o-gate15-contract-forensic-v1`
+
+- frozen plan `51eac07260752809bf9426e38a1b5c46abafe771`
+- evaluator `8c787208a70615bd4c5f596a3457f7fa08f5447a`
+- run `34399525657`
+- job `102627643995`
+- artifact `10122862934`
+- digest `sha256:2e596f3a3bcbef156983664d332ded94ef41dae1402d1a96ab0b61d185c68d47`
+- disposition `R26P_GATE15_EVIDENCE_WIRING_DEFECT_CONFIRMED_MECHANICAL_RERUN_AUTHORIZED`
+- **17/17 forensic tests passed**
+
+R26P proved the frozen R26O evaluator read R22's trace DataFrame where it intended to read R22's audit payload. Canonical protected R22 independently had:
+- `gates.mean_parity = true`
+- `max_mean_delta = 5.329070518200751e-15`
+- `gates.receptions_exact = true`
+
+R26P authorized only a mechanical evidence-wiring correction and exact rerun; it did not reinterpret the old FAIL.
+
+## Final corrected canonical R26O — PASS 38/38
+
+R26P-authorized correction lineage:
+- Gate-15 repair note `c40de155c3f19785f8398cbcb9aaa2ab2445c2f4`
+- audit-payload wrapper `85c3f2ca6bc73c302a3a33f3b6e75f4df42ae78a`
+- final launch/head `e7014a6e365cbb776e48085dcef12dfece744ca4`
+- canonical result doc commit `8cac09adcd1f413d351b011123fc221bee816b1d`
+
+Final canonical execution:
+- run `34399750746`
+- job `102628405629`
+- artifact `10123070453`
+- artifact name `rb-r26o-2026-week1-receptions-shadow-integration-compatibility-v1`
+- digest `sha256:27307ad84c232935aed3b25c0e0c9bff4da70cd2915376f41dfa3f85c25f14d0`
+- disposition `R26O_2026_WEEK1_RECEPTIONS_SHADOW_INTEGRATION_PASS_READY_FOR_PROSPECTIVE_SEAL`
+- **38/38 frozen gates passed**
+
+Final compatibility evidence:
+- 104 intended RB/FB reception arrays changed
+- forbidden changed arrays `0`
+- CIN RB/FB receptions exact baseline
+- non-RB/FB receptions exact baseline
+- all non-reception arrays exact baseline
+- all RB/FB rec-yard arrays exact R22 baseline
+- all RB/FB rush+rec arrays exact R22 baseline
+- all RB rushing arrays exact baseline
+- all QB pass-yard arrays exact baseline
+- full 2,892 simulation-key universe exact
+- deterministic replay exact
+- corrected Gate 15: `mean_parity=true`, `max_mean_delta=3.552713678800501e-15`
+- max baseline MC reception-mean gap vs sealed R26N `0.017563893432533284`
+- max candidate MC gap `0.018766081922851008`
+- max candidate-minus-baseline delta gap `0.023037323394851983`
+- all below frozen `0.05` tolerance
+- 2026 outcomes `0`
+- sportsbook football inputs `0`
+- same-week depth `false`
 - R9 refit `false`
-- serialized R19/R9 inner SHA-256 `9ed6a98b0022e86992fb468df40a9fd79a54bc87885777ac5955a898b5c292ba`
+- R22 changed by splice `false`
+- receiving-yard means changed `false`
+- production parameters changed `false`
 
-### Structural conservation
+Representative 25k research-shadow reception shifts:
+- Omarion Hampton `2.12164 -> 3.23328`
+- Jonathan Taylor `1.57412 -> 2.56996`
+- Jaylen Warren `1.54380 -> 2.52768`
+- Woody Marks `1.35000 -> 2.18748`
+- D'Andre Swift `1.67208 -> 2.38604`
+- Bijan Robinson `2.89060 -> 3.42608`
+- Bam Knight `1.11328 -> 1.62536`
+- Brian Robinson `0.68560 -> 0.19776`
+- Jeremiyah Love `1.15676 -> 0.81148`
 
-- maximum RB/FB room-pool gap `0.0`
-- maximum team-entitlement delta `1.1102230246251565e-16`
-- maximum non-RB/FB entitlement delta `0.0`
-- maximum non-vacancy RB/FB entitlement delta `0.0`
-- CIN exact baseline
-- player universe exact `468 -> 468`
-- strict-prior max identity time key `202518`
-- candidate entitlement finite/nonnegative
-
-### Leakage / authority ceiling
-
-- `2026_outcomes_used = 0`
-- `sportsbook_football_inputs_used = 0`
-- `same_week_depth_used = false`
-- `r9_refit = false`
-- `production_parameters_changed = false`
-- `r22_changed = false`
-- `receiving_yard_means_changed = false`
-- `receiving_distribution_regenerated = false`
-- `live_shadow_activation_authorized = false`
-- `production_promotion_authorized = false`
-- `shadow_integration_design_authorized = true`
-
-### Successful-run hashes
-
-- frozen plan SHA-256 `5033bbd7a8de619333f1a6c290d0eb574b830e3cff76dbb72fb6f062bebf4ff4`
-- implementation lock SHA-256 `afa16ef8695088e83e0698a5656092a676d8c9de330220b7040e18f238a8f619`
-- original frozen builder SHA-256 `ddec40e2373611971572d7f11fd5e966660e4412256736c0a84fbab68c313e6a`
+These are **research-shadow receptions only**. Production remains unchanged.
 
 ---
 
-## 9. R26N mechanical repair lineage — preserve this exactly
+# 9. EXACT CURRENT AUTHORIZED NEXT STEP
 
-These were execution/plumbing failures, **not scientific failures**. The original R26N plan and original candidate builder remained byte-identical through both repairs.
+R26O PASS authorizes only a separately frozen **pre-outcome prospective seal**.
 
-### Repair 1 — missing compact identity key in model-context
+The next study should be R26Q-style and must be frozen **before any 2026 Week-1 outcome is consumed**.
 
-First authoritative launch:
-- run `34395291505`
-- job `102613379938`
-- head `3834b6765f60efc80566b7a28ecd081d6fe8fd00`
+It should:
 
-Failure occurred after all governance/parent checks and before any scientific disposition because:
-- PlayerForm had compact `player_clean_key`;
-- model-context lacked `player_clean_key` and fell back to display names;
-- immutable sources nevertheless had the exact same 468 `(team, display player)` identities with zero duplicates.
+1. pin corrected R26O run `34399750746`, artifact `10123070453`, digest `sha256:27307ad84c232935aed3b25c0e0c9bff4da70cd2915376f41dfa3f85c25f14d0`;
+2. copy/hash-seal the exact R26O disposition, 38-gate matrix, RB receptions manifest, and Monte Carlo draw arrays without recomputation;
+3. freeze the future Week-1 scoring population and metrics now, before outcomes;
+4. score production baseline vs sealed R26O only after target games are final and canonical outcomes become available;
+5. use paired player-level receptions errors, with at minimum MAE, RMSE, bias, median/p75/p90 absolute error and role/tier stability diagnostics;
+6. make the primary paired comparison on the 104 changed vacancy-active RB/FB rows, while preserving suitable secondary all-RB/room-level diagnostics;
+7. leave production, R22, receiving-yard means/distributions, QB, rushing, and all other markets unchanged;
+8. authorize no production promotion merely from sealing.
 
-Frozen repair note:
-`docs/research/RB_R26N_RUN1_MECHANICAL_REPAIR_V1.md`
-- commit `8268327683e9d826c05d2d72a4467e353f4fa9f1`
-- successful-run note SHA `9508cd0dee8cea4f60e35eb284764829f3dcd7a267f328007b5186c37465019f`
-
-Hash-tracked staging helper:
-`scripts/backtest/stage_r26n_production_identity_key_repair_v1.py`
-- commit `0b4c2df7c14b16bd0e945b425aac7f35e015fa3d`
-- helper SHA `6fb5407de5ced156966437702634d51c95a9ec02787be308fd208dac0ea54079`
-
-Successful audit proved:
-- 468 source / 468 staged rows;
-- exact display identity match;
-- zero fuzzy matching;
-- zero normalization heuristics;
-- zero football-value changes;
-- zero players added/removed;
-- immutable parent untouched.
-
-### Repair 2 — pandas identity join dtype mismatch
-
-After repair 1 passed, run `34395790276` reached strict-prior history and failed before R9 scoring because current keys were pandas `string[python]` while historical keys were `object`.
-
-Frozen second repair note:
-`docs/research/RB_R26N_SECOND_MECHANICAL_REPAIR_V1.md`
-- commit `dbfe863212dc5b2684ec1005d66102342bf87777`
-- note SHA `a5fd7708c73c39324a1c46e0ec85aa24931d75b5971e59e9f3f8883191fe8f96`
-
-Dtype-only wrapper:
-`scripts/backtest/run_rb_r26n_with_identity_dtype_compat_v1.py`
-- commit `9abdaa9a6262aa87ac601d7bc665209b94036b20`
-- wrapper SHA `537807be0eddbf2ec7a21006792c4e992b79a24c08ad58613db8dfc524a7ecda`
-
-The wrapper casts only identity join-key dtypes to plain object, verifies key values and all non-key values are unchanged, then delegates to the original protected identity function and original frozen builder.
+Do **not** recompute R26O during the seal. The point is to lock the exact pregame candidate before outcomes.
 
 ---
 
-# 10. CURRENT AUTHORIZED NEXT STEP
-
-R26N **does not authorize a live shadow**.
-
-R26N authorizes only a separately frozen downstream **shadow-integration design / compatibility study**.
-
-The next legitimate study must answer:
-
-> Can the R26N opportunity/reception overlay be integrated into the exact current 2026 Week-1 Full Slate/R22 stack while preserving every protected receiving-yard distribution/mean and all unrelated markets/production authorities unless a later, separately frozen scientific study explicitly authorizes changing them?
-
-The next study should be design/integration validation first, not a production promotion.
-
-Required protections for the next study should include at minimum:
-- exact R26N artifact/digest parent;
-- exact current production Full Slate artifact/digest parent;
-- exact R22/R19 authority parents and model hashes;
-- no 2026 outcomes;
-- no sportsbook football inputs;
-- no R9 refit;
-- no same-week depth;
-- exact non-RB/FB invariance;
-- exact RB non-reception/non-target market invariance unless explicitly in scope;
-- exact receiving-yard mean/distribution invariance if R26N is integrated only as an opportunity/reception shadow layer;
-- exact production-code boundary clean;
-- explicit authority ceiling: pass may authorize shadow activation design/confirmation only, not production promotion unless separately frozen.
-
-Before creating it, check whether an R26O branch/plan already exists. Do not duplicate an existing study.
-
----
-
-## 11. Broader position-lane reminders
+## 10. Broader lane reminders
 
 ### QB
-- M89/M90 mean authority stays protected.
-- Continue football-only attempts/YPA/path integrity and shared pass-state work when returning to QB.
-- Do not shrink QBs merely because the synthesis correction is large; QB-PD3 found no stable internal-disagreement distrust state.
+M89/M90 mean authority remains protected. Continue football-only attempts/YPA/path integrity/shared-pass-state work when returning to QB.
 
 ### WR
-- M38 is the baseline entitlement prior.
-- WR-R11 NGS additive target model failed; do not retry nearby tuning.
-- Future WR work should allocate a finite WR/team opportunity pool rather than apply another broad positive target correction.
+M38 remains the entitlement anchor; WR-R11 additive NGS target correction failed. Future work should remain finite-pool allocation, not broad positive target boosts.
 
 ### TE
-- TE target-pool-first evidence is strong.
-- TE-R3 generic context model failed the full gates despite partial pool signal.
-- Strict-prior participation source qualified.
-- TE work should remain finite-pool + individual entitlement + separate efficiency.
+TE pool-first evidence is strong; TE-R5P remains production. Keep opportunity and efficiency layers separate.
 
 ### RB
-- Static role-order/depth remaps are closed as direct opportunity authority.
-- Retrospective tail-overlay families that failed remain closed.
-- Current productive frontier is the R26 vacancy/R9 receiving-opportunity mechanism, now structurally materialized for 2026 Week 1 but not yet integrated as a live shadow.
+- static depth/role-order remaps remain closed as direct opportunity authority;
+- failed retrospective tail overlays remain failed;
+- R22 receiving-yard authority remains protected;
+- the active frontier is now **prospective validation of the sealed R26O receptions-only shadow**.
 
 ---
 
-## 12. What a new chat must do first
+## 11. What a new chat must do first
 
-1. Read this file.
-2. Read `AGENTS.md`.
-3. Read:
-   - `docs/research/RB_R26N_2026_WEEK1_UNMODIFIED_R26_STRUCTURAL_CANDIDATE_V1_FROZEN_PLAN.md`
-   - `docs/research/RB_R26N_2026_WEEK1_UNMODIFIED_R26_STRUCTURAL_CANDIDATE_V1_IMPLEMENTATION_LOCK.md`
-   - `docs/research/RB_R26N_2026_WEEK1_UNMODIFIED_R26_STRUCTURAL_CANDIDATE_V1_RESULT.md`
-   - both R26N mechanical repair notes.
-4. Verify canonical R26N run `34396075045` and artifact `10121598376` digest `sha256:887929203053cb62904aaaeda9d995c9645163814da181972799f08fe4465c62`.
-5. Inspect repository branches/files for an existing R26O study before creating one.
-6. Continue only with the authorized separately frozen shadow-integration design study.
-7. Keep production authority protected; R26N itself gives no live-shadow or production-promotion permission.
+1. Read this file and `AGENTS.md`.
+2. Verify production head/artifact above.
+3. Read canonical R26N and R26O result documents.
+4. If auditing Gate 15, read the R26P frozen plan/result and preserve the earlier R26O 37/38 FAIL.
+5. Verify corrected R26O run `34399750746`, artifact `10123070453`, digest `sha256:27307ad84c232935aed3b25c0e0c9bff4da70cd2915376f41dfa3f85c25f14d0`.
+6. Check whether an R26Q prospective-seal branch already exists before creating one.
+7. Continue only with the separately frozen pre-outcome seal / future scorecard.
+8. Do not change production.
 
 ---
 
-## 13. One-sentence current state
+## 12. One-sentence current state
 
-**The unmodified R26 vacancy-gated R9 RB receiving-opportunity mechanism has passed all 28 frozen structural gates on the exact 468-player 2026 Week-1 production population, with 31 vacancy teams and CIN baseline-exact, while leaving R22/receiving-yard authority untouched; the only authorized next step is a separately frozen shadow-integration compatibility study.**
+**The unmodified R26 vacancy/R9 mechanism has been materialized into 2026 Week-1 RB receiving entitlements (R26N 28/28), safely converted into receptions-only Monte Carlo shadow distributions on the exact current 468-player Full Slate while leaving R22 and every non-reception array exact (corrected R26O 38/38), and the only authorized next step is to seal those exact pregame arrays and freeze their prospective Week-1 production-vs-shadow scorecard before outcomes.**
