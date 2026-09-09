@@ -1,0 +1,142 @@
+name: TE-R5 Week 1 Full-Stack Confirmation V1
+
+on:
+  push:
+    branches:
+      - production-week1-player-prop-readiness-v1
+    paths:
+      - docs/production/TE_R5_WEEK1_FULL_STACK_CONFIRMATION_V1_PLAN.md
+      - scripts/modeling/te_r5_week1_full_stack_confirmation_v1.py
+      - .github/workflows/te-r5-week1-full-stack-confirmation-v1.yml
+  workflow_dispatch:
+
+jobs:
+  confirm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scikit-learn scipy pyyaml
+
+      - name: Download immutable joint receiving research parent
+        uses: actions/download-artifact@v4
+        with:
+          name: joint-pass-receiving-conservation-v1
+          path: joint-artifact
+          github-token: ${{ github.token }}
+          repository: dkaps6/imtiredofthis
+          run-id: 34081764151
+
+      - name: Download immutable TE-R3 parent
+        uses: actions/download-artifact@v4
+        with:
+          name: te-r3-target-pool-context-model
+          path: r3-artifact
+          github-token: ${{ github.token }}
+          repository: dkaps6/imtiredofthis
+          run-id: 34126813280
+
+      - name: Download immutable TE-R4 parent
+        uses: actions/download-artifact@v4
+        with:
+          name: te-r4-strict-prior-participation-source
+          path: r4-artifact
+          github-token: ${{ github.token }}
+          repository: dkaps6/imtiredofthis
+          run-id: 34127474412
+
+      - name: Download immutable TE-R5 scientific winner
+        uses: actions/download-artifact@v4
+        with:
+          name: te-r5-participation-entitlement-v1
+          path: r5-artifact
+          github-token: ${{ github.token }}
+          repository: dkaps6/imtiredofthis
+          run-id: 34132127351
+
+      - name: Download current clean Week-1 no-odds Full Slate
+        uses: actions/download-artifact@v4
+        with:
+          name: run_34140491656
+          path: full-slate-artifact
+          github-token: ${{ github.token }}
+          repository: dkaps6/imtiredofthis
+          run-id: 34140491656
+
+      - name: Capture immutable artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p te-r5-metadata
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/34081764151/artifacts?per_page=100" > te-r5-metadata/joint.json
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/34126813280/artifacts?per_page=100" > te-r5-metadata/r3.json
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/34127474412/artifacts?per_page=100" > te-r5-metadata/r4.json
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/34132127351/artifacts?per_page=100" > te-r5-metadata/r5.json
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/34140491656/artifacts?per_page=100" > te-r5-metadata/full_slate.json
+
+      - name: Materialize current clean Full Slate data
+        run: |
+          set -euo pipefail
+          test -s full-slate-artifact/data/roles_ourlads.csv
+          test -s full-slate-artifact/data/team_week_map.csv
+          test -s full-slate-artifact/data/player_form.csv
+          test -s full-slate-artifact/data/team_context_v3.csv
+          test -s full-slate-artifact/data/rb_rush_synthesis_context.csv
+          mkdir -p data outputs
+          cp -a full-slate-artifact/data/. data/
+          if [ -d full-slate-artifact/outputs ]; then cp -a full-slate-artifact/outputs/. outputs/; fi
+
+      - name: Production readiness validator before confirmation
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/audit_2026_production_readiness.py
+
+      - name: Run frozen TE-R5 full-stack confirmation
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/modeling/te_r5_week1_full_stack_confirmation_v1.py \
+            --joint-root joint-artifact \
+            --r3-root r3-artifact \
+            --r4-root r4-artifact \
+            --r5-root r5-artifact \
+            --full-slate-root full-slate-artifact \
+            --metadata-dir te-r5-metadata \
+            --out-dir data/backtests/te_r5_week1_full_stack_confirmation_v1
+
+      - name: Production readiness validator after confirmation
+        if: always()
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/audit_2026_production_readiness.py
+
+      - name: Show confirmation result
+        if: always()
+        run: |
+          cat data/backtests/te_r5_week1_full_stack_confirmation_v1/te_r5_week1_confirmation_result.json 2>/dev/null || true
+          echo '=== team target mass audit ==='
+          cat data/backtests/te_r5_week1_full_stack_confirmation_v1/te_r5_week1_target_mass_audit.csv 2>/dev/null || true
+          echo '=== player casebook head ==='
+          head -50 data/backtests/te_r5_week1_full_stack_confirmation_v1/te_r5_week1_player_casebook.csv 2>/dev/null || true
+
+      - name: Upload TE-R5 confirmation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: te-r5-week1-full-stack-confirmation-v1
+          path: data/backtests/te_r5_week1_full_stack_confirmation_v1/*
+          if-no-files-found: warn
+          retention-days: 90
