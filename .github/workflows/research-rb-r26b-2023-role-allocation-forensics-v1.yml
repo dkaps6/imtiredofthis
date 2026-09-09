@@ -1,0 +1,124 @@
+name: RB R26B 2023 Role Allocation Forensics V1
+
+on:
+  push:
+    branches:
+      - research-rb-r26b-2023-role-allocation-forensics-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  PRODUCTION_BASE_SHA: f8417f55b04ce0e19baf260e9d532765034c47f1
+  PARENT_RUN_ID: '34356222339'
+  PARENT_ARTIFACT_ID: '10106271075'
+  PARENT_ARTIFACT_NAME: rb-r26-vacancy-gated-r9-retrospective-v1
+  PARENT_DIGEST: sha256:607fca6e11c301ecb2a3bf74e3dfea8ae415bb33cf3c150a6d89eaedada2809e
+
+jobs:
+  forensic-atlas:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install forensic dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 scipy
+
+      - name: Verify frozen forensic contract and protected production boundary
+        run: |
+          set -euo pipefail
+          test -s docs/research/RB_R26_VACANCY_GATED_R9_RETROSPECTIVE_V1_RESULT.md
+          test -s docs/research/RB_R26B_2023_ROLE_ALLOCATION_FORENSIC_ATLAS_V1_FROZEN_PLAN.md
+          test -s docs/research/RB_R26B_FORENSIC_PRECHECK_AMENDMENT_V1.md
+          test -s scripts/backtest/analyze_rb_r26b_2023_role_allocation_forensics_v1.py
+          python -m py_compile scripts/backtest/analyze_rb_r26b_2023_role_allocation_forensics_v1.py
+          sha256sum docs/research/RB_R26B_2023_ROLE_ALLOCATION_FORENSIC_ATLAS_V1_FROZEN_PLAN.md | tee r26b_plan.sha256
+          sha256sum docs/research/RB_R26B_FORENSIC_PRECHECK_AMENDMENT_V1.md | tee r26b_amendment.sha256
+          sha256sum scripts/backtest/analyze_rb_r26b_2023_role_allocation_forensics_v1.py | tee r26b_code.sha256
+          git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
+            scripts/modeling \
+            scripts/run_rb_week1_no_odds.py \
+            scripts/run_pricing_with_full_roster_universe_v3.py \
+            scripts/run_pricing_with_full_roster_universe_v3_core.py \
+            scripts/run_pricing_with_full_roster_universe_v4_production.py \
+            scripts/simulation_v2.py \
+            scripts/simulation_c2_qb_candidate.py \
+            data/models \
+            model \
+            .github/workflows/full-slate.yml \
+            .github/workflows/production-week1-v4-r22-certification.yml
+          echo 'R26B_PROTECTED_PRODUCTION_BOUNDARY_PASS'
+
+      - name: Verify and download immutable parent R26 evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          META_DIGEST="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${PARENT_ARTIFACT_ID}" --jq '.digest')"
+          test "$META_DIGEST" = "$PARENT_DIGEST"
+          rm -rf parent_artifact
+          mkdir -p parent_artifact
+          gh run download "$PARENT_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$PARENT_ARTIFACT_NAME" --dir parent_artifact
+          test -s parent_artifact/data/backtests/r26_vacancy_gated_r9_2023/r26_predictions.csv
+          test -s parent_artifact/data/backtests/rb_r26_safe_transition_state/r26_safe_transition_player_state.csv
+          echo "R26B_IMMUTABLE_PARENT_EVIDENCE_PASS digest=$META_DIGEST"
+
+      - name: Execute frozen R26B forensic atlas
+        run: |
+          set -euo pipefail
+          rm -rf data/backtests/r26b_2023_role_allocation_forensics_v1
+          python scripts/backtest/analyze_rb_r26b_2023_role_allocation_forensics_v1.py \
+            --artifact-root parent_artifact \
+            --out-dir data/backtests/r26b_2023_role_allocation_forensics_v1
+
+      - name: Assert forensic integrity only
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d = json.loads(Path('data/backtests/r26b_2023_role_allocation_forensics_v1/r26b_integrity.json').read_text())
+          assert d['parent_run'] == 34356222339
+          assert d['parent_artifact'] == 10106271075
+          assert d['parent_digest'] == 'sha256:607fca6e11c301ecb2a3bf74e3dfea8ae415bb33cf3c150a6d89eaedada2809e'
+          assert d['sportsbook_inputs'] == 0
+          assert d['future_outcomes_in_features'] == 0
+          assert d['same_week_depth_used'] is False
+          assert d['new_external_source_used'] is False
+          assert d['model_fit_performed'] is False
+          assert d['candidate_rerun_performed'] is False
+          assert d['production_parameters_changed'] is False
+          assert d['transition_state_missing_rate'] <= 0.005
+          s = json.loads(Path('data/backtests/r26b_2023_role_allocation_forensics_v1/r26b_2023_vs_winning_summary.json').read_text())
+          assert s['disposition'] in {'FORENSIC_MECHANISM_IDENTIFIED','FORENSIC_2023_IDIOSYNCRATIC_NO_ROUTER'}
+          print('R26B_FORENSIC_INTEGRITY_PASS disposition=' + s['disposition'])
+          PY
+
+      - name: Show forensic summary
+        run: |
+          echo '=== R26B summary ==='
+          cat data/backtests/r26b_2023_role_allocation_forensics_v1/r26b_2023_vs_winning_summary.json
+          echo '=== R26B season comparison ==='
+          cat data/backtests/r26b_2023_role_allocation_forensics_v1/r26b_season_comparison.csv
+
+      - name: Upload R26B forensic evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r26b-2023-role-allocation-forensics-v1
+          retention-days: 90
+          path: |
+            r26b_plan.sha256
+            r26b_amendment.sha256
+            r26b_code.sha256
+            data/backtests/r26b_2023_role_allocation_forensics_v1/*
