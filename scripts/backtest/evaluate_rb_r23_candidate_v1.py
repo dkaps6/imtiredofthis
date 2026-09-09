@@ -23,7 +23,6 @@ from scripts.modeling.target_entitlement_v1 import materialize_target_entitlemen
 RB_POS = {"RB", "FB", "HB", "TB"}
 RECENT_GAMES = 6
 STABLE_GAMES = 16
-MODELED_MASS = 0.95
 
 
 def read(path: Path) -> pd.DataFrame:
@@ -103,32 +102,22 @@ def _player_history_features(logs: pd.DataFrame, season: int, week: int, team: s
     stable_share = t16 / room16 if room16 > 0 else base_room_share
     n6 = int(r6[["season", "week"]].drop_duplicates().shape[0]) if not r6.empty else 0
     n16 = int(r16[["season", "week"]].drop_duplicates().shape[0]) if not r16.empty else 0
-    avg_room = room16 / max(1, int(team16[["season", "week"]].drop_duplicates().shape[0])) if room16 > 0 else 5.0
+    room_games = int(team16[["season", "week"]].drop_duplicates().shape[0]) if not team16.empty else 0
+    avg_room = room16 / max(room_games, 1) if room16 > 0 else 5.0
 
-    # Sample-opportunity blend: recent observed targets + stabilizing pseudo-targets
-    # distributed by 16-game share, plus one role-prior room game's mass. No tuned alpha.
-    recent_weight = t6
+    # Frozen, non-tuned opportunity blend: six-game observed targets plus one
+    # stabilizing room game's mass and one role-prior room game's mass.
     stable_pseudo = max(avg_room, 1.0)
     role_pseudo = max(avg_room, 1.0)
-    entitlement_score = recent_weight + stable_pseudo * stable_share + role_pseudo * base_room_share
+    entitlement_score = t6 + stable_pseudo * stable_share + role_pseudo * base_room_share
 
     rec16 = _sum(r16, "receptions")
     y16 = _sum(r16, "receiving_yards")
-    # EB pseudo opportunity equals one average recent player's target/reception game.
     catch_pseudo = max(t16 / max(n16, 1), 1.0)
     catch = (rec16 + catch_pseudo * prior_catch) / (t16 + catch_pseudo) if (t16 + catch_pseudo) > 0 else prior_catch
     ypr_pseudo = max(rec16 / max(n16, 1), 1.0)
     ypr = (y16 + ypr_pseudo * prior_ypr) / (rec16 + ypr_pseudo) if (rec16 + ypr_pseudo) > 0 else prior_ypr
-    return {
-        "score": max(entitlement_score, 0.0),
-        "catch_rate": float(np.clip(catch, 0.35, 0.95)),
-        "ypr": float(np.clip(ypr, 3.0, 15.0)),
-        "history_games_recent": n6,
-        "history_games_stable": n16,
-        "recent_targets": t6,
-        "stable_targets": t16,
-        "stable_room_share": stable_share,
-    }
+    return {"score": max(entitlement_score, 0.0), "catch_rate": float(np.clip(catch, 0.35, 0.95)), "ypr": float(np.clip(ypr, 3.0, 15.0)), "history_games_recent": n6, "history_games_stable": n16, "recent_targets": t6, "stable_targets": t16, "stable_room_share": stable_share}
 
 
 def metric(actual, pred) -> dict:
@@ -137,13 +126,7 @@ def metric(actual, pred) -> dict:
     if z.empty:
         return {"n": 0, "mae": np.nan, "rmse": np.nan, "bias": np.nan, "pearson": np.nan, "spearman": np.nan, "median_abs_error": np.nan, "p75_abs_error": np.nan, "p90_abs_error": np.nan, "miss20_rate": np.nan, "miss30_rate": np.nan, "miss40_rate": np.nan}
     e = z.pred - z.actual; ae = e.abs()
-    return {
-        "n": int(len(z)), "mae": float(ae.mean()), "rmse": float(np.sqrt(np.mean(e.to_numpy() ** 2))), "bias": float(e.mean()),
-        "pearson": float(z.pred.corr(z.actual, method="pearson")) if len(z) > 1 else np.nan,
-        "spearman": float(z.pred.corr(z.actual, method="spearman")) if len(z) > 1 else np.nan,
-        "median_abs_error": float(ae.median()), "p75_abs_error": float(ae.quantile(.75)), "p90_abs_error": float(ae.quantile(.90)),
-        "miss20_rate": float((ae >= 20).mean()), "miss30_rate": float((ae >= 30).mean()), "miss40_rate": float((ae >= 40).mean()),
-    }
+    return {"n": int(len(z)), "mae": float(ae.mean()), "rmse": float(np.sqrt(np.mean(e.to_numpy() ** 2))), "bias": float(e.mean()), "pearson": float(z.pred.corr(z.actual, method="pearson")) if len(z) > 1 else np.nan, "spearman": float(z.pred.corr(z.actual, method="spearman")) if len(z) > 1 else np.nan, "median_abs_error": float(ae.median()), "p75_abs_error": float(ae.quantile(.75)), "p90_abs_error": float(ae.quantile(.90)), "miss20_rate": float((ae >= 20).mean()), "miss30_rate": float((ae >= 30).mean()), "miss40_rate": float((ae >= 40).mean())}
 
 
 def main() -> int:
@@ -161,6 +144,8 @@ def main() -> int:
         actual=cp.build_actual_rows(logs,a.season,week)
         at=actual[actual.market.eq("receptions")][["team","player_clean_key","actual","actual_opportunities"]].rename(columns={"actual":"actual_receptions","actual_opportunities":"actual_targets"})
         ay=actual[actual.market.eq("rec_yards")][["team","player_clean_key","actual"]].rename(columns={"actual":"actual_rec_yards"})
+        labels=at.merge(ay,on=["team","player_clean_key"],how="outer").drop_duplicates(["team","player_clean_key"])
+        label_map={(str(r.team),str(r.player_clean_key)):(finite(r.actual_targets),finite(r.actual_receptions),finite(r.actual_rec_yards)) for _,r in labels.iterrows()}
         prior_catch, prior_ypr = _role_priors(logs,a.season,week)
         for (event_id,tm),g in base.groupby(["event_id","team"],dropna=False,sort=False):
             pos=g.get("position",pd.Series("",index=g.index)).fillna("").astype(str).str.upper().str.strip()
@@ -170,24 +155,24 @@ def main() -> int:
             room_mass=float(rb.entitlement_tgt_share.sum())
             if room_mass<=0: continue
             base_room=rb.entitlement_tgt_share.to_numpy(float)/room_mass
-            feats=[]
-            for j,(_,r) in enumerate(rb.iterrows()): feats.append(_player_history_features(logs,a.season,week,str(tm),str(r.player_clean_key),float(base_room[j]),prior_catch,prior_ypr))
-            scores=np.asarray([f["score"] for f in feats],float)
-            cand_room=scores/scores.sum() if scores.sum()>0 else base_room.copy()
+            rank_order=np.argsort(-base_room,kind="stable")
+            rank_map={int(idx):rank+1 for rank,idx in enumerate(rank_order)}
+            feats=[_player_history_features(logs,a.season,week,str(tm),str(r.player_clean_key),float(base_room[j]),prior_catch,prior_ypr) for j,(_,r) in enumerate(rb.iterrows())]
+            scores=np.asarray([f["score"] for f in feats],float); cand_room=scores/scores.sum() if scores.sum()>0 else base_room.copy()
             plays=float(np.nanmean(pd.to_numeric(g.get("rules_plays_est",64.0),errors="coerce"))); pass_rate=float(np.nanmean(pd.to_numeric(g.get("rules_pass_rate",0.57),errors="coerce")))
             if not np.isfinite(plays): plays=64.0
             if not np.isfinite(pass_rate): pass_rate=.57
             team_targets=plays*pass_rate
             for j,(_,r) in enumerate(rb.iterrows()):
+                key=str(r.player_clean_key); actual_t,actual_r,actual_y=label_map.get((str(tm),key),(np.nan,np.nan,np.nan))
                 base_t=team_targets*float(r.entitlement_tgt_share); cand_t=team_targets*room_mass*float(cand_room[j])
                 base_cr=finite(r.get("rules_catch_rate"), finite(r.get("bayes_receptions_per_target"), prior_catch)); base_cr=float(np.clip(base_cr,.35,.95))
-                base_ypt=finite(r.get("rules_ypt"), finite(r.get("bayes_ypt"), prior_catch*prior_ypr)); base_ypt=max(base_ypt,0.0)
+                base_ypt=max(finite(r.get("rules_ypt"), finite(r.get("bayes_ypt"), prior_catch*prior_ypr)),0.0)
                 cand_cr=feats[j]["catch_rate"]; cand_ypr=feats[j]["ypr"]
-                rows.append({"season":a.season,"week":week,"event_id":str(event_id),"team":str(tm),"player":r.get("player",""),"player_clean_key":str(r.player_clean_key),"rb_rank":j+1,"baseline_targets":base_t,"candidate_targets":cand_t,"baseline_receptions":base_t*base_cr,"candidate_receptions":cand_t*cand_cr,"baseline_rec_yards":base_t*base_ypt,"candidate_rec_yards":cand_t*cand_cr*cand_ypr,"baseline_room_share":float(base_room[j]),"candidate_room_share":float(cand_room[j]),**feats[j],"sportsbook_inputs_used":0,"future_outcomes_used":0})
+                rows.append({"season":a.season,"week":week,"event_id":str(event_id),"team":str(tm),"player":r.get("player",""),"player_clean_key":key,"rb_rank":int(rank_map[j]),"actual_targets":actual_t,"actual_receptions":actual_r,"actual_rec_yards":actual_y,"baseline_targets":base_t,"candidate_targets":cand_t,"baseline_receptions":base_t*base_cr,"candidate_receptions":cand_t*cand_cr,"baseline_rec_yards":base_t*base_ypt,"candidate_rec_yards":cand_t*cand_cr*cand_ypr,"baseline_room_share":float(base_room[j]),"candidate_room_share":float(cand_room[j]),**feats[j],"sportsbook_inputs_used":0,"future_outcomes_used":0})
             audit.append({"season":a.season,"week":week,"event_id":str(event_id),"team":str(tm),"baseline_rb_room_mass":room_mass,"candidate_rb_room_mass":float(room_mass*cand_room.sum()),"room_mass_gap":float(room_mass*cand_room.sum()-room_mass),"sportsbook_inputs_used":0})
         print(f"[r23-candidate] {a.season} week={week:02d} complete")
-    pred=pd.DataFrame(rows).merge(at,on=["team","player_clean_key"],how="left").merge(ay,on=["team","player_clean_key"],how="left")
-    pred["role"]=np.where(pred.rb_rank.eq(1),"RB1","RB2+")
+    pred=pd.DataFrame(rows); pred["role"]=np.where(pred.rb_rank.eq(1),"RB1","RB2+")
     metrics=[]
     for variant in ("baseline","candidate"):
         for market,actual_col in (("targets","actual_targets"),("receptions","actual_receptions"),("rec_yards","actual_rec_yards")):
