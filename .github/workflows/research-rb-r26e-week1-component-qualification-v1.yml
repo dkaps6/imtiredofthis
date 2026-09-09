@@ -1,0 +1,122 @@
+name: RB R26E Week 1 Component Qualification V1
+
+on:
+  push:
+    branches:
+      - research-rb-r26e-week1-qualification-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  PRODUCTION_BASE_SHA: f8417f55b04ce0e19baf260e9d532765034c47f1
+  PARENT_RUN_ID: '34356222339'
+  PARENT_ARTIFACT_ID: '10106271075'
+  PARENT_ARTIFACT_NAME: rb-r26-vacancy-gated-r9-retrospective-v1
+  PARENT_DIGEST: sha256:607fca6e11c301ecb2a3bf74e3dfea8ae415bb33cf3c150a6d89eaedada2809e
+
+jobs:
+  qualify-week1:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install qualification dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4
+
+      - name: Verify frozen plan and protected production boundary
+        run: |
+          set -euo pipefail
+          test -s docs/research/RB_R26E_WEEK1_COMPONENT_QUALIFICATION_V1_FROZEN_PLAN.md
+          test -s docs/research/RB_R26E_WEEK1_COMPONENT_QUALIFICATION_V1_IMPLEMENTATION_LOCK.md
+          test -s scripts/backtest/finalize_rb_r26e_week1_component_qualification_v1.py
+          python -m py_compile scripts/backtest/finalize_rb_r26e_week1_component_qualification_v1.py
+          sha256sum docs/research/RB_R26E_WEEK1_COMPONENT_QUALIFICATION_V1_FROZEN_PLAN.md | tee r26e_plan.sha256
+          sha256sum docs/research/RB_R26E_WEEK1_COMPONENT_QUALIFICATION_V1_IMPLEMENTATION_LOCK.md | tee r26e_lock.sha256
+          sha256sum scripts/backtest/finalize_rb_r26e_week1_component_qualification_v1.py | tee r26e_code.sha256
+          git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
+            scripts/modeling \
+            scripts/run_rb_week1_no_odds.py \
+            scripts/run_pricing_with_full_roster_universe_v3.py \
+            scripts/run_pricing_with_full_roster_universe_v3_core.py \
+            scripts/run_pricing_with_full_roster_universe_v4_production.py \
+            scripts/simulation_v2.py \
+            scripts/simulation_c2_qb_candidate.py \
+            data/models \
+            model \
+            .github/workflows/full-slate.yml \
+            .github/workflows/production-week1-v4-r22-certification.yml
+          echo PASS > r26e_protected_clean.txt
+          echo R26E_PROTECTED_PRODUCTION_BOUNDARY_PASS
+
+      - name: Verify and download immutable R26 parent artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          META_DIGEST="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${PARENT_ARTIFACT_ID}" --jq '.digest')"
+          test "$META_DIGEST" = "$PARENT_DIGEST"
+          rm -rf parent_artifact
+          mkdir -p parent_artifact
+          gh run download "$PARENT_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$PARENT_ARTIFACT_NAME" --dir parent_artifact
+          test -s parent_artifact/data/backtests/r26_vacancy_gated_r9_2020/r26_predictions.csv
+          test -s parent_artifact/data/backtests/r26_vacancy_gated_r9_2025/r26_predictions.csv
+          test -s parent_artifact/data/backtests/r26_vacancy_gated_r9_final/r26_final_disposition.json
+          echo "R26E_PARENT_ARTIFACT_PASS digest=$META_DIGEST"
+
+      - name: Execute frozen Week 1 qualification
+        run: |
+          set -euo pipefail
+          rm -rf data/backtests/r26e_week1_component_qualification_v1
+          python scripts/backtest/finalize_rb_r26e_week1_component_qualification_v1.py \
+            --parent-root parent_artifact \
+            --protected-clean-marker r26e_protected_clean.txt \
+            --out-dir data/backtests/r26e_week1_component_qualification_v1
+
+      - name: Assert scientific disposition contract
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('data/backtests/r26e_week1_component_qualification_v1/r26e_week1_qualification_disposition.json')
+          d = json.loads(p.read_text())
+          assert d['candidate'] == 'RB_R26E_WEEK1_COMPONENT_QUALIFICATION_V1'
+          assert d['production_promotion_authorized'] is False
+          assert d['r26_full_candidate_failure_preserved'] is True
+          assert d['r26d_mixed_router_failure_preserved'] is True
+          assert d['disposition'] in {
+              'WEEK1_COMPONENT_QUALIFIED_FOR_2026_PROSPECTIVE_SHADOW',
+              'WEEK1_COMPONENT_NOT_QUALIFIED_NO_SHADOW',
+          }
+          print('R26E_SCIENTIFIC_CONTRACT_PASS disposition=' + d['disposition'])
+          PY
+
+      - name: Show R26E result
+        run: |
+          cat data/backtests/r26e_week1_component_qualification_v1/r26e_week1_qualification_disposition.json
+          echo '=== season metrics ==='
+          cat data/backtests/r26e_week1_component_qualification_v1/r26e_week1_season_metrics.csv
+
+      - name: Upload R26E qualification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r26e-week1-component-qualification-v1
+          retention-days: 90
+          path: |
+            r26e_plan.sha256
+            r26e_lock.sha256
+            r26e_code.sha256
+            r26e_protected_clean.txt
+            data/backtests/r26e_week1_component_qualification_v1/*
