@@ -8,6 +8,7 @@ on:
     paths:
       - docs/research/RB_R26_ROLE_TRANSITION_SOURCE_AUDIT_PLAN.md
       - scripts/backtest/audit_rb_r26_role_transition_sources_v1.py
+      - scripts/backtest/audit_rb_r26_safe_transition_state_v1.py
       - .github/workflows/research-rb-r26-role-transition-source-audit-v1.yml
 
 permissions:
@@ -63,8 +64,10 @@ jobs:
           print('R26_SOURCE_AUDIT_PROTECTED_PRODUCTION_BOUNDARY_PASS')
           PY
 
-      - name: Compile audit
-        run: python -m py_compile scripts/backtest/audit_rb_r26_role_transition_sources_v1.py
+      - name: Compile audits
+        run: |
+          python -m py_compile scripts/backtest/audit_rb_r26_role_transition_sources_v1.py
+          python -m py_compile scripts/backtest/audit_rb_r26_safe_transition_state_v1.py
 
       - name: Audit 2014-2025 pregame role-state sources
         run: |
@@ -72,6 +75,13 @@ jobs:
           python scripts/backtest/audit_rb_r26_role_transition_sources_v1.py \
             --seasons 2014-2025 \
             --out-dir data/backtests/rb_r26_role_transition_source_audit
+
+      - name: Audit safe roster-transition state
+        run: |
+          rm -rf data/backtests/rb_r26_safe_transition_state
+          python scripts/backtest/audit_rb_r26_safe_transition_state_v1.py \
+            --target-seasons 2015-2025 \
+            --out-dir data/backtests/rb_r26_safe_transition_state
 
       - name: Show source summary
         if: always()
@@ -82,12 +92,18 @@ jobs:
           cat data/backtests/rb_r26_role_transition_source_audit/r26_role_source_summary.csv 2>/dev/null || true
           echo '=== R26 temporal exposure ledger ==='
           cat data/backtests/rb_r26_role_transition_source_audit/r26_temporal_exposure_ledger.csv 2>/dev/null || true
+          echo '=== R26 safe-transition disposition ==='
+          cat data/backtests/rb_r26_safe_transition_state/r26_safe_transition_disposition.json 2>/dev/null || true
+          echo '=== R26 safe-transition summary ==='
+          cat data/backtests/rb_r26_safe_transition_state/r26_safe_transition_summary.csv 2>/dev/null || true
 
       - name: Upload R26 source evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: rb-r26-role-transition-source-audit-v1
-          path: data/backtests/rb_r26_role_transition_source_audit/*
+          path: |
+            data/backtests/rb_r26_role_transition_source_audit/*
+            data/backtests/rb_r26_safe_transition_state/*
           if-no-files-found: warn
           retention-days: 30
