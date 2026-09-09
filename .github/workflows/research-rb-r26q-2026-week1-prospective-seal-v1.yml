@@ -1,0 +1,129 @@
+name: RB R26Q 2026 Week 1 Prospective Seal V1
+
+on:
+  push:
+    branches:
+      - research-rb-r26q-2026-week1-prospective-seal-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  seal:
+    runs-on: ubuntu-24.04
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      R26Q_PLAN_COMMIT: 03b0cdf6367ca17d085d55aa1633f7f705f642ee
+      R26Q_CODE_COMMIT: fb6610be550cb4bdefec640ae83d202f2adb2c4a
+      R26Q_LOCK_COMMIT: 8e01b46b5c0f7c944fbe04ea1d3cc8885c094ff4
+      R26O_RUN_ID: "34399750746"
+      R26O_ARTIFACT_ID: "10123070453"
+      R26O_ARTIFACT_NAME: rb-r26o-2026-week1-receptions-shadow-integration-compatibility-v1
+      R26O_DIGEST: sha256:27307ad84c232935aed3b25c0e0c9bff4da70cd2915376f41dfa3f85c25f14d0
+      R26O_HEAD: e7014a6e365cbb776e48085dcef12dfece744ca4
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install seal dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4
+
+      - name: Verify frozen R26Q contracts
+        run: |
+          set -euo pipefail
+          PLAN=docs/research/RB_R26Q_2026_WEEK1_PROSPECTIVE_SEAL_V1_FROZEN_PLAN.md
+          CODE=scripts/backtest/seal_rb_r26q_2026_week1_receptions_prospective_v1.py
+          LOCK=docs/research/RB_R26Q_2026_WEEK1_PROSPECTIVE_SEAL_V1_IMPLEMENTATION_LOCK.md
+          test -s "$PLAN" && test -s "$CODE" && test -s "$LOCK"
+          python -m py_compile "$CODE"
+          git diff --quiet "$R26Q_PLAN_COMMIT" HEAD -- "$PLAN"
+          git diff --quiet "$R26Q_CODE_COMMIT" HEAD -- "$CODE"
+          git diff --quiet "$R26Q_LOCK_COMMIT" HEAD -- "$LOCK"
+          sha256sum "$PLAN" | tee r26q_plan.sha256
+          sha256sum "$CODE" | tee r26q_code.sha256
+          sha256sum "$LOCK" | tee r26q_lock.sha256
+          echo R26Q_FROZEN_CONTRACT_PASS
+
+      - name: Verify and download immutable R26O parent
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ACTUAL_DIGEST="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26O_ARTIFACT_ID}" --jq '.digest')"
+          ACTUAL_HEAD="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26O_ARTIFACT_ID}" --jq '.workflow_run.head_sha')"
+          test "$ACTUAL_DIGEST" = "$R26O_DIGEST"
+          test "$ACTUAL_HEAD" = "$R26O_HEAD"
+          rm -rf parent_r26o
+          mkdir -p parent_r26o
+          gh run download "$R26O_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26O_ARTIFACT_NAME" --dir parent_r26o
+          test -s parent_r26o/data/backtests/r26o_2026_week1_receptions_shadow_integration_compatibility_v1/r26o_disposition.json
+          test -s parent_r26o/data/backtests/r26o_2026_week1_receptions_shadow_integration_compatibility_v1/r26o_rb_receptions_shadow_arrays.npz
+          echo PASS > r26q_parent_verified.txt
+          printf '%s\n' "$ACTUAL_HEAD" > r26q_parent_head.txt
+          echo "R26Q_IMMUTABLE_PARENT_PASS digest=$ACTUAL_DIGEST head=$ACTUAL_HEAD"
+
+      - name: Execute frozen R26Q prospective seal
+        run: |
+          set -euo pipefail
+          rm -rf data/backtests/r26q_2026_week1_receptions_prospective_seal_v1
+          python scripts/backtest/seal_rb_r26q_2026_week1_receptions_prospective_v1.py \
+            --r26o-root parent_r26o \
+            --parent-verified-marker r26q_parent_verified.txt \
+            --parent-head-marker r26q_parent_head.txt \
+            --out-dir data/backtests/r26q_2026_week1_receptions_prospective_seal_v1
+
+      - name: Assert R26Q authority ceiling
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('data/backtests/r26q_2026_week1_receptions_prospective_seal_v1/r26q_disposition.json')
+          d=json.loads(p.read_text())
+          assert d['disposition'] in {
+              'R26Q_2026_WEEK1_RECEPTIONS_PROSPECTIVE_SEAL_PASS_READY_FOR_OBSERVATION',
+              'R26Q_2026_WEEK1_RECEPTIONS_PROSPECTIVE_SEAL_FAIL_NO_OBSERVATION',
+          }
+          assert d['2026_outcomes_used'] == 0
+          assert d['sportsbook_football_inputs_used'] == 0
+          assert d['same_week_depth_used'] is False
+          assert d['r9_refit'] is False
+          assert d['football_values_regenerated'] is False
+          assert d['production_parameters_changed'] is False
+          assert d['live_shadow_production_activation_authorized'] is False
+          assert d['production_promotion_authorized'] is False
+          qualified=d['disposition']=='R26Q_2026_WEEK1_RECEPTIONS_PROSPECTIVE_SEAL_PASS_READY_FOR_OBSERVATION'
+          assert d['observation_design_authorized'] is qualified
+          print('R26Q_AUTHORITY_CONTRACT_PASS disposition=' + d['disposition'])
+          PY
+
+      - name: Show R26Q evidence
+        run: |
+          cat data/backtests/r26q_2026_week1_receptions_prospective_seal_v1/r26q_disposition.json
+          echo '=== R26Q gates ==='
+          cat data/backtests/r26q_2026_week1_receptions_prospective_seal_v1/r26q_gate_matrix.csv
+          echo '=== R26Q file seal ==='
+          cat data/backtests/r26q_2026_week1_receptions_prospective_seal_v1/r26q_seal_manifest.csv
+
+      - name: Upload R26Q evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r26q-2026-week1-receptions-prospective-seal-v1
+          retention-days: 90
+          path: |
+            r26q_plan.sha256
+            r26q_code.sha256
+            r26q_lock.sha256
+            r26q_parent_verified.txt
+            r26q_parent_head.txt
+            data/backtests/r26q_2026_week1_receptions_prospective_seal_v1/*
