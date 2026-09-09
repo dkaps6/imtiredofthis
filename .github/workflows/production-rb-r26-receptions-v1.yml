@@ -1,0 +1,263 @@
+name: RB R26 Receptions Production Qualification V1
+
+on:
+  push:
+    branches: [production-rb-r26-receptions-v1]
+    paths:
+      - '.github/workflows/production-rb-r26-receptions-v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  PLAN_COMMIT: ca5b641f077964fad58df5f6d1a9c5a4188fcbf1
+  ROOM_COMMIT: b148de8686eb2df1281ab0bf0153a88658bb422f
+  ADAPTER_COMMIT: d3a9a25e86513c674ff494cfb6dc236f34aca960
+  V5_COMMIT: 8c2770b8aedbdb6cfbddf778a12ba6f2cfa20389
+  EVAL_COMMIT: 83619f2cdedac95fcacbb81c59feb9beda16845b
+  HELPER_COMMIT: 138b4206b3f2b8b11de900885dff6445d5a64489
+  LOCK_COMMIT: 46ede1c2a99c83aa88e36d70daaf9e0fbb402867
+  PROTECTED_HEAD: f8417f55b04ce0e19baf260e9d532765034c47f1
+  PROD_RUN: '34317211395'
+  PROD_ARTIFACT: '10090547415'
+  PROD_NAME: run_34317211395
+  PROD_DIGEST: sha256:7eab77e41c5879d4f54d87497eee0d1186010784cfc4ef966178930e16fb7c3b
+  R26R_RUN: '34401814588'
+  R26R_ARTIFACT: '10124274040'
+  R26R_NAME: rb-r26r-2026-week1-prospective-observation-snapshot-v1
+  R26R_DIGEST: sha256:b4d3e573909803e892d57858c9b0c4bdac089bcf078c1d6f6e53366e4622303e
+  R26R_HEAD: 469aa40c90c738e12a82ee32ccca70c9cdbbc29f
+  R19_MODEL_SHA: 9ed6a98b0022e86992fb468df40a9fd79a54bc87885777ac5955a898b5c292ba
+  ROOM_STATE_SHA: 27ad7bad8fcdfa6b0b1090994e0c0d2bdc4c0e45209d2409abc9574b5d354258
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install locked dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml beautifulsoup4 lxml
+
+      - name: Verify frozen plan implementation lock and protected boundary
+        run: |
+          set -euo pipefail
+          PLAN=docs/production/RB_R26_RECEPTIONS_PRODUCTION_INTEGRATION_V2_FROZEN_PLAN.md
+          ROOM=data/models/rb_r26_production_v1/rb_r26_week1_room_state_v1.csv
+          ADAPTER=scripts/modeling/rb_r26_receptions_production_adapter_v1.py
+          V5=scripts/run_pricing_with_full_roster_universe_v5_production.py
+          EVAL=scripts/validate_rb_r26_week1_production_integration_v1.py
+          HELPER=scripts/backtest/stage_r26n_production_identity_key_repair_v1.py
+          LOCK=docs/production/RB_R26_RECEPTIONS_PRODUCTION_INTEGRATION_V1_IMPLEMENTATION_LOCK.md
+          for f in "$PLAN" "$ROOM" "$ADAPTER" "$V5" "$EVAL" "$HELPER" "$LOCK"; do test -s "$f"; done
+          python -m py_compile "$ADAPTER" "$V5" "$EVAL" "$HELPER"
+          git diff --quiet "$PLAN_COMMIT" HEAD -- "$PLAN"
+          git diff --quiet "$ROOM_COMMIT" HEAD -- "$ROOM"
+          git diff --quiet "$ADAPTER_COMMIT" HEAD -- "$ADAPTER"
+          git diff --quiet "$V5_COMMIT" HEAD -- "$V5"
+          git diff --quiet "$EVAL_COMMIT" HEAD -- "$EVAL"
+          git diff --quiet "$HELPER_COMMIT" HEAD -- "$HELPER"
+          git diff --quiet "$LOCK_COMMIT" HEAD -- "$LOCK"
+          git diff --quiet "$PROTECTED_HEAD" HEAD -- \
+            .github/workflows/full-slate.yml \
+            scripts/run_pricing_v2.py \
+            scripts/run_pricing_with_full_roster_universe_v1.py \
+            scripts/run_pricing_with_full_roster_universe_v2.py \
+            scripts/run_pricing_with_full_roster_universe_v3.py \
+            scripts/run_pricing_with_full_roster_universe_v3_core.py \
+            scripts/run_pricing_with_full_roster_universe_v4_production.py \
+            scripts/modeling/rb_receiving_tail_production_adapter_v1.py \
+            scripts/modeling/rb_receiving_identity_runtime_v1.py \
+            scripts/modeling/rb_rush_synthesis_v1.py \
+            scripts/modeling/ensemble_v2.py \
+            scripts/run_rb_week1_no_odds.py
+          test "$(sha256sum "$ROOM" | awk '{print $1}')" = "$ROOM_STATE_SHA"
+          echo PASS > r26_v2_frozen_marker.txt
+          echo PASS > r26_protected_parent_marker.txt
+          sha256sum "$PLAN" "$ROOM" "$ADAPTER" "$V5" "$EVAL" "$HELPER" "$LOCK" > r26_qualification_locked_files.sha256
+
+      - name: Verify and download exact parent artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          verify_artifact () {
+            local id="$1" expected_digest="$2" expected_head="$3"
+            local digest head
+            digest="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}" --jq '.digest')"
+            head="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}" --jq '.workflow_run.head_sha')"
+            test "$digest" = "$expected_digest"
+            if [ -n "$expected_head" ]; then test "$head" = "$expected_head"; fi
+            echo "artifact=${id} digest=${digest} head=${head}"
+          }
+          verify_artifact "$PROD_ARTIFACT" "$PROD_DIGEST" "$PROTECTED_HEAD"
+          verify_artifact "$R26R_ARTIFACT" "$R26R_DIGEST" "$R26R_HEAD"
+          rm -rf parent_production parent_r26r staged_production qualification
+          mkdir -p parent_production parent_r26r qualification
+          gh run download "$PROD_RUN" --repo "$GITHUB_REPOSITORY" --name "$PROD_NAME" --dir parent_production
+          gh run download "$R26R_RUN" --repo "$GITHUB_REPOSITORY" --name "$R26R_NAME" --dir parent_r26r
+          test -s parent_production/data/player_form_consensus.csv
+          test -s parent_production/data/model_context_bridge.csv
+          test -s parent_production/data/rb_rush_synthesis_context.csv
+          test -s parent_production/data/model_ml_diagnostics.csv
+          test -s parent_production/data/model_state_diagnostics.csv
+          test -s parent_production/data/model_ensemble_weights.csv
+          test -s parent_r26r/outputs/props_pricing_offers.csv
+          echo PASS > r26_parent_artifacts_verified.txt
+
+      - name: Apply exact proven production identity staging
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/backtest/stage_r26n_production_identity_key_repair_v1.py \
+            --source-root parent_production \
+            --staged-root staged_production \
+            --audit qualification/r26_identity_staging_audit.json
+          python - <<'PY'
+          import json
+          d=json.load(open('qualification/r26_identity_staging_audit.json'))
+          assert d['pass'] is True
+          assert d['source_root_untouched'] is True
+          assert d['football_values_changed'] is False
+          assert d['players_added_or_removed'] is False
+          assert d['fuzzy_matching_used'] is False
+          assert d['staged_rows'] == 468
+          print('R26_IDENTITY_STAGING_VERIFIED')
+          PY
+
+      - name: Stage fixed football state and fixed downstream market board
+        run: |
+          set -euo pipefail
+          mkdir -p data outputs
+          cp -a staged_production/data/. data/
+          rm -rf outputs/*
+          cp parent_r26r/outputs/props_pricing_offers.csv outputs/props_raw.csv
+          test -s outputs/props_raw.csv
+          test -s data/player_form_consensus.csv
+          test -s data/model_context_bridge.csv
+          test -s data/models/rb_r19_production_v1/rb_r19_tail_scorer_model_v1.json
+          test -s data/models/rb_r19_production_v1/rb_r19_residual_pools_v1.npz
+          test "$(sha256sum data/models/rb_r19_production_v1/rb_r19_tail_scorer_model_v1.json | awk '{print $1}')" = "$R19_MODEL_SHA"
+          test "$(sha256sum data/models/rb_r26_production_v1/rb_r26_week1_room_state_v1.csv | awk '{print $1}')" = "$ROOM_STATE_SHA"
+          python - <<'PY'
+          import pandas as pd
+          o=pd.read_csv('outputs/props_raw.csv',low_memory=False)
+          pf=pd.read_csv('data/player_form_consensus.csv',low_memory=False)
+          mc=pd.read_csv('data/model_context_bridge.csv',low_memory=False)
+          assert len(o)==1687
+          assert len(pf)==468 and len(mc)==468
+          assert pf.team.nunique()==32 and mc.team.nunique()==32
+          assert 'player_clean_key' in mc.columns
+          print('FIXED_INPUTS_READY offers=',len(o),'players=',len(pf))
+          PY
+          echo PASS > r26_clean_assets_marker.txt
+
+      - name: Build deterministic fixed-offer metrics
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/run_metrics_context.py --season 2026 --week 1 --mode full
+          test -s data/metrics_ready.csv
+          cp data/metrics_ready.csv qualification/metrics_ready_fixed.csv
+          python - <<'PY'
+          import pandas as pd
+          x=pd.read_csv('data/metrics_ready.csv',low_memory=False)
+          assert len(x)>0
+          assert x['team'].nunique()==32
+          print('FIXED_METRICS rows=',len(x),'players=',x.player.nunique(),'teams=',x.team.nunique())
+          PY
+
+      - name: Run protected V4 control on exact fixed inputs
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/run_pricing_with_full_roster_universe_v4_production.py --season 2026
+          test -s outputs/props_priced_clean.csv
+          cp outputs/props_priced_clean.csv qualification/v4_control_props_priced_clean.csv
+          cp data/rb_receiving_tail_production_audit.json qualification/v4_control_r22_adapter_audit.json
+          cp data/rb_receiving_tail_pricing_lineage_audit.json qualification/v4_control_r22_pricing_audit.json
+          cp data/football_simulation_universe_audit.json qualification/v4_control_football_universe_audit.json
+
+      - name: Run V5 R26 candidate on the exact same fixed inputs
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          test -s qualification/metrics_ready_fixed.csv
+          cmp --silent data/metrics_ready.csv qualification/metrics_ready_fixed.csv
+          python scripts/run_pricing_with_full_roster_universe_v5_production.py --season 2026
+          test -s outputs/props_priced_clean.csv
+          test -s data/rb_r26_receptions_production_audit.json
+          test -s data/rb_r26_receptions_pricing_lineage_audit.json
+          test -s data/rb_r26_receptions_production_trace.csv
+          test -s data/rb_r26_receptions_production_array_audit.csv
+          cp outputs/props_priced_clean.csv qualification/v5_r26_candidate_props_priced_clean.csv
+
+      - name: Execute frozen 35-gate qualification
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/validate_rb_r26_week1_production_integration_v1.py \
+            --control qualification/v4_control_props_priced_clean.csv \
+            --candidate qualification/v5_r26_candidate_props_priced_clean.csv \
+            --frozen-marker r26_v2_frozen_marker.txt \
+            --protected-marker r26_protected_parent_marker.txt \
+            --clean-assets-marker r26_clean_assets_marker.txt \
+            --out-dir qualification/result
+          python - <<'PY'
+          import json
+          d=json.load(open('qualification/result/rb_r26_week1_production_integration_disposition.json'))
+          assert d['disposition']=='RB_R26_WEEK1_RECEPTIONS_PRODUCTION_INTEGRATION_PASS_READY_FOR_PROMOTION'
+          assert d['gate_count']==35 and d['gate_pass_count']==35 and d['all_gates_pass'] is True
+          assert d['production_promotion_authorized'] is True
+          assert d['week1_outcomes_used']==0 and d['sportsbook_football_inputs_used']==0
+          assert d['single_authoritative_receptions_output'] is True
+          print('R26_PRODUCTION_QUALIFICATION_35_OF_35_PASS')
+          PY
+
+      - name: Show qualification evidence
+        if: always()
+        run: |
+          echo '=== disposition ==='
+          test -f qualification/result/rb_r26_week1_production_integration_disposition.json && cat qualification/result/rb_r26_week1_production_integration_disposition.json || true
+          echo '=== gates ==='
+          test -f qualification/result/rb_r26_week1_production_integration_gate_matrix.csv && cat qualification/result/rb_r26_week1_production_integration_gate_matrix.csv || true
+          echo '=== R26 adapter ==='
+          test -f data/rb_r26_receptions_production_audit.json && cat data/rb_r26_receptions_production_audit.json || true
+          echo '=== R26 pricing lineage ==='
+          test -f data/rb_r26_receptions_pricing_lineage_audit.json && cat data/rb_r26_receptions_pricing_lineage_audit.json || true
+
+      - name: Upload qualification package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r26-week1-receptions-production-qualification-v1
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            r26_v2_frozen_marker.txt
+            r26_protected_parent_marker.txt
+            r26_clean_assets_marker.txt
+            r26_parent_artifacts_verified.txt
+            r26_qualification_locked_files.sha256
+            qualification/**
+            data/rb_r26_receptions_production_audit.json
+            data/rb_r26_receptions_production_trace.csv
+            data/rb_r26_receptions_production_array_audit.csv
+            data/rb_r26_receptions_pricing_lineage_audit.json
+            data/rb_receiving_tail_production_audit.json
+            data/rb_receiving_tail_pricing_lineage_audit.json
+            data/football_simulation_universe_audit.json
+            outputs/props_priced_clean.csv
