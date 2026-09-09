@@ -53,7 +53,7 @@ def _stamp_pricing_lineage() -> dict:
         raise RuntimeError("V4 pricing lineage stamp missing priced output or RB receiving audit/trace")
     priced = pd.read_csv(OUT, low_memory=False)
     trace = pd.read_csv(RB_REC_TRACE_CSV, low_memory=False)
-    required = {"team", "player_clean_key", "market", "model_proj", "mc_proj"}
+    required = {"team", "player", "player_clean_key", "market", "model_proj", "mc_proj"}
     missing = required - set(priced.columns)
     if missing:
         raise RuntimeError(f"V4 priced output missing lineage columns: {sorted(missing)}")
@@ -65,7 +65,31 @@ def _stamp_pricing_lineage() -> dict:
         for r in trace.itertuples(index=False)
         if bool(r.rb_receiving_tail_applied)
     }
-    key_series = list(zip(priced["team"].astype(str).str.upper(), priced["player_clean_key"].astype(str)))
+
+    # Pricing rows retain provider-form display names/keys, while the football
+    # simulation universe intentionally uses suffix-safe canonical player keys.
+    # Provider aliases are installed only after simulation by V2. Stamp lineage
+    # through that same governed identity contract so suffixes such as "III" or
+    # "Jr." cannot make an adapted football distribution look unadapted.
+    canonical_pricing_keys = priced["player"].map(v2._suffix_safe_key)
+    blank = canonical_pricing_keys.astype("string").fillna("").str.strip().eq("")
+    if blank.any():
+        sample = priced.loc[blank, ["player", "player_clean_key", "team"]].drop_duplicates().head(20).to_dict("records")
+        raise RuntimeError(f"R22 pricing lineage suffix-safe identity unresolved: {sample}")
+    priced["rb_receiving_tail_canonical_player_key"] = canonical_pricing_keys
+
+    # Fail closed if one suffix-safe key maps to multiple current provider names
+    # on the same team; this mirrors the full-roster identity ambiguity guard.
+    ambiguity = (
+        priced.assign(_provider_name=priced["player"].astype("string").fillna("").str.strip())
+        .groupby([priced["team"].astype(str).str.upper(), canonical_pricing_keys], dropna=False)["_provider_name"]
+        .nunique(dropna=False)
+    )
+    bad = ambiguity.loc[ambiguity.gt(1)]
+    if not bad.empty:
+        raise RuntimeError(f"R22 pricing lineage suffix-safe identity ambiguous: {bad.head(20).to_dict()}")
+
+    key_series = list(zip(priced["team"].astype(str).str.upper(), canonical_pricing_keys.astype(str)))
     is_adapted_player = pd.Series([k in adapted_keys for k in key_series], index=priced.index)
     eligible_market = priced["market"].astype(str).isin(["rec_yards", "rush_rec_yards"])
     applied = eligible_market & is_adapted_player
@@ -80,6 +104,8 @@ def _stamp_pricing_lineage() -> dict:
     rec_rows = priced.loc[applied & priced.market.astype(str).eq("rec_yards")]
     combo_rows = priced.loc[applied & priced.market.astype(str).eq("rush_rec_yards")]
     reception_rows = priced.loc[is_adapted_player & priced.market.astype(str).eq("receptions")]
+    provider_alias_rows = int((priced["player_clean_key"].astype(str) != canonical_pricing_keys.astype(str)).sum())
+    adapted_provider_alias_rows = int((is_adapted_player & (priced["player_clean_key"].astype(str) != canonical_pricing_keys.astype(str))).sum())
     payload = {
         "disposition": "RB_R22_WEEK1_RECEIVING_TAIL_PRICING_LINEAGE_PASS",
         "integration_valid": True,
@@ -92,7 +118,9 @@ def _stamp_pricing_lineage() -> dict:
         "adapter_max_mean_delta": float(audit["max_mean_delta"]),
         "sportsbook_inputs_to_adapter": 0,
         "production_mean_parameters_changed": 0,
-        "provider_identity_note": "Pricing lineage matches on governed team + player_clean_key because provider event aliases are installed after the canonical simulation adapters.",
+        "provider_alias_rows": provider_alias_rows,
+        "adapted_provider_alias_rows": adapted_provider_alias_rows,
+        "provider_identity_note": "Pricing lineage uses the same governed suffix-safe player identity as the post-simulation provider alias installer; provider event/player aliases remain lookup-only and do not enter football generation.",
         "note": "Only RB rec_yards/rush_rec_yards distribution rows are stamped. Receptions remain unadapted and receiving means remain canonical.",
     }
     if payload["rec_yards_rows_stamped"] <= 0:
