@@ -1,0 +1,148 @@
+name: RB R26G Week 1 Balanced Turnover Guard V1
+
+on:
+  push:
+    branches:
+      - research-rb-r26g-week1-balanced-turnover-guard-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  PRODUCTION_BASE_SHA: f8417f55b04ce0e19baf260e9d532765034c47f1
+  R26_RUN_ID: '34356222339'
+  R26_ARTIFACT_ID: '10106271075'
+  R26_ARTIFACT_NAME: rb-r26-vacancy-gated-r9-retrospective-v1
+  R26_DIGEST: sha256:607fca6e11c301ecb2a3bf74e3dfea8ae415bb33cf3c150a6d89eaedada2809e
+  R26F_RUN_ID: '34365496225'
+  R26F_ARTIFACT_ID: '10109658591'
+  R26F_ARTIFACT_NAME: rb-r26f-2020-week1-vacancy-forensics-v1
+  R26F_DIGEST: sha256:bce3f1a81ff516f962109dcadc9ad1e6efa2273c3a96851e94abbe9e4c332022
+
+jobs:
+  qualify-child:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install qualification dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4
+
+      - name: Verify frozen R26G contract and protected production boundary
+        run: |
+          set -euo pipefail
+          test -s docs/research/RB_R26G_WEEK1_BALANCED_TURNOVER_GUARD_V1_FROZEN_PLAN.md
+          test -s docs/research/RB_R26F_2020_WEEK1_VACANCY_FAILURE_FORENSIC_ATLAS_V1_RESULT.md
+          test -s docs/research/RESEARCH_COMPONENT_PRESERVATION_DOCTRINE.md
+          test -s scripts/backtest/finalize_rb_r26g_week1_balanced_turnover_guard_v1.py
+          python -m py_compile scripts/backtest/finalize_rb_r26g_week1_balanced_turnover_guard_v1.py
+          sha256sum docs/research/RB_R26G_WEEK1_BALANCED_TURNOVER_GUARD_V1_FROZEN_PLAN.md | tee r26g_plan.sha256
+          sha256sum scripts/backtest/finalize_rb_r26g_week1_balanced_turnover_guard_v1.py | tee r26g_code.sha256
+          git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
+            scripts/modeling \
+            scripts/run_rb_week1_no_odds.py \
+            scripts/run_pricing_with_full_roster_universe_v3.py \
+            scripts/run_pricing_with_full_roster_universe_v3_core.py \
+            scripts/run_pricing_with_full_roster_universe_v4_production.py \
+            scripts/simulation_v2.py \
+            scripts/simulation_c2_qb_candidate.py \
+            data/models \
+            model \
+            .github/workflows/full-slate.yml \
+            .github/workflows/production-week1-v4-r22-certification.yml
+          echo 'R26G_PROTECTED_PRODUCTION_BOUNDARY_PASS'
+
+      - name: Verify and download immutable R26/R26F evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          R26_META="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26_ARTIFACT_ID}" --jq '.digest')"
+          R26F_META="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26F_ARTIFACT_ID}" --jq '.digest')"
+          test "$R26_META" = "$R26_DIGEST"
+          test "$R26F_META" = "$R26F_DIGEST"
+          rm -rf parent_r26 parent_r26f
+          mkdir -p parent_r26 parent_r26f
+          gh run download "$R26_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26_ARTIFACT_NAME" --dir parent_r26
+          gh run download "$R26F_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26F_ARTIFACT_NAME" --dir parent_r26f
+          test "$(find parent_r26 -name r26_predictions.csv -type f | wc -l)" -eq 6
+          test "$(find parent_r26 -name r26_structural_audit.csv -type f | wc -l)" -eq 6
+          test "$(find parent_r26f -name r26f_disposition.json -type f | wc -l)" -eq 1
+          python - <<'PY'
+          import json, pathlib
+          p=next(pathlib.Path('parent_r26f').rglob('r26f_disposition.json'))
+          d=json.loads(p.read_text())
+          assert d['disposition'] == 'WEEK1_FAILURE_MECHANISM_IDENTIFIED_REPLICATED'
+          assert d['child_candidate_design_authorized'] is True
+          assert any(x['dimension']=='exit_entrant_balance' and x['level']=='EXITS_EQ_ENTRANTS' for x in d['replicated_harmful_states'])
+          PY
+          echo "R26G_IMMUTABLE_PARENT_EVIDENCE_PASS r26=$R26_META r26f=$R26F_META"
+
+      - name: Execute frozen R26G child qualification
+        run: |
+          set -euo pipefail
+          rm -rf data/backtests/r26g_week1_balanced_turnover_guard_v1
+          python scripts/backtest/finalize_rb_r26g_week1_balanced_turnover_guard_v1.py \
+            --r26-root parent_r26 \
+            --r26f-root parent_r26f \
+            --out-dir data/backtests/r26g_week1_balanced_turnover_guard_v1
+
+      - name: Assert child integrity
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('data/backtests/r26g_week1_balanced_turnover_guard_v1/r26g_disposition.json').read_text())
+          i=d['inheritance']
+          assert i['r26_predictions_regenerated'] is False
+          assert i['r9_refit'] is False
+          assert i['sportsbook_inputs_added'] == 0
+          assert i['production_parameters_changed'] is False
+          assert i['receiving_yard_means_changed'] is False
+          assert i['r22_changed'] is False
+          assert i['max_balanced_target_child_vs_baseline_delta'] <= 1e-12
+          assert i['max_balanced_rec_child_vs_baseline_delta'] <= 1e-12
+          assert i['max_unbalanced_target_child_vs_r26_delta'] <= 1e-12
+          assert i['max_unbalanced_rec_child_vs_r26_delta'] <= 1e-12
+          assert i['max_nonvacancy_target_child_vs_baseline_delta'] <= 1e-12
+          assert i['max_nonvacancy_rec_child_vs_baseline_delta'] <= 1e-12
+          assert i['max_child_rb_room_target_mass_gap'] <= 1e-10
+          assert d['production_promotion_authorized'] is False
+          assert d['all_season_use_authorized'] is False
+          assert d['disposition'] in {
+              'WEEK1_BALANCED_TURNOVER_GUARD_RETROSPECTIVE_SUPPORT_FOR_2026_SHADOW',
+              'WEEK1_BALANCED_TURNOVER_GUARD_MIXED_NO_SHADOW',
+              'WEEK1_BALANCED_TURNOVER_GUARD_INTEGRITY_FAILURE',
+          }
+          print('R26G_CHILD_INTEGRITY_PASS disposition=' + d['disposition'])
+          PY
+
+      - name: Show R26G qualification
+        run: |
+          cat data/backtests/r26g_week1_balanced_turnover_guard_v1/r26g_disposition.json
+          echo '=== season metrics ==='
+          cat data/backtests/r26g_week1_balanced_turnover_guard_v1/r26g_week1_season_metrics.csv
+          echo '=== room mass audit ==='
+          cat data/backtests/r26g_week1_balanced_turnover_guard_v1/r26g_room_mass_audit.csv
+
+      - name: Upload R26G evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r26g-week1-balanced-turnover-guard-v1
+          retention-days: 90
+          path: |
+            r26g_plan.sha256
+            r26g_code.sha256
+            data/backtests/r26g_week1_balanced_turnover_guard_v1/*
