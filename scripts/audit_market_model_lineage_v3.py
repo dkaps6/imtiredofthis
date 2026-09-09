@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from scripts import audit_market_model_lineage_v2 as v2
+from scripts import audit_market_model_lineage_v2_core as v2
 
 DATA = Path("data")
 CSV = DATA / "market_model_lineage_current.csv"
