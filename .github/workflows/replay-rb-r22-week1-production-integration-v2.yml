@@ -5,8 +5,15 @@ on:
     branches:
       - research-cross-position-catastrophic-casebook-v1
     paths:
-      - 'scripts/run_pricing_with_full_roster_universe_v4_production.py'
+      - 'scripts/run_pricing_with_full_roster_universe_v3.py'
       - 'scripts/run_pricing_with_full_roster_universe_v3_core.py'
+      - 'scripts/run_pricing_with_full_roster_universe_v4_production.py'
+      - 'scripts/audit_market_model_lineage_v2.py'
+      - 'scripts/audit_market_model_lineage_v2_core.py'
+      - 'scripts/audit_market_model_lineage_v3.py'
+      - 'scripts/validate_certified_full_slate_stack_v2.py'
+      - 'scripts/validate_certified_full_slate_stack_v2_core.py'
+      - 'scripts/validate_certified_full_slate_stack_v3.py'
       - 'scripts/validate_rb_r22_week1_production_integration_v2.py'
       - '.github/workflows/replay-rb-r22-week1-production-integration-v2.yml'
   workflow_dispatch:
@@ -61,7 +68,7 @@ jobs:
           cp -a evidence/paid/data/. data/
           mkdir -p outputs
           cp -a evidence/paid/outputs/. outputs/
-          echo 'R22 V2 uses the already-paid immutable snapshot; no OddsAPI fetch occurs.'
+          echo 'R22 canonical promotion test uses the already-paid immutable snapshot; no OddsAPI fetch occurs.'
 
       - name: Harden and repair paid sportsbook snapshot
         run: |
@@ -86,7 +93,7 @@ jobs:
               'core_prop_identity_disposition':ident.get('disposition','missing'),
               'core_prop_identity_unresolved_rows':int(ident.get('core_unresolved_rows',0)),
               'core_prop_identity_rows':int(ident.get('core_actual_rows',0)),
-              'replay_source_run':34152868136,'odds_api_refetched':False,'rb_r22_replay_v2':True,
+              'replay_source_run':34152868136,'odds_api_refetched':False,'rb_r22_canonical_promotion_test':True,
           })
           p.write_text(json.dumps(status,indent=2,sort_keys=True)+'\n',encoding='utf-8')
           result=materialize()
@@ -126,7 +133,7 @@ jobs:
           python scripts/validate_build_integrity.py
           python scripts/metrics_ready.py --season 2026 --date ''
 
-      - name: Generate deterministic same-checkout V3 control
+      - name: Generate deterministic preserved V3 control
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
@@ -138,17 +145,17 @@ jobs:
           cp data/wr_r15_full_slate_entitlement_audit.json evidence/v3_wr_audit.json
           cp data/qb_c2_production_integration_audit.json evidence/v3_qb_audit.json
 
-      - name: Generate deterministic V4 candidate from identical inputs
+      - name: Generate deterministic canonical V4 candidate through public entrypoint
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
-          python scripts/run_pricing_with_full_roster_universe_v4_production.py --season 2026
+          python scripts/run_pricing_with_full_roster_universe_v3.py --season 2026
           python scripts/stamp_qb_c2_pricing_lineage_v1.py
           test -s data/rb_receiving_tail_production_audit.json
           test -s data/rb_receiving_tail_production_trace.csv
           test -s data/rb_receiving_tail_pricing_lineage_audit.json
 
-      - name: Existing certified stack remains green
+      - name: Canonical promoted stack remains green
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
@@ -165,16 +172,20 @@ jobs:
           export PYTHONPATH="${PWD}"
           python scripts/validate_rb_r22_week1_production_integration_v2.py evidence/v3_same_checkout.csv outputs/props_priced_clean.csv
 
-      - name: Show R22 V2 result
+      - name: Show canonical R22 result
         if: always()
         run: |
           cat data/rb_receiving_tail_production_audit.json 2>/dev/null || true
           echo '=== pricing lineage ==='
           cat data/rb_receiving_tail_pricing_lineage_audit.json 2>/dev/null || true
+          echo '=== market lineage ==='
+          cat data/market_model_lineage_current.json 2>/dev/null || true
+          echo '=== certified stack ==='
+          cat data/certified_full_slate_stack_audit.json 2>/dev/null || true
           echo '=== differential gate ==='
           cat data/rb_r22_week1_production_integration_audit_v2.json 2>/dev/null || true
 
-      - name: Upload R22 V2 evidence
+      - name: Upload canonical R22 promotion evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -186,6 +197,8 @@ jobs:
             data/rb_receiving_tail_pricing_lineage_audit.json
             data/rb_r22_week1_production_integration_audit_v2.json
             data/rb_r22_week1_pricing_delta_audit_v2.csv
+            data/market_model_lineage_current.csv
+            data/market_model_lineage_current.json
             data/certified_full_slate_stack_audit.json
             data/football_simulation_universe.csv
             data/football_simulation_universe_audit.json
