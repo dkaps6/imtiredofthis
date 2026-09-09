@@ -16,6 +16,8 @@ env:
   PLAN_COMMIT: 41449230c36dbc008e2efc9b8e1ffe1bd28bb3f0
   CODE_COMMIT: db351aa5c1a0a0cc7fcd657e5c222490a4535366
   LOCK_COMMIT: 947135e16ee51ab3da5b4a7a3caf5b6414e0bd52
+  REPAIR_NOTE_COMMIT: b825c6479fb69a66c1e8bc71cb717dd4d950b8d2
+  COMPAT_COMMIT: cd695b72ce51b60bebcd0b03ab4dec2273703239
   FULL_RUN: "34317211395"
   FULL_ARTIFACT: "10090547415"
   FULL_NAME: run_34317211395
@@ -54,20 +56,26 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Verify frozen audit contract
+      - name: Verify frozen audit and repair contracts
         run: |
           set -euo pipefail
           PLAN=docs/research/RB_WEEK1_2026_PREGAME_OPERATIONAL_READINESS_V1_FROZEN_PLAN.md
           CODE=scripts/audit_rb_week1_2026_operational_readiness_v1.py
           LOCK=docs/research/RB_WEEK1_2026_PREGAME_OPERATIONAL_READINESS_V1_IMPLEMENTATION_LOCK.md
-          test -s "$PLAN" && test -s "$CODE" && test -s "$LOCK"
-          python -m py_compile "$CODE"
+          REPAIR=docs/research/RB_WEEK1_2026_PREGAME_READINESS_RUN1_ROLE_KEY_MECHANICAL_REPAIR_V1.md
+          COMPAT=scripts/stage_rb_week1_readiness_r26r_role_key_compat_v1.py
+          test -s "$PLAN" && test -s "$CODE" && test -s "$LOCK" && test -s "$REPAIR" && test -s "$COMPAT"
+          python -m py_compile "$CODE" "$COMPAT"
           git diff --quiet "$PLAN_COMMIT" HEAD -- "$PLAN"
           git diff --quiet "$CODE_COMMIT" HEAD -- "$CODE"
           git diff --quiet "$LOCK_COMMIT" HEAD -- "$LOCK"
+          git diff --quiet "$REPAIR_NOTE_COMMIT" HEAD -- "$REPAIR"
+          git diff --quiet "$COMPAT_COMMIT" HEAD -- "$COMPAT"
           sha256sum "$PLAN" | tee rb_week1_readiness_plan.sha256
           sha256sum "$CODE" | tee rb_week1_readiness_code.sha256
           sha256sum "$LOCK" | tee rb_week1_readiness_lock.sha256
+          sha256sum "$REPAIR" | tee rb_week1_readiness_repair_note.sha256
+          sha256sum "$COMPAT" | tee rb_week1_readiness_compat.sha256
           echo RB_WEEK1_READINESS_FROZEN_CONTRACT_PASS
 
       - name: Verify and download exact protected artifacts
@@ -89,7 +97,7 @@ jobs:
           test "$Q_HEAD" = "$R26Q_HEAD"
           test "$R_DIGEST" = "$R26R_DIGEST"
           test "$R_HEAD" = "$R26R_HEAD"
-          rm -rf parent_full parent_r22 parent_r26q parent_r26r
+          rm -rf parent_full parent_r22 parent_r26q parent_r26r parent_r26r_compat
           mkdir -p parent_full parent_r22 parent_r26q parent_r26r
           gh run download "$FULL_RUN" --repo "$GITHUB_REPOSITORY" --name "$FULL_NAME" --dir parent_full
           gh run download "$R22_RUN" --repo "$GITHUB_REPOSITORY" --name "$R22_NAME" --dir parent_r22
@@ -104,6 +112,18 @@ jobs:
           EOF
           echo RB_WEEK1_READINESS_EXACT_ARTIFACTS_PASS
 
+      - name: Stage frozen three-row R26R role-key compatibility copy
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/stage_rb_week1_readiness_r26r_role_key_compat_v1.py \
+            --source-r26r-root parent_r26r \
+            --staged-r26r-root parent_r26r_compat \
+            --full-slate-root parent_full \
+            --audit-json rb_week1_readiness_role_key_compat_audit.json
+          test -s rb_week1_readiness_role_key_compat_audit.json
+          echo RB_WEEK1_READINESS_ROLE_KEY_COMPAT_PASS
+
       - name: Execute locked pregame RB readiness audit
         id: readiness
         continue-on-error: true
@@ -115,10 +135,10 @@ jobs:
             --full-slate-root parent_full \
             --r22-root parent_r22 \
             --r26q-root parent_r26q \
-            --r26r-root parent_r26r \
+            --r26r-root parent_r26r_compat \
             --out-dir data/backtests/rb_week1_2026_pregame_operational_readiness_v1
 
-      - name: Assert authority ceiling and materialized evidence
+      - name: Assert authority ceiling and final readiness disposition
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -129,11 +149,8 @@ jobs:
           if not p.is_file():
               raise SystemExit('readiness disposition missing: mechanical workflow failure')
           d=json.loads(p.read_text())
-          allowed={
-              'RB_WEEK1_2026_PREGAME_OPERATIONAL_READINESS_PASS_PRODUCTION_STACK_READY_R26_SIDECAR_READY',
-              'RB_WEEK1_2026_PREGAME_OPERATIONAL_READINESS_FAIL_NOT_READY',
-          }
-          assert d['disposition'] in allowed
+          assert d['disposition'] == 'RB_WEEK1_2026_PREGAME_OPERATIONAL_READINESS_PASS_PRODUCTION_STACK_READY_R26_SIDECAR_READY'
+          assert d['gate_count'] == 35 and d['gate_pass_count'] == 35 and d['gate_fail_count'] == 0
           assert d['2026_week1_outcomes_used'] == 0
           assert d['football_values_regenerated'] is False
           assert d['production_parameters_changed'] is False
@@ -141,7 +158,7 @@ jobs:
           assert d['r26_live_production_activation_performed'] is False
           assert (root/'rb_week1_operational_readiness_gate_matrix.csv').is_file()
           assert (root/'rb_week1_player_readiness_manifest.csv').is_file()
-          print('RB_WEEK1_READINESS_AUTHORITY_CONTRACT_PASS disposition=' + d['disposition'])
+          print('RB_WEEK1_READINESS_FINAL_PASS')
           PY
 
       - name: Show readiness evidence
@@ -169,5 +186,8 @@ jobs:
             rb_week1_readiness_plan.sha256
             rb_week1_readiness_code.sha256
             rb_week1_readiness_lock.sha256
+            rb_week1_readiness_repair_note.sha256
+            rb_week1_readiness_compat.sha256
             rb_week1_readiness_parent_authorities.json
+            rb_week1_readiness_role_key_compat_audit.json
             data/backtests/rb_week1_2026_pregame_operational_readiness_v1/*
