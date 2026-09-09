@@ -1,0 +1,167 @@
+name: RB R26 Vacancy Gated R9 Retrospective V1
+
+on:
+  push:
+    branches:
+      - research-rb-r26-role-transition-entitlement-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONPATH: ${{ github.workspace }}
+  PRODUCTION_BASE_SHA: f8417f55b04ce0e19baf260e9d532765034c47f1
+
+jobs:
+  retrospective:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml scipy scikit-learn
+
+      - name: Verify frozen plan implementation and protected production boundary
+        run: |
+          set -euo pipefail
+          test -s docs/research/RB_R26_VACANCY_GATED_R9_RETROSPECTIVE_V1_FROZEN_PLAN.md
+          test -s docs/research/RB_R26_VACANCY_GATED_R9_RETROSPECTIVE_V1_IMPLEMENTATION_LOCK.md
+          test -s scripts/backtest/evaluate_rb_r26_vacancy_gated_r9_v1.py
+          test -s scripts/backtest/finalize_rb_r26_vacancy_gated_r9_v1.py
+          python -m py_compile \
+            scripts/backtest/evaluate_rb_r26_vacancy_gated_r9_v1.py \
+            scripts/backtest/finalize_rb_r26_vacancy_gated_r9_v1.py \
+            scripts/backtest/audit_rb_r26_safe_transition_state_v1.py
+          sha256sum docs/research/RB_R26_VACANCY_GATED_R9_RETROSPECTIVE_V1_FROZEN_PLAN.md | tee r26_plan.sha256
+          sha256sum docs/research/RB_R26_VACANCY_GATED_R9_RETROSPECTIVE_V1_IMPLEMENTATION_LOCK.md | tee r26_lock.sha256
+          sha256sum \
+            scripts/backtest/evaluate_rb_r26_vacancy_gated_r9_v1.py \
+            scripts/backtest/finalize_rb_r26_vacancy_gated_r9_v1.py | tee r26_code.sha256
+          git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
+            scripts/modeling \
+            scripts/run_rb_week1_no_odds.py \
+            scripts/run_pricing_with_full_roster_universe_v3.py \
+            scripts/run_pricing_with_full_roster_universe_v3_core.py \
+            scripts/run_pricing_with_full_roster_universe_v4.py \
+            scripts/run_pricing_with_full_roster_universe_v4_production.py \
+            scripts/simulation_v2.py \
+            scripts/simulation_c2_qb_candidate.py \
+            scripts/apply_rb_receiving_tail_production_v1.py \
+            data/models \
+            model \
+            .github/workflows/full-slate.yml \
+            .github/workflows/production-week1-v4-r22-certification.yml
+          echo PASS > r26_protected_clean.txt
+          echo 'R26_PROTECTED_PRODUCTION_BOUNDARY_PASS'
+
+      - name: Build canonical leakage-safe transition state
+        run: |
+          rm -rf data/backtests/rb_r26_safe_transition_state
+          python scripts/backtest/audit_rb_r26_safe_transition_state_v1.py \
+            --target-seasons 2020-2025 \
+            --out-dir data/backtests/rb_r26_safe_transition_state
+
+      - name: Build historical football bundles 2019-2025
+        run: |
+          set -euo pipefail
+          for SEASON in 2019 2020 2021 2022 2023 2024 2025; do
+            PRIOR=$((SEASON-1))
+            if [ "$SEASON" -le 2020 ]; then WEEKS='1-17'; else WEEKS='1-18'; fi
+            D="data/r26_hist_${SEASON}"
+            rm -rf "$D"
+            python scripts/backtest/build_historical_inputs.py \
+              --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --out-dir "$D"
+            python scripts/backtest/enrich_historical_defense.py \
+              --team-weekly "$D/team_weekly_history.csv" --seasons "$PRIOR,$SEASON" \
+              --audit "$D/historical_defense_enrichment_audit.csv" \
+              --observations "$D/historical_defense_observations.csv"
+            python scripts/backtest/validate_historical_inputs.py \
+              --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" \
+              --data-dir "$D" --report "$D/historical_input_validation.csv"
+            python scripts/backtest/historical_player_logs.py \
+              --seasons "$PRIOR,$SEASON" --schedule "$D/schedule_history.csv" \
+              --out "$D/player_game_logs_history.csv"
+            python scripts/backtest/build_historical_injuries.py \
+              --seasons "$PRIOR,$SEASON" --out "$D/injuries_history.csv"
+            python scripts/backtest/build_historical_weather.py \
+              --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv"
+          done
+
+      - name: Execute six frozen R26 folds
+        run: |
+          set -euo pipefail
+          for TEST in 2020 2021 2022 2023 2024 2025; do
+            TRAIN=$((TEST-1))
+            OUT="data/backtests/r26_vacancy_gated_r9_${TEST}"
+            rm -rf "$OUT"
+            python scripts/backtest/evaluate_rb_r26_vacancy_gated_r9_v1.py \
+              --train-season "$TRAIN" \
+              --test-season "$TEST" \
+              --train-dir "data/r26_hist_${TRAIN}" \
+              --test-dir "data/r26_hist_${TEST}" \
+              --transition-state data/backtests/rb_r26_safe_transition_state/r26_safe_transition_player_state.csv \
+              --out-dir "$OUT"
+          done
+
+      - name: Apply all 20 frozen retrospective support gates
+        run: |
+          python scripts/backtest/finalize_rb_r26_vacancy_gated_r9_v1.py \
+            --dirs \
+              data/backtests/r26_vacancy_gated_r9_2020 \
+              data/backtests/r26_vacancy_gated_r9_2021 \
+              data/backtests/r26_vacancy_gated_r9_2022 \
+              data/backtests/r26_vacancy_gated_r9_2023 \
+              data/backtests/r26_vacancy_gated_r9_2024 \
+              data/backtests/r26_vacancy_gated_r9_2025 \
+            --protected-clean-marker r26_protected_clean.txt \
+            --out data/backtests/r26_vacancy_gated_r9_final/r26_final_disposition.json
+
+      - name: Show R26 disposition
+        run: |
+          cat data/backtests/r26_vacancy_gated_r9_final/r26_final_disposition.json
+
+      - name: Assert structural integrity only
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('data/backtests/r26_vacancy_gated_r9_final/r26_final_disposition.json').read_text())
+          for k in [f'{i:02d}_' for i in range(1,9)]:
+              matches=[v for name,v in d['gates'].items() if name.startswith(k)]
+              assert matches and all(matches), (k,d['gates'])
+          print('R26_STRUCTURAL_INTEGRITY_PASS')
+          print('scientific_disposition=', d['disposition'])
+          PY
+
+      - name: Upload R26 retrospective evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r26-vacancy-gated-r9-retrospective-v1
+          retention-days: 90
+          path: |
+            r26_plan.sha256
+            r26_lock.sha256
+            r26_code.sha256
+            r26_protected_clean.txt
+            data/backtests/rb_r26_safe_transition_state/*
+            data/r26_hist_*/historical_input_validation.csv
+            data/backtests/r26_vacancy_gated_r9_2020/*
+            data/backtests/r26_vacancy_gated_r9_2021/*
+            data/backtests/r26_vacancy_gated_r9_2022/*
+            data/backtests/r26_vacancy_gated_r9_2023/*
+            data/backtests/r26_vacancy_gated_r9_2024/*
+            data/backtests/r26_vacancy_gated_r9_2025/*
+            data/backtests/r26_vacancy_gated_r9_final/*
