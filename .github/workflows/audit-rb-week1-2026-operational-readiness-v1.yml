@@ -1,0 +1,173 @@
+name: RB Week 1 2026 Pregame Operational Readiness V1
+
+on:
+  push:
+    branches:
+      - audit-rb-week1-2026-operational-readiness-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PLAN_COMMIT: 41449230c36dbc008e2efc9b8e1ffe1bd28bb3f0
+  CODE_COMMIT: db351aa5c1a0a0cc7fcd657e5c222490a4535366
+  LOCK_COMMIT: 947135e16ee51ab3da5b4a7a3caf5b6414e0bd52
+  FULL_RUN: "34317211395"
+  FULL_ARTIFACT: "10090547415"
+  FULL_NAME: run_34317211395
+  FULL_DIGEST: sha256:7eab77e41c5879d4f54d87497eee0d1186010784cfc4ef966178930e16fb7c3b
+  FULL_HEAD: f8417f55b04ce0e19baf260e9d532765034c47f1
+  R22_RUN: "34298516960"
+  R22_ARTIFACT: "10084118525"
+  R22_NAME: rb-r22-week1-production-integration-v2
+  R22_DIGEST: sha256:2391bd9914e9d0029c63529829496fb9b462d008bdcc3f8c37bb3e1079580bd1
+  R26Q_RUN: "34400524030"
+  R26Q_ARTIFACT: "10123251043"
+  R26Q_NAME: rb-r26q-2026-week1-receptions-prospective-seal-v1
+  R26Q_DIGEST: sha256:dd3ec0e8e3831ab7f2255c2e5abf343cda8a7943d33a1d4863e52372d6f858a1
+  R26Q_HEAD: 68661da94f03cab2f96182d47636cf55e088b5de
+  R26R_RUN: "34401814588"
+  R26R_ARTIFACT: "10124274040"
+  R26R_NAME: rb-r26r-2026-week1-prospective-observation-snapshot-v1
+  R26R_DIGEST: sha256:b4d3e573909803e892d57858c9b0c4bdac089bcf078c1d6f6e53366e4622303e
+  R26R_HEAD: 469aa40c90c738e12a82ee32ccca70c9cdbbc29f
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install locked audit dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Verify frozen audit contract
+        run: |
+          set -euo pipefail
+          PLAN=docs/research/RB_WEEK1_2026_PREGAME_OPERATIONAL_READINESS_V1_FROZEN_PLAN.md
+          CODE=scripts/audit_rb_week1_2026_operational_readiness_v1.py
+          LOCK=docs/research/RB_WEEK1_2026_PREGAME_OPERATIONAL_READINESS_V1_IMPLEMENTATION_LOCK.md
+          test -s "$PLAN" && test -s "$CODE" && test -s "$LOCK"
+          python -m py_compile "$CODE"
+          git diff --quiet "$PLAN_COMMIT" HEAD -- "$PLAN"
+          git diff --quiet "$CODE_COMMIT" HEAD -- "$CODE"
+          git diff --quiet "$LOCK_COMMIT" HEAD -- "$LOCK"
+          sha256sum "$PLAN" | tee rb_week1_readiness_plan.sha256
+          sha256sum "$CODE" | tee rb_week1_readiness_code.sha256
+          sha256sum "$LOCK" | tee rb_week1_readiness_lock.sha256
+          echo RB_WEEK1_READINESS_FROZEN_CONTRACT_PASS
+
+      - name: Verify and download exact protected artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          F_DIGEST="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${FULL_ARTIFACT}" --jq '.digest')"
+          F_HEAD="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${FULL_ARTIFACT}" --jq '.workflow_run.head_sha')"
+          R22_D="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R22_ARTIFACT}" --jq '.digest')"
+          Q_DIGEST="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26Q_ARTIFACT}" --jq '.digest')"
+          Q_HEAD="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26Q_ARTIFACT}" --jq '.workflow_run.head_sha')"
+          R_DIGEST="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26R_ARTIFACT}" --jq '.digest')"
+          R_HEAD="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26R_ARTIFACT}" --jq '.workflow_run.head_sha')"
+          test "$F_DIGEST" = "$FULL_DIGEST"
+          test "$F_HEAD" = "$FULL_HEAD"
+          test "$R22_D" = "$R22_DIGEST"
+          test "$Q_DIGEST" = "$R26Q_DIGEST"
+          test "$Q_HEAD" = "$R26Q_HEAD"
+          test "$R_DIGEST" = "$R26R_DIGEST"
+          test "$R_HEAD" = "$R26R_HEAD"
+          rm -rf parent_full parent_r22 parent_r26q parent_r26r
+          mkdir -p parent_full parent_r22 parent_r26q parent_r26r
+          gh run download "$FULL_RUN" --repo "$GITHUB_REPOSITORY" --name "$FULL_NAME" --dir parent_full
+          gh run download "$R22_RUN" --repo "$GITHUB_REPOSITORY" --name "$R22_NAME" --dir parent_r22
+          gh run download "$R26Q_RUN" --repo "$GITHUB_REPOSITORY" --name "$R26Q_NAME" --dir parent_r26q
+          gh run download "$R26R_RUN" --repo "$GITHUB_REPOSITORY" --name "$R26R_NAME" --dir parent_r26r
+          test -s parent_full/data/rb_rush_synthesis_context.csv
+          test -s parent_r22/data/rb_receiving_tail_production_audit.json
+          test -s parent_r26q/data/backtests/r26q_2026_week1_receptions_prospective_seal_v1/r26q_disposition.json
+          test -s parent_r26r/data/backtests/r26r_2026_week1_prospective_observation_snapshot_v1/r26r_disposition.json
+          cat > rb_week1_readiness_parent_authorities.json <<EOF
+          {"full_slate":{"run":$FULL_RUN,"artifact":$FULL_ARTIFACT,"digest":"$F_DIGEST","head":"$F_HEAD"},"r22":{"run":$R22_RUN,"artifact":$R22_ARTIFACT,"digest":"$R22_D"},"r26q":{"run":$R26Q_RUN,"artifact":$R26Q_ARTIFACT,"digest":"$Q_DIGEST","head":"$Q_HEAD"},"r26r":{"run":$R26R_RUN,"artifact":$R26R_ARTIFACT,"digest":"$R_DIGEST","head":"$R_HEAD"}}
+          EOF
+          echo RB_WEEK1_READINESS_EXACT_ARTIFACTS_PASS
+
+      - name: Execute locked pregame RB readiness audit
+        id: readiness
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          rm -rf data/backtests/rb_week1_2026_pregame_operational_readiness_v1
+          python scripts/audit_rb_week1_2026_operational_readiness_v1.py \
+            --full-slate-root parent_full \
+            --r22-root parent_r22 \
+            --r26q-root parent_r26q \
+            --r26r-root parent_r26r \
+            --out-dir data/backtests/rb_week1_2026_pregame_operational_readiness_v1
+
+      - name: Assert authority ceiling and materialized evidence
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('data/backtests/rb_week1_2026_pregame_operational_readiness_v1')
+          p=root/'rb_week1_operational_readiness_disposition.json'
+          if not p.is_file():
+              raise SystemExit('readiness disposition missing: mechanical workflow failure')
+          d=json.loads(p.read_text())
+          allowed={
+              'RB_WEEK1_2026_PREGAME_OPERATIONAL_READINESS_PASS_PRODUCTION_STACK_READY_R26_SIDECAR_READY',
+              'RB_WEEK1_2026_PREGAME_OPERATIONAL_READINESS_FAIL_NOT_READY',
+          }
+          assert d['disposition'] in allowed
+          assert d['2026_week1_outcomes_used'] == 0
+          assert d['football_values_regenerated'] is False
+          assert d['production_parameters_changed'] is False
+          assert d['production_promotion_performed'] is False
+          assert d['r26_live_production_activation_performed'] is False
+          assert (root/'rb_week1_operational_readiness_gate_matrix.csv').is_file()
+          assert (root/'rb_week1_player_readiness_manifest.csv').is_file()
+          print('RB_WEEK1_READINESS_AUTHORITY_CONTRACT_PASS disposition=' + d['disposition'])
+          PY
+
+      - name: Show readiness evidence
+        if: always()
+        run: |
+          ROOT=data/backtests/rb_week1_2026_pregame_operational_readiness_v1
+          if [ -s "$ROOT/rb_week1_operational_readiness_disposition.json" ]; then
+            cat "$ROOT/rb_week1_operational_readiness_disposition.json"
+            echo '=== failed gates ==='
+            python - <<'PY'
+          import pandas as pd
+          p='data/backtests/rb_week1_2026_pregame_operational_readiness_v1/rb_week1_operational_readiness_gate_matrix.csv'
+          x=pd.read_csv(p)
+          print(x.loc[~x.passed].to_string(index=False))
+          PY
+          fi
+
+      - name: Upload Week 1 RB readiness evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-week1-2026-pregame-operational-readiness-v1
+          retention-days: 90
+          path: |
+            rb_week1_readiness_plan.sha256
+            rb_week1_readiness_code.sha256
+            rb_week1_readiness_lock.sha256
+            rb_week1_readiness_parent_authorities.json
+            data/backtests/rb_week1_2026_pregame_operational_readiness_v1/*
