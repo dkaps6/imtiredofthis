@@ -1,0 +1,142 @@
+name: RB R26D Exit Significance Effect Atlas V1
+
+on:
+  push:
+    branches:
+      - research-rb-r26d-exit-significance-effect-atlas-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  PRODUCTION_BASE_SHA: f8417f55b04ce0e19baf260e9d532765034c47f1
+  R26_RUN_ID: '34356222339'
+  R26_ARTIFACT_ID: '10106271075'
+  R26_ARTIFACT_NAME: rb-r26-vacancy-gated-r9-retrospective-v1
+  R26_DIGEST: sha256:607fca6e11c301ecb2a3bf74e3dfea8ae415bb33cf3c150a6d89eaedada2809e
+  R26C_RUN_ID: '34361409319'
+  R26C_ARTIFACT_ID: '10108036449'
+  R26C_ARTIFACT_NAME: rb-r26c-exit-significance-source-audit-v1
+  R26C_DIGEST: sha256:1c7ee705179d91b7e3e53c39b57783314bd87876df6c784d5d1930ee5cf79156
+
+jobs:
+  effect-atlas:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install diagnostic dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4
+
+      - name: Verify frozen R26D contract and protected production boundary
+        run: |
+          set -euo pipefail
+          test -s docs/research/RB_R26D_EXIT_SIGNIFICANCE_EFFECT_ATLAS_V1_FROZEN_PLAN.md
+          test -s docs/research/RESEARCH_COMPONENT_PRESERVATION_DOCTRINE.md
+          test -s docs/research/RB_RECEIVING_R23_R26_HANDOFF_LATEST.md
+          test -s scripts/backtest/audit_rb_r26d_exit_significance_effect_v1.py
+          python -m py_compile scripts/backtest/audit_rb_r26d_exit_significance_effect_v1.py
+          sha256sum docs/research/RB_R26D_EXIT_SIGNIFICANCE_EFFECT_ATLAS_V1_FROZEN_PLAN.md | tee r26d_plan.sha256
+          sha256sum scripts/backtest/audit_rb_r26d_exit_significance_effect_v1.py | tee r26d_code.sha256
+          git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
+            scripts/modeling \
+            scripts/run_rb_week1_no_odds.py \
+            scripts/run_pricing_with_full_roster_universe_v3.py \
+            scripts/run_pricing_with_full_roster_universe_v3_core.py \
+            scripts/run_pricing_with_full_roster_universe_v4_production.py \
+            scripts/simulation_v2.py \
+            scripts/simulation_c2_qb_candidate.py \
+            data/models \
+            model \
+            .github/workflows/full-slate.yml \
+            .github/workflows/production-week1-v4-r22-certification.yml
+          echo 'R26D_PROTECTED_PRODUCTION_BOUNDARY_PASS'
+
+      - name: Verify and download immutable R26 and R26C evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          R26_META="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26_ARTIFACT_ID}" --jq '.digest')"
+          R26C_META="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26C_ARTIFACT_ID}" --jq '.digest')"
+          test "$R26_META" = "$R26_DIGEST"
+          test "$R26C_META" = "$R26C_DIGEST"
+          rm -rf parent_r26 parent_r26c
+          mkdir -p parent_r26 parent_r26c
+          gh run download "$R26_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26_ARTIFACT_NAME" --dir parent_r26
+          gh run download "$R26C_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26C_ARTIFACT_NAME" --dir parent_r26c
+          test "$(find parent_r26 -name r26_predictions.csv -type f | wc -l)" -ge 6
+          test "$(find parent_r26c -name r26c_vacancy_teamweek_aggregate.csv -type f | wc -l)" -eq 1
+          test "$(find parent_r26c -name r26c_source_disposition.json -type f | wc -l)" -eq 1
+          echo "R26D_IMMUTABLE_PARENT_EVIDENCE_PASS r26=$R26_META r26c=$R26C_META"
+
+      - name: Execute frozen no-refit R26D effect atlas
+        run: |
+          set -euo pipefail
+          rm -rf data/backtests/r26d_exit_significance_effect_atlas_v1
+          python scripts/backtest/audit_rb_r26d_exit_significance_effect_v1.py \
+            --r26-root parent_r26 \
+            --r26c-root parent_r26c \
+            --out-dir data/backtests/r26d_exit_significance_effect_atlas_v1
+
+      - name: Assert diagnostic integrity
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('data/backtests/r26d_exit_significance_effect_atlas_v1/r26d_disposition.json')
+          d = json.loads(p.read_text())
+          i = d['integrity']
+          assert i['join_rate'] >= 0.995
+          assert i['source_disposition'] == 'EXIT_SIGNIFICANCE_SOURCE_READY'
+          assert i['r26_predictions_regenerated'] is False
+          assert i['r9_refit'] is False
+          assert i['sportsbook_inputs_added'] == 0
+          assert i['production_parameters_changed'] is False
+          assert i['receiving_yard_means_changed'] is False
+          assert i['r22_changed'] is False
+          assert i['primary_targets_pg_threshold'] == 1.0
+          assert i['primary_room_share_threshold'] == 0.25
+          assert d['production_promotion_authorized'] is False
+          assert d['prospective_shadow_authorized'] is False
+          assert d['disposition'] in {
+              'SIGNIFICANCE_ROUTER_HYPOTHESIS_SUPPORTED',
+              'EXIT_SIGNIFICANCE_EFFECT_MIXED_NO_ROUTER',
+              'EXIT_SIGNIFICANCE_EFFECT_INSUFFICIENT',
+          }
+          print('R26D_DIAGNOSTIC_INTEGRITY_PASS disposition=' + d['disposition'])
+          PY
+
+      - name: Show R26D result
+        run: |
+          cat data/backtests/r26d_exit_significance_effect_atlas_v1/r26d_disposition.json
+          echo '=== pooled ==='
+          cat data/backtests/r26d_exit_significance_effect_atlas_v1/r26d_pooled_significance_effect.csv
+          echo '=== season replication ==='
+          cat data/backtests/r26d_exit_significance_effect_atlas_v1/r26d_season_replication_gates.csv
+          echo '=== role ==='
+          cat data/backtests/r26d_exit_significance_effect_atlas_v1/r26d_role_significance_effect.csv
+          echo '=== phase ==='
+          cat data/backtests/r26d_exit_significance_effect_atlas_v1/r26d_phase_significance_effect.csv
+
+      - name: Upload R26D evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r26d-exit-significance-effect-atlas-v1
+          retention-days: 90
+          path: |
+            r26d_plan.sha256
+            r26d_code.sha256
+            data/backtests/r26d_exit_significance_effect_atlas_v1/*
