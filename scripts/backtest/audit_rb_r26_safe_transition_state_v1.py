@@ -7,7 +7,7 @@ Uses only:
 - strictly earlier depth snapshot.
 
 No player outcome/stat table, participation data, sportsbook data, or model prediction
-is loaded.  Same-week historical depth is intentionally NOT used.
+is loaded. Same-week historical depth is intentionally NOT used.
 """
 from __future__ import annotations
 
@@ -20,7 +20,11 @@ import numpy as np
 import pandas as pd
 
 from scripts._opponent_map import canon_team
-from scripts.backtest.historical_inputs import _load_nflreadpy_weekly_sources, build_schedule_history
+from scripts.backtest.historical_inputs import (
+    ALLOWED_ROSTER_STATUS,
+    _load_nflreadpy_weekly_sources,
+    build_schedule_history,
+)
 
 RB_POSITIONS = {"RB", "HB", "FB"}
 
@@ -62,6 +66,14 @@ def normalize_roster(df: pd.DataFrame, season: int) -> pd.DataFrame:
         "position": d[pos].astype(str).str.upper().str.strip(),
         "status": d[status].astype(str).str.upper().str.strip() if status else "",
     })
+    # Mechanical contract alignment: historical_inputs.build_pregame_universe_for_week
+    # admits ACT/INA when status exists. R26 transition state must use the same
+    # roster population for both target and prior snapshots; transaction/developmental
+    # rows such as CUT/DEV/RES are not current pregame backfield members.
+    if status:
+        keep = x["status"].isin(ALLOWED_ROSTER_STATUS)
+        if keep.any():
+            x = x.loc[keep].copy()
     x = x.loc[x["position"].isin(RB_POSITIONS) & x["week"].notna() & x["player_key"].ne("")].copy()
     x["week"] = x["week"].astype(int)
     return x.drop_duplicates(["season", "week", "team", "player_key"], keep="last")
@@ -173,13 +185,14 @@ def main() -> int:
                 z["prior_depth_team_club"] = ""
             z["prior_depth_available"] = z["prior_depth_position"].fillna("").astype(str).str.strip().ne("").astype(int)
 
+            current_room_rows = []
             for team, cg in cur.groupby("team"):
                 pg = prev.loc[prev["team"].eq(team)]
                 cur_set = set(cg["player_key"])
                 prev_set = set(pg["player_key"])
                 entrants = cur_set - prev_set
                 exits = prev_set - cur_set
-                room_rows.append({
+                row = {
                     "season": int(season),
                     "week": int(week),
                     "team": team,
@@ -191,8 +204,10 @@ def main() -> int:
                     "room_exits_n": int(len(exits)),
                     "room_turnover_n": int(len(entrants) + len(exits)),
                     "room_turnover_flag": int(bool(entrants or exits)),
-                })
-            room = pd.DataFrame(room_rows[-cur["team"].nunique():])
+                }
+                room_rows.append(row)
+                current_room_rows.append(row)
+            room = pd.DataFrame(current_room_rows)
             z = z.merge(room[["season", "week", "team", "current_rb_room_n", "prior_rb_room_n", "room_entrants_n", "room_exits_n", "room_turnover_n", "room_turnover_flag"]], on=["season", "week", "team"], how="left", validate="many_to_one")
             player_rows.append(z)
 
@@ -236,6 +251,7 @@ def main() -> int:
         "target_game_participation_used": False,
         "sportsbook_inputs_used": False,
         "production_parameters_changed": False,
+        "allowed_roster_status": sorted(ALLOWED_ROSTER_STATUS),
         "target_seasons": target_seasons,
         "rows": int(len(players)),
         "continuing_same_team_rate": float(players["continuing_same_team"].mean()),
@@ -245,7 +261,7 @@ def main() -> int:
         "prior_depth_coverage": float(players["prior_depth_available"].mean()),
         "week1_rows": int(players["week"].eq(1).sum()),
         "week1_prior_depth_coverage": float(players.loc[players["week"].eq(1), "prior_depth_available"].mean()),
-        "contract": "current-week roster + strictly prior roster/depth only",
+        "contract": "canonical ACT/INA current-week roster + strictly prior ACT/INA roster/depth only",
     }
     (a.out_dir / "r26_safe_transition_disposition.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(summary.to_csv(index=False))
