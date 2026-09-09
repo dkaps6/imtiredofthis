@@ -23,16 +23,19 @@ def test_scoring_enrichment_preserves_playerform_prior_current_columns(tmp_path,
             "season": 2025, "week": 18, "player": "Alpha WR", "player_clean_key": "alphawr",
             "player_identity_key": identity, "player_id": "00-0099000", "team": "IND",
             "position": "WR", "identity_full_name_key": "alphawr", "identity_base_name_key": "alphawr",
+            "rushing_tds": 0, "receiving_tds": 1,
         },
         {
             "season": 2026, "week": 1, "player": "Alpha WR", "player_clean_key": "alphawr",
             "player_identity_key": identity, "player_id": "00-0099000", "team": "IND",
             "position": "WR", "identity_full_name_key": "alphawr", "identity_base_name_key": "alphawr",
+            "rushing_tds": 0, "receiving_tds": 0,
         },
         {
             "season": 2026, "week": 2, "player": "Alpha WR", "player_clean_key": "alphawr",
             "player_identity_key": identity, "player_id": "00-0099000", "team": "IND",
             "position": "WR", "identity_full_name_key": "alphawr", "identity_base_name_key": "alphawr",
+            "rushing_tds": 0, "receiving_tds": 1,
         },
     ])
     form.to_csv(tmp_path / "player_form_consensus.csv", index=False)
