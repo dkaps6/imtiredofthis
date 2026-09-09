@@ -1,0 +1,123 @@
+name: RB R23 Baseline Decomposition V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-r23-receiving-entitlement-mean-v1
+    paths:
+      - .github/workflows/rb-r23-baseline-decomposition-v1.yml
+      - docs/research/RB_R23_RECEIVING_ENTITLEMENT_MEAN_FROZEN_PLAN.md
+
+jobs:
+  decompose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml scikit-learn joblib
+
+      - name: Install immutable prior-lineage diagnostic helpers
+        run: |
+          set -euo pipefail
+          OLD=40759f4c19c26e7881ddadad5b219dbe16c4d0ca
+          curl -fsSL "https://raw.githubusercontent.com/dkaps6/imtiredofthis/${OLD}/scripts/backtest/decompose_rb_receiving_current_entitlement_v1.py" -o scripts/backtest/decompose_rb_receiving_current_entitlement_v1.py
+          curl -fsSL "https://raw.githubusercontent.com/dkaps6/imtiredofthis/${OLD}/scripts/backtest/evaluate_wr_room_empirical_bayes_v1.py" -o scripts/backtest/evaluate_wr_room_empirical_bayes_v1.py
+          test "$(sha256sum scripts/backtest/decompose_rb_receiving_current_entitlement_v1.py | awk '{print $1}')" = "$(curl -fsSL https://raw.githubusercontent.com/dkaps6/imtiredofthis/${OLD}/scripts/backtest/decompose_rb_receiving_current_entitlement_v1.py | sha256sum | awk '{print $1}')"
+          echo "prior_lineage_commit=${OLD}"
+
+      - name: Verify frozen plan exists before outcomes
+        run: |
+          test -s docs/research/RB_R23_RECEIVING_ENTITLEMENT_MEAN_FROZEN_PLAN.md
+          sha256sum docs/research/RB_R23_RECEIVING_ENTITLEMENT_MEAN_FROZEN_PLAN.md | tee r23_frozen_plan.sha256
+
+      - name: Build and validate 2023 historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/r23_2023
+          python scripts/backtest/build_historical_inputs.py --season 2023 --prior-season 2022 --weeks '1-18' --out-dir data/r23_2023
+          python scripts/backtest/enrich_historical_defense.py --team-weekly data/r23_2023/team_weekly_history.csv --seasons 2022,2023 --audit data/r23_2023/historical_defense_enrichment_audit.csv --observations data/r23_2023/historical_defense_observations.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2023 --prior-season 2022 --weeks '1-18' --data-dir data/r23_2023 --report data/r23_2023/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs.py --seasons 2022,2023 --schedule data/r23_2023/schedule_history.csv --out data/r23_2023/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2022,2023 --out data/r23_2023/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/r23_2023/schedule_history.csv --out data/r23_2023/weather_history.csv
+
+      - name: Decompose 2023
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/decompose_rb_receiving_current_entitlement_v1.py --season 2023 --prior-season 2022 --weeks '1-18' --player-logs data/r23_2023/player_game_logs_history.csv --team-weekly data/r23_2023/team_weekly_history.csv --schedule data/r23_2023/schedule_history.csv --universe-dir data/r23_2023/pregame_universe --injuries data/r23_2023/injuries_history.csv --weather data/r23_2023/weather_history.csv --out-dir data/backtests/r23_decomp_2023
+
+      - name: Build and validate 2024 historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/r23_2024
+          python scripts/backtest/build_historical_inputs.py --season 2024 --prior-season 2023 --weeks '1-18' --out-dir data/r23_2024
+          python scripts/backtest/enrich_historical_defense.py --team-weekly data/r23_2024/team_weekly_history.csv --seasons 2023,2024 --audit data/r23_2024/historical_defense_enrichment_audit.csv --observations data/r23_2024/historical_defense_observations.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2024 --prior-season 2023 --weeks '1-18' --data-dir data/r23_2024 --report data/r23_2024/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs.py --seasons 2023,2024 --schedule data/r23_2024/schedule_history.csv --out data/r23_2024/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2023,2024 --out data/r23_2024/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/r23_2024/schedule_history.csv --out data/r23_2024/weather_history.csv
+
+      - name: Decompose 2024
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/decompose_rb_receiving_current_entitlement_v1.py --season 2024 --prior-season 2023 --weeks '1-18' --player-logs data/r23_2024/player_game_logs_history.csv --team-weekly data/r23_2024/team_weekly_history.csv --schedule data/r23_2024/schedule_history.csv --universe-dir data/r23_2024/pregame_universe --injuries data/r23_2024/injuries_history.csv --weather data/r23_2024/weather_history.csv --out-dir data/backtests/r23_decomp_2024
+
+      - name: Build and validate 2025 historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/r23_2025
+          python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks '1-18' --out-dir data/r23_2025
+          python scripts/backtest/enrich_historical_defense.py --team-weekly data/r23_2025/team_weekly_history.csv --seasons 2024,2025 --audit data/r23_2025/historical_defense_enrichment_audit.csv --observations data/r23_2025/historical_defense_observations.csv
+          python scripts/backtest/validate_historical_inputs.py --season 2025 --prior-season 2024 --weeks '1-18' --data-dir data/r23_2025 --report data/r23_2025/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs.py --seasons 2024,2025 --schedule data/r23_2025/schedule_history.csv --out data/r23_2025/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2024,2025 --out data/r23_2025/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule data/r23_2025/schedule_history.csv --out data/r23_2025/weather_history.csv
+
+      - name: Decompose 2025
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/decompose_rb_receiving_current_entitlement_v1.py --season 2025 --prior-season 2024 --weeks '1-18' --player-logs data/r23_2025/player_game_logs_history.csv --team-weekly data/r23_2025/team_weekly_history.csv --schedule data/r23_2025/schedule_history.csv --universe-dir data/r23_2025/pregame_universe --injuries data/r23_2025/injuries_history.csv --weather data/r23_2025/weather_history.csv --out-dir data/backtests/r23_decomp_2025
+
+      - name: Assert sportsbook-free diagnostic contract
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          for season in (2023, 2024, 2025):
+              p=Path(f'data/backtests/r23_decomp_{season}/rb_receiving_player_decomposition.csv')
+              x=pd.read_csv(p)
+              assert len(x)>0
+              assert int(x['sportsbook_inputs_used'].fillna(0).sum()) == 0
+          print('R23 baseline decomposition sportsbook-free contract: PASS')
+          PY
+
+      - name: Upload R23 baseline evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r23-baseline-decomposition-v1
+          path: |
+            r23_frozen_plan.sha256
+            data/r23_2023/historical_input_validation.csv
+            data/r23_2024/historical_input_validation.csv
+            data/r23_2025/historical_input_validation.csv
+            data/backtests/r23_decomp_2023/*
+            data/backtests/r23_decomp_2024/*
+            data/backtests/r23_decomp_2025/*
+          if-no-files-found: warn
+          retention-days: 30
