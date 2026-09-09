@@ -19,6 +19,8 @@ env:
   R26N_IMPLEMENTATION_COMMIT: 5299ce54575ffcfe33ad203db0ee00285181291f
   R26N_REPAIR_PLAN_COMMIT: 8268327683e9d826c05d2d72a4467e353f4fa9f1
   R26N_REPAIR_HELPER_COMMIT: 0b4c2df7c14b16bd0e945b425aac7f35e015fa3d
+  R26N_SECOND_REPAIR_PLAN_COMMIT: dbfe863212dc5b2684ec1005d66102342bf87777
+  R26N_DTYPE_WRAPPER_COMMIT: 9abdaa9a6262aa87ac601d7bc665209b94036b20
 
   R26M_RUN_ID: 34390505549
   R26M_ARTIFACT_ID: 10119429741
@@ -69,26 +71,32 @@ jobs:
           CODE=scripts/backtest/build_rb_r26n_2026_week1_unmodified_r26_structural_candidate_v1.py
           REPAIR_NOTE=docs/research/RB_R26N_RUN1_MECHANICAL_REPAIR_V1.md
           REPAIR_HELPER=scripts/backtest/stage_r26n_production_identity_key_repair_v1.py
+          SECOND_REPAIR_NOTE=docs/research/RB_R26N_SECOND_MECHANICAL_REPAIR_V1.md
+          DTYPE_WRAPPER=scripts/backtest/run_rb_r26n_with_identity_dtype_compat_v1.py
 
           test -s "$PLAN"
           test -s "$LOCK"
           test -s "$CODE"
           test -s "$REPAIR_NOTE"
           test -s "$REPAIR_HELPER"
-          python -m py_compile "$CODE" "$REPAIR_HELPER"
+          test -s "$SECOND_REPAIR_NOTE"
+          test -s "$DTYPE_WRAPPER"
+          python -m py_compile "$CODE" "$REPAIR_HELPER" "$DTYPE_WRAPPER"
 
-          # Original science and candidate builder remain byte-identical to their locks.
           git diff --quiet "$R26N_PLAN_COMMIT" HEAD -- "$PLAN"
           git diff --quiet "$R26N_IMPLEMENTATION_COMMIT" HEAD -- "$CODE"
-          # Mechanical repair intent was frozen before helper implementation.
           git diff --quiet "$R26N_REPAIR_PLAN_COMMIT" HEAD -- "$REPAIR_NOTE"
           git diff --quiet "$R26N_REPAIR_HELPER_COMMIT" HEAD -- "$REPAIR_HELPER"
+          git diff --quiet "$R26N_SECOND_REPAIR_PLAN_COMMIT" HEAD -- "$SECOND_REPAIR_NOTE"
+          git diff --quiet "$R26N_DTYPE_WRAPPER_COMMIT" HEAD -- "$DTYPE_WRAPPER"
 
           sha256sum "$PLAN" | tee r26n_plan.sha256
           sha256sum "$LOCK" | tee r26n_lock.sha256
           sha256sum "$CODE" | tee r26n_code.sha256
           sha256sum "$REPAIR_NOTE" | tee r26n_repair_note.sha256
           sha256sum "$REPAIR_HELPER" | tee r26n_repair_helper.sha256
+          sha256sum "$SECOND_REPAIR_NOTE" | tee r26n_second_repair_note.sha256
+          sha256sum "$DTYPE_WRAPPER" | tee r26n_dtype_wrapper.sha256
 
           git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
             scripts/modeling \
@@ -156,7 +164,6 @@ jobs:
             --staged-root staged_production \
             --audit r26n_identity_key_repair_audit.json
           test -s r26n_identity_key_repair_audit.json
-          # Immutable downloaded parent must still lack the derived key column.
           python - <<'PY'
           import pandas as pd
           src=pd.read_csv('parent_production/data/model_context_bridge.csv', nrows=1)
@@ -166,11 +173,11 @@ jobs:
           print('R26N_IMMUTABLE_PARENT_UNTOUCHED_PASS')
           PY
 
-      - name: Materialize frozen R26N structural candidate
+      - name: Materialize frozen R26N structural candidate with dtype-only compatibility
         run: |
           set -euo pipefail
           rm -rf data/backtests/r26n_2026_week1_unmodified_r26_structural_candidate_v1
-          python scripts/backtest/build_rb_r26n_2026_week1_unmodified_r26_structural_candidate_v1.py \
+          python scripts/backtest/run_rb_r26n_with_identity_dtype_compat_v1.py \
             --production-root staged_production \
             --r26m-root parent_r26m \
             --r26l-root parent_r26l \
@@ -227,6 +234,8 @@ jobs:
             r26n_code.sha256
             r26n_repair_note.sha256
             r26n_repair_helper.sha256
+            r26n_second_repair_note.sha256
+            r26n_dtype_wrapper.sha256
             r26n_protected_clean.txt
             r26n_identity_key_repair_audit.json
             data/backtests/r26n_2026_week1_unmodified_r26_structural_candidate_v1/*
