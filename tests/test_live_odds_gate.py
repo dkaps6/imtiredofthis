@@ -76,6 +76,10 @@ def test_clear_stale_odds_artifacts_removes_previous_outputs(tmp_path, monkeypat
         "CRITICAL_EVENT_ARTIFACTS",
         [outputs / "props_raw.csv", data / "opponent_map_from_props.csv"],
     )
+    # LIVE_DERIVED_ARTIFACTS is intentionally materialized at module import from
+    # the canonical production paths. Unit tests that relocate DATA/OUTPUTS must
+    # relocate that frozen path set as well; production behavior is unchanged.
+    monkeypatch.setattr(gate, "LIVE_DERIVED_ARTIFACTS", {data / "live_odds_status.json"})
 
     _clear_stale_odds_artifacts()
     assert all(not path.exists() for path in stale)
