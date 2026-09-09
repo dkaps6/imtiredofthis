@@ -1,0 +1,310 @@
+name: RB R26U 2026 Week 1 Current Roster Refresh V1
+
+on:
+  push:
+    branches:
+      - research-rb-r26u-2026-week1-current-roster-refresh-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONPATH: ${{ github.workspace }}
+  FETCH_LIVE_ODDS: "false"
+  SEASON: "2026"
+  PRIOR_SEASON: "2025"
+  SLATE_DATE: ""
+  PROTECTED_HEAD: f8417f55b04ce0e19baf260e9d532765034c47f1
+  PLAN_COMMIT: a823b8e52cb6de8ba01e8d6f41b091f0aaddb171
+  AUDIT_COMMIT: 6242f0d6a83fa6a6da7bbce49f2f3be18d3eedec
+  LOCK_COMMIT: cfa85012e84c498b9bd112643444dabb728ede86
+  R26N_CODE_COMMIT: 5299ce54575ffcfe33ad203db0ee00285181291f
+  R26N_HELPER_COMMIT: 0b4c2df7c14b16bd0e945b425aac7f35e015fa3d
+  R26N_DTYPE_COMMIT: 9abdaa9a6262aa87ac601d7bc665209b94036b20
+
+  READINESS_RUN: "34414256467"
+  READINESS_ARTIFACT: "10128488192"
+  READINESS_NAME: rb-week1-pregame-operational-readiness-v1
+  READINESS_DIGEST: sha256:84001f73ecd9c1169c87b6109c705c06a55660ace9d69fd4894aecd3c48e8073
+  READINESS_HEAD: e9f98e98b0a2811b2409b217a88141bc984ba83a
+
+  PROD_RUN: "34317211395"
+  PROD_ARTIFACT: "10090547415"
+  PROD_NAME: run_34317211395
+  PROD_DIGEST: sha256:7eab77e41c5879d4f54d87497eee0d1186010784cfc4ef966178930e16fb7c3b
+
+  R26M_RUN: "34390505549"
+  R26M_ARTIFACT: "10119429741"
+  R26M_NAME: rb-r26m-2026-week1-prospective-qualification-synthesis-v1
+  R26M_DIGEST: sha256:1306a3a2e58a0b129ac7e9fe34ad6407d87c491494e8fc27dd0284ba96996b76
+
+  R26L_RUN: "34389455694"
+  R26L_ARTIFACT: "10119058769"
+  R26L_NAME: rb-r26l-2026-week1-regime-transportability-v1
+  R26L_DIGEST: sha256:3351dfb5bbf6b571174a94ddf0a03179d70786edbb91d316e4fdf2c3cf005c46
+
+  R19_RUN: "34288244770"
+  R19_ARTIFACT: "10080377483"
+  R19_NAME: rb-r19-deployable-tail-scorer-refit-v1
+  R19_DIGEST: sha256:11432b9d7b7f2367935a862b63c30df9f40955e479806ab67d90921b63a907c7
+  R19_MODEL_SHA: 9ed6a98b0022e86992fb468df40a9fd79a54bc87885777ac5955a898b5c292ba
+
+  R26Q_RUN: "34400524030"
+  R26Q_ARTIFACT: "10123251043"
+  R26Q_NAME: rb-r26q-2026-week1-receptions-prospective-seal-v1
+  R26Q_DIGEST: sha256:dd3ec0e8e3831ab7f2255c2e5abf343cda8a7943d33a1d4863e52372d6f858a1
+  R26Q_HEAD: 68661da94f03cab2f96182d47636cf55e088b5de
+
+jobs:
+  current-roster-refresh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install locked refresh dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml beautifulsoup4 lxml scipy scikit-learn
+
+      - name: Verify frozen R26U and unchanged R26/protected runtime contracts
+        run: |
+          set -euo pipefail
+          PLAN=docs/research/RB_R26U_2026_WEEK1_CURRENT_ROSTER_REFRESH_V1_FROZEN_PLAN.md
+          AUDIT=scripts/backtest/audit_rb_r26u_2026_week1_current_roster_refresh_v1.py
+          LOCK=docs/research/RB_R26U_2026_WEEK1_CURRENT_ROSTER_REFRESH_V1_IMPLEMENTATION_LOCK.md
+          R26N=scripts/backtest/build_rb_r26n_2026_week1_unmodified_r26_structural_candidate_v1.py
+          HELPER=scripts/backtest/stage_r26n_production_identity_key_repair_v1.py
+          DTYPE=scripts/backtest/run_rb_r26n_with_identity_dtype_compat_v1.py
+          test -s "$PLAN" && test -s "$AUDIT" && test -s "$LOCK" && test -s "$R26N" && test -s "$HELPER" && test -s "$DTYPE"
+          python -m py_compile "$AUDIT" "$R26N" "$HELPER" "$DTYPE"
+          git diff --quiet "$PLAN_COMMIT" HEAD -- "$PLAN"
+          git diff --quiet "$AUDIT_COMMIT" HEAD -- "$AUDIT"
+          git diff --quiet "$LOCK_COMMIT" HEAD -- "$LOCK"
+          git diff --quiet "$R26N_CODE_COMMIT" HEAD -- "$R26N"
+          git diff --quiet "$R26N_HELPER_COMMIT" HEAD -- "$HELPER"
+          git diff --quiet "$R26N_DTYPE_COMMIT" HEAD -- "$DTYPE"
+          git diff --quiet "$PROTECTED_HEAD" HEAD -- \
+            scripts/run_player_form_v2_loader.py \
+            scripts/run_player_form_v2.py \
+            scripts/player_form_v2.py \
+            scripts/enrich_player_scoring_v2.py \
+            scripts/run_model_context_bridge.py \
+            scripts/run_rb_week1_no_odds.py \
+            scripts/run_pricing_with_full_roster_universe_v1.py \
+            scripts/run_pricing_with_full_roster_universe_v3_core.py \
+            scripts/modeling/rb_rush_synthesis_v1.py \
+            scripts/modeling/rb_receiving_identity_runtime_v1.py \
+            data/models \
+            model/qb_distribution_state_selector_v1.json
+          sha256sum "$PLAN" | tee r26u_plan.sha256
+          sha256sum "$AUDIT" | tee r26u_audit.sha256
+          sha256sum "$LOCK" | tee r26u_lock.sha256
+          sha256sum "$R26N" | tee r26u_r26n_builder.sha256
+          sha256sum "$HELPER" | tee r26u_identity_helper.sha256
+          sha256sum "$DTYPE" | tee r26u_dtype_wrapper.sha256
+          echo PASS > r26u_protected_runtime_clean.txt
+
+      - name: Verify and download exact R26U parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          verify () {
+            local id="$1" digest="$2" head="$3"
+            local actual actual_head
+            actual="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}" --jq '.digest')"
+            actual_head="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}" --jq '.workflow_run.head_sha')"
+            test "$actual" = "$digest"
+            if [ -n "$head" ]; then test "$actual_head" = "$head"; fi
+            echo "artifact=$id digest=$actual head=$actual_head"
+          }
+          verify "$READINESS_ARTIFACT" "$READINESS_DIGEST" "$READINESS_HEAD"
+          verify "$PROD_ARTIFACT" "$PROD_DIGEST" "$PROTECTED_HEAD"
+          verify "$R26M_ARTIFACT" "$R26M_DIGEST" ""
+          verify "$R26L_ARTIFACT" "$R26L_DIGEST" ""
+          verify "$R19_ARTIFACT" "$R19_DIGEST" ""
+          verify "$R26Q_ARTIFACT" "$R26Q_DIGEST" "$R26Q_HEAD"
+          rm -rf parent_readiness parent_production parent_r26m parent_r26l parent_r19 parent_r26q current_root staged_current
+          mkdir -p parent_readiness parent_production parent_r26m parent_r26l parent_r19 parent_r26q
+          gh run download "$READINESS_RUN" --repo "$GITHUB_REPOSITORY" --name "$READINESS_NAME" --dir parent_readiness
+          gh run download "$PROD_RUN" --repo "$GITHUB_REPOSITORY" --name "$PROD_NAME" --dir parent_production
+          gh run download "$R26M_RUN" --repo "$GITHUB_REPOSITORY" --name "$R26M_NAME" --dir parent_r26m
+          gh run download "$R26L_RUN" --repo "$GITHUB_REPOSITORY" --name "$R26L_NAME" --dir parent_r26l
+          gh run download "$R19_RUN" --repo "$GITHUB_REPOSITORY" --name "$R19_NAME" --dir parent_r19
+          gh run download "$R26Q_RUN" --repo "$GITHUB_REPOSITORY" --name "$R26Q_NAME" --dir parent_r26q
+          test -s parent_readiness/current_roles_ourlads.csv
+          test -s parent_production/data/player_form_consensus.csv
+          test -s parent_production/data/model_context_bridge.csv
+          test -s parent_r26m/data/backtests/r26m_2026_week1_prospective_qualification_synthesis_v1/r26m_disposition.json
+          test -s parent_r26l/data/backtests/r26l_2026_week1_regime_transportability_v1/r26l_2026_week1_room_state.csv
+          test -s parent_r26q/data/backtests/r26q_2026_week1_receptions_prospective_seal_v1/r26q_disposition.json
+          R19_MODEL="$(find parent_r19 -type f -name rb_r19_tail_scorer_model_v1.json -print)"
+          test "$(printf '%s\n' "$R19_MODEL" | sed '/^$/d' | wc -l)" -eq 1
+          test "$(sha256sum "$R19_MODEL" | awk '{print $1}')" = "$R19_MODEL_SHA"
+          echo PASS > r26u_parents_verified.txt
+
+      - name: Construct isolated current-roster pregame football root
+        run: |
+          set -euo pipefail
+          cp -a parent_production current_root
+          cp parent_readiness/current_roles_ourlads.csv current_root/data/roles_ourlads.csv
+          mkdir -p current_root/outputs current_root/model
+          cp parent_readiness/current_roles_ourlads.csv current_root/outputs/roles_ourlads.csv
+          git show "$PROTECTED_HEAD:model/qb_distribution_state_selector_v1.json" > current_root/model/qb_distribution_state_selector_v1.json
+          python - <<'PY'
+          import pandas as pd
+          x=pd.read_csv('current_root/data/roles_ourlads.csv',low_memory=False)
+          assert len(x)==468 and x.team.nunique()==32
+          pos=x.position.astype(str).str.upper()
+          rb=x.loc[pos.isin(['RB','HB','TB','FB'])]
+          assert len(rb)==107
+          names=set(rb.player.astype(str))
+          assert 'Lan Larison' in names and 'Corey Kiner' not in names
+          print('R26U_PINNED_CURRENT_ROSTER_PASS rows=',len(x),'rb_fb=',len(rb))
+          PY
+
+      - name: Refresh PlayerForm from pinned current roster with live odds disabled
+        run: |
+          set -euo pipefail
+          cd current_root
+          export PYTHONPATH="${GITHUB_WORKSPACE}"
+          export FETCH_LIVE_ODDS=false
+          export SEASON=2026 PRIOR_SEASON=2025 SLATE_DATE=""
+          python "${GITHUB_WORKSPACE}/scripts/run_player_form_v2_loader.py" --season 2026 --prior-season 2025 --date ""
+          python "${GITHUB_WORKSPACE}/scripts/enrich_player_scoring_v2.py" --season 2026 --prior-season 2025 --date ""
+          test -s data/player_form_consensus.csv
+          test -s data/player_game_logs.csv
+          python - <<'PY'
+          import pandas as pd
+          f=pd.read_csv('data/player_form_consensus.csv',low_memory=False)
+          logs=pd.read_csv('data/player_game_logs.csv',low_memory=False)
+          assert len(f)==468 and f.team.nunique()==32
+          s=pd.to_numeric(logs.season,errors='coerce'); w=pd.to_numeric(logs.week,errors='coerce')
+          bad=logs.loc[s.eq(2026)&w.eq(1)]
+          if len(bad): raise SystemExit(f'R26U OUTCOME LEAKAGE BLOCK: observed 2026 Week1 player rows={len(bad)}')
+          print('R26U_PLAYERFORM_CURRENT_PREGAME_PASS rows=',len(f),'week1_observed_rows=',len(bad))
+          PY
+
+      - name: Refresh protected model context and P3 on current roster
+        run: |
+          set -euo pipefail
+          cd current_root
+          export PYTHONPATH="${GITHUB_WORKSPACE}"
+          export FETCH_LIVE_ODDS=false
+          export SEASON=2026 PRIOR_SEASON=2025 SLATE_DATE=""
+          python "${GITHUB_WORKSPACE}/scripts/run_model_context_bridge.py"
+          test -s data/model_context_bridge.csv
+          python "${GITHUB_WORKSPACE}/scripts/run_rb_week1_no_odds.py" --season 2026 --week 1 --iterations 25000 --out data/rb_rush_synthesis_context.csv
+          test -s data/rb_rush_synthesis_context.csv
+          python - <<'PY'
+          import pandas as pd
+          c=pd.read_csv('data/model_context_bridge.csv',low_memory=False)
+          p=pd.read_csv('data/rb_rush_synthesis_context.csv',low_memory=False)
+          assert len(c)==468
+          assert len(p)==107 and p.team.nunique()==32
+          assert pd.to_numeric(p.sportsbook_inputs_used,errors='coerce').eq(0).all()
+          assert pd.to_numeric(p.simulation_iterations,errors='coerce').eq(25000).all()
+          print('R26U_CURRENT_CONTEXT_P3_PASS context=',len(c),'p3=',len(p))
+          PY
+
+      - name: Stage exact compact identity compatibility for frozen R26N builder
+        run: |
+          set -euo pipefail
+          python scripts/backtest/stage_r26n_production_identity_key_repair_v1.py \
+            --source-root current_root \
+            --staged-root staged_current \
+            --audit r26u_identity_staging_audit.json
+          test -s r26u_identity_staging_audit.json
+          python -c "import json; d=json.load(open('r26u_identity_staging_audit.json')); assert d['pass'] and not d['football_values_changed'] and not d['players_added_or_removed'] and not d['fuzzy_matching_used']; print('R26U_IDENTITY_STAGING_PASS')"
+
+      - name: Materialize exact frozen R26 mechanism on current roster
+        run: |
+          set -euo pipefail
+          rm -rf data/backtests/r26u_r26n_current_roster_structural
+          python scripts/backtest/run_rb_r26n_with_identity_dtype_compat_v1.py \
+            --production-root staged_current \
+            --r26m-root parent_r26m \
+            --r26l-root parent_r26l \
+            --r19-root parent_r19 \
+            --protected-clean-marker r26u_protected_runtime_clean.txt \
+            --out-dir data/backtests/r26u_r26n_current_roster_structural
+          test -s data/backtests/r26u_r26n_current_roster_structural/r26n_disposition.json
+
+      - name: Execute frozen R26U current-roster audit
+        run: |
+          set -euo pipefail
+          rm -rf data/backtests/r26u_2026_week1_current_roster_refresh_v1
+          python scripts/backtest/audit_rb_r26u_2026_week1_current_roster_refresh_v1.py \
+            --current-root current_root \
+            --current-roles parent_readiness/current_roles_ourlads.csv \
+            --r26n-root data/backtests/r26u_r26n_current_roster_structural \
+            --r26q-root parent_r26q \
+            --parents-marker r26u_parents_verified.txt \
+            --protected-marker r26u_protected_runtime_clean.txt \
+            --out-dir data/backtests/r26u_2026_week1_current_roster_refresh_v1
+
+      - name: Assert R26U authority ceiling and PASS
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('data/backtests/r26u_2026_week1_current_roster_refresh_v1/r26u_disposition.json')
+          d=json.loads(p.read_text())
+          assert d['disposition']=='R26U_2026_WEEK1_CURRENT_ROSTER_REFRESH_PASS_READY_FOR_CURRENT_SIDECAR_INTEGRATION'
+          assert d['gate_count']==35 and d['gate_pass_count']==35
+          assert d['current_player_rows']==468 and d['current_rb_fb_rows']==107 and d['current_rb_fb_teams']==32
+          assert d['week1_outcomes_used']==0 and d['sportsbook_football_inputs_used']==0
+          assert d['r9_refit'] is False and d['production_parameters_changed'] is False
+          assert d['production_promotion_performed'] is False and d['live_shadow_activation_performed'] is False
+          assert d['original_r26q_untouched'] is True and d['current_sidecar_integration_authorized'] is True
+          assert d['larison'] and d['larison']['candidate_receptions'] >= 0
+          print('R26U_FINAL_PASS larison=',d['larison'])
+          PY
+
+      - name: Show R26U evidence
+        if: always()
+        run: |
+          ROOT=data/backtests/r26u_2026_week1_current_roster_refresh_v1
+          if [ -s "$ROOT/r26u_disposition.json" ]; then
+            cat "$ROOT/r26u_disposition.json"
+            echo '=== failed gates ==='
+            python -c "import pandas as pd; x=pd.read_csv('$ROOT/r26u_gate_matrix.csv'); print(x.loc[~x.passed].to_string(index=False))"
+            echo '=== NE snapshot rows ==='
+            python -c "import pandas as pd; x=pd.read_csv('$ROOT/r26u_shared_player_comparison_vs_r26q.csv'); print(x.loc[x.team.eq('NE')].to_string(index=False))"
+          fi
+
+      - name: Upload R26U current-roster pregame evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r26u-2026-week1-current-roster-refresh-v1
+          retention-days: 90
+          path: |
+            r26u_plan.sha256
+            r26u_audit.sha256
+            r26u_lock.sha256
+            r26u_r26n_builder.sha256
+            r26u_identity_helper.sha256
+            r26u_dtype_wrapper.sha256
+            r26u_parents_verified.txt
+            r26u_protected_runtime_clean.txt
+            r26u_identity_staging_audit.json
+            parent_readiness/current_roles_ourlads.csv
+            current_root/data/player_form_consensus.csv
+            current_root/data/model_context_bridge.csv
+            current_root/data/rb_rush_synthesis_context.csv
+            data/backtests/r26u_r26n_current_roster_structural/*
+            data/backtests/r26u_2026_week1_current_roster_refresh_v1/*
