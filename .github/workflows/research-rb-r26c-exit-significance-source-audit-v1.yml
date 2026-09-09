@@ -1,0 +1,122 @@
+name: RB R26C Exit Significance Source Audit V1
+
+on:
+  push:
+    branches:
+      - research-rb-r26c-exit-significance-source-audit-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  PRODUCTION_BASE_SHA: f8417f55b04ce0e19baf260e9d532765034c47f1
+  PARENT_RUN_ID: '34356222339'
+  PARENT_ARTIFACT_ID: '10106271075'
+  PARENT_ARTIFACT_NAME: rb-r26-vacancy-gated-r9-retrospective-v1
+  PARENT_DIGEST: sha256:607fca6e11c301ecb2a3bf74e3dfea8ae415bb33cf3c150a6d89eaedada2809e
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install source-audit dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 pyarrow nflreadpy requests
+
+      - name: Verify frozen source contract and production boundary
+        run: |
+          set -euo pipefail
+          test -s docs/research/RB_R26C_EXIT_SIGNIFICANCE_SOURCE_AUDIT_V1_PLAN.md
+          test -s docs/research/RB_R26C_EXIT_SIGNIFICANCE_SOURCE_AUDIT_V1_IMPLEMENTATION_LOCK.md
+          test -s scripts/backtest/audit_rb_r26c_exit_significance_sources_v1.py
+          python -m py_compile scripts/backtest/audit_rb_r26c_exit_significance_sources_v1.py
+          sha256sum docs/research/RB_R26C_EXIT_SIGNIFICANCE_SOURCE_AUDIT_V1_PLAN.md | tee r26c_plan.sha256
+          sha256sum docs/research/RB_R26C_EXIT_SIGNIFICANCE_SOURCE_AUDIT_V1_IMPLEMENTATION_LOCK.md | tee r26c_lock.sha256
+          sha256sum scripts/backtest/audit_rb_r26c_exit_significance_sources_v1.py | tee r26c_code.sha256
+          git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
+            scripts/modeling \
+            scripts/run_rb_week1_no_odds.py \
+            scripts/run_pricing_with_full_roster_universe_v3.py \
+            scripts/run_pricing_with_full_roster_universe_v3_core.py \
+            scripts/run_pricing_with_full_roster_universe_v4_production.py \
+            scripts/simulation_v2.py \
+            scripts/simulation_c2_qb_candidate.py \
+            data/models \
+            model \
+            .github/workflows/full-slate.yml \
+            .github/workflows/production-week1-v4-r22-certification.yml
+          echo 'R26C_PROTECTED_PRODUCTION_BOUNDARY_PASS'
+
+      - name: Verify and download immutable parent room state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          META_DIGEST="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${PARENT_ARTIFACT_ID}" --jq '.digest')"
+          test "$META_DIGEST" = "$PARENT_DIGEST"
+          rm -rf parent_artifact
+          mkdir -p parent_artifact
+          gh run download "$PARENT_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$PARENT_ARTIFACT_NAME" --dir parent_artifact
+          test -s parent_artifact/data/backtests/rb_r26_safe_transition_state/r26_safe_transition_room_state.csv
+          echo "R26C_PARENT_ROOM_STATE_PASS digest=$META_DIGEST"
+
+      - name: Execute source-only exit-significance audit
+        run: |
+          set -euo pipefail
+          rm -rf data/backtests/r26c_exit_significance_source_audit_v1
+          python scripts/backtest/audit_rb_r26c_exit_significance_sources_v1.py \
+            --parent-room-state parent_artifact/data/backtests/rb_r26_safe_transition_state/r26_safe_transition_room_state.csv \
+            --out-dir data/backtests/r26c_exit_significance_source_audit_v1
+
+      - name: Assert source integrity
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('data/backtests/r26c_exit_significance_source_audit_v1/r26c_source_disposition.json')
+          d = json.loads(p.read_text())
+          assert d['target_game_outcomes_selected_or_used'] == 0
+          assert d['target_game_participation_selected_or_used'] == 0
+          assert d['sportsbook_inputs_used'] == 0
+          assert d['same_week_historical_depth_used'] is False
+          assert d['snapshot_order_violations'] == 0
+          assert d['exit_membership_violations'] == 0
+          assert d['strict_asof_identity'] is True
+          assert d['production_parameters_changed'] is False
+          assert d['disposition'] in {
+              'EXIT_SIGNIFICANCE_SOURCE_READY',
+              'EXIT_SIGNIFICANCE_SOURCE_INSUFFICIENT',
+              'EXIT_SIGNIFICANCE_SOURCE_FAILURE',
+          }
+          print('R26C_SOURCE_INTEGRITY_PASS disposition=' + d['disposition'])
+          PY
+
+      - name: Show R26C source disposition
+        run: |
+          cat data/backtests/r26c_exit_significance_source_audit_v1/r26c_source_disposition.json
+          echo '=== season/phase summary ==='
+          cat data/backtests/r26c_exit_significance_source_audit_v1/r26c_season_phase_source_summary.csv
+
+      - name: Upload R26C source evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r26c-exit-significance-source-audit-v1
+          retention-days: 90
+          path: |
+            r26c_plan.sha256
+            r26c_lock.sha256
+            r26c_code.sha256
+            data/backtests/r26c_exit_significance_source_audit_v1/*
