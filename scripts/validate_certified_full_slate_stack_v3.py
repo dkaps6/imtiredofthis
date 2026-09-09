@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts import validate_certified_full_slate_stack_v2 as v2
+from scripts import validate_certified_full_slate_stack_v2_core as v2
 
 DATA = Path("data")
 OUT = DATA / "certified_full_slate_stack_audit.json"
