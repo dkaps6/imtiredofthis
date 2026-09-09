@@ -1,0 +1,201 @@
+name: RB R26N 2026 Week 1 Unmodified R26 Structural Candidate V1
+
+on:
+  push:
+    branches:
+      - research-rb-r26n-2026-week1-unmodified-r26-structural-candidate-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONPATH: ${{ github.workspace }}
+  PRODUCTION_BASE_SHA: f8417f55b04ce0e19baf260e9d532765034c47f1
+  R26N_PLAN_COMMIT: 919285fd0e2042461a5a89472f6832c01da857b4
+  R26N_IMPLEMENTATION_COMMIT: 5299ce54575ffcfe33ad203db0ee00285181291f
+
+  R26M_RUN_ID: 34390505549
+  R26M_ARTIFACT_ID: 10119429741
+  R26M_ARTIFACT_NAME: rb-r26m-2026-week1-prospective-qualification-synthesis-v1
+  R26M_DIGEST: sha256:1306a3a2e58a0b129ac7e9fe34ad6407d87c491494e8fc27dd0284ba96996b76
+
+  PRODUCTION_RUN_ID: 34317211395
+  PRODUCTION_ARTIFACT_ID: 10090547415
+  PRODUCTION_ARTIFACT_NAME: run_34317211395
+  PRODUCTION_DIGEST: sha256:7eab77e41c5879d4f54d87497eee0d1186010784cfc4ef966178930e16fb7c3b
+
+  R26L_RUN_ID: 34389455694
+  R26L_ARTIFACT_ID: 10119058769
+  R26L_ARTIFACT_NAME: rb-r26l-2026-week1-regime-transportability-v1
+  R26L_DIGEST: sha256:3351dfb5bbf6b571174a94ddf0a03179d70786edbb91d316e4fdf2c3cf005c46
+
+  R19_RUN_ID: 34288244770
+  R19_ARTIFACT_ID: 10080377483
+  R19_ARTIFACT_NAME: rb-r19-deployable-tail-scorer-refit-v1
+  R19_DIGEST: sha256:11432b9d7b7f2367935a862b63c30df9f40955e479806ab67d90921b63a907c7
+  R19_INNER_MODEL_SHA256: 9ed6a98b0022e86992fb468df40a9fd79a54bc87885777ac5955a898b5c292ba
+
+jobs:
+  structural-candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install R26N dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml scipy scikit-learn
+
+      - name: Verify frozen R26N contract and protected production boundary
+        run: |
+          set -euo pipefail
+          PLAN=docs/research/RB_R26N_2026_WEEK1_UNMODIFIED_R26_STRUCTURAL_CANDIDATE_V1_FROZEN_PLAN.md
+          LOCK=docs/research/RB_R26N_2026_WEEK1_UNMODIFIED_R26_STRUCTURAL_CANDIDATE_V1_IMPLEMENTATION_LOCK.md
+          CODE=scripts/backtest/build_rb_r26n_2026_week1_unmodified_r26_structural_candidate_v1.py
+
+          test -s "$PLAN"
+          test -s "$LOCK"
+          test -s "$CODE"
+          python -m py_compile "$CODE"
+
+          # Freeze-before-results lineage: the plan and implementation must be byte-identical
+          # to the commits named in the implementation lock.
+          git diff --quiet "$R26N_PLAN_COMMIT" HEAD -- "$PLAN"
+          git diff --quiet "$R26N_IMPLEMENTATION_COMMIT" HEAD -- "$CODE"
+
+          sha256sum "$PLAN" | tee r26n_plan.sha256
+          sha256sum "$LOCK" | tee r26n_lock.sha256
+          sha256sum "$CODE" | tee r26n_code.sha256
+
+          # Research-only branch: protected production/model authorities remain exact.
+          git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
+            scripts/modeling \
+            scripts/run_rb_week1_no_odds.py \
+            scripts/run_pricing_with_full_roster_universe_v3.py \
+            scripts/run_pricing_with_full_roster_universe_v3_core.py \
+            scripts/run_pricing_with_full_roster_universe_v4.py \
+            scripts/run_pricing_with_full_roster_universe_v4_production.py \
+            scripts/simulation_v2.py \
+            scripts/simulation_c2_qb_candidate.py \
+            scripts/apply_rb_receiving_tail_production_v1.py \
+            data/models \
+            model \
+            .github/workflows/full-slate.yml \
+            .github/workflows/production-week1-v4-r22-certification.yml
+
+          echo PASS > r26n_protected_clean.txt
+          echo R26N_PROTECTED_PRODUCTION_BOUNDARY_PASS
+
+      - name: Verify and download immutable R26N parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          R26M_ACTUAL="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26M_ARTIFACT_ID}" --jq '.digest')"
+          PRODUCTION_ACTUAL="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${PRODUCTION_ARTIFACT_ID}" --jq '.digest')"
+          R26L_ACTUAL="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R26L_ARTIFACT_ID}" --jq '.digest')"
+          R19_ACTUAL="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R19_ARTIFACT_ID}" --jq '.digest')"
+          PRODUCTION_HEAD="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${PRODUCTION_ARTIFACT_ID}" --jq '.workflow_run.head_sha')"
+
+          test "$R26M_ACTUAL" = "$R26M_DIGEST"
+          test "$PRODUCTION_ACTUAL" = "$PRODUCTION_DIGEST"
+          test "$R26L_ACTUAL" = "$R26L_DIGEST"
+          test "$R19_ACTUAL" = "$R19_DIGEST"
+          test "$PRODUCTION_HEAD" = "$PRODUCTION_BASE_SHA"
+
+          rm -rf parent_r26m parent_production parent_r26l parent_r19
+          mkdir -p parent_r26m parent_production parent_r26l parent_r19
+
+          gh run download "$R26M_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26M_ARTIFACT_NAME" --dir parent_r26m
+          gh run download "$PRODUCTION_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$PRODUCTION_ARTIFACT_NAME" --dir parent_production
+          gh run download "$R26L_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R26L_ARTIFACT_NAME" --dir parent_r26l
+          gh run download "$R19_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$R19_ARTIFACT_NAME" --dir parent_r19
+
+          test -s parent_production/data/player_form_consensus.csv
+          test -s parent_production/data/model_context_bridge.csv
+          test -s parent_production/data/models/te_r5p_production_model_v1/te_r5p_production_model_v1.json
+          test -s parent_production/data/models/wr_r15_production_model_v1/wr_r15_production_model_v1.json
+          test -s parent_r26m/data/backtests/r26m_2026_week1_prospective_qualification_synthesis_v1/r26m_disposition.json
+          test -s parent_r26l/data/backtests/r26l_2026_week1_regime_transportability_v1/r26l_disposition.json
+          test -s parent_r26l/data/backtests/r26l_2026_week1_regime_transportability_v1/r26l_2026_week1_room_state.csv
+
+          R19_MODEL="$(find parent_r19 -type f -name rb_r19_tail_scorer_model_v1.json -print)"
+          test "$(printf '%s\n' "$R19_MODEL" | sed '/^$/d' | wc -l)" -eq 1
+          test "$(sha256sum "$R19_MODEL" | awk '{print $1}')" = "$R19_INNER_MODEL_SHA256"
+
+          echo "R26N_IMMUTABLE_PARENTS_PASS r26m=$R26M_ACTUAL production=$PRODUCTION_ACTUAL r26l=$R26L_ACTUAL r19=$R19_ACTUAL production_head=$PRODUCTION_HEAD"
+
+      - name: Materialize frozen R26N structural candidate
+        run: |
+          set -euo pipefail
+          rm -rf data/backtests/r26n_2026_week1_unmodified_r26_structural_candidate_v1
+          python scripts/backtest/build_rb_r26n_2026_week1_unmodified_r26_structural_candidate_v1.py \
+            --production-root parent_production \
+            --r26m-root parent_r26m \
+            --r26l-root parent_r26l \
+            --r19-root parent_r19 \
+            --protected-clean-marker r26n_protected_clean.txt \
+            --out-dir data/backtests/r26n_2026_week1_unmodified_r26_structural_candidate_v1
+
+      - name: Assert frozen R26N authority ceiling
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root=Path('data/backtests/r26n_2026_week1_unmodified_r26_structural_candidate_v1')
+          d=json.loads((root/'r26n_disposition.json').read_text())
+          gates=(root/'r26n_gate_matrix.csv')
+          assert gates.is_file() and gates.stat().st_size > 0
+          assert d['disposition'] in {
+              'R26N_2026_WEEK1_STRUCTURAL_CANDIDATE_PASS_READY_FOR_SHADOW_INTEGRATION_DESIGN',
+              'R26N_2026_WEEK1_STRUCTURAL_CANDIDATE_FAIL_NO_INTEGRATION',
+          }
+          assert d['2026_outcomes_used'] == 0
+          assert d['sportsbook_football_inputs_used'] == 0
+          assert d['same_week_depth_used'] is False
+          assert d['r9_refit'] is False
+          assert d['production_parameters_changed'] is False
+          assert d['r22_changed'] is False
+          assert d['receiving_yard_means_changed'] is False
+          assert d['receiving_distribution_regenerated'] is False
+          assert d['live_shadow_activation_authorized'] is False
+          assert d['production_promotion_authorized'] is False
+          qualified=d['disposition']=='R26N_2026_WEEK1_STRUCTURAL_CANDIDATE_PASS_READY_FOR_SHADOW_INTEGRATION_DESIGN'
+          assert d['shadow_integration_design_authorized'] is qualified
+          print('R26N_AUTHORITY_CONTRACT_PASS disposition=' + d['disposition'])
+          PY
+
+      - name: Show R26N evidence
+        run: |
+          cat data/backtests/r26n_2026_week1_unmodified_r26_structural_candidate_v1/r26n_disposition.json
+          echo '=== R26N gate matrix ==='
+          cat data/backtests/r26n_2026_week1_unmodified_r26_structural_candidate_v1/r26n_gate_matrix.csv
+          echo '=== R26N RB room structural audit ==='
+          cat data/backtests/r26n_2026_week1_unmodified_r26_structural_candidate_v1/r26n_rb_room_structural_audit.csv
+
+      - name: Upload R26N evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r26n-2026-week1-unmodified-r26-structural-candidate-v1
+          retention-days: 90
+          path: |
+            r26n_plan.sha256
+            r26n_lock.sha256
+            r26n_code.sha256
+            r26n_protected_clean.txt
+            data/backtests/r26n_2026_week1_unmodified_r26_structural_candidate_v1/*
