@@ -132,11 +132,13 @@ def main() -> int:
         "season", "week", "team", "exit_class", "veteran_entry_present", "no_prior_entry_present"
     ]].drop_duplicates(["season", "week", "team"])
 
+    # Merge first, then derive boolean masks on the merged frame. This is a
+    # mechanical index-alignment correction only; the frozen football states
+    # and child-selection logic are unchanged.
+    w1 = w1.merge(hstate, on=["season", "week", "team"], how="left", validate="many_to_one")
     balanced = w1.vacancy_active.eq(1) & w1.room_exits_n.eq(w1.room_entrants_n)
     unbalanced = w1.vacancy_active.eq(1) & ~balanced
     nonvac = ~w1.vacancy_active.eq(1)
-
-    w1 = w1.merge(hstate, on=["season", "week", "team"], how="left", validate="many_to_one")
     if w1.loc[balanced, "exit_class"].isna().any():
         raise RuntimeError("R26I missing R26H source state for balanced room")
 
