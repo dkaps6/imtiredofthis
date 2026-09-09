@@ -1,0 +1,11 @@
+{
+  "artifact_digest": "sha256:11432b9d7b7f2367935a862b63c30df9f40955e479806ab67d90921b63a907c7",
+  "artifact_id": 10080377483,
+  "artifact_name": "rb-r19-deployable-tail-scorer-refit-v1",
+  "head_sha": "6ac1342f737f142acac6a3e4b459f442faf1442a",
+  "model_sha256": "9ed6a98b0022e86992fb468df40a9fd79a54bc87885777ac5955a898b5c292ba",
+  "pools_sha256": "c69a268a5a1683e846bcb5f59fe55bcae20d70c679792449ea77e6548b37a362",
+  "run_id": 34288244770,
+  "source_status": "R19_SHADOW_ONLY_AT_FIT_TIME",
+  "week1_production_authorization_plan": "docs/migrations/RB_R22_WEEK1_RECEIVING_TAIL_PRODUCTION_INTEGRATION_V1_PLAN.md"
+}
