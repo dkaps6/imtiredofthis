@@ -129,11 +129,7 @@ def _contract_errors():
 
 
 def _legacy_team_form_guarded() -> bool:
-    """Return True only while the legacy TeamForm 2025 literal is neutralized.
-
-    Team Context v3 should eventually remove this exception entirely. Until then
-    CI requires both the stale-season redirect and the post-build runtime repair.
-    """
+    """Return True only while the legacy TeamForm 2025 literal is neutralized."""
     wrapper = ROOT / "scripts/run_team_form_context.py"
     if not wrapper.exists():
         return False
@@ -162,12 +158,71 @@ def _stale_literal_errors():
                 continue
             if not any(p.search(line) for p in patterns):
                 continue
-            # make_team_form is retained temporarily as an imported legacy
-            # dependency. Its known 2025 literals are acceptable only while the
-            # canonical wrapper proves that it redirects and repairs them.
             if rel == "scripts/make_team_form.py" and legacy_guarded:
                 continue
             errors.append(f"stale runtime literal in {rel}:{n}: {line.strip()}")
+    return errors
+
+
+def _promoted_pricing_chain_errors(workflow_text: str) -> list[str]:
+    """Fail closed on the exact promoted Week-1 V4 pricing chain.
+
+    Full Slate no longer invokes run_pricing_v2.py directly.  The governed public
+    compatibility entrypoint routes to V4, which preserves the frozen V3 core and
+    then applies the exact R22 receiving-tail adapter.  The legacy pricing module
+    remains a material imported dependency and is audited separately below.
+    """
+    errors: list[str] = []
+    public = ROOT / "scripts/run_pricing_with_full_roster_universe_v3.py"
+    v4 = ROOT / "scripts/run_pricing_with_full_roster_universe_v4_production.py"
+    v3_core = ROOT / "scripts/run_pricing_with_full_roster_universe_v3_core.py"
+    r22 = ROOT / "scripts/modeling/rb_receiving_tail_production_adapter_v1.py"
+    r19_model = ROOT / "data/models/rb_r19_production_v1/rb_r19_tail_scorer_model_v1.json"
+    r19_pools = ROOT / "data/models/rb_r19_production_v1/rb_r19_residual_pools_v1.npz"
+
+    for path, label in (
+        (public, "public V3 compatibility entrypoint"),
+        (v4, "V4 production entrypoint"),
+        (v3_core, "preserved V3 core"),
+        (r22, "R22 production adapter"),
+        (r19_model, "R19 scorer asset"),
+        (r19_pools, "R19 residual-pools asset"),
+    ):
+        if not path.exists() or path.stat().st_size == 0:
+            errors.append(f"promoted pricing chain missing {label}: {path.relative_to(ROOT)}")
+
+    if errors:
+        return errors
+
+    if "scripts/run_pricing_with_full_roster_universe_v3.py" not in workflow_text:
+        errors.append("full-slate workflow does not invoke promoted public V3/V4 pricing entrypoint")
+
+    public_text = _read(public)
+    if "from scripts.run_pricing_with_full_roster_universe_v4_production import main" not in public_text:
+        errors.append("public V3 compatibility entrypoint does not route exactly to V4 production")
+
+    v4_text = _read(v4)
+    for token, msg in (
+        ("run_pricing_with_full_roster_universe_v3_core", "V4 does not preserve the certified V3 core"),
+        ("apply_rb_receiving_tail_production", "V4 does not apply the R22 receiving-tail adapter"),
+        ("data/models/rb_r19_production_v1/rb_r19_tail_scorer_model_v1.json", "V4 does not pin the committed R19 scorer asset"),
+        ("data/models/rb_r19_production_v1/rb_r19_residual_pools_v1.npz", "V4 does not pin the committed R19 residual-pools asset"),
+        ("RB_R22_WEEK1_RECEIVING_TAIL_PRICING_LINEAGE_PASS", "V4 does not enforce R22 pricing lineage"),
+    ):
+        if token not in v4_text:
+            errors.append(msg)
+
+    r22_text = _read(r22)
+    for token, msg in (
+        ("EXPECTED_MODEL_SHA256", "R22 adapter does not pin scorer SHA256"),
+        ("EXPECTED_POOLS_SHA256", "R22 adapter does not pin residual-pools SHA256"),
+        ("sportsbook_inputs_added", "R22 adapter lacks sportsbook-separation contract"),
+        ("current_or_future_outcomes_used", "R22 adapter lacks future-outcome contract"),
+        ("receptions_exact", "R22 adapter lacks receptions protection gate"),
+        ("non_rb_exact", "R22 adapter lacks non-RB protection gate"),
+    ):
+        if token not in r22_text:
+            errors.append(msg)
     return errors
 
 
@@ -191,11 +246,15 @@ def _workflow_contract_errors():
         "scripts/run_metrics_context.py",
         "scripts/validate_build_integrity.py",
         "scripts/metrics_ready.py",
-        "scripts/run_pricing_v2.py",
+        "scripts/run_pricing_with_full_roster_universe_v3.py",
         "scripts/utils/audit_repo.py --strict",
     )
     errors = [f"full-slate workflow does not invoke {t}" for t in required if t not in text]
+    errors.extend(_promoted_pricing_chain_errors(text))
 
+    # The old run_pricing_v2 implementation remains a material dependency of the
+    # preserved football-first stack, so continue verifying its core projection
+    # contracts even though Full Slate no longer invokes it directly.
     pricing = ROOT / "scripts/run_pricing_v2.py"
     if pricing.exists():
         p = _read(pricing)
@@ -213,8 +272,6 @@ def _workflow_contract_errors():
             if token not in p:
                 errors.append(msg)
 
-    # A promoted QB synthesis is invalid on a fresh checkout unless the exact
-    # calibrated pass-yards base ensemble is also a committed production artifact.
     qb_model = ROOT / "model/qb_pass_synthesis_v1.json"
     ensemble_weights = ROOT / "data/model_ensemble_weights.csv"
     if qb_model.exists():
@@ -250,8 +307,6 @@ def _workflow_contract_errors():
         if "positive=True" not in etext or "uncalibrated_mc_only" not in etext:
             errors.append("canonical ensemble does not enforce nonnegative calibrated weights and explicit MC fallback")
 
-    # The old engine may remain temporarily only as an explicit fail-closed
-    # deprecation stub. Complete removal is an even stronger retirement state.
     engine = ROOT / "engine/engine.py"
     if engine.exists() and "The only canonical production pipeline" not in _read(engine):
         errors.append("legacy engine exists but is not explicitly retired in favor of Full Slate")
