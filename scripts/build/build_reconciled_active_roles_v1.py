@@ -16,16 +16,22 @@ def build(df:pd.DataFrame)->tuple[pd.DataFrame,dict]:
     x=df.copy(); x.columns=[str(c).lower() for c in x.columns]; miss=REQ-set(x.columns)
     if miss: raise RuntimeError(f"availability artifact missing {sorted(miss)}")
     if x.duplicated(["team","player_clean_key"]).any(): raise RuntimeError("duplicate current availability identity")
-    active=x[pd.to_numeric(x.definitive_unavailable,errors="coerce").fillna(1).eq(0)].copy(); active["role"]=active.role_after_availability.astype(str).str.strip()
+    active=x[pd.to_numeric(x.definitive_unavailable,errors="coerce").fillna(1).eq(0)].copy()
+    active["role"]=active.role_after_availability.astype(str).str.strip()
+    # WR alignment roles are intentionally preserved by the resolver. For other
+    # supported families the reconciled ordinal role must be present.
     needs_role=active.position_group.astype(str).str.upper().isin(["QB","RB","FB","TE"])
     if active.loc[needs_role,"role"].eq("").any(): raise RuntimeError("eligible ordinal-role player missing reconciled role")
-    active["player_key"]=active.get("player_key",active.player.map(player_name_key)).astype(str); active["source_asof_utc"]=active.get("source_asof_utc",active.availability_generated_at_utc)
+    active["player_key"]=active.get("player_key",active.player.map(player_name_key)).astype(str)
+    active["source_asof_utc"]=active.get("source_asof_utc",active.availability_generated_at_utc)
     cols=[c for c in ["player","team","role","position","position_group","player_key","player_clean_key","depth_index","raw_depth_role","availability_authority","final_availability_state","source_asof_utc","availability_generated_at_utc"] if c in active.columns]
     out=active[cols].copy().sort_values(["team","position_group","depth_index","player_clean_key"],na_position="last").reset_index(drop=True)
     if out.duplicated(["team","player_clean_key"]).any(): raise RuntimeError("duplicate active role identity")
+    # Gap-free ordinal role checks on QB/RB/TE. FB shares RB rank prefix by locked resolver.
     bad=[]
     for (team,grp),g in out[out.position_group.astype(str).str.upper().isin(["QB","RB","FB","TE"])].groupby(["team","position_group"]):
-        prefix="RB" if str(grp).upper() in {"RB","FB"} else str(grp).upper(); ranks=[]
+        prefix="RB" if str(grp).upper() in {"RB","FB"} else str(grp).upper()
+        ranks=[]
         for r in g.role.astype(str):
             if r.startswith(prefix) and r[len(prefix):].isdigit(): ranks.append(int(r[len(prefix):]))
         if ranks and sorted(ranks)!=list(range(1,len(ranks)+1)): bad.append({"team":team,"group":grp,"ranks":sorted(ranks)})
