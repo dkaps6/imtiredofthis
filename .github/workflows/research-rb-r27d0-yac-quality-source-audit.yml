@@ -1,0 +1,122 @@
+name: RB R27D0 YAC Quality Source Audit
+
+on:
+  push:
+    branches:
+      - research-rb-r27d0-yac-quality-source-audit
+    paths:
+      - 'docs/research/RB_R27D0_YAC_QUALITY_SOURCE_AUDIT_LOCK.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PRODUCTION_BASE_SHA: bb76ba9eabb08e2f0875a9af49301c3877f4141f
+  R27D0_PLAN_BLOB: f5b21545bc880f337afa940d20db2205846a3bc3
+  R27D0_SCRIPT_BLOB: 48644f59ec10717e3ef7dd3470643fb29520cc23
+  R27B_PARENT_RUN: '34428917229'
+  R27B_PARENT_ARTIFACT_ID: '10134023092'
+  R27B_PARENT_ARTIFACT_NAME: rb-r27b-v2-novel-efficiency-context
+  R27B_PARENT_DIGEST: sha256:1df1a14c9900b890fe86e04269849dc90d76fc03a9215ad8612c1820dee5341f
+  R27C2_PARENT_ARTIFACT_ID: '10134581843'
+  R27C2_PARENT_DIGEST: sha256:6e3aa7ec2149f6f0b65adb59b4cc36c4f88b24a142234bc368131de8e4de60dd
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy
+
+      - name: Verify frozen source-audit boundary
+        run: |
+          set -euo pipefail
+          test -s docs/research/RB_R27D0_YAC_QUALITY_NOVELTY_AND_SOURCE_AUDIT_PLAN.md
+          test -s docs/research/RB_R27D0_YAC_QUALITY_SOURCE_AUDIT_LOCK.md
+          test -s scripts/backtest/audit_rb_r27d0_yac_quality_sources.py
+          test "$(git hash-object docs/research/RB_R27D0_YAC_QUALITY_NOVELTY_AND_SOURCE_AUDIT_PLAN.md)" = "$R27D0_PLAN_BLOB"
+          test "$(git hash-object scripts/backtest/audit_rb_r27d0_yac_quality_sources.py)" = "$R27D0_SCRIPT_BLOB"
+          python -m py_compile scripts/backtest/audit_rb_r27d0_yac_quality_sources.py
+          git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
+            scripts/modeling \
+            scripts/run_rb_week1_no_odds.py \
+            scripts/run_pricing_with_full_roster_universe_v3.py \
+            scripts/run_pricing_with_full_roster_universe_v3_core.py \
+            scripts/run_pricing_with_full_roster_universe_v4_production.py \
+            scripts/run_pricing_with_full_roster_universe_v5_production.py \
+            scripts/simulation_v2.py \
+            scripts/simulation_c2_qb_candidate.py \
+            data/models \
+            model \
+            .github/workflows/full-slate.yml
+          sha256sum docs/research/RB_R27D0_YAC_QUALITY_NOVELTY_AND_SOURCE_AUDIT_PLAN.md > r27d0_plan.sha256
+          sha256sum docs/research/RB_R27D0_YAC_QUALITY_SOURCE_AUDIT_LOCK.md > r27d0_lock.sha256
+          sha256sum scripts/backtest/audit_rb_r27d0_yac_quality_sources.py > r27d0_code.sha256
+          echo R27D0_FROZEN_SOURCE_AUDIT_BOUNDARY_PASS
+
+      - name: Verify exact parent evidence and stage V2 universe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          D1="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R27B_PARENT_ARTIFACT_ID}" --jq .digest)"
+          D2="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R27C2_PARENT_ARTIFACT_ID}" --jq .digest)"
+          test "$D1" = "$R27B_PARENT_DIGEST"
+          test "$D2" = "$R27C2_PARENT_DIGEST"
+          rm -rf data/r27d0_v2_parent
+          mkdir -p data/r27d0_v2_parent
+          gh run download "$R27B_PARENT_RUN" --repo "$GITHUB_REPOSITORY" --name "$R27B_PARENT_ARTIFACT_NAME" --dir data/r27d0_v2_parent
+          test -s data/r27d0_v2_parent/data/backtests/r27b_v2_final/r27b_v2_all_predictions.csv
+          echo R27D0_EXACT_PARENT_EVIDENCE_PASS
+
+      - name: Audit YAC-quality sources and strict-prior coverage
+        run: |
+          rm -rf data/backtests/r27d0_yac_quality_source_audit
+          PYTHONPATH=. python scripts/backtest/audit_rb_r27d0_yac_quality_sources.py \
+            --predictions data/r27d0_v2_parent/data/backtests/r27b_v2_final/r27b_v2_all_predictions.csv \
+            --seasons 2020-2025 \
+            --out-dir data/backtests/r27d0_yac_quality_source_audit
+
+      - name: Assert no predictive execution and show source evidence
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('data/backtests/r27d0_yac_quality_source_audit/r27d0_source_audit_summary.json').read_text())
+          assert d['source_audit_only'] is True
+          assert d['model_fit_performed'] is False
+          assert d['candidate_projection_created'] is False
+          assert d['prediction_error_scored'] is False
+          assert d['sportsbook_inputs']==0
+          assert d['production_changed'] is False and d['r26_changed'] is False and d['r22_changed'] is False
+          print('R27D0_SOURCE_AUDIT_INTEGRITY_PASS')
+          print(json.dumps(d,indent=2,sort_keys=True))
+          PY
+          cat data/backtests/r27d0_yac_quality_source_audit/r27d0_pbp_source_coverage.csv
+          cat data/backtests/r27d0_yac_quality_source_audit/r27d0_ngs_source_coverage.csv || true
+          cat data/backtests/r27d0_yac_quality_source_audit/r27d0_vacancy_rb1_strict_prior_coverage.csv
+
+      - name: Upload immutable R27D0 source audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r27d0-yac-quality-source-audit
+          retention-days: 90
+          path: |
+            r27d0_plan.sha256
+            r27d0_lock.sha256
+            r27d0_code.sha256
+            data/backtests/r27d0_yac_quality_source_audit/*
