@@ -32,6 +32,8 @@ def build(active: pd.DataFrame, certification: pd.DataFrame) -> tuple[pd.DataFra
     eligible = pd.to_numeric(c.production_eligible, errors="coerce").fillna(0).eq(1)
     eligible_teams = set(c.loc[eligible, "away_team"]) | set(c.loc[eligible, "home_team"])
     withheld_teams = (set(c.away_team) | set(c.home_team)) - eligible_teams
+    # A team may appear only once in a weekly slate. Reject malformed certification
+    # rather than allowing one eligible duplicate game to mask a withheld row.
     team_rows = pd.concat([c[["away_team"]].rename(columns={"away_team":"team"}), c[["home_team"]].rename(columns={"home_team":"team"})])
     if team_rows.team.duplicated().any():
         raise RuntimeError("timing certification is not one game per team")
@@ -70,6 +72,7 @@ def main() -> int:
     args.status.write_text(json.dumps(meta, indent=2, sort_keys=True), encoding="utf-8")
     print(json.dumps(meta, indent=2, sort_keys=True))
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
