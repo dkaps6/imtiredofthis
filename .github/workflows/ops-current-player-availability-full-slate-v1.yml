@@ -1,0 +1,160 @@
+name: Current Player Availability Full Slate Candidate V1
+
+on:
+  push:
+    branches:
+      - ops-current-player-availability-full-slate-v1
+    paths:
+      - 'docs/operations/CURRENT_PLAYER_AVAILABILITY_FULL_SLATE_V1_IMPLEMENTATION_LOCK.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  SEASON: '2026'
+  PRIOR_SEASON: '2025'
+  FETCH_LIVE_ODDS: 'false'
+  ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
+  PRODUCTION_BASE_SHA: bb76ba9eabb08e2f0875a9af49301c3877f4141f
+  INTEGRATION_PLAN_SHA: 91ee6aa3ad3813c7d285f6f3163368205937eb09
+
+jobs:
+  candidate_no_odds_full_slate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml beautifulsoup4 lxml pytest
+      - name: Verify locked candidate boundary
+        run: |
+          set -euo pipefail
+          test -s docs/operations/CURRENT_PLAYER_AVAILABILITY_FULL_SLATE_V1_IMPLEMENTATION_LOCK.md
+          git diff --quiet "$INTEGRATION_PLAN_SHA" HEAD -- scripts/modeling model data/models || {
+            echo 'FATAL: scientific model code/artifacts changed'; exit 1;
+          }
+          git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- docs/research || {
+            echo 'FATAL: historical research records changed'; exit 1;
+          }
+          PYTHONPATH=. pytest -q tests/test_current_player_availability_v1.py tests/test_current_player_availability_timing_v1.py tests/test_current_roles_input_seam_v1.py tests/test_production_eligible_active_roles_v1.py
+      - name: Build raw current roster and authoritative schedule
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/providers/ourlads_depth.py --season "$SEASON"
+          mkdir -p outputs
+          cp data/roles_ourlads.csv outputs/roles_ourlads.csv
+          python scripts/utils/build_team_week_map_v2.py --season "$SEASON" --out data/team_week_map.csv
+          test -s data/roles_ourlads.csv
+          test -s data/team_week_map.csv
+      - name: Build team context and promoted QB context
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_sharpfootball_v2.py --season "$SEASON" --dump-html
+          python scripts/team_form_prior_bridge.py --season "$SEASON" --prior-season "$PRIOR_SEASON"
+          python scripts/run_team_form_context.py --season "$SEASON" --box-backfill-prev
+          python scripts/run_qb_promoted_context.py --season "$SEASON" --prior-season "$PRIOR_SEASON"
+          test -s data/team_form.csv
+          test -s data/qb_promoted_team_context.csv
+      - name: Build weather and weekly injuries
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/build/build_weather_week_v2.py --season "$SEASON"
+          python scripts/build/build_injuries_weekly.py data/injuries.csv --season "$SEASON"
+          test -s data/weather_week.csv
+          test -s data/injuries.csv
+      - name: Resolve current availability before opportunity
+        run: |
+          export PYTHONPATH="${PWD}"
+          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
+          python scripts/run_current_player_availability_candidate_prep_v1.py --season "$SEASON" --week "$WEEK_RESOLVED"
+          test -s data/current_player_availability.csv
+          test -s data/current_player_availability_game_certification.csv
+          test -s data/roles_current_production_eligible_v1.csv
+      - name: Build coverage and optional current PBP
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_coverage_v2.py --season "$SEASON"
+          python scripts/build/pbp_features.py --season "$SEASON" || true
+      - name: Build PlayerForm from production-eligible active roles
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_player_form_current_roles_v1.py --season "$SEASON" --prior-season "$PRIOR_SEASON"
+          python scripts/enrich_player_scoring_v2.py --season "$SEASON" --prior-season "$PRIOR_SEASON"
+          for f in data/player_game_logs.csv data/player_season_totals.csv data/player_form.csv data/player_form_consensus.csv data/player_identity_validation.csv; do test -s "$f"; done
+          python - <<'PY'
+          import pandas as pd
+          a=pd.read_csv('data/current_player_availability.csv')
+          f=pd.read_csv('data/player_form_consensus.csv')
+          bad=set(zip(a.loc[pd.to_numeric(a.definitive_unavailable,errors='coerce').fillna(0).eq(1),'team'].astype(str),a.loc[pd.to_numeric(a.definitive_unavailable,errors='coerce').fillna(0).eq(1),'player_clean_key'].astype(str)))
+          got=set(zip(f.team.astype(str),f.player_clean_key.astype(str)))
+          assert not (bad & got), sorted(bad & got)[:20]
+          print('PLAYERFORM_UNAVAILABLE_EXCLUSION_PASS')
+          PY
+      - name: Build canonical model stack
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_context_bridge.py
+          python scripts/run_model_bayesian_bridge.py
+          python scripts/run_model_ml_bridge.py
+          python scripts/run_model_state_bridge.py
+          python scripts/run_model_rules_bridge.py
+          python scripts/run_model_ensemble_bridge.py
+          for f in data/model_context_bridge.csv data/model_bayesian_diagnostics.csv data/model_ml_diagnostics.csv data/model_state_diagnostics.csv data/model_rule_diagnostics.csv data/model_ensemble_diagnostics.csv; do test -s "$f"; done
+      - name: Build promoted RB P3 from production-eligible active roles
+        run: |
+          export PYTHONPATH="${PWD}"
+          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
+          test "$WEEK_RESOLVED" = '1'
+          python scripts/run_rb_week1_current_roles_v1.py --season "$SEASON" --week "$WEEK_RESOLVED" --iterations 25000 --out data/rb_rush_synthesis_context.csv
+          test -s data/rb_rush_synthesis_context.csv
+      - name: Build QB C2 state context
+        run: |
+          export PYTHONPATH="${PWD}"
+          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
+          python scripts/run_qb_distribution_state_context.py --season "$SEASON" --week "$WEEK_RESOLVED"
+          test -s data/qb_distribution_state_context.csv
+      - name: Candidate static audits
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/utils/audit_repo.py --strict
+          python scripts/audit_2026_production_readiness.py --strict
+          python - <<'PY'
+          import json,pandas as pd
+          a=pd.read_csv('data/current_player_availability.csv')
+          c=pd.read_csv('data/current_player_availability_game_certification.csv')
+          r=pd.read_csv('data/roles_current_production_eligible_v1.csv')
+          meta={
+            'disposition':'CURRENT_PLAYER_AVAILABILITY_NO_ODDS_FULL_SLATE_CANDIDATE_COMPLETED',
+            'availability_rows':int(len(a)),
+            'definitive_unavailable':int(pd.to_numeric(a.definitive_unavailable,errors='coerce').fillna(0).sum()),
+            'uncertain':int(a.final_availability_state.astype(str).eq('UNCERTAIN').sum()),
+            'unknown':int(a.final_availability_state.astype(str).eq('UNKNOWN').sum()),
+            'eligible_games':int(pd.to_numeric(c.production_eligible,errors='coerce').fillna(0).sum()),
+            'withheld_games':int((~pd.to_numeric(c.production_eligible,errors='coerce').fillna(0).eq(1)).sum()),
+            'production_eligible_active_roles':int(len(r)),
+            'sportsbook_inputs_used':0,
+            'production_promoted':False,
+          }
+          open('data/current_player_availability_candidate_summary.json','w').write(json.dumps(meta,indent=2,sort_keys=True))
+          print(json.dumps(meta,indent=2,sort_keys=True))
+          PY
+      - name: Upload immutable candidate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: current-player-availability-full-slate-candidate-v1
+          retention-days: 90
+          path: |
+            data/**
+            outputs/**
