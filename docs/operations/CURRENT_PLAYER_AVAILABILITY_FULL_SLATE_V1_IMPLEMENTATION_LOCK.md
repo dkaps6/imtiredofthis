@@ -1,6 +1,6 @@
 # Current Player Availability — Full Slate V1 Implementation Lock
 
-Status: `LOCKED BEFORE FIRST CANDIDATE FULL_SLATE RESULT`
+Status: `RELOCKED AFTER VALUE_NEUTRAL_WEEK1_TEAMFORM_MECHANICAL_REPAIR`
 
 ## Frozen authority
 
@@ -15,27 +15,33 @@ Status: `LOCKED BEFORE FIRST CANDIDATE FULL_SLATE RESULT`
 Existing locked availability core remains unchanged:
 - `scripts/providers/ourlads_depth_status_v1.py` = `c115816ea8aa4ba7150a635c3115546d43f94b3c`
 - `scripts/build/build_current_player_availability_v1.py` = `9a1b0a672db7854ff52764ad93e5fcd89f9cb0ea`
-- `scripts/providers/nfl_official_inactives_v1.py` = `0d67316b6d7b7b9aa9d3637a07da4cd2b171639e`
+- `scripts/providers/nfl_official_inactives_v1.py` = `0d67316b6d7b9aa9d3637a07da4cd2b171639e`
 - `scripts/validate_current_player_availability_timing_v1.py` = `d67ae30ed6e837f62098671c499d05462fe9d837`
 - `scripts/build/build_reconciled_active_roles_v1.py` = `b2d05882cada048337f1f5f8b8db8ec7f9eef001`
 
-New explicit current-role / timing-withholding seams:
+Explicit current-role / timing-withholding seams remain unchanged:
 - `scripts/utils/current_roles_v1.py` = `7540cc40e02546b4feb2cc503aa506aa613c44f3`
 - `scripts/run_player_form_current_roles_v1.py` = `6252142859042dac7411ba23a482d8c0c128c601`
 - `scripts/run_rb_week1_current_roles_v1.py` = `5874128aaa31dca9ed0a401f4dfa9197ff4c282e`
 - `scripts/build/build_production_eligible_active_roles_v1.py` = `8be1e607f4d35359459aa2d888c4cfee12cd27c7`
 - `scripts/run_current_player_availability_candidate_prep_v1.py` = `1b16c8052f079ba94423b21a755ce4107f60a311`
-- `.github/workflows/ops-current-player-availability-full-slate-v1.yml` = `1ea734ab5dd9e5f9846857a449d8c8c948774bf5`
 
-Pre-lock mechanical seam evidence:
+Value-neutral mechanical repair after first run:
+- preserved failure record: `docs/operations/CURRENT_PLAYER_AVAILABILITY_FULL_SLATE_RUN1_QB_CONTEXT_MECHANICAL_FAILURE.md`
+- first locked run `34439714153`, job `102752015236`, artifact `10137497418`, digest `sha256:0f3f5195fce8bc6514804b411e0b312475a379cfeb722eb5f5280237f8ff50f2`
+- exact failure: `run_team_form_context.py` rejected absence of legal current-season `week < 1` PBP before any availability/opportunity execution
+- repaired Week-1-only wrapper `scripts/run_team_form_context_week1_prior_v1.py` = `240f62d018fa419567663cae3c96647483305361`
+- repaired candidate workflow `.github/workflows/ops-current-player-availability-full-slate-v1.yml` = `c432d6985323e1a5f6029464ca401dbd68393b78`
+- repair semantics: target Week 1 only, force the already-declared PRIOR_SEASON PBP source; wrapper refuses to run outside Week 1; no TeamForm formulas, model parameters, T-75 logic, availability hierarchy, role semantics, R22/R26 behavior, sportsbook boundary, or frozen 35 gates changed.
+
+Pre-lock/current-role seam evidence remains:
 - Run `34439533260`, Job `102751487393`: SUCCESS.
 - Current-role resolver fixtures + timing-withheld game fixtures PASS.
 - No scientific model files changed from the frozen integration-plan parent.
-- This smoke is plumbing evidence only and is not the first Full Slate integration result.
 
-## Locked first-run contract
+## Locked candidate contract
 
-The first workflow execution caused by this lock is the immutable first candidate Full Slate integration run. It must:
+Each candidate execution under this repaired lock must:
 
 1. run with `FETCH_LIVE_ODDS=false`;
 2. preserve raw `data/roles_ourlads.csv` as provider evidence;
@@ -48,7 +54,7 @@ The first workflow execution caused by this lock is the immutable first candidat
 9. preserve all historical research records;
 10. upload the complete candidate artifact set whether the run succeeds or fails.
 
-A mechanical failure may receive only value-neutral repair and must be preserved separately. A scientifically valid first 35-gate result may never be retuned, rerouted or partially promoted after inspection.
+Mechanical failures may receive only value-neutral repair and must be preserved separately. A scientifically valid first 35-gate result may never be retuned, rerouted or partially promoted after inspection.
 
 ## Promotion boundary
 
