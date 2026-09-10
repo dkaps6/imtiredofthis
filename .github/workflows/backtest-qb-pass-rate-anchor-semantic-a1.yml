@@ -1,0 +1,66 @@
+name: QB Pass Rate Anchor Semantic A1
+
+on:
+  push:
+    branches:
+      - research-qb-pass-rate-anchor-semantic-recalibration-a1
+    paths:
+      - 'scripts/backtest/evaluate_qb_pass_rate_anchor_semantic_a1.py'
+      - 'docs/migrations/QB_PASS_RATE_ANCHOR_SEMANTIC_RECALIBRATION_A1_PLAN.md'
+      - '.github/workflows/backtest-qb-pass-rate-anchor-semantic-a1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy==1.26.4 pandas==1.5.3
+
+      - name: Compile frozen evaluator
+        run: python -m py_compile scripts/backtest/evaluate_qb_pass_rate_anchor_semantic_a1.py
+
+      - name: Download immutable parent artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/play evidence/chain
+          gh run download 34535405829 --repo "${GITHUB_REPOSITORY}" --name qb-team-pass-opportunity-play-rate-decomp-v1 --dir evidence/play
+          gh run download 34523313743 --repo "${GITHUB_REPOSITORY}" --name qb-opportunity-chain-decomposition-v1 --dir evidence/chain
+
+      - name: Run frozen 2024 anchor-only development screen
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests/qb_pass_rate_anchor_semantic_a1
+          python scripts/backtest/evaluate_qb_pass_rate_anchor_semantic_a1.py \
+            --play-root evidence/play \
+            --chain-root evidence/chain \
+            --out-dir data/backtests/qb_pass_rate_anchor_semantic_a1
+
+      - name: Show result
+        if: always()
+        run: cat data/backtests/qb_pass_rate_anchor_semantic_a1/qb_pass_rate_anchor_a1_result.json 2>/dev/null || true
+
+      - name: Upload development evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-pass-rate-anchor-semantic-a1
+          path: |
+            data/backtests/qb_pass_rate_anchor_semantic_a1/*
+            docs/migrations/QB_PASS_RATE_ANCHOR_SEMANTIC_RECALIBRATION_A1_PLAN.md
+          if-no-files-found: warn
+          retention-days: 30
