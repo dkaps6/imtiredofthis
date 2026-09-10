@@ -1,0 +1,41 @@
+name: Current Player Availability Role Seam Smoke
+
+on:
+  push:
+    branches:
+      - ops-current-player-availability-full-slate-v1
+    paths:
+      - 'scripts/utils/current_roles_v1.py'
+      - 'scripts/run_player_form_current_roles_v1.py'
+      - 'scripts/run_rb_week1_current_roles_v1.py'
+      - 'tests/test_current_roles_input_seam_v1.py'
+      - '.github/workflows/ops-current-player-availability-role-seam-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seam:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy pytest
+      - name: Compile candidate seam
+        run: |
+          python -m py_compile scripts/utils/current_roles_v1.py scripts/run_player_form_current_roles_v1.py scripts/run_rb_week1_current_roles_v1.py
+      - name: Run frozen-semantics seam fixtures
+        run: |
+          PYTHONPATH=. pytest -q tests/test_current_roles_input_seam_v1.py
+      - name: Assert no scientific model files changed from integration-plan parent
+        run: |
+          git fetch origin ops-current-player-availability-full-slate-v1 --depth=50 || true
+          git diff --quiet 91ee6aa3ad3813c7d285f6f3163368205937eb09 HEAD -- scripts/modeling model data/models || {
+            echo 'FATAL: scientific model code/artifacts changed'; git diff --name-only 91ee6aa3ad3813c7d285f6f3163368205937eb09 HEAD -- scripts/modeling model data/models; exit 1;
+          }
