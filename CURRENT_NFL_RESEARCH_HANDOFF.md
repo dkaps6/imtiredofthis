@@ -1,189 +1,94 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
 **Repository:** `dkaps6/imtiredofthis`  
-**Protected production-code authority:** `bb76ba9eabb08e2f0875a9af49301c3877f4141f`  
+**Protected production-code authority before availability promotion:** `bb76ba9eabb08e2f0875a9af49301c3877f4141f`  
 **Production stack before availability promotion:** QB M89/M90 + mean-neutral C2; WR M38 WR1 + WR-R15 WR2+; TE TE-R5P; RB rushing P3; RB receptions R26; RB receiving-yard tails R22; sportsbook downstream only.  
 **RB receiving-yard mean lane:** CLOSED at a defensible scientific frontier; no new mean integration authorized.  
 **Active lane:** current roster / late-week availability production promotion and clean Full Slate verification.  
-**Production availability has NOT yet been merged to main.**
+**Production availability is NOT yet merged to main.**
 
-GitHub is canonical; chat memory is secondary. Preserve all mechanical failures and first valid scientific/integration results. Never lower frozen gates, post-hoc route losing cohorts, allow sportsbook to define football, or mutate R26/R22/scientific model parameters without separately frozen authority.
+GitHub is canonical; chat memory is secondary. Preserve first valid scientific/integration results and every mechanical failure. Do not lower frozen gates, retune post-result, allow sportsbook to define football, or mutate R26/R22/scientific model parameters without separately frozen authority.
 
-## Prior handoff authority
+## Prior complete handoff authority
 
-The immediately prior detailed handoff is commit `d370725666c6783f21a9dc728646e189b613d78c`, blob `31ffe649b4e545a26fd98f53e764bd6a56218c58`. It contains the complete lineage through 35-gate Run2 and the locked Run3 retry. All of that history remains canonical and is not superseded except where explicitly updated below.
+The complete detailed handoff immediately before this implementation checkpoint is main commit `93b974acf9563c5b875d7d08476b339fcd5549c6`, blob `0ef4a1f1443ee0327344b5d6ae7002a577dd9d0e`. It contains full R27/R27D closure, availability source/timing/candidate lineage, preserved mechanical failures, eligible-team/QB seams, 35-gate Run3 evidence, Run4A finalization, and the remaining roadmap. That history remains canonical.
 
-## RB receiving-yard mean lane — CLOSED
+## Immutable promotion authority — 35/35 PASS
 
-Final R27D strict-prior YACOE residual result:
-- branch `research-rb-r27d-yacoe-residual-v1`
-- run/job `34436178615` / `102741600329`
-- artifact `10136250846`
-- digest `sha256:b975511dc54e961c7745e9d1422ac48be4f867c65d3733adfaeabe93af9951e6`
-- disposition `R27D_STRICT_PRIOR_YACOE_RESIDUAL_MIXED_OR_FAIL_NO_INTEGRATION`
-- 22/31 total gates; 4/13 scientific gates; vacancy RB1 B1 MAE `14.709395` -> C1 `14.710366`; 2023 `13.992139` -> `14.055947`; only 3/6 seasons improved.
-
-No R27D integration/retuning/router. Reopen only for genuinely new pregame information.
-
-## Availability authority
-
-Frozen Full Slate integration plan:
-- commit `91ee6aa3ad3813c7d285f6f3163368205937eb09`
-- blob `54eb4629c48062fcaef3153918b2069238584d0a`
-- exactly 35 predeclared gates; all required before promotion.
-
-Canonical T-75 timing authority:
-- Run `34437715931`, Job `102746163583`
-- >75 min: `NOT_YET_REQUIRED`, eligible
-- <=75 min with complete official pre-kickoff inactive sections: `REQUIRED_AND_CERTIFIED`
-- <=75 min missing/incomplete official sections: `REQUIRED_MISSING_FAIL_CLOSED` for that game
-- at/after kickoff: `KICKED_OFF_LOCKED`.
-
-Locked availability core blobs:
-- Ourlads sidecar `c115816ea8aa4ba7150a635c3115546d43f94b3c`
-- resolver `9a1b0a672db7854ff52764ad93e5fcd89f9cb0ea`
-- NFL official inactives `0d67316b6d7b7b9aa9d3637a07da4cd2b171639e`
-- T-75 validator `d67ae30ed6e837f62098671c499d05462fe9d837`
-- reconciled active roles `b2d05882cada048337f1f5f8b8db8ec7f9eef001`.
-
-## First mechanically valid no-odds availability candidate — SUCCESS
-
-- branch/head `ops-current-player-availability-full-slate-v1` / `9800254f3ab208ab42501faac83a0d6e5fe3b93d`
-- run/job `34447900206` / `102776660124`
-- artifact `10140425929`
-- artifact name `current-player-availability-full-slate-candidate-v1`
-- digest `sha256:6b31ae40d648780673b7953b57323d509b302ea7a82fe99801b024ede2603f37`
-- 468 availability rows
-- 1 definitive unavailable, 1 uncertain, 0 unknown
-- 15 production-eligible games; 1 kicked-off game withheld
-- 437 production-eligible active-role rows across 30 teams
-- sportsbook inputs to availability/opportunity `0`
-- disposition `CURRENT_PLAYER_AVAILABILITY_NO_ODDS_FULL_SLATE_CANDIDATE_COMPLETED`
-- production promoted `false`.
-
-Preserved candidate plumbing failures remain canonical:
-- Run1 `34439714153`, Job `102752015236`, Artifact `10137497418`, digest `sha256:0f3f5195fce8bc6514804b411e0b312475a379cfeb722eb5f5280237f8ff50f2` — Week1 TeamForm source selection.
-- Run2 `34443710690`, Job `102763847787`, Artifact `10138897760`, digest `sha256:165c0e431e4771eba05472b17d6680457fedac37d5769bfc5c0b478aad830b1f` — PlayerForm history publication contract.
-
-## Availability-aware current-team coverage seams
-
-Full-universe/R26 eligible-team seam:
-- frozen plan commit `5a7b3c7d2cb1dc81fc442abf4b304f366965f1d9`
-- helper blob `77b591e431378ec984c51e8a032262e673d4c843`
-- transformer blob `b64ec5ccd59728121a250433e40e77e3e1013a05`
-- regression Run `34453027002`, Job `102792905910`, Artifact `10142304020`
-- digest `sha256:071f791c916d5c17c655b62d6858ca2adfbfd276009878281898608c2d9d3cc0`
-- disposition `ELIGIBLE_TEAM_COVERAGE_SEAM_REGRESSION_PASS`.
-
-QB C2 current-output seams:
-- starter-audit transformer `c7569c54cda779eb04bed7dbf2b22b9ec4fb526b`
-- primary-frame transformer `fbb7d34b54aefe98e95d8c097c7542c7d6490b52`
-- sequential regression Run `34460546690` — SUCCESS.
-
-Semantics are frozen: legacy mode still requires 32 teams; explicit `ACTIVE_ROLES_CSV` mode requires exactly the certified eligible team set. The separate complete 32-team QB state-context source-integrity guard remains unchanged.
-
-## 35-gate certification failures — PRESERVED
-
-Run1:
-- head `eb7f37fa6e2a9019ed0ec8f3bbe6fe73be202699`
-- run/job `34459655725` / `102814178762`
-- failure before gates: QB C2 starter authority hardcoded 32 teams
-- gates evaluated `0/35`
-- disposition `MECHANICAL_FAILURE_NO_DECISION`.
-
-Run2:
-- head `1d38953995842aa0236edda7124a79665d0b8628`
-- run/job `34460227422` / `102816052394`
-- 30-team M38 -> TE-R5P -> WR-R15 stage passed
-- failure before gates: second QB C2 primary-frame hardcoded 32-team assertion
-- gates evaluated `0/35`
-- disposition `MECHANICAL_FAILURE_NO_DECISION`.
-
-## 35-gate Run3 — FIRST VALID GATES 1-34 EVIDENCE
-
-Run3 was frozen separately:
-- retry-plan commit `8324754389bae0162455a565bd86ee78aee6a91e`
-- workflow blob `8d60c7fb4ff301aab9abcb3c2630601c5d9a8ea9`
-- lock/head `76d01dd8e7b26ef8921cd70c18f27957da46c560`
-- run/job `34461561636` / `102820358570`.
-
-Run3 completed all substantive football/integration work:
-- exact immutable candidate staged
-- locked eligible-team seams applied
-- baseline M38 -> TE-R5P -> WR-R15 -> QB C2 -> R22 -> R26 -> outer P3 conservation completed
-- RB1 OUT fixture completed
-- QB1 inactive fixture completed
-- WR/TE unavailable fixture completed
-- frozen gates 1 through 34 evaluated
-- **34/34 PASS**
-
-Immutable gates 1-34 artifact:
-- artifact `10145975346`
-- name `current-player-availability-35gate-evidence-v1-run3`
-- digest `sha256:dd32b45f6746176911ca68aa1d73a8a75325f92cf7b0951c335ae5484752e0ed`.
-
-The Run3 workflow then failed only at the post-upload gate-35 lineage finalization step. Final result upload was skipped. That failure is preserved as finalization plumbing, not a football/scientific failure. Result-record commit on certification branch: `4646883a7eb9c60cbe556ee93bfc619acce368ae`.
-
-## Run4A — GATE 35 FINALIZED AGAINST IMMUTABLE RUN3 EVIDENCE — SUCCESS
-
-To avoid rerunning already immutable 34/34 football evidence, a separately frozen evidence-only finalization was used.
-
-Frozen lineage:
-- Run4 generic repair-plan commit `2a54b5868dd58eb7c52af8487c9e3509459b0e09`
-- conservative Run4A post-upload plan commit `0854ad71163d9f3b6cb7219d307ae3069106d0df`
-- Run4A plan blob `e0b4e76e2143f85a27cdb1de8b97aadc379b9072`
-- Run4A workflow blob `a4c68c00c2a4d37131969104ace9b7f64958a6db`
-- unchanged gate35 finalizer blob `a5302186eadb748863c70b175421d064885dde60`
-- Run4A lock/head `8609a2ad503b93cc372a72ab3421bc8f16ef7961`.
-
-Execution:
-- wrapper run `34463888613` — SUCCESS
-- Run4A verified exact Run3 artifact ID/name/digest from GitHub API
-- downloaded exact Run3 evidence artifact
-- asserted `all_1_34_pass=true`, `evaluated_gate_count=34`, `passed_1_34=34`, `failed_1_34=0`
-- invoked the exact unchanged gate-35 finalizer using Run3 lineage values
-- no football stack, fixture, gate 1-34, candidate or production recomputation occurred.
-
-Finalized result:
-- artifact `10146675272`
-- name `current-player-availability-35gate-finalized-run3-v1`
-- digest `sha256:dcc0fec6f07c62542e7115a49c1c45e9a185d18fd3baa2e423e0bd3dd08d0286`
-- source evidence lineage remains Run3: branch `ops-current-player-availability-35gate-cert-v1`, head `76d01dd8e7b26ef8921cd70c18f27957da46c560`, run `34461561636`, job `102820358570`, artifact `10145975346`, digest `sha256:dd32b45f6746176911ca68aa1d73a8a75325f92cf7b0951c335ae5484752e0ed`
-- **passed gates: 35/35**
-- failed gates: `0`
+Source certification evidence:
+- certification branch `ops-current-player-availability-35gate-cert-v1`
+- source head `76d01dd8e7b26ef8921cd70c18f27957da46c560`
+- source run/job `34461561636` / `102820358570`
+- gates 1-34 artifact `10145975346`
+- gates 1-34 digest `sha256:dd32b45f6746176911ca68aa1d73a8a75325f92cf7b0951c335ae5484752e0ed`
+- Run4A wrapper run `34463888613`
+- finalized artifact `10146675272`
+- finalized digest `sha256:dcc0fec6f07c62542e7115a49c1c45e9a185d18fd3baa2e423e0bd3dd08d0286`
+- passed gates `35/35`
 - disposition `CURRENT_PLAYER_AVAILABILITY_FULL_SLATE_INTEGRATION_PASS_READY_FOR_PROMOTION`
-- `production_promoted=false`
-- `sportsbook_used_to_define_football=false`.
+- production promoted in certification result: `false`.
 
-This is now the complete immutable certification authority.
+## Frozen production promotion
 
-## CURRENT LIVE STATE — separate production promotion frozen
+Dedicated branch: `ops-current-player-availability-production-promotion-v1`.
 
-Dedicated promotion branch:
-- `ops-current-player-availability-production-promotion-v1`
-- based from current `main`
-- frozen promotion-plan commit `9b3241996c50f1a05d124acd370fa09f0bc07e35`
-- plan file `docs/operations/CURRENT_PLAYER_AVAILABILITY_PRODUCTION_PROMOTION_V1_FROZEN_PLAN.md`.
+Frozen plan commit: `9b3241996c50f1a05d124acd370fa09f0bc07e35`.
 
-The promotion plan authorizes only the certified availability/current-role input plumbing and Full Slate ordering/coverage changes. It explicitly prohibits changes to M89/M90/C2 science, M38, WR-R15, TE-R5P, P3, R26 science, R22 tails, historical research, T-75 semantics, QUESTIONABLE/DOUBTFUL semantics, and sportsbook-to-football boundaries.
+Frozen plan file: `docs/operations/CURRENT_PLAYER_AVAILABILITY_PRODUCTION_PROMOTION_V1_FROZEN_PLAN.md`, blob `2d350379377ae65b2fb094504624da0591f53f7e`.
 
-No production implementation files have yet been changed on the promotion branch. `main` still does not contain the availability promotion.
+The plan authorizes only certified current-roster/current-availability plumbing, current-role seams, Full Slate build ordering, and availability-aware current-team coverage validation. It prohibits changes to M89/M90/C2 science, M38, WR-R15, TE-R5P, P3, R26 science, R22, historical research, T-75 timing semantics, QUESTIONABLE/DOUBTFUL semantics, and sportsbook-to-football boundaries.
 
-### Exact next action
+## CURRENT LIVE STATE — promotion implementation PARTIALLY COMPLETE, NOT LOCKED/VERIFIED
 
-1. On `ops-current-player-availability-production-promotion-v1`, implement only the frozen promotion plan using the already-certified provider/build/current-role/helper seams.
-2. Wire canonical `full-slate.yml` so availability is resolved before PlayerForm/opportunity and `ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv` drives current-role consumers.
-3. Preserve the complete 32-team QB state-context source-integrity guard; make only current-output team-count checks availability-aware using the exact certified eligible-team semantics.
-4. Keep sportsbook downstream; an unavailable/withheld player/game must never be resurrected by odds matching.
-5. Lock exact promotion implementation blobs before the first post-promotion verification run.
-6. Run a dedicated **no-odds clean-checkout Full Slate production verification**. Any mechanical failure must be preserved and minimally repaired under a separately frozen repair; any semantic/scientific invariant failure means no promotion.
-7. Only after that branch verification PASS may the implementation be promoted to `main`.
-8. After main promotion, run Full Slate again from clean `main` with odds disabled and preserve exact run/job/artifact/digest before declaring availability lane complete.
-9. Update this handoff at every material checkpoint.
+Promotion branch latest implementation head at this checkpoint: `02424422bdf7eb0d671fd14f97765da9d657aeb2`.
+
+Certified files now copied/promoted onto the dedicated branch:
+- `scripts/providers/ourlads_depth_status_v1.py` — certified source blob `c115816ea8aa4ba7150a635c3115546d43f94b3c`
+- `scripts/providers/nfl_official_inactives_v1.py` — certified source blob `0d67316b6d7b7b9aa9d3637a07da4cd2b171639e`
+- `scripts/build/build_current_player_availability_v1.py` — certified resolver source blob `9a1b0a672db7854ff52764ad93e5fcd89f9cb0ea`
+- `scripts/build/build_reconciled_active_roles_v1.py` — certified source blob `b2d05882cada048337f1f5f8b8db8ec7f9eef001`
+- `scripts/build/build_production_eligible_active_roles_v1.py` — certified source blob `8be1e607f4d35359459aa2d888c4cfee12cd27c7`
+- `scripts/validate_current_player_availability_timing_v1.py` — certified T-75 source blob `d67ae30ed6e837f62098671c499d05462fe9d837`
+- `scripts/run_current_player_availability_candidate_prep_v1.py` — certified orchestrator source blob `1b16c8052f079ba94423b21a755ce4107f60a311`
+- `scripts/run_player_form_current_roles_v1.py` — certified strict-prior/current-role wrapper source blob `0a82649801794c560ccfd0ef368b7a340ec6f38f`
+- `scripts/run_rb_week1_current_roles_v1.py` — certified RB current-role wrapper source blob `5874128aaa31dca9ed0a401f4dfa9197ff4c282e`
+- `scripts/run_team_form_context_week1_prior_v1.py` — certified Week1 prior wrapper source blob `240f62d018fa419567663cae3c96647483305361`
+- `scripts/utils/current_roles_v1.py` — certified current-role seam source blob `7540cc40e02546b4feb2cc503aa506aa613c44f3`
+- `scripts/utils/eligible_team_set_v1.py` — certified eligible-team helper source blob `77b591e431378ec984c51e8a032262e673d4c843`
+- `scripts/operations/apply_current_availability_eligible_team_seam_v1.py` — certified full-universe/R26 transformer source blob `b64ec5ccd59728121a250433e40e77e3e1013a05`.
+
+Implementation commits made during this checkpoint include:
+- `7031875e97a2f26b0dd04438b2966409ac07685f` Ourlads status sidecar
+- `659068cdc6899839b29c0950bef45d68712a8939` official inactives provider
+- `a31bb7b6f31500a4dff282933d806a2f44b98b3f` availability resolver
+- `cc7d39854ed7a3c970efa93d092c236400905d43` production-eligible role filter
+- `3e4000679e9aeffc9ebb5d9fe64ee76b8e7ffc20` reconciled active roles
+- `f7267f30098406786ada37f50bc5e74f9cfa81e5` availability prep orchestrator
+- `9eb62ac836e901264f16dfcb36a9b3b9149560a7` PlayerForm current-role wrapper
+- `605b0ccce533163b64f287cb58204fb4d99e391d` current-role utility
+- `507c54daf4addd97d05619e365db056645785c78` RB current-role wrapper
+- `1983e3258c5972232b3ad870a642cfc535f87560` Week1 TeamForm prior wrapper
+- `eaaaa59533e8f6a594c7cda44f399c1f7bd153ae` eligible-team helper
+- `02424422bdf7eb0d671fd14f97765da9d657aeb2` eligible-team transformer.
+
+**Important:** this is a partial production implementation only. It is NOT yet an implementation lock, NOT yet a branch verification PASS, NOT merged to `main`, and NOT a production-complete state.
+
+## Exact next action
+
+1. Continue only on `ops-current-player-availability-production-promotion-v1` from head `02424422bdf7eb0d671fd14f97765da9d657aeb2` (or verify newer legitimate commits first).
+2. Copy the remaining certified QB C2 current-output seam transformers from the immutable 35-gate lineage, preserving the separate 32-team QB state-context source-integrity guard.
+3. Verify all promoted files against their certified source blobs; if any promoted blob differs, resolve before locking. Do not silently accept hand-copied drift.
+4. Wire `.github/workflows/full-slate.yml` to the frozen order: schedule -> current roster/status -> injuries -> official inactives -> T-75 certification -> availability/current eligible roles -> TeamForm/QB context -> PlayerForm -> model stack -> RB P3 -> QB C2 -> M38/TE-R5P/WR-R15/R22/R26/outer P3 -> sportsbook downstream only.
+5. Set `ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv` for current-role consumers; unavailable/withheld players/games may never be resurrected by odds matching.
+6. Apply the exact certified eligible-team/QB current-output seams before pricing, or implement identical semantics directly; legacy mode must retain 32 teams, explicit availability mode must require exactly the certified eligible team set.
+7. Freeze an exact production implementation lock containing source blobs, workflow blob, scientific protected hashes, 35/35 authority, and prohibited-change assertions **before the first branch verification run**.
+8. Execute dedicated no-odds clean-checkout Full Slate branch verification. Preserve any mechanical failure separately; semantic/scientific invariant failure means no promotion.
+9. Only after complete branch verification PASS may the implementation be promoted to `main`.
+10. After main promotion, execute a clean-main no-odds Full Slate verification and preserve run/job/artifact/digest before closing availability and moving to the next roadmap item.
 
 ## Remaining roadmap after availability
 
-1. Finish current roster / late-week availability production promotion + clean-main verification — ACTIVE.
+1. Finish availability production promotion + branch verification + clean-main verification — ACTIVE.
 2. Grade sealed R26Q with exact locked R26S once authoritative Week1 outcomes exist.
 3. QB opportunity/efficiency: attempts/dropbacks/pass rate/YPA/sacks/scrambles, building on M89/M90.
 4. Selective unresolved WR/TE opportunity/efficiency/distribution while preserving M38/WR-R15 and TE-R5P.
