@@ -5,6 +5,13 @@ Status: `FROZEN BEFORE TIMING-CERTIFIER TEST EXECUTION`
 Parent operational plan: `docs/operations/CURRENT_ROSTER_LATE_WEEK_ROLE_FIX_V1_FROZEN_PLAN.md`.
 Protected production-code authority: `bb76ba9eabb08e2f0875a9af49301c3877f4141f`.
 
+Pinned implementation for first fixture execution:
+- certifier: `scripts/build/certify_current_player_availability_timing_v1.py`
+- certifier commit: `78436b80e4e1e6432fd0b435b78a898ea271b1ee`
+- frozen fixtures: `tests/test_current_player_availability_timing_v1.py`
+- fixtures commit: `cdbbc27f88e7ed72801925db860c47e855787b8d`
+- workflow creation commit: `63388b51dfffbe5c729109ab969a8449203299a5`
+
 ## Purpose
 
 Make the already-frozen game-window semantics executable without changing availability precedence or any predictive model.
