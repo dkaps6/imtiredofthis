@@ -1,6 +1,6 @@
 # RB R27C2 — Realized Target-Quality Forensic V1 Implementation Lock
 
-Status: `IMPLEMENTATION LOCKED BEFORE CANONICAL TARGET-GAME PBP FORENSIC EXECUTION`
+Status: `IMPLEMENTATION LOCKED / RUN1 MECHANICAL FAILURE PRESERVED / IMPORT-PATH REPAIR V1 LOCKED`
 
 This lock authorizes diagnostic-only execution. It does not authorize a predictive candidate or any production mutation.
 
@@ -22,7 +22,23 @@ This lock authorizes diagnostic-only execution. It does not authorize a predicti
 - Script: `scripts/backtest/forensic_rb_r27c2_realized_target_quality_v1.py`
 - Script blob: `179cabe788afc9d995a827b597ba269fb7dcdded`
 - Workflow: `.github/workflows/research-rb-r27c2-realized-target-quality-forensic-v1.yml`
-- Workflow blob: `cc1b20cd04a7134153e9ba9fe6be8e685cbe3fc0`
+- Run1 workflow blob: `cc1b20cd04a7134153e9ba9fe6be8e685cbe3fc0`
+- Import-path repair V1 workflow blob: `26ca2ea9918f416d788567c190cf3587ea335911`
+
+## Preserved Run1 mechanical failure
+
+- Run: `34431105624`
+- Job: `102726619356`
+- Head: `aa9406750e23efa77f8186c3054512d55a7ff316`
+- Failure: `ModuleNotFoundError: No module named 'scripts'`
+- Failure occurred before PBP loading, cohort calculation, or forensic output.
+- Exact repair record: `docs/research/RB_R27C2_RUN1_IMPORT_PATH_MECHANICAL_REPAIR.md`
+
+The only repair is to invoke the identical pinned diagnostic script with repository root on the import path:
+
+`PYTHONPATH=. python scripts/backtest/forensic_rb_r27c2_realized_target_quality_v1.py ...`
+
+No diagnostic code or scientific/forensic design changed.
 
 ## Frozen execution rules
 
@@ -37,6 +53,6 @@ This lock authorizes diagnostic-only execution. It does not authorize a predicti
 9. No new candidate projection.
 10. No sportsbook input.
 11. No production, R26 or R22 mutation.
-12. Preserve exact first canonical output artifact and digest.
+12. Preserve exact first valid canonical output artifact and digest.
 
 The machine disposition is intentionally conservative. Final forensic interpretation may use either non-production terminal label allowed in the frozen plan, based only on the pre-specified evidence tables.
