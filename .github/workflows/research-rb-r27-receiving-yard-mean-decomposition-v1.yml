@@ -20,6 +20,7 @@ env:
   R26_IDENTITY_RUNTIME_BLOB: 688d1b64fff78a588b1cd86af27654008b55cf26
   R27_EVALUATOR_BLOB: a284592a0b2f948b8f12f973ca9eb7d9c08d6b23
   R27_FINALIZER_BLOB: 4f8bf99b25210e8c88a6c8c4511ff9d565d47652
+  R27_SCHEDULE_STAGE_BLOB: 6a32fcb6cabfcba458b35ab43c029f04d5d62df0
 
 jobs:
   decomposition:
@@ -45,12 +46,14 @@ jobs:
           set -euo pipefail
           test -s docs/research/RB_R27_RECEIVING_YARD_MEAN_DECOMPOSITION_V1_FROZEN_PLAN.md
           test -s docs/research/RB_R27_RECEIVING_YARD_MEAN_DECOMPOSITION_V1_IMPLEMENTATION_LOCK.md
+          test -s docs/research/RB_R27_RUN1_HISTORICAL_SCHEDULE_SCOPE_MECHANICAL_REPAIR_V1.md
           for F in \
             scripts/backtest/evaluate_rb_r25_receptions_specialist_v1.py \
             scripts/backtest/evaluate_rb_r26_vacancy_gated_r9_v1.py \
             scripts/backtest/audit_rb_r26_safe_transition_state_v1.py \
             scripts/backtest/evaluate_rb_r27_receiving_yard_mean_decomposition_v1.py \
-            scripts/backtest/finalize_rb_r27_receiving_yard_mean_decomposition_v1.py; do
+            scripts/backtest/finalize_rb_r27_receiving_yard_mean_decomposition_v1.py \
+            scripts/backtest/stage_r27_regular_schedule_for_player_logs_v1.py; do
             test -s "$F"
           done
           python -m py_compile \
@@ -58,7 +61,8 @@ jobs:
             scripts/backtest/evaluate_rb_r26_vacancy_gated_r9_v1.py \
             scripts/backtest/audit_rb_r26_safe_transition_state_v1.py \
             scripts/backtest/evaluate_rb_r27_receiving_yard_mean_decomposition_v1.py \
-            scripts/backtest/finalize_rb_r27_receiving_yard_mean_decomposition_v1.py
+            scripts/backtest/finalize_rb_r27_receiving_yard_mean_decomposition_v1.py \
+            scripts/backtest/stage_r27_regular_schedule_for_player_logs_v1.py
 
           test "$(git hash-object scripts/backtest/evaluate_rb_r25_receptions_specialist_v1.py)" = "$R25_PARENT_BLOB"
           test "$(git hash-object scripts/backtest/evaluate_rb_r26_vacancy_gated_r9_v1.py)" = "$R26_PARENT_BLOB"
@@ -66,15 +70,18 @@ jobs:
           test "$(git hash-object scripts/modeling/rb_receiving_identity_runtime_v1.py)" = "$R26_IDENTITY_RUNTIME_BLOB"
           test "$(git hash-object scripts/backtest/evaluate_rb_r27_receiving_yard_mean_decomposition_v1.py)" = "$R27_EVALUATOR_BLOB"
           test "$(git hash-object scripts/backtest/finalize_rb_r27_receiving_yard_mean_decomposition_v1.py)" = "$R27_FINALIZER_BLOB"
+          test "$(git hash-object scripts/backtest/stage_r27_regular_schedule_for_player_logs_v1.py)" = "$R27_SCHEDULE_STAGE_BLOB"
 
           sha256sum docs/research/RB_R27_RECEIVING_YARD_MEAN_DECOMPOSITION_V1_FROZEN_PLAN.md | tee r27_plan.sha256
           sha256sum docs/research/RB_R27_RECEIVING_YARD_MEAN_DECOMPOSITION_V1_IMPLEMENTATION_LOCK.md | tee r27_lock.sha256
+          sha256sum docs/research/RB_R27_RUN1_HISTORICAL_SCHEDULE_SCOPE_MECHANICAL_REPAIR_V1.md | tee r27_repair.sha256
           sha256sum \
             scripts/backtest/evaluate_rb_r25_receptions_specialist_v1.py \
             scripts/backtest/evaluate_rb_r26_vacancy_gated_r9_v1.py \
             scripts/backtest/audit_rb_r26_safe_transition_state_v1.py \
             scripts/backtest/evaluate_rb_r27_receiving_yard_mean_decomposition_v1.py \
             scripts/backtest/finalize_rb_r27_receiving_yard_mean_decomposition_v1.py \
+            scripts/backtest/stage_r27_regular_schedule_for_player_logs_v1.py \
             scripts/modeling/rb_receiving_identity_runtime_v1.py | tee r27_code.sha256
 
           git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
@@ -116,8 +123,16 @@ jobs:
             python scripts/backtest/validate_historical_inputs.py \
               --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" \
               --data-dir "$D" --report "$D/historical_input_validation.csv"
+
+            # R27 Run1 mechanical repair only: stage canonical REG-week scope for
+            # historical_player_logs. All other builders continue using the original schedule.
+            python scripts/backtest/stage_r27_regular_schedule_for_player_logs_v1.py \
+              --schedule "$D/schedule_history.csv" \
+              --seasons "$PRIOR,$SEASON" \
+              --out "$D/schedule_history_player_logs_reg.csv" \
+              --audit "$D/r27_player_log_schedule_scope_audit.json"
             python scripts/backtest/historical_player_logs.py \
-              --seasons "$PRIOR,$SEASON" --schedule "$D/schedule_history.csv" \
+              --seasons "$PRIOR,$SEASON" --schedule "$D/schedule_history_player_logs_reg.csv" \
               --out "$D/player_game_logs_history.csv"
             python scripts/backtest/build_historical_injuries.py \
               --seasons "$PRIOR,$SEASON" --out "$D/injuries_history.csv"
@@ -193,10 +208,12 @@ jobs:
           path: |
             r27_plan.sha256
             r27_lock.sha256
+            r27_repair.sha256
             r27_code.sha256
             r27_protected_clean.txt
             data/backtests/rb_r27_safe_transition_state/*
             data/r27_hist_*/historical_input_validation.csv
+            data/r27_hist_*/r27_player_log_schedule_scope_audit.json
             data/backtests/r27_r26_parent_2020/*
             data/backtests/r27_r26_parent_2021/*
             data/backtests/r27_r26_parent_2022/*
