@@ -1,0 +1,60 @@
+name: QB Pass Rate Down Distance Decomp V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-qb-pass-rate-down-distance-decomp-v1
+    paths:
+      - ".github/workflows/audit-qb-pass-rate-down-distance-decomp-v1.yml"
+      - "scripts/backtest/evaluate_qb_pass_rate_down_distance_decomp_v1.py"
+      - "docs/migrations/QB_PASS_RATE_DOWN_DISTANCE_DECOMPOSITION_V1_PLAN.md"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy
+      - name: Compile frozen evaluator
+        run: python -m py_compile scripts/backtest/evaluate_qb_pass_rate_down_distance_decomp_v1.py
+      - name: Download immutable parent artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/play_rate evidence/shared
+          gh run download 34535405829 --repo "${GITHUB_REPOSITORY}" --name qb-team-pass-opportunity-play-rate-decomp-v1 --dir evidence/play_rate
+          gh run download 34066549394 --repo "${GITHUB_REPOSITORY}" --name qb-wr-shared-pass-volume-mechanism --dir evidence/shared
+      - name: Run frozen down-distance decomposition
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests/qb_pass_rate_down_distance_decomp_v1
+          python scripts/backtest/evaluate_qb_pass_rate_down_distance_decomp_v1.py \
+            --play-rate-root evidence/play_rate \
+            --shared-root evidence/shared \
+            --out-dir data/backtests/qb_pass_rate_down_distance_decomp_v1
+      - name: Show result
+        if: always()
+        run: cat data/backtests/qb_pass_rate_down_distance_decomp_v1/down_distance_decomposition_result.json 2>/dev/null || true
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-pass-rate-down-distance-decomp-v1
+          path: |
+            data/backtests/qb_pass_rate_down_distance_decomp_v1/*
+            docs/migrations/QB_PASS_RATE_DOWN_DISTANCE_DECOMPOSITION_V1_PLAN.md
+          if-no-files-found: warn
+          retention-days: 30
