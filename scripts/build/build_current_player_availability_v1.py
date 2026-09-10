@@ -34,13 +34,20 @@ def resolve_state(*,official_inactive,official_complete,injury_status,injury_des
 def rerank(df:pd.DataFrame)->pd.DataFrame:
     out=df.copy(); out["role_after_availability"]=""; out["role_rank_after_availability"]=pd.NA
     eligible=out[~out.definitive_unavailable.eq(1)].copy()
+    # Deterministic rank within QB/RB/FB/TE. WR alignment roles are preserved;
+    # WR opportunity redistribution requires its existing entitlement layer.
     for (team,grp),g in eligible.groupby(["team","position_group"],dropna=False):
-        grp=str(grp).upper(); idx=g.sort_values(["depth_index","raw_depth_role","player_clean_key"],na_position="last").index
+        grp=str(grp).upper()
+        idx=g.sort_values(["depth_index","raw_depth_role","player_clean_key"],na_position="last").index
         if grp in {"QB","RB","FB","TE"}:
             prefix="RB" if grp in {"RB","FB"} else grp
-            for rank,i in enumerate(idx,1): out.at[i,"role_after_availability"]=f"{prefix}{rank}"; out.at[i,"role_rank_after_availability"]=rank
+            for rank,i in enumerate(idx,1):
+                out.at[i,"role_after_availability"]=f"{prefix}{rank}"
+                out.at[i,"role_rank_after_availability"]=rank
         else:
-            for i in idx: out.at[i,"role_after_availability"]=text(out.at[i,"raw_depth_role"]); out.at[i,"role_rank_after_availability"]=out.at[i,"depth_index"]
+            for i in idx:
+                out.at[i,"role_after_availability"]=text(out.at[i,"raw_depth_role"])
+                out.at[i,"role_rank_after_availability"]=out.at[i,"depth_index"]
     return out
 
 def build(depth:pd.DataFrame,injuries:pd.DataFrame,official:pd.DataFrame|None=None)->tuple[pd.DataFrame,dict]:
@@ -48,28 +55,36 @@ def build(depth:pd.DataFrame,injuries:pd.DataFrame,official:pd.DataFrame|None=No
     need={"team","player","status","role","position","position_group","depth_index"}; miss=need-set(d.columns)
     if miss: raise RuntimeError(f"depth/status missing {sorted(miss)}")
     d["team"]=d.team.map(canon_team); d["player_clean_key"]=d.player.map(key); d=d[d.player_clean_key.ne("")].copy()
-    d=d.sort_values(["team","player_clean_key","depth_index"],na_position="last").drop_duplicates(["team","player_clean_key"],keep="first").rename(columns={"status":"ourlads_status","role":"raw_depth_role"})
-    i=injuries.copy() if injuries is not None else pd.DataFrame()
+    d=d.sort_values(["team","player_clean_key","depth_index"],na_position="last").drop_duplicates(["team","player_clean_key"],keep="first")
+    d=d.rename(columns={"status":"ourlads_status","role":"raw_depth_role"})
+    i=injuries.copy() if injuries is not None else pd.DataFrame();
     if not i.empty:
         i.columns=[str(c).lower() for c in i.columns]; i["team"]=i.team.map(canon_team); i["player_clean_key"]=i.player.map(key)
         keep=[c for c in ["team","player_clean_key","status","designation","practice_status","source","report_date"] if c in i]
-        i=i[keep].drop_duplicates(["team","player_clean_key"],keep="last").rename(columns={"status":"injury_status","source":"injury_source"}); d=d.merge(i,on=["team","player_clean_key"],how="left",validate="one_to_one")
-    else: d["injury_status"]=""; d["designation"]=""; d["injury_source"]=""
+        i=i[keep].drop_duplicates(["team","player_clean_key"],keep="last").rename(columns={"status":"injury_status","source":"injury_source"})
+        d=d.merge(i,on=["team","player_clean_key"],how="left",validate="one_to_one")
+    else:
+        d["injury_status"]=""; d["designation"]=""; d["injury_source"]=""
     o=official.copy() if official is not None else pd.DataFrame()
     if not o.empty:
         o.columns=[str(c).lower() for c in o.columns]
         for req in ["team","section_complete"]:
             if req not in o: raise RuntimeError(f"official inactive source missing {req}")
         o["team"]=o.team.map(canon_team); o["player_clean_key"]=o.get("player",pd.Series("",index=o.index)).map(key)
-        teams_complete=set(o.loc[pd.to_numeric(o.section_complete,errors="coerce").fillna(0).eq(1),"team"]); inactive_keys=set(zip(o.loc[o.player_clean_key.ne(""),"team"],o.loc[o.player_clean_key.ne(""),"player_clean_key"]))
-        d["official_inactive_section_complete"]=d.team.isin(teams_complete).astype(int); d["official_inactive"]=[bool((t,k) in inactive_keys) if t in teams_complete else pd.NA for t,k in zip(d.team,d.player_clean_key)]
-    else: d["official_inactive_section_complete"]=0; d["official_inactive"]=pd.NA
+        # One complete section ledger row may have blank player; listed player rows have identity.
+        teams_complete=set(o.loc[pd.to_numeric(o.section_complete,errors="coerce").fillna(0).eq(1),"team"])
+        inactive_keys=set(zip(o.loc[o.player_clean_key.ne(""),"team"],o.loc[o.player_clean_key.ne(""),"player_clean_key"]))
+        d["official_inactive_section_complete"]=d.team.isin(teams_complete).astype(int)
+        d["official_inactive"]=[bool((t,k) in inactive_keys) if t in teams_complete else pd.NA for t,k in zip(d.team,d.player_clean_key)]
+    else:
+        d["official_inactive_section_complete"]=0; d["official_inactive"]=pd.NA
     states=[]
     for r in d.itertuples(index=False):
         oi=False if pd.isna(r.official_inactive) else bool(r.official_inactive)
         states.append(resolve_state(official_inactive=oi,official_complete=bool(r.official_inactive_section_complete),injury_status=getattr(r,"injury_status",""),injury_designation=getattr(r,"designation",""),ourlads_status=r.ourlads_status))
     d[["final_availability_state","availability_authority","availability_reason"]]=pd.DataFrame(states,index=d.index)
-    d["definitive_unavailable"]=d.final_availability_state.str.startswith("UNAVAILABLE_").astype(int); d=rerank(d); d["eligible_for_opportunity"]=(1-d.definitive_unavailable).astype(int); d["availability_generated_at_utc"]=datetime.now(timezone.utc).isoformat()
+    d["definitive_unavailable"]=d.final_availability_state.str.startswith("UNAVAILABLE_").astype(int)
+    d=rerank(d); d["eligible_for_opportunity"]=(1-d.definitive_unavailable).astype(int); d["availability_generated_at_utc"]=datetime.now(timezone.utc).isoformat()
     unavailable=d[d.definitive_unavailable.eq(1)]
     if unavailable.role_after_availability.astype(str).str.strip().ne("").any(): raise RuntimeError("definitive unavailable player retained active reconciled role")
     meta={"rows":int(len(d)),"teams":int(d.team.nunique()),"definitive_unavailable":int(d.definitive_unavailable.sum()),"uncertain":int(d.final_availability_state.eq("UNCERTAIN").sum()),"unknown":int(d.final_availability_state.eq("UNKNOWN").sum()),"official_complete_teams":int(d.loc[d.official_inactive_section_complete.eq(1),"team"].nunique()),"sportsbook_inputs_used":0,"production_wired":False,"generated_at_utc":datetime.now(timezone.utc).isoformat()}
