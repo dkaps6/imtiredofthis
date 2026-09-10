@@ -80,54 +80,77 @@ Semantics: legacy/no-explicit-availability mode still requires 32 teams; explici
 
 ## 35-gate certification implementation
 
-Frozen implementation components on `ops-current-player-availability-35gate-cert-v1`:
+Frozen scientific/integration components remain unchanged:
 - football-stack runner blob `dc60ab10bc18777d6b13cb5f81f285e8c248f3ab`
 - fixture builder blob `dbe9f41e4d175b503bf0cd8caf51c1dc8d0da95d`
 - gates 1-34 evaluator blob `3bc2bb390ab6762f1c20e775152812d3f8e9729e`
 - gate35 finalizer blob `a5302186eadb748863c70b175421d064885dde60`
-- workflow after Run1 repair blob `130ed21db8d23575a38e84f1cfe0cc865498f001`.
+- shared eligible-team helper `77b591e431378ec984c51e8a032262e673d4c843`
+- full-universe/R26 transformer `b64ec5ccd59728121a250433e40e77e3e1013a05`
+- protected QB C2 source `7b677470b27b6776055c75c924a0ddf22d724a44`.
 
 The baseline certification consumes immutable candidate Artifact `10140425929`; it does NOT regenerate the live snapshot. It creates synthetic football-only identity/market-key lookup rows with NO book/line/odds/market probability and exercises the actual production football wrapper: M38 -> TE-R5P -> WR-R15 -> QB C2 -> R22 -> R26 -> outer P3 rush+receiving conservation. Fixtures run in isolated worktrees: RB1 OUT; QB1 inactive; WR2+/TE1 unavailable.
 
 ## 35-gate Run1 — PRESERVED MECHANICAL FAILURE / NO DECISION
 
-Original lock head `eb7f37fa6e2a9019ed0ec8f3bbe6fe73be202699`.
-
-- run `34459655725`
-- job `102814178762`
+- head `eb7f37fa6e2a9019ed0ec8f3bbe6fe73be202699`
+- run/job `34459655725` / `102814178762`
 - failure before any gate 1-34 evaluation
-- exact exception: `RuntimeError: QB C2 starter authority must cover 32 teams, got rows=30`
+- exact exception `RuntimeError: QB C2 starter authority must cover 32 teams, got rows=30`
 - disposition `MECHANICAL_FAILURE_NO_DECISION`
-- record `docs/operations/CURRENT_PLAYER_AVAILABILITY_35GATE_RUN1_MECHANICAL_FAILURE_RECORD.md`.
+- frozen gates evaluated `0/35`.
 
-Run1 had already passed frozen-blob/protected-model verification, immutable candidate digest verification, 30-team seam, all fixture construction, and M38/TE-R5P/WR-R15 baseline materialization/conservation. The failure was another legacy current-slate coverage guard in QB C2 starter-audit validation, not a QB model/starter-selection failure and not a frozen-gate result.
-
-### Frozen QB C2 minimum repair
-
-- repair plan commit `760fbcafec3df636b671b49c16a6d1d04c134162`
-- repair lock head `3825235af0442e7868f474e905ea11ad1214432e`
-- protected QB C2 source blob `7b677470b27b6776055c75c924a0ddf22d724a44`
-- QB coverage transformer blob `c7569c54cda779eb04bed7dbf2b22b9ec4fb526b`
+Frozen Run1 repair:
+- plan commit `760fbcafec3df636b671b49c16a6d1d04c134162`
+- lock head `3825235af0442e7868f474e905ea11ad1214432e`
+- starter-audit transformer blob `c7569c54cda779eb04bed7dbf2b22b9ec4fb526b`
 - dedicated regression Run `34460044387`, Job `102815456345` — SUCCESS.
 
-Regression proved legacy mode still requires exactly 32, explicit availability mode accepts exactly certified 30, and both missing/extra teams fail. The transformer changes only the final current-team coverage validation in `annotate_primary_qbs()`. Starter ranking/selection, official-authority priority, Ourlads fallback, C2 parameters/distributions and the existing 32-team state-context SOURCE integrity assertion remain unchanged.
+This repair changes only the starter-authority current-team coverage assertion. The complete 32-team state-context source-integrity assertion remains unchanged.
 
-## CURRENT LIVE STATE — 35-gate Run2 in progress
+## 35-gate Run2 — PRESERVED MECHANICAL FAILURE / NO DECISION
 
-Certification was relocked after the minimum mechanical repair:
 - relock head `1d38953995842aa0236edda7124a79665d0b8628`
-- Run2 `34460227422`
-- Job `102816052394`
-- current status at this handoff update: `in_progress`.
+- run/job `34460227422` / `102816052394`
+- frozen-implementation and immutable-candidate staging passed
+- 30-team M38 -> TE-R5P -> WR-R15 materialization/conservation passed
+- failure inside baseline QB C2 before any fixture execution or gate evaluation
+- exact exception `RuntimeError: QB C2 production adapter did not resolve exactly one primary QB per team`
+- disposition `MECHANICAL_FAILURE_NO_DECISION`
+- frozen gates evaluated `0/35`.
 
-Run2 remains eligible to become the **first valid immutable 35-gate result** because Run1 evaluated zero gates. The 35 frozen gate definitions have not changed.
+Root cause: a second unconditional legacy 32-team current-slate assertion remained after `qb_projection_eligible` primary selection. This was current-output coverage validation, not the separate complete 32-team state-context source-integrity check.
+
+Canonical Run2 minimum repair authority:
+- repair plan commit `2518f8366a8acbad5eb9d91de6134a1923a2381b`
+- Run2 primary-frame transformer blob `fbb7d34b54aefe98e95d8c097c7542c7d6490b52`
+- shared helper blob `77b591e431378ec984c51e8a032262e673d4c843`
+- sequential regression Run `34460546690` — SUCCESS.
+
+The regression applies the Run1 starter-audit transformer first and the Run2 primary-frame transformer second, compiles the protected QB C2 adapter, proves both current-output checks are availability-aware, and proves the separate state-context source-integrity guard remains exactly 32 teams. Legacy 32-team and explicit exact-certified-team behavior both remain enforced.
+
+A later duplicate mechanical regression Run `34461154452` also passed, but the earlier frozen Run2 lineage above is canonical and authoritative.
+
+## CURRENT LIVE STATE — 35-gate Run3 executing
+
+Run3 retry was separately frozen rather than rewriting the preserved Run1/Run2 workflow:
+- Run3 retry-plan commit `8324754389bae0162455a565bd86ee78aee6a91e`
+- Run3 workflow blob `8d60c7fb4ff301aab9abcb3c2630601c5d9a8ea9`
+- Run3 implementation-lock head `76d01dd8e7b26ef8921cd70c18f27957da46c560`
+- Run3 `34461561636`
+- Job `102820358570`
+- status at this handoff update: `in_progress`.
+
+Run3 uses the exact same immutable candidate, football-stack runner, fixtures, 34-gate evaluator, gate-35 finalizer and no-sportsbook boundary. The only mechanical addition versus Run2 is applying canonical primary-frame transformer `fbb7d34b54aefe98e95d8c097c7542c7d6490b52` immediately after starter-audit transformer `c7569c54cda779eb04bed7dbf2b22b9ec4fb526b` in baseline and each fixture worktree.
+
+Run1 and Run2 both evaluated zero gates, so Run3 is still eligible to become the **first valid immutable 35-gate result**. The 35 frozen gate definitions have never changed.
 
 ### Exact next action
 
-1. Inspect Run `34460227422` / Job `102816052394` first.
-2. If it fails before `Evaluate frozen gates 1 through 34`, preserve as `MECHANICAL_FAILURE_NO_DECISION`, diagnose exact exception, freeze only the minimum value-neutral plumbing repair, regression-test it, relock, retry.
-3. If it reaches gate evaluation, the first valid gate disposition is immutable: any failed gate = `CURRENT_PLAYER_AVAILABILITY_FULL_SLATE_INTEGRATION_FAIL_NO_PROMOTION`; exact 35/35 = `CURRENT_PLAYER_AVAILABILITY_FULL_SLATE_INTEGRATION_PASS_READY_FOR_PROMOTION`.
-4. A 35/35 PASS does NOT itself mutate production. Freeze a separate promotion implementation, wire availability/current-role seams into production, then execute post-promotion Full Slate verification before declaring the lane complete.
+1. Inspect Run `34461561636` / Job `102820358570` first.
+2. If it fails before `Evaluate frozen gates 1 through 34`, preserve as `MECHANICAL_FAILURE_NO_DECISION`, diagnose exact exception and permit only a separately frozen minimum value-neutral plumbing repair.
+3. If it reaches gate evaluation, the first valid integration result is immutable: any failed gate = `CURRENT_PLAYER_AVAILABILITY_FULL_SLATE_INTEGRATION_FAIL_NO_PROMOTION`; exact 35/35 = `CURRENT_PLAYER_AVAILABILITY_FULL_SLATE_INTEGRATION_PASS_READY_FOR_PROMOTION`.
+4. A 35/35 PASS does NOT itself mutate production. Freeze a separate promotion implementation, wire availability/current-role seams into production, and execute post-promotion Full Slate verification before declaring the lane complete.
 5. Update this handoff with exact run/job/artifact/digest/disposition at every material checkpoint.
 
 ## Remaining roadmap after availability
