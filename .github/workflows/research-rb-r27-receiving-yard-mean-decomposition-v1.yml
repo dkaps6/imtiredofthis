@@ -1,0 +1,212 @@
+name: RB R27 Receiving Yard Mean Decomposition V1
+
+on:
+  push:
+    branches:
+      - research-rb-r27-receiving-yard-mean-decomposition-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONPATH: ${{ github.workspace }}
+  PRODUCTION_BASE_SHA: bb76ba9eabb08e2f0875a9af49301c3877f4141f
+  R25_PARENT_BLOB: 93da760073059d68c6481b212a906c68734089e3
+  R26_PARENT_BLOB: 17170baa072bcc3157dee03c7a0de75297060e71
+  R26_TRANSITION_BLOB: 7459dc8a48a0c5e58e14b358ec4a9b0cd19eb959
+  R26_IDENTITY_RUNTIME_BLOB: 688d1b64fff78a588b1cd86af27654008b55cf26
+  R27_EVALUATOR_BLOB: a284592a0b2f948b8f12f973ca9eb7d9c08d6b23
+  R27_FINALIZER_BLOB: 4f8bf99b25210e8c88a6c8c4511ff9d565d47652
+
+jobs:
+  decomposition:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml scipy scikit-learn
+
+      - name: Verify frozen R27 lock and exact R26 parent mechanism
+        run: |
+          set -euo pipefail
+          test -s docs/research/RB_R27_RECEIVING_YARD_MEAN_DECOMPOSITION_V1_FROZEN_PLAN.md
+          test -s docs/research/RB_R27_RECEIVING_YARD_MEAN_DECOMPOSITION_V1_IMPLEMENTATION_LOCK.md
+          for F in \
+            scripts/backtest/evaluate_rb_r25_receptions_specialist_v1.py \
+            scripts/backtest/evaluate_rb_r26_vacancy_gated_r9_v1.py \
+            scripts/backtest/audit_rb_r26_safe_transition_state_v1.py \
+            scripts/backtest/evaluate_rb_r27_receiving_yard_mean_decomposition_v1.py \
+            scripts/backtest/finalize_rb_r27_receiving_yard_mean_decomposition_v1.py; do
+            test -s "$F"
+          done
+          python -m py_compile \
+            scripts/backtest/evaluate_rb_r25_receptions_specialist_v1.py \
+            scripts/backtest/evaluate_rb_r26_vacancy_gated_r9_v1.py \
+            scripts/backtest/audit_rb_r26_safe_transition_state_v1.py \
+            scripts/backtest/evaluate_rb_r27_receiving_yard_mean_decomposition_v1.py \
+            scripts/backtest/finalize_rb_r27_receiving_yard_mean_decomposition_v1.py
+
+          test "$(git hash-object scripts/backtest/evaluate_rb_r25_receptions_specialist_v1.py)" = "$R25_PARENT_BLOB"
+          test "$(git hash-object scripts/backtest/evaluate_rb_r26_vacancy_gated_r9_v1.py)" = "$R26_PARENT_BLOB"
+          test "$(git hash-object scripts/backtest/audit_rb_r26_safe_transition_state_v1.py)" = "$R26_TRANSITION_BLOB"
+          test "$(git hash-object scripts/modeling/rb_receiving_identity_runtime_v1.py)" = "$R26_IDENTITY_RUNTIME_BLOB"
+          test "$(git hash-object scripts/backtest/evaluate_rb_r27_receiving_yard_mean_decomposition_v1.py)" = "$R27_EVALUATOR_BLOB"
+          test "$(git hash-object scripts/backtest/finalize_rb_r27_receiving_yard_mean_decomposition_v1.py)" = "$R27_FINALIZER_BLOB"
+
+          sha256sum docs/research/RB_R27_RECEIVING_YARD_MEAN_DECOMPOSITION_V1_FROZEN_PLAN.md | tee r27_plan.sha256
+          sha256sum docs/research/RB_R27_RECEIVING_YARD_MEAN_DECOMPOSITION_V1_IMPLEMENTATION_LOCK.md | tee r27_lock.sha256
+          sha256sum \
+            scripts/backtest/evaluate_rb_r25_receptions_specialist_v1.py \
+            scripts/backtest/evaluate_rb_r26_vacancy_gated_r9_v1.py \
+            scripts/backtest/audit_rb_r26_safe_transition_state_v1.py \
+            scripts/backtest/evaluate_rb_r27_receiving_yard_mean_decomposition_v1.py \
+            scripts/backtest/finalize_rb_r27_receiving_yard_mean_decomposition_v1.py \
+            scripts/modeling/rb_receiving_identity_runtime_v1.py | tee r27_code.sha256
+
+          git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
+            scripts/modeling \
+            scripts/run_rb_week1_no_odds.py \
+            scripts/run_pricing_with_full_roster_universe_v3.py \
+            scripts/run_pricing_with_full_roster_universe_v3_core.py \
+            scripts/run_pricing_with_full_roster_universe_v4_production.py \
+            scripts/run_pricing_with_full_roster_universe_v5_production.py \
+            scripts/simulation_v2.py \
+            scripts/simulation_c2_qb_candidate.py \
+            data/models \
+            model \
+            .github/workflows/full-slate.yml
+          echo PASS > r27_protected_clean.txt
+          echo R27_FROZEN_PARENT_AND_PRODUCTION_BOUNDARY_PASS
+
+      - name: Build canonical leakage-safe transition state
+        run: |
+          rm -rf data/backtests/rb_r27_safe_transition_state
+          python scripts/backtest/audit_rb_r26_safe_transition_state_v1.py \
+            --target-seasons 2020-2025 \
+            --out-dir data/backtests/rb_r27_safe_transition_state
+
+      - name: Build historical football bundles 2019-2025
+        run: |
+          set -euo pipefail
+          for SEASON in 2019 2020 2021 2022 2023 2024 2025; do
+            PRIOR=$((SEASON-1))
+            if [ "$SEASON" -le 2020 ]; then WEEKS='1-17'; else WEEKS='1-18'; fi
+            D="data/r27_hist_${SEASON}"
+            rm -rf "$D"
+            python scripts/backtest/build_historical_inputs.py \
+              --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --out-dir "$D"
+            python scripts/backtest/enrich_historical_defense.py \
+              --team-weekly "$D/team_weekly_history.csv" --seasons "$PRIOR,$SEASON" \
+              --audit "$D/historical_defense_enrichment_audit.csv" \
+              --observations "$D/historical_defense_observations.csv"
+            python scripts/backtest/validate_historical_inputs.py \
+              --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" \
+              --data-dir "$D" --report "$D/historical_input_validation.csv"
+            python scripts/backtest/historical_player_logs.py \
+              --seasons "$PRIOR,$SEASON" --schedule "$D/schedule_history.csv" \
+              --out "$D/player_game_logs_history.csv"
+            python scripts/backtest/build_historical_injuries.py \
+              --seasons "$PRIOR,$SEASON" --out "$D/injuries_history.csv"
+            python scripts/backtest/build_historical_weather.py \
+              --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv"
+          done
+
+      - name: Execute exact frozen R26 opportunity folds
+        run: |
+          set -euo pipefail
+          for TEST in 2020 2021 2022 2023 2024 2025; do
+            TRAIN=$((TEST-1))
+            OUT="data/backtests/r27_r26_parent_${TEST}"
+            rm -rf "$OUT"
+            python scripts/backtest/evaluate_rb_r26_vacancy_gated_r9_v1.py \
+              --train-season "$TRAIN" \
+              --test-season "$TEST" \
+              --train-dir "data/r27_hist_${TRAIN}" \
+              --test-dir "data/r27_hist_${TEST}" \
+              --transition-state data/backtests/rb_r27_safe_transition_state/r26_safe_transition_player_state.csv \
+              --out-dir "$OUT"
+          done
+
+      - name: Translate exact R26 opportunity into receiving-yard means
+        run: |
+          set -euo pipefail
+          for TEST in 2020 2021 2022 2023 2024 2025; do
+            OUT="data/backtests/r27_rec_yard_mean_${TEST}"
+            rm -rf "$OUT"
+            python scripts/backtest/evaluate_rb_r27_receiving_yard_mean_decomposition_v1.py \
+              --test-season "$TEST" \
+              --test-dir "data/r27_hist_${TEST}" \
+              --r26-dir "data/backtests/r27_r26_parent_${TEST}" \
+              --out-dir "$OUT"
+          done
+
+      - name: Apply all 27 frozen R27 gates
+        run: |
+          python scripts/backtest/finalize_rb_r27_receiving_yard_mean_decomposition_v1.py \
+            --dirs \
+              data/backtests/r27_rec_yard_mean_2020 \
+              data/backtests/r27_rec_yard_mean_2021 \
+              data/backtests/r27_rec_yard_mean_2022 \
+              data/backtests/r27_rec_yard_mean_2023 \
+              data/backtests/r27_rec_yard_mean_2024 \
+              data/backtests/r27_rec_yard_mean_2025 \
+            --protected-clean-marker r27_protected_clean.txt \
+            --out-dir data/backtests/r27_rec_yard_mean_final
+
+      - name: Show R27 disposition
+        run: |
+          cat data/backtests/r27_rec_yard_mean_final/r27_disposition.json
+
+      - name: Assert frozen structural integrity only
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('data/backtests/r27_rec_yard_mean_final/r27_disposition.json').read_text())
+          structural={k:v for k,v in d['gates'].items() if int(k[:2]) <= 12}
+          assert len(structural)==12, structural
+          assert all(structural.values()), structural
+          print('R27_STRUCTURAL_INTEGRITY_PASS')
+          print('scientific_disposition=', d['disposition'])
+          print('scientific_gate_pass_count=', d['gate_pass_count'], '/', d['gate_count'])
+          PY
+
+      - name: Upload R27 evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r27-receiving-yard-mean-decomposition-v1
+          retention-days: 90
+          path: |
+            r27_plan.sha256
+            r27_lock.sha256
+            r27_code.sha256
+            r27_protected_clean.txt
+            data/backtests/rb_r27_safe_transition_state/*
+            data/r27_hist_*/historical_input_validation.csv
+            data/backtests/r27_r26_parent_2020/*
+            data/backtests/r27_r26_parent_2021/*
+            data/backtests/r27_r26_parent_2022/*
+            data/backtests/r27_r26_parent_2023/*
+            data/backtests/r27_r26_parent_2024/*
+            data/backtests/r27_r26_parent_2025/*
+            data/backtests/r27_rec_yard_mean_2020/*
+            data/backtests/r27_rec_yard_mean_2021/*
+            data/backtests/r27_rec_yard_mean_2022/*
+            data/backtests/r27_rec_yard_mean_2023/*
+            data/backtests/r27_rec_yard_mean_2024/*
+            data/backtests/r27_rec_yard_mean_2025/*
+            data/backtests/r27_rec_yard_mean_final/*
