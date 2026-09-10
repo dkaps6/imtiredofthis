@@ -1,0 +1,60 @@
+name: RB R27B V2 Implementation Audit
+
+on:
+  push:
+    branches:
+      - research-rb-r27b-v2-implementation-stage-4
+    paths:
+      - 'scripts/backtest/build_rb_r27b_v2_novel_efficiency_dataset.py'
+      - 'scripts/backtest/evaluate_rb_r27b_v2_novel_efficiency_context.py'
+      - 'scripts/backtest/finalize_rb_r27b_v2_novel_efficiency_context.py'
+      - '.github/workflows/research-rb-r27b-v2-implementation-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+
+jobs:
+  static-audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile frozen V2 implementation
+        run: |
+          python -m py_compile \
+            scripts/backtest/build_rb_r27b_v2_novel_efficiency_dataset.py \
+            scripts/backtest/evaluate_rb_r27b_v2_novel_efficiency_context.py \
+            scripts/backtest/finalize_rb_r27b_v2_novel_efficiency_context.py
+      - name: Static anti-reinvention audit
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/backtest/evaluate_rb_r27b_v2_novel_efficiency_context.py').read_text()
+          required=['player_air_yards_per_target_prior','player_yac_per_reception_prior','team_rb_targets_per_official_pass_attempt_prior','opp_rb_yac_allowed_per_reception_prior']
+          forbidden=['player_career_ypt_eb','player_last4_ypt_eb','player_last8_ypt_eb','player_career_ypr_eb']
+          assert all(x in p for x in required), required
+          assert all(x not in p for x in forbidden), forbidden
+          assert 'CORRECTION_CAP = 1.5' in p
+          assert 'ALPHAS = [1.0, 10.0, 100.0, 1000.0]' in p
+          print('R27B_V2_STATIC_ANTI_REINVENTION_PASS')
+          PY
+      - name: Verify no protected production mutation
+        run: |
+          git diff --quiet bb76ba9eabb08e2f0875a9af49301c3877f4141f HEAD -- \
+            scripts/modeling \
+            scripts/run_rb_week1_no_odds.py \
+            scripts/run_pricing_with_full_roster_universe_v4_production.py \
+            scripts/run_pricing_with_full_roster_universe_v5_production.py \
+            scripts/simulation_v2.py \
+            scripts/simulation_c2_qb_candidate.py \
+            data/models \
+            model \
+            .github/workflows/full-slate.yml
+          echo R27B_V2_PROTECTED_BOUNDARY_PASS
