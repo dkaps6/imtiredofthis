@@ -1,0 +1,228 @@
+name: Audit NE-SEA Pregame Current Stack V1
+
+on:
+  push:
+    branches: [audit-ne-sea-pregame-current-stack-v1]
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  SEASON: "2026"
+  PRIOR_SEASON: "2025"
+  SLATE_DATE: "2026-09-09"
+  ASOF_UTC: "2026-09-09T23:00:00Z"
+  ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
+  FETCH_LIVE_ODDS: "false"
+  SOURCE_ARTIFACT_ID: "10030344451"
+  SOURCE_ARTIFACT_DIGEST: "sha256:c19bd303a0eb7ca58a3484117e28b5e5144459b74459bd1032970873cae6d035"
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml beautifulsoup4 lxml pytest
+
+      - name: Verify frozen plan and protected boundary
+        run: |
+          set -euo pipefail
+          test -s docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_FROZEN_PLAN.md
+          git merge-base --is-ancestor 3e01e2bf3d6307f33562c18bea7e25f686757608 HEAD
+          git diff --name-only 3e01e2bf3d6307f33562c18bea7e25f686757608...HEAD | tee /tmp/diff.txt
+          if grep -Ev '^(docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_FROZEN_PLAN.md|\.github/workflows/audit-ne-sea-pregame-current-stack-v1.yml)$' /tmp/diff.txt | grep -q .; then
+            echo 'FATAL: diagnostic branch changed files outside frozen diagnostic boundary'
+            exit 1
+          fi
+
+      - name: Build current football inputs and frozen pregame availability state
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/providers/ourlads_depth.py --season "${SEASON}"
+          python scripts/utils/build_team_week_map_v2.py --season "${SEASON}" --out data/team_week_map.csv
+          python scripts/build/build_weather_week_v2.py --season "${SEASON}" --date "${SLATE_DATE}"
+          python scripts/build/build_injuries_weekly.py data/injuries.csv --season "${SEASON}"
+          python scripts/run_current_player_availability_candidate_prep_v1.py --season "${SEASON}" --week 1 --asof-utc "${ASOF_UTC}"
+          python - <<'PY'
+          import json, pandas as pd
+          a=pd.read_csv('data/current_player_availability.csv')
+          c=pd.read_csv('data/current_player_availability_game_certification.csv')
+          r=pd.read_csv('data/roles_current_production_eligible_v1.csv')
+          game=c[((c.away_team=='NE')&(c.home_team=='SEA'))|((c.away_team=='SEA')&(c.home_team=='NE'))]
+          assert len(game)==1, game.to_dict('records')
+          g=game.iloc[0]
+          assert bool(g.production_eligible), g.to_dict()
+          assert str(g.certification_state)!='KICKED_OFF_LOCKED', g.to_dict()
+          def one(team,key):
+              x=a[(a.team==team)&(a.player_clean_key==key)]
+              assert len(x)==1, (team,key,len(x))
+              return x.iloc[0]
+          steve=one('NE','rhamondrestevenson')
+          hend=one('NE','treveyonhenderson')
+          darn=one('SEA','samdarnold')
+          aj=one('NE','ajbrown')
+          assert str(steve.role_after_availability)=='RB1' and int(steve.eligible_for_opportunity)==1
+          assert int(hend.definitive_unavailable)==1 and int(hend.eligible_for_opportunity)==0
+          assert str(darn.role_after_availability)=='QB1' and int(darn.eligible_for_opportunity)==1
+          assert int(aj.eligible_for_opportunity)==1
+          assert {'NE','SEA'}.issubset(set(r.team.astype(str)))
+          payload={
+            'disposition':'NE_SEA_FROZEN_PREGAME_STATE_PASS',
+            'asof_utc':'2026-09-09T23:00:00Z',
+            'game_certification_state':str(g.certification_state),
+            'production_eligible':bool(g.production_eligible),
+            'rhamondre_role':str(steve.role_after_availability),
+            'henderson_definitive_unavailable':int(hend.definitive_unavailable),
+            'darnold_role':str(darn.role_after_availability),
+            'aj_brown_eligible':int(aj.eligible_for_opportunity),
+            'sportsbook_inputs_used':0,
+          }
+          open('data/ne_sea_pregame_state_audit.json','w').write(json.dumps(payload,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(payload,indent=2,sort_keys=True))
+          PY
+
+      - name: Rebuild strict-prior current production football stack
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+          python scripts/run_sharpfootball_v2.py --season "${SEASON}" --dump-html
+          python scripts/team_form_prior_bridge.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}"
+          python scripts/run_team_form_context_week1_prior_v1.py --season "${SEASON}" --box-backfill-prev
+          python scripts/run_qb_promoted_context.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}"
+          python scripts/run_coverage_v2.py --season "${SEASON}"
+          # INTENTIONALLY DO NOT RUN scripts/build/pbp_features.py. Target-game PBP is forbidden.
+          python scripts/run_player_form_current_roles_v1.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
+          python scripts/enrich_player_scoring_v2.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
+          python - <<'PY'
+          import pandas as pd
+          x=pd.read_csv('data/player_game_logs.csv')
+          season=pd.to_numeric(x.season,errors='coerce'); week=pd.to_numeric(x.week,errors='coerce')
+          assert not (season.eq(2026)&week.ge(1)).fillna(False).any(), 'target/current Week1 history leaked into PlayerForm'
+          f=pd.read_csv('data/player_form_consensus.csv')
+          assert f.team.nunique()==32, f.team.nunique()
+          print('STRICT_PRIOR_PLAYERFORM_32_TEAM_PASS',len(f))
+          PY
+          python scripts/run_model_context_bridge.py
+          python scripts/run_model_bayesian_bridge.py
+          python scripts/run_model_ml_bridge.py
+          python scripts/run_model_state_bridge.py
+          python scripts/run_model_rules_bridge.py
+          python scripts/run_model_ensemble_bridge.py
+          python scripts/run_rb_week1_current_roles_v1.py --season "${SEASON}" --week 1 --iterations 25000 --out data/rb_rush_synthesis_context.csv
+          python scripts/run_qb_distribution_state_context.py --season "${SEASON}" --week 1
+          python scripts/operations/apply_current_availability_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_primary_team_seam_v1.py
+
+      - name: Download immutable Sep-7 sportsbook artifact without refetching odds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/paid
+          curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}/zip" -o /tmp/source.zip
+          unzip -q /tmp/source.zip -d /tmp/paid
+          test -s /tmp/paid/data/props_enriched.csv
+          echo "source_artifact_id=${SOURCE_ARTIFACT_ID} expected_digest=${SOURCE_ARTIFACT_DIGEST}"
+
+      - name: Stage exact NE-SEA historical offers only after football generation
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python - <<'PY'
+          import json, pandas as pd
+          from scripts.utils.player_identity_v3 import player_name_key
+          src=pd.read_csv('/tmp/paid/data/props_enriched.csv',low_memory=False)
+          roles=pd.read_csv('data/roles_current_production_eligible_v1.csv',low_memory=False)
+          active=set((str(t),player_name_key(p,strip_suffix=True)) for t,p in zip(roles.team,roles.player))
+          x=src[src.player_team_abbr.astype(str).isin(['NE','SEA'])].copy()
+          x['identity_base']=x['player'].map(lambda p: player_name_key(p,strip_suffix=True))
+          x=x[[ (str(t),k) in active for t,k in zip(x.player_team_abbr,x.identity_base) ]].copy()
+          x=x.rename(columns={'player_team_abbr':'team','opponent_team_abbr':'opponent'})
+          keep=['event_id','player','market','line','book','book_title','team','opponent','side','price_american','commence_time_x']
+          x=x[keep].rename(columns={'commence_time_x':'commence_time'})
+          x=x.drop_duplicates(['event_id','player','market','line','book','side','price_american'],keep='first')
+          x.to_csv('outputs/props_raw.csv',index=False)
+          assert set(x.team.astype(str))=={'NE','SEA'},set(x.team.astype(str))
+          assert len(x)>0
+          payload={'source_run':34152868136,'source_artifact':10030344451,'odds_refetched':False,'rows':int(len(x)),'players':int(x.player.nunique()),'markets':sorted(x.market.astype(str).unique().tolist()),'teams':sorted(x.team.astype(str).unique().tolist())}
+          open('data/ne_sea_historical_offer_stage_audit.json','w').write(json.dumps(payload,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(payload,indent=2,sort_keys=True))
+          PY
+
+      - name: Run current promoted pricing stack at preserved NE-SEA lines
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+          python scripts/run_metrics_context.py --season "${SEASON}" --week 1 --date "${SLATE_DATE}"
+          python scripts/metrics_ready.py --season "${SEASON}" --date "${SLATE_DATE}"
+          python scripts/run_pricing_with_full_roster_universe_v3.py --season "${SEASON}"
+          test -s outputs/props_priced_clean.csv
+          python - <<'PY'
+          import json, pandas as pd
+          p=pd.read_csv('outputs/props_priced_clean.csv',low_memory=False)
+          assert set(p.team.astype(str)).issubset({'NE','SEA'}), sorted(p.team.unique())
+          p.to_csv('outputs/ne_sea_current_stack_counterfactual_priced.csv',index=False)
+          rb=pd.read_csv('data/rb_rush_synthesis_context.csv',low_memory=False)
+          rb=rb[rb.team.astype(str).isin(['NE','SEA'])].copy()
+          rb.to_csv('outputs/ne_sea_current_stack_rb_p3.csv',index=False)
+          rham=rb[rb.player_clean_key.astype(str).eq('rhamondrestevenson')]
+          price=rb[rb.player_clean_key.astype(str).eq('jadarianprice')]
+          assert len(rham)==1 and len(price)==1
+          payload={
+            'disposition':'NE_SEA_CURRENT_PROMOTED_STACK_COUNTERFACTUAL_COMPLETE',
+            'diagnostic_only':True,
+            'asof_utc':'2026-09-09T23:00:00Z',
+            'sportsbook_source_run':34152868136,
+            'sportsbook_source_artifact':10030344451,
+            'odds_refetched':False,
+            'priced_side_rows':int(len(p)),
+            'priced_players':int(p.player.nunique()),
+            'rhamondre_p3_rush_yards':float(rham.iloc[0].rb_synthesis_proj),
+            'jadarian_price_p3_rush_yards':float(price.iloc[0].rb_synthesis_proj),
+            'target_game_pbp_used':False,
+            'production_modified':False,
+          }
+          open('outputs/ne_sea_current_stack_counterfactual_result.json','w').write(json.dumps(payload,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(payload,indent=2,sort_keys=True))
+          PY
+
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ne-sea-current-stack-counterfactual-v1
+          path: |
+            outputs/ne_sea_current_stack_counterfactual_priced.csv
+            outputs/ne_sea_current_stack_rb_p3.csv
+            outputs/ne_sea_current_stack_counterfactual_result.json
+            data/ne_sea_pregame_state_audit.json
+            data/ne_sea_historical_offer_stage_audit.json
+            data/current_player_availability.csv
+            data/current_player_availability_game_certification.csv
+            data/roles_current_production_eligible_v1.csv
+            data/player_form_consensus.csv
+            data/rb_rush_synthesis_context.csv
+            data/qb_c2_production_integration_audit.json
+            data/wr_r15_full_slate_entitlement_audit.json
+            data/rb_r22_production_integration_audit.json
+            data/rb_r26_receptions_production_integration_audit.json
+          if-no-files-found: warn
+          retention-days: 14
