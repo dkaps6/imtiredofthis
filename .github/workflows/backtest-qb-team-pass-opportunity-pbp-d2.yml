@@ -1,0 +1,63 @@
+name: QB Team Pass Opportunity PBP D2
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-qb-team-pass-opportunity-pbp-d2
+    paths:
+      - ".github/workflows/backtest-qb-team-pass-opportunity-pbp-d2.yml"
+      - "scripts/backtest/evaluate_qb_team_pass_opportunity_pbp_d2.py"
+      - "docs/migrations/QB_TEAM_PASS_OPPORTUNITY_PBP_D2_PLAN.md"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy==1.26.4 pandas==1.5.3 scipy==1.11.4 scikit-learn==1.4.2
+      - name: Compile frozen D2 evaluator
+        run: python -m py_compile scripts/backtest/evaluate_qb_team_pass_opportunity_pbp_d2.py
+      - name: Download immutable parent artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/v1b evidence/chain evidence/shared evidence/m89
+          gh run download 34534419071 --repo "${GITHUB_REPOSITORY}" --name qb-team-pass-opportunity-pbp-source-audit-v1b --dir evidence/v1b
+          gh run download 34523313743 --repo "${GITHUB_REPOSITORY}" --name qb-opportunity-chain-decomposition-v1 --dir evidence/chain
+          gh run download 34066549394 --repo "${GITHUB_REPOSITORY}" --name qb-wr-shared-pass-volume-mechanism --dir evidence/shared
+          gh run download 33331073376 --repo "${GITHUB_REPOSITORY}" --name m89-qb-data-integrity-casebook-synthesis --dir evidence/m89
+      - name: Run frozen 2024 D2 development screen
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests/qb_team_pass_opportunity_pbp_d2
+          python scripts/backtest/evaluate_qb_team_pass_opportunity_pbp_d2.py \
+            --v1b-root evidence/v1b \
+            --chain-root evidence/chain \
+            --shared-root evidence/shared \
+            --m89-root evidence/m89 \
+            --out-dir data/backtests/qb_team_pass_opportunity_pbp_d2
+      - name: Show D2 result
+        if: always()
+        run: cat data/backtests/qb_team_pass_opportunity_pbp_d2/d2_result.json 2>/dev/null || true
+      - name: Upload D2 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-team-pass-opportunity-pbp-d2
+          path: |
+            data/backtests/qb_team_pass_opportunity_pbp_d2/*
+            docs/migrations/QB_TEAM_PASS_OPPORTUNITY_PBP_D2_PLAN.md
+          if-no-files-found: warn
+          retention-days: 30
