@@ -1,0 +1,41 @@
+name: Current Player Availability QB C2 Primary Team Seam Regression V1
+
+on:
+  push:
+    branches: [ops-current-player-availability-35gate-cert-v1]
+    paths: ['docs/operations/CURRENT_PLAYER_AVAILABILITY_35GATE_RUN2_QB_C2_PRIMARY_COVERAGE_REPAIR_LOCK.md']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PROTECTED_QB_C2_BLOB: 7b677470b27b6776055c75c924a0ddf22d724a44
+  RUN1_TRANSFORMER_BLOB: c7569c54cda779eb04bed7dbf2b22b9ec4fb526b
+  RUN2_TRANSFORMER_BLOB: fbb7d34b54aefe98e95d8c097c7542c7d6490b52
+  HELPER_BLOB: 77b591e431378ec984c51e8a032262e673d4c843
+
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: pip install pandas==1.5.3 numpy==1.26.4
+      - name: Verify sequential frozen transforms
+        run: |
+          set -euo pipefail
+          test "$(git hash-object scripts/modeling/qb_c2_production_adapter_v1.py)" = "$PROTECTED_QB_C2_BLOB"
+          test "$(git hash-object scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py)" = "$RUN1_TRANSFORMER_BLOB"
+          test "$(git hash-object scripts/operations/apply_current_availability_qb_c2_primary_team_seam_v1.py)" = "$RUN2_TRANSFORMER_BLOB"
+          test "$(git hash-object scripts/utils/eligible_team_set_v1.py)" = "$HELPER_BLOB"
+          export PYTHONPATH="$PWD"
+          python scripts/operations/test_current_availability_qb_c2_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_primary_team_seam_v1.py
+          python -m py_compile scripts/modeling/qb_c2_production_adapter_v1.py
+          grep -F 'validate_current_team_set(audit["team"].astype(str), label="QB C2 starter authority")' scripts/modeling/qb_c2_production_adapter_v1.py
+          grep -F 'validate_current_team_set(primary["team"].astype(str), label="QB C2 primary projection")' scripts/modeling/qb_c2_production_adapter_v1.py
+          grep -F 'QB C2 state context must cover exactly 32 teams' scripts/modeling/qb_c2_production_adapter_v1.py
+          echo CURRENT_AVAILABILITY_QB_C2_SEQUENTIAL_COVERAGE_REGRESSION_PASS
