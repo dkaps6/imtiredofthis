@@ -2,12 +2,12 @@
 
 **Repository:** `dkaps6/imtiredofthis`  
 **Purpose:** canonical cross-chat continuity ledger for the NFL pregame projection research program.  
-**Last updated:** 2026-09-09 after R26 receptions production promotion, post-promotion Full Slate/Repo CI verification, and the R27 receiving-yard mean decomposition plan freeze.  
+**Last updated:** 2026-09-09 after R26 receptions production promotion, post-promotion Full Slate/Repo CI verification, the R27 receiving-yard mean decomposition plan freeze, and explicit remaining-work/evidence-access hardening.  
 **Current production head:** `bb76ba9eabb08e2f0875a9af49301c3877f4141f`  
 **Active research branch:** `research-rb-r27-receiving-yard-mean-decomposition-v1`  
 **Exact stop point:** R27 V1 frozen plan exists at commit `5333d7e1cc33dcb567d03c924c774afb6877e932`; **no R27 evaluator/implementation lock/workflow run/results exist yet**.
 
-> **Future ChatGPT sessions / agents:** read this file first, then `AGENTS.md`, then the exact R27 frozen plan named below. Preserve failed studies and mechanical failures, distinguish science from plumbing, freeze plans before results, keep sportsbook data downstream only, and never silently change production.
+> **Future ChatGPT sessions / agents:** read this file first, then `AGENTS.md`, then the exact R27 frozen plan named below. Preserve failed studies and mechanical failures, distinguish science from plumbing, freeze plans before results, keep sportsbook data downstream only, and never silently change production. Sections 14-15 are the explicit remaining-work register and GitHub evidence-reconstruction protocol.
 
 ---
 
@@ -488,3 +488,157 @@ Do not blindly multiply noisy raw YPR by R26 receptions.
 ## 13. One-sentence current state
 
 **R26 receptions is production-active at `main@bb76ba9eabb08e2f0875a9af49301c3877f4141f`; the active next study is R27 V1 on branch `research-rb-r27-receiving-yard-mean-decomposition-v1`, whose plan was frozen at `5333d7e1cc33dcb567d03c924c774afb6877e932` before implementation/results to test whether exact R26 opportunity redistribution improves RB receiving-yard mean using the same production YPT, with R22 and all production code untouched.**
+
+---
+
+## 14. Explicit remaining-work register — what is still unfinished
+
+This section is the canonical backlog. A future chat should not infer the remaining program from memory alone.
+
+### A. Finish the current RB receiving-yard mean lane
+
+**A1 — R27 V1 implementation and execution — ACTIVE NOW**
+- Build evaluator/finalizer under the frozen plan.
+- Lock implementation before candidate execution.
+- Run 2020-2025 exact folds.
+- Preserve first scientific result exactly.
+- Done only when exact run/job/artifact/digest/disposition and gates are recorded here.
+
+**A2 — R27B strict-prior efficiency research — CONDITIONAL**
+- Only if R27 V1 says opportunity translation is insufficient/safe-but-small or otherwise leaves efficiency as the remaining error source.
+- Must add genuinely new pregame efficiency information on top of fixed R26 opportunity; do not rebrand R24.
+- Candidate families may include shrunk efficiency persistence, YAC/YACOE, route/screen/aDOT usage, explosive propensity, RB archetype, opponent/LB tackling/YAC context, and QB checkdown/pressure context if leakage-safe.
+
+**A3 — receiving-yard mean integration/recentering qualification — CONDITIONAL**
+- If a mean candidate qualifies, run a separate frozen integration study.
+- R22 remains the qualified tail layer until this study proves how to recenter/compose it around the new mean without breaking its distribution authority.
+- No direct production mutation from R27 research alone.
+
+### B. Resolve current-roster / late-week role handling
+
+- Preserve sealed R26Q as scientific pregame authority; never rewrite it after the fact.
+- Current production/operational runs must still handle late roster changes, new players, inactives, and current role changes safely.
+- The NE Corey Kiner → Lan Larison RB3 substitution is evidence that the operational refresh problem exists; it is **not** evidence for a general role-inheritance formula.
+- A separate frozen study is still needed for acute same-week injury/availability → role-inheritance / workload-transfer behavior if we want validated automatic redistribution.
+
+### C. Post-Week1 prospective grading
+
+- Rerun the exact locked R26S evaluator unchanged when authoritative Week1 player stats and snap counts are available.
+- This grades the prospectively sealed R26Q forecast; it must not be recomputed from postgame knowledge.
+- Any future promoted RB mean component should receive its own prospective grading path as well.
+
+### D. QB opportunity/efficiency lane
+
+After RB receiving-yard mean is closed or explicitly parked, continue the original hierarchy:
+- attempts / dropbacks
+- pass rate
+- sacks / scramble conversion
+- YPA / efficiency
+- game-script and personnel effects only where pregame and leakage-safe.
+
+Existing M89/M90/C2 production remains authority until a separately qualified replacement exists.
+
+### E. Selective WR/TE efficiency/distribution
+
+- Revisit only mechanisms with a concrete unresolved error source or new information.
+- Preserve WR M38 + WR-R15 and TE-R5P until replacements qualify.
+- Do not reopen old failed/mixed ideas merely because the project moved to a new chat.
+
+### F. Shared QB ↔ receiver conservation
+
+Build a coherent shared passing environment so QB attempts/completions/yards and receiver targets/receptions/yards are generated consistently rather than as loosely coupled markets.
+
+### G. Unified game simulation
+
+Move toward the desired causal simulation:
+`plays → pass/rush → player opportunity → outcomes → yards/explosives/TDs → state feedback → possessions/scoring → final score`.
+
+This is downstream of the player-component work above, not a shortcut around it.
+
+### H. Anytime-TD model
+
+ATD remains after the opportunity/efficiency and shared-game structure are trustworthy. Do not let current sportsbook ATD prices drive football inputs upstream.
+
+### I. Game ML / spread / total
+
+Build only after unified scoring/possession mechanics are coherent enough to support team/game distributions. Sportsbook lines remain benchmark/pricing references, not football-model inputs.
+
+### J. Week-1 final operational package
+
+Before final betting/output use, the production package still needs an up-to-date operational run with:
+- fresh roster/depth/injury availability
+- fresh weather/context where applicable
+- latest qualified football stack only
+- full 32-team/16-game integrity checks
+- live sportsbook capture downstream
+- one authoritative model number per market
+- explicit model-vs-book comparison
+- saved artifacts/digests so the pregame board is auditable after games.
+
+### K. Continuity maintenance
+
+At every major checkpoint update this file on `main` with:
+- active branch and exact stop point
+- new plan/code/lock commits
+- run/job/artifact IDs
+- artifact digest
+- exact disposition/gate count
+- what changed scientifically vs mechanically
+- what is now production-active vs research-only
+- next unresolved question.
+
+---
+
+## 15. Future-chat / future-agent evidence reconstruction protocol
+
+A future chat should be able to continue correctly **without relying on conversational memory**. GitHub is the canonical paper trail.
+
+### Read order
+
+1. Fetch `CURRENT_NFL_RESEARCH_HANDOFF.md` from `main`.
+2. Fetch `AGENTS.md` from `main` for repository operating rules.
+3. Read the **active branch**, **exact stop point**, and **current production head** at the top of this file.
+4. Fetch the named frozen plan from its exact commit/branch before touching code.
+5. Inspect the active branch head and compare it with the stop point recorded here.
+
+### Where each kind of truth lives
+
+- **Current production authority:** `main`, `docs/production/`, production workflows, production model assets under `data/models/` and `model/`.
+- **Frozen scientific designs/results:** `docs/research/` and research branches.
+- **Research executors:** `scripts/backtest/` plus the matching research workflow under `.github/workflows/`.
+- **Production runtime:** `scripts/modeling/`, `scripts/run_*`, `scripts/simulation_*`, and `.github/workflows/full-slate.yml`.
+- **Serialized model authority:** `data/models/` and `model/`; do not refit when a study says to consume pinned assets.
+- **Run truth:** GitHub Actions run → job → logs → uploaded artifact.
+- **Final scientific truth for a run:** disposition/gate files inside the artifact, not the workflow badge alone.
+
+### How to inspect a completed or suspected run
+
+For the exact branch/commit:
+1. locate the relevant GitHub Actions workflow run;
+2. record **run ID, head SHA, conclusion**;
+3. fetch its **job ID and logs**;
+4. fetch the run's **artifact ID/name/digest**;
+5. download/open the artifact if metrics/gates are needed;
+6. read the exact disposition JSON/CSV and gate matrix;
+7. classify any failure as either **mechanical/plumbing** or **scientific** before taking action;
+8. never relabel or discard a failed run.
+
+### Search strategy when something is unclear
+
+Search the repo by exact mechanism/run label first, e.g. `R26Q`, `R27`, disposition string, workflow name, script name, or artifact naming stem. Then inspect:
+- `docs/research/`
+- `docs/production/`
+- `.github/workflows/`
+- `scripts/backtest/`
+- `scripts/modeling/`
+- `data/models/` / `model/`.
+
+Use commit history and compare-commits to determine what changed. Do not infer that a newer file is authoritative merely from timestamp; authority comes from the frozen plan/result/promotion lineage recorded here.
+
+### Conversation-history role
+
+Project chats are useful explanatory context, but they are **secondary** to the repository paper trail. If a future chat can access prior project conversations, audit them for rationale and user intent; if it cannot, this handoff plus GitHub must still be sufficient to resume safely.
+
+### Required behavior if handoff and repo disagree
+
+Stop and reconcile the discrepancy against exact commits/runs/artifacts before continuing. Do not guess. Update this handoff after reconciliation so the next chat inherits one unambiguous state.
