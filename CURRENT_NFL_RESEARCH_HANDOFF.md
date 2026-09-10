@@ -1,5 +1,14 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
+## LATEST CONTINUATION CHECKPOINT — 2026-09-10 15:16 ET
+
+Before doing anything else, read:
+- `docs/handoffs/NFL_HANDOFF_2026-09-10_1516_CURRENT_STOP.md`
+
+That file is the latest exact stop point and records the NE–SEA current-stack counterfactual diagnostic, its preserved mechanical runs, the corrected pregame state, the current missing `data/opponent_map_from_props.csv` diagnostic staging seam, and the instruction to move immediately to the QB opportunity/efficiency research lane after the diagnostic is finished.
+
+**Current immediate task:** finish only the diagnostic staging repair from Run `34509425408` / Job `102979570511` / head `3beb00ee518b8076873a5f54dffed51ee2009e5e`; do not interpret that run as a model-science failure and do not mutate production because of it.
+
 **Repository:** `dkaps6/imtiredofthis`  
 **Current operational production authority before this documentation-only handoff commit:** `3079d8ab0512c5a1304662609e3e880d6846292f`  
 **Protected scientific/model authority remains:** `bb76ba9eabb08e2f0875a9af49301c3877f4141f`  
@@ -247,11 +256,13 @@ Do not change production simply because Week 1 has begun. Speed matters, but fro
 
 ## Resume rule for next chat/session
 
-Read this file first, then verify live GitHub `main`, recent Actions runs/artifacts, and the active research branch before acting. GitHub is canonical.
+Read this file first, then read `docs/handoffs/NFL_HANDOFF_2026-09-10_1516_CURRENT_STOP.md`, then verify live GitHub `main`, Run `34509425408`, its artifact/logs, and the active diagnostic branch before acting. GitHub is canonical.
 
-Current stop point after workbook completion:
+Current stop point:
 - availability: production complete
 - automatic master betting workbook: production complete
+- Full Slate right now uses the latest promoted stack; NE–SEA is expected to be locked out post-kickoff
+- NE–SEA diagnostic: corrected pregame football state/build passed, historical offers staged, complete pricing board blocked only by missing `data/opponent_map_from_props.csv` diagnostic staging step
 - RB receiving-yard mean lane: closed/no integration
 - R26Q/R26S prospective grading: sealed/pending complete Week 1 outcomes
-- next work: QB opportunity/efficiency anti-reinvention audit and error decomposition
+- next development work after the narrow NE–SEA diagnostic: QB opportunity/efficiency anti-reinvention audit and error decomposition
