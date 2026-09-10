@@ -1,3 +1,4 @@
+# Canonical fixtures for the earlier frozen T-75 timing validator.
 import pandas as pd
 from scripts.validate_current_player_availability_timing_v1 import certify
 
