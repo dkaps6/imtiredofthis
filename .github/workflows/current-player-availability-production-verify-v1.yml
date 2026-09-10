@@ -16,8 +16,9 @@ env:
   PROMOTION_PLAN_BLOB: 2d350379377ae65b2fb094504624da0591f53f7e
   VERIFY_PLAN_BLOB: a304f4bcf977c421aef7b7eb1a960579f0c2150c
   AUDIT_REPAIR_PLAN_BLOB: 9b7ffb85d6bfb0895abaca97d4d2642ae3a07288
+  R22_REPAIR_PLAN_BLOB: e5a0eb9495b2d154320fb448d5f25b33fed20ae2
   FULL_SLATE_BLOB: 41bacd4b756c32279169c80e0ff603a4780b7bee
-  DYNAMIC_VERIFY_BLOB: 0a84913d850b44504271fba1985f053b2838b970
+  DYNAMIC_VERIFY_BLOB: 1d4a1be7c1bed0d2ae5d8bf8fd1f70f9ae3221fe
   AUDIT_REPO_BLOB: c5a465892c7f9386a1c567e26622f6835e190aa6
   READINESS_AUDIT_BLOB: d9c47ab0d784510722b8d8f879d53067c4de3aa0
   OURLADS_STATUS_BLOB: c115816ea8aa4ba7150a635c3115546d43f94b3c
@@ -62,6 +63,7 @@ jobs:
           test "$(git hash-object docs/operations/CURRENT_PLAYER_AVAILABILITY_PRODUCTION_PROMOTION_V1_FROZEN_PLAN.md)" = "$PROMOTION_PLAN_BLOB"
           test "$(git hash-object docs/operations/CURRENT_PLAYER_AVAILABILITY_PRODUCTION_VERIFY_V1_FROZEN_PLAN.md)" = "$VERIFY_PLAN_BLOB"
           test "$(git hash-object docs/operations/CURRENT_PLAYER_AVAILABILITY_PRODUCTION_BRANCH_RUN1_AUDIT_COMPAT_MECHANICAL_REPAIR_V1.md)" = "$AUDIT_REPAIR_PLAN_BLOB"
+          test "$(git hash-object docs/operations/CURRENT_PLAYER_AVAILABILITY_PRODUCTION_BRANCH_RUN2_R22_DISPOSITION_MECHANICAL_REPAIR_V1.md)" = "$R22_REPAIR_PLAN_BLOB"
           test "$(git hash-object .github/workflows/full-slate.yml)" = "$FULL_SLATE_BLOB"
           test "$(git hash-object scripts/operations/run_current_availability_production_verify_v1.py)" = "$DYNAMIC_VERIFY_BLOB"
           test "$(git hash-object scripts/utils/audit_repo.py)" = "$AUDIT_REPO_BLOB"
