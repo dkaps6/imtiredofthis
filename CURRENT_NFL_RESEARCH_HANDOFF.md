@@ -6,14 +6,15 @@
 **RB receiving-yard mean lane:** CLOSED at a defensible scientific frontier; no new mean integration authorized.  
 **Active lane:** current roster / late-week role handling operational correctness.  
 **Active implementation branch:** `ops-current-player-availability-v1`  
-**Do not wire/promote until the frozen operational fix plan and all validation gates are satisfied.**
+**Do not wire/promote until the frozen operational fix plan, canonical timing plan, implementation lock and all validation gates are satisfied.**
 
 Future sessions / scheduled tasks: read this file, then `AGENTS.md`, then verify the exact branches/runs/artifacts below. GitHub is canonical; conversation memory is secondary.
 
 ## Historical handoff preservation
 
 Detailed predecessor snapshots remain immutable in Git history:
-- immediately prior handoff commit `393a6b4546bf64e54ec56aa23ec866b77f9f2814`, blob `76a1b0d3af6315d033110db43920c89b6808a27c`
+- immediately prior handoff blob `5ceec583744c25ced11c006640b7a13b75242820`
+- predecessor blob `76a1b0d3af6315d033110db43920c89b6808a27c`
 - earlier detailed handoff commit `99d0ae6f6e0c4d60458a919096ce5cec1dfe695e`, blob `d9ddcfe40811f1f2dbeed7dc259c1ccbc2625a7b`
 - pre-R27D detailed handoff commit `84c9ffa6ce3617757bcd6b41705d7e55fa8403e0`, blob `622f4857e75e9ef8939dc80755adbe837c017164`
 - deep-history checkpoint commit `69e8de76bd1b508849d679fa22abd51aefa68a54`, blob `2f0ee91c1d5296c04114605afd5d4c4067a25a72`
@@ -34,6 +35,7 @@ Do not discard those histories.
 8. Protect R26 receiving opportunity/receptions and R22 RB receiving-tail authority unless separately authorized.
 9. Operational current-roster fixes must not rewrite historical science.
 10. Update this handoff at every material checkpoint.
+11. Earlier frozen authority beats later conflicting implementation attempts; never silently replace a prior lock.
 
 ---
 
@@ -77,174 +79,105 @@ R26S exact postgame evaluator:
 
 # 3. RB receiving-yard mean conclusion — CLOSED
 
-Tested without qualifying a new receiving-yard mean integration:
-- R23 shrunk historical YPR
-- R24 opportunity × existing production efficiency decomposition
-- R27 exact R26 opportunity × unchanged production YPT
-- R27B V2 raw strict-prior player/team/opponent target-shape and YAC context
-- R27C/C2 physical forensics
-- R27D0/D0B/D0C xYAC/YACOE source/physical decomposition
-- R27D strict-prior xYAC/YACOE residual mean correction
-
-Future RB receiving-mean work requires genuinely new pregame information/mechanism. Do not restart transformations of historical YPR/YPT/YAC, basic target shape, or xYAC/YACOE persistence from the same evaluation sample.
-
-## R27D first valid result
-
-Research branch `research-rb-r27d-yacoe-residual-v1`.
-
-Frozen plan:
-- commit `69edc12a16c691e3838eadcd75559b85dbba7865`
-- blob `d0c2b0ff2de154e52fa21fb9ce19b739039633f3`
-
-Preserved Run1 mechanical failure:
-- run `34435661834`, job `102740069405`, head `1757d7549c0fc8c44ad207f55971fdd8c3eab754`
-- duplicate deterministic Week1 merge collision
-- no model fit/scientific result
-- record `docs/research/RB_R27D_RUN1_WEEK1_COLUMN_COLLISION_MECHANICAL_REPAIR.md`
-
-Preserved Run2 integrity/scoring failure:
-- run `34435897671`, job `102740771822`, head `775d9bae7f264ae343209a75cd4947bc88994da9`
-- artifact `10136169669`
-- digest `sha256:d00eab566113e0c43502bf75f07fe477295dbef6a7ce20389e23ea941ec6d845`
-- null outcomes produced NaN scientific metrics; emitted label rejected as invalid
-- record `docs/research/RB_R27D_RUN2_OUTCOME_NULL_SCORING_MECHANICAL_REPAIR.md`
-
-First valid scientific execution:
-- head `641b25419c4f5ff3c234d1c000222fb4909ef940`
-- run `34436178615`
+R27D strict-prior xYAC/YACOE residual correction was the final tested lane and did not qualify:
+- branch `research-rb-r27d-yacoe-residual-v1`
+- frozen plan commit `69edc12a16c691e3838eadcd75559b85dbba7865`, blob `d0c2b0ff2de154e52fa21fb9ce19b739039633f3`
+- first valid run `34436178615`
 - job `102741600329`
 - artifact `10136250846`
 - digest `sha256:b975511dc54e961c7745e9d1422ac48be4f867c65d3733adfaeabe93af9951e6`
 - result record commit `a20e757a1b85806ae5e244cc42d29cfbc7ed2742`
 - disposition `R27D_STRICT_PRIOR_YACOE_RESIDUAL_MIXED_OR_FAIL_NO_INTEGRATION`
 - integrity 18/18 PASS; total 22/31; scientific only 4/13 PASS
+- no integration, retuning or post-hoc routing
 
-Primary vacancy RB1 observed n=503:
-- B0 MAE `14.305919`
-- B1 `14.709395`
-- C1 `14.710366` (`+0.006600%` worse vs B1)
-- RMSE and p90 worsened; 30+ miss rate slightly improved
-
-2023 vacancy RB1 n=74:
-- B0 `12.349471`
-- B1 `13.992139`
-- C1 `14.055947` (`+0.456024%` worse vs B1)
-
-Only 3/6 seasons improved. No integration, no retuning, no post-hoc routing.
+Future RB receiving-mean work requires genuinely new pregame information/mechanism. Do not restart historical YPR/YPT/YAC, basic target-shape, or xYAC/YACOE persistence transformations on the same sample.
 
 ---
 
-# 4. Current roster / late-week role audit — GAP CONFIRMED
+# 4. Current roster / late-week role gap — CONFIRMED
 
-Audit branch: `audit-current-roster-late-week-role-v1`.
+Audit result commit `810c344a437d411707185317033acc7004f1c7db` confirmed:
+1. Ourlads provider inactive status was discarded from canonical roles.
+2. Weekly injury data is not official game-day inactive authority.
+3. Generic simulation injury logic can retain positive opportunity for definitively unavailable players.
+4. Promoted RB P3 builds its current RB universe before definitive-unavailable reconciliation.
+5. Full Slate lacks a canonical role+availability authority before PlayerForm/promoted opportunity construction.
+6. M78 already established hardened NFL official-inactive source semantics but they were never promoted to shared current-player operations.
 
-Frozen audit plan:
-- `docs/operations/CURRENT_ROSTER_LATE_WEEK_ROLE_AUDIT_V1_FROZEN_PLAN.md`
-- commit `848e5e44b1078c9d9dd7ab40ad0ccf16136f3754`
-
-Audit result:
-- `docs/operations/CURRENT_ROSTER_LATE_WEEK_ROLE_AUDIT_V1_RESULT.md`
-- result commit `810c344a437d411707185317033acc7004f1c7db`
-- disposition `CURRENT_ROSTER_LATE_WEEK_ROLE_GAP_CONFIRMED_FIX_PLAN_REQUIRED`
-
-Confirmed gap:
-1. Ourlads parser detects active/inactive but canonical `roles_ourlads.csv` includes inactive by default and strips status/injury before writing.
-2. Role contract requires no availability/as-of/freshness provenance.
-3. Weekly injury builder is not official game-day inactive authority.
-4. Generic injury rules can retain positive opportunity for OUT/IR/PUP/inactive players.
-5. Promoted RB P3 builds active RB universe from all Ourlads RB/HB/FB rows before definitive-unavailable reconciliation.
-6. Full Slate has no canonical role+availability reconciliation before current player opportunity/model construction.
-7. Prior M78 already established hardened NFL official-inactive source semantics but they were never promoted to shared operations.
-
----
-
-# 5. Frozen operational fix architecture
-
-File `docs/operations/CURRENT_ROSTER_LATE_WEEK_ROLE_FIX_V1_FROZEN_PLAN.md`
+Frozen operational fix plan:
+- `docs/operations/CURRENT_ROSTER_LATE_WEEK_ROLE_FIX_V1_FROZEN_PLAN.md`
 - commit `b2206e7ad693148623447bcf9a3ad6b594033500`
 
-Core frozen semantics:
+Core semantics:
 - validated complete official NFL inactive section > definitive weekly injury (`OUT/IR/PUP`) > Ourlads provider inactive > uncertain/unknown
 - QUESTIONABLE/DOUBTFUL remain eligible/uncertain
-- preserve raw source facts/provenance
-- canonical `data/current_player_availability.csv` + JSON sidecar
 - definitive unavailable => zero eligibility/opportunity and no active reconciled role
-- deterministic depth re-ranking
-- opportunity conservation/reallocation only through qualified component logic or separately frozen deterministic layer
+- deterministic depth re-ranking after unavailable removal
+- source provenance retained separately
+- timing-aware official inactive coverage is game-window scoped and fail-closed only when required
 - sportsbook cannot define availability/roles
-- timing-aware official inactive coverage per game window; endpoint reachability alone is not evidence
-- historical backtests unchanged
-- 20 promotion/validation gates plus frozen fixtures
+- historical backtests remain unchanged
 
 ---
 
-# 6. Active implementation branch — NOT PRODUCTION WIRED
-
-Branch `ops-current-player-availability-v1`.
-Base fix-plan commit `b2206e7ad693148623447bcf9a3ad6b594033500`.
-
-Implemented:
+# 5. Implemented availability components on `ops-current-player-availability-v1`
 
 ### Timestamped Ourlads depth/status sidecar
 `scripts/providers/ourlads_depth_status_v1.py`
 - commit `86e024be635691555df4a53434916942870f5e55`
 - preserves provider status, source URL and source timestamp
 - requires 32 teams
-- legacy production roles file untouched
 
 ### Current-player availability resolver
 `scripts/build/build_current_player_availability_v1.py`
 - commit `2ccd425c79e78a401495a77021f933ea2e1a4603`
 - frozen precedence implemented
 - definitive_unavailable / eligible_for_opportunity / authority / reason / reconciled roles
-- deterministic RB/QB/TE/FB re-ranking; WR alignment preserved pending component-specific conservation wiring
+- deterministic RB/QB/TE/FB re-ranking; WR alignment preserved pending component-specific conservation integration
 - sportsbook 0; production_wired false
 
 ### Official NFL game-day inactive adapter
 `scripts/providers/nfl_official_inactives_v1.py`
 - commit `824ad677f4899ea74bddc755615bda61849d3397`
 - adapts hardened M78 parser/source
-- complete parseable team section required for evidence
+- complete parseable team section required for official evidence
 - endpoint reachability separate from payload validity
 
-### Frozen fixture tests
+### Base availability fixtures
 `tests/test_current_player_availability_v1.py`
-- commit `c676164a71a43ea298da06c30319c37fefc42e45`
-- 8 semantic scenarios
+- 8 frozen semantic scenarios
 
-Fixture Run1 mechanical failure:
+Preserved Run1 workflow-only failure:
 - run `34436894543`
 - job `102743747393`
-- all 8 tests PASS; final parent comparison failed only because shallow checkout lacked pinned parent object
-- repair record `docs/operations/CURRENT_PLAYER_AVAILABILITY_V1_RUN1_SHALLOW_CHECKOUT_MECHANICAL_REPAIR.md`
+- all 8 semantic tests passed; only shallow-checkout protected-parent diff failed
+- record `docs/operations/CURRENT_PLAYER_AVAILABILITY_V1_RUN1_SHALLOW_CHECKOUT_MECHANICAL_REPAIR.md`
 
 First clean fixture run:
 - run `34436970099`
 - job `102743973821`
 - head `d3fadbd82953a3b2b1ad4168dbb82741ca62d167`
 - SUCCESS
-- all 8 fixtures PASS
-- protected production files confirmed unchanged
+- all 8 semantic fixtures PASS
+- protected production files unchanged
 
-### Live source smoke — SUCCESS
-Workflow `.github/workflows/smoke-current-player-availability-sources-v1.yml`
-- head `36815ec75b41941131f8866667031292d4d8f01d`
-- run **`34437032282`**
-- job **`102744156238`**
-- conclusion **SUCCESS**
-- artifact **`10136545256`**
-- artifact `current-player-availability-source-smoke-v1`
-- digest **`sha256:decb703afe4769befba790d8b1adceb0accb5a49eec4f5fd8f5d2adc6c7eb75a`**
+---
 
-Ourlads live snapshot at `2026-09-10T04:24:36Z`:
+# 6. Live source smoke — SUCCESS
+
+Run `34437032282`, job `102744156238`, head `36815ec75b41941131f8866667031292d4d8f01d`.
+Artifact `10136545256`, name `current-player-availability-source-smoke-v1`, digest `sha256:decb703afe4769befba790d8b1adceb0accb5a49eec4f5fd8f5d2adc6c7eb75a`.
+
+Ourlads snapshot `2026-09-10T04:24:36Z`:
 - complete true
 - 32/32 teams
 - 468 role/depth rows
 - 0 team failures
-- 0 rows marked inactive at that exact scrape
-- `status`, `source_url`, `source_asof_utc` preserved and validated
+- 0 provider-inactive rows at that exact scrape
+- status/source_url/source_asof preserved
 
-NFL official-inactives live probe at `2026-09-10T04:24:45Z`:
+NFL official-inactives probe `2026-09-10T04:24:45Z`:
 - HTTP 200
 - endpoint_reachable true
 - complete_team_sections 0
@@ -252,24 +185,76 @@ NFL official-inactives live probe at `2026-09-10T04:24:45Z`:
 - payload_valid false
 - sections []
 
-This is a valid pre-publication source state, not an error. It proves the adapter does not mistake HTTP 200/page reachability for published official inactive evidence.
+This is a valid pre-publication state, not an error. It proves HTTP reachability is not being misused as inactive evidence.
 
 ---
 
-# 7. Exact next action
+# 7. Canonical timing authority — EARLIER FROZEN T-75 PLAN
 
-1. Freeze a timing-aware per-game-window certification rule before testing it. It must explicitly distinguish `NOT_YET_REQUIRED/NOT_YET_AVAILABLE` from `REQUIRED_AND_CERTIFIED` and `REQUIRED_MISSING_FAIL_CLOSED`.
-2. Inspect existing M78 timing/snapshot assumptions before selecting the lead-time threshold; do not tune threshold after looking at current source behavior.
-3. Implement and fixture-test a schedule/kickoff-aware validator that requires complete official inactive team sections only inside the frozen pre-kickoff requirement window; missing/invalid required sections withhold affected teams, not the entire slate.
-4. Require official snapshot timestamp < relevant kickoff.
-5. Add implementation lock pinning frozen plan + exact provider/resolver/validator/tests/workflows blobs.
-6. Only after isolated timing/fixture validation, create a dedicated candidate Full Slate integration branch. Definitive unavailable players must be reconciled before PlayerForm/promoted opportunity paths.
-7. Run no-odds Full Slate + all operational invariants before any promotion. Sportsbook cannot resolve availability.
-8. Promote only if all frozen gates pass; otherwise preserve failure and leave production authority unchanged.
+Authoritative frozen plan already existed on the branch before a later T-90 continuation attempt:
+- `docs/operations/CURRENT_PLAYER_AVAILABILITY_TIMING_V1_FROZEN_PLAN.md`
+- validator `scripts/validate_current_player_availability_timing_v1.py`
+- frozen constant `REQUIRE_MINUTES=75.0`
+
+The T-75 threshold intentionally allows a fixed 15-minute publication/ingestion buffer after the league's T-90 inactive-list submission meeting. It was frozen before testing and must not be tuned from current source results.
+
+Canonical game states:
+- `NOT_YET_REQUIRED`: >75 minutes before kickoff; missing official sections do not block.
+- `REQUIRED_AND_CERTIFIED`: <=75 minutes, pre-kickoff, both scheduled team sections complete with valid pre-kickoff timestamps.
+- `REQUIRED_MISSING_FAIL_CLOSED`: <=75 minutes and one/both sections missing/incomplete or timestamp invalid/not pre-kickoff.
+- `KICKED_OFF_LOCKED`: as-of at/after kickoff; no new pregame pricing.
+
+Failure is scoped to the affected game/teams, not the entire slate. Endpoint reachability is never certification.
+
+## Conflicting T-90 attempt — PRESERVED AND REMOVED FROM LIVE BRANCH
+
+A later continuation created a duplicate T-90 certifier/lock before discovering the earlier frozen T-75 authority. The conflict was explicitly reconciled; the earlier frozen plan wins.
+
+Preserved failed duplicate timing run:
+- run `34437394807`
+- job `102745226871`
+- head `3219f584092946d9be81f8b30c2abd2b5f4b4019`
+- protected-production boundary PASS
+- duplicate fixture step FAIL
+- record `docs/operations/CURRENT_PLAYER_AVAILABILITY_TIMING_V1_RUN1_FIXTURE_EXPECTATION_MECHANICAL_REPAIR.md`
+
+The duplicate `scripts/build/certify_current_player_availability_timing_v1.py` and `CURRENT_PLAYER_AVAILABILITY_TIMING_CERTIFICATION_V1_LOCK.md` were deleted from the current branch after discovering the earlier frozen authority. History remains preserved. Do not restore those T-90 files.
+
+## Canonical T-75 timing fixtures
+
+`tests/test_current_player_availability_timing_v1.py` is now bound to `scripts/validate_current_player_availability_timing_v1.py` and tests the exact earlier frozen cases:
+- T-120 no sections => NOT_YET_REQUIRED
+- T-76 no sections => NOT_YET_REQUIRED
+- exactly T-75 no sections => REQUIRED_MISSING_FAIL_CLOSED
+- T-60 both complete => REQUIRED_AND_CERTIFIED
+- T-60 only one complete => fail closed
+- post-kickoff source snapshot => fail closed
+- as-of at/after kickoff => KICKED_OFF_LOCKED
+- staggered kickoff windows => early affected game fails closed while later game remains NOT_YET_REQUIRED
+
+Canonical trigger commit:
+- `6bbbcd9bb57fdfc344c777db8a615f6816d54b39`
+- run `34437595637`
+- job `102745806064`
+- state at this handoff checkpoint: IN PROGRESS (dependency installation)
 
 ---
 
-# 8. Remaining roadmap
+# 8. Exact next action
+
+1. Inspect run `34437595637` through completion.
+2. If it fails, preserve the exact mechanical/integrity failure and repair only value-neutral defects. Do not change T-75.
+3. If it succeeds, record the first clean canonical timing-fixture result.
+4. Add one complete implementation lock pinning the operational fix plan, T-75 plan, Ourlads-status provider, official-inactives provider, availability resolver, T-75 validator, both fixture suites and workflows.
+5. Only then create a dedicated candidate Full Slate integration branch; do not wire directly on main.
+6. Candidate Full Slate order must be: timestamped Ourlads status -> authoritative schedule/kickoffs -> weekly injuries -> official inactive acquisition -> T-75 game certification -> current-player availability reconciliation -> reconciled eligible roles -> PlayerForm/promoted QB/RB/WR/TE opportunity paths.
+7. Explicitly prove unavailable players cannot receive positive RB P3/R26/QB/WR/TE mean/distribution and prove deterministic role promotion + team opportunity conservation.
+8. Run no-odds Full Slate + all frozen operational/static-readiness gates. Live pricing only when appropriate; sportsbook cannot resolve availability.
+9. Promote only if all frozen operational gates pass; otherwise preserve the result and leave protected production unchanged.
+
+---
+
+# 9. Remaining roadmap
 
 1. Current roster / late-week role handling — ACTIVE.
 2. Grade sealed R26Q with exact locked R26S once authoritative Week1 outcomes exist.
