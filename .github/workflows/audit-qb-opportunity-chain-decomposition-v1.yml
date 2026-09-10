@@ -1,0 +1,57 @@
+name: QB Opportunity Chain Decomposition V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-qb-opportunity-chain-decomposition-v1
+    paths:
+      - ".github/workflows/audit-qb-opportunity-chain-decomposition-v1.yml"
+      - "scripts/backtest/evaluate_qb_opportunity_chain_decomposition_v1.py"
+      - "docs/migrations/QB_OPPORTUNITY_CHAIN_DECOMPOSITION_V1_PLAN.md"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy==1.26.4 pandas==1.5.3 scipy==1.11.4
+      - name: Compile frozen evaluator
+        run: python -m py_compile scripts/backtest/evaluate_qb_opportunity_chain_decomposition_v1.py
+      - name: Download immutable source artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/m89 evidence/shared
+          gh run download 33331073376 --repo "${GITHUB_REPOSITORY}" --name m89-qb-data-integrity-casebook-synthesis --dir evidence/m89
+          gh run download 34066549394 --repo "${GITHUB_REPOSITORY}" --name qb-wr-shared-pass-volume-mechanism --dir evidence/shared
+      - name: Run frozen opportunity-chain diagnostic
+        run: |
+          rm -rf data/backtests/qb_opportunity_chain_decomposition_v1
+          python scripts/backtest/evaluate_qb_opportunity_chain_decomposition_v1.py \
+            --m89-root evidence/m89 \
+            --shared-root evidence/shared \
+            --out-dir data/backtests/qb_opportunity_chain_decomposition_v1
+      - name: Show result
+        if: always()
+        run: cat data/backtests/qb_opportunity_chain_decomposition_v1/qb_opportunity_chain_result.json 2>/dev/null || true
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-opportunity-chain-decomposition-v1
+          path: |
+            data/backtests/qb_opportunity_chain_decomposition_v1/*
+            docs/migrations/QB_OPPORTUNITY_CHAIN_DECOMPOSITION_V1_PLAN.md
+          if-no-files-found: warn
+          retention-days: 30
