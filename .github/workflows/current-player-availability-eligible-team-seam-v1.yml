@@ -1,0 +1,76 @@
+name: Current Player Availability Eligible-Team Seam V1
+
+on:
+  push:
+    branches:
+      - ops-current-player-availability-35gate-cert-v1
+    paths:
+      - '.github/workflows/current-player-availability-eligible-team-seam-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PLAN_BLOB: d0a7f74cbc8a4fcb8aa46a0b8a0aaf4987c72006
+  LOCK_BLOB: ae77e8772ef30ae813b960196b6ebed219e3333b
+  HELPER_BLOB: 77b591e431378ec984c51e8a032262e673d4c843
+  TRANSFORM_BLOB: b64ec5ccd59728121a250433e40e77e3e1013a05
+  REGRESSION_BLOB: 778753400f9f1caa6831f2a71e121a13c268356c
+  FULL_SOURCE_BLOB: f8429ea5b6dd730f054460493facde4ab21b0998
+  R26_SOURCE_BLOB: 0c7528a3ca9e750d3b9ef2f08ef9721949b3e7fc
+
+jobs:
+  seam-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install minimal regression dependencies
+        run: pip install pandas
+      - name: Verify exact frozen implementation blobs
+        run: |
+          set -euo pipefail
+          test "$(git hash-object docs/operations/CURRENT_PLAYER_AVAILABILITY_ELIGIBLE_TEAM_COVERAGE_SEAM_V1_FROZEN_PLAN.md)" = "$PLAN_BLOB"
+          test "$(git hash-object docs/operations/CURRENT_PLAYER_AVAILABILITY_ELIGIBLE_TEAM_COVERAGE_SEAM_V1_IMPLEMENTATION_LOCK.md)" = "$LOCK_BLOB"
+          test "$(git hash-object scripts/utils/eligible_team_set_v1.py)" = "$HELPER_BLOB"
+          test "$(git hash-object scripts/operations/apply_current_availability_eligible_team_seam_v1.py)" = "$TRANSFORM_BLOB"
+          test "$(git hash-object scripts/operations/test_current_availability_eligible_team_seam_v1.py)" = "$REGRESSION_BLOB"
+          test "$(git hash-object scripts/run_pricing_with_full_roster_universe_v1.py)" = "$FULL_SOURCE_BLOB"
+          test "$(git hash-object scripts/modeling/rb_r26_receptions_production_adapter_v1.py)" = "$R26_SOURCE_BLOB"
+          echo ELIGIBLE_TEAM_SEAM_FROZEN_BLOBS_PASS
+      - name: Prove transformer anchors before write
+        run: PYTHONPATH=. python scripts/operations/apply_current_availability_eligible_team_seam_v1.py --check-only
+      - name: Run legacy and explicit team-set regression
+        run: PYTHONPATH=. python scripts/operations/test_current_availability_eligible_team_seam_v1.py
+      - name: Apply exact frozen transformation and compile downstream modules
+        run: |
+          set -euo pipefail
+          PYTHONPATH=. python scripts/operations/apply_current_availability_eligible_team_seam_v1.py
+          python -m py_compile scripts/run_pricing_with_full_roster_universe_v1.py
+          python -m py_compile scripts/modeling/rb_r26_receptions_production_adapter_v1.py
+          grep -q 'validate_current_team_set' scripts/run_pricing_with_full_roster_universe_v1.py
+          grep -q 'validate_current_team_set' scripts/modeling/rb_r26_receptions_production_adapter_v1.py
+          git diff -- scripts/run_pricing_with_full_roster_universe_v1.py scripts/modeling/rb_r26_receptions_production_adapter_v1.py > eligible_team_seam.patch
+          test -s eligible_team_seam.patch
+          git diff --name-only | sort > eligible_team_seam_changed_files.txt
+          printf '%s\n' scripts/modeling/rb_r26_receptions_production_adapter_v1.py scripts/run_pricing_with_full_roster_universe_v1.py | sort > expected_changed_files.txt
+          diff -u expected_changed_files.txt eligible_team_seam_changed_files.txt
+          echo ELIGIBLE_TEAM_SEAM_TRANSFORM_COMPILE_PASS
+      - name: Assert no 35-gate result produced
+        run: |
+          set -euo pipefail
+          ! find . -iname '*35*gate*result*' -o -iname '*integration*result*.json' | grep -q .
+          echo SEAM_REGRESSION_ONLY_NO_PROMOTION_RESULT_PASS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: current-player-availability-eligible-team-seam-v1
+          retention-days: 90
+          path: |
+            eligible_team_seam.patch
+            eligible_team_seam_changed_files.txt
