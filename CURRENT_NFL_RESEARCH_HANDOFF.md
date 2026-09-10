@@ -13,7 +13,8 @@ Future sessions / scheduled tasks: read this file, then `AGENTS.md`, then verify
 ## Historical handoff preservation
 
 Detailed predecessor snapshots remain immutable in Git history:
-- immediately prior handoff commit `99d0ae6f6e0c4d60458a919096ce5cec1dfe695e`, blob `d9ddcfe40811f1f2dbeed7dc259c1ccbc2625a7b`
+- immediately prior handoff commit `393a6b4546bf64e54ec56aa23ec866b77f9f2814`, blob `76a1b0d3af6315d033110db43920c89b6808a27c`
+- earlier detailed handoff commit `99d0ae6f6e0c4d60458a919096ce5cec1dfe695e`, blob `d9ddcfe40811f1f2dbeed7dc259c1ccbc2625a7b`
 - pre-R27D detailed handoff commit `84c9ffa6ce3617757bcd6b41705d7e55fa8403e0`, blob `622f4857e75e9ef8939dc80755adbe837c017164`
 - deep-history checkpoint commit `69e8de76bd1b508849d679fa22abd51aefa68a54`, blob `2f0ee91c1d5296c04114605afd5d4c4067a25a72`
 
@@ -122,8 +123,7 @@ Primary vacancy RB1 observed n=503:
 - B0 MAE `14.305919`
 - B1 `14.709395`
 - C1 `14.710366` (`+0.006600%` worse vs B1)
-- RMSE and p90 worsened
-- 30+ miss rate slightly improved
+- RMSE and p90 worsened; 30+ miss rate slightly improved
 
 2023 vacancy RB1 n=74:
 - B0 `12.349471`
@@ -147,120 +147,136 @@ Audit result:
 - result commit `810c344a437d411707185317033acc7004f1c7db`
 - disposition `CURRENT_ROSTER_LATE_WEEK_ROLE_GAP_CONFIRMED_FIX_PLAN_REQUIRED`
 
-Confirmed architecture gap:
-1. Ourlads parser detects `active/inactive`, but canonical `roles_ourlads.csv` defaults to include inactive rows and strips every status/injury column before writing.
-2. `roles_ourlads` artifact contract requires no availability/as-of/freshness provenance.
-3. Full Slate weekly injury builder uses nflverse/NFL.com injury reports, not official game-day inactive lists.
-4. Generic simulation injury rules can retain 50% opportunity for OUT/IR/PUP/inactive players; definitive unavailable is not zero eligibility.
-5. Promoted RB P3 defines its active RB universe directly from all Ourlads RB/HB/FB rows before later injury context joins; no definitive-unavailable filter or depth re-ranking occurs first.
-6. Current Full Slate has no canonical role+availability reconciliation before PlayerForm/promoted opportunity construction.
-7. Prior QB M78 already established a hardened official NFL game-day inactive source contract and live `nfl.com/inactives/` acquisition semantics; this was never promoted into shared current-player availability.
+Confirmed gap:
+1. Ourlads parser detects active/inactive but canonical `roles_ourlads.csv` includes inactive by default and strips status/injury before writing.
+2. Role contract requires no availability/as-of/freshness provenance.
+3. Weekly injury builder is not official game-day inactive authority.
+4. Generic injury rules can retain positive opportunity for OUT/IR/PUP/inactive players.
+5. Promoted RB P3 builds active RB universe from all Ourlads RB/HB/FB rows before definitive-unavailable reconciliation.
+6. Full Slate has no canonical role+availability reconciliation before current player opportunity/model construction.
+7. Prior M78 already established hardened NFL official-inactive source semantics but they were never promoted to shared operations.
 
 ---
 
 # 5. Frozen operational fix architecture
 
-File: `docs/operations/CURRENT_ROSTER_LATE_WEEK_ROLE_FIX_V1_FROZEN_PLAN.md`
+File `docs/operations/CURRENT_ROSTER_LATE_WEEK_ROLE_FIX_V1_FROZEN_PLAN.md`
 - commit `b2206e7ad693148623447bcf9a3ad6b594033500`
 
 Core frozen semantics:
-- availability precedence: validated complete official NFL inactive section > definitive weekly injury designation (`OUT/IR/PUP`) > Ourlads provider inactive > uncertain/unknown
-- `QUESTIONABLE/DOUBTFUL` are not automatically unavailable
-- preserve raw source facts/provenance separately
-- build `data/current_player_availability.csv` + JSON status sidecar
+- validated complete official NFL inactive section > definitive weekly injury (`OUT/IR/PUP`) > Ourlads provider inactive > uncertain/unknown
+- QUESTIONABLE/DOUBTFUL remain eligible/uncertain
+- preserve raw source facts/provenance
+- canonical `data/current_player_availability.csv` + JSON sidecar
 - definitive unavailable => zero eligibility/opportunity and no active reconciled role
-- deterministic depth re-ranking for eligible players
-- removed opportunity must be conserved/reallocated through qualified component logic or a separately frozen deterministic availability redistribution layer
-- sportsbook may not define availability/roles
-- timing-aware official inactive coverage must be certified per game window; endpoint reachability alone is not evidence
+- deterministic depth re-ranking
+- opportunity conservation/reallocation only through qualified component logic or separately frozen deterministic layer
+- sportsbook cannot define availability/roles
+- timing-aware official inactive coverage per game window; endpoint reachability alone is not evidence
 - historical backtests unchanged
-- 20 promotion/validation gates plus frozen fixture scenarios
+- 20 promotion/validation gates plus frozen fixtures
 
 ---
 
 # 6. Active implementation branch — NOT PRODUCTION WIRED
 
-Branch: `ops-current-player-availability-v1`
-Base: frozen fix-plan commit `b2206e7ad693148623447bcf9a3ad6b594033500`.
+Branch `ops-current-player-availability-v1`.
+Base fix-plan commit `b2206e7ad693148623447bcf9a3ad6b594033500`.
 
-Implemented so far:
+Implemented:
 
-### A. Timestamped Ourlads depth/status sidecar
+### Timestamped Ourlads depth/status sidecar
 `scripts/providers/ourlads_depth_status_v1.py`
 - commit `86e024be635691555df4a53434916942870f5e55`
-- reuses production Ourlads parser but preserves `status`, `source_url`, `source_asof_utc`
-- requires 32-team completeness
-- legacy `roles_ourlads.csv` still untouched
+- preserves provider status, source URL and source timestamp
+- requires 32 teams
+- legacy production roles file untouched
 
-### B. Current-player availability resolver
+### Current-player availability resolver
 `scripts/build/build_current_player_availability_v1.py`
 - commit `2ccd425c79e78a401495a77021f933ea2e1a4603`
-- combines depth status + weekly injury + optional official inactive sections
-- implements frozen authority precedence
-- produces `definitive_unavailable`, `eligible_for_opportunity`, authority/reason and reconciled roles
-- deterministic RB/QB/TE/FB re-ranking; WR raw alignment role preserved pending component-specific conservation integration
-- sportsbook inputs 0
-- production_wired false
+- frozen precedence implemented
+- definitive_unavailable / eligible_for_opportunity / authority / reason / reconciled roles
+- deterministic RB/QB/TE/FB re-ranking; WR alignment preserved pending component-specific conservation wiring
+- sportsbook 0; production_wired false
 
-### C. Official NFL game-day inactive adapter
+### Official NFL game-day inactive adapter
 `scripts/providers/nfl_official_inactives_v1.py`
 - commit `824ad677f4899ea74bddc755615bda61849d3397`
-- adapts already-hardened M78 source/parser semantics
-- emits explicit section ledger rows
-- only complete parseable sections can certify absence/listed status
-- endpoint reachability is separately recorded from payload validity
+- adapts hardened M78 parser/source
+- complete parseable team section required for evidence
+- endpoint reachability separate from payload validity
 
-### D. Frozen fixture tests
+### Frozen fixture tests
 `tests/test_current_player_availability_v1.py`
 - commit `c676164a71a43ea298da06c30319c37fefc42e45`
-- 8 scenarios: RB1 OUT→RB2 promotion; QUESTIONABLE remains; Ourlads inactive persists with empty injury report; complete official inactive authority; complete-section absence evidence; incomplete section cannot clear inactive; QB1 inactive→QB2 promotion; sportsbook 0
+- 8 semantic scenarios
 
-Fixture workflow `.github/workflows/test-current-player-availability-v1.yml`.
-
-Preserved fixture Run1 mechanical workflow failure:
+Fixture Run1 mechanical failure:
 - run `34436894543`
 - job `102743747393`
-- head `75a02a4f14d9dcce69970130c9cf01138a0cbb90`
-- all 8 fixtures PASSED, but final parent-diff assertion failed because checkout was shallow and pinned parent object unavailable
-- record `docs/operations/CURRENT_PLAYER_AVAILABILITY_V1_RUN1_SHALLOW_CHECKOUT_MECHANICAL_REPAIR.md`
-- minimum repair: checkout `fetch-depth: 0`
+- all 8 tests PASS; final parent comparison failed only because shallow checkout lacked pinned parent object
+- repair record `docs/operations/CURRENT_PLAYER_AVAILABILITY_V1_RUN1_SHALLOW_CHECKOUT_MECHANICAL_REPAIR.md`
 
 First clean fixture run:
 - run `34436970099`
 - job `102743973821`
 - head `d3fadbd82953a3b2b1ad4168dbb82741ca62d167`
-- conclusion SUCCESS
-- all 8 frozen fixture tests PASS
-- protected Full Slate/RB P3/simulation/context/artifact-contract production files unchanged from parent
+- SUCCESS
+- all 8 fixtures PASS
+- protected production files confirmed unchanged
 
-### E. Live source smoke
-Workflow: `.github/workflows/smoke-current-player-availability-sources-v1.yml`
-- creation/head `36815ec75b41941131f8866667031292d4d8f01d`
-- current run `34437032282`
-- job `102744156238`
-- status at this handoff checkpoint: IN PROGRESS, currently building timestamped Ourlads depth/status after dependencies installed
-- source smoke is not a production run and does not require official inactive payload before publication time
+### Live source smoke — SUCCESS
+Workflow `.github/workflows/smoke-current-player-availability-sources-v1.yml`
+- head `36815ec75b41941131f8866667031292d4d8f01d`
+- run **`34437032282`**
+- job **`102744156238`**
+- conclusion **SUCCESS**
+- artifact **`10136545256`**
+- artifact `current-player-availability-source-smoke-v1`
+- digest **`sha256:decb703afe4769befba790d8b1adceb0accb5a49eec4f5fd8f5d2adc6c7eb75a`**
 
-## Exact next action
+Ourlads live snapshot at `2026-09-10T04:24:36Z`:
+- complete true
+- 32/32 teams
+- 468 role/depth rows
+- 0 team failures
+- 0 rows marked inactive at that exact scrape
+- `status`, `source_url`, `source_asof_utc` preserved and validated
 
-1. Inspect run `34437032282` to completion; preserve any source/plumbing failure separately.
-2. If source smoke succeeds, record row/team/inactive counts, official endpoint/payload state and artifact ID/digest.
-3. Before production wiring, add timing-aware game-window availability certification and fixture tests for required/not-yet-required official sections.
-4. Add an implementation lock pinning the exact resolver/providers/tests and the frozen operational plan.
-5. Only then wire availability reconciliation into a dedicated candidate Full Slate branch, ensuring definitive unavailable players are removed/zeroed before PlayerForm/promoted opportunity paths and role re-ranking feeds those paths.
-6. Run no-odds Full Slate + fixture/invariant gates. Live pricing verification only when appropriate; sportsbook cannot resolve availability.
-7. Promote only if all frozen operational gates pass. Otherwise preserve result and do not mutate production authority.
+NFL official-inactives live probe at `2026-09-10T04:24:45Z`:
+- HTTP 200
+- endpoint_reachable true
+- complete_team_sections 0
+- listed_players 0
+- payload_valid false
+- sections []
+
+This is a valid pre-publication source state, not an error. It proves the adapter does not mistake HTTP 200/page reachability for published official inactive evidence.
 
 ---
 
-# 7. Remaining roadmap after roster/late-week role handling
+# 7. Exact next action
+
+1. Freeze a timing-aware per-game-window certification rule before testing it. It must explicitly distinguish `NOT_YET_REQUIRED/NOT_YET_AVAILABLE` from `REQUIRED_AND_CERTIFIED` and `REQUIRED_MISSING_FAIL_CLOSED`.
+2. Inspect existing M78 timing/snapshot assumptions before selecting the lead-time threshold; do not tune threshold after looking at current source behavior.
+3. Implement and fixture-test a schedule/kickoff-aware validator that requires complete official inactive team sections only inside the frozen pre-kickoff requirement window; missing/invalid required sections withhold affected teams, not the entire slate.
+4. Require official snapshot timestamp < relevant kickoff.
+5. Add implementation lock pinning frozen plan + exact provider/resolver/validator/tests/workflows blobs.
+6. Only after isolated timing/fixture validation, create a dedicated candidate Full Slate integration branch. Definitive unavailable players must be reconciled before PlayerForm/promoted opportunity paths.
+7. Run no-odds Full Slate + all operational invariants before any promotion. Sportsbook cannot resolve availability.
+8. Promote only if all frozen gates pass; otherwise preserve failure and leave production authority unchanged.
+
+---
+
+# 8. Remaining roadmap
 
 1. Current roster / late-week role handling — ACTIVE.
 2. Grade sealed R26Q with exact locked R26S once authoritative Week1 outcomes exist.
-3. QB opportunity/efficiency: attempts, dropbacks, pass rate, YPA, sacks, scrambles; build on M89/M90.
+3. QB opportunity/efficiency: attempts/dropbacks/pass rate/YPA/sacks/scrambles; build on M89/M90.
 4. Selective unresolved WR/TE opportunity/efficiency/distribution; preserve M38/WR-R15 and TE-R5P.
-5. Shared QB↔receiver conservation across attempts, targets, completions, receiving yards and entitlements.
-6. Unified game simulation: plays → pass/rush → player opportunity → outcomes → yards/explosives/TDs → game-state feedback → scoring.
+5. Shared QB↔receiver conservation.
+6. Unified game simulation.
 7. Anytime TD modeling.
 8. Game ML/spread/total from football simulation rather than sportsbook imitation.
 9. Final operational package/prospective grading.
