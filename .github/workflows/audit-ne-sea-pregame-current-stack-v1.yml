@@ -45,9 +45,10 @@ jobs:
           test -s docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_FROZEN_PLAN.md
           test -s docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_RUN1_TIMESTAMP_MECHANICAL_REPAIR.md
           test -s docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_RUN3_REPLAY_OPPONENT_MAP_MECHANICAL_REPAIR.md
+          test -s docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_RUN5_UNSUPPORTED_MARKET_REPLAY_COMPATIBILITY_REPAIR.md
           git merge-base --is-ancestor 3e01e2bf3d6307f33562c18bea7e25f686757608 HEAD
           git diff --name-only 3e01e2bf3d6307f33562c18bea7e25f686757608...HEAD | tee /tmp/diff.txt
-          if grep -Ev '^(docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_FROZEN_PLAN.md|docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_RUN1_TIMESTAMP_MECHANICAL_REPAIR.md|docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_RUN3_REPLAY_OPPONENT_MAP_MECHANICAL_REPAIR.md|\.github/workflows/audit-ne-sea-pregame-current-stack-v1.yml)$' /tmp/diff.txt | grep -q .; then
+          if grep -Ev '^(docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_FROZEN_PLAN.md|docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_RUN1_TIMESTAMP_MECHANICAL_REPAIR.md|docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_RUN3_REPLAY_OPPONENT_MAP_MECHANICAL_REPAIR.md|docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_RUN5_UNSUPPORTED_MARKET_REPLAY_COMPATIBILITY_REPAIR.md|\.github/workflows/audit-ne-sea-pregame-current-stack-v1.yml)$' /tmp/diff.txt | grep -q .; then
             echo 'FATAL: diagnostic branch changed files outside frozen diagnostic boundary'
             exit 1
           fi
@@ -151,6 +152,7 @@ jobs:
           python - <<'PY'
           import json, pandas as pd
           from scripts.utils.player_identity_v3 import player_name_key
+          from scripts.materialize_live_props_for_model_v1 import SUPPORTED_MARKETS
           src=pd.read_csv('/tmp/paid/data/props_enriched.csv',low_memory=False)
           roles=pd.read_csv('data/roles_current_production_eligible_v1.csv',low_memory=False)
           tw=pd.read_csv('data/team_week_map.csv',low_memory=False)
@@ -162,11 +164,28 @@ jobs:
           keep=['event_id','player','market','line','book','book_title','team','opponent','side','price_american','commence_time_x']
           x=x[keep].rename(columns={'commence_time_x':'commence_time'})
           x=x.drop_duplicates(['event_id','player','market','line','book','side','price_american'],keep='first')
-          x.to_csv('outputs/props_raw.csv',index=False)
           assert set(x.team.astype(str))=={'NE','SEA'},set(x.team.astype(str))
-          assert len(x)>0
+          assert len(x)==162, len(x)
+          source_rows=int(len(x))
+          source_players=int(x.player.nunique())
+          source_markets=sorted(x.market.astype(str).unique().tolist())
 
-          # Replay-only canonical opponent map derived from the exact staged rows.
+          # Replay-only production market-capability boundary. Preserve unsupported
+          # provider rows, but do not send them into a model that production itself
+          # never exposes to those markets.
+          supported=x.market.astype(str).isin(SUPPORTED_MARKETS)
+          q=x.loc[~supported].copy()
+          assert len(q)==8, q[['player','market','book','side']].to_dict('records')
+          assert set(q.market.astype(str))=={'player_pass_tds'}, set(q.market.astype(str))
+          assert set(q.player.astype(str))=={'Drake Maye','Sam Darnold'}, set(q.player.astype(str))
+          q['quarantine_reason']='UNSUPPORTED_PRODUCTION_MARKET'
+          q.to_csv('data/ne_sea_replay_unsupported_market_quarantine.csv',index=False)
+          x=x.loc[supported].copy()
+          assert len(x)==154, len(x)
+          assert 'player_pass_tds' not in set(x.market.astype(str))
+          x.to_csv('outputs/props_raw.csv',index=False)
+
+          # Replay-only canonical opponent map derived from the supported staged rows.
           om=x[['player','team','opponent','event_id']].drop_duplicates().copy()
           om['player_clean_key']=om['player'].map(lambda p: player_name_key(p,strip_suffix=False))
           om['season']=2026
@@ -184,11 +203,29 @@ jobs:
           om.to_csv('data/opponent_map_from_props.csv',index=False)
           assert len(om)>0
 
-          payload={'source_run':34152868136,'source_artifact':10030344451,'odds_refetched':False,'rows':int(len(x)),'players':int(x.player.nunique()),'markets':sorted(x.market.astype(str).unique().tolist()),'teams':sorted(x.team.astype(str).unique().tolist()),'opponent_map_rows':int(len(om)),'opponent_map_source':'DETERMINISTIC_FROM_STAGED_HISTORICAL_NE_SEA_ROWS'}
+          payload={
+            'source_run':34152868136,
+            'source_artifact':10030344451,
+            'odds_refetched':False,
+            'immutable_source_side_rows':source_rows,
+            'immutable_source_players':source_players,
+            'immutable_source_markets':source_markets,
+            'model_facing_side_rows':int(len(x)),
+            'model_facing_players':int(x.player.nunique()),
+            'model_facing_markets':sorted(x.market.astype(str).unique().tolist()),
+            'quarantined_side_rows':int(len(q)),
+            'quarantined_markets':sorted(q.market.astype(str).unique().tolist()),
+            'quarantine_reason':'UNSUPPORTED_PRODUCTION_MARKET',
+            'teams':sorted(x.team.astype(str).unique().tolist()),
+            'opponent_map_rows':int(len(om)),
+            'opponent_map_source':'DETERMINISTIC_FROM_STAGED_HISTORICAL_NE_SEA_ROWS',
+            'production_supported_markets_authority':'scripts/materialize_live_props_for_model_v1.py::SUPPORTED_MARKETS',
+          }
           open('data/ne_sea_historical_offer_stage_audit.json','w').write(json.dumps(payload,indent=2,sort_keys=True)+'\n')
           print(json.dumps(payload,indent=2,sort_keys=True))
           PY
           test -s data/opponent_map_from_props.csv
+          test -s data/ne_sea_replay_unsupported_market_quarantine.csv
 
       - name: Run current promoted pricing stack at preserved NE-SEA lines
         run: |
@@ -238,6 +275,7 @@ jobs:
             outputs/ne_sea_current_stack_counterfactual_result.json
             data/ne_sea_pregame_state_audit.json
             data/ne_sea_historical_offer_stage_audit.json
+            data/ne_sea_replay_unsupported_market_quarantine.csv
             data/current_player_availability.csv
             data/current_player_availability_game_certification.csv
             data/roles_current_production_eligible_v1.csv
