@@ -14,7 +14,7 @@ env:
   SEASON: "2026"
   PRIOR_SEASON: "2025"
   SLATE_DATE: "2026-09-09"
-  ASOF_UTC: "2026-09-09T23:00:00Z"
+  ASOF_UTC: "2026-09-09T19:00:00Z"
   ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
   FETCH_LIVE_ODDS: "false"
   SOURCE_ARTIFACT_ID: "10030344451"
@@ -43,9 +43,10 @@ jobs:
         run: |
           set -euo pipefail
           test -s docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_FROZEN_PLAN.md
+          test -s docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_RUN1_TIMESTAMP_MECHANICAL_REPAIR.md
           git merge-base --is-ancestor 3e01e2bf3d6307f33562c18bea7e25f686757608 HEAD
           git diff --name-only 3e01e2bf3d6307f33562c18bea7e25f686757608...HEAD | tee /tmp/diff.txt
-          if grep -Ev '^(docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_FROZEN_PLAN.md|\.github/workflows/audit-ne-sea-pregame-current-stack-v1.yml)$' /tmp/diff.txt | grep -q .; then
+          if grep -Ev '^(docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_FROZEN_PLAN.md|docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_RUN1_TIMESTAMP_MECHANICAL_REPAIR.md|\.github/workflows/audit-ne-sea-pregame-current-stack-v1.yml)$' /tmp/diff.txt | grep -q .; then
             echo 'FATAL: diagnostic branch changed files outside frozen diagnostic boundary'
             exit 1
           fi
@@ -84,7 +85,7 @@ jobs:
           assert {'NE','SEA'}.issubset(set(r.team.astype(str)))
           payload={
             'disposition':'NE_SEA_FROZEN_PREGAME_STATE_PASS',
-            'asof_utc':'2026-09-09T23:00:00Z',
+            'asof_utc':'2026-09-09T19:00:00Z',
             'game_certification_state':str(g.certification_state),
             'production_eligible':bool(g.production_eligible),
             'rhamondre_role':str(steve.role_after_availability),
@@ -189,7 +190,7 @@ jobs:
           payload={
             'disposition':'NE_SEA_CURRENT_PROMOTED_STACK_COUNTERFACTUAL_COMPLETE',
             'diagnostic_only':True,
-            'asof_utc':'2026-09-09T23:00:00Z',
+            'asof_utc':'2026-09-09T19:00:00Z',
             'sportsbook_source_run':34152868136,
             'sportsbook_source_artifact':10030344451,
             'odds_refetched':False,
