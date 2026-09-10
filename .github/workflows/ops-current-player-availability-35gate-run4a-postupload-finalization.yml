@@ -1,0 +1,109 @@
+name: Current Player Availability 35 Gate Run4A Postupload Finalization
+
+on:
+  push:
+    branches: [ops-current-player-availability-35gate-cert-v1]
+    paths: ['docs/operations/CURRENT_PLAYER_AVAILABILITY_35GATE_RUN4A_IMPLEMENTATION_LOCK.md']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PLAN_BLOB: e0b4e76e2143f85a27cdb1de8b97aadc379b9072
+  FINALIZER_BLOB: a5302186eadb748863c70b175421d064885dde60
+  SOURCE_BRANCH: ops-current-player-availability-35gate-cert-v1
+  SOURCE_HEAD: 76d01dd8e7b26ef8921cd70c18f27957da46c560
+  SOURCE_RUN: '34461561636'
+  SOURCE_JOB: '102820358570'
+  SOURCE_ARTIFACT_ID: '10145975346'
+  SOURCE_ARTIFACT_NAME: current-player-availability-35gate-evidence-v1-run3
+  SOURCE_ARTIFACT_DIGEST: sha256:dd32b45f6746176911ca68aa1d73a8a75325f92cf7b0951c335ae5484752e0ed
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+
+      - name: Verify frozen post-upload finalization boundary
+        run: |
+          set -euo pipefail
+          test "$(git hash-object docs/operations/CURRENT_PLAYER_AVAILABILITY_35GATE_RUN4A_POSTUPLOAD_FINALIZATION_PLAN.md)" = "$PLAN_BLOB"
+          test "$(git hash-object scripts/operations/finalize_current_availability_35gate_v1.py)" = "$FINALIZER_BLOB"
+          python -m py_compile scripts/operations/finalize_current_availability_35gate_v1.py
+          echo RUN4A_FROZEN_FINALIZATION_BOUNDARY_PASS
+
+      - name: Verify exact Run3 evidence artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          NAME="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}" --jq .name)"
+          DIGEST="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}" --jq .digest)"
+          RUNID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}" --jq .workflow_run.id)"
+          test "$NAME" = "$SOURCE_ARTIFACT_NAME"
+          test "$DIGEST" = "$SOURCE_ARTIFACT_DIGEST"
+          test "$RUNID" = "$SOURCE_RUN"
+          echo RUN4A_EXACT_RUN3_ARTIFACT_METADATA_PASS
+
+      - name: Download and verify immutable Run3 gates 1-34
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf run3_evidence data/current_player_availability_35gate_preliminary.json
+          mkdir -p run3_evidence data
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "$SOURCE_ARTIFACT_NAME" --dir run3_evidence
+          test -s run3_evidence/current_player_availability_35gate_preliminary.json
+          cp run3_evidence/current_player_availability_35gate_preliminary.json data/current_player_availability_35gate_preliminary.json
+          python - <<'PY'
+          import json
+          d=json.load(open('data/current_player_availability_35gate_preliminary.json'))
+          assert d['all_1_34_pass'] is True, d
+          assert int(d['evaluated_gate_count']) == 34, d
+          assert int(d['passed_1_34']) == 34, d
+          assert int(d['failed_1_34']) == 0, d
+          assert len(d['gates']) == 34, d
+          assert all(bool(g.get('pass')) for g in d['gates']), d
+          print('RUN4A_IMMUTABLE_34_OF_34_PASS')
+          PY
+
+      - name: Finalize unchanged gate 35 against exact Run3 lineage
+        run: |
+          set -euo pipefail
+          python scripts/operations/finalize_current_availability_35gate_v1.py \
+            --branch "$SOURCE_BRANCH" \
+            --head "$SOURCE_HEAD" \
+            --run "$SOURCE_RUN" \
+            --job "$SOURCE_JOB" \
+            --artifact-id "$SOURCE_ARTIFACT_ID" \
+            --artifact-digest "$SOURCE_ARTIFACT_DIGEST"
+
+      - name: Assert complete frozen result
+        run: |
+          python - <<'PY'
+          import json
+          d=json.load(open('data/current_player_availability_35gate_result.json'))
+          assert d['disposition']=='CURRENT_PLAYER_AVAILABILITY_FULL_SLATE_INTEGRATION_PASS_READY_FOR_PROMOTION', d
+          assert int(d['passed_gates'])==35 and int(d['failed_gates'])==0, d
+          assert d['production_promoted'] is False, d
+          assert d['sportsbook_used_to_define_football'] is False, d
+          print('RUN4A_COMPLETE_35_OF_35_PASS_READY_FOR_SEPARATE_PROMOTION')
+          PY
+
+      - name: Upload final immutable Run3 result
+        id: final_upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: current-player-availability-35gate-finalized-run3-v1
+          retention-days: 90
+          path: data/current_player_availability_35gate_result.json
+
+      - name: Display final result lineage
+        run: |
+          cat data/current_player_availability_35gate_result.json
+          echo "FINAL_RESULT_ARTIFACT_ID=${{ steps.final_upload.outputs.artifact-id }}"
+          echo "FINAL_RESULT_ARTIFACT_DIGEST=${{ steps.final_upload.outputs.artifact-digest }}"
