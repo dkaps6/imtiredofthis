@@ -1,6 +1,6 @@
 # Current Player Availability — Production Promotion V1 Implementation Lock
 
-Status: `LOCKED_BEFORE_FIRST_PRODUCTION_BRANCH_VERIFICATION_RUN`
+Status: `RELOCKED_AFTER_FROZEN_RUN1_AUDIT_COMPATIBILITY_REPAIR_BEFORE_RUN2`
 
 ## Promotion authority
 
@@ -13,13 +13,42 @@ Status: `LOCKED_BEFORE_FIRST_PRODUCTION_BRANCH_VERIFICATION_RUN`
 - first-valid gates 1-34 run/job: `34461561636` / `102820358570`
 - first-valid gates 1-34 artifact/digest: `10145975346` / `sha256:dd32b45f6746176911ca68aa1d73a8a75325f92cf7b0951c335ae5484752e0ed`.
 
-## Exact implementation blobs
+## Preserved production-branch Run1 mechanical failure
+
+Parent verification:
+- run/job `34470549704` / `102849180219`
+- evidence artifact `10149440197`
+- digest `sha256:355a8eb8340bdc3281461457cef39a205ffaeedddbe0543b9a291cf1d3db38ae`.
+
+Child Full Slate:
+- run/job `34470613780` / `102849391150`
+- artifact `10149436841`
+- digest `sha256:62fbde8ff296d8df8fbe2c40b5fa3d04a281640281c53dea84be8d14a751f946`
+- all football stages through certified availability-aware current-output seams passed
+- strict repo audit failed only because the workflow no longer directly invoked `scripts/run_player_form_v2_loader.py`
+- main promotion did not occur.
+
+Run1 disposition: `CURRENT_PLAYER_AVAILABILITY_PRODUCTION_BRANCH_VERIFY_MECHANICAL_FAILURE_NO_DECISION`.
+
+## Frozen Run1 minimum repair authority
+
+- repair plan commit: `90a297ab94b75ffbe5da7d050928d01f9da60e1d`
+- repair plan blob: `9b7ffb85d6bfb0895abaca97d4d2642ae3a07288`
+- scope: static audit compatibility only; no Full Slate/model/availability/T-75/sportsbook semantic change.
+
+Repaired audit blobs:
+- `scripts/utils/audit_repo.py`: `c5a465892c7f9386a1c567e26622f6835e190aa6`
+- `scripts/audit_2026_production_readiness.py`: `d9c47ab0d784510722b8d8f879d53067c4de3aa0`.
+
+The repaired audits recognize the certified current-role PlayerForm wrapper only while also proving that it delegates to `scripts.run_player_form_v2_loader`, executes `loader.main()`, resolves explicit certified current roles, republishes strict-prior history, and rejects target/future-week active-season rows. The protected legacy loader remains a material audited dependency.
+
+## Exact implementation blobs for Run2
 
 Canonical production workflow candidate:
 - `.github/workflows/full-slate.yml`: `41bacd4b756c32279169c80e0ff603a4780b7bee`
 
-Production verification launcher:
-- `.github/workflows/current-player-availability-production-verify-v1.yml`: `8f1bd9d931cf588574cd45c0879708092487fa39`
+Production verification launcher, now pinning the repair and both audit blobs:
+- `.github/workflows/current-player-availability-production-verify-v1.yml`: `9e29c21b9417ee2beb4d4b8552072da18501f3ea`
 
 Availability and current-role plumbing:
 - `scripts/providers/ourlads_depth_status_v1.py`: `c115816ea8aa4ba7150a635c3115546d43f94b3c`
@@ -56,8 +85,10 @@ Verification-only runners:
 - no sportsbook input defines carries, targets, receptions, passing opportunity, roster eligibility, or player roles;
 - no M89/M90/C2 science, M38, WR-R15, TE-R5P, P3, R26 science, R22 tail science, model artifact, or historical research result changes are authorized.
 
-## First branch verification
+## Run2 authorization
 
-Creation of this lock authorizes exactly the first dedicated production-branch verification launcher. It must dispatch the branch's exact canonical Full Slate with live odds disabled, require that clean run to succeed, stage its immutable outputs, execute the separately frozen dynamic production verifier, and upload immutable verification evidence.
+Creation of this relock authorizes exactly the repaired dedicated production-branch verification launcher. It must dispatch the branch's exact canonical Full Slate with live odds disabled, require that clean child run to succeed, stage its immutable outputs, execute the separately frozen dynamic production verifier, run both repaired strict audits, and upload immutable verification evidence.
 
-Only `CURRENT_PLAYER_AVAILABILITY_PRODUCTION_BRANCH_VERIFY_PASS_READY_FOR_MAIN_PROMOTION` authorizes a subsequent promotion to `main`. Any mechanical failure is preserved and repaired under a separately frozen minimum repair. Any semantic/scientific invariant failure means no promotion.
+The already-played NE-SEA Week 1 game is expected to be `KICKED_OFF_LOCKED` and withheld from current production eligibility. Missing current live props for that game is not an availability failure. Sportsbook remains disabled for this verification.
+
+Only `CURRENT_PLAYER_AVAILABILITY_PRODUCTION_BRANCH_VERIFY_PASS_READY_FOR_MAIN_PROMOTION` authorizes a subsequent promotion to `main`. Any new mechanical failure must be preserved and repaired under a separately frozen minimum repair. Any semantic/scientific invariant failure means no promotion.
