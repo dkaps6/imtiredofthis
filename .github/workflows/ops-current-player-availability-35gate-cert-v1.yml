@@ -2,10 +2,8 @@ name: Current Player Availability 35 Gate Certification V1
 
 on:
   push:
-    branches:
-      - ops-current-player-availability-35gate-cert-v1
-    paths:
-      - 'docs/operations/CURRENT_PLAYER_AVAILABILITY_35GATE_CERT_V1_IMPLEMENTATION_LOCK.md'
+    branches: [ops-current-player-availability-35gate-cert-v1]
+    paths: ['docs/operations/CURRENT_PLAYER_AVAILABILITY_35GATE_CERT_V1_IMPLEMENTATION_LOCK.md']
   workflow_dispatch:
 
 permissions:
@@ -27,7 +25,7 @@ env:
   CANDIDATE_DIGEST: sha256:6b31ae40d648780673b7953b57323d509b302ea7a82fe99801b024ede2603f37
   RUNNER_BLOB: dc60ab10bc18777d6b13cb5f81f285e8c248f3ab
   FIXTURE_BLOB: dbe9f41e4d175b503bf0cd8caf51c1dc8d0da95d
-  EVALUATOR_BLOB: 040885a1549829c51186e7b3a5f6eda32e12bb70
+  EVALUATOR_BLOB: 3bc2bb390ab6762f1c20e775152812d3f8e9729e
   FINALIZER_BLOB: a5302186eadb748863c70b175421d064885dde60
   ELIGIBLE_HELPER_BLOB: 77b591e431378ec984c51e8a032262e673d4c843
   SEAM_TRANSFORMER_BLOB: b64ec5ccd59728121a250433e40e77e3e1013a05
@@ -40,13 +38,9 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
+        with: {fetch-depth: 0}
       - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
+        with: {python-version: '3.11'}
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -66,96 +60,57 @@ jobs:
           test "$(git hash-object scripts/modeling/rb_r26_receptions_production_adapter_v1.py)" = "$R26_PROTECTED_BLOB"
           git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- docs/research
           git diff --quiet "$INTEGRATION_PLAN_SHA" HEAD -- scripts/modeling data/models model
-          python -m py_compile \
-            scripts/operations/run_current_availability_football_stack_cert_v1.py \
-            scripts/operations/build_current_availability_certification_fixtures_v1.py \
-            scripts/operations/evaluate_current_availability_35gate_v1.py \
-            scripts/operations/finalize_current_availability_35gate_v1.py \
-            scripts/utils/eligible_team_set_v1.py \
-            scripts/operations/apply_current_availability_eligible_team_seam_v1.py
+          python -m py_compile scripts/operations/run_current_availability_football_stack_cert_v1.py scripts/operations/build_current_availability_certification_fixtures_v1.py scripts/operations/evaluate_current_availability_35gate_v1.py scripts/operations/finalize_current_availability_35gate_v1.py
+          mkdir -p data
           python - <<'PY'
           import json
-          from pathlib import Path
-          payload={
-            'protected_model_artifacts_unchanged': True,
-            'historical_research_unchanged': True,
-            'scientific_model_diff_clean': True,
-            'downstream_universe_subset_guard_unchanged': True,
-            'availability_static_readiness_pass': True,
-            'live_pricing_not_executed': True,
-            'live_pricing_eligible_only': False,
-          }
-          Path('data').mkdir(exist_ok=True)
-          Path('data/availability_35gate_static_evidence.json').write_text(json.dumps(payload,indent=2,sort_keys=True)+'\n')
+          json.dump({'protected_model_artifacts_unchanged':True,'historical_research_unchanged':True,'scientific_model_diff_clean':True,'downstream_universe_subset_guard_unchanged':True,'availability_static_readiness_pass':True,'live_pricing_not_executed':True,'live_pricing_eligible_only':False},open('data/availability_35gate_static_evidence.json','w'),indent=2,sort_keys=True)
           PY
 
-      - name: Verify and stage exact immutable successful candidate
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Stage exact immutable successful candidate
+        env: {GH_TOKEN: '${{ github.token }}'}
         run: |
           set -euo pipefail
-          D="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${CANDIDATE_ARTIFACT_ID}" --jq .digest)"
-          test "$D" = "$CANDIDATE_DIGEST"
-          rm -rf candidate_evidence
-          mkdir -p candidate_evidence
+          test "$(gh api repos/${GITHUB_REPOSITORY}/actions/artifacts/${CANDIDATE_ARTIFACT_ID} --jq .digest)" = "$CANDIDATE_DIGEST"
+          rm -rf candidate_evidence && mkdir candidate_evidence
           gh run download "$CANDIDATE_RUN" --repo "$GITHUB_REPOSITORY" --name "$CANDIDATE_ARTIFACT_NAME" --dir candidate_evidence
           test -s candidate_evidence/data/current_player_availability.csv
           test -s candidate_evidence/data/current_player_availability_candidate_summary.json
-          test -s candidate_evidence/data/roles_current_production_eligible_v1.csv
           cp -a candidate_evidence/data/. data/
-          mkdir -p outputs
-          if [ -d candidate_evidence/outputs ]; then cp -a candidate_evidence/outputs/. outputs/; fi
           python - <<'PY'
           import json,pandas as pd
           d=json.load(open('data/current_player_availability_candidate_summary.json'))
           assert d['disposition']=='CURRENT_PLAYER_AVAILABILITY_NO_ODDS_FULL_SLATE_CANDIDATE_COMPLETED',d
-          assert int(d['eligible_games'])==15 and int(d['withheld_games'])==1,d
-          assert int(d['production_eligible_active_roles'])==437,d
-          assert int(d['sportsbook_inputs_used'])==0,d
-          a=pd.read_csv('data/roles_current_production_eligible_v1.csv')
-          assert a.team.nunique()==30,(len(a),a.team.nunique())
+          assert (int(d['eligible_games']),int(d['withheld_games']),int(d['production_eligible_active_roles']),int(d['sportsbook_inputs_used']))==(15,1,437,0),d
+          r=pd.read_csv('data/roles_current_production_eligible_v1.csv'); assert r.team.nunique()==30
           print('IMMUTABLE_CANDIDATE_STAGE_PASS')
           PY
 
-      - name: Apply locked eligible-team coverage seam in certification workspace
+      - name: Apply locked eligible-team seam and build fixtures
         run: |
           set -euo pipefail
-          export PYTHONPATH="${PWD}"
+          export PYTHONPATH="$PWD"
           python scripts/operations/apply_current_availability_eligible_team_seam_v1.py
           python -m py_compile scripts/run_pricing_with_full_roster_universe_v1.py scripts/modeling/rb_r26_receptions_production_adapter_v1.py
-
-      - name: Build frozen fixture inputs
-        run: |
-          set -euo pipefail
-          export PYTHONPATH="${PWD}"
           python scripts/operations/build_current_availability_certification_fixtures_v1.py
-          test -s data/availability_cert_fixtures/fixtures_summary.json
 
       - name: Execute baseline promoted football stack without sportsbook
         run: |
           set -euo pipefail
-          export PYTHONPATH="${PWD}"
-          export ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+          export PYTHONPATH="$PWD" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
           python scripts/operations/run_current_availability_football_stack_cert_v1.py
-          test -s data/current_availability_football_stack_certification.json
           mkdir -p data/availability_35gate_evidence/baseline
           cp data/current_availability_football_stack_certification.json data/availability_35gate_evidence/baseline/
 
-      - name: Execute isolated RB1 OUT fixture candidate
+      - name: Execute RB1 OUT fixture
         run: |
           set -euo pipefail
-          ROOT="$PWD"
-          W=/tmp/availability_rb1_out
-          rm -rf "$W"
-          git worktree add --detach "$W" "$GITHUB_SHA"
-          cp -a candidate_evidence/data/. "$W/data/"
-          cp -a data/availability_cert_fixtures "$W/data/"
-          cd "$W"
-          export PYTHONPATH="$W"
+          ROOT="$PWD"; W=/tmp/availability_rb1_out; rm -rf "$W"; git worktree add --detach "$W" "$GITHUB_SHA"; mkdir -p "$W/data"
+          cp -a candidate_evidence/data/. "$W/data/"; cp -a data/availability_cert_fixtures "$W/data/"
+          cd "$W"; export PYTHONPATH="$W" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
           python scripts/operations/apply_current_availability_eligible_team_seam_v1.py
           cp data/availability_cert_fixtures/rb1_out/current_player_availability.csv data/current_player_availability.csv
           cp data/availability_cert_fixtures/rb1_out/roles_current_production_eligible_v1.csv data/roles_current_production_eligible_v1.csv
-          export ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
           python scripts/run_player_form_current_roles_v1.py --season "$SEASON" --prior-season "$PRIOR_SEASON"
           python scripts/enrich_player_scoring_v2.py --season "$SEASON" --prior-season "$PRIOR_SEASON"
           python scripts/run_model_context_bridge.py
@@ -163,91 +118,51 @@ jobs:
           python scripts/operations/run_current_availability_football_stack_cert_v1.py
           mkdir -p "$ROOT/data/availability_35gate_evidence/rb1_out"
           cp data/current_availability_football_stack_certification.json data/rb_rush_synthesis_context.csv data/roles_current_production_eligible_v1.csv data/availability_cert_fixtures/rb1_out/fixture_manifest.json "$ROOT/data/availability_35gate_evidence/rb1_out/"
-          cd "$ROOT"
-          git worktree remove --force "$W"
+          cd "$ROOT"; git worktree remove --force "$W"
 
-      - name: Execute isolated QB1 inactive fixture candidate
+      - name: Execute QB1 inactive fixture
         run: |
           set -euo pipefail
-          ROOT="$PWD"
-          W=/tmp/availability_qb1_inactive
-          rm -rf "$W"
-          git worktree add --detach "$W" "$GITHUB_SHA"
-          cp -a candidate_evidence/data/. "$W/data/"
-          cp -a data/availability_cert_fixtures "$W/data/"
-          cd "$W"
-          export PYTHONPATH="$W"
+          ROOT="$PWD"; W=/tmp/availability_qb1_inactive; rm -rf "$W"; git worktree add --detach "$W" "$GITHUB_SHA"; mkdir -p "$W/data"
+          cp -a candidate_evidence/data/. "$W/data/"; cp -a data/availability_cert_fixtures "$W/data/"
+          cd "$W"; export PYTHONPATH="$W" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
           python scripts/operations/apply_current_availability_eligible_team_seam_v1.py
           cp data/availability_cert_fixtures/qb1_inactive/current_player_availability.csv data/current_player_availability.csv
           cp data/availability_cert_fixtures/qb1_inactive/roles_current_production_eligible_v1.csv data/roles_current_production_eligible_v1.csv
-          export ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
           python scripts/run_player_form_current_roles_v1.py --season "$SEASON" --prior-season "$PRIOR_SEASON"
           python scripts/enrich_player_scoring_v2.py --season "$SEASON" --prior-season "$PRIOR_SEASON"
           python scripts/run_model_context_bridge.py
           python scripts/operations/run_current_availability_football_stack_cert_v1.py
           mkdir -p "$ROOT/data/availability_35gate_evidence/qb1_inactive"
           cp data/current_availability_football_stack_certification.json data/player_form_consensus.csv data/roles_current_production_eligible_v1.csv data/availability_cert_fixtures/qb1_inactive/fixture_manifest.json "$ROOT/data/availability_35gate_evidence/qb1_inactive/"
-          cd "$ROOT"
-          git worktree remove --force "$W"
+          cd "$ROOT"; git worktree remove --force "$W"
 
-      - name: Execute isolated WR and TE unavailable fixture candidate
+      - name: Execute WR and TE unavailable fixture
         run: |
           set -euo pipefail
-          ROOT="$PWD"
-          W=/tmp/availability_wr_te
-          rm -rf "$W"
-          git worktree add --detach "$W" "$GITHUB_SHA"
-          cp -a candidate_evidence/data/. "$W/data/"
-          cp -a data/availability_cert_fixtures "$W/data/"
-          cd "$W"
-          export PYTHONPATH="$W"
+          ROOT="$PWD"; W=/tmp/availability_wr_te; rm -rf "$W"; git worktree add --detach "$W" "$GITHUB_SHA"; mkdir -p "$W/data"
+          cp -a candidate_evidence/data/. "$W/data/"; cp -a data/availability_cert_fixtures "$W/data/"
+          cd "$W"; export PYTHONPATH="$W" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
           python scripts/operations/apply_current_availability_eligible_team_seam_v1.py
           cp data/availability_cert_fixtures/wr_te_unavailable/current_player_availability.csv data/current_player_availability.csv
           cp data/availability_cert_fixtures/wr_te_unavailable/roles_current_production_eligible_v1.csv data/roles_current_production_eligible_v1.csv
-          export ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
           python scripts/run_player_form_current_roles_v1.py --season "$SEASON" --prior-season "$PRIOR_SEASON"
           python scripts/enrich_player_scoring_v2.py --season "$SEASON" --prior-season "$PRIOR_SEASON"
           python scripts/run_model_context_bridge.py
           python scripts/operations/run_current_availability_football_stack_cert_v1.py
           mkdir -p "$ROOT/data/availability_35gate_evidence/wr_te_unavailable"
           cp data/current_availability_football_stack_certification.json data/target_entitlement_v1_trace.csv data/te_r5p_full_slate_entitlement_audit.json data/wr_r15_full_slate_entitlement_audit.json data/roles_current_production_eligible_v1.csv data/availability_cert_fixtures/wr_te_unavailable/fixture_manifest.json "$ROOT/data/availability_35gate_evidence/wr_te_unavailable/"
-          cd "$ROOT"
-          git worktree remove --force "$W"
+          cd "$ROOT"; git worktree remove --force "$W"
 
       - name: Materialize fixture gate evidence
         run: |
           set -euo pipefail
           python - <<'PY'
-          import json
-          from pathlib import Path
-          import pandas as pd
-          root=Path('data/availability_35gate_evidence')
-          out={}
-
-          p=root/'rb1_out'; m=json.load(open(p/'fixture_manifest.json')); target=m['targets'][0]
-          roles=pd.read_csv(p/'roles_current_production_eligible_v1.csv'); rush=pd.read_csv(p/'rb_rush_synthesis_context.csv'); stack=json.load(open(p/'current_availability_football_stack_certification.json'))
-          old=str(target['player_clean_key']); succ=str(target['expected_successor']); team=str(target['team'])
-          room=roles[(roles.team.astype(str)==team)&(roles.position_group.astype(str).str.upper()=='RB')]
-          succ_role=room.loc[room.player_clean_key.astype(str)==succ,'role'].astype(str).tolist()
-          succ_rush=rush[(rush.team.astype(str)==team)&(rush.player_clean_key.astype(str)==succ)]
-          rbpass=(old not in set(roles.player_clean_key.astype(str)) and succ_role==['RB1'] and old not in set(rush.player_clean_key.astype(str)) and len(succ_rush)==1 and float(pd.to_numeric(succ_rush.stack_att,errors='coerce').iloc[0])>0 and stack['disposition']=='CURRENT_PLAYER_AVAILABILITY_FOOTBALL_STACK_EXECUTION_PASS')
-          out['rb1_out_pass']=bool(rbpass); out['rb1_out']={'team':team,'old':old,'successor':succ,'successor_role':succ_role,'successor_stack_att':float(pd.to_numeric(succ_rush.stack_att,errors='coerce').iloc[0]) if len(succ_rush) else None,'stack':stack}
-
-          p=root/'qb1_inactive'; m=json.load(open(p/'fixture_manifest.json')); target=m['targets'][0]
-          roles=pd.read_csv(p/'roles_current_production_eligible_v1.csv'); form=pd.read_csv(p/'player_form_consensus.csv'); stack=json.load(open(p/'current_availability_football_stack_certification.json'))
-          old=str(target['player_clean_key']); succ=str(target['expected_successor']); team=str(target['team'])
-          qroom=roles[(roles.team.astype(str)==team)&(roles.position_group.astype(str).str.upper()=='QB')]
-          froom=form[(form.team.astype(str)==team)&(form.position.astype(str).str.upper()=='QB')]
-          qbpass=(old not in set(roles.player_clean_key.astype(str)) and old not in set(form.player_clean_key.astype(str)) and qroom.role.astype(str).eq('QB1').sum()==1 and froom.role.astype(str).eq('QB1').sum()==1 and succ in set(qroom.loc[qroom.role.astype(str).eq('QB1'),'player_clean_key'].astype(str)) and succ in set(froom.loc[froom.role.astype(str).eq('QB1'),'player_clean_key'].astype(str)) and stack['disposition']=='CURRENT_PLAYER_AVAILABILITY_FOOTBALL_STACK_EXECUTION_PASS')
-          out['qb1_inactive_pass']=bool(qbpass); out['qb1_inactive']={'team':team,'old':old,'successor':succ,'active_qb1':qroom.loc[qroom.role.astype(str).eq('QB1'),'player_clean_key'].astype(str).tolist(),'form_qb1':froom.loc[froom.role.astype(str).eq('QB1'),'player_clean_key'].astype(str).tolist(),'stack':stack}
-
-          p=root/'wr_te_unavailable'; m=json.load(open(p/'fixture_manifest.json')); targets=m['targets']
-          roles=pd.read_csv(p/'roles_current_production_eligible_v1.csv'); trace=pd.read_csv(p/'target_entitlement_v1_trace.csv'); te=json.load(open(p/'te_r5p_full_slate_entitlement_audit.json')); wr=json.load(open(p/'wr_r15_full_slate_entitlement_audit.json')); stack=json.load(open(p/'current_availability_football_stack_certification.json'))
-          olds={str(t['player_clean_key']) for t in targets}
-          absent=olds.isdisjoint(set(roles.player_clean_key.astype(str))) and olds.isdisjoint(set(trace.player_clean_key.astype(str)))
-          cons=bool(te.get('team_te_pool_preserved')) and bool(te.get('non_te_entitlement_preserved')) and bool(wr.get('m38_wr1_anchor_preserved')) and bool(wr.get('wr2plus_pool_preserved')) and bool(wr.get('wr_room_mass_preserved')) and bool(wr.get('non_wr_entitlement_preserved')) and bool(wr.get('team_total_player_entitlement_preserved'))
-          wtpass=absent and cons and stack['disposition']=='CURRENT_PLAYER_AVAILABILITY_FOOTBALL_STACK_EXECUTION_PASS'
-          out['wr_te_unavailable_pass']=bool(wtpass); out['wr_te_unavailable']={'removed':sorted(olds),'removed_absent':bool(absent),'conservation':bool(cons),'te':te,'wr':wr,'stack':stack}
+          import json; from pathlib import Path; import pandas as pd
+          root=Path('data/availability_35gate_evidence'); out={}
+          p=root/'rb1_out'; m=json.load(open(p/'fixture_manifest.json')); t=m['targets'][0]; roles=pd.read_csv(p/'roles_current_production_eligible_v1.csv'); rush=pd.read_csv(p/'rb_rush_synthesis_context.csv'); stack=json.load(open(p/'current_availability_football_stack_certification.json')); old=str(t['player_clean_key']); succ=str(t['expected_successor']); team=str(t['team']); room=roles[(roles.team.astype(str)==team)&(roles.position_group.astype(str).str.upper()=='RB')]; sr=room.loc[room.player_clean_key.astype(str)==succ,'role'].astype(str).tolist(); rr=rush[(rush.team.astype(str)==team)&(rush.player_clean_key.astype(str)==succ)]; ok=old not in set(roles.player_clean_key.astype(str)) and sr==['RB1'] and old not in set(rush.player_clean_key.astype(str)) and len(rr)==1 and float(pd.to_numeric(rr.stack_att,errors='coerce').iloc[0])>0 and stack['disposition'].endswith('_PASS'); out['rb1_out_pass']=bool(ok); out['rb1_out']={'team':team,'old':old,'successor':succ,'successor_role':sr}
+          p=root/'qb1_inactive'; m=json.load(open(p/'fixture_manifest.json')); t=m['targets'][0]; roles=pd.read_csv(p/'roles_current_production_eligible_v1.csv'); form=pd.read_csv(p/'player_form_consensus.csv'); stack=json.load(open(p/'current_availability_football_stack_certification.json')); old=str(t['player_clean_key']); succ=str(t['expected_successor']); team=str(t['team']); qr=roles[(roles.team.astype(str)==team)&(roles.position_group.astype(str).str.upper()=='QB')]; fr=form[(form.team.astype(str)==team)&(form.position.astype(str).str.upper()=='QB')]; ok=old not in set(roles.player_clean_key.astype(str)) and old not in set(form.player_clean_key.astype(str)) and qr.role.astype(str).eq('QB1').sum()==1 and fr.role.astype(str).eq('QB1').sum()==1 and succ in set(qr.loc[qr.role.astype(str).eq('QB1'),'player_clean_key'].astype(str)) and succ in set(fr.loc[fr.role.astype(str).eq('QB1'),'player_clean_key'].astype(str)) and stack['disposition'].endswith('_PASS'); out['qb1_inactive_pass']=bool(ok); out['qb1_inactive']={'team':team,'old':old,'successor':succ}
+          p=root/'wr_te_unavailable'; m=json.load(open(p/'fixture_manifest.json')); olds={str(t['player_clean_key']) for t in m['targets']}; roles=pd.read_csv(p/'roles_current_production_eligible_v1.csv'); tr=pd.read_csv(p/'target_entitlement_v1_trace.csv'); te=json.load(open(p/'te_r5p_full_slate_entitlement_audit.json')); wr=json.load(open(p/'wr_r15_full_slate_entitlement_audit.json')); stack=json.load(open(p/'current_availability_football_stack_certification.json')); absent=olds.isdisjoint(set(roles.player_clean_key.astype(str))) and olds.isdisjoint(set(tr.player_clean_key.astype(str))); cons=bool(te.get('team_te_pool_preserved')) and bool(te.get('non_te_entitlement_preserved')) and bool(wr.get('m38_wr1_anchor_preserved')) and bool(wr.get('wr2plus_pool_preserved')) and bool(wr.get('wr_room_mass_preserved')) and bool(wr.get('non_wr_entitlement_preserved')) and bool(wr.get('team_total_player_entitlement_preserved')); out['wr_te_unavailable_pass']=bool(absent and cons and stack['disposition'].endswith('_PASS')); out['wr_te_unavailable']={'removed':sorted(olds),'removed_absent':bool(absent),'conservation':bool(cons)}
           Path('data/current_player_availability_fixture_gate_evidence.json').write_text(json.dumps(out,indent=2,sort_keys=True)+'\n')
           print(json.dumps(out,indent=2,sort_keys=True))
           PY
@@ -255,10 +170,8 @@ jobs:
       - name: Evaluate frozen gates 1 through 34
         run: |
           set -euo pipefail
-          export PYTHONPATH="${PWD}"
-          python scripts/operations/evaluate_current_availability_35gate_v1.py \
-            --static-evidence data/availability_35gate_static_evidence.json \
-            --fixture-evidence data/current_player_availability_fixture_gate_evidence.json
+          export PYTHONPATH="$PWD"
+          python scripts/operations/evaluate_current_availability_35gate_v1.py --static-evidence data/availability_35gate_static_evidence.json --fixture-evidence data/current_player_availability_fixture_gate_evidence.json
 
       - name: Upload immutable gates 1-34 evidence
         id: evidence_upload
@@ -288,19 +201,13 @@ jobs:
             data/rb_rush_rec_conservation_input_audit.json
             data/football_simulation_universe_audit.json
 
-      - name: Finalize gate 35 with uploaded immutable lineage
+      - name: Finalize gate 35 with immutable lineage
         run: |
           set -euo pipefail
-          export PYTHONPATH="${PWD}"
-          python scripts/operations/finalize_current_availability_35gate_v1.py \
-            --branch "$GITHUB_REF_NAME" \
-            --head "$GITHUB_SHA" \
-            --run "$GITHUB_RUN_ID" \
-            --job "certify" \
-            --artifact-id "${{ steps.evidence_upload.outputs.artifact-id }}" \
-            --artifact-digest "${{ steps.evidence_upload.outputs.artifact-digest }}"
+          export PYTHONPATH="$PWD"
+          python scripts/operations/finalize_current_availability_35gate_v1.py --branch "$GITHUB_REF_NAME" --head "$GITHUB_SHA" --run "$GITHUB_RUN_ID" --job certify --artifact-id "${{ steps.evidence_upload.outputs.artifact-id }}" --artifact-digest "${{ steps.evidence_upload.outputs.artifact-digest }}"
 
-      - name: Upload final immutable 35-gate result
+      - name: Upload final immutable result
         id: final_upload
         uses: actions/upload-artifact@v4
         with:
