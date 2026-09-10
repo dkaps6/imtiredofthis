@@ -22,4 +22,14 @@ jobs:
           python -m py_compile scripts/validate_current_player_availability_timing_v1.py
           git diff --quiet bb76ba9eabb08e2f0875a9af49301c3877f4141f HEAD -- scripts/modeling scripts/simulation_v2.py scripts/simulation_c2_qb_candidate.py data/models model .github/workflows/full-slate.yml
       - name: Run frozen timing fixtures
-        run: PYTHONPATH=. pytest -q tests/test_current_player_availability_timing_v1.py
+        shell: bash
+        run: |
+          set -o pipefail
+          PYTHONPATH=. pytest -vv tests/test_current_player_availability_timing_v1.py 2>&1 | tee timing-fixtures.txt
+      - name: Upload timing transcript
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: current-player-availability-timing-fixture-transcript
+          retention-days: 14
+          path: timing-fixtures.txt
