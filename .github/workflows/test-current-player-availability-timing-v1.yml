@@ -4,8 +4,8 @@ on:
     branches: [ops-current-player-availability-v1]
     paths:
       - 'tests/test_current_player_availability_timing_v1.py'
-      - 'scripts/build/certify_current_player_availability_timing_v1.py'
-      - 'docs/operations/CURRENT_PLAYER_AVAILABILITY_TIMING_CERTIFICATION_V1_LOCK.md'
+      - 'scripts/validate_current_player_availability_timing_v1.py'
+      - 'docs/operations/CURRENT_PLAYER_AVAILABILITY_TIMING_V1_FROZEN_PLAN.md'
 permissions:
   contents: read
 jobs:
@@ -19,7 +19,7 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Verify production boundary
         run: |
-          python -m py_compile scripts/build/certify_current_player_availability_timing_v1.py
+          python -m py_compile scripts/validate_current_player_availability_timing_v1.py
           git diff --quiet bb76ba9eabb08e2f0875a9af49301c3877f4141f HEAD -- scripts/modeling scripts/simulation_v2.py scripts/simulation_c2_qb_candidate.py data/models model .github/workflows/full-slate.yml
       - name: Run frozen timing fixtures
         run: PYTHONPATH=. pytest -q tests/test_current_player_availability_timing_v1.py
