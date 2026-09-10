@@ -1,28 +1,47 @@
 import pandas as pd
-from scripts.build.certify_current_player_availability_timing_v1 import cert
+from scripts.validate_current_player_availability_timing_v1 import certify
 
-def sched(): return pd.DataFrame([{'season':2026,'week':1,'game_id':'g1','home_team':'IND','away_team':'HOU','kickoff_utc':'2026-09-13T17:00:00Z'},{'season':2026,'week':1,'game_id':'g2','home_team':'KC','away_team':'LV','kickoff_utc':'2026-09-13T20:25:00Z'}])
-def off(rows=()): return pd.DataFrame(list(rows),columns=['team','player','section_complete','source_asof_utc'])
-def state(df,team): return df.loc[df.team.eq(team),'certification_state'].iloc[0]
-def price(df,team): return int(df.loc[df.team.eq(team),'priceable_now'].iloc[0])
+BASE=pd.Timestamp("2026-09-13T16:00:00Z")
 
-def test_tminus91_not_required():
-    x,m=cert(sched(),off(),'2026-09-13T15:29:00Z'); assert state(x,'IND')=='NOT_YET_AVAILABLE' and price(x,'IND')==1 and m['sportsbook_inputs_used']==0
+def sched(kickoffs):
+    rows=[]
+    for i,(mins,away,home) in enumerate(kickoffs,1):
+        rows.append({"season":2026,"week":1,"game_id":f"g{i}","away_team":away,"home_team":home,"kickoff_utc":BASE+pd.Timedelta(minutes=mins)})
+    return pd.DataFrame(rows)
 
-def test_tminus90_missing_fails_closed():
-    x,_=cert(sched(),off(),'2026-09-13T15:30:00Z'); assert state(x,'IND')=='REQUIRED_MISSING_FAIL_CLOSED' and price(x,'IND')==0
+def official(teams, snap="2026-09-13T15:00:00Z"):
+    return pd.DataFrame([{"team":t,"player":"","section_complete":1,"source_asof_utc":snap} for t in teams])
 
-def test_complete_section_certifies():
-    x,_=cert(sched(),off([('IND','',1,'2026-09-13T15:31:00Z')]),'2026-09-13T16:30:00Z'); assert state(x,'IND')=='CERTIFIED_OFFICIAL_SECTION' and price(x,'IND')==1
+def one(minutes,off=None,asof=BASE):
+    s=sched([(minutes,"IND","JAX")]); o=pd.DataFrame() if off is None else off
+    out,_=certify(s,o,asof_utc=asof); return out.iloc[0]
 
-def test_incomplete_section_fails_closed():
-    x,_=cert(sched(),off([('IND','',0,'2026-09-13T15:31:00Z')]),'2026-09-13T16:30:00Z'); assert state(x,'IND')=='REQUIRED_MISSING_FAIL_CLOSED'
+def test_120_minutes_missing_not_yet_required():
+    r=one(120); assert r.certification_state=="NOT_YET_REQUIRED" and bool(r.production_eligible)
 
-def test_early_window_cannot_certify_late_window():
-    x,_=cert(sched(),off([('IND','',1,'2026-09-13T15:31:00Z')]),'2026-09-13T19:00:00Z'); assert state(x,'IND')=='POST_KICKOFF_NOT_PRICEABLE'; assert state(x,'KC')=='REQUIRED_MISSING_FAIL_CLOSED'
+def test_76_minutes_missing_not_yet_required():
+    r=one(76); assert r.certification_state=="NOT_YET_REQUIRED" and bool(r.production_eligible)
 
-def test_postkickoff_not_priceable():
-    x,_=cert(sched(),off([('IND','',1,'2026-09-13T15:31:00Z')]),'2026-09-13T17:01:00Z'); assert state(x,'IND')=='POST_KICKOFF_NOT_PRICEABLE' and price(x,'IND')==0
+def test_exact_75_missing_fails_closed():
+    r=one(75); assert r.certification_state=="REQUIRED_MISSING_FAIL_CLOSED" and not bool(r.production_eligible)
 
-def test_postkickoff_snapshot_cannot_certify_pregame():
-    x,_=cert(sched(),off([('IND','',1,'2026-09-13T17:01:00Z')]),'2026-09-13T16:30:00Z'); assert state(x,'IND')=='REQUIRED_MISSING_FAIL_CLOSED'
+def test_60_minutes_both_complete_pre_kickoff_certified():
+    r=one(60,official(["IND","JAX"],"2026-09-13T15:30:00Z")); assert r.certification_state=="REQUIRED_AND_CERTIFIED" and bool(r.production_eligible)
+
+def test_60_minutes_one_section_missing_fails_closed():
+    r=one(60,official(["IND"],"2026-09-13T15:30:00Z")); assert r.certification_state=="REQUIRED_MISSING_FAIL_CLOSED" and "JAX" in r.failure_reason
+
+def test_post_kickoff_snapshot_cannot_certify():
+    r=one(60,official(["IND","JAX"],"2026-09-13T17:00:00Z")); assert r.certification_state=="REQUIRED_MISSING_FAIL_CLOSED" and "snapshot_not_pre_kickoff" in r.failure_reason
+
+def test_kicked_off_locked():
+    s=sched([(-1,"IND","JAX")]); out,_=certify(s,pd.DataFrame(),asof_utc=BASE); r=out.iloc[0]
+    assert r.certification_state=="KICKED_OFF_LOCKED" and not bool(r.production_eligible)
+
+def test_multiple_windows_fail_only_imminent_game():
+    s=sched([(60,"IND","JAX"),(180,"BUF","NYJ")]); out,meta=certify(s,pd.DataFrame(),asof_utc=BASE)
+    g1=out[out.game_id.eq("g1")].iloc[0]; g2=out[out.game_id.eq("g2")].iloc[0]
+    assert g1.certification_state=="REQUIRED_MISSING_FAIL_CLOSED" and not bool(g1.production_eligible)
+    assert g2.certification_state=="NOT_YET_REQUIRED" and bool(g2.production_eligible)
+    assert set(meta["withheld_teams"])=={"IND","JAX"}
+    assert meta["sportsbook_inputs_used"]==0 and meta["require_minutes_before_kickoff"]==75.0
