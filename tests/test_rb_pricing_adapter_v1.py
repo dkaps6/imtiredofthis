@@ -80,7 +80,7 @@ def test_canonical_pricing_and_full_slate_are_wired_to_p3():
     assert "lookup_rb_projection" in pricing
     assert "target_mean = rb_synthesis_proj" in pricing
     assert "promoted RB production pricing is currently locked to Week 1" in pricing
-    assert "Build promoted RB P3 football-only context" in workflow
+    assert "Build promoted RB P3 from production-eligible current roles" in workflow
     assert "final RB model projection is not the promoted P3 synthesis mean" in workflow
 
 
