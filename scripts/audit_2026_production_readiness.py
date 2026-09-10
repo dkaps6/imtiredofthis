@@ -57,6 +57,7 @@ PRODUCTION_RUNTIME_FILES = (
     "scripts/player_form_v2.py",
     "scripts/slate_universe_v2.py",
     "scripts/run_player_form_v2_loader.py",
+    "scripts/run_player_form_current_roles_v1.py",
     "scripts/enrich_player_scoring_v2.py",
     "scripts/utils/player_identity_v3.py",
     "scripts/validate_player_identity_v3.py",
@@ -106,7 +107,7 @@ def _workflow_findings() -> list[dict[str, str]]:
         "scripts/utils/build_team_week_map_v2.py",
         "scripts/run_team_form_context.py",
         "scripts/run_qb_promoted_context.py",
-        "scripts/run_player_form_v2_loader.py",
+        "scripts/run_player_form_current_roles_v1.py",
         "scripts/run_model_context_bridge.py",
         "scripts/run_pricing_with_full_roster_universe_v3.py",
     ):
@@ -292,6 +293,14 @@ def _v3_contract_findings() -> list[dict[str, str]]:
         ),
         "scripts/run_player_form_v2_loader.py": (
             "validate_player_identity_v3",
+        ),
+        "scripts/run_player_form_current_roles_v1.py": (
+            "import scripts.run_player_form_v2_loader as loader",
+            "loader.main()",
+            "resolve_current_roles_path",
+            "strict_prior_logs",
+            "publish_strict_prior_history",
+            "w.ge(week)",
         ),
         "scripts/validate_player_identity_v3.py": (
             "player_identity_validation.csv",
