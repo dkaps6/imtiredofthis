@@ -97,7 +97,7 @@ jobs:
       - name: Reconstruct target-game PBP and materialize physical target-quality evidence
         run: |
           rm -rf data/backtests/r27c2_realized_target_quality_v1
-          python scripts/backtest/forensic_rb_r27c2_realized_target_quality_v1.py \
+          PYTHONPATH=. python scripts/backtest/forensic_rb_r27c2_realized_target_quality_v1.py \
             --predictions data/r27c2_r27b_parent/data/backtests/r27b_v2_final/r27b_v2_all_predictions.csv \
             --seasons 2020-2025 \
             --min-targeted-join-coverage 0.98 \
