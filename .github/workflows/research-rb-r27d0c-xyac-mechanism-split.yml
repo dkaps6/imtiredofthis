@@ -6,6 +6,7 @@ on:
       - research-rb-r27d0c-xyac-mechanism-split
     paths:
       - 'docs/research/RB_R27D0C_XYAC_MECHANISM_SPLIT_IMPLEMENTATION_LOCK.md'
+      - 'docs/research/RB_R27D0C_RUN1_XYAC_OBSERVATION_SET_REPAIR_LOCK.md'
   workflow_dispatch:
 
 permissions:
@@ -15,7 +16,7 @@ permissions:
 env:
   PRODUCTION_BASE_SHA: bb76ba9eabb08e2f0875a9af49301c3877f4141f
   PLAN_BLOB: 6a01722bd0291805a44d6be37dec1e228c3adbd0
-  SCRIPT_BLOB: 9bdeab07c95b3f632cc4d55d91fa44690a2e6918
+  SCRIPT_BLOB: 8428aa5cfe675efcf3c366a48e80d705ffdf5aea
   R27B_PARENT_RUN: '34428917229'
   R27B_PARENT_ARTIFACT_ID: '10134023092'
   R27B_PARENT_ARTIFACT_NAME: rb-r27b-v2-novel-efficiency-context
