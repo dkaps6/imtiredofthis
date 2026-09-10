@@ -62,7 +62,7 @@ jobs:
           export PYTHONPATH="${PWD}"
           python scripts/run_sharpfootball_v2.py --season "$SEASON" --dump-html
           python scripts/team_form_prior_bridge.py --season "$SEASON" --prior-season "$PRIOR_SEASON"
-          python scripts/run_team_form_context.py --season "$SEASON" --box-backfill-prev
+          python scripts/run_team_form_context_week1_prior_v1.py --season "$SEASON" --box-backfill-prev
           python scripts/run_qb_promoted_context.py --season "$SEASON" --prior-season "$PRIOR_SEASON"
           test -s data/team_form.csv
           test -s data/qb_promoted_team_context.csv
