@@ -1,6 +1,6 @@
 # Current Player Availability — Production Promotion V1 Implementation Lock
 
-Status: `RELOCKED_AFTER_FROZEN_RUN1_AUDIT_COMPATIBILITY_REPAIR_BEFORE_RUN2`
+Status: `RELOCKED_AFTER_FROZEN_RUN2_R22_DISPOSITION_REPAIR_BEFORE_RUN3`
 
 ## Promotion authority
 
@@ -42,13 +42,42 @@ Repaired audit blobs:
 
 The repaired audits recognize the certified current-role PlayerForm wrapper only while also proving that it delegates to `scripts.run_player_form_v2_loader`, executes `loader.main()`, resolves explicit certified current roles, republishes strict-prior history, and rejects target/future-week active-season rows. The protected legacy loader remains a material audited dependency.
 
-## Exact implementation blobs for Run2
+## Preserved production-branch Run2 mechanical failure
+
+Parent verification:
+- run/job `34477957076` / `102873279264`
+- head `944426bae1a6d9292fded5dcf41f8951e7357467`
+- evidence artifact `10152500791`
+- digest `sha256:0f24bbf30094aaf8e22133eb70669d7f4e29275faa0d9b29ae48c051e66d6c14`
+- final conclusion `FAILURE`.
+
+Canonical child Full Slate:
+- run `34478009290`
+- head `944426bae1a6d9292fded5dcf41f8951e7357467`
+- artifact `10152451377`
+- digest `sha256:dd7a2cace7a5ec014ad020d9959238b7896e372ad3b9c748c14e58ec077fdeb3`
+- conclusion `SUCCESS`.
+
+The Run1 audit-compatibility repair therefore succeeded. Run2 then failed only in the dynamic verifier because its accepted R22 disposition literals omitted the canonical production adapter disposition `RB_R22_WEEK1_RECEIVING_TAIL_PRODUCTION_ADAPTER_PASS`. The child R22 audit itself reported `integration_valid=true`, zero sportsbook inputs, zero current/future outcomes, all R22 gates true, and `max_mean_delta=3.552713678800501e-15`.
+
+Run2 disposition: `CURRENT_PLAYER_AVAILABILITY_PRODUCTION_BRANCH_VERIFY_MECHANICAL_FAILURE_NO_DECISION`.
+
+## Frozen Run2 minimum repair authority
+
+- repair plan commit: `538c984eb5c06a72e8b4423a65b564ff6af8d7f2`
+- repair plan blob: `e5a0eb9495b2d154320fb448d5f25b33fed20ae2`
+- repair implementation commit: `12dcd9a0c33b1c85f60c7a19e98de8d527c90927`
+- scope: add only the canonical current R22 production-adapter PASS disposition to the existing accepted-disposition check; retain the exact mean-neutrality threshold and all other invariants.
+
+## Exact implementation blobs for Run3
 
 Canonical production workflow candidate:
-- `.github/workflows/full-slate.yml`: `41bacd4b756c32279169c80e0ff603a4780b7bee`
+- `.github/workflows/full-slate.yml`: `41bacd4b756c32279169c80e0ff603a4780b7bee`.
 
-Production verification launcher, now pinning the repair and both audit blobs:
-- `.github/workflows/current-player-availability-production-verify-v1.yml`: `9e29c21b9417ee2beb4d4b8552072da18501f3ea`
+Production verification launcher:
+- `.github/workflows/current-player-availability-production-verify-v1.yml`: `27e53abdab162f8bb6f66064a3bdceb0f086136a`
+- launcher update commit: `488e682432db407400f01eaf15e9ee8647a1a82c`
+- pins both mechanical repair plans and the repaired dynamic verifier.
 
 Availability and current-role plumbing:
 - `scripts/providers/ourlads_depth_status_v1.py`: `c115816ea8aa4ba7150a635c3115546d43f94b3c`
@@ -71,7 +100,11 @@ Certified current-output seam transformers:
 
 Verification-only runners:
 - immutable historical 35-gate football-stack runner: `dc60ab10bc18777d6b13cb5f81f285e8c248f3ab`
-- dynamic production verification runner: `0a84913d850b44504271fba1985f053b2838b970`.
+- repaired dynamic production verification runner: `1d4a1be7c1bed0d2ae5d8bf8fd1f70f9ae3221fe`.
+
+Strict audit authorities remain:
+- `scripts/utils/audit_repo.py`: `c5a465892c7f9386a1c567e26622f6835e190aa6`
+- `scripts/audit_2026_production_readiness.py`: `d9c47ab0d784510722b8d8f879d53067c4de3aa0`.
 
 ## Locked production semantics
 
@@ -85,10 +118,10 @@ Verification-only runners:
 - no sportsbook input defines carries, targets, receptions, passing opportunity, roster eligibility, or player roles;
 - no M89/M90/C2 science, M38, WR-R15, TE-R5P, P3, R26 science, R22 tail science, model artifact, or historical research result changes are authorized.
 
-## Run2 authorization
+## Run3 authorization
 
 Creation of this relock authorizes exactly the repaired dedicated production-branch verification launcher. It must dispatch the branch's exact canonical Full Slate with live odds disabled, require that clean child run to succeed, stage its immutable outputs, execute the separately frozen dynamic production verifier, run both repaired strict audits, and upload immutable verification evidence.
 
-The already-played NE-SEA Week 1 game is expected to be `KICKED_OFF_LOCKED` and withheld from current production eligibility. Missing current live props for that game is not an availability failure. Sportsbook remains disabled for this verification.
+The already-played NE-SEA Week 1 game is expected to remain `KICKED_OFF_LOCKED` and withheld from current production eligibility. Sportsbook remains disabled for this verification.
 
 Only `CURRENT_PLAYER_AVAILABILITY_PRODUCTION_BRANCH_VERIFY_PASS_READY_FOR_MAIN_PROMOTION` authorizes a subsequent promotion to `main`. Any new mechanical failure must be preserved and repaired under a separately frozen minimum repair. Any semantic/scientific invariant failure means no promotion.
