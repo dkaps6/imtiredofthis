@@ -1,81 +1,62 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 
 **Repository:** `dkaps6/imtiredofthis`  
-**Purpose:** canonical cross-chat continuity ledger for the NFL pregame projection research program.  
-**Last updated:** 2026-09-09 after the first valid R27 receiving-yard decomposition result, R27B V1 pre-execution novelty stop, the 2019-2025 novel-efficiency source audit, and the R27B V2 plan freeze.  
+**Purpose:** canonical cross-chat / scheduled-task continuity ledger for the NFL pregame projection research program.  
+**Current local date:** 2026-09-09 (America/Indiana/Indianapolis).  
 **Protected production-code authority:** `bb76ba9eabb08e2f0875a9af49301c3877f4141f`  
-**Active research branch:** `research-rb-r27b-v2-novel-efficiency-context`  
-**Exact stop point:** R27B V2 novel receiving-efficiency-context plan is frozen before implementation/model fitting/candidate execution/results at commit `bbaa0e2bbf32b182ca768555fa17548f8493be18`, plan blob `88c1377acc2e5389df092ec74ab876eaed468cdd`. No R27B V2 candidate result exists yet.
+**Active research branch:** `research-rb-r27d-yacoe-residual-v1`  
+**Exact current stop point:** R27D strict-prior YAC-over-expected residual V1 plan is frozen before implementation/model fit/candidate execution/results at commit `69edc12a16c691e3838eadcd75559b85dbba7865`, plan blob `d0c2b0ff2de154e52fa21fb9ce19b739039633f3`.  
+**Next action:** implement R27D exactly from that frozen plan, static-audit it, create an implementation lock pinning all code/parent hashes, then and only then execute the first 2020–2025 walk-forward candidate. Preserve the first valid result exactly.
 
-> **Future ChatGPT sessions / agents:** read this file first, then `AGENTS.md`, then `docs/research/RB_R27B_V2_NOVEL_EFFICIENCY_CONTEXT_FROZEN_PLAN.md` at the exact commit above. GitHub is canonical. Preserve failed science and mechanical failures separately, freeze before results, keep sportsbook data downstream only, and never silently change production or a frozen research mechanism.
+> **Future ChatGPT sessions / scheduled runs:** read this file first, then `AGENTS.md`, then the exact active frozen plan. GitHub is canonical; chat memory is secondary. Verify live branches, commits, workflow runs, jobs, artifacts, digests and dispositions before acting. Never infer current state from an old chat when GitHub disagrees.
 
----
+## Historical handoff preservation
 
-## 1. Controlling objective and architecture
+The prior full canonical ledger through the R27B V2 **plan-freeze** checkpoint is permanently preserved in Git history at:
+- handoff commit `69e8de76bd1b508849d679fa22abd51aefa68a54`
+- handoff blob `2f0ee91c1d5296c04114605afd5d4c4067a25a72`
 
-Project NFL outcomes as accurately as possible **pregame**, player by player and game by game: attempts, carries, targets, receptions, yards, touchdowns and downstream fair probabilities.
-
-Core architecture:
-
-> **GAME / TEAM OPPORTUNITY → POSITION / ROOM POOL → INDIVIDUAL PLAYER ENTITLEMENT → PLAYER + MATCHUP EFFICIENCY → JOINT MONTE CARLO DISTRIBUTION**
-
-Sportsbook information is an external benchmark/pricing layer, not the teacher of the football projection.
-
-Operating loop:
-
-> **historical research/backtest → prove a mechanism improves football prediction → integrate only qualified winners → emit one authoritative football projection → compare to reality and Vegas → grade prospectively**
-
-The north star is to build a more accurate pregame representation of NFL football than the market. Matching Vegas is not the objective; predicting actual outcomes better than Vegas over valid samples is.
+That snapshot contains the deeper pre-R27B migration/R26 paper trail. This refreshed file supersedes its stale top-level stop point; it does **not** erase or invalidate the historical record.
 
 ---
 
-## 2. Non-negotiable methodology
+# 1. Controlling objective
 
-- Historical science is strict walk-forward / leakage-safe.
-- Freeze hypothesis, population, candidate definitions, metrics, thresholds, gates and authority ceiling **before** implementation/results.
-- Preserve scientific failures exactly; never lower gates after seeing results.
-- Mechanical/plumbing failures may receive only the minimum documented value-neutral repair.
-- No sportsbook football inputs upstream of football projections unless a separately frozen market-assisted experiment explicitly says so.
-- Do not refit a protected model when a study says to consume pinned/serialized authority.
-- Production changes require a separate explicit qualification/promotion step.
-- A promoted component must feed the single authoritative production output; predecessor values may remain only as audit fields.
-- R22 receiving-yard tail authority remains untouched during RB mean research.
-- R26 receiving opportunity/receptions remains fixed during R27B.
-- The assistant may disagree with a research direction, but must communicate the concern before changing any frozen mechanism, threshold, architecture or research direction.
+Build an elite pregame NFL prediction model that predicts **actual football outcomes** more accurately than competing forecasts/markets over valid samples.
 
----
+Primary causal target:
 
-## 3. Program hierarchy
+> **Actual football outcome ← our football prediction → market prediction**
 
-Preserve this order unless explicitly changed:
+The sportsbook is a strong external benchmark and downstream pricing layer, not the teacher of the football model.
 
-1. **RB receiving efficiency / receiving-yard mean** — ACTIVE
-2. **QB attempts / dropbacks / pass rate / YPA / sacks / scrambles**
-3. **Selective WR/TE efficiency/distribution**
-4. **Shared QB ↔ receiver conservation**
-5. **Unified coherent game simulation**
-6. **Anytime TD**
-7. **Game ML / spread / total**
-8. **Final operational package / prospective grading**
+Desired architecture:
 
-Desired end-state simulation:
+> **GAME / TEAM OPPORTUNITY → POSITION / ROOM POOL → INDIVIDUAL ENTITLEMENT → PLAYER + MATCHUP EFFICIENCY → JOINT DISTRIBUTION → GAME-STATE FEEDBACK → SCORING / FINAL SCORE**
 
-> **plays → pass/rush decision → player opportunity → outcomes → yards/explosives/TDs → game-state feedback → possessions/scoring → final score**
-
-Current position: item #1. R26 solved/improved the RB receiving opportunity/receptions side and is production-active. R27 showed that translating that improved opportunity through the existing production YPT helps in aggregate but is not robust enough for mean promotion. R27B V2 now isolates genuinely novel football-context efficiency information.
-
-Parked unless explicitly reopened:
-- 2026 ESPN/nflverse hierarchy audit
-- RotoBaller WR/CB parser work
-- old failed/mixed QB/WR/TE salvage audits
-- acute same-week RB injury / role-inheritance transform
+Do not optimize merely to mimic Vegas. If Vegas repeatedly wins a valid cohort, investigate what football signal it may be capturing.
 
 ---
 
-## 4. Current production authority
+# 2. Non-negotiable research rules
+
+1. Historical science must be strict-prior / walk-forward / leakage-safe.
+2. Freeze the scientific question, population, candidate mechanics, metrics, thresholds, gates and authority ceiling **before results**.
+3. Preserve the first valid scientific result exactly whether PASS, mixed or fail.
+4. Preserve mechanical/plumbing failures separately; repair them only with the minimum documented value-neutral change.
+5. Do not lower gates, change cohorts, drop losing seasons or retune a candidate after seeing results.
+6. Sportsbook inputs remain downstream unless a separately frozen market-assisted experiment explicitly authorizes otherwise.
+7. Do not silently change a frozen mechanism, architecture or research direction. Communicate scientific concerns first.
+8. Production changes require separate qualification/integration/promotion evidence. A research PASS alone is not permission to mutate production.
+9. One authoritative production projection per player/market. Old values may remain only as audit fields.
+10. R26 receiving opportunity/receptions and R22 RB receiving-yard tail authority are protected during the current mean-research lane unless a separately frozen integration study explicitly changes that boundary.
+11. Update this handoff on `main` at every material checkpoint with exact branch/commit/run/job/artifact/digest/disposition and next action.
+
+---
+
+# 3. Current protected production stack
 
 Protected production-code authority:
-
 `bb76ba9eabb08e2f0875a9af49301c3877f4141f`
 
 Current stack:
@@ -83,616 +64,487 @@ Current stack:
 - QB distribution: **mean-neutral C2**
 - WR: **M38 WR1 + WR-R15 WR2+**
 - TE: **TE-R5P**
-- RB rushing: **RB-P3**
+- RB rushing: **P3**
 - RB receptions: **R26 production refinement**
-- RB receiving-yard distribution/tails: **R22**, using pinned R19 assets and preserving the upstream receiving-yard mean
+- RB receiving-yard mean: existing production mean/YPT path; R26 opportunity has **not** yet been promoted to recenter the RB receiving-yard mean
+- RB receiving-yard distribution/tails: **R22**, using pinned R19 assets and preserving the upstream mean
 - sportsbook: downstream only
 
-### R26 production qualification
+## R26 production qualification
 
-- branch: `production-rb-r26-receptions-v1`
-- qualification head: `343372586bd4979c34487761d0af49b5986f68e8`
-- run: `34417740186`
-- job: `102686263562`
-- artifact: `10129819192`
-- digest: `sha256:f8fbd74187e811fc765c6d236c4c005c19be6d007d1bec33800790e56eabdcde`
-- disposition: `RB_R26_WEEK1_RECEPTIONS_PRODUCTION_INTEGRATION_PASS_READY_FOR_PROMOTION`
-- gates: **35/35 PASS**
+- qualification run `34417740186`
+- job `102686263562`
+- artifact `10129819192`
+- digest `sha256:f8fbd74187e811fc765c6d236c4c005c19be6d007d1bec33800790e56eabdcde`
+- disposition `RB_R26_WEEK1_RECEPTIONS_PRODUCTION_INTEGRATION_PASS_READY_FOR_PROMOTION`
+- 35/35 PASS
 
-R26 changes the RB/FB receptions MC component only inside its qualified scope. P3 rushing, R22 receiving-yard tail logic, QB, WR, TE and non-RB arrays remain unchanged.
-
-Initial promotion commit: `1f0ea0d697f9a5b66cba42facc424a0185a147ed`.
-Final repaired production-code authority after a static-audit compatibility-only repair: `bb76ba9eabb08e2f0875a9af49301c3877f4141f`.
-
-Repair note:
-`docs/production/RB_R26_PROMOTION_STATIC_AUDIT_COMPAT_MECHANICAL_REPAIR_V1.md`
-
-### Post-promotion verification
-
-Full Slate:
+Post-promotion Full Slate:
 - run `34418491952`
 - job `102688556296`
-- head `bb76ba9eabb08e2f0875a9af49301c3877f4141f`
-- conclusion **SUCCESS**
 - artifact `10130055472`
 - digest `sha256:d84bbc9fb976e3862b19d458a929888c1ab5e0f7cec49e1f4705a961a236e15f`
-- live odds disabled, so this verifies football-stack/repository wiring, not a fresh sportsbook board
+- head `bb76ba9eabb08e2f0875a9af49301c3877f4141f`
+- SUCCESS; live odds disabled, so this verifies football-stack/repository wiring rather than a fresh sportsbook board.
 
-Repo CI:
-- run `34418492012`
-- job `102688556448`
-- conclusion **SUCCESS**
-- compile/static audit/unit tests PASS
+R26 vacancy mechanism remains:
+- `VACANCY_ACTIVE = room_exits_n >= 1`
+- stable/no-vacancy remains baseline exactly
+- exact RB/FB room target pool is conserved
+- non-RB entitlement is preserved exactly
+- strict-prior R8/R9 receiving identity/reliability drives within-room redistribution
+- softmax only inside the RB/FB room
 
----
-
-## 5. Protected R22/R19 authority
+## R22 / R19 tail authority
 
 R22 integration:
 - run `34298516960`
 - artifact `10084118525`
 - digest `sha256:2391bd9914e9d0029c63529829496fb9b462d008bdcc3f8c37bb3e1079580bd1`
-- head `4d0690f9827466d0792be42752bcc6b6d8a03f96`
 - disposition `RB_R22_WEEK1_RECEIVING_TAIL_PRODUCTION_INTEGRATION_PASS`
-- mean-neutral: changes receiving-yard distribution/tails while preserving receiving-yard means and receptions
+- mean-neutral by design
 
 R19 serialized tail authority:
 - run `34288244770`
 - artifact `10080377483`
 - digest `sha256:11432b9d7b7f2367935a862b63c30df9f40955e479806ab67d90921b63a907c7`
-- inner model SHA `9ed6a98b0022e86992fb468df40a9fd79a54bc87885777ac5955a898b5c292ba`
-- residual pools SHA `c69a268a5a1683e846bcb5f59fe55bcae20d70c679792449ea77e6548b37a362`
+- model SHA `9ed6a98b0022e86992fb468df40a9fd79a54bc87885777ac5955a898b5c292ba`
+- residual-pools SHA `c69a268a5a1683e846bcb5f59fe55bcae20d70c679792449ea77e6548b37a362`
 
-R19/R22 are tail/distribution authorities, not a replacement point-mean efficiency model. R19 uses existing opportunity/mean/identity state and does not establish a target-depth/YAC/checkdown/opponent-context receiving-yard mean model.
+R19/R22 own stochastic receiving-yard right-tail shape; they are **not** the point-mean efficiency model.
 
 ---
 
-## 6. R26 science / prospective lineage
+# 4. Prospective R26 evidence that must remain immutable
 
-Preserve the full failed/supporting path.
-
-R26 parent:
-- run `34356222339`
-- artifact `10106271075`
-- digest `sha256:607fca6e11c301ecb2a3bf74e3dfea8ae415bb33cf3c150a6d89eaedada2809e`
-- disposition `RETROSPECTIVE_MIXED_OR_FAIL_NO_SHADOW`
-- 19/20; 2023 vacancy-incumbent receptions MAE worsened ~4.54%
-
-R26E:
-- run `34368268224`
-- artifact `10110785184`
-- digest `sha256:2b64fe25a1024136f2bb2cdde42bc74de290b6b9df63b4bb6cd675f6095b8bb7`
-- disposition `WEEK1_COMPONENT_NOT_QUALIFIED_NO_SHADOW`
-- 19/20; 2020 W1 worsened ~8.9668%, 2021-2025 improved
-
-R26J:
-- run `34374987828`
-- artifact `10113466373`
-- digest `sha256:7d886f228487e052ee1617cc5f42b974cd9da6a9d448f3a86b1de82cb4fc4f46`
-- disposition `2020_SOURCE_REGIME_DISTINCT_FOR_MECHANISM_FOLLOWUP`
-
-R26K:
-- run `34376961740`
-- artifact `10114261724`
-- digest `sha256:74a3d9ac58fca360f6d2d23e19b28e1254f38e49e3be23878ee1b37cebe22c88`
-- disposition `2020_SPECIFIC_MECHANISM_NO_REPLICATED_ROUTER`
-- do not exclude 2020 or invent a router
-
-R26L:
-- run `34389455694`
-- artifact `10119058769`
-- digest `sha256:3351dfb5bbf6b571174a94ddf0a03179d70786edbb91d316e4fdf2c3cf005c46`
-- disposition `2026_SOURCE_REGIME_MODERN_LIKE_FOR_PROSPECTIVE_QUALIFICATION`
-
-R26M:
-- run `34390505549`
-- artifact `10119429741`
-- digest `sha256:1306a3a2e58a0b129ac7e9fe34ad6407d87c491494e8fc27dd0284ba96996b76`
-- disposition `2026_WEEK1_UNMODIFIED_R26_SHADOW_CANDIDATE_DESIGN_QUALIFIED`
-
-R26N:
-- run `34396075045`
-- job `102616001356`
-- artifact `10121598376`
-- digest `sha256:887929203053cb62904aaaeda9d995c9645163814da181972799f08fe4465c62`
-- disposition `R26N_2026_WEEK1_STRUCTURAL_CANDIDATE_PASS_READY_FOR_SHADOW_INTEGRATION_DESIGN`
-- 28/28 PASS
-- 107 RB/FB; 31 vacancy teams; 104 changed; 3 CIN controls
-
-R26O canonical MC integration:
-- run `34399750746`
-- job `102628405629`
-- artifact `10123070453`
-- digest `sha256:27307ad84c232935aed3b25c0e0c9bff4da70cd2915376f41dfa3f85c25f14d0`
-- disposition `R26O_2026_WEEK1_RECEPTIONS_SHADOW_INTEGRATION_PASS_READY_FOR_PROSPECTIVE_SEAL`
-- 38/38 PASS
-- 104 intended RB/FB reception arrays changed; 3 CIN exact; all non-reception arrays exact; R22 mean delta `3.552713678800501e-15`; 25k draws seed42
-
-Preserved R26O 37/38 mechanical run:
-- run `34398759284`
-- artifact `10122672501`
-- digest `sha256:6d72de1eb8902fd8d956feb01b4d1a3cb5847aa58417ad4f416f3e1102e96e82`
-- Gate15 evidence wiring only
-
-R26P repair authority:
-- run `34399525657`
-- artifact `10122862934`
-- digest `sha256:2e596f3a3bcbef156983664d332ded94ef41dae1402d1a96ab0b61d185c68d47`
-- disposition `R26P_GATE15_EVIDENCE_WIRING_DEFECT_CONFIRMED_MECHANICAL_RERUN_AUTHORIZED`
-- 17/17
-
-R26Q immutable pregame seal:
+R26Q Week1 pregame seal — do not recompute:
 - run `34400524030`
 - job `102630996205`
 - artifact `10123251043`
 - digest `sha256:dd3ec0e8e3831ab7f2255c2e5abf343cda8a7943d33a1d4863e52372d6f858a1`
 - disposition `R26Q_2026_WEEK1_RECEPTIONS_PROSPECTIVE_SEAL_PASS_READY_FOR_OBSERVATION`
-- 28/28 PASS
-- 107 exact arrays; 104 changed; 3 CIN; 25k seed42
 - NPZ SHA `7933bd7629d0e7108fe181e7a5474f8c8f6e8512b6a1b35081d3a8d71af8fe06`
-- **do not recompute this sealed record**
 
-R26R pregame market observation:
+R26R market observation:
 - run `34401814588`
 - job `102635265504`
 - artifact `10124274040`
 - digest `sha256:b4d3e573909803e892d57858c9b0c4bdac089bcf078c1d6f6e53366e4622303e`
 - disposition `R26R_2026_WEEK1_PROSPECTIVE_OBSERVATION_SNAPSHOT_PASS_MARKET_CAPTURED`
-- 30/30 PASS
-- 320 all-position reception lines; 70 RB/FB lines; 35 matched sealed players; sportsbook downstream only
 
----
-
-## 7. R26S postgame evaluator
-
-R26S is the scorecard for sealed R26Q, not the predictive model.
-
-Frozen authority:
+R26S postgame evaluator is the frozen scorecard for R26Q, not a predictive model:
 - plan commit `63722c61ca1b408b8ae77eba383e5fa8daecf9f2`
 - evaluator commit `e42099dbf11cdd510eb64e43a0910444c75ec7f8`
 - lock commit `3a706fa52f91f6584f6fd6594563239dd6ea3b53`
-
-Canonical pregame dry-run:
-- run `34411889262`
+- canonical pregame dry run `34411889262`
 - job `102667966181`
 - artifact `10127562840`
 - digest `sha256:e9ecd949816eafd813a50e60e8af28ce387e668848483ffcda3dfadf7614919e`
 - disposition `R26S_2026_WEEK1_POSTGAME_PROSPECTIVE_EVALUATION_INCOMPLETE_NO_DECISION`
-- evaluable rows 0 because Week1 outcomes were not yet available
 
-Preserved first mechanical run:
-- run `34405689393`
-- artifact `10125223220`
-- digest `sha256:6130a64872739436a0626ee45eb249a06edb3281a8f750755c8b4483af6aa9bd`
-- metadata-contract failure only
-
-After Week1 outcomes/stat/snap authority is available, rerun the exact locked R26S evaluator unchanged.
+When Week1 outcome authority is available, rerun the **exact locked R26S evaluator unchanged**.
 
 ---
 
-## 8. RB operational readiness note
+# 5. Anti-reinvention boundary for RB receiving-yard mean
 
-Final pre-promotion readiness:
-- run `34412854521`
-- job `102671015758`
-- artifact `10127920603`
-- digest `sha256:b619429022a5bfc50257ebbb55600c1ff1299e4b706997d278545f66a469dd5e`
-- disposition `RB_WEEK1_2026_PREGAME_OPERATIONAL_READINESS_PASS_PRODUCTION_STACK_READY_R26_SIDECAR_READY`
-- 35/35 PASS
-- 107 RB/FB; 32 teams; exact P3/R26 universe alignment; 94 RB exact R22 alignment; outcomes0
+Already established before the current R27D lane:
 
-A later readiness run exposed one current-roster swap:
-- sealed-only NE Corey Kiner, RB3
-- current-only NE Lan Larison, RB3
-- matched-player role changes 0
+- Production already has empirical-Bayes player YPT (`bayes_ypt`) plus production matchup/team pass-efficiency adjustment (`rules_ypt`).
+- R23 already tested a new shrunk historical YPR construction and did not qualify.
+- R24 already tested an opportunity × existing-production-efficiency decomposition and did not qualify.
+- R27 tested the exact later-qualified R26 opportunity mechanism × unchanged production YPT.
+- R27B V2 tested novel raw target-shape/YAC/team/opponent context and did not qualify integration.
+- R19/R22 own tail/distribution science, not mean recentering.
+- Generic statements that “YPT/YPR/YAC matters” are not new science.
 
-This proves an operational current-roster refresh problem exists; it does **not** justify a general role-inheritance formula.
+Do **not** restart generic rolling YPT/YPR/YAC models.
 
 ---
 
-## 9. Current RB model tree
+# 6. R27 — exact R26 opportunity → receiving-yard mean decomposition
 
-> current roster / game context  
-> → team / position opportunity  
-> → **RB-P3 rushing opportunity + yards**  
-> → **R26 RB receiving/receptions entitlement refinement**  
-> → **production Bayesian/rules receiving efficiency (`bayes_ypt` → `rules_ypt`)**  
-> → **R22 receiving-yard distribution/tails around the upstream mean**  
-> → existing ML/state/ensemble  
-> → one final football projection  
-> → sportsbook comparison downstream
-
-Key limitation: R26 improves receiving opportunity/receptions. R22 is intentionally mean-neutral. The remaining research problem is whether genuinely incremental pregame efficiency/context information can improve the receiving-yard mean beneath unchanged R22.
-
----
-
-## 10. Prior receiving-yard science that constrains current work
-
-### Production efficiency already exists
-
-`scripts/modeling/bayesian_v2.py` already builds `bayes_ypt` using position-family prior + prior/current player evidence. `scripts/modeling/simulation_rules.py` uses that football state and existing matchup/pass-efficiency logic to create `rules_ypt`.
-
-Therefore generic player YPT persistence/shrinkage is not a novel R27B hypothesis.
-
-### R23
-
-R23 tested improved RB receiving opportunity/receptions plus a strict-prior shrunk-YPR efficiency component using frozen 6-game recent and 16-game stabilizing histories.
-
-Authoritative run:
-- run `34332613867`
-- head `0b4e641ec9fa6ba7ea9464a140268dfdbb897d28`
-- artifact `10096546836`
-- digest `sha256:e3e3087f03d0a8d697225e61de435e9a1668ef74e35ca850e60ffe451e9c66b6`
-- disposition `MIXED_OR_FAIL_NO_PROMOTION`
-
-R23 pooled 2023-2025:
-- target MAE improved `1.375079 → 1.352808`
-- reception MAE improved `1.161790 → 1.151914`
-- receiving-yard MAE worsened `10.683986 → 10.725492` (~+0.39%)
-- p90 receiving-yard AE worsened ~3.35%
-- RB1 receiving-yard MAE worsened ~2.68%
-- RB2+ improved ~1.77%
-
-R23 is a preserved scientific null for combined opportunity + generic shrunk-YPR efficiency. Do not recreate it.
-
-### R24
-
-R24 intentionally removed R23's failed new YPR component and paired the improved opportunity with unchanged production YPT. It did not qualify receiving-yard mean promotion. Do not rebrand R24.
-
-### Earlier diagnostic decomposition
-
-`scripts/backtest/decompose_receiving_error.py` already decomposed receiving error into opportunity, catch conversion and YPT error. Identifying YPT as an error source is therefore not itself a new study.
-
----
-
-## 11. R27 V1 — COMPLETE FIRST VALID SCIENTIFIC RESULT
-
-Research branch:
-`research-rb-r27-receiving-yard-mean-decomposition-v1`
+Frozen question:
+Does exact historical R26 opportunity redistribution improve RB receiving-yard means when the existing production efficiency estimate is held fixed?
 
 Frozen plan:
-`docs/research/RB_R27_RECEIVING_YARD_MEAN_DECOMPOSITION_V1_FROZEN_PLAN.md`
-
-### Frozen/implementation lineage
-
-- plan commit `5333d7e1cc33dcb567d03c924c774afb6877e932`
+- commit `5333d7e1cc33dcb567d03c924c774afb6877e932`
 - plan blob `4ad4801dbe600238dd7f1090df0a6596ff8a6a46`
-- exact R25/R26 parent staging `62e1b285f930e4cc2c437d85710c4579c0941faa`
-- evaluator implementation `934443e2c750b3d506fb9722043a54bd39f846e7`
-- finalizer / 27-gate implementation `2ceb6b372bf04156cf61ffc23234b12c87b6352a`
-- implementation lock `a20f172db9d635a01029e3af8c772e0556ee2666`
-- workflow commit `d6de4665fb520240d09225957d55b26a6c4cdcfc`
-- evaluator locked blob `a284592a0b2f948b8f12f973ca9eb7d9c08d6b23`
-- finalizer locked blob `4f8bf99b25210e8c88a6c8c4511ff9d565d47652`
 
-### Preserved mechanical repair lineage
-
-- `7740d02be1f916accc3b8d8ace60583a21566d84` — freeze historical schedule mechanical repair
-- `acaf8993d260871e8c409b21d5ec775eb2a53170` — add REG schedule staging repair
-- `4fe26a31cd988fad84c0ac3d00426ad69fe86c71` — apply schedule scope repair
-- `efebb966922ea6703236bd2ec60f1351fdc1a08c` — freeze player-log REG scope repair v2
-- `e6e30d3da8bdbad461a5abeb04f50904b8753bcf` — fail-closed exact player-log blob guard
-- `b7cfe5b2c450765208672fc6e2b017d0cb0c0dde` — stage exact R25 REG-scope player-log authority
-- exact canonical player-log blob `b993bd46fd44c88785bb37344c756c51b5d39afa`
-
-Mechanical runs preserved:
-- run `34420935737` — failure before candidate; no scientific result
-- run `34421267285` / job `102696999664` — schedule/player-log REG scope failure; no scientific result
-- guard-only fail-close run `34423519513` — exact blob guard active before canonical file staging; no model/data execution
-
-### First valid R27 scientific execution
-
+First valid scientific evidence:
 - run `34423546037`
 - job `102703879430`
 - head `b7cfe5b2c450765208672fc6e2b017d0cb0c0dde`
 - artifact `10132290573`
-- artifact name `rb-r27-receiving-yard-mean-decomposition-v1`
 - digest `sha256:cd5c9e26efa44c47ef3374e4deefe9038dc504c155799b48548ad64746e10e45`
-- workflow conclusion **SUCCESS** at the structural level
-- scientific disposition `R27_R26_OPPORTUNITY_TRANSLATION_MIXED_OR_FAIL`
-- gates **24/27 PASS**
+- disposition **`R27_R26_OPPORTUNITY_TRANSLATION_MIXED_OR_FAIL`**
+- 24/27 gates PASS
 
-Material results vs original production-path baseline:
-- VACANCY_ACTIVE receiving-yard MAE: **-1.0967854669869492%**
-- VACANCY_ACTIVE RMSE: **-1.3337252245802733%**
-- vacancy target MAE: **-2.0869346310231074%**
-- vacancy reception MAE: **-1.8026686460321795%**
-- ALL-RB receiving-yard MAE: **-0.23517744112927508%**
-- WEEK1 receiving-yard MAE: **-3.3081859534149105%**
-- VACANCY_RB2PLUS_INCUMBENT MAE: **-3.3577795492306994%**
+Key evidence:
+- ALL-RB rec-yard MAE change `-0.235%`
+- Week1 rec-yard MAE change `-3.308%`
+- vacancy-active n=1761: MAE `11.2830 → 11.1593` (`-1.097%`)
+- vacancy-active RMSE `-1.334%`
+- vacancy-active p90 worsened `+2.078%`
+- vacancy target MAE improved `-2.087%`
+- vacancy reception MAE improved `-1.803%`
+- vacancy RB1 target MAE improved `-2.284%`
+- vacancy RB1 reception MAE improved `-2.387%`
+- vacancy RB1 receiving-yard MAE worsened `14.3059 → 14.7094` (`+2.820%`)
+- vacancy RB2+ receiving-yard MAE improved `-3.358%`
+- 2023 vacancy-active rec-yard MAE worsened `+4.916%`
+- 4/6 seasons improved
 
-Failed frozen gates:
-- Gate17: VACANCY_ACTIVE p90 AE worsened **+2.077705464816737%** vs allowed +2.0%
-- Gate19: 2023 VACANCY_ACTIVE MAE worsened **+4.915812026979438%** vs allowed +3.0%
-- Gate20: VACANCY_RB1_INCUMBENT MAE worsened **+2.820339661055238%** vs allowed +1.5%
-
-Season VACANCY_ACTIVE MAE changes:
-- 2020 `-1.58%`
-- 2021 `-2.35%`
-- 2022 `-4.25%`
-- 2023 `+4.92%`
-- 2024 `-3.56%`
-- 2025 `+2.87%`
-
-Interpretation: exact R26 opportunity is supported and materially useful, but opportunity alone does not make receiving-yard mean robust enough to promote. The remaining weakness is downstream efficiency/context, especially RB1 and the upper-error tail. R27 is preserved as a scientific mixed/fail and may not be retuned.
-
-Production remains unchanged.
+Interpretation: R26 opportunity is real; the unresolved bottleneck is downstream efficiency/translation, especially lead backs, 2023 and tail safety.
 
 ---
 
-## 12. R27B V1 — SUPERSEDED BEFORE EXECUTION
+# 7. R27B V1 supersession and V2 context experiment
 
-Branch:
-`research-rb-r27b-receiving-efficiency-v1`
+R27B V1 was formally superseded **before execution** because it risked reinventing existing production/R23 generic historical efficiency science:
+- supersession commit `ca5537321893eb5fecba890b3ee2aeb320dede1f`
+- no V1 workflow, artifact or scientific result exists.
 
-The initial V1 design was stopped after the user explicitly challenged novelty. Repository audit showed that part of V1 would overlap production empirical-Bayes YPT and R23's already-tested shrunk-YPR/persistence work.
-
-V1 lineage:
-- R27 result-record parent commit `886c8432ff811882e006d84a61385862e3be7839`
-- V1 plan commit `c9c7906748065f25cf7cb0d5ce24259144465dc5`
-- V1 feature-dataset builder commit `7ec3ccf53607e42a5bfdfbc1e2e6596f0c3d913c`
-- V1 evaluator commit `a55e42ea7a7eaf7f318024ea0e4c1d7c4688f640`
-- supersession record commit `ca5537321893eb5fecba890b3ee2aeb320dede1f`
-- record: `docs/research/RB_R27B_V1_PREEXECUTION_NOVELTY_AUDIT_AND_SUPERSESSION.md`
-
-Critical status:
-- **no V1 workflow exists**
-- **no V1 workflow run exists**
-- **no V1 artifact exists**
-- **no V1 candidate metric exists**
-- **no scientific result exists**
-
-V1 frozen files remain preserved as historical design evidence and are not authorized for execution.
-
-Ruled out as the primary novelty for V2:
-- career/current/trailing YPT
-- career/current/trailing YPR
-- generic catch-rate persistence
-- generic empirical-Bayes YPT/YPR re-shrinkage
-
----
-
-## 13. ACTIVE R27B V2 — NOVEL EFFICIENCY CONTEXT
-
-Active branch:
-`research-rb-r27b-v2-novel-efficiency-context`
-
-Novelty boundary:
-`docs/research/RB_R27B_V2_NOVELTY_BOUNDARY_AUDIT.md`
-
-Novelty-boundary commit:
-`4bdb9351ff9f40d956d88b915d70af86f3cf5a17`
-
-### Pre-plan source audit — COMPLETE
-
-Source-only audit script commit:
-`25c337ba957e366d803c4f741d803dae82329cdb`
-
-Workflow commit/head:
-`fd347b8f743c3829049a8052fcd0bc5d1ba72222`
-
-Workflow:
-`RB R27B V2 Novel Efficiency Source Audit`
+## R27B V2 source audit
 
 - run `34427150810`
 - job `102714703407`
-- conclusion **SUCCESS**
 - artifact `10133096990`
-- artifact name `rb-r27b-v2-source-audit`
 - digest `sha256:a9905a02243af2120cd71e85bcd460d47c5ccc73af87779adde4dd5c20a8263b`
-- audit script SHA256 `c9a2921d3d75c02048a46de1ed0e59b08c5120f1e4d94b458cf5f1ca8f10886c`
+- source/schema only; no model/candidate/performance score
+- excellent 2019–2025 PBP coverage for novel RB target-shape/YAC/team/opponent context
 
-Audit constraints/results:
-- 2019-2025 schema pass: all seasons
-- model fit performed: false
-- candidate projection created: false
-- prediction error scored: false
-- sportsbook inputs: 0
-- receiver position resolution ~99.97%-99.99%
-- RB air-yards non-null ~99.63%-99.77%
-- RB YAC non-null on completed catches 100% each season
-- RB yards non-null 100% each season
-- team-week RB checkdown denominator finite 100% each season
-- opponent RB context derivable every season
+## R27B V2 frozen plan
 
-RB target rows audited by season:
-- 2019: 3548
-- 2020: 3326
-- 2021: 3522
-- 2022: 3366
-- 2023: 3301
-- 2024: 2974
-- 2025: 2986
-
-The source audit proves reconstructability only; it is not predictive evidence.
-
-### Frozen V2 plan
-
-Plan:
-`docs/research/RB_R27B_V2_NOVEL_EFFICIENCY_CONTEXT_FROZEN_PLAN.md`
-
-- plan commit `bbaa0e2bbf32b182ca768555fa17548f8493be18`
+- commit `bbaa0e2bbf32b182ca768555fa17548f8493be18`
 - plan blob `88c1377acc2e5389df092ec74ab876eaed468cdd`
-- status **FROZEN BEFORE IMPLEMENTATION / MODEL FIT / CANDIDATE EXECUTION / RESULTS**
+- implementation lock `2c86520c84fbdd5a18aad3f4b88373e5f8c17051`
+
+V2 kept R26 opportunity fixed and predicted a residual to production YPT using strict-prior player target shape/YAC, team/QB RB environment, opponent RB-specific environment and frozen role/vacancy controls. Stable rows remained exact production/B1; R22 stayed untouched.
+
+## First valid R27B V2 result
+
+- run `34428917229`
+- job `102720004328`
+- artifact **`10134023092`**
+- digest `sha256:1df1a14c9900b890fe86e04269849dc90d76fc03a9215ad8612c1820dee5341f`
+- disposition **`R27B_V2_NOVEL_EFFICIENCY_CONTEXT_MIXED_OR_FAIL_NO_INTEGRATION`**
+- 24/31 gates PASS
+- all 15 integrity gates PASS; seven scientific gates failed
+
+Failed scientific gates: pooled vacancy improvement threshold, RB1 improvement threshold, RB1 non-worse vs B0, pooled vacancy RMSE, 30+ miss rate, 2023 improvement threshold, and 2023 non-worse vs B0.
+
+Useful retained signal — evidence, **not cherry-picked production**:
+- vacancy MAE `11.1593 → 11.1267` (`-0.292%` vs B1)
+- vs B0 `11.2830 → 11.1267` (`-1.385%`)
+- p90 `25.3747 → 24.9769` (~`-1.57%`), repairing R27 p90 weakness
+- RB2+ improved ~`0.338%`
+- 4/6 seasons improved
+- ALL-RB and Week1 stayed stable/slightly better
+- RB1 only improved ~`0.292%` vs B1 and remained ~`2.52%` worse than B0
+- 2023 worsened again
+
+Conclusion: V2 contained real context signal but did not qualify. Preserve the signal as evidence; do not route winning post-hoc subsets into production.
+
+---
+
+# 8. R27C / R27C2 — RB1 and 2023 forensics
+
+## R27C diagnostic
+
+Branch `research-rb-r27c-rb1-2023-forensic-v1`.
+- canonical run `34430754033`
+- job `102725570088`
+- artifact `10134387002`
+- digest `sha256:0c915a1c413d66c550990a1cc8bd45e0dc20a18e110fe1b96414a79eb7b598e9`
+- result record commit `b2907345c50dceffdfb5c074ce9d556ff6d764c6`
+- diagnostic only, exact V2 artifact consumed, no candidate/model
+
+Clue: 2023 RB1 target count became slightly more accurate while receiving-yard translation worsened; tail misses showed the opposite high-YAC phenomenon.
+
+## R27C2 realized target-quality forensic
+
+Branch `research-rb-r27c2-realized-target-quality-forensic-v1`.
+- first valid run `34431286455`
+- job `102727137722`
+- artifact `10134581843`
+- digest `sha256:6e3aa7ec2149f6f0b65adb59b4cc36c4f88b24a142234bc368131de8e4de60dd`
+- result-record commit `2cfca82d919290ac18ed01559994d2e0239b0798`
+- disposition `R27C2_FORENSIC_COMPLETE_PHYSICAL_TARGET_QUALITY_HYPOTHESIS_IDENTIFIED`
+- integrity PASS; 8429 parent rows; ~99.63% overall targeted PBP join; 100% 2023 vacancy-RB1 targeted join
+
+2023 vacancy RB1 vs non-2023 vacancy RB1:
+- catch rate `0.78345 vs 0.78724` — essentially unchanged
+- air yards/target `0.0887 vs 0.1065` — essentially unchanged
+- screen rate `0.5806 vs 0.5623` — similar
+- explosive20 target rate `0.05046 vs 0.05097` — nearly identical
+- YAC/reception `7.3395 vs 8.0667` — down `0.7272`
+- YPR `6.4254 vs 7.4206` — down `0.9952`
+- YPT `5.2236 vs 5.9001` — down `0.6765`
+
+Production arithmetic, 2023 RB1:
+- actual catch rate `0.78345`, production `0.77220` — actual slightly better
+- actual YPR `6.4254`, production implied YPR `7.5774` — residual about `-1.188`
+- actual YPT `5.2236`, production YPT `5.8393` — residual about `-0.616`
+- non-2023 actual YPT `5.9001`, production `5.9029` — essentially perfect
+
+Conclusion: problem is post-catch/YPR compression, not missed catches or basic target-shape frequency.
+
+Tail reference remained a separate high-YAC/explosive phenomenon; do not solve it by broadly raising point means.
+
+---
+
+# 9. R27D0 / R27D0B — xYAC/YACOE source audit
+
+## R27D0 source audit
+
+Branch `research-rb-r27d0-yac-quality-source-audit`.
+- result commit `8663b132c9910d07679d7b5e03ee8a8c9542f332`
+- run `34431705294`
+- job `102728396342`
+- artifact `10134726607`
+- digest `sha256:b1a2a44d7ed0303300a792bf617ac6c5095aa7a0229186001504ebc2cad44bdf`
+- disposition `R27D0_YAC_QUALITY_SOURCES_SUPPORT_SEPARATELY_FROZEN_PREDICTIVE_STUDY`
+
+Source finding:
+- nflverse PBP exposes `xyac_mean_yardage`, `xyac_median_yardage`, `xyac_success`, `xyac_fd`.
+- completed-RB-catch `xyac_mean_yardage` coverage is ~99% in every 2020–2025 season.
+- targeted vacancy RB1 strict-prior PBP YACOE history is dense: >=1 prior game ~95.5%; >=3 ~91.2%; 2023 >=3 ~95.8%.
+- down, yards-to-go, shotgun, no-huddle, pass location/length, score differential and air yards are ~99.6–100% available.
+
+**NGS warning:** the Next Gen Stats receiving schema contains YACOE/expected-YAC/separation/cushion fields but the historical feed resolves to **zero RB rows** across 2020–2025. NGS is rejected for this RB-specific lane. Do not impute WR/TE tracking to RBs or claim NGS RB support from schema alone.
+
+The genuinely new source is PBP expected YAC / YAC-over-expected, not another raw YAC average.
+
+## R27D0B 2019 source extension
+
+- run `34431927369`
+- job `102729055139`
+- artifact `10134799189`
+- digest `sha256:13853603029adaf820b3228916c519acfdf98794c70462fbbcebe5f93f97d6cd`
+- result commit `4e19b549dad2141ba3d55b77c563947342426461`
+
+2019:
+- RB target rows `3548`
+- completed RB catches `2709`
+- xYAC coverage `99.2617%`
+- situational fields ~99.77–100%
+
+Therefore the 2020 outer fold can have legal pre-2020 xYAC history; no arbitrary source-absence fallback is needed.
+
+---
+
+# 10. R27D0C — xYAC physical mechanism split
+
+Branch `research-rb-r27d0c-xyac-mechanism-split`.
+
+Frozen plan:
+- commit `21db47af29f121e27c137c6e21773dd557094395`
+- blob `6a01722bd0291805a44d6be37dec1e228c3adbd0`
+
+Original implementation lock:
+- `99f3347abc6af3ac300b4a78ac1237454678a6e1`
+
+### Preserved Run1 mechanical failure
+
+- run `34432353557`
+- job `102730315801`
+- plan hash / parent artifact / production boundary all PASS
+- failure: actual YAC averaged all completed catches while expected YAC/YACOE necessarily used only xYAC-observed catches; ~99% rather than 100% xYAC coverage caused a `0.0509294626941692` yard/reception algebra gap
+- no artifact, no canonical scientific/diagnostic conclusion
+
+Frozen repair record:
+`docs/research/RB_R27D0C_RUN1_XYAC_OBSERVATION_SET_MECHANICAL_REPAIR.md`
+- repair-record commit `c87f3dcae924f8a9656f91533b81edccf86cd921`
+- repaired script blob `8428aa5cfe675efcf3c366a48e80d705ffdf5aea`
+- repaired workflow blob `23fcc7018ab560782556c7fd316308ec90154bbe`
+- repair lock / first-valid head `6ee566b67abd87f0f33b37111aeb83011419b43d`
+
+### First valid R27D0C result
+
+- run `34432497854`
+- job `102730752292`
+- artifact `10134994377`
+- artifact name `rb-r27d0c-xyac-mechanism-split`
+- digest `sha256:2c3d6043dc25298b8806e82abe7e4a97e9c2c066408fc38e215eae0bdbc1c882`
+- result record commit `76e662c92a49743092d7e512a6a1b2e87a74032c`
+- status `R27D0C_XYAC_MECHANISM_SPLIT_COMPLETE`
+- integrity PASS
+
+2023 vacancy RB1:
+- actual YAC/reception on xYAC-observed catches `7.33951`
+- expected YAC/reception `7.92507`
+- YACOE/reception `-0.58556`
+
+Non-2023 vacancy RB1:
+- actual YAC/reception `8.11761`
+- expected YAC/reception `7.65199`
+- YACOE/reception `+0.46562`
+
+2023 minus non-2023:
+- actual YAC difference `-0.77810`
+- expected-YAC difference `+0.27308`
+- YACOE difference `-1.05118`
+
+**Key physical conclusion:** 2023 catches were **not** lower-value by xYAC target/play context; expected YAC was actually slightly higher. The observed compression occurred because realized post-catch execution came in dramatically below contextual expectation. In signed terms the lower YACOE more than explains the negative actual-YAC gap while expected-YAC context offsets part of it.
+
+Tail reference:
+- four RB1 rows V2 moved from <30 AE to >=30 AE: actual YAC/reception `22.5`, expected YAC `6.943`, YACOE `+15.557`
+- RB1 rows >=30 AE under both B1/C1: actual YAC `11.894`, expected YAC `7.898`, YACOE `+3.996`
+
+This reinforces architecture: repeatable mean correction should study pregame-identifiable YACOE state; stochastic extreme positive post-catch outcomes remain conceptually owned by R22.
+
+---
+
+# 11. ACTIVE: R27D strict-prior YACOE residual V1
+
+Branch:
+`research-rb-r27d-yacoe-residual-v1`
+
+Frozen plan:
+- commit **`69edc12a16c691e3838eadcd75559b85dbba7865`**
+- plan blob **`d0c2b0ff2de154e52fa21fb9ce19b739039633f3`**
+- file `docs/research/RB_R27D_STRICT_PRIOR_YACOE_RESIDUAL_V1_FROZEN_PLAN.md`
+- status `FROZEN BEFORE IMPLEMENTATION / MODEL FIT / CANDIDATE EXECUTION / RESULTS`
 
 Scientific question:
+Can strict-prior relative YAC-over-expected state improve receiving-yard point means specifically for **vacancy-active incumbent RB1s**, with exact R26 opportunity/receptions fixed, without sacrificing pooled vacancy, aggregate, Week1 or tail safety?
 
-> With exact R26 opportunity fixed, can strict-prior target-shape, YAC, QB/team checkdown and RB-specific opponent context explain residual receiving efficiency not already represented by production YPT, enough to repair R27's RB1/p90/2023 weaknesses without sacrificing aggregate accuracy?
+Frozen application scope:
+`VACANCY_ACTIVE == 1 AND vacancy_incumbent == 1 AND role == "RB1"`.
 
-### Exact V2 candidate scope
+Every other row remains exact R27/B1. Vacancy RB2+ is forced to exact B1 parity by construction. This scope is frozen before R27D results and is justified by repeated R23/R27/V2/C/C2 localization of the unresolved translation error to lead backs; it is not a post-result R27D router.
 
-- R26 candidate targets/receptions remain immutable.
-- V2 efficiency correction applies only to `VACANCY_ACTIVE` RB/FB rows, matching the exact R26 mechanism scope.
-- stable/no-vacancy YPT and receiving-yard mean remain exact production/B1.
-- production YPT is the baseline/offset, **not** a new predictive feature.
-- generic historical YPT/YPR persistence features are forbidden.
+Frozen primary predictor family — xYAC/YACOE only:
+1. player relative YACOE prior
+2. player expected-YAC prior relative to league
+3. team-RB relative YACOE prior
+4. team-RB expected-YAC prior relative to league
+5. opponent RB relative YACOE allowed prior
+6. opponent expected-YAC allowed prior relative to league
+7. Week1
+8. log prior player xYAC-reception support
 
-Primary new football features, strict-prior only:
-- player air yards / target
-- player YAC / reception
-- player screen/behind-LOS target rate
-- player explosive-20 receiving target rate
-- team/QB RB targets per official pass attempt
-- team RB air yards / target
-- team RB YAC / reception
-- team RB screen rate
-- opponent RB air yards allowed / target
-- opponent RB YAC allowed / reception
-- opponent RB catch rate allowed
-- opponent RB explosive-20 allowed / target
-- opponent RB screen rate faced
-- structural role/vacancy flags
+Forbidden primary predictors:
+- raw historical YAC/YPR/YPT
+- generic catch-rate persistence
+- V2 raw air-yard/screen/explosive/YAC feature family
+- sportsbook
+- target-game/future PBP as features
+- R19/R22 tail probabilities
+
+Strict-prior shrinkage:
+- player K=12 xYAC receptions
+- team K=30
+- opponent K=30
+- no-history centered relative signals = 0 using legal prior population level
 
 Estimator:
-- standardized weighted Ridge
-- alpha grid `[1.0, 10.0, 100.0, 1000.0]`
-- rolling-origin inner-season selection only
-- 2020 fallback alpha `100.0`
-- residual correction clipped to `[-1.5, +1.5]` YPT
+- StandardScaler + weighted Ridge
+- fixed `alpha=100.0`; no model zoo or hyperparameter search
+- training label = player-game YACOE centered against legal prior league RB YACOE
+- weight `clip(xYAC observed receptions,1,8)`
+- correction capped at ±1.5 yards/reception
 
-Outer folds:
-- 2020-2025 REG
-- all seasons retained
-- no 2020/2023 special router
+Candidate arithmetic:
+- B0 = baseline targets × production YPT
+- B1 = exact R26 candidate targets × production YPT
+- production implied YPR = production YPT / production catch rate
+- exact bridge: R26 candidate receptions × production implied YPR == B1 within `1e-10`
+- C1 scoped RB1 YPR = production implied YPR + clipped predicted relative YACOE
+- C1 yards = exact R26 candidate receptions × C1 YPR
+- outside frozen RB1 scope C1 == B1 exactly
 
-The frozen gates explicitly require repair of RB1 and 2023, not merely pooled improvement. Full details are in the frozen plan. A scientific PASS still cannot mutate production; it would authorize only a separate integration/recentering qualification under unchanged R22.
+Frozen plan contains 18 structural/integrity gates and 13 scientific gates (31 total). Important science hurdles include:
+- primary RB1 MAE improve >=1.00% vs B1
+- primary RB1 non-worse vs B0
+- 2023 RB1 improve >=2.00% vs B1 and non-worse vs B0
+- pooled vacancy MAE non-worse vs B1
+- ALL-RB non-worse vs B1 and <=+0.10% vs B0
+- RB1 RMSE/p90/30+ miss safety
+- bias safety
+- >=4/6 seasons improve, no season >2% worse
+- Week1 <=0.50% worse
 
-### Exact next action
+Frozen PASS disposition:
+`R27D_STRICT_PRIOR_YACOE_RESIDUAL_SUPPORT_READY_FOR_SEPARATE_INTEGRATION_DESIGN`
 
-Implement V2 feature materialization/evaluator/finalizer under the frozen plan, create an implementation lock before any candidate run, then add a dedicated workflow and preserve the first valid scientific result exactly.
+Frozen mixed/fail disposition:
+`R27D_STRICT_PRIOR_YACOE_RESIDUAL_MIXED_OR_FAIL_NO_INTEGRATION`
 
-Do not execute or reuse R27B V1 scripts as the V2 candidate.
+Integrity failure:
+`R27D_MECHANICAL_OR_INTEGRITY_FAILURE_NO_SCIENTIFIC_DECISION`
 
----
+**A PASS still does not mutate production.** It only authorizes a separately frozen integration/recentering study compatible with R22 and the one-authoritative-projection stack.
 
-## 14. Remaining-work register
+## Exact next action
 
-### A. Finish RB receiving-yard mean lane
-
-**A1 — R27 V1: COMPLETE / MIXED-FAIL PRESERVED**
-- exact first valid run recorded above
-- do not retune
-
-**A2 — R27B V1: SUPERSEDED PRE-EXECUTION**
-- preserve only as design lineage
-- never infer a result from its scripts
-
-**A3 — R27B V2: ACTIVE**
-- implement exact frozen novel-context feature family
-- lock implementation before candidate execution
-- run 2020-2025 strict walk-forward
-- preserve first scientific result exactly
-
-**A4 — receiving-yard mean integration/recentering: CONDITIONAL**
-- only if a mean candidate qualifies
-- separately freeze how the new mean composes with mean-neutral R22
-- do not directly mutate production from research result
-
-### B. Current-roster / late-week role handling
-
-- preserve sealed R26Q as scientific pregame authority
-- production operations still need safe handling of late roster changes/inactives/new players
-- the Corey Kiner → Lan Larison example is evidence of operational refresh need, not a validated inheritance formula
-- separate frozen study required for automatic acute role transfer
-
-### C. Post-Week1 prospective grading
-
-- rerun exact locked R26S unchanged when authoritative Week1 outcomes/snaps are available
-- do not recompute R26Q from postgame knowledge
-- any later promoted RB mean should get its own prospective grading path
-
-### D. QB opportunity/efficiency
-
-After RB receiving-yard mean is closed or explicitly parked:
-- attempts/dropbacks
-- pass rate
-- sacks/scramble conversion
-- YPA/efficiency
-- game-script/personnel effects where pregame-safe
-
-Existing M89/M90/C2 remains authority until a separately qualified replacement exists.
-
-### E. Selective WR/TE
-
-- preserve WR M38 + WR-R15 and TE-R5P
-- reopen only concrete unresolved error sources/new information
-- do not recycle failed ideas under new labels
-
-### F. Shared QB ↔ receiver conservation
-
-Build one coherent passing environment so QB attempts/completions/yards and receiver targets/receptions/yards conserve together.
-
-### G. Unified game simulation
-
-Target causal simulation:
-`plays → pass/rush → player opportunity → outcomes → yards/explosives/TDs → state feedback → possessions/scoring → final score`
-
-### H. Anytime TD
-
-Build after opportunity/efficiency/shared-game structure is trustworthy. Sportsbook ATD prices remain downstream.
-
-### I. Game ML / spread / total
-
-Build only when possession/scoring mechanics support coherent team/game distributions. Market lines remain benchmark/pricing references.
-
-### J. Operational live package
-
-Before final live use:
-- fresh roster/depth/injury state
-- fresh weather/context
-- latest qualified football stack only
-- full 32-team/16-game integrity
-- live sportsbook capture downstream
-- one authoritative model number per market
-- model-vs-book comparison
-- saved pregame artifacts/digests
-
-### K. Continuity maintenance
-
-At every major checkpoint update this file on `main` with:
-- active branch / exact stop point
-- plan/code/lock commits and blobs
-- run/job/artifact/digest
-- exact disposition/gate count
-- mechanical vs scientific changes
-- production-active vs research-only status
-- next unresolved question
+1. Stay on `research-rb-r27d-yacoe-residual-v1`.
+2. Read exact frozen plan at commit `69edc12a16c691e3838eadcd75559b85dbba7865`, blob `d0c2b0ff2de154e52fa21fb9ce19b739039633f3`.
+3. Implement strict-as-of PBP xYAC/YACOE history materialization for 2019–2025.
+4. Consume exact R26/R27/V2 parent authority as specified; do not recreate a different opportunity candidate.
+5. Fit only the frozen 8-feature relative-YACOE model with fixed Ridge alpha 100 and frozen shrinkage/cap.
+6. Add all 31 gates exactly.
+7. Static/anti-reinvention/protected-production audit implementation.
+8. Create implementation lock pinning plan/code/workflow/parent blobs **before any candidate execution**.
+9. Run first 2020–2025 walk-forward scientific execution.
+10. Preserve first valid result exactly and record it in docs/research.
+11. If mechanical failure occurs, preserve it and allow only minimum documented value-neutral repair.
+12. If PASS, do not directly promote; write/freeze a separate integration design and prove R22/full-stack compatibility first.
+13. If mixed/fail, do not retune on the same sample; use the evidence to decide whether another genuinely new hypothesis exists or whether RB receiving mean research has reached a defensible stopping point.
+14. Update this handoff on `main` at the next material checkpoint.
 
 ---
 
-## 15. Future-chat / future-agent evidence reconstruction protocol
+# 12. Overnight / scheduled continuation instructions
 
-A future chat must be able to continue without conversational memory. GitHub is canonical.
+An hourly ChatGPT task has been configured for **9 hourly runs, midnight through 8:00 AM America/Indiana/Indianapolis**.
 
-### Read order
+Each run is instructed to:
+- open this repo and read this handoff first;
+- verify exact live GitHub state rather than rely on chat memory;
+- do meaningful research/implementation work, not merely report status;
+- obey all freeze, leakage, artifact and production-safety rules;
+- continue the current RB receiving lane to a defensible scientific stopping point;
+- follow a separately frozen integration/promotion path if and only if pre-frozen criteria genuinely authorize it;
+- after RB receiving work is complete, automatically advance to the next documented roadmap item;
+- update this handoff on `main` at every material checkpoint so later runs/chats inherit exact lineage.
 
-1. `CURRENT_NFL_RESEARCH_HANDOFF.md` from `main`
-2. `AGENTS.md`
-3. the active branch and exact frozen plan named at the top of this file
-4. inspect active branch head vs exact stop point before writing anything
+Do not wait for the user between routine research checkpoints. Stop only when a scientific decision genuinely requires user preference, a safety/authorization boundary prevents an action, or the documented roadmap reaches a point with no defensible next experiment.
 
-### Where truth lives
+---
 
-- production authority: production code/assets and production workflow lineage recorded here
-- frozen research designs/results: `docs/research/` and research branches
-- research executors: `scripts/backtest/` and matching research workflows
-- production runtime: `scripts/modeling/`, `scripts/run_*`, `scripts/simulation_*`, `.github/workflows/full-slate.yml`
-- serialized model authority: `data/models/` and `model/`
-- run truth: GitHub Actions run → job → logs → artifact
-- final scientific truth: artifact disposition/gate files, not a green workflow badge alone
+# 13. Roadmap after RB receiving-yard mean lane
 
-### Completed-run protocol
+Preserve this order unless new evidence gives a strong reason to discuss a change with the user first:
 
-For the exact branch/commit:
-1. locate workflow run
-2. record run ID/head/conclusion
-3. fetch job ID/steps/logs
-4. fetch artifact ID/name/digest
-5. open artifact disposition/gates/metrics
-6. classify failures as mechanical or scientific
-7. preserve every first result exactly
-8. never relabel or silently discard a failed run
+1. **Finish RB receiving efficiency / receiving-yard mean** — ACTIVE R27D.
+2. **Current roster / late-week role handling** where needed as a separate operational lane; do not contaminate historical science.
+3. **Grade sealed R26Q via the exact locked R26S evaluator** when authoritative Week1 outcomes are available.
+4. **QB opportunity/efficiency:** attempts, dropbacks, pass rate, YPA, sacks, scrambles; build on existing M89/M90 rather than restarting old failed migrations.
+5. **Selective WR/TE work:** only unresolved opportunity/efficiency/distribution mechanisms; preserve M38/WR-R15 and TE-R5P winners.
+6. **Shared QB ↔ receiver conservation:** align team pass attempts, targets, completions, receiving yards and player entitlements coherently.
+7. **Unified game simulation:** plays → pass/rush → player opportunity → outcomes → yards/explosives/TDs → game-state feedback → possessions/scoring.
+8. **Anytime TD** modeling under coherent opportunity/game environment.
+9. **Game ML / spread / total** from the football simulation rather than sportsbook imitation.
+10. **Final operational package / prospective grading:** one authoritative slate, live input checks, distributions/fair probabilities, market comparison downstream, prospective scorecards.
 
-### If handoff and repo disagree
+Explosive receiver/QB interaction idea remains worth revisiting in the QB↔receiver distribution/conservation lane: player-specific explosive propensity vs coverage/DB environment may help explain QB high-end passing outcomes. Do not mix that parked hypothesis into current RB point-mean work; R22 already owns RB receiving-yard tail shape.
 
-Stop and reconcile against exact commits/runs/artifacts before continuing. Do not guess. Then update this handoff so the next session inherits one unambiguous state.
+---
+
+# 14. Promotion and production safety
+
+The user has authorized autonomous continuation and trusts the research process, including promotion when genuinely qualified. That authorization does **not** waive scientific controls.
+
+For any component:
+1. Research result must satisfy its pre-frozen gates.
+2. If the research plan says PASS only authorizes integration design, write/freeze that integration design first.
+3. Verify exact parent/model hashes and preserve predecessor authority.
+4. Prove no unintended cross-component changes.
+5. Run full-stack / Full Slate verification where relevant.
+6. Record exact production commit, run, job, artifact, digest and disposition.
+7. Only then treat the new component as authoritative production.
+8. Never promote a mixed/fail result or a cherry-picked post-result cohort.
+
+GitHub remains the source of truth.
