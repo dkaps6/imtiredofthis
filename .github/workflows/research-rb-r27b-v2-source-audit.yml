@@ -1,0 +1,56 @@
+name: RB R27B V2 Novel Efficiency Source Audit
+
+on:
+  push:
+    branches:
+      - research-rb-r27b-v2-novel-efficiency-context
+    paths:
+      - 'scripts/backtest/audit_rb_r27b_v2_novel_efficiency_sources.py'
+      - '.github/workflows/research-rb-r27b-v2-source-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  PYTHONPATH: ${{ github.workspace }}
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy
+      - name: Verify audit-only boundary
+        run: |
+          set -euo pipefail
+          test -s scripts/backtest/audit_rb_r27b_v2_novel_efficiency_sources.py
+          python -m py_compile scripts/backtest/audit_rb_r27b_v2_novel_efficiency_sources.py
+          sha256sum scripts/backtest/audit_rb_r27b_v2_novel_efficiency_sources.py | tee r27b_v2_source_audit_code.sha256
+      - name: Audit 2019-2025 novel efficiency source coverage
+        run: |
+          python scripts/backtest/audit_rb_r27b_v2_novel_efficiency_sources.py \
+            --seasons 2019-2025 \
+            --out-dir data/backtests/r27b_v2_source_audit
+      - name: Show source audit
+        run: |
+          cat data/backtests/r27b_v2_source_audit/r27b_v2_source_audit.json
+          cat data/backtests/r27b_v2_source_audit/r27b_v2_source_coverage_by_season.csv
+      - name: Upload source audit evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r27b-v2-source-audit
+          retention-days: 90
+          path: |
+            r27b_v2_source_audit_code.sha256
+            data/backtests/r27b_v2_source_audit/*
