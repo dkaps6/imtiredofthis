@@ -1,0 +1,136 @@
+name: RB R27C2 Realized Target Quality Forensic V1
+
+on:
+  push:
+    branches:
+      - research-rb-r27c2-realized-target-quality-forensic-v1
+    paths:
+      - 'docs/research/RB_R27C2_REALIZED_TARGET_QUALITY_FORENSIC_V1_IMPLEMENTATION_LOCK.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PRODUCTION_BASE_SHA: bb76ba9eabb08e2f0875a9af49301c3877f4141f
+  R27C2_PLAN_BLOB: 57e26c75f8f551c28c86d49c55375ef4f590b6e9
+  R27C2_SCRIPT_BLOB: 179cabe788afc9d995a827b597ba269fb7dcdded
+  R27B_PARENT_RUN: '34428917229'
+  R27B_PARENT_ARTIFACT_ID: '10134023092'
+  R27B_PARENT_ARTIFACT_NAME: rb-r27b-v2-novel-efficiency-context
+  R27B_PARENT_DIGEST: sha256:1df1a14c9900b890fe86e04269849dc90d76fc03a9215ad8612c1820dee5341f
+  R27C_PARENT_RUN: '34430754033'
+  R27C_PARENT_ARTIFACT_ID: '10134387002'
+  R27C_PARENT_ARTIFACT_NAME: rb-r27c-rb1-2023-forensic-v1
+  R27C_PARENT_DIGEST: sha256:0c915a1c413d66c550990a1cc8bd45e0dc20a18e110fe1b96414a79eb7b598e9
+
+jobs:
+  forensic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy
+
+      - name: Verify frozen diagnostic implementation and production boundary
+        run: |
+          set -euo pipefail
+          test -s docs/research/RB_R27C2_REALIZED_TARGET_QUALITY_FORENSIC_V1_FROZEN_PLAN.md
+          test -s docs/research/RB_R27C2_REALIZED_TARGET_QUALITY_FORENSIC_V1_IMPLEMENTATION_LOCK.md
+          test -s scripts/backtest/forensic_rb_r27c2_realized_target_quality_v1.py
+          test "$(git hash-object docs/research/RB_R27C2_REALIZED_TARGET_QUALITY_FORENSIC_V1_FROZEN_PLAN.md)" = "$R27C2_PLAN_BLOB"
+          test "$(git hash-object scripts/backtest/forensic_rb_r27c2_realized_target_quality_v1.py)" = "$R27C2_SCRIPT_BLOB"
+          python -m py_compile scripts/backtest/forensic_rb_r27c2_realized_target_quality_v1.py
+          git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
+            scripts/modeling \
+            scripts/run_rb_week1_no_odds.py \
+            scripts/run_pricing_with_full_roster_universe_v3.py \
+            scripts/run_pricing_with_full_roster_universe_v3_core.py \
+            scripts/run_pricing_with_full_roster_universe_v4_production.py \
+            scripts/run_pricing_with_full_roster_universe_v5_production.py \
+            scripts/simulation_v2.py \
+            scripts/simulation_c2_qb_candidate.py \
+            data/models \
+            model \
+            .github/workflows/full-slate.yml
+          sha256sum docs/research/RB_R27C2_REALIZED_TARGET_QUALITY_FORENSIC_V1_FROZEN_PLAN.md > r27c2_plan.sha256
+          sha256sum docs/research/RB_R27C2_REALIZED_TARGET_QUALITY_FORENSIC_V1_IMPLEMENTATION_LOCK.md > r27c2_lock.sha256
+          sha256sum scripts/backtest/forensic_rb_r27c2_realized_target_quality_v1.py > r27c2_code.sha256
+          echo R27C2_FROZEN_DIAGNOSTIC_AND_PRODUCTION_BOUNDARY_PASS
+
+      - name: Verify and stage exact R27B V2 and R27C evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          D1="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R27B_PARENT_ARTIFACT_ID}" --jq .digest)"
+          D2="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R27C_PARENT_ARTIFACT_ID}" --jq .digest)"
+          test "$D1" = "$R27B_PARENT_DIGEST"
+          test "$D2" = "$R27C_PARENT_DIGEST"
+          rm -rf data/r27c2_r27b_parent data/r27c2_r27c_parent
+          mkdir -p data/r27c2_r27b_parent data/r27c2_r27c_parent
+          gh run download "$R27B_PARENT_RUN" --repo "$GITHUB_REPOSITORY" --name "$R27B_PARENT_ARTIFACT_NAME" --dir data/r27c2_r27b_parent
+          gh run download "$R27C_PARENT_RUN" --repo "$GITHUB_REPOSITORY" --name "$R27C_PARENT_ARTIFACT_NAME" --dir data/r27c2_r27c_parent
+          test -s data/r27c2_r27b_parent/data/backtests/r27b_v2_final/r27b_v2_all_predictions.csv
+          test -s data/r27c2_r27c_parent/data/backtests/r27c_forensic_v1/r27c_forensic_summary.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('data/r27c2_r27c_parent/data/backtests/r27c_forensic_v1/r27c_forensic_summary.json').read_text())
+          assert r['integrity_pass'] is True, r
+          assert r['new_model_fit'] is False and r['new_candidate_created'] is False, r
+          print('R27C2_EXACT_PARENT_EVIDENCE_PASS')
+          PY
+
+      - name: Reconstruct target-game PBP and materialize physical target-quality evidence
+        run: |
+          rm -rf data/backtests/r27c2_realized_target_quality_v1
+          python scripts/backtest/forensic_rb_r27c2_realized_target_quality_v1.py \
+            --predictions data/r27c2_r27b_parent/data/backtests/r27b_v2_final/r27b_v2_all_predictions.csv \
+            --seasons 2020-2025 \
+            --min-targeted-join-coverage 0.98 \
+            --out-dir data/backtests/r27c2_realized_target_quality_v1
+
+      - name: Assert diagnostic integrity and display evidence
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('data/backtests/r27c2_realized_target_quality_v1/r27c2_summary.json').read_text())
+          assert d['integrity_pass'] is True, d
+          assert d['diagnostic_only'] is True
+          assert d['target_game_pbp_used_as_postgame_labels_only'] is True
+          assert d['new_model_fit'] is False and d['new_candidate_created'] is False
+          assert d['sportsbook_inputs']==0
+          assert d['production_changed'] is False and d['r26_changed'] is False and d['r22_changed'] is False
+          print('R27C2_FORENSIC_INTEGRITY_PASS')
+          print(json.dumps(d,indent=2,sort_keys=True))
+          PY
+          cat data/backtests/r27c2_realized_target_quality_v1/r27c2_2023_vs_non2023_rb1_physical_diff.csv
+          cat data/backtests/r27c2_realized_target_quality_v1/r27c2_catch_ypr_ypt_decomposition.csv
+          cat data/backtests/r27c2_realized_target_quality_v1/r27c2_prior_to_realized_shape_drift.csv
+          cat data/backtests/r27c2_realized_target_quality_v1/r27c2_tail_target_quality.csv
+          cat data/backtests/r27c2_realized_target_quality_v1/r27c2_join_coverage_and_stat_gaps.csv
+
+      - name: Upload immutable R27C2 forensic evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r27c2-realized-target-quality-forensic-v1
+          retention-days: 90
+          path: |
+            r27c2_plan.sha256
+            r27c2_lock.sha256
+            r27c2_code.sha256
+            data/backtests/r27c2_realized_target_quality_v1/*
