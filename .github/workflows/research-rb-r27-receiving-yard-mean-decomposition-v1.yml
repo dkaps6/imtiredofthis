@@ -15,6 +15,7 @@ env:
   PYTHONPATH: ${{ github.workspace }}
   PRODUCTION_BASE_SHA: bb76ba9eabb08e2f0875a9af49301c3877f4141f
   R25_PARENT_BLOB: 93da760073059d68c6481b212a906c68734089e3
+  R25_PLAYER_LOG_BLOB: b993bd46fd44c88785bb37344c756c51b5d39afa
   R26_PARENT_BLOB: 17170baa072bcc3157dee03c7a0de75297060e71
   R26_TRANSITION_BLOB: 7459dc8a48a0c5e58e14b358ec4a9b0cd19eb959
   R26_IDENTITY_RUNTIME_BLOB: 688d1b64fff78a588b1cd86af27654008b55cf26
@@ -47,8 +48,10 @@ jobs:
           test -s docs/research/RB_R27_RECEIVING_YARD_MEAN_DECOMPOSITION_V1_FROZEN_PLAN.md
           test -s docs/research/RB_R27_RECEIVING_YARD_MEAN_DECOMPOSITION_V1_IMPLEMENTATION_LOCK.md
           test -s docs/research/RB_R27_RUN1_HISTORICAL_SCHEDULE_SCOPE_MECHANICAL_REPAIR_V1.md
+          test -s docs/research/RB_R27_RUN4_PLAYER_LOG_REG_SCOPE_MECHANICAL_REPAIR_V2.md
           for F in \
             scripts/backtest/evaluate_rb_r25_receptions_specialist_v1.py \
+            scripts/backtest/historical_player_logs.py \
             scripts/backtest/evaluate_rb_r26_vacancy_gated_r9_v1.py \
             scripts/backtest/audit_rb_r26_safe_transition_state_v1.py \
             scripts/backtest/evaluate_rb_r27_receiving_yard_mean_decomposition_v1.py \
@@ -58,6 +61,7 @@ jobs:
           done
           python -m py_compile \
             scripts/backtest/evaluate_rb_r25_receptions_specialist_v1.py \
+            scripts/backtest/historical_player_logs.py \
             scripts/backtest/evaluate_rb_r26_vacancy_gated_r9_v1.py \
             scripts/backtest/audit_rb_r26_safe_transition_state_v1.py \
             scripts/backtest/evaluate_rb_r27_receiving_yard_mean_decomposition_v1.py \
@@ -65,6 +69,7 @@ jobs:
             scripts/backtest/stage_r27_regular_schedule_for_player_logs_v1.py
 
           test "$(git hash-object scripts/backtest/evaluate_rb_r25_receptions_specialist_v1.py)" = "$R25_PARENT_BLOB"
+          test "$(git hash-object scripts/backtest/historical_player_logs.py)" = "$R25_PLAYER_LOG_BLOB"
           test "$(git hash-object scripts/backtest/evaluate_rb_r26_vacancy_gated_r9_v1.py)" = "$R26_PARENT_BLOB"
           test "$(git hash-object scripts/backtest/audit_rb_r26_safe_transition_state_v1.py)" = "$R26_TRANSITION_BLOB"
           test "$(git hash-object scripts/modeling/rb_receiving_identity_runtime_v1.py)" = "$R26_IDENTITY_RUNTIME_BLOB"
@@ -75,8 +80,10 @@ jobs:
           sha256sum docs/research/RB_R27_RECEIVING_YARD_MEAN_DECOMPOSITION_V1_FROZEN_PLAN.md | tee r27_plan.sha256
           sha256sum docs/research/RB_R27_RECEIVING_YARD_MEAN_DECOMPOSITION_V1_IMPLEMENTATION_LOCK.md | tee r27_lock.sha256
           sha256sum docs/research/RB_R27_RUN1_HISTORICAL_SCHEDULE_SCOPE_MECHANICAL_REPAIR_V1.md | tee r27_repair.sha256
+          sha256sum docs/research/RB_R27_RUN4_PLAYER_LOG_REG_SCOPE_MECHANICAL_REPAIR_V2.md | tee r27_repair_v2.sha256
           sha256sum \
             scripts/backtest/evaluate_rb_r25_receptions_specialist_v1.py \
+            scripts/backtest/historical_player_logs.py \
             scripts/backtest/evaluate_rb_r26_vacancy_gated_r9_v1.py \
             scripts/backtest/audit_rb_r26_safe_transition_state_v1.py \
             scripts/backtest/evaluate_rb_r27_receiving_yard_mean_decomposition_v1.py \
@@ -124,8 +131,9 @@ jobs:
               --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" \
               --data-dir "$D" --report "$D/historical_input_validation.csv"
 
-            # R27 Run1 mechanical repair only: stage canonical REG-week scope for
-            # historical_player_logs. All other builders continue using the original schedule.
+            # R27 mechanical schedule audit: stage canonical REG-week scope for
+            # historical_player_logs. The exact R25 player-log builder then uses
+            # validated REG schedule keys as the player-observation scope authority.
             python scripts/backtest/stage_r27_regular_schedule_for_player_logs_v1.py \
               --schedule "$D/schedule_history.csv" \
               --seasons "$PRIOR,$SEASON" \
@@ -209,6 +217,7 @@ jobs:
             r27_plan.sha256
             r27_lock.sha256
             r27_repair.sha256
+            r27_repair_v2.sha256
             r27_code.sha256
             r27_protected_clean.txt
             data/backtests/rb_r27_safe_transition_state/*
