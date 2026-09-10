@@ -40,6 +40,7 @@ PRODUCTION_SCRIPTS = (
     "scripts/slate_universe_v2.py",
     "scripts/run_player_form_v2.py",
     "scripts/run_player_form_v2_loader.py",
+    "scripts/run_player_form_current_roles_v1.py",
     "scripts/enrich_player_scoring_v2.py",
     "scripts/modeling/context_bridge.py",
     "scripts/modeling/bayesian_v2.py",
@@ -226,6 +227,31 @@ def _promoted_pricing_chain_errors(workflow_text: str) -> list[str]:
     return errors
 
 
+def _player_form_wrapper_errors(workflow_text: str) -> list[str]:
+    """Protect the certified current-role PlayerForm wrapper and its legacy authority."""
+    errors: list[str] = []
+    wrapper_rel = "scripts/run_player_form_current_roles_v1.py"
+    wrapper = ROOT / wrapper_rel
+    if wrapper_rel not in workflow_text:
+        errors.append(f"full-slate workflow does not invoke {wrapper_rel}")
+        return errors
+    if not wrapper.exists() or wrapper.stat().st_size == 0:
+        errors.append(f"certified PlayerForm current-role wrapper missing: {wrapper_rel}")
+        return errors
+    text = _read(wrapper)
+    for token, msg in (
+        ("import scripts.run_player_form_v2_loader as loader", "PlayerForm current-role wrapper does not delegate to protected loader"),
+        ("loader.main()", "PlayerForm current-role wrapper does not execute protected loader"),
+        ("resolve_current_roles_path", "PlayerForm current-role wrapper does not resolve explicit certified current roles"),
+        ("strict_prior_logs", "PlayerForm current-role wrapper lacks strict-prior history filter"),
+        ("publish_strict_prior_history", "PlayerForm current-role wrapper lacks strict-prior publication step"),
+        ("w.ge(week)", "PlayerForm current-role wrapper lacks target/future-week publication guard"),
+    ):
+        if token not in text:
+            errors.append(msg)
+    return errors
+
+
 def _workflow_contract_errors():
     path = ROOT / ".github/workflows/full-slate.yml"
     if not path.exists():
@@ -235,7 +261,7 @@ def _workflow_contract_errors():
         "scripts/utils/build_team_week_map_v2.py",
         "scripts/run_team_form_context.py",
         "scripts/run_qb_promoted_context.py",
-        "scripts/run_player_form_v2_loader.py",
+        "scripts/run_player_form_current_roles_v1.py",
         "scripts/enrich_player_scoring_v2.py",
         "scripts/run_model_context_bridge.py",
         "scripts/run_model_bayesian_bridge.py",
@@ -250,6 +276,7 @@ def _workflow_contract_errors():
         "scripts/utils/audit_repo.py --strict",
     )
     errors = [f"full-slate workflow does not invoke {t}" for t in required if t not in text]
+    errors.extend(_player_form_wrapper_errors(text))
     errors.extend(_promoted_pricing_chain_errors(text))
 
     # The old run_pricing_v2 implementation remains a material dependency of the
