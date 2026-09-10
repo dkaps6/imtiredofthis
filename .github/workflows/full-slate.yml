@@ -464,6 +464,22 @@ jobs:
           python scripts/utils/audit_repo.py --strict
           python scripts/audit_2026_production_readiness.py --strict
 
+      - name: Build master betting workbook artifact
+        if: always()
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          mkdir -p outputs
+          python scripts/build_master_betting_workbook_v1.py \
+            --root . \
+            --out outputs/NFL_BETTING_MODEL_MASTER.xlsx \
+            --run-id "${GITHUB_RUN_ID}" \
+            --sha "${GITHUB_SHA}" \
+            --ref-name "${GITHUB_REF_NAME}" \
+            --fetch-live-odds "${FETCH_LIVE_ODDS}"
+          test -s outputs/NFL_BETTING_MODEL_MASTER.xlsx
+          echo "MASTER BETTING WORKBOOK: outputs/NFL_BETTING_MODEL_MASTER.xlsx"
+
       - name: Summarize outputs
         if: always()
         run: |
@@ -480,7 +496,7 @@ jobs:
           echo '=== identity status ==='
           test -f data/player_identity_validation.csv && cat data/player_identity_validation.csv || true
           echo '=== generated artifacts ==='
-          find data outputs -maxdepth 2 -type f \( -name "*.csv" -o -name "*.json" \) -print0 2>/dev/null | xargs -0 -r -I{} sh -c 'echo "--- {}"; wc -l "{}"'
+          find data outputs -maxdepth 2 -type f \( -name "*.csv" -o -name "*.json" -o -name "*.xlsx" \) -print0 2>/dev/null | xargs -0 -r -I{} sh -c 'echo "--- {}"; wc -l "{}"'
 
       - name: Upload artifacts
         if: always()
