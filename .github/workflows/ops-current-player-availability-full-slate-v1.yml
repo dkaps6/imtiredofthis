@@ -47,7 +47,7 @@ jobs:
           git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- docs/research || {
             echo 'FATAL: historical research records changed'; exit 1;
           }
-          PYTHONPATH=. pytest -q tests/test_current_player_availability_v1.py tests/test_current_player_availability_timing_v1.py tests/test_current_roles_input_seam_v1.py tests/test_production_eligible_active_roles_v1.py
+          PYTHONPATH=. pytest -q tests/test_current_player_availability_v1.py tests/test_current_player_availability_timing_v1.py tests/test_current_roles_input_seam_v1.py tests/test_production_eligible_active_roles_v1.py tests/test_player_form_strict_prior_publication_v1.py
       - name: Build raw current roster and authoritative schedule
         run: |
           export PYTHONPATH="${PWD}"
@@ -99,7 +99,13 @@ jobs:
           bad=set(zip(a.loc[pd.to_numeric(a.definitive_unavailable,errors='coerce').fillna(0).eq(1),'team'].astype(str),a.loc[pd.to_numeric(a.definitive_unavailable,errors='coerce').fillna(0).eq(1),'player_clean_key'].astype(str)))
           got=set(zip(f.team.astype(str),f.player_clean_key.astype(str)))
           assert not (bad & got), sorted(bad & got)[:20]
+          logs=pd.read_csv('data/player_game_logs.csv')
+          season=pd.to_numeric(logs.season,errors='coerce')
+          week=pd.to_numeric(logs.week,errors='coerce')
+          illegal=season.eq(2026)&week.ge(1)
+          assert not illegal.fillna(False).any(), logs.loc[illegal.fillna(False),['season','week','player','team']].head(20).to_dict('records')
           print('PLAYERFORM_UNAVAILABLE_EXCLUSION_PASS')
+          print('PLAYERFORM_STRICT_PRIOR_PUBLICATION_PASS')
           PY
       - name: Build canonical model stack
         run: |
