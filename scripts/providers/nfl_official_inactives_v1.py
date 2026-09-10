@@ -25,6 +25,7 @@ def build(url:str=m78.LIVE_INACTIVES_URL)->tuple[pd.DataFrame,dict]:
             bullets=hard._candidate_bullets(ul); parsed=[m78.parse_player_bullet(x) for x in bullets]; ok=[x for x in parsed if x is not None]
             complete=bool(len(bullets)>=3 and len(ok)==len(bullets) and len({m78.norm_name(name) for _,name in ok})==len(ok))
             section_rows.append({"team":team,"section_complete":int(complete),"candidate_bullets":len(bullets),"parsed_bullets":len(ok)})
+            # Always emit a section ledger row so complete absence checks are explicit.
             rows.append({"team":team,"player":"","listed_position":"","section_complete":int(complete),"source_url":r.url,"source_asof_utc":now})
             for pos,name in ok:
                 rows.append({"team":team,"player":name,"listed_position":pos,"section_complete":int(complete),"source_url":r.url,"source_asof_utc":now})
