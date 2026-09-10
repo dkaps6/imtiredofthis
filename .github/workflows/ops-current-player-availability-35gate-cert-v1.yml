@@ -29,6 +29,8 @@ env:
   FINALIZER_BLOB: a5302186eadb748863c70b175421d064885dde60
   ELIGIBLE_HELPER_BLOB: 77b591e431378ec984c51e8a032262e673d4c843
   SEAM_TRANSFORMER_BLOB: b64ec5ccd59728121a250433e40e77e3e1013a05
+  QB_C2_PROTECTED_BLOB: 7b677470b27b6776055c75c924a0ddf22d724a44
+  QB_SEAM_TRANSFORMER_BLOB: c7569c54cda779eb04bed7dbf2b22b9ec4fb526b
   FULL_UNIVERSE_PROTECTED_BLOB: f8429ea5b6dd730f054460493facde4ab21b0998
   R26_PROTECTED_BLOB: 0c7528a3ca9e750d3b9ef2f08ef9721949b3e7fc
 
@@ -56,11 +58,13 @@ jobs:
           test "$(git hash-object scripts/operations/finalize_current_availability_35gate_v1.py)" = "$FINALIZER_BLOB"
           test "$(git hash-object scripts/utils/eligible_team_set_v1.py)" = "$ELIGIBLE_HELPER_BLOB"
           test "$(git hash-object scripts/operations/apply_current_availability_eligible_team_seam_v1.py)" = "$SEAM_TRANSFORMER_BLOB"
+          test "$(git hash-object scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py)" = "$QB_SEAM_TRANSFORMER_BLOB"
           test "$(git hash-object scripts/run_pricing_with_full_roster_universe_v1.py)" = "$FULL_UNIVERSE_PROTECTED_BLOB"
           test "$(git hash-object scripts/modeling/rb_r26_receptions_production_adapter_v1.py)" = "$R26_PROTECTED_BLOB"
+          test "$(git hash-object scripts/modeling/qb_c2_production_adapter_v1.py)" = "$QB_C2_PROTECTED_BLOB"
           git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- docs/research
           git diff --quiet "$INTEGRATION_PLAN_SHA" HEAD -- scripts/modeling data/models model
-          python -m py_compile scripts/operations/run_current_availability_football_stack_cert_v1.py scripts/operations/build_current_availability_certification_fixtures_v1.py scripts/operations/evaluate_current_availability_35gate_v1.py scripts/operations/finalize_current_availability_35gate_v1.py
+          python -m py_compile scripts/operations/run_current_availability_football_stack_cert_v1.py scripts/operations/build_current_availability_certification_fixtures_v1.py scripts/operations/evaluate_current_availability_35gate_v1.py scripts/operations/finalize_current_availability_35gate_v1.py scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py
           mkdir -p data
           python - <<'PY'
           import json
@@ -86,12 +90,13 @@ jobs:
           print('IMMUTABLE_CANDIDATE_STAGE_PASS')
           PY
 
-      - name: Apply locked eligible-team seam and build fixtures
+      - name: Apply locked eligible-team seams and build fixtures
         run: |
           set -euo pipefail
           export PYTHONPATH="$PWD"
           python scripts/operations/apply_current_availability_eligible_team_seam_v1.py
-          python -m py_compile scripts/run_pricing_with_full_roster_universe_v1.py scripts/modeling/rb_r26_receptions_production_adapter_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py
+          python -m py_compile scripts/run_pricing_with_full_roster_universe_v1.py scripts/modeling/rb_r26_receptions_production_adapter_v1.py scripts/modeling/qb_c2_production_adapter_v1.py
           python scripts/operations/build_current_availability_certification_fixtures_v1.py
 
       - name: Execute baseline promoted football stack without sportsbook
@@ -109,6 +114,7 @@ jobs:
           cp -a candidate_evidence/data/. "$W/data/"; cp -a data/availability_cert_fixtures "$W/data/"
           cd "$W"; export PYTHONPATH="$W" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
           python scripts/operations/apply_current_availability_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py
           cp data/availability_cert_fixtures/rb1_out/current_player_availability.csv data/current_player_availability.csv
           cp data/availability_cert_fixtures/rb1_out/roles_current_production_eligible_v1.csv data/roles_current_production_eligible_v1.csv
           python scripts/run_player_form_current_roles_v1.py --season "$SEASON" --prior-season "$PRIOR_SEASON"
@@ -127,6 +133,7 @@ jobs:
           cp -a candidate_evidence/data/. "$W/data/"; cp -a data/availability_cert_fixtures "$W/data/"
           cd "$W"; export PYTHONPATH="$W" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
           python scripts/operations/apply_current_availability_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py
           cp data/availability_cert_fixtures/qb1_inactive/current_player_availability.csv data/current_player_availability.csv
           cp data/availability_cert_fixtures/qb1_inactive/roles_current_production_eligible_v1.csv data/roles_current_production_eligible_v1.csv
           python scripts/run_player_form_current_roles_v1.py --season "$SEASON" --prior-season "$PRIOR_SEASON"
@@ -144,6 +151,7 @@ jobs:
           cp -a candidate_evidence/data/. "$W/data/"; cp -a data/availability_cert_fixtures "$W/data/"
           cd "$W"; export PYTHONPATH="$W" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
           python scripts/operations/apply_current_availability_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py
           cp data/availability_cert_fixtures/wr_te_unavailable/current_player_availability.csv data/current_player_availability.csv
           cp data/availability_cert_fixtures/wr_te_unavailable/roles_current_production_eligible_v1.csv data/roles_current_production_eligible_v1.csv
           python scripts/run_player_form_current_roles_v1.py --season "$SEASON" --prior-season "$PRIOR_SEASON"
