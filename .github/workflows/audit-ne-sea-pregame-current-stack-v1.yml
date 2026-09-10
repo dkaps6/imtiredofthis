@@ -44,9 +44,10 @@ jobs:
           set -euo pipefail
           test -s docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_FROZEN_PLAN.md
           test -s docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_RUN1_TIMESTAMP_MECHANICAL_REPAIR.md
+          test -s docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_RUN3_REPLAY_OPPONENT_MAP_MECHANICAL_REPAIR.md
           git merge-base --is-ancestor 3e01e2bf3d6307f33562c18bea7e25f686757608 HEAD
           git diff --name-only 3e01e2bf3d6307f33562c18bea7e25f686757608...HEAD | tee /tmp/diff.txt
-          if grep -Ev '^(docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_FROZEN_PLAN.md|docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_RUN1_TIMESTAMP_MECHANICAL_REPAIR.md|\.github/workflows/audit-ne-sea-pregame-current-stack-v1.yml)$' /tmp/diff.txt | grep -q .; then
+          if grep -Ev '^(docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_FROZEN_PLAN.md|docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_RUN1_TIMESTAMP_MECHANICAL_REPAIR.md|docs/audits/NE_SEA_PREGAME_CURRENT_STACK_COUNTERFACTUAL_V1_RUN3_REPLAY_OPPONENT_MAP_MECHANICAL_REPAIR.md|\.github/workflows/audit-ne-sea-pregame-current-stack-v1.yml)$' /tmp/diff.txt | grep -q .; then
             echo 'FATAL: diagnostic branch changed files outside frozen diagnostic boundary'
             exit 1
           fi
@@ -152,6 +153,7 @@ jobs:
           from scripts.utils.player_identity_v3 import player_name_key
           src=pd.read_csv('/tmp/paid/data/props_enriched.csv',low_memory=False)
           roles=pd.read_csv('data/roles_current_production_eligible_v1.csv',low_memory=False)
+          tw=pd.read_csv('data/team_week_map.csv',low_memory=False)
           active=set((str(t),player_name_key(p,strip_suffix=True)) for t,p in zip(roles.team,roles.player))
           x=src[src.player_team_abbr.astype(str).isin(['NE','SEA'])].copy()
           x['identity_base']=x['player'].map(lambda p: player_name_key(p,strip_suffix=True))
@@ -163,10 +165,30 @@ jobs:
           x.to_csv('outputs/props_raw.csv',index=False)
           assert set(x.team.astype(str))=={'NE','SEA'},set(x.team.astype(str))
           assert len(x)>0
-          payload={'source_run':34152868136,'source_artifact':10030344451,'odds_refetched':False,'rows':int(len(x)),'players':int(x.player.nunique()),'markets':sorted(x.market.astype(str).unique().tolist()),'teams':sorted(x.team.astype(str).unique().tolist())}
+
+          # Replay-only canonical opponent map derived from the exact staged rows.
+          om=x[['player','team','opponent','event_id']].drop_duplicates().copy()
+          om['player_clean_key']=om['player'].map(lambda p: player_name_key(p,strip_suffix=False))
+          om['season']=2026
+          om['week']=1
+          sched=tw[(pd.to_numeric(tw.season,errors='coerce').eq(2026))&(pd.to_numeric(tw.week,errors='coerce').eq(1))&tw.team.astype(str).isin(['NE','SEA'])][['team','kickoff_utc']].drop_duplicates('team')
+          om=om.merge(sched,on='team',how='left',validate='many_to_one')
+          ts=pd.to_datetime(om['kickoff_utc'],utc=True,errors='coerce')
+          om['game_timestamp']=(ts.astype('int64')//1_000_000_000).where(ts.notna(),pd.NA)
+          om['player_name_clean']=om['player']
+          om['player_canonical']=om['player']
+          om['team_abbr']=om['team']
+          om['opponent_abbr']=om['opponent']
+          assert set(om.team.astype(str))=={'NE','SEA'}
+          assert set(zip(om.team.astype(str),om.opponent.astype(str))).issubset({('NE','SEA'),('SEA','NE')})
+          om.to_csv('data/opponent_map_from_props.csv',index=False)
+          assert len(om)>0
+
+          payload={'source_run':34152868136,'source_artifact':10030344451,'odds_refetched':False,'rows':int(len(x)),'players':int(x.player.nunique()),'markets':sorted(x.market.astype(str).unique().tolist()),'teams':sorted(x.team.astype(str).unique().tolist()),'opponent_map_rows':int(len(om)),'opponent_map_source':'DETERMINISTIC_FROM_STAGED_HISTORICAL_NE_SEA_ROWS'}
           open('data/ne_sea_historical_offer_stage_audit.json','w').write(json.dumps(payload,indent=2,sort_keys=True)+'\n')
           print(json.dumps(payload,indent=2,sort_keys=True))
           PY
+          test -s data/opponent_map_from_props.csv
 
       - name: Run current promoted pricing stack at preserved NE-SEA lines
         run: |
