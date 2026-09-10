@@ -1,0 +1,62 @@
+name: Smoke Current Player Availability Sources V1
+
+on:
+  push:
+    branches:
+      - ops-current-player-availability-v1
+    paths:
+      - '.github/workflows/smoke-current-player-availability-sources-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install repository dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pandas requests beautifulsoup4 lxml
+      - name: Build timestamped Ourlads depth/status sidecar
+        run: |
+          PYTHONPATH=. python scripts/providers/ourlads_depth_status_v1.py
+          python - <<'PY'
+          import json,pandas as pd
+          s=json.load(open('data/roles_ourlads_status_v1.json'))
+          x=pd.read_csv('data/roles_ourlads_status_v1.csv')
+          assert s['complete'] is True, s
+          assert int(s['teams_with_rows'])==32, s
+          assert x['team'].nunique()==32
+          assert 'status' in x.columns and 'source_asof_utc' in x.columns and 'source_url' in x.columns
+          print('OURLADS_STATUS_SIDECAR_PASS', s)
+          PY
+      - name: Probe official NFL game-day inactives
+        run: |
+          PYTHONPATH=. python scripts/providers/nfl_official_inactives_v1.py
+          python - <<'PY'
+          import json,pandas as pd
+          s=json.load(open('data/official_inactives_v1_status.json'))
+          x=pd.read_csv('data/official_inactives_v1.csv')
+          assert 'endpoint_reachable' in s and 'payload_valid' in s
+          required={'team','player','listed_position','section_complete','source_url','source_asof_utc'}
+          assert required.issubset(x.columns), (required-set(x.columns), s)
+          print('OFFICIAL_INACTIVES_SOURCE_STATE', s)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: current-player-availability-source-smoke-v1
+          retention-days: 14
+          path: |
+            data/roles_ourlads_status_v1.csv
+            data/roles_ourlads_status_v1.json
+            data/official_inactives_v1.csv
+            data/official_inactives_v1_status.json
