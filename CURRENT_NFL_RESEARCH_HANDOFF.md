@@ -4,163 +4,140 @@
 **Protected production-code authority:** `bb76ba9eabb08e2f0875a9af49301c3877f4141f`  
 **Production stack unchanged:** QB M89/M90 + mean-neutral C2; WR M38 WR1 + WR-R15 WR2+; TE TE-R5P; RB rushing P3; RB receptions R26; RB receiving-yard tails R22; sportsbook downstream only.  
 **RB receiving-yard mean lane:** CLOSED at a defensible scientific frontier; no new mean integration authorized.  
-**Active lane:** current roster / late-week availability + role reconciliation / Full Slate integration certification.  
-**Canonical availability core:** `ops-current-player-availability-t75-v1`.  
-**Candidate Full Slate branch:** `ops-current-player-availability-full-slate-v1`.  
-**35-gate certification branch:** `ops-current-player-availability-35gate-cert-v1`.  
-**Production is NOT yet wired or promoted.**
+**Active lane:** current roster / late-week availability + current-role Full Slate integration certification.  
+**35-gate branch:** `ops-current-player-availability-35gate-cert-v1`.  
+**Production has NOT been promoted.**
 
-GitHub is canonical; chat memory is secondary. Preserve all prior handoff snapshots in Git history.
-
-## Non-negotiable rules
-
-- freeze questions/mechanics/gates before results;
-- preserve first valid results exactly;
-- preserve mechanical/integrity failures separately and repair only value-neutral defects;
-- no lowering gates, dropping losing seasons, post-hoc routing or retuning;
-- sportsbook remains downstream and cannot define football eligibility/role;
-- protect R26 receptions/opportunity and R22 RB receiving-tail authority unless separately authorized;
-- operational availability work must not alter historical research;
-- earlier frozen authority wins over later unacknowledged conflicts;
-- update this file at every material checkpoint.
+GitHub is canonical; chat memory is secondary. Preserve mechanical failures and first valid scientific/integration results. Never lower frozen gates, post-hoc route losing cohorts, allow sportsbook to define football, or mutate R26/R22/scientific model parameters without separately frozen authority.
 
 ## RB receiving-yard mean lane — CLOSED
 
-Final tested mean family R27D:
+Final R27D strict-prior YACOE residual result:
 - branch `research-rb-r27d-yacoe-residual-v1`
-- run `34436178615`, job `102741600329`
+- run/job `34436178615` / `102741600329`
 - artifact `10136250846`
 - digest `sha256:b975511dc54e961c7745e9d1422ac48be4f867c65d3733adfaeabe93af9951e6`
 - disposition `R27D_STRICT_PRIOR_YACOE_RESIDUAL_MIXED_OR_FAIL_NO_INTEGRATION`
-- 22/31 total gates; 4/13 scientific gates
-- vacancy RB1 B1 MAE `14.709395` -> C1 `14.710366`; 2023 RB1 `13.992139` -> `14.055947`; 3/6 seasons improved.
+- 22/31 total gates; 4/13 scientific gates; vacancy RB1 B1 MAE `14.709395` -> C1 `14.710366`; 2023 `13.992139` -> `14.055947`; only 3/6 seasons improved.
 
-No integration/retuning/router. Reopen only for genuinely new pregame information.
+No R27D integration/retuning/router. Reopen only for genuinely new pregame information.
 
-## Availability core authority
+## Availability authority
 
 Frozen Full Slate integration plan:
 - commit `91ee6aa3ad3813c7d285f6f3163368205937eb09`
 - blob `54eb4629c48062fcaef3153918b2069238584d0a`
-- 35 predeclared gates; all required before promotion.
+- exactly 35 predeclared gates; all required before promotion.
 
-Canonical T-75 semantics are frozen by first valid result Run `34437715931`, Job `102746163583`:
-- >75 min: `NOT_YET_REQUIRED` and eligible;
-- <=75 min with complete official pre-kickoff sections: `REQUIRED_AND_CERTIFIED`;
-- <=75 min missing/incomplete/invalid official sections: `REQUIRED_MISSING_FAIL_CLOSED` for that game only;
-- at/after kickoff: `KICKED_OFF_LOCKED`.
+Canonical T-75 first valid result: Run `34437715931`, Job `102746163583`:
+- >75 min `NOT_YET_REQUIRED` and eligible;
+- <=75 min with complete official pre-kickoff inactive sections `REQUIRED_AND_CERTIFIED`;
+- <=75 min missing/incomplete official sections `REQUIRED_MISSING_FAIL_CLOSED` for that game;
+- at/after kickoff `KICKED_OFF_LOCKED`.
 
-Locked core blobs:
-- Ourlads status sidecar `c115816ea8aa4ba7150a635c3115546d43f94b3c`
-- availability resolver `9a1b0a672db7854ff52764ad93e5fcd89f9cb0ea`
-- official NFL inactives adapter `0d67316b6d7b7b9aa9d3637a07da4cd2b171639e`
+Locked availability core blobs:
+- Ourlads sidecar `c115816ea8aa4ba7150a635c3115546d43f94b3c`
+- resolver `9a1b0a672db7854ff52764ad93e5fcd89f9cb0ea`
+- NFL official inactives `0d67316b6d7b7b9aa9d3637a07da4cd2b171639e`
 - T-75 validator `d67ae30ed6e837f62098671c499d05462fe9d837`
-- reconciled active roles `b2d05882cada048337f1f5f8b8db8ec7f9eef001`
-
-Current-role/timing seams:
-- `scripts/utils/current_roles_v1.py` `7540cc40e02546b4feb2cc503aa506aa613c44f3`
-- `scripts/run_player_form_current_roles_v1.py` `0a82649801794c560ccfd0ef368b7a340ec6f38f`
-- `scripts/run_rb_week1_current_roles_v1.py` `5874128aaa31dca9ed0a401f4dfa9197ff4c282e`
-- `scripts/build/build_production_eligible_active_roles_v1.py` `8be1e607f4d35359459aa2d888c4cfee12cd27c7`
-- `scripts/run_current_player_availability_candidate_prep_v1.py` `1b16c8052f079ba94423b21a755ce4107f60a311`
-- Week-1 TeamForm prior wrapper `240f62d018fa419567663cae3c96647483305361`
-- PlayerForm strict-prior publication fixture `ee3c88060a3d12b10ada01a0eff6e2e2c5b5d1d5`
-- candidate workflow `51362ee87a164824cc96dc186aeb9f1f66973f4a`.
-
-## Preserved Full Slate mechanical failures
-
-Run 1 — Week-1 TeamForm source selection:
-- run `34439714153`, job `102752015236`
-- artifact `10137497418`
-- digest `sha256:0f3f5195fce8bc6514804b411e0b312475a379cfeb722eb5f5280237f8ff50f2`
-- record: `docs/operations/CURRENT_PLAYER_AVAILABILITY_FULL_SLATE_RUN1_QB_CONTEXT_MECHANICAL_FAILURE.md`.
-
-Run 2 — PlayerForm history publication contract:
-- run `34443710690`, job `102763847787`
-- artifact `10138897760`
-- digest `sha256:165c0e431e4771eba05472b17d6680457fedac37d5769bfc5c0b478aad830b1f`
-- record: `docs/operations/CURRENT_PLAYER_AVAILABILITY_FULL_SLATE_RUN2_PLAYER_HISTORY_PUBLICATION_MECHANICAL_FAILURE.md`.
-
-Both were plumbing failures and received only value-neutral repairs; scientific model semantics were unchanged.
+- reconciled active roles `b2d05882cada048337f1f5f8b8db8ec7f9eef001`.
 
 ## First mechanically valid no-odds availability candidate — SUCCESS
 
-Candidate branch `ops-current-player-availability-full-slate-v1`, head `9800254f3ab208ab42501faac83a0d6e5fe3b93d`.
+Branch/head `ops-current-player-availability-full-slate-v1` / `9800254f3ab208ab42501faac83a0d6e5fe3b93d`.
 
-Run `34447900206`, Job `102776660124`:
+- run/job `34447900206` / `102776660124`
 - artifact `10140425929`
+- artifact name `current-player-availability-full-slate-candidate-v1`
 - digest `sha256:6b31ae40d648780673b7953b57323d509b302ea7a82fe99801b024ede2603f37`
-- conclusion `success`
-- availability rows `468`
-- definitive unavailable `1` (`TreVeyon Henderson`, NE, weekly injury report)
-- uncertain `1`; unknown `0`
-- production-eligible games `15`
-- withheld games `1` (`NE-SEA`, already kicked off)
-- production-eligible active-role rows `437`
-- eligible teams `30`
-- sportsbook inputs used for availability/opportunity `0`
+- 468 availability rows
+- 1 definitive unavailable (TreVeyon Henderson, NE), 1 uncertain, 0 unknown
+- 15 production-eligible games; NE-SEA withheld because already kicked off
+- 437 production-eligible active-role rows across 30 teams
+- sportsbook inputs to availability/opportunity `0`
 - disposition `CURRENT_PLAYER_AVAILABILITY_NO_ODDS_FULL_SLATE_CANDIDATE_COMPLETED`
 - production promoted `false`.
 
-This satisfies frozen gate 26 only; it is not the 35-gate integration result.
+This satisfies gate 26 only; it is not the 35-gate result.
 
-## Eligible-team downstream coverage seam — REGRESSION PASS
+Preserved candidate plumbing failures remain canonical:
+- Run1 `34439714153`, Job `102752015236`, Artifact `10137497418`, digest `sha256:0f3f5195fce8bc6514804b411e0b312475a379cfeb722eb5f5280237f8ff50f2` — Week1 TeamForm source selection.
+- Run2 `34443710690`, Job `102763847787`, Artifact `10138897760`, digest `sha256:165c0e431e4771eba05472b17d6680457fedac37d5769bfc5c0b478aad830b1f` — PlayerForm history publication contract.
 
-The valid 30-team candidate exposed two legacy current-coverage guards that assumed an untouched 32-team slate. They were frozen before implementation:
-- plan `docs/operations/CURRENT_PLAYER_AVAILABILITY_ELIGIBLE_TEAM_COVERAGE_SEAM_V1_FROZEN_PLAN.md`
+## Availability-aware current-team coverage seam
+
+Initial frozen seam for full-universe and R26:
 - plan commit `5a7b3c7d2cb1dc81fc442abf4b304f366965f1d9`
-- plan blob `d0a7f74cbc8a4fcb8aa46a0b8a0aaf4987c72006`.
-
-Frozen implementation uses a surgical, blob-locked CI/runtime transformation rather than an unreviewed rewrite of the two large protected source files:
-- helper `scripts/utils/eligible_team_set_v1.py` blob `77b591e431378ec984c51e8a032262e673d4c843`
-- transformer `scripts/operations/apply_current_availability_eligible_team_seam_v1.py` blob `b64ec5ccd59728121a250433e40e77e3e1013a05`
-- regression `scripts/operations/test_current_availability_eligible_team_seam_v1.py` blob `778753400f9f1caa6831f2a71e121a13c268356c`
-- implementation lock commit `7bccb4960ab0d2e538fd8c0e179ceedf4b1fb458`
-- implementation lock blob `ae77e8772ef30ae813b960196b6ebed219e3333b`
-- protected full-universe source blob `f8429ea5b6dd730f054460493facde4ab21b0998`
-- protected R26 source blob `0c7528a3ca9e750d3b9ef2f08ef9721949b3e7fc`.
-
-First seam regression:
-- branch/head `ops-current-player-availability-35gate-cert-v1` / `c4529c1dcb21f807b0e539db5bad53f68bdf4dfb`
-- Run `34453027002`
-- Job `102792905910`
-- Artifact `10142304020`
-- digest `sha256:071f791c916d5c17c655b62d6858ca2adfbfd276009878281898608c2d9d3cc0`
-- result record commit `30558db704f81b6336514024e3ed0c5c75291fcc`
+- helper blob `77b591e431378ec984c51e8a032262e673d4c843`
+- transformer blob `b64ec5ccd59728121a250433e40e77e3e1013a05`
+- protected full-universe source `f8429ea5b6dd730f054460493facde4ab21b0998`
+- protected R26 source `0c7528a3ca9e750d3b9ef2f08ef9721949b3e7fc`
+- regression Run `34453027002`, Job `102792905910`, Artifact `10142304020`, digest `sha256:071f791c916d5c17c655b62d6858ca2adfbfd276009878281898608c2d9d3cc0`
+- result commit `30558db704f81b6336514024e3ed0c5c75291fcc`
 - disposition `ELIGIBLE_TEAM_COVERAGE_SEAM_REGRESSION_PASS`.
 
-Frozen regression passed all prerequisites:
-1. no-availability mode still requires 32 teams;
-2. explicit availability mode accepts exactly the certified eligible set;
-3. missing eligible team rejected;
-4. extra withheld team rejected;
-5. transformation touched only the two declared downstream coverage-source files in CI;
-6. transformed full-universe and R26 modules compiled;
-7. no 35-gate result was produced.
+Semantics: legacy/no-explicit-availability mode still requires 32 teams; explicit `ACTIVE_ROLES_CSV` mode requires exactly the certified eligible team set. This changes coverage validation only, never model science.
 
-This removes the known 32-team plumbing blocker only. R26 assets/coefficients/vacancy set/CIN control/redistribution math, R22, M38, TE-R5P, WR-R15, QB C2 and sportsbook boundaries remain unchanged.
+## 35-gate certification implementation
 
-## Exact next action
+Frozen implementation components on `ops-current-player-availability-35gate-cert-v1`:
+- football-stack runner blob `dc60ab10bc18777d6b13cb5f81f285e8c248f3ab`
+- fixture builder blob `dbe9f41e4d175b503bf0cd8caf51c1dc8d0da95d`
+- gates 1-34 evaluator blob `3bc2bb390ab6762f1c20e775152812d3f8e9729e`
+- gate35 finalizer blob `a5302186eadb748863c70b175421d064885dde60`
+- workflow after Run1 repair blob `130ed21db8d23575a38e84f1cfe0cc865498f001`.
 
-1. Stay on `ops-current-player-availability-35gate-cert-v1`.
-2. Build a sportsbook-independent certification football universe from immutable Run `34447900206` / Artifact `10140425929`; do not regenerate the live roster/availability snapshot.
-3. Apply the locked eligible-team seam transformation in the certification workspace.
-4. Execute the real M38 finite entitlement -> TE-R5P -> WR-R15 -> R26 -> R22 football path on only the 30 certified eligible teams / 15 eligible games.
-5. Construct the already-frozen fixture candidate paths: RB1 OUT, QB1 inactive, WR/TE unavailable, including conservation checks.
-6. Complete the frozen 35-gate evaluator and result serializer.
-7. Lock exact evaluator/fixture/workflow blobs before the first 35-gate execution.
-8. Record the first valid integration disposition. Promotion is authorized only for exact `CURRENT_PLAYER_AVAILABILITY_FULL_SLATE_INTEGRATION_PASS_READY_FOR_PROMOTION` with 35/35 PASS.
-9. If 35/35 PASS, use a separately frozen production-promotion implementation and then run post-promotion Full Slate verification. Any other valid disposition leaves protected production unchanged.
-10. Update this handoff at every material commit/run/job/artifact/digest/disposition.
+The baseline certification consumes immutable candidate Artifact `10140425929`; it does NOT regenerate the live snapshot. It creates synthetic football-only identity/market-key lookup rows with NO book/line/odds/market probability and exercises the actual production football wrapper: M38 -> TE-R5P -> WR-R15 -> QB C2 -> R22 -> R26 -> outer P3 rush+receiving conservation. Fixtures run in isolated worktrees: RB1 OUT; QB1 inactive; WR2+/TE1 unavailable.
+
+## 35-gate Run1 — PRESERVED MECHANICAL FAILURE / NO DECISION
+
+Original lock head `eb7f37fa6e2a9019ed0ec8f3bbe6fe73be202699`.
+
+- run `34459655725`
+- job `102814178762`
+- failure before any gate 1-34 evaluation
+- exact exception: `RuntimeError: QB C2 starter authority must cover 32 teams, got rows=30`
+- disposition `MECHANICAL_FAILURE_NO_DECISION`
+- record `docs/operations/CURRENT_PLAYER_AVAILABILITY_35GATE_RUN1_MECHANICAL_FAILURE_RECORD.md`.
+
+Run1 had already passed frozen-blob/protected-model verification, immutable candidate digest verification, 30-team seam, all fixture construction, and M38/TE-R5P/WR-R15 baseline materialization/conservation. The failure was another legacy current-slate coverage guard in QB C2 starter-audit validation, not a QB model/starter-selection failure and not a frozen-gate result.
+
+### Frozen QB C2 minimum repair
+
+- repair plan commit `760fbcafec3df636b671b49c16a6d1d04c134162`
+- repair lock head `3825235af0442e7868f474e905ea11ad1214432e`
+- protected QB C2 source blob `7b677470b27b6776055c75c924a0ddf22d724a44`
+- QB coverage transformer blob `c7569c54cda779eb04bed7dbf2b22b9ec4fb526b`
+- dedicated regression Run `34460044387`, Job `102815456345` — SUCCESS.
+
+Regression proved legacy mode still requires exactly 32, explicit availability mode accepts exactly certified 30, and both missing/extra teams fail. The transformer changes only the final current-team coverage validation in `annotate_primary_qbs()`. Starter ranking/selection, official-authority priority, Ourlads fallback, C2 parameters/distributions and the existing 32-team state-context SOURCE integrity assertion remain unchanged.
+
+## CURRENT LIVE STATE — 35-gate Run2 in progress
+
+Certification was relocked after the minimum mechanical repair:
+- relock head `1d38953995842aa0236edda7124a79665d0b8628`
+- Run2 `34460227422`
+- Job `102816052394`
+- current status at this handoff update: `in_progress`.
+
+Run2 remains eligible to become the **first valid immutable 35-gate result** because Run1 evaluated zero gates. The 35 frozen gate definitions have not changed.
+
+### Exact next action
+
+1. Inspect Run `34460227422` / Job `102816052394` first.
+2. If it fails before `Evaluate frozen gates 1 through 34`, preserve as `MECHANICAL_FAILURE_NO_DECISION`, diagnose exact exception, freeze only the minimum value-neutral plumbing repair, regression-test it, relock, retry.
+3. If it reaches gate evaluation, the first valid gate disposition is immutable: any failed gate = `CURRENT_PLAYER_AVAILABILITY_FULL_SLATE_INTEGRATION_FAIL_NO_PROMOTION`; exact 35/35 = `CURRENT_PLAYER_AVAILABILITY_FULL_SLATE_INTEGRATION_PASS_READY_FOR_PROMOTION`.
+4. A 35/35 PASS does NOT itself mutate production. Freeze a separate promotion implementation, wire availability/current-role seams into production, then execute post-promotion Full Slate verification before declaring the lane complete.
+5. Update this handoff with exact run/job/artifact/digest/disposition at every material checkpoint.
 
 ## Remaining roadmap after availability
 
-1. Current roster / late-week role handling — ACTIVE.
+1. Finish current roster / late-week availability integration and production verification — ACTIVE.
 2. Grade sealed R26Q with exact locked R26S once authoritative Week1 outcomes exist.
-3. QB opportunity/efficiency: attempts/dropbacks/pass rate/YPA/sacks/scrambles; build on M89/M90.
-4. Selective unresolved WR/TE opportunity/efficiency/distribution; preserve M38/WR-R15 and TE-R5P.
+3. QB opportunity/efficiency: attempts/dropbacks/pass rate/YPA/sacks/scrambles, building on M89/M90.
+4. Selective unresolved WR/TE opportunity/efficiency/distribution while preserving M38/WR-R15 and TE-R5P.
 5. Shared QB↔receiver conservation.
 6. Unified game simulation.
 7. Anytime TD modeling.
 8. Game ML/spread/total from football simulation rather than sportsbook imitation.
-9. Final operational package/prospective grading.
+9. Final operational package and prospective grading.
