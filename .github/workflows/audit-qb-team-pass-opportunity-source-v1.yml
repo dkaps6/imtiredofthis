@@ -1,0 +1,58 @@
+name: QB Team Pass Opportunity Source Audit V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-qb-team-pass-opportunity-source-audit-v1
+    paths:
+      - ".github/workflows/audit-qb-team-pass-opportunity-source-v1.yml"
+      - "scripts/backtest/audit_qb_team_pass_opportunity_sources_v1.py"
+      - "docs/migrations/QB_TEAM_PASS_OPPORTUNITY_SOURCE_AUDIT_V1_PLAN.md"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy
+      - name: Compile frozen source auditor
+        run: python -m py_compile scripts/backtest/audit_qb_team_pass_opportunity_sources_v1.py
+      - name: Download immutable M89 target-key artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/m89
+          gh run download 33331073376 --repo "${GITHUB_REPOSITORY}" --name m89-qb-data-integrity-casebook-synthesis --dir evidence/m89
+      - name: Run frozen source/provenance audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests/qb_team_pass_opportunity_source_audit_v1
+          python scripts/backtest/audit_qb_team_pass_opportunity_sources_v1.py \
+            --m89-root evidence/m89 \
+            --out-dir data/backtests/qb_team_pass_opportunity_source_audit_v1
+      - name: Show source-audit result
+        if: always()
+        run: cat data/backtests/qb_team_pass_opportunity_source_audit_v1/qb_team_pass_opportunity_source_audit_result.json 2>/dev/null || true
+      - name: Upload source-audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-team-pass-opportunity-source-audit-v1
+          path: |
+            data/backtests/qb_team_pass_opportunity_source_audit_v1/*
+            docs/migrations/QB_TEAM_PASS_OPPORTUNITY_SOURCE_AUDIT_V1_PLAN.md
+          if-no-files-found: warn
+          retention-days: 30
