@@ -19,7 +19,7 @@ def test_incomplete_section_fails_closed():
     x,_=cert(sched(),off([('IND','',0,'2026-09-13T15:31:00Z')]),'2026-09-13T16:30:00Z'); assert state(x,'IND')=='REQUIRED_MISSING_FAIL_CLOSED'
 
 def test_early_window_cannot_certify_late_window():
-    x,_=cert(sched(),off([('IND','',1,'2026-09-13T15:31:00Z')]),'2026-09-13T19:00:00Z'); assert state(x,'IND')=='POST_KICKOFF_NOT_PRICEABLE'; assert state(x,'KC')=='NOT_YET_AVAILABLE'
+    x,_=cert(sched(),off([('IND','',1,'2026-09-13T15:31:00Z')]),'2026-09-13T19:00:00Z'); assert state(x,'IND')=='POST_KICKOFF_NOT_PRICEABLE'; assert state(x,'KC')=='REQUIRED_MISSING_FAIL_CLOSED'
 
 def test_postkickoff_not_priceable():
     x,_=cert(sched(),off([('IND','',1,'2026-09-13T15:31:00Z')]),'2026-09-13T17:01:00Z'); assert state(x,'IND')=='POST_KICKOFF_NOT_PRICEABLE' and price(x,'IND')==0
