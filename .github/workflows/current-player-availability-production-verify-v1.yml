@@ -15,8 +15,11 @@ permissions:
 env:
   PROMOTION_PLAN_BLOB: 2d350379377ae65b2fb094504624da0591f53f7e
   VERIFY_PLAN_BLOB: a304f4bcf977c421aef7b7eb1a960579f0c2150c
+  AUDIT_REPAIR_PLAN_BLOB: 9b7ffb85d6bfb0895abaca97d4d2642ae3a07288
   FULL_SLATE_BLOB: 41bacd4b756c32279169c80e0ff603a4780b7bee
   DYNAMIC_VERIFY_BLOB: 0a84913d850b44504271fba1985f053b2838b970
+  AUDIT_REPO_BLOB: c5a465892c7f9386a1c567e26622f6835e190aa6
+  READINESS_AUDIT_BLOB: d9c47ab0d784510722b8d8f879d53067c4de3aa0
   OURLADS_STATUS_BLOB: c115816ea8aa4ba7150a635c3115546d43f94b3c
   NFL_INACTIVES_BLOB: 0d67316b6d7b7b9aa9d3637a07da4cd2b171639e
   AVAILABILITY_RESOLVER_BLOB: 9a1b0a672db7854ff52764ad93e5fcd89f9cb0ea
@@ -58,8 +61,11 @@ jobs:
           set -euo pipefail
           test "$(git hash-object docs/operations/CURRENT_PLAYER_AVAILABILITY_PRODUCTION_PROMOTION_V1_FROZEN_PLAN.md)" = "$PROMOTION_PLAN_BLOB"
           test "$(git hash-object docs/operations/CURRENT_PLAYER_AVAILABILITY_PRODUCTION_VERIFY_V1_FROZEN_PLAN.md)" = "$VERIFY_PLAN_BLOB"
+          test "$(git hash-object docs/operations/CURRENT_PLAYER_AVAILABILITY_PRODUCTION_BRANCH_RUN1_AUDIT_COMPAT_MECHANICAL_REPAIR_V1.md)" = "$AUDIT_REPAIR_PLAN_BLOB"
           test "$(git hash-object .github/workflows/full-slate.yml)" = "$FULL_SLATE_BLOB"
           test "$(git hash-object scripts/operations/run_current_availability_production_verify_v1.py)" = "$DYNAMIC_VERIFY_BLOB"
+          test "$(git hash-object scripts/utils/audit_repo.py)" = "$AUDIT_REPO_BLOB"
+          test "$(git hash-object scripts/audit_2026_production_readiness.py)" = "$READINESS_AUDIT_BLOB"
           test "$(git hash-object scripts/providers/ourlads_depth_status_v1.py)" = "$OURLADS_STATUS_BLOB"
           test "$(git hash-object scripts/providers/nfl_official_inactives_v1.py)" = "$NFL_INACTIVES_BLOB"
           test "$(git hash-object scripts/build/build_current_player_availability_v1.py)" = "$AVAILABILITY_RESOLVER_BLOB"
@@ -76,7 +82,7 @@ jobs:
           test "$(git hash-object scripts/operations/apply_current_availability_qb_c2_primary_team_seam_v1.py)" = "$QB_PRIMARY_SEAM_BLOB"
           test "$(git hash-object scripts/operations/run_current_availability_football_stack_cert_v1.py)" = "$CERT_RUNNER_BLOB"
           test "$(gh api repos/${GITHUB_REPOSITORY}/actions/artifacts/${FINAL_35_ARTIFACT_ID} --jq .digest)" = "$FINAL_35_DIGEST"
-          python -m py_compile scripts/operations/run_current_availability_production_verify_v1.py
+          python -m py_compile scripts/operations/run_current_availability_production_verify_v1.py scripts/utils/audit_repo.py scripts/audit_2026_production_readiness.py
           git diff --quiet bb76ba9eabb08e2f0875a9af49301c3877f4141f HEAD -- scripts/modeling data/models model docs/research || { echo 'FATAL: protected science/artifacts/history changed'; exit 1; }
           echo PRODUCTION_IMPLEMENTATION_LOCK_BOUNDARY_PASS
       - name: Dispatch canonical branch Full Slate without odds
