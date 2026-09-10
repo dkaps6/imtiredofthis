@@ -1,0 +1,129 @@
+name: RB R27C RB1 2023 Forensic V1
+
+on:
+  push:
+    branches:
+      - research-rb-r27c-rb1-2023-forensic-v1
+    paths:
+      - 'docs/research/RB_R27C_RB1_2023_FORENSIC_V1_IMPLEMENTATION_LOCK.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PRODUCTION_BASE_SHA: bb76ba9eabb08e2f0875a9af49301c3877f4141f
+  R27C_PLAN_BLOB: dc1883c40dd194c723453d76e1564de0c204a8e9
+  R27C_SCRIPT_BLOB: b8a97f82e31725e7673957f0c999a2152d4ea993
+  R27B_PARENT_RUN: '34428917229'
+  R27B_PARENT_ARTIFACT_ID: '10134023092'
+  R27B_PARENT_ARTIFACT_NAME: rb-r27b-v2-novel-efficiency-context
+  R27B_PARENT_DIGEST: sha256:1df1a14c9900b890fe86e04269849dc90d76fc03a9215ad8612c1820dee5341f
+
+jobs:
+  forensic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install diagnostic dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy pandas
+
+      - name: Verify frozen plan, diagnostic code and protected production boundary
+        run: |
+          set -euo pipefail
+          test -s docs/research/RB_R27C_RB1_2023_FORENSIC_V1_FROZEN_PLAN.md
+          test -s docs/research/RB_R27C_RB1_2023_FORENSIC_V1_IMPLEMENTATION_LOCK.md
+          test -s scripts/backtest/forensic_rb_r27c_rb1_2023_v1.py
+          test "$(git hash-object docs/research/RB_R27C_RB1_2023_FORENSIC_V1_FROZEN_PLAN.md)" = "$R27C_PLAN_BLOB"
+          test "$(git hash-object scripts/backtest/forensic_rb_r27c_rb1_2023_v1.py)" = "$R27C_SCRIPT_BLOB"
+          python -m py_compile scripts/backtest/forensic_rb_r27c_rb1_2023_v1.py
+          git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
+            scripts/modeling \
+            scripts/run_rb_week1_no_odds.py \
+            scripts/run_pricing_with_full_roster_universe_v3.py \
+            scripts/run_pricing_with_full_roster_universe_v3_core.py \
+            scripts/run_pricing_with_full_roster_universe_v4_production.py \
+            scripts/run_pricing_with_full_roster_universe_v5_production.py \
+            scripts/simulation_v2.py \
+            scripts/simulation_c2_qb_candidate.py \
+            data/models \
+            model \
+            .github/workflows/full-slate.yml
+          sha256sum docs/research/RB_R27C_RB1_2023_FORENSIC_V1_FROZEN_PLAN.md > r27c_plan.sha256
+          sha256sum docs/research/RB_R27C_RB1_2023_FORENSIC_V1_IMPLEMENTATION_LOCK.md > r27c_lock.sha256
+          sha256sum scripts/backtest/forensic_rb_r27c_rb1_2023_v1.py > r27c_code.sha256
+          echo R27C_FROZEN_DIAGNOSTIC_AND_PRODUCTION_BOUNDARY_PASS
+
+      - name: Download and verify exact immutable R27B V2 evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          OBSERVED_DIGEST="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${R27B_PARENT_ARTIFACT_ID}" --jq .digest)"
+          test "$OBSERVED_DIGEST" = "$R27B_PARENT_DIGEST"
+          rm -rf data/r27c_parent
+          mkdir -p data/r27c_parent
+          gh run download "$R27B_PARENT_RUN" --repo "$GITHUB_REPOSITORY" --name "$R27B_PARENT_ARTIFACT_NAME" --dir data/r27c_parent
+          test -s data/r27c_parent/data/backtests/r27b_v2_final/r27b_v2_all_predictions.csv
+          test -s data/r27c_parent/data/backtests/r27b_v2_final/r27b_v2_disposition.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('data/r27c_parent/data/backtests/r27b_v2_final/r27b_v2_disposition.json')
+          d=json.loads(p.read_text())
+          assert d['disposition']=='R27B_V2_NOVEL_EFFICIENCY_CONTEXT_MIXED_OR_FAIL_NO_INTEGRATION', d
+          assert d['gate_count']==31 and d['gate_pass_count']==24, d
+          assert d['integrity_gates_pass'] is True, d
+          print('R27C_EXACT_R27B_V2_PARENT_PASS')
+          PY
+
+      - name: Materialize frozen forensic evidence only
+        run: |
+          rm -rf data/backtests/r27c_forensic_v1
+          python scripts/backtest/forensic_rb_r27c_rb1_2023_v1.py \
+            --predictions data/r27c_parent/data/backtests/r27b_v2_final/r27b_v2_all_predictions.csv \
+            --out-dir data/backtests/r27c_forensic_v1
+
+      - name: Assert forensic integrity and show key evidence
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('data/backtests/r27c_forensic_v1/r27c_forensic_summary.json').read_text())
+          assert d['integrity_pass'] is True, d
+          assert d['diagnostic_only'] is True
+          assert d['new_model_fit'] is False
+          assert d['new_candidate_created'] is False
+          assert d['production_changed'] is False
+          assert d['r26_changed'] is False
+          assert d['r22_changed'] is False
+          assert d['sportsbook_inputs']==0
+          print('R27C_FORENSIC_INTEGRITY_PASS')
+          print('machine_default_disposition=',d['disposition'])
+          PY
+          cat data/backtests/r27c_forensic_v1/r27c_cohort_metrics.csv
+          cat data/backtests/r27c_forensic_v1/r27c_2023_distribution.csv
+          cat data/backtests/r27c_forensic_v1/r27c_30plus_crossings.csv
+          cat data/backtests/r27c_forensic_v1/r27c_ablation_metrics.csv
+
+      - name: Upload immutable R27C forensic evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r27c-rb1-2023-forensic-v1
+          retention-days: 90
+          path: |
+            r27c_plan.sha256
+            r27c_lock.sha256
+            r27c_code.sha256
+            data/backtests/r27c_forensic_v1/*
