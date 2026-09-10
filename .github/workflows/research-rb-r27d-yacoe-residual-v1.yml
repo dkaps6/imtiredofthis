@@ -1,0 +1,105 @@
+name: RB R27D Strict Prior YACOE Residual V1
+
+on:
+  push:
+    branches:
+      - research-rb-r27d-yacoe-residual-v1
+    paths:
+      - 'docs/research/RB_R27D_STRICT_PRIOR_YACOE_RESIDUAL_V1_IMPLEMENTATION_LOCK.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PRODUCTION_BASE_SHA: bb76ba9eabb08e2f0875a9af49301c3877f4141f
+  PLAN_BLOB: d0c2b0ff2de154e52fa21fb9ce19b739039633f3
+  BUILDER_BLOB: 1a1f379a66ba016afedede24a3880348d89a0351
+  ADAPTER_BLOB: ed021ce01201920072e70d66a4b07af00c8e0bc9
+  EVALUATOR_BLOB: f34ef4069910d17cae9faf313f58a170c6b4b7c4
+  PARENT_RUN: '34428917229'
+  PARENT_ARTIFACT_ID: '10134023092'
+  PARENT_ARTIFACT_NAME: rb-r27b-v2-novel-efficiency-context
+  PARENT_DIGEST: sha256:1df1a14c9900b890fe86e04269849dc90d76fc03a9215ad8612c1820dee5341f
+
+jobs:
+  scientific:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scikit-learn
+      - name: Verify frozen implementation and protected production boundary
+        run: |
+          set -euo pipefail
+          test "$(git hash-object docs/research/RB_R27D_STRICT_PRIOR_YACOE_RESIDUAL_V1_FROZEN_PLAN.md)" = "$PLAN_BLOB"
+          test "$(git hash-object scripts/backtest/build_rb_r27d_yacoe_dataset_v1.py)" = "$BUILDER_BLOB"
+          test "$(git hash-object scripts/backtest/prepare_rb_r27d_parent_v1.py)" = "$ADAPTER_BLOB"
+          test "$(git hash-object scripts/backtest/run_rb_r27d_yacoe_residual_v1.py)" = "$EVALUATOR_BLOB"
+          python -m py_compile scripts/backtest/build_rb_r27d_yacoe_dataset_v1.py scripts/backtest/prepare_rb_r27d_parent_v1.py scripts/backtest/run_rb_r27d_yacoe_residual_v1.py
+          git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
+            scripts/modeling scripts/run_rb_week1_no_odds.py scripts/run_pricing_with_full_roster_universe_v3.py \
+            scripts/run_pricing_with_full_roster_universe_v3_core.py scripts/run_pricing_with_full_roster_universe_v4_production.py \
+            scripts/run_pricing_with_full_roster_universe_v5_production.py scripts/simulation_v2.py scripts/simulation_c2_qb_candidate.py \
+            data/models model .github/workflows/full-slate.yml
+          echo R27D_FROZEN_IMPLEMENTATION_AND_PRODUCTION_BOUNDARY_PASS
+      - name: Verify and stage exact immutable V2 parent
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          D="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${PARENT_ARTIFACT_ID}" --jq .digest)"
+          test "$D" = "$PARENT_DIGEST"
+          rm -rf data/r27d_parent && mkdir -p data/r27d_parent
+          gh run download "$PARENT_RUN" --repo "$GITHUB_REPOSITORY" --name "$PARENT_ARTIFACT_NAME" --dir data/r27d_parent
+          test -s data/r27d_parent/data/backtests/r27b_v2_final/r27b_v2_all_predictions.csv
+          echo R27D_EXACT_PARENT_PASS
+      - name: Normalize parent contract without changing values
+        run: |
+          PYTHONPATH=. python scripts/backtest/prepare_rb_r27d_parent_v1.py \
+            --input data/r27d_parent/data/backtests/r27b_v2_final/r27b_v2_all_predictions.csv \
+            --output data/r27d_parent_normalized.csv
+      - name: Build strict-prior xYAC/YACOE training and evaluation features
+        run: |
+          rm -rf data/backtests/r27d_dataset
+          PYTHONPATH=. python scripts/backtest/build_rb_r27d_yacoe_dataset_v1.py \
+            --parent-predictions data/r27d_parent_normalized.csv \
+            --out-dir data/backtests/r27d_dataset
+      - name: Execute frozen first R27D scientific candidate
+        run: |
+          rm -rf data/backtests/r27d_yacoe_residual_v1
+          PYTHONPATH=. python scripts/backtest/run_rb_r27d_yacoe_residual_v1.py \
+            --historical data/backtests/r27d_dataset/r27d_historical_yacoe_training_rows.csv \
+            --parent data/backtests/r27d_dataset/r27d_parent_rows_with_strict_prior_features.csv \
+            --out-dir data/backtests/r27d_yacoe_residual_v1
+      - name: Assert result integrity and display frozen scorecard
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('data/backtests/r27d_yacoe_residual_v1/r27d_summary.json').read_text())
+          assert d['integrity_pass'] is True, d
+          assert d['sportsbook_inputs_used']==0
+          assert d['production_changed'] is False and d['r22_changed'] is False and d['r26_changed'] is False
+          print(json.dumps(d,indent=2,sort_keys=True))
+          PY
+          cat data/backtests/r27d_yacoe_residual_v1/r27d_gates.csv
+          cat data/backtests/r27d_yacoe_residual_v1/r27d_season_rb1.csv
+      - name: Upload immutable first R27D result
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-r27d-strict-prior-yacoe-residual-v1
+          retention-days: 90
+          path: |
+            data/backtests/r27d_dataset/*
+            data/backtests/r27d_yacoe_residual_v1/*
