@@ -36,25 +36,43 @@ def _set_seasons_arg(args, kwargs, season: int):
 def _week1_prior_guard(active_season: int, prior_season: int):
     week = int(resolve_week(season=active_season))
     if week != 1:
-        raise RuntimeError(f"Week-1 prior wrapper is only valid for target week 1; got week={week}")
+        raise RuntimeError(
+            f"Week-1 prior wrapper is only valid for target week 1; got week={week}"
+        )
+
     nflv = base.make_team_form.NFLV
     if not hasattr(nflv, "load_pbp"):
         raise RuntimeError("TeamForm nflverse loader has no load_pbp")
     original = nflv.load_pbp
+
     def prior_only_load_pbp(*args, **kwargs):
         p_args, p_kwargs = _set_seasons_arg(args, kwargs, int(prior_season))
         return original(*p_args, **p_kwargs)
+
     nflv.load_pbp = prior_only_load_pbp
-    print(f"[team_form_week1_prior] target week=1; forcing declared prior-season PBP {prior_season} for active season {active_season}")
-    return {"pbp_feature_season": int(prior_season),"used_prior": True,"fallback_reason": "target_week_1_has_no_legal_current_season_pre_target_games"}
+    print(
+        f"[team_form_week1_prior] target week=1; forcing declared prior-season "
+        f"PBP {prior_season} for active season {active_season}"
+    )
+    return {
+        "pbp_feature_season": int(prior_season),
+        "used_prior": True,
+        "fallback_reason": "target_week_1_has_no_legal_current_season_pre_target_games",
+    }
 
 
 def main() -> None:
-    season = int(resolve_season()); prior = int(resolve_prior_season()); week = int(resolve_week(season=season))
-    if week != 1: raise RuntimeError(f"refusing Week-1 wrapper outside week 1: week={week}")
-    if prior >= season: raise RuntimeError(f"invalid prior season: prior={prior} active={season}")
+    season = int(resolve_season())
+    prior = int(resolve_prior_season())
+    week = int(resolve_week(season=season))
+    if week != 1:
+        raise RuntimeError(f"refusing Week-1 wrapper outside week 1: week={week}")
+    if prior >= season:
+        raise RuntimeError(f"invalid prior season: prior={prior} active={season}")
+
     base._install_pbp_season_guard = _week1_prior_guard
     base.main()
+
 
 if __name__ == "__main__":
     main()
