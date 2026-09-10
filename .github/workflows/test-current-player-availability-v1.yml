@@ -1,0 +1,40 @@
+name: Test Current Player Availability V1
+
+on:
+  push:
+    branches:
+      - ops-current-player-availability-v1
+    paths:
+      - 'scripts/build/build_current_player_availability_v1.py'
+      - 'scripts/providers/ourlads_depth_status_v1.py'
+      - 'scripts/providers/nfl_official_inactives_v1.py'
+      - 'tests/test_current_player_availability_v1.py'
+      - '.github/workflows/test-current-player-availability-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fixtures:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install fixture dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas pytest requests beautifulsoup4 lxml
+      - name: Compile implementation
+        run: |
+          python -m py_compile scripts/build/build_current_player_availability_v1.py scripts/providers/ourlads_depth_status_v1.py scripts/providers/nfl_official_inactives_v1.py
+      - name: Run frozen availability fixtures
+        run: |
+          PYTHONPATH=. pytest -q tests/test_current_player_availability_v1.py
+      - name: Assert production remains unwired
+        run: |
+          set -euo pipefail
+          git diff --quiet 99d0ae6f6e0c4d60458a919096ce5cec1dfe695e HEAD -- .github/workflows/full-slate.yml scripts/run_rb_week1_no_odds.py scripts/modeling/simulation_rules.py scripts/modeling/context_bridge.py scripts/artifact_contracts.py
+          echo AVAILABILITY_V1_FIXTURES_ONLY_PRODUCTION_UNWIRED_PASS
