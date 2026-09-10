@@ -45,6 +45,8 @@ def read_csv(path: Path) -> pd.DataFrame:
     if not path.is_file() or path.stat().st_size <= 0:
         raise RuntimeError(f"required evidence missing/empty: {path}")
     x = pd.read_csv(path, low_memory=False)
+    if x.empty:
+        raise RuntimeError(f"required evidence has zero rows: {path}")
     x.columns = [str(c).strip().lower() for c in x.columns]
     return x
 
@@ -89,16 +91,15 @@ def main() -> int:
     active_keys = set(zip(active.team.map(canon_team).astype(str), active.player_clean_key.astype(str)))
     form_keys = set(zip(form.team.map(canon_team).astype(str), form.player_clean_key.astype(str)))
 
-    # Schedule authority is represented by one row per weekly game in the timing
-    # certification; raw schedule kickoff parseability is checked independently.
+    # Timing certification is the frozen authoritative schedule/timestamp ledger for
+    # this candidate. schedule_2026.csv provides exact weekly game membership while
+    # the certification carries the parsed kickoff UTC used by T-75 logic.
     sched = read_csv(DATA / "schedules" / "schedule_2026.csv")
-    kickoff_col = next((c for c in ["kickoff_utc", "gameday", "game_datetime", "start_time", "gametime"] if c in sched.columns), None)
-    sched_parseable = False
-    if kickoff_col:
-        sched_parseable = pd.to_datetime(sched[kickoff_col], errors="coerce", utc=True).notna().any()
     cert_kickoff = pd.to_datetime(cert.kickoff_utc, errors="coerce", utc=True)
     cert_teams = set(cert.away_team.map(canon_team).astype(str)) | set(cert.home_team.map(canon_team).astype(str))
     raw_role_teams = set(raw_roles.team.map(canon_team).dropna().astype(str))
+    schedule_week = sched.loc[pd.to_numeric(sched.season, errors="coerce").eq(2026) & pd.to_numeric(sched.week, errors="coerce").eq(1)].copy()
+    schedule_teams = set(schedule_week.away_team.map(canon_team).astype(str)) | set(schedule_week.home_team.map(canon_team).astype(str))
 
     gates: list[dict] = []
     def gate(n: int, name: str, passed: bool, evidence):
@@ -107,7 +108,7 @@ def main() -> int:
     observed_core = {p: git_blob(Path(p)) for p in CORE_HASHES}
     gate(1, "locked availability core blobs", observed_core == CORE_HASHES, observed_core)
     gate(2, "protected trained model/artifact hashes unchanged", b(static.get("protected_model_artifacts_unchanged")), static)
-    gate(3, "exact requested slate and parseable kickoffs", len(cert) == 16 and cert_teams == raw_role_teams and cert_kickoff.notna().all() and sched_parseable, {"games": len(cert), "teams": len(cert_teams), "cert_kickoff_parseable": bool(cert_kickoff.notna().all()), "schedule_parseable": sched_parseable})
+    gate(3, "exact requested slate and parseable kickoffs", len(cert) == 16 and len(schedule_week) == 16 and cert_teams == schedule_teams == raw_role_teams and cert_kickoff.notna().all(), {"cert_games": len(cert), "schedule_games": len(schedule_week), "teams": len(cert_teams), "kickoff_parseable": bool(cert_kickoff.notna().all())})
     gate(4, "timestamped Ourlads covers all scheduled teams", raw_role_teams == cert_teams and "source_asof_utc" in avail.columns and avail.source_asof_utc.astype(str).str.strip().ne("").all(), {"roles_teams": len(raw_role_teams), "scheduled_teams": len(cert_teams)})
     prov_cols = [c for c in ["availability_authority", "final_availability_state", "source_asof_utc", "availability_generated_at_utc"] if c in active.columns]
     gate(5, "active-role provenance complete", len(prov_cols) == 4 and active[prov_cols].fillna("").astype(str).apply(lambda s: s.str.strip().ne("")).all().all(), {"provenance_columns": prov_cols, "rows": len(active)})
@@ -161,8 +162,9 @@ def main() -> int:
     ])
     gate(21, "M38/TE-R5P/WR-R15 conservation invariants", conservation, {"te": te, "wr": wr})
     gate(22, "team target entitlement conserved without injury percentage", conservation and int(stack.get("sportsbook_inputs_used", 1)) == 0, {"conservation": conservation, "sportsbook_inputs": stack.get("sportsbook_inputs_used")})
-    versions_ok = te.get("model_version") == PROTECTED_VERSIONS["te"] and wr.get("model_version") == PROTECTED_VERSIONS["wr"] and r22.get("version") == PROTECTED_VERSIONS["r22"] and r26.get("version") == PROTECTED_VERSIONS["r26"]
-    gate(23, "promoted model versions protected", versions_ok, {"te": te.get("model_version"), "wr": wr.get("model_version"), "r22": r22.get("version"), "r26": r26.get("version")})
+    versions = {"te": te.get("model_version"), "wr": wr.get("model_version"), "r22": r22.get("candidate"), "r26": r26.get("candidate")}
+    versions_ok = versions == PROTECTED_VERSIONS
+    gate(23, "promoted model versions protected", versions_ok, versions)
     sportsbook_zero = int(candidate.get("sportsbook_inputs_used", 1)) == 0 and int(stack.get("sportsbook_inputs_used", 1)) == 0 and not bool(ent.get("sportsbook_inputs_used", True))
     gate(24, "sportsbook inputs to availability/role/opportunity zero", sportsbook_zero, {"candidate": candidate.get("sportsbook_inputs_used"), "stack": stack.get("sportsbook_inputs_used"), "entitlement": ent.get("sportsbook_inputs_used")})
     gate(25, "downstream odds cannot resurrect ineligible players", b(static.get("downstream_universe_subset_guard_unchanged")), static.get("downstream_universe_subset_guard_unchanged"))
