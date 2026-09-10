@@ -1,0 +1,59 @@
+name: QB Pass Rate Designed Run Source Audit V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-qb-pass-rate-designed-run-source-audit-v1
+    paths:
+      - ".github/workflows/audit-qb-pass-rate-designed-run-source-v1.yml"
+      - "scripts/backtest/audit_qb_pass_rate_designed_run_source_v1.py"
+      - "docs/migrations/QB_PASS_RATE_DESIGNED_RUN_SOURCE_AUDIT_V1_PLAN.md"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy beautifulsoup4 lxml
+      - name: Compile frozen auditor
+        run: python -m py_compile scripts/backtest/audit_qb_pass_rate_designed_run_source_v1.py
+      - name: Download immutable M89 key source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/m89
+          gh run download 33331073376 --repo "${GITHUB_REPOSITORY}" --name m89-qb-data-integrity-casebook-synthesis --dir evidence/m89
+      - name: Run frozen source/architecture audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests/qb_pass_rate_designed_run_source_audit_v1
+          python scripts/backtest/audit_qb_pass_rate_designed_run_source_v1.py \
+            --m89-root evidence/m89 \
+            --repo-root . \
+            --out-dir data/backtests/qb_pass_rate_designed_run_source_audit_v1
+      - name: Show result
+        if: always()
+        run: cat data/backtests/qb_pass_rate_designed_run_source_audit_v1/qb_designed_run_source_result.json 2>/dev/null || true
+      - name: Upload source evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-pass-rate-designed-run-source-v1
+          path: |
+            data/backtests/qb_pass_rate_designed_run_source_audit_v1/*
+            docs/migrations/QB_PASS_RATE_DESIGNED_RUN_SOURCE_AUDIT_V1_PLAN.md
+          if-no-files-found: warn
+          retention-days: 30
