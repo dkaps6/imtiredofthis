@@ -42,13 +42,23 @@ def main() -> int:
     run("scripts/build/build_reconciled_active_roles_v1.py")
     run("scripts/build/build_production_eligible_active_roles_v1.py")
 
-    required = [Path("data/roles_ourlads_status_v1.csv"),Path("data/official_inactives_v1.csv"),Path("data/current_player_availability_game_certification.csv"),Path("data/current_player_availability.csv"),Path("data/roles_ourlads_active_v1.csv"),Path("data/roles_current_production_eligible_v1.csv")]
+    required = [
+        Path("data/roles_ourlads_status_v1.csv"),
+        Path("data/official_inactives_v1.csv"),
+        Path("data/current_player_availability_game_certification.csv"),
+        Path("data/current_player_availability.csv"),
+        Path("data/roles_ourlads_active_v1.csv"),
+        Path("data/roles_current_production_eligible_v1.csv"),
+    ]
     missing = [str(p) for p in required if not p.exists() or p.stat().st_size <= 0]
-    if missing: raise RuntimeError(f"availability candidate prep missing artifacts: {missing}")
+    if missing:
+        raise RuntimeError(f"availability candidate prep missing artifacts: {missing}")
     status = json.loads(Path("data/roles_current_production_eligible_v1_status.json").read_text(encoding="utf-8"))
-    if int(status.get("sportsbook_inputs_used", 1)) != 0: raise RuntimeError("availability candidate prep reports sportsbook input")
+    if int(status.get("sportsbook_inputs_used", 1)) != 0:
+        raise RuntimeError("availability candidate prep reports sportsbook input")
     print(json.dumps({"status":"AVAILABILITY_CANDIDATE_PREP_COMPLETE","season":a.season,"week":week,**status}, indent=2, sort_keys=True))
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
