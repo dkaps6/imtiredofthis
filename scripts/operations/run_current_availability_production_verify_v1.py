@@ -73,7 +73,7 @@ def main()->int:
     if not all(checks.values()): raise RuntimeError(f'entitlement conservation failed: {checks}')
     if qb.get('disposition')!='QB_C2_PRODUCTION_DISTRIBUTION_INTEGRATION_PASS': raise RuntimeError(f'QB C2 integration failure: {qb}')
     if int(qb.get('sportsbook_inputs_to_selector',0))!=0 or int(qb.get('sportsbook_inputs_to_starter_selection',0))!=0 or int(qb.get('sportsbook_inputs_to_c2_generation',0))!=0: raise RuntimeError('QB C2 sportsbook leakage')
-    if r22.get('disposition') not in {'RB_R22_PRODUCTION_TAIL_INTEGRATION_PASS','R22_PRODUCTION_TAIL_INTEGRATION_PASS'}: raise RuntimeError(f'R22 disposition unexpected: {r22.get("disposition")}')
+    if r22.get('disposition') not in {'RB_R22_PRODUCTION_TAIL_INTEGRATION_PASS','R22_PRODUCTION_TAIL_INTEGRATION_PASS','RB_R22_WEEK1_RECEIVING_TAIL_PRODUCTION_ADAPTER_PASS'}: raise RuntimeError(f'R22 disposition unexpected: {r22.get("disposition")}')
     if float(r22.get('max_mean_delta',0.0))>1e-10: raise RuntimeError(f'R22 mean drift: {r22.get("max_mean_delta")}')
     if int(r26.get('sportsbook_inputs_used',r26.get('sportsbook_inputs_to_r26_football',0)))!=0: raise RuntimeError('R26 sportsbook leakage')
     if p3.get('disposition')!='RB_RUSH_REC_DISTRIBUTION_CONSERVED_WITH_PROMOTED_P3': raise RuntimeError(f'P3 conservation failure: {p3}')
