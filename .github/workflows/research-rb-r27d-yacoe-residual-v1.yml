@@ -15,7 +15,7 @@ permissions:
 env:
   PRODUCTION_BASE_SHA: bb76ba9eabb08e2f0875a9af49301c3877f4141f
   PLAN_BLOB: d0c2b0ff2de154e52fa21fb9ce19b739039633f3
-  BUILDER_BLOB: 1a1f379a66ba016afedede24a3880348d89a0351
+  BUILDER_BLOB: 2465ae781b55a33ba44098c9b3a3d99f9cf47e01
   ADAPTER_BLOB: ed021ce01201920072e70d66a4b07af00c8e0bc9
   EVALUATOR_BLOB: f34ef4069910d17cae9faf313f58a170c6b4b7c4
   PARENT_RUN: '34428917229'
@@ -47,11 +47,7 @@ jobs:
           test "$(git hash-object scripts/backtest/prepare_rb_r27d_parent_v1.py)" = "$ADAPTER_BLOB"
           test "$(git hash-object scripts/backtest/run_rb_r27d_yacoe_residual_v1.py)" = "$EVALUATOR_BLOB"
           python -m py_compile scripts/backtest/build_rb_r27d_yacoe_dataset_v1.py scripts/backtest/prepare_rb_r27d_parent_v1.py scripts/backtest/run_rb_r27d_yacoe_residual_v1.py
-          git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- \
-            scripts/modeling scripts/run_rb_week1_no_odds.py scripts/run_pricing_with_full_roster_universe_v3.py \
-            scripts/run_pricing_with_full_roster_universe_v3_core.py scripts/run_pricing_with_full_roster_universe_v4_production.py \
-            scripts/run_pricing_with_full_roster_universe_v5_production.py scripts/simulation_v2.py scripts/simulation_c2_qb_candidate.py \
-            data/models model .github/workflows/full-slate.yml
+          git diff --quiet "$PRODUCTION_BASE_SHA" HEAD -- scripts/modeling scripts/run_rb_week1_no_odds.py scripts/run_pricing_with_full_roster_universe_v3.py scripts/run_pricing_with_full_roster_universe_v3_core.py scripts/run_pricing_with_full_roster_universe_v4_production.py scripts/run_pricing_with_full_roster_universe_v5_production.py scripts/simulation_v2.py scripts/simulation_c2_qb_candidate.py data/models model .github/workflows/full-slate.yml
           echo R27D_FROZEN_IMPLEMENTATION_AND_PRODUCTION_BOUNDARY_PASS
       - name: Verify and stage exact immutable V2 parent
         env:
@@ -66,22 +62,15 @@ jobs:
           echo R27D_EXACT_PARENT_PASS
       - name: Normalize parent contract without changing values
         run: |
-          PYTHONPATH=. python scripts/backtest/prepare_rb_r27d_parent_v1.py \
-            --input data/r27d_parent/data/backtests/r27b_v2_final/r27b_v2_all_predictions.csv \
-            --output data/r27d_parent_normalized.csv
+          PYTHONPATH=. python scripts/backtest/prepare_rb_r27d_parent_v1.py --input data/r27d_parent/data/backtests/r27b_v2_final/r27b_v2_all_predictions.csv --output data/r27d_parent_normalized.csv
       - name: Build strict-prior xYAC/YACOE training and evaluation features
         run: |
           rm -rf data/backtests/r27d_dataset
-          PYTHONPATH=. python scripts/backtest/build_rb_r27d_yacoe_dataset_v1.py \
-            --parent-predictions data/r27d_parent_normalized.csv \
-            --out-dir data/backtests/r27d_dataset
-      - name: Execute frozen first R27D scientific candidate
+          PYTHONPATH=. python scripts/backtest/build_rb_r27d_yacoe_dataset_v1.py --parent-predictions data/r27d_parent_normalized.csv --out-dir data/backtests/r27d_dataset
+      - name: Execute frozen first valid R27D scientific candidate
         run: |
           rm -rf data/backtests/r27d_yacoe_residual_v1
-          PYTHONPATH=. python scripts/backtest/run_rb_r27d_yacoe_residual_v1.py \
-            --historical data/backtests/r27d_dataset/r27d_historical_yacoe_training_rows.csv \
-            --parent data/backtests/r27d_dataset/r27d_parent_rows_with_strict_prior_features.csv \
-            --out-dir data/backtests/r27d_yacoe_residual_v1
+          PYTHONPATH=. python scripts/backtest/run_rb_r27d_yacoe_residual_v1.py --historical data/backtests/r27d_dataset/r27d_historical_yacoe_training_rows.csv --parent data/backtests/r27d_dataset/r27d_parent_rows_with_strict_prior_features.csv --out-dir data/backtests/r27d_yacoe_residual_v1
       - name: Assert result integrity and display frozen scorecard
         run: |
           python - <<'PY'
@@ -95,7 +84,7 @@ jobs:
           PY
           cat data/backtests/r27d_yacoe_residual_v1/r27d_gates.csv
           cat data/backtests/r27d_yacoe_residual_v1/r27d_season_rb1.csv
-      - name: Upload immutable first R27D result
+      - name: Upload immutable first valid R27D result
         uses: actions/upload-artifact@v4
         with:
           name: rb-r27d-strict-prior-yacoe-residual-v1
