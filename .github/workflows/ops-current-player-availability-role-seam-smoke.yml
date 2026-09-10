@@ -8,7 +8,9 @@ on:
       - 'scripts/utils/current_roles_v1.py'
       - 'scripts/run_player_form_current_roles_v1.py'
       - 'scripts/run_rb_week1_current_roles_v1.py'
+      - 'scripts/build/build_production_eligible_active_roles_v1.py'
       - 'tests/test_current_roles_input_seam_v1.py'
+      - 'tests/test_production_eligible_active_roles_v1.py'
       - '.github/workflows/ops-current-player-availability-role-seam-smoke.yml'
   workflow_dispatch:
 
@@ -29,10 +31,10 @@ jobs:
           pip install pandas numpy pytest
       - name: Compile candidate seam
         run: |
-          python -m py_compile scripts/utils/current_roles_v1.py scripts/run_player_form_current_roles_v1.py scripts/run_rb_week1_current_roles_v1.py
+          python -m py_compile scripts/utils/current_roles_v1.py scripts/run_player_form_current_roles_v1.py scripts/run_rb_week1_current_roles_v1.py scripts/build/build_production_eligible_active_roles_v1.py
       - name: Run frozen-semantics seam fixtures
         run: |
-          PYTHONPATH=. pytest -q tests/test_current_roles_input_seam_v1.py
+          PYTHONPATH=. pytest -q tests/test_current_roles_input_seam_v1.py tests/test_production_eligible_active_roles_v1.py
       - name: Assert no scientific model files changed from integration-plan parent
         run: |
           git fetch origin ops-current-player-availability-full-slate-v1 --depth=50 || true
