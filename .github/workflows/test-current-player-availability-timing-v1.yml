@@ -1,25 +1,42 @@
 name: Test Current Player Availability Timing V1
+
 on:
   push:
-    branches: [ops-current-player-availability-v1]
+    branches:
+      - ops-current-player-availability-t75-v1
     paths:
       - 'tests/test_current_player_availability_timing_v1.py'
-      - 'scripts/build/certify_current_player_availability_timing_v1.py'
-      - 'docs/operations/CURRENT_PLAYER_AVAILABILITY_TIMING_CERTIFICATION_V1_LOCK.md'
+      - 'scripts/validate_current_player_availability_timing_v1.py'
+      - 'docs/operations/CURRENT_PLAYER_AVAILABILITY_TIMING_V1_FROZEN_PLAN.md'
+      - 'docs/operations/CURRENT_PLAYER_AVAILABILITY_TIMING_V1_CONCURRENCY_RESOLUTION.md'
+      - '.github/workflows/test-current-player-availability-timing-v1.yml'
+  workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
   timing-fixtures:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-        with: {fetch-depth: 0}
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
-        with: {python-version: '3.11'}
-      - run: pip install -r requirements.txt
-      - name: Verify production boundary
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
         run: |
-          python -m py_compile scripts/build/certify_current_player_availability_timing_v1.py
-          git diff --quiet bb76ba9eabb08e2f0875a9af49301c3877f4141f HEAD -- scripts/modeling scripts/simulation_v2.py scripts/simulation_c2_qb_candidate.py data/models model .github/workflows/full-slate.yml
-      - name: Run frozen timing fixtures
-        run: PYTHONPATH=. pytest -q tests/test_current_player_availability_timing_v1.py
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Verify canonical frozen timing contract and production boundary
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/validate_current_player_availability_timing_v1.py
+          grep -q 'REQUIRE_MINUTES=75.0' scripts/validate_current_player_availability_timing_v1.py
+          grep -q 'threshold is frozen at \*\*75 minutes' docs/operations/CURRENT_PLAYER_AVAILABILITY_TIMING_V1_FROZEN_PLAN.md
+          git diff --quiet bb76ba9eabb08e2f0875a9af49301c3877f4141f HEAD -- scripts/modeling scripts/simulation_v2.py scripts/simulation_c2_qb_candidate.py data/models model .github/workflows/full-slate.yml scripts/run_rb_week1_no_odds.py
+          echo T75_FROZEN_TIMING_AND_PRODUCTION_BOUNDARY_PASS
+      - name: Run frozen T-75 timing fixtures
+        run: |
+          PYTHONPATH=. pytest -q tests/test_current_player_availability_timing_v1.py
