@@ -1,0 +1,88 @@
+name: Current Availability QB C2 Primary Coverage Regression V1
+
+on:
+  push:
+    branches: [ops-current-player-availability-35gate-cert-v1]
+    paths: ['docs/operations/CURRENT_PLAYER_AVAILABILITY_QB_C2_PRIMARY_COVERAGE_REPAIR_LOCK.md']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  QB_C2_PROTECTED_BLOB: 7b677470b27b6776055c75c924a0ddf22d724a44
+  QB_STARTER_TRANSFORMER_BLOB: c7569c54cda779eb04bed7dbf2b22b9ec4fb526b
+  QB_PRIMARY_TRANSFORMER_BLOB: 3d24597727d496d2e2547c3a01b0f995700a7b82
+  ELIGIBLE_HELPER_BLOB: 77b591e431378ec984c51e8a032262e673d4c843
+
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Install minimum dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4
+      - name: Verify frozen blobs and apply both QB coverage seams
+        run: |
+          set -euo pipefail
+          test "$(git hash-object scripts/modeling/qb_c2_production_adapter_v1.py)" = "$QB_C2_PROTECTED_BLOB"
+          test "$(git hash-object scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py)" = "$QB_STARTER_TRANSFORMER_BLOB"
+          test "$(git hash-object scripts/operations/apply_current_availability_qb_c2_primary_eligible_team_seam_v1.py)" = "$QB_PRIMARY_TRANSFORMER_BLOB"
+          test "$(git hash-object scripts/utils/eligible_team_set_v1.py)" = "$ELIGIBLE_HELPER_BLOB"
+          export PYTHONPATH="$PWD"
+          python scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_primary_eligible_team_seam_v1.py
+          python -m py_compile scripts/modeling/qb_c2_production_adapter_v1.py
+          grep -F 'QB C2 state context must cover exactly 32 teams' scripts/modeling/qb_c2_production_adapter_v1.py
+          grep -F 'validate_current_team_set(audit["team"].astype(str), label="QB C2 starter authority")' scripts/modeling/qb_c2_production_adapter_v1.py
+          grep -F 'validate_current_team_set(primary["team"].astype(str), label="QB C2 primary QB coverage")' scripts/modeling/qb_c2_production_adapter_v1.py
+      - name: Prove legacy and explicit availability team-set semantics
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$PWD"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import pandas as pd
+          from scripts.utils.eligible_team_set_v1 import validate_current_team_set
+
+          teams32=['ARI','ATL','BAL','BUF','CAR','CHI','CIN','CLE','DAL','DEN','DET','GB','HOU','IND','JAX','KC','LAC','LAR','LV','MIA','MIN','NE','NO','NYG','NYJ','PHI','PIT','SEA','SF','TB','TEN','WAS']
+          teams30=[t for t in teams32 if t not in {'NE','SEA'}]
+
+          os.environ.pop('ACTIVE_ROLES_CSV',None)
+          a=validate_current_team_set(teams32,label='regression legacy')
+          assert a['mode']=='LEGACY_32_TEAM' and a['observed_teams']==32,a
+          try:
+              validate_current_team_set(teams30,label='regression legacy 30')
+          except RuntimeError:
+              pass
+          else:
+              raise AssertionError('legacy 30-team set unexpectedly accepted')
+
+          p=Path('data/regression_active_roles.csv'); p.parent.mkdir(parents=True,exist_ok=True)
+          pd.DataFrame({'team':teams30,'player_clean_key':[f'p{i}' for i in range(30)]}).to_csv(p,index=False)
+          os.environ['ACTIVE_ROLES_CSV']=str(p)
+          b=validate_current_team_set(teams30,label='regression explicit')
+          assert b['mode']=='EXPLICIT_CURRENT_AVAILABILITY' and b['expected_teams']==30 and b['canonical_games']==15,b
+          for bad in (teams30[:-1], teams30+['NE']):
+              try:
+                  validate_current_team_set(bad,label='regression explicit bad')
+              except RuntimeError:
+                  pass
+              else:
+                  raise AssertionError(f'explicit bad team set unexpectedly accepted: {bad}')
+          print('QB_C2_PRIMARY_COVERAGE_REGRESSION_PASS')
+          PY
+      - name: Assert no 35-gate result was produced
+        run: |
+          set -euo pipefail
+          test ! -e data/current_player_availability_35gate_result.json
+          test ! -e data/current_player_availability_35gate_gates_1_34.json
+          echo NO_35_GATE_RESULT_PRODUCED
