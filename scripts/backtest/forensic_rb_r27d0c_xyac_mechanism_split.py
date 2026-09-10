@@ -56,9 +56,12 @@ def rb_games(season):
     rb["complete"]=num(rb.complete_pass).fillna(0)
     rb["yac"]=num(rb.yards_after_catch); rb["xyac"]=num(rb.xyac_mean_yardage)
     c=rb[rb.complete.eq(1)].copy(); c["xyac_obs"]=c.yac.notna()&c.xyac.notna(); c["yacoe"]=c.yac-c.xyac
+    c["yac_xyac_obs"]=np.where(c.xyac_obs,c.yac,np.nan)
+    c["expected_yac_xyac_obs"]=np.where(c.xyac_obs,c.xyac,np.nan)
+    c["yacoe_xyac_obs"]=np.where(c.xyac_obs,c.yacoe,np.nan)
     keys=["season","week","team","player_clean_key"]
     g=c.groupby(keys,dropna=False)
-    out=g.agg(receptions=("complete","size"),xyac_obs_receptions=("xyac_obs","sum"),actual_yac=("yac","mean"),expected_yac=("xyac","mean"),yacoe=("yacoe","mean")).reset_index()
+    out=g.agg(receptions=("complete","size"),xyac_obs_receptions=("xyac_obs","sum"),actual_yac=("yac_xyac_obs","mean"),expected_yac=("expected_yac_xyac_obs","mean"),yacoe=("yacoe_xyac_obs","mean")).reset_index()
     out["xyac_coverage"]=np.where(out.receptions.gt(0),out.xyac_obs_receptions/out.receptions,np.nan)
     return out
 
@@ -87,7 +90,7 @@ def main():
     actual=mean(c23,"actual_yac")-mean(co,"actual_yac"); exp=mean(c23,"expected_yac")-mean(co,"expected_yac"); oe=mean(c23,"yacoe")-mean(co,"yacoe")
     primary=x[rb1].copy(); coverage=primary.groupby(primary.season.eq(2023).map({True:"2023",False:"NON2023"})).apply(lambda g: float(num(g.xyac_coverage).dropna().mean()) if g.xyac_coverage.notna().any() else 0.0)
     summary={"status":"R27D0C_XYAC_MECHANISM_SPLIT_COMPLETE","diagnostic_only":True,"new_model_fit":False,"new_candidate_created":False,"sportsbook_inputs":0,"production_changed":False,"r26_changed":False,"r22_changed":False,"rows":int(len(x)),"primary_2023_xyac_reception_coverage":float(coverage.get("2023",0)),"primary_non2023_xyac_reception_coverage":float(coverage.get("NON2023",0)),"actual_yac_diff_2023_minus_non2023":actual,"expected_yac_diff_2023_minus_non2023":exp,"yacoe_diff_2023_minus_non2023":oe,"decomposition_gap":actual-(exp+oe),"expected_yac_share_of_signed_gap":(exp/actual if abs(actual)>1e-12 else np.nan),"yacoe_share_of_signed_gap":(oe/actual if abs(actual)>1e-12 else np.nan)}
-    summary["integrity_pass"]=bool(summary["primary_2023_xyac_reception_coverage"]>=.98 and summary["primary_non2023_xyac_reception_coverage"]>=.98 and abs(summary["decomposition_gap"])<1e-6)
+    summary["integrity_pass"]=bool(summary["primary_2023_xyac_reception_coverage"]>=.98 and summary["primary_non2023_xyac_reception_coverage"]>=.98 and abs(summary["decomposition_gap"])<1e-9)
     (od/"r27d0c_summary.json").write_text(json.dumps(summary,indent=2,sort_keys=True))
     x.to_csv(od/"r27d0c_joined_rows.csv",index=False)
     print(json.dumps(summary,indent=2,sort_keys=True))
