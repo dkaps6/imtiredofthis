@@ -29,6 +29,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install pytest
       - name: Verify canonical frozen timing contract and production boundary
         run: |
           set -euo pipefail
