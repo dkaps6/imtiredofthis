@@ -48,13 +48,70 @@ def _pos(value) -> str:
     return p or "OTHER"
 
 
+def _validate_qb_c2_coverage_contract(c2: dict, stamp: dict, *, priced_qbs: int | None = None, selected_priced_qbs: int | None = None) -> dict:
+    """Validate football-universe coverage separately from sportsbook coverage.
+
+    The C2 production audit owns the upstream football-QB universe. The pricing
+    stamp has already validated that every sportsbook-priced QB is a member of
+    that football audit while allowing a current starter to have no live prop.
+    This audit must preserve that asymmetry rather than restoring a legacy
+    sportsbook-must-cover-all-32 assumption.
+    """
+    football_qbs = int(c2.get("football_qb_rows", 0))
+    selected_football_qbs = int(c2.get("selected_qb_rows", 0))
+    stamped_football_qbs = int(stamp.get("football_qbs", 0))
+    current_scope = int(stamp.get("current_team_scope_expected", 0))
+    stamped_priced_qbs = int(stamp.get("pass_yard_qbs", 0))
+    stamped_selected_priced = int(stamp.get("c2_selected_qbs", -1))
+    stamped_selected_football = int(stamp.get("c2_selected_football_qbs", -1))
+
+    if football_qbs <= 0 or selected_football_qbs <= 0 or selected_football_qbs > football_qbs:
+        raise RuntimeError(f"QB C2 production coverage invalid: {c2}")
+    if stamped_football_qbs != football_qbs or current_scope != football_qbs:
+        raise RuntimeError(
+            "QB C2 football universe differs between production audit and pricing lineage stamp; "
+            f"production={football_qbs} stamp={stamped_football_qbs} scope={current_scope}"
+        )
+    if stamped_selected_football != selected_football_qbs:
+        raise RuntimeError(
+            "QB C2 selected football-QB count differs between production audit and pricing lineage stamp; "
+            f"production={selected_football_qbs} stamp={stamped_selected_football}"
+        )
+    if stamped_priced_qbs <= 0 or stamped_priced_qbs > football_qbs:
+        raise RuntimeError(
+            "QB C2 priced pass-yard coverage must be a nonempty subset of the football universe; "
+            f"priced={stamped_priced_qbs} football={football_qbs}"
+        )
+    if stamped_selected_priced < 0 or stamped_selected_priced > selected_football_qbs:
+        raise RuntimeError(
+            "QB C2 selected priced-QB coverage invalid; "
+            f"priced_selected={stamped_selected_priced} football_selected={selected_football_qbs}"
+        )
+    if bool(stamp.get("sportsbook_offer_coverage_defines_football_universe", True)):
+        raise RuntimeError("QB C2 pricing stamp allows sportsbook coverage to define football universe")
+    if priced_qbs is not None and int(priced_qbs) != stamped_priced_qbs:
+        raise RuntimeError(
+            "QB C2 priced pass-yard identity count differs from pricing lineage stamp; "
+            f"priced={priced_qbs} stamp={stamped_priced_qbs}"
+        )
+    if selected_priced_qbs is not None and int(selected_priced_qbs) != stamped_selected_priced:
+        raise RuntimeError(
+            "QB C2 selected priced-QB count differs from pricing lineage stamp; "
+            f"priced={selected_priced_qbs} stamp={stamped_selected_priced}"
+        )
+    return {
+        "football_qbs": football_qbs,
+        "selected_football_qbs": selected_football_qbs,
+        "priced_qbs": stamped_priced_qbs,
+        "selected_priced_qbs": stamped_selected_priced,
+    }
+
+
 def _certify_qb_c2(priced: pd.DataFrame) -> tuple[dict, dict]:
     c2 = _read_json(DATA / "qb_c2_production_integration_audit.json")
     stamp = _read_json(DATA / "qb_c2_pricing_lineage_stamp_audit.json")
     if c2.get("disposition") != "QB_C2_PRODUCTION_DISTRIBUTION_INTEGRATION_PASS":
         raise RuntimeError(f"QB C2 production integration not certified: {c2.get('disposition')}")
-    if int(c2.get("football_qb_rows", 0)) != 32 or int(c2.get("selected_qb_rows", 0)) <= 0:
-        raise RuntimeError(f"QB C2 production coverage invalid: {c2}")
     if c2.get("production_distribution_specialist") != QB_C2_VERSION:
         raise RuntimeError("QB C2 production distribution version drift")
     if c2.get("selector_version") != QB_C2_SELECTOR:
@@ -81,10 +138,7 @@ def _certify_qb_c2(priced: pd.DataFrame) -> tuple[dict, dict]:
         raise RuntimeError("QB C2 pricing stamp reports pricing values modified")
     if int(stamp.get("protected_columns_changed", 1)) != 0:
         raise RuntimeError("QB C2 pricing stamp changed protected columns")
-    if int(stamp.get("pass_yard_qbs", 0)) != 32:
-        raise RuntimeError("QB C2 pricing stamp does not cover 32 QBs")
-    if int(stamp.get("c2_selected_qbs", -1)) != int(c2.get("selected_qb_rows", -2)):
-        raise RuntimeError("QB C2 selected-QB count differs between simulation and pricing stamp")
+    _validate_qb_c2_coverage_contract(c2, stamp)
     if stamp.get("specialist_version") != QB_C2_VERSION or stamp.get("selector_version") != QB_C2_SELECTOR:
         raise RuntimeError("QB C2 pricing stamp version drift")
 
@@ -105,8 +159,7 @@ def _certify_qb_c2(priced: pd.DataFrame) -> tuple[dict, dict]:
     qb = priced.loc[priced["source_market"].astype(str).eq("player_pass_yds")].copy()
     if qb.empty:
         raise RuntimeError("QB C2 lineage found zero priced pass-yard rows")
-    if qb[["team", "player"]].drop_duplicates().shape[0] != 32:
-        raise RuntimeError("QB C2 priced pass-yard rows do not cover 32 unique QBs")
+    priced_qbs = int(qb[["team", "player"]].drop_duplicates().shape[0])
     if not qb["qb_distribution_candidate_version"].astype(str).eq(QB_C2_VERSION).all():
         raise RuntimeError("priced QB rows do not all record frozen C2 candidate version")
     if not qb["qb_distribution_selector_version"].astype(str).eq(QB_C2_SELECTOR).all():
@@ -116,8 +169,12 @@ def _certify_qb_c2(priced: pd.DataFrame) -> tuple[dict, dict]:
         raise RuntimeError("priced QB C2 applied flag invalid")
     selected = qb.loc[applied.eq(1)]
     selected_qbs = int(selected[["team", "player"]].drop_duplicates().shape[0])
-    if selected_qbs != int(c2["selected_qb_rows"]):
-        raise RuntimeError(f"priced QB C2 selected count drift expected={c2['selected_qb_rows']} actual={selected_qbs}")
+    _validate_qb_c2_coverage_contract(
+        c2,
+        stamp,
+        priced_qbs=priced_qbs,
+        selected_priced_qbs=selected_qbs,
+    )
     if not selected["qb_distribution_specialist_version"].astype(str).eq(QB_C2_VERSION).all():
         raise RuntimeError("selected priced QB rows missing C2 specialist version")
     unselected = qb.loc[applied.eq(0)]
