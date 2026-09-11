@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 
 from scripts._opponent_map import canon_team
+from scripts.utils.eligible_team_set_v1 import validate_current_team_set
 from scripts.utils.player_identity_v3 import player_name_key
 
 DATA = Path("data")
@@ -52,6 +53,43 @@ def _key(value: object) -> str:
         return ""
 
 
+def _validate_current_c2_scope(
+    status: dict,
+    c2: pd.DataFrame,
+    *,
+    active_roles_path: Path | None = None,
+) -> dict:
+    """Validate one current C2 starter row for every certified eligible team.
+
+    In legacy mode the shared helper retains the historical 32-team contract.
+    With explicit current availability, current-output coverage is the exact
+    certified eligible-team set. This does not alter the separate 32-team C2
+    state-context source-integrity contract upstream.
+    """
+    if "team" not in c2.columns:
+        raise RuntimeError("QB C2 production CSV missing team column")
+    scope = validate_current_team_set(
+        c2["team"],
+        active_roles_path=active_roles_path,
+        label="QB C2 current production audit",
+    )
+    expected_qbs = int(scope["observed_teams"])
+    team_keys = c2["team"].map(canon_team)
+    if team_keys.eq("").any():
+        raise RuntimeError("QB C2 production CSV contains unresolvable team identity")
+    if len(c2) != expected_qbs or team_keys.nunique() != expected_qbs:
+        raise RuntimeError(
+            "QB C2 production CSV must contain exactly one QB per certified eligible team; "
+            f"rows={len(c2)} teams={team_keys.nunique()} expected={expected_qbs}"
+        )
+    if int(status.get("football_qb_rows", 0)) != expected_qbs:
+        raise RuntimeError(
+            "QB C2 production audit row count != certified eligible-team scope; "
+            f"status_rows={status.get('football_qb_rows')} expected={expected_qbs}"
+        )
+    return scope
+
+
 def main() -> int:
     priced = _read(PRICED)
     c2 = _read(C2_CSV)
@@ -60,8 +98,6 @@ def main() -> int:
     status = json.loads(C2_JSON.read_text(encoding="utf-8"))
     if status.get("disposition") != "QB_C2_PRODUCTION_DISTRIBUTION_INTEGRATION_PASS":
         raise RuntimeError(f"QB C2 production integration not certified: {status.get('disposition')}")
-    if int(status.get("football_qb_rows", 0)) != 32:
-        raise RuntimeError("QB C2 production audit does not cover 32 QBs")
     if float(status.get("max_raw_qb_mean_gap", 1.0)) > 1e-10:
         raise RuntimeError("QB C2 production audit has raw mean drift")
     if int(status.get("state_capture_changed_arrays", -1)) != 0:
@@ -82,8 +118,8 @@ def main() -> int:
     missing = sorted(required_c2 - set(c2.columns))
     if missing:
         raise RuntimeError(f"QB C2 production CSV missing columns: {missing}")
-    if len(c2) != 32 or c2["team"].nunique() != 32:
-        raise RuntimeError(f"QB C2 production CSV expected 32 QBs, got rows={len(c2)} teams={c2['team'].nunique()}")
+    scope = _validate_current_c2_scope(status, c2)
+    expected_qbs = int(scope["observed_teams"])
 
     # Build an identity key independently from display-name punctuation/suffixes.
     c2["_team_key"] = c2["team"].map(canon_team)
@@ -159,8 +195,10 @@ def main() -> int:
 
     if missing_rows:
         raise RuntimeError(f"priced pass-yard rows missing QB C2 audit identity: {missing_rows[:20]}")
-    if len(matched_identities) != 32:
-        raise RuntimeError(f"priced QB C2 stamp matched {len(matched_identities)} unique QBs, expected 32")
+    if len(matched_identities) != expected_qbs:
+        raise RuntimeError(
+            f"priced QB C2 stamp matched {len(matched_identities)} unique QBs, expected {expected_qbs}"
+        )
 
     # Every C2 audit QB must be represented in priced pass-yards for this slate.
     audit_identities = set(lookup)
@@ -217,8 +255,10 @@ def main() -> int:
         "priced_side_rows": int(len(priced)),
         "pass_yard_side_rows": int(pass_mask.sum()),
         "pass_yard_qbs": int(len(matched_identities)),
+        "current_team_scope_mode": str(scope["mode"]),
+        "current_team_scope_expected": int(scope["expected_teams"]),
         "c2_selected_qbs": selected_players,
-        "c2_unselected_qbs": int(32 - selected_players),
+        "c2_unselected_qbs": int(expected_qbs - selected_players),
         "specialist_version": SPECIALIST_VERSION,
         "selector_version": str(pass_rows["qb_distribution_selector_version"].iloc[0]),
         "max_raw_mean_gap": float(gap.abs().max()),
