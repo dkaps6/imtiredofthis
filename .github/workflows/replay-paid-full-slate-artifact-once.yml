@@ -15,6 +15,7 @@ env:
   PRIOR_SEASON: "2025"
   SLATE_DATE: ""
   FETCH_LIVE_ODDS: "false"
+  FULL_SLATE_SOURCE_RUN_ID: "34650067599"
   ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
 
 jobs:
