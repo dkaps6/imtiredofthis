@@ -8,6 +8,7 @@ on:
     paths:
       - ".github/workflows/audit-qb-first-down-score-state-decomp-v1.yml"
       - "scripts/backtest/evaluate_qb_first_down_score_state_decomp_v1.py"
+      - "scripts/backtest/materialize_qb_first_down_score_state_decomp_v1_mechfix.py"
       - "docs/migrations/QB_FIRST_DOWN_SCORE_STATE_DECOMP_V1_PLAN.md"
 
 permissions:
@@ -31,8 +32,11 @@ jobs:
         run: |
           echo 'DIAGNOSTIC ONLY: first-down score-state decomposition inside fixed field-position zones.'
           echo 'No model fitting, sportsbook input, threshold search, M64/M65 predictive retest, or production change.'
-      - name: Compile frozen evaluator
-        run: python -m py_compile scripts/backtest/evaluate_qb_first_down_score_state_decomp_v1.py
+          echo 'Mechanical repair only: target-game universe must exactly match immutable parent, including kneels.'
+      - name: Materialize mechanical parity repair
+        run: python scripts/backtest/materialize_qb_first_down_score_state_decomp_v1_mechfix.py
+      - name: Compile frozen evaluator with mechanical parity repair
+        run: python -m py_compile scripts/backtest/evaluate_qb_first_down_score_state_decomp_v1_mechfix.py
       - name: Download immutable parent artifacts
         env:
           GH_TOKEN: ${{ github.token }}
@@ -45,7 +49,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           rm -rf data/backtests/qb_first_down_score_state_decomp_v1
-          python scripts/backtest/evaluate_qb_first_down_score_state_decomp_v1.py \
+          python scripts/backtest/evaluate_qb_first_down_score_state_decomp_v1_mechfix.py \
             --parent-root evidence/parent \
             --shared-root evidence/shared \
             --out-dir data/backtests/qb_first_down_score_state_decomp_v1
