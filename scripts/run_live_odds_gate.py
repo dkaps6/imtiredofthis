@@ -40,6 +40,7 @@ DATA = Path("data")
 OUTPUTS = Path("outputs")
 STATUS = DATA / "live_odds_status.json"
 TEAM_WEEK_MAP = DATA / "team_week_map.csv"
+EVENT_KICKOFF_TOLERANCE_HOURS = 36.0
 
 CRITICAL_EVENT_ARTIFACTS = [
     OUTPUTS / "odds_game.csv",
@@ -115,18 +116,72 @@ def _active_game_pairs(schedule: pd.DataFrame, season: int, week: int) -> set[tu
     return pairs
 
 
-def _allowed_event_ids(game_odds: pd.DataFrame, active_pairs: set[tuple[str, str]]) -> set[str]:
+def _active_game_windows(
+    schedule: pd.DataFrame,
+    season: int,
+    week: int,
+) -> dict[tuple[str, str], tuple[pd.Timestamp, ...]]:
+    """Return canonical week matchups with their authoritative kickoff anchors.
+
+    team_week_map currently carries a date-level UTC kickoff anchor for some
+    schedule sources, so the sportsbook event may be up to roughly one day
+    later in UTC. A bounded 36-hour window accepts that representation while
+    rejecting later-season rematches between the same two teams.
+    """
+    required = {"season", "week", "team", "opponent", "kickoff_utc"}
+    missing = required - set(schedule.columns)
+    if missing:
+        raise RuntimeError(
+            f"team_week_map missing kickoff columns required for live odds event scope: {sorted(missing)}"
+        )
+    x = schedule.copy()
+    x["season"] = pd.to_numeric(x["season"], errors="coerce")
+    x["week"] = pd.to_numeric(x["week"], errors="coerce")
+    x = x.loc[x["season"].eq(int(season)) & x["week"].eq(int(week))].copy()
+    if x.empty:
+        raise RuntimeError(f"No canonical schedule rows for live odds season={season} week={week}")
+    x["_kickoff_utc"] = pd.to_datetime(x["kickoff_utc"], utc=True, errors="coerce")
+    if x["_kickoff_utc"].isna().any():
+        sample = x.loc[x["_kickoff_utc"].isna(), ["team", "opponent", "kickoff_utc"]].head(20).to_dict("records")
+        raise RuntimeError(f"Canonical live odds schedule has invalid kickoff_utc rows: {sample}")
+
+    windows: dict[tuple[str, str], set[pd.Timestamp]] = {}
+    for team, opponent, kickoff in zip(x["team"], x["opponent"], x["_kickoff_utc"]):
+        a, b = canon_team(team), canon_team(opponent)
+        if not a or not b:
+            raise RuntimeError(
+                f"Unresolvable team identity in live odds schedule: {team!r} vs {opponent!r}"
+            )
+        pair = tuple(sorted((a, b)))
+        windows.setdefault(pair, set()).add(kickoff)
+    return {pair: tuple(sorted(kickoffs)) for pair, kickoffs in windows.items()}
+
+
+def _allowed_event_ids(
+    game_odds: pd.DataFrame,
+    active_windows: dict[tuple[str, str], tuple[pd.Timestamp, ...]],
+) -> set[str]:
     if game_odds.empty:
         return set()
-    required = {"event_id", "home_team", "away_team"}
+    required = {"event_id", "home_team", "away_team", "commence_time"}
     missing = required - set(game_odds.columns)
     if missing:
         raise RuntimeError(f"odds_game missing columns required for active-slate gate: {sorted(missing)}")
+    tolerance = pd.Timedelta(hours=EVENT_KICKOFF_TOLERANCE_HOURS)
     allowed: set[str] = set()
     for row in game_odds.itertuples(index=False):
         home = canon_team(getattr(row, "home_team"))
         away = canon_team(getattr(row, "away_team"))
-        if home and away and tuple(sorted((home, away))) in active_pairs:
+        pair = tuple(sorted((home, away))) if home and away else None
+        if pair not in active_windows:
+            continue
+        commence = pd.to_datetime(getattr(row, "commence_time"), utc=True, errors="coerce")
+        if pd.isna(commence):
+            raise RuntimeError(
+                f"Active-pair sportsbook event has invalid commence_time "
+                f"event_id={getattr(row, 'event_id')} pair={pair}"
+            )
+        if any(abs(commence - kickoff) <= tolerance for kickoff in active_windows[pair]):
             allowed.add(str(getattr(row, "event_id")))
     return allowed
 
@@ -193,6 +248,7 @@ def run_gate(season: int, date: str = "") -> dict:
     week = int(resolve_week())
     schedule = _safe_read_csv(TEAM_WEEK_MAP)
     active_pairs = _active_game_pairs(schedule, int(season), week)
+    active_windows = _active_game_windows(schedule, int(season), week)
 
     _clear_stale_odds_artifacts()
 
@@ -222,7 +278,7 @@ def run_gate(season: int, date: str = "") -> dict:
         raise RuntimeError(f"OddsAPI fetch failed with exit code {proc.returncode}")
 
     raw_game_odds = _safe_read_csv(OUTPUTS / "odds_game.csv")
-    allowed_ids = _allowed_event_ids(raw_game_odds, active_pairs)
+    allowed_ids = _allowed_event_ids(raw_game_odds, active_windows)
     _scope_all_event_artifacts(allowed_ids)
 
     hardening_status = harden_live_odds_artifacts()

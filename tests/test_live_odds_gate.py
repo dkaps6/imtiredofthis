@@ -2,9 +2,11 @@ import json
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from scripts.run_live_odds_gate import (
     _active_game_pairs,
+    _active_game_windows,
     _actual_prop_rows,
     _allowed_event_ids,
     _clear_stale_odds_artifacts,
@@ -12,20 +14,97 @@ from scripts.run_live_odds_gate import (
 )
 
 
-def test_active_slate_event_gate_excludes_preseason_or_other_week_games():
+def test_active_slate_event_gate_excludes_other_week_and_same_pair_future_rematch():
     schedule = pd.DataFrame([
-        {"season": 2026, "week": 1, "team": "IND", "opponent": "BAL"},
-        {"season": 2026, "week": 1, "team": "BAL", "opponent": "IND"},
-        {"season": 2026, "week": 1, "team": "KC", "opponent": "DEN"},
-        {"season": 2026, "week": 1, "team": "DEN", "opponent": "KC"},
+        {
+            "season": 2026,
+            "week": 1,
+            "team": "IND",
+            "opponent": "BAL",
+            "kickoff_utc": "2026-09-13T00:00:00Z",
+        },
+        {
+            "season": 2026,
+            "week": 1,
+            "team": "BAL",
+            "opponent": "IND",
+            "kickoff_utc": "2026-09-13T00:00:00Z",
+        },
+        {
+            "season": 2026,
+            "week": 1,
+            "team": "KC",
+            "opponent": "DEN",
+            "kickoff_utc": "2026-09-14T00:00:00Z",
+        },
+        {
+            "season": 2026,
+            "week": 1,
+            "team": "DEN",
+            "opponent": "KC",
+            "kickoff_utc": "2026-09-14T00:00:00Z",
+        },
     ])
     pairs = _active_game_pairs(schedule, 2026, 1)
+    windows = _active_game_windows(schedule, 2026, 1)
+    assert pairs == set(windows)
     odds = pd.DataFrame([
-        {"event_id": "week1-a", "home_team": "IND", "away_team": "BAL"},
-        {"event_id": "week1-b", "home_team": "DEN", "away_team": "KC"},
-        {"event_id": "preseason", "home_team": "IND", "away_team": "DET"},
+        {
+            "event_id": "week1-a",
+            "home_team": "IND",
+            "away_team": "BAL",
+            "commence_time": "2026-09-13T17:00:00Z",
+        },
+        {
+            "event_id": "week1-b",
+            "home_team": "DEN",
+            "away_team": "KC",
+            "commence_time": "2026-09-15T00:15:00Z",
+        },
+        {
+            "event_id": "future-rematch",
+            "home_team": "KC",
+            "away_team": "DEN",
+            "commence_time": "2026-11-01T21:25:00Z",
+        },
+        {
+            "event_id": "other-matchup",
+            "home_team": "IND",
+            "away_team": "DET",
+            "commence_time": "2026-09-13T17:00:00Z",
+        },
     ])
-    assert _allowed_event_ids(odds, pairs) == {"week1-a", "week1-b"}
+    assert _allowed_event_ids(odds, windows) == {"week1-a", "week1-b"}
+
+
+def test_active_pair_with_invalid_commence_time_fails_closed():
+    schedule = pd.DataFrame([
+        {
+            "season": 2026,
+            "week": 1,
+            "team": "KC",
+            "opponent": "DEN",
+            "kickoff_utc": "2026-09-14T00:00:00Z",
+        },
+        {
+            "season": 2026,
+            "week": 1,
+            "team": "DEN",
+            "opponent": "KC",
+            "kickoff_utc": "2026-09-14T00:00:00Z",
+        },
+    ])
+    windows = _active_game_windows(schedule, 2026, 1)
+    odds = pd.DataFrame([
+        {
+            "event_id": "bad-time",
+            "home_team": "KC",
+            "away_team": "DEN",
+            "commence_time": "not-a-time",
+        },
+    ])
+    with pytest.raises(RuntimeError, match="invalid commence_time"):
+        _allowed_event_ids(odds, windows)
 
 
 def test_event_csv_filter_preserves_only_allowed_event_ids(tmp_path):
