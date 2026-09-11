@@ -47,6 +47,62 @@ def _nonblank_count(series: pd.Series) -> int:
     return int(series.astype("string").fillna("").str.strip().ne("").sum())
 
 
+def _validate_current_roster_scope(
+    scheduled_teams: set[str],
+    roles: pd.DataFrame,
+    game_odds: pd.DataFrame,
+) -> tuple[set[str], set[str]]:
+    """Require roster coverage for the already-gated live event universe.
+
+    The live odds gate has already removed off-week events and later rematches.
+    Teams whose Week-1 games have already been played may legitimately be absent
+    from the current Ourlads snapshot, so the quality classifier must not restore
+    the old all-32 roster invariant. Extra roster teams are allowed only when they
+    are part of the authoritative active-week schedule, and any missing live-event
+    team remains fatal.
+    """
+    if "team" not in roles.columns:
+        raise RuntimeError("current Ourlads roster missing team column")
+    required_game_cols = {"home_team", "away_team"}
+    missing_game_cols = required_game_cols - set(game_odds.columns)
+    if missing_game_cols:
+        raise RuntimeError(
+            f"odds_game missing columns required for current-roster scope: {sorted(missing_game_cols)}"
+        )
+
+    role_series = roles["team"].map(canon_team).astype("string").fillna("").str.strip()
+    if role_series.eq("").any():
+        raise RuntimeError("current Ourlads roster contains unresolvable team identity")
+    role_teams = set(role_series)
+
+    live_event_teams: set[str] = set()
+    for col in ("home_team", "away_team"):
+        event_series = game_odds[col].map(canon_team).astype("string").fillna("").str.strip()
+        if event_series.eq("").any():
+            raise RuntimeError("live odds event scope contains unresolvable team identity")
+        live_event_teams.update(event_series)
+    if not live_event_teams:
+        raise RuntimeError("live odds event scope contains zero teams")
+
+    off_schedule_events = sorted(live_event_teams - scheduled_teams)
+    if off_schedule_events:
+        raise RuntimeError(
+            f"live odds event scope contains teams outside active schedule: {off_schedule_events}"
+        )
+    off_schedule_roster = sorted(role_teams - scheduled_teams)
+    if off_schedule_roster:
+        raise RuntimeError(
+            f"current Ourlads roster contains teams outside active schedule: {off_schedule_roster}"
+        )
+    missing_live = sorted(live_event_teams - role_teams)
+    if missing_live:
+        raise RuntimeError(
+            f"current Ourlads roster missing live-event teams: {missing_live}"
+        )
+
+    return role_teams, live_event_teams
+
+
 def audit() -> dict:
     rows: list[dict] = []
     season = int(resolve_season())
@@ -68,10 +124,18 @@ def audit() -> dict:
     rows.append(_row("schedule", "CERTIFIED", f"teams=32 games=16"))
 
     roles = _read(DATA / "roles_ourlads.csv")
-    role_teams = set(roles["team"].map(canon_team))
-    if role_teams != scheduled_teams:
-        raise RuntimeError("current Ourlads roster team set does not match scheduled teams")
-    rows.append(_row("current_roster", "LIVE_PROVIDER_ROSTER_PRESENT", f"source=ourlads rows={len(roles)} teams=32 players={roles['player'].nunique()}"))
+    game_odds = _read(OUTPUTS / "odds_game.csv")
+    role_teams, live_event_teams = _validate_current_roster_scope(
+        scheduled_teams,
+        roles,
+        game_odds,
+    )
+    rows.append(_row(
+        "current_roster",
+        "LIVE_PROVIDER_ROSTER_PRESENT",
+        f"source=ourlads rows={len(roles)} teams={len(role_teams)} "
+        f"live_event_teams={len(live_event_teams)} scheduled_teams=32 players={roles['player'].nunique()}",
+    ))
 
     identity = _json(DATA / "player_identity_semantic_audit.json")
     suspicious = int(identity.get("temporary_possible_historical_aliases", -1))
