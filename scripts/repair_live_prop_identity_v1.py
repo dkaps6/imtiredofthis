@@ -72,7 +72,11 @@ def _name_keys(value) -> set[str]:
     return {k for k in keys if k}
 
 
-def _build_roster_index(roles: pd.DataFrame) -> dict[str, set[str]]:
+def _build_roster_index(
+    roles: pd.DataFrame,
+    *,
+    required_teams: set[str] | None = None,
+) -> dict[str, set[str]]:
     missing = {"team", "player"} - set(roles.columns)
     if missing:
         raise RuntimeError(f"roles_ourlads missing live-prop identity columns: {sorted(missing)}")
@@ -82,9 +86,18 @@ def _build_roster_index(roles: pd.DataFrame) -> dict[str, set[str]]:
         if team not in CANON_TEAM_CODES:
             continue
         roster.setdefault(team, set()).update(_name_keys(getattr(row, "player", "")))
-    if set(roster) != set(CANON_TEAM_CODES):
-        missing_teams = sorted(set(CANON_TEAM_CODES) - set(roster))
-        raise RuntimeError(f"Ourlads roster identity index missing teams: {missing_teams}")
+
+    # Live runs can legitimately contain only the remaining slate. Require
+    # complete coverage for teams participating in the current sportsbook
+    # events, while preserving the historical all-32 behavior for callers
+    # that do not provide an event scope.
+    required = set(CANON_TEAM_CODES) if required_teams is None else set(required_teams)
+    invalid_required = sorted(required - set(CANON_TEAM_CODES))
+    if invalid_required:
+        raise RuntimeError(f"Current event scope contains invalid NFL teams: {invalid_required}")
+    missing_teams = sorted(required - set(roster))
+    if missing_teams:
+        raise RuntimeError(f"Ourlads roster identity index missing current-event teams: {missing_teams}")
     return roster
 
 
@@ -195,8 +208,9 @@ def repair_live_prop_identity() -> dict:
     compact = _read(OUTPUTS / "props_raw.csv")
     raw_data = _read(DATA / "props_raw.csv")
     enriched = _read(DATA / "props_enriched.csv", required=False)
-    roster = _build_roster_index(roles)
     events = _event_map(enriched, raw_data)
+    required_teams = {team for pair in events.values() for team in pair}
+    roster = _build_roster_index(roles, required_teams=required_teams)
 
     compact, changed_compact = _repair_frame(
         compact, roster=roster, events=events,
