@@ -4,38 +4,41 @@
 
 GitHub is canonical; chat memory is secondary.
 
-The Week-1 live Full Slate incident has advanced past the original failure. The original Step-25 live fetch/gate incident is repaired. One controlled paid live Full Slate has now been executed from repaired `main`. That paid run passed football Steps 1-24 and live sportsbook Steps 25-28, then failed mechanically at Step 29 `Classify live Full Slate data quality`.
+The Week-1 live Full Slate incident has advanced past the original Step-25 failure and past the controlled paid-run Step-29 failure. The original live fetch/gate incident is repaired. One controlled paid live Full Slate was executed from repaired `main`; it passed football Steps 1-24 and live sportsbook Steps 25-28, then failed mechanically at Step 29 because a downstream validator still required the current live roster to contain all 32 Week-1 teams even though four teams had already played.
 
-**Do not restart completed investigations. Do not redesign or retune model science. Do not spend another paid live-odds call to discover the next bug.**
+PR #523 now contains the mechanical/current-availability certification repair. The exact preserved paid artifact from run `34650067599` has been replayed through Steps 29-31 and strict repository audits with **zero certification blockers and zero additional OddsAPI acquisition**. PR #523 remains **OPEN / UNMERGED** pending final integrity review against current `main`.
 
-Production state audited immediately before this handoff update: `be061eaf23372f080db3911d3b4919120c744c53` (`Dispatch one controlled Week 1 live Full Slate`). This handoff update is documentation-only and may advance `main`; always inspect only the intervening diff before continuing.
+**Do not restart completed investigations. Do not redesign or retune model science. Do not spend another paid live-odds call to discover bugs. Do not merge PR #523 blindly without first comparing it to current `main`.**
 
-## Integrity verdict — model methodology was NOT changed by this incident repair
+Current `main` immediately before this handoff update was `0b066e31b38ff5a20e456f9a8fceac7369effbab` (`Update Full Slate handoff after controlled live run`). This handoff update is documentation-only and advances `main`; always inspect only the intervening diff before continuing.
 
-A direct Git compare from the original failed production SHA `0c6fcefea0d38d0975dea7fd04edd43216b2cbab` through the paid-run SHA `be061eaf23372f080db3911d3b4919120c744c53` shows changes only in:
+## Integrity verdict — the paid failure was NOT caused by model-methodology degradation
 
-- `.github/workflows/dispatch-full-slate-live-odds-once.yml`
-- `CURRENT_NFL_RESEARCH_HANDOFF.md`
-- `data/manual_name_overrides.csv`
-- this handoff
-- preserved-artifact replay documentation
-- `scripts/repair_live_prop_identity_v1.py`
-- `scripts/run_live_odds_gate.py`
-- live-odds / roster-scope regression tests
+The key distinction is execution coverage, not a change in football science.
 
-No QB, WR, RB, TE model-science implementation, promoted-model authority, projection-weight, distribution, pricing-science, or football-opportunity methodology file was changed in that repair sequence.
+The final successful no-live Full Slate baseline was run `34649759674` on SHA `1f7255805647e978adddb2cf4aecf2883f0dda48`. The paid live-dispatch SHA `be061eaf23372f080db3911d3b4919120c744c53` differed from that immediately preceding green baseline by exactly **one file / one authorized live-dispatch marker line** in `.github/workflows/dispatch-full-slate-live-odds-once.yml`. No QB, WR, RB, TE, projection, distribution, entitlement, simulation, pricing-science, or fitted-model implementation changed between that green baseline and the controlled paid run.
 
-Even more importantly, the final successful no-live Full Slate baseline was run `34649759674` on SHA `1f7255805647e978adddb2cf4aecf2883f0dda48`. The paid live-dispatch SHA `be061eaf23372f080db3911d3b4919120c744c53` differs from that baseline by exactly **one file and one line**: the authorized marker in `.github/workflows/dispatch-full-slate-live-odds-once.yml`. Therefore the paid Step-29 failure was not introduced by a model-methodology change between the green baseline and the live run.
+Therefore the Step-29 failure cannot be attributed to a scientific-model mutation introduced between the green baseline and the paid live run. What changed was that the paid run exercised the live sportsbook / late-certification path that the no-live run intentionally skipped.
 
-## Why we had a green Full Slate before and still failed now
+A broader compare across the original live incident repair through the paid-run SHA likewise shows operational live-odds scope/identity/workflow/documentation changes, not changes to the frozen QB/WR/RB/TE production authorities.
+
+This conclusion is deliberately scoped: it proves the integrity of the incident interval and the current PR #523 repair. It is **not** a claim that no methodology file has ever changed anywhere in the repository’s full historical lifetime.
+
+## Why a prior green Full Slate could still be followed by this failure
 
 The prior green Full Slate was a **no-live-odds integration run**. It successfully executed football Steps 1-24, then intentionally skipped live sportsbook Steps 25-31 because live odds were disabled.
 
-The controlled paid run enabled live odds and therefore exercised code paths that the green no-live run never traversed. It successfully passed Steps 25, 26, 27 and 28, then exposed a stale Step-29 certification invariant. This is a deeper live-path validation failure, not evidence that the football model regressed.
+The controlled paid run enabled the live path. It successfully passed Steps 25, 26, 27 and 28, then exposed a stale Step-29 certification invariant that the no-live run never executed.
 
-## Frozen production science
+So:
 
-Production authorities remain unchanged:
+- green no-live Full Slate = football/model stack and non-live integration healthy;
+- paid live Full Slate = additionally exercises live acquisition, boundary validation, identity semantics, data-quality classification, pricing/certification and downstream lineage;
+- the paid failure was a newly exercised **mechanical certification-scope defect**, not evidence that the football model regressed.
+
+## Frozen production science — unchanged
+
+Production authorities remain:
 
 - QB mean: M89/M90 / `QB_PASS_SYNTHESIS_V1`
 - QB distribution: `C2_QB_MEAN_NEUTRAL_DISTRIBUTION_V1`
@@ -57,6 +60,8 @@ Earlier continuity notes carried an unsupported claim that `M108` was a scientif
 
 Repository searches did not recover an authoritative M108 workflow/script/result/branch/commit proving such a gate. Do not fabricate or reconstruct M108 by name and do not reinterpret generic Repo CI counts as `26/26`.
 
+Canonical correction: `docs/production/WEEK1_LIVE_M107_M108_PROVENANCE_CORRECTION_2026_09_11.md`.
+
 This is a documentation-lineage correction only. It does not change model science.
 
 ## Original failed live run
@@ -72,7 +77,7 @@ This is a documentation-lineage correction only. It does not change model scienc
 
 The exact historical exception was not preserved; do not invent one.
 
-## Completed repair lineage
+## Completed repair lineage before the controlled paid run
 
 ### Repair 1 — remaining-slate roster scope — CLOSED
 
@@ -131,7 +136,7 @@ An attempted stable historical alias was correctly rejected because the historic
 - live sportsbook Steps 25-31: SKIPPED because live odds were disabled
 - strict repository audits/artifact generation: PASS
 
-This run proved the football/model stack was still healthy but did **not** exercise Step 29.
+This run proved the football/model stack was healthy but did **not** exercise the live sportsbook/certification path.
 
 ## Controlled paid live Full Slate — EXECUTED ONCE
 
@@ -139,7 +144,7 @@ Authorized dispatch commit:
 
 - SHA `be061eaf23372f080db3911d3b4919120c744c53`
 - commit message `Dispatch one controlled Week 1 live Full Slate`
-- only change from the immediately preceding green baseline: one-line authorized marker in `.github/workflows/dispatch-full-slate-live-odds-once.yml`
+- no model-science change from the immediately preceding green no-live baseline
 
 Paid live run:
 
@@ -159,100 +164,200 @@ Step results:
 - Steps 30-32: skipped after Step 29 failure
 - artifact build/upload still completed
 
-This proves the original Step-25 production incident is repaired.
+The Step-29 error was the stale full-32 current-roster invariant. The paid artifact showed 405 current roster rows across the correct 28 remaining event teams while the authoritative full Week-1 schedule still contained all 32 teams / 16 games. The missing four live-roster teams were LAR, NE, SEA and SF, which had already played.
+
+This proves the original Step-25 production incident was repaired and the next failure was downstream mechanical certification scope.
 
 ## Paid artifact — zero-credit replay authority
 
+- source paid run: `34650067599`
 - artifact ID `10283817522`
+- artifact name: `run_34650067599`
 - artifact SHA256 `a70c90023632059476cc688070fb21ad63b9ebd14aa4db102844b9e342188359`
 
-Important observed live status:
+Observed live status:
 
 - active sportsbook events: 14
 - full Week-1 scheduled games: 16
 - live event-team universe: 28 teams
-- absent live teams: LAR, NE, SEA, SF — the four teams that had already played
+- absent live teams: LAR, NE, SEA, SF — already played
 - actual prop rows: 894
 - production compact rows: 782
 - production compact unique players: 344
 - unresolved modeled-core identities: 0
 - strict market identity failures: 0
 - sportsbook/current-roster identity mismatches: 0
-- future-rematch contamination: blocked by Step-26 live boundary validation
+- future-rematch contamination: blocked by live boundary validation
 
-Use the saved paid artifact for all Step-29 and downstream debugging. **Do not pay for another fetch to discover bugs.**
+Use this saved artifact for downstream verification. **Do not pay for another fetch to discover bugs.**
 
-## Current demonstrated failure — stale Step-29 all-32 roster invariant
+## PR #523 — current-availability certification repair — OPEN / UNMERGED
 
-`scripts/validate_full_slate_data_quality_v1.py` currently does two different things:
+PR #523: `Scope Step 29 roster quality gate to live events`
 
-1. correctly requires the authoritative Week-1 schedule to contain all 32 scheduled teams; and
-2. incorrectly requires the **current live Ourlads roster snapshot** to equal that same 32-team scheduled set.
+- branch: `repair/week1-step29-event-roster-scope`
+- currently audited head: `723e304291ee1dcf40f5a15df50585cbffcd4471`
+- state at this handoff: OPEN, mergeable, NOT merged
 
-The relevant stale logic is effectively:
+PR #523 changed only replay/certification/lineage plumbing and tests:
 
-`if role_teams != scheduled_teams: raise RuntimeError("current Ourlads roster team set does not match scheduled teams")`
+- `.github/workflows/replay-paid-full-slate-artifact-once.yml`
+- `scripts/audit_market_model_lineage_v1.py`
+- `scripts/audit_market_model_lineage_v2.py`
+- `scripts/operations/apply_current_availability_downstream_certification_seam_v1.py`
+- `scripts/stamp_qb_c2_pricing_lineage_v1.py`
+- `scripts/validate_full_slate_data_quality_v1.py`
+- `scripts/validate_full_slate_mechanical_certification_v1.py`
+- `tests/test_full_slate_data_quality_scope.py`
+- `tests/test_qb_c2_lineage_current_scope.py`
 
-For the paid live artifact:
+It does **not** change core model-generation/science files, fitted model assets, weights, learned parameters, football feature-generation formulas, simulation formulas, entitlement math, or sportsbook-to-football isolation.
 
-- scheduled teams = 32
-- current live roster teams = 28
-- schedule minus roster = `LAR, NE, SEA, SF`
-- those four teams had already played and are intentionally outside the 14 remaining live sportsbook events
-- current live sportsbook/event teams = 28 and are all represented by the roster snapshot
+### What PR #523 actually changes
 
-Therefore Step 29 is applying the old all-32 roster rule even though the upstream live roster gate was already correctly repaired to event scope.
+The repair replaces stale hard-coded full-Week-1 cardinality assertions in downstream certification with the explicit certified current-availability authority where appropriate:
 
-This is a **mechanical certification-scope defect**, not a provider-fetch failure, not an identity failure, and not a model-science failure.
+- Step-29 current roster: require every **current live event team**; preserve full 32-team schedule validation; allow already-played non-event teams to be absent; fail closed if a current-event team is missing.
+- Injury scope: certify nflverse only when current official-report rows positively cover all 32 scheduled teams; incomplete scope remains a blocker.
+- QB C2 lineage coverage: reconcile to current eligible-team authority instead of hard-coded 32 while preserving C2 version, selector and mean-neutral contract.
+- WR-R15 certification: reconcile current WR1 anchor count to current eligible teams while preserving M38 WR1 anchor and R15 WR2+ redistribution contracts.
+- R22 certification: reconcile current adapted-RB count to the actual R22 audit rather than a frozen historical player count.
+- target-pool / certified-stack counts: reconcile players/teams/games to the certified current football universe instead of historical hard-coded cardinalities.
 
-## Exact next execution order
+The downstream transformer contains protected science fragments and raises if those protected scientific contracts are changed by the transform.
 
-1. Verify current `main` and inspect only commits after the production state recorded above.
-2. Do **not** rerun broad historical investigations, alias research, M108 searches, or paid live odds.
-3. Patch only the Step-29 current-roster certification invariant so that:
-   - the full schedule must still prove 32 teams / 16 games;
-   - every current live sportsbook/event team must exist in `roles_ourlads.csv`;
-   - non-event teams may be absent;
-   - a missing current-event team fails closed;
-   - a full 32-team roster remains valid;
-   - future/off-slate events cannot expand the required roster universe.
-4. Add focused regression coverage for the cases above.
-5. Run targeted tests and Repo CI/no-paid Full Slate.
-6. Replay the saved paid artifact through Step 29 locally/offline with the patched validator. Zero OddsAPI credits.
-7. If Step 29 passes, continue replaying downstream Steps 30-31 offline wherever possible and exhaustively audit:
-   - real lines/prices
-   - nonempty priced output/edges where markets exist
-   - selected-book semantics
-   - deterministic duplicate collapse
-   - provenance/status codes
-   - active-week event scope
-   - zero unresolved current-event modeled-core identities
-   - QB passing-yard rows use M89/M90 synthesis
-   - Week-1 RB rushing rows use `RB_P3_SYNTHESIS_V1`
-   - no sportsbook input leaks upstream into football projections
-8. Only after the saved paid artifact and repository validations are clean should any decision about another live run be made.
-9. When fully closed, update this handoff and `NFL_MASTER_CONTINUITY_RECORD.md`, then resume the parked QB/WR research lane.
+### Pre-existing operational current-availability seams
+
+The offline replay also invokes current-availability operations seams that already existed before PR #523. They convert stale full-32/current-player coverage assertions to the certified current-player universe without changing model parameters or formulas.
+
+One explicit operational QB availability rule should remain visible for integrity review: the current-role seam uses `primary_qb = max(is_starter, is_qb1)` for current QB row authority. That is an operational current-player selection rule, not a fitted scientific model change, and it predates PR #523. Do not hide or reinterpret it as learned QB science.
+
+The existing seams explicitly preserve:
+
+- M89/M90 QB mean authority
+- C2 states / selector / mean-neutral distribution contract
+- R26 protected contracts
+- P3 rushing authority
+- M38/R15 entitlement logic
+- TE-R5P contracts
+- R22 source assets/parameters
+- sportsbook isolation from football-generation inputs
+
+## Exact paid-artifact replay after PR #523 — PASS, ZERO NEW ODDSAPI ACQUISITION
+
+Repo CI on PR head:
+
+- run `34655125555`
+- head `723e304291ee1dcf40f5a15df50585cbffcd4471`
+- compile: PASS
+- static repo audit: PASS
+- unit tests: PASS
+
+Offline replay:
+
+- run `34655125574`
+- job `103445740378`
+- head `723e304291ee1dcf40f5a15df50585cbffcd4471`
+- downloaded exact paid artifact `run_34650067599`
+- replay environment `FETCH_LIVE_ODDS=false`
+- replay environment `FULL_SLATE_SOURCE_RUN_ID=34650067599`
+- no OddsAPI acquisition command exists in the replay workflow
+- conclusion: SUCCESS
+
+Replay evidence artifact:
+
+- artifact name `offline_replay_34655125574`
+- artifact ID `10285470181`
+- SHA256 `aa4d7a06f8f0fc521a0b19066c9ec691e3185d187c6ea91359ebdea99ebd75a9`
+
+### Replay results
+
+Step 29 / data quality:
+
+- certification blockers: **0**
+- schedule: 32 teams / 16 games certified
+- current live roster: 405 rows / 28 live-event teams
+- sportsbook/current-roster mismatches: 0
+- nflverse injury evidence: 167 rows / 32 of 32 scheduled teams -> `CERTIFIED_REPORT_SCOPE`
+- direct WR/CB unavailable state remained explicitly gated off rather than silently synthesized
+
+Pricing / football universe:
+
+- production compact rows: 782
+- exact pricing book-line rows: 1,524
+- priced side rows: 3,048
+- priced players: 344
+- quarantined rows: 126
+- football players: 405
+- football teams: 28
+- canonical current games: 14
+- sportsbook rows used to define football player universe: 0
+- sportsbook inputs used to generate football distributions: false
+- provider event IDs installed only post-simulation for lookup
+
+Promoted-model lineage:
+
+- QB football rows: 28
+- C2 selected QB rows: 26
+- C2 raw-mean preservation gap: floating-point noise only (~`5.68e-14`)
+- WR-R15 current WR1 anchors: 28; M38 anchor preserved
+- WR-R15 current WR2+ rows: 129
+- R22 current adapted RB keys: 82; receiving mean preserved
+- R26 receptions pricing lineage: PASS
+- P3 rush+reception conservation: PASS
+- TE-R5P active and team-pool/non-TE conservation preserved
+
+Final mechanical certification:
+
+- `disposition = PAID_FULL_SLATE_REPLAY_MECHANICAL_EXECUTION_CERTIFIED`
+- `certification_scope = MECHANICAL_EXECUTION_DATA_IDENTITY_PRICING_AND_COMPONENT_ROUTING_ONLY`
+- `does_not_certify_all_market_science = true`
+- `certification_blockers = 0`
+- `source_run = 34650067599`
+- `odds_api_refetched = false`
+- strict repository audit: PASS
+- 2026 production-readiness audit: PASS
+
+The replay is strong evidence that the preserved live data, identity boundary, pricing plumbing, current-availability certification and promoted-model routing now execute coherently. It is **not** a claim that every still-open market-specific research lane has acquired scientific certification.
+
+## Concurrency / coordination note
+
+During PR #523 replay, another repository lane had already made part of the QB lineage certification current-scope aware. An exact-anchor transformer check failed rather than overwriting that concurrent repair. The PR was then re-read against its current head and reconciled so the already-correct QB lineage implementation remained canonical and the downstream transformer touched only the still-stale assertions.
+
+This was a coordination/stale-context issue during repair work, not evidence of model-science degradation. Continue to re-read current `main` and the current PR head before every write or merge.
 
 ## Guardrails
 
 Do not alter:
 
 - QB/WR/RB/TE model science
-- model weights or thresholds
+- model weights or scientific thresholds
 - PlayerForm science
-- role-chain science
 - projection methodology
 - football opportunity logic
 - promoted model authorities
-- pricing semantics
+- fitted model assets or parameters
+- sportsbook isolation from upstream football generation
+- pricing semantics except a separately demonstrated downstream mechanical bug
 - sportsbook comparison semantics except a separately demonstrated downstream mechanical bug
 - promotion rules except a narrowly demonstrated mechanical validation-scope repair
 
-Do not weaken truth/integrity gates. The fix must preserve fail-closed behavior for missing **current-event** teams.
+Do not weaken truth/integrity gates. Current-availability repairs must remain fail-closed for missing current-event teams or incomplete required source scope.
+
+## Exact next execution order
+
+1. Treat current `main` plus this handoff as canonical; do not resume from stale chat state.
+2. Do **not** make another paid OddsAPI call for debugging. The exact paid artifact already replays successfully through the repaired mechanical chain.
+3. Before any merge, compare PR #523 head against current `main`, because `main` has advanced through documentation/concurrent work since the PR branch was opened.
+4. Review PR #523 specifically for methodology integrity. The required verdict is not merely “tests green”; verify again that only availability/certification/lineage cardinalities are changed and the protected scientific authorities above remain untouched.
+5. If that comparison remains clean, merge PR #523 as a mechanical production repair. Do not bundle unrelated research or science changes into the merge.
+6. After merge, run Repo CI and a no-paid/offline verification from merged `main`. Reuse the preserved paid artifact where needed; no paid fetch is necessary merely to prove the patch.
+7. A future fresh paid live run, if desired, should be a deliberate production-validation decision after merge—not a debugging mechanism.
+8. When the production incident is formally closed, update `NFL_MASTER_CONTINUITY_RECORD.md` and then resume the parked QB/WR research lane.
 
 ## Current status
 
-`original Step-25 incident FIXED -> remaining-event roster scope PASS -> modeled-core identities 0 unresolved -> rematch scope PASS -> kickoff-anchor fail-close PASS -> Knight live alias boundary PASS -> no-live football/model stack GREEN -> one paid live run executed -> live Steps 25-28 PASS -> Step 29 exposed stale all-32 roster certification rule -> MODEL SCIENCE INTEGRITY CHECK PASS -> next action is surgical Step-29 event-scope repair + zero-credit paid-artifact replay`
+`original Step-25 incident FIXED -> remaining-event roster scope PASS -> modeled-core identities 0 unresolved -> rematch scope PASS -> kickoff-anchor fail-close PASS -> Knight live alias boundary PASS -> green no-live football/model stack (live Steps 25-31 intentionally skipped) -> exact pre-live diff proves no science mutation -> one paid live run executed -> live Steps 25-28 PASS -> Step 29 exposed stale all-32 certification rule -> PR #523 repairs current-availability certification chain without changing frozen model methodology -> exact paid artifact replay passes Steps 29-31 + strict audits with 0 blockers and no refetch -> PR #523 remains OPEN/UNMERGED pending final current-main integrity comparison`
 
 ## Parked science lane
 
@@ -260,4 +365,4 @@ Preserved at `docs/handoffs/NFL_HANDOFF_2026-09-11_QB_WR_SHARED_OPPORTUNITY_CURR
 
 ## Resume rule for the next chat
 
-Do not restart the preserved-artifact replay, roster investigation, identity audit, rematch investigation, Knight alias investigation, M108 search, or paid live fetch. Verify current `main`, read this exact checkpoint, and continue with the **Step-29 event-scoped certification repair using the saved paid artifact**.
+Do not restart the preserved-artifact replay, roster investigation, identity audit, rematch investigation, Knight alias investigation, M108 search, or paid live fetch. Verify current `main`, read this exact checkpoint, inspect PR #523 against current `main`, and continue from the **merge-integrity decision**, not from the original Step-29 diagnosis.
