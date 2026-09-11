@@ -1,6 +1,7 @@
 name: Dispatch Full Slate Live Odds Once
 
 # One-shot operational dispatcher; touch only when an explicit live-odds run is requested.
+# authorized-live-run: 2026-09-11T21:35Z
 on:
   push:
     branches: [main]
