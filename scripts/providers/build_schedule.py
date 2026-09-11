@@ -127,10 +127,19 @@ def _download_nfl_data_py(season: int) -> pd.DataFrame:
     if "kickoff_utc" not in df.columns:
         if "start_time" in df.columns:
             df["kickoff_utc"] = pd.to_datetime(df["start_time"], errors="coerce", utc=True)
-        elif {"gameday", "game_time"}.issubset(df.columns):
-            df["kickoff_utc"] = pd.to_datetime(
-                df["gameday"] + " " + df["game_time"], errors="coerce", utc=True
+        elif "gameday" in df.columns and ("gametime" in df.columns or "game_time" in df.columns):
+            # nflverse schedule ``gametime`` is published in US/Eastern local time.
+            # Localize there first (respecting DST), then convert to UTC.  The old
+            # fallback looked only for ``game_time``, so current nfl_data_py rows
+            # silently became NaT and broke deterministic historical sample builds.
+            time_col = "gametime" if "gametime" in df.columns else "game_time"
+            local = pd.to_datetime(
+                df["gameday"].astype(str) + " " + df[time_col].astype(str),
+                errors="coerce",
             )
+            df["kickoff_utc"] = local.dt.tz_localize(
+                "America/New_York", ambiguous="NaT", nonexistent="shift_forward"
+            ).dt.tz_convert("UTC")
         else:
             df["kickoff_utc"] = pd.NaT
 
