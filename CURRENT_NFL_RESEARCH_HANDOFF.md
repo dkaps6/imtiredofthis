@@ -4,27 +4,44 @@
 
 Before doing anything else, read:
 
-1. `docs/handoffs/NFL_HANDOFF_2026-09-11_FULL_SLATE_LIVE_REPAIR_MERGED_CURRENT.md`
-2. `NFL_MASTER_CONTINUITY_RECORD.md`
+1. `docs/handoffs/NFL_HANDOFF_2026-09-11_WEEK2_PRODUCTION_READINESS_CURRENT.md`
+2. `docs/handoffs/NFL_HANDOFF_2026-09-11_FULL_SLATE_LIVE_REPAIR_MERGED_CURRENT.md`
+3. `NFL_MASTER_CONTINUITY_RECORD.md`
 
 GitHub is canonical; chat memory is secondary.
 
-The Week-1 live Full Slate mechanical incident is now **repaired and merged**. PR #523 was merged to `main` at `f84c6242da02b1804b4b9675c3a3a3e679838e10`. Post-merge Repo CI run `34656484043` and no-live Full Slate run `34656483980` both passed. The exact preserved paid artifact from run `34650067599` previously replayed through repaired Steps 29-31 with zero certification blockers and zero additional OddsAPI acquisition.
+## Current highest priority
 
-Do **not** restart the roster/event-scope repair, preserved-artifact replay, player-identity audit, rematch investigation, Knight alias investigation, downstream current-availability certification repair, or broad historical M107/M108 search. Do not spend another paid live-odds call merely to rediscover mechanical bugs.
+**Week-2 production readiness is now the active critical path.**
 
-Production model science remains frozen and unchanged by the repair. The active merged handoff contains the exact integrity verdict, paid-run lineage, replay evidence, merge SHA, and next authorized step.
+The Week-1 live Full Slate mechanical incident is closed and merged. Do not restart that repair.
 
-Important continuity correction: prior chat notes carried an `M108 = 26/26 PASS` label, but repository search did not recover an authoritative M108 workflow/script/run/PR proving this was a canonical repository gate. Do not invent or require an M108 test by name unless concrete GitHub lineage is later recovered.
+The current Week-1 WR, TE, QB and qualified RB football stack must **not** be described as unusable. The new concern is future-week production continuity: RB P3 rushing already has a frozen Weeks 2-18 research formula, but its live `enriched_att` production source path was not promoted because the historical availability/injury timestamp contract remained unresolved. R26 receptions and R22 receiving-tail adapters are also explicitly Week-1 production-gated and require an explicit W2+ authority decision.
 
----
+Do not redesign settled model science merely because these production gates exist. Recover and qualify the existing research lineage first.
 
-## PARKED SCIENCE CHECKPOINT
+Active branch:
+- `production-week2-readiness-2026`
 
-The QB/WR shared-opportunity / first-down pass-propensity / public pregame-intent V1B lane remains preserved at:
+Active handoff:
+- `docs/handoffs/NFL_HANDOFF_2026-09-11_WEEK2_PRODUCTION_READINESS_CURRENT.md`
 
+Exact immediate task:
+- recover STACK2/STACK3 result lineage;
+- identify the precise source/provenance gap for W2-18 `enriched_att`;
+- freeze a leakage-safe Week-2 production bridge before implementation/results;
+- then close W2+ routing for R26/R22 and run a no-paid-odds Week-2 Full Slate dry run.
+
+## Parked lanes
+
+Until Week-2 production readiness is closed, park:
+
+- QB/WR shared-opportunity / first-down public-intent V1B research;
+- broad Week-1 betting-card evaluation except production sanity checks;
+- game ML/spread/total model development;
+- anytime-TD model development.
+
+The QB/WR science checkpoint remains preserved at:
 - `docs/handoffs/NFL_HANDOFF_2026-09-11_QB_WR_SHARED_OPPORTUNITY_CURRENT.md`
 
-Resume that lane only after confirming no newer production incident supersedes the merged checkpoint.
-
-No production-science change is authorized by the live-repair work itself.
+Important continuity correction: prior chat notes carried an `M108 = 26/26 PASS` label, but repository search did not recover authoritative M108 workflow/script/run/PR evidence. Do not invent or require M108 by name unless concrete GitHub lineage is recovered.
