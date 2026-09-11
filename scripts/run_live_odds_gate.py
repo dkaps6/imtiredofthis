@@ -127,6 +127,10 @@ def _active_game_windows(
     schedule sources, so the sportsbook event may be up to roughly one day
     later in UTC. A bounded 36-hour window accepts that representation while
     rejecting later-season rematches between the same two teams.
+
+    The mirrored team rows for one game must agree on exactly one distinct
+    kickoff anchor. Any conflicting parseable anchors are an internally
+    inconsistent required schedule and therefore fail closed.
     """
     required = {"season", "week", "team", "opponent", "kickoff_utc"}
     missing = required - set(schedule.columns)
@@ -154,6 +158,21 @@ def _active_game_windows(
             )
         pair = tuple(sorted((a, b)))
         windows.setdefault(pair, set()).add(kickoff)
+
+    conflicts = {
+        pair: tuple(sorted(kickoffs))
+        for pair, kickoffs in windows.items()
+        if len(kickoffs) != 1
+    }
+    if conflicts:
+        sample = {
+            "-".join(pair): [kickoff.isoformat() for kickoff in kickoffs]
+            for pair, kickoffs in sorted(conflicts.items())
+        }
+        raise RuntimeError(
+            f"Canonical live odds schedule has conflicting kickoff_utc anchors: {sample}"
+        )
+
     return {pair: tuple(sorted(kickoffs)) for pair, kickoffs in windows.items()}
 
 

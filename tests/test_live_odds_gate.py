@@ -77,6 +77,27 @@ def test_active_slate_event_gate_excludes_other_week_and_same_pair_future_rematc
     assert _allowed_event_ids(odds, windows) == {"week1-a", "week1-b"}
 
 
+def test_conflicting_mirrored_schedule_kickoff_anchors_fail_closed():
+    schedule = pd.DataFrame([
+        {
+            "season": 2026,
+            "week": 1,
+            "team": "KC",
+            "opponent": "DEN",
+            "kickoff_utc": "2026-09-14T00:00:00Z",
+        },
+        {
+            "season": 2026,
+            "week": 1,
+            "team": "DEN",
+            "opponent": "KC",
+            "kickoff_utc": "2026-09-14T01:00:00Z",
+        },
+    ])
+    with pytest.raises(RuntimeError, match="conflicting kickoff_utc anchors"):
+        _active_game_windows(schedule, 2026, 1)
+
+
 def test_active_pair_with_invalid_commence_time_fails_closed():
     schedule = pd.DataFrame([
         {
