@@ -7,6 +7,7 @@ on:
     paths:
       - 'scripts/backtest/build_qb_public_intent_sample_v1.py'
       - 'scripts/backtest/audit_qb_first_down_public_intent_source_v1.py'
+      - 'scripts/providers/build_schedule.py'
       - '.github/workflows/audit-qb-public-intent-source-v1.yml'
   workflow_dispatch:
 
