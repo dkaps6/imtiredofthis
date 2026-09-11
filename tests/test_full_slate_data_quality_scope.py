@@ -1,7 +1,10 @@
 import pandas as pd
 import pytest
 
-from scripts.validate_full_slate_data_quality_v1 import _validate_current_roster_scope
+from scripts.validate_full_slate_data_quality_v1 import (
+    _derive_positive_row_injury_scope,
+    _validate_current_roster_scope,
+)
 
 
 ALL_TEAMS = {
@@ -35,6 +38,12 @@ def _game_odds(teams: set[str]) -> pd.DataFrame:
     )
 
 
+def _injuries(teams: set[str]) -> pd.DataFrame:
+    return pd.DataFrame(
+        [{"team": team, "player": f"{team} Injured Player"} for team in sorted(teams)]
+    )
+
+
 def test_current_roster_scope_accepts_28_team_remaining_slate():
     role_teams, live_event_teams = _validate_current_roster_scope(
         ALL_TEAMS,
@@ -64,4 +73,39 @@ def test_current_roster_scope_rejects_missing_live_event_team():
             ALL_TEAMS,
             _roles(LIVE_TEAMS - {missing_team}),
             _game_odds(LIVE_TEAMS),
+        )
+
+
+def test_positive_row_injury_scope_certifies_exact_32_team_coverage():
+    scope = _derive_positive_row_injury_scope(
+        _injuries(ALL_TEAMS),
+        ALL_TEAMS,
+        source="nflverse",
+    )
+
+    assert scope is not None
+    assert set(scope["team"]) == ALL_TEAMS
+    assert set(scope["scope_state"]) == {"OFFICIAL_REPORT_ROWS"}
+    assert scope["injury_rows"].eq(1).all()
+
+
+def test_positive_row_injury_scope_keeps_31_team_coverage_unproven():
+    missing_team = sorted(ALL_TEAMS)[0]
+    scope = _derive_positive_row_injury_scope(
+        _injuries(ALL_TEAMS - {missing_team}),
+        ALL_TEAMS,
+        source="nflverse",
+    )
+
+    assert scope is None
+
+
+def test_positive_row_injury_scope_rejects_off_schedule_team():
+    bad = _injuries(ALL_TEAMS)
+    bad.loc[len(bad)] = {"team": "XYZ", "player": "Bad Team Player"}
+    with pytest.raises(RuntimeError, match="outside active schedule"):
+        _derive_positive_row_injury_scope(
+            bad,
+            ALL_TEAMS,
+            source="nflverse",
         )
