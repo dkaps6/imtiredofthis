@@ -1,0 +1,39 @@
+name: QB Public Intent Source V1
+
+on:
+  push:
+    branches:
+      - research-qb-first-down-public-intent-source-v1
+    paths:
+      - 'scripts/backtest/build_qb_public_intent_sample_v1.py'
+      - 'scripts/backtest/audit_qb_first_down_public_intent_source_v1.py'
+      - '.github/workflows/audit-qb-public-intent-source-v1.yml'
+  workflow_dispatch:
+
+jobs:
+  build-frozen-sample:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install minimal dependencies
+        run: python -m pip install --upgrade pip pandas requests nfl_data_py
+      - name: Build deterministic schedule and pending-review manifest
+        env:
+          PYTHONPATH: .
+        run: |
+          mkdir -p artifacts/qb_public_intent_source_v1
+          python scripts/backtest/build_qb_public_intent_sample_v1.py \
+            --schedule-out artifacts/qb_public_intent_source_v1/frozen_schedule.csv \
+            --manifest-out artifacts/qb_public_intent_source_v1/collection_manifest.csv
+      - name: Guard against premature scientific grading
+        run: |
+          test ! -f artifacts/qb_public_intent_source_v1/source_ledger.csv
+          echo 'source qualification intentionally not run: ledger research incomplete'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qb-public-intent-source-v1-sample
+          path: artifacts/qb_public_intent_source_v1/
+          if-no-files-found: error
