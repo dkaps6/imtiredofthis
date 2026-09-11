@@ -223,38 +223,50 @@ def audit(season: int, week: int, *, live_odds_enabled: bool) -> pd.DataFrame:
     ))
 
     if live_odds_enabled:
+        # Canonical Full Slate intentionally resolves all football eligibility and
+        # builds PlayerForm before sportsbook acquisition. Therefore a missing
+        # live_odds_status.json at this pre-model gate is the expected state, not
+        # a failure. The downstream run_live_odds_gate.py step fetches, clears,
+        # scopes, hardens, and validates sportsbook artifacts after football is
+        # complete. If a live artifact is already present, retain the historical
+        # hard checks below so an unexpected/stale artifact cannot pass silently.
         live_path = DATA / "live_odds_status.json"
         if not live_path.exists() or live_path.stat().st_size <= 0:
-            raise RuntimeError("live odds enabled but live_odds_status.json missing")
-        live = json.loads(live_path.read_text(encoding="utf-8"))
-        if not bool(live.get("available")):
-            rows.append(_row("live_odds", "PASS_NO_MARKETS", f"status={live.get('status')}"))
-        else:
-            if live.get("artifact_hardening_disposition") != "LIVE_ODDS_ARTIFACTS_SEMANTICALLY_HARDENED":
-                raise RuntimeError(f"live odds semantic hardening not confirmed: {live.get('artifact_hardening_disposition')}")
-            if live.get("core_prop_identity_disposition") != "LIVE_PROP_IDENTITY_READY":
-                raise RuntimeError(f"live core prop identity not ready: {live.get('core_prop_identity_disposition')}")
-            if int(live.get("core_prop_identity_unresolved_rows", -1)) != 0:
-                raise RuntimeError("live core prop identity has unresolved real rows")
-            props = _read(OUTPUTS / "props_raw.csv")
-            placeholder = pd.to_numeric(props.get("bookmaker_missing", 0), errors="coerce").fillna(0).eq(1)
-            actual = props.loc[~placeholder].copy()
-            if actual.empty:
-                raise RuntimeError("live odds status says available but compact props have zero actual rows")
-            player_col = next((c for c in ("canonical_player_name", "player_canonical", "player") if c in actual.columns), None)
-            if player_col is None:
-                raise RuntimeError("live compact props have no canonical player column")
-            if _text(actual[player_col]).eq("").any():
-                raise RuntimeError("actual live prop rows contain blank canonical player")
-            for col in ("team_abbr", "opponent_abbr", "event_id", "market"):
-                if col not in actual.columns or _text(actual[col]).eq("").any():
-                    raise RuntimeError(f"actual live prop rows contain missing {col}")
-            if actual.duplicated().any():
-                raise RuntimeError("compact live prop artifact contains exact duplicate rows after hardening")
             rows.append(_row(
-                "live_odds", "PASS",
-                f"actual_rows={len(actual)} core_rows={live.get('core_prop_identity_rows',0)} hardening=1 unresolved=0 duplicates_removed={live.get('raw_artifact_exact_duplicates_removed',0)}",
+                "live_odds",
+                "PASS_DEFERRED_TO_POST_FOOTBALL_GATE",
+                "FETCH_LIVE_ODDS=true; sportsbook acquisition/validation occurs after football eligibility",
             ))
+        else:
+            live = json.loads(live_path.read_text(encoding="utf-8"))
+            if not bool(live.get("available")):
+                rows.append(_row("live_odds", "PASS_NO_MARKETS", f"status={live.get('status')}"))
+            else:
+                if live.get("artifact_hardening_disposition") != "LIVE_ODDS_ARTIFACTS_SEMANTICALLY_HARDENED":
+                    raise RuntimeError(f"live odds semantic hardening not confirmed: {live.get('artifact_hardening_disposition')}")
+                if live.get("core_prop_identity_disposition") != "LIVE_PROP_IDENTITY_READY":
+                    raise RuntimeError(f"live core prop identity not ready: {live.get('core_prop_identity_disposition')}")
+                if int(live.get("core_prop_identity_unresolved_rows", -1)) != 0:
+                    raise RuntimeError("live core prop identity has unresolved real rows")
+                props = _read(OUTPUTS / "props_raw.csv")
+                placeholder = pd.to_numeric(props.get("bookmaker_missing", 0), errors="coerce").fillna(0).eq(1)
+                actual = props.loc[~placeholder].copy()
+                if actual.empty:
+                    raise RuntimeError("live odds status says available but compact props have zero actual rows")
+                player_col = next((c for c in ("canonical_player_name", "player_canonical", "player") if c in actual.columns), None)
+                if player_col is None:
+                    raise RuntimeError("live compact props have no canonical player column")
+                if _text(actual[player_col]).eq("").any():
+                    raise RuntimeError("actual live prop rows contain blank canonical player")
+                for col in ("team_abbr", "opponent_abbr", "event_id", "market"):
+                    if col not in actual.columns or _text(actual[col]).eq("").any():
+                        raise RuntimeError(f"actual live prop rows contain missing {col}")
+                if actual.duplicated().any():
+                    raise RuntimeError("compact live prop artifact contains exact duplicate rows after hardening")
+                rows.append(_row(
+                    "live_odds", "PASS",
+                    f"actual_rows={len(actual)} core_rows={live.get('core_prop_identity_rows',0)} hardening=1 unresolved=0 duplicates_removed={live.get('raw_artifact_exact_duplicates_removed',0)}",
+                ))
     else:
         rows.append(_row("live_odds", "SKIP_NO_CREDIT_MODE", "FETCH_LIVE_ODDS=false"))
     return pd.DataFrame(rows)
