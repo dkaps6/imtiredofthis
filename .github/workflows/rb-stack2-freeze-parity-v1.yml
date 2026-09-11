@@ -1,0 +1,73 @@
+name: RB STACK2 Freeze Parity V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - production-season-long-readiness-2026
+    paths:
+      - 'scripts/operations/freeze_rb_stack2_allocation_v1.py'
+      - '.github/workflows/rb-stack2-freeze-parity-v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M94C_RUN_ID: '33353485070'
+  STACK1_RUN_ID: '33535308110'
+  STACK2_RUN_ID: '33538770934'
+
+jobs:
+  freeze-parity:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned project stack
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Compile
+        run: python -m py_compile scripts/operations/freeze_rb_stack2_allocation_v1.py
+      - name: Download frozen historical authorities
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p data/backtests/rb_stack2_freeze/m94c \
+                   data/backtests/rb_stack2_freeze/stack1 \
+                   data/backtests/rb_stack2_freeze/archived_stack2
+          gh run download "$M94C_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-94c-rb-game-environment \
+            --dir data/backtests/rb_stack2_freeze/m94c
+          gh run download "$STACK1_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name rb-stack1-production-equivalent-baseline \
+            --dir data/backtests/rb_stack2_freeze/stack1
+          gh run download "$STACK2_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name rb-stack2-enriched-allocation-integration \
+            --dir data/backtests/rb_stack2_freeze/archived_stack2
+          test -s data/backtests/rb_stack2_freeze/m94c/m94c_2025_rb_trace.csv
+          test -n "$(find data/backtests/rb_stack2_freeze/stack1 -name stack1_2025_rb_trace.csv -print -quit)"
+          test -n "$(find data/backtests/rb_stack2_freeze/archived_stack2 -name stack2_2025_casebook.csv -print -quit)"
+      - name: Materialize frozen allocation learner and verify exact parity
+        run: |
+          rm -rf data/backtests/rb_stack2_freeze/results
+          python scripts/operations/freeze_rb_stack2_allocation_v1.py \
+            --m94c-root data/backtests/rb_stack2_freeze/m94c \
+            --stack1-root data/backtests/rb_stack2_freeze/stack1 \
+            --archived-stack2-root data/backtests/rb_stack2_freeze/archived_stack2 \
+            --out-dir data/backtests/rb_stack2_freeze/results
+      - name: Show result
+        if: always()
+        run: |
+          cat data/backtests/rb_stack2_freeze/results/rb_stack2_frozen_allocation_result_v1.json 2>/dev/null || true
+          cat data/backtests/rb_stack2_freeze/results/rb_stack2_2026_roster_metadata_contract.json 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-stack2-freeze-parity-v1
+          path: data/backtests/rb_stack2_freeze/results/**
+          retention-days: 30
