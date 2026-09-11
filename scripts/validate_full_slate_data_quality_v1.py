@@ -47,6 +47,99 @@ def _nonblank_count(series: pd.Series) -> int:
     return int(series.astype("string").fillna("").str.strip().ne("").sum())
 
 
+def _validate_current_roster_scope(
+    scheduled_teams: set[str],
+    roles: pd.DataFrame,
+    game_odds: pd.DataFrame,
+) -> tuple[set[str], set[str]]:
+    """Require roster coverage for the already-gated live event universe.
+
+    The live odds gate has already removed off-week events and later rematches.
+    Teams whose Week-1 games have already been played may legitimately be absent
+    from the current Ourlads snapshot, so the quality classifier must not restore
+    the old all-32 roster invariant. Extra roster teams are allowed only when they
+    are part of the authoritative active-week schedule, and any missing live-event
+    team remains fatal.
+    """
+    if "team" not in roles.columns:
+        raise RuntimeError("current Ourlads roster missing team column")
+    required_game_cols = {"home_team", "away_team"}
+    missing_game_cols = required_game_cols - set(game_odds.columns)
+    if missing_game_cols:
+        raise RuntimeError(
+            f"odds_game missing columns required for current-roster scope: {sorted(missing_game_cols)}"
+        )
+
+    role_series = roles["team"].map(canon_team).astype("string").fillna("").str.strip()
+    if role_series.eq("").any():
+        raise RuntimeError("current Ourlads roster contains unresolvable team identity")
+    role_teams = set(role_series)
+
+    live_event_teams: set[str] = set()
+    for col in ("home_team", "away_team"):
+        event_series = game_odds[col].map(canon_team).astype("string").fillna("").str.strip()
+        if event_series.eq("").any():
+            raise RuntimeError("live odds event scope contains unresolvable team identity")
+        live_event_teams.update(event_series)
+    if not live_event_teams:
+        raise RuntimeError("live odds event scope contains zero teams")
+
+    off_schedule_events = sorted(live_event_teams - scheduled_teams)
+    if off_schedule_events:
+        raise RuntimeError(
+            f"live odds event scope contains teams outside active schedule: {off_schedule_events}"
+        )
+    off_schedule_roster = sorted(role_teams - scheduled_teams)
+    if off_schedule_roster:
+        raise RuntimeError(
+            f"current Ourlads roster contains teams outside active schedule: {off_schedule_roster}"
+        )
+    missing_live = sorted(live_event_teams - role_teams)
+    if missing_live:
+        raise RuntimeError(
+            f"current Ourlads roster missing live-event teams: {missing_live}"
+        )
+
+    return role_teams, live_event_teams
+
+
+def _derive_positive_row_injury_scope(
+    injuries: pd.DataFrame,
+    scheduled_teams: set[str],
+    *,
+    source: str,
+) -> pd.DataFrame | None:
+    """Prove complete injury-source scope when every scheduled team has a row.
+
+    Positive report rows are sufficient to prove that a team was represented by
+    the source. They are *not* sufficient to infer that a team with no rows had
+    no injuries. Therefore this helper certifies only exact 32/32 positive-row
+    coverage; partial coverage remains unproven and fail-closed.
+    """
+    if injuries.empty or "team" not in injuries.columns:
+        return None
+    teams = injuries["team"].map(canon_team).astype("string").fillna("").str.strip()
+    if teams.eq("").any():
+        raise RuntimeError("injury artifact contains unresolvable team identity")
+    injury_teams = set(teams)
+    off_schedule = sorted(injury_teams - scheduled_teams)
+    if off_schedule:
+        raise RuntimeError(f"injury artifact contains teams outside active schedule: {off_schedule}")
+    if injury_teams != scheduled_teams:
+        return None
+
+    counts = teams.value_counts().to_dict()
+    return pd.DataFrame([
+        {
+            "team": team,
+            "scope_state": "OFFICIAL_REPORT_ROWS",
+            "injury_rows": int(counts.get(team, 0)),
+            "source": str(source),
+        }
+        for team in sorted(scheduled_teams)
+    ])
+
+
 def audit() -> dict:
     rows: list[dict] = []
     season = int(resolve_season())
@@ -68,10 +161,18 @@ def audit() -> dict:
     rows.append(_row("schedule", "CERTIFIED", f"teams=32 games=16"))
 
     roles = _read(DATA / "roles_ourlads.csv")
-    role_teams = set(roles["team"].map(canon_team))
-    if role_teams != scheduled_teams:
-        raise RuntimeError("current Ourlads roster team set does not match scheduled teams")
-    rows.append(_row("current_roster", "LIVE_PROVIDER_ROSTER_PRESENT", f"source=ourlads rows={len(roles)} teams=32 players={roles['player'].nunique()}"))
+    game_odds = _read(OUTPUTS / "odds_game.csv")
+    role_teams, live_event_teams = _validate_current_roster_scope(
+        scheduled_teams,
+        roles,
+        game_odds,
+    )
+    rows.append(_row(
+        "current_roster",
+        "LIVE_PROVIDER_ROSTER_PRESENT",
+        f"source=ourlads rows={len(roles)} teams={len(role_teams)} "
+        f"live_event_teams={len(live_event_teams)} scheduled_teams=32 players={roles['player'].nunique()}",
+    ))
 
     identity = _json(DATA / "player_identity_semantic_audit.json")
     suspicious = int(identity.get("temporary_possible_historical_aliases", -1))
@@ -119,10 +220,13 @@ def audit() -> dict:
     ))
 
     # Injury certification is about source scope, not forcing every team to have
-    # a player row. The NFL page can explicitly state No Injuries Reported.
+    # a player row. The NFL page can explicitly state No Injuries Reported. A
+    # source with positive current-week rows for all 32 teams also proves scope
+    # without making any inference about teams that have no rows.
     injury_status = _json(DATA / "injuries_source_status.json")
     injuries = _read(DATA / "injuries.csv", required=False)
     injury_state = str(injury_status.get("state", ""))
+    scope_proven = False
     if injury_state == "official_report":
         if injuries.empty:
             raise RuntimeError("injury status says official_report but injury artifact is empty")
@@ -133,6 +237,29 @@ def audit() -> dict:
         scope_proven = bool(injury_status.get("all_scheduled_teams_checked", False))
         if scope_proven:
             scope = _read(DATA / "injury_team_scope.csv")
+        else:
+            scope = _derive_positive_row_injury_scope(
+                injuries,
+                scheduled_teams,
+                source=str(injury_status.get("source", "")),
+            )
+            if scope is not None:
+                scope_proven = True
+                scope.to_csv(DATA / "injury_team_scope.csv", index=False)
+                injury_status = dict(injury_status)
+                injury_status.update({
+                    "all_scheduled_teams_checked": True,
+                    "scheduled_teams_checked": 32,
+                    "teams_with_report_rows": 32,
+                    "teams_explicit_no_injuries_reported": 0,
+                    "scope_basis": "complete_current_week_positive_report_row_coverage",
+                    "scope_ledger": str(DATA / "injury_team_scope.csv"),
+                })
+                (DATA / "injuries_source_status.json").write_text(
+                    json.dumps(injury_status, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+        if scope_proven:
             if not {"team", "scope_state"}.issubset(scope.columns):
                 raise RuntimeError("injury scope ledger missing team/scope_state")
             scope_teams = set(scope["team"].map(canon_team).dropna().astype(str))
@@ -223,7 +350,7 @@ def audit() -> dict:
         if {"provider", "status", "detail"}.issubset(readiness.columns):
             if (readiness["provider"] == "injuries").any():
                 mask = readiness["provider"].eq("injuries")
-                readiness.loc[mask, "status"] = "report_scope_certified" if bool(injury_status.get("all_scheduled_teams_checked", False)) else "partial_scope_not_proven"
+                readiness.loc[mask, "status"] = "report_scope_certified" if scope_proven else "partial_scope_not_proven"
             if (readiness["provider"] == "coverage_v2").any():
                 mask = readiness["provider"].eq("coverage_v2")
                 readiness.loc[mask, "status"] = "direct_matchup_unavailable_gated_off" if direct <= 0 else "direct_matchups_available"

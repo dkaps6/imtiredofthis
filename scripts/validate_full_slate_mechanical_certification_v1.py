@@ -10,6 +10,7 @@ that all football-model science gates have passed.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -23,6 +24,22 @@ AUDIT = Path("data/full_slate_post_pricing_audit.csv")
 def main() -> int:
     result = audit()
     blockers = int(result.get("certification_blockers", 0))
+
+    # The durable certification artifact must identify the sportsbook snapshot
+    # that actually supplied the pricing data. Offline replays set
+    # FULL_SLATE_SOURCE_RUN_ID explicitly; a genuinely live Full Slate falls
+    # back to its own GITHUB_RUN_ID. Never preserve the validator's legacy
+    # historical default when an execution-scoped source run is available.
+    source_run = (
+        os.environ.get("FULL_SLATE_SOURCE_RUN_ID", "").strip()
+        or os.environ.get("GITHUB_RUN_ID", "").strip()
+    )
+    if source_run:
+        result["source_run"] = int(source_run)
+    result["odds_api_refetched"] = (
+        str(os.environ.get("FETCH_LIVE_ODDS", "false")).strip().lower() == "true"
+    )
+
     result["legacy_post_pricing_disposition"] = result.get("disposition")
     result["certification_scope"] = "MECHANICAL_EXECUTION_DATA_IDENTITY_PRICING_AND_COMPONENT_ROUTING_ONLY"
     result["does_not_certify_all_market_science"] = True
