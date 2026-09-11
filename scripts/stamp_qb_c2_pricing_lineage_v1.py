@@ -90,6 +90,52 @@ def _validate_current_c2_scope(
     return scope
 
 
+def _validate_priced_c2_subset(
+    lookup: dict[tuple[str, str], pd.Series],
+    matched_identities: set[tuple[str, str]],
+    selected_players: int,
+) -> dict:
+    """Validate sportsbook-priced QBs as a downstream subset of football QBs.
+
+    Sportsbook offer availability may omit an otherwise valid football starter.
+    The sportsbook is therefore never allowed to define the upstream football QB
+    universe. Every priced QB must exist in the certified C2 football audit, but
+    certified football QBs without a pass-yard offer are explicitly allowed and
+    recorded as downstream coverage gaps.
+    """
+    audit_identities = set(lookup)
+    if not matched_identities:
+        raise RuntimeError("QB C2 pricing lineage matched zero priced pass-yard QBs")
+    extra = sorted(matched_identities - audit_identities)
+    if extra:
+        raise RuntimeError(f"priced QB identities absent from C2 football audit: {extra[:20]}")
+
+    selected_audit_identities = {
+        identity
+        for identity, row in lookup.items()
+        if int(row.get("selector_c2_selected")) == 1
+    }
+    expected_selected_priced = int(len(selected_audit_identities & matched_identities))
+    if int(selected_players) != expected_selected_priced:
+        raise RuntimeError(
+            "QB C2 stamped selected-player count drift within priced subset "
+            f"expected={expected_selected_priced} actual={selected_players}"
+        )
+
+    missing_priced = sorted(audit_identities - matched_identities)
+    return {
+        "football_qbs": int(len(audit_identities)),
+        "priced_pass_yard_qbs": int(len(matched_identities)),
+        "football_qbs_without_priced_pass_yard_offer": int(len(missing_priced)),
+        "football_qbs_without_priced_pass_yard_offer_identities": [
+            {"team": team, "player_key": player_key} for team, player_key in missing_priced
+        ],
+        "c2_selected_football_qbs": int(len(selected_audit_identities)),
+        "c2_selected_priced_qbs": int(expected_selected_priced),
+        "c2_selected_unpriced_qbs": int(len(selected_audit_identities - matched_identities)),
+    }
+
+
 def main() -> int:
     priced = _read(PRICED)
     c2 = _read(C2_CSV)
@@ -195,28 +241,23 @@ def main() -> int:
 
     if missing_rows:
         raise RuntimeError(f"priced pass-yard rows missing QB C2 audit identity: {missing_rows[:20]}")
-    if len(matched_identities) != expected_qbs:
-        raise RuntimeError(
-            f"priced QB C2 stamp matched {len(matched_identities)} unique QBs, expected {expected_qbs}"
-        )
-
-    # Every C2 audit QB must be represented in priced pass-yards for this slate.
-    audit_identities = set(lookup)
-    if matched_identities != audit_identities:
-        raise RuntimeError(
-            "priced QB identity set != C2 production audit; "
-            f"missing={sorted(audit_identities-matched_identities)[:20]} "
-            f"extra={sorted(matched_identities-audit_identities)[:20]}"
-        )
 
     pass_rows = priced.loc[pass_mask].copy()
     selected_players = int(
         pass_rows.loc[pd.to_numeric(pass_rows["qb_distribution_specialist_applied"], errors="coerce").eq(1), ["team", "player"]]
         .drop_duplicates().shape[0]
     )
-    expected_selected = int(status.get("selected_qb_rows", -1))
-    if selected_players != expected_selected:
-        raise RuntimeError(f"QB C2 stamped selected-player count drift expected={expected_selected} actual={selected_players}")
+    priced_scope = _validate_priced_c2_subset(lookup, matched_identities, selected_players)
+    if int(priced_scope["football_qbs"]) != expected_qbs:
+        raise RuntimeError(
+            "QB C2 football audit identity count drifted from certified eligible-team scope; "
+            f"audit={priced_scope['football_qbs']} expected={expected_qbs}"
+        )
+    if int(priced_scope["c2_selected_football_qbs"]) != int(status.get("selected_qb_rows", -1)):
+        raise RuntimeError(
+            "QB C2 selected football-QB count differs between CSV and JSON audit; "
+            f"csv={priced_scope['c2_selected_football_qbs']} json={status.get('selected_qb_rows')}"
+        )
     if not pass_rows["qb_distribution_candidate_version"].eq(SPECIALIST_VERSION).all():
         raise RuntimeError("not every pass-yard row records the frozen C2 candidate version")
     if pass_rows["qb_distribution_selector_version"].astype(str).str.strip().eq("").any():
@@ -255,16 +296,22 @@ def main() -> int:
         "priced_side_rows": int(len(priced)),
         "pass_yard_side_rows": int(pass_mask.sum()),
         "pass_yard_qbs": int(len(matched_identities)),
+        "football_qbs": int(priced_scope["football_qbs"]),
+        "football_qbs_without_priced_pass_yard_offer": int(priced_scope["football_qbs_without_priced_pass_yard_offer"]),
+        "football_qbs_without_priced_pass_yard_offer_identities": priced_scope["football_qbs_without_priced_pass_yard_offer_identities"],
         "current_team_scope_mode": str(scope["mode"]),
         "current_team_scope_expected": int(scope["expected_teams"]),
-        "c2_selected_qbs": selected_players,
-        "c2_unselected_qbs": int(expected_qbs - selected_players),
+        "c2_selected_qbs": int(priced_scope["c2_selected_priced_qbs"]),
+        "c2_selected_football_qbs": int(priced_scope["c2_selected_football_qbs"]),
+        "c2_selected_unpriced_qbs": int(priced_scope["c2_selected_unpriced_qbs"]),
+        "c2_unselected_priced_qbs": int(len(matched_identities) - selected_players),
         "specialist_version": SPECIALIST_VERSION,
         "selector_version": str(pass_rows["qb_distribution_selector_version"].iloc[0]),
         "max_raw_mean_gap": float(gap.abs().max()),
         "non_pass_specialist_rows": 0,
         "protected_columns_changed": 0,
         "sportsbook_inputs_used_to_stamp": False,
+        "sportsbook_offer_coverage_defines_football_universe": False,
         "pricing_values_modified": False,
         "source_c2_audit": str(C2_JSON),
         "output": str(PRICED),
