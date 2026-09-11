@@ -1,0 +1,55 @@
+name: QB First Down Choice Economics Source V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-qb-first-down-choice-economics-source-v1
+    paths:
+      - ".github/workflows/audit-qb-first-down-choice-economics-source-v1.yml"
+      - "scripts/backtest/audit_qb_first_down_choice_economics_source_v1.py"
+      - "docs/migrations/QB_FIRST_DOWN_CHOICE_ECONOMICS_SOURCE_V1_PLAN.md"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy
+      - name: Declare frozen source-only boundary
+        run: |
+          echo 'SOURCE AUDIT ONLY: first-down pass-vs-run EPA/success economics.'
+          echo 'No parent residual, QB/WR residual, sportsbook input, model fitting, or production change.'
+          echo 'Target source-audit seasons: 2023-2025. 2022 is history support only.'
+      - name: Compile frozen source evaluator
+        run: python -m py_compile scripts/backtest/audit_qb_first_down_choice_economics_source_v1.py
+      - name: Run frozen source audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests/qb_first_down_choice_economics_source_v1
+          python scripts/backtest/audit_qb_first_down_choice_economics_source_v1.py \
+            --out-dir data/backtests/qb_first_down_choice_economics_source_v1
+      - name: Show result
+        if: always()
+        run: cat data/backtests/qb_first_down_choice_economics_source_v1/first_down_choice_economics_source_result.json 2>/dev/null || true
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-first-down-choice-economics-source-v1
+          path: |
+            data/backtests/qb_first_down_choice_economics_source_v1/*
+            docs/migrations/QB_FIRST_DOWN_CHOICE_ECONOMICS_SOURCE_V1_PLAN.md
+          if-no-files-found: warn
+          retention-days: 30
