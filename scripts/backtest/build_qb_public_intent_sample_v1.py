@@ -6,6 +6,9 @@ preregistered deterministic 2023-2025 team-week universe (weeks 2,5,8,11,14,17)
 and a PENDING_REVIEW collection manifest. That prevents unsearched rows from being
 silently labeled NO_RECONSTRUCTABLE_SOURCE and keeps source qualification separate
 from football outcomes/model data.
+
+Historical kickoff timestamps come from ``scripts.providers.build_schedule``; this
+script does not alter the frozen sample or infer missing kickoff times itself.
 """
 from __future__ import annotations
 
