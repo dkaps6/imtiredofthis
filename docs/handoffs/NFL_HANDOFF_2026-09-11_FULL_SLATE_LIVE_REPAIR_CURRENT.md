@@ -6,11 +6,11 @@ GitHub is canonical; chat memory is secondary.
 
 The Week-1 live Full Slate incident has advanced past the original Step-25 failure and past the controlled paid-run Step-29 failure. The original live fetch/gate incident is repaired. One controlled paid live Full Slate was executed from repaired `main`; it passed football Steps 1-24 and live sportsbook Steps 25-28, then failed mechanically at Step 29 because a downstream validator still required the current live roster to contain all 32 Week-1 teams even though four teams had already played.
 
-PR #523 now contains the mechanical/current-availability certification repair. The exact preserved paid artifact from run `34650067599` has been replayed through Steps 29-31 and strict repository audits with **zero certification blockers and zero additional OddsAPI acquisition**. PR #523 remains **OPEN / UNMERGED** pending final integrity review against current `main`.
+PR #523 now contains the mechanical/current-availability certification repair. The exact preserved paid artifact from run `34650067599` has been replayed through Steps 29-31 and strict repository audits with **zero certification blockers and zero additional OddsAPI acquisition**. PR #523 remains **OPEN / UNMERGED** pending final integrity reconciliation against current `main`.
 
-**Do not restart completed investigations. Do not redesign or retune model science. Do not spend another paid live-odds call to discover bugs. Do not merge PR #523 blindly without first comparing it to current `main`.**
+**Do not restart completed investigations. Do not redesign or retune model science. Do not spend another paid live-odds call to discover bugs. Do not merge PR #523 blindly without first reconciling it to current `main`.**
 
-Current `main` immediately before this handoff update was `0b066e31b38ff5a20e456f9a8fceac7369effbab` (`Update Full Slate handoff after controlled live run`). This handoff update is documentation-only and advances `main`; always inspect only the intervening diff before continuing.
+Current `main` immediately before this handoff correction was `e4c1a620e9d1720d60f3f2d9267bb731ea016f8f` (`Reconcile Full Slate handoff with PR 523 replay`). This handoff update is documentation-only and advances `main`; always inspect only the intervening diff before continuing.
 
 ## Integrity verdict — the paid failure was NOT caused by model-methodology degradation
 
@@ -197,7 +197,9 @@ PR #523: `Scope Step 29 roster quality gate to live events`
 
 - branch: `repair/week1-step29-event-roster-scope`
 - currently audited head: `723e304291ee1dcf40f5a15df50585cbffcd4471`
-- state at this handoff: OPEN, mergeable, NOT merged
+- state at this handoff: **OPEN, NOT MERGED; GitHub currently reports `mergeable=false`**
+- comparison to current handoff-era `main`: branch is `ahead_by=16`, `behind_by=2`, status `diverged`, merge base `be061eaf23372f080db3911d3b4919120c744c53`
+- do not merge until the branch is explicitly reconciled/rebased against current `main` and revalidated
 
 PR #523 changed only replay/certification/lineage plumbing and tests:
 
@@ -348,16 +350,17 @@ Do not weaken truth/integrity gates. Current-availability repairs must remain fa
 
 1. Treat current `main` plus this handoff as canonical; do not resume from stale chat state.
 2. Do **not** make another paid OddsAPI call for debugging. The exact paid artifact already replays successfully through the repaired mechanical chain.
-3. Before any merge, compare PR #523 head against current `main`, because `main` has advanced through documentation/concurrent work since the PR branch was opened.
-4. Review PR #523 specifically for methodology integrity. The required verdict is not merely “tests green”; verify again that only availability/certification/lineage cardinalities are changed and the protected scientific authorities above remain untouched.
-5. If that comparison remains clean, merge PR #523 as a mechanical production repair. Do not bundle unrelated research or science changes into the merge.
-6. After merge, run Repo CI and a no-paid/offline verification from merged `main`. Reuse the preserved paid artifact where needed; no paid fetch is necessary merely to prove the patch.
-7. A future fresh paid live run, if desired, should be a deliberate production-validation decision after merge—not a debugging mechanism.
-8. When the production incident is formally closed, update `NFL_MASTER_CONTINUITY_RECORD.md` and then resume the parked QB/WR research lane.
+3. PR #523 currently diverges from `main` and GitHub reports `mergeable=false`; reconcile/rebase it before any merge attempt.
+4. After reconciliation, review PR #523 specifically for methodology integrity. The required verdict is not merely “tests green”; verify again that only availability/certification/lineage cardinalities are changed and the protected scientific authorities above remain untouched.
+5. Re-run Repo CI and the zero-credit paid-artifact replay on the reconciled PR head.
+6. If those checks remain clean, merge PR #523 as a mechanical production repair. Do not bundle unrelated research or science changes into the merge.
+7. After merge, run Repo CI and a no-paid/offline verification from merged `main`. Reuse the preserved paid artifact where needed; no paid fetch is necessary merely to prove the patch.
+8. A future fresh paid live run, if desired, should be a deliberate production-validation decision after merge—not a debugging mechanism.
+9. When the production incident is formally closed, update `NFL_MASTER_CONTINUITY_RECORD.md` and then resume the parked QB/WR research lane.
 
 ## Current status
 
-`original Step-25 incident FIXED -> remaining-event roster scope PASS -> modeled-core identities 0 unresolved -> rematch scope PASS -> kickoff-anchor fail-close PASS -> Knight live alias boundary PASS -> green no-live football/model stack (live Steps 25-31 intentionally skipped) -> exact pre-live diff proves no science mutation -> one paid live run executed -> live Steps 25-28 PASS -> Step 29 exposed stale all-32 certification rule -> PR #523 repairs current-availability certification chain without changing frozen model methodology -> exact paid artifact replay passes Steps 29-31 + strict audits with 0 blockers and no refetch -> PR #523 remains OPEN/UNMERGED pending final current-main integrity comparison`
+`original Step-25 incident FIXED -> remaining-event roster scope PASS -> modeled-core identities 0 unresolved -> rematch scope PASS -> kickoff-anchor fail-close PASS -> Knight live alias boundary PASS -> green no-live football/model stack (live Steps 25-31 intentionally skipped) -> exact pre-live diff proves no science mutation -> one paid live run executed -> live Steps 25-28 PASS -> Step 29 exposed stale all-32 certification rule -> PR #523 repairs current-availability certification chain without changing frozen model methodology -> exact paid artifact replay passes Steps 29-31 + strict audits with 0 blockers and no refetch -> PR #523 remains OPEN/UNMERGED and is now diverged from current main; reconcile + revalidate before merge`
 
 ## Parked science lane
 
@@ -365,4 +368,4 @@ Preserved at `docs/handoffs/NFL_HANDOFF_2026-09-11_QB_WR_SHARED_OPPORTUNITY_CURR
 
 ## Resume rule for the next chat
 
-Do not restart the preserved-artifact replay, roster investigation, identity audit, rematch investigation, Knight alias investigation, M108 search, or paid live fetch. Verify current `main`, read this exact checkpoint, inspect PR #523 against current `main`, and continue from the **merge-integrity decision**, not from the original Step-29 diagnosis.
+Do not restart the preserved-artifact replay, roster investigation, identity audit, rematch investigation, Knight alias investigation, M108 search, or paid live fetch. Verify current `main`, read this exact checkpoint, reconcile PR #523 against current `main`, rerun its zero-credit validation, and continue from the **merge-integrity decision**, not from the original Step-29 diagnosis.
