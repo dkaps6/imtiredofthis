@@ -1,0 +1,123 @@
+name: Replay Paid Full Slate Artifact Once
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  SEASON: "2026"
+  PRIOR_SEASON: "2025"
+  SLATE_DATE: ""
+  FETCH_LIVE_ODDS: "false"
+  ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml beautifulsoup4 lxml pytest
+
+      - name: Download preserved paid artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: run_34650067599
+          path: replay_source
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34650067599
+
+      - name: Restore preserved data and outputs
+        run: |
+          set -euo pipefail
+          test -d replay_source/data
+          test -d replay_source/outputs
+          rm -rf data outputs
+          mkdir -p data outputs
+          cp -a replay_source/data/. data/
+          cp -a replay_source/outputs/. outputs/
+          test -s data/live_odds_status.json
+          test -s outputs/odds_game.csv
+          test -s outputs/props_raw_compact.csv
+          echo "OFFLINE REPLAY ONLY: no OddsAPI acquisition command exists in this workflow"
+
+      - name: Replay Step 29 data quality classifier
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/validate_full_slate_data_quality_v1.py
+          test -s data/full_slate_data_quality_audit.json
+
+      - name: Replay Step 30 pricing inputs and metrics
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/materialize_pricing_offers_v1.py
+          test -s outputs/props_pricing_offers.csv
+          test -s data/live_pricing_offer_audit.json
+          python scripts/run_metrics_context.py --season "${SEASON}" --mode full --date "${SLATE_DATE}"
+          python scripts/validate_build_integrity.py
+          python scripts/metrics_ready.py --season "${SEASON}" --date "${SLATE_DATE}"
+          test -s data/metrics_ready.csv
+
+      - name: Replay Step 31 certified pricing stack
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+          python scripts/run_pricing_with_full_roster_universe_v3.py --season "${SEASON}"
+          test -s outputs/props_priced_clean.csv
+          test -s data/football_simulation_universe_audit.json
+          test -s data/wr_r15_full_slate_entitlement_audit.json
+          test -s data/qb_c2_production_integration_audit.json
+          python scripts/stamp_qb_c2_pricing_lineage_v1.py
+          test -s data/qb_c2_pricing_lineage_stamp_audit.json
+          python scripts/validate_rb_rush_rec_conservation_v1.py
+          python scripts/audit_market_model_lineage_v2.py
+          python scripts/validate_anytime_td_model_status_v1.py
+          python scripts/validate_team_target_pool_full_universe_v2.py
+          python scripts/validate_certified_full_slate_stack_v2.py
+          python scripts/validate_full_slate_mechanical_certification_v1.py
+          test -s outputs/paid_full_slate_replay_result.json
+          test -s data/full_slate_post_pricing_audit.csv
+
+      - name: Strict repository audits
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/utils/audit_repo.py --strict
+          python scripts/audit_2026_production_readiness.py --strict
+
+      - name: Upload offline replay evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline_replay_${{ github.run_id }}
+          path: |
+            data/full_slate_data_quality_audit.csv
+            data/full_slate_data_quality_audit.json
+            data/live_pricing_offer_audit.json
+            data/full_slate_post_pricing_audit.csv
+            data/certified_full_slate_stack_audit.json
+            outputs/paid_full_slate_replay_result.json
+            outputs/props_pricing_offers.csv
+            outputs/props_priced_clean.csv
+          if-no-files-found: warn
+          retention-days: 7
