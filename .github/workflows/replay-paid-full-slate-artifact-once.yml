@@ -78,6 +78,15 @@ jobs:
           python scripts/metrics_ready.py --season "${SEASON}" --date "${SLATE_DATE}"
           test -s data/metrics_ready.csv
 
+      - name: Apply locked current-availability production seams
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+          python scripts/operations/apply_current_availability_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_primary_team_seam_v1.py
+          python -m py_compile scripts/run_pricing_with_full_roster_universe_v1.py scripts/modeling/rb_r26_receptions_production_adapter_v1.py scripts/modeling/qb_c2_production_adapter_v1.py
+
       - name: Replay Step 31 certified pricing stack
         run: |
           set -euo pipefail
