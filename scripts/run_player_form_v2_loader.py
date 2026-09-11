@@ -7,7 +7,6 @@ import os
 import pandas as pd
 
 import scripts.run_player_form_v2 as runner
-from scripts.materialize_live_props_for_model_v1 import materialize as materialize_live_props_for_model
 from scripts.player_identity_roster_history_v1 import load_identity_roster_history
 from scripts.player_stats_loader_v2 import load_weekly_player_stats
 from scripts.repair_injuries_nflcom_v1 import repair_if_needed as repair_injury_identity
@@ -168,12 +167,12 @@ def main() -> int:
     # model identity if a CSV row was shifted/malformed or does not round-trip.
     validate_manual_name_overrides()
 
-    # Repair provider representation defects and validate every critical artifact
-    # before historical/player modeling is allowed to start. No sportsbook line
-    # or football projection is altered here.
+    # Repair provider representation defects and validate every critical football
+    # artifact before historical/player modeling is allowed to start. Live
+    # sportsbook artifacts are intentionally NOT materialized here: canonical
+    # Full Slate fetches and compacts them only after football eligibility is
+    # resolved, keeping PlayerForm football-only regardless of FETCH_LIVE_ODDS.
     repair_injury_identity()
-    if live_odds:
-        materialize_live_props_for_model()
     validate_pre_model_semantics()
 
     # Maintained weekly-stat provider.
