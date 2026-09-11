@@ -1,0 +1,30 @@
+name: Dispatch Full Slate Live Odds Once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dispatch-full-slate-live-odds-once.yml'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch canonical Full Slate with live odds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh workflow run full-slate.yml \
+            --repo "${GH_REPO}" \
+            --ref main \
+            -f season=2026 \
+            -f prior_season=2025 \
+            -f date= \
+            -f fetch_live_odds=true
+          echo "Dispatched canonical Full Slate with fetch_live_odds=true"
