@@ -1,0 +1,64 @@
+name: QB First Down Choice Economics D1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-qb-first-down-choice-economics-d1
+    paths:
+      - ".github/workflows/audit-qb-first-down-choice-economics-d1.yml"
+      - "scripts/backtest/evaluate_qb_first_down_choice_economics_d1.py"
+      - "docs/migrations/QB_FIRST_DOWN_CHOICE_ECONOMICS_D1_PLAN.md"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy
+      - name: Declare frozen D1 boundary
+        run: |
+          echo 'ONE-CANDIDATE 2023 DEVELOPMENT SCREEN ONLY.'
+          echo 'Fit Weeks 1-9; score untouched Weeks 10-18.'
+          echo '2024/2025 target PBP and target outcomes are prohibited.'
+          echo 'No QB/WR target outcomes, sportsbook inputs, model zoo, or production changes.'
+      - name: Compile frozen evaluator
+        run: python -m py_compile scripts/backtest/evaluate_qb_first_down_choice_economics_d1.py
+      - name: Download immutable qualified source artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/source
+          gh run download 34544776077 --repo "${GITHUB_REPOSITORY}" --name qb-first-down-choice-economics-source-v1 --dir evidence/source
+      - name: Run frozen D1
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests/qb_first_down_choice_economics_d1
+          python scripts/backtest/evaluate_qb_first_down_choice_economics_d1.py \
+            --source-root evidence/source \
+            --out-dir data/backtests/qb_first_down_choice_economics_d1
+      - name: Show result
+        if: always()
+        run: cat data/backtests/qb_first_down_choice_economics_d1/first_down_choice_economics_d1_result.json 2>/dev/null || true
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-first-down-choice-economics-d1
+          path: |
+            data/backtests/qb_first_down_choice_economics_d1/*
+            docs/migrations/QB_FIRST_DOWN_CHOICE_ECONOMICS_D1_PLAN.md
+          if-no-files-found: warn
+          retention-days: 30
