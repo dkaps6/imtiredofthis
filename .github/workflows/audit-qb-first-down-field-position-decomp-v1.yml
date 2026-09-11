@@ -1,0 +1,64 @@
+name: QB First Down Field Position Decomp V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-qb-first-down-field-position-decomp-v1
+    paths:
+      - ".github/workflows/audit-qb-first-down-field-position-decomp-v1.yml"
+      - "scripts/backtest/evaluate_qb_first_down_field_position_decomp_v1.py"
+      - "docs/migrations/QB_FIRST_DOWN_FIELD_POSITION_DECOMP_V1_PLAN.md"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy
+      - name: Declare frozen diagnostic boundary
+        run: |
+          echo 'DIAGNOSTIC ONLY: first-down field-position decomposition.'
+          echo 'No model fitting, sportsbook input, threshold search, or production change.'
+      - name: Compile frozen evaluator
+        run: python -m py_compile scripts/backtest/evaluate_qb_first_down_field_position_decomp_v1.py
+      - name: Download immutable parent artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/parent evidence/shared
+          gh run download 34544457497 --repo "${GITHUB_REPOSITORY}" --name qb-pass-rate-state-shared-attribution-v1 --dir evidence/parent
+          gh run download 34066549394 --repo "${GITHUB_REPOSITORY}" --name qb-wr-shared-pass-volume-mechanism --dir evidence/shared
+      - name: Run frozen field-position decomposition
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests/qb_first_down_field_position_decomp_v1
+          python scripts/backtest/evaluate_qb_first_down_field_position_decomp_v1.py \
+            --parent-root evidence/parent \
+            --shared-root evidence/shared \
+            --out-dir data/backtests/qb_first_down_field_position_decomp_v1
+      - name: Show result
+        if: always()
+        run: cat data/backtests/qb_first_down_field_position_decomp_v1/first_down_field_position_result.json 2>/dev/null || true
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-first-down-field-position-decomp-v1
+          path: |
+            data/backtests/qb_first_down_field_position_decomp_v1/*
+            docs/migrations/QB_FIRST_DOWN_FIELD_POSITION_DECOMP_V1_PLAN.md
+          if-no-files-found: warn
+          retention-days: 30
