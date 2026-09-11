@@ -25,14 +25,18 @@ jobs:
           PYTHONPATH: .
         run: |
           mkdir -p artifacts/qb_public_intent_source_v1
+          set -o pipefail
           python scripts/backtest/build_qb_public_intent_sample_v1.py \
             --schedule-out artifacts/qb_public_intent_source_v1/frozen_schedule.csv \
-            --manifest-out artifacts/qb_public_intent_source_v1/collection_manifest.csv
+            --manifest-out artifacts/qb_public_intent_source_v1/collection_manifest.csv \
+            2>&1 | tee artifacts/qb_public_intent_source_v1/build.log
       - name: Guard against premature scientific grading
+        if: success()
         run: |
           test ! -f artifacts/qb_public_intent_source_v1/source_ledger.csv
           echo 'source qualification intentionally not run: ledger research incomplete'
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: qb-public-intent-source-v1-sample
           path: artifacts/qb_public_intent_source_v1/
