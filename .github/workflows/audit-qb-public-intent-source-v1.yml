@@ -6,6 +6,7 @@ on:
       - research-qb-first-down-public-intent-source-v1
     paths:
       - 'scripts/backtest/build_qb_public_intent_sample_v1.py'
+      - 'scripts/backtest/prepare_qb_public_intent_collection_v1.py'
       - 'scripts/backtest/audit_qb_first_down_public_intent_source_v1.py'
       - 'scripts/providers/build_schedule.py'
       - '.github/workflows/audit-qb-public-intent-source-v1.yml'
@@ -31,6 +32,17 @@ jobs:
             --schedule-out artifacts/qb_public_intent_source_v1/frozen_schedule.csv \
             --manifest-out artifacts/qb_public_intent_source_v1/collection_manifest.csv \
             2>&1 | tee artifacts/qb_public_intent_source_v1/build.log
+      - name: Initialize frozen ordered collection state
+        if: success()
+        run: |
+          set -o pipefail
+          python scripts/backtest/prepare_qb_public_intent_collection_v1.py init \
+            --manifest artifacts/qb_public_intent_source_v1/collection_manifest.csv \
+            --out artifacts/qb_public_intent_source_v1/collection_working.csv \
+            2>&1 | tee artifacts/qb_public_intent_source_v1/collection_init.log
+          python scripts/backtest/prepare_qb_public_intent_collection_v1.py check \
+            --work artifacts/qb_public_intent_source_v1/collection_working.csv \
+            2>&1 | tee artifacts/qb_public_intent_source_v1/collection_check.log
       - name: Guard against premature scientific grading
         if: success()
         run: |
