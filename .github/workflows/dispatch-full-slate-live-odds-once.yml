@@ -1,5 +1,6 @@
 name: Dispatch Full Slate Live Odds Once
 
+# One-shot operational dispatcher; touch only when an explicit live-odds run is requested.
 on:
   push:
     branches: [main]
