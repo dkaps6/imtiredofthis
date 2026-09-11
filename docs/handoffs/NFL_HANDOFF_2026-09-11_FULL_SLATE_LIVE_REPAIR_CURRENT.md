@@ -1,10 +1,14 @@
 # NFL Production Handoff — 2026-09-11 — Week 1 Full Slate Live Repair
 
-## Active priority
+## Active checkpoint
 
-Finish the Week-1 live Full Slate production incident. The QB/WR shared-opportunity / public-pregame-intent V1B science lane is temporarily parked until production is repaired.
+GitHub is canonical; chat memory is secondary.
 
-This is a mechanical/data-production incident. Do **not** redesign or retune model science while repairing it.
+The preserved-artifact replay and live player-identity audit are complete. The remaining-slate roster defect, future-rematch event defect, conflicting schedule-anchor defect, and the verified Knight provider-name bridge have all been repaired and validated. Repo CI and the no-live-odds Full Slate integration gate are green.
+
+Do **not** restart those completed investigations and do **not** redesign or retune model science.
+
+Current main at this correction: `292cd883fcaeba8b6eb0d80810be1d7c145938a9` (root continuity correction only, parent production state `9f7b875a4ebf7a0a4ed61ad7f87e7575cdff2e3f`).
 
 ## Frozen production science
 
@@ -17,256 +21,154 @@ Production authorities remain unchanged:
 - RB rushing: `RB_P3_SYNTHESIS_V1` for the qualified Week-1 route
 - RB receptions/opportunity: R26
 - RB receiving-yard tail/distribution: R22 using frozen R19 assets
-- M108 scientific regression baseline: previously 26/26 PASS
 
-Do not change production science while fixing this incident.
+## IMPORTANT CORRECTION — M108 / 26-of-26
+
+Earlier continuity notes carried an explicit claim that `M108` was a scientific regression gate that had previously passed `26/26`, and the prior version of this handoff treated recovery of that invocation as a blocker.
+
+That was not sufficiently grounded in canonical GitHub lineage.
+
+The repository was searched across code, handoffs/continuity docs, commits, PRs, issues, branches, and workflow history for `M108`, `Migration 108`, `26/26`, and related regression wording. The inherited statement is present in the handoff, but **no authoritative M108 workflow, script, PR, commit, branch, or run has been recovered that proves a canonical repository test named M108 produced a 26-of-26 result**.
+
+Therefore:
+
+- do not describe `M108 26/26` as a verified repository gate;
+- do not fabricate or reconstruct an M108 test by name;
+- do not hold the production repair indefinitely on that chat-memory label;
+- if concrete M108 evidence is found later, preserve it as historical lineage and evaluate what it actually was;
+- use the actual named repository validation below as the authoritative pre-live gate.
+
+This correction changes documentation/lineage only. It does not change model science, thresholds, weights, projection logic, pricing semantics, or sportsbook comparison behavior.
 
 ## Original failed live run
 
-- Original main SHA: `0c6fcefea0d38d0975dea7fd04edd43216b2cbab`
-- Failed Full Slate run: `34602328548`
-- Failed job: `103272747139`
-- Football construction Steps 1-24 passed.
-- Failure occurred at Step 25: `Fetch and gate player props and game odds after football eligibility`.
-- Preserved GitHub artifact ID: `10265557165`
-- Artifact name: `run_34602328548`
-- Artifact SHA256: `08727a37cf174a5be9767855a8a6aa3854c0f56cc5e650099ec3dced127e12b1`
-- Preserved archive SHA256 was re-verified during the repair replay.
+- original main SHA `0c6fcefea0d38d0975dea7fd04edd43216b2cbab`
+- failed Full Slate run `34602328548`
+- failed job `103272747139`
+- Steps 1-24 passed; failure occurred at Step 25, `Fetch and gate player props and game odds after football eligibility`
+- preserved artifact ID `10265557165`
+- artifact name `run_34602328548`
+- artifact SHA256 `08727a37cf174a5be9767855a8a6aa3854c0f56cc5e650099ec3dced127e12b1`
 
-Important: do not claim an exact historical exception from the original failed job unless the decoded log is actually retrieved and seen. The preserved artifacts themselves are the authority for the replay findings below.
+Do not claim an exact historical exception from that job unless the decoded log itself is retrieved. The preserved artifact is the authority for the replay findings.
 
-## Roster-universe finding — closed
+## Repair 1 — remaining-slate roster scope — CLOSED
 
-The preserved live `roles_ourlads.csv` contained 28 teams. That is legitimate for the remaining live slate.
+The preserved `roles_ourlads.csv` had 28 teams. LAR, NE, SEA and SF had already played and were legitimately outside the remaining event universe.
 
-The four absent teams were LAR, NE, SEA and SF; they had already played and were not required in the remaining sportsbook/event universe.
+Correct invariant: every team represented by the current event universe must exist in the current roster snapshot; non-event teams may be absent; a missing current-event team fails closed.
 
-Correct invariant:
-
-> Every team represented by the current sportsbook/event universe must exist in the current roster snapshot. Teams outside the active event universe may legitimately be absent. A missing current-event team must still fail closed.
-
-Original roster-scope repair:
-
-- commit `ea0af251f943fe6a540e82e36c38ab5a6295fb7d`
 - PR #518 `Fix live roster validation for remaining-slate event scope`
+- commit `ea0af251f943fe6a540e82e36c38ab5a6295fb7d`
 
-Behavior:
+Regression coverage:
 
-- `_build_roster_index()` accepts `required_teams`.
-- Required teams come from current sportsbook events.
-- Missing current-event teams fail closed.
-- Absent non-event teams are allowed.
-- Callers without an event scope retain historical all-32 validation.
-- Invalid required team codes fail closed.
-- No model science, pricing semantics, projection logic or promotion rules changed.
+- 28-team roster + all current-event teams present -> PASS
+- one current-event team missing -> FAIL CLOSED
+- full 32-team roster -> PASS
+- missing non-event teams -> ignored
 
-Regression cases cover 28-team remaining-slate PASS, missing current-event team FAIL CLOSED, full-32 PASS, and missing non-event teams ignored.
+## Preserved-artifact replay / identity audit — COMPLETE
 
-## Preserved-artifact replay — COMPLETE
+Exact preserved run artifact replayed without another live-odds fetch.
 
-The exact preserved live artifact from run `34602328548` was replayed against the repaired production identity boundary without another OddsAPI fetch.
+Results:
 
-Replay result:
-
-- event-scoped 28-team roster gate: PASS
-- active sportsbook/event team universe covered by Ourlads: PASS
+- event-scoped roster gate PASS
+- current event-team universe covered by Ourlads PASS
 - unresolved modeled-core identities: **0**
-- modeled-core markets checked:
-  - `player_pass_yds`
-  - `player_rush_yds`
-  - `player_reception_yds`
-  - `player_receptions`
+- modeled-core markets checked: `player_pass_yds`, `player_rush_yds`, `player_reception_yds`, `player_receptions`
 
-The large apparent unmatched population was not a broad modeled-player failure.
+The apparent unmatched population was primarily non-core:
 
-Exhaustive non-core classification:
+- 84 unresolved anytime-TD/non-core labels
+- 56 synthetic defense labels
+- 28 player names
+- 27/28 player names absent from current authoritative roster/slate and correctly quarantined
+- one confirmed current provider alias: `Zonovan Knight -> Bam Knight`
 
-- 84 unresolved anytime-TD/non-core labels total
-- 56 were synthetic defense labels
-- 28 were player names
-- 27 of those 28 players were absent from the current authoritative roster/slate and remain correctly quarantined/non-modeled
-- the one confirmed current-player provider alias was `Zonovan Knight -> Bam Knight`
+No speculative aliases were added.
 
-No speculative aliases were added for the other names.
+Detailed replay record: `docs/production/WEEK1_LIVE_PRESERVED_ARTIFACT_REPLAY_2026_09_11.md`.
 
-Detailed replay paper trail:
+## Repair 2 — future same-opponent rematches — CLOSED
 
-- `docs/production/WEEK1_LIVE_PRESERVED_ARTIFACT_REPLAY_2026_09_11.md`
+Pair-only event matching allowed four later-season rematches to survive the Week-1 gate.
 
-## Second mechanical defect found by replay — future same-opponent rematches
+- PR #519 `Harden Week 1 live event scope after preserved replay`
+- merged SHA `c54746444b9c64bacb170649ee89832e4abda206`
 
-The old live odds event gate used only the unordered team pair. Because some Week-1 opponents meet again later in the season, four future rematches survived the pair-only filter in the preserved artifact and generated placeholder sportsbook rows.
+`run_live_odds_gate.py` now requires canonical matchup plus bounded authoritative kickoff proximity. Tolerance is 36 hours. Invalid `commence_time` on an active pair fails closed. Regression proves a later rematch cannot survive the Week-1 scope.
 
-Observed separation in the preserved replay:
+## Repair 3 — conflicting mirrored kickoff anchors — CLOSED
 
-- legitimate Week-1 provider events were approximately 17.0-24.33 hours from the repository's date-level UTC schedule anchor
-- leaked future rematches were more than 1,173 hours away
+- PR #521 `Fail closed on conflicting Week 1 kickoff anchors`
+- merged SHA `7ccf12603da3da456e61586e4dd27062fa33b84e`
 
-This is sportsbook boundary plumbing only; it does not change any football projection/model science.
+Mirrored schedule rows for one matchup must resolve to one distinct `kickoff_utc`; conflicting parseable anchors now fail closed.
 
-### PR #519 — matchup + kickoff scoping
+## Repair 4 — Knight live provider-name bridge — CLOSED
 
-- merged main SHA `c54746444b9c64bacb170649ee89832e4abda206`
-- title: `Harden Week 1 live event scope after preserved replay`
-
-Repair:
-
-- `run_live_odds_gate.py` now requires canonical matchup **and** bounded authoritative kickoff proximity
-- tolerance: 36 hours, intentionally wide enough for the date-level UTC schedule representation while far below later-season rematches
-- active-pair sportsbook rows with invalid `commence_time` fail closed
-- regression explicitly supplies the same two teams in Week 1 and a future rematch and proves only the Week-1 event survives
-
-Repo CI passed this repair, including 211 unit tests.
-
-## Third mechanical defect found in review — conflicting mirrored kickoff anchors
-
-PR #519 review correctly identified that mirrored `team_week_map` rows could theoretically carry two different parseable kickoff anchors for the same matchup. Accepting an event close to either anchor would violate the required-schedule consistency contract.
-
-### PR #521 — fail closed on schedule-anchor disagreement
-
-- merged main SHA `7ccf12603da3da456e61586e4dd27062fa33b84e`
-- title: `Fail closed on conflicting Week 1 kickoff anchors`
-
-Repair:
-
-- mirrored schedule rows for one matchup must resolve to exactly one distinct `kickoff_utc`
-- multiple distinct parseable anchors now raise before sportsbook scoping
-- regression proves conflicting mirrored KC/DEN anchors fail closed
-
-Repo CI passed before merge. No review comments or unresolved review threads remained.
-
-## Verified Knight alias — correct boundary
-
-The preserved sportsbook artifact used `Zonovan Knight`; the current Arizona roster identity is `Bam Knight`.
-
-Verified provider-name bridge:
+Verified bridge:
 
 - `Zonovan Knight -> Bam Knight`
-- current team: ARI
-- position: RB
-- stable GSIS person ID: `00-0037157`
-- verified through Arizona Cardinals documentation
+- ARI, RB
+- GSIS `00-0037157`
 
-The live canonical-name bridge remains in `data/manual_name_overrides.csv`.
+The bridge belongs in `data/manual_name_overrides.csv`.
 
-A first attempt also added a stable historical alias row to `data/player_identity_aliases.csv`. The no-paid integration run correctly rejected that row because nflreadpy historical roster identity for GSIS `00-0037157` is already `Bam Knight`, so declaring `historical_name=Zonovan Knight` violated the identity-history contract.
+An attempted stable historical alias was correctly rejected by PlayerForm because historical nflreadpy identity for that GSIS ID already uses `Bam Knight`. The validator was not weakened; the invalid historical alias was removed.
 
-The validator was **not weakened**. The bad stable alias row was removed and the verified live provider-name bridge was retained.
+- PR #522 `Keep Knight alias at live canonical-name boundary`
+- merged SHA `de7bd83e8ff8eb23535efbc53f92d8b79182934d`
 
-### PR #522 — correct Knight alias boundary
+## Authoritative validation lineage
 
-- merged main SHA `de7bd83e8ff8eb23535efbc53f92d8b79182934d`
-- title: `Keep Knight alias at live canonical-name boundary`
-
-Repo CI passed before merge.
-
-## Verification lineage
-
-### Original roster-scope repair CI
-
-- run `34621082108`
-- job `103334928263`
-- SHA `ea0af251f943fe6a540e82e36c38ab5a6295fb7d`
-- SUCCESS
-
-### Original roster-scope no-paid Full Slate
-
-- run `34621082187`
-- job `103334928676`
-- SHA `ea0af251f943fe6a540e82e36c38ab5a6295fb7d`
-- SUCCESS
-- Steps 1-24 PASS
-- sportsbook Steps 25-31 SKIPPED
-
-### Intermediate no-paid run that caught the invalid stable Knight alias
-
-- run `34645962275`
-- job `103416720917`
-- SHA `7ccf12603da3da456e61586e4dd27062fa33b84e`
-- FAILED at Step 15 PlayerForm
-- exact failure: stable identity alias expected `historical_name=Zonovan Knight`, but the historical source for GSIS `00-0037157` already used `Bam Knight`
-- this was a correct fail-closed validation result
-- no sportsbook fetch was performed
-
-### Final Repo CI after correcting Knight alias boundary
-
-- post-merge Repo CI run `34646336751`
-- main SHA `de7bd83e8ff8eb23535efbc53f92d8b79182934d`
-- SUCCESS
-
-### Final no-paid Full Slate integration gate
-
-- run `34646336732`
-- job `103417908187`
-- main SHA `de7bd83e8ff8eb23535efbc53f92d8b79182934d`
-- **SUCCESS**
-- Steps 1-24 PASS
-- PlayerForm Step 15 PASS
-- strict repository/readiness audits PASS
-- artifacts uploaded
-- sportsbook/live-odds Steps 25-31 SKIPPED because live mode was disabled
-- no OddsAPI credits used
+- roster-scope repair Repo CI: run `34621082108`, job `103334928263`, SHA `ea0af251...`, SUCCESS
+- roster-scope no-live Full Slate: run `34621082187`, job `103334928676`, SHA `ea0af251...`, SUCCESS; Steps 1-24 PASS, live-odds Steps 25-31 skipped
+- fail-closed Knight historical-alias run: `34645962275`, job `103416720917`, SHA `7ccf1260...`, failed correctly at PlayerForm Step 15 before any live fetch
+- final Repo CI after Knight boundary correction: `34646336751`, SHA `de7bd83e...`, SUCCESS
+- final no-live Full Slate integration: run `34646336732`, job `103417908187`, SHA `de7bd83e...`, SUCCESS; Steps 1-24 PASS; PlayerForm PASS; strict repository/readiness audits PASS; artifacts uploaded; live-odds Steps 25-31 skipped
+- handoff-only main SHA `9f7b875a4ebf7a0a4ed61ad7f87e7575cdff2e3f`: Full Slate run `34646857105` SUCCESS and Repo CI `34646857098` SUCCESS
 
 ## Current status
 
-`preserved artifact verified -> event-scoped roster repair PASS -> modeled-core identity replay 0 unresolved -> exhaustive non-core classification complete -> future-rematch leak repaired -> conflicting schedule-anchor gate repaired -> verified Knight live alias repaired at correct boundary -> Repo CI green -> no-paid Full Slate green -> M108 exact 26/26 regression invocation still must be located/verified -> paid live run NOT triggered`
-
-## Remaining pre-paid gate — M108
-
-The active handoff inherited the explicit requirement:
-
-> targeted tests plus the broader regression suite; **M108 must remain 26/26 PASS or better**.
-
-The current GitHub repository has been searched across code, commits, branches, PRs, issues, workflow runs and continuity/handoff documents for literal `M108`, `Migration 108`, `26/26`, and `scientific regression` lineage. The handoff preserves the fact that the baseline was previously 26/26 PASS, but the exact workflow/script/run that generated that label has not yet been recovered from GitHub under the `M108` name.
-
-Do **not** silently substitute ordinary Repo CI or the no-paid Full Slate for this explicit scientific gate. Do **not** trigger the paid Full Slate until the exact M108 regression lineage is identified and verified, or the canonical source of that gate is recovered.
-
-If the exact M108 lineage cannot be recovered from GitHub, ask the user for a pointer to the chat/file/run that named M108 rather than guessing.
+`artifact replay COMPLETE -> event-scoped roster repair PASS -> modeled-core identity replay 0 unresolved -> non-core classification COMPLETE -> future-rematch repair PASS -> conflicting-anchor repair PASS -> Knight boundary PASS -> Repo CI GREEN -> no-live Full Slate GREEN -> inherited M108 label audited and NOT VERIFIED AS A CANONICAL GITHUB GATE -> ready for one controlled live Full Slate`
 
 ## Exact next execution order
 
-1. Recover the exact M108 26/26 regression invocation/run lineage.
-2. Re-run or otherwise verify the exact M108 gate on the repaired current production head; require 26/26 PASS or better.
-3. If M108 is green, verify current `main` again.
-4. Execute exactly one paid live Full Slate run.
-5. Validate production output: nonempty edges, real sportsbook lines/prices, selected-book semantics, duplicate collapse, provenance, status codes, correct event-week scope, and zero unresolved current-event team/core-player identity failures.
-6. Update this handoff and the decision/continuity ledger with exact paid-run commit/run/artifact lineage.
-7. Only after the incident is closed, resume the parked QB/WR shared-opportunity / public-pregame-intent V1B lane.
+1. Read `AGENTS.md`, `CURRENT_NFL_RESEARCH_HANDOFF.md`, then this file.
+2. Verify current `main`. If it advanced, inspect only the intervening diff/commits; do not restart completed history.
+3. Do not repeat a broad M108 search unless genuinely new evidence appears.
+4. Run **exactly one** controlled live Full Slate from current repaired main with live odds enabled.
+5. Audit the output before declaring closure:
+   - nonempty priced output/edges where markets are available
+   - real lines/prices and no placeholder or future-rematch contamination
+   - selected-book semantics correct
+   - duplicate collapse correct
+   - provenance/status codes correct
+   - event/week scope correct
+   - every current event team covered by roster authority
+   - zero unresolved current-event modeled-core identities
+   - QB passing-yards rows use promoted M89/M90 synthesis
+   - Week-1 RB rushing-yards rows use qualified `RB_P3_SYNTHESIS_V1`
+   - no live-market inputs leak upstream into football projections
+6. If that run fails mechanically, preserve exact run/job/artifact/log lineage and repair only the demonstrated plumbing defect. Do not retune science or immediately spend another live fetch just to find the next bug.
+7. If it passes, update this handoff and `NFL_MASTER_CONTINUITY_RECORD.md` with exact final lineage and mark the Week-1 incident CLOSED.
+8. Only then resume the parked QB/WR shared-opportunity / first-down pass-propensity / public-pregame-intent V1B lane.
 
 ## Guardrails
 
-Do **not** alter:
-
-- M107 thresholds
-- model weights
-- PlayerForm science
-- role-chain science
-- pricing semantics
-- promotion rules
-- sportsbook comparison logic
-- projections
-- any other scientific behavior
+Do not alter M107 thresholds, model weights, PlayerForm science, role-chain science, pricing semantics, promotion rules, sportsbook comparison logic, projections, or any other scientific behavior while closing this incident.
 
 Architecture remains football-first:
 
 `GAME STATE -> TEAM OPPORTUNITY -> POSITION/ROOM POOL -> PLAYER ENTITLEMENT -> PLAYER EFFICIENCY -> JOINT MONTE CARLO -> PLAYER PROJECTIONS/DISTRIBUTIONS -> FAIR PROBABILITIES -> SPORTSBOOK COMPARISON`
 
-Vegas cannot teach upstream football projections which direction to move.
-
-## Paid-run rule
-
-No paid Full Slate has been triggered during this repair sequence after the preserved failed artifact was recovered. Do **not** spend another OddsAPI Full Slate merely to discover the next bug. M108 is the remaining explicit gate.
-
 ## Parked science lane
 
-The separate QB/WR shared-opportunity / first-down pass-propensity / public pregame-intent V1B work remains preserved at:
-
-- `docs/handoffs/NFL_HANDOFF_2026-09-11_QB_WR_SHARED_OPPORTUNITY_CURRENT.md`
-
-Resume that lane only after the live production incident is closed. It has made no production changes.
+Preserved at `docs/handoffs/NFL_HANDOFF_2026-09-11_QB_WR_SHARED_OPPORTUNITY_CURRENT.md`. Resume only after the live incident is closed.
 
 ## Resume rule for the next chat
 
-GitHub is canonical; chat memory is secondary.
-
-Read `CURRENT_NFL_RESEARCH_HANDOFF.md`, then this file. Verify current `main` before writing anything. Do **not** restart the preserved-artifact replay or identity audit; those are complete. Resume from the exact M108 gate-recovery checkpoint above.
+Do not restart the preserved-artifact replay, roster audit, identity audit, rematch investigation, Knight alias investigation, or broad M108 search. Verify current main and continue from the **one controlled live Full Slate** checkpoint.
