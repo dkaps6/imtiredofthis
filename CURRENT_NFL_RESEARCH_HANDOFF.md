@@ -9,7 +9,11 @@ Before doing anything else, read:
 
 GitHub is canonical; chat memory is secondary.
 
-The active priority is the Week-1 live Full Slate production repair. Continue from the preserved-artifact replay / player-identity audit checkpoint in the production handoff. Do not restart model research, redesign production science, or trigger another paid Full Slate before the handoff gates are satisfied.
+The Week-1 live Full Slate preserved-artifact replay and player-identity audit are complete. The active production handoff contains the closed mechanical repair lineage and the exact next production checkpoint. Do not restart the replay, identity audit, or broad historical search.
+
+Important continuity correction: prior chat notes carried an `M108 = 26/26 PASS` label, but repository search has not recovered an authoritative M108 workflow/script/run/PR that proves this was a canonical repository gate. Do not invent or require an M108 test by name unless concrete GitHub lineage is later recovered. Use the actual named repository CI, readiness audits, and Full Slate validation recorded in the active handoff.
+
+Do not redesign production science while closing the live incident.
 
 ---
 
