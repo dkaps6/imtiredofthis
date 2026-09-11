@@ -10,7 +10,7 @@ on:
       - '.github/workflows/rb-stack2-freeze-parity-v1.yml'
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 env:
@@ -60,14 +60,93 @@ jobs:
             --stack1-root data/backtests/rb_stack2_freeze/stack1 \
             --archived-stack2-root data/backtests/rb_stack2_freeze/archived_stack2 \
             --out-dir data/backtests/rb_stack2_freeze/results
+      - name: Freeze passing authority into repository
+        run: |
+          python - <<'PY'
+          import base64
+          import gzip
+          import hashlib
+          import json
+          from pathlib import Path
+
+          src = Path('data/backtests/rb_stack2_freeze/results')
+          dst = Path('data/models/rb_stack2_production_v1')
+          dst.mkdir(parents=True, exist_ok=True)
+          result = json.loads((src / 'rb_stack2_frozen_allocation_result_v1.json').read_text())
+          if result.get('disposition') != 'RB_STACK2_FROZEN_ALLOCATION_PARITY_PASS':
+              raise SystemExit('Refusing to persist non-passing STACK2 authority')
+
+          raw_model = base64.b64decode((src / 'rb_stack2_allocation_model_v1.pkl.b64').read_text().strip())
+          model_sha = hashlib.sha256(raw_model).hexdigest()
+          if model_sha != result['serialized_model_sha256']:
+              raise SystemExit(f'model hash mismatch before persist: {model_sha}')
+          model_gz = gzip.compress(raw_model, compresslevel=9, mtime=0)
+          (dst / 'rb_stack2_allocation_model_v1.pkl.gz.b64').write_text(
+              base64.b64encode(model_gz).decode('ascii') + '\n', encoding='utf-8'
+          )
+
+          raw_matrix = (src / 'rb_stack2_frozen_training_matrix_v1.csv').read_bytes()
+          matrix_sha = hashlib.sha256(raw_matrix).hexdigest()
+          if matrix_sha != result['training_matrix_sha256']:
+              raise SystemExit(f'training matrix hash mismatch before persist: {matrix_sha}')
+          matrix_gz = gzip.compress(raw_matrix, compresslevel=9, mtime=0)
+          (dst / 'rb_stack2_frozen_training_matrix_v1.csv.gz.b64').write_text(
+              base64.b64encode(matrix_gz).decode('ascii') + '\n', encoding='utf-8'
+          )
+
+          manifest = {
+              'model_version': 'RB_STACK2_ALLOCATION_PRODUCTION_V1',
+              'scientific_authority': 'STACK2_2024_FIT_2025_HOLDOUT',
+              'parity_run_id': 34659593197,
+              'source_stack2_run_id': 33538770934,
+              'source_stack2_artifact_id': 9812754276,
+              'source_stack2_artifact_digest': 'sha256:793b90494e2ea5a562e53be79311cb59b07d9589d934fb4237ae03e014ea774a',
+              'verification_artifact_id': 10286921484,
+              'verification_artifact_digest': 'sha256:28b8fa73dbe249e55388d108c0e022ab781bb343c1b8952c2c08b131097ffa94',
+              'training_season': result['training_season'],
+              'holdout_season': result['holdout_season'],
+              'training_rows': result['training_rows'],
+              'holdout_rows': result['holdout_rows'],
+              'full_feature_contract': result['full_feature_contract'],
+              'learner': result['learner'],
+              'learner_kwargs': result['learner_kwargs'],
+              'sklearn_version': result['sklearn_version'],
+              'training_matrix_sha256': matrix_sha,
+              'serialized_model_sha256': model_sha,
+              'compressed_training_matrix_sha256': hashlib.sha256(matrix_gz).hexdigest(),
+              'compressed_serialized_model_sha256': hashlib.sha256(model_gz).hexdigest(),
+              'max_alloc_full_score_abs_diff': result['max_alloc_full_score_abs_diff'],
+              'max_alloc_full_share_abs_diff': result['max_alloc_full_share_abs_diff'],
+              'parity_tolerance': result['parity_tolerance'],
+              'sportsbook_inputs_used': False,
+              'scientific_search_performed': False,
+              'runtime_rule': 'immutable learner; target-week features only; no weekly refit',
+          }
+          (dst / 'rb_stack2_allocation_manifest_v1.json').write_text(
+              json.dumps(manifest, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/models/rb_stack2_production_v1/
+          if git diff --cached --quiet; then
+            echo 'Frozen STACK2 authority already matches repository; no commit needed.'
+          else
+            git commit -m 'Freeze parity-verified STACK2 allocation authority'
+            git pull --rebase origin production-season-long-readiness-2026
+            git push origin HEAD:production-season-long-readiness-2026
+          fi
       - name: Show result
         if: always()
         run: |
           cat data/backtests/rb_stack2_freeze/results/rb_stack2_frozen_allocation_result_v1.json 2>/dev/null || true
           cat data/backtests/rb_stack2_freeze/results/rb_stack2_2026_roster_metadata_contract.json 2>/dev/null || true
+          cat data/models/rb_stack2_production_v1/rb_stack2_allocation_manifest_v1.json 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: rb-stack2-freeze-parity-v1
-          path: data/backtests/rb_stack2_freeze/results/**
+          path: |
+            data/backtests/rb_stack2_freeze/results/**
+            data/models/rb_stack2_production_v1/**
           retention-days: 30
