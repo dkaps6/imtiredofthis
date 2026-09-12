@@ -1,0 +1,86 @@
+{
+  "contract": "HISTORICAL_BENCHMARK_IDENTITY_CLEAN_V1",
+  "detail_identity": {
+    "bad_rows": 0,
+    "invalid_game_id": 0,
+    "opponent_mismatch": 0,
+    "rows": 17715,
+    "season_mismatch": 0,
+    "team_mismatch": 0,
+    "week_mismatch": 0
+  },
+  "graded_by_season_market": [
+    {
+      "market": "pass_yards",
+      "rows": 429,
+      "season": 2024
+    },
+    {
+      "market": "rec_yards",
+      "rows": 3021,
+      "season": 2024
+    },
+    {
+      "market": "receptions",
+      "rows": 2863,
+      "season": 2024
+    },
+    {
+      "market": "rush_rec_yards",
+      "rows": 1937,
+      "season": 2024
+    },
+    {
+      "market": "rush_yards",
+      "rows": 1426,
+      "season": 2024
+    },
+    {
+      "market": "pass_yards",
+      "rows": 383,
+      "season": 2025
+    },
+    {
+      "market": "rec_yards",
+      "rows": 2832,
+      "season": 2025
+    },
+    {
+      "market": "receptions",
+      "rows": 2839,
+      "season": 2025
+    },
+    {
+      "market": "rush_rec_yards",
+      "rows": 654,
+      "season": 2025
+    },
+    {
+      "market": "rush_yards",
+      "rows": 1331,
+      "season": 2025
+    }
+  ],
+  "graded_rows": 17715,
+  "projection_identity": {
+    "bad_rows": 0,
+    "invalid_game_id": 0,
+    "opponent_mismatch": 0,
+    "rows": 51197,
+    "season_mismatch": 0,
+    "team_mismatch": 0,
+    "week_mismatch": 0
+  },
+  "projection_rows": 51197,
+  "props_identity": {
+    "bad_rows": 0,
+    "invalid_game_id": 0,
+    "opponent_mismatch": 0,
+    "rows": 32092,
+    "season_mismatch": 0,
+    "team_mismatch": 0,
+    "week_mismatch": 0
+  },
+  "props_rows": 32092,
+  "status": "PASS"
+}
