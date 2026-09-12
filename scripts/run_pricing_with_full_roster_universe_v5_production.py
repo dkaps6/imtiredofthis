@@ -179,11 +179,16 @@ def _stamp_r26_pricing_lineage(*, week: int) -> dict:
     return payload
 
 
-def _clarify_r22_lineage_after_r26() -> None:
+def _clarify_r22_lineage_after_r26(*, week: int) -> None:
     path = v4.PRICING_AUDIT
     if not path.is_file():
         raise RuntimeError("V5 expected R22 pricing lineage audit")
     payload = json.loads(path.read_text(encoding="utf-8"))
+    if int(week) != 1:
+        # R22 is Week-1-only, same as R26; nothing to clarify outside Week 1.
+        if payload.get("disposition") != v4.R22_NOT_APPLICABLE:
+            raise RuntimeError("V5 R22 pricing lineage disposition mismatch for non-Week-1 run")
+        return
     if payload.get("disposition") != "RB_R22_WEEK1_RECEIVING_TAIL_PRICING_LINEAGE_PASS":
         raise RuntimeError("V5 R22 pricing lineage lost certified disposition")
     payload["downstream_r26_receptions_adapter_present"] = True
@@ -202,9 +207,10 @@ def main() -> int:
     rc = int(base.main())
     if rc != 0:
         return rc
-    r22_payload = v4._stamp_pricing_lineage()
-    _clarify_r22_lineage_after_r26()
-    r26_payload = _stamp_r26_pricing_lineage(week=int(resolve_week()))
+    week = int(resolve_week())
+    r22_payload = v4._stamp_pricing_lineage(week=week)
+    _clarify_r22_lineage_after_r26(week=week)
+    r26_payload = _stamp_r26_pricing_lineage(week=week)
     print("[rb_receiving_tail_pricing_lineage] " + json.dumps(r22_payload, sort_keys=True))
     print("[rb_r26_receptions_pricing_lineage] " + json.dumps(r26_payload, sort_keys=True))
     return 0

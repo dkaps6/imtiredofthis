@@ -22,11 +22,38 @@ from scripts.modeling.rb_receiving_tail_production_adapter_v1 import (
     VERSION as RB_REC_VERSION,
     apply_rb_receiving_tail_production,
 )
+from scripts.runtime_context import resolve_week
 
 OUT = Path("outputs/props_priced_clean.csv")
 PRICING_AUDIT = Path("data/rb_receiving_tail_pricing_lineage_audit.json")
 MODEL = Path("data/models/rb_r19_production_v1/rb_r19_tail_scorer_model_v1.json")
 POOLS = Path("data/models/rb_r19_production_v1/rb_r19_residual_pools_v1.npz")
+
+R22_NOT_APPLICABLE = "RB_R22_NOT_APPLICABLE_OUTSIDE_WEEK1"
+
+
+def _write_r22_not_applicable_adapter_stub(*, season: int, week: int) -> None:
+    payload = {
+        "candidate": RB_REC_VERSION,
+        "disposition": R22_NOT_APPLICABLE,
+        "integration_valid": False,
+        "season": int(season),
+        "week": int(week),
+        "adapted_rb_rows": 0,
+        "football_rb_rows": 0,
+        "max_mean_delta": 0.0,
+        "min_spearman": 1.0,
+        "gates": {},
+        "sportsbook_inputs_added": 0,
+        "current_or_future_outcomes_used": 0,
+        "production_mean_parameters_changed": 0,
+        "note": (
+            "RB R22 receiving-tail adapter is Week-1-only; this week's rec_yards/"
+            "rush_rec_yards distribution uses the pre-R22 (V3) result, not a silent "
+            "Week-1 fallback."
+        ),
+    }
+    RB_REC_AUDIT_JSON.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def _simulate_v4(metrics: pd.DataFrame, *, iterations=None, seed=None, allocation_trace=None):
@@ -37,6 +64,16 @@ def _simulate_v4(metrics: pd.DataFrame, *, iterations=None, seed=None, allocatio
     weeks = pd.to_numeric(metrics["week"], errors="coerce").dropna().astype(int).unique().tolist()
     if len(seasons) != 1 or len(weeks) != 1:
         raise RuntimeError(f"Full Slate V4 requires one season/week, got seasons={seasons} weeks={weeks}")
+    if weeks[0] != 1:
+        # RB R22 receiving-tail refinement is Week-1-only, same as RB P3/R26.
+        # Fail closed on the R22 route only: other weeks keep the pre-R22 (V3)
+        # receiving-yard result instead of aborting the rest of Full Slate.
+        print(
+            "[pricing] promoted RB R22 receiving-tail refinement is Week-1-only; "
+            f"week={weeks[0]} keeps the pre-R22 receiving-yard result"
+        )
+        _write_r22_not_applicable_adapter_stub(season=int(seasons[0]), week=int(weeks[0]))
+        return v3_result
     adapted, _, _ = apply_rb_receiving_tail_production(
         v3_result,
         metrics,
@@ -48,7 +85,21 @@ def _simulate_v4(metrics: pd.DataFrame, *, iterations=None, seed=None, allocatio
     return adapted
 
 
-def _stamp_pricing_lineage() -> dict:
+def _stamp_pricing_lineage(*, week: int) -> dict:
+    if int(week) != 1:
+        payload = {
+            "disposition": R22_NOT_APPLICABLE,
+            "integration_valid": False,
+            "version": RB_REC_VERSION,
+            "week": int(week),
+            "note": (
+                "RB R22 receiving-tail refinement is Week-1-only; this week's rec_yards/"
+                "rush_rec_yards pricing uses the pre-R22 (V3) result, not a silent "
+                "Week-1 fallback."
+            ),
+        }
+        PRICING_AUDIT.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return payload
     if not OUT.is_file() or not RB_REC_AUDIT_JSON.is_file() or not RB_REC_TRACE_CSV.is_file():
         raise RuntimeError("V4 pricing lineage stamp missing priced output or RB receiving audit/trace")
     priced = pd.read_csv(OUT, low_memory=False)
@@ -132,7 +183,7 @@ def main() -> int:
     rc = int(base.main())
     if rc != 0:
         return rc
-    payload = _stamp_pricing_lineage()
+    payload = _stamp_pricing_lineage(week=int(resolve_week()))
     print("[rb_receiving_tail_pricing_lineage] " + json.dumps(payload, sort_keys=True))
     return 0
 

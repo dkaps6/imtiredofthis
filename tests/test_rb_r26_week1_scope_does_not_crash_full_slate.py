@@ -22,4 +22,5 @@ def test_r26_lineage_stamp_does_not_require_r26_artifacts_outside_week1():
     src = Path("scripts/run_pricing_with_full_roster_universe_v5_production.py").read_text(encoding="utf-8")
     assert "def _stamp_r26_pricing_lineage(*, week: int) -> dict:" in src
     assert "RB_R26_NOT_APPLICABLE_OUTSIDE_WEEK1" in src
-    assert "_stamp_r26_pricing_lineage(week=int(resolve_week()))" in src
+    assert "week = int(resolve_week())" in src
+    assert "_stamp_r26_pricing_lineage(week=week)" in src
