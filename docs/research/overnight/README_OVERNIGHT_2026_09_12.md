@@ -8,6 +8,13 @@ This is the index. Per-position detail lives in:
 - `WR_GAP_FINDINGS.md`, `WR_R3_COMBINED_CANDIDATE_STATUS.md`
 - `TE_GAP_FINDINGS.md`, `QB_PD3_AND_TE_R1_RECOVERED_RESULTS.md`
 - `COVERAGE_V2_EFFICIENCY_SIGNAL_NOVELTY_CHECK.md`
+- **`SITUATIONAL_EDGE_HUNT_V1_RESULT.md` — a third pass, run after the two above, that actually found a real candidate edge. See "Situational edge hunt" below before anything else.**
+
+## Situational edge hunt (new, most actionable finding of the whole sweep)
+
+Instead of more feature-hunting, re-sliced the *existing* real 2024-2025 full-stack Vegas benchmark (`data/backtests/full_stack_vegas_benchmark_v1/non_qb_detail.csv`, 16,973 already-graded bets) by situational context instead of just the tier cut it already reported. 146 slices tested; one real candidate survived a both-seasons-independently-positive bar:
+
+**Receptions market, model's highest-confidence quartile (`prob_edge >= ~0.44`), UNDER side only: n=1,258, win rate 52.5%, ROI +2.66%/unit, positive independently in both 2024 (+2.43%) and 2025 (+2.90%).** Full writeup, including the statistical-honesty caveats (146 tests run, multiple-comparisons exposure) and why this one looks real rather than noise, in `SITUATIONAL_EDGE_HUNT_V1_RESULT.md`. Notably, this shows up even though `receptions` in this benchmark does *not* yet include the promoted WR-R15/TE-R5P entitlement models (disclosed gap, still open) — applying those to this same cohort is the natural next step to see if the edge sharpens further.
 
 ## Method
 
