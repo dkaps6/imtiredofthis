@@ -1,12 +1,19 @@
+import os
+import subprocess
+import sys
+
 import numpy as np
 import pandas as pd
 import pytest
 
 from scripts.research.fit_and_apply_distribution_widening_v1 import (
     _row_arrays,
+    _summarize,
     apply_and_grade,
     fit_widening_factors,
 )
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 KEYS = ["season", "week", "team", "opponent", "player_clean_key", "market"]
 NARROW_SD = 8.0
@@ -117,3 +124,92 @@ def test_fit_widening_factors_requires_matched_rows(tmp_path):
     proj, meta, _props, dist_dir = _build_fixture(tmp_path)
     with pytest.raises(RuntimeError, match="no rows to fit widening factors"):
         fit_widening_factors(proj, meta, dist_dir, fit_season=2099)
+
+
+def test_fit_widening_factors_fails_closed_on_zero_mean_mc_array(tmp_path):
+    # rescale_outcomes intentionally leaves an all-zero MC array untouched
+    # (it can't rescale toward a nonzero proj by any finite multiplier). A
+    # zero-allocation player (e.g. a non-rusher in rush_yards) can produce
+    # exactly this array. Silently proceeding would compute row_sd from a
+    # distribution that was never actually aligned to proj -- this must
+    # fail loud instead, per the same contract grade_empirical_fair_prob_v1
+    # already enforces.
+    dist_dir = tmp_path / "dist"
+    dist_dir.mkdir()
+    np.savez(dist_dir / "2024_week_01.npz", a000000=np.zeros(2000))
+
+    proj = pd.DataFrame(
+        [
+            {
+                "season": 2024, "week": 1, "team": "KC", "opponent": "BAL",
+                "player_clean_key": "player0", "market": "rush_yards",
+                "game_id": "2024_01_KC_BAL", "proj": 12.0, "ensemble_proj": 12.0, "actual": 8.0,
+            }
+        ]
+    )
+    meta = pd.DataFrame(
+        [
+            {
+                "season": 2024, "week": 1, "team": "KC", "opponent": "BAL",
+                "player": "player0", "player_clean_key": "player0", "market": "rush_yards",
+                "array_key": "a000000", "npz_file": "2024_week_01.npz",
+            }
+        ]
+    )
+    with pytest.raises(RuntimeError, match="failed to align mean to proj"):
+        fit_widening_factors(proj, meta, dist_dir, fit_season=2024)
+
+
+def test_summarize_excludes_pushes_from_brier_and_log_loss(tmp_path):
+    # A row where actual lands exactly on the line is a PUSH -- it must not
+    # be scored as a "not over" (y=0) outcome in calibration metrics, the
+    # same exclusion grade_empirical_fair_prob_v1's diagnostics already apply.
+    detail = pd.DataFrame(
+        [
+            {
+                "market": "rec_yards", "actual": 50.0, "line": 50.0, "p_over": 0.5, "p_under": 0.5,
+                "signal": "NO_EDGE", "bet_result": "PUSH", "unit_result": 0.0,
+                "model_error": 1.0, "vegas_error": 1.0,
+            },
+            {
+                "market": "rec_yards", "actual": 60.0, "line": 50.0, "p_over": 0.9, "p_under": 0.1,
+                "signal": "NO_EDGE", "bet_result": "WIN", "unit_result": 0.9,
+                "model_error": 1.0, "vegas_error": 1.0,
+            },
+        ]
+    )
+    summary = _summarize(detail)
+    row = summary.loc[summary.market.eq("rec_yards") & summary.tier.eq("ALL_NO_FILTER")].iloc[0]
+    # Brier/log-loss computed on the single decided (non-push) row only:
+    # y=1 (actual > line), p=0.9 -> brier=(0.9-1)**2=0.01
+    assert row["brier"] == pytest.approx(0.01, abs=1e-9)
+    assert row["log_loss"] == pytest.approx(-np.log(0.9), abs=1e-9)
+
+
+def test_cli_rejects_identical_fit_and_test_season(tmp_path):
+    proj, meta, props, dist_dir = _build_fixture(tmp_path)
+    proj_path = tmp_path / "projection_trace.csv"
+    props_path = tmp_path / "props.csv"
+    proj.to_csv(proj_path, index=False)
+    props.to_csv(props_path, index=False)
+    meta.to_csv(dist_dir / "combined_metadata.csv", index=False)
+
+    env = dict(os.environ)
+    env["PYTHONPATH"] = _REPO_ROOT + os.pathsep + env.get("PYTHONPATH", "")
+    result = subprocess.run(
+        [
+            sys.executable,
+            os.path.join(_REPO_ROOT, "scripts/research/fit_and_apply_distribution_widening_v1.py"),
+            "--projection-file", str(proj_path),
+            "--distribution-dir", str(dist_dir),
+            "--props", str(props_path),
+            "--fit-season", "2024",
+            "--test-season", "2024",
+            "--out-dir", str(tmp_path / "out"),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "must differ" in result.stderr

@@ -101,6 +101,14 @@ def fit_widening_factors(proj: pd.DataFrame, meta: pd.DataFrame, distribution_di
         if arr is None:
             continue
         rescaled = rescale_outcomes(arr, float(row["proj"]))
+        aligned_delta = abs(float(np.mean(rescaled)) - float(row["proj"]))
+        if not np.isfinite(aligned_delta) or aligned_delta > 1e-8:
+            raise RuntimeError(
+                f"rescale_outcomes failed to align mean to proj (likely a zero-mean MC array) "
+                f"season={row['season']} week={row['week']} team={row['team']} "
+                f"player={row['player_clean_key']} market={row['market']}: "
+                f"mean(rescaled)={float(np.mean(rescaled)):.4f} proj={float(row['proj']):.4f}"
+            )
         row_sd = float(np.std(rescaled, ddof=1)) if len(rescaled) > 1 else np.nan
         rows.append({"market": row["market"], "row_sd": row_sd, "residual": float(row["actual"]) - float(row["proj"])})
     fit_df = pd.DataFrame(rows)
@@ -155,10 +163,10 @@ def _summarize(z: pd.DataFrame) -> pd.DataFrame:
         for tier_name, tier_df in tiers.items():
             g = tier_df if market == "ALL_MARKETS" else tier_df.loc[tier_df.market.eq(market)]
             decided = g.loc[g.bet_result.isin(["WIN", "LOSS"])]
-            y = (num(g.actual) > num(g.line)).astype(float)
-            p = np.clip(num(g.p_over), 1e-6, 1 - 1e-6)
-            brier = float(np.mean((p - y) ** 2)) if len(g) else np.nan
-            log_loss = float(-np.mean(y * np.log(p) + (1 - y) * np.log(1 - p))) if len(g) else np.nan
+            y = (num(decided.actual) > num(decided.line)).astype(float)
+            p = np.clip(num(decided.p_over), 1e-6, 1 - 1e-6)
+            brier = float(np.mean((p - y) ** 2)) if len(decided) else np.nan
+            log_loss = float(-np.mean(y * np.log(p) + (1 - y) * np.log(1 - p))) if len(decided) else np.nan
             rows.append({
                 "market": market, "tier": tier_name, "matched_rows": int(len(g)),
                 "decided_bets": int(len(decided)),
@@ -194,6 +202,14 @@ def apply_and_grade(proj: pd.DataFrame, meta: pd.DataFrame, props: pd.DataFrame,
         arr = arrays[key]
         rescaled = rescale_outcomes(arr, float(row["proj"]))
         base_mean = float(np.mean(rescaled))
+        aligned_delta = abs(base_mean - float(row["proj"]))
+        if not np.isfinite(aligned_delta) or aligned_delta > 1e-8:
+            raise RuntimeError(
+                f"rescale_outcomes failed to align mean to proj (likely a zero-mean MC array) "
+                f"season={row['season']} week={row['week']} team={row['team']} "
+                f"player={row['player_clean_key']} market={row['market']}: "
+                f"mean(rescaled)={base_mean:.4f} proj={float(row['proj']):.4f}"
+            )
         k = widening_factors.get(row["market"], 1.0)
         widened = base_mean + (rescaled - base_mean) * k
         p_over_base.append(empirical_over_probability(rescaled, float(row["line"])))
@@ -226,6 +242,12 @@ def main() -> int:
     ap.add_argument("--test-season", type=int, required=True)
     ap.add_argument("--out-dir", type=Path, required=True)
     a = ap.parse_args()
+
+    if a.fit_season == a.test_season:
+        raise RuntimeError(
+            f"--fit-season and --test-season must differ to guarantee an out-of-sample result "
+            f"(both were {a.fit_season})"
+        )
 
     proj = _read(a.projection_file, "projection trace")
     if "ensemble_proj" in proj.columns and "proj" not in proj.columns:
