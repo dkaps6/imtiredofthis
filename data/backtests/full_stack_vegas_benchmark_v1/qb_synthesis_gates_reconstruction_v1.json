@@ -1,0 +1,44 @@
+{
+  "football_synthesis": {
+    "mae_gain": 0.04076205035116942,
+    "mae_gain_gate": false,
+    "both_seasons_nonworse": false,
+    "season_detail": "2024:60.914->60.955 2025:61.294->61.171",
+    "rmse_nonworse": false,
+    "correlation_gain": 0.010230480863755859,
+    "correlation_gate": true,
+    "tails_nonincrease": false,
+    "bootstrap_p_improve": 0.5202,
+    "bootstrap_gate": false,
+    "market_coverage": 1.0,
+    "market_coverage_gate": true,
+    "all_gates_pass": false
+  },
+  "market_assisted": {
+    "mae_gain": 1.7649997569134541,
+    "mae_gain_gate": true,
+    "both_seasons_nonworse": true,
+    "season_detail": "2024:60.914->59.227 2025:61.294->59.450",
+    "rmse_nonworse": true,
+    "correlation_gain": 0.09178936548214495,
+    "correlation_gate": true,
+    "tails_nonincrease": true,
+    "bootstrap_p_improve": 0.9832,
+    "bootstrap_gate": true,
+    "market_coverage": 1.0,
+    "market_coverage_gate": true,
+    "all_gates_pass": true
+  },
+  "train_season": 2023,
+  "evaluation_seasons": [
+    2024,
+    2025
+  ],
+  "ridge_alpha": 20.0,
+  "residual_cap": 45.0,
+  "bootstrap_draws": 10000,
+  "bootstrap_seed": 89,
+  "postgame_casebook_features_used_for_prediction": false,
+  "sportsbook_features_in_football_model": false,
+  "market_timing": "nflverse schedule market snapshot treated as pregame/closing-style, not Wednesday information"
+}
