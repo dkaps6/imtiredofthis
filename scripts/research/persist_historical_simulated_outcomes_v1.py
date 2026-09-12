@@ -2,7 +2,7 @@
 """Rebuild leakage-safe historical Monte Carlo outcome arrays for fair-probability research.
 
 This script intentionally reruns only the historical football simulation path.
-Sportsbook lines/odds are not inputs.  The saved arrays are keyed by historical
+Sportsbook lines/odds are not inputs. The saved arrays are keyed by historical
 pregame identity and are later consumed by a separate downstream grader.
 
 The component file is used only as an integrity checksum: every observed-row
@@ -22,7 +22,9 @@ from scripts.backtest.historical_context import build_historical_context_bundle
 from scripts.simulation_v2 import lookup, simulate
 from scripts.utils.canonical_names import canon_team
 
-KEYS = ["season", "week", "team", "player_clean_key", "market"]
+# Include opponent even though authoritative team/week implies it. This makes
+# wrong-opponent/stale sidecars fail closed at the persistence seam itself.
+KEYS = ["season", "week", "team", "opponent", "player_clean_key", "market"]
 
 
 def _read(path: Path, label: str) -> pd.DataFrame:
@@ -86,11 +88,17 @@ def _historical_outcomes(sims, row: pd.Series) -> np.ndarray | None:
 def _canon_keys(frame: pd.DataFrame) -> pd.DataFrame:
     x = frame.copy()
     x.columns = [str(c).strip().lower() for c in x.columns]
+    missing = sorted(set(KEYS) - set(x.columns))
+    if missing:
+        raise RuntimeError(f"historical distribution identity missing columns: {missing}")
     x["season"] = pd.to_numeric(x["season"], errors="raise").astype(int)
     x["week"] = pd.to_numeric(x["week"], errors="raise").astype(int)
     x["team"] = x["team"].map(canon_team)
+    x["opponent"] = x["opponent"].map(canon_team)
     x["player_clean_key"] = x["player_clean_key"].astype(str)
     x["market"] = x["market"].astype(str).str.lower()
+    if x["team"].eq("").any() or x["opponent"].eq("").any():
+        raise RuntimeError("historical distribution identity contains invalid team/opponent")
     return x
 
 
@@ -141,6 +149,7 @@ def persist_season(
         # build_mc_predictions already simulated once to emit mc_proj. Running the
         # same deterministic simulator again with the same prepared metrics/seed
         # reproduces that exact football distribution without introducing market data.
+        # The exact mean check below hard-fails if deterministic equivalence breaks.
         sims = simulate(metrics, iterations=int(iterations), seed=seed)
 
         arrays: dict[str, np.ndarray] = {}
@@ -149,6 +158,12 @@ def persist_season(
             arr = _historical_outcomes(sims, row)
             if arr is None:
                 continue
+            if len(arr) != int(iterations):
+                raise RuntimeError(
+                    f"{season} W{week:02d}: simulation draw-count mismatch "
+                    f"{row.get('player_clean_key')} {row.get('market')}: "
+                    f"{len(arr)} != {int(iterations)}"
+                )
             array_key = f"a{i:06d}"
             arrays[array_key] = arr
             rows.append(
@@ -164,13 +179,15 @@ def persist_season(
                     "array_key": array_key,
                     "draws": int(len(arr)),
                     "mc_mean": float(np.mean(arr)),
-                    "mc_sd": float(np.std(arr, ddof=0)),
+                    # Match production's recorded model SD convention.
+                    "mc_sd": float(np.std(arr, ddof=1)) if len(arr) > 1 else 0.0,
                 }
             )
 
         meta = pd.DataFrame(rows)
         if meta.empty:
             raise RuntimeError(f"{season} W{week:02d}: no simulated arrays")
+        meta = _canon_keys(meta)
         if meta.duplicated(KEYS).any():
             bad = meta.loc[meta.duplicated(KEYS, keep=False), KEYS].head(10).to_dict("records")
             raise RuntimeError(f"{season} W{week:02d}: duplicate distribution identities: {bad}")
