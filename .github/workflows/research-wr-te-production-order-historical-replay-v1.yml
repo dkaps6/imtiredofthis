@@ -1,0 +1,281 @@
+name: WR TE Production Order Historical Replay V1
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/research/persist_wr_te_production_order_historical_v1.py"
+      - "scripts/research/summarize_wr_te_production_order_replay_v1.py"
+      - "tests/test_wr_te_production_order_historical_v1.py"
+      - "docs/research/WR_TE_PRODUCTION_ORDER_HISTORICAL_REPLAY_V1_PLAN.md"
+      - ".github/workflows/research-wr-te-production-order-historical-replay-v1.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml pyarrow tabulate
+
+      - name: Run frozen replay tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q \
+            tests/test_wr_te_production_order_historical_v1.py \
+            tests/test_empirical_fair_prob_v1.py \
+            tests/test_benchmark_identity_v1.py
+
+      - name: Create workspace
+        run: |
+          rm -rf /tmp/wrte /tmp/hist_2024 /tmp/hist_2025 /tmp/ref /tmp/wr_model /tmp/te_model
+          mkdir -p /tmp/wrte/distributions /tmp/wrte/grade /tmp/wrte/result \
+                   /tmp/hist_2024 /tmp/hist_2025 /tmp/ref /tmp/wr_model /tmp/te_model
+
+      - name: Download canonical empirical baseline reference
+        uses: actions/download-artifact@v4
+        with:
+          name: historical-fair-probability-reconstruction-v1
+          path: /tmp/ref
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34712931786
+
+      - name: Download WR-R15 fold-safe OOS authority
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-r15-wr1-anchor-participation-v1
+          path: /tmp/wr_model
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34238301577
+
+      - name: Download TE-R5P production-contract OOS authority
+        uses: actions/download-artifact@v4
+        with:
+          name: te-r5p-production-contract-refit-v1
+          path: /tmp/te_model
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34152797603
+
+      - name: Verify frozen fold artifacts
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from pathlib import Path
+
+          wr_root = Path('/tmp/wr_model/backtests/wr_r15_wr1_anchor_v1')
+          te_root = Path('/tmp/te_model/data/backtests/te_r5p_production_contract_refit_v1')
+          wr = pd.read_csv(wr_root / 'wr_r15_fold_coefficients.csv')
+          te = pd.read_csv(te_root / 'te_r5p_coefficients.csv')
+          wr_result = json.loads((wr_root / 'wr_r15_result.json').read_text())
+          te_result = json.loads((te_root / 'te_r5p_result.json').read_text())
+          if sorted(wr['test_season'].astype(int).unique().tolist()) != [2023, 2024]:
+              raise RuntimeError('WR-R15 OOS fold seasons drifted')
+          if sorted(te['test_season'].astype(int).unique().tolist()) != [2023, 2024, 2025]:
+              raise RuntimeError('TE-R5P OOS fold seasons drifted')
+          if not bool(wr_result.get('design_motivated_by_2025_but_2025_confirmation_forbidden')):
+              raise RuntimeError('WR-R15 2025 exclusion contract missing')
+          if te_result.get('candidate_team_pool') != 'b0_te_pool' or float(te_result.get('pool_ratio_contract')) != 1.0:
+              raise RuntimeError('TE-R5P production pool-conservation contract drifted')
+          if te_result.get('disposition') != 'TE_R5P_PRODUCTION_CONTRACT_REFIT_ELIGIBLE':
+              raise RuntimeError('TE-R5P OOS production-contract artifact not eligible')
+          print('frozen fold authority PASS')
+          PY
+
+      - name: Build independent historical inputs for 2024 and 2025
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --out-dir /tmp/hist_2024
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --out-dir /tmp/hist_2025
+
+      - name: Combine authoritative schedule and team-week history
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out = Path('/tmp/wrte')
+          for name in ['schedule_history.csv', 'team_weekly_history.csv']:
+              parts = [pd.read_csv('/tmp/hist_2024/' + name), pd.read_csv('/tmp/hist_2025/' + name)]
+              x = pd.concat(parts, ignore_index=True)
+              keys = ['season', 'week', 'team']
+              x = x.sort_values(keys).drop_duplicates(keys, keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined historical rows in {name}')
+              x.to_csv(out / name, index=False)
+          PY
+
+      - name: Build canonical historical player logs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2023,2024,2025 \
+            --schedule /tmp/wrte/schedule_history.csv \
+            --out /tmp/wrte/player_game_logs_history.csv
+
+      - name: Build canonical baseline component traces
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/walk_forward.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/wrte/player_game_logs_history.csv \
+            --team-weekly /tmp/wrte/team_weekly_history.csv \
+            --schedule /tmp/wrte/schedule_history.csv \
+            --universe-dir /tmp/hist_2024/pregame_universe \
+            --out /tmp/wrte/component_predictions_2024_base.csv
+          python scripts/backtest/walk_forward.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/wrte/player_game_logs_history.csv \
+            --team-weekly /tmp/wrte/team_weekly_history.csv \
+            --schedule /tmp/wrte/schedule_history.csv \
+            --universe-dir /tmp/hist_2025/pregame_universe \
+            --out /tmp/wrte/component_predictions_2025_base.csv
+
+      - name: Rebuild baseline full-stack trace and prove canonical reproduction
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_full_stack_vegas_projection_trace_v2.py \
+            --component-file /tmp/wrte/component_predictions_2024_base.csv \
+            --component-file /tmp/wrte/component_predictions_2025_base.csv \
+            --schedule /tmp/wrte/schedule_history.csv \
+            --weights data/model_ensemble_weights.csv \
+            --out /tmp/wrte/full_stack_projection_trace_base.csv
+          python - <<'PY'
+          import numpy as np
+          import pandas as pd
+          a = pd.read_csv('/tmp/wrte/full_stack_projection_trace_base.csv', low_memory=False)
+          b = pd.read_csv('/tmp/ref/full_stack_projection_trace_clean_v1.csv', low_memory=False)
+          keys = ['season','week','team','opponent','player_clean_key','market','game_id']
+          aa = a.sort_values(keys).reset_index(drop=True)
+          bb = b.sort_values(keys).reset_index(drop=True)
+          if len(aa) != 51197 or len(bb) != 51197:
+              raise RuntimeError(f'canonical projection row count drift: {len(aa)} / {len(bb)}')
+          if not aa[keys].astype(str).equals(bb[keys].astype(str)):
+              raise RuntimeError('canonical baseline projection identity drift')
+          for c in ['mc_proj','ml_proj','state_proj','ensemble_proj','actual']:
+              av = pd.to_numeric(aa[c], errors='coerce').to_numpy(float)
+              bv = pd.to_numeric(bb[c], errors='coerce').to_numpy(float)
+              mask = np.isfinite(av) & np.isfinite(bv)
+              if not np.array_equal(np.isnan(av), np.isnan(bv)):
+                  raise RuntimeError(f'canonical baseline missingness drift: {c}')
+              delta = float(np.max(np.abs(av[mask]-bv[mask]))) if mask.any() else 0.0
+              if delta > 1e-10:
+                  raise RuntimeError(f'canonical baseline numerical drift {c}: {delta}')
+          print('canonical baseline projection reproduction PASS')
+          PY
+
+      - name: Replay TE-R5P and WR-R15 upstream of joint MC
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/persist_wr_te_production_order_historical_v1.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/wrte/player_game_logs_history.csv \
+            --team-weekly /tmp/wrte/team_weekly_history.csv \
+            --schedule /tmp/wrte/schedule_history.csv \
+            --universe-dir /tmp/hist_2024/pregame_universe \
+            --component-file /tmp/wrte/component_predictions_2024_base.csv \
+            --component-out /tmp/wrte/component_predictions_2024_wrte.csv \
+            --out-dir /tmp/wrte/distributions \
+            --te-coefficients /tmp/te_model/data/backtests/te_r5p_production_contract_refit_v1/te_r5p_coefficients.csv \
+            --wr-coefficients /tmp/wr_model/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv
+          python scripts/research/persist_wr_te_production_order_historical_v1.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/wrte/player_game_logs_history.csv \
+            --team-weekly /tmp/wrte/team_weekly_history.csv \
+            --schedule /tmp/wrte/schedule_history.csv \
+            --universe-dir /tmp/hist_2025/pregame_universe \
+            --component-file /tmp/wrte/component_predictions_2025_base.csv \
+            --component-out /tmp/wrte/component_predictions_2025_wrte.csv \
+            --out-dir /tmp/wrte/distributions \
+            --te-coefficients /tmp/te_model/data/backtests/te_r5p_production_contract_refit_v1/te_r5p_coefficients.csv \
+            --wr-coefficients /tmp/wr_model/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv
+
+      - name: Build specialist full-stack football trace
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_full_stack_vegas_projection_trace_v2.py \
+            --component-file /tmp/wrte/component_predictions_2024_wrte.csv \
+            --component-file /tmp/wrte/component_predictions_2025_wrte.csv \
+            --schedule /tmp/wrte/schedule_history.csv \
+            --weights data/model_ensemble_weights.csv \
+            --out /tmp/wrte/full_stack_projection_trace_wrte.csv
+
+      - name: Grade empirical specialist replay on canonical market rows
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/grade_empirical_fair_prob_v1.py \
+            --projection-file /tmp/wrte/full_stack_projection_trace_wrte.csv \
+            --props /tmp/ref/market_archive/historical_market_props.csv \
+            --distribution-dir /tmp/wrte/distributions \
+            --out-dir /tmp/wrte/grade
+
+      - name: Summarize frozen authorized cohort and untouched-row invariance
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/summarize_wr_te_production_order_replay_v1.py \
+            --baseline-detail /tmp/ref/grade/empirical_fair_prob_detail.csv \
+            --specialist-detail /tmp/wrte/grade/empirical_fair_prob_detail.csv \
+            --baseline-projection /tmp/ref/full_stack_projection_trace_clean_v1.csv \
+            --specialist-projection /tmp/wrte/full_stack_projection_trace_wrte.csv \
+            --out-dir /tmp/wrte/result
+          python scripts/research/summarize_empirical_fair_prob_segments_v1.py \
+            --projection-file /tmp/wrte/full_stack_projection_trace_wrte.csv \
+            --props /tmp/ref/market_archive/historical_market_props.csv \
+            --empirical-detail /tmp/wrte/grade/empirical_fair_prob_detail.csv \
+            --out-dir /tmp/wrte/grade
+
+      - name: Upload compact WR TE production-order replay result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-te-production-order-historical-replay-v1
+          path: |
+            /tmp/wrte/component_predictions_2024_wrte.csv
+            /tmp/wrte/component_predictions_2025_wrte.csv
+            /tmp/wrte/full_stack_projection_trace_base.csv
+            /tmp/wrte/full_stack_projection_trace_wrte.csv
+            /tmp/wrte/distributions/*_wrte_replay_audit.csv
+            /tmp/wrte/distributions/*_wrte_component_updates.csv
+            /tmp/wrte/distributions/*_metadata.csv
+            /tmp/wrte/grade/*.csv
+            /tmp/wrte/result/*.csv
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload hybrid raw distribution shards
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-te-production-order-historical-distributions-v1
+          path: /tmp/wrte/distributions/*.npz
+          if-no-files-found: warn
+          retention-days: 7
+          compression-level: 0
