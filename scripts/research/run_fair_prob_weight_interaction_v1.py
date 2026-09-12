@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """Frozen 2x2 interaction: heldout ensemble weights x probability translator.
 
-Cells:
-  A0 current/fallback weights x legacy component_sd Normal translator
-  A1 2023-only heldout weights for rec_yards/receptions/rush_rec_yards x legacy
-  B0 current/fallback weights x empirical historical MC translator
-  B1 same heldout weights x empirical historical MC translator
+A0 = current/fallback means x legacy component_sd Normal translator.
+A1 = PR #545 published heldout means x legacy translator.
+B0 = current/fallback means x empirical historical MC translator.
+B1 = PR #545 published heldout means x empirical historical MC translator.
 
-No fitting, threshold tuning, sportsbook-upstream input, or new simulation occurs here.
-The script consumes already-certified artifacts and fails closed if the three
-previously-published cells do not reproduce their canonical summaries.
+Important reproduction note: PR #545's published A1 result used a fixed weighted
+sum with missing components contributing zero, rather than production
+apply_ensemble() missing-component renormalization. The 2x2 preserves that exact
+published-A1 mean construction in A1/B1 so the interaction tests the result that
+was actually reported. This limitation is audited explicitly and does not alter
+production.
 """
 from __future__ import annotations
 
@@ -20,11 +22,7 @@ import numpy as np
 import pandas as pd
 
 from scripts.backtest.grade_full_stack_vegas_benchmark_v1 import grade as legacy_grade
-from scripts.modeling.ensemble_v2 import apply_ensemble
-from scripts.research.grade_empirical_fair_prob_v1 import (
-    _probability_diagnostics,
-    grade_empirical,
-)
+from scripts.research.grade_empirical_fair_prob_v1 import _probability_diagnostics, grade_empirical
 
 TARGET_MARKETS = ("rec_yards", "receptions", "rush_rec_yards")
 IDENTITY = ["season", "week", "team", "opponent", "player_clean_key", "market", "game_id"]
@@ -38,7 +36,7 @@ SUMMARY_NUMERIC = [
 def _read(path: Path, label: str) -> pd.DataFrame:
     if not path.exists() or not path.stat().st_size:
         raise RuntimeError(f"missing {label}: {path}")
-    x = pd.read_csv(path)
+    x = pd.read_csv(path, low_memory=False)
     x.columns = [str(c).strip().lower() for c in x.columns]
     return x
 
@@ -60,25 +58,74 @@ def build_overlay_weights(current: pd.DataFrame, heldout: pd.DataFrame) -> pd.Da
     return out
 
 
+def build_published_a1_trace(current: pd.DataFrame, heldout_weights: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Reproduce PR #545's published A1 mean construction exactly.
+
+    Missing component projections contribute zero and weights are not renormalized.
+    This is intentionally *not* production apply_ensemble() semantics; it is the
+    discovered historical application semantics required to reproduce A1 exactly.
+    """
+    out = current.copy()
+    w = heldout_weights.copy()
+    w["market"] = w["market"].astype(str).str.lower().str.strip()
+    missing = sorted(set(TARGET_MARKETS) - set(w["market"]))
+    if missing:
+        raise RuntimeError(f"heldout weight artifact missing frozen markets: {missing}")
+    w = w.set_index("market")
+    audit_rows: list[dict] = []
+
+    for market in TARGET_MARKETS:
+        mask = out["market"].astype(str).str.lower().eq(market)
+        row = w.loc[market]
+        wm = float(row["mc_weight"])
+        wl = float(row["ml_weight"])
+        ws = float(row["state_weight"])
+        weight_sum = wm + wl + ws
+        if not np.isfinite(weight_sum) or abs(weight_sum - 1.0) > 1e-6:
+            raise RuntimeError(f"heldout weights for {market} do not sum to 1: {weight_sum}")
+
+        mc = pd.to_numeric(out.loc[mask, "mc_proj"], errors="coerce")
+        ml = pd.to_numeric(out.loc[mask, "ml_proj"], errors="coerce")
+        state = pd.to_numeric(out.loc[mask, "state_proj"], errors="coerce")
+        if mc.isna().any() or ml.isna().any():
+            raise RuntimeError(f"published-A1 reproduction found missing mc/ml projection in {market}")
+        published_mean = mc * wm + ml * wl + state.fillna(0.0) * ws
+        out.loc[mask, "ensemble_proj"] = published_mean.to_numpy(dtype=float)
+        out.loc[mask, "ensemble_weight_mc"] = wm
+        out.loc[mask, "ensemble_weight_ml"] = wl
+        out.loc[mask, "ensemble_weight_state"] = ws
+        if "ensemble_calibration_rows" in out.columns and "calibration_rows" in row.index:
+            out.loc[mask, "ensemble_calibration_rows"] = int(row["calibration_rows"])
+        if "ensemble_method" in out.columns:
+            out.loc[mask, "ensemble_method"] = "PR545_PUBLISHED_FIXED_WEIGHT_NO_MISSING_RENORM"
+        if "ensemble_status" in out.columns:
+            out.loc[mask, "ensemble_status"] = "research_pr545_published_semantics"
+
+        audit_rows.append({
+            "market": market,
+            "rows": int(mask.sum()),
+            "missing_mc_rows": int(mc.isna().sum()),
+            "missing_ml_rows": int(ml.isna().sum()),
+            "missing_state_rows": int(state.isna().sum()),
+            "state_weight": ws,
+            "rows_affected_by_missing_state_semantics": int((state.isna() & (abs(ws) > 0)).sum()),
+            "weight_sum": weight_sum,
+            "application_semantics": "fixed_weight_missing_component_zero_no_renormalization",
+        })
+    return out, pd.DataFrame(audit_rows)
+
+
 def _assert_trace_identity(a: pd.DataFrame, b: pd.DataFrame) -> None:
-    for label, x in (("current", a), ("heldout", b)):
-        missing = sorted(set(IDENTITY) - set(x.columns))
-        if missing:
-            raise RuntimeError(f"{label} trace identity missing: {missing}")
     aa = a[IDENTITY].copy().sort_values(IDENTITY).reset_index(drop=True)
     bb = b[IDENTITY].copy().sort_values(IDENTITY).reset_index(drop=True)
     if len(aa) != len(bb) or not aa.equals(bb):
-        raise RuntimeError(f"projection trace identity changed under heldout weights: {len(aa)} vs {len(bb)}")
+        raise RuntimeError(f"projection trace identity changed under heldout means: {len(aa)} vs {len(bb)}")
 
 
-def _assert_only_target_means_changed(current: pd.DataFrame, heldout: pd.DataFrame) -> pd.DataFrame:
+def _projection_change_audit(current: pd.DataFrame, heldout: pd.DataFrame) -> pd.DataFrame:
     keys = IDENTITY
-    cols = keys + [
-        "ensemble_proj", "ensemble_weight_mc", "ensemble_weight_ml",
-        "ensemble_weight_state", "ensemble_calibration_rows",
-    ]
-    a = current[cols].copy().rename(columns={c: f"{c}_current" for c in cols if c not in keys})
-    b = heldout[cols].copy().rename(columns={c: f"{c}_heldout" for c in cols if c not in keys})
+    a = current[keys + ["ensemble_proj"]].rename(columns={"ensemble_proj": "ensemble_proj_current"})
+    b = heldout[keys + ["ensemble_proj"]].rename(columns={"ensemble_proj": "ensemble_proj_heldout"})
     z = a.merge(b, on=keys, validate="one_to_one")
     z["proj_abs_delta"] = (
         pd.to_numeric(z["ensemble_proj_heldout"], errors="coerce")
@@ -87,23 +134,17 @@ def _assert_only_target_means_changed(current: pd.DataFrame, heldout: pd.DataFra
     non_target = z.loc[~z["market"].isin(TARGET_MARKETS)]
     if (non_target["proj_abs_delta"] > 1e-12).any():
         bad = non_target.loc[non_target["proj_abs_delta"] > 1e-12, keys + ["proj_abs_delta"]].head(10)
-        raise RuntimeError(f"heldout overlay changed non-target projection rows: {bad.to_dict('records')}")
-    if not (z.loc[z["market"].isin(TARGET_MARKETS), "proj_abs_delta"] > 1e-12).any():
-        raise RuntimeError("heldout overlay changed no target-market projections")
-    audit = z.groupby("market", as_index=False).agg(
+        raise RuntimeError(f"heldout means changed non-target rows: {bad.to_dict('records')}")
+    return z.groupby("market", as_index=False).agg(
         rows=("proj_abs_delta", "size"),
         changed_rows=("proj_abs_delta", lambda s: int((s > 1e-12).sum())),
         mean_abs_projection_delta=("proj_abs_delta", "mean"),
         max_abs_projection_delta=("proj_abs_delta", "max"),
     )
-    return audit
 
 
 def _identity_from_detail(detail: pd.DataFrame) -> pd.DataFrame:
     cols = IDENTITY + ["line"]
-    missing = sorted(set(cols) - set(detail.columns))
-    if missing:
-        raise RuntimeError(f"graded detail identity missing: {missing}")
     return detail[cols].sort_values(cols).reset_index(drop=True)
 
 
@@ -116,17 +157,29 @@ def _assert_four_cell_row_parity(details: dict[str, pd.DataFrame]) -> None:
             raise RuntimeError(f"ALL_NO_FILTER row identity differs between {names[0]} and {name}")
 
 
-def _assert_summary_reproduces(observed: pd.DataFrame, reference: pd.DataFrame, label: str, tol: float = 1e-10) -> None:
+def _summary_diff(observed: pd.DataFrame, reference: pd.DataFrame, label: str) -> pd.DataFrame:
     o = observed.copy().sort_values(SUMMARY_KEYS).reset_index(drop=True)
     r = reference.copy().sort_values(SUMMARY_KEYS).reset_index(drop=True)
-    if not o[SUMMARY_KEYS].equals(r[SUMMARY_KEYS]):
+    z = r.merge(o, on=SUMMARY_KEYS, how="outer", suffixes=("_reference", "_observed"), indicator=True)
+    z.insert(0, "label", label)
+    for col in SUMMARY_NUMERIC:
+        rc = f"{col}_reference"
+        oc = f"{col}_observed"
+        if rc in z and oc in z:
+            z[f"{col}_delta"] = pd.to_numeric(z[oc], errors="coerce") - pd.to_numeric(z[rc], errors="coerce")
+    return z
+
+
+def _assert_summary_reproduces(observed: pd.DataFrame, reference: pd.DataFrame, label: str, tol: float = 1e-10) -> pd.DataFrame:
+    diff = _summary_diff(observed, reference, label)
+    if not diff["_merge"].eq("both").all():
         raise RuntimeError(f"{label} summary keys do not reproduce canonical reference")
     for col in SUMMARY_NUMERIC:
-        ov = pd.to_numeric(o[col], errors="coerce").to_numpy(dtype=float)
-        rv = pd.to_numeric(r[col], errors="coerce").to_numpy(dtype=float)
-        if not np.allclose(ov, rv, rtol=0.0, atol=tol, equal_nan=True):
-            delta = np.nanmax(np.abs(ov - rv))
+        d = pd.to_numeric(diff[f"{col}_delta"], errors="coerce").to_numpy(dtype=float)
+        if not np.all(np.isnan(d) | (np.abs(d) <= tol)):
+            delta = np.nanmax(np.abs(d))
             raise RuntimeError(f"{label} failed canonical reproduction at {col}; max_abs_delta={delta}")
+    return diff
 
 
 def _tag_summary(summary: pd.DataFrame, cell: str, weight_arm: str, prob_arm: str) -> pd.DataFrame:
@@ -168,33 +221,32 @@ def _strong_side_counts(detail: pd.DataFrame, cell: str) -> pd.DataFrame:
 
 def _interaction_deltas(cell_summary: pd.DataFrame, probability_diag: pd.DataFrame) -> pd.DataFrame:
     strong = cell_summary.loc[cell_summary["tier"].eq("STRONG_ONLY_PLAY_TIER")].copy()
-    metrics = ["model_mae", "roi_per_unit", "win_rate", "matched_rows"]
-    rows: list[dict] = []
+    rows = []
     for market in strong["market"].unique():
         g = strong.loc[strong["market"].eq(market)].set_index("cell")
         if not {"A0", "A1", "B0", "B1"}.issubset(g.index):
             continue
         row = {"market": market, "tier": "STRONG_ONLY_PLAY_TIER"}
-        for metric in metrics:
-            vals = {c: float(g.loc[c, metric]) for c in ("A0", "A1", "B0", "B1")}
-            row[f"{metric}_weight_effect_legacy_A1_minus_A0"] = vals["A1"] - vals["A0"]
-            row[f"{metric}_translator_effect_current_B0_minus_A0"] = vals["B0"] - vals["A0"]
-            row[f"{metric}_translator_effect_heldout_B1_minus_A1"] = vals["B1"] - vals["A1"]
-            row[f"{metric}_weight_effect_empirical_B1_minus_B0"] = vals["B1"] - vals["B0"]
-            row[f"{metric}_interaction"] = (vals["B1"] - vals["A1"]) - (vals["B0"] - vals["A0"])
+        for metric in ["model_mae", "roi_per_unit", "win_rate", "matched_rows"]:
+            v = {c: float(g.loc[c, metric]) for c in ("A0", "A1", "B0", "B1")}
+            row[f"{metric}_weight_effect_legacy_A1_minus_A0"] = v["A1"] - v["A0"]
+            row[f"{metric}_translator_effect_current_B0_minus_A0"] = v["B0"] - v["A0"]
+            row[f"{metric}_translator_effect_heldout_B1_minus_A1"] = v["B1"] - v["A1"]
+            row[f"{metric}_weight_effect_empirical_B1_minus_B0"] = v["B1"] - v["B0"]
+            row[f"{metric}_interaction"] = (v["B1"] - v["A1"]) - (v["B0"] - v["A0"])
         rows.append(row)
-
     diag = probability_diag.set_index(["market", "cell"])
     for row in rows:
         market = row["market"]
-        if all((market, c) in diag.index for c in ("A0", "A1", "B0", "B1")):
-            for metric in ("brier_over", "log_loss_over", "strong_coverage"):
-                vals = {c: float(diag.loc[(market, c), metric]) for c in ("A0", "A1", "B0", "B1")}
-                row[f"{metric}_weight_effect_legacy_A1_minus_A0"] = vals["A1"] - vals["A0"]
-                row[f"{metric}_translator_effect_current_B0_minus_A0"] = vals["B0"] - vals["A0"]
-                row[f"{metric}_translator_effect_heldout_B1_minus_A1"] = vals["B1"] - vals["A1"]
-                row[f"{metric}_weight_effect_empirical_B1_minus_B0"] = vals["B1"] - vals["B0"]
-                row[f"{metric}_interaction"] = (vals["B1"] - vals["A1"]) - (vals["B0"] - vals["A0"])
+        for metric in ("brier_over", "log_loss_over", "strong_coverage"):
+            if not all((market, c) in diag.index for c in ("A0", "A1", "B0", "B1")):
+                continue
+            v = {c: float(diag.loc[(market, c), metric]) for c in ("A0", "A1", "B0", "B1")}
+            row[f"{metric}_weight_effect_legacy_A1_minus_A0"] = v["A1"] - v["A0"]
+            row[f"{metric}_translator_effect_current_B0_minus_A0"] = v["B0"] - v["A0"]
+            row[f"{metric}_translator_effect_heldout_B1_minus_A1"] = v["B1"] - v["A1"]
+            row[f"{metric}_weight_effect_empirical_B1_minus_B0"] = v["B1"] - v["B0"]
+            row[f"{metric}_interaction"] = (v["B1"] - v["A1"]) - (v["B0"] - v["A0"])
     return pd.DataFrame(rows)
 
 
@@ -209,48 +261,47 @@ def main() -> int:
     ap.add_argument("--a1-reference", type=Path, required=True)
     ap.add_argument("--out-dir", type=Path, required=True)
     a = ap.parse_args()
+    a.out_dir.mkdir(parents=True, exist_ok=True)
 
     current_trace = _read(a.projection_trace, "clean projection trace")
     props = _read(a.props, "historical props")
     current_weights = _read(a.current_weights, "current ensemble weights")
     heldout_weights = _read(a.heldout_weights, "2023 heldout ensemble weights")
     overlay = build_overlay_weights(current_weights, heldout_weights)
-    heldout_trace = apply_ensemble(current_trace, weights=overlay)
-
+    heldout_trace, semantics_audit = build_published_a1_trace(current_trace, heldout_weights)
     _assert_trace_identity(current_trace, heldout_trace)
-    projection_audit = _assert_only_target_means_changed(current_trace, heldout_trace)
+    projection_audit = _projection_change_audit(current_trace, heldout_trace)
 
     a0_detail, a0_summary = legacy_grade(current_trace, props, proj_col="ensemble_proj")
     a1_detail, a1_summary = legacy_grade(heldout_trace, props, proj_col="ensemble_proj")
-    b0_detail, b0_summary, b0_legacy_summary, *_ = grade_empirical(
-        current_trace, props, distribution_dir=a.distribution_dir, proj_col="ensemble_proj"
-    )
-    b1_detail, b1_summary, b1_legacy_summary, *_ = grade_empirical(
-        heldout_trace, props, distribution_dir=a.distribution_dir, proj_col="ensemble_proj"
-    )
-
+    b0_detail, b0_summary, b0_legacy_summary, *_ = grade_empirical(current_trace, props, distribution_dir=a.distribution_dir, proj_col="ensemble_proj")
+    b1_detail, b1_summary, b1_legacy_summary, *_ = grade_empirical(heldout_trace, props, distribution_dir=a.distribution_dir, proj_col="ensemble_proj")
     _assert_four_cell_row_parity({"A0": a0_detail, "A1": a1_detail, "B0": b0_detail, "B1": b1_detail})
 
     ref_a0 = _read(a.reference_grade_dir / "legacy_component_sd_summary.csv", "A0 canonical reference")
     ref_b0 = _read(a.reference_grade_dir / "empirical_fair_prob_summary.csv", "B0 canonical reference")
     ref_a1 = _read(a.a1_reference, "A1 canonical reference")
-    _assert_summary_reproduces(a0_summary, ref_a0, "A0")
-    _assert_summary_reproduces(b0_summary, ref_b0, "B0")
-    _assert_summary_reproduces(a1_summary, ref_a1, "A1")
-    _assert_summary_reproduces(b0_legacy_summary, ref_a0, "B0 internal legacy arm")
-    _assert_summary_reproduces(b1_legacy_summary, ref_a1, "B1 internal legacy arm")
+    reproduction = []
+    for observed, reference, label in [
+        (a0_summary, ref_a0, "A0"),
+        (b0_summary, ref_b0, "B0"),
+        (a1_summary, ref_a1, "A1"),
+        (b0_legacy_summary, ref_a0, "B0_internal_legacy"),
+        (b1_legacy_summary, ref_a1, "B1_internal_legacy"),
+    ]:
+        reproduction.append(_assert_summary_reproduces(observed, reference, label))
 
     summaries = pd.concat([
         _tag_summary(a0_summary, "A0", "CURRENT", "LEGACY_COMPONENT_SD"),
-        _tag_summary(a1_summary, "A1", "HELDOUT_2023", "LEGACY_COMPONENT_SD"),
+        _tag_summary(a1_summary, "A1", "HELDOUT_2023_PUBLISHED", "LEGACY_COMPONENT_SD"),
         _tag_summary(b0_summary, "B0", "CURRENT", "EMPIRICAL_MC"),
-        _tag_summary(b1_summary, "B1", "HELDOUT_2023", "EMPIRICAL_MC"),
+        _tag_summary(b1_summary, "B1", "HELDOUT_2023_PUBLISHED", "EMPIRICAL_MC"),
     ], ignore_index=True)
     diagnostics = pd.concat([
         _tag_diag(a0_detail, "A0", "CURRENT", "LEGACY_COMPONENT_SD"),
-        _tag_diag(a1_detail, "A1", "HELDOUT_2023", "LEGACY_COMPONENT_SD"),
+        _tag_diag(a1_detail, "A1", "HELDOUT_2023_PUBLISHED", "LEGACY_COMPONENT_SD"),
         _tag_diag(b0_detail, "B0", "CURRENT", "EMPIRICAL_MC"),
-        _tag_diag(b1_detail, "B1", "HELDOUT_2023", "EMPIRICAL_MC"),
+        _tag_diag(b1_detail, "B1", "HELDOUT_2023_PUBLISHED", "EMPIRICAL_MC"),
     ], ignore_index=True)
     sides = pd.concat([
         _strong_side_counts(a0_detail, "A0"),
@@ -259,15 +310,15 @@ def main() -> int:
         _strong_side_counts(b1_detail, "B1"),
     ], ignore_index=True)
     deltas = _interaction_deltas(summaries, diagnostics)
-
     focal = deltas.loc[deltas["market"].eq("rush_rec_yards")].copy()
     if len(focal) != 1:
         raise RuntimeError("missing unique rush_rec_yards interaction row")
 
-    a.out_dir.mkdir(parents=True, exist_ok=True)
     overlay.to_csv(a.out_dir / "combined_frozen_weights_v1.csv", index=False)
     heldout_trace.to_csv(a.out_dir / "heldout_projection_trace_v1.csv", index=False)
+    semantics_audit.to_csv(a.out_dir / "published_a1_application_semantics_audit.csv", index=False)
     projection_audit.to_csv(a.out_dir / "projection_change_audit.csv", index=False)
+    pd.concat(reproduction, ignore_index=True).to_csv(a.out_dir / "canonical_reproduction_audit.csv", index=False)
     summaries.to_csv(a.out_dir / "interaction_cell_summary.csv", index=False)
     diagnostics.to_csv(a.out_dir / "interaction_probability_diagnostics.csv", index=False)
     sides.to_csv(a.out_dir / "interaction_strong_side_counts.csv", index=False)
@@ -277,8 +328,6 @@ def main() -> int:
 
     print("=== 2x2 STRONG CELL SUMMARY ===")
     print(summaries.loc[summaries["tier"].eq("STRONG_ONLY_PLAY_TIER")].to_string(index=False))
-    print("\n=== 2x2 PROBABILITY DIAGNOSTICS ===")
-    print(diagnostics.to_string(index=False))
     print("\n=== RUSH_REC_YARDS FOCAL INTERACTION ===")
     print(focal.to_string(index=False))
     return 0
