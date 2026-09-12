@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Emit frozen season/market/side and chosen-probability diagnostics for V1."""
+"""Emit frozen season/market/position/side and probability diagnostics for V1."""
 from __future__ import annotations
 
 import argparse
@@ -8,15 +8,47 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from scripts._opponent_map import canon_team
 from scripts.backtest.grade_full_stack_vegas_benchmark_v1 import grade as legacy_grade
 from scripts.operations.grade_market_track_record_v1 import num
+
+IDENTITY = ["season", "week", "team", "opponent", "player_clean_key", "market", "game_id"]
+
+
+def _normalize_identity(frame: pd.DataFrame) -> pd.DataFrame:
+    x = frame.copy()
+    missing = sorted(set(IDENTITY) - set(x.columns))
+    if missing:
+        raise RuntimeError(f"segment audit identity missing columns: {missing}")
+    x["season"] = pd.to_numeric(x["season"], errors="raise").astype(int)
+    x["week"] = pd.to_numeric(x["week"], errors="raise").astype(int)
+    x["team"] = x["team"].map(canon_team)
+    x["opponent"] = x["opponent"].map(canon_team)
+    x["player_clean_key"] = x["player_clean_key"].astype(str)
+    x["market"] = x["market"].astype(str).str.lower()
+    x["game_id"] = x["game_id"].astype(str)
+    return x
+
+
+def _assert_exact_same_rows(legacy: pd.DataFrame, empirical: pd.DataFrame) -> None:
+    a = _normalize_identity(legacy)[IDENTITY].sort_values(IDENTITY).reset_index(drop=True)
+    b = _normalize_identity(empirical)[IDENTITY].sort_values(IDENTITY).reset_index(drop=True)
+    if len(a) != len(b) or not a.equals(b):
+        raise RuntimeError(
+            f"same-row A/B contract violated for segment audit: legacy={len(a)} empirical={len(b)}"
+        )
 
 
 def _segment_diagnostics(detail: pd.DataFrame, translator: str) -> pd.DataFrame:
     rows: list[dict] = []
-    season_values = sorted(pd.to_numeric(detail["season"], errors="coerce").dropna().astype(int).unique())
-    season_scopes = [("ALL_SEASONS", detail)] + [
-        (str(season), detail.loc[pd.to_numeric(detail["season"], errors="coerce").eq(season)])
+    work = detail.copy()
+    if "position" not in work.columns:
+        work["position"] = "UNKNOWN"
+    work["position"] = work["position"].fillna("UNKNOWN").astype(str).str.upper()
+
+    season_values = sorted(pd.to_numeric(work["season"], errors="coerce").dropna().astype(int).unique())
+    season_scopes = [("ALL_SEASONS", work)] + [
+        (str(season), work.loc[pd.to_numeric(work["season"], errors="coerce").eq(season)])
         for season in season_values
     ]
     for season_label, season_df in season_scopes:
@@ -26,26 +58,33 @@ def _segment_diagnostics(detail: pd.DataFrame, translator: str) -> pd.DataFrame:
             for market in markets
         ]
         for market_label, market_df in market_scopes:
-            for side_label in ["ALL_SIDES", "OVER", "UNDER"]:
-                g = market_df if side_label == "ALL_SIDES" else market_df.loc[market_df["side"].eq(side_label)]
-                decided = g.loc[
-                    g["bet_result"].isin(["WIN", "LOSS"]) & num(g["chosen_odds"]).notna()
-                ]
-                rows.append(
-                    {
-                        "translator": translator,
-                        "season": season_label,
-                        "market": market_label,
-                        "side": side_label,
-                        "matched_rows": int(len(g)),
-                        "strong_rows": int(g["signal"].eq("STRONG_EDGE").sum()),
-                        "strong_coverage": float(g["signal"].eq("STRONG_EDGE").mean()) if len(g) else np.nan,
-                        "decided_bets": int(len(decided)),
-                        "win_rate": float(decided["bet_result"].eq("WIN").mean()) if len(decided) else np.nan,
-                        "units": float(decided["unit_result"].sum()) if len(decided) else np.nan,
-                        "roi_per_unit": float(decided["unit_result"].mean()) if len(decided) else np.nan,
-                    }
-                )
+            positions = sorted(market_df["position"].dropna().astype(str).unique())
+            position_scopes = [("ALL_POSITIONS", market_df)] + [
+                (position, market_df.loc[market_df["position"].eq(position)])
+                for position in positions
+            ]
+            for position_label, position_df in position_scopes:
+                for side_label in ["ALL_SIDES", "OVER", "UNDER"]:
+                    g = position_df if side_label == "ALL_SIDES" else position_df.loc[position_df["side"].eq(side_label)]
+                    decided = g.loc[
+                        g["bet_result"].isin(["WIN", "LOSS"]) & num(g["chosen_odds"]).notna()
+                    ]
+                    rows.append(
+                        {
+                            "translator": translator,
+                            "season": season_label,
+                            "market": market_label,
+                            "position": position_label,
+                            "side": side_label,
+                            "matched_rows": int(len(g)),
+                            "strong_rows": int(g["signal"].eq("STRONG_EDGE").sum()),
+                            "strong_coverage": float(g["signal"].eq("STRONG_EDGE").mean()) if len(g) else np.nan,
+                            "decided_bets": int(len(decided)),
+                            "win_rate": float(decided["bet_result"].eq("WIN").mean()) if len(decided) else np.nan,
+                            "units": float(decided["unit_result"].sum()) if len(decided) else np.nan,
+                            "roi_per_unit": float(decided["unit_result"].mean()) if len(decided) else np.nan,
+                        }
+                    )
     return pd.DataFrame(rows)
 
 
@@ -95,11 +134,7 @@ def main() -> int:
     legacy_detail, _ = legacy_grade(proj, props, proj_col=a.proj_col)
     empirical_detail = pd.read_csv(a.empirical_detail)
 
-    if len(legacy_detail) != len(empirical_detail):
-        raise RuntimeError(
-            f"same-row A/B contract violated for segment audit: "
-            f"legacy={len(legacy_detail)} empirical={len(empirical_detail)}"
-        )
+    _assert_exact_same_rows(legacy_detail, empirical_detail)
 
     segments = pd.concat(
         [
@@ -116,7 +151,7 @@ def main() -> int:
         ignore_index=True,
     )
     a.out_dir.mkdir(parents=True, exist_ok=True)
-    segments.to_csv(a.out_dir / "season_market_side_diagnostics.csv", index=False)
+    segments.to_csv(a.out_dir / "season_market_position_side_diagnostics.csv", index=False)
     bins.to_csv(a.out_dir / "bet_probability_bins.csv", index=False)
     print(segments.to_string(index=False))
     print(bins.to_string(index=False))
