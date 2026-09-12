@@ -1,0 +1,96 @@
+name: Ensemble Weight 2023 OOS Fit V1
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/research/fit_2023_ensemble_weights_v1.py"
+      - ".github/workflows/backtest-ensemble-weight-2023-fit-v1.yml"
+
+jobs:
+  fit-2023-weights:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml pyarrow tabulate
+
+      - name: Build independent historical inputs for 2022-2023
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/hist_2022 /tmp/hist_2023 /tmp/weight_fit
+          mkdir -p /tmp/hist_2022 /tmp/hist_2023 /tmp/weight_fit
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2022 --prior-season 2021 --weeks 1-18 --out-dir /tmp/hist_2022
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2023 --prior-season 2022 --weeks 1-18 --out-dir /tmp/hist_2023
+
+      - name: Combine 2022-2023 schedule and team-week history
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+
+          out = Path('/tmp/weight_fit')
+          for name in ['schedule_history.csv', 'team_weekly_history.csv']:
+              parts = [pd.read_csv(f'/tmp/hist_{s}/' + name) for s in (2022, 2023)]
+              x = pd.concat(parts, ignore_index=True)
+              keys = ['season', 'week', 'team']
+              x = x.sort_values(keys).drop_duplicates(keys, keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined historical identity rows in {name}')
+              x.to_csv(out / name, index=False)
+              print(name, len(x), sorted(x.season.unique()))
+          PY
+
+      - name: Build canonical 2022-2023 player game logs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2022,2023 \
+            --schedule /tmp/weight_fit/schedule_history.csv \
+            --out /tmp/weight_fit/player_game_logs_history.csv
+
+      - name: Build 2023 component predictions (all non-QB markets, prior=2022)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/walk_forward.py \
+            --season 2023 --prior-season 2022 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/weight_fit/player_game_logs_history.csv \
+            --team-weekly /tmp/weight_fit/team_weekly_history.csv \
+            --schedule /tmp/weight_fit/schedule_history.csv \
+            --universe-dir /tmp/hist_2023/pregame_universe \
+            --out /tmp/weight_fit/component_predictions_2023.csv
+
+      - name: Fit OOS ensemble weights on 2023 only (frozen, held out from 2024-2025)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/fit_2023_ensemble_weights_v1.py \
+            --calibration /tmp/weight_fit/component_predictions_2023.csv \
+            --out /tmp/weight_fit/ensemble_weights_2023_fit_v1.csv
+
+      - name: Upload 2023 weight-fit bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ensemble-weight-2023-fit-v1
+          path: |
+            /tmp/weight_fit/component_predictions_2023.csv
+            /tmp/weight_fit/ensemble_weights_2023_fit_v1.csv
+          if-no-files-found: warn
+          retention-days: 14
