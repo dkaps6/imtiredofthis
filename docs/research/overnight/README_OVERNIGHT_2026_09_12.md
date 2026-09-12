@@ -2,6 +2,8 @@
 
 **STATUS: NOTHING HERE IS PROMOTED. Everything is documentation or a non-model bug fix, per your instructions. Model-science changes wait for your review and explicit approval.**
 
+**CRITICAL UPDATE (read first)**: GPT-5.6 found, and Claude independently confirmed, a data-integrity bug in the Vegas benchmark cohort that predates this whole research thread — 94.5% of rows have a `game_id` from the wrong season, meaning the "Vegas line" joined for grading is very often a different game's line, not the actual matchup's line. See `BENCHMARK_GAME_ID_SEASON_MISMATCH_CONFIRMED.md`. **Every ROI/win-rate/STRONG-gate finding below (situational edge hunts V1/V2, the holdout tests, the full-market scan) is downgraded from `UNVERIFIED` to `INVALID_PENDING_REBUILD`.** The football-mean-vs-Vegas MAE gap is probably still directionally valid (traced separately, doesn't depend on `game_id`), but do not act on anything ROI-related here until the benchmark is rebuilt with fail-closed identity checks.
+
 This is the index. Per-position detail lives in:
 - `RB_POST_WEEK1_GAP_FINDINGS.md`, `RB_PD_CHAIN_STATUS.md`
 - `QB_GAP_FINDINGS.md`, `QB_PD3_AND_TE_R1_RECOVERED_RESULTS.md`
