@@ -113,8 +113,9 @@ def _derive_positive_row_injury_scope(
 
     Positive report rows are sufficient to prove that a team was represented by
     the source. They are *not* sufficient to infer that a team with no rows had
-    no injuries. Therefore this helper certifies only exact 32/32 positive-row
-    coverage; partial coverage remains unproven and fail-closed.
+    no injuries. Therefore this helper certifies only exact full positive-row
+    coverage of the active week's scheduled teams (32, or fewer on a bye week);
+    partial coverage remains unproven and fail-closed.
     """
     if injuries.empty or "team" not in injuries.columns:
         return None
@@ -156,9 +157,11 @@ def audit() -> dict:
         raise RuntimeError(f"team_week_map has no active rows season={season} week={week}")
     active["team"] = active["team"].map(canon_team)
     scheduled_teams = set(active["team"].dropna().astype(str))
-    if len(scheduled_teams) != 32:
-        raise RuntimeError(f"active schedule must contain 32 teams; got {len(scheduled_teams)}")
-    rows.append(_row("schedule", "CERTIFIED", f"teams=32 games=16"))
+    # Bye weeks legitimately shrink the active schedule below 32 teams from
+    # roughly Week 4 onward; only an odd/zero count is actually invalid.
+    if not scheduled_teams or len(scheduled_teams) % 2:
+        raise RuntimeError(f"active schedule must contain an even, nonzero team count; got {len(scheduled_teams)}")
+    rows.append(_row("schedule", "CERTIFIED", f"teams={len(scheduled_teams)} games={len(scheduled_teams) // 2}"))
 
     roles = _read(DATA / "roles_ourlads.csv")
     game_odds = _read(OUTPUTS / "odds_game.csv")
@@ -171,7 +174,7 @@ def audit() -> dict:
         "current_roster",
         "LIVE_PROVIDER_ROSTER_PRESENT",
         f"source=ourlads rows={len(roles)} teams={len(role_teams)} "
-        f"live_event_teams={len(live_event_teams)} scheduled_teams=32 players={roles['player'].nunique()}",
+        f"live_event_teams={len(live_event_teams)} scheduled_teams={len(scheduled_teams)} players={roles['player'].nunique()}",
     ))
 
     identity = _json(DATA / "player_identity_semantic_audit.json")
@@ -249,8 +252,8 @@ def audit() -> dict:
                 injury_status = dict(injury_status)
                 injury_status.update({
                     "all_scheduled_teams_checked": True,
-                    "scheduled_teams_checked": 32,
-                    "teams_with_report_rows": 32,
+                    "scheduled_teams_checked": len(scheduled_teams),
+                    "teams_with_report_rows": len(scheduled_teams),
                     "teams_explicit_no_injuries_reported": 0,
                     "scope_basis": "complete_current_week_positive_report_row_coverage",
                     "scope_ledger": str(DATA / "injury_team_scope.csv"),
@@ -263,7 +266,7 @@ def audit() -> dict:
             if not {"team", "scope_state"}.issubset(scope.columns):
                 raise RuntimeError("injury scope ledger missing team/scope_state")
             scope_teams = set(scope["team"].map(canon_team).dropna().astype(str))
-            if len(scope) != 32 or scope_teams != scheduled_teams:
+            if len(scope) != len(scheduled_teams) or scope_teams != scheduled_teams:
                 raise RuntimeError("injury scope ledger does not exactly match active scheduled teams")
             allowed = {"OFFICIAL_REPORT_ROWS", "NO_INJURIES_REPORTED_BY_SOURCE"}
             bad_states = sorted(set(scope["scope_state"].astype(str)) - allowed)
@@ -273,7 +276,7 @@ def audit() -> dict:
             explicit_none = int(scope["scope_state"].eq("NO_INJURIES_REPORTED_BY_SOURCE").sum())
             rows.append(_row(
                 "injuries", "CERTIFIED_REPORT_SCOPE",
-                f"rows={len(injuries)} teams_checked=32 teams_with_report_rows={report_teams} "
+                f"rows={len(injuries)} teams_checked={len(scheduled_teams)} teams_with_report_rows={report_teams} "
                 f"teams_explicit_no_injuries_reported={explicit_none} practice_status={practice_nonblank}/{len(injuries)} "
                 f"game_status={game_status_nonblank}/{len(injuries)} body_part={body_nonblank}/{len(injuries)} "
                 f"source={injury_status.get('source','')}",
@@ -281,7 +284,7 @@ def audit() -> dict:
         else:
             rows.append(_row(
                 "injuries", "PARTIAL_SCOPE_NOT_PROVEN",
-                f"rows={len(injuries)} teams_with_rows={len(injury_teams)}/32 practice_status={practice_nonblank}/{len(injuries)} "
+                f"rows={len(injuries)} teams_with_rows={len(injury_teams)}/{len(scheduled_teams)} practice_status={practice_nonblank}/{len(injuries)} "
                 f"game_status={game_status_nonblank}/{len(injuries)} body_part={body_nonblank}/{len(injuries)} source={injury_status.get('source','')}",
                 blocker=True,
             ))
