@@ -276,9 +276,15 @@ def _apply_rb_rush_rec_conservation(result, pricing_metrics: pd.DataFrame) -> di
     if pos_col is None:
         raise RuntimeError("RB conservation requires current position column")
     frame["_position_family"] = frame[pos_col].map(_position_family)
+    # RB P3 is Week-1-only (docs/production/RB_P3_WEEK1_PROMOTION_2026_09_05.md);
+    # conserving rush_rec_yards to a P3 mean only makes sense for Week-1 rows.
+    # Other weeks keep whatever the base simulation already produced rather than
+    # calling into a promoted context that was never built for them.
+    week_num = pd.to_numeric(frame.get("week"), errors="coerce")
     eligible = frame.loc[
         frame["_canonical_market"].eq("rush_rec_yards")
         & frame["_position_family"].isin({"RB", "FB"})
+        & week_num.eq(1)
     ].copy()
     identity_cols = [c for c in ("event_id", "team", "player_clean_key", "player") if c in eligible.columns]
     eligible = eligible.drop_duplicates(identity_cols, keep="first")
