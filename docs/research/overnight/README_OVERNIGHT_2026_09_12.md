@@ -3,62 +3,68 @@
 **STATUS: NOTHING HERE IS PROMOTED. Everything is documentation or a non-model bug fix, per your instructions. Model-science changes wait for your review and explicit approval.**
 
 This is the index. Per-position detail lives in:
-- `RB_POST_WEEK1_GAP_FINDINGS.md`
-- `QB_GAP_FINDINGS.md`
-- `WR_GAP_FINDINGS.md`
-- `TE_GAP_FINDINGS.md`
+- `RB_POST_WEEK1_GAP_FINDINGS.md`, `RB_PD_CHAIN_STATUS.md`
+- `QB_GAP_FINDINGS.md`, `QB_PD3_AND_TE_R1_RECOVERED_RESULTS.md`
+- `WR_GAP_FINDINGS.md`, `WR_R3_COMBINED_CANDIDATE_STATUS.md`
+- `TE_GAP_FINDINGS.md`, `QB_PD3_AND_TE_R1_RECOVERED_RESULTS.md`
+- `COVERAGE_V2_EFFICIENCY_SIGNAL_NOVELTY_CHECK.md`
 
 ## Method
 
-Four parallel research agents were launched to do this; all four hit a session rate limit and died before writing anything. I redid the same work directly instead of re-spawning agents, working through git history across all `research-<position>-*` branches (unmerged, never promoted) plus the docs already on `main`. For RB (136 branches, the largest by far) I leaned on the project's own terminal synthesis docs rather than re-reading every branch individually, then specifically checked everything postdating those syntheses to make sure nothing newer was missed — which is how I found the RB R27D result (Sept 10) that wasn't in what I told you earlier tonight.
+This ran in two passes. Pass 1: four parallel research agents to survey each position; all four hit a session rate limit and died before writing anything, so I redid that survey directly — working through git history across all `research-<position>-*` branches (unmerged, never promoted) plus the docs already on `main`. Pass 2 (after capacity reset, at your request to use agents): three more parallel agents, each chasing a specific loose end pass 1 surfaced (the RB PD-chain's true status, whether WR-R3's authorized follow-up was ever built, whether Coverage v2 had already been tried as a WR/TE efficiency signal). Those three completed cleanly and each found something pass 1 didn't have.
 
-## Cross-position pattern (the actual headline finding)
+A pattern showed up twice and is now the standard first move for any "this thread looks stalled" claim in this repo: **check GitHub Actions run history before assuming a thread never finished.** QB-PD3, TE-R1, RB-PD3, RB-PD4, RB-PD5, and a WR player-bias-shrink attempt had *all* actually executed successfully on GitHub's runners — every one of them just never got a result doc committed afterward. All six were recovered from real job logs (cited run/job/artifact IDs, nothing re-run) rather than re-executed.
 
-**Three of four positions have a genuine, positive, walk-forward-validated finding that individual-player error persists pregame — and none of the three have been integrated into production:**
+## Cross-position pattern (the actual headline finding, now fully resolved)
 
-| Position | Branch | Result | Integrated? |
+Three of four positions have (or had) a genuine, positive, walk-forward-validated finding that individual-player error persists pregame:
+
+| Position | Diagnostic | Result | Follow-up status |
 |---|---|---|---|
-| RB | `research-rb-pd2-player-error-persistence` | `RB_PLAYER_ERROR_PERSISTENCE_DETECTED` — 4/4 diagnostics pass | No — follow-up (PD3→PD5→PD6) stalled on a cohort-execution bug |
-| WR | `research-wr-r3-player-error-persistence` | `WR_PLAYER_ERROR_PERSISTENCE_DETECTED` — 3/3 diagnostics pass | No — authorized combined candidate never built |
-| QB | `research-qb-pd2-player-error-persistence` | `NO_ACTIONABLE_QB_PLAYER_ERROR_PERSISTENCE` | N/A — this one legitimately failed |
+| RB | PD2 | `RB_PLAYER_ERROR_PERSISTENCE_DETECTED` — 4/4 pass | PD3/PD4/PD5 all **recovered and FAILED** (close misses, mostly on yard p90). PD6 **genuinely blocked** — cohort-execution discrepancy unresolved, PD6 itself never implemented (byte-identical to PD5, zero CI runs). |
+| WR | R3 (`research-wr-r3-player-error-persistence`) | `WR_PLAYER_ERROR_PERSISTENCE_DETECTED` — 3/3 pass | R3's own *combined* candidate was never built. A related, differently-branched R3 (`research-wr-r3-player-bias-persistence`) ran a first-pass bias-shrink and it **recovered and FAILED**. A correctly-scoped implementation-ready design spec now exists for the real combined candidate (never attempted). |
+| QB | PD2 | `NO_ACTIONABLE_QB_PLAYER_ERROR_PERSISTENCE` | Legitimately failed originally. Its redirect, PD3 (component-disagreement reliability), **recovered**: `NO_ACTIONABLE_QB_INTERNAL_RELIABILITY_STATE` — also null, but reassuring (no state where the synthesis correction breaks down). |
+| TE | R1 (mechanism decomposition, one level earlier than the other three) | — | **Recovered**: `TE_MECHANISM_DECOMPOSITION_ACTIONABLE`, all 5 gates pass. Confirms targets/entitlement dominate TE error (45.2%), validating the R2→R5 strategy that became TE-R5P, and quantifies the remaining efficiency gap at ~55% of error mass. |
 
-QB's own version of this test failed, which is exactly why QB PD2 explicitly redirected toward *component-disagreement* reliability (PD3) instead of *player-history* reliability — and that QB PD3 also stalled unfinished. TE has the equivalent gap one level earlier (R1, mechanism decomposition, also stalled unfinished).
-
-**So the single most valuable, lowest-risk thing across the whole research backlog isn't a new theory — it's finishing four already-scoped, already-frozen, partially-positive threads that got interrupted before integration:** RB-PD2→calibration, WR-R3→calibration, QB-PD3 (component-disagreement), TE-R1 (mechanism decomposition). All four explicitly propose using the signal for **uncertainty/tail calibration**, not mean correction — which also happens to be exactly what RB's rushing-ceiling problem and the general "beat Vegas" gap need (per the earlier `RB_FINAL_QUALIFICATION_RESULTS.md` finding that P3's failure is specifically a tail-calibration problem, not a mean problem).
+**Net effect of the follow-up pass: every thread that looked "stalled, might be shovel-ready" in the first pass is now either a documented failure, a documented pass, or a documented hard block with a named cause.** Nothing is ambiguous anymore. The one live opportunity that survived scrutiny is the WR-R3 combined candidate's design spec — real, unbuilt, correctly scoped, but still unvalidated until actually run.
 
 ## What's fully exhausted — do not re-attempt
 
 - RB rushing weeks 2-18 mean correction (ceiling compression) — `RB_FINAL_QUALIFICATION_RESULTS.md`, no waiver.
 - RB receiving-yard mean via any historical efficiency transform (YPR/YPT/YAC/xYAC/YACOE) — R23 through R27D, all failed, explicitly closed.
 - RB STACK6 team-rush-context slicing, RB carry-tail retuning (M95T stop).
+- RB residual/MC-width calibration via PD3's, PD4's, and PD5's specific designs — all three now confirmed failed (close, but failed; yard p90 is the recurring blocker). A materially different design would be needed, not a retry of these.
 - QB first-down choice mechanism via occupancy (field position, score state, down/distance) or EPA/success economics — all explicitly ruled out.
-- QB player-error/bias persistence as a mean correction (PD2 killed this specifically).
-- WR player-tracking residuals (R2), dynamic-entitlement-from-absence-counts (ND3), NGS as a target/yardage source (R9-R11), another ND5 snap-depth variant.
+- QB player-error/bias persistence as a mean correction (PD2 killed this specifically). QB internal-disagreement/correction-magnitude as an unreliability flag (PD3, now recovered — null).
+- WR bias-shrink applied as a direct patch to M38's MC output (the one build that exists) — confirmed failed. WR player-tracking residuals (R2), dynamic-entitlement-from-absence-counts (ND3), NGS as a target/yardage source (R9-R11), another ND5 snap-depth variant.
 - TE team-pool-only residual correction (R3) without individual differentiation.
+- Coverage v2 team-level rates (`coverage_man_rate`/`coverage_zone_rate`) as a WR receiving-efficiency feature — already backtested via feature ablation (run `32316784561`, Aug 2026, recovered from CI logs): near-neutral, essentially no effect (rec_yards MAE delta -0.04, receptions -0.002). Don't re-test this exact feature the same way.
 
-## What's still live/unconcluded (don't duplicate, pick up if you want)
+## What's still live/unconcluded
 
-- QB first-down public-intent source crawl (`research-qb-first-down-public-intent-source-v1`/`v1b`) — manual/semi-automated media-text collection, paused mid-collection, not concluded either way.
-- RB PD3→PD5→PD6 cohort-execution repair — unclear current state, flagged for you to check before building on it.
+- **WR-R3 combined candidate** — real, correctly-scoped, implementation-ready design spec exists (`WR_R3_COMBINED_CANDIDATE_STATUS.md`), never built or run. The most concrete "actually go build this" candidate to come out of tonight, if you want one.
+- QB first-down public-intent source crawl (`research-qb-first-down-public-intent-source-v1`/`v1b`) — manual/semi-automated media-text collection, paused mid-collection, not concluded either way. Unchanged from the first pass.
+- Coverage v2 **player-level** WR-CB matchup data (`wr_cb_exposure.csv`) as an efficiency signal — genuinely never tried, but for a structural reason: `audit_wr_cb_source.py` already found nflverse has no reconstructable ground truth for who covered whom historically (`NO_GO_TRUE_ASSIGNMENT`). This data only exists live/current-slate via scrapers, so a frozen walk-forward diagnostic can't be built on it without new historical data acquisition. Not shovel-ready — flagging as a real gap, not a proposal.
+- Worth knowing, not necessarily worth acting on: the repo's coverage-based `coverage_penalty()` WR efficiency multiplier (0.94x/1.04x YPT, in `scripts/modeling/rules_v2.py`) has been live since the repo's earliest commits and, per the finding above, has never been empirically validated — the one time this exact signal family was tested (the team-level ablation above) it came back null. Not urgent, but it's a piece of production logic resting on an untested assumption.
 
-## New proposals worth your attention first (ranked)
+## Ranked next steps if you want to actually build one
 
-1. **Finish RB-PD2's and WR-R3's authorized calibration integration.** Both diagnostics already passed; both explicitly specify the next step; neither needs new data.
-2. **Reframe RB rushing-ceiling and QB first-down uncertainty as calibration/variance problems**, using the persistence signals above as the width input, rather than continuing to hunt for new mean features (which has a 0-for-many track record across both positions recently).
-3. **Test the repo's own Coverage v2 output (`cb_coverage_player.csv`/`wr_cb_exposure.csv`) as the "richer matchup information" WR-R7/R8 and TE-R3/R4 both explicitly called for** — this is a different data source than the NGS approach that already failed (R9-R11), already computed every production run, and — as far as I found — never tested for this purpose. Do WR first (bigger sample), extend to TE only if it clears WR's gates.
-4. Finish QB-PD3 (component-disagreement reliability) and TE-R1 (mechanism decomposition) — both frozen, scoped, and stalled before a result was ever recorded.
+1. **Build and run the WR-R3 combined candidate** per `WR_R3_COMBINED_CANDIDATE_STATUS.md`'s spec. Only genuinely live, unvalidated, ready-to-build candidate from the entire sweep.
+2. **Decide on RB PD6**: someone needs to assemble genuine multi-season (not 2025-only) RB residual-calibration evidence and freeze a real replication plan before this lane can move at all. This is a data/scoping decision, not a modeling one — your call on priority.
+3. Reconsider whether `coverage_penalty()` in `rules_v2.py` is worth empirically validating or retiring, given the one relevant test came back null.
+4. Everything else in "fully exhausted" is closed; don't relitigate without genuinely new signal or new forward-season evidence, per each thread's own stop-rules.
 
-## Bugs fixed this session (all merged/ready, non-model-science)
+## Bugs fixed this session (merged, non-model-science)
 
 1. **RB P3 Week-1 gate crashed all of Full Slate from Week 2 on** (`.github/workflows/full-slate.yml`, `scripts/run_pricing_v2.py`, `scripts/run_pricing_with_full_roster_universe_v1.py`) — merged, PR #530.
 2. **RB R26 (receptions) Week-1 gate, same crash class** (`scripts/run_pricing_with_full_roster_universe_v5_production.py`) — merged, PR #530.
 3. **RB R22 (receiving-tail) Week-1 gate, same crash class across 3 files** (`v4_production.py`, `audit_market_model_lineage_v3.py`, `validate_certified_full_slate_stack_v3.py`) — merged, PR #530.
-4. **Full Slate data-quality classifier hard-required exactly 32 scheduled teams** (`scripts/validate_full_slate_data_quality_v1.py`) — would have crashed the live-odds data-quality gate on every bye week from roughly Week 4 onward. Fixed to accept any even, nonzero scheduled-team count; fixed the same hardcoded-32 bug in the injury-scope ledger check right next to it. Tests added, not yet committed as of this doc — see next commit.
+4. **Full Slate data-quality classifier hard-required exactly 32 scheduled teams** (`scripts/validate_full_slate_data_quality_v1.py`) — would have crashed the live-odds data-quality gate on every bye week from roughly Week 4 onward. Fixed to accept any even, nonzero scheduled-team count; fixed the same hardcoded-32 bug in the injury-scope ledger check right next to it. Merged, PR #531.
 
-All fixes validated: full test suite (258 passed / 1 skipped) and both strict repo audits (`audit_repo.py --strict`, `audit_2026_production_readiness.py --strict`) clean.
+All fixes validated: full test suite (258 passed / 1 skipped) and both strict repo audits (`audit_repo.py --strict`, `audit_2026_production_readiness.py --strict`) clean at time of merge.
 
 ## Honest caveats
 
-- I did not exhaustively re-read all 136 RB branches commit-by-commit — I used the project's own terminal synthesis docs as the primary source and spot-checked what postdates them. If there's a smaller, un-synthesized finding buried in an intermediate STACK/M9x/ND branch that never made it into a terminal doc, I could have missed it.
-- I have not run any new model code or backtests tonight — everything here is landscape-mapping and reasoning from existing documented results, not new empirical validation. Before building any of the "proposed directions," they still need to go through your gates the same as everything else.
-- Coverage v2 as a WR/TE efficiency signal (proposal #3) is my own inference that it wasn't already tried under a different name — I could not fully rule that out in the time available.
+- I did not exhaustively re-read all 136 RB branches commit-by-commit in pass 1 — I used the project's own terminal synthesis docs as the primary source and spot-checked what postdates them. Pass 2 closed several of the resulting gaps but was itself targeted (RB PD-chain, WR-R3, Coverage v2), not exhaustive either.
+- No new model code was run tonight anywhere. Every "recovered" result is real, already-executed CI output pulled from job logs — not new compute, and not re-verified independently by me beyond confirming run/job/artifact IDs and reading the printed JSON directly.
+- The WR-R3 design spec (the one live proposal left standing) still needs to actually be built and pass its own frozen gates before it means anything. Nothing here is validated until it's run.
