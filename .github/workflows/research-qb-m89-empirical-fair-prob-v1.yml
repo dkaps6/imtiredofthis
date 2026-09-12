@@ -176,6 +176,11 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
+          # build_qb_synthesis_confirmation_inputs_v1.py seeds predict_week() with
+          # 53 + week (see run_m89_pregame_synthesis.py's upstream trace builder),
+          # not walk_forward.py's standard 42 + week -- pass --seed-offset 53 so
+          # the reconstructed array's mean-reproduction checksum matches the QB
+          # trace's own mc_proj instead of aborting on a seed mismatch.
           python scripts/research/persist_historical_simulated_outcomes_v1.py \
             --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
             --player-logs /tmp/qb_m89/player_game_logs_history.csv \
@@ -183,6 +188,7 @@ jobs:
             --schedule /tmp/qb_m89/schedule_history.csv \
             --universe-dir /tmp/hist_2024/pregame_universe \
             --component-file /tmp/qb_m89/qb_trace_2024.csv \
+            --seed-offset 53 \
             --out-dir /tmp/qb_m89/distributions
           python scripts/research/persist_historical_simulated_outcomes_v1.py \
             --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000 \
@@ -191,6 +197,7 @@ jobs:
             --schedule /tmp/qb_m89/schedule_history.csv \
             --universe-dir /tmp/hist_2025/pregame_universe \
             --component-file /tmp/qb_m89/qb_trace_2025.csv \
+            --seed-offset 53 \
             --out-dir /tmp/qb_m89/distributions
 
       - name: Grade base_proj/football_synthesis/market_assisted through the empirical translator
