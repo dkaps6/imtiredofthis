@@ -1,0 +1,238 @@
+name: QB M89 Empirical Fair Probability V1
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/research/grade_qb_m89_empirical_fair_prob_v1.py"
+      - "tests/test_qb_m89_empirical_fair_prob_v1.py"
+      - ".github/workflows/research-qb-m89-empirical-fair-prob-v1.yml"
+
+jobs:
+  qb-m89-empirical-fair-prob:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml pyarrow tabulate
+
+      - name: Run focused integrity tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q \
+            tests/test_qb_m89_empirical_fair_prob_v1.py \
+            tests/test_empirical_fair_prob_v1.py \
+            tests/test_benchmark_identity_v1.py \
+            tests/test_grade_full_stack_vegas_benchmark_v1.py \
+            tests/test_attach_qb_synthesis_game_identity_v1.py
+
+      - name: Build independent historical inputs for 2022-2025
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/hist_2022 /tmp/hist_2023 /tmp/hist_2024 /tmp/hist_2025 /tmp/qb_m89
+          mkdir -p /tmp/hist_2022 /tmp/hist_2023 /tmp/hist_2024 /tmp/hist_2025 /tmp/qb_m89/distributions
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2022 --prior-season 2021 --weeks 1-18 --out-dir /tmp/hist_2022
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2023 --prior-season 2022 --weeks 1-18 --out-dir /tmp/hist_2023
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --out-dir /tmp/hist_2024
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --out-dir /tmp/hist_2025
+
+      - name: Combine authoritative 2022-2025 schedule and team-week history
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+
+          out = Path('/tmp/qb_m89')
+          for name in ['schedule_history.csv', 'team_weekly_history.csv']:
+              parts = [pd.read_csv(f'/tmp/hist_{s}/' + name) for s in (2022, 2023, 2024, 2025)]
+              x = pd.concat(parts, ignore_index=True)
+              keys = ['season', 'week', 'team']
+              x = x.sort_values(keys).drop_duplicates(keys, keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined historical identity rows in {name}')
+              x.to_csv(out / name, index=False)
+              print(name, len(x), sorted(x.season.unique()))
+          PY
+
+      - name: Apply M89 team-semantics correction to combined team-weekly
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/correct_m89_team_semantics.py \
+            --team-weekly /tmp/qb_m89/team_weekly_history.csv \
+            --seasons 2022,2023,2024,2025 \
+            --observations /tmp/qb_m89/m89_team_semantics_observations.csv \
+            --audit /tmp/qb_m89/m89_team_semantics_audit.csv
+
+      - name: Split corrected team-weekly by season
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          x = pd.read_csv('/tmp/qb_m89/team_weekly_history.csv')
+          for season in (2022, 2023, 2024, 2025):
+              x.loc[x.season.eq(season)].to_csv(f'/tmp/qb_m89/team_weekly_{season}.csv', index=False)
+              print(season, int(x.season.eq(season).sum()))
+          PY
+
+      - name: Build canonical 2022-2025 player game logs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2022,2023,2024,2025 \
+            --schedule /tmp/qb_m89/schedule_history.csv \
+            --out /tmp/qb_m89/player_game_logs_history.csv
+
+      - name: Split player logs by season
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          x = pd.read_csv('/tmp/qb_m89/player_game_logs_history.csv')
+          for season in (2022, 2023, 2024, 2025):
+              x.loc[x.season.eq(season)].to_csv(f'/tmp/qb_m89/player_logs_{season}.csv', index=False)
+              print(season, int(x.season.eq(season).sum()))
+          PY
+
+      - name: Build QB pass_yards component trace for 2023/2024/2025
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          for season in 2023 2024 2025; do
+            prior=$((season - 1))
+            python scripts/backtest/build_qb_synthesis_confirmation_inputs_v1.py \
+              --season $season --prior-season $prior --weeks 1-18 --iterations 2000 \
+              --player-logs /tmp/qb_m89/player_game_logs_history.csv \
+              --team-weekly /tmp/qb_m89/team_weekly_${season}.csv \
+              --schedule /tmp/qb_m89/schedule_history.csv \
+              --universe-dir /tmp/hist_${season}/pregame_universe \
+              --out /tmp/qb_m89/qb_trace_${season}.csv
+          done
+
+      - name: Combine 2024+2025 QB trace for M89 evaluation
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          a = pd.read_csv('/tmp/qb_m89/qb_trace_2024.csv')
+          b = pd.read_csv('/tmp/qb_m89/qb_trace_2025.csv')
+          pd.concat([a, b], ignore_index=True).to_csv('/tmp/qb_m89/qb_trace_2024_2025.csv', index=False)
+          PY
+
+      - name: Fit frozen M89 recipe on 2023, evaluate on 2024-2025
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/run_m89_pregame_synthesis.py \
+            --trace-2023 /tmp/qb_m89/qb_trace_2023.csv \
+            --trace-2024-2025 /tmp/qb_m89/qb_trace_2024_2025.csv \
+            --team-2023 /tmp/qb_m89/team_weekly_2023.csv \
+            --logs-2023 /tmp/qb_m89/player_logs_2023.csv \
+            --team-2024 /tmp/qb_m89/team_weekly_2024.csv \
+            --logs-2024 /tmp/qb_m89/player_logs_2024.csv \
+            --team-2025 /tmp/qb_m89/team_weekly_2025.csv \
+            --logs-2025 /tmp/qb_m89/player_logs_2025.csv \
+            --out-dir /tmp/qb_m89/m89_out
+
+      - name: Attach authoritative game identity to the M89 test-season trace
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/attach_qb_synthesis_game_identity_v1.py \
+            --trace /tmp/qb_m89/m89_out/m89_2024_2025_synthesis_trace.csv \
+            --schedule /tmp/qb_m89/schedule_history.csv \
+            --out /tmp/qb_m89/qb_synthesis_trace_with_identity.csv
+
+      - name: Build clean historical QB pass_yards Vegas props (2024-2025)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/prepare_free_qb_prop_archive.py \
+            --projection-file /tmp/qb_m89/qb_synthesis_trace_with_identity.csv \
+            --out-dir /tmp/qb_m89/qb_props
+
+      - name: Reconstruct raw historical simulated pass_yards arrays (reused unmodified from PR #546)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/persist_historical_simulated_outcomes_v1.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/qb_m89/player_game_logs_history.csv \
+            --team-weekly /tmp/qb_m89/team_weekly_2024.csv \
+            --schedule /tmp/qb_m89/schedule_history.csv \
+            --universe-dir /tmp/hist_2024/pregame_universe \
+            --component-file /tmp/qb_m89/qb_trace_2024.csv \
+            --out-dir /tmp/qb_m89/distributions
+          python scripts/research/persist_historical_simulated_outcomes_v1.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/qb_m89/player_game_logs_history.csv \
+            --team-weekly /tmp/qb_m89/team_weekly_2025.csv \
+            --schedule /tmp/qb_m89/schedule_history.csv \
+            --universe-dir /tmp/hist_2025/pregame_universe \
+            --component-file /tmp/qb_m89/qb_trace_2025.csv \
+            --out-dir /tmp/qb_m89/distributions
+
+      - name: Grade base_proj/football_synthesis/market_assisted through the empirical translator
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/grade_qb_m89_empirical_fair_prob_v1.py \
+            --trace /tmp/qb_m89/qb_synthesis_trace_with_identity.csv \
+            --distribution-dir /tmp/qb_m89/distributions \
+            --props /tmp/qb_m89/qb_props/m60b_historical_qb_pass_props.csv \
+            --out-dir /tmp/qb_m89/result
+
+      - name: Also grade through the legacy translator for a same-row comparison
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/grade_qb_synthesis_vegas_v1.py \
+            --trace /tmp/qb_m89/qb_synthesis_trace_with_identity.csv \
+            --props /tmp/qb_m89/qb_props/m60b_historical_qb_pass_props.csv \
+            --out-dir /tmp/qb_m89/legacy_grade
+
+      - name: Upload QB M89 empirical fair-probability bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-m89-empirical-fair-prob-v1
+          path: |
+            /tmp/qb_m89/qb_synthesis_trace_with_identity.csv
+            /tmp/qb_m89/qb_props/m60b_historical_qb_pass_props.csv
+            /tmp/qb_m89/distributions/*_distribution_rebuild_audit.csv
+            /tmp/qb_m89/distributions/*_metadata.csv
+            /tmp/qb_m89/result/*.csv
+            /tmp/qb_m89/legacy_grade/*.csv
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload reconstructed pass_yards distribution shards
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-m89-simulated-outcome-shards-v1
+          path: /tmp/qb_m89/distributions/*.npz
+          if-no-files-found: warn
+          retention-days: 7
+          compression-level: 0
