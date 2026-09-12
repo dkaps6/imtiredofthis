@@ -1,0 +1,154 @@
+name: Historical Benchmark Clean Rebuild V1
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/backtest/**"
+      - "scripts/research/full_market_holdout_scan_v1.py"
+      - "tests/test_benchmark_identity_v1.py"
+      - "tests/test_grade_full_stack_vegas_benchmark_v1.py"
+      - ".github/workflows/backtest-historical-benchmark-clean-rebuild-v1.yml"
+
+jobs:
+  clean-rebuild:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml pyarrow tabulate
+
+      - name: Run identity and grader unit tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_benchmark_identity_v1.py tests/test_grade_full_stack_vegas_benchmark_v1.py
+
+      - name: Build independent historical inputs for 2024 and 2025
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/hist_2024 /tmp/hist_2025 /tmp/clean_benchmark
+          mkdir -p /tmp/hist_2024 /tmp/hist_2025 /tmp/clean_benchmark
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --out-dir /tmp/hist_2024
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --out-dir /tmp/hist_2025
+
+      - name: Combine authoritative 2023-2025 schedule and team-week history
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+
+          out = Path('/tmp/clean_benchmark')
+          for name in ['schedule_history.csv', 'team_weekly_history.csv']:
+              parts = [pd.read_csv('/tmp/hist_2024/' + name), pd.read_csv('/tmp/hist_2025/' + name)]
+              x = pd.concat(parts, ignore_index=True)
+              keys = ['season', 'week', 'team']
+              x = x.sort_values(keys).drop_duplicates(keys, keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined historical identity rows in {name}')
+              x.to_csv(out / name, index=False)
+              print(name, len(x), sorted(x.season.unique()))
+          PY
+
+      - name: Build canonical 2023-2025 player game logs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2023,2024,2025 \
+            --schedule /tmp/clean_benchmark/schedule_history.csv \
+            --out /tmp/clean_benchmark/player_game_logs_history.csv
+
+      - name: Build leakage-safe 2024 component trace
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/walk_forward.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/clean_benchmark/player_game_logs_history.csv \
+            --team-weekly /tmp/clean_benchmark/team_weekly_history.csv \
+            --schedule /tmp/clean_benchmark/schedule_history.csv \
+            --universe-dir /tmp/hist_2024/pregame_universe \
+            --out /tmp/clean_benchmark/component_predictions_2024.csv
+
+      - name: Build leakage-safe 2025 component trace
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/walk_forward.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/clean_benchmark/player_game_logs_history.csv \
+            --team-weekly /tmp/clean_benchmark/team_weekly_history.csv \
+            --schedule /tmp/clean_benchmark/schedule_history.csv \
+            --universe-dir /tmp/hist_2025/pregame_universe \
+            --out /tmp/clean_benchmark/component_predictions_2025.csv
+
+      - name: Apply frozen ensemble and attach authoritative game identity
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_full_stack_vegas_projection_trace_v2.py \
+            --component-file /tmp/clean_benchmark/component_predictions_2024.csv \
+            --component-file /tmp/clean_benchmark/component_predictions_2025.csv \
+            --schedule /tmp/clean_benchmark/schedule_history.csv \
+            --weights data/model_ensemble_weights.csv \
+            --out /tmp/clean_benchmark/full_stack_projection_trace_clean_v1.csv
+
+      - name: Rebuild free historical market archive against clean identities
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/prepare_free_market_prop_archive_v1.py \
+            --projection-file /tmp/clean_benchmark/full_stack_projection_trace_clean_v1.csv \
+            --out-dir /tmp/clean_benchmark/market_archive
+
+      - name: Grade clean full-stack benchmark with frozen grading rules
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/grade_full_stack_vegas_benchmark_v1.py \
+            --projection-file /tmp/clean_benchmark/full_stack_projection_trace_clean_v1.csv \
+            --props /tmp/clean_benchmark/market_archive/historical_market_props.csv \
+            --out-dir /tmp/clean_benchmark/grade
+
+      - name: Emit fail-closed identity audit artifact
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/audit_clean_full_stack_vegas_benchmark_v1.py \
+            --projection /tmp/clean_benchmark/full_stack_projection_trace_clean_v1.csv \
+            --props /tmp/clean_benchmark/market_archive/historical_market_props.csv \
+            --detail /tmp/clean_benchmark/grade/full_stack_vegas_benchmark_detail.csv \
+            --out /tmp/clean_benchmark/HISTORICAL_BENCHMARK_IDENTITY_AUDIT_V1.json
+
+      - name: Upload clean benchmark bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-benchmark-clean-rebuild-v1
+          path: |
+            /tmp/clean_benchmark/HISTORICAL_BENCHMARK_IDENTITY_AUDIT_V1.json
+            /tmp/clean_benchmark/schedule_history.csv
+            /tmp/clean_benchmark/component_predictions_2024.csv
+            /tmp/clean_benchmark/component_predictions_2025.csv
+            /tmp/clean_benchmark/full_stack_projection_trace_clean_v1.csv
+            /tmp/clean_benchmark/market_archive/market_archive_source_audit.csv
+            /tmp/clean_benchmark/market_archive/historical_market_props.csv
+            /tmp/clean_benchmark/grade/full_stack_vegas_benchmark_detail.csv
+            /tmp/clean_benchmark/grade/full_stack_vegas_benchmark_summary.csv
+          if-no-files-found: warn
+          retention-days: 14

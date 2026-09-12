@@ -28,6 +28,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from scripts.backtest.benchmark_identity_v1 import assert_benchmark_identity, home_away_from_game_id
+
 DETAIL = Path("docs/research/overnight/non_qb_detail_wr_r15_te_r5p_applied.csv")
 OUT = Path("docs/research/overnight/FULL_MARKET_HOLDOUT_SCAN_V1_RESULT.md")
 MIN_N = 25
@@ -35,10 +37,7 @@ MARKETS = ["rush_yards", "rec_yards", "rush_rec_yards", "receptions"]
 
 
 def home_away(row) -> str:
-    parts = str(row["game_id"]).split("_")
-    if len(parts) != 4:
-        return "UNKNOWN"
-    return "HOME" if str(row["team"]) == parts[3] else "AWAY"
+    return home_away_from_game_id(row.get("team"), row.get("game_id"))
 
 
 def week_bucket(w: int) -> str:
@@ -99,8 +98,17 @@ def quantile_holdout_candidates(pool: pd.DataFrame, market: str, dim_col: str, s
 
 def main() -> int:
     df = pd.read_csv(DETAIL, low_memory=False)
+    assert_benchmark_identity(
+        df,
+        label="full-market holdout input",
+        require_team=True,
+        require_opponent=("opponent" in {str(c).strip().lower() for c in df.columns}),
+    )
     strong = df.loc[df.signal.eq("STRONG_EDGE")].copy()
     strong["home_away"] = strong.apply(home_away, axis=1)
+    if strong["home_away"].eq("UNKNOWN").any():
+        sample = strong.loc[strong["home_away"].eq("UNKNOWN"), ["team", "game_id"]].head(20).to_dict(orient="records")
+        raise RuntimeError(f"home/away identity unresolved after canonicalization: {sample}")
     strong["week_bucket"] = strong["week"].astype(int).map(week_bucket)
 
     cat_rows: list[dict] = []
@@ -116,8 +124,6 @@ def main() -> int:
                 quant_rows.extend(quantile_holdout_candidates(strong, market, dim_col, side_filter))
     quant_df = pd.DataFrame(quant_rows)
 
-    # A quantile-holdout rule is a real candidate only if BOTH fit/test
-    # directions are positive with adequate test-side sample size.
     quant_candidates = []
     for (market, dim, value), g in quant_df.groupby(["market", "dimension", "value"]):
         if len(g) == 2 and (g["n_test"] >= MIN_N).all() and (g["roi_test"] > 0).all():

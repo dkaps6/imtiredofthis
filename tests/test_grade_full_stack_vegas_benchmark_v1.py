@@ -8,6 +8,7 @@ no network, no file I/O.
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from scripts.backtest.grade_full_stack_vegas_benchmark_v1 import (
     ev_roi,
@@ -35,7 +36,7 @@ def test_ev_roi_breakeven_at_market_implied_prob():
 
 def test_signal_thresholds():
     assert signal(0.06, 0.04) == "STRONG_EDGE"
-    assert signal(0.06, 0.02) == "LEAN_EDGE"  # EV clears but prob edge doesn't reach STRONG
+    assert signal(0.06, 0.02) == "LEAN_EDGE"
     assert signal(0.01, 0.10) == "LEAN_EDGE"
     assert signal(-0.01, 0.10) == "NO_EDGE"
 
@@ -46,10 +47,10 @@ def _proj(mean=280.0, spread_component="tight"):
     return pd.DataFrame(
         [
             {
-                "season": 2024, "week": 1, "team": "KC", "player_clean_key": "patrickmahomes",
-                "market": "pass_yards", "game_id": "2024_01_KC_BAL",
-                "mc_proj": mean, "ml_proj": ml, "state_proj": state, "ensemble_proj": mean,
-                "actual": 300.0,
+                "season": 2024, "week": 1, "team": "KC", "opponent": "BAL",
+                "player_clean_key": "patrickmahomes", "market": "pass_yards",
+                "game_id": "2024_01_KC_BAL", "mc_proj": mean, "ml_proj": ml,
+                "state_proj": state, "ensemble_proj": mean, "actual": 300.0,
             }
         ]
     )
@@ -58,9 +59,10 @@ def _proj(mean=280.0, spread_component="tight"):
 def _props(over_odds=-110, under_odds=-110, line=265.5):
     return pd.DataFrame(
         [{
-            "game_id": "2024_01_KC_BAL", "player_clean_key": "patrickmahomes", "market": "pass_yards",
-            "book": "draftkings", "line": line, "over_odds": over_odds, "under_odds": under_odds,
-            "player": "p.mahomes",
+            "season": 2024, "week": 1, "game_id": "2024_01_KC_BAL",
+            "player_clean_key": "patrickmahomes", "market": "pass_yards",
+            "book": "draftkings", "line": line, "over_odds": over_odds,
+            "under_odds": under_odds, "player": "p.mahomes",
         }]
     )
 
@@ -76,3 +78,10 @@ def test_summary_has_all_three_tiers_and_all_markets_rollup():
     _, summary = grade(_proj(), _props())
     assert set(summary.tier) == {"ALL_NO_FILTER", "LEAN_OR_STRONG", "STRONG_ONLY_PLAY_TIER"}
     assert "ALL_MARKETS" in set(summary.market)
+
+
+def test_grade_rejects_wrong_season_game_id_before_join():
+    bad = _proj()
+    bad.loc[0, "game_id"] = "2023_01_DET_KC"
+    with pytest.raises(RuntimeError, match="benchmark identity failure"):
+        grade(bad, _props())
