@@ -1,0 +1,3 @@
+season,raw_rows,regular_season_rows,gradeable_market_rows,full_game_rows,period_status,dk_fd_rows,valid_side_line_rows,rows_with_source_player_id,consolidated_book_player_market_rows,conflicting_line_groups_dropped,source_url,download_bytes
+2024,760828,718592,110280,102630,known_full_game_period,37328,37326,35630,18648,7,https://raw.githubusercontent.com/gcampb41/nfl_data-/main/data/processed/football/nfl/player_props/2024.parquet,6667141
+2025,1405406,1350121,168087,141268,known_full_game_period,46069,46069,44217,16307,767,https://raw.githubusercontent.com/gcampb41/nfl_data-/main/data/processed/football/nfl/player_props/2025.parquet,15248790
