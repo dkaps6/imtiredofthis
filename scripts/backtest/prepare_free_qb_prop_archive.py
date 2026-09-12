@@ -322,15 +322,33 @@ def attach_projection_games(props: pd.DataFrame, projections: pd.DataFrame) -> t
     proj = z.proj_team.fillna("").astype(str).str.strip()
     z["team_mismatch"] = z.matched_projection & src.ne("") & proj.ne("") & src.ne(proj)
     stats["matched_projection_rows_before_team_check"] = int(z.matched_projection.sum())
-    stats["team_mismatch_rows_dropped"] = int(z.team_mismatch.sum())
+    stats["team_mismatch_rows_flagged"] = int(z.team_mismatch.sum())
 
-    z = z.loc[z.matched_projection & ~z.team_mismatch].copy()
+    # The free archive's own `team` column is a denormalized snapshot (it can
+    # reflect a player's later team, e.g. after an offseason signing, applied
+    # retroactively across every historical week) rather than a point-in-time
+    # value. It is unreliable exactly for the players who changed teams after
+    # the archive was built. The GSIS `player_id` join against
+    # production (season, week, player_id) identity has no such staleness, so
+    # a `gsis_player_id` match is trusted even when the archive's own team
+    # label disagrees; the disagreement is preserved as a diagnostic column
+    # rather than used to discard otherwise-verified rows. The exact-name
+    # fallback path has no independent player-identity anchor, so team
+    # agreement remains a required integrity check there to avoid a false
+    # same-name match.
+    reject_mismatch = z.team_mismatch & z.join_method.eq("exact_name_fallback")
+    stats["team_mismatch_rows_dropped"] = int(reject_mismatch.sum())
+
+    z = z.loc[z.matched_projection & ~reject_mismatch].copy()
     stats["matched_projection_rows_after_team_check"] = len(z)
+    stats["gsis_matched_stale_team_label_rows_kept"] = int(
+        (z.join_method.eq("gsis_player_id") & z.team_mismatch).sum()
+    )
 
     keep = [
         "game_id", "player_clean_key", "book", "line", "over_odds", "under_odds", "player",
         "season", "week", "source_team", "source_player_id", "source_event_id", "join_method",
-        "source_line_definition", "source_dataset",
+        "team_mismatch", "source_line_definition", "source_dataset",
     ]
     return z[[c for c in keep if c in z.columns]].copy(), stats
 
