@@ -46,6 +46,14 @@ def main() -> int:
     props = _read(a.props, "historical QB pass_yards props")
     a.out_dir.mkdir(parents=True, exist_ok=True)
 
+    # prepare_free_qb_prop_archive.py's output is single-market by
+    # construction (it only ever downloads passing-yard props) and never
+    # writes a market column -- grade()'s select_one_book_row() requires
+    # one to group/sort by, since it's shared with the multi-market non-QB
+    # grader. Not a data gap, just a column the QB-specific archive never
+    # needed until now.
+    props["market"] = "pass_yards"
+
     all_details = []
     for proj_col, out_stem in VARIANTS.items():
         detail, summary = grade(trace, props, proj_col=proj_col)
