@@ -1,0 +1,174 @@
+name: Historical Production Fair Probability V1
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/backtest/walk_forward_distribution_v1.py"
+      - "scripts/backtest/grade_empirical_fair_probability_v1.py"
+      - "tests/test_historical_empirical_fair_probability_v1.py"
+      - ".github/workflows/backtest-historical-production-fair-prob-v1.yml"
+
+jobs:
+  reconstruct-fair-probability:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml pyarrow tabulate
+
+      - name: Run identity, old-grader, and empirical probability unit tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q \
+            tests/test_benchmark_identity_v1.py \
+            tests/test_grade_full_stack_vegas_benchmark_v1.py \
+            tests/test_historical_empirical_fair_probability_v1.py
+
+      - name: Build independent historical inputs for 2024 and 2025
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/hist_2024 /tmp/hist_2025 /tmp/fair_prob_v1
+          mkdir -p /tmp/hist_2024 /tmp/hist_2025 /tmp/fair_prob_v1/distributions
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --out-dir /tmp/hist_2024
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --out-dir /tmp/hist_2025
+
+      - name: Combine authoritative 2023-2025 schedule and team-week history
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+
+          out = Path('/tmp/fair_prob_v1')
+          for name in ['schedule_history.csv', 'team_weekly_history.csv']:
+              parts = [pd.read_csv('/tmp/hist_2024/' + name), pd.read_csv('/tmp/hist_2025/' + name)]
+              x = pd.concat(parts, ignore_index=True)
+              keys = ['season', 'week', 'team']
+              x = x.sort_values(keys).drop_duplicates(keys, keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined historical identity rows in {name}')
+              x.to_csv(out / name, index=False)
+              print(name, len(x), sorted(x.season.unique()))
+          PY
+
+      - name: Build canonical 2023-2025 player game logs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2023,2024,2025 \
+            --schedule /tmp/fair_prob_v1/schedule_history.csv \
+            --out /tmp/fair_prob_v1/player_game_logs_history.csv
+
+      - name: Build leakage-safe 2024 trace and persist the exact 2000-draw distributions
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/walk_forward_distribution_v1.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/fair_prob_v1/player_game_logs_history.csv \
+            --team-weekly /tmp/fair_prob_v1/team_weekly_history.csv \
+            --schedule /tmp/fair_prob_v1/schedule_history.csv \
+            --universe-dir /tmp/hist_2024/pregame_universe \
+            --out /tmp/fair_prob_v1/component_predictions_2024.csv \
+            --distribution-dir /tmp/fair_prob_v1/distributions
+
+      - name: Build leakage-safe 2025 trace and persist the exact 2000-draw distributions
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/walk_forward_distribution_v1.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/fair_prob_v1/player_game_logs_history.csv \
+            --team-weekly /tmp/fair_prob_v1/team_weekly_history.csv \
+            --schedule /tmp/fair_prob_v1/schedule_history.csv \
+            --universe-dir /tmp/hist_2025/pregame_universe \
+            --out /tmp/fair_prob_v1/component_predictions_2025.csv \
+            --distribution-dir /tmp/fair_prob_v1/distributions
+
+      - name: Apply frozen ensemble and attach authoritative game identity
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_full_stack_vegas_projection_trace_v2.py \
+            --component-file /tmp/fair_prob_v1/component_predictions_2024.csv \
+            --component-file /tmp/fair_prob_v1/component_predictions_2025.csv \
+            --schedule /tmp/fair_prob_v1/schedule_history.csv \
+            --weights data/model_ensemble_weights.csv \
+            --out /tmp/fair_prob_v1/full_stack_projection_trace_clean_v1.csv
+
+      - name: Rebuild free historical market archive against clean identities
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/prepare_free_market_prop_archive_v1.py \
+            --projection-file /tmp/fair_prob_v1/full_stack_projection_trace_clean_v1.csv \
+            --out-dir /tmp/fair_prob_v1/market_archive
+
+      - name: Reproduce the old component-SD benchmark on this exact rerun
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/grade_full_stack_vegas_benchmark_v1.py \
+            --projection-file /tmp/fair_prob_v1/full_stack_projection_trace_clean_v1.csv \
+            --props /tmp/fair_prob_v1/market_archive/historical_market_props.csv \
+            --out-dir /tmp/fair_prob_v1/old_grade
+
+      - name: Emit the existing fail-closed identity audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/audit_clean_full_stack_vegas_benchmark_v1.py \
+            --projection /tmp/fair_prob_v1/full_stack_projection_trace_clean_v1.csv \
+            --props /tmp/fair_prob_v1/market_archive/historical_market_props.csv \
+            --detail /tmp/fair_prob_v1/old_grade/full_stack_vegas_benchmark_detail.csv \
+            --out /tmp/fair_prob_v1/HISTORICAL_BENCHMARK_IDENTITY_AUDIT_V1.json
+
+      - name: Grade same-row OLD vs production-style empirical probabilities
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/grade_empirical_fair_probability_v1.py \
+            --projection-file /tmp/fair_prob_v1/full_stack_projection_trace_clean_v1.csv \
+            --proj-col ensemble_proj \
+            --props /tmp/fair_prob_v1/market_archive/historical_market_props.csv \
+            --distribution-dir /tmp/fair_prob_v1/distributions \
+            --expected-iterations 2000 \
+            --out-dir /tmp/fair_prob_v1/fair_probability_grade
+
+      - name: Upload fair-probability reconstruction bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-production-fair-probability-v1
+          path: |
+            /tmp/fair_prob_v1/HISTORICAL_BENCHMARK_IDENTITY_AUDIT_V1.json
+            /tmp/fair_prob_v1/schedule_history.csv
+            /tmp/fair_prob_v1/component_predictions_2024.csv
+            /tmp/fair_prob_v1/component_predictions_2025.csv
+            /tmp/fair_prob_v1/full_stack_projection_trace_clean_v1.csv
+            /tmp/fair_prob_v1/market_archive/market_archive_source_audit.csv
+            /tmp/fair_prob_v1/market_archive/historical_market_props.csv
+            /tmp/fair_prob_v1/old_grade/full_stack_vegas_benchmark_detail.csv
+            /tmp/fair_prob_v1/old_grade/full_stack_vegas_benchmark_summary.csv
+            /tmp/fair_prob_v1/fair_probability_grade/*.csv
+            /tmp/fair_prob_v1/fair_probability_grade/*.json
+            /tmp/fair_prob_v1/distributions/*.csv
+            /tmp/fair_prob_v1/distributions/*.npz
+          if-no-files-found: warn
+          retention-days: 14
