@@ -1,0 +1,7 @@
+market,mc_weight,ml_weight,state_weight,calibration_rows,calibration_mae,calibration_rmse,method
+pass_yards,0.506003,0.162297,0.331700,486,63.521011,79.574395,nonnegative_oos_linear_blend_v2
+rec_yards,0.656745,0.301320,0.041935,4335,17.796630,25.937820,nonnegative_oos_linear_blend_v2
+receptions,0.546111,0.453889,0.000000,4335,1.352271,1.851299,nonnegative_oos_linear_blend_v2
+rush_att,0.260264,0.660877,0.078859,1951,3.090041,4.292213,nonnegative_oos_linear_blend_v2
+rush_rec_yards,0.506977,0.467964,0.025059,4991,20.686976,29.207160,nonnegative_oos_linear_blend_v2
+rush_yards,0.396067,0.559625,0.044308,3180,11.662209,19.834766,nonnegative_oos_linear_blend_v2
