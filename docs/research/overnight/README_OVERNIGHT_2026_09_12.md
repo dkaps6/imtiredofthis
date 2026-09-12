@@ -8,7 +8,8 @@ This is the index. Per-position detail lives in:
 - `WR_GAP_FINDINGS.md`, `WR_R3_COMBINED_CANDIDATE_STATUS.md`
 - `TE_GAP_FINDINGS.md`, `QB_PD3_AND_TE_R1_RECOVERED_RESULTS.md`
 - `COVERAGE_V2_EFFICIENCY_SIGNAL_NOVELTY_CHECK.md`
-- **`SITUATIONAL_EDGE_HUNT_V1_RESULT.md` and `SITUATIONAL_EDGE_HUNT_V2_WR_R15_TE_R5P_APPLIED.md` — the most actionable findings of the whole sweep. See "Situational edge hunt" below before anything else.**
+- **`SITUATIONAL_EDGE_HUNT_V1_RESULT.md`, `SITUATIONAL_EDGE_HUNT_V2_WR_R15_TE_R5P_APPLIED.md`, `RECEPTIONS_UNDER_HOLDOUT_TEST_V1_RESULT.md` — read all three in order. The candidate downgrades under a real holdout test; see below.**
+- **Cross-audited jointly with GPT-5.6 in [GitHub Issue #535](https://github.com/dkaps6/imtiredofthis/issues/535) — that thread is now the live source of truth for this candidate's status, more current than this file.**
 
 ## Situational edge hunt (new, most actionable finding of the whole sweep)
 
@@ -17,6 +18,8 @@ Instead of more feature-hunting, re-sliced the *existing* real 2024-2025 full-st
 **Receptions market, model's highest-confidence quartile, UNDER side only: n=1,258, win rate 52.5%, ROI +2.66%/unit, positive independently in both 2024 (+2.43%) and 2025 (+2.90%).** Full writeup, including the statistical-honesty caveats (146 tests run, multiple-comparisons exposure) and why this one looks real rather than noise, in `SITUATIONAL_EDGE_HUNT_V1_RESULT.md`.
 
 **V2 update**: that V1 result graded receptions on the base engine only (disclosed gap — WR-R15/TE-R5P not yet applied). You located and provided the two canonical GH Actions validation artifacts (`wr_r15_confirmation_predictions.csv`, `te_r5_oos_player_casebook.csv` — direct download was blocked by this session's network egress policy, an org-level block on Azure blob storage, not a repo issue) and I applied them to the same cohort and re-graded with the unmodified grading script. **The edge survives**: softens from +2.66% to +1.50% pooled ROI but stays positive independently in both seasons (2024 +2.07%, 2025 +0.92%). The subset of bets the real promoted models actually touched shows a stronger edge (+2.94%) than the untouched subset (+0.70%) — encouraging, but the 2025-specific slice of that (n=21, almost all TE-R5P since WR-R15 has zero 2025 coverage by its own frozen contract) is too small to lean on. Full writeup in `SITUATIONAL_EDGE_HUNT_V2_WR_R15_TE_R5P_APPLIED.md`.
+
+**Holdout test (self-attack, per the #535 cross-audit protocol)**: V1/V2's "positive both seasons" check is weaker than it looks — the prob_edge quartile threshold that *defines* the candidate was fit on the pooled 2024+2025 sample, so 2025 data influenced the rule used to grade 2025. Refit the threshold on ONE season only, froze it, and graded the OTHER season blind, both directions: **fit-2024→test-2025: n=577, ROI +0.61%; fit-2025→test-2024: n=543, ROI +1.59%.** Both still positive and win rate stays consistent (~52.7-52.9%) either direction, but this is materially weaker than the pooled +1.50%, and at this n a ~52.7% win rate carries a ~2.1pp binomial standard error against a 50% null — not distinguishable from noise on hit rate alone. **Downgraded from "validated, modest edge" to "directionally plausible, unconfirmed at this sample size."** Full writeup in `RECEPTIONS_UNDER_HOLDOUT_TEST_V1_RESULT.md`. Not promotable, not disproven — needs more data (a real third season, or 2026-forward tracking) to move either direction.
 
 ## Method
 
