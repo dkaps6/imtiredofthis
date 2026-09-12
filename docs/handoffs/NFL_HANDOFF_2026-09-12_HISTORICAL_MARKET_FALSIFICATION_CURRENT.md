@@ -10,6 +10,18 @@ Branch base / canonical `main` at creation:
 
 GitHub is canonical; chat memory is secondary.
 
+## Concurrent research rule
+
+The user currently has Claude working in the repository at the same time.
+
+Therefore this branch must be treated as an isolated research lane:
+- do not write directly to `main`;
+- do not force-update shared branches;
+- before every meaningful merge, pointer update, or claim about canonical state, re-fetch current `main` and inspect any new Claude commits/PRs;
+- reconcile rather than duplicate overlapping work;
+- if Claude lands a superior or newer benchmark artifact, treat the merged GitHub record as canonical and update this handoff before continuing;
+- preserve both positive and negative results; do not overwrite contrary evidence.
+
 ## Priority override
 
 A newly surfaced historical Vegas benchmark is now the highest-priority issue.
@@ -148,4 +160,4 @@ Once this falsification audit tells us which layers are sound versus broken, res
 
 ## Exact next step
 
-Reproduce and audit the committed full-stack Vegas benchmark at current `main`, with year-by-year decomposition and benchmark-fidelity checks, before changing production science or resuming season-continuity implementation.
+Re-fetch current `main` to pick up any concurrent Claude work, then reproduce and audit the committed full-stack Vegas benchmark with year-by-year decomposition and benchmark-fidelity checks before changing production science or resuming season-continuity implementation.
