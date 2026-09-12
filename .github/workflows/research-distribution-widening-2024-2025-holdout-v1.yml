@@ -1,0 +1,166 @@
+name: Distribution Widening 2024-2025 Holdout V1
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/research/fit_and_apply_distribution_widening_v1.py"
+      - "tests/test_fit_and_apply_distribution_widening_v1.py"
+      - ".github/workflows/research-distribution-widening-2024-2025-holdout-v1.yml"
+
+jobs:
+  widen-and-grade:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml pyarrow tabulate
+
+      - name: Run focused integrity tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q \
+            tests/test_fit_and_apply_distribution_widening_v1.py \
+            tests/test_empirical_fair_prob_v1.py \
+            tests/test_benchmark_identity_v1.py
+
+      - name: Build independent historical inputs for 2024 and 2025
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/hist_2024 /tmp/hist_2025 /tmp/widen
+          mkdir -p /tmp/hist_2024 /tmp/hist_2025 /tmp/widen/distributions
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --out-dir /tmp/hist_2024
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --out-dir /tmp/hist_2025
+
+      - name: Combine authoritative 2023-2025 schedule and team-week history
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out = Path('/tmp/widen')
+          for name in ['schedule_history.csv', 'team_weekly_history.csv']:
+              parts = [pd.read_csv('/tmp/hist_2024/' + name), pd.read_csv('/tmp/hist_2025/' + name)]
+              x = pd.concat(parts, ignore_index=True)
+              keys = ['season', 'week', 'team']
+              x = x.sort_values(keys).drop_duplicates(keys, keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined historical identity rows in {name}')
+              x.to_csv(out / name, index=False)
+          PY
+
+      - name: Build canonical 2023-2025 player game logs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2023,2024,2025 \
+            --schedule /tmp/widen/schedule_history.csv \
+            --out /tmp/widen/player_game_logs_history.csv
+
+      - name: Build exact clean 2024 and 2025 component traces
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/walk_forward.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/widen/player_game_logs_history.csv \
+            --team-weekly /tmp/widen/team_weekly_history.csv \
+            --schedule /tmp/widen/schedule_history.csv \
+            --universe-dir /tmp/hist_2024/pregame_universe \
+            --out /tmp/widen/component_predictions_2024.csv
+          python scripts/backtest/walk_forward.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/widen/player_game_logs_history.csv \
+            --team-weekly /tmp/widen/team_weekly_history.csv \
+            --schedule /tmp/widen/schedule_history.csv \
+            --universe-dir /tmp/hist_2025/pregame_universe \
+            --out /tmp/widen/component_predictions_2025.csv
+
+      - name: Reconstruct raw historical simulated outcome arrays (reused unmodified from PR #546)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/persist_historical_simulated_outcomes_v1.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/widen/player_game_logs_history.csv \
+            --team-weekly /tmp/widen/team_weekly_history.csv \
+            --schedule /tmp/widen/schedule_history.csv \
+            --universe-dir /tmp/hist_2024/pregame_universe \
+            --component-file /tmp/widen/component_predictions_2024.csv \
+            --out-dir /tmp/widen/distributions
+          python scripts/research/persist_historical_simulated_outcomes_v1.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/widen/player_game_logs_history.csv \
+            --team-weekly /tmp/widen/team_weekly_history.csv \
+            --schedule /tmp/widen/schedule_history.csv \
+            --universe-dir /tmp/hist_2025/pregame_universe \
+            --component-file /tmp/widen/component_predictions_2025.csv \
+            --out-dir /tmp/widen/distributions
+
+      - name: Apply frozen ensemble and authoritative game identity
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_full_stack_vegas_projection_trace_v2.py \
+            --component-file /tmp/widen/component_predictions_2024.csv \
+            --component-file /tmp/widen/component_predictions_2025.csv \
+            --schedule /tmp/widen/schedule_history.csv \
+            --weights data/model_ensemble_weights.csv \
+            --out /tmp/widen/full_stack_projection_trace_clean_v1.csv
+
+      - name: Rebuild identical historical market archive
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/prepare_free_market_prop_archive_v1.py \
+            --projection-file /tmp/widen/full_stack_projection_trace_clean_v1.csv \
+            --out-dir /tmp/widen/market_archive
+
+      - name: Fit widening on 2024, apply blind to 2025
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/fit_and_apply_distribution_widening_v1.py \
+            --projection-file /tmp/widen/full_stack_projection_trace_clean_v1.csv \
+            --distribution-dir /tmp/widen/distributions \
+            --props /tmp/widen/market_archive/historical_market_props.csv \
+            --fit-season 2024 --test-season 2025 \
+            --out-dir /tmp/widen/result
+
+      - name: Fit widening on 2025, apply blind to 2024
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/fit_and_apply_distribution_widening_v1.py \
+            --projection-file /tmp/widen/full_stack_projection_trace_clean_v1.csv \
+            --distribution-dir /tmp/widen/distributions \
+            --props /tmp/widen/market_archive/historical_market_props.csv \
+            --fit-season 2025 --test-season 2024 \
+            --out-dir /tmp/widen/result
+
+      - name: Upload widening result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: distribution-widening-2024-2025-holdout-v1
+          path: |
+            /tmp/widen/full_stack_projection_trace_clean_v1.csv
+            /tmp/widen/market_archive/historical_market_props.csv
+            /tmp/widen/result/*.csv
+          if-no-files-found: warn
+          retention-days: 14
