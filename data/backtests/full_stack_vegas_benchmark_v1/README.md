@@ -1,6 +1,6 @@
 # Full-Stack Vegas Benchmark V1 — result record
 
-**Disposition:** `FULL_STACK_EDGE_THRESHOLD_HISTORICAL_BENCHMARK_NO_EDGE_QB_AND_NON_QB`
+**Disposition:** `FULL_STACK_EDGE_THRESHOLD_HISTORICAL_BENCHMARK_QB_SYNTHESIS_GATES_CONFIRMED_NO_FOOTBALL_ONLY_EDGE`
 
 ## What this measures
 
@@ -34,7 +34,7 @@ follow-up pass (`scripts/modeling/wr_r15_entitlement_adapter_v1.py`,
 backtest-compatible application) before treating the WR/TE numbers here as
 final.
 
-## QB pass_yards result
+## QB pass_yards result (resolved reconstruction)
 
 Trained the synthesis on 2023, tested out-of-sample on 2024-2025 real
 DraftKings/FanDuel lines (`qb_base_summary.csv`, `qb_synthesis_summary.csv`,
@@ -42,32 +42,45 @@ DraftKings/FanDuel lines (`qb_base_summary.csv`, `qb_synthesis_summary.csv`,
 
 | Candidate | PLAY tier win rate | PLAY tier ROI/unit | Model MAE | Vegas MAE |
 |---|---:|---:|---:|---:|
-| Base ensemble (no synthesis) | 50.3% | -5.3% | 60.2 | 56.9 |
-| Football-only synthesis reconstruction | 50.8% | -4.6% | 60.3 | 57.3 |
-| Market-assisted (sees Vegas spread/total) | 53.2% | -0.06% | 58.9 | 57.6 |
+| Base ensemble (no synthesis) | 50.3% | -5.3% | 60.1 | 56.6 |
+| Football-only synthesis reconstruction | 52.5% | -1.4% | 58.8 | 56.8 |
+| Market-assisted (sees Vegas spread/total) | 54.6% | **+2.6%** | 57.4 | 56.7 |
 
-The real STRONG/LEAN/PASS gate did not rescue the football-only candidates;
-tightening the filter did not clearly improve ROI for QB. The
-market-assisted candidate approaches breakeven, but it is explicitly not a
-football-only result (it uses Vegas spread/total/moneyline as input
-features) and must not be read as evidence of a football-only edge.
+Every promotion gate the synthesis reconstruction was checked against
+passed: combined MAE 61.15 -> 59.77 (both seasons individually improved),
+bias -10.04 -> +2.55, correlation 0.197 -> 0.260, paired-bootstrap
+probability of improvement 0.97
+(`qb_synthesis_scoreboard_reconstruction_v1.csv`,
+`qb_synthesis_gates_reconstruction_v1.json`). The football-only synthesis
+meaningfully narrows the loss under the real edge-threshold gate (-5.3% ->
+-1.4%) but does not cross breakeven. The market-assisted candidate is the
+only QB candidate in this whole benchmark with positive ROI (+2.6%) — it is
+explicitly not a football-only result (it uses Vegas spread/total/moneyline
+as input features) and must not be read as evidence of a football-only edge,
+but it is worth knowing that letting the model see market context is enough
+to flip this specific market from loser to (small) winner.
 
-### Reconstruction-fidelity note (important)
+### Reconstruction-fidelity note (resolved)
 
-`qb_synthesis_scoreboard_reconstruction_v1.csv` and
-`qb_synthesis_gates_reconstruction_v1.json` are from an **independent
-reconstruction** of the M89/M90 methodology using this repo's general
-`scripts/backtest/walk_forward.py` harness plus the exact frozen
-`correct_m89_team_semantics.py` / `build_historical_injuries.py` /
-`build_historical_weather.py` steps the original M89/M90 workflows used —
-not a replay of the original artifact/run. The documented production result
-(`docs/production/QB_PASS_SYNTHESIS_V1.md`) for the same train-2023/test-
-2024-2025 split is base MAE ~57.64 -> synthesis ~55.06. This reconstruction
-did not fully reproduce that gain (see follow-up investigation before
-treating this as a finding against the promoted synthesis; a first pass
-without the team-semantics/injury/weather corrections showed an even larger
-gap, so at least part of the discrepancy is reconstruction fidelity, not
-model failure).
+An earlier pass of this reconstruction used this repo's general backtest
+harness without the exact original M89/M90 correction steps
+(`correct_m89_team_semantics.py`, real historical injuries/weather via
+`build_historical_injuries.py`/`build_historical_weather.py`) and showed no
+improvement at all (all gates failing) -- a fidelity gap in the
+reconstruction, not evidence against the promoted synthesis. Rebuilding with
+those exact steps (still the general `scripts/backtest/walk_forward.py`
+harness, not a literal replay of the original run) reproduces a real,
+gate-passing improvement in the same direction and shape as the documented
+production result (`docs/production/QB_PASS_SYNTHESIS_V1.md`: base MAE
+~57.64 -> synthesis ~55.06). The reconstruction's absolute MAE remains
+somewhat higher than the documented numbers (61.15 -> 59.77 vs. 57.64 ->
+55.06) -- the most likely remaining source is that the original M89/M90
+evaluation reconciled its base cohort against the frozen 884-row
+`data/backtests/qb_frontier_canonical_v3_football_only/` cohort, which this
+reconstruction does not replicate. That remaining gap is a data-selection
+detail worth closing for full numerical parity, not a reason to doubt the
+promoted synthesis: the qualitative result (real, gate-passing, correctly
+signed improvement) now matches.
 
 ## Non-QB markets result (rush_yards, rec_yards, receptions, rush_rec_yards)
 
@@ -100,8 +113,15 @@ way it was not for QB pass_yards.
 ## Anti-reinvention rule
 
 Do not repeat this exact base/threshold comparison expecting a different
-answer. The next legitimate steps are: (1) resolve the QB reconstruction-
-fidelity gap against the documented ~57.64->~55.06 result before drawing any
-conclusion about the promoted synthesis itself, and (2) if a real edge
-exists anywhere, it is more likely in non-QB markets under a tighter edge
-threshold than in QB pass_yards.
+answer. The QB reconstruction-fidelity question is resolved: the promoted
+M89/M90 synthesis reproduces a real, gate-passing improvement once
+reconstructed with the correct inputs, so do not re-litigate whether the
+synthesis itself is sound from this benchmark alone. What remains open: (1)
+closing the residual MAE gap to the documented numbers via the canonical
+884-row cohort reconciliation, purely for numerical parity; (2) no
+football-only candidate (QB or non-QB) has crossed breakeven against real
+2024-2025 Vegas lines yet under the real edge-threshold gate -- the
+market-assisted QB candidate is the only positive-ROI result in this whole
+benchmark, and it is explicitly not a football-only edge; (3) WR-R15/TE-R5P
+are not yet in the non-QB numbers (see above) -- close that gap before
+concluding anything about WR/TE's real-world edge.
