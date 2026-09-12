@@ -1,22 +1,32 @@
-STATUS: RESEARCH ONLY — NOT PROMOTED. WR-R15/TE-R5P re-applied to the
+STATUS: RESEARCH ONLY — NOT PROMOTED. WR-R15/TE-R5 re-applied to the
 identity-clean cohort (PR #541/#542). No production/model/threshold change.
 
-# WR-R15/TE-R5P applied to the identity-clean benchmark
+CORRECTION (Issue #535 checkpoint 28): this doc originally said "TE-R5P"
+throughout. The artifact actually applied for TE
+(`te_r5_oos_player_casebook.csv`, run `34132127351`/artifact `10022512461`)
+is **TE-R5**, an earlier scientific-decomposition model, not the later
+production-certified **TE-R5P** (authorized_by_run `34152797603`, artifact
+`10029942404`). The numbers below are unchanged and correct for TE-R5 as
+actually applied; they were never a valid test of TE-R5P. A genuine TE-R5P
+historical replay is separate follow-up work (see PR #549).
+
+# WR-R15/TE-R5 applied to the identity-clean benchmark
 
 Direct answer to: "you tested Vegas against my base ensemble, not against my
 full researched/layered model." Correct — `CLEAN_BENCHMARK_INDEPENDENT_REGRADE_V1_RESULT.md`
 tested only `mc_proj`/`ml_proj`/`state_proj` + frozen ensemble weights, the
 same base stack that existed before WR-R15/TE-R5P were promoted. This
-re-applies those two promoted models to the same clean cohort, using the
-identical method already used once on the corrupted cohort (PR #534) —
+re-applies WR-R15 (the actual promoted model) and TE-R5 (not TE-R5P — see
+correction above) to the same clean cohort, using the identical method
+already used once on the corrupted cohort (PR #534) —
 `scripts/research/apply_wr_r15_te_r5p_to_clean_benchmark_v2.py`, same join
 keys, same `grade()` function, same PLAY/LEAN/STRONG gate. Nothing re-fit.
 
 WR-R15 applied to 3,079 rows (2023-2024 WR receptions/rec_yards only, per
-its own frozen validation contract — no 2025 extrapolation). TE-R5P applied
+its own frozen validation contract — no 2025 extrapolation). TE-R5 applied
 to 2,662 rows (2023-2025 TE receptions/rec_yards, full overlap).
 
-## Before (base ensemble) vs after (WR-R15/TE-R5P applied), STRONG tier
+## Before (base ensemble) vs after (WR-R15/TE-R5 applied), STRONG tier
 
 | market | model_mae before | model_mae after | vegas_mae before | vegas_mae after | ROI before | ROI after | still loses to Vegas |
 |---|---:|---:|---:|---:|---:|---:|:---|
@@ -29,12 +39,14 @@ Your researched layers **measurably help** — this is real, not nothing.
 Model MAE drops on both touched markets, ROI improves on both (receptions
 nearly halves its loss, -0.87% to -0.49%), and this happens on the clean,
 correctly-matched cohort, not a corrupted one. That's genuine evidence
-WR-R15 and TE-R5P are doing what they were built to do: making the
-projection more accurate than the base ensemble underneath them.
+WR-R15 and TE-R5 are doing what they were built to do: making the
+projection more accurate than the base ensemble underneath them. (TE-R5P
+itself, the actually-promoted TE model, has not yet been tested this way —
+see correction above.)
 
 **They do not yet flip the verdict.** The model still loses to Vegas on raw
 MAE in both markets after the improvement, and ROI is still negative in
-every tier. WR-R15/TE-R5P narrow the gap to Vegas; they do not close it,
+every tier. WR-R15/TE-R5 narrow the gap to Vegas; they do not close it,
 at least not on this benchmark's fidelity-limited probability layer (same
 disclosed caveat as before: `Normal(mean=proj, sd=component_sd)`, not a
 full replay of the promoted stack's actual simulation distribution — this
