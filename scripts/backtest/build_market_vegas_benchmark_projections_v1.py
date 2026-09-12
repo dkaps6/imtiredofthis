@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from scripts.backtest.benchmark_identity_v1 import assert_benchmark_identity
 from scripts.backtest.component_predictions import build_actual_rows, build_mc_predictions
 from scripts.backtest.historical_context import build_historical_context_bundle
 from scripts.backtest.walk_forward import _exact_week, _parse_weeks
@@ -86,7 +87,7 @@ def main() -> int:
         z = mc.merge(actual, on=["team", "player_clean_key", "market"], how="inner")
         z["season"] = a.season
         z["week"] = week
-        keep = [c for c in ["season", "week", "team", "player_clean_key", "market", "mc_proj", "actual"] if c in z.columns]
+        keep = [c for c in ["season", "week", "team", "opponent", "player_clean_key", "market", "mc_proj", "actual"] if c in z.columns]
         traces.append(z[keep])
         print(f"[market_vegas_benchmark] {a.season} W{week:02d}: {len(z)} projected rows")
 
@@ -97,10 +98,25 @@ def main() -> int:
 
     sk = sched.copy()
     sk.columns = [str(c).strip().lower() for c in sk.columns]
-    sk = sk.loc[sk.season.eq(a.season)] if "season" in sk.columns else sk
-    keep_sk = [c for c in ["week", "team", "game_id"] if c in sk.columns]
+    sk = sk.loc[pd.to_numeric(sk.season, errors="coerce").eq(a.season)] if "season" in sk.columns else sk
+    keep_sk = [c for c in ["week", "team", "opponent", "game_id"] if c in sk.columns]
     sk = sk[keep_sk].drop_duplicates(["week", "team"])
+    if "opponent" in long.columns and "opponent" in sk.columns:
+        sk = sk.rename(columns={"opponent": "schedule_opponent"})
     long = long.merge(sk, on=["week", "team"], how="left", validate="many_to_one")
+    if "schedule_opponent" in long.columns:
+        mismatch = long["opponent"].astype(str).ne(long["schedule_opponent"].astype(str))
+        if mismatch.any():
+            sample = long.loc[mismatch, ["season", "week", "team", "opponent", "schedule_opponent", "game_id"]].head(20).to_dict(orient="records")
+            raise RuntimeError(f"benchmark component/schedule opponent mismatch: {sample}")
+        long = long.drop(columns=["schedule_opponent"])
+
+    assert_benchmark_identity(
+        long,
+        label=f"market Vegas benchmark projections {a.season}",
+        require_team=True,
+        require_opponent=("opponent" in long.columns),
+    )
 
     a.out.parent.mkdir(parents=True, exist_ok=True)
     long.to_csv(a.out, index=False)
