@@ -8,7 +8,7 @@ This is the index. Per-position detail lives in:
 - `WR_GAP_FINDINGS.md`, `WR_R3_COMBINED_CANDIDATE_STATUS.md`
 - `TE_GAP_FINDINGS.md`, `QB_PD3_AND_TE_R1_RECOVERED_RESULTS.md`
 - `COVERAGE_V2_EFFICIENCY_SIGNAL_NOVELTY_CHECK.md`
-- **`SITUATIONAL_EDGE_HUNT_V1_RESULT.md`, `SITUATIONAL_EDGE_HUNT_V2_WR_R15_TE_R5P_APPLIED.md`, `RECEPTIONS_UNDER_HOLDOUT_TEST_V1_RESULT.md` — read all three in order. The candidate downgrades under a real holdout test; see below.**
+- **`SITUATIONAL_EDGE_HUNT_V1_RESULT.md`, `SITUATIONAL_EDGE_HUNT_V2_WR_R15_TE_R5P_APPLIED.md`, `RECEPTIONS_UNDER_HOLDOUT_TEST_V1_RESULT.md`, `FULL_MARKET_HOLDOUT_SCAN_V1_ANALYSIS.md` — read in order. The candidate downgrades under a real holdout test, and the full-market scan surfaced more candidates with a live suspicion they're a measurement artifact, not signal. See below.**
 - **Cross-audited jointly with GPT-5.6 in [GitHub Issue #535](https://github.com/dkaps6/imtiredofthis/issues/535) — that thread is now the live source of truth for this candidate's status, more current than this file.**
 
 ## Situational edge hunt (new, most actionable finding of the whole sweep)
