@@ -26,6 +26,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import norm
 
+from scripts.backtest.benchmark_identity_v1 import assert_benchmark_identity
 from scripts.backtest.grade_historical_market_vegas_benchmark_v1 import select_one_book_row
 from scripts.operations.grade_market_track_record_v1 import american_profit, num, outcome_side
 
@@ -64,6 +65,22 @@ def signal(ev: float, prob_edge: float) -> str:
 
 
 def grade(proj: pd.DataFrame, props: pd.DataFrame, *, proj_col: str = "ensemble_proj") -> tuple[pd.DataFrame, pd.DataFrame]:
+    # Identity is a hard precondition, not a post-hoc diagnostic. This prevents
+    # a plausible wrong-season game_id from silently joining to a real but
+    # unrelated sportsbook row, which corrupted the original benchmark.
+    assert_benchmark_identity(
+        proj,
+        label="full-stack Vegas projection input",
+        require_team=True,
+        require_opponent=("opponent" in {str(c).strip().lower() for c in proj.columns}),
+    )
+    assert_benchmark_identity(
+        props,
+        label="historical market props input",
+        require_team=False,
+        require_opponent=False,
+    )
+
     selected = select_one_book_row(props)
     join_cols = ["game_id", "player_clean_key", "market"]
     keep = join_cols + ["book", "line", "over_odds", "under_odds", "player"]
@@ -72,6 +89,13 @@ def grade(proj: pd.DataFrame, props: pd.DataFrame, *, proj_col: str = "ensemble_
     z = proj.merge(selected, on=join_cols, how="inner")
     if z.empty:
         return z, pd.DataFrame()
+
+    assert_benchmark_identity(
+        z,
+        label="post-join full-stack Vegas detail",
+        require_team=True,
+        require_opponent=("opponent" in {str(c).strip().lower() for c in z.columns}),
+    )
 
     z["proj"] = num(z[proj_col])
     z["actual"] = num(z.actual)
