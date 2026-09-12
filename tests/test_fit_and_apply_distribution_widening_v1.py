@@ -213,3 +213,77 @@ def test_cli_rejects_identical_fit_and_test_season(tmp_path):
     )
     assert result.returncode != 0
     assert "must differ" in result.stderr
+
+
+def test_cli_ignores_out_of_scope_markets_with_degenerate_mc_arrays(tmp_path):
+    # Reproduces the exact real-data CI failure on PR #548: the clean
+    # projection trace also carries rush_att (an ensemble-weight
+    # consistency-check market, never one of the 5 markets this experiment
+    # is scoped to). A zero-carry player there has an all-zero MC array
+    # with a nonzero calibrated proj -- rescale_outcomes can't align it,
+    # correctly tripping the mean-alignment guard. The fix is for main() to
+    # filter to MARKETS before fitting/applying, not to weaken the guard.
+    proj, meta, props, dist_dir = _build_fixture(tmp_path)
+
+    out_of_scope_arr = np.zeros(2000)
+    np.savez(dist_dir / "2024_week_02.npz", z000000=out_of_scope_arr)
+    proj = pd.concat(
+        [
+            proj,
+            pd.DataFrame(
+                [
+                    {
+                        "season": 2024, "week": 2, "team": "KC", "opponent": "BAL",
+                        "player_clean_key": "zerocarry", "market": "rush_att",
+                        "game_id": "2024_02_KC_BAL", "proj": 0.0535, "ensemble_proj": 0.0535,
+                        "actual": 0.0,
+                    }
+                ]
+            ),
+        ],
+        ignore_index=True,
+    )
+    meta = pd.concat(
+        [
+            meta,
+            pd.DataFrame(
+                [
+                    {
+                        "season": 2024, "week": 2, "team": "KC", "opponent": "BAL",
+                        "player": "zerocarry", "player_clean_key": "zerocarry", "market": "rush_att",
+                        "event_id": "e2", "array_key": "z000000", "draws": 2000,
+                        "mc_mean": 0.0, "mc_sd": 0.0, "npz_file": "2024_week_02.npz",
+                    }
+                ]
+            ),
+        ],
+        ignore_index=True,
+    )
+
+    proj_path = tmp_path / "projection_trace.csv"
+    props_path = tmp_path / "props.csv"
+    proj.to_csv(proj_path, index=False)
+    props.to_csv(props_path, index=False)
+    meta.to_csv(dist_dir / "combined_metadata.csv", index=False)
+
+    env = dict(os.environ)
+    env["PYTHONPATH"] = _REPO_ROOT + os.pathsep + env.get("PYTHONPATH", "")
+    out_dir = tmp_path / "out"
+    result = subprocess.run(
+        [
+            sys.executable,
+            os.path.join(_REPO_ROOT, "scripts/research/fit_and_apply_distribution_widening_v1.py"),
+            "--projection-file", str(proj_path),
+            "--distribution-dir", str(dist_dir),
+            "--props", str(props_path),
+            "--fit-season", "2024",
+            "--test-season", "2025",
+            "--out-dir", str(out_dir),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    summary = pd.read_csv(out_dir / "widening_test2025_fit2024_summary.csv")
+    assert "rush_att" not in set(summary["market"])

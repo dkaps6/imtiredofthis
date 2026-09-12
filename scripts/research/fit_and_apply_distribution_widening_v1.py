@@ -252,11 +252,21 @@ def main() -> int:
     proj = _read(a.projection_file, "projection trace")
     if "ensemble_proj" in proj.columns and "proj" not in proj.columns:
         proj["proj"] = proj["ensemble_proj"]
+    # Scope strictly to the 5 markets this experiment is designed for (per
+    # DISTRIBUTION_WIDENING_V1_PLAN.md). The clean projection trace also
+    # carries rush_att (a consistency-check market from the ensemble-weight
+    # work, never part of this experiment) -- including it here would widen
+    # a market this design never intended to touch, and it degenerately
+    # exposes literal zero-carry players (MC array all zeros) that the
+    # mean-alignment guard below correctly refuses to silently pass through.
+    proj = proj.loc[proj["market"].isin(MARKETS)].copy()
     meta = pd.concat(
         [pd.read_csv(p) for p in sorted(a.distribution_dir.glob("*_metadata.csv"))], ignore_index=True,
     )
     meta = _canon_keys(meta)
+    meta = meta.loc[meta["market"].isin(MARKETS)].copy()
     props = _read(a.props, "historical props")
+    props = props.loc[props["market"].isin(MARKETS)].copy()
 
     a.out_dir.mkdir(parents=True, exist_ok=True)
 
