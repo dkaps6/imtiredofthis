@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Apply the promoted WR-R15/TE-R5P entitlement models to the existing
-full-stack Vegas benchmark cohort, closing the gap disclosed in
-data/backtests/full_stack_vegas_benchmark_v1/README.md ("WR-R15/TE-R5P are
-not yet included in the non_qb numbers").
+"""Apply the promoted WR-R15 model and the TE-R5 scientific-decomposition
+model (NOT the later production-certified TE-R5P -- see Issue #535
+checkpoint 28) to the existing full-stack Vegas benchmark cohort, closing
+the gap disclosed in data/backtests/full_stack_vegas_benchmark_v1/README.md
+("WR-R15/TE-R5P are not yet included in the non_qb numbers").
 
 Research only. Reuses the exact grading arithmetic from
 scripts/backtest/grade_full_stack_vegas_benchmark_v1.py (same PLAY/LEAN gate,
@@ -78,7 +79,16 @@ def main() -> int:
     proj.loc[wr_mask, "adjustment_applied"] = "WR_R15_WR1_ANCHORED_PARTICIPATION"
     proj = proj.drop(columns=["wr_r15_value"])
 
-    # --- TE-R5P: 2023-2025, TE position, receptions/rec_yards ---
+    # --- TE-R5: 2023-2025, TE position, receptions/rec_yards ---
+    # NOTE: this is TE-R5 (run 34132127351/artifact 10022512461), the earlier
+    # scientific-decomposition model, NOT the later production-certified
+    # TE-R5P (authorized_by_run 34152797603/artifact 10029942404, see
+    # data/models/te_r5p_production_model_v1/te_r5p_production_model_v1.json).
+    # Mislabeled as "TE-R5P" here and throughout this script's original
+    # output/docs until Issue #535 checkpoint 28 caught it -- corrected in
+    # place; see docs/research/overnight/README_OVERNIGHT_2026_09_12.md for
+    # the disclosure. A true TE-R5P historical replay is separate follow-up
+    # work, not this script.
     te = pd.read_csv(TE_R5_CASEBOOK, low_memory=False)
     te_rec = te[["team", "player_key", "season", "week", "candidate_receptions_r5"]].rename(
         columns={"player_key": "player_clean_key", "candidate_receptions_r5": "te_r5_value"}
@@ -93,11 +103,11 @@ def main() -> int:
     proj = proj.merge(te_long, on=["team", "player_clean_key", "season", "week", "market"], how="left")
     te_mask = proj["position"].eq("TE") & proj["te_r5_value"].notna()
     proj.loc[te_mask, "adjusted_proj"] = proj.loc[te_mask, "te_r5_value"]
-    proj.loc[te_mask, "adjustment_applied"] = "TE_R5P_PARTICIPATION_ENTITLEMENT"
+    proj.loc[te_mask, "adjustment_applied"] = "TE_R5_PARTICIPATION_ENTITLEMENT"
     proj = proj.drop(columns=["te_r5_value"])
 
     print(f"WR-R15 applied to {int(wr_mask.sum())} rows (2023-2024 WR receptions/rec_yards)")
-    print(f"TE-R5P applied to {int(te_mask.sum())} rows (2023-2025 TE receptions/rec_yards)")
+    print(f"TE-R5 applied to {int(te_mask.sum())} rows (2023-2025 TE receptions/rec_yards)")
 
     # Re-grade with the adjusted projection, using the exact same grading
     # arithmetic as the committed benchmark.
