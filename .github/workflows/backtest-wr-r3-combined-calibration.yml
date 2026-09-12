@@ -53,8 +53,9 @@ jobs:
         run: |
           mkdir -p evidence/r3
           gh run download 34064572328 --repo "${GITHUB_REPOSITORY}" --name wr-r3-player-error-persistence --dir evidence/r3
-          test -s evidence/r3/wr_r3_walkforward_casebook.csv
-          test -s evidence/r3/wr_r3_result.json
+          find evidence/r3 -maxdepth 6 -type f -print
+          test "$(find evidence/r3 -type f -name wr_r3_walkforward_casebook.csv | wc -l)" -eq 1
+          test "$(find evidence/r3 -type f -name wr_r3_result.json | wc -l)" -eq 1
 
       - name: Rebuild exact M38 historical inputs and baseline across 2020-2025
         shell: bash
