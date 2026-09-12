@@ -27,7 +27,11 @@ from scripts.backtest.grade_full_stack_vegas_benchmark_v1 import (
 from scripts.operations.grade_market_track_record_v1 import american_profit, num, outcome_side
 from scripts.utils.canonical_names import canon_team
 
-KEYS = ["season", "week", "team", "player_clean_key", "market"]
+# Opponent is intentionally part of the distribution-lineage key.  Team/week
+# functionally identifies it in the authoritative schedule, but carrying it here
+# makes a stale or wrong-opponent sidecar fail closed instead of joining anyway.
+KEYS = ["season", "week", "team", "opponent", "player_clean_key", "market"]
+EXPECTED_DRAWS = 2000
 
 
 def rescale_outcomes(outcomes: np.ndarray, target_mean: float) -> np.ndarray:
@@ -47,11 +51,18 @@ def empirical_over_probability(outcomes: np.ndarray, line: float) -> float:
 
 def _canon_keys(frame: pd.DataFrame) -> pd.DataFrame:
     x = frame.copy()
+    required = set(KEYS)
+    missing = sorted(required - set(x.columns))
+    if missing:
+        raise RuntimeError(f"distribution identity missing columns: {missing}")
     x["season"] = pd.to_numeric(x["season"], errors="raise").astype(int)
     x["week"] = pd.to_numeric(x["week"], errors="raise").astype(int)
     x["team"] = x["team"].map(canon_team)
+    x["opponent"] = x["opponent"].map(canon_team)
     x["player_clean_key"] = x["player_clean_key"].astype(str)
     x["market"] = x["market"].astype(str).str.lower()
+    if x["team"].eq("").any() or x["opponent"].eq("").any():
+        raise RuntimeError("distribution identity contains uncanonicalizable team/opponent")
     return x
 
 
@@ -97,6 +108,28 @@ def _summarize(z: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(summaries)
 
 
+def _assert_same_base_cohort(comparison: pd.DataFrame) -> None:
+    """Require identical unfiltered rows while allowing the translator to move tiers.
+
+    LEAN/STRONG membership is an experimental outcome, not an identity invariant.
+    Requiring equal tier counts would make the experiment fail precisely when the
+    new probability translator changes calibration/selectivity as intended.
+    """
+    base = comparison.loc[comparison["tier"].eq("ALL_NO_FILTER")]
+    if base.empty:
+        raise RuntimeError("same-row A/B contract violated: missing ALL_NO_FILTER cohort")
+    equal = (
+        base["matched_rows_legacy"].astype(int)
+        == base["matched_rows_empirical"].astype(int)
+    )
+    if not equal.all():
+        bad = base.loc[
+            ~equal,
+            ["market", "matched_rows_legacy", "matched_rows_empirical"],
+        ].to_dict("records")
+        raise RuntimeError(f"same-row A/B contract violated in unfiltered cohort: {bad}")
+
+
 def _probability_diagnostics(detail: pd.DataFrame, translator: str) -> pd.DataFrame:
     rows: list[dict] = []
     scopes = list(detail.market.unique()) + ["ALL_MARKETS"]
@@ -121,7 +154,7 @@ def _probability_diagnostics(detail: pd.DataFrame, translator: str) -> pd.DataFr
                 "brier_over": brier,
                 "log_loss_over": log_loss,
                 "mean_translator_sd": float(num(g[sd_col]).mean()) if len(g) and sd_col in g else np.nan,
-                "residual_std": float((num(g.actual) - num(g.proj)).std(ddof=0)) if len(g) else np.nan,
+                "residual_std": float((num(g.actual) - num(g.proj)).std(ddof=1)) if len(g) > 1 else np.nan,
             }
         )
     return pd.DataFrame(rows)
@@ -157,12 +190,25 @@ def grade_empirical(
     *,
     distribution_dir: Path,
     proj_col: str = "ensemble_proj",
+    expected_draws: int = EXPECTED_DRAWS,
 ):
     legacy_detail, legacy_summary = legacy_grade(proj, props, proj_col=proj_col)
     if legacy_detail.empty:
         raise RuntimeError("legacy benchmark produced no matched rows")
 
+    # Preserve the OLD arm row-level values before NEW overwrites probability,
+    # side, signal, and unit-result columns. These deltas are required to isolate
+    # the translator on identical rows rather than only compare aggregate tables.
     detail = _canon_keys(legacy_detail)
+    detail["legacy_p_over"] = num(detail["p_over"])
+    detail["legacy_p_under"] = num(detail["p_under"])
+    detail["legacy_side"] = detail["side"].astype(str)
+    detail["legacy_signal"] = detail["signal"].astype(str)
+    detail["legacy_best_ev"] = num(detail["best_ev"])
+    detail["legacy_prob_edge"] = num(detail["prob_edge"])
+    detail["legacy_unit_result"] = num(detail["unit_result"])
+    detail["legacy_component_sd"] = num(detail["component_sd"])
+
     meta = _load_metadata(distribution_dir)
     detail = detail.merge(
         meta[KEYS + ["array_key", "npz_file", "draws", "mc_mean", "mc_sd"]],
@@ -170,10 +216,23 @@ def grade_empirical(
         how="left",
         validate="one_to_one",
     )
+    if len(detail) != len(legacy_detail):
+        raise RuntimeError(
+            f"same-row A/B contract violated by distribution join: "
+            f"legacy={len(legacy_detail)} joined={len(detail)}"
+        )
     missing = int(detail["array_key"].isna().sum())
     if missing:
         sample = detail.loc[detail["array_key"].isna(), KEYS].head(10).to_dict("records")
         raise RuntimeError(f"{missing} graded rows lack defensible simulation lineage: {sample}")
+
+    draws = pd.to_numeric(detail["draws"], errors="raise").astype(int)
+    if not draws.eq(int(expected_draws)).all():
+        bad = sorted(draws.loc[~draws.eq(int(expected_draws))].unique().tolist())
+        raise RuntimeError(
+            f"empirical reconstruction iteration policy violated: "
+            f"expected={int(expected_draws)} found={bad}"
+        )
 
     cache: dict[str, object] = {}
     p_over: list[float] = []
@@ -183,6 +242,8 @@ def grade_empirical(
 
     for _, row in detail.iterrows():
         file_name = str(row["npz_file"])
+        if Path(file_name).name != file_name:
+            raise RuntimeError(f"invalid distribution shard path in metadata: {file_name}")
         if file_name not in cache:
             path = distribution_dir / file_name
             if not path.exists():
@@ -190,6 +251,12 @@ def grade_empirical(
             cache[file_name] = np.load(path, allow_pickle=False)
         arr = np.asarray(cache[file_name][str(row["array_key"])], dtype=float)
 
+        if len(arr) != int(expected_draws):
+            raise RuntimeError(
+                f"distribution draw-count mismatch {row['season']} W{row['week']} "
+                f"{row['team']} {row['player_clean_key']} {row['market']}: "
+                f"{len(arr)} != {int(expected_draws)}"
+            )
         stored_mean = float(np.mean(arr))
         expected_mc = float(row["mc_proj"])
         delta = abs(stored_mean - expected_mc)
@@ -201,7 +268,8 @@ def grade_empirical(
 
         adjusted = rescale_outcomes(arr, float(row["proj"]))
         p_over.append(empirical_over_probability(adjusted, float(row["line"])))
-        model_sd.append(float(np.std(adjusted, ddof=0)))
+        # Production run_pricing_v2 records sample SD (ddof=1).
+        model_sd.append(float(np.std(adjusted, ddof=1)) if len(adjusted) > 1 else 0.0)
         aligned_mean.append(float(np.mean(adjusted)))
         mean_delta.append(abs(float(np.mean(adjusted)) - float(row["proj"])))
 
@@ -248,6 +316,13 @@ def grade_empirical(
     detail["vegas_error"] = num(detail.line) - num(detail.actual)
     detail["translator"] = "EMPIRICAL_MC_RESCALED_V1"
 
+    detail["delta_p_over_empirical_minus_legacy"] = detail["p_over"] - detail["legacy_p_over"]
+    detail["delta_best_ev_empirical_minus_legacy"] = detail["best_ev"] - detail["legacy_best_ev"]
+    detail["delta_prob_edge_empirical_minus_legacy"] = detail["prob_edge"] - detail["legacy_prob_edge"]
+    detail["delta_unit_result_empirical_minus_legacy"] = detail["unit_result"] - detail["legacy_unit_result"]
+    detail["side_changed"] = detail["side"].ne(detail["legacy_side"]).astype(int)
+    detail["signal_changed"] = detail["signal"].ne(detail["legacy_signal"]).astype(int)
+
     empirical_summary = _summarize(detail)
     comparison = legacy_summary.merge(
         empirical_summary,
@@ -256,11 +331,10 @@ def grade_empirical(
         suffixes=("_legacy", "_empirical"),
         validate="one_to_one",
     )
-    if not (
-        comparison["matched_rows_legacy"].astype(int)
-        == comparison["matched_rows_empirical"].astype(int)
-    ).all():
-        raise RuntimeError("same-row A/B contract violated: matched row counts differ")
+    _assert_same_base_cohort(comparison)
+    comparison["coverage_row_delta_empirical_minus_legacy"] = (
+        comparison["matched_rows_empirical"] - comparison["matched_rows_legacy"]
+    )
     comparison["roi_delta_empirical_minus_legacy"] = (
         comparison["roi_per_unit_empirical"] - comparison["roi_per_unit_legacy"]
     )
@@ -305,6 +379,7 @@ def main() -> int:
     ap.add_argument("--props", type=Path, required=True)
     ap.add_argument("--distribution-dir", type=Path, required=True)
     ap.add_argument("--out-dir", type=Path, required=True)
+    ap.add_argument("--expected-draws", type=int, default=EXPECTED_DRAWS)
     a = ap.parse_args()
 
     proj = pd.concat([pd.read_csv(Path(p)) for p in a.projection_file], ignore_index=True)
@@ -322,6 +397,7 @@ def main() -> int:
         props,
         distribution_dir=a.distribution_dir,
         proj_col=a.proj_col,
+        expected_draws=a.expected_draws,
     )
 
     a.out_dir.mkdir(parents=True, exist_ok=True)
@@ -337,6 +413,11 @@ def main() -> int:
     print(comparison.to_string(index=False))
     print("\n=== PROBABILITY DIAGNOSTICS ===")
     print(diagnostics.to_string(index=False))
+    print(
+        "\n=== SAME-ROW CHANGE COUNTS ===\n"
+        f"rows={len(detail)} side_changed={int(detail['side_changed'].sum())} "
+        f"signal_changed={int(detail['signal_changed'].sum())}"
+    )
     return 0
 
 
