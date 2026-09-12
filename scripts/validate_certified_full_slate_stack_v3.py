@@ -38,6 +38,31 @@ def main() -> int:
         return rc
 
     adapter = _load(ADAPTER)
+
+    if adapter.get("disposition") == "RB_R22_NOT_APPLICABLE_OUTSIDE_WEEK1":
+        pricing = _load(PRICING)
+        lineage = _load(LINEAGE)
+        payload = _load(OUT)
+        _require(pricing.get("disposition") == "RB_R22_NOT_APPLICABLE_OUTSIDE_WEEK1", "R22 pricing lineage disposition mismatch for non-Week-1 run")
+        _require(lineage.get("rb_r22_receiving_tail_consumed") is False, "market lineage incorrectly claims R22 consumed outside Week 1")
+        payload.update({
+            "disposition": "FULL_SLATE_CERTIFIED_STACK_READY_M38_R15_TE_R5P_C2_R22_NOT_APPLICABLE_WITH_DECLARED_SCIENCE_LIMITATIONS",
+            "rb_r22_receiving_tail_active": False,
+            "rb_r22_version": VERSION,
+            "rb_r22_week1_only": True,
+            "rb_r22_not_applicable_week": int(adapter.get("week", -1)),
+            "remaining_science_lanes": [
+                "RB receiving entitlement/receptions and receiving-yard mean refinement (R22 covers Week-1 tail shape only)",
+                "WR/TE receiving efficiency and distribution calibration",
+                "shared QB-receiver C2 conservation",
+                "dedicated anytime-TD probability calibration",
+                "game-level moneyline/spread/total model built from certified joint football state",
+            ],
+        })
+        OUT.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print("[certified_full_slate_stack_v3] " + json.dumps(payload, sort_keys=True))
+        return 0
+
     pricing = _load(PRICING)
     lineage = _load(LINEAGE)
     payload = _load(OUT)

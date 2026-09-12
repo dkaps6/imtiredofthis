@@ -176,21 +176,28 @@ def price(season: int) -> pd.DataFrame:
                 ).dropna().astype(int).tolist()
             )
         )
-        if rush_weeks != [1]:
-            raise RuntimeError(
-                "promoted RB production pricing is currently locked to Week 1; "
-                f"refusing unsupported RB/FB rush_yards weeks={rush_weeks}"
+        non_week1_weeks = [w for w in rush_weeks if w != 1]
+        if non_week1_weeks:
+            # RB P3 is Week-1-only (docs/production/RB_P3_WEEK1_PROMOTION_2026_09_05.md).
+            # Fail closed on the RB route only: these rows price from the calibrated
+            # generic ensemble mean instead of silently inheriting the Week-1 P3
+            # correction. This must never abort pricing for every other market/week.
+            print(
+                "[pricing] promoted RB P3 synthesis is Week-1-only; "
+                f"rush_yards weeks={non_week1_weeks} will price from the calibrated "
+                "generic ensemble mean instead of P3"
             )
-        rb_context = load_rb_context()
-        ctx = rb_context.loc[
-            rb_context["season"].eq(int(season)) & rb_context["week"].eq(1)
-        ].copy()
-        if ctx.empty:
-            raise RuntimeError(f"promoted RB context has no season={season} Week-1 rows")
-        print(
-            f"[pricing] promoted RB P3 synthesis enabled version={sorted(ctx['rb_synthesis_version'].unique().tolist())} "
-            f"players={ctx['player_clean_key'].nunique()} teams={ctx['team'].nunique()}"
-        )
+        if 1 in rush_weeks:
+            rb_context = load_rb_context()
+            ctx = rb_context.loc[
+                rb_context["season"].eq(int(season)) & rb_context["week"].eq(1)
+            ].copy()
+            if ctx.empty:
+                raise RuntimeError(f"promoted RB context has no season={season} Week-1 rows")
+            print(
+                f"[pricing] promoted RB P3 synthesis enabled version={sorted(ctx['rb_synthesis_version'].unique().tolist())} "
+                f"players={ctx['player_clean_key'].nunique()} teams={ctx['team'].nunique()}"
+            )
 
     sims = simulate(df)
     rows, missed = [], []
@@ -284,7 +291,7 @@ def price(season: int) -> pd.DataFrame:
         # calibrated rushing distribution. Current PlayerForm position is the
         # routing authority; eligible RB/FB rows remain fail-closed on P3 lookup.
         row_position = _position_family(row)
-        if market == "rush_yards" and row_position in {"RB", "FB"}:
+        if market == "rush_yards" and row_position in {"RB", "FB"} and _runtime_week(row) == 1:
             try:
                 if str(ens["ensemble_status"]) != "calibrated":
                     raise RuntimeError(

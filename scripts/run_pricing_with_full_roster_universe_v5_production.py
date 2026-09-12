@@ -24,6 +24,7 @@ from scripts.modeling.rb_r26_receptions_production_adapter_v1 import (
     VERSION as R26_VERSION,
     apply_rb_r26_receptions_production,
 )
+from scripts.runtime_context import resolve_week
 
 OUT = Path("outputs/props_priced_clean.csv")
 R26_PRICING_AUDIT = Path("data/rb_r26_receptions_pricing_lineage_audit.json")
@@ -37,6 +38,15 @@ def _simulate_v5(metrics: pd.DataFrame, *, iterations=None, seed=None, allocatio
     weeks = pd.to_numeric(metrics["week"], errors="coerce").dropna().astype(int).unique().tolist()
     if len(seasons) != 1 or len(weeks) != 1:
         raise RuntimeError(f"Full Slate V5 requires one season/week, got seasons={seasons} weeks={weeks}")
+    if weeks[0] != 1:
+        # RB R26 receptions refinement is Week-1-only, same as RB P3 rushing.
+        # Fail closed on the R26 route only: other weeks keep the pre-R26 (V4)
+        # receptions result instead of aborting the rest of Full Slate pricing.
+        print(
+            "[pricing] promoted RB R26 receptions refinement is Week-1-only; "
+            f"week={weeks[0]} keeps the pre-R26 receptions result"
+        )
+        return v4_result
     adapted, _, _ = apply_rb_r26_receptions_production(
         v4_result,
         metrics,
@@ -48,7 +58,20 @@ def _simulate_v5(metrics: pd.DataFrame, *, iterations=None, seed=None, allocatio
     return adapted
 
 
-def _stamp_r26_pricing_lineage() -> dict:
+def _stamp_r26_pricing_lineage(*, week: int) -> dict:
+    if int(week) != 1:
+        payload = {
+            "disposition": "RB_R26_NOT_APPLICABLE_OUTSIDE_WEEK1",
+            "integration_valid": False,
+            "version": R26_VERSION,
+            "week": int(week),
+            "note": (
+                "RB R26 receptions refinement is Week-1-only; this week's receptions "
+                "pricing uses the pre-R26 (V4) result, not a silent Week-1 fallback."
+            ),
+        }
+        R26_PRICING_AUDIT.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return payload
     if not OUT.is_file() or not R26_AUDIT_JSON.is_file() or not R26_TRACE_CSV.is_file():
         raise RuntimeError("V5 R26 pricing lineage missing priced output or R26 audit/trace")
     priced = pd.read_csv(OUT, low_memory=False)
@@ -156,11 +179,16 @@ def _stamp_r26_pricing_lineage() -> dict:
     return payload
 
 
-def _clarify_r22_lineage_after_r26() -> None:
+def _clarify_r22_lineage_after_r26(*, week: int) -> None:
     path = v4.PRICING_AUDIT
     if not path.is_file():
         raise RuntimeError("V5 expected R22 pricing lineage audit")
     payload = json.loads(path.read_text(encoding="utf-8"))
+    if int(week) != 1:
+        # R22 is Week-1-only, same as R26; nothing to clarify outside Week 1.
+        if payload.get("disposition") != v4.R22_NOT_APPLICABLE:
+            raise RuntimeError("V5 R22 pricing lineage disposition mismatch for non-Week-1 run")
+        return
     if payload.get("disposition") != "RB_R22_WEEK1_RECEIVING_TAIL_PRICING_LINEAGE_PASS":
         raise RuntimeError("V5 R22 pricing lineage lost certified disposition")
     payload["downstream_r26_receptions_adapter_present"] = True
@@ -179,9 +207,10 @@ def main() -> int:
     rc = int(base.main())
     if rc != 0:
         return rc
-    r22_payload = v4._stamp_pricing_lineage()
-    _clarify_r22_lineage_after_r26()
-    r26_payload = _stamp_r26_pricing_lineage()
+    week = int(resolve_week())
+    r22_payload = v4._stamp_pricing_lineage(week=week)
+    _clarify_r22_lineage_after_r26(week=week)
+    r26_payload = _stamp_r26_pricing_lineage(week=week)
     print("[rb_receiving_tail_pricing_lineage] " + json.dumps(r22_payload, sort_keys=True))
     print("[rb_r26_receptions_pricing_lineage] " + json.dumps(r26_payload, sort_keys=True))
     return 0

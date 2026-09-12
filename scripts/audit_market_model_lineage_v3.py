@@ -45,6 +45,28 @@ def main() -> int:
         return rc
 
     adapter = _load(ADAPTER)
+
+    if adapter.get("disposition") == "RB_R22_NOT_APPLICABLE_OUTSIDE_WEEK1":
+        # R22 is Week-1-only. Outside Week 1 there is nothing to adapt or
+        # relabel here -- leave the V2 lineage (already written by v2.main())
+        # untouched and just record that R22 was not applicable this week.
+        payload = _load(JSON)
+        payload.update({
+            "rb_r22_receiving_tail_consumed": False,
+            "rb_r22_version": VERSION,
+            "rb_r22_week1_only": True,
+            "rb_r22_not_applicable_week": int(adapter.get("week", -1)),
+            "rb_r22_receiving_mean_preserved": True,
+            "rb_r22_receptions_preserved": True,
+            "rb_r22_non_rb_preserved": True,
+            "rb_r22_sportsbook_inputs_used": False,
+            "rb_r22_future_outcomes_used": False,
+            "lineage_version": "MARKET_MODEL_LINEAGE_V3_R22_NOT_APPLICABLE_OUTSIDE_WEEK1",
+        })
+        JSON.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print("[market_model_lineage_v3] " + json.dumps(payload, sort_keys=True))
+        return 0
+
     pricing = _load(PRICING)
     trace = pd.read_csv(TRACE, low_memory=False)
 

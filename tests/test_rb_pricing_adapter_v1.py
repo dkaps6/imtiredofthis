@@ -79,9 +79,26 @@ def test_canonical_pricing_and_full_slate_are_wired_to_p3():
     assert "load_rb_context" in pricing
     assert "lookup_rb_projection" in pricing
     assert "target_mean = rb_synthesis_proj" in pricing
-    assert "promoted RB production pricing is currently locked to Week 1" in pricing
+    assert "promoted RB P3 synthesis is Week-1-only" in pricing
+    assert 'and _runtime_week(row) == 1' in pricing
     assert "Build promoted RB P3 from production-eligible current roles" in workflow
-    assert "final RB model projection is not the promoted P3 synthesis mean" in workflow
+    assert "final Week-1 RB model projection is not the promoted P3 synthesis mean" in workflow
+
+
+def test_non_week1_rb_route_fails_closed_without_aborting_full_slate():
+    """RB P3 is Week-1-only. A non-Week-1 run must never abort the whole
+    workflow (every market, every other week of the season) just because the
+    RB rushing-yards route isn't qualified yet -- it must fail closed on the
+    RB route only and let everything else price normally."""
+    pricing = Path("scripts/run_pricing_v2.py").read_text(encoding="utf-8")
+    workflow = Path(".github/workflows/full-slate.yml").read_text(encoding="utf-8")
+    assert "refusing unsupported RB/FB rush_yards weeks" not in pricing
+    assert 'if [ "${WEEK_RESOLVED}" != "1" ]; then' in workflow
+    rb_step = workflow.split("Build promoted RB P3 from production-eligible current roles")[1]
+    rb_step = rb_step.split("- name:")[0]
+    assert "exit 0" in rb_step
+    assert "exit 1" not in rb_step
+    assert "non-Week-1 RB/FB rows incorrectly claimed P3" in workflow
 
 
 def test_live_week1_context_prices_end_to_end_without_sportsbook_model_input():
