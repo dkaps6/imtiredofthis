@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 import requests
 
+from scripts.backtest.benchmark_identity_v1 import assert_benchmark_identity
 from scripts.backtest.prepare_free_qb_prop_archive import (
     BOOKS,
     FULL_GAME_PERIODS,
@@ -183,6 +184,13 @@ def main() -> int:
     args.out_dir.mkdir(parents=True, exist_ok=True)
     raw_projections = pd.concat([pd.read_csv(Path(p)) for p in args.projection_file], ignore_index=True)
     raw_projections.columns = [str(c).strip().lower() for c in raw_projections.columns]
+    assert_benchmark_identity(
+        raw_projections,
+        label="projection input to free market archive",
+        require_team=True,
+        require_opponent=("opponent" in raw_projections.columns),
+    )
+
     # The projection trace has one row per (season, week, team, player_clean_key,
     # market) -- market/mc_proj/actual are irrelevant to identity reconciliation
     # and are reattached later when grading. Only a single identity row per
@@ -207,6 +215,13 @@ def main() -> int:
     match_stats: dict = {}
     if not props.empty:
         matched, match_stats = attach_projection_games_per_market(props, projections)
+        if not matched.empty:
+            assert_benchmark_identity(
+                matched,
+                label="matched historical market props",
+                require_team=False,
+                require_opponent=False,
+            )
 
     pd.DataFrame(audits).to_csv(args.out_dir / "market_archive_source_audit.csv", index=False)
     out_cols = [
