@@ -1,0 +1,104 @@
+name: Fair Probability x Heldout Weight Interaction V1
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/research/run_fair_prob_weight_interaction_v1.py"
+      - "tests/test_fair_prob_weight_interaction_v1.py"
+      - "docs/research/FAIR_PROB_WEIGHT_INTERACTION_V1_PLAN.md"
+      - ".github/workflows/research-fair-prob-weight-interaction-v1.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  interaction:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyarrow tabulate
+
+      - name: Run focused interaction tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest -q tests/test_fair_prob_weight_interaction_v1.py tests/test_empirical_fair_prob_v1.py
+
+      - name: Create frozen artifact workspace
+        run: mkdir -p /tmp/interaction/fairprob/distributions /tmp/interaction/weights /tmp/interaction/out
+
+      - name: Download canonical fair-probability compact artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: historical-fair-probability-reconstruction-v1
+          path: /tmp/interaction/fairprob
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34712931786
+
+      - name: Download canonical raw simulation shards
+        uses: actions/download-artifact@v4
+        with:
+          name: historical-simulated-outcome-shards-v1
+          path: /tmp/interaction/fairprob/distributions
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34712931786
+
+      - name: Download full-precision 2023 weight-fit provenance
+        uses: actions/download-artifact@v4
+        with:
+          name: ensemble-weight-2023-fit-v1
+          path: /tmp/interaction/weights
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34715724032
+
+      - name: Verify published weights are six-decimal fit artifact
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          full = pd.read_csv('/tmp/interaction/weights/ensemble_weights_2023_fit_v1.csv').set_index('market')
+          pub = pd.read_csv('docs/research/overnight/ensemble_weights_2023_fit_v1.csv').set_index('market')
+          cols = ['mc_weight','ml_weight','state_weight']
+          expected = full[cols].round(6)
+          got = pub[cols].astype(float)
+          if not expected.equals(got):
+              delta = (expected - got).abs().max().max()
+              raise RuntimeError(f'published six-decimal weights do not reproduce fit artifact rounding: {delta}')
+          print('published six-decimal heldout weights verified against full-precision fit artifact')
+          PY
+
+      - name: Run frozen 2x2 interaction
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/run_fair_prob_weight_interaction_v1.py \
+            --projection-trace /tmp/interaction/fairprob/full_stack_projection_trace_clean_v1.csv \
+            --props /tmp/interaction/fairprob/market_archive/historical_market_props.csv \
+            --distribution-dir /tmp/interaction/fairprob/distributions \
+            --heldout-weights docs/research/overnight/ensemble_weights_2023_fit_v1.csv \
+            --current-weights data/model_ensemble_weights.csv \
+            --reference-grade-dir /tmp/interaction/fairprob/grade \
+            --a1-reference docs/research/overnight/ensemble_weight_2023_holdout_summary.csv \
+            --out-dir /tmp/interaction/out
+
+      - name: Upload interaction result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fair-prob-weight-interaction-v1
+          path: /tmp/interaction/out/*.csv
+          if-no-files-found: warn
+          retention-days: 14
