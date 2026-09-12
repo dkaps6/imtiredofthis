@@ -6,6 +6,7 @@ on:
     paths:
       - "scripts/research/persist_historical_simulated_outcomes_v1.py"
       - "scripts/research/grade_empirical_fair_prob_v1.py"
+      - "scripts/research/summarize_empirical_fair_prob_segments_v1.py"
       - "tests/test_empirical_fair_prob_v1.py"
       - ".github/workflows/research-historical-fair-probability-reconstruction-v1.yml"
 
@@ -140,6 +141,16 @@ jobs:
             --projection-file /tmp/fair_prob/full_stack_projection_trace_clean_v1.csv \
             --props /tmp/fair_prob/market_archive/historical_market_props.csv \
             --distribution-dir /tmp/fair_prob/distributions \
+            --out-dir /tmp/fair_prob/grade
+
+      - name: Emit frozen season market side and probability-bin diagnostics
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/summarize_empirical_fair_prob_segments_v1.py \
+            --projection-file /tmp/fair_prob/full_stack_projection_trace_clean_v1.csv \
+            --props /tmp/fair_prob/market_archive/historical_market_props.csv \
+            --empirical-detail /tmp/fair_prob/grade/empirical_fair_prob_detail.csv \
             --out-dir /tmp/fair_prob/grade
 
       - name: Upload compact research result
