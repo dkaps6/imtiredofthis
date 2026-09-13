@@ -37,15 +37,16 @@ jobs:
                   resp = requests.get(url, headers=HDRS, timeout=30)
                   print(f"status={resp.status_code} len={len(resp.text)}")
                   if resp.status_code != 200:
-                      print(f"non-200, first 500 chars:\n{resp.text[:500]}")
+                      print(f"non-200 status, skipping table parse")
                       return
                   try:
-                      tables = pd.read_html(resp.text)
+                      import io
+                      tables = pd.read_html(io.StringIO(resp.text))
                       print(f"pd.read_html found {len(tables)} tables")
                       for i, t in enumerate(tables[:6]):
                           print(f"  table[{i}] shape={t.shape} cols={list(t.columns)[:12]}")
                   except Exception as e:
-                      print(f"pd.read_html failed: {e}")
+                      print(f"pd.read_html failed: {type(e).__name__}: {str(e)[:150]}")
                   soup = BeautifulSoup(resp.text, "html.parser")
                   next_data = soup.find("script", {"id": "__NEXT_DATA__"})
                   print(f"__NEXT_DATA__ present: {bool(next_data)}")
