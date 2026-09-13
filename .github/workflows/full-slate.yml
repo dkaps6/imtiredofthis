@@ -474,6 +474,14 @@ jobs:
           print(f"CERTIFIED LIVE PRICING rows={len(df)} players={df.player.nunique()} QB_side_rows={len(qb)} RB_FB_rush_side_rows={len(rb)} non_RB_rush_side_rows={len(nonrb)}")
           EOF
 
+      - name: Apply final-board-only verified prop quarantines
+        if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' }}
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/quarantine_final_priced_props_v1.py
+          test -s data/final_priced_props_quarantine_status.json
+
       - name: Strict repository audits
         run: |
           export PYTHONPATH="${PWD}"
