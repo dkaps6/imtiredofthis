@@ -8,6 +8,7 @@ from scripts.research.diagnose_market_implied_game_script_v1 import (
     add_rolling_baseline,
     build_cohort,
     fit_and_evaluate,
+    load_market_schedule,
 )
 
 
@@ -70,14 +71,47 @@ def test_build_cohort_drops_rows_missing_baseline_or_market():
     assert cohort["market_team_implied"].notna().all()
 
 
-def test_market_blend_beats_historical_only_baseline_out_of_sample():
+def test_market_blend_beats_fitted_baseline_only_out_of_sample():
+    """The correct comparator is the fitted-baseline-only arm, not the raw
+    unfit baseline -- otherwise the market arm gets undue credit merely for
+    fitting the baseline's own scale/bias (Codex P1 on PR #558).
+    """
     team_weekly = _team_weekly(n_weeks=25)
     market = _market_from_team_weekly(team_weekly)
     cohort = build_cohort(team_weekly, market, "plays_est")
     result = fit_and_evaluate(cohort, target_col="plays_est", fit_season=2024, test_season=2025)
     assert result["status"] == "OK"
-    assert result["baseline_plus_market_mae"] < result["baseline_only_mae"]
-    assert result["mae_improvement"] > 0
+    for col in ["raw_baseline_mae", "fitted_baseline_only_mae", "baseline_plus_market_mae"]:
+        assert col in result
+    assert result["baseline_plus_market_mae"] < result["fitted_baseline_only_mae"]
+    assert result["incremental_market_mae_improvement"] > 0
+
+
+def test_load_market_schedule_favors_home_team_when_spread_positive(monkeypatch):
+    """nflverse's spread_line is positive when the home team is favored
+    (verified against real 2023 results, e.g. DAL home spread_line=+17.5,
+    won 49-17) -- the favored side's implied total must be the larger half
+    of the game total, not the smaller half (Codex P1 on PR #558).
+    """
+    fake_schedule = pd.DataFrame([{
+        "season": 2023, "week": 10, "game_type": "REG",
+        "home_team": "DAL", "away_team": "NYG",
+        "spread_line": 17.5, "total_line": 38.5,
+    }])
+
+    import sys
+    import types
+
+    fake_module = types.ModuleType("nflreadpy")
+    fake_module.load_schedules = lambda season: fake_schedule
+    monkeypatch.setitem(sys.modules, "nflreadpy", fake_module)
+
+    market = load_market_schedule([2023])
+    home = market.loc[market.team.eq("DAL")].iloc[0]
+    away = market.loc[market.team.eq("NYG")].iloc[0]
+    assert home["market_team_implied"] > away["market_team_implied"]
+    assert home["market_team_implied"] == pytest.approx((38.5 + 17.5) / 2.0)
+    assert away["market_team_implied"] == pytest.approx((38.5 - 17.5) / 2.0)
 
 
 def test_fit_and_evaluate_fails_closed_on_insufficient_rows():

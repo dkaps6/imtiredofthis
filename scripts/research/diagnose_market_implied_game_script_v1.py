@@ -16,8 +16,22 @@ historical-tendency approach would predict" -- not a literal reimplementation
 of estimate_plays()/success_diff(), which would require the full TeamContext
 pipeline. Disclosed simplification, not a hidden one.
 
-Genuine two-directional holdout: fit the historical-vs-market blend weight
-on one season, freeze, evaluate blind on the other.
+Single-direction holdout only (fit 2024, freeze, evaluate blind on 2025):
+a genuine reverse direction (fit 2025, test 2024) would require the training
+fold's own rolling-history feature to never draw on the test season's
+outcomes, which it cannot avoid here since 2025's early weeks' prior-8
+history reaches directly into 2024 -- exactly the season being held out in
+that direction. Fixing that would require pulling additional backstop
+seasons (2022/2023) purely for history, which this diagnostic does not
+attempt; noted as a real limitation rather than silently run anyway.
+
+Three arms compared on the 2025 holdout, all frozen on 2024 only:
+(1) the raw historical rolling baseline itself (no fit at all);
+(2) that same baseline re-fit through a plain linear regression (isolates
+    how much of any apparent improvement is just correcting the baseline's
+    own scale/bias, independent of the market columns);
+(3) the baseline plus market_team_implied/market_abs_spread, fit jointly.
+Incremental market value is (2) vs (3), not (1) vs (3).
 
 Research only. No production/model/weight/threshold change.
 """
@@ -59,9 +73,17 @@ def load_market_schedule(seasons: list[int]) -> pd.DataFrame:
         for _, r in s.iterrows():
             total = num(pd.Series([r.get("total_line")])).iloc[0]
             spread = num(pd.Series([r.get("spread_line")])).iloc[0]
+            # nflverse's spread_line convention (verified empirically against
+            # real 2023 results, e.g. DAL home spread_line=+17.5, won 49-17):
+            # POSITIVE means the HOME team is favored by that many points,
+            # negative means home is the underdog. team_spread below is
+            # therefore "points this team is favored by" for each side
+            # (positive=favored), and the favored team's implied total must
+            # be the LARGER half of the total -- (total + team_spread) / 2,
+            # not (total - team_spread) / 2.
             for side, team, opp in [("home", r["home_team"], r["away_team"]), ("away", r["away_team"], r["home_team"])]:
                 team_spread = spread if side == "home" else (-spread if pd.notna(spread) else np.nan)
-                implied = (total - team_spread) / 2.0 if pd.notna(total) and pd.notna(team_spread) else np.nan
+                implied = (total + team_spread) / 2.0 if pd.notna(total) and pd.notna(team_spread) else np.nan
                 rows.append({
                     "season": int(r["season"]), "week": int(r["week"]),
                     "team": canon_team(team), "opponent": canon_team(opp),
@@ -103,26 +125,43 @@ def fit_and_evaluate(cohort: pd.DataFrame, *, target_col: str, fit_season: int, 
         return {"target": target_col, "fit_season": fit_season, "test_season": test_season, "status": "INSUFFICIENT_ROWS"}
 
     baseline_col = f"{target_col}_prior_avg"
-
-    # Arm 1: historical-only baseline, carried through unchanged (no fit needed --
-    # it IS the rolling average itself).
-    baseline_pred_test = test[baseline_col].to_numpy(dtype=float)
-    baseline_mae = float(np.mean(np.abs(baseline_pred_test - test[target_col].to_numpy(dtype=float))))
-
-    # Arm 2: historical baseline + market signal, linear blend fit on train only, frozen.
-    x_train = train[[baseline_col, "market_team_implied", "market_abs_spread"]].to_numpy(dtype=float)
     y_train = train[target_col].to_numpy(dtype=float)
+    y_test = test[target_col].to_numpy(dtype=float)
+
+    # Arm 1: raw historical rolling baseline, unfit, carried through as-is.
+    raw_baseline_pred = test[baseline_col].to_numpy(dtype=float)
+    raw_baseline_mae = float(np.mean(np.abs(raw_baseline_pred - y_test)))
+
+    # Arm 2: the SAME baseline re-fit through a plain linear regression
+    # (intercept + scale correction only, no market columns). This is the
+    # correct comparator for isolating market value -- Arm 3 must beat this,
+    # not the unfit Arm 1, since Arm 3 also gets to fit the baseline's own
+    # scale/bias and would otherwise get undue credit for doing so.
+    x_train_baseline_only = train[[baseline_col]].to_numpy(dtype=float)
+    baseline_model = LinearRegression()
+    baseline_model.fit(x_train_baseline_only, y_train)
+    x_test_baseline_only = test[[baseline_col]].to_numpy(dtype=float)
+    fitted_baseline_pred = baseline_model.predict(x_test_baseline_only)
+    fitted_baseline_mae = float(np.mean(np.abs(fitted_baseline_pred - y_test)))
+
+    # Arm 3: baseline + market signal, fit jointly, frozen, applied blind.
+    x_train = train[[baseline_col, "market_team_implied", "market_abs_spread"]].to_numpy(dtype=float)
     model = LinearRegression()
     model.fit(x_train, y_train)
     x_test = test[[baseline_col, "market_team_implied", "market_abs_spread"]].to_numpy(dtype=float)
     blended_pred_test = model.predict(x_test)
-    blended_mae = float(np.mean(np.abs(blended_pred_test - test[target_col].to_numpy(dtype=float))))
+    blended_mae = float(np.mean(np.abs(blended_pred_test - y_test)))
 
     return {
         "target": target_col, "fit_season": fit_season, "test_season": test_season, "status": "OK",
         "train_rows": int(len(train)), "test_rows": int(len(test)),
-        "baseline_only_mae": baseline_mae, "baseline_plus_market_mae": blended_mae,
-        "mae_improvement": baseline_mae - blended_mae,
+        "raw_baseline_mae": raw_baseline_mae,
+        "fitted_baseline_only_mae": fitted_baseline_mae,
+        "baseline_plus_market_mae": blended_mae,
+        # The real incremental-value comparison: fitted baseline-only vs
+        # baseline+market, both given equal opportunity to correct the
+        # baseline's own scale/bias.
+        "incremental_market_mae_improvement": fitted_baseline_mae - blended_mae,
         "market_coefficients": {
             "baseline_weight": float(model.coef_[0]),
             "market_implied_weight": float(model.coef_[1]),
@@ -154,13 +193,19 @@ def main() -> int:
 
     market = load_market_schedule(seasons)
 
+    # Single direction only: fit_season must be the earlier season, so the
+    # training fold's rolling history (which crosses season boundaries) can
+    # never reach into the test season. The reverse direction cannot make
+    # this guarantee with only two seasons of history available -- see the
+    # module docstring.
+    fit_season, test_season = seasons[0], seasons[1]
+
     a.out_dir.mkdir(parents=True, exist_ok=True)
     results = []
     for target_col in ["plays_est", "dropback_rate"]:
         cohort = build_cohort(team_weekly, market, target_col)
         cohort.to_csv(a.out_dir / f"market_game_script_cohort_{target_col}.csv", index=False)
-        for fit_season, test_season in [(seasons[0], seasons[1]), (seasons[1], seasons[0])]:
-            results.append(fit_and_evaluate(cohort, target_col=target_col, fit_season=fit_season, test_season=test_season))
+        results.append(fit_and_evaluate(cohort, target_col=target_col, fit_season=fit_season, test_season=test_season))
 
     out = pd.DataFrame(results)
     out.to_csv(a.out_dir / "market_game_script_diagnosis_summary.csv", index=False)
