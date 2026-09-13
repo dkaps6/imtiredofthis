@@ -13,7 +13,7 @@ from __future__ import annotations
 import pandas as pd
 
 from scripts.runtime_context import resolve_prior_season, resolve_season, resolve_slate_date, resolve_week
-from scripts.utils.current_roles_v1 import resolve_current_roles_path
+from scripts.utils.current_roles_v1 import DEFAULT_ACTIVE_ROLES
 import scripts.run_player_form_v2_loader as loader
 
 
@@ -62,7 +62,20 @@ def publish_strict_prior_history() -> None:
 
 
 def main() -> int:
-    path = resolve_current_roles_path(require_active=True)
+    # PlayerForm's slate universe (scripts/slate_universe_v2.py) is explicitly
+    # contracted to be independent of sportsbook/kickoff-timing gating:
+    # "sportsbook availability NEVER defines which players the football model
+    # knows." full-slate.yml sets ACTIVE_ROLES_CSV job-wide to the
+    # kickoff-timing-gated roles_current_production_eligible_v1.csv for other,
+    # genuinely availability-aware stages (RB P3, QB C2). Resolving through
+    # that env var here broke PlayerForm's own contract and crashed its
+    # 24-team floor once more than ~8 games were simultaneously withheld
+    # around a live kickoff wave (2026-09-13). Use the reconciled-but-not-
+    # timing-gated active roster directly -- deliberately bypassing
+    # ACTIVE_ROLES_CSV for this call site only.
+    path = DEFAULT_ACTIVE_ROLES
+    if not path.exists() or path.stat().st_size <= 0:
+        raise RuntimeError(f"reconciled active roles missing/empty: {path}")
     loader.runner.pf.ROLES = path
     print(f"[current_roles_v1] PlayerForm roles={path}")
     rc = int(loader.main())
