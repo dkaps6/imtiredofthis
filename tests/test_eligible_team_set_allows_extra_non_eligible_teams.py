@@ -12,31 +12,32 @@ def _roles_csv(tmp_path, teams):
     return path
 
 
-def test_exact_match_still_passes(tmp_path):
+def test_exact_match_passes(tmp_path):
     path = _roles_csv(tmp_path, ELIGIBLE_12)
     result = validate_current_team_set(ELIGIBLE_12, active_roles_path=path, label="test universe")
     assert result["mode"] == "EXPLICIT_CURRENT_AVAILABILITY"
-    assert result["extra_non_eligible_teams"] == []
+    assert result["expected_teams"] == 12
+    assert result["observed_teams"] == 12
+    assert result["canonical_games"] == 6
 
 
-def test_observed_superset_of_eligible_now_passes(tmp_path):
-    """This is the real production incident (2026-09-13): PlayerForm's
-    football simulation universe correctly covers all 32 teams (its own
-    documented contract is sportsbook/kickoff-timing independence), while
-    only 12 teams are currently certified-eligible mid-kickoff-wave. That
-    must not be fatal -- pricing narrows to eligible teams later, separately.
+def test_observed_superset_of_certified_fails_closed(tmp_path):
+    """Do not expand a shrinking current Sunday slate back to the full league.
+
+    The weekly schedule can remain 32-team authoritative, but football artifacts
+    guarded by this helper must stay on the certified current team universe.
+    Sportsbook posting coverage remains a separate downstream concern.
     """
     path = _roles_csv(tmp_path, ELIGIBLE_12)
     all_32 = ELIGIBLE_12 + ["HOU", "IND", "JAX", "KC", "LAC", "LAR", "LV", "MIA", "MIN", "NE", "NO", "NYG", "NYJ", "PHI", "PIT", "SEA", "SF", "TB", "TEN", "WAS"]
-    result = validate_current_team_set(all_32, active_roles_path=path, label="football simulation universe")
-    assert result["mode"] == "EXPLICIT_CURRENT_AVAILABILITY"
-    assert set(result["extra_non_eligible_teams"]) == set(all_32) - set(ELIGIBLE_12)
+    with pytest.raises(RuntimeError, match=r"!= certified eligible teams; missing=\[\] extra="):
+        validate_current_team_set(all_32, active_roles_path=path, label="football simulation universe")
 
 
-def test_missing_eligible_team_still_fails_closed(tmp_path):
+def test_missing_certified_team_fails_closed(tmp_path):
     path = _roles_csv(tmp_path, ELIGIBLE_12)
     observed = [t for t in ELIGIBLE_12 if t != "GB"]
-    with pytest.raises(RuntimeError, match=r"missing certified eligible teams: \['GB'\]"):
+    with pytest.raises(RuntimeError, match=r"missing=\['GB'\] extra=\[\]"):
         validate_current_team_set(observed, active_roles_path=path, label="test universe")
 
 
