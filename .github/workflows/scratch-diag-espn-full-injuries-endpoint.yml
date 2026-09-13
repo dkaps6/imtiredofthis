@@ -1,0 +1,79 @@
+# scratch: confirmed the per-event summary injuries field is capped at
+# exactly 5 entries per team across ALL 16 games today -- a page-size limit,
+# not the real inactive count. Checking whether ESPN's core API (team-level
+# injuries endpoint, which supports pagination) returns the true unbounded
+# list instead. Fetch-only, zero credits.
+name: Scratch Diagnose ESPN Full Injuries Endpoint
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/scratch-diag-espn-full-injuries-endpoint.yml'
+
+jobs:
+  diag:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install requests
+      - name: Try ESPN core API team injuries endpoint (ATL, team id lookup first)
+        run: |
+          python3 -c "
+          import requests, json
+
+          # ATL team id via site API teams list
+          r = requests.get('https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams', timeout=30)
+          d = r.json()
+          teams = d.get('sports',[{}])[0].get('leagues',[{}])[0].get('teams',[])
+          atl_id = None
+          for t in teams:
+              team = t.get('team',{})
+              if team.get('abbreviation') == 'ATL':
+                  atl_id = team.get('id')
+                  break
+          print('ATL team id:', atl_id)
+
+          if atl_id:
+              # core API team injuries endpoint (unbounded, item-based)
+              url = f'https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/teams/{atl_id}/injuries'
+              r2 = requests.get(url, timeout=30)
+              print('core injuries status:', r2.status_code)
+              d2 = r2.json()
+              print('top-level keys:', sorted(d2.keys()) if isinstance(d2, dict) else type(d2))
+              print('count:', d2.get('count'), 'pageCount:', d2.get('pageCount'), 'pageSize:', d2.get('pageSize'))
+              items = d2.get('items', [])
+              print('items returned:', len(items))
+              if items:
+                  print('first item keys:', sorted(items[0].keys()) if isinstance(items[0], dict) else type(items[0]))
+                  print(json.dumps(items[0], indent=2)[:1500])
+                  # follow one \$ref to see the actual injury detail shape
+                  ref = items[0].get('\$ref')
+                  if ref:
+                      r3 = requests.get(ref, timeout=30)
+                      print()
+                      print('followed ref status:', r3.status_code)
+                      print(json.dumps(r3.json(), indent=2)[:2000])
+          "
+      - name: Try limit query param on the site summary endpoint
+        run: |
+          python3 -c "
+          import requests
+          r = requests.get('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard', timeout=30)
+          events = r.json().get('events', [])
+          atl_game = next((e for e in events if 'ATL' in e.get('shortName','') and 'PIT' in e.get('shortName','')), None)
+          if atl_game:
+              for limit in [5, 20, 50]:
+                  r2 = requests.get(f\"https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event={atl_game['id']}&limit={limit}\", timeout=30)
+                  d2 = r2.json()
+                  inj = d2.get('injuries', [])
+                  counts = [len(b.get('injuries', [])) for b in inj]
+                  print(f'limit={limit} counts={counts}')
+          "
