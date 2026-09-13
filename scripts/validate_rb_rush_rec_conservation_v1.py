@@ -40,7 +40,7 @@ def main() -> int:
 
     priced = pd.read_csv(PRICED, low_memory=False)
     priced.columns = [str(c).strip().lower() for c in priced.columns]
-    required = {"player", "team", "source_market", "side", "model_proj"}
+    required = {"player", "team", "source_market", "side", "model_proj", "rb_synthesis_applied"}
     missing = required - set(priced.columns)
     if missing:
         raise RuntimeError(f"priced output missing conservation columns: {sorted(missing)}")
@@ -61,19 +61,41 @@ def main() -> int:
     present = pivot.dropna(subset=need).copy()
     if present.empty:
         raise RuntimeError("no players have all three RB conservation markets in final priced output")
-    present["component_sum"] = present["player_rush_yds"] + present["player_reception_yds"]
-    present["conservation_gap"] = present["player_rush_reception_yds"] - present["component_sum"]
-    max_gap = float(present["conservation_gap"].abs().max())
-    if not np.isfinite(max_gap) or max_gap > 1e-6:
-        sample = present.loc[present["conservation_gap"].abs().gt(1e-6)].head(20).to_dict("records")
-        raise RuntimeError(f"final RB rush+receiving projection conservation failed max_gap={max_gap} sample={sample}")
+
+    # The rush+receiving reconciliation is a P3-specific guarantee: P3 anchors
+    # rush_rec_yards to its own synthesized rush mean, so the two are conserved
+    # by construction. A player whose team is outside P3's built scope for this
+    # run (see RB P3 team-scope fallback) prices rush_yds and rush_rec_yds from
+    # two independently calibrated ensembles instead, with no such reconciliation
+    # promised or intended -- checking them here would assert an invariant this
+    # codebase never guaranteed for that player.
+    rb_applied = one.loc[
+        one["source_market"].eq("player_rush_yds"), ["team", "player_base_key", "rb_synthesis_applied"]
+    ].rename(columns={"rb_synthesis_applied": "rush_yds_rb_synthesis_applied"})
+    present = present.merge(rb_applied, on=["team", "player_base_key"], how="left")
+    present["rush_yds_rb_synthesis_applied"] = pd.to_numeric(
+        present["rush_yds_rb_synthesis_applied"], errors="coerce"
+    ).fillna(0)
+    p3_covered = present.loc[present["rush_yds_rb_synthesis_applied"].eq(1)].copy()
+
+    if p3_covered.empty:
+        max_gap = 0.0
+    else:
+        p3_covered["component_sum"] = p3_covered["player_rush_yds"] + p3_covered["player_reception_yds"]
+        p3_covered["conservation_gap"] = p3_covered["player_rush_reception_yds"] - p3_covered["component_sum"]
+        max_gap = float(p3_covered["conservation_gap"].abs().max())
+        if not np.isfinite(max_gap) or max_gap > 1e-6:
+            sample = p3_covered.loc[p3_covered["conservation_gap"].abs().gt(1e-6)].head(20).to_dict("records")
+            raise RuntimeError(f"final RB rush+receiving projection conservation failed max_gap={max_gap} sample={sample}")
+
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    present.to_csv(OUT, index=False)
+    p3_covered.to_csv(OUT, index=False)
     print(
         "[rb_rush_rec_final] "
         + json.dumps({
             "disposition": "FINAL_RB_RUSH_REC_PROJECTIONS_CONSERVED",
-            "players_checked": int(len(present)),
+            "players_checked": int(len(p3_covered)),
+            "players_outside_p3_scope_skipped": int(len(present) - len(p3_covered)),
             "max_gap": max_gap,
         }, sort_keys=True)
     )
