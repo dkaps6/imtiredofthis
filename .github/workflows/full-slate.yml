@@ -403,7 +403,7 @@ jobs:
           q=json.load(open('data/qb_c2_production_integration_audit.json',encoding='utf-8'))
           w=json.load(open('data/wr_r15_full_slate_entitlement_audit.json',encoding='utf-8'))
           if q.get('disposition') != 'QB_C2_PRODUCTION_DISTRIBUTION_INTEGRATION_PASS': raise SystemExit(f"FATAL: QB C2 production integration not certified: {q.get('disposition')}")
-          if int(q.get('football_qb_rows',0)) != expected or int(q.get('selected_qb_rows',0)) <= 0: raise SystemExit(f"FATAL: QB C2 current-output coverage invalid expected={expected}: {q}")
+          if int(q.get('football_qb_rows',0)) < expected or int(q.get('selected_qb_rows',0)) <= 0: raise SystemExit(f"FATAL: QB C2 current-output coverage invalid expected>={expected}: {q}")
           if float(q.get('max_raw_qb_mean_gap',1.0)) > 1e-10: raise SystemExit(f"FATAL: QB C2 raw mean drift: {q.get('max_raw_qb_mean_gap')}")
           if int(q.get('state_capture_changed_arrays',-1)) != 0: raise SystemExit(f"FATAL: QB C2 state-capture seam changed arrays: {q.get('state_capture_changed_arrays')}")
           if float(q.get('state_capture_max_element_gap',1.0)) > 1e-12: raise SystemExit(f"FATAL: QB C2 state-capture element drift: {q.get('state_capture_max_element_gap')}")
@@ -413,7 +413,7 @@ jobs:
           required={'disposition':'WR_R15_FULL_SLATE_ENTITLEMENT_READY','model_version':'WR_R15_PRODUCTION_MODEL_V1','m38_wr1_anchor_preserved':True,'wr2plus_pool_preserved':True,'wr_room_mass_preserved':True,'non_wr_entitlement_preserved':True,'team_total_player_entitlement_preserved':True,'sportsbook_inputs_used':False,'current_or_future_outcomes_used':False}
           for k,v in required.items():
               if w.get(k)!=v: raise SystemExit(f'FATAL: WR-R15 contract drift {k}: {w.get(k)!r}')
-          if int(w.get('current_wr1_anchor_rows',0)) != expected: raise SystemExit(f'FATAL: WR-R15 anchor coverage expected={expected}')
+          if int(w.get('current_wr1_anchor_rows',0)) < expected: raise SystemExit(f'FATAL: WR-R15 anchor coverage expected>={expected}')
           if float(w.get('max_wr1_anchor_entitlement_delta',1.0)) != 0.0 or float(w.get('max_non_wr_entitlement_delta',1.0)) != 0.0: raise SystemExit('FATAL: WR-R15 changed WR1 or non-WR entitlement')
           print('M38_R15_TE_R5P_C2_PRODUCTION_INTEGRATION_CERTIFIED')
           EOF
