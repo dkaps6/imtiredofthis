@@ -55,6 +55,33 @@ jobs:
           echo
           echo "=== ATL rows in roles_ourlads.csv ==="
           grep -i ",ATL," data/roles_ourlads.csv || grep -i "ATL" data/roles_ourlads.csv | head -20
+          echo
+          echo "=== ANY ATL props rows at all (any player/market) ==="
+          grep -i ",ATL," outputs/props_raw.csv | head -10 || echo "no ATL rows in outputs/props_raw.csv"
+          echo
+          echo "=== distinct teams present in outputs/props_raw.csv ==="
+          python3 -c "
+          import pandas as pd
+          df = pd.read_csv('outputs/props_raw.csv', low_memory=False)
+          df.columns = [c.lower() for c in df.columns]
+          col = 'team_abbr' if 'team_abbr' in df.columns else ('team' if 'team' in df.columns else None)
+          print('team col:', col)
+          if col:
+              print(sorted(df[col].dropna().astype(str).unique()))
+          "
+          echo
+          echo "=== metrics_ready.csv ATL QB rows ==="
+          python3 -c "
+          import pandas as pd
+          df = pd.read_csv('data/metrics_ready.csv', low_memory=False)
+          df.columns = [c.lower() for c in df.columns]
+          if {'team','position'}.issubset(df.columns):
+              atl_qb = df[(df['team'].astype(str)=='ATL') & (df['position'].astype(str).str.upper()=='QB')]
+              cols = [c for c in ['player','team','position','depth_role','role'] if c in atl_qb.columns]
+              print(atl_qb[cols].to_string())
+          else:
+              print('missing team/position columns; have:', list(df.columns)[:20])
+          "
 
       - name: Apply certified availability-aware current-output coverage seams
         run: |
