@@ -67,10 +67,19 @@ def _validate_qb_c2_coverage_contract(c2: dict, stamp: dict, *, priced_qbs: int 
 
     if football_qbs <= 0 or selected_football_qbs <= 0 or selected_football_qbs > football_qbs:
         raise RuntimeError(f"QB C2 production coverage invalid: {c2}")
-    if stamped_football_qbs != football_qbs or current_scope != football_qbs:
+    if stamped_football_qbs != football_qbs:
         raise RuntimeError(
             "QB C2 football universe differs between production audit and pricing lineage stamp; "
-            f"production={football_qbs} stamp={stamped_football_qbs} scope={current_scope}"
+            f"production={football_qbs} stamp={stamped_football_qbs}"
+        )
+    # current_team_scope_expected is the certified-eligible team count, which
+    # legitimately shrinks over the course of a game day as more games kick
+    # off -- it is a subset of the constant football-only universe, never
+    # required to equal it. Only a scope that has somehow grown past the full
+    # 32-team universe would be a real bug.
+    if current_scope > football_qbs:
+        raise RuntimeError(
+            f"QB C2 current team scope exceeds the football-only universe; scope={current_scope} football={football_qbs}"
         )
     if stamped_selected_football != selected_football_qbs:
         raise RuntimeError(
