@@ -55,6 +55,7 @@ jobs:
           export PYTHONPATH="${PWD}"
           python scripts/run_pricing_with_full_roster_universe_v3.py --season "${SEASON}"
           test -s outputs/props_priced_clean.csv
+          python scripts/stamp_qb_c2_pricing_lineage_v1.py
           python scripts/validate_rb_rush_rec_conservation_v1.py
           python scripts/audit_market_model_lineage_v2.py
       - name: Apply final-board-only verified prop quarantines
