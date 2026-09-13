@@ -297,7 +297,7 @@ def _v3_contract_findings() -> list[dict[str, str]]:
         "scripts/run_player_form_current_roles_v1.py": (
             "import scripts.run_player_form_v2_loader as loader",
             "loader.main()",
-            "resolve_current_roles_path",
+            "DEFAULT_ACTIVE_ROLES",
             "strict_prior_logs",
             "publish_strict_prior_history",
             "w.ge(week)",
