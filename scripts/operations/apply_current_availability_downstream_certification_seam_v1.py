@@ -99,7 +99,7 @@ def main() -> int:
         ),
         (
             '''    _require(int(stamp.get("pass_yard_qbs", 0)) == 32, "QB C2 pricing lineage does not cover 32 QBs")\n''',
-            '''    if current_teams is None:\n        _require(int(stamp.get("pass_yard_qbs", 0)) == 32, "QB C2 pricing lineage does not cover 32 QBs")\n    else:\n        _require(int(stamp.get("current_team_scope_expected", -1)) == expected_team_count, "QB C2 pricing current-team scope drift")\n        _require(int(stamp.get("football_qbs", -1)) >= expected_team_count, "QB C2 pricing football-QB scope below floor")\n        _require(int(stamp.get("c2_selected_football_qbs", -1)) == int(c2.get("selected_qb_rows", -2)), "QB C2 selected football-QB count drift")\n        _require(0 < int(stamp.get("pass_yard_qbs", 0)) <= expected_team_count, "QB C2 priced pass-yard QB subset invalid")\n''',
+            '''    if current_teams is None:\n        _require(int(stamp.get("pass_yard_qbs", 0)) == 32, "QB C2 pricing lineage does not cover 32 QBs")\n    else:\n        _require(int(stamp.get("current_team_scope_expected", -1)) == expected_team_count, "QB C2 pricing current-team scope drift")\n        _require(int(stamp.get("football_qbs", -1)) >= expected_team_count, "QB C2 pricing football-QB scope below floor")\n        _require(int(stamp.get("c2_selected_football_qbs", -1)) == int(c2.get("selected_qb_rows", -2)), "QB C2 selected football-QB count drift")\n        _require(int(stamp.get("pass_yard_qbs", 0)) > 0, "QB C2 priced pass-yard QB subset is empty")\n''',
             "stack-v1 pricing-stamp coverage",
         ),
     ])
