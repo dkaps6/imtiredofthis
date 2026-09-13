@@ -1,0 +1,102 @@
+name: RB-PD2 Multi-Season Current Route Replication V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-pd2-multiseason-p3-equivalent-v1
+    paths:
+      - ".github/workflows/research-rb-pd2-multiseason-current-route-v1.yml"
+      - "scripts/research/evaluate_rb_pd2_multiseason_current_route_v1.py"
+      - "docs/research/RB_PD2_MULTISEASON_P3_EQUIVALENT_REPLICATION_V1_PLAN.md"
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M95Q_RUN_ID: "33450395426"
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout frozen research branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pandas==1.5.3 numpy==1.26.4 scikit-learn==1.5.2
+
+      - name: Download exact M95Q M91 temporal artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/m91
+          for SEASON in 2020 2021 2022 2023 2024; do
+            mkdir -p "evidence/m91/${SEASON}"
+            gh run download "$M95Q_RUN_ID" \
+              --repo "$GITHUB_REPOSITORY" \
+              --name "m95q-m91-${SEASON}" \
+              --dir "evidence/m91/${SEASON}"
+            test -s "evidence/m91/${SEASON}/component_predictions.csv"
+            test -s "evidence/m91/${SEASON}/historical_input_validation.csv"
+          done
+
+      - name: Download final M95Q parity evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/m95q
+          gh run download "$M95Q_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name migration-95q-rb-expanded-historical-stable-workhorse \
+            --dir evidence/m95q
+          test -s evidence/m95q/m95q_disposition.csv
+          test -s evidence/m95q/m95q_2024_m91_universe_parity.csv
+          test -s evidence/m95q/m95q_2024_parity_audit.csv
+
+      - name: Compile frozen evaluator
+        run: |
+          python -m py_compile scripts/research/evaluate_rb_pd2_multiseason_current_route_v1.py
+
+      - name: Run frozen 2021-2024 replication
+        run: |
+          rm -rf data/backtests/rb_pd2_multiseason_current_route_v1
+          python scripts/research/evaluate_rb_pd2_multiseason_current_route_v1.py \
+            --root evidence/m91 \
+            --parity-root evidence/m95q \
+            --out-dir data/backtests/rb_pd2_multiseason_current_route_v1
+
+      - name: Show result unchanged
+        if: always()
+        run: |
+          echo "=== disposition ==="
+          cat data/backtests/rb_pd2_multiseason_current_route_v1/rb_pd2_multiseason_result.json 2>/dev/null || true
+          echo "=== pooled diagnostics ==="
+          cat data/backtests/rb_pd2_multiseason_current_route_v1/rb_pd2_multiseason_metrics.csv 2>/dev/null || true
+          echo "=== season diagnostics ==="
+          cat data/backtests/rb_pd2_multiseason_current_route_v1/rb_pd2_multiseason_by_season.csv 2>/dev/null || true
+
+      - name: Upload frozen replication evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-pd2-multiseason-current-route-v1
+          path: |
+            data/backtests/rb_pd2_multiseason_current_route_v1/*
+            docs/research/RB_PD2_MULTISEASON_P3_EQUIVALENT_REPLICATION_V1_PLAN.md
+          if-no-files-found: warn
+          retention-days: 30
