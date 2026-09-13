@@ -1,54 +1,68 @@
 """QB C2 football coverage must match the certified current football scope.
 
-Sportsbook pass-yard coverage may be a smaller subset, but the football C2
-starter universe itself must not carry already-started/withheld teams.
+The pricing lineage stamp is the authoritative current-scope gate. Sportsbook
+pass-yard coverage may be a smaller downstream subset, but the upstream C2
+football audit must contain exactly one starter for every certified current team.
 """
+from pathlib import Path
+
+import pandas as pd
 import pytest
 
-from scripts.audit_market_model_lineage_v1 import _validate_qb_c2_coverage_contract
+from scripts.stamp_qb_c2_pricing_lineage_v1 import _validate_current_c2_scope
 
 
-def _c2(**overrides):
-    base = {
-        "football_qb_rows": 4,
-        "selected_qb_rows": 3,
-    }
-    base.update(overrides)
-    return base
+def _roles(path: Path, teams: list[str]) -> Path:
+    pd.DataFrame({"team": teams, "player": [f"{t} Player" for t in teams]}).to_csv(path, index=False)
+    return path
 
 
-def _stamp(**overrides):
-    base = {
-        "football_qbs": 4,
-        "current_team_scope_expected": 4,
-        "pass_yard_qbs": 2,
-        "c2_selected_qbs": 2,
-        "c2_selected_football_qbs": 3,
-        "sportsbook_offer_coverage_defines_football_universe": False,
-    }
-    base.update(overrides)
-    return base
+def _c2(teams: list[str]) -> pd.DataFrame:
+    return pd.DataFrame({
+        "team": teams,
+        "player": [f"{t} QB" for t in teams],
+        "player_clean_key": [f"{t.lower()}qb" for t in teams],
+    })
 
 
-def test_accepts_exact_current_football_scope_with_smaller_priced_subset():
-    result = _validate_qb_c2_coverage_contract(_c2(), _stamp())
-    assert result["football_qbs"] == 4
-    assert result["priced_qbs"] == 2
+def test_accepts_exact_current_football_scope(tmp_path):
+    teams = ["DAL", "DEN", "KC", "NYG"]
+    roles = _roles(tmp_path / "roles.csv", teams)
+    status = {"football_qb_rows": 4}
+
+    scope = _validate_current_c2_scope(status, _c2(teams), active_roles_path=roles)
+
+    assert scope["mode"] == "EXPLICIT_CURRENT_AVAILABILITY"
+    assert scope["expected_teams"] == 4
+    assert scope["observed_teams"] == 4
 
 
-def test_rejects_football_universe_larger_than_current_scope():
-    with pytest.raises(RuntimeError, match="differs from certified current team scope"):
-        _validate_qb_c2_coverage_contract(
-            _c2(football_qb_rows=32, selected_qb_rows=30),
-            _stamp(football_qbs=32, current_team_scope_expected=4, c2_selected_football_qbs=30),
+def test_rejects_football_qb_superset_of_current_scope(tmp_path):
+    roles = _roles(tmp_path / "roles.csv", ["DAL", "DEN"])
+    with pytest.raises(RuntimeError, match=r"extra=\['KC', 'NYG'\]"):
+        _validate_current_c2_scope(
+            {"football_qb_rows": 4},
+            _c2(["DAL", "DEN", "KC", "NYG"]),
+            active_roles_path=roles,
         )
 
 
-def test_rejects_current_scope_larger_than_football_universe():
-    with pytest.raises(RuntimeError, match="differs from certified current team scope"):
-        _validate_qb_c2_coverage_contract(_c2(), _stamp(current_team_scope_expected=5))
+def test_rejects_missing_current_qb_team(tmp_path):
+    roles = _roles(tmp_path / "roles.csv", ["DAL", "DEN", "KC", "NYG"])
+    with pytest.raises(RuntimeError, match=r"missing=\['NYG'\]"):
+        _validate_current_c2_scope(
+            {"football_qb_rows": 3},
+            _c2(["DAL", "DEN", "KC"]),
+            active_roles_path=roles,
+        )
 
 
-def test_still_rejects_production_stamp_mismatch():
-    with pytest.raises(RuntimeError, match="football universe differs"):
-        _validate_qb_c2_coverage_contract(_c2(), _stamp(football_qbs=3))
+def test_rejects_status_row_count_drift(tmp_path):
+    teams = ["DAL", "DEN", "KC", "NYG"]
+    roles = _roles(tmp_path / "roles.csv", teams)
+    with pytest.raises(RuntimeError, match="production audit row count"):
+        _validate_current_c2_scope(
+            {"football_qb_rows": 32},
+            _c2(teams),
+            active_roles_path=roles,
+        )
