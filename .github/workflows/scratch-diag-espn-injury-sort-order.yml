@@ -1,0 +1,64 @@
+# scratch: sizing check before building the real ESPN-core-API inactives
+# scraper. The core injuries endpoint is an unbounded per-item-ref list
+# (each item is just a $ref, detail requires a follow-up fetch) -- need to
+# know whether it's sorted newest-first (so page 1 alone covers this week's
+# status for almost every team) before deciding how many pages/items to
+# fetch per team in production. Fetch-only, zero credits.
+name: Scratch Diagnose ESPN Injury Sort Order
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/scratch-diag-espn-injury-sort-order.yml'
+
+jobs:
+  diag:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install requests
+      - name: Check sort order and try sort param
+        run: |
+          python3 -c "
+          import requests, json
+
+          r = requests.get('https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams', timeout=30)
+          teams = r.json().get('sports',[{}])[0].get('leagues',[{}])[0].get('teams',[])
+          atl_id = next(t['team']['id'] for t in teams if t['team']['abbreviation']=='ATL')
+
+          # default order, first 10 items' dates
+          url = f'https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/teams/{atl_id}/injuries'
+          r2 = requests.get(url, params={'limit': 10}, timeout=30)
+          d2 = r2.json()
+          print('count:', d2.get('count'), 'pageSize used:', len(d2.get('items',[])))
+          dates = []
+          for item in d2.get('items', [])[:10]:
+              rr = requests.get(item['\$ref'], timeout=30)
+              dd = rr.json()
+              dates.append((dd.get('date'), dd.get('status'), dd.get('athlete',{}).get('\$ref','').split('/')[-1].split('?')[0]))
+          print('default order dates (first 10):')
+          for d in dates:
+              print(' ', d)
+
+          # try sort=date:desc
+          r3 = requests.get(url, params={'limit': 10, 'sort': 'date:desc'}, timeout=30)
+          d3 = r3.json()
+          print()
+          print('sort=date:desc status:', r3.status_code, 'count:', d3.get('count'))
+          dates2 = []
+          for item in d3.get('items', [])[:5]:
+              rr = requests.get(item['\$ref'], timeout=30)
+              dd = rr.json()
+              dates2.append((dd.get('date'), dd.get('status')))
+          print('sort=date:desc dates (first 5):')
+          for d in dates2:
+              print(' ', d)
+          "
