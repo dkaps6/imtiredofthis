@@ -181,10 +181,19 @@ jobs:
           # not walk_forward.py's standard 42 + week -- pass --seed-offset 53 so
           # the reconstructed array's mean-reproduction checksum matches the QB
           # trace's own mc_proj instead of aborting on a seed mismatch.
+          #
+          # --team-weekly must be the FULL multi-season combined history, not the
+          # per-season split used by run_m89_pregame_synthesis.py's --team-2024/
+          # --team-2025 args: build_historical_team_form()'s before_cutoff() filters
+          # the passed frame for rows strictly before the target week, so a
+          # single-season file has zero prior rows for week 1 and hard-fails
+          # ("No team history available before target cutoff"). The three other
+          # fidelity tests tonight (PR #546/#548/#549) all pass the combined file
+          # for exactly this reason.
           python scripts/research/persist_historical_simulated_outcomes_v1.py \
             --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
             --player-logs /tmp/qb_m89/player_game_logs_history.csv \
-            --team-weekly /tmp/qb_m89/team_weekly_2024.csv \
+            --team-weekly /tmp/qb_m89/team_weekly_history.csv \
             --schedule /tmp/qb_m89/schedule_history.csv \
             --universe-dir /tmp/hist_2024/pregame_universe \
             --component-file /tmp/qb_m89/qb_trace_2024.csv \
@@ -193,7 +202,7 @@ jobs:
           python scripts/research/persist_historical_simulated_outcomes_v1.py \
             --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000 \
             --player-logs /tmp/qb_m89/player_game_logs_history.csv \
-            --team-weekly /tmp/qb_m89/team_weekly_2025.csv \
+            --team-weekly /tmp/qb_m89/team_weekly_history.csv \
             --schedule /tmp/qb_m89/schedule_history.csv \
             --universe-dir /tmp/hist_2025/pregame_universe \
             --component-file /tmp/qb_m89/qb_trace_2025.csv \
