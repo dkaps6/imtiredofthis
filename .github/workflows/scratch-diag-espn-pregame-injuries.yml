@@ -1,0 +1,64 @@
+# scratch: decisive test. nfl.com has no structured inactives this season.
+# ESPN's per-event 'injuries' field is real and structured, but does it
+# actually get populated BEFORE kickoff (the window our gate needs), or only
+# once a game goes live? Right now the 4pm games (ARI@LAC, GB@MIN, MIA@LV,
+# WAS@PHI) are ~25-30 min from kickoff -- squarely inside the ~90-minute
+# window where the real official inactive report should already exist.
+# Checking ESPN's injuries field for those exact games right now is a live,
+# decisive test of whether ESPN has it and nfl.com doesn't. Fetch-only,
+# zero credits.
+name: Scratch Diagnose ESPN Pregame Injuries Timing
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/scratch-diag-espn-pregame-injuries.yml'
+
+jobs:
+  diag:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install requests
+      - name: Check ESPN injuries field for still-scheduled 4pm games
+        run: |
+          python3 -c "
+          import requests, json
+          from datetime import datetime, timezone
+
+          print('now_utc:', datetime.now(timezone.utc).isoformat())
+          r = requests.get('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard', timeout=30)
+          events = r.json().get('events', [])
+          by_short = {e.get('shortName',''): e for e in events}
+
+          targets = ['ARI @ LAC', 'GB @ MIN', 'MIA @ LV', 'WSH @ PHI']
+          for label in targets:
+              e = by_short.get(label)
+              if not e:
+                  print(label, 'NOT FOUND in scoreboard')
+                  continue
+              status = e.get('status',{}).get('type',{}).get('name')
+              kickoff = e.get('date')
+              print()
+              print(f'=== {label} status={status} kickoff={kickoff} ===')
+              r2 = requests.get(f\"https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event={e['id']}\", timeout=30)
+              d2 = r2.json()
+              inj = d2.get('injuries', [])
+              print('injuries team-blocks:', len(inj))
+              for block in inj:
+                  team = block.get('team',{}).get('abbreviation')
+                  players = block.get('injuries', [])
+                  print(f'  team={team} listed_players={len(players)}')
+                  for p in players[:10]:
+                      name = p.get('athlete',{}).get('displayName')
+                      status_p = p.get('status')
+                      print(f'    {name}: {status_p}')
+          "
