@@ -7,7 +7,9 @@ on:
       - "scripts/research/persist_historical_simulated_outcomes_v1.py"
       - "scripts/research/grade_empirical_fair_prob_v1.py"
       - "scripts/research/summarize_empirical_fair_prob_segments_v1.py"
+      - "scripts/research/fit_and_apply_strong_gate_probability_calibration_v1.py"
       - "tests/test_empirical_fair_prob_v1.py"
+      - "tests/test_fit_and_apply_strong_gate_probability_calibration_v1.py"
       - ".github/workflows/research-historical-fair-probability-reconstruction-v1.yml"
 
 jobs:
@@ -34,7 +36,8 @@ jobs:
           pytest -q \
             tests/test_empirical_fair_prob_v1.py \
             tests/test_benchmark_identity_v1.py \
-            tests/test_grade_full_stack_vegas_benchmark_v1.py
+            tests/test_grade_full_stack_vegas_benchmark_v1.py \
+            tests/test_fit_and_apply_strong_gate_probability_calibration_v1.py
 
       - name: Build independent historical inputs for 2024 and 2025
         env:
@@ -143,6 +146,14 @@ jobs:
             --distribution-dir /tmp/fair_prob/distributions \
             --out-dir /tmp/fair_prob/grade
 
+      - name: Fit and apply STRONG-gate probability calibration (two-directional holdout)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/fit_and_apply_strong_gate_probability_calibration_v1.py \
+            --detail /tmp/fair_prob/grade/empirical_fair_prob_detail.csv \
+            --out-dir /tmp/fair_prob/calibration
+
       - name: Emit frozen season market side and probability-bin diagnostics
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -152,6 +163,13 @@ jobs:
             --props /tmp/fair_prob/market_archive/historical_market_props.csv \
             --empirical-detail /tmp/fair_prob/grade/empirical_fair_prob_detail.csv \
             --out-dir /tmp/fair_prob/grade
+
+      - name: Show STRONG-gate calibration result
+        if: always()
+        run: |
+          cat /tmp/fair_prob/calibration/strong_gate_calibration_summary.csv 2>/dev/null || true
+          echo "--- coverage ---"
+          cat /tmp/fair_prob/calibration/strong_gate_calibration_coverage.csv 2>/dev/null || true
 
       - name: Upload compact research result
         if: always()
@@ -167,6 +185,7 @@ jobs:
             /tmp/fair_prob/distributions/*_distribution_rebuild_audit.csv
             /tmp/fair_prob/distributions/*_metadata.csv
             /tmp/fair_prob/grade/*.csv
+            /tmp/fair_prob/calibration/*.csv
           if-no-files-found: warn
           retention-days: 14
 
