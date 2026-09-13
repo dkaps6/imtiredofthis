@@ -107,6 +107,26 @@ market-confirmation genuinely recovers the ground-truth effect; Arm C
 staying close to Arm B means confirmation doesn't add much beyond the raw
 label, at least at the tested thresholds.
 
+## Amendment log
+
+**Amendment 1 (before any result was reported)**: Codex review (via GitHub,
+PR #560) found that the "confirmed" definition used error tolerance alone
+(`abs(actual - predicted) <= threshold`), which lets a sign reversal or
+cutoff crossing through: e.g. predicted margin +3, actual margin -3 has
+abs error 6, passing the T=7 threshold even though the predicted favorite
+actually lost; analogously for total, predicted=43/actual=45 with a
+cutoff of 44 has abs error 2 but the two land on opposite sides of the
+split. Left unfixed, this would have silently included directionally-wrong
+games in Arm C's "confirmed" cohort, diluting the very effect the arm is
+meant to isolate and potentially changing the reported conclusion. Fixed
+by requiring, in addition to the error tolerance, that predicted and
+actual land on the same side (matching sign for margin, same side of the
+frozen cutoff for total) — for both hypotheses, since the total hypothesis
+had the identical class of bug even though Codex's comment anchored on the
+margin hypothesis's line. Covered by two new tests constructing an explicit
+reversal/crossing row and asserting it is excluded from the confirmed
+cohort's row count.
+
 ## What this is not
 
 - Not a claim that we can identify confirmed games before kickoff — see

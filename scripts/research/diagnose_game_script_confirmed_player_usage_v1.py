@@ -133,7 +133,15 @@ def run_margin_hypothesis(frame: pd.DataFrame, *, season_label: str, threshold: 
     predicted_all = frame.loc[~frame["predicted_team_margin"].eq(0.0)].copy()
     predicted_all["side"] = predicted_all["predicted_team_margin"] > 0
 
-    confirmed = predicted_all.loc[predicted_all["margin_abs_error"] <= threshold].copy()
+    # "Confirmed" requires both a small error AND agreement on which side of
+    # zero the team landed -- error tolerance alone lets a sign reversal
+    # through (e.g. predicted +3, actual -3 has abs error 6, which passes
+    # T=7 even though the predicted favorite actually lost). Without the
+    # matching-sign requirement, Arm C's "confirmed" cohort would include
+    # games that were not directionally confirmed at all, diluting whatever
+    # effect the arm is meant to isolate (Codex P1 on PR #560).
+    same_side = np.sign(predicted_all["predicted_team_margin"]) == np.sign(predicted_all["actual_team_margin"])
+    confirmed = predicted_all.loc[(predicted_all["margin_abs_error"] <= threshold) & same_side].copy()
 
     for arm_label, arm_frame in [
         ("A_ground_truth_actual_split", ground_truth),
@@ -155,7 +163,13 @@ def run_total_hypothesis(frame: pd.DataFrame, *, season_label: str, threshold: f
     predicted_all = frame.copy()
     predicted_all["side"] = predicted_all["predicted_total"] >= total_cutoff
 
-    confirmed = predicted_all.loc[predicted_all["total_abs_error"] <= threshold].copy()
+    # Same class of bug as the margin hypothesis (Codex P1 on PR #560): a
+    # small error can still cross the frozen cutoff (e.g. predicted=43,
+    # actual=45 with cutoff=44 has abs error 2, but lands on opposite sides
+    # of the split). Require the same side of the cutoff in addition to the
+    # error tolerance.
+    same_side = predicted_all["side"] == (predicted_all["actual_total"] >= total_cutoff)
+    confirmed = predicted_all.loc[(predicted_all["total_abs_error"] <= threshold) & same_side].copy()
 
     for arm_label, arm_frame in [
         ("A_ground_truth_actual_split", ground_truth),

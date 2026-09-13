@@ -124,6 +124,64 @@ def test_margin_hypothesis_ground_truth_recovers_designed_effect():
     assert confirmed["status"] == "OK" and confirmed["diff"] > 10
 
 
+def test_margin_confirmed_arm_excludes_sign_reversals():
+    """Codex P1 on PR #560: a small error tolerance alone lets a sign
+    reversal through (predicted +3, actual -3 has abs error 6, passing
+    T=7 even though the predicted favorite actually lost). The 'confirmed'
+    cohort must require matching sign, not just a small absolute error.
+    """
+    rows = [
+        # Genuinely confirmed: predicted and actual agree in sign and are close.
+        {"season": 2024, "actual_team_margin": 4.0, "predicted_team_margin": 3.0,
+         "margin_abs_error": 1.0, "rb_rush_att": 30.0, "rb_rush_yards": 120.0},
+        # Sign reversal that would pass T=7 on error tolerance alone: predicted
+        # favorite (+3) actually lost (-3). Must be excluded from "confirmed".
+        {"season": 2024, "actual_team_margin": -3.0, "predicted_team_margin": 3.0,
+         "margin_abs_error": 6.0, "rb_rush_att": 12.0, "rb_rush_yards": 40.0},
+    ]
+    # Pad with enough rows on each side to clear MIN_ROWS_PER_SIDE so the
+    # single reversal row's presence/absence is visible in n_high/n_low.
+    rng = np.random.default_rng(3)
+    for _ in range(40):
+        rows.append({"season": 2024, "actual_team_margin": 10.0, "predicted_team_margin": 10.0,
+                     "margin_abs_error": 0.0, "rb_rush_att": 30.0 + rng.normal(0, 1), "rb_rush_yards": 130.0})
+    for _ in range(40):
+        rows.append({"season": 2024, "actual_team_margin": -10.0, "predicted_team_margin": -10.0,
+                     "margin_abs_error": 0.0, "rb_rush_att": 13.0 + rng.normal(0, 1), "rb_rush_yards": 45.0})
+    frame = pd.DataFrame(rows)
+    results = run_margin_hypothesis(frame, season_label="2024", threshold=7.0)
+    confirmed = {r["metric"]: r for r in results if r["arm"] == "C_vegas_confirmed_only"}["rb_rush_att"]
+    # 41 predicted-favored rows total (1 genuine + 40 padding) minus the 1
+    # reversal row that must be excluded -> 41 on the high side, not 42.
+    assert confirmed["n_high"] == 41
+
+
+def test_total_confirmed_arm_excludes_cutoff_crossings():
+    """Same class of bug for the total hypothesis: a small error can still
+    cross the frozen cutoff (predicted=43, actual=45, cutoff=44 has abs
+    error 2 but lands on opposite sides). Must be excluded from 'confirmed'.
+    """
+    rows = [
+        {"season": 2024, "actual_total": 46.0, "predicted_total": 45.0,
+         "total_abs_error": 1.0, "wrte_targets": 25.0, "wrte_rec_yards": 200.0},
+        # Crosses the cutoff (45) despite a small error: predicted low side
+        # (43), actual high side (44.5). Must be excluded from "confirmed".
+        {"season": 2024, "actual_total": 44.5, "predicted_total": 43.0,
+         "total_abs_error": 1.5, "wrte_targets": 15.0, "wrte_rec_yards": 100.0},
+    ]
+    rng = np.random.default_rng(4)
+    for _ in range(40):
+        rows.append({"season": 2024, "actual_total": 56.0, "predicted_total": 56.0,
+                     "total_abs_error": 0.0, "wrte_targets": 25.0 + rng.normal(0, 1), "wrte_rec_yards": 210.0})
+    for _ in range(40):
+        rows.append({"season": 2024, "actual_total": 36.0, "predicted_total": 36.0,
+                     "total_abs_error": 0.0, "wrte_targets": 15.0 + rng.normal(0, 1), "wrte_rec_yards": 110.0})
+    frame = pd.DataFrame(rows)
+    results = run_total_hypothesis(frame, season_label="2024", threshold=3.0, total_cutoff=45.0)
+    confirmed = {r["metric"]: r for r in results if r["arm"] == "C_vegas_confirmed_only"}["wrte_targets"]
+    assert confirmed["n_high"] == 41
+
+
 def test_total_hypothesis_uses_frozen_cutoff_consistently_across_arms():
     rows = []
     rng = np.random.default_rng(9)
