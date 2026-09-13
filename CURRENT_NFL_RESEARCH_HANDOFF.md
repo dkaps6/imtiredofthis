@@ -19,7 +19,8 @@ Verified `main` before opening #562:
 
 Active research branch:
 - `research-rb-pd2-yard-difficulty-mc-width-v1`
-- frozen-plan commit: `222c78cb0314e79e0f9ce6e147ab127a30f68f10`
+- original frozen-plan commit: `222c78cb0314e79e0f9ce6e147ab127a30f68f10`
+- pre-result fidelity amendment: `8c5bcab4fb9f273b5214216fcc47a3d61b5005e1`
 - draft PR #562
 
 ## OPERATING CONTRACT
@@ -149,7 +150,8 @@ The carry-width and yard-width research lanes are legitimately unlocked for newl
 Frozen before any candidate distribution result:
 - branch `research-rb-pd2-yard-difficulty-mc-width-v1`
 - draft PR #562
-- plan commit `222c78cb0314e79e0f9ce6e147ab127a30f68f10`
+- original plan commit `222c78cb0314e79e0f9ce6e147ab127a30f68f10`
+- pre-result fidelity amendment `8c5bcab4fb9f273b5214216fcc47a3d61b5005e1`
 - plan `docs/research/RB_PD2_YARD_DIFFICULTY_MC_WIDTH_V1_PLAN.md`
 
 ### Deliberate scope
@@ -168,6 +170,7 @@ Core contract:
 - qualifying seasons 2021-2024 only; 2025 forbidden;
 - reconstruct exact canonical historical MC: 2,000 draws, seed `42+week`, raw mean must reproduce source `mc_proj` within `1e-8`;
 - align canonical MC shape to prior-season-fitted `ensemble_proj` with the same multiplicative mean-alignment contract production pricing uses;
+- exact #556 history universe: 2020 only fits the 2021 ensemble; same-player error history starts in the 2021 target panel and crosses only within 2021-2024;
 - last8/min4 `prior8_yard_mae`;
 - strictly-prior empirical difficulty percentile, minimum 100 earlier reference rows;
 - fixed conservative width mapping borrowed prospectively from the repo's prior WR-R3 uncertainty plan: lower half unchanged, top half widens monotonically to max `1.30x`;
@@ -177,7 +180,7 @@ Core contract:
 Frozen hard gates include:
 - exact lineage / no leakage / no sportsbook;
 - exact mean neutrality and point-MAE identity;
-- pooled CRPS improvement >=0.5% with paired-bootstrap P(improve)>=0.95;
+- pooled CRPS improvement >=0.5% with **player-clustered paired bootstrap** P(improve)>=0.95 (10,000 reps, seed 42027);
 - top-difficulty-quartile CRPS improvement >=1.0%;
 - top-quartile 80% and 90% coverage gaps both strictly improve;
 - pooled 80/90 coverage gaps non-worse, at least one strictly better;
@@ -188,11 +191,20 @@ Positive disposition would be `RB_YARD_DIFFICULTY_MC_WIDTH_QUALIFIED`, still res
 
 Failure is `NO_ACTIONABLE_RB_YARD_DIFFICULTY_MC_WIDTH` and closes this exact mapping with no coefficient/cutoff/subset rescue. Carry width remains separately unanswered.
 
+### Pre-result amendment integrity
+
+The original frozen plan SHA is preserved. Before any candidate implementation/run/output, GPT-5.6 reread the exact #556 evaluator and prospectively clarified two points at `8c5bcab...`:
+
+1. 2020 is not an error-history season; it is only the S-1 fit source for the ensemble applied to 2021.
+2. The paired CRPS bootstrap is clustered by `player_key` rather than resampling individual games, preserving repeated-player dependence and making the confidence gate more conservative.
+
+No width coefficient, onset, cap, target season, fixed tail threshold, CRPS/coverage requirement, or scientific pass disposition changed.
+
 ### Adversarial review gate before implementation/result exposure
 
-GPT-5.6 posted the frozen plan to Issue #535 comment `5653596342` and asked Claude to attack leakage, production alignment, mean neutrality, stop-rule compatibility, and gate validity before implementation.
+GPT-5.6 posted the original frozen plan to Issue #535 comment `5653596342` and asked Claude to attack leakage, production alignment, mean neutrality, stop-rule compatibility, and gate validity before implementation.
 
-PR #562 comment `5653596905` separately asks Codex for pre-result plan review.
+After the prospective fidelity amendment, GPT-5.6 posted Issue #535 comment `5653615361` and PR #562 comment `5653614801`, asking Claude/Codex to review amended head `8c5bcab...`.
 
 **Do not expose a candidate #562 result until substantive preregistration defects raised by this pre-result review are resolved prospectively.** Mechanical implementation work may proceed only if it cannot trigger/inspect the candidate output; safest default is to disposition the pre-result design review first.
 
@@ -216,6 +228,6 @@ PR #562 comment `5653596905` separately asks Codex for pre-result plan review.
 
 1. Refetch Issue #535 and PR #562 review state.
 2. Resolve any genuine pre-result plan defect prospectively without looking at candidate output.
-3. If the plan survives review, implement the frozen evaluator/tests/workflow exactly as written.
+3. If the plan survives review, implement the frozen evaluator/tests/workflow exactly as amended.
 4. Run once, preserve exact artifact/logs, independently cross-audit all hard gates, and post the disposition to Issue #535.
 5. No production change unless a later separately frozen production-shadow/forward-confirmation experiment earns it.
