@@ -12,7 +12,6 @@ import argparse
 import bisect
 import json
 from pathlib import Path
-from typing import Iterable
 
 import numpy as np
 import pandas as pd
@@ -46,12 +45,15 @@ def strict_prior_difficulty_scores(wf: pd.DataFrame) -> pd.DataFrame:
     out = wf.copy().sort_values(["season", "week", "player_key"], kind="stable").reset_index(drop=True)
     out["difficulty_score"] = np.nan
     out["difficulty_reference_n"] = 0
+    out["difficulty_reference_max_ord"] = np.nan
     ref: list[float] = []
-    for (_, _), idx in out.groupby(["season", "week"], sort=True).groups.items():
+    last_ref_ord = np.nan
+    for (season, week), idx in out.groupby(["season", "week"], sort=True).groups.items():
         ids = list(idx)
         ref_n = len(ref)
         for i in ids:
             out.at[i, "difficulty_reference_n"] = ref_n
+            out.at[i, "difficulty_reference_max_ord"] = last_ref_ord
             if int(out.at[i, "prior_games"]) < MIN_PRIOR or ref_n < REF_MIN:
                 continue
             value = float(pd.to_numeric(pd.Series([out.at[i, "prior8_yard_mae"]]), errors="coerce").iloc[0])
@@ -64,6 +66,7 @@ def strict_prior_difficulty_scores(wf: pd.DataFrame) -> pd.DataFrame:
             value = float(pd.to_numeric(pd.Series([out.at[i, "prior8_yard_mae"]]), errors="coerce").iloc[0])
             if np.isfinite(value):
                 bisect.insort(ref, value)
+        last_ref_ord = int(season) * 100 + int(week)
     return out
 
 
@@ -220,7 +223,8 @@ def attach_features_and_distributions(
     dist_index: pd.DataFrame,
 ) -> pd.DataFrame:
     features = scored_wf[["season", "week", "team", "player_key", "prior_games", "prior8_yard_mae",
-                          "last_prior_ord", "difficulty_score", "difficulty_reference_n"]].copy()
+                          "last_prior_ord", "difficulty_score", "difficulty_reference_n",
+                          "difficulty_reference_max_ord"]].copy()
     out = lineage.merge(features, on=["season", "week", "team", "player_key"], how="left", validate="one_to_one")
     out = out.merge(dist_index, on=IDENTITY, how="left", validate="one_to_one")
     return out
@@ -274,8 +278,10 @@ def grade_distributions(rows: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, flo
             "ensemble_proj": target_mean,
             "prior_games": int(r.prior_games),
             "prior8_yard_mae": float(r.prior8_yard_mae),
+            "last_prior_ord": float(r.last_prior_ord),
             "difficulty_score": float(r.difficulty_score),
             "difficulty_reference_n": int(r.difficulty_reference_n),
+            "difficulty_reference_max_ord": float(r.difficulty_reference_max_ord),
             "width_mult": mult,
             "raw_mc_mean": raw_mean,
         })
@@ -342,15 +348,21 @@ def evaluate_gates(casebook: pd.DataFrame, checks: dict[str, float], parent_sour
     candidate_point_mae = float(np.mean(np.abs(pd.to_numeric(casebook.candidate_mean) - pd.to_numeric(casebook.actual))))
     point_mae_delta = candidate_point_mae - baseline_point_mae
 
+    current_ord = pd.to_numeric(casebook.season) * 100 + pd.to_numeric(casebook.week)
+    last_prior = pd.to_numeric(casebook.last_prior_ord, errors="coerce")
+    ref_prior = pd.to_numeric(casebook.difficulty_reference_max_ord, errors="coerce")
     recent = by_season.set_index("season")
     gates = {
         "A_m95q_source_parity": bool(parity.get("m91_universe_2024_pass") and parity.get("downstream_2024_parity_pass") and parity.get("m95q_disposition") == "M95Q_EXPANDED_PANEL_READY"),
         "A_parent_panel_matches_556": bool(parent_source_rows == EXPECTED_PARENT_ROWS and parent_scoreable_rows == EXPECTED_PARENT_SCOREABLE),
+        "A_prior_season_only_ensemble_weights": bool(checks.get("prior_season_weight_lineage_pass", False)),
         "A_target_seasons_exact_no_2025": bool(set(casebook.season.astype(int).unique()) == set(TARGET_SEASONS) and not casebook.season.eq(2025).any()),
         "A_raw_mc_reproduces_source": bool(checks["max_abs_raw_mc_vs_source_mc_proj"] <= 1e-8),
         "A_metadata_mc_reproduces_array": bool(checks["max_abs_raw_mc_vs_metadata_mc_mean"] <= 1e-8),
         "A_baseline_mean_matches_ensemble": bool(checks["max_abs_baseline_mean_vs_ensemble_proj"] <= 1e-8),
-        "A_strict_prior_feature_history": bool((pd.to_numeric(casebook.prior_games) >= MIN_PRIOR).all() and (pd.to_numeric(casebook.difficulty_reference_n) >= REF_MIN).all()),
+        "A_strict_prior_feature_history": bool(last_prior.notna().all() and (last_prior < current_ord).all()),
+        "A_strict_prior_percentile_reference": bool(ref_prior.notna().all() and (ref_prior < current_ord).all() and (pd.to_numeric(casebook.difficulty_reference_n) >= REF_MIN).all()),
+        "A_zero_pre2021_history_panel": bool(checks.get("history_panel_min_season") == 2021),
         "A_zero_sportsbook_inputs": True,
         "A_production_changed_false": True,
         "B_candidate_mean_neutral": bool(checks["max_abs_candidate_vs_baseline_mean"] <= 1e-8),
@@ -430,6 +442,19 @@ def run(component_root: Path, parity_root: Path, distribution_root: Path, out_di
     dist_index = load_distribution_index(distribution_root)
     joined = attach_features_and_distributions(lineage, scored, dist_index)
     casebook, checks = grade_distributions(joined)
+
+    fit_season = pd.to_numeric(weights.get("fit_season"), errors="coerce")
+    target_season = pd.to_numeric(weights.get("target_season"), errors="coerce")
+    checks["prior_season_weight_lineage_pass"] = bool(
+        len(weights) > 0
+        and fit_season.notna().all()
+        and target_season.notna().all()
+        and ((target_season - fit_season) == 1).all()
+        and set(target_season.astype(int).unique()) == set(TARGET_SEASONS)
+    )
+    checks["history_panel_min_season"] = int(pd.to_numeric(wf.season, errors="raise").min())
+    checks["history_panel_max_season"] = int(pd.to_numeric(wf.season, errors="raise").max())
+
     gates, by_season, result = evaluate_gates(casebook, checks, len(parent_panel), parent_scoreable, parity)
 
     parent_panel.to_csv(out_dir / "rb_pd2_yard_width_parent_panel.csv", index=False)
