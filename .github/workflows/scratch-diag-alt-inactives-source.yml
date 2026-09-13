@@ -1,0 +1,92 @@
+# scratch: nfl.com/inactives has no structured data this season (confirmed via
+# scratch-diag-nflcom-page-shape). Evaluate candidate alternate sources for
+# official game-day inactives before building a real replacement scraper.
+# Uses already-completed games today (ATL@PIT etc.) as ground truth since
+# their inactive reports must be final and stable by now. Fetch-only, no
+# odds, zero credits.
+name: Scratch Diagnose Alternate Inactives Source
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/scratch-diag-alt-inactives-source.yml'
+
+jobs:
+  diag:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4 lxml
+      - name: Try ESPN scoreboard + summary API
+        run: |
+          python3 -c "
+          import requests, json
+
+          r = requests.get('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard', timeout=30)
+          print('scoreboard status:', r.status_code)
+          d = r.json()
+          events = d.get('events', [])
+          print('events:', len(events))
+          for e in events[:3]:
+              print(' ', e.get('id'), e.get('shortName'), e.get('status',{}).get('type',{}).get('name'))
+
+          # find a completed game (ATL@PIT) to use as ground truth
+          target = None
+          for e in events:
+              short = e.get('shortName','')
+              if 'ATL' in short and 'PIT' in short:
+                  target = e
+                  break
+          if target is None and events:
+              target = events[0]
+          print()
+          print('using event:', target.get('id') if target else None, target.get('shortName') if target else None)
+          if target:
+              eid = target['id']
+              r2 = requests.get(f'https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event={eid}', timeout=30)
+              print('summary status:', r2.status_code)
+              d2 = r2.json()
+              print('top-level keys:', sorted(d2.keys()))
+              # look for inactive/injury/roster info
+              for key in ['boxscore','injuries','gameInfo']:
+                  print(f'--- {key} present:', key in d2)
+              if 'injuries' in d2:
+                  inj = d2['injuries']
+                  print('injuries type:', type(inj), 'len:', len(inj) if hasattr(inj,\"__len__\") else None)
+                  print(json.dumps(inj, indent=2)[:3000])
+              if 'boxscore' in d2 and isinstance(d2['boxscore'], dict):
+                  bx = d2['boxscore']
+                  print('boxscore keys:', sorted(bx.keys()))
+          "
+      - name: Try RotoWire inactives page
+        run: |
+          python3 -c "
+          import requests
+          from bs4 import BeautifulSoup
+          r = requests.get('https://www.rotowire.com/football/inactives.php', timeout=30, headers={'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'})
+          print('rotowire status:', r.status_code, 'bytes:', len(r.content))
+          soup = BeautifulSoup(r.text, 'html.parser')
+          text = soup.get_text(' ', strip=True)
+          print('body_text_len:', len(text))
+          print(text[:2000])
+          " || echo "ROTOWIRE_FAILED"
+      - name: Try CBS Sports inactives
+        run: |
+          python3 -c "
+          import requests
+          from bs4 import BeautifulSoup
+          r = requests.get('https://www.cbssports.com/nfl/injuries/', timeout=30, headers={'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'})
+          print('cbs status:', r.status_code, 'bytes:', len(r.content))
+          soup = BeautifulSoup(r.text, 'html.parser')
+          text = soup.get_text(' ', strip=True)
+          print('body_text_len:', len(text))
+          print(text[:1500])
+          " || echo "CBS_FAILED"
