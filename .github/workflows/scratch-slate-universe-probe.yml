@@ -1,0 +1,59 @@
+name: Scratch Slate Universe 12-Team Probe
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/scratch-slate-universe-probe.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Download failing run artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p artifact
+          gh run download 34767394377 --repo "$GITHUB_REPOSITORY" --name run_34767394377 --dir artifact
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Diagnose team coverage
+        run: |
+          pip install pandas -q
+          python - <<'EOF'
+          import pandas as pd
+
+          tw = pd.read_csv("artifact/data/team_week_map.csv")
+          tw.columns = [c.lower() for c in tw.columns]
+          print("team_week_map columns:", list(tw.columns))
+          print("team_week_map total rows:", len(tw))
+          w1 = tw[(pd.to_numeric(tw["season"], errors="coerce") == 2026) & (pd.to_numeric(tw["week"], errors="coerce") == 1)]
+          print("season=2026 week=1 rows:", len(w1))
+          print("season=2026 week=1 unique teams:", sorted(w1["team"].astype(str).unique()))
+
+          roles = pd.read_csv("artifact/data/roles_ourlads.csv")
+          roles.columns = [c.lower() for c in roles.columns]
+          print("\nroles_ourlads total rows:", len(roles))
+          print("roles_ourlads unique teams:", sorted(roles["team"].astype(str).unique()))
+
+          # canon_team mapping check
+          import sys
+          sys.path.insert(0, ".")
+          try:
+              from scripts._opponent_map import canon_team
+              roles_teams = set(roles["team"].map(canon_team))
+              sched_teams = set(w1["team"].map(canon_team))
+              print("\ncanon roles teams (n=%d):" % len(roles_teams), sorted(roles_teams))
+              print("canon sched teams (n=%d):" % len(sched_teams), sorted(sched_teams))
+              print("intersection (n=%d):" % len(roles_teams & sched_teams), sorted(roles_teams & sched_teams))
+              print("in roles but not sched:", sorted(roles_teams - sched_teams))
+              print("in sched but not roles:", sorted(sched_teams - roles_teams))
+          except Exception as e:
+              print("canon_team import failed:", e)
+          EOF
