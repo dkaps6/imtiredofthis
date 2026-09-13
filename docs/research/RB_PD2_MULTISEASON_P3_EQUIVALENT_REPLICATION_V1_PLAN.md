@@ -1,198 +1,172 @@
-# RB-PD2 Multi-Season P3-Equivalent Replication V1 — Frozen Plan
+# RB-PD2 Multi-Season Current-Production-Route Replication V1 — Frozen Plan
 
-**STATUS: FROZEN BEFORE ANY 2021-2024 PERSISTENCE RESULT. RESEARCH ONLY. NO PRODUCTION CHANGE.**
+**STATUS: PRE-EXECUTION AMENDMENT FROZEN BEFORE ANY 2021-2024 PERSISTENCE RESULT. RESEARCH ONLY. NO PRODUCTION CHANGE.**
+
+## Amendment record
+
+The initial preregistration at commit `241841ec685b7cbde16a34681e77ae40bca79932` was **not executed** and produced **no 2021-2024 persistence result**. Before implementation, two architecture facts forced a correction:
+
+1. canonical STACK2's 50/50 allocation anchor is **M94C raw opportunity share**, not `stack_share`; the initial text misstated this;
+2. more importantly, the production ledger `RB_P3_WEEK1_PROMOTION_2026_09_05.md` explicitly promotes P3 only for **Week 1**. Weeks 2-18 enriched-allocation/P3 is **not promoted** and production remains on the base calibrated ensemble.
+
+Backporting the unpromoted Weeks2-18 STACK2/P3 route would therefore be less representative of the actual season-long production system. This amendment replaces that proposed backport before any scientific result is observed.
+
+The literal PD5/PD6 memo requirement for a multi-season "P3-equivalent" panel remains a **separate unresolved PD6 blocker**. This experiment does not claim to satisfy it. Its narrower purpose is to determine whether PD2's untouched uncertainty-width authorization survives on the **current production-equivalent RB rushing mean route**.
 
 ## Purpose
 
-The RB-PD5 cohort-discrepancy memo requires a valid multi-season, non-2025, P3-equivalent evidence path before any further confirmatory RB residual mechanism can advance. Separately, RB-PD2 detected individual player-error persistence on the already-observed 2025 STACK1 cohort and authorized a still-unattempted difficulty -> MC-width/uncertainty lane.
+RB-PD2 detected player-specific carry/yard error persistence on the already-observed 2025 STACK1 cohort and authorized three follow-ups, including an untouched difficulty -> MC-width/uncertainty lane.
 
-This experiment is the prerequisite only. It asks:
+This replication asks:
 
-> Do the original RB-PD2 player-error persistence signals reproduce on a genuinely multi-season, non-2025 panel whose rushing-yard mean is reconstructed with the same P3 architecture: prior-season-frozen STACK1 opportunity/efficiency + prior-season-fit STACK2 allocation + the frozen P3 composition?
+> Do the original PD2 persistence signals reproduce on non-2025 seasons when RB carries/rushing yards use the same temporal calibrated full-stack ensemble that underlies current production outside the Week-1-only P3 override?
 
-It does **not** test a new uncertainty-width multiplier. A PASS only unlocks a separately frozen PD2-width experiment.
+A PASS can authorize only a separately frozen PD2 uncertainty-width experiment. It does not authorize PD6, a mean correction, or a production change.
 
-## Why 2021-2024
+## Frozen target seasons
 
-Target seasons are frozen to **2021, 2022, 2023, 2024** before looking at their persistence results.
+Targets: **2021, 2022, 2023, 2024**.
 
-Reason is architectural, not outcome-based:
+Reason, fixed before results:
 
-- M95Q already established parity-checked temporal M91 component reconstructions through 2024;
-- P3-equivalent reconstruction needs a full prior season to fit both the STACK1 ensemble and STACK2 allocation model;
-- starting at 2021 lets every target season use an available 2020+ prior-season provider panel without relying on less-certain 2019 roster/depth/injury coverage;
-- 2025 is explicitly excluded because it is the already-observed PD2/PD3/PD4/PD5 cohort and cannot act as confirmation.
+- M95Q run `33450395426` provides parity-checked M91 temporal component reconstructions for 2020-2024;
+- every target season can therefore use an immediately prior full season to fit ensemble weights;
+- 2025 is excluded because it is the already-observed PD2/PD3/PD4/PD5 cohort;
+- 2020 is excluded because using it would require a 2019 fit season outside the M95Q comparability panel used for this replication.
 
-No 2021-2024 PD2 persistence metric has been inspected before this plan is frozen.
+No 2021-2024 persistence statistic has been inspected before this amended plan is frozen.
 
-## Canonical historical inputs
+## Canonical historical evidence
 
-### Temporal football components
+Use only M95Q successful run `33450395426`:
 
-Use the successful M95Q reconstruction run:
+- artifacts `m95q-m91-2020` through `m95q-m91-2024`;
+- exact `component_predictions.csv` per season;
+- final M95Q artifact `9779790912` with `M95Q_EXPANDED_PANEL_READY`;
+- M91 2024 universe parity PASS.
 
-- run `33450395426`;
-- M91 rotation artifacts for 2020-2024;
-- final M95Q artifact `9779790912`, disposition `M95Q_EXPANDED_PANEL_READY`;
-- 2024 M91 universe parity PASS and downstream parity PASS.
+No sportsbook data enters this experiment.
 
-The M91 component rows provide the same `mc_proj`, `ml_proj`, `state_proj`, actual, player/team/week identity and historical pregame routing used by STACK1.
+## Production-route-equivalent mean reconstruction
 
-### STACK1-equivalent reconstruction
+For each target season `S` in 2021-2024:
 
-For target season `S` in 2021-2024:
-
-1. fit `fit_market_weights()` on exact season `S-1` component predictions only;
-2. freeze those weights;
-3. apply them to season `S`;
+1. read exact M91 component rows for `S-1` and `S`;
+2. fit canonical `fit_market_weights()` on **S-1 only**;
+3. freeze those weights and call `apply_ensemble()` on S;
 4. retain RB/HB/FB `rush_att` and `rush_yards` rows;
-5. call the resulting projections `stack_att` and `stack_yards`.
+5. pivot one row per `(season, week, team, player)` with:
+   - `pred_carry = ensemble_proj` for `rush_att`;
+   - `pred_yard = ensemble_proj` for `rush_yards`;
+   - corresponding target-season actuals from the same timestamp-safe M91 trace.
 
-This is the exact temporal analogue of 2025 STACK1's `ensemble_2024_frozen` path. No target-season outcome is used to fit target-season STACK1 weights.
+This is the exact temporal analogue of STACK1's `ensemble_2024_frozen` construction used by original PD2.
 
-### STACK2-equivalent allocation reconstruction
+### Current-production relationship
 
-Generalize the already-frozen STACK2 allocation architecture without changing its science:
+- Week 1 P3's promoted `WEEK1_STACK_OVERRIDE` equals the calibrated STACK1 rushing-yard projection unchanged.
+- Weeks 2-18 currently do **not** use the unresolved enriched P3 route; the production ledger keeps the base calibrated ensemble.
 
-- same `FULL` feature list from `evaluate_rb_stack2_enriched_allocation.py`;
-- same `HistGradientBoostingRegressor`:
-  - `loss='squared_error'`
-  - `learning_rate=0.05`
-  - `max_iter=160`
-  - `max_leaf_nodes=15`
-  - `min_samples_leaf=30`
-  - `l2_regularization=1.0`
-  - `random_state=17`;
-- same target: actual share of team RB carries;
-- same team-score normalization;
-- same 50/50 anchor: `enriched_share = 0.5 * stack_share + 0.5 * alloc_full_share`;
-- `enriched_att = enriched_share * team_stack_att_pool`.
+Therefore the frozen-ensemble historical reconstruction is the appropriate season-long parent for testing whether PD2's error-persistence mechanism generalizes to the currently authorized production mean architecture.
 
-For each target season `S`, fit the allocator on `S-1` only and freeze it before applying to `S`.
+## Integrity gates
 
-Historical roster, depth, snap and injury features must be strictly pregame/strictly-prior. Missing-provider handling must follow the existing STACK2 semantics; no target-game outcome may enter a feature.
-
-If required historical provider fields cannot be reconstructed with sufficient integrity, the run must fail `P3_EQUIVALENT_INTEGRITY_FAILURE`; do not substitute a simpler allocation model after seeing that failure.
-
-### P3-equivalent composition
-
-Apply the frozen `compose_p3_row()` semantics from `scripts/modeling/rb_rush_synthesis_v1.py`:
-
-- Week 1: `p3_equiv_yards = stack_yards`;
-- Weeks 2-18: `p3_equiv_yards = enriched_att * (stack_yards / stack_att)` when `stack_att > 0.20`.
-
-The production M94C efficiency fallback may only be used if an exact historical M94C-equivalent fallback is available from a predeclared source. Otherwise any row requiring the fallback is excluded from the scoreable replication panel and counted explicitly; if fallback-required rows exceed **1%** of otherwise eligible rows in any target season, integrity FAIL.
-
-Carry prediction for the PD2 carry diagnostics is `enriched_att` for Weeks 2-18 and `stack_att` for Week 1, matching the P3 opportunity route. Yard prediction is `p3_equiv_yards`.
-
-## Identity and parity gates
-
-Before any persistence interpretation:
+All must pass before scientific interpretation:
 
 1. target seasons exactly `{2021, 2022, 2023, 2024}`;
 2. 2025 rows = 0;
-3. no target-game outcomes in any feature used to fit STACK1/STACK2;
-4. each target season's STACK1 weights fit only on `S-1`;
-5. each target season's STACK2 allocator fit only on `S-1`;
-6. M95Q 2024 M91 universe parity source remains PASS;
-7. player/team/week identity unique in the final P3-equivalent panel;
-8. P3 Week-1 route equals frozen STACK1 exactly to floating-point tolerance;
-9. P3 Weeks2-18 arithmetic reproduces `enriched_att * stack_implied_ypc` to <=1e-10;
-10. fallback-required share <=1% per season;
-11. sportsbook inputs used upstream = 0;
-12. production changed = false.
+3. target-season ensemble weights use only `S-1` component rows;
+4. required `mc_proj`, `ml_proj`, `state_proj`, `actual`, market, player/team/week identity present;
+5. final RB identity unique by `(season, week, team, player_key)`;
+6. exactly one `rush_att` and one `rush_yards` source row per final player-game;
+7. M95Q source parity status remains PASS;
+8. sportsbook inputs used = 0;
+9. production changed = false.
 
-Any failure => `P3_EQUIVALENT_INTEGRITY_FAILURE`; no scientific disposition.
+Failure => `RB_PD2_MULTISEASON_INTEGRITY_FAILURE`; no scientific disposition.
 
-## Frozen PD2 history construction
+## Frozen history construction
 
-Reuse the original RB-PD2 contract unchanged:
+Reuse original PD2 mechanics:
 
 - same player only;
 - chronological completed prior games only;
-- last **8** eligible prior games;
+- last **8** eligible games;
 - minimum **4** prior games;
-- history resets only by chronology, not season boundary: prior completed games may carry across seasons for the same player, but no future/same-game row may enter;
-- prior quantities:
-  - carry bias = mean(predicted carries - actual carries),
-  - carry MAE,
-  - yard bias = mean(predicted rushing yards - actual rushing yards),
-  - yard MAE.
+- history may cross season boundaries within the 2021-2024 reconstructed panel, but never includes same/future games;
+- carry error = predicted carries - actual carries;
+- yard error = predicted rushing yards - actual rushing yards;
+- prior8 bias/MAE computed exactly as original PD2.
 
-The replication target is the next game's signed/absolute error.
-
-## Frozen diagnostics — original PD2 gates retained
+## Original PD2 gates retained
 
 ### A. Carry directional persistence
 
-Pooled 2021-2024 PASS only if all:
-
-- scoreable rows >= 700;
+Pooled PASS iff all:
+- scoreable rows >=700;
 - Spearman(prior carry bias, target carry error) >= +0.08;
 - high-low quartile target carry-error gap >= +1.0 carry;
-- sign agreement >=55% where |prior carry bias| >=0.5;
-- pooled Weeks 5-12 gap >0;
-- pooled Weeks 13-18 gap >0.
+- sign agreement >=55% where |prior carry bias|>=0.5;
+- Weeks5-12 gap >0;
+- Weeks13-18 gap >0.
 
 ### B. Carry difficulty persistence
 
-Pooled PASS only if all:
-
+Pooled PASS iff all:
 - scoreable rows >=700;
 - Spearman(prior carry MAE, target absolute carry error) >= +0.08;
-- high-low target absolute-error gap >= +0.75 carry;
-- pooled Weeks 5-12 gap >0;
-- pooled Weeks 13-18 gap >0.
+- high-low absolute-error gap >= +0.75 carry;
+- Weeks5-12 gap >0;
+- Weeks13-18 gap >0.
 
 ### C. Yard directional persistence
 
-Pooled PASS only if all:
-
+Pooled PASS iff all:
 - scoreable rows >=700;
 - Spearman(prior yard bias, target yard error) >= +0.08;
 - high-low target yard-error gap >= +6 yards;
-- sign agreement >=55% where |prior yard bias| >=3 yards;
-- pooled Weeks 5-12 gap >0;
-- pooled Weeks 13-18 gap >0.
+- sign agreement >=55% where |prior yard bias|>=3 yards;
+- Weeks5-12 gap >0;
+- Weeks13-18 gap >0.
 
 ### D. Yard difficulty persistence
 
-Pooled PASS only if all:
-
+Pooled PASS iff all:
 - scoreable rows >=700;
 - Spearman(prior yard MAE, target absolute yard error) >= +0.08;
 - high-low target absolute-error gap >= +5 yards;
-- pooled Weeks 5-12 gap >0;
-- pooled Weeks 13-18 gap >0.
+- Weeks5-12 gap >0;
+- Weeks13-18 gap >0.
 
-## Added multi-season confirmation guard
+## Multi-season confirmation guard
 
-Because this is specifically a multi-season replication, a pooled diagnostic is `REPLICATED` only when:
+A diagnostic is `REPLICATED` only if:
 
-- the original pooled PD2 gate above passes; **and**
-- both Spearman and quartile-gap direction are positive in at least **3 of 4** target seasons; **and**
-- neither 2023 nor 2024 has both Spearman <=0 and quartile gap <=0 for that diagnostic.
+- its original pooled gate passes; and
+- both Spearman and quartile-gap direction are positive in at least **3 of 4** target seasons; and
+- neither 2023 nor 2024 has both Spearman <=0 and quartile gap <=0.
 
-This guard is frozen before results and is stricter than the original single-season PD2 disposition; it cannot rescue a pooled failure.
+This can only make the original gate stricter; it cannot rescue a pooled failure.
 
 ## Dispositions
 
-- integrity failure: `P3_EQUIVALENT_INTEGRITY_FAILURE`;
-- zero diagnostics replicate: `NO_MULTISEASON_RB_PLAYER_ERROR_PERSISTENCE`;
-- one or more diagnostics replicate: `MULTISEASON_RB_PLAYER_ERROR_PERSISTENCE_REPRODUCED`.
+- integrity failure: `RB_PD2_MULTISEASON_INTEGRITY_FAILURE`;
+- no replicated diagnostics: `NO_MULTISEASON_RB_PLAYER_ERROR_PERSISTENCE`;
+- >=1 replicated diagnostic: `MULTISEASON_RB_PLAYER_ERROR_PERSISTENCE_REPRODUCED`.
 
-**Authorization boundary for the untouched uncertainty-width lane:**
+Width-lane authorization is narrower:
 
-- Carry-width research is unlocked only if diagnostic **B** replicates.
-- Yard-width research is unlocked only if diagnostic **D** replicates.
-- Directional A/C results do not by themselves authorize a width experiment.
-- Any unlocked width experiment still requires its own separately frozen plan before implementation.
+- carry uncertainty-width work unlocks only if **B** replicates;
+- yard uncertainty-width work unlocks only if **D** replicates;
+- A/C do not authorize width changes;
+- any unlocked width experiment requires a new frozen plan before implementation.
 
-## Forbidden
+## Explicit non-claims / forbidden actions
 
-- no sportsbook/line/odds features;
+- this does **not** resolve the PD5/PD6 memo's literal multi-season P3-equivalent blocker;
+- no unpromoted Weeks2-18 P3 backport;
+- no M94C/STACK2 substitute invented after results;
+- no sportsbook features;
 - no 2025 confirmation rows;
-- no threshold/window/model-family tuning after results;
-- no alternate historical allocator if this one fails integrity;
-- no PD6 launch from this experiment alone;
-- no production changes.
+- no gate/window/feature/model tuning after results;
+- no production change.
