@@ -6,6 +6,7 @@ from typing import Callable
 import pandas as pd
 
 from scripts._opponent_map import canon_team
+from scripts.utils.eligible_team_set_v1 import expected_current_teams
 
 
 def build_slate_universe(
@@ -19,11 +20,12 @@ def build_slate_universe(
     """Return one football-defined player row per team/player for the active week.
 
     Production contract:
-    - sportsbook availability NEVER defines which players the football model knows;
-    - the active player universe is current Ourlads offensive-skill roles;
+    - sportsbook posting coverage NEVER defines which players the football model knows;
+    - when ACTIVE_ROLES_CSV is configured, that football-only availability/timing
+      artifact defines the certified current team/player universe;
+    - otherwise the active player universe is current Ourlads offensive-skill roles;
     - the authoritative schedule supplies opponent identity;
-    - live props, when enabled, are validated/quarantined separately upstream and
-      are joined only later when deciding which already-modeled markets to price;
+    - live props, when enabled, are validated/quarantined separately downstream;
     - unresolved current team/opponent/player identity is fatal.
 
     ``live_odds_enabled`` is retained only for runtime logging/backward-compatible
@@ -74,7 +76,9 @@ def build_slate_universe(
         dupes = cur.loc[cur["team"].duplicated(keep=False)].to_dict("records")
         raise RuntimeError(f"Active schedule is not unique by team: {dupes[:20]}")
 
-    # Football model universe is independent of sportsbook posting coverage.
+    # Football model identity is independent of sportsbook posting coverage.
+    # The roles source may itself be the certified current availability/timing
+    # subset, which is the authoritative football universe for this run.
     base = roles[["player", "player_clean_key", "team"]].copy()
     base = base.merge(cur, on="team", how="inner", validate="many_to_one")
     if base.empty:
@@ -103,11 +107,24 @@ def build_slate_universe(
     base["week"] = int(week)
     base = base.drop_duplicates(["team", "player_clean_key"])
 
-    if base["team"].nunique() < 24:
-        raise RuntimeError(f"PlayerForm active slate universe has implausible team coverage: {base['team'].nunique()}")
+    observed = {canon_team(x) for x in base["team"].dropna().astype(str)}
+    observed.discard("")
+    expected = expected_current_teams()
+    if expected is not None:
+        missing_teams = sorted(expected - observed)
+        extra_teams = sorted(observed - expected)
+        if missing_teams or extra_teams:
+            raise RuntimeError(
+                "PlayerForm current-team universe != certified current roles; "
+                f"missing={missing_teams} extra={extra_teams}"
+            )
+    elif len(observed) < 24:
+        # Legacy/non-availability mode retains the historical corruption floor.
+        raise RuntimeError(f"PlayerForm active slate universe has implausible team coverage: {len(observed)}")
+
     print(
         "[slate_universe_v2] sportsbook_independent=1 "
         f"live_odds_enabled={int(bool(live_odds_enabled))} season={season} week={week} "
-        f"players={len(base)} teams={base['team'].nunique()} source=OURLADS_PLUS_SCHEDULE"
+        f"players={len(base)} teams={len(observed)} source=OURLADS_PLUS_SCHEDULE"
     )
     return base
