@@ -35,6 +35,7 @@ from scripts._opponent_map import canon_team
 from scripts.harden_live_odds_artifacts_v1 import harden_live_odds_artifacts
 from scripts.repair_live_prop_identity_v1 import repair_live_prop_identity
 from scripts.runtime_context import resolve_week
+from scripts.utils.eligible_team_set_v1 import expected_current_teams
 
 DATA = Path("data")
 OUTPUTS = Path("outputs")
@@ -176,6 +177,29 @@ def _active_game_windows(
     return {pair: tuple(sorted(kickoffs)) for pair, kickoffs in windows.items()}
 
 
+def _scope_to_eligible_teams(
+    active_pairs: set[tuple[str, str]],
+    active_windows: dict[tuple[str, str], tuple[pd.Timestamp, ...]],
+    eligible_teams: set[str] | None,
+) -> tuple[set[tuple[str, str]], dict[tuple[str, str], tuple[pd.Timestamp, ...]]]:
+    """Narrow this week's real-schedule pairs/windows to pricing-eligible teams.
+
+    ``eligible_teams`` of ``None`` means legacy 32-team mode (no availability
+    gating configured) -- pass through unchanged. Otherwise a pair is kept only
+    if both teams are currently pricing-eligible, so a withheld team (already
+    kicked off, or not yet certified pre-kickoff) never has its sportsbook
+    offers scoped in downstream.
+    """
+    if eligible_teams is None:
+        return active_pairs, active_windows
+    pairs = {pair for pair in active_pairs if set(pair).issubset(eligible_teams)}
+    windows = {
+        pair: windows for pair, windows in active_windows.items()
+        if set(pair).issubset(eligible_teams)
+    }
+    return pairs, windows
+
+
 def _allowed_event_ids(
     game_odds: pd.DataFrame,
     active_windows: dict[tuple[str, str], tuple[pd.Timestamp, ...]],
@@ -268,6 +292,21 @@ def run_gate(season: int, date: str = "") -> dict:
     schedule = _safe_read_csv(TEAM_WEEK_MAP)
     active_pairs = _active_game_pairs(schedule, int(season), week)
     active_windows = _active_game_windows(schedule, int(season), week)
+
+    # team_week_map covers the whole week's real schedule (all 32 teams), which
+    # only rules out off-slate/wrong-week sportsbook events. It does NOT know
+    # which of those games are currently pricing-eligible: a game already
+    # kicked off (or not yet certified pre-kickoff) is withheld from
+    # roles_current_production_eligible_v1.csv, but was still "this week's real
+    # schedule" and so passed straight through this gate uncontested -- a real
+    # live run priced 8 already-in-progress/finished teams as a result. Narrow
+    # to the certified-eligible team set here so a withheld team's sportsbook
+    # offers never reach props_raw.csv/props_enriched.csv/odds_game.csv in the
+    # first place, matching the pricing-eligibility rule enforced everywhere
+    # else in the pipeline.
+    active_pairs, active_windows = _scope_to_eligible_teams(
+        active_pairs, active_windows, expected_current_teams()
+    )
 
     _clear_stale_odds_artifacts()
 
