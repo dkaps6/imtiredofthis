@@ -112,22 +112,18 @@ def add_pregame_features(games: pd.DataFrame, geometry: pd.DataFrame) -> tuple[p
     x["away_ml_novig_p"] = x["away_ml_raw_p"] / denom
     x["favorite_ml_prob"] = x[["home_ml_novig_p", "away_ml_novig_p"]].max(axis=1)
 
-    spread_side_prob = np.where(
-        x["predicted_margin_home"] > 0,
-        x["home_ml_novig_p"],
-        np.where(x["predicted_margin_home"] < 0, x["away_ml_novig_p"], x["favorite_ml_prob"]),
-    )
-    x["spread_favored_ml_prob"] = spread_side_prob
-
-    fit = x.loc[train_mask & x["spread_favored_ml_prob"].notna() & x["abs_spread"].notna()].copy()
+    # Frozen feature 6: train-only mapping from spread magnitude to the
+    # market's favorite no-vig probability. Do not substitute the probability
+    # of the spread-selected side; the preregistered feature is favorite_ml_prob.
+    fit = x.loc[train_mask & x["favorite_ml_prob"].notna() & x["abs_spread"].notna()].copy()
     if len(fit) < 50:
         raise RuntimeError("moneyline block passed coverage gate but has <50 usable train rows")
     mapper = LinearRegression()
-    mapper.fit(fit[["abs_spread"]].to_numpy(dtype=float), fit["spread_favored_ml_prob"].to_numpy(dtype=float))
-    x["expected_spread_favored_ml_prob"] = mapper.predict(x[["abs_spread"]].to_numpy(dtype=float))
-    x["spread_ml_consistency_resid"] = x["spread_favored_ml_prob"] - x["expected_spread_favored_ml_prob"]
-    meta["spread_ml_mapper_slope"] = float(mapper.coef_[0])
-    meta["spread_ml_mapper_intercept"] = float(mapper.intercept_)
+    mapper.fit(fit[["abs_spread"]].to_numpy(dtype=float), fit["favorite_ml_prob"].to_numpy(dtype=float))
+    x["expected_favorite_ml_prob"] = mapper.predict(x[["abs_spread"]].to_numpy(dtype=float))
+    x["spread_ml_consistency_resid"] = x["favorite_ml_prob"] - x["expected_favorite_ml_prob"]
+    meta["favorite_ml_mapper_slope"] = float(mapper.coef_[0])
+    meta["favorite_ml_mapper_intercept"] = float(mapper.intercept_)
     return x, meta
 
 
@@ -308,19 +304,54 @@ def downstream_summary(
         selected_ids = set(p.loc[p["selected"].eq(1), "game_id"].astype(str))
 
         for metric in [primary_metric, secondary_metric]:
-            uncond = effect_row(parent_frame, hypothesis=hypothesis, metric=metric, total_cutoff=total_cutoff, selected_game_ids=None, eligible_game_ids=eligible_ids, arm="unconditional_vegas")
-            selected = effect_row(parent_frame, hypothesis=hypothesis, metric=metric, total_cutoff=total_cutoff, selected_game_ids=selected_ids, eligible_game_ids=eligible_ids, arm="selected_high_confirmation")
-            ground = effect_row(parent_frame, hypothesis=hypothesis, metric=metric, total_cutoff=total_cutoff, selected_game_ids=None, eligible_game_ids=eligible_ids, arm="ground_truth")
+            uncond = effect_row(
+                parent_frame,
+                hypothesis=hypothesis,
+                metric=metric,
+                total_cutoff=total_cutoff,
+                selected_game_ids=None,
+                eligible_game_ids=eligible_ids,
+                arm="unconditional_vegas",
+            )
+            selected = effect_row(
+                parent_frame,
+                hypothesis=hypothesis,
+                metric=metric,
+                total_cutoff=total_cutoff,
+                selected_game_ids=selected_ids,
+                eligible_game_ids=eligible_ids,
+                arm="selected_high_confirmation",
+            )
+            ground = effect_row(
+                parent_frame,
+                hypothesis=hypothesis,
+                metric=metric,
+                total_cutoff=total_cutoff,
+                selected_game_ids=None,
+                eligible_game_ids=eligible_ids,
+                arm="ground_truth",
+            )
 
             uncond_d = uncond.get("cohens_d", np.nan)
             selected_d = selected.get("cohens_d", np.nan)
+            ground_d = ground.get("cohens_d", np.nan)
             selected_support = (
                 selected.get("status") == "OK"
                 and int(selected.get("n_high", 0)) >= MIN_DOWNSTREAM_ROWS_PER_SIDE
                 and int(selected.get("n_low", 0)) >= MIN_DOWNSTREAM_ROWS_PER_SIDE
             )
-            sharpen = np.isfinite(uncond_d) and np.isfinite(selected_d) and float(selected_d) > float(uncond_d)
-            primary_gate = bool(class_pass and selected_support and sharpen) if metric == primary_metric else None
+            finite_effects = all(np.isfinite(v) for v in [uncond_d, selected_d, ground_d])
+            sharpen = finite_effects and float(selected_d) > float(uncond_d)
+            closer_to_ground = (
+                finite_effects
+                and abs(float(ground_d) - float(selected_d))
+                < abs(float(ground_d) - float(uncond_d))
+            )
+            primary_gate = (
+                bool(class_pass and selected_support and sharpen and closer_to_ground)
+                if metric == primary_metric
+                else None
+            )
             for row in [uncond, selected, ground]:
                 rows.append({
                     **row,
@@ -328,6 +359,7 @@ def downstream_summary(
                     "classification_pass": class_pass,
                     "selected_support_pass": selected_support,
                     "usage_sharpen_pass": sharpen,
+                    "moves_toward_ground_truth_pass": closer_to_ground,
                     "downstream_primary_gate_pass": primary_gate,
                 })
     return pd.DataFrame(rows)
@@ -336,8 +368,14 @@ def downstream_summary(
 def disposition(class_summary: pd.DataFrame, downstream: pd.DataFrame) -> dict:
     out: dict[str, dict] = {}
     for hypothesis in ["margin", "total"]:
-        c7 = class_summary.loc[class_summary["hypothesis"].eq(hypothesis) & class_summary["confirm_threshold"].eq(PRIMARY_THRESHOLD)].iloc[0]
-        c3 = class_summary.loc[class_summary["hypothesis"].eq(hypothesis) & class_summary["confirm_threshold"].eq(SENSITIVITY_THRESHOLD)].iloc[0]
+        c7 = class_summary.loc[
+            class_summary["hypothesis"].eq(hypothesis)
+            & class_summary["confirm_threshold"].eq(PRIMARY_THRESHOLD)
+        ].iloc[0]
+        c3 = class_summary.loc[
+            class_summary["hypothesis"].eq(hypothesis)
+            & class_summary["confirm_threshold"].eq(SENSITIVITY_THRESHOLD)
+        ].iloc[0]
         d = downstream.loc[
             downstream["hypothesis"].eq(hypothesis)
             & downstream["is_primary_metric"].eq(True)
@@ -386,7 +424,13 @@ def main() -> int:
     for hypothesis in ["margin", "total"]:
         for threshold in [PRIMARY_THRESHOLD, SENSITIVITY_THRESHOLD]:
             label = f"{hypothesis}_confirmed_{int(threshold)}"
-            row, pred = fit_label(x, label_col=label, features=features, hypothesis=hypothesis, threshold=threshold)
+            row, pred = fit_label(
+                x,
+                label_col=label,
+                features=features,
+                hypothesis=hypothesis,
+                threshold=threshold,
+            )
             summaries.append(row)
             predictions.append(pred)
 
@@ -408,7 +452,9 @@ def main() -> int:
         "feature_meta": feature_meta,
         "disposition": disp,
     }
-    (a.out_dir / "vegas_confirmation_likelihood_result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+    (a.out_dir / "vegas_confirmation_likelihood_result.json").write_text(
+        json.dumps(result, indent=2, sort_keys=True) + "\n"
+    )
 
     print("=== VEGAS_CONFIRMATION_LIKELIHOOD_V1 ===")
     print(json.dumps(result, indent=2, sort_keys=True))
