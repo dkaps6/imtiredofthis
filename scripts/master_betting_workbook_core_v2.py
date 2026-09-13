@@ -298,17 +298,29 @@ def build_offer_rows(pr,av,pf,roles,cert,lineage,season_totals,game_logs):
 
 
 def signal(row,current):
+    # STRONG/LEAN EDGE confidence tiering removed 2026-09-13: overnight
+    # research (Issue #535, PRs #557/#559) found the underlying model
+    # probability has AUC~0.517 against realized outcomes (near chance) and
+    # that isotonic recalibration of the STRONG-gate probability does not
+    # improve realized ROI in either holdout direction -- the tier does not
+    # reliably separate good bets from bad ones. The BLOCKED/RESEARCH ONLY
+    # fail-closed states below are unrelated data-quality/eligibility gates,
+    # not the discredited confidence tier, and are kept as-is.
     if row['pos']=='UNRESOLVED':
         return 'BLOCKED','BLOCKED'
     if 'NOT_DEDICATED' in row['science'] or row['science']=='LINEAGE_NOT_RESOLVED':
         return 'RESEARCH ONLY','BLOCKED'
     if row['game_status']=='KICKED_OFF_LOCKED' or row['availability'] in {'UNAVAILABLE','UNMATCHED_CURRENT_ROSTER'}:
         return 'BLOCKED','BLOCKED'
-    e=row['best_ev']; q=row['prob_edge']
-    sig='STRONG EDGE' if e is not None and q is not None and e>=.05 and q>=.03 else ('LEAN EDGE' if e is not None and e>0 else 'NO EDGE')
+    e=row['best_ev']
+    sig='HAS EDGE' if e is not None and e>0 else 'NO EDGE'
     if not current:
         return sig,'NO LIVE ODDS'
-    return sig,('PLAY '+row['best_side'] if sig=='STRONG EDGE' else ('LEAN '+row['best_side'] if sig=='LEAN EDGE' else 'PASS'))
+    return sig,(row['best_side'] if sig=='HAS EDGE' else 'PASS')
+
+
+def rank(r):
+    return (r['pos']=='UNRESOLVED',('NOT_DEDICATED' in r['science'] or r['science']=='LINEAGE_NOT_RESOLVED'),r['game_status']=='KICKED_OFF_LOCKED' or r['availability'] in {'UNAVAILABLE','UNMATCHED_CURRENT_ROSTER'},-(r['best_ev'] if r['best_ev'] is not None else -999))
 
 
 def parse_args():
@@ -353,7 +365,9 @@ def main():
     master=wb.create_sheet('Master Betting Board')
     headers=['Event ID','Game ID','Kickoff UTC','Player','Player Key','Team','Opponent','Position','Position Source','Model Role','Depth Role','Current Availability','Availability Authority','Roster Match','Game Status','Game Eligible','Market','Book','Vegas Line','Model Projection','Model SD','Projection - Line','Over Odds','Under Odds','Model P Over','Model P Under','No-Vig P Over','No-Vig P Under','EV ROI Over','EV ROI Under','Best Side','Best Odds','Best Model P','Best Market P','Probability Edge','Best EV ROI','Snapshot Signal','Science Status','Bettable Now','Decision','Mean Owner / Limitation']
     master.append(headers)
-    for r in rows:
+    # Sorted by raw EV (via shared rank(), same ordering as Best Snapshot
+    # Edges below) instead of relying on the removed confidence tier.
+    for r in sorted(rows,key=rank):
         sg,dec=signal(r,current)
         master.append([r['event_id'],r['game_id'],r['kickoff'],r['player'],r['key'],r['team'],r['opp'],r['pos'],r['position_source'],r['model_role'],r['depth_role'],r['availability'],r['authority'],r['match'],r['game_status'],r['game_eligible'],r['market_label'],r['book'],r['line'],r['proj'],r['sd'],None,r['over_odds'],r['under_odds'],r['p_over'],r['p_under'],r['nv_over'],r['nv_under'],r['ev_over'],r['ev_under'],r['best_side'],r['over_odds'] if r['best_side']=='OVER' else r['under_odds'] if r['best_side']=='UNDER' else '',r['best_model_p'],r['best_market_p'],r['prob_edge'],r['best_ev'],sg,r['science'],current and r['game_eligible'] and r['pos']!='UNRESOLVED' and sg not in {'BLOCKED','RESEARCH ONLY'},dec,(r['mean_owner']+(' | '+r['limitation'] if r['limitation'] else ''))[:32000]])
         rr=master.max_row; master.cell(rr,22,f'=IF(OR(T{rr}="",S{rr}=""),"",T{rr}-S{rr})')
@@ -361,8 +375,9 @@ def main():
     for col in ['Y','Z','AA','AB','AC','AD','AG','AH','AI','AJ']:
         for cell in master[col][1:]: cell.number_format='0.0%'
     if master.max_row>1:
-        master.conditional_formatting.add(f'AK2:AK{master.max_row}',FormulaRule(formula=['$AK2="STRONG EDGE"'],fill=PatternFill('solid',fgColor=GREEN),font=Font(color=GD,bold=True)))
-        master.conditional_formatting.add(f'AK2:AK{master.max_row}',FormulaRule(formula=['$AK2="LEAN EDGE"'],fill=PatternFill('solid',fgColor=YELLOW),font=Font(color=YD,bold=True)))
+        # STRONG/LEAN EDGE green/yellow color-coding removed with the tier
+        # (see signal()). BLOCKED/RESEARCH ONLY red stays -- real fail-closed
+        # data-quality states, not a confidence claim.
         master.conditional_formatting.add(f'AK2:AK{master.max_row}',FormulaRule(formula=['OR($AK2="BLOCKED",$AK2="RESEARCH ONLY")'],fill=PatternFill('solid',fgColor=RED),font=Font(color=RD,bold=True)))
         master.conditional_formatting.add(f'AJ2:AJ{master.max_row}',ColorScaleRule(start_type='min',start_color='FECACA',mid_type='percentile',mid_value=50,mid_color='FEF3C7',end_type='max',end_color='BBF7D0'))
 
@@ -372,8 +387,6 @@ def main():
     for r in rows:
         k=(r['key'],r['market']); score=r['best_ev'] if r['best_ev'] is not None else -999
         if k not in picks or score>(picks[k]['best_ev'] if picks[k]['best_ev'] is not None else -999): picks[k]=r
-    def rank(r):
-        return (r['pos']=='UNRESOLVED',('NOT_DEDICATED' in r['science'] or r['science']=='LINEAGE_NOT_RESOLVED'),r['game_status']=='KICKED_OFF_LOCKED' or r['availability'] in {'UNAVAILABLE','UNMATCHED_CURRENT_ROSTER'},-(r['best_ev'] if r['best_ev'] is not None else -999))
     for r in sorted(picks.values(),key=rank):
         sg,dec=signal(r,current); odds=r['over_odds'] if r['best_side']=='OVER' else r['under_odds'] if r['best_side']=='UNDER' else ''
         best.append([r['player'],r['team'],r['opp'],r['pos'],r['position_source'],r['model_role'],r['market_label'],r['book'],r['line'],r['proj'],None,r['best_side'],odds,r['best_model_p'],r['best_market_p'],r['prob_edge'],r['best_ev'],sg,r['availability'],r['game_status'],r['science'],current and r['game_eligible'] and r['pos']!='UNRESOLVED' and sg not in {'BLOCKED','RESEARCH ONLY'},dec])
@@ -382,15 +395,13 @@ def main():
     for col in ['N','O','P','Q']:
         for cell in best[col][1:]: cell.number_format='0.0%'
     if best.max_row>1:
-        best.conditional_formatting.add(f'R2:R{best.max_row}',FormulaRule(formula=['$R2="STRONG EDGE"'],fill=PatternFill('solid',fgColor=GREEN),font=Font(color=GD,bold=True)))
-        best.conditional_formatting.add(f'R2:R{best.max_row}',FormulaRule(formula=['$R2="LEAN EDGE"'],fill=PatternFill('solid',fgColor=YELLOW),font=Font(color=YD,bold=True)))
         best.conditional_formatting.add(f'R2:R{best.max_row}',FormulaRule(formula=['OR($R2="BLOCKED",$R2="RESEARCH ONLY")'],fill=PatternFill('solid',fgColor=RED),font=Font(color=RD,bold=True)))
 
     frame(wb,'Game Certification',cert,'GameCertification')
     frame(wb,'Availability & Roles',av,'AvailabilityRoles')
     frame(wb,'Market Science',lineage,'MarketScience')
     notes=wb.create_sheet('Lineage & Notes'); notes.append(['NFL BETTING MODEL MASTER — RUN LINEAGE','']); notes.merge_cells('A1:B1'); notes['A1'].fill=PatternFill('solid',fgColor=NAVY); notes['A1'].font=Font(bold=True,color=WHITE,size=15)
-    for k,v in [('Workbook builder','scripts/build_master_betting_workbook_v1.py -> master_betting_workbook_core_v2.py'),('GitHub Run ID',a.run_id),('GitHub SHA',a.sha),('GitHub Ref',a.ref_name),('Live odds requested',requested),('Pricing status',status),('Live odds status',live.get('status','')),('Unresolved position rows',unresolved),('Position resolution','Exact current identity -> suffix-insensitive current identity -> historical player position -> deterministic model/market inference -> UNRESOLVED fail-closed.'),('Architecture','Sportsbook is downstream only; workbook generation cannot alter football projections.'),('Decision policy','PLAY/LEAN is a display gate only; it is not a calibrated staking policy.')]:
+    for k,v in [('Workbook builder','scripts/build_master_betting_workbook_v1.py -> master_betting_workbook_core_v2.py'),('GitHub Run ID',a.run_id),('GitHub SHA',a.sha),('GitHub Ref',a.ref_name),('Live odds requested',requested),('Pricing status',status),('Live odds status',live.get('status','')),('Unresolved position rows',unresolved),('Position resolution','Exact current identity -> suffix-insensitive current identity -> historical player position -> deterministic model/market inference -> UNRESOLVED fail-closed.'),('Architecture','Sportsbook is downstream only; workbook generation cannot alter football projections.'),('Decision policy','Snapshot Signal/Decision show a raw EV-derived HAS EDGE/NO EDGE status and best side (or PASS/BLOCKED/RESEARCH ONLY); this is not a calibrated confidence tier or staking policy. Both betting sheets sort by Best EV ROI descending.')]:
         notes.append([k,v]); notes.cell(notes.max_row,1).fill=PatternFill('solid',fgColor=LBLUE); notes.cell(notes.max_row,1).font=Font(bold=True,color=NAVY)
     notes.column_dimensions['A'].width=34; notes.column_dimensions['B'].width=105
 
