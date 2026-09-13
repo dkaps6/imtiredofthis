@@ -89,7 +89,7 @@ jobs:
           python scripts/backtest/validate_historical_inputs.py \
             --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" \
             --data-dir "$D" --report "$D/historical_input_validation.csv"
-          python scripts/backtest/historical_player_logs_m95q.py \
+          python scripts/backtest/historical_player_logs.py \
             --seasons "$PRIOR,$SEASON" --schedule "$D/schedule_history.csv" \
             --out "$D/player_game_logs_history.csv"
           python scripts/backtest/build_historical_injuries.py \
