@@ -1,0 +1,78 @@
+# scratch: ESPN's public summary API has real structured data (confirmed via
+# scratch-diag-alt-inactives-source). This checks exactly where per-game
+# inactive-player designation lives in the payload (boxscore.players
+# structure) using a completed game (ATL@PIT) as ground truth, and separately
+# checks whether that same field is populated pre-kickoff for a game that
+# hasn't started yet (DAL@NYG, tonight's SNF). Fetch-only, zero credits.
+name: Scratch Diagnose ESPN Boxscore Shape
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/scratch-diag-espn-boxscore-shape.yml'
+
+jobs:
+  diag:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install requests
+      - name: Inspect ESPN boxscore.players shape for completed and future games
+        run: |
+          python3 -c "
+          import requests, json
+
+          r = requests.get('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard', timeout=30)
+          events = r.json().get('events', [])
+          by_short = {e.get('shortName',''): e for e in events}
+          for k in list(by_short.keys()):
+              print('available:', k, by_short[k].get('status',{}).get('type',{}).get('name'))
+
+          def inspect(eid, label):
+              print()
+              print(f'===== {label} (event {eid}) =====')
+              r2 = requests.get(f'https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event={eid}', timeout=30)
+              d2 = r2.json()
+              bx = d2.get('boxscore', {})
+              players = bx.get('players', [])
+              print('boxscore.players team count:', len(players))
+              for team_block in players:
+                  team = team_block.get('team', {}).get('abbreviation')
+                  stats_groups = team_block.get('statistics', [])
+                  print(f'  team={team} statistics_groups={len(stats_groups)}')
+                  for g in stats_groups[:2]:
+                      print('    group name:', g.get('name'), 'athletes:', len(g.get('athletes', [])))
+                      for a in g.get('athletes', [])[:2]:
+                          keys = sorted(a.keys())
+                          print('      athlete keys:', keys)
+                  # look for any explicit 'didNotPlay' / roster-only entries
+                  print('  team_block top-level keys:', sorted(team_block.keys()))
+              # gameInfo check
+              gi = d2.get('gameInfo', {})
+              print('gameInfo keys:', sorted(gi.keys()) if isinstance(gi, dict) else type(gi))
+              # header check for competitors/roster hints
+              header = d2.get('header', {})
+              comps = header.get('competitions', [{}])[0].get('competitors', []) if header else []
+              for c in comps:
+                  print('  competitor keys:', sorted(c.keys()), 'team:', c.get('team',{}).get('abbreviation'))
+
+          # completed game
+          pit = by_short.get('ATL @ PIT')
+          if pit:
+              inspect(pit['id'], 'ATL @ PIT (completed)')
+
+          # find tonight's DAL @ NYG (not started)
+          dal = by_short.get('DAL @ NYG')
+          if dal:
+              inspect(dal['id'], 'DAL @ NYG (not yet started)')
+          else:
+              print('DAL @ NYG not in todays scoreboard event list')
+          "
