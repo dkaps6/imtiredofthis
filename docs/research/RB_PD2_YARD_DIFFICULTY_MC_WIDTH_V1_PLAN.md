@@ -1,6 +1,17 @@
 # RB-PD2 Yard-Difficulty MC-Width V1 — Frozen Plan
 
-**STATUS: FROZEN BEFORE ANY CANDIDATE DISTRIBUTION RESULT. RESEARCH ONLY. NO PRODUCTION CHANGE.**
+**STATUS: FROZEN BEFORE ANY CANDIDATE DISTRIBUTION RESULT. PRE-RESULT FIDELITY AMENDMENT RECORDED BELOW. RESEARCH ONLY. NO PRODUCTION CHANGE.**
+
+## Pre-result fidelity amendment record
+
+The original plan was frozen at commit `222c78cb0314e79e0f9ce6e147ab127a30f68f10`. No candidate distribution was implemented, run, or inspected before the two clarifications below were made.
+
+A direct reread of the exact merged PR #556 evaluator established two details that should be explicit rather than left to interpretation:
+
+1. **Exact #556 error-history universe.** The PR #556 panel used for same-player error history contains target seasons **2021-2024 only**. The 2020 component artifact exists only to fit the frozen ensemble weights applied to 2021; 2020 errors do **not** enter `prior8_yard_mae`. Cross-season history therefore begins only where target-panel history exists (for example 2021 -> 2022), exactly matching #556.
+2. **Clustered paired bootstrap.** Because the same RB contributes repeated player-games, the primary CRPS bootstrap will resample **player clusters**, not individual rows. Each sampled `player_key` contributes all of that player's eligible rows, preserving within-player dependence. The replicate count (`10,000`), deterministic seed (`42027`), paired baseline/candidate comparison, and frozen `>=0.95` probability gate are unchanged. This is a prospective statistical-conservatism correction, not a result-driven gate change.
+
+No width coefficient, onset percentile, cap, target seasons, evaluation thresholds, candidate transformation, or scientific success gate was changed by this amendment.
 
 ## Authority / purpose
 
@@ -73,14 +84,16 @@ No P3 Weeks2-18 backport is introduced. This remains the current production-equi
 
 ## Frozen strictly-prior difficulty feature
 
-Reproduce PR #556's untouched yard-difficulty history mechanic:
+Reproduce PR #556's untouched yard-difficulty history mechanic exactly:
 
 - target error = `ensemble_proj - actual_rush_yards`;
 - same player only;
 - chronological completed prior games only;
 - last `8` eligible games;
 - minimum `4` prior games;
-- history may cross seasons within the reconstructed panel;
+- the error-history panel consists only of target-season rows from **2021-2024**;
+- 2020 is used to fit 2021 ensemble weights but is never an error-history observation;
+- history may cross target-season boundaries within 2021-2024 (for example, 2021 history may feed an early-2022 target), matching #556;
 - current/future game is forbidden;
 - `prior8_yard_mae = mean(abs(prior target errors))`.
 
@@ -126,7 +139,7 @@ All 2021-2024 RB/HB/FB rushing-yard player-games with:
 
 - exact baseline distribution lineage;
 - finite current-route mean and actual;
-- at least 4 strictly-prior same-player games;
+- at least 4 strictly-prior same-player games from the exact 2021-2024 #556 target panel;
 - a valid strictly-prior difficulty score/reference floor.
 
 Expected order of magnitude is the #556 scoreable panel (`4,652` rows); exact row count is emitted and must be reconciled, not forced.
@@ -149,9 +162,12 @@ All distribution metrics use the raw paired 2,000-draw arrays and the realized r
 4. **Upper-tail Brier scores** from empirical exceedance probabilities at fixed football thresholds `50`, `75`, and `100` rushing yards.
 5. Row mean and point-error checks to prove mean neutrality.
 
-Bootstrap for the primary paired CRPS delta:
+Clustered paired bootstrap for the primary CRPS delta:
 
-- resample eligible player-games with replacement;
+- cluster unit = `player_key`;
+- sample unique eligible players with replacement;
+- each sampled player contributes all of that player's eligible rows, preserving within-player dependence;
+- use the identical sampled clusters for baseline and candidate in each paired replicate;
 - `10,000` bootstrap replicates;
 - deterministic seed `42027`;
 - report `P(candidate pooled CRPS < baseline pooled CRPS)`.
@@ -169,7 +185,7 @@ Candidate disposition can be positive only if **every gate family** passes.
 3. Prior-season-only ensemble weights: target `S` uses fit season `S-1` only.
 4. Raw reconstructed MC mean matches source `mc_proj` rowwise, max abs delta `<=1e-8`.
 5. Baseline aligned mean matches current-route `ensemble_proj` rowwise, max abs delta `<=1e-8`.
-6. Zero same/future-game difficulty-history violations.
+6. Zero same/future-game difficulty-history violations and zero pre-2021 rows in the difficulty-history panel.
 7. Zero sportsbook inputs.
 8. Production changed = false.
 
@@ -186,7 +202,7 @@ Failure => `RB_YARD_DIFFICULTY_WIDTH_INTEGRITY_FAILURE`; no scientific interpret
 On the full eligible population:
 
 1. Candidate mean CRPS improves by at least **0.5%** vs baseline.
-2. Paired bootstrap probability of lower candidate pooled CRPS is `>=0.95`.
+2. Player-clustered paired bootstrap probability of lower candidate pooled CRPS is `>=0.95`.
 
 ### D. Targeted high-difficulty improvement
 
