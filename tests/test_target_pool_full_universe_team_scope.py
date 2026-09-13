@@ -1,8 +1,8 @@
-"""validate_team_target_pool_full_universe_v2.py must tolerate the
-sportsbook-independent football universe covering MORE teams than are
-currently eligible for pricing (kickoff lockout narrows pricing eligibility
-only), while still catching a universe that's missing a team pricing
-actually depends on.
+"""The target-pool football universe must exactly match the certified current
+football teams when explicit availability/timing authority is present.
+
+The weekly schedule may contain more games, but already-started/withheld teams
+must not survive into current PlayerForm/simulation/target artifacts.
 """
 from __future__ import annotations
 
@@ -55,16 +55,25 @@ def wired(tmp_path, monkeypatch):
     return {"universe": universe, "universe_audit": universe_audit, "roles": roles}
 
 
-def test_universe_superset_of_eligible_teams_passes(wired):
-    _write_universe(wired["universe"], ["ARI", "ATL", "BAL", "BUF"])
+def test_universe_exactly_matching_certified_current_teams_passes(wired):
+    teams = ["ARI", "ATL", "BAL", "BUF"]
+    _write_universe(wired["universe"], teams)
     _write_universe_audit(wired["universe_audit"])
-    _write_roles(wired["roles"], ["ARI", "ATL"])  # only 2 of the 4 universe teams are pricing-eligible right now
+    _write_roles(wired["roles"], teams)
     assert validate_mod.main() == 0
 
 
-def test_universe_missing_an_eligible_team_still_fails(wired):
+def test_universe_superset_of_certified_current_teams_fails(wired):
+    _write_universe(wired["universe"], ["ARI", "ATL", "BAL", "BUF"])
+    _write_universe_audit(wired["universe_audit"])
+    _write_roles(wired["roles"], ["ARI", "ATL"])
+    with pytest.raises(RuntimeError, match=r"missing=\[\] extra=\['BAL', 'BUF'\]"):
+        validate_mod.main()
+
+
+def test_universe_missing_certified_current_team_fails(wired):
     _write_universe(wired["universe"], ["ARI", "ATL"])
     _write_universe_audit(wired["universe_audit"])
-    _write_roles(wired["roles"], ["ARI", "ATL", "BAL", "BUF"])  # eligible teams not all present in universe
-    with pytest.raises(RuntimeError, match="missing certified eligible teams"):
+    _write_roles(wired["roles"], ["ARI", "ATL", "BAL", "BUF"])
+    with pytest.raises(RuntimeError, match=r"missing=\['BAL', 'BUF'\] extra=\[\]"):
         validate_mod.main()
