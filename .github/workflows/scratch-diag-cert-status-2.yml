@@ -1,0 +1,70 @@
+# scratch: fresh, real-time check of official-inactives certification status
+# for the 4pm games (ARI@LAC, GB@MIN, MIA@LV, WAS@PHI). Runs only the
+# football-side steps (Ourlads roles, team-week map, weather/injuries,
+# current-availability resolution) — never touches the OddsAPI, so it
+# costs zero sportsbook credits.
+name: Scratch Diagnose Certification Status 2
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/scratch-diag-cert-status-2.yml'
+
+jobs:
+  diag:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      SEASON: "2026"
+      PRIOR_SEASON: "2025"
+      SLATE_DATE: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml beautifulsoup4 lxml
+      - name: Build raw Ourlads roles
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/providers/ourlads_depth.py --season "${SEASON}"
+      - name: Build authoritative team-week map
+        env:
+          TEAM_WEEK_MAP_CSV: data/team_week_map.csv
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/utils/build_team_week_map_v2.py --season "${SEASON}" --out data/team_week_map.csv
+          python -c "from scripts.runtime_context import log_runtime_context,resolve_week; log_runtime_context(); print('week=',resolve_week())"
+      - name: Build weather and weekly injuries
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/build/build_weather_week_v2.py --season "${SEASON}" --date "${SLATE_DATE}"
+          python scripts/build/build_injuries_weekly.py data/injuries.csv --season "${SEASON}"
+      - name: Resolve current availability (no odds)
+        run: |
+          export PYTHONPATH="${PWD}"
+          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
+          python scripts/run_current_player_availability_candidate_prep_v1.py --season "${SEASON}" --week "${WEEK_RESOLVED}"
+      - name: Print certification status
+        run: |
+          python3 -c "
+          import pandas as pd
+          c = pd.read_csv('data/current_player_availability_game_certification.csv', low_memory=False)
+          pd.set_option('display.max_columns', None)
+          pd.set_option('display.width', 200)
+          print(c.to_string())
+          print()
+          r = pd.read_csv('data/roles_current_production_eligible_v1.csv', low_memory=False)
+          r.columns = [x.lower() for x in r.columns]
+          teams = sorted(r['team'].dropna().astype(str).unique())
+          print('eligible teams now:', teams, 'count:', len(teams))
+          "
