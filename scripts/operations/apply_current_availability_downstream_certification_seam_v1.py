@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Scope downstream coverage gates to the certified current football universe.
+"""Scope downstream certification to the certified current football universe.
 
-Governance/certification only. No model parameters, projections, simulation
-science, entitlements, or sportsbook values are changed.
+Governance/certification only. The target-pool validator now owns its team-scope
+check natively through validate_current_team_set(), so this transformer does not
+rewrite it. No model parameters, projections, simulation science, entitlements,
+or sportsbook values are changed.
 """
 from __future__ import annotations
 from pathlib import Path
 
 LINEAGE_V2 = Path("scripts/audit_market_model_lineage_v2_core.py")
 LINEAGE_V3 = Path("scripts/audit_market_model_lineage_v3.py")
-TARGET_POOL = Path("scripts/validate_team_target_pool_full_universe_v2.py")
 STACK_V1 = Path("scripts/validate_certified_full_slate_stack_v1.py")
 STACK_V2 = Path("scripts/validate_certified_full_slate_stack_v2_core.py")
 STACK_V3 = Path("scripts/validate_certified_full_slate_stack_v3.py")
@@ -36,22 +37,11 @@ def main() -> int:
         "WR-R15 current-team coverage",
     )])
 
-    r22_expected = '    expected_r22_players = int(adapter.get("football_rb_rows", 0))\n    _require(expected_r22_players > 0, "R22 adapter reports zero football RB rows")\n'
     _patch(LINEAGE_V3, [
-        ('    _require(int(adapter.get("adapted_rb_rows", 0)) == 94, "R22 did not adapt all 94 Week-1 RBs")\n', r22_expected + '    _require(int(adapter.get("adapted_rb_rows", 0)) == expected_r22_players, f"R22 adapted-RB coverage drift expected={expected_r22_players} actual={adapter.get(\'adapted_rb_rows\')}")\n', "R22 adapter coverage"),
+        ('    _require(int(adapter.get("adapted_rb_rows", 0)) == 94, "R22 did not adapt all 94 Week-1 RBs")\n', '    expected_r22_players = int(adapter.get("football_rb_rows", 0))\n    _require(expected_r22_players > 0, "R22 adapter reports zero football RB rows")\n    _require(int(adapter.get("adapted_rb_rows", 0)) == expected_r22_players, f"R22 adapted-RB coverage drift expected={expected_r22_players} actual={adapter.get(\'adapted_rb_rows\')}")\n', "R22 adapter coverage"),
         ('    _require(int(pricing.get("adapted_player_keys", 0)) == 94, "R22 pricing lineage RB coverage drift")\n', '    _require(int(pricing.get("adapted_player_keys", 0)) == expected_r22_players, f"R22 pricing RB coverage drift expected={expected_r22_players} actual={pricing.get(\'adapted_player_keys\')}")\n', "R22 pricing coverage"),
         ('    _require(int(trace["rb_receiving_tail_applied"].astype(bool).sum()) == 94, "R22 trace does not contain 94 adapted RBs")\n', '    _require(int(trace["rb_receiving_tail_applied"].astype(bool).sum()) == expected_r22_players, f"R22 trace adapted-RB coverage drift expected={expected_r22_players}")\n', "R22 trace coverage"),
         ('        "rb_r22_adapted_rb_rows": 94,\n', '        "rb_r22_adapted_rb_rows": expected_r22_players,\n', "R22 payload coverage"),
-    ])
-
-    _patch(TARGET_POOL, [
-        ('import pandas as pd\n', 'import pandas as pd\n\nfrom scripts.utils.eligible_team_set_v1 import expected_current_teams\n', "target-pool import"),
-        ('    source = json.loads(UNIVERSE_AUDIT.read_text(encoding="utf-8"))\n', '    source = json.loads(UNIVERSE_AUDIT.read_text(encoding="utf-8"))\n    current_teams = expected_current_teams()\n    expected_team_count = len(current_teams) if current_teams is not None else 32\n', "target-pool scope"),
-        ('    if frame["team"].nunique() != 32:\n        raise RuntimeError(f"target audit expected 32 teams, found {frame[\'team\'].nunique()}")\n', '    if frame["team"].nunique() != expected_team_count:\n        raise RuntimeError(f"target audit expected {expected_team_count} teams, found {frame[\'team\'].nunique()}")\n', "target-pool football coverage"),
-        ('        if trace["team"].nunique() != 32:\n            raise RuntimeError(f"explicit entitlement expected 32 teams, found {trace[\'team\'].nunique()}")\n', '        if trace["team"].nunique() != expected_team_count:\n            raise RuntimeError(f"explicit entitlement expected {expected_team_count} teams, found {trace[\'team\'].nunique()}")\n', "target-pool trace coverage"),
-        ('        if len(physical) != 32:\n            raise RuntimeError(f"explicit entitlement physical audit expected 32 teams, found {len(physical)}")\n', '        if len(physical) != expected_team_count:\n            raise RuntimeError(f"explicit entitlement physical audit expected {expected_team_count} teams, found {len(physical)}")\n', "target-pool physical coverage"),
-        ('            f"Explicit full-roster target entitlement is physically invalid for {len(explicit_bad)}/32 teams; see {OUT_CSV}."\n', '            f"Explicit full-roster target entitlement is physically invalid for {len(explicit_bad)}/{expected_team_count} teams; see {OUT_CSV}."\n', "target-pool explicit denominator"),
-        ('            f"Full-roster receiving entitlement pool is physically invalid for {len(raw_bad)}/32 teams; "\n', '            f"Full-roster receiving entitlement pool is physically invalid for {len(raw_bad)}/{expected_team_count} teams; "\n', "target-pool legacy denominator"),
     ])
 
     _patch(STACK_V1, [
@@ -69,7 +59,7 @@ def main() -> int:
     )])
 
     _patch(STACK_V3, [
-        ('    _require(int(adapter.get("adapted_rb_rows", 0)) == 94, "R22 adapted-RB coverage drift")\n', r22_expected + '    _require(int(adapter.get("adapted_rb_rows", 0)) == expected_r22_players, f"R22 adapted-RB coverage drift expected={expected_r22_players}")\n', "stack-v3 R22 adapter"),
+        ('    _require(int(adapter.get("adapted_rb_rows", 0)) == 94, "R22 adapted-RB coverage drift")\n', '    expected_r22_players = int(adapter.get("football_rb_rows", 0))\n    _require(expected_r22_players > 0, "R22 adapter reports zero football RB rows")\n    _require(int(adapter.get("adapted_rb_rows", 0)) == expected_r22_players, f"R22 adapted-RB coverage drift expected={expected_r22_players}")\n', "stack-v3 R22 adapter"),
         ('    _require(int(pricing.get("adapted_player_keys", 0)) == 94, "R22 pricing RB coverage drift")\n', '    _require(int(pricing.get("adapted_player_keys", 0)) == expected_r22_players, f"R22 pricing RB coverage drift expected={expected_r22_players}")\n', "stack-v3 R22 pricing"),
         ('        "rb_r22_adapted_rb_rows": 94,\n', '        "rb_r22_adapted_rb_rows": expected_r22_players,\n', "stack-v3 R22 payload"),
     ])
