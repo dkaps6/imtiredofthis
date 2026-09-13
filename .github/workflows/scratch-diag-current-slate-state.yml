@@ -26,6 +26,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Install pandas
+        run: pip install pandas
       - name: Inspect current slate state
         run: |
           python3 -c "
