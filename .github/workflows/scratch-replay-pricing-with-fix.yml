@@ -83,14 +83,47 @@ jobs:
               print('missing team/position columns; have:', list(df.columns)[:20])
           "
           echo
-          echo "=== roles_ourlads_status_v1.csv ATL QB rows (raw status scrape) ==="
-          test -f data/roles_ourlads_status_v1.csv && grep -i ",ATL," data/roles_ourlads_status_v1.csv | grep -i -E "tagovailoa|penix|rush|,QB," || echo "file missing or no ATL QB rows"
+          echo "=== roles_ourlads_status_v1.csv ATL QB rows (raw status scrape, robust) ==="
+          python3 -c "
+          import pandas as pd
+          df = pd.read_csv('data/roles_ourlads_status_v1.csv', dtype=str, low_memory=False).fillna('')
+          df.columns = [c.lower() for c in df.columns]
+          print('columns:', list(df.columns))
+          mask = df.get('team', pd.Series(dtype=str)).astype(str).str.upper().eq('ATL')
+          if 'position_group' in df.columns:
+              mask = mask & df['position_group'].astype(str).str.upper().eq('QB')
+          elif 'position' in df.columns:
+              mask = mask & df['position'].astype(str).str.upper().eq('QB')
+          print(df.loc[mask].to_string())
+          "
           echo
-          echo "=== current_player_availability.csv ATL QB rows (reconciliation output) ==="
-          test -f data/current_player_availability.csv && grep -i ",ATL," data/current_player_availability.csv | grep -i -E "tagovailoa|penix|rush|,QB," || echo "file missing or no ATL QB rows"
+          echo "=== current_player_availability.csv ATL QB rows (reconciliation output, robust) ==="
+          python3 -c "
+          import pandas as pd
+          df = pd.read_csv('data/current_player_availability.csv', dtype=str, low_memory=False).fillna('')
+          df.columns = [c.lower() for c in df.columns]
+          print('columns:', list(df.columns))
+          mask = df.get('team', pd.Series(dtype=str)).astype(str).str.upper().eq('ATL')
+          if 'position_group' in df.columns:
+              mask = mask & df['position_group'].astype(str).str.upper().eq('QB')
+          elif 'position' in df.columns:
+              mask = mask & df['position'].astype(str).str.upper().eq('QB')
+          print(df.loc[mask].to_string())
+          "
           echo
-          echo "=== roles_ourlads_active_v1.csv ATL QB rows (DEFAULT_ACTIVE_ROLES, feeds PlayerForm) ==="
-          test -f data/roles_ourlads_active_v1.csv && grep -i ",ATL," data/roles_ourlads_active_v1.csv | grep -i -E "tagovailoa|penix|rush|,QB," || echo "file missing or no ATL QB rows"
+          echo "=== roles_ourlads_active_v1.csv ATL QB rows (DEFAULT_ACTIVE_ROLES, feeds PlayerForm, robust) ==="
+          python3 -c "
+          import pandas as pd
+          df = pd.read_csv('data/roles_ourlads_active_v1.csv', dtype=str, low_memory=False).fillna('')
+          df.columns = [c.lower() for c in df.columns]
+          print('columns:', list(df.columns))
+          mask = df.get('team', pd.Series(dtype=str)).astype(str).str.upper().eq('ATL')
+          if 'position_group' in df.columns:
+              mask = mask & df['position_group'].astype(str).str.upper().eq('QB')
+          elif 'position' in df.columns:
+              mask = mask & df['position'].astype(str).str.upper().eq('QB')
+          print(df.loc[mask].to_string())
+          "
           echo
           echo "=== player_form_consensus.csv ATL QB rows ==="
           test -f data/player_form_consensus.csv && grep -i ",ATL," data/player_form_consensus.csv | grep -i -E "tagovailoa|penix|rush" || echo "file missing or no ATL QB rows"
