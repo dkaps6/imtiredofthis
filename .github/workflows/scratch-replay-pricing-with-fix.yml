@@ -82,6 +82,18 @@ jobs:
           else:
               print('missing team/position columns; have:', list(df.columns)[:20])
           "
+          echo
+          echo "=== roles_ourlads_status_v1.csv ATL QB rows (raw status scrape) ==="
+          test -f data/roles_ourlads_status_v1.csv && grep -i ",ATL," data/roles_ourlads_status_v1.csv | grep -i -E "tagovailoa|penix|rush|,QB," || echo "file missing or no ATL QB rows"
+          echo
+          echo "=== current_player_availability.csv ATL QB rows (reconciliation output) ==="
+          test -f data/current_player_availability.csv && grep -i ",ATL," data/current_player_availability.csv | grep -i -E "tagovailoa|penix|rush|,QB," || echo "file missing or no ATL QB rows"
+          echo
+          echo "=== roles_ourlads_active_v1.csv ATL QB rows (DEFAULT_ACTIVE_ROLES, feeds PlayerForm) ==="
+          test -f data/roles_ourlads_active_v1.csv && grep -i ",ATL," data/roles_ourlads_active_v1.csv | grep -i -E "tagovailoa|penix|rush|,QB," || echo "file missing or no ATL QB rows"
+          echo
+          echo "=== player_form_consensus.csv ATL QB rows ==="
+          test -f data/player_form_consensus.csv && grep -i ",ATL," data/player_form_consensus.csv | grep -i -E "tagovailoa|penix|rush" || echo "file missing or no ATL QB rows"
 
       - name: Apply certified availability-aware current-output coverage seams
         run: |
