@@ -26,7 +26,7 @@ import pandas as pd
 import scripts.run_pricing_v2 as pricing
 from scripts._opponent_map import canon_team
 from scripts.modeling.bayesian_v2 import apply_bayesian_to_metrics
-from scripts.modeling.rb_pricing_adapter_v1 import load_rb_context, lookup_rb_projection
+from scripts.modeling.rb_pricing_adapter_v1 import load_rb_context, lookup_rb_projection, rb_context_teams
 from scripts.modeling.simulation_rules import apply_rules_to_metrics
 from scripts.simulation_v2 import MARKET_MAP, _player_key, lookup, simulate as canonical_simulate
 
@@ -289,13 +289,27 @@ def _apply_rb_rush_rec_conservation(result, pricing_metrics: pd.DataFrame) -> di
     identity_cols = [c for c in ("event_id", "team", "player_clean_key", "player") if c in eligible.columns]
     eligible = eligible.drop_duplicates(identity_cols, keep="first")
 
+    rb_context = load_rb_context()
+    p3_teams = rb_context_teams(rb_context)
+    # Certified-eligible teams whose props went live after P3's context was
+    # built are legitimately outside its scope -- those rows keep whatever
+    # the base simulation already produced instead of a P3 conservation that
+    # was never built for them, rather than fail the whole run.
+    in_scope = eligible["team"].astype(str).isin(p3_teams)
+    out_of_scope_teams = sorted(eligible.loc[~in_scope, "team"].astype(str).unique())
+    eligible = eligible.loc[in_scope].copy()
+
     if eligible.empty:
         pd.DataFrame(columns=["player", "team"]).to_csv(RB_AUDIT_CSV, index=False)
-        payload = {"disposition": "NO_ELIGIBLE_RB_RUSH_REC_ROWS", "players": 0, "sportsbook_inputs_used": False}
+        payload = {
+            "disposition": "NO_ELIGIBLE_RB_RUSH_REC_ROWS",
+            "players": 0,
+            "sportsbook_inputs_used": False,
+            "out_of_p3_scope_teams": out_of_scope_teams,
+        }
         RB_AUDIT_JSON.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return payload
 
-    rb_context = load_rb_context()
     audit_rows = []
     for _, row in eligible.iterrows():
         rush = lookup(result, row, "rush_yards")
@@ -348,6 +362,7 @@ def _apply_rb_rush_rec_conservation(result, pricing_metrics: pd.DataFrame) -> di
         "disposition": "RB_RUSH_REC_DISTRIBUTION_CONSERVED_WITH_PROMOTED_P3",
         "players": int(len(audit)), "max_arithmetic_gap": max_gap,
         "sportsbook_inputs_used": False, "audit": str(RB_AUDIT_CSV),
+        "out_of_p3_scope_teams": out_of_scope_teams,
     }
     RB_AUDIT_JSON.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print("[rb_rush_rec_conservation] " + json.dumps(payload, sort_keys=True))
