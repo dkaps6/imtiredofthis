@@ -24,6 +24,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from sklearn.linear_model import QuantileRegressor
 
 from scripts._opponent_map import canon_team
 
@@ -120,6 +121,17 @@ def direct_calibration(games: pd.DataFrame) -> pd.DataFrame:
 
 
 def _fit_and_apply(train: pd.DataFrame, test: pd.DataFrame, *, pred_col: str, actual_col: str) -> dict:
+    """Two recalibration arms, not one. OLS (np.polyfit) minimizes squared
+    error and targets the conditional MEAN -- but this experiment judges
+    success by MAE, whose optimal correction targets the conditional MEDIAN.
+    If score residuals are skewed (plausible for margin/total, given
+    blowouts), OLS can report negligible/negative MAE improvement even when
+    a real, correctable bias exists (Codex P1 on PR #559). A median (L1)
+    regression is fit alongside OLS so the "no exploitable bias" conclusion
+    is judged against the estimator that actually optimizes the reported
+    metric, not against a mean-targeting estimator evaluated on a different
+    loss than it was fit for.
+    """
     if len(train) < MIN_ROWS_PER_FOLD or len(test) < MIN_ROWS_PER_FOLD:
         return {"status": "INSUFFICIENT_ROWS"}
     x_train = train[pred_col].to_numpy(dtype=float)
@@ -130,8 +142,13 @@ def _fit_and_apply(train: pd.DataFrame, test: pd.DataFrame, *, pred_col: str, ac
     slope, intercept = np.polyfit(x_train, y_train, 1)
     recalibrated_pred = intercept + slope * x_test
 
+    median_model = QuantileRegressor(quantile=0.5, alpha=0.0, solver="highs")
+    median_model.fit(x_train.reshape(-1, 1), y_train)
+    median_recalibrated_pred = median_model.predict(x_test.reshape(-1, 1))
+
     raw_mae = float(np.mean(np.abs(x_test - y_test)))
     recalibrated_mae = float(np.mean(np.abs(recalibrated_pred - y_test)))
+    median_recalibrated_mae = float(np.mean(np.abs(median_recalibrated_pred - y_test)))
     return {
         "status": "OK",
         "train_rows": int(len(train)), "test_rows": int(len(test)),
@@ -139,6 +156,9 @@ def _fit_and_apply(train: pd.DataFrame, test: pd.DataFrame, *, pred_col: str, ac
         "raw_line_mae": raw_mae,
         "recalibrated_mae": recalibrated_mae,
         "recalibration_mae_improvement": raw_mae - recalibrated_mae,
+        "median_fitted_slope": float(median_model.coef_[0]), "median_fitted_intercept": float(median_model.intercept_),
+        "median_recalibrated_mae": median_recalibrated_mae,
+        "median_recalibration_mae_improvement": raw_mae - median_recalibrated_mae,
     }
 
 

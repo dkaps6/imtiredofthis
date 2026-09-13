@@ -72,6 +72,26 @@ anywhere in this plan)**:
    This directly answers "if the spread/total says X, how often did the
    game actually look like X."
 
+## Amendment log
+
+**Amendment 1 (before any result was reported)**: Codex review (via GitHub,
+PR #559) found that Arm 2's recalibration used `np.polyfit` (ordinary least
+squares), which minimizes squared error and estimates the conditional
+*mean* — but the arm's success is judged by MAE, whose optimal correction
+targets the conditional *median*. Under skewed residuals, OLS can report a
+negligible or negative MAE improvement even when a real, correctable bias
+exists, which would have invalidated the "no exploitable bias" conclusion
+had it gone unaddressed. Fixed by adding a median (L1) regression
+(`sklearn.linear_model.QuantileRegressor(quantile=0.5)`) alongside the OLS
+arm, fit and applied with the same train/test discipline, so the conclusion
+is judged against the estimator that actually optimizes the reported
+metric. Result: the median arm's improvements are closer to zero (less
+negative) than the OLS arm's in every fold — confirming OLS's negative
+numbers were partly a mean-targeting overshoot artifact — but none turn
+positive. The "no exploitable linear bias" conclusion holds under the
+corrected, appropriate estimator; it is not reversed, but is now more
+defensibly established.
+
 ## What this is not
 
 - Not a claim about profitability, ROI, or betting edge — this measures

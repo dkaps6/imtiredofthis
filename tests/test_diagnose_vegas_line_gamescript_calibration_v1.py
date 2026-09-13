@@ -4,6 +4,7 @@ import pytest
 
 from scripts.research.diagnose_vegas_line_gamescript_calibration_v1 import (
     MIN_ROWS_PER_FOLD,
+    _fit_and_apply,
     binned_game_script_accuracy,
     direct_calibration,
     load_game_outcomes,
@@ -61,6 +62,33 @@ def test_out_of_sample_recalibration_detects_and_corrects_transferable_bias():
         assert row["fitted_intercept"] == pytest.approx(5.0, abs=3.0)
         assert row["recalibrated_mae"] < row["raw_line_mae"]
         assert row["recalibration_mae_improvement"] > 0
+
+
+def test_median_recalibration_beats_ols_recalibration_under_skewed_residuals():
+    """Codex P1 on PR #559: OLS (np.polyfit) targets the conditional mean,
+    but MAE is optimized by the conditional median. Under right-skewed
+    residuals (mean bias > median bias), OLS recalibration overshoots the
+    correction and a median (L1) regression should show a larger -- or at
+    least not smaller -- MAE improvement.
+    """
+    def _frame(n, seed_offset):
+        r = np.random.default_rng(21 + seed_offset)
+        x = r.uniform(30, 60, n)
+        noise = r.exponential(scale=4.0, size=n)  # mean=4, median=4*ln(2)~2.77: right-skewed
+        y = x + noise
+        return pd.DataFrame({"predicted_total": x, "actual_total": y})
+
+    train = _frame(300, 0)
+    test = _frame(200, 1)
+    result = _fit_and_apply(train, test, pred_col="predicted_total", actual_col="actual_total")
+    assert result["status"] == "OK"
+    for col in ["median_fitted_slope", "median_fitted_intercept", "median_recalibrated_mae", "median_recalibration_mae_improvement"]:
+        assert col in result
+    # OLS's mean-targeting intercept overshoots the true median bias under
+    # right-skewed noise, so the median-regression arm should do at least as
+    # well, and in this constructed case strictly better.
+    assert result["median_recalibrated_mae"] <= result["recalibrated_mae"] + 1e-9
+    assert result["median_recalibration_mae_improvement"] >= result["recalibration_mae_improvement"] - 1e-9
 
 
 def test_out_of_sample_recalibration_fails_closed_on_insufficient_rows():
