@@ -12,7 +12,6 @@ from pathlib import Path
 
 LINEAGE_V2 = Path("scripts/audit_market_model_lineage_v2_core.py")
 LINEAGE_V3 = Path("scripts/audit_market_model_lineage_v3.py")
-TARGET_POOL = Path("scripts/validate_team_target_pool_full_universe_v2.py")
 STACK_V1 = Path("scripts/validate_certified_full_slate_stack_v1.py")
 STACK_V2 = Path("scripts/validate_certified_full_slate_stack_v2_core.py")
 STACK_V3 = Path("scripts/validate_certified_full_slate_stack_v3.py")
@@ -64,45 +63,16 @@ def main() -> int:
         ),
     ])
 
-    # Target-pool physical conservation remains exact, but over the certified
-    # current football team set (28 late in Week 1; legacy 32 otherwise).
-    _transform(TARGET_POOL, [
-        (
-            "import pandas as pd\n",
-            "import pandas as pd\n\nfrom scripts.utils.eligible_team_set_v1 import expected_current_teams\n",
-            "target-pool current-team import",
-        ),
-        (
-            '''    source = json.loads(UNIVERSE_AUDIT.read_text(encoding="utf-8"))\n''',
-            '''    source = json.loads(UNIVERSE_AUDIT.read_text(encoding="utf-8"))\n    current_teams = expected_current_teams()\n    expected_team_count = len(current_teams) if current_teams is not None else 32\n''',
-            "target-pool current-team scope",
-        ),
-        (
-            '''    if frame["team"].nunique() != 32:\n        raise RuntimeError(f"target audit expected 32 teams, found {frame['team'].nunique()}")\n''',
-            '''    if frame["team"].nunique() != expected_team_count:\n        raise RuntimeError(f"target audit expected {expected_team_count} teams, found {frame['team'].nunique()}")\n''',
-            "target-pool football team coverage",
-        ),
-        (
-            '''        if trace["team"].nunique() != 32:\n            raise RuntimeError(f"explicit entitlement expected 32 teams, found {trace['team'].nunique()}")\n''',
-            '''        if trace["team"].nunique() != expected_team_count:\n            raise RuntimeError(f"explicit entitlement expected {expected_team_count} teams, found {trace['team'].nunique()}")\n''',
-            "target-pool trace team coverage",
-        ),
-        (
-            '''        if len(physical) != 32:\n            raise RuntimeError(f"explicit entitlement physical audit expected 32 teams, found {len(physical)}")\n''',
-            '''        if len(physical) != expected_team_count:\n            raise RuntimeError(f"explicit entitlement physical audit expected {expected_team_count} teams, found {len(physical)}")\n''',
-            "target-pool physical team coverage",
-        ),
-        (
-            '''            f"Explicit full-roster target entitlement is physically invalid for {len(explicit_bad)}/32 teams; see {OUT_CSV}."\n''',
-            '''            f"Explicit full-roster target entitlement is physically invalid for {len(explicit_bad)}/{expected_team_count} teams; see {OUT_CSV}."\n''',
-            "target-pool explicit failure denominator",
-        ),
-        (
-            '''            f"Full-roster receiving entitlement pool is physically invalid for {len(raw_bad)}/32 teams; "\n''',
-            '''            f"Full-roster receiving entitlement pool is physically invalid for {len(raw_bad)}/{expected_team_count} teams; "\n''',
-            "target-pool legacy failure denominator",
-        ),
-    ])
+    # NOTE: TARGET_POOL (validate_team_target_pool_full_universe_v2.py) is
+    # deliberately NOT patched here. It audits football_simulation_universe.csv
+    # and target_entitlement_v1_trace.csv, both explicitly sportsbook-independent
+    # full-league artifacts that the universe builder itself
+    # (run_pricing_with_full_roster_universe_v1.py) hard-requires to cover all
+    # 32 teams regardless of kickoff-timing pricing eligibility -- eligibility
+    # only narrows which teams get priced, later and separately (see
+    # eligible_team_set_v1.validate_current_team_set's own docstring). Scoping
+    # this check to the shrinking current-eligible count made it fail as soon
+    # as any team's game kicked off, since the 32-team universe never shrinks.
 
     # Final certified-stack V1: preserve every semantic gate, replacing only
     # frozen cardinalities with the explicit current-availability authority.
