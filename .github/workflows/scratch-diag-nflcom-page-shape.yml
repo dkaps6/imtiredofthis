@@ -1,0 +1,82 @@
+# scratch: user correctly pointed out that at 3:45pm ET (kickoff 4:25pm ET),
+# official inactives for the 4pm games should already be posted (the NFL posts
+# ~90 min before kickoff). Our scraper is returning complete_team_sections=0
+# with http_status=200 — that could mean "genuinely not posted" OR "our HTML
+# parser doesn't match the page's actual structure" (e.g. client-side-rendered
+# content requests.get() never sees). This dumps the raw page so we can tell
+# which. Fetch-only, no odds, zero credits.
+name: Scratch Diagnose NFL.com Inactives Page Shape
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/scratch-diag-nflcom-page-shape.yml'
+
+jobs:
+  diag:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4 lxml
+      - name: Dump raw page shape
+        run: |
+          python3 -c "
+          import requests
+          from bs4 import BeautifulSoup
+
+          r = requests.get('https://www.nfl.com/inactives/', timeout=45, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'})
+          print('status:', r.status_code, 'final_url:', r.url, 'bytes:', len(r.content))
+          text = r.text
+          print('raw_html_len:', len(text))
+
+          soup = BeautifulSoup(text, 'html.parser')
+          title = soup.title.get_text(' ', strip=True) if soup.title else None
+          print('title:', title)
+          h1 = soup.find('h1')
+          print('h1:', h1.get_text(' ', strip=True) if h1 else None)
+
+          uls = soup.find_all('ul')
+          print('total <ul> count:', len(uls))
+          lis = soup.find_all('li')
+          print('total <li> count:', len(lis))
+
+          headings = soup.find_all(['h2','h3','h4'])
+          print('h2/h3/h4 count:', len(headings))
+          for h in headings[:40]:
+              print('  heading:', h.name, repr(h.get_text(' ', strip=True))[:80])
+
+          # look for any obvious team abbreviations or 'Inactives' text anywhere
+          body_text = soup.get_text(' ', strip=True)
+          print('body_text_len:', len(body_text))
+          print('body_text_sample_first_2000:')
+          print(body_text[:2000])
+          print()
+          print('contains literal Inactives:', 'Inactives' in text)
+          print('contains __NEXT_DATA__:', '__NEXT_DATA__' in text)
+          print('contains root div id app-root or similar:', 'id=\"root\"' in text or 'id=\"__next\"' in text)
+
+          # dump first 3000 chars of raw html for visual inspection
+          print()
+          print('RAW_HTML_HEAD_3000:')
+          print(text[:3000])
+          "
+      - name: Save full raw HTML as artifact
+        run: |
+          python3 -c "
+          import requests
+          r = requests.get('https://www.nfl.com/inactives/', timeout=45, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'})
+          open('inactives_raw.html','w',encoding='utf-8').write(r.text)
+          "
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nflcom-inactives-raw
+          path: inactives_raw.html
+          retention-days: 3
