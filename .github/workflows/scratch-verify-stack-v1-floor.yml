@@ -1,0 +1,61 @@
+# scratch: verify the stack-v1 football-universe/QB-C2 floor fix against the
+# REAL artifact from the failed live run 34785568240 (real fetched odds,
+# real pricing already computed, crashed at "football universe team
+# coverage drift expected=4" with a real 32-team universe on the board) --
+# no re-fetch, zero additional OddsAPI credits.
+name: Scratch Verify Stack V1 Floor Fix
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/scratch-verify-stack-v1-floor.yml'
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Download real failed-run artifact (no re-fetch)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p artifact
+          gh run download 34785568240 --repo "$GITHUB_REPOSITORY" --name run_34785568240 --dir artifact
+      - name: Restore preserved data and outputs
+        run: |
+          rm -rf data outputs
+          mkdir -p data outputs
+          cp -a artifact/data/. data/
+          cp -a artifact/outputs/. outputs/
+      - name: Confirm the real artifact reproduces the eligible/universe mismatch
+        run: |
+          export PYTHONPATH="${PWD}"
+          python3 -c "
+          import json
+          from scripts.utils.eligible_team_set_v1 import expected_current_teams
+          teams = expected_current_teams()
+          print('eligible teams:', sorted(teams), 'count:', len(teams))
+          football = json.load(open('data/football_simulation_universe_audit.json'))
+          print('football_teams:', football.get('football_teams'), 'canonical_games:', football.get('canonical_games'))
+          assert len(teams) < int(football.get('football_teams', 0)), 'expected a real eligible-vs-universe gap matching the live failure'
+          "
+      - name: Re-run the exact failing sequence with this branch's fix applied
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/audit_market_model_lineage_v2.py
+          python scripts/validate_anytime_td_model_status_v1.py
+          python scripts/validate_team_target_pool_full_universe_v2.py
+          python scripts/validate_certified_full_slate_stack_v2.py
+          echo "PASS: full validation chain now succeeds against the real eligible-vs-universe gap"
