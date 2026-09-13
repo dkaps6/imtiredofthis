@@ -329,8 +329,15 @@ def main() -> int:
     qb = p.loc[p["source_market"].astype(str).eq("player_pass_yds")]
     if not qb.empty and not pd.to_numeric(qb.get("qb_synthesis_applied", 0), errors="coerce").fillna(0).eq(1).all():
         raise RuntimeError("lineage claims QB M89/M90 specialist active but priced rows disagree")
+    # RB P3 is only built for the teams its context covers as of build time
+    # (see RB P3 team-scope fallback). A rush_yds row for a team outside
+    # that scope legitimately prices from the generic model instead, so the
+    # lineage's "P3 is active for this market" claim is only checked against
+    # rows for teams P3 was actually built for.
+    rb_p3_teams = set(pd.read_csv(DATA / "rb_rush_synthesis_context.csv", usecols=["team"])["team"].astype(str))
     rb = p.loc[p["source_market"].astype(str).eq("player_rush_yds") & p["position_family"].eq("RB/FB")]
-    if not rb.empty and not pd.to_numeric(rb.get("rb_synthesis_applied", 0), errors="coerce").fillna(0).eq(1).all():
+    rb_in_scope = rb.loc[rb["team"].astype(str).isin(rb_p3_teams)]
+    if not rb_in_scope.empty and not pd.to_numeric(rb_in_scope.get("rb_synthesis_applied", 0), errors="coerce").fillna(0).eq(1).all():
         raise RuntimeError("lineage claims RB P3 active but priced rows disagree")
     atd = p.loc[p["source_market"].astype(str).eq("player_anytime_td")]
     if not atd.empty:
