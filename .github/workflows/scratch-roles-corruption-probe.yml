@@ -1,0 +1,41 @@
+name: Scratch Roles Ourlads Corruption Probe
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/scratch-roles-corruption-probe.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Download failing run artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p artifact
+          gh run download 34768297893 --repo "$GITHUB_REPOSITORY" --name run_34768297893 --dir artifact
+      - name: Inspect roles_ourlads.csv state
+        run: |
+          echo "=== file mtimes (zip preserves them) ==="
+          ls -la --time-style=full-iso artifact/data/roles_ourlads.csv artifact/data/roles_ourlads_active_v1.csv artifact/data/roles_current_production_eligible_v1.csv artifact/data/provider_readiness_v3.csv artifact/data/roles_ourlads_status_v1.json 2>&1
+          echo
+          echo "=== roles_ourlads.csv row/team count ==="
+          python3 -c "
+          import pandas as pd
+          df = pd.read_csv('artifact/data/roles_ourlads.csv')
+          df.columns = [c.lower() for c in df.columns]
+          print('rows:', len(df))
+          print('teams:', sorted(df['team'].astype(str).unique()))
+          "
+          echo
+          echo "=== roles_ourlads_status_v1.json ==="
+          cat artifact/data/roles_ourlads_status_v1.json
+          echo
+          echo "=== provider_readiness_v3.csv ==="
+          cat artifact/data/provider_readiness_v3.csv
