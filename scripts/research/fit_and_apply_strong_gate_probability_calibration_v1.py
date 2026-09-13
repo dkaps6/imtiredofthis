@@ -55,6 +55,14 @@ def fit_calibrators(train: pd.DataFrame) -> dict:
 
 
 def apply_calibration(test: pd.DataFrame, calibrators: dict) -> pd.DataFrame:
+    """Recompute the new (calibrated) arm alongside the untouched original arm.
+
+    Rows whose market had too few training rows to fit a calibrator are kept
+    (not dropped) with new-arm columns left NaN/None -- summarize() reports
+    those markets explicitly as INSUFFICIENT_ROWS rather than silently
+    omitting them, and every OK row is a genuine same-row old-vs-new
+    comparison rather than only reporting the calibrated side.
+    """
     z = test.copy()
     calibrated_p_over = np.full(len(z), np.nan)
     for market, iso in calibrators.items():
@@ -63,60 +71,114 @@ def apply_calibration(test: pd.DataFrame, calibrators: dict) -> pd.DataFrame:
             continue
         raw = num(z.loc[mask, "p_over"]).to_numpy(dtype=float)
         calibrated_p_over[mask] = iso.predict(raw)
-
     z["calibrated_p_over"] = calibrated_p_over
-    scoreable = pd.notna(z["calibrated_p_over"])
-    z = z.loc[scoreable].copy()
+    z["calibration_available"] = pd.notna(z["calibrated_p_over"])
 
-    z["p_over_new"] = z["calibrated_p_over"]
-    z["p_under_new"] = 1.0 - z["p_over_new"]
-    z["ev_over_new"] = [ev_roi(p, o) for p, o in zip(z["p_over_new"], z["over_odds"])]
-    z["ev_under_new"] = [ev_roi(p, o) for p, o in zip(z["p_under_new"], z["under_odds"])]
+    scored = z.loc[z["calibration_available"]].copy()
+    scored["p_over_new"] = scored["calibrated_p_over"]
+    scored["p_under_new"] = 1.0 - scored["p_over_new"]
+    scored["ev_over_new"] = [ev_roi(p, o) for p, o in zip(scored["p_over_new"], scored["over_odds"])]
+    scored["ev_under_new"] = [ev_roi(p, o) for p, o in zip(scored["p_under_new"], scored["under_odds"])]
 
-    best_over = z["ev_under_new"].isna() | (
-        z["ev_over_new"].fillna(-np.inf) >= z["ev_under_new"].fillna(-np.inf)
+    best_over = scored["ev_under_new"].isna() | (
+        scored["ev_over_new"].fillna(-np.inf) >= scored["ev_under_new"].fillna(-np.inf)
     )
-    z["side_new"] = np.where(best_over, "OVER", "UNDER")
-    z["best_ev_new"] = np.where(best_over, z["ev_over_new"], z["ev_under_new"])
-    z["best_model_p_new"] = np.where(best_over, z["p_over_new"], z["p_under_new"])
-    z["best_market_p_new"] = np.where(best_over, z["over_novig"], z["under_novig"])
-    z["prob_edge_new"] = z["best_model_p_new"] - z["best_market_p_new"]
-    z["chosen_odds_new"] = np.where(best_over, z["over_odds"], z["under_odds"])
-    z["signal_new"] = [signal(e, q) for e, q in zip(z["best_ev_new"], z["prob_edge_new"])]
+    scored["side_new"] = np.where(best_over, "OVER", "UNDER")
+    scored["best_ev_new"] = np.where(best_over, scored["ev_over_new"], scored["ev_under_new"])
+    scored["best_model_p_new"] = np.where(best_over, scored["p_over_new"], scored["p_under_new"])
+    scored["best_market_p_new"] = np.where(best_over, scored["over_novig"], scored["under_novig"])
+    scored["prob_edge_new"] = scored["best_model_p_new"] - scored["best_market_p_new"]
+    scored["chosen_odds_new"] = np.where(best_over, scored["over_odds"], scored["under_odds"])
+    scored["signal_new"] = [signal(e, q) for e, q in zip(scored["best_ev_new"], scored["prob_edge_new"])]
 
-    z["bet_result_new"] = np.select(
-        [z["actual_side"].eq("PUSH"), z["side_new"].eq(z["actual_side"])],
+    scored["bet_result_new"] = np.select(
+        [scored["actual_side"].eq("PUSH"), scored["side_new"].eq(scored["actual_side"])],
         ["PUSH", "WIN"],
         default="LOSS",
     )
-    z["unit_result_new"] = np.where(
-        z["bet_result_new"].eq("WIN"),
-        [american_profit(o) for o in z["chosen_odds_new"]],
-        np.where(z["bet_result_new"].eq("LOSS"), -1.0, 0.0),
+    scored["unit_result_new"] = np.where(
+        scored["bet_result_new"].eq("WIN"),
+        [american_profit(o) for o in scored["chosen_odds_new"]],
+        np.where(scored["bet_result_new"].eq("LOSS"), -1.0, 0.0),
     )
-    return z
+
+    new_cols = [
+        "p_over_new", "p_under_new", "ev_over_new", "ev_under_new", "side_new", "best_ev_new",
+        "best_model_p_new", "best_market_p_new", "prob_edge_new", "chosen_odds_new",
+        "signal_new", "bet_result_new", "unit_result_new",
+    ]
+    return z.join(scored[new_cols])
 
 
-def _tier_row(g: pd.DataFrame, tier: str, market: str) -> dict:
-    decided = g.loc[g["bet_result_new"].isin(["WIN", "LOSS"])]
+def _side_metrics(g: pd.DataFrame, *, bet_col: str, unit_col: str) -> dict:
+    decided = g.loc[g[bet_col].isin(["WIN", "LOSS"])]
     return {
-        "market": market,
-        "tier": tier,
         "matched_rows": int(len(g)),
         "decided_bets": int(len(decided)),
-        "win_rate": float(decided["bet_result_new"].eq("WIN").mean()) if len(decided) else np.nan,
-        "roi_per_unit": float(decided["unit_result_new"].mean()) if len(decided) else np.nan,
-        "mean_calibrated_p_over": float(num(g["p_over_new"]).mean()) if len(g) else np.nan,
+        "win_rate": float(decided[bet_col].eq("WIN").mean()) if len(decided) else np.nan,
+        "roi_per_unit": float(decided[unit_col].mean()) if len(decided) else np.nan,
+    }
+
+
+def _insufficient_row(market: str, tier: str, matched_rows: int) -> dict:
+    return {
+        "market": market, "tier": tier, "status": "INSUFFICIENT_ROWS",
+        "matched_rows": matched_rows, "decided_bets": np.nan,
+        "old_win_rate": np.nan, "old_roi_per_unit": np.nan,
+        "new_win_rate": np.nan, "new_roi_per_unit": np.nan, "roi_delta": np.nan,
     }
 
 
 def summarize(calibrated: pd.DataFrame) -> pd.DataFrame:
     rows = []
-    scopes = list(calibrated["market"].unique()) + ["ALL_MARKETS"]
-    for market in scopes:
+    for market in MARKETS + ["ALL_MARKETS"]:
         g = calibrated if market == "ALL_MARKETS" else calibrated.loc[calibrated["market"].eq(market)]
-        rows.append(_tier_row(g, "ALL_NO_FILTER", market))
-        rows.append(_tier_row(g.loc[g["signal_new"].eq("STRONG_EDGE")], "STRONG_ONLY_PLAY_TIER", market))
+        if market != "ALL_MARKETS" and not g["calibration_available"].any():
+            rows.append(_insufficient_row(market, "ALL_NO_FILTER", int(len(g))))
+            rows.append(_insufficient_row(market, "STRONG_ONLY_PLAY_TIER", 0))
+            continue
+
+        # Same fixed row set for old vs new (only rows a calibrator actually
+        # covered) -- an apples-to-apples comparison, not old-on-everything
+        # vs new-on-a-narrower-subset.
+        scoreable = g.loc[g["calibration_available"]]
+
+        old_all = _side_metrics(scoreable, bet_col="bet_result", unit_col="unit_result")
+        new_all = _side_metrics(scoreable, bet_col="bet_result_new", unit_col="unit_result_new")
+        roi_delta_all = (
+            new_all["roi_per_unit"] - old_all["roi_per_unit"]
+            if np.isfinite(new_all["roi_per_unit"]) and np.isfinite(old_all["roi_per_unit"])
+            else np.nan
+        )
+        rows.append({
+            "market": market, "tier": "ALL_NO_FILTER", "status": "OK",
+            "matched_rows": old_all["matched_rows"], "decided_bets": old_all["decided_bets"],
+            "old_win_rate": old_all["win_rate"], "old_roi_per_unit": old_all["roi_per_unit"],
+            "new_win_rate": new_all["win_rate"], "new_roi_per_unit": new_all["roi_per_unit"],
+            "roi_delta": roi_delta_all,
+        })
+
+        old_strong = scoreable.loc[scoreable["signal"].eq("STRONG_EDGE")]
+        new_strong = scoreable.loc[scoreable["signal_new"].eq("STRONG_EDGE")]
+        old_s = _side_metrics(old_strong, bet_col="bet_result", unit_col="unit_result")
+        new_s = _side_metrics(new_strong, bet_col="bet_result_new", unit_col="unit_result_new")
+        roi_delta_strong = (
+            new_s["roi_per_unit"] - old_s["roi_per_unit"]
+            if np.isfinite(new_s["roi_per_unit"]) and np.isfinite(old_s["roi_per_unit"])
+            else np.nan
+        )
+        rows.append({
+            "market": market, "tier": "STRONG_ONLY_PLAY_TIER", "status": "OK",
+            # matched_rows/decided_bets describe the NEW (calibrated) tier --
+            # the tier a live gate change would actually produce. The OLD
+            # tier's own row count is old_matched_rows, since STRONG
+            # membership is a translator-dependent outcome, not a fixed set.
+            "matched_rows": new_s["matched_rows"], "decided_bets": new_s["decided_bets"],
+            "old_matched_rows": old_s["matched_rows"],
+            "old_win_rate": old_s["win_rate"], "old_roi_per_unit": old_s["roi_per_unit"],
+            "new_win_rate": new_s["win_rate"], "new_roi_per_unit": new_s["roi_per_unit"],
+            "roi_delta": roi_delta_strong,
+        })
     return pd.DataFrame(rows)
 
 
