@@ -2113,6 +2113,8 @@ def fetch_odds(
         for c in ("home_team", "away_team"):
             games[c] = games[c].apply(_canon_team)
 
+    if "event_id" not in props.columns:
+        props["event_id"] = pd.Series(dtype=str)
     props["event_id"] = props["event_id"].astype(str)
     if not games.empty:
         props = props.merge(games[["event_id","home_team","away_team"]], on="event_id", how="left")
