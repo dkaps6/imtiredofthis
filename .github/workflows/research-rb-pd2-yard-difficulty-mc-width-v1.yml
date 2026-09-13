@@ -1,0 +1,185 @@
+name: RB-PD2 Yard Difficulty MC Width V1
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/research/evaluate_rb_pd2_yard_difficulty_mc_width_v1.py'
+      - 'tests/test_rb_pd2_yard_difficulty_mc_width_v1.py'
+      - '.github/workflows/research-rb-pd2-yard-difficulty-mc-width-v1.yml'
+  workflow_dispatch:
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M95Q_RUN_ID: '33450395426'
+
+jobs:
+  helper-contract-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest scikit-learn
+      - name: Compile and test frozen helper contracts
+        run: |
+          python -m py_compile scripts/research/evaluate_rb_pd2_yard_difficulty_mc_width_v1.py
+          pytest -q tests/test_rb_pd2_yard_difficulty_mc_width_v1.py
+
+  rebuild-distributions:
+    if: github.event_name == 'workflow_dispatch'
+    needs: helper-contract-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: true
+      matrix:
+        season: [2021, 2022, 2023, 2024]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install historical reconstruction dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+      - name: Download exact M95Q M91 component artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SEASON: ${{ matrix.season }}
+        run: |
+          mkdir -p "evidence/m91/${SEASON}"
+          gh run download "$M95Q_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "m95q-m91-${SEASON}" \
+            --dir "evidence/m91/${SEASON}"
+          test -s "evidence/m91/${SEASON}/component_predictions.csv"
+      - name: Rebuild exact historical football inputs
+        env:
+          SEASON: ${{ matrix.season }}
+        run: |
+          PRIOR=$((SEASON-1))
+          WEEKS='1-18'
+          D="data/backtests/rb_pd2_yard_width/${SEASON}"
+          mkdir -p "$D"
+          python scripts/backtest/build_historical_inputs.py \
+            --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --out-dir "$D"
+          python scripts/backtest/enrich_historical_defense.py \
+            --team-weekly "$D/team_weekly_history.csv" \
+            --seasons "$PRIOR,$SEASON" \
+            --audit "$D/historical_defense_enrichment_audit.csv" \
+            --observations "$D/historical_defense_observations.csv"
+          python scripts/backtest/validate_historical_inputs.py \
+            --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" \
+            --data-dir "$D" --report "$D/historical_input_validation.csv"
+          python scripts/backtest/historical_player_logs_m95q.py \
+            --seasons "$PRIOR,$SEASON" --schedule "$D/schedule_history.csv" \
+            --out "$D/player_game_logs_history.csv"
+          python scripts/backtest/build_historical_injuries.py \
+            --seasons "$PRIOR,$SEASON" --out "$D/injuries_history.csv"
+          python scripts/backtest/build_historical_weather.py \
+            --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv"
+      - name: Persist checksum-verified historical MC arrays
+        env:
+          SEASON: ${{ matrix.season }}
+        run: |
+          PRIOR=$((SEASON-1))
+          D="data/backtests/rb_pd2_yard_width/${SEASON}"
+          OUT="evidence/distributions/${SEASON}"
+          python scripts/research/persist_historical_simulated_outcomes_v1.py \
+            --season "$SEASON" --prior-season "$PRIOR" --weeks '1-18' \
+            --player-logs "$D/player_game_logs_history.csv" \
+            --team-weekly "$D/team_weekly_history.csv" \
+            --schedule "$D/schedule_history.csv" \
+            --universe-dir "$D/pregame_universe" \
+            --component-file "evidence/m91/${SEASON}/component_predictions.csv" \
+            --injuries "$D/injuries_history.csv" \
+            --weather "$D/weather_history.csv" \
+            --out-dir "$OUT" \
+            --iterations 2000 --seed-offset 42
+      - name: Upload reconstructed distribution shard
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-pd2-yard-width-distributions-${{ matrix.season }}
+          path: evidence/distributions/${{ matrix.season }}/**
+          if-no-files-found: error
+          retention-days: 30
+
+  evaluate-frozen-candidate:
+    if: github.event_name == 'workflow_dispatch'
+    needs: rebuild-distributions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install evaluation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install scikit-learn
+      - name: Download exact M95Q M91 component artifacts 2020-2024
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for SEASON in 2020 2021 2022 2023 2024; do
+            mkdir -p "evidence/m91/${SEASON}"
+            gh run download "$M95Q_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+              --name "m95q-m91-${SEASON}" \
+              --dir "evidence/m91/${SEASON}"
+            test -s "evidence/m91/${SEASON}/component_predictions.csv"
+          done
+      - name: Download exact M95Q final parity artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/m95q
+          gh run download "$M95Q_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name migration-95q-rb-expanded-historical-stable-workhorse \
+            --dir evidence/m95q
+          test -s evidence/m95q/m95q_disposition.csv
+          test -s evidence/m95q/m95q_2024_m91_universe_parity.csv
+          test -s evidence/m95q/m95q_2024_parity_audit.csv
+      - name: Download reconstructed MC distribution shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: rb-pd2-yard-width-distributions-*
+          path: evidence/distributions
+          merge-multiple: true
+      - name: Evaluate frozen candidate exactly once
+        run: |
+          python scripts/research/evaluate_rb_pd2_yard_difficulty_mc_width_v1.py \
+            --component-root evidence/m91 \
+            --parity-root evidence/m95q \
+            --distribution-root evidence/distributions \
+            --out-dir evidence/result
+      - name: Show frozen disposition
+        if: always()
+        run: |
+          cat evidence/result/rb_pd2_yard_width_result.json 2>/dev/null || true
+          cat evidence/result/rb_pd2_yard_width_gates.csv 2>/dev/null || true
+      - name: Upload exact research result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-pd2-yard-difficulty-mc-width-v1
+          path: evidence/result/**
+          if-no-files-found: warn
+          retention-days: 30
