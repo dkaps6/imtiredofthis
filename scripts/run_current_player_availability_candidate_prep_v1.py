@@ -33,7 +33,7 @@ def main() -> int:
     week = int(a.week if a.week is not None else resolve_week())
 
     run("scripts/providers/ourlads_depth_status_v1.py")
-    run("scripts/providers/nfl_official_inactives_v1.py")
+    run("scripts/providers/espn_official_inactives_v1.py")
     timing = ["scripts/validate_current_player_availability_timing_v1.py", "--season", str(a.season), "--week", str(week)]
     if a.asof_utc:
         timing += ["--asof-utc", a.asof_utc]
