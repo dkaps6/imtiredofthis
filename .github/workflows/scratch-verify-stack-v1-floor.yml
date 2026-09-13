@@ -18,6 +18,8 @@ jobs:
     permissions:
       contents: read
       actions: read
+    env:
+      ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
