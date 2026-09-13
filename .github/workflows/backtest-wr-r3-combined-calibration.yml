@@ -1,0 +1,141 @@
+name: WR-R3 Combined Calibration
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-wr-r3-combined-calibration
+    paths:
+      - ".github/workflows/backtest-wr-r3-combined-calibration.yml"
+      - "scripts/backtest/evaluate_wr_r3_combined_calibration.py"
+      - "scripts/backtest/run_wr_r1_historical_player_logs.py"
+      - "docs/migrations/WR_R3_COMBINED_CALIBRATION_PLAN.md"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout research branch
+        uses: actions/checkout@v4
+        with:
+          path: research
+
+      - name: Checkout exact M38 parent
+        uses: actions/checkout@v4
+        with:
+          ref: b98518d97b3038f471aee9ae3201009b2c70bb29
+          path: m38_parent
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r m38_parent/requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+
+      - name: Compile frozen evaluator and mechanical player-log wrapper
+        run: |
+          python -m py_compile research/scripts/backtest/evaluate_wr_r3_combined_calibration.py
+          python -m py_compile research/scripts/backtest/run_wr_r1_historical_player_logs.py
+
+      - name: Download exact frozen WR-R3 feature artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/r3
+          gh run download 34064572328 --repo "${GITHUB_REPOSITORY}" --name wr-r3-player-error-persistence --dir evidence/r3
+          find evidence/r3 -maxdepth 6 -type f -print
+          test "$(find evidence/r3 -type f -name wr_r3_walkforward_casebook.csv | wc -l)" -eq 1
+          test "$(find evidence/r3 -type f -name wr_r3_result.json | wc -l)" -eq 1
+
+      - name: Rebuild exact M38 historical inputs and baseline across 2020-2025
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="${GITHUB_WORKSPACE}/research/data/backtests/wr_r3_combined_rebuild"
+          mkdir -p "${ROOT}"
+          for SEASON in 2020 2021 2022 2023 2024 2025; do
+            PRIOR=$((SEASON-1))
+            if [ "${SEASON}" = "2020" ]; then WEEKS="1-17"; else WEEKS="1-18"; fi
+            D="${ROOT}/${SEASON}"
+            I="${D}/inputs"
+            mkdir -p "${I}"
+            echo "=== WR-R3 combined season=${SEASON} prior=${PRIOR} weeks=${WEEKS} ==="
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/build_historical_inputs.py \
+              --season "${SEASON}" --prior-season "${PRIOR}" --weeks "${WEEKS}" --out-dir "${I}"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/enrich_historical_defense.py \
+              --team-weekly "${I}/team_weekly_history.csv" \
+              --seasons "${PRIOR},${SEASON}" \
+              --audit "${I}/historical_defense_enrichment_audit.csv" \
+              --observations "${I}/historical_defense_observations.csv"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/validate_historical_inputs.py \
+              --season "${SEASON}" --prior-season "${PRIOR}" --weeks "${WEEKS}" \
+              --data-dir "${I}" --report "${I}/historical_input_validation.csv"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent:${GITHUB_WORKSPACE}/research" python research/scripts/backtest/run_wr_r1_historical_player_logs.py \
+              --seasons "${PRIOR},${SEASON}" --schedule "${I}/schedule_history.csv" --out "${I}/player_game_logs_history.csv"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/build_historical_injuries.py \
+              --seasons "${PRIOR},${SEASON}" --out "${I}/injuries_history.csv"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/build_historical_weather.py \
+              --schedule "${I}/schedule_history.csv" --out "${I}/weather_history.csv"
+
+            rm -f "${D}/m38.csv"
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/walk_forward.py \
+              --season "${SEASON}" --prior-season "${PRIOR}" --weeks "${WEEKS}" \
+              --player-logs "${I}/player_game_logs_history.csv" \
+              --team-weekly "${I}/team_weekly_history.csv" \
+              --schedule "${I}/schedule_history.csv" \
+              --universe-dir "${I}/pregame_universe" \
+              --injuries "${I}/injuries_history.csv" \
+              --weather "${I}/weather_history.csv" \
+              --out "${D}/m38.csv" --iterations 2000
+          done
+
+      - name: Evaluate frozen combined candidate through exact M38 Monte Carlo
+        env:
+          PYTHONPATH: ${{ github.workspace }}/m38_parent:${{ github.workspace }}/research
+        run: |
+          rm -rf research/data/backtests/wr_r3_combined_calibration
+          python research/scripts/backtest/evaluate_wr_r3_combined_calibration.py \
+            --root research/data/backtests/wr_r3_combined_rebuild \
+            --r3-root evidence/r3 \
+            --out-dir research/data/backtests/wr_r3_combined_calibration
+
+      - name: Show frozen result
+        if: always()
+        run: |
+          cat research/data/backtests/wr_r3_combined_calibration/wr_r3_result.json 2>/dev/null || true
+          echo "--- season summary ---"
+          cat research/data/backtests/wr_r3_combined_calibration/wr_r3_season_summary.csv 2>/dev/null || true
+          echo "--- role summary ---"
+          cat research/data/backtests/wr_r3_combined_calibration/wr_r3_role_summary.csv 2>/dev/null || true
+          echo "--- tail summary ---"
+          cat research/data/backtests/wr_r3_combined_calibration/wr_r3_tail_summary.csv 2>/dev/null || true
+          echo "--- distribution summary ---"
+          cat research/data/backtests/wr_r3_combined_calibration/wr_r3_distribution_summary.json 2>/dev/null || true
+
+      - name: Upload frozen WR-R3 combined evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-r3-combined-calibration
+          path: |
+            research/data/backtests/wr_r3_combined_calibration/*
+            research/data/backtests/wr_r3_combined_rebuild/*/inputs/historical_input_validation.csv
+            research/docs/migrations/WR_R3_COMBINED_CALIBRATION_PLAN.md
+          if-no-files-found: warn
+          retention-days: 30
