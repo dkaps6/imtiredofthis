@@ -24,6 +24,7 @@ DATA = Path("data")
 OUTPUTS = Path("outputs")
 ROLES = DATA / "roles_ourlads.csv"
 MANUAL_ROSTER_OVERRIDES = DATA / "manual_roster_overrides.csv"
+MANUAL_PROP_QUARANTINE = DATA / "manual_prop_quarantine.csv"
 CORE_MARKETS = {
     "player_pass_yds",
     "player_rush_yds",
@@ -89,6 +90,11 @@ def _load_manual_roster_overrides() -> dict[str, set[str]]:
     missing_cols = required_cols - set(df.columns)
     if missing_cols:
         raise RuntimeError(f"manual roster overrides missing columns: {sorted(missing_cols)}")
+    if not isinstance(df.index, pd.RangeIndex):
+        raise RuntimeError(
+            "manual roster overrides parsed with a non-default index; this usually means an "
+            "unquoted extra comma in a field (e.g. reason) shifted a row"
+        )
     if df.empty:
         return {}
     overrides: dict[str, set[str]] = {}
@@ -107,6 +113,56 @@ def _load_manual_roster_overrides() -> dict[str, set[str]]:
             raise RuntimeError(f"manual roster overrides contains unusable player name: {data.get('player')!r}")
         overrides.setdefault(team, set()).update(keys)
     return overrides
+
+
+def _load_prop_quarantine_keys() -> set[str]:
+    """Load verified player exclusions for props the model cannot price yet.
+
+    This is for a player the sportsbook already lists but the football-only
+    PlayerForm universe (built upstream, independent of sportsbook data) has
+    no entry for -- usually a very recent signing/trade the roster source
+    hasn't caught up to. Quarantining removes exactly that player's offer
+    rows before any downstream stage sees them, so the rest of the slate
+    still prices normally. Every row must carry a verified_source and
+    verified_date; this is a narrow, auditable exclusion, not a silent drop.
+    """
+    if not MANUAL_PROP_QUARANTINE.exists() or MANUAL_PROP_QUARANTINE.stat().st_size == 0:
+        return set()
+    df = pd.read_csv(MANUAL_PROP_QUARANTINE)
+    required_cols = {"player", "reason", "verified_source", "verified_date"}
+    missing_cols = required_cols - set(df.columns)
+    if missing_cols:
+        raise RuntimeError(f"manual prop quarantine missing columns: {sorted(missing_cols)}")
+    if not isinstance(df.index, pd.RangeIndex):
+        raise RuntimeError(
+            "manual prop quarantine parsed with a non-default index; this usually means an "
+            "unquoted extra comma in a field (e.g. reason) shifted a row"
+        )
+    if df.empty:
+        return set()
+    keys: set[str] = set()
+    for row in df.itertuples(index=False):
+        data = row._asdict()
+        for col in required_cols:
+            if _missing_text(data.get(col)):
+                raise RuntimeError(
+                    f"manual prop quarantine row for player={data.get('player')!r} missing {col}"
+                )
+        player_keys = _name_keys(data.get("player"))
+        if not player_keys:
+            raise RuntimeError(f"manual prop quarantine contains unusable player name: {data.get('player')!r}")
+        keys.update(player_keys)
+    return keys
+
+
+def _quarantine_frame(df: pd.DataFrame, quarantine_keys: set[str]) -> tuple[pd.DataFrame, int]:
+    if df.empty or not quarantine_keys:
+        return df, 0
+    pcol = _player_col(df)
+    name_keys = df[pcol].map(_name_keys)
+    mask = name_keys.map(lambda keys: bool(keys & quarantine_keys))
+    removed = int(mask.sum())
+    return df.loc[~mask].copy(), removed
 
 
 def _build_roster_index(
@@ -253,6 +309,18 @@ def repair_live_prop_identity() -> dict:
     compact = _read(OUTPUTS / "props_raw.csv")
     raw_data = _read(DATA / "props_raw.csv")
     enriched = _read(DATA / "props_enriched.csv", required=False)
+
+    # Verified quarantines are removed before anything else touches these
+    # frames, so no downstream artifact derived from them (compact, wide,
+    # per-market pricing) can leak a quarantined player's rows back in.
+    quarantine_keys = _load_prop_quarantine_keys()
+    compact, quarantined_compact = _quarantine_frame(compact, quarantine_keys)
+    raw_data, quarantined_raw = _quarantine_frame(raw_data, quarantine_keys)
+    if not enriched.empty:
+        enriched, quarantined_enriched = _quarantine_frame(enriched, quarantine_keys)
+    else:
+        quarantined_enriched = 0
+
     events = _event_map(enriched, raw_data)
     required_teams = {team for pair in events.values() for team in pair}
     roster = _build_roster_index(roles, required_teams=required_teams)
@@ -310,6 +378,11 @@ def repair_live_prop_identity() -> dict:
         "repaired_enriched_rows": int(changed_enriched),
         "roster_authority": "current_ourlads_plus_current_event_participants",
         "manual_roster_override_teams": sorted(_load_manual_roster_overrides()),
+        "manual_prop_quarantine_rows_removed": {
+            "compact": quarantined_compact,
+            "raw": quarantined_raw,
+            "enriched": quarantined_enriched,
+        },
         "historical_team_affiliation_used": False,
         "disposition": "LIVE_PROP_IDENTITY_READY" if not unresolved.any() else "LIVE_PROP_IDENTITY_FAILURE",
     }
@@ -323,6 +396,7 @@ def repair_live_prop_identity() -> dict:
     out_enriched_path = OUTPUTS / "props_enriched.csv"
     if out_enriched_path.exists() and out_enriched_path.stat().st_size > 0:
         out_enriched = _read(out_enriched_path)
+        out_enriched, _ = _quarantine_frame(out_enriched, quarantine_keys)
         out_enriched, _ = _repair_frame(
             out_enriched, roster=roster, events=events,
             team_cols=("team_abbr", "team"), opp_cols=("opponent_abbr", "opponent"),
