@@ -11,6 +11,7 @@ from scripts.run_live_odds_gate import (
     _allowed_event_ids,
     _clear_stale_odds_artifacts,
     _filter_event_csv,
+    _scope_to_eligible_teams,
 )
 
 
@@ -75,6 +76,66 @@ def test_active_slate_event_gate_excludes_other_week_and_same_pair_future_rematc
         },
     ])
     assert _allowed_event_ids(odds, windows) == {"week1-a", "week1-b"}
+
+
+def test_scope_to_eligible_teams_drops_withheld_pairs():
+    """A real live run (2026-09-13) priced 8 teams whose games had already
+    kicked off/finished, because this week's real-schedule pairs/windows were
+    never narrowed to the certified pricing-eligible team set. A withheld
+    team's game (already started, or not yet pre-kickoff certified) must be
+    dropped here so its sportsbook offers never reach props_raw.csv."""
+    pairs = {("BAL", "IND"), ("DEN", "KC")}
+    windows = {
+        ("BAL", "IND"): (pd.Timestamp("2026-09-13T17:00:00Z"),),
+        ("DEN", "KC"): (pd.Timestamp("2026-09-14T00:00:00Z"),),
+    }
+    eligible = {"DEN", "KC"}  # BAL/IND already kicked off and were withheld
+    scoped_pairs, scoped_windows = _scope_to_eligible_teams(pairs, windows, eligible)
+    assert scoped_pairs == {("DEN", "KC")}
+    assert scoped_windows == {("DEN", "KC"): (pd.Timestamp("2026-09-14T00:00:00Z"),)}
+
+
+def test_scoped_withheld_teams_are_excluded_from_allowed_event_ids():
+    """End-to-end reproduction of the real 2026-09-13 incident: ARI, GB, LAC,
+    LV, MIA, MIN, PHI, WAS had already kicked off/finished and were withheld
+    from roles_current_production_eligible_v1.csv, but their sportsbook events
+    still matched "this week's real schedule" and were priced anyway (a game
+    is withheld or eligible as a whole -- both its teams together, per
+    build_production_eligible_active_roles_v1.py). Chaining
+    _scope_to_eligible_teams before _allowed_event_ids must drop exactly those
+    4 withheld games while keeping every still-eligible game."""
+    withheld_pairs = [("ARI", "LAC"), ("GB", "MIN"), ("LV", "MIA"), ("PHI", "WAS")]
+    eligible_pairs = [("SF", "CHI"), ("KC", "NYJ"), ("NE", "ATL"), ("DAL", "NYG")]
+    all_pairs = withheld_pairs + eligible_pairs
+    schedule_rows = []
+    for a, b in all_pairs:
+        for team, opp in ((a, b), (b, a)):
+            schedule_rows.append({
+                "season": 2026, "week": 1, "team": team, "opponent": opp,
+                "kickoff_utc": "2026-09-13T17:00:00Z",
+            })
+    schedule = pd.DataFrame(schedule_rows)
+    pairs = _active_game_pairs(schedule, 2026, 1)
+    windows = _active_game_windows(schedule, 2026, 1)
+
+    eligible_teams = {t for pair in eligible_pairs for t in pair}
+    scoped_pairs, scoped_windows = _scope_to_eligible_teams(pairs, windows, eligible_teams)
+
+    odds = pd.DataFrame([
+        {"event_id": f"evt-{a}-{b}", "home_team": a, "away_team": b, "commence_time": "2026-09-13T17:00:00Z"}
+        for a, b in all_pairs
+    ])
+    allowed = _allowed_event_ids(odds, scoped_windows)
+    assert allowed == {f"evt-{a}-{b}" for a, b in eligible_pairs}
+    assert scoped_pairs == {tuple(sorted(p)) for p in eligible_pairs}
+
+
+def test_scope_to_eligible_teams_passthrough_in_legacy_mode():
+    pairs = {("BAL", "IND")}
+    windows = {("BAL", "IND"): (pd.Timestamp("2026-09-13T17:00:00Z"),)}
+    scoped_pairs, scoped_windows = _scope_to_eligible_teams(pairs, windows, None)
+    assert scoped_pairs == pairs
+    assert scoped_windows == windows
 
 
 def test_conflicting_mirrored_schedule_kickoff_anchors_fail_closed():
