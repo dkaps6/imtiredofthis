@@ -7,6 +7,11 @@ on:
       - 'scripts/research/evaluate_rb_pd2_yard_difficulty_mc_width_v1.py'
       - 'tests/test_rb_pd2_yard_difficulty_mc_width_v1.py'
       - '.github/workflows/research-rb-pd2-yard-difficulty-mc-width-v1.yml'
+  push:
+    branches:
+      - research-rb-pd2-yard-difficulty-mc-width-v1
+    paths:
+      - 'docs/research/RB_PD2_YARD_DIFFICULTY_MC_WIDTH_V1_RUN.md'
   workflow_dispatch:
 
 env:
@@ -35,7 +40,7 @@ jobs:
           pytest -q tests/test_rb_pd2_yard_difficulty_mc_width_v1.py
 
   rebuild-distributions:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name != 'pull_request'
     needs: helper-contract-tests
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -118,7 +123,7 @@ jobs:
           retention-days: 30
 
   evaluate-frozen-candidate:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name != 'pull_request'
     needs: rebuild-distributions
     runs-on: ubuntu-24.04
     timeout-minutes: 45
