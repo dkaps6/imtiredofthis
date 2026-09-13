@@ -1,12 +1,19 @@
 """validate_team_target_pool_full_universe_v2.py audits
-football_simulation_universe.csv and target_entitlement_v1_trace.csv, both
-explicitly sportsbook-independent full-league artifacts that the universe
-builder (run_pricing_with_full_roster_universe_v1.py) hard-requires to cover
-all 32 teams regardless of kickoff-timing pricing eligibility. The downstream
-certification seam must never scope this file's team-count checks down to
-the shrinking current-eligible count -- that made every real pricing run
-fail the moment any team's game kicked off, since the 32-team universe never
-shrinks while the eligible-for-pricing set does.
+football_simulation_universe.csv and target_entitlement_v1_trace.csv. It now
+natively validates team coverage via eligible_team_set_v1.validate_current_team_set,
+which tolerates the universe being a superset of the currently-eligible-for-
+pricing teams (kickoff lockout narrows pricing eligibility, not the
+football-only universe -- and the universe itself can legitimately be below
+32 on a bye week). Two live production incidents motivated this:
+
+1. A downstream certification seam used to scope this validator's team-count
+   check down to an exact match on the shrinking current-eligible count,
+   which made a real pricing run fail the moment any team's game kicked off
+   ("target audit expected 4 teams, found 32").
+2. Reverting to a hardcoded "exactly 32" then failed the standing bye-week
+   replay artifact, whose real football_simulation_universe.csv legitimately
+   has only 28 teams. Neither a shrinking exact-match nor a fixed 32 is
+   correct; only a floor/superset check is.
 """
 from __future__ import annotations
 
@@ -43,9 +50,10 @@ def test_target_pool_validator_is_never_patched_by_the_seam(restore_seam_targets
     assert before == after
 
 
-def test_target_pool_validator_still_requires_all_32_teams():
+def test_target_pool_validator_uses_the_native_floor_check_not_a_fixed_count():
     text = TARGET_POOL.read_text(encoding="utf-8")
-    assert 'if frame["team"].nunique() != 32:' in text
+    assert "validate_current_team_set(frame[\"team\"]" in text
+    assert 'if frame["team"].nunique() != 32:' not in text
     assert "expected_current_teams" not in text
 
 

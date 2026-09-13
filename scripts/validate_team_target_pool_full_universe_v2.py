@@ -17,6 +17,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from scripts.utils.eligible_team_set_v1 import validate_current_team_set
+
 DATA = Path("data")
 UNIVERSE = DATA / "football_simulation_universe.csv"
 UNIVERSE_AUDIT = DATA / "football_simulation_universe_audit.json"
@@ -60,8 +62,11 @@ def main() -> int:
         raise RuntimeError(f"full football universe missing target audit columns: {sorted(missing)}")
     if frame.duplicated(["team", "player_clean_key"]).any():
         raise RuntimeError("full football universe has duplicate player/team rows")
-    if frame["team"].nunique() != 32:
-        raise RuntimeError(f"target audit expected 32 teams, found {frame['team'].nunique()}")
+    # football_simulation_universe.csv is sportsbook-independent and, per its
+    # own builder, always covers every team with a game this week -- observed
+    # is allowed to exceed the currently-eligible-for-pricing count (kickoff
+    # lockout narrows pricing eligibility, not the football-only universe).
+    validate_current_team_set(frame["team"], label="target-pool football universe")
 
     x = frame.copy()
     for c in ("tgt_share", "bayes_tgt_share", "rules_tgt_share"):
@@ -117,8 +122,11 @@ def main() -> int:
             raise RuntimeError("explicit entitlement trace has duplicate player/team rows")
         if len(trace) != len(frame):
             raise RuntimeError(f"explicit entitlement trace/player universe mismatch: {len(trace)} != {len(frame)}")
-        if trace["team"].nunique() != 32:
-            raise RuntimeError(f"explicit entitlement expected 32 teams, found {trace['team'].nunique()}")
+        if trace["team"].nunique() != frame["team"].nunique():
+            raise RuntimeError(
+                f"explicit entitlement team coverage does not match football universe: "
+                f"trace={trace['team'].nunique()} universe={frame['team'].nunique()}"
+            )
         if set(zip(trace["team"], trace["player_clean_key"])) != set(zip(frame["team"], frame["player_clean_key"])):
             raise RuntimeError("explicit entitlement player/team keys do not exactly match football universe")
 
@@ -145,8 +153,11 @@ def main() -> int:
             | physical["entitlement_sum"].gt(1.0 + 1e-9)
             | physical["residual_share"].lt(-1e-12)
         ]
-        if len(physical) != 32:
-            raise RuntimeError(f"explicit entitlement physical audit expected 32 teams, found {len(physical)}")
+        if len(physical) != frame["team"].nunique():
+            raise RuntimeError(
+                f"explicit entitlement physical audit team coverage does not match football universe: "
+                f"physical={len(physical)} universe={frame['team'].nunique()}"
+            )
 
         out = out.merge(physical, on="team", how="left", validate="one_to_one")
         explicit_payload = {
@@ -199,11 +210,13 @@ def main() -> int:
 
     if explicit and not explicit_bad.empty:
         raise SystemExit(
-            f"Explicit full-roster target entitlement is physically invalid for {len(explicit_bad)}/32 teams; see {OUT_CSV}."
+            f"Explicit full-roster target entitlement is physically invalid for "
+            f"{len(explicit_bad)}/{frame['team'].nunique()} teams; see {OUT_CSV}."
         )
     if (not explicit) and not raw_bad.empty:
         raise SystemExit(
-            f"Full-roster receiving entitlement pool is physically invalid for {len(raw_bad)}/32 teams; "
+            f"Full-roster receiving entitlement pool is physically invalid for "
+            f"{len(raw_bad)}/{frame['team'].nunique()} teams; "
             f"see {OUT_CSV}. No automatic normalization was applied."
         )
     return 0
