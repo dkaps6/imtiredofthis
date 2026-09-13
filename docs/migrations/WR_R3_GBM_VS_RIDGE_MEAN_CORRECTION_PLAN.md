@@ -48,9 +48,14 @@ models completely, then apply frozen predictions blind to 2025 only. No
 refitting, no peeking at 2025 during either model's fit.
 
 **Model arms**, both fit on the identical train rows/features/target:
-1. `Ridge(alpha=20)` — matches M89/M90's own frozen alpha exactly, for
-   consistency with the one place in this repo that already uses literal
-   `sklearn.linear_model.Ridge` for a mean correction.
+1. `Pipeline([StandardScaler(), Ridge(alpha=20)])` — matches
+   `run_m89_pregame_synthesis.py`'s own frozen precedent exactly (the one
+   place in this repo that already uses literal `sklearn.linear_model.Ridge`
+   for a mean correction): same alpha, and the same standardization step,
+   since the four WR-R3 features are on materially different scales (yards,
+   a [0,1] rate, a raw game count) and Ridge's L2 penalty is scale-sensitive.
+   An unscaled Ridge arm would be an avoidably weakened comparator, not a
+   clean test of model family alone.
 2. `HistGradientBoostingRegressor` (scikit-learn, already a pinned dependency;
    no new library) with `max_depth=3, max_iter=200, learning_rate=0.05,
    min_samples_leaf=30, random_state=42` — conservative depth/leaf-size
@@ -101,5 +106,20 @@ input build), the same M38 rebuild steps and `wr_r3_walkforward_casebook.csv`
 artifact WR-R3 already produced, and `evaluate_wr_r3_combined_calibration.py`'s
 own `load_r3_features`/`m38_map`/`actual_map`/`score` helpers where directly
 applicable, to avoid re-deriving already-validated plumbing.
+
+## Amendment log
+
+**Amendment 1 (before any run-1 result was inspected)**: GPT-5.6 (checkpoint
+28, Issue #535) identified that the first committed implementation used a bare
+unscaled `Ridge(alpha=20)`, not the `StandardScaler -> Ridge(alpha=20)`
+pipeline `run_m89_pregame_synthesis.py` actually uses. Corrected per the
+"Model arms" section above before reading run 1's candidate output — run 1
+(workflow run `34730965831`) is **non-authoritative for model-family
+attribution** and is superseded by the corrected re-run. Run 1 also failed
+outright on an unrelated `ModuleNotFoundError` (a PYTHONPATH package-resolution
+conflict between the pinned M38-parent checkout and this research branch's own
+`evaluate_wr_r3_combined_calibration.py`, fixed by loading that module directly
+by file path instead of via package import), so it produced no candidate
+output at all.
 
 No sportsbook/odds inputs. No production/model/weight/threshold change.

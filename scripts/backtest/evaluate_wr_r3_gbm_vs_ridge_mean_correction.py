@@ -16,6 +16,7 @@ Research only. No production/model/weight/threshold change.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 from pathlib import Path
 
@@ -23,40 +24,58 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.linear_model import Ridge
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 from scripts._opponent_map import canon_team
-from scripts.backtest.evaluate_wr_r3_combined_calibration import (
-    EXPECTED_2025_ALL_REC,
-    EXPECTED_2025_WR_ROWS,
-    MIN_PRIOR,
-    WR_POS,
-    ITERATIONS,
-    actual_map,
-    load_r3_features,
-    m38_map,
-    miss_rate,
-    num,
-    one,
-    parent_2025,
-    prepared_metrics,
-    read,
-    score,
-    target_map,
-)
 from scripts.backtest.historical_context import build_historical_context_bundle
 from scripts.backtest.walk_forward import _exact_week
 from scripts import simulation_v2
+
+# The CI workflow runs with PYTHONPATH="<frozen-M38-parent-checkout>:<this-branch's-checkout>"
+# so that every OTHER shared module (component_predictions, historical_context,
+# bayesian_v2, simulation_rules, simulation_v2, walk_forward) resolves against
+# the exact pinned M38 parent commit, preserving the same reproduction fidelity
+# WR-R3's own workflow already relies on. But evaluate_wr_r3_combined_calibration.py
+# was added to this research branch AFTER that parent commit was frozen, so it
+# does not exist under the parent checkout's scripts/backtest/ package -- and
+# because scripts/backtest is a regular (non-namespace) package there, `import
+# scripts.backtest.evaluate_wr_r3_combined_calibration` resolves against the
+# parent checkout first and never falls through to this branch's copy,
+# regardless of where it appears later on PYTHONPATH. Load it directly by file
+# path instead, alongside this script, to sidestep that resolution order
+# entirely -- everything *inside* the loaded module still imports the shared
+# modules normally and still resolves against the frozen parent as intended.
+_r3_spec = importlib.util.spec_from_file_location(
+    "_wr_r3_combined_calibration_sibling",
+    Path(__file__).with_name("evaluate_wr_r3_combined_calibration.py"),
+)
+_r3 = importlib.util.module_from_spec(_r3_spec)
+_r3_spec.loader.exec_module(_r3)
+
+EXPECTED_2025_ALL_REC = _r3.EXPECTED_2025_ALL_REC
+EXPECTED_2025_WR_ROWS = _r3.EXPECTED_2025_WR_ROWS
+MIN_PRIOR = _r3.MIN_PRIOR
+WR_POS = _r3.WR_POS
+ITERATIONS = _r3.ITERATIONS
+actual_map = _r3.actual_map
+load_r3_features = _r3.load_r3_features
+m38_map = _r3.m38_map
+miss_rate = _r3.miss_rate
+num = _r3.num
+one = _r3.one
+parent_2025 = _r3.parent_2025
+prepared_metrics = _r3.prepared_metrics
+read = _r3.read
+score = _r3.score
+target_map = _r3.target_map
+key = _r3.key
 
 TRAIN_SEASONS = [2020, 2021, 2022, 2023, 2024]
 TEST_SEASON = 2025
 FEATURE_COLS = ["prior8_m38_bias", "prior8_m38_mae", "prior8_m38_miss30_rate", "prior_games"]
 CORRECTION_CLIP = 8.0
 RIDGE_ALPHA = 20.0  # matches M89/M90's own frozen alpha
-
-
-def key(v) -> str:
-    from scripts.backtest.evaluate_wr_r3_combined_calibration import key as _key
-    return _key(v)
 
 
 def build_training_rows(features: pd.DataFrame, root: Path) -> pd.DataFrame:
@@ -110,11 +129,17 @@ def build_training_rows(features: pd.DataFrame, root: Path) -> pd.DataFrame:
     return out
 
 
-def fit_frozen_models(train: pd.DataFrame) -> tuple[Ridge, HistGradientBoostingRegressor, dict]:
+def fit_frozen_models(train: pd.DataFrame) -> tuple[Pipeline, HistGradientBoostingRegressor, dict]:
     X = train[FEATURE_COLS].to_numpy(dtype=float)
     y = train["residual"].to_numpy(dtype=float)
 
-    ridge = Ridge(alpha=RIDGE_ALPHA, random_state=42)
+    # The four features are on materially different scales (yards, a [0,1]
+    # rate, a raw game count) and Ridge's L2 penalty is scale-sensitive --
+    # matching run_m89_pregame_synthesis.py's own frozen precedent
+    # (Pipeline[StandardScaler, Ridge(alpha=ALPHA)]) so the comparison to the
+    # scale-invariant GBM arm is attributable to model family alone, not to an
+    # avoidable scaling handicap on the linear arm.
+    ridge = Pipeline([("scale", StandardScaler()), ("ridge", Ridge(alpha=RIDGE_ALPHA, random_state=42))])
     ridge.fit(X, y)
 
     gbm = HistGradientBoostingRegressor(
