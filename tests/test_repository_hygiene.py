@@ -33,6 +33,7 @@ def test_root_data_csvs_are_runtime_except_explicit_static_artifacts():
         "data/stadiums.csv",
         "data/manual_name_overrides.csv",
         "data/manual_roster_overrides.csv",
+        "data/manual_prop_quarantine.csv",
         "data/player_identity_aliases.csv",
     }
 
