@@ -1,0 +1,74 @@
+name: Vegas Line Game-Script Calibration V1
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/research/diagnose_vegas_line_gamescript_calibration_v1.py"
+      - "tests/test_diagnose_vegas_line_gamescript_calibration_v1.py"
+      - "docs/research/VEGAS_LINE_GAMESCRIPT_CALIBRATION_V1_PLAN.md"
+      - ".github/workflows/research-vegas-line-gamescript-calibration-v1.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyyaml
+      - name: Run focused unit tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_diagnose_vegas_line_gamescript_calibration_v1.py
+
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml
+
+      - name: Run Vegas line game-script calibration diagnosis
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p /tmp/vegas_calibration/result
+          python scripts/research/diagnose_vegas_line_gamescript_calibration_v1.py \
+            --seasons 2023,2024,2025 \
+            --out-dir /tmp/vegas_calibration/result
+
+      - name: Show results
+        if: always()
+        run: |
+          for f in vegas_line_calibration_direct vegas_line_calibration_recalibration vegas_line_spread_bucket_accuracy vegas_line_total_bucket_accuracy; do
+            echo "=== $f ==="
+            cat "/tmp/vegas_calibration/result/$f.csv" 2>/dev/null || true
+            echo
+          done
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vegas-line-gamescript-calibration-v1
+          path: |
+            /tmp/vegas_calibration/result/*.csv
+            docs/research/VEGAS_LINE_GAMESCRIPT_CALIBRATION_V1_PLAN.md
+          if-no-files-found: warn
+          retention-days: 14
