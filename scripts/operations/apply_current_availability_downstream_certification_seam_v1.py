@@ -9,7 +9,6 @@ from pathlib import Path
 
 LINEAGE_V2 = Path("scripts/audit_market_model_lineage_v2_core.py")
 LINEAGE_V3 = Path("scripts/audit_market_model_lineage_v3.py")
-TARGET_POOL = Path("scripts/validate_team_target_pool_full_universe_v2.py")
 STACK_V1 = Path("scripts/validate_certified_full_slate_stack_v1.py")
 STACK_V2 = Path("scripts/validate_certified_full_slate_stack_v2_core.py")
 STACK_V3 = Path("scripts/validate_certified_full_slate_stack_v3.py")
@@ -44,15 +43,10 @@ def main() -> int:
         ('        "rb_r22_adapted_rb_rows": 94,\n', '        "rb_r22_adapted_rb_rows": expected_r22_players,\n', "R22 payload coverage"),
     ])
 
-    _patch(TARGET_POOL, [
-        ('import pandas as pd\n', 'import pandas as pd\n\nfrom scripts.utils.eligible_team_set_v1 import expected_current_teams\n', "target-pool import"),
-        ('    source = json.loads(UNIVERSE_AUDIT.read_text(encoding="utf-8"))\n', '    source = json.loads(UNIVERSE_AUDIT.read_text(encoding="utf-8"))\n    current_teams = expected_current_teams()\n    expected_team_count = len(current_teams) if current_teams is not None else 32\n', "target-pool scope"),
-        ('    if frame["team"].nunique() != 32:\n        raise RuntimeError(f"target audit expected 32 teams, found {frame[\'team\'].nunique()}")\n', '    if frame["team"].nunique() != expected_team_count:\n        raise RuntimeError(f"target audit expected {expected_team_count} teams, found {frame[\'team\'].nunique()}")\n', "target-pool football coverage"),
-        ('        if trace["team"].nunique() != 32:\n            raise RuntimeError(f"explicit entitlement expected 32 teams, found {trace[\'team\'].nunique()}")\n', '        if trace["team"].nunique() != expected_team_count:\n            raise RuntimeError(f"explicit entitlement expected {expected_team_count} teams, found {trace[\'team\'].nunique()}")\n', "target-pool trace coverage"),
-        ('        if len(physical) != 32:\n            raise RuntimeError(f"explicit entitlement physical audit expected 32 teams, found {len(physical)}")\n', '        if len(physical) != expected_team_count:\n            raise RuntimeError(f"explicit entitlement physical audit expected {expected_team_count} teams, found {len(physical)}")\n', "target-pool physical coverage"),
-        ('            f"Explicit full-roster target entitlement is physically invalid for {len(explicit_bad)}/32 teams; see {OUT_CSV}."\n', '            f"Explicit full-roster target entitlement is physically invalid for {len(explicit_bad)}/{expected_team_count} teams; see {OUT_CSV}."\n', "target-pool explicit denominator"),
-        ('            f"Full-roster receiving entitlement pool is physically invalid for {len(raw_bad)}/32 teams; "\n', '            f"Full-roster receiving entitlement pool is physically invalid for {len(raw_bad)}/{expected_team_count} teams; "\n', "target-pool legacy denominator"),
-    ])
+    # validate_team_target_pool_full_universe_v2.py already owns a native
+    # validate_current_team_set(...) gate.  Do not runtime-patch it here: with
+    # eligible_team_set_v1 restored to exact current-scope semantics, that
+    # validator automatically enforces the same certified football universe.
 
     _patch(STACK_V1, [
         ('import pandas as pd\n', 'import pandas as pd\n\nfrom scripts.utils.eligible_team_set_v1 import expected_current_teams\n', "stack-v1 import"),
