@@ -1,0 +1,105 @@
+name: Scratch Replay QB Starter Reconciliation
+
+on:
+  pull_request:
+    paths:
+      - "scripts/utils/qb_starter_availability_v1.py"
+      - "scripts/operations/apply_current_availability_qb_c2_stale_starter_seam_v1.py"
+      - "tests/test_qb_c2_stale_starter_availability_v1.py"
+      - ".github/workflows/scratch-replay-qb-starter-reconciliation.yml"
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  SEASON: "2026"
+  PRIOR_SEASON: "2025"
+  SLATE_DATE: ""
+  ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Unit-test fail-closed starter reconciliation
+        run: |
+          export PYTHONPATH="${PWD}"
+          python -m pytest -q tests/test_qb_c2_stale_starter_availability_v1.py
+
+      - name: Restore preserved production artifact from failed live run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifact
+          gh run download 34769507865 --repo "$GITHUB_REPOSITORY" --name run_34769507865 --dir artifact
+          cp -rv artifact/data/. data/
+          cp -rv artifact/outputs/. outputs/
+          test -s data/current_player_availability.csv
+          test -s data/player_form_consensus.csv
+          test -s data/metrics_ready.csv
+          test -s outputs/props_pricing_offers.csv
+          echo "PRESERVED_ARTIFACT_RESTORED_NO_LIVE_FETCH"
+
+      - name: Apply current availability seams including stale starter reconciliation
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/apply_current_availability_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_stale_starter_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_primary_team_seam_v1.py
+          python -m py_compile \
+            scripts/run_pricing_with_full_roster_universe_v1.py \
+            scripts/modeling/qb_c2_production_adapter_v1.py \
+            scripts/utils/qb_starter_availability_v1.py
+
+      - name: Replay pricing from preserved football and sportsbook artifacts
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/run_pricing_with_full_roster_universe_v3.py --season "${SEASON}"
+          test -s outputs/props_priced_clean.csv
+          test -s data/qb_c2_production_starter_audit.csv
+          python - <<'PY'
+          import pandas as pd
+          audit = pd.read_csv('data/qb_c2_production_starter_audit.csv')
+          atl = audit.loc[audit['team'].astype(str).eq('ATL')]
+          if len(atl) != 1:
+              raise SystemExit(f'FATAL: expected one ATL starter audit row, got {len(atl)}')
+          row = atl.iloc[0]
+          if str(row['primary_player']) != 'Cooper Rush':
+              raise SystemExit(f"FATAL: ATL reconciled primary is {row['primary_player']!r}, expected Cooper Rush")
+          if not str(row['authority_source']).startswith('availability_reconciled_from_'):
+              raise SystemExit(f"FATAL: ATL authority source not availability-reconciled: {row['authority_source']!r}")
+          priced = pd.read_csv('outputs/props_priced_clean.csv', low_memory=False)
+          print('ATL_STARTER_RECONCILIATION_PASS', row.to_dict())
+          print('PRESERVED_PRICING_REPLAY_PASS', {'rows': len(priced), 'players': priced['player'].nunique() if 'player' in priced.columns else None})
+          PY
+
+      - name: Upload replay evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-starter-reconciliation-replay
+          if-no-files-found: warn
+          path: |
+            data/qb_c2_production_starter_audit.csv
+            data/qb_c2_production_integration_audit.json
+            outputs/props_priced_clean.csv
