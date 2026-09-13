@@ -1,17 +1,18 @@
 # RB-PD2 Yard-Difficulty MC-Width V1 — Frozen Plan
 
-**STATUS: FROZEN BEFORE ANY CANDIDATE DISTRIBUTION RESULT. PRE-RESULT FIDELITY AMENDMENT RECORDED BELOW. RESEARCH ONLY. NO PRODUCTION CHANGE.**
+**STATUS: FROZEN BEFORE ANY CANDIDATE DISTRIBUTION RESULT. PRE-RESULT FIDELITY AMENDMENTS RECORDED BELOW. RESEARCH ONLY. NO PRODUCTION CHANGE.**
 
 ## Pre-result fidelity amendment record
 
-The original plan was frozen at commit `222c78cb0314e79e0f9ce6e147ab127a30f68f10`. No candidate distribution was implemented, run, or inspected before the two clarifications below were made.
+The original plan was frozen at commit `222c78cb0314e79e0f9ce6e147ab127a30f68f10`. No candidate distribution was implemented, run, or inspected before the clarifications below were made.
 
-A direct reread of the exact merged PR #556 evaluator established two details that should be explicit rather than left to interpretation:
+Direct rereads of the exact merged PR #556 evaluator and the repository's WR-R3 width implementation established three details that should be explicit rather than left to interpretation:
 
 1. **Exact #556 error-history universe.** The PR #556 panel used for same-player error history contains target seasons **2021-2024 only**. The 2020 component artifact exists only to fit the frozen ensemble weights applied to 2021; 2020 errors do **not** enter `prior8_yard_mae`. Cross-season history therefore begins only where target-panel history exists (for example 2021 -> 2022), exactly matching #556.
 2. **Clustered paired bootstrap.** Because the same RB contributes repeated player-games, the primary CRPS bootstrap will resample **player clusters**, not individual rows. Each sampled `player_key` contributes all of that player's eligible rows, preserving within-player dependence. The replicate count (`10,000`), deterministic seed (`42027`), paired baseline/candidate comparison, and frozen `>=0.95` probability gate are unchanged. This is a prospective statistical-conservatism correction, not a result-driven gate change.
+3. **Exact empirical-percentile convention.** Match the already-implemented WR-R3 width precedent: maintain the sorted strictly-prior reference values and compute `difficulty_score = bisect_right(reference, prior8_yard_mae) / len(reference)`. Process by `(season, week)` groups: every row in a target week is scored against the reference pool available **before that week**, and only after the whole week is scored are that week's eligible feature values inserted into the reference pool. This removes any arbitrary within-week player ordering and keeps the mapping fully pregame.
 
-No width coefficient, onset percentile, cap, target seasons, evaluation thresholds, candidate transformation, or scientific success gate was changed by this amendment.
+No width coefficient, onset percentile, cap, target seasons, evaluation thresholds, candidate transformation, or scientific success gate was changed by these amendments.
 
 ## Authority / purpose
 
@@ -97,9 +98,15 @@ Reproduce PR #556's untouched yard-difficulty history mechanic exactly:
 - current/future game is forbidden;
 - `prior8_yard_mae = mean(abs(prior target errors))`.
 
-For each eligible target row, convert `prior8_yard_mae` to a **strictly-prior empirical percentile** using only scoreable feature rows that chronologically precede the target row. Require at least `100` earlier reference rows; before that floor, the width multiplier is exactly `1.0`.
+For each eligible target row, convert `prior8_yard_mae` to a **strictly-prior empirical percentile** using the exact WR-R3 convention:
 
-No target-season/global percentile may look forward in time.
+- maintain a sorted reference pool of finite `prior8_yard_mae` values from scoreable feature rows in earlier `(season, week)` groups only;
+- require at least `100` earlier reference values;
+- `difficulty_score = bisect_right(reference, prior8_yard_mae) / len(reference)`;
+- score every row in the current week before inserting any current-week feature values into the reference pool;
+- before the 100-row reference floor, the width multiplier is exactly `1.0` and the row is not in the primary qualifying evaluation population.
+
+No target-season/global percentile may look forward in time, and no within-week player ordering may affect a score.
 
 ## Frozen candidate mapping
 
@@ -140,7 +147,7 @@ All 2021-2024 RB/HB/FB rushing-yard player-games with:
 - exact baseline distribution lineage;
 - finite current-route mean and actual;
 - at least 4 strictly-prior same-player games from the exact 2021-2024 #556 target panel;
-- a valid strictly-prior difficulty score/reference floor.
+- a valid strictly-prior difficulty score after the 100-row reference floor.
 
 Expected order of magnitude is the #556 scoreable panel (`4,652` rows); exact row count is emitted and must be reconciled, not forced.
 
@@ -185,7 +192,7 @@ Candidate disposition can be positive only if **every gate family** passes.
 3. Prior-season-only ensemble weights: target `S` uses fit season `S-1` only.
 4. Raw reconstructed MC mean matches source `mc_proj` rowwise, max abs delta `<=1e-8`.
 5. Baseline aligned mean matches current-route `ensemble_proj` rowwise, max abs delta `<=1e-8`.
-6. Zero same/future-game difficulty-history violations and zero pre-2021 rows in the difficulty-history panel.
+6. Zero same/future-game difficulty-history violations, zero pre-2021 rows in the difficulty-history panel, and zero same-week rows in the percentile reference pool.
 7. Zero sportsbook inputs.
 8. Production changed = false.
 
