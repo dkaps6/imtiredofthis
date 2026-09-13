@@ -43,14 +43,15 @@ SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/sco
 TEAM_INJURIES_URL = "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/teams/{team_id}/injuries"
 OUT = Path("data/official_inactives_v1.csv")
 STATUS = Path("data/official_inactives_v1_status.json")
-UA = "imtiredofthis-espn-official-inactives/1.0"
 RECENT_WINDOW_DAYS = 6
 ITEMS_PER_TEAM = 25
 REQUEST_TIMEOUT = 30
 
 
 def _get(url: str, **kwargs):
-    return requests.get(url, timeout=REQUEST_TIMEOUT, headers={"User-Agent": UA}, **kwargs)
+    # ESPN's edge returns 403 for an identifying custom User-Agent (verified
+    # live); the plain default requests UA is what actually works.
+    return requests.get(url, timeout=REQUEST_TIMEOUT, **kwargs)
 
 
 def _athlete_id_from_ref(ref: str) -> str:
