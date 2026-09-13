@@ -1,0 +1,61 @@
+# scratch: diagnose why the opponent map came back empty on run 34777883137,
+# using only its already-fetched artifact. No re-fetch, no OddsAPI credits.
+name: Scratch Diagnose Current Slate State
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/scratch-diag-current-slate-state.yml'
+
+jobs:
+  diag:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download real artifact from run 34777883137 (no re-fetch)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p artifact
+          gh run download 34777883137 --repo "$GITHUB_REPOSITORY" --name run_34777883137 --dir artifact
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Inspect current slate state
+        run: |
+          python3 -c "
+          import pandas as pd
+
+          print('=== roles_current_production_eligible_v1.csv (certified-eligible teams right now) ===')
+          r = pd.read_csv('artifact/data/roles_current_production_eligible_v1.csv', low_memory=False)
+          r.columns = [c.lower() for c in r.columns]
+          teams = sorted(r['team'].dropna().astype(str).unique())
+          print('eligible teams:', teams, 'count:', len(teams))
+
+          print()
+          print('=== current_player_availability_game_certification.csv ===')
+          c = pd.read_csv('artifact/data/current_player_availability_game_certification.csv', low_memory=False)
+          print(c.to_string())
+
+          print()
+          print('=== outputs/props_raw.csv (what actually got fetched) ===')
+          p = pd.read_csv('artifact/outputs/props_raw.csv', low_memory=False)
+          p.columns = [c.lower() for c in p.columns]
+          print('rows:', len(p))
+          if len(p):
+              print(p.to_string())
+
+          print()
+          print('=== data/team_week_map.csv kickoff times for teams not yet eligible ===')
+          twm = pd.read_csv('artifact/data/team_week_map.csv', low_memory=False)
+          twm.columns = [c.lower() for c in twm.columns]
+          twm['team'] = twm['team'].astype(str)
+          not_eligible = twm[~twm['team'].isin(teams)]
+          cols = [c for c in ['team','opponent','season','week','kickoff_utc','kickoff','game_date','commence_time'] if c in twm.columns]
+          print(not_eligible[cols].drop_duplicates('team').to_string() if cols else list(twm.columns))
+          "
