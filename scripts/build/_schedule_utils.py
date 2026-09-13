@@ -9,9 +9,14 @@ if str(REPO_ROOT) not in sys.path:
 
 from dataclasses import dataclass
 from typing import Iterable, Optional
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
+
+# nflverse's gameday/gametime columns are naive Eastern local time (e.g.
+# gametime="13:00" for a 1:00pm ET kickoff), not UTC.
+_SCHEDULE_LOCAL_TZ = ZoneInfo("America/New_York")
 
 DEFAULT_HEADERS = {
     "User-Agent": "FullSlate/Weather (+https://github.com/imtiredofthis)",
@@ -160,7 +165,14 @@ def _coerce_kickoff(df: pd.DataFrame, columns: _ScheduleColumns) -> pd.Series:
             else gameday.dt.strftime("%Y-%m-%d")
         )
         times = df[columns.gametime].astype(str).str.strip()
-        kickoff = pd.to_datetime(combo + " " + times, utc=True, errors="coerce")
+        # gameday/gametime are naive Eastern local time. Localizing (not just
+        # UTC-labeling) a naive timestamp is required, or every kickoff is
+        # shifted 4-5 hours earlier than reality (ET's UTC offset) and games
+        # falsely appear to have already kicked off hours before they have.
+        naive = pd.to_datetime(combo + " " + times, errors="coerce")
+        kickoff = naive.dt.tz_localize(
+            _SCHEDULE_LOCAL_TZ, ambiguous="NaT", nonexistent="NaT"
+        ).dt.tz_convert("UTC")
         if kickoff.notna().any():
             return kickoff
 
