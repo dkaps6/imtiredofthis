@@ -40,6 +40,18 @@ def expected_current_teams(*, active_roles_path: Path | None = None) -> set[str]
 
 
 def validate_current_team_set(observed, *, active_roles_path: Path | None = None, label: str = "current football universe") -> dict:
+    """Require every certified-eligible team to be present in ``observed``.
+
+    ``observed`` is allowed to be a superset of the certified-eligible teams.
+    The football-only layers this guards (PlayerForm's full simulation
+    universe, R26/QB-C2 context, ...) are contracted to cover every rostered
+    team regardless of sportsbook/kickoff-timing availability; only pricing
+    actually narrows to teams with live offers, later and separately. A
+    stricter set-equality check here would require football-only artifacts to
+    be pre-narrowed to the eligible subset, which nothing in this pipeline
+    does -- and shouldn't, since that would make "which players the football
+    model knows" depend on sportsbook availability again.
+    """
     obs = {canon_team(x) for x in observed if str(x).strip()}
     obs.discard("")
     expected = expected_current_teams(active_roles_path=active_roles_path)
@@ -49,12 +61,13 @@ def validate_current_team_set(observed, *, active_roles_path: Path | None = None
         return {"mode": "LEGACY_32_TEAM", "expected_teams": LEGACY_TEAM_COUNT, "observed_teams": len(obs)}
     missing = sorted(expected - obs)
     extra = sorted(obs - expected)
-    if missing or extra:
-        raise RuntimeError(f"{label} != certified eligible teams; missing={missing} extra={extra}")
+    if missing:
+        raise RuntimeError(f"{label} missing certified eligible teams: {missing}")
     return {
         "mode": "EXPLICIT_CURRENT_AVAILABILITY",
         "expected_teams": len(expected),
         "observed_teams": len(obs),
+        "extra_non_eligible_teams": extra,
         "canonical_games": len(expected) // 2,
         "teams": sorted(expected),
     }
