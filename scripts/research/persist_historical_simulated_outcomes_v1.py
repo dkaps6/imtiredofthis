@@ -116,6 +116,7 @@ def persist_season(
     injuries_path: Path | None,
     weather_path: Path | None,
     iterations: int,
+    seed_offset: int = 42,
 ) -> pd.DataFrame:
     player_logs = _read(player_logs_path, "player logs")
     team_weekly = _read(team_weekly_path, "historical team-week features")
@@ -131,7 +132,7 @@ def persist_season(
         universe = _read(universe_path, f"pregame universe for {season} week {week}")
         injuries = _exact_week(injuries_history, season, week)
         weather = _exact_week(weather_history, season, week)
-        seed = 42 + int(week)
+        seed = int(seed_offset) + int(week)
 
         bundle = build_historical_context_bundle(
             player_logs=player_logs,
@@ -260,6 +261,15 @@ def main() -> int:
     ap.add_argument("--injuries", type=Path, default=Path("data/backtests/injuries_history.csv"))
     ap.add_argument("--weather", type=Path, default=Path("data/backtests/weather_history.csv"))
     ap.add_argument("--iterations", type=int, default=2000)
+    ap.add_argument(
+        "--seed-offset", type=int, default=42,
+        help="week-offset added to derive the per-week simulation seed (seed = offset + week). "
+             "Default 42 matches walk_forward.py's standard component-prediction seed policy, "
+             "used by every existing caller of this script. Callers whose component file was "
+             "built with a different seed policy (e.g. build_qb_synthesis_confirmation_inputs_v1.py's "
+             "53 + week) must pass the matching offset here or the mean-reproduction checksum "
+             "below will correctly fail closed.",
+    )
     a = ap.parse_args()
 
     persist_season(
@@ -275,6 +285,7 @@ def main() -> int:
         injuries_path=a.injuries,
         weather_path=a.weather,
         iterations=a.iterations,
+        seed_offset=a.seed_offset,
     )
     return 0
 
