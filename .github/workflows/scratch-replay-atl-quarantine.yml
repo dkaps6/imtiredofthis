@@ -49,6 +49,35 @@ jobs:
           python scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py
           python scripts/operations/apply_current_availability_qb_c2_primary_team_seam_v1.py
           python -m py_compile scripts/run_pricing_with_full_roster_universe_v1.py scripts/modeling/rb_r26_receptions_production_adapter_v1.py scripts/modeling/qb_c2_production_adapter_v1.py
+      - name: Check RB P3 synthesis scope for Breece Hall/NYJ
+        run: |
+          python3 -c "
+          import pandas as pd
+          df = pd.read_csv('data/rb_rush_synthesis_context.csv', low_memory=False)
+          df.columns = [c.lower() for c in df.columns]
+          print('teams in RB P3 context:', sorted(df['team'].dropna().astype(str).unique()))
+          print('NYJ rows:')
+          print(df[df['team'].astype(str)=='NYJ'].to_string())
+          print('rows mentioning Hall:')
+          print(df[df['player'].astype(str).str.contains('Hall', case=False, na=False)].to_string())
+          "
+          echo "=== eligible/certified teams (data/roles_current_production_eligible_v1.csv) ==="
+          python3 -c "
+          import pandas as pd
+          r = pd.read_csv('data/roles_current_production_eligible_v1.csv', low_memory=False)
+          r.columns = [c.lower() for c in r.columns]
+          print('NYJ in eligible set:', 'NYJ' in set(r['team'].astype(str)))
+          print(sorted(r['team'].dropna().astype(str).unique()))
+          "
+          echo "=== NYJ rows in data/current_player_availability.csv (Breece Hall specifically) ==="
+          python3 -c "
+          import pandas as pd
+          a = pd.read_csv('data/current_player_availability.csv', low_memory=False)
+          a.columns = [c.lower() for c in a.columns]
+          mask = a['team'].astype(str).eq('NYJ') & a['player'].astype(str).str.contains('Hall', case=False, na=False)
+          print(a.loc[mask].to_string())
+          "
+
       - name: Price from certified football-first Full Slate stack (replay, no live fetch)
         run: |
           set -euo pipefail
