@@ -65,7 +65,12 @@ def test_unavailable_flag_state_disagreement_fails_closed(tmp_path):
 
 
 def test_starter_seam_is_single_anchor_and_preserves_fail_closed_path():
-    source = "before\n" + OLD + "after\n"
+    protected = "\n".join([
+        "FORBIDDEN_SELECTOR_FIELDS",
+        'raise RuntimeError(f"team={team} has ambiguous Ourlads QB1 fallback: {sample}")',
+        'if not audit["sportsbook_inputs_used"].eq(0).all():',
+    ])
+    source = protected + "\nbefore\n" + OLD + "after\n"
     out = transform(source)
     assert OLD not in out
     assert NEW in out
