@@ -1,4 +1,4 @@
-# retrigger: game-count guard relaxed too
+# probe: does Tua Tagovailoa have a real posted line for ATL tonight?
 name: Scratch Replay Pricing With Eligible-Team Fix
 
 on:
@@ -45,6 +45,17 @@ jobs:
           test -s data/live_pricing_offer_audit.json && echo "live_pricing_offer_audit.json OK"
           test -s data/metrics_ready.csv && echo "metrics_ready.csv OK"
           test -s data/player_form_consensus.csv && echo "player_form_consensus.csv OK"
+      - name: Check whether Tua Tagovailoa has a real posted ATL line
+        run: |
+          echo "=== props_raw.csv rows mentioning Tua ==="
+          grep -i "tagovailoa" outputs/props_raw.csv || echo "no match in outputs/props_raw.csv"
+          echo
+          echo "=== data/props_raw.csv rows mentioning Tua ==="
+          grep -i "tagovailoa" data/props_raw.csv || echo "no match in data/props_raw.csv"
+          echo
+          echo "=== ATL rows in roles_ourlads.csv ==="
+          grep -i ",ATL," data/roles_ourlads.csv || grep -i "ATL" data/roles_ourlads.csv | head -20
+
       - name: Apply certified availability-aware current-output coverage seams
         run: |
           set -euo pipefail
