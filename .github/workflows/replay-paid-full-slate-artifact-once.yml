@@ -15,7 +15,7 @@ env:
   PRIOR_SEASON: "2025"
   SLATE_DATE: ""
   FETCH_LIVE_ODDS: "false"
-  FULL_SLATE_SOURCE_RUN_ID: "34790259599"
+  FULL_SLATE_SOURCE_RUN_ID: "34650067599"
   ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
 
 jobs:
@@ -40,11 +40,11 @@ jobs:
       - name: Download preserved paid artifact
         uses: actions/download-artifact@v4
         with:
-          name: run_34790259599
+          name: run_34650067599
           path: replay_source
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
-          run-id: 34790259599
+          run-id: 34650067599
 
       - name: Restore preserved data and outputs
         run: |
