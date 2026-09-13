@@ -67,10 +67,19 @@ def _validate_qb_c2_coverage_contract(c2: dict, stamp: dict, *, priced_qbs: int 
 
     if football_qbs <= 0 or selected_football_qbs <= 0 or selected_football_qbs > football_qbs:
         raise RuntimeError(f"QB C2 production coverage invalid: {c2}")
-    if stamped_football_qbs != football_qbs or current_scope != football_qbs:
+    if stamped_football_qbs != football_qbs:
         raise RuntimeError(
             "QB C2 football universe differs between production audit and pricing lineage stamp; "
-            f"production={football_qbs} stamp={stamped_football_qbs} scope={current_scope}"
+            f"production={football_qbs} stamp={stamped_football_qbs}"
+        )
+    # current_team_scope_expected is the certified-eligible team count, which
+    # legitimately shrinks over the course of a game day as more games kick
+    # off -- it is a subset of the constant football-only universe, never
+    # required to equal it. Only a scope that has somehow grown past the full
+    # 32-team universe would be a real bug.
+    if current_scope > football_qbs:
+        raise RuntimeError(
+            f"QB C2 current team scope exceeds the football-only universe; scope={current_scope} football={football_qbs}"
         )
     if stamped_selected_football != selected_football_qbs:
         raise RuntimeError(
@@ -320,8 +329,15 @@ def main() -> int:
     qb = p.loc[p["source_market"].astype(str).eq("player_pass_yds")]
     if not qb.empty and not pd.to_numeric(qb.get("qb_synthesis_applied", 0), errors="coerce").fillna(0).eq(1).all():
         raise RuntimeError("lineage claims QB M89/M90 specialist active but priced rows disagree")
+    # RB P3 is only built for the teams its context covers as of build time
+    # (see RB P3 team-scope fallback). A rush_yds row for a team outside
+    # that scope legitimately prices from the generic model instead, so the
+    # lineage's "P3 is active for this market" claim is only checked against
+    # rows for teams P3 was actually built for.
+    rb_p3_teams = set(pd.read_csv(DATA / "rb_rush_synthesis_context.csv", usecols=["team"])["team"].astype(str))
     rb = p.loc[p["source_market"].astype(str).eq("player_rush_yds") & p["position_family"].eq("RB/FB")]
-    if not rb.empty and not pd.to_numeric(rb.get("rb_synthesis_applied", 0), errors="coerce").fillna(0).eq(1).all():
+    rb_in_scope = rb.loc[rb["team"].astype(str).isin(rb_p3_teams)]
+    if not rb_in_scope.empty and not pd.to_numeric(rb_in_scope.get("rb_synthesis_applied", 0), errors="coerce").fillna(0).eq(1).all():
         raise RuntimeError("lineage claims RB P3 active but priced rows disagree")
     atd = p.loc[p["source_market"].astype(str).eq("player_anytime_td")]
     if not atd.empty:
