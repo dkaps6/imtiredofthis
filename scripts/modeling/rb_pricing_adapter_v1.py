@@ -77,6 +77,17 @@ def load_rb_context(path: Path = RB_CONTEXT_PATH) -> pd.DataFrame:
     return out
 
 
+def rb_context_teams(context: pd.DataFrame) -> set[str]:
+    """Teams the promoted RB P3 context was actually built for.
+
+    Certified-eligible teams whose props became live after P3's context was
+    built are legitimately absent here -- a Week-1 RB/FB row for a team
+    outside this set must fall back to the generic calibrated model instead
+    of attempting a P3 lookup that can never resolve.
+    """
+    return set(context["team"].astype(str))
+
+
 def lookup_rb_projection(row: pd.Series, context: pd.DataFrame) -> dict[str, object]:
     season = int(float(row.get("season")))
     week = int(float(row.get("week")))
