@@ -23,6 +23,7 @@ from scripts._opponent_map import CANON_TEAM_CODES, canon_team
 DATA = Path("data")
 OUTPUTS = Path("outputs")
 ROLES = DATA / "roles_ourlads.csv"
+MANUAL_ROSTER_OVERRIDES = DATA / "manual_roster_overrides.csv"
 CORE_MARKETS = {
     "player_pass_yds",
     "player_rush_yds",
@@ -72,6 +73,42 @@ def _name_keys(value) -> set[str]:
     return {k for k in keys if k}
 
 
+def _load_manual_roster_overrides() -> dict[str, set[str]]:
+    """Load verified player->team additions for gaps in the Ourlads scrape.
+
+    Every row must carry a verified_source and verified_date proving the
+    assignment was checked, not guessed -- this file is a narrow, auditable
+    escape hatch for a scraped roster lagging a real, very recent transaction
+    (trade/signing) that a live sportsbook has already priced, not a general
+    substitute for fixing the scrape.
+    """
+    if not MANUAL_ROSTER_OVERRIDES.exists() or MANUAL_ROSTER_OVERRIDES.stat().st_size == 0:
+        return {}
+    df = pd.read_csv(MANUAL_ROSTER_OVERRIDES)
+    required_cols = {"player", "team", "reason", "verified_source", "verified_date"}
+    missing_cols = required_cols - set(df.columns)
+    if missing_cols:
+        raise RuntimeError(f"manual roster overrides missing columns: {sorted(missing_cols)}")
+    if df.empty:
+        return {}
+    overrides: dict[str, set[str]] = {}
+    for row in df.itertuples(index=False):
+        data = row._asdict()
+        for col in required_cols:
+            if _missing_text(data.get(col)):
+                raise RuntimeError(
+                    f"manual roster overrides row for player={data.get('player')!r} missing {col}"
+                )
+        team = canon_team(data.get("team"))
+        if team not in CANON_TEAM_CODES:
+            raise RuntimeError(f"manual roster overrides contains invalid team: {data.get('team')!r}")
+        keys = _name_keys(data.get("player"))
+        if not keys:
+            raise RuntimeError(f"manual roster overrides contains unusable player name: {data.get('player')!r}")
+        overrides.setdefault(team, set()).update(keys)
+    return overrides
+
+
 def _build_roster_index(
     roles: pd.DataFrame,
     *,
@@ -95,6 +132,14 @@ def _build_roster_index(
     invalid_required = sorted(required - set(CANON_TEAM_CODES))
     if invalid_required:
         raise RuntimeError(f"Current event scope contains invalid NFL teams: {invalid_required}")
+
+    # Verified manual additions may rescue a player missing from the Ourlads
+    # scrape, but only within the teams actually in scope for this call --
+    # never silently widen the roster to teams the caller never asked about.
+    for team, keys in _load_manual_roster_overrides().items():
+        if team in required:
+            roster.setdefault(team, set()).update(keys)
+
     missing_teams = sorted(required - set(roster))
     if missing_teams:
         raise RuntimeError(f"Ourlads roster identity index missing current-event teams: {missing_teams}")
@@ -264,6 +309,7 @@ def repair_live_prop_identity() -> dict:
         "repaired_raw_offer_rows": int(changed_raw),
         "repaired_enriched_rows": int(changed_enriched),
         "roster_authority": "current_ourlads_plus_current_event_participants",
+        "manual_roster_override_teams": sorted(_load_manual_roster_overrides()),
         "historical_team_affiliation_used": False,
         "disposition": "LIVE_PROP_IDENTITY_READY" if not unresolved.any() else "LIVE_PROP_IDENTITY_FAILURE",
     }
