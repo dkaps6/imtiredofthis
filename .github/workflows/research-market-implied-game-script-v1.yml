@@ -1,0 +1,101 @@
+name: Market-Implied Game Script V1
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/research/diagnose_market_implied_game_script_v1.py"
+      - "tests/test_diagnose_market_implied_game_script_v1.py"
+      - "docs/research/MARKET_IMPLIED_GAME_SCRIPT_V1_PLAN.md"
+      - ".github/workflows/research-market-implied-game-script-v1.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyyaml scikit-learn
+      - name: Run focused unit tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_diagnose_market_implied_game_script_v1.py
+
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn
+
+      - name: Build independent historical inputs for 2024 and 2025
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/hist_2024 /tmp/hist_2025 /tmp/game_script
+          mkdir -p /tmp/hist_2024 /tmp/hist_2025 /tmp/game_script
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --out-dir /tmp/hist_2024
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --out-dir /tmp/hist_2025
+
+      - name: Combine 2024-2025 team-week history
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          a = pd.read_csv('/tmp/hist_2024/team_weekly_history.csv')
+          b = pd.read_csv('/tmp/hist_2025/team_weekly_history.csv')
+          a.columns = [c.lower() for c in a.columns]
+          b.columns = [c.lower() for c in b.columns]
+          a = a.loc[a.season.eq(2024)]
+          b = b.loc[b.season.eq(2025)]
+          x = pd.concat([a, b], ignore_index=True)
+          keys = ['season', 'week', 'team']
+          x = x.sort_values(keys).drop_duplicates(keys, keep='last').reset_index(drop=True)
+          if x.duplicated(keys).any():
+              raise RuntimeError('duplicate combined team-weekly rows')
+          x.to_csv('/tmp/game_script/team_weekly_history.csv', index=False)
+          print(len(x), sorted(x.season.unique()))
+          PY
+
+      - name: Run market-implied game-script incremental-value diagnosis
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/diagnose_market_implied_game_script_v1.py \
+            --team-weekly /tmp/game_script/team_weekly_history.csv \
+            --out-dir /tmp/game_script/result
+
+      - name: Show result
+        if: always()
+        run: |
+          cat /tmp/game_script/result/market_game_script_diagnosis_summary.csv 2>/dev/null || true
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-implied-game-script-v1
+          path: |
+            /tmp/game_script/result/*.csv
+            docs/research/MARKET_IMPLIED_GAME_SCRIPT_V1_PLAN.md
+          if-no-files-found: warn
+          retention-days: 14
