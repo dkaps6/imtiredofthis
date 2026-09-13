@@ -1,0 +1,70 @@
+# scratch: every team checked so far shows exactly 5 'Out' players in ESPN's
+# per-event injuries field -- suspicious for a display-truncated list rather
+# than the true official inactive count (usually ~7). Before building a real
+# scraper on this source, verify: (1) does the count vary across more teams
+# (evidence against truncation) or stay pinned at 5 (evidence for it), and
+# (2) for the already-completed ATL@PIT game, does Tua Tagovailoa (known
+# real inactive, confirmed via news headline earlier) actually appear, and
+# is there any 'count'/pagination hint in the raw payload. Fetch-only, zero
+# credits.
+name: Scratch Diagnose ESPN Injuries Completeness
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/scratch-diag-espn-injuries-completeness.yml'
+
+jobs:
+  diag:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install requests
+      - name: Check injuries counts across all teams and ATL detail
+        run: |
+          python3 -c "
+          import requests, json
+
+          r = requests.get('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard', timeout=30)
+          events = r.json().get('events', [])
+          print('total events today:', len(events))
+
+          counts = []
+          for e in events:
+              eid = e['id']
+              short = e.get('shortName','')
+              r2 = requests.get(f'https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event={eid}', timeout=30)
+              d2 = r2.json()
+              inj = d2.get('injuries', [])
+              for block in inj:
+                  team = block.get('team',{}).get('abbreviation')
+                  players = block.get('injuries', [])
+                  counts.append((short, team, len(players)))
+
+          print()
+          print('all team injury counts this week:')
+          for short, team, n in counts:
+              print(f'  {short:15s} {team:4s} count={n}')
+
+          distinct_counts = sorted(set(n for _,_,n in counts))
+          print()
+          print('distinct counts seen:', distinct_counts)
+
+          # ATL detail -- full raw dump for the completed ATL@PIT game
+          atl_game = next((e for e in events if 'ATL' in e.get('shortName','') and 'PIT' in e.get('shortName','')), None)
+          if atl_game:
+              r3 = requests.get(f\"https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event={atl_game['id']}\", timeout=30)
+              d3 = r3.json()
+              inj = d3.get('injuries', [])
+              print()
+              print('=== full ATL@PIT injuries raw dump ===')
+              print(json.dumps(inj, indent=2)[:6000])
+          "
