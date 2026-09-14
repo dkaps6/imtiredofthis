@@ -1,0 +1,74 @@
+name: Evaluate WR-QB Shared Tail Signal V1
+
+# Runs the frozen evaluator (scripts/research/evaluate_wr_qb_shared_tail_signal_v1.py)
+# against the real 2024/2025 trace bundle produced by the artifact-completion
+# job (workflow run 34865304105, artifact 10356647408, branch
+# wr-qb-shared-tail-signal-v1-artifact-completion). No model code changes
+# here -- this only consumes already-computed frozen-authority data and
+# scores it against the pre-registered gates in
+# docs/research/WR_QB_SHARED_TAIL_SIGNAL_V1_PLAN.md.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-wr-qb-shared-tail-signal-v1
+    paths:
+      - '.github/workflows/evaluate-wr-qb-shared-tail-signal-v1.yml'
+      - 'scripts/research/evaluate_wr_qb_shared_tail_signal_v1.py'
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pandas numpy scipy
+
+      - name: Run evaluator unit tests first
+        run: python -m pytest -q tests/test_evaluate_wr_qb_shared_tail_signal_v1.py
+
+      - name: Download real 2024/2025 trace bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/trace_root
+          gh run download 34865304105 --repo "${GITHUB_REPOSITORY}" --name joint-pass-receiving-conservation-v1-2024-2025-full-trace --dir /tmp/trace_root
+
+      - name: Show downloaded layout
+        run: find /tmp/trace_root -type f | sort
+
+      - name: Run frozen evaluator against real data
+        run: |
+          mkdir -p /tmp/wr_qb_result
+          python scripts/research/evaluate_wr_qb_shared_tail_signal_v1.py \
+            --root /tmp/trace_root \
+            --out-dir /tmp/wr_qb_result
+
+      - name: Show result
+        if: always()
+        run: |
+          echo "=== result json ==="
+          cat /tmp/wr_qb_result/wr_qb_shared_tail_signal_v1_result.json 2>/dev/null || true
+          echo "=== summary ==="
+          cat /tmp/wr_qb_result/wr_qb_shared_tail_signal_v1_summary.csv 2>/dev/null || true
+          echo "=== anti-retest scoreboard ==="
+          cat /tmp/wr_qb_result/wr_qb_shared_tail_signal_v1_anti_retest_scoreboard.csv 2>/dev/null || true
+
+      - name: Upload result bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-qb-shared-tail-signal-v1-real-result
+          retention-days: 30
+          path: /tmp/wr_qb_result/*
