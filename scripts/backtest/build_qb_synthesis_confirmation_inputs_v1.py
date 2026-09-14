@@ -6,6 +6,13 @@ the calibrated ensemble projection with the same frozen production weights
 (data/model_ensemble_weights.csv) used everywhere else, so the base_proj the
 synthesis corrects on top of matches what production actually starts from --
 not a bespoke re-derivation.
+
+The team-weekly input is fail-closed to the requested target season before
+historical-context construction. This preserves the season-scoped M89 clean
+rebuild contract even when a caller supplies a combined multi-season file;
+canonical callers that already pass season-specific files are unchanged.
+Player logs remain multi-season because the historical player-form builder
+explicitly uses the requested prior season for strictly-prior player evidence.
 """
 from __future__ import annotations
 
@@ -32,6 +39,18 @@ def opt(path: Path | None) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
+def _target_season_team_history(frame: pd.DataFrame, season: int) -> pd.DataFrame:
+    x = frame.copy()
+    x.columns = [str(c).strip().lower() for c in x.columns]
+    if "season" not in x.columns:
+        raise RuntimeError("QB synthesis team-weekly input missing season")
+    s = pd.to_numeric(x["season"], errors="coerce")
+    x = x.loc[s.eq(int(season))].copy()
+    if x.empty:
+        raise RuntimeError(f"QB synthesis team-weekly input has no rows for target season {season}")
+    return x
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--season", type=int, required=True)
@@ -47,8 +66,9 @@ def main() -> int:
     p.add_argument("--out", type=Path, required=True)
     a = p.parse_args()
 
-    logs, tw, sched = read(a.player_logs), read(a.team_weekly), read(a.schedule)
+    logs, tw, sched = read(a.player_logs), _target_season_team_history(read(a.team_weekly), a.season), read(a.schedule)
     injuries_history, weather_history = _read_optional(a.injuries), _read_optional(a.weather)
+    print(f"[qb_synthesis_inputs] target-season team history rows={len(tw)} season={a.season}")
 
     traces = []
     for week in _parse_weeks(a.weeks):
