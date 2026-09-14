@@ -66,12 +66,22 @@ def load_concat(root: Path, filename: str, label: str) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
-def build_cohort(qb: pd.DataFrame, players: pd.DataFrame, actual: pd.DataFrame) -> pd.DataFrame:
+def build_cohort(qb: pd.DataFrame, players: pd.DataFrame, actual: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     """One true model WR1 per (season, week, event_id, team), restricted to
-    the exact QB C2 authority identities. Fails closed on drift."""
+    the exact QB C2 authority identities. Fails closed on drift in the QB
+    join (identity of the QB C2 authority side). The actual-outcome join
+    uses the same join_key + inner-join convention already established and
+    frozen by evaluate_joint_pass_receiving_v1.py's player_casebook() for
+    this exact data -- a pregame WR1 with no matching actual_usage row did
+    not play that week (inactive/injury/trade), and is legitimately excluded
+    from grading rather than treated as a data-integrity failure. This is
+    applying existing precedent, not a new methodological choice made after
+    seeing results."""
     wr = players.loc[players.position.astype(str).str.upper().eq("WR")].copy()
     if wr.empty:
         raise RuntimeError("no WR rows in player projection trace")
+    if "join_key" not in wr.columns:
+        raise RuntimeError("player projection trace missing join_key")
     wr["b0_target_probability"] = pd.to_numeric(wr["b0_target_probability"], errors="coerce")
     wr = wr.sort_values(
         ["season", "week", "event_id", "team", "b0_target_probability", "player_clean_key"],
@@ -96,14 +106,23 @@ def build_cohort(qb: pd.DataFrame, players: pd.DataFrame, actual: pd.DataFrame) 
         if n != EXPECTED_QB_ROWS[season]:
             raise RuntimeError(f"cohort row-count drift season={season} expected={EXPECTED_QB_ROWS[season]} got={n}")
 
-    au = actual[["season", "week", "team", "player_clean_key", "rec_yards"]].rename(
+    if "join_key" not in actual.columns:
+        raise RuntimeError("actual usage missing join_key")
+    au = actual[["season", "week", "team", "join_key", "rec_yards"]].rename(
         columns={"rec_yards": "actual_rec_yards"}
     )
-    cohort = cohort.merge(au, on=["season", "week", "team", "player_clean_key"], how="left", validate="one_to_one")
-    if cohort["actual_rec_yards"].isna().any():
-        missing = cohort.loc[cohort.actual_rec_yards.isna(), ["season", "week", "team", "player_clean_key"]]
-        raise RuntimeError(f"missing actual outcome for cohort rows:\n{missing.to_string(index=False)}")
-    return cohort.reset_index(drop=True)
+    pre_join_n = len(cohort)
+    dnp = cohort.merge(au[["season", "week", "team", "join_key"]], on=["season", "week", "team", "join_key"], how="left", indicator=True)
+    dnp_rows = cohort.loc[(dnp._merge == "left_only").to_numpy(), ["season", "week", "team", "player", "player_clean_key", "join_key"]]
+
+    cohort = cohort.merge(au, on=["season", "week", "team", "join_key"], how="inner", validate="one_to_one")
+    audit = {
+        "pre_actual_join_n": pre_join_n,
+        "post_actual_join_n": len(cohort),
+        "dropped_no_actual_usage_n": int(len(dnp_rows)),
+        "dropped_no_actual_usage_rows": dnp_rows.to_dict("records"),
+    }
+    return cohort.reset_index(drop=True), audit
 
 
 def add_features_and_outcomes(cohort: pd.DataFrame) -> pd.DataFrame:
@@ -171,11 +190,14 @@ def main() -> int:
     players = load_concat(a.root, "joint_v1_player_projection_trace.csv", "player projection trace")
     actual = load_concat(a.root, "joint_v1_actual_usage.csv", "actual usage")
 
-    cohort = build_cohort(qb, players, actual)
+    cohort, join_audit = build_cohort(qb, players, actual)
     cohort = add_features_and_outcomes(cohort)
 
     a.out_dir.mkdir(parents=True, exist_ok=True)
     cohort.to_csv(a.out_dir / "wr_qb_shared_tail_signal_v1_cohort.csv", index=False)
+    (a.out_dir / "wr_qb_shared_tail_signal_v1_actual_usage_join_audit.json").write_text(
+        json.dumps(join_audit, indent=2, sort_keys=True, default=str)
+    )
 
     scoreboard = anti_retest_scoreboard(cohort)
     scoreboard.to_csv(a.out_dir / "wr_qb_shared_tail_signal_v1_anti_retest_scoreboard.csv", index=False)
@@ -271,6 +293,7 @@ def main() -> int:
         "dev_2024": dev_r,
         "holdout_2025": hold_r,
         "opportunity_conditional_nonneg_quartiles": nonneg_count,
+        "actual_usage_join_audit": join_audit,
     }
     (a.out_dir / "wr_qb_shared_tail_signal_v1_result.json").write_text(json.dumps(gate_json, indent=2, sort_keys=True))
 

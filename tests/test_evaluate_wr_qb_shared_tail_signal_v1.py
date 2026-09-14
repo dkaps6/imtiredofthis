@@ -35,12 +35,13 @@ def _synthetic(season: int, n: int, seed: int, *, plant_signal: bool) -> tuple[p
         b0_rec = 55 + rng.normal(0, 15)
         effect = (0.5 * c2_upper if c2_upper > 55 else 0.0) if plant_signal else 0.0
         actual = max(0.0, b0_rec + effect + rng.normal(0, 25))
+        join_key = f"name:wr{i}"
         player_rows.append(dict(
             season=season, week=week, event_id=event_id, team=team,
-            player=f"WR{i}", player_clean_key=f"wr{i}", position="WR",
+            player=f"WR{i}", player_clean_key=f"wr{i}", join_key=join_key, position="WR",
             b0_target_probability=0.25 + rng.uniform(0, 0.05), b0_rec_yards=b0_rec, c2_rec_yards=b0_rec + 2,
         ))
-        actual_rows.append(dict(season=season, week=week, team=team, player_clean_key=f"wr{i}", rec_yards=actual))
+        actual_rows.append(dict(season=season, week=week, team=team, join_key=join_key, rec_yards=actual))
     return pd.DataFrame(qb_rows), pd.DataFrame(player_rows), pd.DataFrame(actual_rows)
 
 
@@ -50,7 +51,8 @@ def _build(*, plant_signal: bool):
     qb = pd.concat([qb24, qb25], ignore_index=True)
     players = pd.concat([p24, p25], ignore_index=True)
     actual = pd.concat([a24, a25], ignore_index=True)
-    return add_features_and_outcomes(build_cohort(qb, players, actual))
+    cohort, _audit = build_cohort(qb, players, actual)
+    return add_features_and_outcomes(cohort)
 
 
 def test_cohort_row_counts_match_frozen_authority():
@@ -74,18 +76,22 @@ def test_duplicate_qb_identity_fails_closed():
         raise AssertionError("expected RuntimeError for duplicate QB identity")
 
 
-def test_missing_actual_outcome_fails_closed():
+def test_wr1_with_no_actual_usage_row_is_excluded_not_fatal():
+    """A pregame WR1 with no matching actual_usage row (DNP/inactive/trade)
+    is dropped via the same inner-join convention already frozen by
+    evaluate_joint_pass_receiving_v1.py's player_casebook(), not treated as
+    a data-integrity failure."""
     qb24, p24, a24 = _synthetic(2024, EXPECTED_QB_ROWS[2024], seed=0, plant_signal=True)
     qb25, p25, a25 = _synthetic(2025, EXPECTED_QB_ROWS[2025], seed=1, plant_signal=True)
     qb = pd.concat([qb24, qb25], ignore_index=True)
     players = pd.concat([p24, p25], ignore_index=True)
-    actual = pd.concat([a24, a25], ignore_index=True).iloc[1:]  # drop one row's outcome
-    try:
-        build_cohort(qb, players, actual)
-    except RuntimeError as exc:
-        assert "missing actual outcome" in str(exc)
-    else:
-        raise AssertionError("expected RuntimeError for missing actual outcome")
+    actual = pd.concat([a24, a25], ignore_index=True).iloc[1:]  # one WR1 never suited up that week
+    cohort, audit = build_cohort(qb, players, actual)
+    assert audit["dropped_no_actual_usage_n"] == 1
+    assert audit["pre_actual_join_n"] == EXPECTED_QB_ROWS[2024] + EXPECTED_QB_ROWS[2025]
+    assert audit["post_actual_join_n"] == len(cohort) == audit["pre_actual_join_n"] - 1
+    assert "actual_rec_yards" in cohort.columns
+    assert cohort["actual_rec_yards"].notna().all()
 
 
 def test_planted_signal_is_detected_via_spearman():
