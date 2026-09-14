@@ -46,7 +46,7 @@ jobs:
 
       - name: Run synthetic mechanical gates before real data
         run: |
-          python scripts/research/test_wr_r17_target_depth_distribution_v1.py
+          python -m scripts.research.test_wr_r17_target_depth_distribution_v1
 
       - name: Verify exact WR-R15 authority artifact lineage
         run: |
@@ -84,7 +84,7 @@ jobs:
       - name: Run frozen WR-R17 Stage A on 2023 development only
         run: |
           rm -rf "${OUT_DIR}"
-          python scripts/research/evaluate_wr_r17_target_depth_distribution_stage_a_v1.py \
+          python -m scripts.research.evaluate_wr_r17_target_depth_distribution_stage_a_v1 \
             --authority "${AUTHORITY_CSV}" \
             --out-dir "${OUT_DIR}"
 
