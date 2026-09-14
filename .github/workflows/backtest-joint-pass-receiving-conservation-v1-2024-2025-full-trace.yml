@@ -1,0 +1,153 @@
+name: Joint Pass Receiving Conservation V1 -- 2024/2025 Full Trace Artifact Completion
+
+# This workflow does NOT modify the frozen V1 trace script
+# (scripts/backtest/trace_joint_pass_receiving_v1.py, unchanged since commit
+# 4f620f1e on research-joint-pass-receiving-conservation-v1). It reruns the
+# exact same frozen code, with the exact same pinned M38 parent commit and
+# the exact same pinned M89 evidence artifact, for only the 2024 and 2025
+# seasons that the original 2020-2025 run (workflow run 34081764151,
+# artifact 10004223287) already computed once. The only difference is what
+# gets uploaded: the original job's `path:` list kept only the QB
+# distribution trace, conservation trace, and result summaries -- it never
+# preserved joint_v1_player_projection_trace.csv or joint_v1_actual_usage.csv,
+# which the WR-QB shared tail signal V1 study
+# (docs/research/WR_QB_SHARED_TAIL_SIGNAL_V1_PLAN.md) needs for the WR1
+# cohort side. Given identical frozen code, identical pinned inputs, and
+# identical RNG seeds (season/week-derived), 2024/2025 output here is a
+# deterministic reproduction of what already ran once -- not a new retest.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - name: Checkout research branch
+        uses: actions/checkout@v4
+        with:
+          path: research
+
+      - name: Checkout exact M38 receiving parent
+        uses: actions/checkout@v4
+        with:
+          ref: b98518d97b3038f471aee9ae3201009b2c70bb29
+          path: m38_parent
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r m38_parent/requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+
+      - name: Compile frozen V1 code
+        working-directory: research
+        run: |
+          python -m py_compile scripts/backtest/trace_joint_pass_receiving_v1.py
+          python -m py_compile scripts/backtest/evaluate_joint_pass_receiving_v1.py
+          python -m py_compile scripts/backtest/run_receiving_ecosystem_historical_player_logs.py
+
+      - name: Download frozen M89 QB synthesis evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p research/evidence/m89
+          gh run download 33331073376 --repo "${GITHUB_REPOSITORY}" --name m89-qb-data-integrity-casebook-synthesis --dir research/evidence/m89
+
+      - name: Apply mechanical M89 cohort alignment repair (identical to original run)
+        run: |
+          python -c "from pathlib import Path; p=Path('research/scripts/backtest/trace_joint_pass_receiving_v1.py'); s=p.read_text(); old='            if int(args.season) in (2024, 2025):\n                hit = m89.loc[(m89.season.eq(int(args.season))) & (m89.week.eq(int(week))) & (m89.team.eq(canon_team(team)))]\n                if len(hit) != 1:\n                    raise RuntimeError(f\"M89 anchor mismatch season={args.season} week={week} team={team} rows={len(hit)}\")\n                anchor_map[k] = float(hit.iloc[0].football_synthesis)\n            else:\n                anchor_map[k] = float(np.mean(qarr))\n'; new='            if int(args.season) in (2024, 2025):\n                hit = m89.loc[(m89.season.eq(int(args.season))) & (m89.week.eq(int(week))) & (m89.team.eq(canon_team(team)))]\n                if len(hit) > 1:\n                    raise RuntimeError(f\"duplicate M89 anchor season={args.season} week={week} team={team} rows={len(hit)}\")\n                anchor_map[k] = float(hit.iloc[0].football_synthesis) if len(hit) == 1 else float(np.mean(qarr))\n            else:\n                anchor_map[k] = float(np.mean(qarr))\n'; assert old in s, 'expected M89 mismatch block not found; refusing non-mechanical patch'; p.write_text(s.replace(old,new,1))"
+          python -m py_compile research/scripts/backtest/trace_joint_pass_receiving_v1.py
+
+      - name: Build leakage-safe inputs and run frozen B0 C1 C2 C3 for 2024 and 2025 only
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="${GITHUB_WORKSPACE}/research/data/backtests/joint_pass_receiving_v1"
+          mkdir -p "${ROOT}"
+
+          for SEASON in 2024 2025; do
+            PRIOR=$((SEASON-1))
+            WEEKS="1-18"
+            D="${ROOT}/${SEASON}"
+            I="${D}/inputs"
+            T="${D}/trace"
+            mkdir -p "${I}" "${T}"
+            echo "=== joint-v1 season=${SEASON} prior=${PRIOR} weeks=${WEEKS} ==="
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/build_historical_inputs.py \
+              --season "${SEASON}" --prior-season "${PRIOR}" --weeks "${WEEKS}" --out-dir "${I}"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/enrich_historical_defense.py \
+              --team-weekly "${I}/team_weekly_history.csv" \
+              --seasons "${PRIOR},${SEASON}" \
+              --audit "${I}/historical_defense_enrichment_audit.csv" \
+              --observations "${I}/historical_defense_observations.csv"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/validate_historical_inputs.py \
+              --season "${SEASON}" --prior-season "${PRIOR}" --weeks "${WEEKS}" \
+              --data-dir "${I}" --report "${I}/historical_input_validation.csv"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent:${GITHUB_WORKSPACE}/research" python research/scripts/backtest/run_receiving_ecosystem_historical_player_logs.py \
+              --seasons "${PRIOR},${SEASON}" \
+              --schedule "${I}/schedule_history.csv" \
+              --out "${I}/player_game_logs_history.csv"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/build_historical_injuries.py \
+              --seasons "${PRIOR},${SEASON}" \
+              --out "${I}/injuries_history.csv"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent" python m38_parent/scripts/backtest/build_historical_weather.py \
+              --schedule "${I}/schedule_history.csv" \
+              --out "${I}/weather_history.csv"
+
+            PYTHONPATH="${GITHUB_WORKSPACE}/m38_parent:${GITHUB_WORKSPACE}/research" python research/scripts/backtest/trace_joint_pass_receiving_v1.py \
+              --season "${SEASON}" --prior-season "${PRIOR}" --weeks "${WEEKS}" \
+              --iterations 2000 \
+              --player-logs "${I}/player_game_logs_history.csv" \
+              --team-weekly "${I}/team_weekly_history.csv" \
+              --schedule "${I}/schedule_history.csv" \
+              --universe-dir "${I}/pregame_universe" \
+              --injuries "${I}/injuries_history.csv" \
+              --weather "${I}/weather_history.csv" \
+              --m89-root "${GITHUB_WORKSPACE}/research/evidence/m89" \
+              --out-dir "${T}"
+          done
+
+      - name: Verify QB distribution trace row counts match the preserved authority artifact
+        working-directory: research
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          expected = {2024: 444, 2025: 440}
+          for season, exp in expected.items():
+              df = pd.read_csv(f"data/backtests/joint_pass_receiving_v1/{season}/trace/joint_v1_qb_distribution_trace.csv")
+              n = len(df)
+              print(f"season={season} rows={n} expected={exp}")
+              if n != exp:
+                  raise SystemExit(f"row count drift season={season} got={n} expected={exp}")
+          PY
+
+      - name: Upload full 2024/2025 trace bundle (player projection + actual usage + QB distribution)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: joint-pass-receiving-conservation-v1-2024-2025-full-trace
+          retention-days: 30
+          path: |
+            research/data/backtests/joint_pass_receiving_v1/*/trace/joint_v1_qb_distribution_trace.csv
+            research/data/backtests/joint_pass_receiving_v1/*/trace/joint_v1_player_projection_trace.csv
+            research/data/backtests/joint_pass_receiving_v1/*/trace/joint_v1_actual_usage.csv
+            research/data/backtests/joint_pass_receiving_v1/*/trace/joint_v1_group_calibration_trace.csv
+            research/data/backtests/joint_pass_receiving_v1/*/trace/joint_v1_conservation_trace.csv
+            research/data/backtests/joint_pass_receiving_v1/*/trace/joint_v1_integrity_counts.csv
