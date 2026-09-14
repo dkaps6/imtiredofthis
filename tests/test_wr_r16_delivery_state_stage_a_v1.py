@@ -61,7 +61,6 @@ def test_receiver_state_is_strictly_prior_to_target_week():
     state = _receiver_state(_target_rows(), "testreceiver", 2023, 5)
     assert state["wr_prior_target_games"] == 4
     assert state["wr_target_cpoe_mean8"] == 2.5
-    # If week 5 leaked in, this would be much larger.
     assert state["wr_target_cpoe_mean8"] < 10
 
 
@@ -89,18 +88,16 @@ def test_signal_standardization_is_fit_from_2023_only():
 
 
 def test_stage_a_scoring_ignores_2024_rows(monkeypatch):
-    # Lower only the expected 2023 count for this synthetic unit test.
     import scripts.research.evaluate_wr_r16_delivery_state_stage_a_v1 as m
     monkeypatch.setitem(m.EXPECTED_ROWS, 2023, 8)
 
     rows = []
     for season in [2023, 2024]:
         for i in range(8):
-            # 2024 outcomes are intentionally absurd; Stage A must not use them.
             resid = float(i * 10) if season == 2023 else float(10000 + i)
             rows.append({
                 "season": season,
-                "wr_rank": 1 if i < 4 else 2,
+                "wr_rank": 1 if i % 2 == 0 else 2,
                 "actual_rec_yards": 100.0 + resid,
                 "yard_residual": resid,
                 "DEEP_DELIVERY": float(i),
@@ -108,8 +105,7 @@ def test_stage_a_scoring_ignores_2024_rows(monkeypatch):
                 "DELIVERY_CPOE": float(i),
                 "DELIVERY_MOMENTUM": float(i),
             })
-    panel = pd.DataFrame(rows)
-    score, _ = score_development(panel)
+    score, _ = score_development(pd.DataFrame(rows))
     assert set(score["n"]) == {8}
 
 
@@ -120,13 +116,11 @@ def test_signal_priority_is_fixed_not_best_metric(monkeypatch):
 
     rows = []
     for i in range(200):
-        # Make all signals monotonic and supported; advancing signal must still
-        # be the first frozen priority, not whichever happens to look strongest.
         v = float(i)
         resid = v
         rows.append({
             "season": 2023,
-            "wr_rank": 1 if i < 100 else 2,
+            "wr_rank": 1 if i % 2 == 0 else 2,
             "actual_rec_yards": 100.0 + resid,
             "yard_residual": resid,
             "DEEP_DELIVERY": v,
