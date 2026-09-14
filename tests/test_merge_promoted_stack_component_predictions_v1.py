@@ -39,6 +39,8 @@ def test_matched_pass_yards_row_replaces_ensemble_proj_not_mc_proj():
     assert row["ensemble_proj"] == 235.0
     assert row["mc_proj"] == 250.0  # untouched -- QB synthesis replaces the final mean, not the MC component
     assert row["qb_m89_synthesis_applied"] == 1
+    assert stats["qb_trace_rows_with_finite_synthesis"] == 1
+    assert stats["qb_trace_rows_missing_from_projection"] == 0
     assert stats["pass_yards_rows_matched_to_qb_trace"] == 1
 
 
@@ -84,6 +86,33 @@ def test_duplicate_qb_trace_identity_raises():
         assert "duplicate" in str(exc).lower()
     else:
         raise AssertionError("expected RuntimeError for duplicate QB trace identity")
+
+
+def test_missing_qb_authority_row_from_projection_raises():
+    qb = pd.concat([
+        _qb_trace(),
+        pd.DataFrame([{
+            "season": 2024, "week": 3, "team": "KC", "opponent": "BUF", "player_clean_key": "mahomes",
+            "actual_pass_yards": 240.0, "base_proj": 250.0, "football_synthesis": 248.0,
+            "football_residual_correction": -2.0,
+        }]),
+    ], ignore_index=True)
+    try:
+        merge_qb_synthesis(_projection(), qb)
+    except RuntimeError as exc:
+        assert "authority rows missing" in str(exc)
+    else:
+        raise AssertionError("expected RuntimeError for missing QB authority row")
+
+
+def test_duplicate_projection_pass_yards_identity_raises():
+    dup = pd.concat([_projection(), _projection().iloc[[0]]], ignore_index=True)
+    try:
+        merge_qb_synthesis(dup, _qb_trace())
+    except RuntimeError as exc:
+        assert "duplicate pass_yards identities" in str(exc)
+    else:
+        raise AssertionError("expected RuntimeError for duplicate pass_yards projection identity")
 
 
 def test_cli_round_trip(tmp_path: Path):
