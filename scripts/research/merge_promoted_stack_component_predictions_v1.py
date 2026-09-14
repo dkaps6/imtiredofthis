@@ -26,15 +26,12 @@ Input:
   player/week, reconstructed from the exact frozen M89 feature list and
   Ridge fit -- not a re-derivation.
 
-For every pass_yards row in the projection file whose identity matches a
-row in the QB trace, ensemble_proj is overridden with the M89
-football_synthesis value. All non-pass_yards rows, and any pass_yards row
-without a QB trace match (games the frozen 2023 fit's feature contract
-could not cover), are left untouched -- RB rows stay on the generic
-ensemble mean (P3 is legitimately out of scope for 2024-2025; see
-docs/production/RB_P3_WEEK1_PROMOTION_2026_09_05.md), and any unmatched QB
-row fails closed to the existing ensemble mean rather than silently
-guessing.
+Every finite M89 authority row must be present in the pass-yards projection
+universe; missing authority rows fail closed. The projection universe may
+contain additional pass-yards rows without historical M89 authority (for
+example a season/week outside the reconstruction cohort); those rows are
+left on the generic ensemble and are explicitly marked as not having the
+M89 synthesis applied.
 
 This script performs no modeling of its own -- every value it writes was
 produced by an already-frozen, already-validated production or research
@@ -69,6 +66,8 @@ def merge_qb_synthesis(projection: pd.DataFrame, qb_trace: pd.DataFrame) -> tupl
             raise RuntimeError(f"QB M89 trace missing required key column: {c}")
     if "ensemble_proj" not in out.columns:
         raise RuntimeError("projection trace missing ensemble_proj -- run the ensemble step before this merge")
+    if "market" not in out.columns:
+        raise RuntimeError("projection trace missing market")
 
     qb = qb_trace.copy()
     qb["football_synthesis"] = pd.to_numeric(qb["football_synthesis"], errors="coerce")
@@ -79,6 +78,23 @@ def merge_qb_synthesis(projection: pd.DataFrame, qb_trace: pd.DataFrame) -> tupl
     qb_lookup = qb.set_index(KEYS)["football_synthesis"]
 
     is_pass = out["market"].astype(str).str.lower().eq("pass_yards")
+    pass_rows = out.loc[is_pass].copy()
+    proj_dup = pass_rows.duplicated(KEYS, keep=False)
+    if proj_dup.any():
+        raise RuntimeError(
+            "projection trace has duplicate pass_yards identities:\n"
+            + pass_rows.loc[proj_dup, KEYS].head(20).to_string(index=False)
+        )
+
+    pass_key_set = set(pass_rows[KEYS].itertuples(index=False, name=None))
+    qb_key_set = set(qb_lookup.index.tolist())
+    missing_authority = sorted(qb_key_set - pass_key_set)
+    if missing_authority:
+        raise RuntimeError(
+            f"QB M89 authority rows missing from pass_yards projection universe: "
+            f"count={len(missing_authority)} sample={missing_authority[:10]}"
+        )
+
     key_tuples = list(out[KEYS].itertuples(index=False, name=None))
     matched_mask = [bool(p) and t in qb_lookup.index for p, t in zip(is_pass, key_tuples)]
     matched = pd.Series(matched_mask, index=out.index)
@@ -87,14 +103,23 @@ def merge_qb_synthesis(projection: pd.DataFrame, qb_trace: pd.DataFrame) -> tupl
     new_values = [qb_lookup.loc[t] for t, m in zip(key_tuples, matched_mask) if m]
     out.loc[matched, "ensemble_proj"] = new_values
     out.loc[matched, "qb_m89_synthesis_applied"] = 1
-    out["qb_m89_synthesis_applied"] = pd.to_numeric(out.get("qb_m89_synthesis_applied"), errors="coerce").fillna(0).astype(int)
+    out["qb_m89_synthesis_applied"] = pd.to_numeric(
+        out.get("qb_m89_synthesis_applied"), errors="coerce"
+    ).fillna(0).astype(int)
 
     stats = {
+        "qb_trace_rows_with_finite_synthesis": int(len(qb_lookup)),
+        "qb_trace_rows_missing_from_projection": 0,
         "pass_yards_rows": int(is_pass.sum()),
         "pass_yards_rows_matched_to_qb_trace": int(matched.sum()),
         "pass_yards_rows_unmatched_stay_on_generic_ensemble": int(is_pass.sum() - matched.sum()),
         "mean_abs_ensemble_proj_change_on_matched_rows": float(
-            np.mean(np.abs(pd.to_numeric(out.loc[matched, "ensemble_proj"], errors="coerce").to_numpy() - before.to_numpy()))
+            np.mean(
+                np.abs(
+                    pd.to_numeric(out.loc[matched, "ensemble_proj"], errors="coerce").to_numpy()
+                    - before.to_numpy()
+                )
+            )
         ) if matched.any() else 0.0,
     }
     return out, stats
