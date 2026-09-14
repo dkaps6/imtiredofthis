@@ -8,6 +8,7 @@ on:
       - '.github/workflows/research-wr-r17-target-depth-distribution-v1.yml'
       - 'scripts/research/evaluate_wr_r17_target_depth_distribution_stage_a_v1.py'
       - 'scripts/research/evaluate_wr_r17_target_depth_distribution_stage_a_v1b.py'
+      - 'scripts/research/evaluate_wr_r17_target_depth_distribution_stage_a_v1c.py'
       - 'scripts/research/test_wr_r17_target_depth_distribution_v1.py'
       - 'docs/research/WR_R17_TARGET_DEPTH_DISTRIBUTION_V1_PLAN.md'
   workflow_dispatch:
