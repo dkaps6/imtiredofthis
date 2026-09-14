@@ -66,8 +66,48 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p research/evidence/m89
-          gh run download 33331073376 --repo "${GITHUB_REPOSITORY}" --name m89-qb-data-integrity-casebook-synthesis --dir research/evidence/m89
+          # The original M89 evidence artifact (run 33331073376) expired
+          # 2026-09-13T19:51:37Z. Per GPT-5.6's independent audit on Issue #535
+          # (comment 5666735904), the QB-PD3 authority artifact from run
+          # 34122984048 (the same one PR #600 used for hard parity, exact
+          # cohort 884 = 444 (2024) + 440 (2025)) carries the identical
+          # season/week/team/football_synthesis/actual_pass_yards columns
+          # trace_joint_pass_receiving_v1.py's load_m89() needs -- confirmed
+          # by direct inspection of its header in a one-off diagnostic run
+          # (workflow diagnose-qb-pd3-casebook-schema.yml, run 34865152128).
+          # This is a pure column-subset rename, not a re-fit: no value in
+          # the file is recomputed.
+          mkdir -p /tmp/qb_pd3 research/evidence/m89
+          gh run download 34122984048 --repo "${GITHUB_REPOSITORY}" --name qb-pd3-internal-disagreement-reliability --dir /tmp/qb_pd3
+
+      - name: Mechanically rename QB-PD3 casebook into the exact filename/schema load_m89() expects
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+
+          src = Path("/tmp/qb_pd3/data/backtests/qb_pd3_internal_disagreement_reliability/qb_pd3_casebook.csv")
+          if not src.exists():
+              raise RuntimeError(f"expected QB-PD3 casebook missing: {src}")
+          df = pd.read_csv(src, low_memory=False)
+
+          required = ["season", "week", "team", "football_synthesis", "actual_pass_yards"]
+          missing = [c for c in required if c not in df.columns]
+          if missing:
+              raise RuntimeError(f"QB-PD3 casebook missing required load_m89() columns: {missing}")
+
+          expected = {2024: 444, 2025: 440}
+          for season, exp in expected.items():
+              n = int((pd.to_numeric(df["season"], errors="coerce") == season).sum())
+              if n != exp:
+                  raise RuntimeError(f"QB-PD3 casebook row-count drift season={season} expected={exp} got={n}")
+          if df.duplicated(["season", "week", "team"]).any():
+              raise RuntimeError("QB-PD3 casebook has duplicate season/week/team rows")
+
+          out = Path("research/evidence/m89/m89_2024_2025_synthesis_trace.csv")
+          df.to_csv(out, index=False)
+          print(f"wrote {len(df)} rows -> {out} (no values transformed, column-subset rename only)")
+          PY
 
       - name: Apply mechanical M89 cohort alignment repair (identical to original run)
         run: |
