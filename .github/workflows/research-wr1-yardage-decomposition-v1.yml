@@ -1,0 +1,86 @@
+name: WR1 Yardage Decomposition V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-wr1-yardage-decomposition-v1
+    paths:
+      - "scripts/research/wr1_yardage_decomposition_v1.py"
+      - "tests/test_wr1_yardage_decomposition_v1.py"
+      - "docs/research/WR1_YARDAGE_DECOMPOSITION_V1_PLAN.md"
+      - ".github/workflows/research-wr1-yardage-decomposition-v1.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run frozen diagnostic tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest -q tests/test_wr1_yardage_decomposition_v1.py
+
+      - name: Create workspace
+        run: mkdir -p /tmp/wr /tmp/wrte /tmp/benchmark /tmp/out
+
+      - name: Download exact WR-R15 authority
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-r15-wr1-anchor-participation-v1
+          path: /tmp/wr
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34238301577
+
+      - name: Download audited WR/TE production-order replay
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-te-production-order-historical-replay-v1
+          path: /tmp/wrte
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34722725629
+
+      - name: Download authority-exact Vegas benchmark
+        uses: actions/download-artifact@v4
+        with:
+          name: unified-promoted-stack-authority-exact-vegas-v1
+          path: /tmp/benchmark
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34843204550
+
+      - name: Run frozen WR1 decomposition
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/wr1_yardage_decomposition_v1.py \
+            --wr-authority /tmp/wr/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_predictions.csv \
+            --authority-scoreboard /tmp/benchmark/scoreboard_authority/directional_scoreboard_detail.csv \
+            --production-scoreboard /tmp/benchmark/scoreboard_production/directional_scoreboard_detail.csv \
+            --component-2024 /tmp/wrte/component_predictions_2024_wrte.csv \
+            --out-dir /tmp/out
+
+      - name: Upload frozen diagnostic bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr1-yardage-decomposition-v1
+          path: /tmp/out
+          retention-days: 30
