@@ -1,0 +1,43 @@
+name: Diagnose QB-PD3 Casebook Schema (one-off)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download QB-PD3 internal disagreement reliability artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/qb_pd3
+          gh run download 34122984048 --repo "${GITHUB_REPOSITORY}" --name qb-pd3-internal-disagreement-reliability --dir /tmp/qb_pd3
+
+      - name: List files and print schema
+        run: |
+          echo "=== full file tree ==="
+          find /tmp/qb_pd3 -type f | sort
+          echo "=== qb_pd3_casebook.csv header + row count (if present) ==="
+          F=$(find /tmp/qb_pd3 -name 'qb_pd3_casebook.csv' | head -1)
+          if [ -n "$F" ]; then
+            echo "found: $F"
+            head -1 "$F"
+            echo "row count (incl header): $(wc -l < "$F")"
+            python3 - <<PY
+          import pandas as pd
+          df = pd.read_csv("$F", low_memory=False, nrows=5)
+          print(df.columns.tolist())
+          print(df.head().to_string())
+          PY
+          else
+            echo "qb_pd3_casebook.csv NOT FOUND -- listing any *.csv instead"
+            find /tmp/qb_pd3 -name '*.csv' -exec echo {} \; -exec head -1 {} \;
+          fi
