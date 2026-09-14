@@ -18,6 +18,11 @@ name: Joint Pass Receiving Conservation V1 -- 2024/2025 Full Trace Artifact Comp
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - wr-qb-shared-tail-signal-v1-artifact-completion
+    paths:
+      - '.github/workflows/backtest-joint-pass-receiving-conservation-v1-2024-2025-full-trace.yml'
 
 permissions:
   actions: read
