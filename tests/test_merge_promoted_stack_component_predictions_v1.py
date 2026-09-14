@@ -41,14 +41,15 @@ def test_matched_pass_yards_row_replaces_ensemble_proj_not_mc_proj():
     assert row["qb_m89_synthesis_applied"] == 1
     assert stats["qb_trace_rows_with_finite_synthesis"] == 1
     assert stats["qb_trace_rows_missing_from_projection"] == 0
-    assert stats["pass_yards_rows_matched_to_qb_trace"] == 1
+    assert stats["pass_yards_rows_m89_authorized"] == 1
+    assert stats["pass_yards_rows_excluded_no_m89_authority"] == 1
 
 
-def test_unmatched_pass_yards_row_stays_on_generic_ensemble():
-    merged, _ = merge_qb_synthesis(_projection(), _qb_trace())
-    row = merged.loc[(merged.week == 2) & (merged.player_clean_key == "mahomes")].iloc[0]
-    assert row["ensemble_proj"] == 255.0
-    assert row["qb_m89_synthesis_applied"] == 0
+def test_unmatched_pass_yards_row_is_excluded_from_promoted_qb_benchmark():
+    merged, stats = merge_qb_synthesis(_projection(), _qb_trace())
+    assert merged.loc[(merged.week == 2) & (merged.player_clean_key == "mahomes")].empty
+    assert stats["pass_yards_rows_excluded_no_m89_authority"] == 1
+    assert len(merged) == 2  # matched QB + untouched non-QB row
 
 
 def test_non_qb_row_untouched():
@@ -141,3 +142,4 @@ def test_cli_round_trip(tmp_path: Path):
     matched = out.loc[(out.week == 1) & (out.player_clean_key == "mahomes")].iloc[0]
     assert matched["ensemble_proj"] == 235.0
     assert matched["mc_proj"] == 250.0
+    assert out.loc[(out.week == 2) & (out.player_clean_key == "mahomes")].empty
