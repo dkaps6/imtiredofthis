@@ -4,11 +4,13 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - "scripts/research/merge_promoted_stack_component_predictions_v1.py"
+      - "scripts/backtest/build_authority_exact_vegas_projection_trace_v1.py"
+      - "scripts/backtest/build_full_stack_vegas_projection_trace_v2.py"
+      - "scripts/backtest/prepare_free_market_prop_archive_v1.py"
       - "scripts/backtest/grade_directional_scoreboard_v1.py"
-      - "scripts/backtest/build_qb_synthesis_confirmation_inputs_v1.py"
-      - "tests/test_merge_promoted_stack_component_predictions_v1.py"
+      - "tests/test_build_authority_exact_vegas_projection_trace_v1.py"
       - "tests/test_grade_directional_scoreboard_v1.py"
+      - "data/model_ensemble_weights.csv"
       - ".github/workflows/backtest-unified-promoted-stack-vegas-v1.yml"
 
 permissions:
@@ -16,9 +18,9 @@ permissions:
   actions: read
 
 jobs:
-  unified-benchmark:
+  authority-exact-benchmark:
     runs-on: ubuntu-24.04
-    timeout-minutes: 240
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -32,302 +34,183 @@ jobs:
           pip install -r requirements.txt
           pip install nflreadpy pytest pyyaml pyarrow tabulate
 
-      - name: Run focused unit tests
+      - name: Run focused parity and directional tests
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           pytest -q \
-            tests/test_wr_te_production_order_historical_v1.py \
-            tests/test_benchmark_identity_v1.py \
-            tests/test_grade_full_stack_vegas_benchmark_v1.py \
-            tests/test_merge_promoted_stack_component_predictions_v1.py \
-            tests/test_grade_directional_scoreboard_v1.py
+            tests/test_build_authority_exact_vegas_projection_trace_v1.py \
+            tests/test_grade_directional_scoreboard_v1.py \
+            tests/test_benchmark_identity_v1.py
 
-      - name: Create workspace
+      - name: Create authority workspace
         run: |
-          rm -rf /tmp/unified /tmp/hist_2022 /tmp/hist_2023 /tmp/hist_2024 /tmp/hist_2025 /tmp/wr_model /tmp/te_model
-          mkdir -p /tmp/unified/distributions /tmp/unified/grade /tmp/unified/scoreboard \
-                   /tmp/hist_2022 /tmp/hist_2023 /tmp/hist_2024 /tmp/hist_2025 /tmp/wr_model /tmp/te_model
+          rm -rf /tmp/authority_exact /tmp/qb_authority /tmp/wr_authority /tmp/te_authority /tmp/wrte_replay
+          mkdir -p /tmp/authority_exact /tmp/qb_authority /tmp/wr_authority /tmp/te_authority /tmp/wrte_replay
 
-      - name: Download WR-R15 fold-safe OOS authority
+      - name: Download exact QB M89/M90 884-row authority artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: qb-pd3-internal-disagreement-reliability
+          path: /tmp/qb_authority
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34122984048
+
+      - name: Download exact WR-R15 OOS authority artifact
         uses: actions/download-artifact@v4
         with:
           name: wr-r15-wr1-anchor-participation-v1
-          path: /tmp/wr_model
+          path: /tmp/wr_authority
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
           run-id: 34238301577
 
-      - name: Download TE-R5P production-contract OOS authority
+      - name: Download exact TE-R5P OOS production-contract authority artifact
         uses: actions/download-artifact@v4
         with:
           name: te-r5p-production-contract-refit-v1
-          path: /tmp/te_model
+          path: /tmp/te_authority
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
           run-id: 34152797603
 
-      - name: Build independent historical inputs for 2022-2025 (2022 provides prior-season context for the 2023 QB fit)
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/backtest/build_historical_inputs.py \
-            --season 2022 --prior-season 2021 --weeks 1-18 --out-dir /tmp/hist_2022
-          python scripts/backtest/build_historical_inputs.py \
-            --season 2023 --prior-season 2022 --weeks 1-18 --out-dir /tmp/hist_2023
-          python scripts/backtest/build_historical_inputs.py \
-            --season 2024 --prior-season 2023 --weeks 1-18 --out-dir /tmp/hist_2024
-          python scripts/backtest/build_historical_inputs.py \
-            --season 2025 --prior-season 2024 --weeks 1-18 --out-dir /tmp/hist_2025
+      - name: Download audited WR/TE production-order replay artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-te-production-order-historical-replay-v1
+          path: /tmp/wrte_replay
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34722725629
 
-      - name: Combine authoritative 2022-2025 schedule and team-week history
+      - name: Recover the audited 2024-2025 schedule identity from the WR/TE replay
         run: |
           python - <<'PY'
           import pandas as pd
-          from pathlib import Path
-          out = Path('/tmp/unified')
-          for name in ['schedule_history.csv', 'team_weekly_history.csv']:
-              parts = [pd.read_csv(f'/tmp/hist_{s}/' + name) for s in (2022, 2023, 2024, 2025)]
-              x = pd.concat(parts, ignore_index=True)
-              keys = ['season', 'week', 'team']
-              x = x.sort_values(keys).drop_duplicates(keys, keep='last').reset_index(drop=True)
-              if x.duplicated(keys).any():
-                  raise RuntimeError(f'duplicate combined historical rows in {name}')
-              x.to_csv(out / name, index=False)
-              print(name, len(x), sorted(x.season.unique()))
+          src = pd.read_csv('/tmp/wrte_replay/full_stack_projection_trace_wrte.csv', low_memory=False)
+          schedule = src[['season','week','team','opponent','game_id']].drop_duplicates().copy()
+          if schedule.duplicated(['season','week','team']).any():
+              raise RuntimeError('WR/TE replay schedule contains duplicate team-week identities')
+          if sorted(schedule['season'].astype(int).unique().tolist()) != [2024, 2025]:
+              raise RuntimeError('WR/TE replay schedule season scope drifted')
+          schedule.to_csv('/tmp/authority_exact/schedule_history.csv', index=False)
+          print(schedule.groupby('season').size())
           PY
 
-      - name: Build canonical 2022-2025 player game logs
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/backtest/historical_player_logs.py \
-            --seasons 2022,2023,2024,2025 \
-            --schedule /tmp/unified/schedule_history.csv \
-            --out /tmp/unified/player_game_logs_history.csv
-
-      - name: Build base component traces for 2024 and 2025
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/backtest/walk_forward.py \
-            --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
-            --player-logs /tmp/unified/player_game_logs_history.csv \
-            --team-weekly /tmp/unified/team_weekly_history.csv \
-            --schedule /tmp/unified/schedule_history.csv \
-            --universe-dir /tmp/hist_2024/pregame_universe \
-            --out /tmp/unified/component_predictions_2024_base.csv
-          python scripts/backtest/walk_forward.py \
-            --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000 \
-            --player-logs /tmp/unified/player_game_logs_history.csv \
-            --team-weekly /tmp/unified/team_weekly_history.csv \
-            --schedule /tmp/unified/schedule_history.csv \
-            --universe-dir /tmp/hist_2025/pregame_universe \
-            --out /tmp/unified/component_predictions_2025_base.csv
-
-      - name: Verify frozen WR-R15/TE-R5P fold artifacts
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python - <<'PY'
-          import json
-          import pandas as pd
-          from pathlib import Path
-
-          wr_root = Path('/tmp/wr_model/backtests/wr_r15_wr1_anchor_v1')
-          te_root = Path('/tmp/te_model/data/backtests/te_r5p_production_contract_refit_v1')
-          wr = pd.read_csv(wr_root / 'wr_r15_fold_coefficients.csv')
-          te = pd.read_csv(te_root / 'te_r5p_coefficients.csv')
-          wr_result = json.loads((wr_root / 'wr_r15_result.json').read_text())
-          te_result = json.loads((te_root / 'te_r5p_result.json').read_text())
-          if sorted(wr['test_season'].astype(int).unique().tolist()) != [2023, 2024]:
-              raise RuntimeError('WR-R15 OOS fold seasons drifted')
-          if sorted(te['test_season'].astype(int).unique().tolist()) != [2023, 2024, 2025]:
-              raise RuntimeError('TE-R5P OOS fold seasons drifted')
-          if not bool(wr_result.get('design_motivated_by_2025_but_2025_confirmation_forbidden')):
-              raise RuntimeError('WR-R15 2025 exclusion contract missing')
-          if te_result.get('disposition') != 'TE_R5P_PRODUCTION_CONTRACT_REFIT_ELIGIBLE':
-              raise RuntimeError('TE-R5P OOS production-contract artifact not eligible')
-          print('frozen WR-R15/TE-R5P fold authority PASS')
-          PY
-
-      - name: Replay TE-R5P and WR-R15 upstream of joint MC (2024, 2025)
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/research/persist_wr_te_production_order_historical_v1.py \
-            --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
-            --player-logs /tmp/unified/player_game_logs_history.csv \
-            --team-weekly /tmp/unified/team_weekly_history.csv \
-            --schedule /tmp/unified/schedule_history.csv \
-            --universe-dir /tmp/hist_2024/pregame_universe \
-            --component-file /tmp/unified/component_predictions_2024_base.csv \
-            --component-out /tmp/unified/component_predictions_2024_wrte.csv \
-            --out-dir /tmp/unified/distributions \
-            --te-coefficients /tmp/te_model/data/backtests/te_r5p_production_contract_refit_v1/te_r5p_coefficients.csv \
-            --wr-coefficients /tmp/wr_model/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv
-          python scripts/research/persist_wr_te_production_order_historical_v1.py \
-            --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000 \
-            --player-logs /tmp/unified/player_game_logs_history.csv \
-            --team-weekly /tmp/unified/team_weekly_history.csv \
-            --schedule /tmp/unified/schedule_history.csv \
-            --universe-dir /tmp/hist_2025/pregame_universe \
-            --component-file /tmp/unified/component_predictions_2025_base.csv \
-            --component-out /tmp/unified/component_predictions_2025_wrte.csv \
-            --out-dir /tmp/unified/distributions \
-            --te-coefficients /tmp/te_model/data/backtests/te_r5p_production_contract_refit_v1/te_r5p_coefficients.csv \
-            --wr-coefficients /tmp/wr_model/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv
-
-      - name: Apply frozen ensemble to the WR-R15/TE-R5P-adjusted component files
+      - name: Reapply current receiving ensemble weights to the frozen WR/TE production-order components
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/backtest/build_full_stack_vegas_projection_trace_v2.py \
-            --component-file /tmp/unified/component_predictions_2024_wrte.csv \
-            --component-file /tmp/unified/component_predictions_2025_wrte.csv \
-            --schedule /tmp/unified/schedule_history.csv \
+            --component-file /tmp/wrte_replay/component_predictions_2024_wrte.csv \
+            --component-file /tmp/wrte_replay/component_predictions_2025_wrte.csv \
+            --schedule /tmp/authority_exact/schedule_history.csv \
             --weights data/model_ensemble_weights.csv \
-            --out /tmp/unified/full_stack_projection_trace_wrte.csv
+            --out /tmp/authority_exact/full_stack_projection_trace_wrte_current_weights.csv
 
-      - name: Build QB-only corrected team semantics (M89 Phase 0), isolated from the shared WR/TE/base team-weekly file
+      - name: Fail closed unless QB, WR and TE reproduce their exact promoted football authority
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          cp /tmp/unified/team_weekly_history.csv /tmp/unified/team_weekly_history_qb_corrected.csv
-          python scripts/backtest/correct_m89_team_semantics.py \
-            --team-weekly /tmp/unified/team_weekly_history_qb_corrected.csv \
-            --seasons 2023,2024,2025 \
-            --observations /tmp/unified/m89_semantic_observations.csv \
-            --audit /tmp/unified/m89_semantic_audit.csv
+          python scripts/backtest/build_authority_exact_vegas_projection_trace_v1.py \
+            --qb-casebook /tmp/qb_authority/data/backtests/qb_pd3_internal_disagreement_reliability/qb_pd3_casebook.csv \
+            --wr-predictions /tmp/wr_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_predictions.csv \
+            --te-casebook /tmp/te_authority/data/backtests/te_r5p_production_contract_refit_v1/te_r5p_oos_player_casebook.csv \
+            --wrte-replay-integrity /tmp/wrte_replay/result/wrte_replay_integrity_audit.csv \
+            --wrte-production-trace /tmp/authority_exact/full_stack_projection_trace_wrte_current_weights.csv \
+            --out-dir /tmp/authority_exact/parity
 
-      - name: Build real historical injuries and weather for QB context
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/backtest/build_historical_injuries.py \
-            --seasons 2023,2024,2025 --out /tmp/unified/injuries_history.csv
-          python scripts/backtest/build_historical_weather.py \
-            --schedule /tmp/unified/schedule_history.csv --out /tmp/unified/weather_history.csv
-
-      - name: Build QB M89 synthesis-confirmation trace inputs (2023-2025, corrected team semantics + real injuries/weather)
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/backtest/build_qb_synthesis_confirmation_inputs_v1.py \
-            --season 2023 --prior-season 2022 --weeks 1-18 --iterations 2000 \
-            --player-logs /tmp/unified/player_game_logs_history.csv \
-            --team-weekly /tmp/unified/team_weekly_history_qb_corrected.csv \
-            --schedule /tmp/unified/schedule_history.csv \
-            --universe-dir /tmp/hist_2023/pregame_universe \
-            --injuries /tmp/unified/injuries_history.csv \
-            --weather /tmp/unified/weather_history.csv \
-            --out /tmp/unified/qb_trace_2023.csv
-          python scripts/backtest/build_qb_synthesis_confirmation_inputs_v1.py \
-            --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
-            --player-logs /tmp/unified/player_game_logs_history.csv \
-            --team-weekly /tmp/unified/team_weekly_history_qb_corrected.csv \
-            --schedule /tmp/unified/schedule_history.csv \
-            --universe-dir /tmp/hist_2024/pregame_universe \
-            --injuries /tmp/unified/injuries_history.csv \
-            --weather /tmp/unified/weather_history.csv \
-            --out /tmp/unified/qb_trace_2024.csv
-          python scripts/backtest/build_qb_synthesis_confirmation_inputs_v1.py \
-            --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000 \
-            --player-logs /tmp/unified/player_game_logs_history.csv \
-            --team-weekly /tmp/unified/team_weekly_history_qb_corrected.csv \
-            --schedule /tmp/unified/schedule_history.csv \
-            --universe-dir /tmp/hist_2025/pregame_universe \
-            --injuries /tmp/unified/injuries_history.csv \
-            --weather /tmp/unified/weather_history.csv \
-            --out /tmp/unified/qb_trace_2025.csv
-          python - <<'PY'
-          import pandas as pd
-          a = pd.read_csv('/tmp/unified/qb_trace_2024.csv')
-          b = pd.read_csv('/tmp/unified/qb_trace_2025.csv')
-          pd.concat([a, b], ignore_index=True).to_csv('/tmp/unified/qb_trace_2024_2025.csv', index=False)
-          print('combined 2024+2025 QB trace rows:', len(a) + len(b))
-          PY
-
-      - name: Fit M89 once on 2023, evaluate blind on 2024 and 2025 (single frozen fit, not a rolling retrain)
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/backtest/run_m89_pregame_synthesis.py \
-            --trace-2023 /tmp/unified/qb_trace_2023.csv \
-            --trace-2024-2025 /tmp/unified/qb_trace_2024_2025.csv \
-            --team-2023 /tmp/unified/team_weekly_history_qb_corrected.csv \
-            --logs-2023 /tmp/unified/player_game_logs_history.csv \
-            --team-2024 /tmp/unified/team_weekly_history_qb_corrected.csv \
-            --logs-2024 /tmp/unified/player_game_logs_history.csv \
-            --team-2025 /tmp/unified/team_weekly_history_qb_corrected.csv \
-            --logs-2025 /tmp/unified/player_game_logs_history.csv \
-            --out-dir /tmp/unified/m89
-
-      - name: Merge M89 QB synthesis into the unified projection trace (after ensemble, replacing the final mean -- not before it)
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/research/merge_promoted_stack_component_predictions_v1.py \
-            --projection-file /tmp/unified/full_stack_projection_trace_wrte.csv \
-            --qb-trace /tmp/unified/m89/m89_2024_2025_synthesis_trace.csv \
-            --out /tmp/unified/full_stack_projection_trace_unified.csv
-
-      - name: Rebuild free historical market archive against clean identities
+      - name: Rebuild the free historical market archive only after football parity passes
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/backtest/prepare_free_market_prop_archive_v1.py \
-            --projection-file /tmp/unified/full_stack_projection_trace_unified.csv \
-            --out-dir /tmp/unified/market_archive
+            --projection-file /tmp/authority_exact/parity/current_production_order_projection_trace.csv \
+            --out-dir /tmp/authority_exact/market_archive
 
-      - name: Grade unified promoted-stack benchmark with the real production EV/STRONG-LEAN gate
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/backtest/grade_full_stack_vegas_benchmark_v1.py \
-            --projection-file /tmp/unified/full_stack_projection_trace_unified.csv \
-            --props /tmp/unified/market_archive/historical_market_props.csv \
-            --out-dir /tmp/unified/grade
-
-      - name: Grade the same rows with the simple directional (projection-vs-line) scoreboard
+      - name: Grade exact OOS authority projections versus Vegas directionally
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/backtest/grade_directional_scoreboard_v1.py \
-            --projection-file /tmp/unified/full_stack_projection_trace_unified.csv \
-            --props /tmp/unified/market_archive/historical_market_props.csv \
-            --out-dir /tmp/unified/scoreboard
+            --projection-file /tmp/authority_exact/parity/authority_oos_projection_trace.csv \
+            --props /tmp/authority_exact/market_archive/historical_market_props.csv \
+            --out-dir /tmp/authority_exact/scoreboard_authority
 
-      - name: Emit fail-closed identity audit artifact
+      - name: Grade current production-order projections on the same authority identities
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/backtest/audit_clean_full_stack_vegas_benchmark_v1.py \
-            --projection /tmp/unified/full_stack_projection_trace_unified.csv \
-            --props /tmp/unified/market_archive/historical_market_props.csv \
-            --detail /tmp/unified/grade/full_stack_vegas_benchmark_detail.csv \
-            --out /tmp/unified/UNIFIED_PROMOTED_STACK_IDENTITY_AUDIT_V1.json
+          python scripts/backtest/grade_directional_scoreboard_v1.py \
+            --projection-file /tmp/authority_exact/parity/current_production_order_projection_trace.csv \
+            --props /tmp/authority_exact/market_archive/historical_market_props.csv \
+            --out-dir /tmp/authority_exact/scoreboard_production
 
-      - name: Upload unified promoted-stack benchmark bundle
+      - name: Emit combined parity-gated scoreboard and coverage audit
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+
+          root = Path('/tmp/authority_exact')
+          summaries = []
+          details = []
+          for arm, d in [
+              ('AUTHORITY_OOS', root/'scoreboard_authority'),
+              ('CURRENT_PRODUCTION_ORDER', root/'scoreboard_production'),
+          ]:
+              s = pd.read_csv(d/'directional_scoreboard_summary.csv')
+              s['benchmark_arm_file'] = arm
+              summaries.append(s)
+              x = pd.read_csv(d/'directional_scoreboard_detail.csv')
+              x['benchmark_arm_file'] = arm
+              details.append(x)
+          summary = pd.concat(summaries, ignore_index=True)
+          detail = pd.concat(details, ignore_index=True)
+          summary.to_csv(root/'PROMOTED_STACK_AUTHORITY_EXACT_VEGAS_SCOREBOARD.csv', index=False)
+          detail.to_csv(root/'PROMOTED_STACK_AUTHORITY_EXACT_VEGAS_DETAIL.csv', index=False)
+
+          parity = pd.read_csv(root/'parity/authority_parity_audit.csv')
+          football = pd.read_csv(root/'parity/football_metric_summary.csv')
+          coverage = (
+              detail.groupby(['benchmark_arm_file','position','market','promoted_model_version'])
+                    .size().rename('vegas_matched_rows').reset_index()
+          )
+          coverage.to_csv(root/'authority_exact_vegas_coverage.csv', index=False)
+          audit = {
+              'football_parity_pass_positions': parity.loc[parity.status.eq('PASS'),'position'].astype(str).tolist(),
+              'rb_scope_status': parity.loc[parity.position.eq('RB'),'status'].astype(str).tolist(),
+              'football_metric_rows': int(len(football)),
+              'vegas_detail_rows': int(len(detail)),
+              'sportsbook_used_upstream': 0,
+              'paid_odds_api_calls': 0,
+          }
+          (root/'AUTHORITY_EXACT_BENCHMARK_AUDIT.json').write_text(json.dumps(audit, indent=2, sort_keys=True))
+          print(summary.to_string(index=False))
+          print('\nCOVERAGE')
+          print(coverage.to_string(index=False))
+          PY
+
+      - name: Upload authority-exact benchmark bundle
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: unified-promoted-stack-vegas-v1
-          path: |
-            /tmp/unified/UNIFIED_PROMOTED_STACK_IDENTITY_AUDIT_V1.json
-            /tmp/unified/component_predictions_2024_wrte.csv
-            /tmp/unified/component_predictions_2025_wrte.csv
-            /tmp/unified/full_stack_projection_trace_wrte.csv
-            /tmp/unified/full_stack_projection_trace_unified.csv
-            /tmp/unified/m89_semantic_audit.csv
-            /tmp/unified/m89/m89_synthesis_scoreboard.csv
-            /tmp/unified/m89/m89_synthesis_gates.json
-            /tmp/unified/m89/m89_2024_2025_synthesis_trace.csv
-            /tmp/unified/distributions/*_wrte_replay_audit.csv
-            /tmp/unified/distributions/*_wrte_component_updates.csv
-            /tmp/unified/market_archive/market_archive_source_audit.csv
-            /tmp/unified/market_archive/historical_market_props.csv
-            /tmp/unified/grade/*.csv
-            /tmp/unified/scoreboard/*.csv
-          if-no-files-found: warn
+          name: unified-promoted-stack-authority-exact-vegas-v1
           retention-days: 14
+          path: |
+            /tmp/authority_exact/parity/authority_parity_audit.csv
+            /tmp/authority_exact/parity/football_metric_summary.csv
+            /tmp/authority_exact/parity/authority_oos_projection_trace.csv
+            /tmp/authority_exact/parity/current_production_order_projection_trace.csv
+            /tmp/authority_exact/market_archive/market_archive_source_audit.csv
+            /tmp/authority_exact/market_archive/historical_market_props.csv
+            /tmp/authority_exact/scoreboard_authority/directional_scoreboard_detail.csv
+            /tmp/authority_exact/scoreboard_authority/directional_scoreboard_summary.csv
+            /tmp/authority_exact/scoreboard_production/directional_scoreboard_detail.csv
+            /tmp/authority_exact/scoreboard_production/directional_scoreboard_summary.csv
+            /tmp/authority_exact/PROMOTED_STACK_AUTHORITY_EXACT_VEGAS_SCOREBOARD.csv
+            /tmp/authority_exact/PROMOTED_STACK_AUTHORITY_EXACT_VEGAS_DETAIL.csv
+            /tmp/authority_exact/authority_exact_vegas_coverage.csv
+            /tmp/authority_exact/AUTHORITY_EXACT_BENCHMARK_AUDIT.json
