@@ -11,48 +11,63 @@ from scripts.research.merge_promoted_stack_component_predictions_v1 import merge
 KEYS = ["season", "week", "team", "opponent", "player_clean_key"]
 
 
-def _component() -> pd.DataFrame:
+def _projection() -> pd.DataFrame:
     return pd.DataFrame([
         {"season": 2024, "week": 1, "team": "KC", "opponent": "DEN", "player_clean_key": "mahomes",
-         "market": "pass_yards", "mc_proj": 250.0, "ml_proj": 240.0, "state_proj": 245.0, "actual": 230.0},
+         "market": "pass_yards", "mc_proj": 250.0, "ml_proj": 240.0, "state_proj": 245.0,
+         "ensemble_proj": 243.0, "actual": 230.0},
         {"season": 2024, "week": 1, "team": "KC", "opponent": "DEN", "player_clean_key": "kelce",
-         "market": "rec_yards", "mc_proj": 50.0, "ml_proj": 55.0, "state_proj": 45.0, "actual": 60.0},
+         "market": "rec_yards", "mc_proj": 50.0, "ml_proj": 55.0, "state_proj": 45.0,
+         "ensemble_proj": 51.0, "actual": 60.0},
         {"season": 2024, "week": 2, "team": "KC", "opponent": "BAL", "player_clean_key": "mahomes",
-         "market": "pass_yards", "mc_proj": 260.0, "ml_proj": 250.0, "state_proj": 255.0, "actual": 240.0},
+         "market": "pass_yards", "mc_proj": 260.0, "ml_proj": 250.0, "state_proj": 255.0,
+         "ensemble_proj": 255.0, "actual": 240.0},
     ])
 
 
 def _qb_trace() -> pd.DataFrame:
     return pd.DataFrame([
         {"season": 2024, "week": 1, "team": "KC", "opponent": "DEN", "player_clean_key": "mahomes",
-         "actual_pass_yards": 230.0, "base_proj": 250.0, "football_synthesis": 235.0, "m90_correction": -15.0},
+         "actual_pass_yards": 230.0, "base_proj": 243.0, "football_synthesis": 235.0,
+         "football_residual_correction": -8.0},
     ])
 
 
-def test_matched_pass_yards_row_uses_football_synthesis():
-    merged, stats = merge_qb_synthesis(_component(), _qb_trace())
+def test_matched_pass_yards_row_replaces_ensemble_proj_not_mc_proj():
+    merged, stats = merge_qb_synthesis(_projection(), _qb_trace())
     row = merged.loc[(merged.week == 1) & (merged.player_clean_key == "mahomes")].iloc[0]
-    assert row["mc_proj"] == 235.0
-    assert row["qb_m90_synthesis_applied"] == 1
+    assert row["ensemble_proj"] == 235.0
+    assert row["mc_proj"] == 250.0  # untouched -- QB synthesis replaces the final mean, not the MC component
+    assert row["qb_m89_synthesis_applied"] == 1
     assert stats["pass_yards_rows_matched_to_qb_trace"] == 1
 
 
 def test_unmatched_pass_yards_row_stays_on_generic_ensemble():
-    merged, _ = merge_qb_synthesis(_component(), _qb_trace())
+    merged, _ = merge_qb_synthesis(_projection(), _qb_trace())
     row = merged.loc[(merged.week == 2) & (merged.player_clean_key == "mahomes")].iloc[0]
-    assert row["mc_proj"] == 260.0
-    assert row["qb_m90_synthesis_applied"] == 0
+    assert row["ensemble_proj"] == 255.0
+    assert row["qb_m89_synthesis_applied"] == 0
 
 
 def test_non_qb_row_untouched():
-    merged, _ = merge_qb_synthesis(_component(), _qb_trace())
+    merged, _ = merge_qb_synthesis(_projection(), _qb_trace())
     row = merged.loc[merged.player_clean_key == "kelce"].iloc[0]
-    assert row["mc_proj"] == 50.0
+    assert row["ensemble_proj"] == 51.0
     assert row["market"] == "rec_yards"
 
 
+def test_missing_ensemble_proj_column_raises():
+    bad = _projection().drop(columns=["ensemble_proj"])
+    try:
+        merge_qb_synthesis(bad, _qb_trace())
+    except RuntimeError as exc:
+        assert "ensemble_proj" in str(exc)
+    else:
+        raise AssertionError("expected RuntimeError for missing ensemble_proj")
+
+
 def test_missing_key_column_raises():
-    bad = _component().drop(columns=["opponent"])
+    bad = _projection().drop(columns=["opponent"])
     try:
         merge_qb_synthesis(bad, _qb_trace())
     except RuntimeError as exc:
@@ -64,7 +79,7 @@ def test_missing_key_column_raises():
 def test_duplicate_qb_trace_identity_raises():
     dup = pd.concat([_qb_trace(), _qb_trace()], ignore_index=True)
     try:
-        merge_qb_synthesis(_component(), dup)
+        merge_qb_synthesis(_projection(), dup)
     except RuntimeError as exc:
         assert "duplicate" in str(exc).lower()
     else:
@@ -72,10 +87,10 @@ def test_duplicate_qb_trace_identity_raises():
 
 
 def test_cli_round_trip(tmp_path: Path):
-    component_path = tmp_path / "component.csv"
+    projection_path = tmp_path / "projection.csv"
     qb_trace_path = tmp_path / "qb_trace.csv"
     out_path = tmp_path / "out.csv"
-    _component().to_csv(component_path, index=False)
+    _projection().to_csv(projection_path, index=False)
     _qb_trace().to_csv(qb_trace_path, index=False)
 
     result = subprocess.run(
@@ -83,7 +98,7 @@ def test_cli_round_trip(tmp_path: Path):
             sys.executable,
             "-m",
             "scripts.research.merge_promoted_stack_component_predictions_v1",
-            "--component-file", str(component_path),
+            "--projection-file", str(projection_path),
             "--qb-trace", str(qb_trace_path),
             "--out", str(out_path),
         ],
@@ -95,4 +110,5 @@ def test_cli_round_trip(tmp_path: Path):
     assert out_path.exists()
     out = pd.read_csv(out_path)
     matched = out.loc[(out.week == 1) & (out.player_clean_key == "mahomes")].iloc[0]
-    assert matched["mc_proj"] == 235.0
+    assert matched["ensemble_proj"] == 235.0
+    assert matched["mc_proj"] == 250.0

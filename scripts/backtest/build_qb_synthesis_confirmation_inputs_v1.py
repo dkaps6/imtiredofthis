@@ -17,6 +17,7 @@ import pandas as pd
 from scripts.backtest.component_predictions import predict_week
 from scripts.backtest.walk_forward import _parse_weeks
 from scripts.modeling.ensemble_v2 import apply_ensemble
+from scripts.research.persist_historical_simulated_outcomes_v1 import _exact_week, _read_optional
 
 
 def read(path: Path) -> pd.DataFrame:
@@ -41,10 +42,13 @@ def main() -> int:
     p.add_argument("--team-weekly", type=Path, required=True)
     p.add_argument("--schedule", type=Path, required=True)
     p.add_argument("--universe-dir", type=Path, required=True)
+    p.add_argument("--injuries", type=Path, default=Path("data/backtests/injuries_history.csv"))
+    p.add_argument("--weather", type=Path, default=Path("data/backtests/weather_history.csv"))
     p.add_argument("--out", type=Path, required=True)
     a = p.parse_args()
 
     logs, tw, sched = read(a.player_logs), read(a.team_weekly), read(a.schedule)
+    injuries_history, weather_history = _read_optional(a.injuries), _read_optional(a.weather)
 
     traces = []
     for week in _parse_weeks(a.weeks):
@@ -53,10 +57,12 @@ def main() -> int:
             print(f"[qb_synthesis_inputs] {a.season} W{week:02d}: no pregame universe, skipping")
             continue
         universe = read(universe_path)
+        injuries, weather = _exact_week(injuries_history, a.season, week), _exact_week(weather_history, a.season, week)
         try:
             out = predict_week(
                 player_logs=logs, team_weekly=tw, pregame_universe=universe, schedule=sched,
                 season=a.season, week=week, prior_season=a.prior_season, iterations=a.iterations, seed=53 + week,
+                injuries=injuries, weather=weather,
             )
         except Exception as exc:
             print(f"[qb_synthesis_inputs] {a.season} W{week:02d}: failed ({exc}); skipping")
