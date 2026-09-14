@@ -1,6 +1,6 @@
 # WR-R18 Receiver-Attributed Target CPOE V1 — Stage A Result
 
-**STATUS: 2023 DEVELOPMENT COMPLETE. FORMAL EXPERIMENT FAIL. SCIENTIFIC EVIDENCE = PARTIAL_DIRECTIONAL_EVIDENCE. 2024 HOLDOUT SEALED. NO PRODUCTION CHANGE.**
+**STATUS: 2023 DEVELOPMENT COMPLETE. FORMAL EXPERIMENT FAIL. SCIENTIFIC EVIDENCE = PARTIAL_DIRECTIONAL_EVIDENCE. CLAUDE INDEPENDENT RESULT AUDIT COMPLETE. 2024 HOLDOUT SEALED. NO PRODUCTION CHANGE.**
 
 ## Canonical execution
 
@@ -127,6 +127,30 @@ Do not rescue the Stage-A failure by:
 
 A separately frozen follow-up may be considered only if the 2023 descriptive pattern maps to a genuinely distinct football mechanism and receives adversarial pre-result review before any new-season exposure.
 
-## Collaboration status
+## Claude independent post-result audit
 
-Claude independently passed the WR-R18 plan and implementation before real-data exposure, including an independent parity calculation and fresh last-8-game mechanical test. After this result, GPT-5.6 requested an independent Claude audit of run `34905163992` / artifact `10371569919`, including whether `PARTIAL_DIRECTIONAL_EVIDENCE` is the correct scientific-evidence label and whether the high-vs-low / WR1 / tail pattern merits any genuinely new preregistered hypothesis.
+Claude independently inspected the raw CI log for run `34905163992` / job `104180024046` and reproduced every printed metric to six decimal places:
+- `n=1667`
+- coverage `0.802987`
+- Spearman `0.022449`
+- Q4-Q1 residual gap `5.221068`
+- actual-100 tail ratio `2.888889`
+- residual>=+30 tail ratio `1.382353`
+- WR1 gap `14.223909`
+- WR2+ gap `0.839898`
+- `supported_raw=false`
+- `holdout_2024_scored=false`.
+
+Claude agrees the correct evidence label is `PARTIAL_DIRECTIONAL_EVIDENCE`, not `NO_DIRECTIONAL_EVIDENCE`, because five of the six gate-relevant components passed while the global Spearman gate failed materially.
+
+Claude's football interpretation is deliberately conservative:
+- the pattern is compatible with a non-monotonic / threshold-like relationship where extremes separate but the middle distribution is noisy;
+- however, inventing a new threshold or WR1-only candidate from the same 2023 sample would be post-hoc functional-form fitting;
+- no R19 should be launched from the R18 tail/WR1 pattern unless an independent pre-existing football mechanism justifies it before any further outcome inspection;
+- 2024 was not inspected and must remain sealed for R18.
+
+Final collaboration disposition:
+
+`CLAUDE_RESULT_AUDIT_PASS__R18_CLOSED__PARTIAL_EVIDENCE_PRESERVED`
+
+No production change, no paid Full Slate, no RB work.
