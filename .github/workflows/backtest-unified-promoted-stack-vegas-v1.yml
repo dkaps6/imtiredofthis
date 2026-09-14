@@ -1,0 +1,298 @@
+name: Unified Promoted-Stack Historical Vegas Benchmark V1
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/research/merge_promoted_stack_component_predictions_v1.py"
+      - "tests/test_merge_promoted_stack_component_predictions_v1.py"
+      - ".github/workflows/backtest-unified-promoted-stack-vegas-v1.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  unified-benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml pyarrow tabulate
+
+      - name: Run focused unit tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q \
+            tests/test_wr_te_production_order_historical_v1.py \
+            tests/test_benchmark_identity_v1.py \
+            tests/test_grade_full_stack_vegas_benchmark_v1.py \
+            tests/test_merge_promoted_stack_component_predictions_v1.py
+
+      - name: Create workspace
+        run: |
+          rm -rf /tmp/unified /tmp/hist_2023 /tmp/hist_2024 /tmp/hist_2025 /tmp/wr_model /tmp/te_model
+          mkdir -p /tmp/unified/distributions /tmp/unified/grade \
+                   /tmp/hist_2023 /tmp/hist_2024 /tmp/hist_2025 /tmp/wr_model /tmp/te_model
+
+      - name: Download WR-R15 fold-safe OOS authority
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-r15-wr1-anchor-participation-v1
+          path: /tmp/wr_model
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34238301577
+
+      - name: Download TE-R5P production-contract OOS authority
+        uses: actions/download-artifact@v4
+        with:
+          name: te-r5p-production-contract-refit-v1
+          path: /tmp/te_model
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34152797603
+
+      - name: Build independent historical inputs for 2023-2025
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2023 --prior-season 2022 --weeks 1-18 --out-dir /tmp/hist_2023
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --out-dir /tmp/hist_2024
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --out-dir /tmp/hist_2025
+
+      - name: Combine authoritative 2023-2025 schedule and team-week history
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out = Path('/tmp/unified')
+          for name in ['schedule_history.csv', 'team_weekly_history.csv']:
+              parts = [pd.read_csv(f'/tmp/hist_{s}/' + name) for s in (2023, 2024, 2025)]
+              x = pd.concat(parts, ignore_index=True)
+              keys = ['season', 'week', 'team']
+              x = x.sort_values(keys).drop_duplicates(keys, keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined historical rows in {name}')
+              x.to_csv(out / name, index=False)
+              print(name, len(x), sorted(x.season.unique()))
+          PY
+
+      - name: Build canonical 2023-2025 player game logs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2023,2024,2025 \
+            --schedule /tmp/unified/schedule_history.csv \
+            --out /tmp/unified/player_game_logs_history.csv
+
+      - name: Build base component traces for 2024 and 2025
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/walk_forward.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/unified/player_game_logs_history.csv \
+            --team-weekly /tmp/unified/team_weekly_history.csv \
+            --schedule /tmp/unified/schedule_history.csv \
+            --universe-dir /tmp/hist_2024/pregame_universe \
+            --out /tmp/unified/component_predictions_2024_base.csv
+          python scripts/backtest/walk_forward.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/unified/player_game_logs_history.csv \
+            --team-weekly /tmp/unified/team_weekly_history.csv \
+            --schedule /tmp/unified/schedule_history.csv \
+            --universe-dir /tmp/hist_2025/pregame_universe \
+            --out /tmp/unified/component_predictions_2025_base.csv
+
+      - name: Verify frozen WR-R15/TE-R5P fold artifacts
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from pathlib import Path
+
+          wr_root = Path('/tmp/wr_model/backtests/wr_r15_wr1_anchor_v1')
+          te_root = Path('/tmp/te_model/data/backtests/te_r5p_production_contract_refit_v1')
+          wr = pd.read_csv(wr_root / 'wr_r15_fold_coefficients.csv')
+          te = pd.read_csv(te_root / 'te_r5p_coefficients.csv')
+          wr_result = json.loads((wr_root / 'wr_r15_result.json').read_text())
+          te_result = json.loads((te_root / 'te_r5p_result.json').read_text())
+          if sorted(wr['test_season'].astype(int).unique().tolist()) != [2023, 2024]:
+              raise RuntimeError('WR-R15 OOS fold seasons drifted')
+          if sorted(te['test_season'].astype(int).unique().tolist()) != [2023, 2024, 2025]:
+              raise RuntimeError('TE-R5P OOS fold seasons drifted')
+          if not bool(wr_result.get('design_motivated_by_2025_but_2025_confirmation_forbidden')):
+              raise RuntimeError('WR-R15 2025 exclusion contract missing')
+          if te_result.get('disposition') != 'TE_R5P_PRODUCTION_CONTRACT_REFIT_ELIGIBLE':
+              raise RuntimeError('TE-R5P OOS production-contract artifact not eligible')
+          print('frozen WR-R15/TE-R5P fold authority PASS')
+          PY
+
+      - name: Replay TE-R5P and WR-R15 upstream of joint MC (2024, 2025)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/persist_wr_te_production_order_historical_v1.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/unified/player_game_logs_history.csv \
+            --team-weekly /tmp/unified/team_weekly_history.csv \
+            --schedule /tmp/unified/schedule_history.csv \
+            --universe-dir /tmp/hist_2024/pregame_universe \
+            --component-file /tmp/unified/component_predictions_2024_base.csv \
+            --component-out /tmp/unified/component_predictions_2024_wrte.csv \
+            --out-dir /tmp/unified/distributions \
+            --te-coefficients /tmp/te_model/data/backtests/te_r5p_production_contract_refit_v1/te_r5p_coefficients.csv \
+            --wr-coefficients /tmp/wr_model/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv
+          python scripts/research/persist_wr_te_production_order_historical_v1.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/unified/player_game_logs_history.csv \
+            --team-weekly /tmp/unified/team_weekly_history.csv \
+            --schedule /tmp/unified/schedule_history.csv \
+            --universe-dir /tmp/hist_2025/pregame_universe \
+            --component-file /tmp/unified/component_predictions_2025_base.csv \
+            --component-out /tmp/unified/component_predictions_2025_wrte.csv \
+            --out-dir /tmp/unified/distributions \
+            --te-coefficients /tmp/te_model/data/backtests/te_r5p_production_contract_refit_v1/te_r5p_coefficients.csv \
+            --wr-coefficients /tmp/wr_model/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv
+
+      - name: Build QB M89/M90 synthesis-confirmation trace inputs (2023-2025)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_qb_synthesis_confirmation_inputs_v1.py \
+            --season 2023 --prior-season 2022 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/unified/player_game_logs_history.csv \
+            --team-weekly /tmp/unified/team_weekly_history.csv \
+            --schedule /tmp/unified/schedule_history.csv \
+            --universe-dir /tmp/hist_2023/pregame_universe \
+            --out /tmp/unified/qb_trace_2023_base.csv
+          python scripts/backtest/build_qb_synthesis_confirmation_inputs_v1.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/unified/player_game_logs_history.csv \
+            --team-weekly /tmp/unified/team_weekly_history.csv \
+            --schedule /tmp/unified/schedule_history.csv \
+            --universe-dir /tmp/hist_2024/pregame_universe \
+            --out /tmp/unified/qb_trace_2024_base.csv
+          python scripts/backtest/build_qb_synthesis_confirmation_inputs_v1.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/unified/player_game_logs_history.csv \
+            --team-weekly /tmp/unified/team_weekly_history.csv \
+            --schedule /tmp/unified/schedule_history.csv \
+            --universe-dir /tmp/hist_2025/pregame_universe \
+            --out /tmp/unified/qb_trace_2025_base.csv
+
+      - name: Run M90 exact-M89 football-synthesis rotated confirmation (train 2023->test 2024, train 2024->test 2025)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p /tmp/unified/m90_2024 /tmp/unified/m90_2025
+          python scripts/backtest/run_m90_qb_synthesis_confirmation.py \
+            --train-season 2023 --test-season 2024 \
+            --train-trace /tmp/unified/qb_trace_2023_base.csv \
+            --train-team /tmp/unified/team_weekly_history.csv \
+            --train-logs /tmp/unified/player_game_logs_history.csv \
+            --test-trace /tmp/unified/qb_trace_2024_base.csv \
+            --test-team /tmp/unified/team_weekly_history.csv \
+            --test-logs /tmp/unified/player_game_logs_history.csv \
+            --out-dir /tmp/unified/m90_2024
+          python scripts/backtest/run_m90_qb_synthesis_confirmation.py \
+            --train-season 2024 --test-season 2025 \
+            --train-trace /tmp/unified/qb_trace_2024_base.csv \
+            --train-team /tmp/unified/team_weekly_history.csv \
+            --train-logs /tmp/unified/player_game_logs_history.csv \
+            --test-trace /tmp/unified/qb_trace_2025_base.csv \
+            --test-team /tmp/unified/team_weekly_history.csv \
+            --test-logs /tmp/unified/player_game_logs_history.csv \
+            --out-dir /tmp/unified/m90_2025
+          echo "--- 2024 confirmation scoreboard ---"
+          cat /tmp/unified/m90_2024/m90_rotated_confirmation_scoreboard.csv
+          echo "--- 2025 confirmation scoreboard ---"
+          cat /tmp/unified/m90_2025/m90_rotated_confirmation_scoreboard.csv
+
+      - name: Merge WR-R15/TE-R5P and QB M90 into one unified component trace per season
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/merge_promoted_stack_component_predictions_v1.py \
+            --component-file /tmp/unified/component_predictions_2024_wrte.csv \
+            --qb-trace /tmp/unified/m90_2024/m90_rotated_confirmation_trace.csv \
+            --out /tmp/unified/component_predictions_2024_unified.csv
+          python scripts/research/merge_promoted_stack_component_predictions_v1.py \
+            --component-file /tmp/unified/component_predictions_2025_wrte.csv \
+            --qb-trace /tmp/unified/m90_2025/m90_rotated_confirmation_trace.csv \
+            --out /tmp/unified/component_predictions_2025_unified.csv
+
+      - name: Apply frozen ensemble and attach authoritative game identity
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_full_stack_vegas_projection_trace_v2.py \
+            --component-file /tmp/unified/component_predictions_2024_unified.csv \
+            --component-file /tmp/unified/component_predictions_2025_unified.csv \
+            --schedule /tmp/unified/schedule_history.csv \
+            --weights data/model_ensemble_weights.csv \
+            --out /tmp/unified/full_stack_projection_trace_unified.csv
+
+      - name: Rebuild free historical market archive against clean identities
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/prepare_free_market_prop_archive_v1.py \
+            --projection-file /tmp/unified/full_stack_projection_trace_unified.csv \
+            --out-dir /tmp/unified/market_archive
+
+      - name: Grade unified promoted-stack benchmark with frozen grading rules
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/grade_full_stack_vegas_benchmark_v1.py \
+            --projection-file /tmp/unified/full_stack_projection_trace_unified.csv \
+            --props /tmp/unified/market_archive/historical_market_props.csv \
+            --out-dir /tmp/unified/grade
+
+      - name: Emit fail-closed identity audit artifact
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/audit_clean_full_stack_vegas_benchmark_v1.py \
+            --projection /tmp/unified/full_stack_projection_trace_unified.csv \
+            --props /tmp/unified/market_archive/historical_market_props.csv \
+            --detail /tmp/unified/grade/full_stack_vegas_benchmark_detail.csv \
+            --out /tmp/unified/UNIFIED_PROMOTED_STACK_IDENTITY_AUDIT_V1.json
+
+      - name: Upload unified promoted-stack benchmark bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unified-promoted-stack-vegas-v1
+          path: |
+            /tmp/unified/UNIFIED_PROMOTED_STACK_IDENTITY_AUDIT_V1.json
+            /tmp/unified/component_predictions_2024_unified.csv
+            /tmp/unified/component_predictions_2025_unified.csv
+            /tmp/unified/full_stack_projection_trace_unified.csv
+            /tmp/unified/m90_2024/m90_rotated_confirmation_scoreboard.csv
+            /tmp/unified/m90_2025/m90_rotated_confirmation_scoreboard.csv
+            /tmp/unified/distributions/*_wrte_replay_audit.csv
+            /tmp/unified/distributions/*_wrte_component_updates.csv
+            /tmp/unified/market_archive/market_archive_source_audit.csv
+            /tmp/unified/market_archive/historical_market_props.csv
+            /tmp/unified/grade/*.csv
+          if-no-files-found: warn
+          retention-days: 14
