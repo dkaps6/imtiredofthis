@@ -111,13 +111,13 @@ def _schedule_timestamp(frame: pd.DataFrame) -> pd.Series:
 
 
 def _schedule_calendar_date(frame: pd.DataFrame, kickoff: pd.Series) -> pd.Series:
-    """Return the NFL schedule's intended local game date for each row.
+    """Return the schedule's intended game-date identity for each row.
 
     ``team_week_map.csv`` is commonly built from nflverse ``gameday``, which is a
     calendar date rather than an exact kickoff instant. Parsing that date as UTC
     midnight and comparing it to wall-clock UTC caused Week 1 to roll into Week 2
-    at 00:00 UTC on Sunday night. Preserve date-semantic columns as dates first;
-    only fall back to a real kickoff timestamp converted to the NFL calendar zone.
+    at 00:00 UTC on Sunday night. Preserve date-semantic columns as dates first.
+    Timestamp-only schedules retain their existing UTC-date semantics.
     """
     for candidate in ("slate_date", "gameday", "game_date", "date"):
         if candidate not in frame.columns:
@@ -126,7 +126,7 @@ def _schedule_calendar_date(frame: pd.DataFrame, kickoff: pd.Series) -> pd.Serie
         if parsed.notna().any():
             return parsed.dt.date
     if kickoff.notna().any():
-        return kickoff.dt.tz_convert(NFL_CALENDAR_TZ).dt.date
+        return kickoff.dt.date
     return pd.Series([pd.NaT] * len(frame), index=frame.index, dtype=object)
 
 
@@ -172,7 +172,7 @@ def resolve_week(
     1. Scope to the active season and authoritative schedule.
     2. Honor a previously frozen ``NFL_RUNTIME_WEEK`` after validating it against
        that schedule (and an explicit slate date, when supplied).
-    3. If a slate date is supplied, match the schedule's local game date.
+    3. If a slate date is supplied, match the schedule's game date.
     4. If slate date is blank, first prefer games on the current NFL local date;
        otherwise choose the nearest upcoming scheduled game week, or the most
        recent completed week if the season is over.
