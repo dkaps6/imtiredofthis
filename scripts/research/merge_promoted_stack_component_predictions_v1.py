@@ -8,34 +8,18 @@ final football target mean. It is not blended back into another ensemble
 pass. So this script must run AFTER build_full_stack_vegas_projection_trace_v2.py
 has already produced ``ensemble_proj``, and it overrides that column
 directly on matched pass_yards rows -- it does not touch mc_proj/ml_proj/
-state_proj, and it must not run before the ensemble step (doing so would
-let the ensemble re-blend the QB synthesis mean back down with raw ml_proj/
-state_proj, diluting the promoted correction instead of replacing the mean
-with it, as production does).
+state_proj.
 
-Input:
-- ``--projection-file``: the full-stack projection trace (output of
-  build_full_stack_vegas_projection_trace_v2.py), already carrying
-  ensemble_proj for every market/row, including any upstream WR-R15/TE-R5P
-  adjustment already baked into mc_proj before that ensemble step ran.
-- ``--qb-trace``: the M89 single-fit synthesis trace (output of
-  run_m89_pregame_synthesis.py, trained once on 2023, evaluated on both
-  2024 and 2025 -- not the M90 rotating-retrain confirmation, which is a
-  different, separately-purposed robustness check with its own
-  train=test-1 refit each year). Carries ``football_synthesis`` per
-  player/week, reconstructed from the exact frozen M89 feature list and
-  Ridge fit -- not a re-derivation.
-
-Every finite M89 authority row must be present in the pass-yards projection
-universe; missing authority rows fail closed. The projection universe may
-contain additional pass-yards rows without historical M89 authority (for
-example a season/week outside the reconstruction cohort); those rows are
-left on the generic ensemble and are explicitly marked as not having the
-M89 synthesis applied.
+For this historical *promoted-stack* benchmark, pass-yards rows without
+historical M89 authority are excluded rather than mixed into the QB grade as
+generic-ensemble controls. Every finite M89 authority row must be present in
+the projection universe; missing authority rows fail closed. Non-QB markets
+are preserved unchanged.
 
 This script performs no modeling of its own -- every value it writes was
 produced by an already-frozen, already-validated production or research
-component. It only decides which already-computed number wins per row.
+component. It only decides which already-computed number wins per row and
+which QB rows belong to the historically authorized benchmark cohort.
 """
 from __future__ import annotations
 
@@ -98,6 +82,7 @@ def merge_qb_synthesis(projection: pd.DataFrame, qb_trace: pd.DataFrame) -> tupl
     key_tuples = list(out[KEYS].itertuples(index=False, name=None))
     matched_mask = [bool(p) and t in qb_lookup.index for p, t in zip(is_pass, key_tuples)]
     matched = pd.Series(matched_mask, index=out.index)
+    unmatched_pass = is_pass & ~matched
 
     before = pd.to_numeric(out.loc[matched, "ensemble_proj"], errors="coerce").copy()
     new_values = [qb_lookup.loc[t] for t, m in zip(key_tuples, matched_mask) if m]
@@ -107,20 +92,31 @@ def merge_qb_synthesis(projection: pd.DataFrame, qb_trace: pd.DataFrame) -> tupl
         out.get("qb_m89_synthesis_applied"), errors="coerce"
     ).fillna(0).astype(int)
 
+    input_rows = int(len(out))
+    excluded = int(unmatched_pass.sum())
+    changed_mean = float(
+        np.mean(
+            np.abs(
+                pd.to_numeric(out.loc[matched, "ensemble_proj"], errors="coerce").to_numpy()
+                - before.to_numpy()
+            )
+        )
+    ) if matched.any() else 0.0
+
+    # The unified QB benchmark is the historically authorized M89 cohort only.
+    # Base-ensemble QB rows outside that cohort are controls, not promoted-stack
+    # observations, so exclude them before any sportsbook archive join/grade.
+    out = out.loc[~unmatched_pass].copy().reset_index(drop=True)
+
     stats = {
+        "input_projection_rows": input_rows,
+        "output_projection_rows": int(len(out)),
         "qb_trace_rows_with_finite_synthesis": int(len(qb_lookup)),
         "qb_trace_rows_missing_from_projection": 0,
-        "pass_yards_rows": int(is_pass.sum()),
-        "pass_yards_rows_matched_to_qb_trace": int(matched.sum()),
-        "pass_yards_rows_unmatched_stay_on_generic_ensemble": int(is_pass.sum() - matched.sum()),
-        "mean_abs_ensemble_proj_change_on_matched_rows": float(
-            np.mean(
-                np.abs(
-                    pd.to_numeric(out.loc[matched, "ensemble_proj"], errors="coerce").to_numpy()
-                    - before.to_numpy()
-                )
-            )
-        ) if matched.any() else 0.0,
+        "pass_yards_rows_input": int(is_pass.sum()),
+        "pass_yards_rows_m89_authorized": int(matched.sum()),
+        "pass_yards_rows_excluded_no_m89_authority": excluded,
+        "mean_abs_ensemble_proj_change_on_m89_rows": changed_mean,
     }
     return out, stats
 
