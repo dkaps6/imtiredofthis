@@ -2,6 +2,11 @@ name: Diagnose QB-PD3 Casebook Schema (one-off)
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - wr-qb-shared-tail-signal-v1-artifact-completion
+    paths:
+      - '.github/workflows/diagnose-qb-pd3-casebook-schema.yml'
 
 permissions:
   actions: read
