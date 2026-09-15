@@ -6,6 +6,9 @@ on:
       - research-wr-phase4-authority-exact-opportunity-attribution-v1
     paths:
       - '.github/workflows/research-wr-phase4b-static-gsis-preflight-v2.yml'
+      - 'scripts/research/evaluate_wr_phase4b_authority_exact_opportunity_attribution_v2.py'
+      - 'scripts/research/test_wr_phase4b_authority_exact_opportunity_synthetic_v1.py'
+      - 'scripts/research/test_wr_phase4b_static_identity_source_synthetic_v2.py'
   workflow_dispatch:
 
 permissions:
