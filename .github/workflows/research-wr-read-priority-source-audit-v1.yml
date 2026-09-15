@@ -1,0 +1,124 @@
+name: WR Read Priority Source Audit V1
+
+on:
+  push:
+    branches:
+      - research-wr-read-priority-source-audit-v1
+    paths:
+      - '.github/workflows/research-wr-read-priority-source-audit-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  source-redundancy-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      AUTHORITY_RUN_ID: '34238301577'
+      AUTHORITY_ARTIFACT_ID: '10061328722'
+      AUTHORITY_ARTIFACT_NAME: wr-r15-wr1-anchor-participation-v1
+      AUTHORITY_DIGEST: sha256:8df31b5e136621d959272daf0422dfc665593cd0da2eb0892b4aa69c1417f3ce
+      AUTHORITY_CSV: /tmp/wr_r15_artifact/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_predictions.csv
+      OUT_DIR: data/backtests/wr_read_priority_source_audit_v1
+
+    steps:
+      - name: Checkout source-audit branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install research dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pandas numpy pyarrow nflreadpy
+
+      - name: Verify exact WR-R15 authority artifact lineage
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${AUTHORITY_RUN_ID}/artifacts" > /tmp/wr_r15_artifacts.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          payload = json.loads(Path('/tmp/wr_r15_artifacts.json').read_text())
+          matches = [a for a in payload.get('artifacts', []) if int(a.get('id', -1)) == int(os.environ['AUTHORITY_ARTIFACT_ID'])]
+          if len(matches) != 1:
+              raise SystemExit(f"expected one authority artifact id={os.environ['AUTHORITY_ARTIFACT_ID']}, got {len(matches)}")
+          a = matches[0]
+          if a.get('name') != os.environ['AUTHORITY_ARTIFACT_NAME']:
+              raise SystemExit(f"artifact name mismatch: {a.get('name')}")
+          if a.get('digest') != os.environ['AUTHORITY_DIGEST']:
+              raise SystemExit(f"artifact digest mismatch: {a.get('digest')}")
+          if bool(a.get('expired')):
+              raise SystemExit('authority artifact expired')
+          print('WR-R15 authority lineage: PASS')
+          PY
+
+      - name: Download exact WR-R15 authority artifact
+        run: |
+          rm -rf /tmp/wr_r15_artifact
+          mkdir -p /tmp/wr_r15_artifact
+          gh run download "${AUTHORITY_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name "${AUTHORITY_ARTIFACT_NAME}" \
+            --dir /tmp/wr_r15_artifact
+          test -s "${AUTHORITY_CSV}"
+
+      - name: Run source-only read-priority redundancy audit
+        run: |
+          rm -rf "${OUT_DIR}"
+          python -m scripts.research.audit_wr_read_priority_source_redundancy_v1 \
+            --authority "${AUTHORITY_CSV}" \
+            --out-dir "${OUT_DIR}"
+
+      - name: Prove no WR outcome or holdout scoring occurred
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import pandas as pd
+
+          out = Path(os.environ['OUT_DIR'])
+          result = json.loads((out / 'wr_read_priority_source_redundancy_result.json').read_text())
+          panel = pd.read_csv(out / 'wr_read_priority_source_feature_panel_2023.csv')
+
+          if result.get('wr_outcomes_loaded') is not False:
+              raise SystemExit('WR outcomes were loaded')
+          am = result.get('authority_meta', {})
+          if am.get('authority_materialized_seasons') != [2023]:
+              raise SystemExit(f"unexpected authority materialized seasons: {am.get('authority_materialized_seasons')}")
+          if am.get('outcome_fields_parsed') is not False:
+              raise SystemExit('outcome fields were parsed')
+          if am.get('holdout_2024_projection_or_outcome_fields_parsed') is not False:
+              raise SystemExit('2024 projection/outcome field parsed')
+          forbidden = {'actual_rec_yards','mc_rec_yards','yard_residual','residual'}
+          overlap = forbidden.intersection(set(panel.columns))
+          if overlap:
+              raise SystemExit(f'forbidden outcome columns present: {sorted(overlap)}')
+          if result.get('sportsbook_inputs') != 0:
+              raise SystemExit('sportsbook boundary violated')
+          seasons = sorted(int(x['season']) for x in result.get('source_meta', []))
+          if seasons != [2022, 2023, 2024]:
+              raise SystemExit(f'unexpected source seasons: {seasons}')
+          print('WR read-priority source-only guards: PASS')
+          print(json.dumps({
+              'disposition': result.get('disposition'),
+              'coverage': result.get('redundancy', {}).get('coverage'),
+              'entitlement_spearman': result.get('redundancy', {}).get('primary_vs_entitlement_spearman'),
+              'redundancy_r2': result.get('redundancy', {}).get('primary_explained_by_entitlement_predtargets_wr1_r2'),
+          }, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload source-only evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-read-priority-source-audit-v1
+          path: data/backtests/wr_read_priority_source_audit_v1/
+          if-no-files-found: error
+          retention-days: 30
