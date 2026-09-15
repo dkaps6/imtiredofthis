@@ -72,6 +72,15 @@ jobs:
             --season "${BACKTEST_SEASON}" \
             --weeks "${BACKTEST_WEEK}"
 
+      - name: Audit coverage + biggest misses
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/research/audit_week1_backtest_coverage_v1.py \
+            --priced-file outputs/props_priced_clean.csv \
+            --graded-detail "data/market_track_record/graded/${BACKTEST_SEASON}_wk${BACKTEST_WEEK}_detail.csv" \
+            --season "${BACKTEST_SEASON}" \
+            --week "${BACKTEST_WEEK}"
+
       - name: Upload backtest evidence
         if: always()
         uses: actions/upload-artifact@v4
