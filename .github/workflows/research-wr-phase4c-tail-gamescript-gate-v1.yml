@@ -1,0 +1,90 @@
+name: WR Phase4C Tail Game-Script Gate V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-wr-phase4c-tail-gamescript-gate-v1
+    paths:
+      - "scripts/research/diagnose_wr_phase4c_tail_gamescript_gate_v1.py"
+      - "tests/test_diagnose_wr_phase4c_tail_gamescript_gate_v1.py"
+      - "docs/research/WR_PHASE4C_TAIL_GAMESCRIPT_GATE_V1_PLAN.md"
+      - ".github/workflows/research-wr-phase4c-tail-gamescript-gate-v1.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest scipy scikit-learn nflreadpy
+
+      - name: Focused mechanics tests
+        run: |
+          PYTHONPATH=. pytest -q tests/test_diagnose_wr_phase4c_tail_gamescript_gate_v1.py
+
+      - name: Download exact canonical Phase4B artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/phase4b
+          curl --fail --location \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{ github.repository }}/actions/artifacts/10404525877/zip \
+            --output /tmp/phase4b.zip
+          echo "0dad0dbc91a4bd6aa3e3f45cbc62e8ed493ca7bf2c95daaa0c4028a54a0fd0d4  /tmp/phase4b.zip" | sha256sum --check
+          unzip -q /tmp/phase4b.zip -d /tmp/phase4b
+          test -s /tmp/phase4b/wr_phase4b_attribution_v2/phase4b_layer1_yard_decomposition.csv
+          test -s /tmp/phase4b/wr_phase4b_attribution_v2/phase4b_layer2_3_team_game_detail.csv
+
+      - name: Run frozen Gate0 diagnostic
+        run: |
+          PYTHONPATH=. python scripts/research/diagnose_wr_phase4c_tail_gamescript_gate_v1.py \
+            --layer1 /tmp/phase4b/wr_phase4b_attribution_v2/phase4b_layer1_yard_decomposition.csv \
+            --layer23 /tmp/phase4b/wr_phase4b_attribution_v2/phase4b_layer2_3_team_game_detail.csv \
+            --out-dir /tmp/phase4c_gate0
+
+      - name: Output-contract guard
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('/tmp/phase4c_gate0/phase4c_gate0_result.json')
+          x=json.loads(p.read_text())
+          assert x['phase4b_layer1_rows']==4193
+          assert x['phase4b_layer23_team_games']==1025
+          assert x['cluster_unit']=='season-week-team'
+          assert x['comparison_space']=={'pooled_cells':112,'pooled_plus_season_cells':336,'directional_control_cells':24}
+          assert x['market_lineage']['implied_team_target_pool_has_market_input'] is False
+          assert x['script_predictor_built'] is False
+          assert x['production_change'] is False
+          assert x['paid_full_slate'] is False
+          assert x['rb_work'] is False
+          assert x['gate']['disposition'] in {'ADVANCE_TO_SCRIPT_PREDICTOR_DESIGN','NO_ACTIONABLE_TAIL_GAMESCRIPT_BRIDGE'}
+          print(json.dumps(x, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload canonical Gate0 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-phase4c-tail-gamescript-gate-v1
+          path: |
+            /tmp/phase4c_gate0/*
+            docs/research/WR_PHASE4C_TAIL_GAMESCRIPT_GATE_V1_PLAN.md
+          retention-days: 30
+          if-no-files-found: error
