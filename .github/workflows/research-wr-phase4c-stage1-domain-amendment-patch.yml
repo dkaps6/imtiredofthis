@@ -1,0 +1,141 @@
+name: WR Phase4C Stage1 Domain Amendment Patch
+
+on:
+  push:
+    branches:
+      - research-wr-phase4c-stage1-pass-volume-predictor-v1
+    paths:
+      - ".github/workflows/research-wr-phase4c-stage1-domain-amendment-patch.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Apply blind structural-domain amendment
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('scripts/research/evaluate_wr_phase4c_stage1_pass_volume_predictor_v1.py')
+          s = p.read_text()
+
+          old = '''EXPECTED_TAILS_2024 = {
+              "UNDERPROJECT_30_PLUS_OPP_DOM": 222,
+              "ACTUAL_100_PLUS_OPP_DOM": 87,
+              "UNDERPROJECT_30_PLUS": 312,
+          }
+          '''
+          new = '''RAW_LAYER1_TAILS_2024 = {
+              "UNDERPROJECT_30_PLUS_OPP_DOM": 222,
+              "ACTUAL_100_PLUS_OPP_DOM": 87,
+              "UNDERPROJECT_30_PLUS": 312,
+          }
+          EXPECTED_TAILS_2024 = {
+              # Stage-1 is defined on the canonical Phase4B Layer-2 team-pool domain.
+              # These are the frozen Layer1 tail memberships intersected with that domain.
+              "UNDERPROJECT_30_PLUS_OPP_DOM": 208,
+              "ACTUAL_100_PLUS_OPP_DOM": 85,
+              "UNDERPROJECT_30_PLUS": 294,
+          }
+          '''
+          if old not in s:
+              raise SystemExit('tail-constant anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = 'expected = EXPECTED_TAILS_2024[name]\n        if len(tg) != expected:'
+          new = 'expected = RAW_LAYER1_TAILS_2024[name]\n        if len(tg) != expected:'
+          if old not in s:
+              raise SystemExit('raw tail assertion anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = '"primary_tail_team_games": EXPECTED_TAILS_2024["UNDERPROJECT_30_PLUS_OPP_DOM"],\n            "primary_tail_prediction_rows"'
+          new = '"primary_tail_raw_layer1_team_games": RAW_LAYER1_TAILS_2024["UNDERPROJECT_30_PLUS_OPP_DOM"],\n            "primary_tail_team_games": EXPECTED_TAILS_2024["UNDERPROJECT_30_PLUS_OPP_DOM"],\n            "primary_tail_prediction_rows"'
+          if old not in s:
+              raise SystemExit('preflight tail report anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = '"canonical_team_games": EXPECTED_TAILS_2024[name], "eligible_team_games": int(len(z)),'
+          new = '"raw_layer1_team_games": RAW_LAYER1_TAILS_2024[name], "canonical_team_games": EXPECTED_TAILS_2024[name], "eligible_team_games": int(len(z)),'
+          if old not in s:
+              raise SystemExit('outcome tail metric anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = '"primary_tail_canonical": EXPECTED_TAILS_2024["UNDERPROJECT_30_PLUS_OPP_DOM"],\n            "primary_tail_eligible"'
+          new = '"primary_tail_raw_layer1": RAW_LAYER1_TAILS_2024["UNDERPROJECT_30_PLUS_OPP_DOM"],\n            "primary_tail_canonical": EXPECTED_TAILS_2024["UNDERPROJECT_30_PLUS_OPP_DOM"],\n            "primary_tail_eligible"'
+          if old not in s:
+              raise SystemExit('outcome coverage anchor not found')
+          s = s.replace(old, new, 1)
+
+          p.write_text(s)
+
+          amend = Path('docs/research/WR_PHASE4C_STAGE1_LAYER2_DOMAIN_AMENDMENT_V1.md')
+          amend.write_text('''# WR Phase 4C Stage 1 — Layer-2 Tail-Domain Amendment V1
+
+**STATUS: FROZEN BLIND AMENDMENT AFTER PREFLIGHT, BEFORE ANY 2024 STAGE-1 OUTCOME SCORING.**
+
+## Why this amendment exists
+
+The first sealed preflight (`run 35023900963`) verified 515/515 Stage-1 predictions on the canonical Phase4B Layer-2 2024 population, but exposed that the plan's tail coverage denominator had been copied from the broader Phase4B Layer-1 universe.
+
+Stage 1 predicts the Layer-2 team-pool response `actual_team_targets - implied_team_target_pool`. Therefore a Layer-1 tail team-game that is not in canonical Layer 2 has no Stage-1 response or A/B/C prediction by construction. It is not a missing script prediction.
+
+No blind Stage-1 error metric or disposition had been scored when this was found. The failed workflow assertion occurred after `--preflight-only` completed.
+
+## Frozen structural counts
+
+Keep the parent Layer-1 tail counts fully disclosed:
+
+- `UNDERPROJECT_30_PLUS_OPP_DOM`: 222 unique 2024 team-games
+- `ACTUAL_100_PLUS_OPP_DOM`: 87
+- `UNDERPROJECT_30_PLUS`: 312
+
+For Stage-1 B-vs-C evaluation, use the prospectively corrected addressable domain:
+
+`frozen Layer-1 tail membership ∩ canonical Phase4B Layer-2 2024 team-games`
+
+Exact counts, established structurally before outcome scoring:
+
+- primary `UNDERPROJECT_30_PLUS_OPP_DOM`: **208** addressable; 14 outside Layer 2
+- secondary `ACTUAL_100_PLUS_OPP_DOM`: **85** addressable; 2 outside Layer 2
+- secondary `UNDERPROJECT_30_PLUS`: **294** addressable; 18 outside Layer 2
+
+The 14 primary parent-tail games outside Layer 2 are: 2024 W1 GB; W3 SF; W7 LAR; W9 TB; W10 BUF; W13 BAL; W14 LAC; W15 NYJ; W17 HOU; W18 BUF, GB, KC, LAR, PHI.
+
+## Gate amendment
+
+Coverage/integrity remains:
+
+- >=95% of all 515 canonical 2024 Layer-2 team-games;
+- >=95% of the **208 Layer-2-addressable primary-tail team-games**.
+
+The raw parent counts 222/87/312 remain in every result/audit record and are never silently dropped. The addressable counts 208/85/294 are the denominators for Stage-1 tail evaluation because that is the population on which A/B/C exists.
+
+No target, feature, model, alpha, market field, materiality threshold, bootstrap rule, tail definition, production science, M38/R15 rule, or go/stop logic changes.
+''')
+
+          wf = Path('.github/workflows/research-wr-phase4c-stage1-pass-volume-preflight-v1.yml')
+          w = wf.read_text()
+          anchor = '            docs/research/WR_PHASE4C_STAGE1_PASS_VOLUME_SOURCE_AUDIT.md\n'
+          repl = anchor + '            docs/research/WR_PHASE4C_STAGE1_LAYER2_DOMAIN_AMENDMENT_V1.md\n'
+          if anchor not in w:
+              raise SystemExit('preflight upload anchor not found')
+          wf.write_text(w.replace(anchor, repl, 1))
+          PY
+
+      - name: Commit blinded amendment
+        run: |
+          git config user.name "dkaps6"
+          git config user.email "drekapsalis@gmail.com"
+          git add scripts/research/evaluate_wr_phase4c_stage1_pass_volume_predictor_v1.py \
+                  docs/research/WR_PHASE4C_STAGE1_LAYER2_DOMAIN_AMENDMENT_V1.md \
+                  .github/workflows/research-wr-phase4c-stage1-pass-volume-preflight-v1.yml
+          git diff --cached --check
+          git commit -m "research: amend Stage1 Layer2 tail domain blind"
+          git push origin HEAD:research-wr-phase4c-stage1-pass-volume-predictor-v1
