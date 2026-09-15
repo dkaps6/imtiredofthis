@@ -1,0 +1,61 @@
+name: WR Phase4B Authority Schema Audit V1
+
+on:
+  push:
+    branches:
+      - research-wr-phase4-authority-exact-opportunity-attribution-v1
+    paths:
+      - '.github/workflows/research-wr-phase4b-schema-audit-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  schema-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      AUTHORITY_RUN_ID: '34238301577'
+      AUTHORITY_ARTIFACT_ID: '10061328722'
+      AUTHORITY_ARTIFACT_NAME: wr-r15-wr1-anchor-participation-v1
+      AUTHORITY_DIGEST: sha256:8df31b5e136621d959272daf0422dfc665593cd0da2eb0892b4aa69c1417f3ce
+      AUTHORITY_ROOT: /tmp/wr_r15_artifact/backtests/wr_r15_wr1_anchor_v1
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify and download exact authority artifact
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${AUTHORITY_RUN_ID}/artifacts" > /tmp/a.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          p=json.loads(Path('/tmp/a.json').read_text())
+          a=[x for x in p['artifacts'] if int(x['id'])==int(os.environ['AUTHORITY_ARTIFACT_ID'])]
+          assert len(a)==1
+          a=a[0]
+          assert a['name']==os.environ['AUTHORITY_ARTIFACT_NAME']
+          assert a['digest']==os.environ['AUTHORITY_DIGEST']
+          assert not a['expired']
+          print('authority lineage PASS')
+          PY
+          rm -rf /tmp/wr_r15_artifact && mkdir -p /tmp/wr_r15_artifact
+          gh run download "${AUTHORITY_RUN_ID}" --repo "${GITHUB_REPOSITORY}" --name "${AUTHORITY_ARTIFACT_NAME}" --dir /tmp/wr_r15_artifact
+      - name: Print headers only
+        run: |
+          python - <<'PY'
+          import csv, os
+          from pathlib import Path
+          root=Path(os.environ['AUTHORITY_ROOT'])
+          for name in ['wr_r15_confirmation_predictions.csv','wr_r15_confirmation_features.csv','wr_r15_conservation_audit.csv']:
+              p=root/name
+              with p.open(newline='') as f:
+                  hdr=next(csv.reader(f))
+              print(name)
+              print('|'.join(hdr))
+          PY
