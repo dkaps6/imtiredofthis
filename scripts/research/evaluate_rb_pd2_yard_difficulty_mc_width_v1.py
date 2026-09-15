@@ -26,7 +26,6 @@ from scripts.research.evaluate_rb_pd2_multiseason_current_route_v1 import (
     num,
     read,
     team,
-    verify_m95q_parity,
 )
 
 ITERATIONS = 2000
@@ -38,6 +37,49 @@ TAIL_THRESHOLDS = (50.0, 75.0, 100.0)
 EXPECTED_PARENT_ROWS = 5607
 EXPECTED_PARENT_SCOREABLE = 4652
 IDENTITY = ["season", "week", "team", "opponent", "player_key", "market"]
+REQUIRED_FRESH_DISPOSITION = "MULTISEASON_RB_PLAYER_ERROR_PERSISTENCE_REPRODUCED"
+
+
+def verify_fresh_source_revalidation(fresh_root: Path) -> tuple[dict, pd.DataFrame]:
+    """Fail-closed check of the fresh-source PD2 replication (Issue #535, GPT-5.6,
+    comment 5689291516, DIRECT_FRESH_REVALIDATION_ALLOWED).
+
+    Supersedes the original PR #556 verify_m95q_parity() gate: that gate was
+    provenance certification for M95Q's downstream stable-workhorse role-model
+    family, which this width candidate never consumes, and its own upstream
+    dependency (an M91-temporal-baseline artifact) has since expired. This
+    checks the invariant that actually matters instead: that the PD2
+    difficulty-persistence signal this width candidate is built on still
+    replicates, unchanged scientifically, on the current (fresh, potentially
+    drifted) production-equivalent source -- not merely that a fresh rebuild
+    is internally self-consistent.
+    """
+    result = json.loads((fresh_root / "rb_pd2_fresh_result.json").read_text())
+    manifest = pd.read_csv(fresh_root / "rb_pd2_fresh_identity_manifest.csv")
+    manifest.columns = [str(c).strip().lower() for c in manifest.columns]
+
+    checks = {
+        "target_seasons_exact": bool(result.get("target_seasons") == TARGET_SEASONS
+                                      and result.get("source_parity", {}).get("target_seasons_exact") is True),
+        "zero_2025_rows": bool(result.get("source_parity", {}).get("zero_2025_rows") is True),
+        "unique_identity_contract_pass": bool(result.get("source_parity", {}).get("unique_identity_contract_pass") is True),
+        "zero_sportsbook_inputs": bool(result.get("sportsbook_inputs_used") is False),
+        "zero_production_change": bool(result.get("production_changed") is False),
+        "yard_difficulty_replicated_on_fresh_source": bool(
+            result.get("disposition") == REQUIRED_FRESH_DISPOSITION
+            and result.get("yard_width_unlocked") is True
+            and "YARD_DIFFICULTY_PERSISTENCE" in (result.get("replicated_diagnostics") or [])
+        ),
+        "identity_manifest_present": bool(len(manifest) > 0),
+    }
+    if not all(checks.values()):
+        raise RuntimeError(f"fresh-source PD2 revalidation failed: {checks}")
+    return {
+        "verification_method": "FRESH_SOURCE_STRUCTURAL_REVALIDATION_V1",
+        "fresh_m91_source_run_id": result.get("source_parity", {}).get("fresh_m91_source_run_id"),
+        "yard_width_unlocked_on_fresh_source": True,
+        "checks": checks,
+    }, manifest
 
 
 def strict_prior_difficulty_scores(wf: pd.DataFrame) -> pd.DataFrame:
@@ -353,8 +395,9 @@ def evaluate_gates(casebook: pd.DataFrame, checks: dict[str, float], parent_sour
     ref_prior = pd.to_numeric(casebook.difficulty_reference_max_ord, errors="coerce")
     recent = by_season.set_index("season")
     gates = {
-        "A_m95q_source_parity": bool(parity.get("m91_universe_2024_pass") and parity.get("downstream_2024_parity_pass") and parity.get("m95q_disposition") == "M95Q_EXPANDED_PANEL_READY"),
+        "A_fresh_source_revalidated": bool(parity.get("yard_width_unlocked_on_fresh_source") is True),
         "A_parent_panel_matches_556": bool(parent_source_rows == EXPECTED_PARENT_ROWS and parent_scoreable_rows == EXPECTED_PARENT_SCOREABLE),
+        "A_parent_identity_matches_fresh_revalidation": bool(parity.get("identity_exact_match_fresh_revalidation") is True),
         "A_prior_season_only_ensemble_weights": bool(checks.get("prior_season_weight_lineage_pass", False)),
         "A_target_seasons_exact_no_2025": bool(set(casebook.season.astype(int).unique()) == set(TARGET_SEASONS) and not casebook.season.eq(2025).any()),
         "A_raw_mc_reproduces_source": bool(checks["max_abs_raw_mc_vs_source_mc_proj"] <= 1e-8),
@@ -433,9 +476,20 @@ def evaluate_gates(casebook: pd.DataFrame, checks: dict[str, float], parent_sour
 
 def run(component_root: Path, parity_root: Path, distribution_root: Path, out_dir: Path) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
-    parity = verify_m95q_parity(parity_root)
+    parity, fresh_identity = verify_fresh_source_revalidation(parity_root)
     parent_panel, weights = build_panel(component_root)
     wf = build_wf(parent_panel)
+
+    # A_parent_identity_matches_fresh_revalidation: not merely the same row
+    # count (EXPECTED_PARENT_ROWS below already checks that) but the exact
+    # same (season, week, team, player_key) identity set the fresh PD2
+    # replication just re-earned its authorization on -- per GPT-5.6's ask.
+    own_identity = parent_panel[["season", "week", "team", "player_key"]].drop_duplicates()
+    own_keys = set(map(tuple, own_identity.itertuples(index=False, name=None)))
+    fresh_keys = set(map(tuple, fresh_identity[["season", "week", "team", "player_key"]].itertuples(index=False, name=None)))
+    identity_match = bool(own_keys == fresh_keys)
+    parity["identity_exact_match_fresh_revalidation"] = identity_match
+    parity["identity_symmetric_difference_count"] = len(own_keys ^ fresh_keys)
     parent_scoreable = int((pd.to_numeric(wf.prior_games, errors="coerce") >= MIN_PRIOR).sum())
     scored = strict_prior_difficulty_scores(wf)
     lineage = build_yard_lineage(component_root, parent_panel)

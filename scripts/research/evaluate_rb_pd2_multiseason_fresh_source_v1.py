@@ -70,6 +70,9 @@ def main() -> int:
         "production_changed": False,
     }
 
+    panel[["season", "week", "team", "player_key"]].drop_duplicates().sort_values(
+        ["season", "week", "team", "player_key"]
+    ).to_csv(a.out_dir / "rb_pd2_fresh_identity_manifest.csv", index=False)
     panel.to_csv(a.out_dir / "rb_pd2_fresh_parent_panel.csv", index=False)
     weights.to_csv(a.out_dir / "rb_pd2_fresh_weights.csv", index=False)
     wf.to_csv(a.out_dir / "rb_pd2_fresh_walkforward_casebook.csv", index=False)

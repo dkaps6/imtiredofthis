@@ -162,24 +162,33 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           for SEASON in 2020 2021 2022 2023 2024; do
             mkdir -p "evidence/m91/${SEASON}"
             gh run download "$M95Q_RUN_ID" --repo "$GITHUB_REPOSITORY" \
               --name "m95q-m91-${SEASON}" \
-              --dir "evidence/m91/${SEASON}"
-            test -s "evidence/m91/${SEASON}/component_predictions.csv"
+              --dir "/tmp/dl_m91_${SEASON}"
+            SRC=$(find "/tmp/dl_m91_${SEASON}" -name "component_predictions.csv" | head -1)
+            test -s "$SRC"
+            cp "$SRC" "evidence/m91/${SEASON}/component_predictions.csv"
           done
-      - name: Download exact M95Q final parity artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
+      # Supersedes the old "Download exact M95Q final parity artifact" step.
+      # Per Issue #535 (GPT-5.6, DIRECT_FRESH_REVALIDATION_ALLOWED, comment
+      # 5689291516): the old migration-95q-rb-expanded-historical-stable-workhorse
+      # parity artifact certified M95Q's downstream stable-workhorse role-model
+      # family, which this width candidate never consumes, and its own upstream
+      # dependency has since expired. Re-run the actual invariant that matters
+      # (PD2 difficulty-persistence still replicates on this fresh source)
+      # inline here instead of depending on a separately pinned artifact.
+      - name: Rerun frozen PD2 multiseason science on this run's fresh M91 source
         run: |
-          mkdir -p evidence/m95q
-          gh run download "$M95Q_RUN_ID" --repo "$GITHUB_REPOSITORY" \
-            --name migration-95q-rb-expanded-historical-stable-workhorse \
-            --dir evidence/m95q
-          test -s evidence/m95q/m95q_disposition.csv
-          test -s evidence/m95q/m95q_2024_m91_universe_parity.csv
-          test -s evidence/m95q/m95q_2024_parity_audit.csv
+          mkdir -p evidence/pd2_fresh
+          python scripts/research/evaluate_rb_pd2_multiseason_fresh_source_v1.py \
+            --root evidence/m91 \
+            --source-run-id "$M95Q_RUN_ID" \
+            --out-dir evidence/pd2_fresh
+          test -s evidence/pd2_fresh/rb_pd2_fresh_result.json
+          test -s evidence/pd2_fresh/rb_pd2_fresh_identity_manifest.csv
       - name: Download reconstructed MC distribution shards
         uses: actions/download-artifact@v4
         with:
@@ -190,7 +199,7 @@ jobs:
         run: |
           python scripts/research/evaluate_rb_pd2_yard_difficulty_mc_width_v1.py \
             --component-root evidence/m91 \
-            --parity-root evidence/m95q \
+            --parity-root evidence/pd2_fresh \
             --distribution-root evidence/distributions \
             --out-dir evidence/result
       - name: Show frozen disposition
