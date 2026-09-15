@@ -7,16 +7,24 @@ import pandas as pd
 
 from scripts.research import audit_wr_phase4b_prior_roster_gsis_alias_v2 as strict
 from scripts.research import audit_wr_phase4b_identity_temporal_ablation_v3 as static
+from scripts.utils.player_identity_v3 import player_name_key
 
 
 def main() -> int:
     # Two aliases: Alpha has strictly-prior evidence; Beta first appears target week.
+    alpha = player_name_key("Alpha Receiver")
+    beta = player_name_key("Beta Receiver")
+    brandon = player_name_key("Brandon Smith")
     full_index = {
-        "alpha receiver": [(2023, 1, "AAA", "00-001")],
-        "beta receiver": [(2023, 5, "BBB", "00-002")],
-        "brandon smith": [(2024, 15, "NYJ", "00-010"), (2024, 15, "NYJ", "00-011")],
+        alpha: [(2023, 1, "AAA", "00-001")],
+        beta: [(2023, 5, "BBB", "00-002")],
+        brandon: [(2024, 15, "NYJ", "00-010"), (2024, 15, "NYJ", "00-011")],
     }
-    base_index = dict(full_index)
+    base_index = {
+        player_name_key("Alpha Receiver", strip_suffix=True): [(2023, 1, "AAA", "00-001")],
+        player_name_key("Beta Receiver", strip_suffix=True): [(2023, 5, "BBB", "00-002")],
+        player_name_key("Brandon Smith", strip_suffix=True): [(2024, 15, "NYJ", "00-010"), (2024, 15, "NYJ", "00-011")],
+    }
     counts = pd.DataFrame([
         {"season": 2023, "week": 4, "team": "AAA", "receiver_id": "00-001", "pbp_targets": 7.0},
         {"season": 2023, "week": 5, "team": "BBB", "receiver_id": "00-002", "pbp_targets": 3.0},
