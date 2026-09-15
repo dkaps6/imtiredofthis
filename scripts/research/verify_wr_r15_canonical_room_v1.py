@@ -128,6 +128,11 @@ def main() -> int:
 
     # Full sorted list of exactly-complete team-game keys (identity-set
     # definition) so this can be diffed directly against GPT's own list.
+    # Also flag anchor presence per key to test GPT's explanation (comment
+    # 5673565674) that the 79-71 gap is entirely anchor-absent team-games
+    # where the (empty) prediction set trivially equals the (anchor-less)
+    # canonical set.
+    anchor_keys = set(zip(anchor_present["season"], anchor_present["week"], anchor_present["team"]))
     complete_keys = []
     for key, cgrp in canonical.groupby(["season", "week", "team"]):
         canonical_set = set(cgrp[id_col])
@@ -137,9 +142,19 @@ def main() -> int:
         if set(pgrp[id_col]) == canonical_set:
             complete_keys.append(key)
     complete_keys.sort()
-    print(f"\nfull sorted list of {len(complete_keys)} identity-set-complete team-game keys (season, week, team):")
+    print(f"\nfull sorted list of {len(complete_keys)} identity-set-complete team-game keys (season, week, team), anchor flag:")
     for k in complete_keys:
-        print(" ", k)
+        print(" ", k, "anchor_present" if k in anchor_keys else "NO_ANCHOR")
+
+    complete_with_anchor = [k for k in complete_keys if k in anchor_keys]
+    complete_without_anchor = [k for k in complete_keys if k not in anchor_keys]
+    print(f"\ncomplete AND anchor-present (GPT's stricter 'full WR room' definition): {len(complete_with_anchor)}")
+    print(f"complete but anchor-ABSENT (the disputed subset): {len(complete_without_anchor)}")
+    print(f"\nGPT's claim: the 79-71={79-71} gap is entirely the anchor-absent set.")
+    if len(complete_with_anchor) == 71 and len(complete_without_anchor) == 8:
+        print("CONFIRMED: anchor-present-and-complete count is exactly 71, anchor-absent-and-complete count is exactly 8. GPT's explanation is correct.")
+    else:
+        print(f"NOT CONFIRMED: anchor-present-and-complete = {len(complete_with_anchor)}, anchor-absent-and-complete = {len(complete_without_anchor)} -- does not exactly match GPT's explanation, needs further digging.")
 
     return 0
 
