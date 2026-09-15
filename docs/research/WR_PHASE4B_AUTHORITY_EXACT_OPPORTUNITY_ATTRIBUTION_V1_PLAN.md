@@ -8,7 +8,8 @@ This plan follows:
 - canonical WR-R15 authority run `34238301577`, artifact `10061328722`, digest `sha256:8df31b5e136621d959272daf0422dfc665593cd0da2eb0892b4aa69c1417f3ce`;
 - canonical Phase 4A source reconciliation run `34919390334`, artifact `10376694364`, digest `sha256:069dfe4d935d58e9fd232dea9c08ae07a306ade811e7382ccf5f5b23d4c89548`;
 - Claude anchor-presence reconciliation run `34919926239`, which confirms `71` genuinely full graded WR rooms and `8` anchor-absent identity-set matches;
-- Claude Phase 4B adversarial review comment `5673594282`.
+- Claude Phase 4B adversarial review comment `5673594282`;
+- Claude final qualified review pass comment `5673644009`.
 
 The 2023 and 2024 WR-R15 authority seasons are diagnostic evidence only. They are not a fresh validation set for any later challenger.
 
@@ -92,6 +93,14 @@ Report pooled + season:
 - which component is larger in absolute magnitude by row;
 - distributions of actual/predicted team target pool and WR-room share.
 
+### Anchor-observability disclosure
+
+Because Layers 2–3 condition on an observable WR1 anchor, the result must disclose whether the excluded `62` team-games appear structurally different from the included `1,026` on cheap pre-existing cohort descriptors. Report at minimum:
+- season counts/share in the included vs excluded groups;
+- week-number distribution (mean, median, min, max and counts by week bucket) for included vs excluded groups.
+
+This is a coverage/generalizability disclosure only. It cannot override or rescue any Layer 2–3 result.
+
 ### Off-model target-mass disclosure
 
 On the same 1,026 anchor-observable team-games, separately calculate weekly targets credited to raw-position WRs **outside** the canonical modeled-room identity set.
@@ -122,9 +131,17 @@ Population: all `5,321` canonical WR2+ feature rows. This is a diagnostic extens
 For each WR2+ identity:
 - baseline predicted targets = `baseline_entitlement_tgt_share × implied_team_target_pool`;
 - R15 predicted targets = `candidate_entitlement_tgt_share × same implied_team_target_pool`;
-- actual targets = cleared weekly actual target count for that exact feature identity; a missing weekly row may be treated as zero only if the weekly source convention establishes that the player had zero targets rather than an unresolved identity.
+- actual targets = cleared weekly actual target count for that exact feature identity.
 
-Compare baseline vs R15 on the exact same 5,321 identities:
+### Layer-4 actual-target identity status
+
+Every one of the 5,321 feature identities must receive one explicit status:
+- `EXACT_WEEKLY_MATCH`: exact `(season, week, team, player_clean_key)` row exists in the cleared weekly source; use its explicit `targets` value, including an explicit zero if present.
+- `UNRESOLVED_WEEKLY_IDENTITY`: no exact weekly row exists. **Do not silently impute zero and do not silently drop before reporting.** Count these rows explicitly (n and % pooled + by season), preserve their keys in an audit output, and exclude them from target MAE/RMSE/bias/share-MAE/toward-away calculations.
+
+No absent weekly row is treated as a verified zero merely because it is absent. A zero is used only when the source contains an explicit exact-identity row with `targets == 0`. If unresolved coverage is non-zero, every Layer-4 metric must report its resolved-row denominator and the result document must flag the coverage limitation. This fail-closed rule cannot be relaxed post-result.
+
+Compare baseline vs R15 on the exact same resolved subset of the 5,321 identities:
 - target MAE;
 - RMSE;
 - signed bias;
@@ -137,11 +154,28 @@ Compare baseline vs R15 on the exact same 5,321 identities:
 
 Established program-level meaningful target-MAE scale is `0.05` targets/player-game (same order used in prior WR target-model gating).
 
-- If R15 improves full-5,321 target MAE pooled and does not regress either season by >=0.05, classify `R15_WR2PLUS_ALLOCATION_HEALTHY_OR_IMPROVED` and do not blame R15.
-- If R15 worsens full-5,321 target MAE by >=0.05 pooled **and** worsens target MAE in both 2023 and 2024, classify `R15_WR2PLUS_ALLOCATION_STRUCTURED_ERROR` as a diagnostic finding only. A challenger still requires a separately frozen hypothesis and genuinely fresh validation route.
+- If R15 improves full resolved Layer-4 target MAE pooled and does not regress either season by >=0.05, classify `R15_WR2PLUS_ALLOCATION_HEALTHY_OR_IMPROVED` and do not blame R15.
+- If R15 worsens full resolved Layer-4 target MAE by >=0.05 pooled **and** worsens target MAE in both 2023 and 2024, classify `R15_WR2PLUS_ALLOCATION_STRUCTURED_ERROR` as a diagnostic finding only. A challenger still requires a separately frozen hypothesis and genuinely fresh validation route.
 - Otherwise classify `R15_WR2PLUS_ALLOCATION_MIXED_OR_SMALL`; diagnose only, no challenger.
 
 RMSE/share-MAE/toward-away counts are corroborating diagnostics and cannot override the frozen target-MAE disposition by themselves.
+
+### Required uncertainty context for the 0.05 rule
+
+The `0.05` threshold does **not** change and the disposition is not made conditional on significance. But the result must report uncertainty for the paired target-MAE delta so the threshold is not presented without noise context.
+
+Define per resolved player-row:
+`d_i = abs(R15_pred_targets_i - actual_targets_i) - abs(baseline_pred_targets_i - actual_targets_i)`.
+
+Report the observed mean `d_i` (which equals R15 MAE minus baseline MAE) plus a 95% confidence interval:
+- bootstrap unit = `(season, week, team)` team-game, preserving all WR2+ rows within the resampled cluster;
+- pooled bootstrap is stratified by season so each replicate resamples 2023 team-games within 2023 and 2024 team-games within 2024, then recombines;
+- season-specific bootstrap resamples team-games within that season;
+- `10,000` bootstrap replicates;
+- deterministic seed `20260915`;
+- percentile 2.5% / 97.5% interval.
+
+These CIs are reporting context only and cannot override the frozen 0.05 target-MAE disposition.
 
 ## Program-level interpretation tree
 
@@ -156,10 +190,10 @@ No post-result threshold changes, cohort reshaping, role-only rescue, sportsbook
 
 ## Pre-execution review gate
 
-No Phase 4B attribution run is authorized until Claude independently reviews this exact revised contract, including:
-- symmetric zero-target handling;
-- the 1,026 anchor-observable scope for Layers 2–3;
-- canonical-identity restriction for actual WR-room targets;
-- off-model target-mass disclosure;
-- all-5,321 WR2+ Layer 4 diagnostic extension;
-- frozen `0.05` target-MAE materiality rule for the R15-specific disposition.
+Claude's final review comment `5673644009` returned a qualified `REVIEW_PASS` on the frozen math, conditional only on:
+- explicit fail-closed unresolved-identity handling in Layer 4;
+- uncertainty reporting (SE/CI context) alongside the frozen 0.05 MAE materiality threshold.
+
+Both are now frozen above. The requested anchor-observability disclosure is also frozen as a reporting-only addition.
+
+Next authorized step: implementation + synthetic/parity tests only, followed by Claude implementation review. No Phase 4B attribution outcome run is authorized before that code-level review passes.
