@@ -1,6 +1,9 @@
 name: SCRATCH Diag RB PD2 W3 2023 Mismatch
 
 on:
+  push:
+    branches:
+      - scratch-diag-rb-pd2-w3-2023-mismatch
   workflow_dispatch:
 
 env:
