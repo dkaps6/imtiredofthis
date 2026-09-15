@@ -1,0 +1,125 @@
+name: WR Phase4C Stage1 Pass Volume Preflight V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-wr-phase4c-stage1-pass-volume-predictor-v1
+    paths:
+      - "scripts/research/evaluate_wr_phase4c_stage1_pass_volume_predictor_v1.py"
+      - "tests/test_evaluate_wr_phase4c_stage1_pass_volume_predictor_v1.py"
+      - "docs/research/WR_PHASE4C_STAGE1_PASS_VOLUME_PREDICTOR_V1_PLAN.md"
+      - "docs/research/WR_PHASE4C_STAGE1_PASS_VOLUME_SOURCE_AUDIT.md"
+      - ".github/workflows/research-wr-phase4c-stage1-pass-volume-preflight-v1.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      PHASE4B_ARTIFACT_ID: "10404525877"
+      PHASE4B_DIGEST: "sha256:0dad0dbc91a4bd6aa3e3f45cbc62e8ed493ca7bf2c95daaa0c4028a54a0fd0d4"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest scikit-learn
+
+      - name: Run focused Stage1 synthetic tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_evaluate_wr_phase4c_stage1_pass_volume_predictor_v1.py
+
+      - name: Verify canonical Phase4B artifact metadata and digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          meta="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${PHASE4B_ARTIFACT_ID}")"
+          echo "$meta" > /tmp/phase4b_artifact_metadata.json
+          actual_digest="$(printf '%s' "$meta" | jq -r '.digest')"
+          actual_expired="$(printf '%s' "$meta" | jq -r '.expired')"
+          echo "artifact=${PHASE4B_ARTIFACT_ID} digest=${actual_digest} expired=${actual_expired}"
+          test "$actual_digest" = "$PHASE4B_DIGEST"
+          test "$actual_expired" = "false"
+
+      - name: Download exact Phase4B authority artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/phase4b /tmp/stage1_preflight /tmp/phase4b.zip
+          mkdir -p /tmp/phase4b /tmp/stage1_preflight
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${PHASE4B_ARTIFACT_ID}/zip" > /tmp/phase4b.zip
+          unzip -q /tmp/phase4b.zip -d /tmp/phase4b
+          find /tmp/phase4b -maxdepth 3 -type f -print | sort
+          test -f /tmp/phase4b/wr_phase4b_attribution_v2/phase4b_layer2_3_team_game_detail.csv
+          test -f /tmp/phase4b/wr_phase4b_attribution_v2/phase4b_layer1_yard_decomposition.csv
+
+      - name: Run sealed Stage1 preflight only
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/evaluate_wr_phase4c_stage1_pass_volume_predictor_v1.py \
+            --phase4b-dir /tmp/phase4b/wr_phase4b_attribution_v2 \
+            --out-dir /tmp/stage1_preflight \
+            --preflight-only
+
+      - name: Enforce blind-output seal and preflight contract
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+
+          root = Path('/tmp/stage1_preflight')
+          p = root / 'stage1_preflight.json'
+          sealed = root / 'stage1_sealed_2024_predictions.csv'
+          assert p.exists(), p
+          assert sealed.exists(), sealed
+          assert not (root / 'stage1_result.json').exists(), 'blind outcome result unexpectedly exists'
+
+          j = json.loads(p.read_text())
+          assert j['blind_2024_outcomes_scored'] is False
+          assert j['production_change'] is False
+          assert j['source_lineage']['market_lineage_in_script_target_or_rolling_priors'] == 0
+          assert j['sealed_2024']['contains_actual_team_targets'] is False
+          assert j['sealed_2024']['contains_actual_wr_room_targets'] is False
+          assert j['sealed_2024']['contains_realized_pass_volume'] is False
+          assert j['sealed_2024']['coverage'] >= 0.95
+          assert j['sealed_2024']['primary_tail_coverage'] >= 0.95
+          assert j['temporal_integrity']['target_or_future_rows_used_in_rolling_features'] == 0
+
+          x = pd.read_csv(sealed)
+          forbidden = {'actual_team_targets', 'actual_wr_room_targets', 'realized_pass_volume'}
+          assert forbidden.isdisjoint(x.columns), sorted(forbidden & set(x.columns))
+          required = {'pool_A0','pool_A','pool_B','pool_C','pred_realized_pass_volume','market_total','game_id'}
+          assert required.issubset(x.columns), sorted(required - set(x.columns))
+          assert len(x) >= 490
+          print('SEALED_STAGE1_PREFLIGHT_CONTRACT_PASS', len(x))
+          PY
+
+      - name: Upload sealed preflight artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-phase4c-stage1-pass-volume-preflight-v1
+          path: |
+            /tmp/stage1_preflight/stage1_preflight.json
+            /tmp/stage1_preflight/stage1_sealed_2024_predictions.csv
+            /tmp/phase4b_artifact_metadata.json
+            docs/research/WR_PHASE4C_STAGE1_PASS_VOLUME_PREDICTOR_V1_PLAN.md
+            docs/research/WR_PHASE4C_STAGE1_PASS_VOLUME_SOURCE_AUDIT.md
+          if-no-files-found: error
+          retention-days: 14
