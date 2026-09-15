@@ -1,0 +1,81 @@
+name: SCRATCH Diag RB PD2 W3 2023 Mismatch
+
+on:
+  workflow_dispatch:
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  M95Q_RUN_ID: '33450395426'
+
+jobs:
+  diag:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml scikit-learn joblib
+      - name: Download original M95Q migration artifact (full inputs, if present)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/m95q_original
+          gh run download "$M95Q_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "migration-95q-rb-expanded-historical-stable-workhorse" \
+            --dir evidence/m95q_original
+          echo "=== top-level structure ==="
+          find evidence/m95q_original -maxdepth 4 -type d | sort
+          echo "=== files matching 2023/team_weekly/defense ==="
+          find evidence/m95q_original -iname "*2023*" -o -iname "*team_weekly*" -o -iname "*defense*" | sort
+      - name: Rebuild fresh 2023 historical inputs (same as PD2 workflow)
+        run: |
+          SEASON=2023
+          PRIOR=2022
+          D="data/backtests/rb_pd2_yard_width/${SEASON}"
+          mkdir -p "$D"
+          python scripts/backtest/build_historical_inputs.py \
+            --season "$SEASON" --prior-season "$PRIOR" --weeks '1-18' --out-dir "$D"
+          python scripts/backtest/enrich_historical_defense.py \
+            --team-weekly "$D/team_weekly_history.csv" \
+            --seasons "$PRIOR,$SEASON" \
+            --audit "$D/historical_defense_enrichment_audit.csv" \
+            --observations "$D/historical_defense_observations.csv"
+      - name: Compare fresh vs original inputs for the mismatched W3 games
+        run: |
+          set -x
+          D="data/backtests/rb_pd2_yard_width/2023"
+          echo "=== fresh team_weekly_history.csv columns ==="
+          head -1 "$D/team_weekly_history.csv"
+          echo "=== fresh W3 rows for DET/ATL/CLE/TEN/NO/GB ==="
+          python3 - <<'PYEOF'
+          import pandas as pd
+          df = pd.read_csv("data/backtests/rb_pd2_yard_width/2023/team_weekly_history.csv")
+          df.columns = [c.strip().lower() for c in df.columns]
+          teams = {"DET","ATL","CLE","TEN","NO","GB"}
+          sub = df[(df["season"]==2023) & (df["week"]==3) & (df["team"].isin(teams))]
+          pd.set_option("display.max_columns", None)
+          pd.set_option("display.width", 220)
+          print(sub.to_string())
+          PYEOF
+          echo "=== does an original defense/team_weekly artifact exist to diff against? ==="
+          find evidence/m95q_original -iname "*.csv" | xargs -I{} sh -c 'echo ===={}====; head -1 "{}"' 2>/dev/null | head -200
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-pd2-w3-2023-mismatch-diag
+          path: |
+            data/backtests/rb_pd2_yard_width/2023/team_weekly_history.csv
+            data/backtests/rb_pd2_yard_width/2023/historical_defense_enrichment_audit.csv
+            data/backtests/rb_pd2_yard_width/2023/historical_defense_observations.csv
+          retention-days: 14
+          if-no-files-found: warn
