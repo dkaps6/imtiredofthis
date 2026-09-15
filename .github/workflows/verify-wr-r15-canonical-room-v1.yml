@@ -1,0 +1,53 @@
+name: Verify WR-R15 Canonical Room V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/verify-wr-r15-canonical-room-v1
+    paths:
+      - '.github/workflows/verify-wr-r15-canonical-room-v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      AUTHORITY_RUN_ID: '34238301577'
+      AUTHORITY_ARTIFACT_NAME: wr-r15-wr1-anchor-participation-v1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pandas numpy
+
+      - name: Download exact WR-R15 authority artifact
+        run: |
+          rm -rf /tmp/wr_r15_artifact
+          mkdir -p /tmp/wr_r15_artifact
+          gh run download "${AUTHORITY_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name "${AUTHORITY_ARTIFACT_NAME}" \
+            --dir /tmp/wr_r15_artifact
+          find /tmp/wr_r15_artifact -maxdepth 4 -type f -name "*.csv" | sort
+
+      - name: Run independent canonical-room reconciliation check
+        run: |
+          python -m scripts.research.verify_wr_r15_canonical_room_v1 \
+            --predictions /tmp/wr_r15_artifact/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_predictions.csv \
+            --features /tmp/wr_r15_artifact/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_features.csv
