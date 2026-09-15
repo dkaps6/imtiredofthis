@@ -101,10 +101,27 @@ def main() -> int:
     print("\n" + "=" * 70)
     print("3) ACTUAL-OUTCOME MATCH COMPLETENESS")
     print("=" * 70)
-    detail = pd.read_csv(args.graded_detail, low_memory=False)
-    detail.columns = [c.strip().lower() for c in detail.columns]
-    unmatched = detail.loc[~detail["has_actual"]] if "has_actual" in detail.columns else pd.DataFrame()
-    print(f"total selected bet rows: {len(detail)}")
+    # IMPORTANT: the graded-detail CSV the grading script writes is already
+    # filtered to has_actual==True rows only (grade_matched_rows() drops
+    # unmatched rows before writing it) -- reading it back can never show an
+    # unmatched row. Reconstruct the true pre-filter population instead by
+    # calling the grading script's own functions directly on the archived
+    # board + real actual stats, so "0 unmatched" can't be a false read of
+    # an already-filtered file.
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from scripts.operations.grade_market_track_record_v1 import (
+        load_boards, select_model_bet, load_actual_stats, match_bets_to_actuals,
+    )
+
+    board = load_boards(args.season, [args.week])
+    bets = select_model_bet(board)
+    actual = load_actual_stats(args.season, [args.week])
+    full_detail = match_bets_to_actuals(bets, actual)
+    full_detail.columns = [c.strip().lower() for c in full_detail.columns]
+
+    unmatched = full_detail.loc[~full_detail["has_actual"]] if "has_actual" in full_detail.columns else pd.DataFrame()
+    print(f"total selected bet rows across the 5 gradeable markets: {len(full_detail)}")
     print(f"rows with NO matching actual-stat row: {len(unmatched)}")
     if len(unmatched):
         print("\nunmatched rows (player/team/market/week) -- checking why:")
@@ -115,18 +132,22 @@ def main() -> int:
         # this season (any week), to distinguish "did not play this week" from
         # "genuine identity/join gap".
         if "player_clean_key" in unmatched.columns:
-            raw = nfl.load_player_stats(seasons=[args.season], summary_level="week")
-            stats = _to_pandas(raw)
-            stats.columns = [str(c).strip().lower() for c in stats.columns]
+            season_stats = load_actual_stats(args.season, [])
+            season_stats.columns = [c.strip().lower() for c in season_stats.columns]
             for key in unmatched["player_clean_key"].dropna().unique():
-                rows = stats.loc[stats.get("player_clean_key", pd.Series(dtype=str)).eq(key)] if "player_clean_key" in stats.columns else pd.DataFrame()
+                rows = season_stats.loc[season_stats["player_clean_key"].eq(key)] if "player_clean_key" in season_stats.columns else pd.DataFrame()
                 if rows.empty:
-                    # try name-based fallback since stats frame here is raw (unnormalized)
-                    name_col = "player_display_name" if "player_display_name" in stats.columns else None
-                    print(f"  {key}: 0 rows anywhere in {args.season} weekly stats under this key (genuine gap or key mismatch)")
+                    print(f"  {key}: 0 rows anywhere in {args.season} weekly stats under this normalized key "
+                          f"(genuine identity/key gap -- worth checking manually)")
                 else:
                     weeks_played = sorted(pd.to_numeric(rows.get("week"), errors="coerce").dropna().astype(int).unique().tolist())
-                    print(f"  {key}: appears in weeks {weeks_played} this season (not week {args.week} -> likely inactive/DNP that week)")
+                    print(f"  {key}: appears in weeks {weeks_played} this season (not week {args.week} -> inactive/DNP/bye that week)")
+
+    # Read the actual graded-detail CSV for the biggest-misses section below
+    # (correct to use here since it's already the has_actual==True subset,
+    # which is exactly what biggest-misses needs).
+    detail = pd.read_csv(args.graded_detail, low_memory=False)
+    detail.columns = [c.strip().lower() for c in detail.columns]
 
     print("\n" + "=" * 70)
     print("4) BIGGEST MISSES")
