@@ -1,6 +1,6 @@
 # WR Phase 4C — Tail Game-Script Gate V1
 
-**STATUS: PROPOSED/FROZEN BEFORE ANY GAME-SCRIPT ASSOCIATION OUTPUT. RESEARCH ONLY. NO MODEL/PRODUCTION/THRESHOLD CHANGE.**
+**STATUS: FROZEN BEFORE ANY GAME-SCRIPT ASSOCIATION OUTPUT. RESEARCH ONLY. NO MODEL/PRODUCTION/THRESHOLD CHANGE.**
 
 ## Authority and motivation
 
@@ -53,6 +53,16 @@ Join market descriptors by exact `(season, week, team)`.
 
 No player props. No sportsbook spend. No target-game feature engineering beyond the pregame schedule market descriptors above.
 
+### Phase 4B team-pool market-lineage disclosure
+
+`implied_team_target_pool` has **no market-total / spread / sportsbook lineage** in the frozen Phase 4B authority path:
+- Phase 4B reconstructs it algebraically as authority `pred_targets / entitlement_tgt_share` on positive-entitlement rows;
+- the promoted WR-R15 adapter explicitly forbids sportsbook inputs and its production/audit contract records `sportsbook_inputs_used=False`;
+- the R15 conservation artifact consumed by Phase 4B hard-fails if `sportsbook_inputs_used != 0`;
+- PR #558 independently documented that the shared historical `project_game_script()` engine did not read live spread/total.
+
+Therefore any Layer-2 association with the market descriptors is interpreted as **new descriptive mechanism evidence about a pregame signal absent from the authority pool**, not as rediscovery/recalibration of a signal already embedded in `implied_team_target_pool`.
+
 ### Frozen Layer-1 cohorts
 
 These counts are known from Phase 4B **before any game-script association is inspected**:
@@ -68,22 +78,49 @@ These counts are known from Phase 4B **before any game-script association is ins
 
 The 307 and 1,048 full-tail counts must **not** be described as all opportunity-dominant; only the explicit OPP_DOM subsets are.
 
+### Frozen cluster unit
+
+Every player-row bootstrap/enrichment uncertainty calculation in Section A uses **team-game clusters `(season, week, team)`**, stratified by season for pooled intervals. It must not cluster at `(season, week)` and must not treat individual WR rows as independent.
+
+### Frozen complement/control semantics
+
+For Section A continuous and enrichment comparisons:
+- **Primary complement** for each named event cohort = all `ALL` rows not in that cohort, preserving the broad population contrast.
+- **Named secondary directional control** = `OVERPROJECT_30_PLUS` for the primary underprojection cohorts (`UNDERPROJECT_30_PLUS` and `UNDERPROJECT_30_PLUS_OPP_DOM`).
+- The `OVERPROJECT_30_PLUS` cohort itself is disclosure-only and is not used as its own complement.
+
+Both are reported separately; they must not be conflated.
+
 ### Gate-0 reporting
 
 #### A. Player-tail enrichment by existing pregame market descriptors
 
-For every frozen cohort above, pooled and separately for 2023/2024:
+For every frozen event cohort above except `ALL`, pooled and separately for 2023/2024:
 - row count and base prevalence;
 - prevalence and enrichment ratio within each fixed PR #559 total bucket;
 - prevalence and enrichment ratio within each fixed PR #559 spread-magnitude bucket;
 - favorite vs underdog split using the sign of `market_team_spread`;
-- mean/median `market_total`, `market_team_implied`, `market_team_spread`, and `market_abs_spread` versus the complement cohort.
+- mean/median `market_total`, `market_team_implied`, `market_team_spread`, and `market_abs_spread` versus the primary complement cohort;
+- for the two underprojection cohorts, repeat the continuous comparison against the named `OVERPROJECT_30_PLUS` directional control.
 
-Use team-game-cluster bootstrap 95% CIs for prevalence/enrichment differences so multiple WR rows from one team-game are not treated as independent evidence.
+Use team-game-cluster bootstrap 95% CIs for prevalence/enrichment differences and continuous mean differences so multiple WR rows from one team-game are not treated as independent evidence.
 
 Primary player-tail read = `UNDERPROJECT_30_PLUS_OPP_DOM` (517 rows).
 Secondary confirmations = `ACTUAL_100_PLUS_OPP_DOM` (185) and full `UNDERPROJECT_30_PLUS` (809).
 The absolute-miss cohorts are continuity/sensitivity only.
+
+#### Comparison-space disclosure
+
+The output must disclose the complete Section-A comparison space, not only significant cells. With seven event cohorts and the frozen market views, the pooled player-tail table contains:
+- 5 total-bucket prevalence contrasts,
+- 5 spread-bucket prevalence contrasts,
+- 2 favorite/underdog prevalence contrasts,
+- 4 continuous-descriptor complement contrasts,
+for **16 pooled market comparisons per event cohort = 112 pooled cohort/market comparisons**.
+
+The same 112 cells are also reported separately in 2023 and 2024, yielding **336 total pooled+season-specific cohort/market cells** before the named directional-control repeats. The two underprojection cohorts add 4 continuous descriptors × 2 cohorts × 3 scopes (pooled/2023/2024) = **24 named directional-control cells**. These counts are fixed and must be printed in the result metadata.
+
+Condition 1 below is judged on the **primary cohort only**, but all 112/336/24 cells remain visible so the multiple-comparison exposure cannot be hidden.
 
 #### B. Layer-2 team-pool association
 
@@ -102,7 +139,7 @@ This is descriptive mechanism evidence only; no causal claim.
 Do **not** build the new realized-script predictor (Claude's proposed Arm C) unless Gate 0 shows a coherent market-only bridge between pregame script and the Phase 4B opportunity failure.
 
 `ADVANCE_TO_SCRIPT_PREDICTOR_DESIGN` requires all of:
-1. **Primary tail enrichment:** `UNDERPROJECT_30_PLUS_OPP_DOM` shows a non-null pregame market association with a cluster-bootstrap 95% CI excluding zero for at least one of the four frozen market descriptors/bucket families.
+1. **Primary tail enrichment:** `UNDERPROJECT_30_PLUS_OPP_DOM` shows a non-null pregame market association with a team-game-cluster-bootstrap 95% CI excluding zero for at least one of the frozen market descriptor/bucket views.
 2. **Season coherence:** the corresponding effect has the same direction in both 2023 and 2024; no pooled-only sign reversal.
 3. **Layer-2 coherence:** the same market concept also shows directionally coherent association with either signed/direct team-target-pool error or its magnitude. It cannot be only a player-row artifact with no team-pool connection.
 4. **Replication in one secondary tail definition:** either `ACTUAL_100_PLUS_OPP_DOM` or full `UNDERPROJECT_30_PLUS` must point in the same direction.
