@@ -16,7 +16,17 @@ on:
 
 env:
   PYTHONPATH: ${{ github.workspace }}
-  M95Q_RUN_ID: '33450395426'
+  # Repointed 2026-09-15: the original 33450395426 artifact (built 2026-08-31)
+  # no longer checksum-reconstructs -- 2023 W03 diverges by ~2.8 real yards
+  # across multiple teams/markets (DET/ATL, CLE/TEN, NO/GB), not floating-point
+  # noise. Weeks 1-2 still reconstruct to ~1e-13. The player-stats loader and
+  # team_weekly/defense-enrichment code are byte-identical between the two
+  # builds, so this is upstream nflverse data drift since 33450395426 was
+  # built, not a code bug in this PR. Repointing to a same-day fresh rebuild
+  # (35032590321) so both sides of the reconstruction checksum are built from
+  # the same current data. See scratch-diag-rb-pd2-w3-2023-mismatch branch for
+  # the diagnostic that found this.
+  M95Q_RUN_ID: '35032590321'
 
 jobs:
   helper-contract-tests:
