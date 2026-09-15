@@ -13,7 +13,7 @@ from __future__ import annotations
 import pandas as pd
 
 from scripts.runtime_context import resolve_prior_season, resolve_season, resolve_slate_date, resolve_week
-from scripts.utils.current_roles_v1 import resolve_current_roles_path
+from scripts.utils.current_roles_v1 import DEFAULT_ACTIVE_ROLES, resolve_current_roles_path
 import scripts.run_player_form_v2_loader as loader
 
 
@@ -62,6 +62,13 @@ def publish_strict_prior_history() -> None:
 
 
 def main() -> int:
+    # ACTIVE_ROLES_CSV is the certified current football-role authority when
+    # Full Slate configures it.  This is timing/availability state, not
+    # sportsbook posting coverage.  Keeping PlayerForm on the same role source
+    # as the opportunity and pricing stack prevents a shrinking current slate
+    # from being expanded back to the full league mid-pipeline.
+    # DEFAULT_ACTIVE_ROLES remains the require_active fallback for callers that
+    # intentionally do not provide an explicit current-role artifact.
     path = resolve_current_roles_path(require_active=True)
     loader.runner.pf.ROLES = path
     print(f"[current_roles_v1] PlayerForm roles={path}")

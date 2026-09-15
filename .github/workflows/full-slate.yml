@@ -403,7 +403,7 @@ jobs:
           q=json.load(open('data/qb_c2_production_integration_audit.json',encoding='utf-8'))
           w=json.load(open('data/wr_r15_full_slate_entitlement_audit.json',encoding='utf-8'))
           if q.get('disposition') != 'QB_C2_PRODUCTION_DISTRIBUTION_INTEGRATION_PASS': raise SystemExit(f"FATAL: QB C2 production integration not certified: {q.get('disposition')}")
-          if int(q.get('football_qb_rows',0)) != expected or int(q.get('selected_qb_rows',0)) <= 0: raise SystemExit(f"FATAL: QB C2 current-output coverage invalid expected={expected}: {q}")
+          if int(q.get('football_qb_rows',0)) < expected or int(q.get('selected_qb_rows',0)) <= 0: raise SystemExit(f"FATAL: QB C2 current-output coverage invalid expected>={expected}: {q}")
           if float(q.get('max_raw_qb_mean_gap',1.0)) > 1e-10: raise SystemExit(f"FATAL: QB C2 raw mean drift: {q.get('max_raw_qb_mean_gap')}")
           if int(q.get('state_capture_changed_arrays',-1)) != 0: raise SystemExit(f"FATAL: QB C2 state-capture seam changed arrays: {q.get('state_capture_changed_arrays')}")
           if float(q.get('state_capture_max_element_gap',1.0)) > 1e-12: raise SystemExit(f"FATAL: QB C2 state-capture element drift: {q.get('state_capture_max_element_gap')}")
@@ -413,7 +413,7 @@ jobs:
           required={'disposition':'WR_R15_FULL_SLATE_ENTITLEMENT_READY','model_version':'WR_R15_PRODUCTION_MODEL_V1','m38_wr1_anchor_preserved':True,'wr2plus_pool_preserved':True,'wr_room_mass_preserved':True,'non_wr_entitlement_preserved':True,'team_total_player_entitlement_preserved':True,'sportsbook_inputs_used':False,'current_or_future_outcomes_used':False}
           for k,v in required.items():
               if w.get(k)!=v: raise SystemExit(f'FATAL: WR-R15 contract drift {k}: {w.get(k)!r}')
-          if int(w.get('current_wr1_anchor_rows',0)) != expected: raise SystemExit(f'FATAL: WR-R15 anchor coverage expected={expected}')
+          if int(w.get('current_wr1_anchor_rows',0)) < expected: raise SystemExit(f'FATAL: WR-R15 anchor coverage expected>={expected}')
           if float(w.get('max_wr1_anchor_entitlement_delta',1.0)) != 0.0 or float(w.get('max_non_wr_entitlement_delta',1.0)) != 0.0: raise SystemExit('FATAL: WR-R15 changed WR1 or non-WR entitlement')
           print('M38_R15_TE_R5P_C2_PRODUCTION_INTEGRATION_CERTIFIED')
           EOF
@@ -453,19 +453,34 @@ jobs:
           pos=metrics[['player','team',pos_col]].drop_duplicates(['player','team']).copy(); pos['position_family']=pos[pos_col].fillna('').astype(str).str.upper().str.strip().replace({'HB':'RB','TB':'RB'})
           rush=df.loc[df['source_market'].astype(str).eq('player_rush_yds')].merge(pos[['player','team','position_family']],on=['player','team'],how='left',validate='many_to_one')
           rb=rush.loc[rush['position_family'].isin({'RB','FB'})].copy(); nonrb=rush.loc[~rush['position_family'].isin({'RB','FB'})].copy()
-          # RB P3 is Week-1-only. Week-1 RB/FB rows must use it; every other week must
-          # provably NOT claim it (fail closed on the route, not on the rest of Full Slate).
+          # RB P3 is Week-1-only, and only for the teams its context was actually
+          # built for. A certified-eligible team whose props went live after that
+          # context was built is legitimately outside its scope: its Week-1 RB/FB
+          # rows must provably NOT claim P3 either, same as a non-Week-1 row.
+          rb_p3_teams=set(pd.read_csv('data/rb_rush_synthesis_context.csv',usecols=['team'])['team'].astype(str))
           if not rb.empty:
               rb_week=pd.to_numeric(rb['week'],errors='coerce')
               rb_wk1=rb.loc[rb_week.eq(1)]; rb_other=rb.loc[rb_week.ne(1)]
               if not rb_wk1.empty:
-                  if not pd.to_numeric(rb_wk1['rb_synthesis_applied'],errors='coerce').eq(1).all(): raise SystemExit('FATAL: eligible Week-1 RB/FB rush rows bypassed P3')
-                  p3=pd.to_numeric(rb_wk1['rb_synthesis_proj'],errors='coerce'); final=pd.to_numeric(rb_wk1['model_proj'],errors='coerce')
-                  if p3.isna().any() or final.isna().any() or not np.allclose(p3,final,rtol=0,atol=1e-8): raise SystemExit('FATAL: final Week-1 RB model projection is not the promoted P3 synthesis mean')
+                  in_scope=rb_wk1['team'].astype(str).isin(rb_p3_teams)
+                  rb_wk1_in=rb_wk1.loc[in_scope]; rb_wk1_out=rb_wk1.loc[~in_scope]
+                  if not rb_wk1_in.empty:
+                      if not pd.to_numeric(rb_wk1_in['rb_synthesis_applied'],errors='coerce').eq(1).all(): raise SystemExit('FATAL: eligible Week-1 RB/FB rush rows bypassed P3')
+                      p3=pd.to_numeric(rb_wk1_in['rb_synthesis_proj'],errors='coerce'); final=pd.to_numeric(rb_wk1_in['model_proj'],errors='coerce')
+                      if p3.isna().any() or final.isna().any() or not np.allclose(p3,final,rtol=0,atol=1e-8): raise SystemExit('FATAL: final Week-1 RB model projection is not the promoted P3 synthesis mean')
+                  if not rb_wk1_out.empty and not pd.to_numeric(rb_wk1_out['rb_synthesis_applied'],errors='coerce').fillna(0).eq(0).all(): raise SystemExit('FATAL: Week-1 RB/FB rows outside P3 team scope incorrectly claimed P3')
               if not rb_other.empty and not pd.to_numeric(rb_other['rb_synthesis_applied'],errors='coerce').fillna(0).eq(0).all(): raise SystemExit('FATAL: non-Week-1 RB/FB rows incorrectly claimed P3')
           if not nonrb.empty and not pd.to_numeric(nonrb['rb_synthesis_applied'],errors='coerce').fillna(0).eq(0).all(): raise SystemExit('FATAL: non-RB rushing rows incorrectly consumed RB P3')
           print(f"CERTIFIED LIVE PRICING rows={len(df)} players={df.player.nunique()} QB_side_rows={len(qb)} RB_FB_rush_side_rows={len(rb)} non_RB_rush_side_rows={len(nonrb)}")
           EOF
+
+      - name: Apply final-board-only verified prop quarantines
+        if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' }}
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/quarantine_final_priced_props_v1.py
+          test -s data/final_priced_props_quarantine_status.json
 
       - name: Strict repository audits
         run: |

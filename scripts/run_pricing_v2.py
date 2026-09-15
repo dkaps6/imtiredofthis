@@ -37,7 +37,7 @@ from scripts.modeling.qb_pass_synthesis_v1 import (
     load_team_context as load_qb_team_context,
     predict_correction as predict_qb_synthesis,
 )
-from scripts.modeling.rb_pricing_adapter_v1 import load_rb_context, lookup_rb_projection
+from scripts.modeling.rb_pricing_adapter_v1 import load_rb_context, lookup_rb_projection, rb_context_teams
 from scripts.modeling.state_v2 import apply_state_to_metrics
 from scripts.modeling.simulation_rules import apply_rules_to_metrics
 from scripts.pricing_v2 import _fair_market_prob, _fair_odds
@@ -152,6 +152,7 @@ def price(season: int) -> pd.DataFrame:
 
     qb_artifact = qb_team_context = qb_player_logs = None
     rb_context = None
+    p3_teams: set[str] = set()
     weather = pd.DataFrame()
 
     if has_qb_pass:
@@ -194,6 +195,7 @@ def price(season: int) -> pd.DataFrame:
             ].copy()
             if ctx.empty:
                 raise RuntimeError(f"promoted RB context has no season={season} Week-1 rows")
+            p3_teams = rb_context_teams(rb_context)
             print(
                 f"[pricing] promoted RB P3 synthesis enabled version={sorted(ctx['rb_synthesis_version'].unique().tolist())} "
                 f"players={ctx['player_clean_key'].nunique()} teams={ctx['team'].nunique()}"
@@ -290,8 +292,17 @@ def price(season: int) -> pd.DataFrame:
         # not make a player an RB: QB/WR rushing props must stay on the generic
         # calibrated rushing distribution. Current PlayerForm position is the
         # routing authority; eligible RB/FB rows remain fail-closed on P3 lookup.
+        # A team whose props went live after P3's context was built is
+        # legitimately outside its scope -- that row prices from the generic
+        # calibrated ensemble mean instead, exactly like a non-Week-1 row.
         row_position = _position_family(row)
-        if market == "rush_yards" and row_position in {"RB", "FB"} and _runtime_week(row) == 1:
+        row_team = str(row.get("team") or "").upper().strip()
+        if (
+            market == "rush_yards"
+            and row_position in {"RB", "FB"}
+            and _runtime_week(row) == 1
+            and row_team in p3_teams
+        ):
             try:
                 if str(ens["ensemble_status"]) != "calibrated":
                     raise RuntimeError(

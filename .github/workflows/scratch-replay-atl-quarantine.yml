@@ -1,0 +1,117 @@
+# scratch: verify the ATL QB quarantine fix against tonight's already-fetched
+# real live-odds artifact (run 34769507865), no re-fetch / no OddsAPI credits.
+name: Scratch Replay ATL QB Quarantine Fix
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/scratch-replay-atl-quarantine.yml'
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+  SEASON: "2026"
+  PRIOR_SEASON: "2025"
+  SLATE_DATE: ""
+  ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
+
+jobs:
+  replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Download real props/context data from run 34769507865 (no re-fetch)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p artifact
+          gh run download 34769507865 --repo "$GITHUB_REPOSITORY" --name run_34769507865 --dir artifact
+          cp -rv artifact/data/. data/
+          cp -rv artifact/outputs/. outputs/
+      - name: Apply certified availability-aware current-output coverage seams
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/apply_current_availability_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_primary_team_seam_v1.py
+          python -m py_compile scripts/run_pricing_with_full_roster_universe_v1.py scripts/modeling/rb_r26_receptions_production_adapter_v1.py scripts/modeling/qb_c2_production_adapter_v1.py
+      - name: Check RB P3 synthesis scope for Breece Hall/NYJ
+        run: |
+          python3 -c "
+          import pandas as pd
+          df = pd.read_csv('data/rb_rush_synthesis_context.csv', low_memory=False)
+          df.columns = [c.lower() for c in df.columns]
+          print('teams in RB P3 context:', sorted(df['team'].dropna().astype(str).unique()))
+          print('NYJ rows:')
+          print(df[df['team'].astype(str)=='NYJ'].to_string())
+          print('rows mentioning Hall:')
+          print(df[df['player'].astype(str).str.contains('Hall', case=False, na=False)].to_string())
+          "
+          echo "=== eligible/certified teams (data/roles_current_production_eligible_v1.csv) ==="
+          python3 -c "
+          import pandas as pd
+          r = pd.read_csv('data/roles_current_production_eligible_v1.csv', low_memory=False)
+          r.columns = [c.lower() for c in r.columns]
+          print('NYJ in eligible set:', 'NYJ' in set(r['team'].astype(str)))
+          print(sorted(r['team'].dropna().astype(str).unique()))
+          "
+          echo "=== NYJ rows in data/current_player_availability.csv (Breece Hall specifically) ==="
+          python3 -c "
+          import pandas as pd
+          a = pd.read_csv('data/current_player_availability.csv', low_memory=False)
+          a.columns = [c.lower() for c in a.columns]
+          mask = a['team'].astype(str).eq('NYJ') & a['player'].astype(str).str.contains('Hall', case=False, na=False)
+          print(a.loc[mask].to_string())
+          "
+
+      - name: Price from certified football-first Full Slate stack (replay, no live fetch)
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/run_pricing_with_full_roster_universe_v3.py --season "${SEASON}"
+          test -s outputs/props_priced_clean.csv
+          echo "=== priced row count before final-board quarantine ==="
+          python3 -c "
+          import pandas as pd
+          df = pd.read_csv('outputs/props_priced_clean.csv')
+          print('rows:', len(df))
+          print('teams:', sorted(df['team'].dropna().astype(str).unique()) if 'team' in df.columns else 'n/a')
+          atl_qb = df[(df['team'].astype(str)=='ATL') & (df['source_market'].astype(str)=='player_pass_yds')] if {'team','source_market'}.issubset(df.columns) else df.iloc[0:0]
+          print('ATL pass_yards rows before quarantine:', len(atl_qb))
+          print(atl_qb[['player','team','model_proj']].to_string() if len(atl_qb) else '(none)')
+          "
+      - name: Apply final-board-only verified prop quarantines
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/quarantine_final_priced_props_v1.py
+          test -s data/final_priced_props_quarantine_status.json
+          echo "=== final-board quarantine status ==="
+          cat data/final_priced_props_quarantine_status.json
+          echo
+          echo "=== priced row count after final-board quarantine ==="
+          python3 -c "
+          import pandas as pd
+          df = pd.read_csv('outputs/props_priced_clean.csv')
+          print('rows:', len(df))
+          print('teams:', sorted(df['team'].dropna().astype(str).unique()) if 'team' in df.columns else 'n/a')
+          atl = df[df['team'].astype(str)=='ATL'] if 'team' in df.columns else df.iloc[0:0]
+          print('ATL rows remaining:', len(atl))
+          print('ATL markets remaining:', sorted(atl['source_market'].dropna().astype(str).unique()) if 'source_market' in atl.columns else 'n/a')
+          assert not any(p in set(atl.get('player', [])) for p in ('Michael Penix','Tua Tagovailoa','Cooper Rush')), 'ATL QB still present after quarantine!'
+          print('OK: no ATL QB rows remain, ATL non-QB rows preserved:', len(atl))
+          "

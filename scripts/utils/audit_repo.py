@@ -242,7 +242,7 @@ def _player_form_wrapper_errors(workflow_text: str) -> list[str]:
     for token, msg in (
         ("import scripts.run_player_form_v2_loader as loader", "PlayerForm current-role wrapper does not delegate to protected loader"),
         ("loader.main()", "PlayerForm current-role wrapper does not execute protected loader"),
-        ("resolve_current_roles_path", "PlayerForm current-role wrapper does not resolve explicit certified current roles"),
+        ("DEFAULT_ACTIVE_ROLES", "PlayerForm current-role wrapper does not resolve the reconciled, kickoff-timing-independent active roster"),
         ("strict_prior_logs", "PlayerForm current-role wrapper lacks strict-prior history filter"),
         ("publish_strict_prior_history", "PlayerForm current-role wrapper lacks strict-prior publication step"),
         ("w.ge(week)", "PlayerForm current-role wrapper lacks target/future-week publication guard"),

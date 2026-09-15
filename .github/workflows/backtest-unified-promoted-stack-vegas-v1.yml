@@ -1,0 +1,216 @@
+name: Unified Promoted-Stack Historical Vegas Benchmark V1
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/backtest/build_authority_exact_vegas_projection_trace_v1.py"
+      - "scripts/backtest/build_full_stack_vegas_projection_trace_v2.py"
+      - "scripts/backtest/prepare_free_market_prop_archive_v1.py"
+      - "scripts/backtest/grade_directional_scoreboard_v1.py"
+      - "tests/test_build_authority_exact_vegas_projection_trace_v1.py"
+      - "tests/test_grade_directional_scoreboard_v1.py"
+      - "data/model_ensemble_weights.csv"
+      - ".github/workflows/backtest-unified-promoted-stack-vegas-v1.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  authority-exact-benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml pyarrow tabulate
+
+      - name: Run focused parity and directional tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q \
+            tests/test_build_authority_exact_vegas_projection_trace_v1.py \
+            tests/test_grade_directional_scoreboard_v1.py \
+            tests/test_benchmark_identity_v1.py
+
+      - name: Create authority workspace
+        run: |
+          rm -rf /tmp/authority_exact /tmp/qb_authority /tmp/wr_authority /tmp/te_authority /tmp/wrte_replay
+          mkdir -p /tmp/authority_exact /tmp/qb_authority /tmp/wr_authority /tmp/te_authority /tmp/wrte_replay
+
+      - name: Download exact QB M89/M90 884-row authority artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: qb-pd3-internal-disagreement-reliability
+          path: /tmp/qb_authority
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34122984048
+
+      - name: Download exact WR-R15 OOS authority artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-r15-wr1-anchor-participation-v1
+          path: /tmp/wr_authority
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34238301577
+
+      - name: Download exact TE-R5P OOS production-contract authority artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: te-r5p-production-contract-refit-v1
+          path: /tmp/te_authority
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34152797603
+
+      - name: Download audited WR/TE production-order replay artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-te-production-order-historical-replay-v1
+          path: /tmp/wrte_replay
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34722725629
+
+      - name: Recover the audited 2024-2025 schedule identity from the WR/TE replay
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          src = pd.read_csv('/tmp/wrte_replay/full_stack_projection_trace_wrte.csv', low_memory=False)
+          schedule = src[['season','week','team','opponent','game_id']].drop_duplicates().copy()
+          if schedule.duplicated(['season','week','team']).any():
+              raise RuntimeError('WR/TE replay schedule contains duplicate team-week identities')
+          if sorted(schedule['season'].astype(int).unique().tolist()) != [2024, 2025]:
+              raise RuntimeError('WR/TE replay schedule season scope drifted')
+          schedule.to_csv('/tmp/authority_exact/schedule_history.csv', index=False)
+          print(schedule.groupby('season').size())
+          PY
+
+      - name: Reapply current receiving ensemble weights to the frozen WR/TE production-order components
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_full_stack_vegas_projection_trace_v2.py \
+            --component-file /tmp/wrte_replay/component_predictions_2024_wrte.csv \
+            --component-file /tmp/wrte_replay/component_predictions_2025_wrte.csv \
+            --schedule /tmp/authority_exact/schedule_history.csv \
+            --weights data/model_ensemble_weights.csv \
+            --out /tmp/authority_exact/full_stack_projection_trace_wrte_current_weights.csv
+
+      - name: Fail closed unless QB, WR and TE reproduce their exact promoted football authority
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_authority_exact_vegas_projection_trace_v1.py \
+            --qb-casebook /tmp/qb_authority/data/backtests/qb_pd3_internal_disagreement_reliability/qb_pd3_casebook.csv \
+            --wr-predictions /tmp/wr_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_predictions.csv \
+            --te-casebook /tmp/te_authority/data/backtests/te_r5p_production_contract_refit_v1/te_r5p_oos_player_casebook.csv \
+            --wrte-replay-integrity /tmp/wrte_replay/result/wrte_replay_integrity_audit.csv \
+            --wrte-production-trace /tmp/authority_exact/full_stack_projection_trace_wrte_current_weights.csv \
+            --out-dir /tmp/authority_exact/parity
+
+      - name: Rebuild the free historical market archive only after football parity passes
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/prepare_free_market_prop_archive_v1.py \
+            --projection-file /tmp/authority_exact/parity/current_production_order_projection_trace.csv \
+            --out-dir /tmp/authority_exact/market_archive
+
+      - name: Grade exact OOS authority projections versus Vegas directionally
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/grade_directional_scoreboard_v1.py \
+            --projection-file /tmp/authority_exact/parity/authority_oos_projection_trace.csv \
+            --props /tmp/authority_exact/market_archive/historical_market_props.csv \
+            --out-dir /tmp/authority_exact/scoreboard_authority
+
+      - name: Grade current production-order projections on the same authority identities
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/grade_directional_scoreboard_v1.py \
+            --projection-file /tmp/authority_exact/parity/current_production_order_projection_trace.csv \
+            --props /tmp/authority_exact/market_archive/historical_market_props.csv \
+            --out-dir /tmp/authority_exact/scoreboard_production
+
+      - name: Emit combined parity-gated scoreboard and coverage audit
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+
+          root = Path('/tmp/authority_exact')
+          summaries = []
+          details = []
+          for arm, d in [
+              ('AUTHORITY_OOS', root/'scoreboard_authority'),
+              ('CURRENT_PRODUCTION_ORDER', root/'scoreboard_production'),
+          ]:
+              s = pd.read_csv(d/'directional_scoreboard_summary.csv')
+              s['benchmark_arm_file'] = arm
+              summaries.append(s)
+              x = pd.read_csv(d/'directional_scoreboard_detail.csv')
+              x['benchmark_arm_file'] = arm
+              details.append(x)
+          summary = pd.concat(summaries, ignore_index=True)
+          detail = pd.concat(details, ignore_index=True)
+          summary.to_csv(root/'PROMOTED_STACK_AUTHORITY_EXACT_VEGAS_SCOREBOARD.csv', index=False)
+          detail.to_csv(root/'PROMOTED_STACK_AUTHORITY_EXACT_VEGAS_DETAIL.csv', index=False)
+
+          parity = pd.read_csv(root/'parity/authority_parity_audit.csv')
+          football = pd.read_csv(root/'parity/football_metric_summary.csv')
+          coverage = (
+              detail.groupby(['benchmark_arm_file','position','market','promoted_model_version'])
+                    .size().rename('vegas_matched_rows').reset_index()
+          )
+          coverage.to_csv(root/'authority_exact_vegas_coverage.csv', index=False)
+          audit = {
+              'football_parity_pass_positions': parity.loc[parity.status.eq('PASS'),'position'].astype(str).tolist(),
+              'rb_scope_status': parity.loc[parity.position.eq('RB'),'status'].astype(str).tolist(),
+              'football_metric_rows': int(len(football)),
+              'vegas_detail_rows': int(len(detail)),
+              'sportsbook_used_upstream': 0,
+              'paid_odds_api_calls': 0,
+          }
+          (root/'AUTHORITY_EXACT_BENCHMARK_AUDIT.json').write_text(json.dumps(audit, indent=2, sort_keys=True))
+          print(summary.to_string(index=False))
+          print('\nCOVERAGE')
+          print(coverage.to_string(index=False))
+          PY
+
+      - name: Upload authority-exact benchmark bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unified-promoted-stack-authority-exact-vegas-v1
+          retention-days: 14
+          path: |
+            /tmp/authority_exact/parity/authority_parity_audit.csv
+            /tmp/authority_exact/parity/football_metric_summary.csv
+            /tmp/authority_exact/parity/authority_oos_projection_trace.csv
+            /tmp/authority_exact/parity/current_production_order_projection_trace.csv
+            /tmp/authority_exact/market_archive/market_archive_source_audit.csv
+            /tmp/authority_exact/market_archive/historical_market_props.csv
+            /tmp/authority_exact/scoreboard_authority/directional_scoreboard_detail.csv
+            /tmp/authority_exact/scoreboard_authority/directional_scoreboard_summary.csv
+            /tmp/authority_exact/scoreboard_production/directional_scoreboard_detail.csv
+            /tmp/authority_exact/scoreboard_production/directional_scoreboard_summary.csv
+            /tmp/authority_exact/PROMOTED_STACK_AUTHORITY_EXACT_VEGAS_SCOREBOARD.csv
+            /tmp/authority_exact/PROMOTED_STACK_AUTHORITY_EXACT_VEGAS_DETAIL.csv
+            /tmp/authority_exact/authority_exact_vegas_coverage.csv
+            /tmp/authority_exact/AUTHORITY_EXACT_BENCHMARK_AUDIT.json

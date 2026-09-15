@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import re
-import shutil
 import subprocess
 import sys
 import time
@@ -2114,6 +2113,8 @@ def fetch_odds(
         for c in ("home_team", "away_team"):
             games[c] = games[c].apply(_canon_team)
 
+    if "event_id" not in props.columns:
+        props["event_id"] = pd.Series(dtype=str)
     props["event_id"] = props["event_id"].astype(str)
     if not games.empty:
         props = props.merge(games[["event_id","home_team","away_team"]], on="event_id", how="left")
@@ -2618,32 +2619,21 @@ if __name__ == "__main__":
             set_roles_csv_override(roles_arg)
         roles_csv_path = _locate_roles_csv(args.roles_csv)
         logging.info("[fetch_props] Final roles CSV path resolved to %s", roles_csv_path)
-        resolved_roles_path = Path(roles_csv_path)
-        default_targets = [
-            ROOT_DIR / "roles_ourlads.csv",
-            DATA_DIR / "roles_ourlads.csv",
-            OUTPUT_DIR / "roles_ourlads.csv",
-        ]
-        for target in default_targets:
-            if target.parent != Path('.'):
-                target.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                if resolved_roles_path.resolve() == target.resolve():
-                    continue
-            except OSError:
-                # If resolve fails for any reason, still attempt to copy
-                pass
-            try:
-                shutil.copyfile(resolved_roles_path, target)
-                logging.info(
-                    "[fetch_props] Mirrored roles CSV to %s", target
-                )
-            except OSError as copy_exc:
-                logging.warning(
-                    "[fetch_props] Unable to mirror roles CSV to %s: %s",
-                    target,
-                    copy_exc,
-                )
+        # NOTE: this used to "mirror" (a copyfile call) whatever roles source was
+        # resolved here onto data/roles_ourlads.csv, outputs/roles_ourlads.csv, and
+        # the repo-root roles_ourlads.csv. When ROLES_CSV/--roles-csv pointed at the
+        # kickoff-timing-gated roles_current_production_eligible_v1.csv (as
+        # full-slate.yml's live-odds-fetch step does), that silently overwrote the
+        # canonical, documented-immutable data/roles_ourlads.csv (see
+        # scripts/utils/current_roles_v1.py's own docstring: "Raw data/roles_ourlads.csv
+        # remains the immutable provider artifact") with the gated subset for the rest
+        # of the job. That corrupted repair_live_prop_identity_v1.py's roster index for
+        # every team not yet certified, and crashed a live run (2026-09-13) with
+        # "Ourlads roster identity index missing current-event teams" for 16 teams.
+        # This script only ever needs roles_csv_path itself (used directly below); the
+        # mirror served other tools assuming a fixed default path, at the cost of a
+        # cross-script data race. Removed rather than scoped, since nothing in this
+        # repo actually depends on the mirrored copies (see PR history).
         roles_map = build_roles_map_from_csv(roles_csv_path)
         print(
             f"[fetch_props_oddsapi] INFO: roles_ourlads.csv loaded from {roles_csv_path} entries={len(roles_map)}"

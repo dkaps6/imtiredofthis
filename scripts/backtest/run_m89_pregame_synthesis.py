@@ -6,6 +6,11 @@ Two residual models are fit once on 2023:
 2) identical football context plus a separately labeled game-market layer.
 
 2024-2025 are evaluation only. No postgame casebook field is read here.
+
+The season-labeled team/log arguments are fail-closed to their named season.
+This preserves the clean M89 reconstruction contract even if a caller passes a
+combined multi-season file to more than one argument. Existing callers that
+already pass season-split files are unchanged.
 """
 from __future__ import annotations
 
@@ -108,15 +113,19 @@ def normalize_trace(path: Path, season: int) -> pd.DataFrame:
     return x[keep].drop_duplicates(["season","week","team","player_clean_key"])
 
 
-def load_team_history(path: Path) -> pd.DataFrame:
+def load_team_history(path: Path, season: int | None = None) -> pd.DataFrame:
     x = lower(pd.read_csv(path, low_memory=False))
     x["season"] = pd.to_numeric(x["season"], errors="coerce")
     x["week"] = pd.to_numeric(x["week"], errors="coerce")
     x["team"] = x["team"].map(canon)
+    if season is not None:
+        x = x.loc[x["season"].eq(int(season))].copy()
+        if x.empty:
+            raise RuntimeError(f"team history {path} has no rows for required season {season}")
     return x.sort_values(["season","week","team"]).reset_index(drop=True)
 
 
-def load_player_logs(path: Path) -> pd.DataFrame:
+def load_player_logs(path: Path, season: int | None = None) -> pd.DataFrame:
     x = lower(pd.read_csv(path, low_memory=False))
     x["season"] = pd.to_numeric(x["season"], errors="coerce")
     x["week"] = pd.to_numeric(x["week"], errors="coerce")
@@ -127,6 +136,10 @@ def load_player_logs(path: Path) -> pd.DataFrame:
         x["player_clean_key"] = x["player"].map(key)
     else:
         raise RuntimeError(f"player log {path} missing player identity")
+    if season is not None:
+        x = x.loc[x["season"].eq(int(season))].copy()
+        if x.empty:
+            raise RuntimeError(f"player logs {path} have no rows for required season {season}")
     return x.sort_values(["season","week","team","player_clean_key"]).reset_index(drop=True)
 
 
@@ -239,8 +252,6 @@ def fit_candidate(train: pd.DataFrame, features: list[str], label: str) -> tuple
     target = q["actual_pass_yards"] - q["base_proj"]
     model = model_pipeline()
     model.fit(q[features], target)
-    # Feature names after imputation indicators are intentionally not relied on
-    # for promotion; raw feature list and coverage are the audit contract.
     cov = pd.DataFrame({
         "candidate":label,
         "feature":features,
@@ -330,13 +341,12 @@ def main() -> int:
     a=p.parse_args(); a.out_dir.mkdir(parents=True,exist_ok=True)
 
     t23=normalize_trace(a.trace_2023,2023)
-    ev=lower(pd.read_csv(a.trace_2024_2025,low_memory=False))
     t24=normalize_trace(a.trace_2024_2025,2024)
     t25=normalize_trace(a.trace_2024_2025,2025)
 
-    f23=add_history_features(t23,load_team_history(a.team_2023),load_player_logs(a.logs_2023))
-    f24=add_history_features(t24,load_team_history(a.team_2024),load_player_logs(a.logs_2024))
-    f25=add_history_features(t25,load_team_history(a.team_2025),load_player_logs(a.logs_2025))
+    f23=add_history_features(t23,load_team_history(a.team_2023,2023),load_player_logs(a.logs_2023,2023))
+    f24=add_history_features(t24,load_team_history(a.team_2024,2024),load_player_logs(a.logs_2024,2024))
+    f25=add_history_features(t25,load_team_history(a.team_2025,2025),load_player_logs(a.logs_2025,2025))
     market=load_market([2023,2024,2025])
     f23=attach_market(f23,market); f24=attach_market(f24,market); f25=attach_market(f25,market)
     train=f23; test=pd.concat([f24,f25],ignore_index=True)
