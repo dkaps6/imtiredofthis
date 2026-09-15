@@ -4,11 +4,13 @@
 
 Formal experiment disposition: **`NO_ACTIONABLE_WR_EARLY_NO_EXTENDED_SIGNAL`**.
 
+Scientific-evidence taxonomy label: **`DIRECTIONAL_CONTRADICTION`**.
+
 The frozen 2023 development test failed the raw Stage-A gates. Mediation / robustness was **not evaluated** because the raw test failed. The 2024 holdout remained sealed and no 2024 WR-R15 projection/outcome cells were parsed.
 
 This result closes WR-R20 under its frozen V1 contract. No threshold, window, WR1-only, tail-only, `CHK` rebucketing, direction flip, interaction, or other rescue is authorized.
 
-Scientific-evidence taxonomy label is intentionally left pending the independent Claude result audit requested in Issue #535 comment `5673369352`; the formal experiment disposition above is final regardless of whether the evidence label is ultimately `NO_DIRECTIONAL_EVIDENCE` or `DIRECTIONAL_CONTRADICTION`.
+Claude independently verified the canonical CI result in Issue #535 comment `5673467842`, including the raw metrics, 2024 seal, and evidence taxonomy. The evidence label is `DIRECTIONAL_CONTRADICTION` because all frozen directional checks coherently leaned opposite the preregistered negative hypothesis, even though the reverse magnitudes were modest.
 
 ## Canonical execution lineage
 
@@ -27,6 +29,7 @@ Scientific-evidence taxonomy label is intentionally left pending the independent
 - artifact name: `wr-r20-early-no-extended-stage-a-v1`
 - artifact digest: **`sha256:95b9d68fb338f1fc9034df6f1833ce3d39a23133481ebe64776fbb62d9e2ce20`**
 - artifact size: `181749` bytes
+- Claude result audit: Issue #535 comment `5673467842`
 
 Exact WR-R15 authority:
 
@@ -69,6 +72,19 @@ Raw development supported: **false**.
 Mediation evaluated: **false**.
 
 Do **not** call the robustness step a mediation failure; it was never run.
+
+## Evidence classification
+
+**`DIRECTIONAL_CONTRADICTION`**
+
+All frozen directional checks point coherently opposite the preregistered negative hypothesis:
+
+- Spearman is positive, not negative.
+- Q4-Q1 receiving-yard residual gap is positive, not negative.
+- Both frozen tail ratios point opposite the expected orientation.
+- WR1 and WR2+ slices both have positive Q4-Q1 gaps.
+
+Claude's independent audit noted that the Spearman magnitude is modest, but with `n=1578` it is roughly `1.87` standard errors from zero under the rough `1/sqrt(n-1)` approximation. The contradiction label therefore records coherent opposite-direction evidence without authorizing a positive-direction rescue.
 
 ## Quartile descriptives
 
@@ -134,7 +150,7 @@ Selected but denominator-excluded states under the frozen contract:
 
 The source and identity mechanics are healthy; coverage comfortably cleared the frozen minimum. The test failed because the football relationship did not follow the preregistered negative direction.
 
-Every frozen endpoint-level directional diagnostic leaned positive rather than negative: correlation, Q4-Q1 residual gap, both role slices, and both frozen tail orientations. The reverse magnitudes are modest and do not authorize flipping the hypothesis or creating a positive-direction R20 rescue.
+Every frozen endpoint-level directional diagnostic leaned positive rather than negative: correlation, Q4-Q1 residual gap, both role slices, and both frozen tail orientations. The reverse magnitudes are not large enough to authorize flipping the hypothesis or creating a positive-direction R20 rescue, but the cross-metric sign coherence supports `DIRECTIONAL_CONTRADICTION`.
 
 The program-level implication is therefore the jointly preregistered roadmap trigger, not a new downstream feature:
 
