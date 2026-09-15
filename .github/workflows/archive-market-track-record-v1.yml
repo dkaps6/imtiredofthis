@@ -1,0 +1,84 @@
+name: Archive Market Track Record
+
+on:
+  workflow_run:
+    workflows: ["Full Slate"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  SEASON: "2026"
+
+jobs:
+  archive:
+    # Only archive genuine production runs of the canonical Full Slate
+    # pipeline that actually completed (success or the run still produced a
+    # priced board before a later step failed). This job never re-fetches
+    # odds or re-prices anything -- it only reads outputs the triggering
+    # run already produced and already paid for, same boundary as
+    # scripts/operations/archive_priced_board_v1.py itself.
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Download the triggering Full Slate run's artifact
+        run: |
+          rm -rf /tmp/fs_artifact
+          mkdir -p /tmp/fs_artifact
+          gh run download "${SOURCE_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name "run_${SOURCE_RUN_ID}" \
+            --dir /tmp/fs_artifact || echo "no run_${SOURCE_RUN_ID} artifact found (likely no live odds this run)"
+
+      - name: Archive priced board, if this run produced one
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          SRC=/tmp/fs_artifact/outputs/props_priced_clean.csv
+          if [ ! -s "$SRC" ]; then
+            echo "no priced board in this run's artifact (no-live-odds run) -- nothing to archive"
+            exit 0
+          fi
+          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
+          python scripts/operations/archive_priced_board_v1.py \
+            --priced-file "$SRC" \
+            --season "${SEASON}" \
+            --week "${WEEK_RESOLVED}" \
+            --run-id "${SOURCE_RUN_ID}"
+
+      - name: Commit archived board to the durable ledger
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/market_track_record/boards/
+          if git diff --cached --quiet; then
+            echo "no market track record changes to commit"
+          else
+            git commit -m "market track record: archive Full Slate run ${SOURCE_RUN_ID}"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
