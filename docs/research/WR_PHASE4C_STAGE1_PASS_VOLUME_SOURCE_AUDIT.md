@@ -40,3 +40,4 @@ Therefore Arm C's `pred_realized_pass_volume` is market-free upstream. Arm B own
 - It does not alter the frozen target, features, model, gates, or thresholds.
 - The optional WR-room magnitude-floor suggestion from Claude is not adopted: conditions 3/4 already impose the materiality floor at the team-pool level, while condition 6 remains a transport/coherence gate.
 - The eventual Stage-1 result record must repeat this lineage statement and contextualize the frozen `0.10` target/team-game floor against the Phase-4B Layer-2 reported baseline MAE reference (~`4.520381`, about `2.21%`).
+- The later blind preflight exposed a structural Layer-1-vs-Layer-2 tail-domain denominator mismatch before outcome scoring. The frozen correction is recorded separately in `WR_PHASE4C_STAGE1_LAYER2_DOMAIN_AMENDMENT_V1.md`; it does not alter this source-lineage finding.
