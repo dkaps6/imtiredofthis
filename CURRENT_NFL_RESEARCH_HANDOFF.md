@@ -2,53 +2,57 @@
 
 GitHub is canonical; chat memory is secondary.
 
-## ACTIVE RESEARCH CHECKPOINT — 2026-09-14
+## ACTIVE RESEARCH CHECKPOINT — 2026-09-15
 
-The user's explicit current priority is **WR receiving yards**. Do not skip ahead to RB until the user changes priority.
+The user's explicit current priority is **WR receiving yards**. Do not skip ahead to RB unless the user changes priority.
 
 Read in this order:
 
 1. `AGENTS.md`
-2. `docs/handoffs/NFL_HANDOFF_2026-09-14_WR_RECEIVING_YARDS_CURRENT.md`
-3. `NFL_MASTER_CONTINUITY_RECORD.md`
-4. latest GPT-5.6 / Claude checkpoints in GitHub Issue #535
+2. `docs/handoffs/NFL_HANDOFF_2026-09-15_WR_PHASE4C_STAGE1_PREFLIGHT_CURRENT.md`
+3. `docs/research/WR_PHASE4C_STAGE1_PASS_VOLUME_PREDICTOR_V1_PLAN.md`
+4. `docs/research/WR_PHASE4C_STAGE1_PASS_VOLUME_SOURCE_AUDIT.md`
+5. `docs/research/WR_PHASE4C_STAGE1_LAYER2_DOMAIN_AMENDMENT_V1.md`
+6. latest GPT-5.6 / Claude checkpoints in GitHub Issue #535
+7. `NFL_MASTER_CONTINUITY_RECORD.md` only if older lineage is needed.
 
-The active handoff contains the exact WR authority lineage, PR #600 benchmark state, WR1 identity correction, receiving-yard decomposition, closed QB-C2 shared-tail result, Claude independent artifact lineage, anti-retest rules, the next WR research objective, and the parked RB Weeks-2-18 checkpoint.
+### Immediate action
 
-### Current WR interpretation
+Active branch: `research-wr-phase4c-stage1-pass-volume-predictor-v1`.
 
-- M38 + `WR_R15_PRODUCTION_MODEL_V1` remain valid production authorities and improved football accuracy in their frozen OOS tests.
-- WR receptions/opportunity are comparatively healthy.
-- WR receiving-yard translation/efficiency is the active weakness, especially high-efficiency/right-tail games.
-- The exact QB-C2 -> WR1 shared-tail selector has been independently tested by GPT-5.6 and Claude and is CLOSED. Do not rescue it with new percentiles/thresholds.
-- Before any new WR candidate, perform an anti-retest + feature-availability audit and freeze one genuinely new leakage-safe hypothesis.
-- GPT-5.6 and Claude must continue collaborating through Issue #535 and independently challenge each other's design/results.
+Canonical sealed Stage-1 preflight is green:
 
-### Open authority-exact benchmark
+- run `35024523296`
+- job `104568212642`
+- artifact `10418149149`
+- digest `sha256:1752b8b434424f79091d9db9955c9ac91cb4216d314ef3e90af7b0b9dcb9cdea`
+- upstream Phase4B artifact `10404525877`, digest `sha256:0dad0dbc91a4bd6aa3e3f45cbc62e8ed493ca7bf2c95daaa0c4028a54a0fd0d4`
+- focused synthetics 5/5 PASS
+- blind-output contract guard PASS
+- blind 2024 Stage-1 outcomes remain SEALED; `--run-outcomes` has NOT been executed.
 
-PR #600 remains open/mergeable at handoff creation:
+GPT-5.6 requested Claude's implementation review in Issue #535 comment `5688220080`. At the handoff update, no later Claude comment was visible through the GitHub API.
 
-- head `1167f9fdadde452deb84d3891097865da2f163d5`
-- canonical run `34843204550`
-- artifact `10346639168`
+**First action in a new chat:** check Issue #535 for Claude's response to `5688220080`.
 
-Use it as diagnostic evidence; do not train football projections against market lines.
+- If `IMPLEMENTATION_REVIEW_PASS`: run the single frozen `--run-outcomes` exposure and preserve the result regardless disposition. No retuning or rescue.
+- If Claude raises a blocker: independently verify it, fix only the valid blocker, rerun sealed preflight, and keep outcomes sealed until implementation review passes.
 
-## PARKED RB CHECKPOINT
+### Scientific state
 
-RB Weeks 2-18 work is intentionally parked while WR receiving yards is active.
+- Phase4B closed with R15 healthy/improved; preserve M38 + R15.
+- Phase4C Gate 0 passed: scoring environment / `market_total` has a modest coherent bridge to team target-pool realization and opportunity-dominant WR yardage tails.
+- Stage1 asks whether a strictly pregame **football-only predicted realized pass-volume state** adds beyond the market on the Phase4B team-pool residual.
+- Decisive comparison is C > B OOS; all seven frozen gates must pass.
+- A blind preflight-only Layer2-domain amendment repaired an impossible tail denominator before any Stage1 outcome scoring; addressable tails are 208 / 85 / 294 while raw Layer1 parent counts 222 / 87 / 312 remain disclosed.
+- Historical `plays_est` / `dropback_rate` lineage was explicitly proven PBP-only with zero Vegas/market lineage.
 
-Branch `research-rb-pd2-yard-difficulty-mc-width-v1`, head `3e3da9ec7216ec836b4d593a3b5ac32f524442f0`.
-Run `34876877949` failed during historical MC-distribution parity reconstruction before candidate evaluation (2022 W08 mismatch `1.0232351709`; 2023 W03 mismatch `2.7762633539`). No RB width scientific result was exposed. Preserve this state for later.
+### Hard boundaries
 
-## PRODUCTION CHECKPOINT
+- Do not reopen R17-R20, R21-style feature fishing, PR #561 confirmation classifier, shared-tail/C2-WR1 rescue, or blind M38/R15 retuning.
+- No production/model/threshold change from this research.
+- No paid Full Slate.
+- RB is parked.
+- Continue GPT-5.6 + Claude adversarial collaboration through Issue #535.
 
-The Week-1 Full Slate incident is already repaired/green. Do not reopen paid-live debugging for WR research.
-
-Production handoff:
-
-`docs/handoffs/NFL_HANDOFF_2026-09-11_FULL_SLATE_LIVE_REPAIR_MERGED_CURRENT.md`
-
-No production-science change is authorized by the current WR diagnostic work itself.
-
-Older research ledgers previously carried in this root file remain available in Git history and `NFL_MASTER_CONTINUITY_RECORD.md`; this root file is intentionally kept as a concise pointer to the newest canonical handoff.
+The detailed current handoff contains all exact lineage, gates, anti-retest rules, Phase4B/Gate0 results, source audit, blind-domain amendment, and next-step instructions.
