@@ -18,7 +18,7 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Apply blind structural-domain amendment
+      - name: Apply blind structural-domain amendment to evaluator
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -50,24 +50,13 @@ jobs:
               raise SystemExit('outcome coverage anchor not found')
           s = s.replace(old, new, 1)
           p.write_text(s)
-
-          wf = Path('.github/workflows/research-wr-phase4c-stage1-pass-volume-preflight-v1.yml')
-          w = wf.read_text()
-          anchor = '            docs/research/WR_PHASE4C_STAGE1_PASS_VOLUME_SOURCE_AUDIT.md\n'
-          extra = '            docs/research/WR_PHASE4C_STAGE1_LAYER2_DOMAIN_AMENDMENT_V1.md\n'
-          if extra not in w:
-              if anchor not in w:
-                  raise SystemExit('preflight upload anchor not found')
-              w = w.replace(anchor, anchor + extra, 1)
-          wf.write_text(w)
           PY
 
-      - name: Commit blinded amendment
+      - name: Commit blinded evaluator amendment
         run: |
           git config user.name "dkaps6"
           git config user.email "drekapsalis@gmail.com"
-          git add scripts/research/evaluate_wr_phase4c_stage1_pass_volume_predictor_v1.py \
-                  .github/workflows/research-wr-phase4c-stage1-pass-volume-preflight-v1.yml
+          git add scripts/research/evaluate_wr_phase4c_stage1_pass_volume_predictor_v1.py
           git diff --cached --check
           git commit -m "research: amend Stage1 Layer2 tail domain blind"
           git push origin HEAD:research-wr-phase4c-stage1-pass-volume-predictor-v1
