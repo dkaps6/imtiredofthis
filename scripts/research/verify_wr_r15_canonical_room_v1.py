@@ -112,6 +112,35 @@ def main() -> int:
     else:
         print("MISMATCH: independent computation does NOT match the claimed 71/1088 -- needs reconciliation before Phase 4A freeze.")
 
+    # --- Diagnostic 2: raw row-count parity (NOT deduplicated), to test
+    # whether GPT's "71" came from comparing raw feature ROW counts (which
+    # can exceed distinct-identity counts if a player has >1 feature row
+    # per team-game, e.g. one per market/event_id) rather than distinct
+    # identity SETS.
+    raw_feat_counts = wr2plus_feat.groupby(["season", "week", "team"]).size().rename("n_feat_rows_raw")
+    raw_pred_counts = cand.groupby(["season", "week", "team"]).size().rename("n_pred_rows_raw")
+    anchor_flag = anchor_present.assign(has_anchor=1).set_index(["season", "week", "team"])["has_anchor"]
+    rowcount = pd.concat([raw_feat_counts, raw_pred_counts, anchor_flag], axis=1).fillna(0)
+    rowcount["expected_full_room_rows"] = rowcount["n_feat_rows_raw"] + rowcount["has_anchor"]
+    rowcount_complete = int((rowcount["n_pred_rows_raw"] == rowcount["expected_full_room_rows"]).sum())
+    print(f"\n[diagnostic] raw-row-count parity (undeduplicated feature rows + anchor flag vs candidate row count): "
+          f"{rowcount_complete} / {len(rowcount)} team-games match by RAW ROW COUNT (not identity set).")
+
+    # Full sorted list of exactly-complete team-game keys (identity-set
+    # definition) so this can be diffed directly against GPT's own list.
+    complete_keys = []
+    for key, cgrp in canonical.groupby(["season", "week", "team"]):
+        canonical_set = set(cgrp[id_col])
+        pgrp = pred_ids.loc[
+            pred_ids["season"].eq(key[0]) & pred_ids["week"].eq(key[1]) & pred_ids["team"].eq(key[2])
+        ]
+        if set(pgrp[id_col]) == canonical_set:
+            complete_keys.append(key)
+    complete_keys.sort()
+    print(f"\nfull sorted list of {len(complete_keys)} identity-set-complete team-game keys (season, week, team):")
+    for k in complete_keys:
+        print(" ", k)
+
     return 0
 
 
