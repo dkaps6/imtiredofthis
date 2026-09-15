@@ -39,10 +39,15 @@ BOOT_SEED = 20260915
 MATERIALITY_TARGETS = 0.10
 BIAS_TOLERANCE = 0.25
 EXPECTED_LAYER23 = {2023: 510, 2024: 515}
-EXPECTED_TAILS_2024 = {
+RAW_LAYER1_TAILS_2024 = {
     "UNDERPROJECT_30_PLUS_OPP_DOM": 222,
     "ACTUAL_100_PLUS_OPP_DOM": 87,
     "UNDERPROJECT_30_PLUS": 312,
+}
+EXPECTED_TAILS_2024 = {
+    "UNDERPROJECT_30_PLUS_OPP_DOM": 208,
+    "ACTUAL_100_PLUS_OPP_DOM": 85,
+    "UNDERPROJECT_30_PLUS": 294,
 }
 SCRIPT_FEATURES = [
     "team_plays_prior8",
@@ -284,7 +289,7 @@ def tail_team_games(layer1: pd.DataFrame, season: int = 2024) -> dict[str, pd.Da
     out = {}
     for name, mask in masks.items():
         tg = x.loc[mask, TG].drop_duplicates().sort_values(TG).reset_index(drop=True)
-        expected = EXPECTED_TAILS_2024[name]
+        expected = RAW_LAYER1_TAILS_2024[name]
         if len(tg) != expected:
             raise RuntimeError(f"tail count drift {name}: {len(tg)} != {expected}")
         out[name] = tg
@@ -453,6 +458,7 @@ def mechanics_preflight(phase4b_dir: Path, out_dir: Path) -> dict:
         "sealed_2024": {
             "canonical_team_games": EXPECTED_LAYER23[2024], "prediction_rows": int(len(sealed)),
             "coverage": float(full_coverage),
+            "primary_tail_raw_layer1_team_games": RAW_LAYER1_TAILS_2024["UNDERPROJECT_30_PLUS_OPP_DOM"],
             "primary_tail_team_games": EXPECTED_TAILS_2024["UNDERPROJECT_30_PLUS_OPP_DOM"],
             "primary_tail_prediction_rows": int(len(primary_covered)), "primary_tail_coverage": float(primary_coverage),
             "contains_actual_team_targets": False, "contains_actual_wr_room_targets": False,
@@ -528,7 +534,7 @@ def run_outcomes(phase4b_dir: Path, out_dir: Path) -> dict:
         z = test.merge(tg.assign(_tail=1), on=TG, how="inner")
         z["diff_B_minus_C"] = (z["pool_B"] - z["actual_team_targets"]).abs() - (z["pool_C"] - z["actual_team_targets"]).abs()
         tail_metrics[name] = {
-            "canonical_team_games": EXPECTED_TAILS_2024[name], "eligible_team_games": int(len(z)),
+            "raw_layer1_team_games": RAW_LAYER1_TAILS_2024[name], "canonical_team_games": EXPECTED_TAILS_2024[name], "eligible_team_games": int(len(z)),
             "coverage": float(len(z) / EXPECTED_TAILS_2024[name]),
             "mae_improvement_B_minus_C": float(z["diff_B_minus_C"].mean()) if len(z) else np.nan,
             "bootstrap": paired_cluster_bootstrap_ci(z, "diff_B_minus_C") if len(z) else {},
@@ -569,6 +575,7 @@ def run_outcomes(phase4b_dir: Path, out_dir: Path) -> dict:
         "coverage": {
             "canonical_2024_team_games": EXPECTED_LAYER23[2024], "eligible_2024_team_games": int(len(test)),
             "full_coverage": float(full_coverage),
+            "primary_tail_raw_layer1": RAW_LAYER1_TAILS_2024["UNDERPROJECT_30_PLUS_OPP_DOM"],
             "primary_tail_canonical": EXPECTED_TAILS_2024["UNDERPROJECT_30_PLUS_OPP_DOM"],
             "primary_tail_eligible": int(len(primary_covered)), "primary_tail_coverage": float(primary_coverage),
         },
