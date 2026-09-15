@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 from scripts.research.evaluate_wr_phase4c_stage1_pass_volume_predictor_v1 import (
+    SCRIPT_FEATURES,
     build_script_feature_frame,
     crossfit_script_predictions,
     fit_downstream_models,
@@ -13,28 +14,31 @@ from scripts.research.evaluate_wr_phase4c_stage1_pass_volume_predictor_v1 import
 
 def _toy_schedule():
     rows = []
+    pairs = [("A", "B"), ("C", "D"), ("E", "F"), ("G", "H")]
     for season in [2021, 2022, 2023, 2024]:
         for week in range(1, 19):
-            gid = f"{season}_{week:02d}_A_B"
             total = 40.0 + (week % 5)
-            rows += [
-                dict(season=season, week=week, team="A", opponent="B", game_id=gid,
-                     home_flag=1.0, team_rest=7.0, opp_rest=7.0, rest_diff=0.0, market_total=total),
-                dict(season=season, week=week, team="B", opponent="A", game_id=gid,
-                     home_flag=0.0, team_rest=7.0, opp_rest=7.0, rest_diff=0.0, market_total=total),
-            ]
+            for home, away in pairs:
+                gid = f"{season}_{week:02d}_{away}_{home}"
+                rows += [
+                    dict(season=season, week=week, team=home, opponent=away, game_id=gid,
+                         home_flag=1.0, team_rest=7.0, opp_rest=7.0, rest_diff=0.0, market_total=total),
+                    dict(season=season, week=week, team=away, opponent=home, game_id=gid,
+                         home_flag=0.0, team_rest=7.0, opp_rest=7.0, rest_diff=0.0, market_total=total),
+                ]
     return pd.DataFrame(rows)
 
 
 def _toy_weekly():
     rows = []
+    teams = list("ABCDEFGH")
     for season in [2021, 2022, 2023, 2024]:
         for week in range(1, 19):
-            for team, offset in [("A", 0.0), ("B", 2.0)]:
+            for idx, team in enumerate(teams):
                 rows.append(dict(
                     season=season, week=week, team=team,
-                    plays_est=60 + offset + 0.2 * week,
-                    dropback_rate=0.50 + 0.002 * week,
+                    plays_est=60 + idx * 0.5 + 0.2 * week,
+                    dropback_rate=0.50 + 0.002 * week + idx * 0.001,
                 ))
     return pd.DataFrame(rows)
 
@@ -44,7 +48,6 @@ def test_rolling_features_are_strictly_prior():
     z = x.loc[(x.season == 2022) & (x.week == 5) & (x.team == "A")].iloc[0]
     assert z.team_source_max_ordinal < z.target_ordinal
     assert z.defense_team_source_max_ordinal < z.target_ordinal
-
     tw = _toy_weekly()
     tw.loc[(tw.season == 2022) & (tw.week == 5) & (tw.team == "A"), "plays_est"] = 9999
     y = build_script_feature_frame(tw, _toy_schedule())
@@ -66,25 +69,26 @@ def test_script_crossfit_never_trains_on_prediction_season():
 def _toy_phase4b_and_script():
     rows, sp, sched = [], [], []
     for season in [2023, 2024]:
-        for week in range(1, 19):
-            for team, off in [("A", 0), ("B", 1)]:
-                gid = f"{season}_{week:02d}_A_B"
-                implied = 30 + off
-                actual = implied + 0.4 + 0.03 * (40 + (week % 5)) + 0.02 * (32 + week + off)
-                rows.append(dict(
-                    season=season, week=week, team=team,
-                    implied_team_target_pool=implied, candidate_wr_room_mass=.5,
-                    actual_team_targets=actual, actual_wr_room_targets=actual * .5,
-                ))
-                sp.append(dict(
-                    season=season, week=week, team=team,
-                    pred_realized_pass_volume=32 + week + off,
-                    naive_pass_volume=31 + week + off,
-                ))
-                sched.append(dict(
-                    season=season, week=week, team=team,
-                    market_total=40 + (week % 5), game_id=gid,
-                ))
+        for i in range(500):
+            week = (i % 18) + 1
+            team = f"T{i:03d}"
+            gid = f"{season}_{i//2:03d}"
+            implied = 30 + (i % 3)
+            script = 32 + (i % 20) * 0.2
+            total = 40 + (i % 5)
+            actual = implied + 0.4 + 0.03 * total + 0.02 * script
+            rows.append(dict(
+                season=season, week=week, team=team,
+                implied_team_target_pool=implied, candidate_wr_room_mass=.5,
+                actual_team_targets=actual, actual_wr_room_targets=actual * .5,
+            ))
+            sp.append(dict(
+                season=season, week=week, team=team,
+                pred_realized_pass_volume=script, naive_pass_volume=script - 1.0,
+            ))
+            sched.append(dict(
+                season=season, week=week, team=team, market_total=total, game_id=gid,
+            ))
     return pd.DataFrame(rows), pd.DataFrame(sp), pd.DataFrame(sched)
 
 
