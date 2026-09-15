@@ -1,0 +1,55 @@
+name: Diagnose Live Identity Gap V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/diagnose-live-identity-gap
+    paths:
+      - '.github/workflows/diagnose-live-identity-gap-v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  SOURCE_REPLAY_RUN_ID: '34910010508'
+  SOURCE_REPLAY_ARTIFACT_NAME: offline_replay_34910010508
+  BACKTEST_SEASON: '2026'
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy
+
+      - name: Download the real priced Week 1 board
+        run: |
+          rm -rf /tmp/board_artifact
+          mkdir -p /tmp/board_artifact
+          gh run download "${SOURCE_REPLAY_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name "${SOURCE_REPLAY_ARTIFACT_NAME}" \
+            --dir /tmp/board_artifact
+          test -s /tmp/board_artifact/outputs/props_priced_clean.csv
+          mkdir -p outputs
+          cp /tmp/board_artifact/outputs/props_priced_clean.csv outputs/props_priced_clean.csv
+
+      - name: Run live identity gap diagnostic
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/research/diagnose_live_backtest_identity_gap_v1.py \
+            --priced-file outputs/props_priced_clean.csv \
+            --season "${BACKTEST_SEASON}"
