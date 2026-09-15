@@ -1,0 +1,37 @@
+name: WR R20 Early No Extended Synthetic V1
+
+on:
+  push:
+    branches:
+      - research-wr-r20-early-no-extended-v1
+    paths:
+      - 'scripts/research/evaluate_wr_r20_early_no_extended_stage_a_v1.py'
+      - 'scripts/research/test_wr_r20_early_no_extended_synthetic_v1.py'
+      - '.github/workflows/research-wr-r20-synthetic-v1.yml'
+      - 'docs/research/WR_R20_EARLY_NO_EXTENDED_V1_PLAN.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-only:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout R20 branch
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install synthetic-test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy pandas
+      - name: Run WR-R20 synthetic mechanics
+        run: python -m scripts.research.test_wr_r20_early_no_extended_synthetic_v1
+      - name: Prove no WR-R20 football output exists
+        run: |
+          test ! -e data/backtests/wr_r20_early_no_extended_v1
+          echo 'No WR-R20 football output directory exists: PASS'
