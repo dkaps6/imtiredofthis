@@ -45,8 +45,18 @@ was an artifact of checksumming against a `component_predictions.csv` downloaded
 from a separately-triggered M95Q run rather than a code bug or nflverse drift.
 Fixed at commit `780087b1` (`rebuild-distributions` now builds its own in-job
 `walk_forward.py` reference and checksums against that). See Issue #535 comment
-`5689731492` for the full writeup. A fresh CI run is in flight to confirm the fix
-and produce the first real candidate disposition.
+`5689731492` for the full writeup.
+
+First real end-to-end run: `35037087309`, all jobs green, reconstruction
+integrity now `~1e-14`/`~1e-15`. Disposition: `RB_YARD_DIFFICULTY_WIDTH_INTEGRITY_FAILURE`
+-- but every science gate (mean-neutrality, point-MAE identity, pooled/high-difficulty
+CRPS, coverage, Brier, 3-of-4-season robustness) passed. The sole failure is
+`A_parent_panel_matches_556`, a stale exact-row-count check against PR #556's
+original frozen artifact (`5607`/`4652` rows); this run's fresh-rebuilt panel has
+`5616`/`4657` rows (+9/+5, ~0.16%), while the independent fresh-source identity-set
+check passed with zero symmetric difference. Flagged for GPT-5.6 adversarial review
+rather than patched unilaterally (Issue #535 comment `5689826445`) -- do not change
+this gate without that review landing first.
 
 ## PRODUCTION CHECKPOINT
 
