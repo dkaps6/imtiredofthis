@@ -1,0 +1,100 @@
+name: WR Phase4B Prior Roster GSIS Alias V2
+
+on:
+  push:
+    branches:
+      - research-wr-phase4-authority-exact-opportunity-attribution-v1
+    paths:
+      - 'scripts/research/audit_wr_phase4b_prior_roster_gsis_alias_v2.py'
+      - '.github/workflows/research-wr-phase4b-prior-roster-gsis-alias-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      AUTHORITY_RUN_ID: '34238301577'
+      AUTHORITY_ARTIFACT_ID: '10061328722'
+      AUTHORITY_ARTIFACT_NAME: wr-r15-wr1-anchor-participation-v1
+      AUTHORITY_DIGEST: sha256:8df31b5e136621d959272daf0422dfc665593cd0da2eb0892b4aa69c1417f3ce
+      AUTHORITY_ROOT: /tmp/wr_r15_artifact/backtests/wr_r15_wr1_anchor_v1
+      OUT_DIR: data/backtests/wr_phase4b_prior_roster_gsis_alias_v2
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pandas numpy pyarrow nflreadpy
+
+      - name: Compile source-only audit
+        run: python -m py_compile scripts/research/audit_wr_phase4b_prior_roster_gsis_alias_v2.py
+
+      - name: Verify exact WR-R15 authority artifact lineage
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${AUTHORITY_RUN_ID}/artifacts" > /tmp/a.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          p=json.loads(Path('/tmp/a.json').read_text())
+          a=[x for x in p.get('artifacts',[]) if int(x.get('id',-1))==int(os.environ['AUTHORITY_ARTIFACT_ID'])]
+          if len(a)!=1: raise SystemExit('authority artifact lookup failed')
+          a=a[0]
+          if a.get('name')!=os.environ['AUTHORITY_ARTIFACT_NAME']: raise SystemExit('authority name drift')
+          if a.get('digest')!=os.environ['AUTHORITY_DIGEST']: raise SystemExit('authority digest drift')
+          if a.get('expired'): raise SystemExit('authority artifact expired')
+          print('authority lineage PASS')
+          PY
+
+      - name: Download exact authority artifact
+        run: |
+          rm -rf /tmp/wr_r15_artifact && mkdir -p /tmp/wr_r15_artifact
+          gh run download "${AUTHORITY_RUN_ID}" --repo "${GITHUB_REPOSITORY}" --name "${AUTHORITY_ARTIFACT_NAME}" --dir /tmp/wr_r15_artifact
+          test -s "${AUTHORITY_ROOT}/wr_r15_confirmation_predictions.csv"
+          test -s "${AUTHORITY_ROOT}/wr_r15_confirmation_features.csv"
+
+      - name: Run prior-roster GSIS alias source audit only
+        run: |
+          rm -rf "${OUT_DIR}"
+          python -m scripts.research.audit_wr_phase4b_prior_roster_gsis_alias_v2 \
+            --predictions "${AUTHORITY_ROOT}/wr_r15_confirmation_predictions.csv" \
+            --features "${AUTHORITY_ROOT}/wr_r15_confirmation_features.csv" \
+            --out-dir "${OUT_DIR}"
+
+      - name: Guard source-only boundary
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          p=json.loads((Path(os.environ['OUT_DIR'])/'prior_roster_gsis_alias_v2.json').read_text())
+          if p.get('receiving_yard_fields_loaded') is not False: raise SystemExit('receiving-yard boundary violated')
+          if p.get('zero_imputation_performed') is not False: raise SystemExit('audit performed zero imputation')
+          if p.get('sportsbook_inputs') != 0: raise SystemExit('sportsbook boundary violated')
+          if p.get('challenger_model_authorized') is not False: raise SystemExit('audit improperly authorized challenger')
+          if p.get('target_week_roster_used_for_resolution') is not False: raise SystemExit('target-week roster used')
+          print('source-only boundary PASS')
+          print(json.dumps(p, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload source audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-phase4b-prior-roster-gsis-alias-v2
+          path: data/backtests/wr_phase4b_prior_roster_gsis_alias_v2/
+          retention-days: 30
+          if-no-files-found: warn
