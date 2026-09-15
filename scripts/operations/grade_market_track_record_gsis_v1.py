@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Corrected actual-outcome grading for the market track record.
 
-Fixes two real bugs found grading the real Week 1 2026 board against
+Fixes three real bugs found grading the real Week 1 2026 board against
 nflreadpy:
 
 1. `load_actual_stats()` in `grade_market_track_record_v1.py` reuses
@@ -24,6 +24,17 @@ nflreadpy:
    no-fuzzy-matching hierarchy used for the WR-R15 historical research
    tonight, then joins actuals by (season, week, resolved GSIS) instead of
    by name key.
+
+3. A player who was genuinely inactive/DNP that week has NO row at all in
+   nflreadpy's weekly stats table (not even a zero row), so bug #2's fix
+   alone can't identity-resolve them -- their name never appears in a
+   stats-table-derived alias index (found: Odell Beckham Jr., Calvin
+   Ridley, Jalen Tolbert). The alias index is extended with weekly roster
+   data (which does have them, including Tolbert's explicit `INA` status),
+   so identity can resolve from roster presence alone; once resolved, a
+   confirmed-rostered GSIS with no stats-table row is graded as a verified
+   zero for every stat column, since a real inactive player is a real,
+   gradable 0-yard/0-reception outcome, not missing data.
 
 Source-only. No production change; this does not modify player_form_v2 or
 the live pricing pipeline, only how already-priced boards get graded.
@@ -93,19 +104,51 @@ def load_actual_stats_unfiltered(season: int, weeks: list[int] | None) -> pd.Dat
     return out
 
 
-def build_alias_index(actual: pd.DataFrame) -> dict:
+def load_roster_identity(season: int, weeks: list[int] | None) -> pd.DataFrame:
+    """(season, week, team, gsis_id, player_clean_key) identity evidence from
+    nflreadpy's weekly rosters -- broader than the stats table, since it
+    includes players who were rostered but recorded nothing that week
+    (including explicit inactive status), which the stats table omits
+    entirely rather than zero-filling."""
+    import nflreadpy as nfl
+
+    raw = nfl.load_rosters_weekly(int(season))
+    x = _to_pandas(raw)
+    x.columns = [str(c).strip().lower() for c in x.columns]
+    x["season"] = pd.to_numeric(x.get("season", season), errors="coerce").fillna(season).astype(int)
+    x["week"] = pd.to_numeric(x.get("week"), errors="coerce")
+    x = x.loc[x["season"].eq(int(season)) & x["week"].notna()].copy()
+    x["week"] = x["week"].astype(int)
+    if weeks:
+        x = x.loc[x["week"].isin(weeks)].copy()
+    team_col = next((c for c in ("team", "team_abbr", "club_code") if c in x.columns), None)
+    x["team"] = x[team_col].astype("string").fillna("").str.strip().map(canon_team) if team_col else ""
+    x["gsis_id"] = x.get("gsis_id", x.get("player_id", "")).astype("string").fillna("").str.strip()
+    name_col = next((c for c in ("full_name", "football_name", "player_name", "player") if c in x.columns), None)
+    raw_name = x[name_col].astype("string").fillna("").str.strip() if name_col else pd.Series("", index=x.index)
+    canon = raw_name.map(canonicalize_player_name_safe)
+    x["player_clean_key"] = canon.map(lambda t: t[1])
+    x["status"] = x.get("status", "").astype("string").fillna("")
+    x = x.loc[x["team"].astype(str).ne("") & x["gsis_id"].astype(str).ne("") & x["player_clean_key"].astype(str).ne("")]
+    return x[["season", "week", "team", "gsis_id", "player_clean_key", "status"]].drop_duplicates()
+
+
+def build_alias_index(actual: pd.DataFrame, roster: pd.DataFrame) -> dict:
     """team-scoped exact/suffix-stripped alias -> set of GSIS ids, plus a
-    global (any-team) index for the fallback tiers. Ambiguous buckets (more
-    than one GSIS under the same alias) are kept as-is so the resolver can
-    fail closed on them."""
+    global (any-team) index for the fallback tiers, built from the UNION of
+    stats-table and roster-table identity evidence so a genuinely-inactive
+    player (present on roster, absent from stats) can still resolve.
+    Ambiguous buckets (more than one GSIS under the same alias) are kept
+    as-is so the resolver can fail closed on them."""
     idx = {"team_exact": {}, "team_base": {}, "global_exact": {}, "global_base": {}}
-    for r in actual.itertuples(index=False):
-        key_exact = r.player_clean_key
-        key_base = _suffix_strip(key_exact)
-        idx["team_exact"].setdefault((r.team, key_exact), set()).add(r.gsis_id)
-        idx["team_base"].setdefault((r.team, key_base), set()).add(r.gsis_id)
-        idx["global_exact"].setdefault(key_exact, set()).add(r.gsis_id)
-        idx["global_base"].setdefault(key_base, set()).add(r.gsis_id)
+    for source in (actual, roster):
+        for r in source.itertuples(index=False):
+            key_exact = r.player_clean_key
+            key_base = _suffix_strip(key_exact)
+            idx["team_exact"].setdefault((r.team, key_exact), set()).add(r.gsis_id)
+            idx["team_base"].setdefault((r.team, key_base), set()).add(r.gsis_id)
+            idx["global_exact"].setdefault(key_exact, set()).add(r.gsis_id)
+            idx["global_base"].setdefault(key_base, set()).add(r.gsis_id)
     return idx
 
 
@@ -133,13 +176,19 @@ def grade(season: int, weeks: list[int]) -> dict:
     bets = select_model_bet(board)
     bets["team"] = bets["team"].map(canon_team)
     actual = load_actual_stats_unfiltered(season, weeks)
-    idx = build_alias_index(actual)
+    roster = load_roster_identity(season, weeks)
+    idx = build_alias_index(actual, roster)
+    roster_confirmed = set(zip(roster["season"], roster["week"], roster["team"], roster["gsis_id"]))
 
     resolved = []
     for r in bets.itertuples(index=False):
         gsis, status = resolve_gsis(r.player_clean_key, r.team, idx)
         resolved.append({"gsis_id": gsis, "identity_status": status})
     res_df = pd.concat([bets.reset_index(drop=True), pd.DataFrame(resolved)], axis=1)
+    res_df["roster_confirmed_this_team_week"] = [
+        (s, w, t, g) in roster_confirmed
+        for s, w, t, g in zip(res_df["season"], res_df["week"], res_df["team"], res_df["gsis_id"])
+    ]
 
     detail_parts = []
     for market, stat_col in [
@@ -160,7 +209,19 @@ def grade(season: int, weeks: list[int]) -> dict:
         detail_parts.append(d)
     detail = pd.concat(detail_parts, ignore_index=True, sort=False) if detail_parts else pd.DataFrame()
 
-    detail["has_verified_actual"] = detail["identity_status"].eq("RESOLVED_GSIS") & detail["actual"].notna()
+    # A resolved GSIS with a real stats-table row: use it. A resolved GSIS
+    # confirmed on that team's roster that week but absent from the stats
+    # table: a genuine inactive/zero-involvement outcome, so it's a real
+    # verified zero, not missing data -- fill it in rather than drop it.
+    resolved_ok = detail["identity_status"].eq("RESOLVED_GSIS")
+    has_stat_row = detail["actual"].notna()
+    verified_zero = resolved_ok & ~has_stat_row & detail["roster_confirmed_this_team_week"]
+    detail.loc[verified_zero, "actual"] = 0.0
+    detail["actual_source"] = np.select(
+        [resolved_ok & has_stat_row, verified_zero],
+        ["stats_table", "roster_confirmed_verified_zero"], default="unresolved",
+    )
+    detail["has_verified_actual"] = detail["actual_source"].ne("unresolved")
     unresolved = detail.loc[~detail["has_verified_actual"]]
     graded = detail.loc[detail["has_verified_actual"]].copy()
 
@@ -183,6 +244,8 @@ def grade(season: int, weeks: list[int]) -> dict:
         "status": "graded",
         "archived_bet_rows": int(len(detail)),
         "verified_actual_rows": int(len(graded)),
+        "verified_via_stats_table": int((graded["actual_source"] == "stats_table").sum()),
+        "verified_via_roster_confirmed_zero": int((graded["actual_source"] == "roster_confirmed_verified_zero").sum()),
         "still_unresolved_rows": int(len(unresolved)),
         "unresolved_identity_status_counts": unresolved["identity_status"].value_counts().to_dict(),
         "decided_bets": int(len(decided)),
