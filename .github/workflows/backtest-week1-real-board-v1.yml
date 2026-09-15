@@ -1,0 +1,84 @@
+name: Backtest Week 1 Real Board V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/backtest-week1-real-board
+    paths:
+      - '.github/workflows/backtest-week1-real-board-v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  # Real, already-paid-for Week 1 board: replay of run 34650067599's captured
+  # live odds through the current (post-fix) pricing stack, executed 2026-09-14.
+  SOURCE_REPLAY_RUN_ID: '34910010508'
+  SOURCE_REPLAY_ARTIFACT_NAME: offline_replay_34910010508
+  BACKTEST_SEASON: '2026'
+  BACKTEST_WEEK: '1'
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy
+
+      - name: Download the real priced Week 1 board
+        run: |
+          rm -rf /tmp/board_artifact
+          mkdir -p /tmp/board_artifact
+          gh run download "${SOURCE_REPLAY_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name "${SOURCE_REPLAY_ARTIFACT_NAME}" \
+            --dir /tmp/board_artifact
+          find /tmp/board_artifact -maxdepth 3 -type f | sort
+          test -s /tmp/board_artifact/outputs/props_priced_clean.csv
+          mkdir -p outputs
+          cp /tmp/board_artifact/outputs/props_priced_clean.csv outputs/props_priced_clean.csv
+          echo "rows: $(wc -l < outputs/props_priced_clean.csv)"
+
+      - name: Archive board into the durable market track record
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/archive_priced_board_v1.py \
+            --priced-file outputs/props_priced_clean.csv \
+            --season "${BACKTEST_SEASON}" \
+            --week "${BACKTEST_WEEK}"
+          test -s "data/market_track_record/boards/${BACKTEST_SEASON}_wk01.csv"
+          echo "=== archived ledger head ==="
+          head -5 "data/market_track_record/boards/${BACKTEST_SEASON}_wk01.csv"
+
+      - name: Grade against real Week 1 results
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/grade_market_track_record_v1.py \
+            --season "${BACKTEST_SEASON}" \
+            --weeks "${BACKTEST_WEEK}"
+
+      - name: Upload backtest evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: week1-real-board-backtest-v1
+          path: |
+            data/market_track_record/**
+            outputs/props_priced_clean.csv
+          if-no-files-found: warn
+          retention-days: 14
