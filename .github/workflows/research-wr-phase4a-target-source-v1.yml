@@ -1,0 +1,110 @@
+name: WR Phase4A Target Source Reconciliation V1
+
+on:
+  push:
+    branches:
+      - research-wr-phase4-authority-exact-opportunity-attribution-v1
+    paths:
+      - '.github/workflows/research-wr-phase4a-target-source-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  source-reconciliation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      AUTHORITY_RUN_ID: '34238301577'
+      AUTHORITY_ARTIFACT_ID: '10061328722'
+      AUTHORITY_ARTIFACT_NAME: wr-r15-wr1-anchor-participation-v1
+      AUTHORITY_DIGEST: sha256:8df31b5e136621d959272daf0422dfc665593cd0da2eb0892b4aa69c1417f3ce
+      AUTHORITY_ROOT: /tmp/wr_r15_artifact/backtests/wr_r15_wr1_anchor_v1
+      OUT_DIR: data/backtests/wr_phase4a_target_source_reconciliation_v1
+
+    steps:
+      - name: Checkout frozen Phase4A branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install research dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pandas numpy pyarrow nflreadpy
+
+      - name: Verify exact WR-R15 authority artifact lineage
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${AUTHORITY_RUN_ID}/artifacts" > /tmp/wr_r15_artifacts.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          payload = json.loads(Path('/tmp/wr_r15_artifacts.json').read_text())
+          matches = [a for a in payload.get('artifacts', []) if int(a.get('id', -1)) == int(os.environ['AUTHORITY_ARTIFACT_ID'])]
+          if len(matches) != 1:
+              raise SystemExit(f"expected one authority artifact id={os.environ['AUTHORITY_ARTIFACT_ID']}, got {len(matches)}")
+          a = matches[0]
+          if a.get('name') != os.environ['AUTHORITY_ARTIFACT_NAME']:
+              raise SystemExit(f"authority name mismatch: {a.get('name')}")
+          if a.get('digest') != os.environ['AUTHORITY_DIGEST']:
+              raise SystemExit(f"authority digest mismatch: {a.get('digest')}")
+          if bool(a.get('expired')):
+              raise SystemExit('authority artifact expired')
+          print('WR-R15 exact authority lineage: PASS')
+          print(json.dumps({k:a.get(k) for k in ['id','name','digest','expired','size_in_bytes']}, indent=2))
+          PY
+
+      - name: Download exact WR-R15 authority artifact
+        run: |
+          rm -rf /tmp/wr_r15_artifact
+          mkdir -p /tmp/wr_r15_artifact
+          gh run download "${AUTHORITY_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name "${AUTHORITY_ARTIFACT_NAME}" \
+            --dir /tmp/wr_r15_artifact
+          test -s "${AUTHORITY_ROOT}/wr_r15_confirmation_predictions.csv"
+          test -s "${AUTHORITY_ROOT}/wr_r15_confirmation_features.csv"
+          test -s "${AUTHORITY_ROOT}/wr_r15_conservation_audit.csv"
+
+      - name: Run frozen Phase4A source reconciliation
+        run: |
+          rm -rf "${OUT_DIR}"
+          python -m scripts.research.audit_wr_phase4a_full_room_target_source_v1 \
+            --predictions "${AUTHORITY_ROOT}/wr_r15_confirmation_predictions.csv" \
+            --features "${AUTHORITY_ROOT}/wr_r15_confirmation_features.csv" \
+            --out-dir "${OUT_DIR}"
+
+      - name: Assert audit did not load receiving-yard fields or sportsbook inputs
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          out = Path(os.environ['OUT_DIR'])
+          result = json.loads((out/'phase4a_result.json').read_text())
+          audit = json.loads((out/'phase4a_source_audit.json').read_text())
+          if audit.get('receiving_yard_fields_loaded') is not False:
+              raise SystemExit('receiving-yard field boundary violated')
+          if result.get('sportsbook_inputs') != 0 or audit.get('sportsbook_inputs') != 0:
+              raise SystemExit('sportsbook boundary violated')
+          if result.get('challenger_model_authorized') is not False:
+              raise SystemExit('source audit improperly authorized challenger model')
+          print('Phase4A source-only boundary: PASS')
+          print(json.dumps(result, indent=2, sort_keys=True))
+          print(json.dumps(audit, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload Phase4A source evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-phase4a-target-source-reconciliation-v1
+          path: data/backtests/wr_phase4a_target_source_reconciliation_v1/
+          if-no-files-found: warn
+          retention-days: 30
