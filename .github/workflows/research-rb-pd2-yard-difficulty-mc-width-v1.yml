@@ -114,6 +114,14 @@ jobs:
             --weather "$D/weather_history.csv" \
             --out-dir "$OUT" \
             --iterations 2000 --seed-offset 42
+      - name: Upload mean-mismatch diagnostic (failure only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-pd2-yard-width-mismatch-diagnostic-${{ matrix.season }}
+          path: evidence/distributions/${{ matrix.season }}/*_mean_mismatch_diagnostic.csv
+          if-no-files-found: warn
+          retention-days: 30
       - name: Upload reconstructed distribution shard
         uses: actions/upload-artifact@v4
         with:
