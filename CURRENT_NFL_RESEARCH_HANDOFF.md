@@ -33,30 +33,32 @@ PR #600 remains open/mergeable at handoff creation:
 
 Use it as diagnostic evidence; do not train football projections against market lines.
 
-## ACTIVE DRAFT PR #562 — RB-PD2 YARD-DIFFICULTY MC-WIDTH V1 — UPDATED 2026-09-15
+## ACTIVE DRAFT PR #562 — RB-PD2 YARD-DIFFICULTY MC-WIDTH V1 — QUALIFIED 2026-09-16
 
 Branch `research-rb-pd2-yard-difficulty-mc-width-v1`. The historical MC-distribution
-parity-reconstruction failure previously blocking candidate evaluation (2022 W08
-mismatch `1.0232351709`; 2023 W03 mismatch `2.7762633539`) was root-caused: a
-same-job double-build diagnostic (branch `scratch-diag-rb-pd2-w3-2023-mismatch`)
-proved the historical-input builders are fully deterministic and the reconstruction
-code reproduces `mc_proj` to `~1e-14` against its own same-run inputs. The failure
-was an artifact of checksumming against a `component_predictions.csv` downloaded
-from a separately-triggered M95Q run rather than a code bug or nflverse drift.
-Fixed at commit `780087b1` (`rebuild-distributions` now builds its own in-job
-`walk_forward.py` reference and checksums against that). See Issue #535 comment
-`5689731492` for the full writeup.
+checksum failure (root cause: comparing against a cross-run M95Q artifact, not
+nflverse drift or a code bug) was fixed at `780087b1` -- `rebuild-distributions`
+now builds its own in-job `walk_forward.py` reference. See Issue #535 comment
+`5689731492`.
 
-First real end-to-end run: `35037087309`, all jobs green, reconstruction
-integrity now `~1e-14`/`~1e-15`. Disposition: `RB_YARD_DIFFICULTY_WIDTH_INTEGRITY_FAILURE`
--- but every science gate (mean-neutrality, point-MAE identity, pooled/high-difficulty
-CRPS, coverage, Brier, 3-of-4-season robustness) passed. The sole failure is
-`A_parent_panel_matches_556`, a stale exact-row-count check against PR #556's
-original frozen artifact (`5607`/`4652` rows); this run's fresh-rebuilt panel has
-`5616`/`4657` rows (+9/+5, ~0.16%), while the independent fresh-source identity-set
-check passed with zero symmetric difference. Flagged for GPT-5.6 adversarial review
-rather than patched unilaterally (Issue #535 comment `5689826445`) -- do not change
-this gate without that review landing first.
+First end-to-end run (`35037087309`) passed every science gate but failed one
+stale integrity gate (`A_parent_panel_matches_556`, an exact-row-count check
+against PR #556's original frozen artifact). GPT-5.6 reviewed on Issue #535 and
+approved four fixes (comment landed 2026-09-16): implement Amendment 3's crossed
+player x game CRPS bootstrap, add fail-closed fresh-parent VALUE parity (not just
+identity), fix mislabeled composite source provenance, and demote the old count
+gate to a non-fatal disclosure. Implemented exactly as specified at `b9ad5247`,
+reran once (`35039152022`, preserving `35037087309` unchanged in the paper trail).
+
+**Final disposition: `RB_YARD_DIFFICULTY_MC_WIDTH_QUALIFIED`.** All 28 gates
+pass. Pooled CRPS +1.218%, high-difficulty-quartile CRPS +2.624%, both
+player-clustered and crossed player x game bootstraps `p=1.0`, point-MAE
+identical (mean-neutral), coverage and Brier-100 both improve, 4/4-season
+robustness. Reported in full on Issue #535 comment `5690193256`.
+
+Research qualification only -- per the frozen plan, a separate forward/shadow
+confirmation is still required before any production change. None has been
+started; production is untouched.
 
 ## PRODUCTION CHECKPOINT
 
