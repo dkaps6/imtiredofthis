@@ -1,9 +1,14 @@
+import numpy as np
 import pandas as pd
 import pytest
 
 from scripts.backtest.rb_lane_a_candidate_v1 import (
     check_rush_yard_translation_constructibility,
+    compute_conservation_pool,
+    compute_historical_rb_room_rush_share,
+    compute_hhi_dampened_reallocation,
     compute_incumbent_ypc,
+    compute_role_weights_and_hhi,
     translate_candidate_rush_yards,
 )
 
@@ -89,3 +94,115 @@ def test_translate_candidate_rush_yards_fails_closed_on_unmatched_row():
     incumbent = compute_incumbent_ypc(_dual([[2024, 3, "TB", "p1", 10.0, 50.0]]))
     with pytest.raises(RuntimeError, match="no incumbent_ypc match"):
         translate_candidate_rush_yards(candidate_att, incumbent)
+
+
+def _player_log_row(season, week, team, position, rushes, rush_yards=0.0, name_key="p1"):
+    return {
+        "season": season, "week": week, "team": team, "position": position,
+        "rushes": rushes, "rush_yards": rush_yards, "name_key": name_key,
+    }
+
+
+def test_compute_historical_rb_room_rush_share_uses_strictly_prior_weeks():
+    logs = pd.DataFrame(
+        [
+            _player_log_row(2024, 1, "TB", "RB", rushes=10),
+            _player_log_row(2024, 1, "TB", "WR", rushes=0),
+            _player_log_row(2024, 1, "TB", "QB", rushes=5),
+            _player_log_row(2024, 2, "TB", "RB", rushes=20),
+            _player_log_row(2024, 2, "TB", "QB", rushes=0),
+            _player_log_row(2024, 3, "TB", "RB", rushes=15),
+            _player_log_row(2024, 3, "TB", "QB", rushes=0),
+        ]
+    )
+    out = compute_historical_rb_room_rush_share(logs)
+    w1 = out.loc[out.week == 1].iloc[0]
+    assert np.isnan(w1["historical_rb_room_rush_share"])  # no prior weeks
+
+    w2 = out.loc[out.week == 2].iloc[0]
+    # week 1: rb=10, total=15 -> share=0.6667; only prior week available
+    assert w2["historical_rb_room_rush_share"] == pytest.approx(10 / 15)
+
+    w3 = out.loc[out.week == 3].iloc[0]
+    # trailing mean of weeks 1 (0.6667) and 2 (20/20=1.0)
+    assert w3["historical_rb_room_rush_share"] == pytest.approx(((10 / 15) + 1.0) / 2)
+
+
+def test_compute_conservation_pool_formula():
+    cp = pd.DataFrame(
+        [
+            {"season": 2024, "week": 3, "team": "TB", "mc_projected_plays": 60.0, "mc_dropback_rate": 0.6},
+        ]
+    )
+    share = pd.DataFrame(
+        [{"season": 2024, "week": 3, "team": "TB", "historical_rb_room_rush_share": 0.8}]
+    )
+    out = compute_conservation_pool(cp, share)
+    assert out.iloc[0]["pool"] == pytest.approx(60.0 * (1 - 0.6) * 0.8)
+
+
+def test_compute_conservation_pool_fails_closed_on_missing_columns():
+    cp = pd.DataFrame([{"season": 2024, "week": 3, "team": "TB"}])
+    share = pd.DataFrame([{"season": 2024, "week": 3, "team": "TB", "historical_rb_room_rush_share": 0.8}])
+    with pytest.raises(RuntimeError, match="missing"):
+        compute_conservation_pool(cp, share)
+
+
+def test_hhi_dampened_reallocation_even_split_at_zero_hhi():
+    room = pd.DataFrame([{"raw_w": 0.5}, {"raw_w": 0.5}])
+    hhi_lookup = pd.DataFrame(
+        [{"transition_season": 2024, "transition_week": 3, "team": "TB", "prior_backfield_hhi": 0.0}]
+    )
+    pool_row = {"season": 2024, "week": 3, "team": "TB", "pool": 20.0}
+    out, meta = compute_hhi_dampened_reallocation(room, hhi_lookup, pool_row)
+    assert meta["all_zero_weights"] is False
+    assert out["candidate_att"].sum() == pytest.approx(20.0)
+    # even raw weights + H=0 (p=1) -> even split
+    assert out["candidate_att"].tolist() == pytest.approx([10.0, 10.0])
+
+
+def test_hhi_dampened_reallocation_concentrates_toward_dominant_back_as_hhi_rises():
+    room = pd.DataFrame([{"raw_w": 0.8}, {"raw_w": 0.2}])
+    hhi_lookup = pd.DataFrame(
+        [{"transition_season": 2024, "transition_week": 3, "team": "TB", "prior_backfield_hhi": 0.9}]
+    )
+    pool_row = {"season": 2024, "week": 3, "team": "TB", "pool": 20.0}
+    out, meta = compute_hhi_dampened_reallocation(room, hhi_lookup, pool_row)
+    assert out["candidate_att"].sum() == pytest.approx(20.0)
+    # dominant back's share of the pool exceeds its raw share (concentration effect)
+    dominant_share = out["candidate_att"].iloc[0] / 20.0
+    assert dominant_share > 0.8
+
+
+def test_hhi_dampened_reallocation_all_zero_weights_excluded():
+    room = pd.DataFrame([{"raw_w": 0.0}, {"raw_w": 0.0}])
+    hhi_lookup = pd.DataFrame(columns=["transition_season", "transition_week", "team", "prior_backfield_hhi"])
+    pool_row = {"season": 2024, "week": 3, "team": "TB", "pool": 20.0}
+    out, meta = compute_hhi_dampened_reallocation(room, hhi_lookup, pool_row)
+    assert meta["all_zero_weights"] is True
+    assert out.empty
+
+
+def test_compute_role_weights_and_hhi_end_to_end():
+    logs = pd.DataFrame(
+        [
+            _player_log_row(2024, 1, "TB", "RB", rushes=12, rush_yards=50, name_key="rb1"),
+            _player_log_row(2024, 1, "TB", "RB", rushes=3, rush_yards=10, name_key="rb2"),
+            _player_log_row(2024, 1, "TB", "QB", rushes=2, name_key="qb1"),
+            _player_log_row(2024, 2, "TB", "RB", rushes=14, rush_yards=60, name_key="rb1"),
+            _player_log_row(2024, 2, "TB", "RB", rushes=2, rush_yards=8, name_key="rb2"),
+            _player_log_row(2024, 2, "TB", "QB", rushes=1, name_key="qb1"),
+        ]
+    )
+    active_room = pd.DataFrame([{"season": 2024, "week": 3, "team": "TB", "name_key": "rb1"}])
+    pre_transition_room = pd.DataFrame(
+        [
+            {"season": 2024, "week": 2, "team": "TB", "name_key": "rb1"},
+            {"season": 2024, "week": 2, "team": "TB", "name_key": "rb2"},
+        ]
+    )
+    active_enriched, hhi_lookup = compute_role_weights_and_hhi(active_room, pre_transition_room, logs)
+    assert "raw_w" in active_enriched.columns
+    assert active_enriched.iloc[0]["raw_w"] > 0
+    assert len(hhi_lookup) == 1
+    assert hhi_lookup.iloc[0]["prior_backfield_hhi"] > 0

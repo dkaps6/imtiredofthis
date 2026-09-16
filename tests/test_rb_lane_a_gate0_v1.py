@@ -3,6 +3,7 @@ import pandas as pd
 from scripts.backtest.rb_lane_a_gate0_v1 import (
     RB_POS,
     _name_key,
+    _player_clean_key,
     gate01_report,
     gate02_report,
     gate03_event_report,
@@ -14,6 +15,14 @@ def test_name_key_strips_punctuation_and_lowercases():
     s = pd.Series(["D'Andre Swift", "A.J. Dillon"])
     out = _name_key(s)
     assert out.tolist() == ["dandreswift", "ajdillon"]
+
+
+def test_player_clean_key_matches_component_predictions_canonicalization():
+    from scripts.backtest.component_predictions import _key as component_predictions_key
+
+    s = pd.Series(["Chris Godwin Jr.", "D'Andre Swift"])
+    out = _player_clean_key(s)
+    assert out.tolist() == [component_predictions_key(v) for v in s]
 
 
 def test_rb_pos_matches_repo_convention():

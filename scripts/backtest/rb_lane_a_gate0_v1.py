@@ -66,6 +66,18 @@ def _name_key(series: pd.Series) -> pd.Series:
     return series.astype(str).str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
 
 
+def _player_clean_key(series: pd.Series) -> pd.Series:
+    """Same canonicalization as component_predictions.py::_key(), so roster_state
+    identities join cleanly against component_predictions.csv's player_clean_key
+    (used by the RB Lane A candidate mechanism, scripts/backtest/
+    rb_lane_a_candidate_v1.py -- additive column, does not change any existing
+    Gate 0 field or pass/fail logic).
+    """
+    from scripts.backtest.component_predictions import _key as component_predictions_key
+
+    return series.map(component_predictions_key)
+
+
 # ---------------------------------------------------------------------------
 # Kickoff-UTC reconstruction (shared by 0.1's live-side as-of join)
 # ---------------------------------------------------------------------------
@@ -315,14 +327,18 @@ def harmonize_roster_membership(seasons: Iterable[int]) -> pd.DataFrame:
         d["position"] = pos.loc[d.index]
         d["status"] = status.loc[d.index]
         d["name_key"] = _name_key(d.get("full_name", pd.Series("", index=d.index)))
+        d["player_clean_key"] = _player_clean_key(d.get("full_name", pd.Series("", index=d.index)))
         out.append(
-            d[["season", "week", "team", "player_key", "position", "status", "name_key"]]
+            d[["season", "week", "team", "player_key", "position", "status", "name_key", "player_clean_key"]]
             .dropna(subset=["season", "week"])
         )
 
     if not out:
         return pd.DataFrame(
-            columns=["season", "week", "team", "player_key", "position", "status", "name_key"]
+            columns=[
+                "season", "week", "team", "player_key", "position", "status",
+                "name_key", "player_clean_key",
+            ]
         )
     result = pd.concat(out, ignore_index=True)
     result["season"] = result["season"].astype(int)
