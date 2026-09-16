@@ -46,6 +46,23 @@ Fixed by splitting "detected transition" (broad, all three checks, used only for
 Gate-0 harmonizer testing and disclosure) from "scored V1 transition" (narrow: loss/
 vacancy events only), so the scored population matches the claimed cohort honestly.
 
+**Amendment 4** (this revision): incorporates GPT-5.6's cross-audit of Amendment 3
+from Issue #535 comment `5700382360`, before any candidate is built or run.
+Amendment 3's temporal-comparator and scope fixes were verified correct, but one
+deployment-architecture defect remained: the plan defined stable-week candidate
+output as identical to the **mechanism comparator (P3/STACK2)** -- an unpromoted
+diagnostic route -- rather than to the **promotion comparator (`ensemble_proj`)**,
+the actual live Weeks-2-18 production route Amendment 2 itself established as
+decisive. Left uncorrected, a qualified Lane A module could have silently replaced
+today's real stable-week production output with an unpromoted research route on
+every non-transition week. Fixed by splitting the candidate into two explicit,
+non-interchangeable arms -- `deployable_candidate` (byte-identical to the promotion
+comparator on every stable/non-scored week; the transition reallocation only on
+scored V1 weeks) and `mechanism_diagnostic` (transition reallocation vs. P3/STACK2,
+diagnostic-only, never defines production output) -- with a new hard stable-identity
+gate and a whole-season integration-sanity check added to the protected gates. See
+"Two candidate arms" below.
+
 ## Why this candidate, and why it is not a disguised STACK2 retest
 
 The Lane A audit established: STACK2 (`scripts/backtest/evaluate_rb_stack2_enriched_
@@ -67,12 +84,14 @@ ND1's own Shapley forensic atlas (`RB_ND1_FORENSIC_FAILURE_ATLAS_RESULTS.md`) sh
 highest-error-per-row classes in the entire atlas.
 
 This candidate's novelty is **state segmentation**, not new raw data: split every
-team-week into `transition` vs `stable`, leave `stable` weeks exactly on the mechanism
-comparator's route, and apply a targeted reallocation rule **only** on `transition`
-weeks. If this candidate cannot beat the real production (promotion) comparator
-specifically on the transition subpopulation while leaving the stable subpopulation
-unregressed, it does not qualify -- there is no pooled-average rescue path. (See "Two
-comparators" below for why beating P3/STACK2 alone is not sufficient.)
+team-week into `transition` vs `stable`, leave `stable` weeks exactly on today's real
+production route (the promotion comparator -- see "Two candidate arms" below,
+Amendment 4), and apply a targeted reallocation rule **only** on scored V1
+`transition` weeks. If this candidate cannot beat the real production (promotion)
+comparator specifically on the transition subpopulation while leaving the stable
+subpopulation unregressed, it does not qualify -- there is no pooled-average rescue
+path. (See "Two comparators" below for why beating P3/STACK2 alone is not
+sufficient.)
 
 **Scope correction (Amendment 2)**: V1 targets the **role-collapse** error class
 only -- transitions driven by a departure/status change among backs who already have
@@ -312,8 +331,11 @@ the identical rule and threshold already frozen in production P3. **No YPC
 learning/tuning belongs in Lane A**; efficiency is untouched, only opportunity
 allocation changes.
 
-On a stable week, the candidate's **mechanism-track** output is defined to be
-**identical** to the mechanism comparator (below) -- no reallocation logic executes.
+This reallocation-plus-translation formula defines the candidate's output **only on
+scored V1 transition weeks**. What happens on every other week -- and which comparator
+that output must match -- is specified explicitly in "Two candidate arms" below
+(Amendment 4); it is **not** the mechanism comparator, per GPT-5.6's Amendment-4
+correction.
 
 ## Two comparators: mechanism vs. promotion (Amendment 2 point #1)
 
@@ -380,6 +402,40 @@ team-week (stable and transition):
   as GPT-5.6's finding required ("Do not silently backfit one after looking at
   candidate results").
 
+## Two candidate arms: deployable vs. mechanism-diagnostic (Amendment 4)
+
+GPT-5.6's Amendment-4 cross-audit found that defining stable-week candidate output as
+identical to the **mechanism comparator** (P3/STACK2, an unpromoted diagnostic route)
+was a deployment-architecture defect: it would let a qualified Lane A module silently
+replace today's real stable-week production route with an unpromoted research route,
+even though "Two comparators" above already establishes the promotion comparator
+(`ensemble_proj`) as the actual Weeks-2-18 production authority. Two explicit,
+non-interchangeable arms are frozen instead:
+
+- **`deployable_candidate`** (the only arm with any bearing on a future production
+  question): on a **scored V1 transition week**, equal to the transition reallocation
+  candidate's `candidate_rush_yards_i` as defined in "Candidate mechanism" above. On
+  **every other week** (stable weeks, and detected-but-not-scored transition weeks
+  alike), equal to the **promotion comparator** (`ensemble_proj`, per its frozen
+  per-rotation reconstruction above) -- **byte-identical, by construction, never the
+  mechanism comparator.** This is the only arm any future production-integration PR
+  could ever propose enabling.
+- **`mechanism_diagnostic`** (informative only, never a candidate for production): on
+  scored V1 transition weeks only, the same transition reallocation candidate compared
+  directly against the **mechanism comparator** (P3/STACK2). Its sole purpose is
+  answering whether the reallocation mechanism itself improved on STACK2's pooled
+  model on exactly the population it failed (see "Why this candidate" above) -- it
+  never defines stable-week output and is not itself sufficient for qualification (see
+  "Two comparators" above, unchanged from Amendment 2).
+
+**Hard stable-identity gate (new, Amendment 4):** for every non-scored row (stable
+weeks and detected-but-not-scored transition weeks) in both OOS rotations,
+`max(abs(deployable_candidate_rush_yards - promotion_comparator_rush_yards)) == 0.0`
+-- a code-identity assertion, not a statistical gate, exactly analogous to the
+conservation identity check already required in "Candidate mechanism" above. A
+failure here means the deployable arm was built wrong, not that the candidate is
+weak; see Promotion disposition rule.
+
 ## Authority-exact baseline reconstruction (Amendment 1 point #6)
 
 Before any candidate-vs-comparator comparison is scored, **both** comparators above
@@ -391,9 +447,15 @@ canonical historical `component_predictions.csv`/ensemble-output lineage already
 elsewhere in this repo's backtest machinery. Report row-count and max-abs-value delta
 against each canonical source. **Fail closed** if either reconstruction does not
 reproduce to near-machine precision -- a candidate "win" against a mis-reconstructed
-comparator is not evidence. Stable-week mechanism-comparator rows remain byte-identical
-by construction and do not need this proof independently; transition-week rows and the
-promotion comparator (scored on every row, stable and transition alike) do.
+comparator is not evidence. **Scope corrected under Amendment 4**: the mechanism
+comparator feeds only the diagnostic-only `mechanism_diagnostic` arm, which scores
+scored V1 transition rows exclusively (see "Two candidate arms"), so its
+reconstruction proof is required on scored V1 transition rows only -- stable-week
+mechanism-comparator values are not used anywhere and need no reconstruction proof.
+The promotion comparator, by contrast, is required on **every** row (stable and
+transition alike): transition rows need it as the decisive qualification comparator,
+and stable/non-scored rows need it as the exact value the `deployable_candidate` arm
+must reproduce under the hard stable-identity gate.
 
 **Per-rotation weight-file provenance check (Amendment 3 addition):** as part of this
 same reconstruction proof, confirm which `rush_yards` weight row was actually applied
@@ -442,11 +504,20 @@ production endpoint is decisive** for qualification.
   comparator (`ensemble_proj`), independently in Rotation 1 (2024 OOS) and Rotation 2
   (2025 OOS). A carry-allocation improvement over the mechanism comparator that does
   not improve rushing-yard MAE over the **promotion** comparator does **not** qualify.
-- **Stable subpopulation must not regress**: mechanism-track stable-week output is
-  defined identical to the mechanism comparator by construction (`max abs diff ==
-  0.0`), so this is a code-identity assertion, not a statistical gate. Against the
-  promotion comparator, stable-week rows are scored exactly the same as transition-week
-  rows (the promotion comparator makes no stable/transition distinction).
+- **Stable subpopulation must not regress (corrected, Amendment 4)**: the
+  `deployable_candidate` arm's non-scored-week output is defined identical to the
+  **promotion comparator** by construction (`max abs diff == 0.0`, the hard
+  stable-identity gate in "Two candidate arms" above) -- a code-identity assertion,
+  not a statistical gate. This replaces the prior, incorrect Amendment-1/2/3 wording
+  that compared stable weeks to the mechanism comparator.
+- **Deployable whole-season safety check (new, Amendment 4)**: because non-scored
+  rows are byte-identical to the promotion comparator by construction, the
+  `deployable_candidate` arm's **whole-season** (every row, stable and scored
+  transition alike) rushing-yard MAE must be non-worse than the promotion comparator,
+  independently in each OOS rotation -- report the exact delta. This is an
+  integration-sanity gate confirming the hybrid arm as a whole is safe to consider for
+  deployment; per GPT-5.6's framing it is **required** but cannot by itself rescue a
+  failure on the decisive scored-transition-only gate above -- both must pass.
 - **Protected P3-failure cohorts, reused exactly** from `RB_FINAL_QUALIFICATION_
   RESULTS.md` for direct comparability: actual carries>=20, actual rushing yards>=100
   are **required** gates (each non-worse than the promotion comparator, transition-week
@@ -501,7 +572,10 @@ production endpoint is decisive** for qualification.
   comparators passes; both rotations have adequate (`n>=30`) support on the overall
   transition subpopulation and both required protected cohorts; both rotations clear
   every required gate on the rushing-yard production endpoint against the promotion
-  comparator** -> `RB_LANE_A_TRANSITION_ALLOCATION_QUALIFIED`. Eligible for a separate,
+  comparator; the Amendment-4 stable-identity gate holds exactly on every non-scored
+  row in both rotations; and the Amendment-4 whole-season deployable safety check is
+  non-worse than the promotion comparator in both rotations** ->
+  `RB_LANE_A_TRANSITION_ALLOCATION_QUALIFIED`. Eligible for a separate,
   independently-reviewed production-integration PR (this plan does not itself
   authorize enabling anything) -- and, per Issue #535's standing policy, enters
   permanent all-season shadow monitoring after any such promotion, same as every other
@@ -524,16 +598,22 @@ production endpoint is decisive** for qualification.
   this alone prevents `QUALIFIED` regardless of how any scoreable gate performs.
   Disclosure-only slices (carries>=25) never trigger this regardless of their count.
 - **Gate 0, both reconstructions, and adequacy all clear, but any required
-  protected-cohort/bootstrap/conservation/per-season gate fails against the promotion
-  comparator** -> `RB_LANE_A_TRANSITION_ALLOCATION_NOT_QUALIFIED`. No rescue tuning, no
-  re-test with adjusted thresholds, no subset search. Same stop-rule discipline as
-  every other closed RB lane in this program (STACK6, STACK6B, M95T,
-  Role-Order-Remap-V1).
+  protected-cohort/bootstrap/conservation/stable-identity/whole-season-safety/
+  per-season gate fails against the promotion comparator** ->
+  `RB_LANE_A_TRANSITION_ALLOCATION_NOT_QUALIFIED`. No rescue tuning, no re-test with
+  adjusted thresholds, no subset search. Same stop-rule discipline as every other
+  closed RB lane in this program (STACK6, STACK6B, M95T, Role-Order-Remap-V1). A
+  stable-identity-gate failure specifically (Amendment 4) indicates a
+  `deployable_candidate` construction bug, not candidate weakness -- it is fixed and
+  re-verified before any other gate is re-scored, not tuned around.
 
 ## Explicitly out of scope
 
-- No change to stable-week mechanism-track RB output -- by construction, identical to
-  the mechanism comparator (P3/STACK2).
+- No change to stable-week (or detected-but-not-scored transition-week) RB output --
+  by construction, the `deployable_candidate` arm is identical to the **promotion
+  comparator** (`ensemble_proj`, today's real Weeks-2-18 production route) on every
+  such row (Amendment 4). The mechanism comparator (P3/STACK2) is used only inside the
+  diagnostic-only `mechanism_diagnostic` arm and never defines any candidate output.
 - No change to WR/TE/QB, receiving markets, or any non-rushing RB market.
 - Does not reopen STACK6 team-rush-context slicing, direct depth-rank carry
   assignment, or pooled-whole-season secondary-role features (STACK6B) -- this
