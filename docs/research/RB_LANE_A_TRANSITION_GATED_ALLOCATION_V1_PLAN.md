@@ -87,6 +87,31 @@ field computes `sum((ownshares/ownshares.sum())^2)` -- normalized, not raw. Pros
 corrected to match; the existing field is reused byte-for-byte, unchanged, no new
 calculation.
 
+**Amendment 6** (this revision): adjudicated by GPT-5.6 on Issue #535 (comment
+`5704381940`), replacing the promotion comparator's cross-run parity requirement
+before any candidate output exists. During implementation, a cross-run parity check
+of a fresh Rotation-1 (2024) reconstruction against run `35032590321` (initially
+believed to be the canonical M91 authority artifact) surfaced a residual `mc_proj`-
+only delta on Chris-Godwin-affected weeks (1-7) after two rounds of invocation-
+fidelity and universe-membership diagnostics (Issue #535 comments `5703806811`,
+`5703860966`, `5704046915`, `5704073674`, `5704161947`, `5704337661`) ruled out
+invocation mismatch and universe-membership disagreement as the cause (the A/B
+deterministic-trace test matched canonical to machine epsilon under the correct
+universe assumption, isolating the residual to somewhere inside `simulate()`/the MC
+layer itself, or to a field not yet compared). GPT-5.6's audit then found the deeper
+problem: **`35032590321` is not the original M91 authority artifact at all** -- it
+is itself a 2026-09-15 reconstruction (`M91_EXACT_RUN_ID=33348554748` in its own
+workflow inputs); the true original run (`33348554748`, 2026-08-31) has an expired
+artifact. Cross-run parity against a non-authoritative, now-partially-unreproducible
+reconstruction is therefore **not a legitimate blocking requirement** -- it correctly
+caught real invocation bugs earlier in this process, but continued cross-run
+archaeology against it cannot be a permanent gate. **The "Authority-exact baseline
+reconstruction" section's promotion-comparator requirement (Amendment 1 point #6) is
+formally replaced** with the same-job double-build authority contract specified
+below ("Same-job promotion-comparator authority (Amendment 6 replacement)"). The
+mechanism-comparator reconstruction requirement (against the canonical STACK2/P3
+casebook, which is not affected by this cross-run-artifact problem) is unchanged.
+
 ## Why this candidate, and why it is not a disguised STACK2 retest
 
 The Lane A audit established: STACK2 (`scripts/backtest/evaluate_rb_stack2_enriched_
@@ -558,6 +583,62 @@ in each. A reconstruction that resolves to the wrong weight file for either rota
 identically to any other baseline-reconstruction failure below -- it fails closed,
 not silently corrected after the fact.
 
+## Same-job promotion-comparator authority (Amendment 6 replacement)
+
+Replaces this document's promotion-comparator cross-run parity requirement (the
+promotion-comparator half of "Authority-exact baseline reconstruction" above), per
+Amendment 6 and GPT-5.6's Issue #535 comment `5704381940`. The mechanism-comparator
+reconstruction requirement (against the canonical STACK2/P3 casebook) is unaffected
+and still applies exactly as specified above.
+
+For each rotation, the promotion comparator's `component_predictions.csv` is
+established by:
+
+1. Building the exact M91 invocation (the same helper-script sequence already
+   verified in this branch: `build_historical_inputs.py` -> `enrich_historical_
+   defense.py` -> `validate_historical_inputs.py` -> `historical_player_logs_m95q.py`
+   -> `build_historical_injuries.py` -> `build_historical_weather.py` ->
+   `walk_forward.py --injuries --weather --iterations 2000`) **twice, in the same CI
+   job**, from one frozen input snapshot/manifest (i.e. build A and build B both read
+   the identical downloaded/generated historical-input files -- not two independent
+   re-fetches -- isolating this check to the deterministic code path, not to whether
+   an upstream data source can change between two separate fetches).
+2. Persisting, as evidence: SHA256 of every historical-input file that feeds the
+   build (player/team-weekly/schedule history, injuries, weather, pregame universe
+   per week), the repo code SHA, the `scripts/simulation_v2.py` blob SHA
+   specifically, the Python/numpy/pandas versions, the seed policy (`42 + week`), and
+   `iterations=2000`.
+3. Requiring **exact row identity** between build A and build B on `(season, week,
+   team, player_clean_key, market)` -- zero rows unique to either build.
+4. Requiring `mc_proj`, `ml_proj`, and `state_proj` equality between build A and
+   build B to machine tolerance (`<=1e-6`; same-seed/same-input reruns are expected
+   to reproduce far tighter than this).
+5. Preserving the raw pre-actual-filter simulation-universe identity/order manifest
+   (every player row entering `simulate()`, in order, per week) as part of the
+   evidence, so a membership/order ambiguity of the kind this amendment resolves
+   cannot recur undetected.
+6. Designating **build A as the single canonical component-prediction source**
+   consumed by both (a) the promotion comparator used for candidate qualification,
+   and (b) the Lane-A candidate's own `ensemble_proj` construction -- the critical
+   paired-input guarantee: candidate and comparator are never built from two
+   separately-reconstructed component-prediction sources, so no future cross-run
+   discrepancy of this kind can silently bias a candidate-vs-comparator comparison.
+7. Disposition naming: a pass is recorded as `SAME_JOB_AUTHORITY_RECONSTRUCTION_
+   PASS`, never as "parity passed" against `35032590321` or any other cross-run
+   artifact. The `35032590321` cross-run discrepancy remains fully disclosed in this
+   document's history (Amendment 6 above) as a historical reconstruction diagnostic
+   that correctly caught real invocation bugs earlier in this process -- it is not
+   deleted or hidden, only no longer treated as a blocking requirement. A failure of
+   this same-job contract (row-identity mismatch, or any of `mc_proj`/`ml_proj`/
+   `state_proj` exceeding `1e-6` between build A and build B) stops the process the
+   same as any other baseline-reconstruction failure below -- it is a genuine
+   nondeterminism/environment defect requiring its own fix, not something to tune
+   around.
+8. Per-rotation weight-file provenance (Amendment 3) is unchanged by this
+   replacement: Rotation 1 still resolves to `docs/research/overnight/
+   ensemble_weights_2023_fit_v1.csv`, Rotation 2 still resolves to `data/
+   model_ensemble_weights.csv`, both asserted exactly as specified above.
+
 ## Two-rotation temporal design
 
 Matching the QB M89/M90 rotation-confirmation pattern
@@ -657,10 +738,12 @@ production endpoint is decisive** for qualification.
 
 ## Promotion disposition rule
 
-- **Gate 0 (all three sub-gates) passes; authority-exact reconstruction of both
-  comparators passes; both rotations have adequate (`n>=30`) support on the overall
-  transition subpopulation and both required protected cohorts; both rotations clear
-  every required gate on the rushing-yard production endpoint against the promotion
+- **Gate 0 (all three sub-gates) passes; the mechanism comparator's authority-exact
+  reconstruction passes and the promotion comparator's same-job authority contract
+  (Amendment 6) reaches `SAME_JOB_AUTHORITY_RECONSTRUCTION_PASS` for both rotations;
+  both rotations have adequate (`n>=30`) support on the overall transition
+  subpopulation and both required protected cohorts; both rotations clear every
+  required gate on the rushing-yard production endpoint against the promotion
   comparator; the Amendment-4 stable-identity gate holds exactly on every non-scored
   row in both rotations; and the Amendment-4 whole-season deployable safety check is
   non-worse than the promotion comparator in both rotations** ->
@@ -676,10 +759,13 @@ production endpoint is decisive** for qualification.
   separate fix/review first. Explicitly does not permit reverting to a coarser
   identity/leakage-relaxed harmonizer to unblock -- the fix is to the harmonizer, not
   the gate.
-- **Authority-exact reconstruction of either comparator fails, including the
-  Amendment-3 per-rotation weight-file provenance check (wrong weight file resolved
-  for a rotation, or `max(calibration_season_used) < test_season` cannot be proven)**
-  -> `RB_LANE_A_TRANSITION_ALLOCATION_BASELINE_RECONSTRUCTION_FAILURE`. Candidate
+- **The mechanism comparator's authority-exact reconstruction fails, or the
+  promotion comparator's same-job authority contract (Amendment 6) fails (row-
+  identity mismatch between build A/B, or any of `mc_proj`/`ml_proj`/`state_proj`
+  exceeding `1e-6` between build A/B), or the Amendment-3 per-rotation weight-file
+  provenance check fails (wrong weight file resolved for a rotation, or
+  `max(calibration_season_used) < test_season` cannot be proven)** ->
+  `RB_LANE_A_TRANSITION_ALLOCATION_BASELINE_RECONSTRUCTION_FAILURE`. Candidate
   science does not proceed until the failing reconstruction is fixed and re-verified.
 - **Either OOS rotation's overall transition subpopulation, or either required
   protected cohort (carries>=20, yards>=100) within it, is below the `n>=30` adequacy
