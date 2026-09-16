@@ -287,3 +287,78 @@ def blob_sha_of(repo_root: Path, rel_path: str) -> str:
         check=False,
     )
     return proc.stdout.strip()
+
+
+# Amendment 7: mechanism comparator (P3/STACK2) authority-exact reconstruction,
+# Rotation 2 (2024-fit/2025-eval) only -- no canonical 2023-fit/2024-eval STACK2
+# casebook exists, so Rotation 1 discloses NOT_CONSTRUCTIBLE_NO_CASEBOOK per the
+# plan's Amendment-7 text, never gating BASELINE_RECONSTRUCTION_FAILURE alone.
+#
+# The mechanism comparator's frozen formula (`enriched_att * stack_implied_ypc`,
+# `compose_p3_row()` in rb_rush_synthesis_v1.py) is already precomputed, byte for
+# byte, as the STACK2 casebook's own `arch_enriched_opp_stack_eff_yards` column
+# (evaluate_rb_stack2_enriched_allocation.py::add_projection_arms) -- no separate
+# recomposition is performed here; this only proves the fresh rebuild reproduces
+# that already-frozen column against the canonical casebook (run `33538770934`,
+# cited directly in rb_rush_synthesis_v1.py's own docstring).
+MECHANISM_COMPARATOR_SCRIPT_BLOB = "7baa23a2db32fac60cdeffec875e20b4f6176d25"
+MECHANISM_COMPARATOR_COLUMN = "arch_enriched_opp_stack_eff_yards"
+MECHANISM_PARITY_JOIN_KEYS = ["season", "week", "team", "name_key"]
+MECHANISM_CANONICAL_RUN_ID = "33538770934"
+MECHANISM_FROZEN_PARENT_RUN_IDS = {
+    "m94c": "33353485070",
+    "stack1": "33535308110",
+    "rb_market": "33499129109",
+}
+
+
+def compare_mechanism_comparator_parity(fresh: pd.DataFrame, canonical: pd.DataFrame) -> dict:
+    """Authority-exact reconstruction proof for the mechanism comparator
+    (Rotation 2 only, per Amendment 7). Same identity/value-parity discipline
+    as `compare_component_predictions_parity()`, applied to STACK2's own
+    identity keys (`season, week, team, name_key`) and its single precomputed
+    mechanism-comparator column.
+    """
+    required = set(MECHANISM_PARITY_JOIN_KEYS) | {MECHANISM_COMPARATOR_COLUMN}
+    for label, frame in (("fresh", fresh), ("canonical", canonical)):
+        missing = required - set(frame.columns)
+        if missing:
+            return {
+                "disposition": "MECHANISM_PARITY_FAILURE",
+                "reason": f"{label} frame missing required columns: {sorted(missing)}",
+            }
+
+    f = fresh[MECHANISM_PARITY_JOIN_KEYS + [MECHANISM_COMPARATOR_COLUMN]].copy()
+    c = canonical[MECHANISM_PARITY_JOIN_KEYS + [MECHANISM_COMPARATOR_COLUMN]].copy()
+    f = f.drop_duplicates(MECHANISM_PARITY_JOIN_KEYS, keep="last")
+    c = c.drop_duplicates(MECHANISM_PARITY_JOIN_KEYS, keep="last")
+
+    merged = f.merge(
+        c, on=MECHANISM_PARITY_JOIN_KEYS, how="outer",
+        suffixes=("_fresh", "_canonical"), indicator=True,
+    )
+    matched = merged.loc[merged["_merge"] == "both"]
+    fresh_only = int((merged["_merge"] == "left_only").sum())
+    canonical_only = int((merged["_merge"] == "right_only").sum())
+
+    a = pd.to_numeric(matched[f"{MECHANISM_COMPARATOR_COLUMN}_fresh"], errors="coerce")
+    b = pd.to_numeric(matched[f"{MECHANISM_COMPARATOR_COLUMN}_canonical"], errors="coerce")
+    delta = (a - b).abs()
+    max_abs_delta = float(delta.max()) if len(delta) else float("nan")
+
+    tolerance = 1e-6
+    value_mismatch = (not pd.isna(max_abs_delta)) and max_abs_delta > tolerance
+    disposition = (
+        "MECHANISM_PARITY_FAILURE"
+        if (fresh_only or canonical_only or value_mismatch)
+        else "MECHANISM_AUTHORITY_RECONSTRUCTION_PASS"
+    )
+
+    return {
+        "disposition": disposition,
+        "rows_matched": int(len(matched)),
+        "rows_fresh_only": fresh_only,
+        "rows_canonical_only": canonical_only,
+        "max_abs_value_delta": {MECHANISM_COMPARATOR_COLUMN: max_abs_delta},
+        "tolerance": tolerance,
+    }

@@ -657,3 +657,127 @@ jobs:
             evidence/rb_lane_a_same_job_canonical/component_predictions_${{ matrix.test_season }}.csv
           if-no-files-found: error
           retention-days: 30
+
+  mechanism-comparator-reconstruction:
+    # Amendment 7: mechanism comparator (P3/STACK2) authority-exact
+    # reconstruction, Rotation 2 (2024-fit/2025-eval) only -- no canonical
+    # 2023-fit/2024-eval STACK2 casebook exists (Issue #535 comment
+    # 5704854605). Mirrors the exact invocation of
+    # backtest-rb-stack2-enriched-allocation.yml's own canonical run
+    # (33538770934): download the same three frozen-parent artifacts by the
+    # same run IDs, run evaluate_rb_stack2_enriched_allocation.py unchanged,
+    # and prove the fresh rebuild reproduces the canonical casebook's
+    # already-frozen arch_enriched_opp_stack_eff_yards column (the plan's
+    # mechanism-comparator formula, enriched_att * stack_implied_ypc).
+    needs: helper-contract-tests
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      M94C_RUN_ID: '33353485070'
+      STACK1_RUN_ID: '33535308110'
+      RB_MARKET_RUN_ID: '33499129109'
+      MECHANISM_CANONICAL_RUN_ID: '33538770934'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scikit-learn
+
+      - name: Verify STACK2 script is byte-identical to the canonical run's code
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.backtest.rb_lane_a_comparator_reconstruction_v1 import (
+              MECHANISM_COMPARATOR_SCRIPT_BLOB,
+              blob_sha_of,
+          )
+          actual = blob_sha_of(Path("."), "scripts/backtest/evaluate_rb_stack2_enriched_allocation.py")
+          if actual != MECHANISM_COMPARATOR_SCRIPT_BLOB:
+              raise SystemExit(
+                  f"evaluate_rb_stack2_enriched_allocation.py blob drifted from the "
+                  f"canonical run's code: expected {MECHANISM_COMPARATOR_SCRIPT_BLOB}, got {actual}"
+              )
+          print("STACK2 script blob matches canonical run's code:", actual)
+          PY
+
+      - name: Download frozen-parent artifacts (exact same run IDs as the canonical STACK2 run)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p data/backtests/rb_stack2/m94c data/backtests/rb_stack2/stack1 data/backtests/rb_stack2/market
+          gh run download "$M94C_RUN_ID" --repo "$GITHUB_REPOSITORY" --name migration-94c-rb-game-environment --dir data/backtests/rb_stack2/m94c
+          gh run download "$STACK1_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-stack1-production-equivalent-baseline --dir data/backtests/rb_stack2/stack1
+          gh run download "$RB_MARKET_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rb-market-benchmark-2025 --dir data/backtests/rb_stack2/market
+          test -s data/backtests/rb_stack2/m94c/m94c_2025_rb_trace.csv
+          test -s data/backtests/rb_stack2/stack1/results/stack1_2025_rb_trace.csv || test -s data/backtests/rb_stack2/stack1/stack1_2025_rb_trace.csv
+          test -s data/backtests/rb_stack2/market/rb_market_casebook.csv
+
+      - name: Rebuild STACK2 casebook (exact same invocation as the canonical run)
+        run: |
+          set -euo pipefail
+          rm -rf data/backtests/rb_stack2/results
+          python scripts/backtest/evaluate_rb_stack2_enriched_allocation.py \
+            --m94c-root data/backtests/rb_stack2/m94c \
+            --stack1-root data/backtests/rb_stack2/stack1 \
+            --market-root data/backtests/rb_stack2/market \
+            --out-dir data/backtests/rb_stack2/results
+          test -s data/backtests/rb_stack2/results/stack2_2025_casebook.csv
+
+      - name: Download canonical STACK2 casebook
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/canonical_stack2
+          gh run download "$MECHANISM_CANONICAL_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "rb-stack2-enriched-allocation-integration" --dir evidence/canonical_stack2
+          test -s evidence/canonical_stack2/stack2_2025_casebook.csv
+
+      - name: Run mechanism-comparator authority-exact reconstruction parity check
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from scripts.backtest.rb_lane_a_comparator_reconstruction_v1 import (
+              compare_mechanism_comparator_parity,
+          )
+
+          fresh = pd.read_csv("data/backtests/rb_stack2/results/stack2_2025_casebook.csv")
+          canonical = pd.read_csv("evidence/canonical_stack2/stack2_2025_casebook.csv")
+
+          report = {
+              "rotation": 2,
+              "test_season": 2025,
+              "mechanism_parity": compare_mechanism_comparator_parity(fresh, canonical),
+              "rotation_1_disposition": (
+                  "NOT_CONSTRUCTIBLE_NO_CASEBOOK -- no canonical 2023-fit/2024-eval "
+                  "STACK2 casebook exists anywhere in this repo's history "
+                  "(Amendment 7, Issue #535 comment 5704854605). Non-blocking: "
+                  "mechanism_diagnostic never gates the QUALIFIED disposition."
+              ),
+          }
+          with open("evidence/rb_lane_a_mechanism_comparator_reconstruction_report.json", "w") as f:
+              json.dump(report, f, indent=2, default=str)
+          print(json.dumps(report, indent=2, default=str))
+
+          if report["mechanism_parity"]["disposition"] != "MECHANISM_AUTHORITY_RECONSTRUCTION_PASS":
+              raise SystemExit(
+                  f"Amendment 7 mechanism-comparator reconstruction FAILED: {report['mechanism_parity']}"
+              )
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-lane-a-mechanism-comparator-reconstruction
+          path: |
+            evidence/rb_lane_a_mechanism_comparator_reconstruction_report.json
+            data/backtests/rb_stack2/results/stack2_2025_casebook.csv
+          if-no-files-found: error
+          retention-days: 30

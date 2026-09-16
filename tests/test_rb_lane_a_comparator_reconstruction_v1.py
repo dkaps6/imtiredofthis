@@ -3,9 +3,11 @@ import pytest
 
 from scripts.backtest.rb_lane_a_comparator_reconstruction_v1 import (
     FROZEN_PARENT_BLOBS,
+    MECHANISM_COMPARATOR_COLUMN,
     build_input_manifest,
     build_promotion_comparator,
     compare_component_predictions_parity,
+    compare_mechanism_comparator_parity,
     load_rotation_rush_yards_weights,
     same_job_double_build_disposition,
     sha256_of_file,
@@ -174,4 +176,52 @@ def test_build_input_manifest_records_sha256_per_label(tmp_path):
 def test_build_input_manifest_fails_closed_on_missing_file(tmp_path):
     with pytest.raises(RuntimeError, match="missing file"):
         build_input_manifest({"schedule": tmp_path / "does_not_exist.csv"})
+
+
+def _mech_rows(rows):
+    cols = ["season", "week", "team", "name_key", MECHANISM_COMPARATOR_COLUMN]
+    return pd.DataFrame(rows, columns=cols)
+
+
+def test_mechanism_parity_passes_on_identical_frames():
+    frame = _mech_rows(
+        [
+            [2025, 1, "KC", "p1", 80.0],
+            [2025, 1, "SF", "p2", 60.0],
+        ]
+    )
+    result = compare_mechanism_comparator_parity(frame, frame.copy())
+    assert result["disposition"] == "MECHANISM_AUTHORITY_RECONSTRUCTION_PASS"
+    assert result["rows_fresh_only"] == 0
+    assert result["rows_canonical_only"] == 0
+    assert result["max_abs_value_delta"][MECHANISM_COMPARATOR_COLUMN] == 0.0
+
+
+def test_mechanism_parity_fails_closed_on_value_mismatch():
+    fresh = _mech_rows([[2025, 1, "KC", "p1", 80.0]])
+    canonical = _mech_rows([[2025, 1, "KC", "p1", 80.5]])
+    result = compare_mechanism_comparator_parity(fresh, canonical)
+    assert result["disposition"] == "MECHANISM_PARITY_FAILURE"
+    assert result["max_abs_value_delta"][MECHANISM_COMPARATOR_COLUMN] == pytest.approx(0.5)
+
+
+def test_mechanism_parity_fails_closed_on_unmatched_rows():
+    fresh = _mech_rows(
+        [
+            [2025, 1, "KC", "p1", 80.0],
+            [2025, 1, "SF", "p2", 60.0],
+        ]
+    )
+    canonical = _mech_rows([[2025, 1, "KC", "p1", 80.0]])
+    result = compare_mechanism_comparator_parity(fresh, canonical)
+    assert result["disposition"] == "MECHANISM_PARITY_FAILURE"
+    assert result["rows_fresh_only"] == 1
+
+
+def test_mechanism_parity_fails_closed_on_missing_columns():
+    fresh = pd.DataFrame({"season": [2025]})
+    canonical = _mech_rows([[2025, 1, "KC", "p1", 80.0]])
+    result = compare_mechanism_comparator_parity(fresh, canonical)
+    assert result["disposition"] == "MECHANISM_PARITY_FAILURE"
+    assert "fresh frame missing" in result["reason"]
 
