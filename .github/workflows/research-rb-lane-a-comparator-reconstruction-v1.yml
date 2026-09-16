@@ -14,10 +14,18 @@ permissions:
 
 env:
   PYTHONPATH: ${{ github.workspace }}
-  # Canonical historical M91 artifacts (2020-2024), already used elsewhere in
-  # this repo (research-rb-pd2-fresh-source-revalidation-v1.yml) as the
-  # cross-run ground truth for this exact pipeline's 2024 output. Rotation 1's
-  # (test=2024) authority/value-parity check reuses it unchanged.
+  # Canonical historical M91 artifact for 2024, built by the exact invocation
+  # in backtest-rb-m95q-expanded-historical-stable-workhorse.yml's
+  # build-m91-rotation job (build_historical_inputs.py -> enrich_historical_
+  # defense.py -> validate_historical_inputs.py -> historical_player_logs_
+  # m95q.py -> build_historical_injuries.py -> build_historical_weather.py ->
+  # walk_forward.py --iterations 2000). Rotation 1's (test=2024) parity check
+  # only holds if this job's own rebuild mirrors that exact sequence -- a
+  # first attempt that used a different invocation (merged multi-season
+  # window, generic player-logs builder, no injuries/weather, iterations=5000)
+  # produced a 40-80 yard "parity failure" that was actually an invalid
+  # comparison, not a reconstruction defect (see Issue #535 comment
+  # 5702639446, citing this repo's own precedent at commit 780087b1).
   CANONICAL_2024_RUN_ID: '35032590321'
 
 jobs:
@@ -40,6 +48,14 @@ jobs:
           python -m pytest tests/test_rb_lane_a_comparator_reconstruction_v1.py -v
 
   build-component-predictions:
+    # Exact-invocation M91 reconstruction, per GPT-5.6's adjudication (Issue
+    # #535 comment 5702639446): the first attempt at this job used a merged
+    # multi-season history window, the generic historical_player_logs.py,
+    # skipped defense enrichment/input validation, omitted injuries/weather,
+    # and used iterations=5000 -- none of which match the canonical M91
+    # invocation (.github/workflows/backtest-rb-m95q-expanded-historical-
+    # stable-workhorse.yml, build-m91-rotation job), so the resulting parity
+    # diff was not a valid comparison. This step-for-step mirrors that job.
     needs: helper-contract-tests
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
@@ -50,73 +66,59 @@ jobs:
           - rotation: 1
             test_season: 2024
             prior_season: 2023
-            history_seasons: '2022,2023,2024'
           - rotation: 2
             test_season: 2025
             prior_season: 2024
-            history_seasons: '2023,2024,2025'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install dependencies
+      - name: Install M91 dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install nflreadpy pyarrow
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
 
-      - name: Build per-season historical inputs
+      - name: Rebuild exact M91-invocation temporal rotation
+        env:
+          SEASON: ${{ matrix.test_season }}
+          PRIOR: ${{ matrix.prior_season }}
         run: |
           set -euo pipefail
-          IFS=',' read -ra SEASONS <<< "${{ matrix.history_seasons }}"
-          for s in "${SEASONS[@]}"; do
-            prior=$((s - 1))
-            mkdir -p "/tmp/hist_${s}"
-            python scripts/backtest/build_historical_inputs.py \
-              --season "$s" --prior-season "$prior" --weeks 1-18 \
-              --out-dir "/tmp/hist_${s}"
-          done
-
-      - name: Combine schedule + team-week history across the lookback window
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/combined
-          python - <<PY
-          import pandas as pd
-          from pathlib import Path
-          seasons = "${{ matrix.history_seasons }}".split(",")
-          out = Path("/tmp/combined")
-          for name in ["schedule_history.csv", "team_weekly_history.csv"]:
-              parts = [pd.read_csv(f"/tmp/hist_{s}/" + name) for s in seasons]
-              x = pd.concat(parts, ignore_index=True)
-              keys = ["season", "week", "team"]
-              x = x.sort_values(keys).drop_duplicates(keys, keep="last").reset_index(drop=True)
-              if x.duplicated(keys).any():
-                  raise RuntimeError(f"duplicate combined historical identity rows in {name}")
-              x.to_csv(out / name, index=False)
-              print(name, len(x), sorted(x.season.unique()))
-          PY
-
-      - name: Build canonical player game logs across the lookback window
-        run: |
-          python scripts/backtest/historical_player_logs.py \
-            --seasons "${{ matrix.history_seasons }}" \
-            --schedule /tmp/combined/schedule_history.csv \
-            --out /tmp/combined/player_game_logs_history.csv
-
-      - name: Build component predictions for the test season (frozen-parent pipeline)
-        run: |
+          WEEKS='1-18'
+          D="/tmp/rb_lane_a_m91/${SEASON}"
+          mkdir -p "$D"
+          echo "Lane-A M91 rebuild season=$SEASON prior=$PRIOR regular_weeks=$WEEKS"
+          python scripts/backtest/build_historical_inputs.py \
+            --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --out-dir "$D"
+          python scripts/backtest/enrich_historical_defense.py \
+            --team-weekly "$D/team_weekly_history.csv" \
+            --seasons "$PRIOR,$SEASON" \
+            --audit "$D/historical_defense_enrichment_audit.csv" \
+            --observations "$D/historical_defense_observations.csv"
+          python scripts/backtest/validate_historical_inputs.py \
+            --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" \
+            --data-dir "$D" --report "$D/historical_input_validation.csv"
+          python scripts/backtest/historical_player_logs_m95q.py \
+            --seasons "$PRIOR,$SEASON" --schedule "$D/schedule_history.csv" \
+            --out "$D/player_game_logs_history.csv"
+          python scripts/backtest/build_historical_injuries.py \
+            --seasons "$PRIOR,$SEASON" --out "$D/injuries_history.csv"
+          python scripts/backtest/build_historical_weather.py \
+            --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv"
           python scripts/backtest/walk_forward.py \
-            --season ${{ matrix.test_season }} \
-            --prior-season ${{ matrix.prior_season }} \
-            --weeks 1-18 \
-            --iterations 5000 \
-            --player-logs /tmp/combined/player_game_logs_history.csv \
-            --team-weekly /tmp/combined/team_weekly_history.csv \
-            --schedule /tmp/combined/schedule_history.csv \
-            --universe-dir "/tmp/hist_${{ matrix.test_season }}/pregame_universe" \
-            --out "/tmp/component_predictions_${{ matrix.test_season }}.csv"
+            --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" \
+            --player-logs "$D/player_game_logs_history.csv" \
+            --team-weekly "$D/team_weekly_history.csv" \
+            --schedule "$D/schedule_history.csv" \
+            --universe-dir "$D/pregame_universe" \
+            --injuries "$D/injuries_history.csv" \
+            --weather "$D/weather_history.csv" \
+            --out "$D/component_predictions.csv" \
+            --iterations 2000
+          test -s "$D/component_predictions.csv"
+          cp "$D/component_predictions.csv" "/tmp/component_predictions_${SEASON}.csv"
 
       - name: Show output summary
         if: always()
@@ -186,8 +188,10 @@ jobs:
           report["rotation_2_parity"] = {
               "disposition": "NO_PRIOR_CANONICAL_ARTIFACT",
               "reason": (
-                  "No prior CI run of this exact frozen-parent pipeline exists for "
-                  "season 2025 anywhere in this repo -- this build establishes the "
+                  "No prior CI run of this exact M91 invocation exists for season "
+                  "2025 anywhere in this repo -- this build (same helper-script "
+                  "sequence, single-prior-season scope, injuries+weather, "
+                  "iterations=2000 as the canonical M91 rebuild) establishes the "
                   "first canonical artifact for that season. Not a cross-run value "
                   "parity proof; documented honestly as such, not silently upgraded "
                   "to a PASS."
