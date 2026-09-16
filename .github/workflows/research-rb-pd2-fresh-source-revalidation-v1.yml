@@ -1,0 +1,64 @@
+name: RB-PD2 Fresh-Source Revalidation V1
+
+on:
+  push:
+    branches:
+      - research-rb-pd2-yard-difficulty-mc-width-v1
+    paths:
+      - 'scripts/research/evaluate_rb_pd2_fresh_source_revalidation_trigger.marker'
+  workflow_dispatch:
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  FRESH_M91_RUN_ID: '35032590321'
+
+jobs:
+  revalidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install scikit-learn
+      - name: Download fresh M91 component artifacts (2020-2024)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for SEASON in 2020 2021 2022 2023 2024; do
+            mkdir -p "evidence/fresh_m91/${SEASON}"
+            gh run download "$FRESH_M91_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+              --name "m95q-m91-${SEASON}" \
+              --dir "/tmp/dl_${SEASON}"
+            SRC=$(find "/tmp/dl_${SEASON}" -name "component_predictions.csv" | head -1)
+            test -s "$SRC"
+            cp "$SRC" "evidence/fresh_m91/${SEASON}/component_predictions.csv"
+          done
+      - name: Rerun frozen PD2 multiseason science on fresh source
+        run: |
+          python scripts/research/evaluate_rb_pd2_multiseason_fresh_source_v1.py \
+            --root evidence/fresh_m91 \
+            --target-source-label "cross_run:${FRESH_M91_RUN_ID}" \
+            --prior-2020-source-run-id "$FRESH_M91_RUN_ID" \
+            --out-dir evidence/rb_pd2_fresh_result
+      - name: Show result
+        if: always()
+        run: |
+          cat evidence/rb_pd2_fresh_result/rb_pd2_fresh_result.json 2>/dev/null || true
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-pd2-fresh-source-revalidation-v1
+          path: evidence/rb_pd2_fresh_result/**
+          if-no-files-found: warn
+          retention-days: 30

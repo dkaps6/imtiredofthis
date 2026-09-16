@@ -134,3 +134,48 @@ def test_historical_player_logs_exclude_postseason_before_schedule_join(monkeypa
     assert len(out) == 1
     assert int(out.iloc[0]["week"]) == 18
     assert out.iloc[0]["opponent"] == "SEA"
+
+
+def test_historical_player_logs_use_schedule_authority_for_old_regular_season_boundary(monkeypatch):
+    raw = pd.DataFrame([
+        {
+            "season": 2020,
+            "week": 17,
+            "recent_team": "TB",
+            "position": "RB",
+            "player_display_name": "Regular Runner",
+            "player_id": "p1",
+            "rushing_attempts": 10,
+            "rushing_yards": 45,
+            "targets": 2,
+            "receptions": 1,
+            "receiving_yards": 7,
+            "attempts": 0,
+            "passing_yards": 0,
+        },
+        {
+            "season": 2020,
+            "week": 18,
+            "recent_team": "TB",
+            "position": "RB",
+            "player_display_name": "Postseason Runner",
+            "player_id": "p2",
+            "rushing_attempts": 8,
+            "rushing_yards": 40,
+            "targets": 1,
+            "receptions": 1,
+            "receiving_yards": 5,
+            "attempts": 0,
+            "passing_yards": 0,
+        },
+    ])
+    schedule = pd.DataFrame([
+        {"season": 2020, "week": 17, "team": "TB", "opponent": "ATL", "game_id": "g17"},
+        {"season": 2020, "week": 17, "team": "ATL", "opponent": "TB", "game_id": "g17"},
+    ])
+    monkeypatch.setattr("scripts.backtest.historical_player_logs._load_historical_weekly", lambda season: raw.copy())
+    out = build_historical_player_logs(seasons=[2020], schedule_history=schedule)
+    assert len(out) == 1
+    assert int(out.iloc[0]["week"]) == 17
+    assert out.iloc[0]["player"] == "Regular Runner"
+    assert out.iloc[0]["opponent"] == "ATL"

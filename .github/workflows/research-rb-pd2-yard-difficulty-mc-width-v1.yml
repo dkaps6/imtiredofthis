@@ -1,0 +1,270 @@
+name: RB-PD2 Yard Difficulty MC Width V1
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/research/evaluate_rb_pd2_yard_difficulty_mc_width_v1.py'
+      - 'tests/test_rb_pd2_yard_difficulty_mc_width_v1.py'
+      - '.github/workflows/research-rb-pd2-yard-difficulty-mc-width-v1.yml'
+  push:
+    branches:
+      - research-rb-pd2-yard-difficulty-mc-width-v1
+    paths:
+      - 'docs/research/RB_PD2_YARD_DIFFICULTY_MC_WIDTH_V1_RUN.md'
+  workflow_dispatch:
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  # 2026-09-15 correction: the 2023 W03 checksum mismatch against the original
+  # 33450395426 artifact (built 2026-08-31) was NOT nflverse data drift -- a
+  # same-job/same-input double-build (branch scratch-diag-rb-pd2-w3-2023-mismatch)
+  # proved build_historical_inputs.py/enrich_historical_defense.py/
+  # historical_player_logs.py are fully deterministic (byte-identical outputs
+  # across independent invocations) and that walk_forward.py's mc_proj
+  # reconstructs to ~1e-14 against its own same-run inputs. Repointing
+  # M95Q_RUN_ID to a same-day rebuild (35032590321) reproduced the exact same
+  # mismatch, which a genuine drift theory could not explain. The real cause was
+  # comparing against a *cross-run* M95Q artifact at all: rebuild-distributions
+  # now builds its own mc_proj checksum reference in-job (see "Build in-job
+  # component-prediction checksum reference"), so this env var is only used to
+  # source the 2020 prior-season component file evaluate-frozen-candidate needs
+  # (2020 is outside this PR's own 2021-2024 rebuild matrix and was never the
+  # season that mismatched).
+  M95Q_RUN_ID: '35032590321'
+
+jobs:
+  helper-contract-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest scikit-learn
+      - name: Compile and test frozen helper contracts
+        run: |
+          python -m py_compile scripts/research/evaluate_rb_pd2_yard_difficulty_mc_width_v1.py
+          pytest -q tests/test_rb_pd2_yard_difficulty_mc_width_v1.py
+
+  rebuild-distributions:
+    if: github.event_name != 'pull_request'
+    needs: helper-contract-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: true
+      matrix:
+        season: [2021, 2022, 2023, 2024]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install historical reconstruction dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+      - name: Rebuild exact historical football inputs
+        env:
+          SEASON: ${{ matrix.season }}
+        run: |
+          PRIOR=$((SEASON-1))
+          WEEKS='1-18'
+          D="data/backtests/rb_pd2_yard_width/${SEASON}"
+          mkdir -p "$D"
+          python scripts/backtest/build_historical_inputs.py \
+            --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --out-dir "$D"
+          python scripts/backtest/enrich_historical_defense.py \
+            --team-weekly "$D/team_weekly_history.csv" \
+            --seasons "$PRIOR,$SEASON" \
+            --audit "$D/historical_defense_enrichment_audit.csv" \
+            --observations "$D/historical_defense_observations.csv"
+          python scripts/backtest/validate_historical_inputs.py \
+            --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" \
+            --data-dir "$D" --report "$D/historical_input_validation.csv"
+          python scripts/backtest/historical_player_logs.py \
+            --seasons "$PRIOR,$SEASON" --schedule "$D/schedule_history.csv" \
+            --out "$D/player_game_logs_history.csv"
+          python scripts/backtest/build_historical_injuries.py \
+            --seasons "$PRIOR,$SEASON" --out "$D/injuries_history.csv"
+          python scripts/backtest/build_historical_weather.py \
+            --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv"
+      # Builds the mc_proj checksum reference in this same job, from the exact
+      # inputs just rebuilt above, instead of downloading a separately-triggered
+      # M95Q run's component_predictions.csv. A same-job/same-input double-build
+      # diagnostic (branch scratch-diag-rb-pd2-w3-2023-mismatch) proved the
+      # historical-input builder is fully deterministic (byte-identical
+      # team_weekly/player_logs/pregame_universe across independent invocations)
+      # and that walk_forward.py's mc_proj reconstructs to ~1e-14 against its own
+      # same-run inputs. The previously reported 2023 W03 ~2.8-yard mismatch was
+      # therefore not code nondeterminism or nflverse drift -- it was comparing
+      # against a cross-run M95Q artifact. Building the reference in-job removes
+      # that entire class of cross-run/expiring-artifact risk by construction.
+      - name: Build in-job component-prediction checksum reference
+        env:
+          SEASON: ${{ matrix.season }}
+        run: |
+          PRIOR=$((SEASON-1))
+          D="data/backtests/rb_pd2_yard_width/${SEASON}"
+          python scripts/backtest/walk_forward.py \
+            --season "$SEASON" --prior-season "$PRIOR" --weeks '1-18' \
+            --player-logs "$D/player_game_logs_history.csv" \
+            --team-weekly "$D/team_weekly_history.csv" \
+            --schedule "$D/schedule_history.csv" \
+            --universe-dir "$D/pregame_universe" \
+            --injuries "$D/injuries_history.csv" \
+            --weather "$D/weather_history.csv" \
+            --out "$D/component_predictions.csv" \
+            --iterations 2000
+          test -s "$D/component_predictions.csv"
+          mkdir -p "evidence/m91/${SEASON}"
+          cp "$D/component_predictions.csv" "evidence/m91/${SEASON}/component_predictions.csv"
+          cp "$D/historical_input_validation.csv" "evidence/m91/${SEASON}/historical_input_validation.csv"
+      - name: Persist checksum-verified historical MC arrays
+        env:
+          SEASON: ${{ matrix.season }}
+        run: |
+          PRIOR=$((SEASON-1))
+          D="data/backtests/rb_pd2_yard_width/${SEASON}"
+          OUT="evidence/distributions/${SEASON}"
+          python scripts/research/persist_historical_simulated_outcomes_v1.py \
+            --season "$SEASON" --prior-season "$PRIOR" --weeks '1-18' \
+            --player-logs "$D/player_game_logs_history.csv" \
+            --team-weekly "$D/team_weekly_history.csv" \
+            --schedule "$D/schedule_history.csv" \
+            --universe-dir "$D/pregame_universe" \
+            --component-file "$D/component_predictions.csv" \
+            --injuries "$D/injuries_history.csv" \
+            --weather "$D/weather_history.csv" \
+            --out-dir "$OUT" \
+            --iterations 2000 --seed-offset 42
+      - name: Upload in-job M91 component reference
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-pd2-yard-width-m91-component-${{ matrix.season }}
+          path: |
+            evidence/m91/${{ matrix.season }}/component_predictions.csv
+            evidence/m91/${{ matrix.season }}/historical_input_validation.csv
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload mean-mismatch diagnostic (failure only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-pd2-yard-width-mismatch-diagnostic-${{ matrix.season }}
+          path: evidence/distributions/${{ matrix.season }}/*_mean_mismatch_diagnostic.csv
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Upload reconstructed distribution shard
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-pd2-yard-width-distributions-${{ matrix.season }}
+          path: evidence/distributions/${{ matrix.season }}/**
+          if-no-files-found: error
+          retention-days: 30
+
+  evaluate-frozen-candidate:
+    if: github.event_name != 'pull_request'
+    needs: rebuild-distributions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install evaluation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install scikit-learn
+      - name: Download 2020 M95Q M91 component artifact (prior-season only, unaffected)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "evidence/m91/2020"
+          gh run download "$M95Q_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "m95q-m91-2020" \
+            --dir "/tmp/dl_m91_2020"
+          SRC=$(find "/tmp/dl_m91_2020" -name "component_predictions.csv" | head -1)
+          test -s "$SRC"
+          cp "$SRC" "evidence/m91/2020/component_predictions.csv"
+      # 2021-2024 come from this run's own rebuild-distributions job (in-job
+      # walk_forward.py build), not a separately-triggered M95Q run -- see the
+      # "Build in-job component-prediction checksum reference" step comment.
+      - name: Download in-job-built M91 component artifacts 2021-2024
+        uses: actions/download-artifact@v4
+        with:
+          pattern: rb-pd2-yard-width-m91-component-*
+          path: evidence/m91_raw
+          merge-multiple: false
+      - name: Place in-job-built M91 artifacts at evidence/m91/{season}
+        run: |
+          set -euo pipefail
+          for SEASON in 2021 2022 2023 2024; do
+            SRC="evidence/m91_raw/rb-pd2-yard-width-m91-component-${SEASON}"
+            mkdir -p "evidence/m91/${SEASON}"
+            cp "$SRC/component_predictions.csv" "evidence/m91/${SEASON}/component_predictions.csv"
+            cp "$SRC/historical_input_validation.csv" "evidence/m91/${SEASON}/historical_input_validation.csv"
+            test -s "evidence/m91/${SEASON}/component_predictions.csv"
+          done
+      # Supersedes the old "Download exact M95Q final parity artifact" step.
+      # Per Issue #535 (GPT-5.6, DIRECT_FRESH_REVALIDATION_ALLOWED, comment
+      # 5689291516): the old migration-95q-rb-expanded-historical-stable-workhorse
+      # parity artifact certified M95Q's downstream stable-workhorse role-model
+      # family, which this width candidate never consumes, and its own upstream
+      # dependency has since expired. Re-run the actual invariant that matters
+      # (PD2 difficulty-persistence still replicates on this fresh source)
+      # inline here instead of depending on a separately pinned artifact.
+      - name: Rerun frozen PD2 multiseason science on this run's fresh M91 source
+        run: |
+          mkdir -p evidence/pd2_fresh
+          python scripts/research/evaluate_rb_pd2_multiseason_fresh_source_v1.py \
+            --root evidence/m91 \
+            --target-source-label "in_job_same_run:${{ github.run_id }}" \
+            --prior-2020-source-run-id "$M95Q_RUN_ID" \
+            --out-dir evidence/pd2_fresh
+          test -s evidence/pd2_fresh/rb_pd2_fresh_result.json
+          test -s evidence/pd2_fresh/rb_pd2_fresh_identity_manifest.csv
+      - name: Download reconstructed MC distribution shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: rb-pd2-yard-width-distributions-*
+          path: evidence/distributions
+          merge-multiple: true
+      - name: Evaluate frozen candidate exactly once
+        run: |
+          python scripts/research/evaluate_rb_pd2_yard_difficulty_mc_width_v1.py \
+            --component-root evidence/m91 \
+            --parity-root evidence/pd2_fresh \
+            --distribution-root evidence/distributions \
+            --out-dir evidence/result
+      - name: Show frozen disposition
+        if: always()
+        run: |
+          cat evidence/result/rb_pd2_yard_width_result.json 2>/dev/null || true
+          cat evidence/result/rb_pd2_yard_width_gates.csv 2>/dev/null || true
+      - name: Upload exact research result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-pd2-yard-difficulty-mc-width-v1
+          path: evidence/result/**
+          if-no-files-found: warn
+          retention-days: 30
