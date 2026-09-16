@@ -112,6 +112,35 @@ below ("Same-job promotion-comparator authority (Amendment 6 replacement)"). The
 mechanism-comparator reconstruction requirement (against the canonical STACK2/P3
 casebook, which is not affected by this cross-run-artifact problem) is unchanged.
 
+**Amendment 7** (this revision): resolves a structural gap found while starting the
+mechanism-comparator reconstruction (Issue #535 comment `5704854605`), before any
+candidate output exists. `scripts/backtest/evaluate_rb_stack2_enriched_allocation.py`
+-- the source of the mechanism comparator's `enriched_att` input -- is entirely
+hardcoded to a single fit/eval pair (its own docstring: "2024 is the only fit season.
+2025 is evaluation"; literal `2025`-suffixed input/output filenames; `rosters=
+load_rosters([2024,2025])`). No `2023`-fit/`2024`-eval STACK2 casebook exists
+anywhere in this repo's history, and nothing in that script is parameterized to
+produce one -- refitting STACK2 for a new rotation would itself be new modeling
+requiring its own separate review, not a reconstruction. GPT-5.6's comment
+`5704913012` (posted concurrently with the gap report, addressing it via already-
+established plan language rather than a point-by-point reply) confirmed the
+mechanism comparator is "diagnostic only, non-gating for promotion" -- consistent
+with "Two comparators" (Amendment 2) and Amendment 4's framing of
+`mechanism_diagnostic` as "informative only, never a candidate for production" and
+"not itself sufficient for qualification," and with `mechanism_diagnostic` playing no
+role anywhere in the Promotion disposition rule's `QUALIFIED` path (only
+`deployable_candidate` vs. the **promotion** comparator does). Per that reading:
+**the mechanism comparator's authority-exact reconstruction is required for Rotation
+2 (2024-fit/2025-eval, the existing canonical STACK2 casebook) only.** Rotation 1's
+`mechanism_diagnostic` arm is disclosed as `NOT_CONSTRUCTIBLE_NO_CASEBOOK` --
+same fail-closed-but-non-blocking disclosure pattern Amendment 5 established for
+Gate 0.1's impossible 2023-2024 parity check -- and does not trigger
+`BASELINE_RECONSTRUCTION_FAILURE` on its own. This interpretation is flagged
+explicitly, not silently assumed: if GPT-5.6 intended something else (e.g. building a
+genuinely new, separately-reviewed 2023-fit STACK2 casebook per option 1 in comment
+`5704854605`), that supersedes this amendment on say-so, before any candidate
+science is interpreted against it.
+
 ## Why this candidate, and why it is not a disguised STACK2 retest
 
 The Lane A audit established: STACK2 (`scripts/backtest/evaluate_rb_stack2_enriched_
@@ -571,6 +600,15 @@ transition alike): transition rows need it as the decisive qualification compara
 and stable/non-scored rows need it as the exact value the `deployable_candidate` arm
 must reproduce under the hard stable-identity gate.
 
+**Rotation scope corrected under Amendment 7**: no canonical STACK2/P3 casebook
+exists for a 2023-fit/2024-eval rotation (`evaluate_rb_stack2_enriched_allocation.py`
+is hardcoded to the single existing 2024-fit/2025-eval casebook). The mechanism
+comparator's authority-exact reconstruction proof is therefore required for
+**Rotation 2 only**. Rotation 1's `mechanism_diagnostic` arm is disclosed as
+`NOT_CONSTRUCTIBLE_NO_CASEBOOK` -- non-blocking, since `mechanism_diagnostic` never
+gates the `QUALIFIED` disposition (see "Two candidate arms," Amendment 4). The
+promotion comparator's every-row, both-rotations requirement is unchanged.
+
 **Per-rotation weight-file provenance check (Amendment 3 addition):** as part of this
 same reconstruction proof, confirm which `rush_yards` weight row was actually applied
 for each rotation's promotion-comparator reconstruction -- Rotation 1 must resolve to
@@ -739,9 +777,11 @@ production endpoint is decisive** for qualification.
 ## Promotion disposition rule
 
 - **Gate 0 (all three sub-gates) passes; the mechanism comparator's authority-exact
-  reconstruction passes and the promotion comparator's same-job authority contract
-  (Amendment 6) reaches `SAME_JOB_AUTHORITY_RECONSTRUCTION_PASS` for both rotations;
-  both rotations have adequate (`n>=30`) support on the overall transition
+  reconstruction passes for Rotation 2 (Amendment 7 -- Rotation 1 discloses
+  `NOT_CONSTRUCTIBLE_NO_CASEBOOK`, non-blocking) and the promotion comparator's
+  same-job authority contract (Amendment 6) reaches
+  `SAME_JOB_AUTHORITY_RECONSTRUCTION_PASS` for both rotations; both rotations have
+  adequate (`n>=30`) support on the overall transition
   subpopulation and both required protected cohorts; both rotations clear every
   required gate on the rushing-yard production endpoint against the promotion
   comparator; the Amendment-4 stable-identity gate holds exactly on every non-scored
@@ -759,11 +799,13 @@ production endpoint is decisive** for qualification.
   separate fix/review first. Explicitly does not permit reverting to a coarser
   identity/leakage-relaxed harmonizer to unblock -- the fix is to the harmonizer, not
   the gate.
-- **The mechanism comparator's authority-exact reconstruction fails, or the
-  promotion comparator's same-job authority contract (Amendment 6) fails (row-
-  identity mismatch between build A/B, or any of `mc_proj`/`ml_proj`/`state_proj`
-  exceeding `1e-6` between build A/B), or the Amendment-3 per-rotation weight-file
-  provenance check fails (wrong weight file resolved for a rotation, or
+- **The mechanism comparator's authority-exact reconstruction fails for Rotation 2
+  (a Rotation-1 `NOT_CONSTRUCTIBLE_NO_CASEBOOK` disclosure per Amendment 7 does
+  *not* trigger this disposition on its own), or the promotion comparator's
+  same-job authority contract (Amendment 6) fails (row-identity mismatch between
+  build A/B, or any of `mc_proj`/`ml_proj`/`state_proj` exceeding `1e-6` between
+  build A/B), or the Amendment-3 per-rotation weight-file provenance check fails
+  (wrong weight file resolved for a rotation, or
   `max(calibration_season_used) < test_season` cannot be proven)** ->
   `RB_LANE_A_TRANSITION_ALLOCATION_BASELINE_RECONSTRUCTION_FAILURE`. Candidate
   science does not proceed until the failing reconstruction is fixed and re-verified.
