@@ -354,6 +354,118 @@ jobs:
               json.dump(results, f, indent=2, default=str)
           PY
 
+      - name: Run membership-inference A/B (GPT-5.6 correction, comment 5704073674)
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          from scripts.backtest.rb_lane_a_m91_parity_diagnostic_v1 import (
+              build_deterministic_trace,
+              compare_deterministic_trace_arm,
+          )
+
+          canonical = pd.read_csv("evidence/canonical_2024/component_predictions.csv")
+          extra = pd.read_csv("evidence/rb_lane_a_fresh_only_rows.csv")
+
+          inputs_dir = Path("evidence/rb_lane_a_m91_inputs")
+          player_logs = pd.read_csv(inputs_dir / "player_game_logs_history.csv")
+          team_weekly = pd.read_csv(inputs_dir / "team_weekly_history.csv")
+          schedule = pd.read_csv(inputs_dir / "schedule_history.csv")
+          injuries_history = pd.read_csv(inputs_dir / "injuries_history.csv")
+          weather_history = pd.read_csv(inputs_dir / "weather_history.csv")
+          universe_dir = inputs_dir / "pregame_universe"
+
+          def exact_week(frame, season, week):
+              x = frame.copy()
+              x.columns = [str(c).strip().lower() for c in x.columns]
+              s = pd.to_numeric(x["season"], errors="coerce")
+              w = pd.to_numeric(x["week"], errors="coerce")
+              x = x.loc[s.eq(int(season)) & w.eq(int(week))].copy()
+              return x.drop(columns=["season", "week"], errors="ignore")
+
+          results = []
+          affected_weeks = sorted(int(w) for w in extra["week"].unique())
+          for week in affected_weeks:
+              week_extra = extra.loc[extra.week == week]
+              contested_names = sorted(week_extra["player"].unique())
+              contested_keys = sorted(week_extra["player_clean_key"].unique())
+              team = sorted(week_extra["team"].unique())[0]
+
+              universe_path = universe_dir / f"2024_week_{week:02d}.csv"
+              universe_included = pd.read_csv(universe_path)
+              universe_excluded = universe_included.loc[
+                  ~universe_included["player"].isin(contested_names)
+              ].copy()
+
+              injuries = exact_week(injuries_history, 2024, week)
+              weather = exact_week(weather_history, 2024, week)
+
+              arm_included = build_deterministic_trace(
+                  player_logs=player_logs, team_weekly=team_weekly,
+                  pregame_universe=universe_included, schedule=schedule,
+                  season=2024, week=week, prior_season=2023,
+                  injuries=injuries, weather=weather,
+              )
+              arm_excluded = build_deterministic_trace(
+                  player_logs=player_logs, team_weekly=team_weekly,
+                  pregame_universe=universe_excluded, schedule=schedule,
+                  season=2024, week=week, prior_season=2023,
+                  injuries=injuries, weather=weather,
+              )
+
+              for key in contested_keys:
+                  included_report = compare_deterministic_trace_arm(
+                      arm_included, canonical, week=week, team=team,
+                      exclude_player_clean_key=key,
+                  )
+                  excluded_report = compare_deterministic_trace_arm(
+                      arm_excluded, canonical, week=week, team=team,
+                      exclude_player_clean_key=key,
+                  )
+                  results.append({
+                      "week": week, "team": team, "contested_player_clean_key": key,
+                      "arm_included_deltas": included_report,
+                      "arm_excluded_deltas": excluded_report,
+                  })
+                  print(json.dumps(results[-1], indent=2, default=str))
+
+          # Documents fresh's own actual-join lineage for the contested
+          # identity, per GPT-5.6's ask #5. We only have canonical's final
+          # scored output (not its raw player-log inputs), so this can show
+          # fresh's own source resolution only -- not directly diff it
+          # against canonical's build inputs. Flagged as a limitation, not
+          # papered over.
+          pl = player_logs.copy()
+          pl.columns = [str(c).strip().lower() for c in pl.columns]
+          from scripts.backtest.component_predictions import _key
+          pl_key = pl.get("player_clean_key", pl.get("player", pd.Series(dtype=str))).map(_key)
+          lineage_rows = []
+          for key in sorted(extra["player_clean_key"].unique()):
+              rows = pl.loc[pl_key.eq(key) & pd.to_numeric(pl.get("season"), errors="coerce").eq(2024)]
+              for _, r in rows.iterrows():
+                  lineage_rows.append({
+                      "player_clean_key": key,
+                      "season": r.get("season"), "week": r.get("week"),
+                      "team": r.get("team"), "player": r.get("player"),
+                      "rush_yards": r.get("rush_yards"), "rec_yards": r.get("rec_yards"),
+                      "targets": r.get("targets"), "rushes": r.get("rushes"),
+                  })
+
+          report = {
+              "membership_inference_results": results,
+              "fresh_actual_join_lineage_for_contested_identity": lineage_rows,
+              "lineage_limitation": (
+                  "Only fresh's own player_game_logs_history.csv is available here; "
+                  "canonical's raw pre-simulation inputs were not preserved by the "
+                  "original M91 run, so this cannot directly diff fresh vs canonical "
+                  "join-key resolution -- only document fresh's own resolved rows."
+              ),
+          }
+          with open("evidence/rb_lane_a_membership_inference_ab.json", "w") as f:
+              json.dump(report, f, indent=2, default=str)
+          PY
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -362,5 +474,6 @@ jobs:
             evidence/rb_lane_a_fresh_only_rows.csv
             evidence/rb_lane_a_mc_proj_drift_step1_2.json
             evidence/rb_lane_a_mc_proj_drift_step3.json
+            evidence/rb_lane_a_membership_inference_ab.json
           if-no-files-found: error
           retention-days: 30

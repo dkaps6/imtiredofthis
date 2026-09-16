@@ -5,6 +5,18 @@ Implements GPT-5.6's four-step diagnostic protocol (Issue #535, comment
 delta between a corrected-invocation fresh rebuild of 2024 and the canonical
 M91 artifact, after `ml_proj`/`state_proj` were confirmed to match exactly.
 
+Also implements GPT-5.6's follow-up correction (Issue #535, comment
+`5704073674`): the Step-3 exclusion falsification is invalid on its own
+because `component_predictions.predict_week()` only returns rows with a
+non-null joined `actual` -- so "fresh-only" identifies a scored-OUTPUT
+membership difference, not a proven pre-simulation universe difference.
+`build_deterministic_trace()` / `compare_deterministic_trace_arm()`
+implement the required A/B membership-inference test: build the
+RNG-free, pre-`simulate()` metrics frame with the contested player
+included vs excluded, and compare each arm's *other* players' deterministic
+trace fields against canonical to infer which arm canonical's simulation
+universe actually matched.
+
 STRICT SCOPE: this is comparator-integrity diagnostic work only. It computes
 no candidate rushing-yard output and makes no candidate-vs-outcome
 comparison. Nothing here is a production change.
@@ -13,11 +25,30 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Iterable
+from unittest.mock import patch
 
 import pandas as pd
 
-from scripts.backtest.component_predictions import predict_week
+from scripts.backtest.component_predictions import (
+    _attach_historical_passing_volume,
+    _context_trace_frame,
+    build_market_frame,
+    predict_week,
+)
+from scripts.backtest.historical_context import build_historical_context_bundle
 from scripts.backtest.walk_forward import _exact_week
+from scripts.modeling import simulation_rules
+from scripts.modeling.bayesian_v2 import apply_bayesian_to_metrics, build_bayesian_baseline
+
+DETERMINISTIC_TRACE_COLUMNS = [
+    "rules_tgt_share",
+    "rules_catch_rate",
+    "rules_ypt",
+    "rules_rush_share",
+    "rules_ypc",
+    "rules_plays_est",
+    "rules_pass_rate",
+]
 
 IDENTITY_COLS = ["season", "week", "team", "player_clean_key", "market"]
 
@@ -137,3 +168,89 @@ def compare_common_universe_mc_proj(
         "max_abs_delta_mc_proj": float(delta.max()) if delta.notna().any() else None,
         "collapses_to_tolerance": bool(delta.max() <= 1e-6) if delta.notna().any() else False,
     }
+
+
+def build_deterministic_trace(
+    *,
+    player_logs: pd.DataFrame,
+    team_weekly: pd.DataFrame,
+    pregame_universe: pd.DataFrame,
+    schedule: pd.DataFrame,
+    season: int,
+    week: int,
+    prior_season: int,
+    injuries: pd.DataFrame | None = None,
+    weather: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """Reproduce component_predictions.build_mc_predictions()'s deterministic,
+    RNG-free metrics frame -- identical logic, calling the exact same
+    production functions, stopping before the `simulate()` MC step. Used to
+    test whether canonical's simulation universe included or excluded a
+    contested player, without any RNG-sensitive re-simulation.
+    """
+    bundle = build_historical_context_bundle(
+        player_logs=player_logs,
+        team_weekly=team_weekly,
+        pregame_universe=pregame_universe,
+        schedule=schedule,
+        season=int(season),
+        week=int(week),
+        prior_season=int(prior_season),
+        injuries=injuries,
+        weather=weather,
+    )
+    metrics = build_market_frame(bundle)
+    bayes = build_bayesian_baseline(bundle.player_consensus)
+    metrics = apply_bayesian_to_metrics(metrics, bayes)
+    with patch.object(simulation_rules, "load_model_contexts", return_value=(bundle.teams, bundle.players)):
+        metrics = simulation_rules.apply_rules_to_metrics(metrics)
+    metrics = _attach_historical_passing_volume(metrics, bundle)
+    trace = _context_trace_frame(bundle)
+    metrics = metrics.merge(trace, on=["team", "player_clean_key"], how="left", validate="many_to_one")
+    metrics["season"] = int(season)
+    metrics["week"] = int(week)
+    return metrics
+
+
+def compare_deterministic_trace_arm(
+    arm_metrics: pd.DataFrame,
+    canonical: pd.DataFrame,
+    *,
+    week: int,
+    team: str,
+    exclude_player_clean_key: str,
+    columns: Iterable[str] = DETERMINISTIC_TRACE_COLUMNS,
+) -> dict:
+    """Compare one arm's deterministic trace (excluding the contested player's
+    own rows) against canonical's trace for the same team/week, on matched
+    OTHER-player rows only. Whichever arm (contested player included vs
+    excluded from the pregame universe) minimizes these deltas is the arm
+    whose universe membership canonical's simulation actually matched.
+    """
+    a = arm_metrics.loc[
+        (arm_metrics["team"] == team)
+        & (pd.to_numeric(arm_metrics["week"], errors="coerce") == week)
+        & (arm_metrics["player_clean_key"] != exclude_player_clean_key)
+    ]
+    c = canonical.loc[
+        (canonical["team"] == team)
+        & (pd.to_numeric(canonical["week"], errors="coerce") == week)
+        & (canonical["player_clean_key"] != exclude_player_clean_key)
+    ]
+    merged = a.merge(
+        c,
+        on=["season", "week", "team", "player_clean_key", "market"],
+        how="inner",
+        suffixes=("_arm", "_canonical"),
+    )
+    report = {"week": week, "team": team, "matched_rows": int(len(merged))}
+    for col in columns:
+        ac, cc = f"{col}_arm", f"{col}_canonical"
+        if ac not in merged.columns or cc not in merged.columns:
+            report[col] = "column_missing"
+            continue
+        delta = (
+            pd.to_numeric(merged[ac], errors="coerce") - pd.to_numeric(merged[cc], errors="coerce")
+        ).abs()
+        report[col] = float(delta.max()) if delta.notna().any() else None
+    return report

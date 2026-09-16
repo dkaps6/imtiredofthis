@@ -1,6 +1,7 @@
 import pandas as pd
 
 from scripts.backtest.rb_lane_a_m91_parity_diagnostic_v1 import (
+    compare_deterministic_trace_arm,
     compare_trace_columns_by_week,
     find_fresh_only_rows,
 )
@@ -58,3 +59,53 @@ def test_compare_trace_columns_by_week_flags_missing_column():
     canonical = pd.DataFrame([_row(2024, 1, "KC", "p1", "rush_yards")])
     report = compare_trace_columns_by_week(fresh, canonical, columns=["not_a_real_column"])
     assert report["1"]["not_a_real_column"] == "column_missing"
+
+
+def test_compare_deterministic_trace_arm_excludes_contested_player_from_comparison():
+    # arm has the contested player (p2) plus another player (p1); canonical
+    # only ever has p1 -- the contested player's own row must never enter
+    # the matched-rows comparison either way.
+    arm = pd.DataFrame(
+        [
+            _row(2024, 1, "TB", "p1", "rush_yards", rules_rush_share=0.30, rules_ypc=4.1),
+            _row(2024, 1, "TB", "p2", "rush_yards", rules_rush_share=0.10, rules_ypc=3.9),
+        ]
+    )
+    canonical = pd.DataFrame(
+        [_row(2024, 1, "TB", "p1", "rush_yards", rules_rush_share=0.30, rules_ypc=4.1)]
+    )
+    report = compare_deterministic_trace_arm(
+        arm, canonical, week=1, team="TB", exclude_player_clean_key="p2"
+    )
+    assert report["matched_rows"] == 1
+    assert report["rules_rush_share"] == 0.0
+    assert report["rules_ypc"] == 0.0
+
+
+def test_compare_deterministic_trace_arm_reports_max_abs_delta_on_other_players():
+    arm = pd.DataFrame(
+        [_row(2024, 1, "TB", "p1", "rush_yards", rules_rush_share=0.35, rules_ypc=4.1)]
+    )
+    canonical = pd.DataFrame(
+        [_row(2024, 1, "TB", "p1", "rush_yards", rules_rush_share=0.30, rules_ypc=4.1)]
+    )
+    report = compare_deterministic_trace_arm(
+        arm, canonical, week=1, team="TB", exclude_player_clean_key="godwin"
+    )
+    assert report["matched_rows"] == 1
+    assert abs(report["rules_rush_share"] - 0.05) < 1e-9
+    assert report["rules_ypc"] == 0.0
+
+
+def test_compare_deterministic_trace_arm_flags_missing_column():
+    arm = pd.DataFrame([_row(2024, 1, "TB", "p1", "rush_yards")])
+    canonical = pd.DataFrame([_row(2024, 1, "TB", "p1", "rush_yards")])
+    report = compare_deterministic_trace_arm(
+        arm,
+        canonical,
+        week=1,
+        team="TB",
+        exclude_player_clean_key="godwin",
+        columns=["not_a_real_column"],
+    )
+    assert report["not_a_real_column"] == "column_missing"
