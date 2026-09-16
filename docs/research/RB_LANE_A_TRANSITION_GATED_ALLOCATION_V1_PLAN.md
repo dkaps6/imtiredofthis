@@ -28,6 +28,24 @@ resolves the departed-player-has-no-row problem. (4) adequacy/disposition langua
 made fail-closed and internally consistent. No candidate code exists under any prior
 revision of this document; nothing here is a post-implementation change.
 
+**Amendment 3** (this revision): incorporates GPT-5.6's cross-audit of Amendment 2
+from Issue #535 comment `5699148456`, before any candidate is built or run. Two
+fixes: (1) **fatal temporal leak in the decisive promotion comparator** -- Amendment
+2 pinned `data/model_ensemble_weights.csv` blob `baade160...` identically for both
+OOS rotations, but that file's `rush_yards` row has `fit_scope =
+all_2024_oos_frozen_for_2025` (fit using 2024 outcomes). Applying it to Rotation 1's
+2024 test set would let the comparator's own calibration season leak into its test
+season -- the same class of defect the M89/M90 rotation discipline exists to
+prevent. Fixed by using a genuinely pre-2024 `rush_yards` weight authority for
+Rotation 1 specifically (see "Two comparators" and "Authority-exact baseline
+reconstruction" below), with a hard per-rotation provenance assertion. (2) **scope/
+trigger mismatch** -- V1 claims the ND1 "role-collapse" cohort, but the original
+three-way transition definition also scored role-expansion/re-entry events (a
+previously-unavailable player returning, a roster addition) under the same trigger.
+Fixed by splitting "detected transition" (broad, all three checks, used only for
+Gate-0 harmonizer testing and disclosure) from "scored V1 transition" (narrow: loss/
+vacancy events only), so the scored population matches the claimed cohort honestly.
+
 ## Why this candidate, and why it is not a disguised STACK2 retest
 
 The Lane A audit established: STACK2 (`scripts/backtest/evaluate_rb_stack2_enriched_
@@ -154,10 +172,12 @@ never a silent fallback to a coarser, less leakage-safe source.
 
 ## Transition definition (exact, leakage-safe)
 
-A team-week `(team, season, week)` is a **transition week** for RB purposes if, using
-only information available strictly before that week's kickoff (per the Gate-0
-harmonized sources above), any of the following holds relative to the same team's
-immediately preceding resolvable depth/status state:
+### Detected transition (broad; disclosure and Gate-0 testing only, not itself scored)
+
+A team-week `(team, season, week)` is a **detected transition week** if, using only
+information available strictly before that week's kickoff (per the Gate-0 harmonized
+sources above), any of the following holds relative to the same team's immediately
+preceding resolvable depth/status state:
 
 1. **Depth-rank change**: the harmonized `pos_rank` (RB room only) of the player
    previously ranked RB1 (by the prior state) differs from the current state's RB1, OR
@@ -171,9 +191,43 @@ immediately preceding resolvable depth/status state:
 All three checks use **only** the harmonized depth/status state as of strictly before
 the current week's kickoff compared against the harmonized state as of strictly before
 the previous state's kickoff -- never same-week or postgame information. A team-week
-that is not a transition week under any of the three checks is a **stable week**.
+that is not a detected transition week under any of the three checks is a **stable
+week**. The detected-transition population is reported in full (rate by season, by
+trigger type) for disclosure and is the population Gate 0's harmonizers are tested
+against, but **it is not the population the V1 candidate is scored on** -- see below.
 
-## Candidate mechanism (transition weeks only)
+### Scored V1 transition (narrow; role-collapse/vacancy only -- Amendment 3 fix)
+
+GPT-5.6's Amendment-3 review found the broad detected-transition population above
+mixes two directionally opposite football events under one label: a back **losing**
+role (departure, new unavailability) and a back **gaining/regaining** role (a return
+from `OUT`/`DOUBTFUL`/`IR`/`PUP`, a roster addition). V1 claims only ND1's
+"role-collapse" cohort (`RB_ND1_FORENSIC_FAILURE_ATLAS_RESULTS.md`, n=59, MAE 32.59)
+-- a vacancy in the room causing the *remaining* backs' roles to redistribute -- not
+the broader mixed population. Scoring the broad population under a role-collapse
+label would misrepresent what was actually tested.
+
+A team-week is a **scored V1 transition week** if and only if it is a detected
+transition week **and** the specific trigger is a **loss/vacancy event** relative to
+the immediately preceding resolvable state:
+
+- a player who was fully available now carries `OUT`/`DOUBTFUL`/`IR`/`PUP` (the
+  "return" direction of check 2 above is excluded from scoring), OR
+- the active RB room's membership **shrinks** by the departure of a previously-
+  rostered player (the "addition" direction of check 3 above is excluded from
+  scoring).
+
+A depth-rank change (check 1) is **not** an independent scored trigger -- it is
+downstream evidence of a loss/vacancy event, not a standalone one (a depth-rank
+change absent a co-occurring loss/vacancy event, e.g. a pure coaching-decision
+reordering, is a detected transition but not a scored V1 transition; it is disclosed,
+not scored, and is explicitly out of V1's claimed scope). The reallocation mechanism
+below executes **only** on scored V1 transition weeks; a detected-but-not-scored
+transition week is treated identically to a stable week by the candidate mechanism
+(no reallocation), and is reported separately from both the stable and scored-
+transition subpopulations in every disclosure table.
+
+## Candidate mechanism (scored V1 transition weeks only -- Amendment 3 scope)
 
 ### Predicted pregame conservation pool (Amendment 1 point #1, redesigned under Amendment 2 points #2-3)
 
@@ -207,8 +261,9 @@ redistribution:
 
 ### Exact frozen HHI-dampened reallocation formula (Amendment 1 point #3, normalization fixed under Amendment 2)
 
-On a transition team-week, let the team's **active (post-transition) RB room** be
-indexed `i = 1..N`, and let `pool` be the team-level pool defined above.
+On a scored V1 (loss/vacancy) transition team-week, let the team's **active
+(post-transition) RB room** be indexed `i = 1..N`, and let `pool` be the team-level
+pool defined above.
 
 1. **Raw role weight**: `raw_w_i = prior3_rb_share_i` (STACK2's own existing
    rolling-share feature, reused unchanged) for each active back `i`; `raw_w_i = 0` if
@@ -284,14 +339,46 @@ team-week (stable and transition):
 - **Promotion comparator** (decisive for qualification): the actual historical
   reconstruction of `ensemble_proj` for Weeks 2-18, built via the same frozen-parent
   pattern already established in PR #615 -- `scripts/modeling/ensemble_v2.py`
-  (blob `41e809b32e4596b8cf18bedbf2b940a2aa3b80b2` at #562's merge commit `91afb3a5`),
-  `scripts/backtest/component_predictions.py` (blob
-  `18f7289515b88c84a91479da18526df4cd7f5398`), and `data/model_ensemble_weights.csv`
-  (blob `baade160a124e5cd8ecd415c0276622d4b60953f`), pinned identically for both OOS
+  (blob `41e809b32e4596b8cf18bedbf2b940a2aa3b80b2` at #562's merge commit `91afb3a5`)
+  and `scripts/backtest/component_predictions.py` (blob
+  `18f7289515b88c84a91479da18526df4cd7f5398`), pinned identically for both OOS
   rotations. **Qualification requires beating the promotion comparator on the
   decisive rushing-yard endpoint** (see Protected cohorts and gates); beating only the
   mechanism comparator is necessary evidence that the reallocation mechanism itself
   works, but is not sufficient by itself for a `QUALIFIED` disposition.
+
+  **Rush-yard ensemble weights, per-rotation (Amendment 3 fix -- temporal leak
+  correction):** GPT-5.6's cross-audit (`5699148456`) found `data/model_
+  ensemble_weights.csv`'s `rush_yards` row (blob `baade160a124e5cd8ecd415c0276622
+  d4b60953f`) is `fit_scope = all_2024_oos_frozen_for_2025` -- fit using 2024
+  outcomes. That row is a legitimate pre-2025 authority (2024 < 2025), so it remains
+  the correct weight source for **Rotation 2 (test = 2025)**. It is **not** a
+  legitimate pre-2024 authority, so it may **not** be used for **Rotation 1
+  (test = 2024)** -- doing so would let the comparator's own 2024 calibration leak
+  into its 2024 test row, defeating the OOS design for the comparator itself. Instead,
+  Rotation 1's promotion comparator uses the already-existing, already-merged
+  2023-only frozen fit: `docs/research/overnight/ensemble_weights_2023_fit_v1.csv`
+  (blob `b9c193b9b9d11578f3dd17ae6da241715878bea5`, produced by `scripts/research/
+  fit_2023_ensemble_weights_v1.py` per `.github/workflows/backtest-ensemble-weight-
+  2023-fit-v1.yml`, trained on 2023 component predictions with `prior_season = 2022`,
+  merged via PR #545 (commit `3f75c8ba`), unchanged since): `rush_yards` mc_weight
+  `0.396067`, ml_weight `0.559625`, state_weight `0.044308`, `calibration_rows=3180`,
+  method `nonnegative_oos_linear_blend_v2` -- the identical fitting method as the
+  production file's row, differing only in which season it was fit on. This mirrors
+  the pattern the production file itself already uses for `rec_yards`/`receptions`
+  (`fit_2023_only_blind_holdout_2024_2025`), just applied to the market this
+  candidate actually needs.
+
+  **Hard per-rotation provenance assertion:** before scoring, assert
+  `max(calibration_season_used) < test_season` for the `rush_yards` weight row
+  actually applied in each rotation's promotion-comparator reconstruction (Rotation 1:
+  `2023 < 2024`; Rotation 2: `2024 < 2025`). If this cannot be proven for either
+  rotation from the weight file's own recorded provenance fields, the reconstruction
+  fails closed -- see Promotion disposition rule -- rather than silently reusing a
+  wrong-season weight file. No new weight-fitting is performed to satisfy this: only
+  the already-frozen, already-reviewed 2023-only artifact is reused, unchanged, exactly
+  as GPT-5.6's finding required ("Do not silently backfit one after looking at
+  candidate results").
 
 ## Authority-exact baseline reconstruction (Amendment 1 point #6)
 
@@ -307,6 +394,18 @@ reproduce to near-machine precision -- a candidate "win" against a mis-reconstru
 comparator is not evidence. Stable-week mechanism-comparator rows remain byte-identical
 by construction and do not need this proof independently; transition-week rows and the
 promotion comparator (scored on every row, stable and transition alike) do.
+
+**Per-rotation weight-file provenance check (Amendment 3 addition):** as part of this
+same reconstruction proof, confirm which `rush_yards` weight row was actually applied
+for each rotation's promotion-comparator reconstruction -- Rotation 1 must resolve to
+`docs/research/overnight/ensemble_weights_2023_fit_v1.csv` (blob
+`b9c193b9b9d11578f3dd17ae6da241715878bea5`), Rotation 2 must resolve to `data/
+model_ensemble_weights.csv` (blob `baade160a124e5cd8ecd415c0276622d4b60953f`) -- and
+assert `max(calibration_season_used) < test_season` holds for the row actually used
+in each. A reconstruction that resolves to the wrong weight file for either rotation
+(e.g. accidentally applying the 2024-fit row to the 2024 test rotation) is treated
+identically to any other baseline-reconstruction failure below -- it fails closed,
+not silently corrected after the fact.
 
 ## Two-rotation temporal design
 
@@ -326,10 +425,13 @@ engineering after rotation, `BOOT_N=10000`, `BOOTSTRAP_GATE=0.90`):
 
 ## Protected cohorts and gates
 
-Scored separately on **(a) the transition subpopulation** and **(b) the stable
-subpopulation**, each season, each rotation, against **both** comparators. Per
-Amendment 1 point #7 and Amendment 2 point #1, both the allocation mechanism and the
-final rush-yard production endpoint are scored, and **the promotion comparator on the
+Scored separately on **(a) the scored V1 transition subpopulation** (loss/vacancy
+events only, per Amendment 3) and **(b) the stable subpopulation**, each season, each
+rotation, against **both** comparators. The detected-but-not-scored transition
+population (returns, roster additions, pure depth-rank reordering absent a
+co-occurring loss/vacancy) is disclosed separately and gates nothing. Per Amendment 1
+point #7 and Amendment 2 point #1, both the allocation mechanism and the final
+rush-yard production endpoint are scored, and **the promotion comparator on the
 production endpoint is decisive** for qualification.
 
 - **Mechanism evidence (informative, against the mechanism comparator only -- not
@@ -411,9 +513,11 @@ production endpoint is decisive** for qualification.
   separate fix/review first. Explicitly does not permit reverting to a coarser
   identity/leakage-relaxed harmonizer to unblock -- the fix is to the harmonizer, not
   the gate.
-- **Authority-exact reconstruction of either comparator fails** ->
-  `RB_LANE_A_TRANSITION_ALLOCATION_BASELINE_RECONSTRUCTION_FAILURE`. Candidate science
-  does not proceed until the failing reconstruction is fixed and re-verified.
+- **Authority-exact reconstruction of either comparator fails, including the
+  Amendment-3 per-rotation weight-file provenance check (wrong weight file resolved
+  for a rotation, or `max(calibration_season_used) < test_season` cannot be proven)**
+  -> `RB_LANE_A_TRANSITION_ALLOCATION_BASELINE_RECONSTRUCTION_FAILURE`. Candidate
+  science does not proceed until the failing reconstruction is fixed and re-verified.
 - **Either OOS rotation's overall transition subpopulation, or either required
   protected cohort (carries>=20, yards>=100) within it, is below the `n>=30` adequacy
   bar** -> `RB_LANE_A_TRANSITION_ALLOCATION_INSUFFICIENT_EVIDENCE`, fail-closed --
