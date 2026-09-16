@@ -5,6 +5,7 @@ from scripts.backtest.rb_lane_a_gate0_v1 import (
     _name_key,
     gate01_report,
     gate02_report,
+    gate03_event_report,
     gate03_report,
 )
 
@@ -82,4 +83,64 @@ def test_gate03_report_passes_clean_with_no_duplicates():
     )
     report = gate03_report(roster_state, [2023])
     assert report["failures"] == []
+    # Structural pass only -- per GPT-5.6's adjudication (5702132088), requirements
+    # 5/6 (event-level checks) are separate and not folded into this disposition.
+    assert report["disposition"] == "PASS_STRUCTURAL_EVENT_CHECKS_PENDING"
+
+
+def test_gate03_event_report_passes_when_current_and_prior_state_resolvable():
+    roster_state = pd.DataFrame(
+        {
+            "season": [2024, 2024],
+            "week": [3, 2],
+            "team": ["KC", "KC"],
+        }
+    )
+    event_population = pd.DataFrame(
+        {
+            "season": [2024],
+            "week": [3],
+            "team": ["KC"],
+            "prior_season": [2024],
+            "prior_week": [2],
+        }
+    )
+    report = gate03_event_report(event_population, roster_state)
     assert report["disposition"] == "PASS"
+    assert report["failures"] == []
+    assert report["events_checked"] == 1
+
+
+def test_gate03_event_report_fails_closed_on_missing_prior_state():
+    roster_state = pd.DataFrame({"season": [2024], "week": [3], "team": ["KC"]})
+    event_population = pd.DataFrame(
+        {
+            "season": [2024],
+            "week": [3],
+            "team": ["KC"],
+            "prior_season": [2024],
+            "prior_week": [2],
+        }
+    )
+    report = gate03_event_report(event_population, roster_state)
+    assert report["disposition"] == "GATE0_BLOCKED"
+    assert any("requirement_5_missing_prior_state" in f for f in report["failures"])
+
+
+def test_gate03_event_report_fails_closed_on_outcome_columns():
+    roster_state = pd.DataFrame(
+        {"season": [2024, 2024], "week": [3, 2], "team": ["KC", "KC"]}
+    )
+    event_population = pd.DataFrame(
+        {
+            "season": [2024],
+            "week": [3],
+            "team": ["KC"],
+            "prior_season": [2024],
+            "prior_week": [2],
+            "actual_rush_yards": [88.0],
+        }
+    )
+    report = gate03_event_report(event_population, roster_state)
+    assert report["disposition"] == "GATE0_BLOCKED"
+    assert any("requirement_6_outcome_columns_present" in f for f in report["failures"])

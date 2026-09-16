@@ -368,7 +368,7 @@ def gate03_report(roster_state: pd.DataFrame, seasons: Iterable[int]) -> dict:
             "unique_team_weeks": int(s[["week", "team"]].drop_duplicates().shape[0]) if not s.empty else 0,
         }
 
-    disposition = "GATE0_BLOCKED" if failures else "PASS"
+    disposition = "GATE0_BLOCKED" if failures else "PASS_STRUCTURAL_EVENT_CHECKS_PENDING"
     return {
         "gate": "0.3_roster_membership",
         "amendment": 5,
@@ -378,12 +378,73 @@ def gate03_report(roster_state: pd.DataFrame, seasons: Iterable[int]) -> dict:
         "scheduled_team_week_coverage_gap": coverage_gap,
         "coverage_by_season": coverage_by_season,
         "note": (
-            "Requirement 5 (both current and immediately-previous resolvable state for "
-            "every scored loss/vacancy event) and requirement 6 (zero target-week "
-            "statistics/outcomes) are verified at candidate-construction time, not here, "
-            "since they depend on the scored V1 transition population which is not yet "
-            "computed at Gate-0 time."
+            "Requirements 1-4 verified here (schema, zero duplicate identities, full "
+            "scheduled team-week coverage for both OOS test seasons). Requirement 5 (both "
+            "current and immediately-previous resolvable state for every scored loss/"
+            "vacancy event) and requirement 6 (zero target-week statistics/outcomes) are "
+            "NOT yet verified -- they require the scored V1 transition event population, "
+            "which does not exist until the frozen transition detector is instantiated. "
+            "Per GPT-5.6's adjudication (Issue #535 comment 5702132088), this disposition "
+            "is PASS_STRUCTURAL_EVENT_CHECKS_PENDING, not a final PASS, until requirements "
+            "5/6 are run against that exact event population -- see gate03_event_report()."
         ),
+    }
+
+
+def gate03_event_report(event_population: pd.DataFrame, roster_state: pd.DataFrame) -> dict:
+    """Score requirements 5 and 6 against the actual scored V1 event population.
+
+    Must be called only after the frozen transition detector has instantiated
+    `event_population` -- and BEFORE any candidate rushing-yard output is
+    computed or inspected against actual outcomes, per GPT-5.6's required
+    execution order (Issue #535 comment 5702132088).
+
+    `event_population` must carry one row per scored V1 loss/vacancy event with
+    columns: season, week, team, prior_season, prior_week (the immediately
+    preceding resolvable state's identity).
+    """
+    failures: list[str] = []
+    required_cols = {"season", "week", "team", "prior_season", "prior_week"}
+    if not required_cols.issubset(event_population.columns):
+        failures.append(f"requirement_5_schema_missing: {required_cols - set(event_population.columns)}")
+        return {
+            "gate": "0.3_roster_membership_event_checks",
+            "amendment": 5,
+            "disposition": "GATE0_BLOCKED",
+            "failures": failures,
+        }
+
+    have = roster_state[["season", "week", "team"]].drop_duplicates()
+    have["_has"] = 1
+
+    current = event_population[["season", "week", "team"]].drop_duplicates()
+    current_check = current.merge(have, on=["season", "week", "team"], how="left")
+    missing_current = int(current_check["_has"].isna().sum())
+    if missing_current:
+        failures.append(f"requirement_5_missing_current_state: {missing_current} events")
+
+    prior = event_population[["prior_season", "prior_week", "team"]].rename(
+        columns={"prior_season": "season", "prior_week": "week"}
+    ).drop_duplicates()
+    prior_check = prior.merge(have, on=["season", "week", "team"], how="left")
+    missing_prior = int(prior_check["_has"].isna().sum())
+    if missing_prior:
+        failures.append(f"requirement_5_missing_prior_state: {missing_prior} events")
+
+    # Requirement 6: event construction must never reference target-week
+    # statistics/outcomes. Structural proof: event_population's own columns
+    # must not carry any outcome-shaped field (rush_att/rush_yards/etc.).
+    outcome_like = {c for c in event_population.columns if "yards" in c.lower() or "actual" in c.lower()}
+    if outcome_like:
+        failures.append(f"requirement_6_outcome_columns_present: {sorted(outcome_like)}")
+
+    disposition = "GATE0_BLOCKED" if failures else "PASS"
+    return {
+        "gate": "0.3_roster_membership_event_checks",
+        "amendment": 5,
+        "disposition": disposition,
+        "failures": failures,
+        "events_checked": int(len(event_population)),
     }
 
 
@@ -416,15 +477,25 @@ def main() -> None:
     roster_state.to_csv(args.out_dir / "gate0_3_roster_state.csv", index=False)
     gate03 = gate03_report(roster_state, seasons)
 
-    overall_blocked = gate02["disposition"] != "PASS" or gate03["disposition"] != "PASS"
+    overall_blocked = (
+        gate02["disposition"] != "PASS"
+        or gate03["disposition"] != "PASS_STRUCTURAL_EVENT_CHECKS_PENDING"
+    )
+    # Per GPT-5.6's adjudication (Issue #535 comment 5702132088): this is a
+    # structural/provisional disposition, NOT a final GATE0_PASS. Gate 0.3
+    # requirements 5/6 (event-level checks) still need to run against the
+    # scored V1 transition event population once it exists -- see
+    # gate03_event_report(). Final GATE0_PASS is emitted only after that.
     report = {
         "seasons": seasons,
         "gate0_1": gate01,
         "gate0_2": gate02,
         "gate0_3": gate03,
-        "gate0_overall_disposition": "RB_LANE_A_TRANSITION_ALLOCATION_GATE0_BLOCKED"
-        if overall_blocked
-        else "GATE0_PASS",
+        "gate0_overall_disposition": (
+            "RB_LANE_A_TRANSITION_ALLOCATION_GATE0_BLOCKED"
+            if overall_blocked
+            else "GATE0_STRUCTURAL_PASS_EVENT_CHECKS_PENDING"
+        ),
     }
     out_path = args.out_dir / "gate0_report.json"
     out_path.write_text(json.dumps(report, indent=2, default=str))
