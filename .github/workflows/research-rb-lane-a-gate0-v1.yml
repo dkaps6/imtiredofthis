@@ -5,13 +5,16 @@ on:
   pull_request:
     paths:
       - 'scripts/backtest/rb_lane_a_gate0_v1.py'
+      - 'scripts/backtest/rb_lane_a_transition_detector_v1.py'
       - 'tests/test_rb_lane_a_gate0_v1.py'
+      - 'tests/test_rb_lane_a_transition_detector_v1.py'
       - '.github/workflows/research-rb-lane-a-gate0-v1.yml'
   push:
     branches:
       - research-rb-lane-a-transition-gated-allocation-v1
     paths:
       - 'scripts/backtest/rb_lane_a_gate0_v1.py'
+      - 'scripts/backtest/rb_lane_a_transition_detector_v1.py'
       - 'docs/research/RB_LANE_A_TRANSITION_GATED_ALLOCATION_V1_PLAN.md'
 
 permissions:
@@ -37,7 +40,8 @@ jobs:
       - name: Compile + unit test (network-free contract tests only)
         run: |
           python -m py_compile scripts/backtest/rb_lane_a_gate0_v1.py
-          python -m pytest tests/test_rb_lane_a_gate0_v1.py -v
+          python -m py_compile scripts/backtest/rb_lane_a_transition_detector_v1.py
+          python -m pytest tests/test_rb_lane_a_gate0_v1.py tests/test_rb_lane_a_transition_detector_v1.py -v
 
   run-gate0:
     needs: helper-contract-tests
@@ -54,7 +58,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install nflreadpy
-      - name: Run Gate 0 (0.1 disclosure-only, 0.2, 0.3) for seasons 2023-2025
+      - name: Run Gate 0 (0.1 disclosure-only, 0.2, 0.3 structural+event checks) for seasons 2023-2025
         run: |
           python scripts/backtest/rb_lane_a_gate0_v1.py \
             --seasons 2023,2024,2025 \

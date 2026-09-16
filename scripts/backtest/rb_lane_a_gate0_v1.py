@@ -34,6 +34,11 @@ if str(REPO_ROOT) not in sys.path:
 from scripts._opponent_map import canon_team
 from scripts.backtest.build_historical_injuries import load_historical_injuries
 from scripts.backtest.historical_inputs import ALLOWED_ROSTER_STATUS
+from scripts.backtest.rb_lane_a_transition_detector_v1 import (
+    build_detected_transitions,
+    build_scored_v1_event_population,
+    disclosure_report,
+)
 from scripts.build._schedule_utils import get_nfl_schedule
 
 RB_POS = {"RB", "FB", "HB"}
@@ -309,13 +314,16 @@ def harmonize_roster_membership(seasons: Iterable[int]) -> pd.DataFrame:
             d.loc[missing_id, "player_key"] = "namekey:" + _name_key(d.loc[missing_id, "full_name"])
         d["position"] = pos.loc[d.index]
         d["status"] = status.loc[d.index]
+        d["name_key"] = _name_key(d.get("full_name", pd.Series("", index=d.index)))
         out.append(
-            d[["season", "week", "team", "player_key", "position", "status"]]
+            d[["season", "week", "team", "player_key", "position", "status", "name_key"]]
             .dropna(subset=["season", "week"])
         )
 
     if not out:
-        return pd.DataFrame(columns=["season", "week", "team", "player_key", "position", "status"])
+        return pd.DataFrame(
+            columns=["season", "week", "team", "player_key", "position", "status", "name_key"]
+        )
     result = pd.concat(out, ignore_index=True)
     result["season"] = result["season"].astype(int)
     result["week"] = result["week"].astype(int)
@@ -477,25 +485,39 @@ def main() -> None:
     roster_state.to_csv(args.out_dir / "gate0_3_roster_state.csv", index=False)
     gate03 = gate03_report(roster_state, seasons)
 
-    overall_blocked = (
+    structural_blocked = (
         gate02["disposition"] != "PASS"
         or gate03["disposition"] != "PASS_STRUCTURAL_EVENT_CHECKS_PENDING"
     )
-    # Per GPT-5.6's adjudication (Issue #535 comment 5702132088): this is a
-    # structural/provisional disposition, NOT a final GATE0_PASS. Gate 0.3
-    # requirements 5/6 (event-level checks) still need to run against the
-    # scored V1 transition event population once it exists -- see
-    # gate03_event_report(). Final GATE0_PASS is emitted only after that.
+
+    # Per GPT-5.6's adjudication (Issue #535 comment 5702132088): instantiate
+    # the scored V1 transition event population (identities/features only --
+    # no candidate rushing-yard output, no comparison to actual outcomes) and
+    # run Gate-0.3 requirements 5/6 against it BEFORE final disposition.
+    gate03_events = None
+    if not structural_blocked:
+        detected = build_detected_transitions(roster_state, injury_state)
+        detected.to_csv(args.out_dir / "gate0_detected_transitions.csv", index=False)
+        events = build_scored_v1_event_population(detected)
+        events.to_csv(args.out_dir / "gate0_scored_v1_events.csv", index=False)
+        gate03_events = gate03_event_report(events, roster_state)
+        gate03_events["transition_disclosure"] = disclosure_report(detected, seasons)
+
+    overall_blocked = structural_blocked or (gate03_events is not None and gate03_events["disposition"] != "PASS")
+    if structural_blocked:
+        final_disposition = "RB_LANE_A_TRANSITION_ALLOCATION_GATE0_BLOCKED"
+    elif overall_blocked:
+        final_disposition = "RB_LANE_A_TRANSITION_ALLOCATION_GATE0_BLOCKED"
+    else:
+        final_disposition = "GATE0_PASS"
+
     report = {
         "seasons": seasons,
         "gate0_1": gate01,
         "gate0_2": gate02,
         "gate0_3": gate03,
-        "gate0_overall_disposition": (
-            "RB_LANE_A_TRANSITION_ALLOCATION_GATE0_BLOCKED"
-            if overall_blocked
-            else "GATE0_STRUCTURAL_PASS_EVENT_CHECKS_PENDING"
-        ),
+        "gate0_3_event_checks": gate03_events,
+        "gate0_overall_disposition": final_disposition,
     }
     out_path = args.out_dir / "gate0_report.json"
     out_path.write_text(json.dumps(report, indent=2, default=str))
