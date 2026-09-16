@@ -4,10 +4,12 @@ import pytest
 from scripts.backtest.rb_lane_a_comparator_reconstruction_v1 import (
     FROZEN_PARENT_BLOBS,
     MECHANISM_COMPARATOR_COLUMN,
+    build_dual_market_promotion_comparator,
     build_input_manifest,
     build_promotion_comparator,
     compare_component_predictions_parity,
     compare_mechanism_comparator_parity,
+    load_rotation_market_weights,
     load_rotation_rush_yards_weights,
     same_job_double_build_disposition,
     sha256_of_file,
@@ -224,4 +226,42 @@ def test_mechanism_parity_fails_closed_on_missing_columns():
     result = compare_mechanism_comparator_parity(fresh, canonical)
     assert result["disposition"] == "MECHANISM_PARITY_FAILURE"
     assert "fresh frame missing" in result["reason"]
+
+
+def test_load_rotation_market_weights_rush_att_rotation_1():
+    w = load_rotation_market_weights(1, "rush_att")
+    assert len(w) == 1
+    assert w.iloc[0]["market"] == "rush_att"
+    assert w.iloc[0]["mc_weight"] == pytest.approx(0.260264, abs=1e-6)
+
+
+def test_load_rotation_market_weights_rush_att_rotation_2():
+    w = load_rotation_market_weights(2, "rush_att")
+    assert len(w) == 1
+    assert w.iloc[0]["mc_weight"] == pytest.approx(0.3164919683016017, abs=1e-9)
+
+
+def _dual_cp(rows):
+    cols = ["season", "week", "team", "player_clean_key", "market", "mc_proj", "ml_proj", "state_proj"]
+    return pd.DataFrame(rows, columns=cols)
+
+
+def test_build_dual_market_promotion_comparator_joins_both_markets():
+    cp = _dual_cp(
+        [
+            [2024, 1, "KC", "p1", "rush_att", 15.0, 14.0, 16.0],
+            [2024, 1, "KC", "p1", "rush_yards", 80.0, 75.0, 85.0],
+        ]
+    )
+    out = build_dual_market_promotion_comparator(cp, rotation=1)
+    assert len(out) == 1
+    row = out.iloc[0]
+    assert row["promotion_rush_att"] > 0
+    assert row["promotion_rush_yards"] > 0
+
+
+def test_build_dual_market_promotion_comparator_fails_closed_on_missing_market():
+    cp = _dual_cp([[2024, 1, "KC", "p1", "rush_att", 15.0, 14.0, 16.0]])
+    with pytest.raises(RuntimeError, match="rush_yards reconstruction is empty"):
+        build_dual_market_promotion_comparator(cp, rotation=1)
 

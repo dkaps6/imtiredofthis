@@ -92,12 +92,14 @@ def verify_frozen_parent_blobs(repo_root: Path = REPO_ROOT) -> dict:
     }
 
 
-def load_rotation_rush_yards_weights(rotation: int) -> pd.DataFrame:
-    """Return a one-row `rush_yards` weights frame for the given rotation.
+def load_rotation_market_weights(rotation: int, market: str) -> pd.DataFrame:
+    """Return a one-row weights frame for the given rotation and market.
 
     Hard-asserts `calibration_season_used < test_season` (Amendment 3) using
     each source file's own recorded provenance -- never silently reuses the
-    wrong-season file. Fails closed (raises) rather than guessing.
+    wrong-season file. Fails closed (raises) rather than guessing. Amendment 8
+    extends this same per-rotation weight-file provenance rule to `rush_att`
+    (not just `rush_yards`), for the held-incumbent-efficiency translation.
     """
     if rotation not in ROTATIONS:
         raise RuntimeError(f"unknown rotation {rotation!r}; expected 1 or 2")
@@ -127,13 +129,14 @@ def load_rotation_rush_yards_weights(rotation: int) -> pd.DataFrame:
 
     weights = pd.read_csv(path)
     weights.columns = [str(c).strip().lower() for c in weights.columns]
-    row = weights.loc[weights["market"].astype(str).str.lower() == "rush_yards"]
+    row = weights.loc[weights["market"].astype(str).str.lower() == market.lower()]
     if row.empty:
-        raise RuntimeError(f"no rush_yards row in {path}")
+        raise RuntimeError(f"no {market} row in {path}")
     if len(row) > 1:
-        raise RuntimeError(f"multiple rush_yards rows in {path}, ambiguous")
+        raise RuntimeError(f"multiple {market} rows in {path}, ambiguous")
 
-    # Hard per-rotation provenance assertion (Amendment 3).
+    # Hard per-rotation provenance assertion (Amendment 3, extended to
+    # rush_att by Amendment 8).
     if expected_calibration_season >= test_season:
         raise RuntimeError(
             f"rotation {rotation}: calibration_season_used={expected_calibration_season} "
@@ -143,31 +146,39 @@ def load_rotation_rush_yards_weights(rotation: int) -> pd.DataFrame:
     return row.reset_index(drop=True)
 
 
-def build_promotion_comparator(component_predictions: pd.DataFrame, rotation: int) -> pd.DataFrame:
-    """Reconstruct the decisive promotion comparator (`ensemble_proj`) for rush_yards.
+def load_rotation_rush_yards_weights(rotation: int) -> pd.DataFrame:
+    """Return a one-row `rush_yards` weights frame for the given rotation."""
+    return load_rotation_market_weights(rotation, "rush_yards")
+
+
+def build_promotion_comparator(
+    component_predictions: pd.DataFrame, rotation: int, market: str = "rush_yards"
+) -> pd.DataFrame:
+    """Reconstruct the decisive promotion comparator (`ensemble_proj`) for one market.
 
     `component_predictions` must already carry `market`, `mc_proj`, `ml_proj`,
     `state_proj` for the rotation's test season (built via the frozen-parent
     `component_predictions.py`/`walk_forward.py` pipeline -- not built here).
-    Returns only `market == "rush_yards"` rows with the reconstructed
-    `promotion_comparator_rush_yards` column attached.
+    Returns only rows matching `market` with the reconstructed
+    `promotion_comparator_{market}` column attached. Amendment 8 reuses this
+    for `rush_att` as well as `rush_yards`, to hold incumbent efficiency fixed.
     """
     blob_check = verify_frozen_parent_blobs()
     if blob_check["disposition"] != "PASS":
         raise RuntimeError(f"frozen-parent blob mismatch, refusing to proceed: {blob_check['mismatches']}")
 
-    weights_row = load_rotation_rush_yards_weights(rotation)
+    weights_row = load_rotation_market_weights(rotation, market)
 
     if component_predictions is None or component_predictions.empty:
         return pd.DataFrame()
     frame = component_predictions.copy()
     frame.columns = [str(c).strip().lower() for c in frame.columns]
-    rush = frame.loc[frame["market"].astype(str).str.lower() == "rush_yards"].copy()
+    rush = frame.loc[frame["market"].astype(str).str.lower() == market.lower()].copy()
     if rush.empty:
         return rush
 
     ensembled = apply_ensemble(rush, weights=weights_row)
-    ensembled["promotion_comparator_rush_yards"] = pd.to_numeric(
+    ensembled[f"promotion_comparator_{market}"] = pd.to_numeric(
         ensembled["ensemble_proj"], errors="coerce"
     )
     ensembled["promotion_comparator_rotation"] = rotation
@@ -175,6 +186,38 @@ def build_promotion_comparator(component_predictions: pd.DataFrame, rotation: in
         str(ROTATION_1_2023_FIT_WEIGHTS) if rotation == 1 else str(PRODUCTION_WEIGHTS)
     )
     return ensembled
+
+
+PROMOTION_IDENTITY_KEYS = ["season", "week", "team", "player_clean_key"]
+
+
+def build_dual_market_promotion_comparator(component_predictions: pd.DataFrame, rotation: int) -> pd.DataFrame:
+    """Amendment 8: reconstruct both `promotion_rush_att` and
+    `promotion_rush_yards` from the same component source, joined on exact
+    player identity. Asserts zero duplicates and zero ambiguous joins on
+    either side before merging -- fails closed rather than silently
+    many-to-one/one-to-many joining.
+    """
+    att = build_promotion_comparator(component_predictions, rotation, market="rush_att")
+    yards = build_promotion_comparator(component_predictions, rotation, market="rush_yards")
+
+    for label, frame in (("rush_att", att), ("rush_yards", yards)):
+        if frame is None or frame.empty:
+            raise RuntimeError(f"dual-market promotion comparator: {label} reconstruction is empty")
+        if frame.duplicated(PROMOTION_IDENTITY_KEYS).any():
+            raise RuntimeError(f"dual-market promotion comparator: {label} has duplicate identity rows")
+
+    att_slim = att[PROMOTION_IDENTITY_KEYS + ["promotion_comparator_rush_att"]].rename(
+        columns={"promotion_comparator_rush_att": "promotion_rush_att"}
+    )
+    yards_slim = yards[PROMOTION_IDENTITY_KEYS + ["promotion_comparator_rush_yards"]].rename(
+        columns={"promotion_comparator_rush_yards": "promotion_rush_yards"}
+    )
+    merged = att_slim.merge(
+        yards_slim, on=PROMOTION_IDENTITY_KEYS, how="outer", validate="one_to_one"
+    )
+    merged["rotation"] = rotation
+    return merged
 
 
 PARITY_JOIN_KEYS = ["season", "week", "team", "player_clean_key", "market"]
