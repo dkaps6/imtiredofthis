@@ -141,6 +141,48 @@ genuinely new, separately-reviewed 2023-fit STACK2 casebook per option 1 in comm
 `5704854605`), that supersedes this amendment on say-so, before any candidate
 science is interpreted against it.
 
+**Amendment 8** (this revision): adjudicated by GPT-5.6 on Issue #535 (comment
+`5705529323`), replacing the "Rush-yard translation" section's dependency on the P3
+efficiency seam (STACK1 `stack_yards/stack_att`, M94C implied-YPC fallback) before
+any candidate output exists. While building the candidate, tracing that seam's full
+parent chain (Issue #535 comment `5705499168`) found it unconstructible for Rotation
+1: STACK1's own evaluator fits weights on 2024 components but scores **2025 only**
+(one trace file, `stack1_2025_rb_trace.csv`, no 2024 equivalent ever produced); its
+M94C input is likewise 2025-only; and M94C's own M94B input is single-rotation **by
+architecture**, not just an unexercised code path -- its docstring bakes 2024 in as
+the one-time architecture-selection/blend-holdout season, so substituting an earlier
+season would mean redoing that model-family selection, i.e. new modeling across
+three already-frozen tiers (M94B, M94C, STACK1), not a reconstruction. Unlike the
+mechanism comparator (Amendment 7), this blocked the **decisive** candidate output
+itself, not a diagnostic-only arm.
+
+GPT-5.6 rejected both rebuilding that three-tier lineage for 2024 (unnecessary new
+modeling, would confound the Lane-A question) and collapsing to a single 2025
+rotation (weakens the evidence standard when a cleaner constructible source already
+exists in this repo). **The "Rush-yard translation" section below is replaced** with
+a hold-incumbent-efficiency-fixed design: since Lane A's stated novelty is
+allocation/state segmentation, not efficiency, the candidate reconstructs each
+player's *incumbent production ensemble* mean for **both** `rush_att` and
+`rush_yards` (same Amendment-6 Build-A component source, same per-rotation frozen
+weight rows already used for the promotion comparator, same
+`calibration_season < test_season` hard rule extended to both markets), derives
+`incumbent_ypc_i = promotion_rush_yards_i / promotion_rush_att_i` per player
+per scored-transition row, and translates candidate carries through that held-fixed
+efficiency: `candidate_rush_yards_i = candidate_att_i * incumbent_ypc_i`. This makes
+the *only* scored-transition change carry allocation -- comparator and candidate
+share the same component source and the same per-player efficiency, isolating
+exactly the mechanism this candidate claims to improve. Fully constructible both
+rotations (no new M94-tier model, no sportsbook/postgame input). A new fail-closed
+**constructibility check** (see revised section below) runs before any outcome is
+scored: every active player row in every scored-V1 transition team-week must have
+finite `promotion_rush_yards_i` and finite `promotion_rush_att_i > 0.20`, or the
+disposition is `RUSH_YARD_TRANSLATION_CONSTRUCTIBILITY_FAILURE` -- no dropping,
+imputing, clipping, or inventing a fallback after seeing coverage. Stable-week
+`deployable_candidate` output is unchanged (still exactly `promotion_rush_yards`,
+Amendment 4). All previously frozen adequacy/protected-cohort/bootstrap/per-season/
+p90-cat/stable-identity/whole-season gates are unchanged; no new tuning parameter is
+introduced.
+
 ## Why this candidate, and why it is not a disguised STACK2 retest
 
 The Lane A audit established: STACK2 (`scripts/backtest/evaluate_rb_stack2_enriched_
@@ -462,23 +504,47 @@ pool defined above.
    directly from step 7's normalization) -- asserted as a hard check every transition
    team-week: `max(abs(sum(candidate_att_i) - pool)) == 0.0`.
 
-### Rush-yard translation (Amendment 1 point #2 -- freeze the complete endpoint, not just carries)
+### Rush-yard translation (Amendment 1 point #2, replaced under Amendment 8 -- hold incumbent efficiency fixed)
 
 Since qualification must ultimately be on rushing-yard accuracy, the candidate's final
-projection is defined explicitly, reusing the exact existing P3 efficiency seam
-(`scripts/modeling/rb_rush_synthesis_v1.py::compose_p3_row`, **on main**) unchanged:
+projection is defined explicitly. Amendment 8 replaces the original P3-efficiency-seam
+design (unconstructible for Rotation 1, see Amendment 8 above) with a
+hold-incumbent-efficiency-fixed design, so that carry allocation is the *only* thing
+that differs between candidate and comparator on scored rows:
 
-`candidate_rush_yards_i = candidate_att_i * ypc_i`, where `ypc_i = stack_yards_i /
-stack_att_i` when `stack_att_i > 0.20`, else the existing M94C implied-YPC fallback --
-the identical rule and threshold already frozen in production P3. **No YPC
-learning/tuning belongs in Lane A**; efficiency is untouched, only opportunity
-allocation changes.
+1. **Reconstruct both incumbent-production means** from the same Amendment-6 Build-A
+   component source already used for the promotion comparator, for **both**
+   `rush_att` and `rush_yards`, using the correct per-rotation frozen weight row for
+   each market (Rotation 1: `docs/research/overnight/ensemble_weights_2023_fit_v1.csv`
+   -- `rush_att` mc `.260264`/ml `.660877`/state `.078859`, `rush_yards` mc
+   `.396067`/ml `.559625`/state `.044308`; Rotation 2: `data/model_ensemble_
+   weights.csv` -- `rush_att` mc `.3164919683016017`/ml `.6528957474344519`/state
+   `.030612284263946517`, `rush_yards` mc `.5569542426070742`/ml
+   `.4430457573929258`/state `0`), producing `promotion_rush_att_i` and
+   `promotion_rush_yards_i`. The `calibration_season < test_season` hard rule
+   (Amendment 3) applies to both markets, not just `rush_yards`.
+2. **Join** the two incumbent means on exact player identity `(season, week, team,
+   player_clean_key)`; assert zero duplicates and zero ambiguous joins.
+3. **Constructibility check (fail-closed, before any outcome is scored)**: every
+   active player row in every scored-V1 transition team-week must have finite
+   `promotion_rush_yards_i` and finite `promotion_rush_att_i > 0.20`. If any required
+   scored row fails this, disposition is `RUSH_YARD_TRANSLATION_CONSTRUCTIBILITY_
+   FAILURE` -- do not drop the row, impute, clip, change the threshold, or invent a
+   fallback after seeing coverage.
+4. **Held-fixed incumbent efficiency**: `incumbent_ypc_i = promotion_rush_yards_i /
+   promotion_rush_att_i`, no fitting or clipping.
+5. **Candidate endpoint**: `candidate_rush_yards_i = candidate_att_i *
+   incumbent_ypc_i`, equivalently `candidate_rush_yards_i = promotion_rush_yards_i *
+   (candidate_att_i / promotion_rush_att_i)`. **No YPC learning/tuning belongs in
+   Lane A**; efficiency is untouched, only opportunity allocation changes.
 
 This reallocation-plus-translation formula defines the candidate's output **only on
 scored V1 transition weeks**. What happens on every other week -- and which comparator
 that output must match -- is specified explicitly in "Two candidate arms" below
 (Amendment 4); it is **not** the mechanism comparator, per GPT-5.6's Amendment-4
-correction.
+correction. On scored rows, `promotion_rush_yards_i` (from step 1) is exactly the
+`ensemble_proj` promotion comparator value already required elsewhere in this
+document -- no separate reconstruction, same value reused.
 
 ## Two comparators: mechanism vs. promotion (Amendment 2 point #1)
 
@@ -809,6 +875,12 @@ production endpoint is decisive** for qualification.
   `max(calibration_season_used) < test_season` cannot be proven)** ->
   `RB_LANE_A_TRANSITION_ALLOCATION_BASELINE_RECONSTRUCTION_FAILURE`. Candidate
   science does not proceed until the failing reconstruction is fixed and re-verified.
+- **The Amendment-8 rush-yard translation constructibility check fails (any active
+  player row in any scored-V1 transition team-week, either rotation, lacks a finite
+  `promotion_rush_yards_i` or a finite `promotion_rush_att_i > 0.20`)** ->
+  `RUSH_YARD_TRANSLATION_CONSTRUCTIBILITY_FAILURE`. Candidate science does not
+  proceed; no row is dropped, imputed, clipped, or given an invented fallback to
+  route around the failure.
 - **Either OOS rotation's overall transition subpopulation, or either required
   protected cohort (carries>=20, yards>=100) within it, is below the `n>=30` adequacy
   bar** -> `RB_LANE_A_TRANSITION_ALLOCATION_INSUFFICIENT_EVIDENCE`, fail-closed --
