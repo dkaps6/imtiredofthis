@@ -352,3 +352,103 @@ def translate_candidate_rush_yards(candidate_att: pd.DataFrame, incumbent_ypc: p
         merged["candidate_att"], errors="coerce"
     ) * pd.to_numeric(merged["incumbent_ypc"], errors="coerce")
     return merged
+
+
+# ---------------------------------------------------------------------------
+# Two candidate arms (Amendment 4)
+# ---------------------------------------------------------------------------
+
+
+def build_deployable_candidate(
+    all_rush_yards_rows: pd.DataFrame, scored_transition_candidate: pd.DataFrame
+) -> pd.DataFrame:
+    """Amendment 4: `deployable_candidate` -- the only arm with any bearing on
+    a future production question.
+
+    On a scored V1 transition week, equal to
+    `scored_transition_candidate`'s `candidate_rush_yards`. On every other
+    week (stable weeks, and detected-but-not-scored transition weeks alike),
+    equal to the promotion comparator (`promotion_rush_yards`) --
+    byte-identical, by construction, never the mechanism comparator.
+
+    `all_rush_yards_rows` must carry `CONSTRUCTIBILITY_IDENTITY_KEYS` +
+    `promotion_rush_yards` for **every** row (the universe this arm is
+    defined over). `scored_transition_candidate` must carry the same keys +
+    `candidate_rush_yards`, for scored-transition rows only (a subset).
+    """
+    required = set(CONSTRUCTIBILITY_IDENTITY_KEYS) | {"promotion_rush_yards"}
+    missing = required - set(all_rush_yards_rows.columns)
+    if missing:
+        raise RuntimeError(f"build_deployable_candidate: all_rush_yards_rows missing {sorted(missing)}")
+
+    out = all_rush_yards_rows[CONSTRUCTIBILITY_IDENTITY_KEYS + ["promotion_rush_yards"]].copy()
+    scored = scored_transition_candidate[
+        CONSTRUCTIBILITY_IDENTITY_KEYS + ["candidate_rush_yards"]
+    ].drop_duplicates(CONSTRUCTIBILITY_IDENTITY_KEYS)
+    out = out.merge(scored, on=CONSTRUCTIBILITY_IDENTITY_KEYS, how="left")
+    out["is_scored_v1_transition_row"] = out["candidate_rush_yards"].notna()
+    out["deployable_candidate_rush_yards"] = out["candidate_rush_yards"].where(
+        out["is_scored_v1_transition_row"], out["promotion_rush_yards"]
+    )
+    return out.drop(columns=["candidate_rush_yards"])
+
+
+def build_mechanism_diagnostic(
+    scored_transition_candidate: pd.DataFrame, mechanism_comparator: pd.DataFrame
+) -> pd.DataFrame:
+    """Amendment 4: `mechanism_diagnostic` -- informative only, never a
+    candidate for production. Scored V1 transition weeks only, compared
+    directly against the mechanism comparator (P3/STACK2). Per Amendment 7,
+    only constructible for Rotation 2 -- callers must not invoke this for
+    Rotation 1 (the mechanism comparator itself is `NOT_CONSTRUCTIBLE_
+    NO_CASEBOOK` there).
+
+    `mechanism_comparator` must carry `season, week, team, name_key,
+    arch_enriched_opp_stack_eff_yards` (the STACK2 casebook's own column,
+    per `rb_lane_a_comparator_reconstruction_v1.MECHANISM_COMPARATOR_COLUMN`).
+    Joins on `name_key` (STACK2's own identity scheme), not `player_clean_key`
+    -- `scored_transition_candidate` must therefore also carry `name_key`.
+    """
+    mech_col = "arch_enriched_opp_stack_eff_yards"
+    required_candidate = {"season", "week", "team", "name_key", "candidate_rush_yards"}
+    missing_candidate = required_candidate - set(scored_transition_candidate.columns)
+    if missing_candidate:
+        raise RuntimeError(f"build_mechanism_diagnostic: candidate frame missing {sorted(missing_candidate)}")
+    required_mech = {"season", "week", "team", "name_key", mech_col}
+    missing_mech = required_mech - set(mechanism_comparator.columns)
+    if missing_mech:
+        raise RuntimeError(f"build_mechanism_diagnostic: mechanism_comparator missing {sorted(missing_mech)}")
+
+    out = scored_transition_candidate.merge(
+        mechanism_comparator[["season", "week", "team", "name_key", mech_col]],
+        on=["season", "week", "team", "name_key"],
+        how="left",
+    )
+    out = out.rename(columns={mech_col: "mechanism_comparator_rush_yards"})
+    return out
+
+
+def check_stable_identity_gate(deployable_candidate: pd.DataFrame) -> dict:
+    """Amendment 4's hard stable-identity gate: for every non-scored row
+    (stable weeks, and detected-but-not-scored transition weeks), the
+    deployable candidate must equal the promotion comparator EXACTLY --
+    `max(abs(deployable_candidate_rush_yards - promotion_comparator_rush_yards)) == 0.0`.
+    A failure here means the deployable arm was built wrong, not that the
+    candidate is weak.
+    """
+    required = {"is_scored_v1_transition_row", "deployable_candidate_rush_yards", "promotion_rush_yards"}
+    missing = required - set(deployable_candidate.columns)
+    if missing:
+        raise RuntimeError(f"check_stable_identity_gate: missing columns {sorted(missing)}")
+
+    non_scored = deployable_candidate.loc[~deployable_candidate["is_scored_v1_transition_row"]]
+    delta = (
+        pd.to_numeric(non_scored["deployable_candidate_rush_yards"], errors="coerce")
+        - pd.to_numeric(non_scored["promotion_rush_yards"], errors="coerce")
+    ).abs()
+    max_delta = float(delta.max()) if len(delta) else 0.0
+    return {
+        "disposition": "STABLE_IDENTITY_GATE_PASS" if max_delta == 0.0 else "STABLE_IDENTITY_GATE_FAILURE",
+        "rows_checked": int(len(non_scored)),
+        "max_abs_delta": max_delta,
+    }

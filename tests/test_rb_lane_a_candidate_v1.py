@@ -3,7 +3,10 @@ import pandas as pd
 import pytest
 
 from scripts.backtest.rb_lane_a_candidate_v1 import (
+    build_deployable_candidate,
+    build_mechanism_diagnostic,
     check_rush_yard_translation_constructibility,
+    check_stable_identity_gate,
     compute_conservation_pool,
     compute_historical_rb_room_rush_share,
     compute_hhi_dampened_reallocation,
@@ -206,3 +209,68 @@ def test_compute_role_weights_and_hhi_end_to_end():
     assert active_enriched.iloc[0]["raw_w"] > 0
     assert len(hhi_lookup) == 1
     assert hhi_lookup.iloc[0]["prior_backfield_hhi"] > 0
+
+
+def _keys(season, week, team, player_clean_key):
+    return {"season": season, "week": week, "team": team, "player_clean_key": player_clean_key}
+
+
+def test_build_deployable_candidate_uses_candidate_on_scored_rows_and_comparator_elsewhere():
+    all_rows = pd.DataFrame(
+        [
+            {**_keys(2024, 3, "TB", "p1"), "promotion_rush_yards": 50.0},
+            {**_keys(2024, 4, "TB", "p1"), "promotion_rush_yards": 55.0},
+        ]
+    )
+    scored = pd.DataFrame([{**_keys(2024, 3, "TB", "p1"), "candidate_rush_yards": 62.0}])
+    out = build_deployable_candidate(all_rows, scored)
+    row3 = out.loc[out.week == 3].iloc[0]
+    row4 = out.loc[out.week == 4].iloc[0]
+    assert row3["is_scored_v1_transition_row"] is True or bool(row3["is_scored_v1_transition_row"])
+    assert row3["deployable_candidate_rush_yards"] == pytest.approx(62.0)
+    assert bool(row4["is_scored_v1_transition_row"]) is False
+    assert row4["deployable_candidate_rush_yards"] == pytest.approx(55.0)
+
+
+def test_check_stable_identity_gate_passes_when_non_scored_rows_match_exactly():
+    deployable = pd.DataFrame(
+        [
+            {"is_scored_v1_transition_row": True, "deployable_candidate_rush_yards": 62.0, "promotion_rush_yards": 50.0},
+            {"is_scored_v1_transition_row": False, "deployable_candidate_rush_yards": 55.0, "promotion_rush_yards": 55.0},
+        ]
+    )
+    result = check_stable_identity_gate(deployable)
+    assert result["disposition"] == "STABLE_IDENTITY_GATE_PASS"
+    assert result["rows_checked"] == 1
+
+
+def test_check_stable_identity_gate_fails_closed_on_non_scored_mismatch():
+    deployable = pd.DataFrame(
+        [
+            {"is_scored_v1_transition_row": False, "deployable_candidate_rush_yards": 55.1, "promotion_rush_yards": 55.0},
+        ]
+    )
+    result = check_stable_identity_gate(deployable)
+    assert result["disposition"] == "STABLE_IDENTITY_GATE_FAILURE"
+    assert result["max_abs_delta"] == pytest.approx(0.1)
+
+
+def test_build_mechanism_diagnostic_joins_on_name_key():
+    scored = pd.DataFrame(
+        [{"season": 2025, "week": 5, "team": "TB", "name_key": "p1", "candidate_rush_yards": 62.0}]
+    )
+    mechanism = pd.DataFrame(
+        [{"season": 2025, "week": 5, "team": "TB", "name_key": "p1", "arch_enriched_opp_stack_eff_yards": 58.0}]
+    )
+    out = build_mechanism_diagnostic(scored, mechanism)
+    assert out.iloc[0]["mechanism_comparator_rush_yards"] == pytest.approx(58.0)
+    assert out.iloc[0]["candidate_rush_yards"] == pytest.approx(62.0)
+
+
+def test_build_mechanism_diagnostic_fails_closed_on_missing_columns():
+    scored = pd.DataFrame([{"season": 2025}])
+    mechanism = pd.DataFrame(
+        [{"season": 2025, "week": 5, "team": "TB", "name_key": "p1", "arch_enriched_opp_stack_eff_yards": 58.0}]
+    )
+    with pytest.raises(RuntimeError, match="candidate frame missing"):
+        build_mechanism_diagnostic(scored, mechanism)
