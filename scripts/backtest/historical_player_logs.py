@@ -59,15 +59,23 @@ def build_historical_player_logs(
     frames: list[pd.DataFrame] = []
     for season in sorted(set(int(s) for s in seasons)):
         normalized = _normalize_weekly(_load_historical_weekly(season), season)
-        # nflverse weekly player stats include postseason weeks (19+). This
-        # backtest is explicitly regular season Weeks 1-18, and schedule_history
-        # is intentionally REG-only, so postseason observations must be excluded
-        # before opponent attachment rather than treated as missing schedule data.
-        normalized = normalized.loc[
-            pd.to_numeric(normalized["week"], errors="coerce").between(1, REGULAR_SEASON_MAX_WEEK)
-        ].copy()
+
+        # The validated schedule artifact is the authority for which week
+        # numbers belong to that season's regular season. A fixed Weeks 1-18
+        # filter is insufficient historically: for example, the 2020 regular
+        # season ended in Week 17 while nflreadpy exposes postseason player
+        # rows labeled Week 18. Filter those out before opponent attachment.
+        season_sched = sched.loc[sched["season"].eq(season)].copy()
+        valid_regular_weeks = sorted(
+            int(w) for w in season_sched["week"].dropna().unique().tolist()
+        )
+        if not valid_regular_weeks:
+            raise RuntimeError(f"historical schedule has zero regular-season weeks for {season}")
+        normalized_week = pd.to_numeric(normalized["week"], errors="coerce")
+        normalized = normalized.loc[normalized_week.isin(valid_regular_weeks)].copy()
+
         normalized = normalized.merge(
-            sched.loc[sched["season"].eq(season)],
+            season_sched,
             on=["season", "week", "team"],
             how="left",
             validate="many_to_one",
@@ -80,7 +88,10 @@ def build_historical_player_logs(
                 + sample.to_dict(orient="records").__repr__()
             )
         frames.append(normalized)
-        print(f"[backtest_player_logs] season={season} regular_season_rows={len(normalized)}")
+        print(
+            f"[backtest_player_logs] season={season} regular_season_weeks={valid_regular_weeks} "
+            f"regular_season_rows={len(normalized)}"
+        )
 
     out = pd.concat(frames, ignore_index=True, sort=False) if frames else pd.DataFrame()
     if out.empty:

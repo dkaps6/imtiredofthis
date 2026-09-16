@@ -218,8 +218,14 @@ def persist_season(
         ).abs()
         max_delta = float(delta.max()) if len(delta) else 0.0
         if not np.isfinite(max_delta) or max_delta > 1e-8:
+            chk = chk.assign(_abs_delta=delta)
+            worst = chk.sort_values("_abs_delta", ascending=False).head(10)
+            diag_path = out_dir / f"{season}_week_{week:02d}_mean_mismatch_diagnostic.csv"
+            worst.to_csv(diag_path, index=False)
+            worst_rows = worst[KEYS + ["mc_proj", "mc_mean", "_abs_delta"]].to_dict("records")
             raise RuntimeError(
-                f"{season} W{week:02d}: reconstructed MC mean mismatch max_abs={max_delta:.12g}"
+                f"{season} W{week:02d}: reconstructed MC mean mismatch max_abs={max_delta:.12g}; "
+                f"worst rows (saved in full to {diag_path.name}): {worst_rows}"
             )
 
         np.savez_compressed(out_dir / shard, **arrays)
