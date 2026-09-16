@@ -154,7 +154,7 @@ def test_compute_conservation_pool_fails_closed_on_missing_columns():
 def test_hhi_dampened_reallocation_even_split_at_zero_hhi():
     room = pd.DataFrame([{"raw_w": 0.5}, {"raw_w": 0.5}])
     hhi_lookup = pd.DataFrame(
-        [{"transition_season": 2024, "transition_week": 3, "team": "TB", "prior_backfield_hhi": 0.0}]
+        [{"season": 2024, "week": 3, "team": "TB", "prior_backfield_hhi": 0.0}]
     )
     pool_row = {"season": 2024, "week": 3, "team": "TB", "pool": 20.0}
     out, meta = compute_hhi_dampened_reallocation(room, hhi_lookup, pool_row)
@@ -167,7 +167,7 @@ def test_hhi_dampened_reallocation_even_split_at_zero_hhi():
 def test_hhi_dampened_reallocation_concentrates_toward_dominant_back_as_hhi_rises():
     room = pd.DataFrame([{"raw_w": 0.8}, {"raw_w": 0.2}])
     hhi_lookup = pd.DataFrame(
-        [{"transition_season": 2024, "transition_week": 3, "team": "TB", "prior_backfield_hhi": 0.9}]
+        [{"season": 2024, "week": 3, "team": "TB", "prior_backfield_hhi": 0.9}]
     )
     pool_row = {"season": 2024, "week": 3, "team": "TB", "pool": 20.0}
     out, meta = compute_hhi_dampened_reallocation(room, hhi_lookup, pool_row)
@@ -179,7 +179,7 @@ def test_hhi_dampened_reallocation_concentrates_toward_dominant_back_as_hhi_rise
 
 def test_hhi_dampened_reallocation_all_zero_weights_excluded():
     room = pd.DataFrame([{"raw_w": 0.0}, {"raw_w": 0.0}])
-    hhi_lookup = pd.DataFrame(columns=["transition_season", "transition_week", "team", "prior_backfield_hhi"])
+    hhi_lookup = pd.DataFrame(columns=["season", "week", "team", "prior_backfield_hhi"])
     pool_row = {"season": 2024, "week": 3, "team": "TB", "pool": 20.0}
     out, meta = compute_hhi_dampened_reallocation(room, hhi_lookup, pool_row)
     assert meta["all_zero_weights"] is True
@@ -198,16 +198,23 @@ def test_compute_role_weights_and_hhi_end_to_end():
         ]
     )
     active_room = pd.DataFrame([{"season": 2024, "week": 3, "team": "TB", "name_key": "rb1"}])
+    # Membership drawn from the prior week's (week 2) roster, but tagged with
+    # the TRANSITION week's own coordinates (week 3) -- see the corrected
+    # compute_role_weights_and_hhi() contract: this makes enrich_history()'s
+    # cutoff use history strictly before the transition week, and makes the
+    # resulting hhi_lookup key match pool_row's own (season, week, team).
     pre_transition_room = pd.DataFrame(
         [
-            {"season": 2024, "week": 2, "team": "TB", "name_key": "rb1"},
-            {"season": 2024, "week": 2, "team": "TB", "name_key": "rb2"},
+            {"season": 2024, "week": 3, "team": "TB", "name_key": "rb1"},
+            {"season": 2024, "week": 3, "team": "TB", "name_key": "rb2"},
         ]
     )
     active_enriched, hhi_lookup = compute_role_weights_and_hhi(active_room, pre_transition_room, logs)
     assert "raw_w" in active_enriched.columns
     assert active_enriched.iloc[0]["raw_w"] > 0
     assert len(hhi_lookup) == 1
+    assert hhi_lookup.iloc[0]["season"] == 2024
+    assert hhi_lookup.iloc[0]["week"] == 3
     assert hhi_lookup.iloc[0]["prior_backfield_hhi"] > 0
 
 

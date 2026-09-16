@@ -208,19 +208,24 @@ def compute_role_weights_and_hhi(
     `enrich_history()`/`add_team_competition()` unchanged, per Amendment 1
     point #3/Amendment 5's HHI-prose correction).
 
-    ``active_room``/``pre_transition_room`` must each carry
-    ``season, week, team, name_key`` -- the scored-transition team-week's
-    active and pre-transition RB/FB rooms respectively (Gate 0's
-    `harmonize_roster_membership` output, restricted to the relevant rows;
-    ``pre_transition_room`` uses the transition detector's own
-    ``prior_season``/``prior_week``, never an assumed ``week - 1``).
+    ``active_room`` must carry ``season, week, team, name_key`` at the
+    scored-transition team-week's own coordinates (Gate 0's
+    `harmonize_roster_membership` output, restricted to the relevant rows).
 
-    `H` is computed at the pre-transition room's own coordinates
-    (`prior_season`/`prior_week`), so `prior3_rb_share` there reflects
-    history strictly before that week -- consistent with the frozen
-    formula's "not dependent on any current-week row." This coordinate
-    choice is a documented implementation reading of "pre-transition room,"
-    not itself specified verbatim in the frozen text; reported as such.
+    ``pre_transition_room`` must carry the **same transition-week**
+    ``season, week, team`` coordinates (not the prior week's), with
+    membership drawn from the transition detector's own
+    ``prior_season``/``prior_week`` roster snapshot -- i.e. the caller
+    re-tags the pre-transition roster rows onto the transition week before
+    calling this function. This makes `enrich_history()`'s own "strictly
+    before this row's (season,week)" cutoff naturally compute each
+    pre-transition player's `prior3_rb_share` using history strictly before
+    the *transition* week (never the current-week outcome), and makes the
+    resulting `H` lookup key directly match the transition week's own
+    `(season, week, team)`, the same coordinates `compute_conservation_pool`
+    produces. This coordinate choice is a documented implementation reading
+    of "pre-transition room," not itself specified verbatim in the frozen
+    text; reported as such.
     """
     logs = player_logs.copy()
     logs.columns = [str(c).strip().lower() for c in logs.columns]
@@ -273,10 +278,8 @@ def compute_role_weights_and_hhi(
     pre_enriched = add_team_competition(pre_enriched)
     # add_team_competition computes prior_backfield_hhi identically for every
     # row within a (season,week,team) group -- take the group-level value.
-    hhi_lookup = (
-        pre_enriched[["season", "week", "team", "prior_backfield_hhi"]]
-        .drop_duplicates(["season", "week", "team"])
-        .rename(columns={"season": "transition_season", "week": "transition_week"})
+    hhi_lookup = pre_enriched[["season", "week", "team", "prior_backfield_hhi"]].drop_duplicates(
+        ["season", "week", "team"]
     )
 
     return active_enriched, hhi_lookup
@@ -303,8 +306,8 @@ def compute_hhi_dampened_reallocation(
     assert abs(float(room["w"].sum()) - 1.0) < 1e-9, "role-weight normalization must sum to 1.0 exactly"
 
     match = hhi_lookup.loc[
-        (hhi_lookup["transition_season"] == pool_row["season"])
-        & (hhi_lookup["transition_week"] == pool_row["week"])
+        (hhi_lookup["season"] == pool_row["season"])
+        & (hhi_lookup["week"] == pool_row["week"])
         & (hhi_lookup["team"] == pool_row["team"])
     ]
     H = float(match["prior_backfield_hhi"].iloc[0]) if len(match) else 0.0
