@@ -2,12 +2,18 @@
 
 **FROZEN BEFORE ANY WEEK-2-OR-LATER OUTCOME IS OBSERVED. RESEARCH ONLY. NO PRODUCTION CHANGE.**
 
-**Amendment 1** (this revision): incorporates GPT-5.6's five prospective corrections
-from Issue #535 comment `5690752971`, before any shadow implementation or Week-2
-outcome exposure -- crossed player x game bootstrap restored, Week 8 stripped of
+**Amendment 1**: incorporated GPT-5.6's five prospective corrections from Issue #535
+comment `5690752971` -- crossed player x game bootstrap restored, Week 8 stripped of
 scientific values, evidence-count-driven (not calendar-driven) stopping rule,
-structural job isolation, and tightened sportsbook wording. No implementation existed
-under the prior revision; nothing here is a post-implementation change.
+structural job isolation, and tightened sportsbook wording.
+
+**Amendment 2** (this revision): incorporates GPT-5.6's two further prospective
+corrections from Issue #535 comment `5690848753`, before any shadow implementation or
+Week-2 outcome exposure -- a frozen qualification-parent track (so the confirmation
+cannot silently mix pre- and post-change production authorities if RB production
+changes mid-window) and a durable, content-hashed, append-only evidence storage
+contract. No implementation exists under any prior revision; nothing here is a
+post-implementation change.
 
 This is the separately-frozen forward-confirmation contract required by PR #562's own
 hard-gate section before any production promotion of
@@ -16,6 +22,42 @@ hard-gate section before any production promotion of
 (GPT-5.6, comments `5690509775` and `5690752971`): shadow capture only, zero effect on
 published pricing, predeclared gates, predeclared evidence horizon, no week-to-week
 auto-tuning, no outcome-driven stopping.
+
+## Frozen qualification-parent track (Amendment 2)
+
+`RB_YARD_DIFFICULTY_MC_WIDTH_QUALIFIED` was earned against a specific production route,
+not against "whatever production happens to be running this week." If RB production
+changes during the confirmation window (e.g. a Lane A allocation candidate is promoted
+before this window closes), letting the shadow baseline silently track the new
+production route would mix two different mean authorities into one `prior8_yard_mae`
+difficulty history and one CRPS/coverage comparison -- contaminating the exact
+experiment #562 qualified.
+
+The parent is therefore pinned, not re-resolved weekly:
+
+- **Frozen parent identity**: the RB rushing-projection code as it existed at #562's
+  merge commit `91afb3a5` -- specifically `scripts/modeling/rb_rush_synthesis_v1.py`
+  (blob `f5cf574144faf4cc527f2ef6627511ae774d2431`), `scripts/modeling/rb_pricing_
+  adapter_v1.py` (blob `b9ed94dc39fc0c8397675859fd1c659ae689ff14`),
+  `scripts/backtest/component_predictions.py` (blob
+  `18f7289515b88c84a91479da18526df4cd7f5398`), and `scripts/modeling/ensemble_v2.py`
+  (blob `41e809b32e4596b8cf18bedbf2b940a2aa3b80b2`). None of these files were modified
+  by #562 itself (confirmed: #562's merge touched only `scripts/research/`,
+  `scripts/backtest/historical_player_logs.py`, and
+  `scripts/backtest/persist_historical_simulated_outcomes_v1.py`).
+- **Every week of the confirmation window**, the baseline and candidate distributions
+  for the scientific track are built by invoking this exact frozen-parent code
+  (pinned at these blob SHAs, checked out into an isolated execution context -- not
+  whatever `main` currently contains) against that week's real pregame inputs. The
+  frozen parent's own `prior8_yard_mae`/difficulty-score history accumulates only from
+  this same frozen-parent lineage for the entire window -- never mixed with a
+  different production authority's errors.
+- **Parent version/hash is recorded in every sidecar row and manifest** (see storage
+  contract below), so any future audit can verify which code produced each row.
+- If production RB projections change mid-window, a **separate, additional
+  contemporaneous-live-authority companion track** may be captured for operational
+  learning, but it is informational only and never replaces or mixes into the
+  frozen-parent rows used for #562's scientific confirmation disposition.
 
 ## What runs, and when
 
@@ -27,10 +69,10 @@ different job/step boundary in the pipeline), not merely a contractual promise i
 this doc.
 
 For every RB `rush_yards` row in that slate's already-priced production output,
-compute and persist **both**:
+compute and persist **both**, using the frozen-parent lineage above:
 
-- **baseline**: the exact current-production Monte Carlo distribution/fair-probability
-  outputs, read from the already-materialized production artifacts, unchanged.
+- **baseline**: the frozen-parent Monte Carlo distribution/fair-probability outputs
+  for that row, built from that week's real pregame inputs via the pinned parent code.
 - **candidate**: the identical #562 transform applied to that same distribution --
   `strict_prior_difficulty_scores` -> `width_multiplier` -> `widen_mean_neutral`, with
   the frozen `0.50` onset / `1.30x` cap / `0.30` width-cap coefficient, byte-identical to
@@ -40,15 +82,32 @@ compute and persist **both**:
   shadow transform itself.** Any later probability-to-market-line comparison is a
   downstream evaluation step, not part of the transform.
 
-Both are written to an immutable, pre-kickoff sidecar artifact
-(`data/backtests/rb_pd2_yard_width_forward_shadow/{season}_week_{week:02d}.csv`, one row
-per RB rush-yards identity, columns: identity keys, `prior8_yard_mae`,
-`difficulty_score`, `width_mult`, baseline/candidate quantiles needed for CRPS and
-50/75/100-yard tail probabilities, `baseline_mean`, `candidate_mean`), alongside a
-**lineage manifest** (source production artifact identity/hash, sidecar write
-timestamp, confirmation that the write occurred strictly before that slate's earliest
-kickoff). The sidecar and manifest are written once, before kickoff, and are never
-edited afterward -- outcome grading later *reads* them; it never modifies them.
+### Durable evidence storage (Amendment 2)
+
+A short-lived CI artifact is not sufficient -- the sidecar must still exist and be
+independently auditable at the evidence-count-triggered checkpoint (which may be as
+late as Week 18) and after the season ends. Storage contract:
+
+- **One immutable pre-kickoff file + manifest per slate**, committed into the repo at
+  `data/backtests/rb_pd2_yard_width_forward_shadow/{season}_week_{week:02d}.csv` plus
+  `{season}_week_{week:02d}_manifest.json`, one row per RB rush-yards identity.
+  Sidecar columns: identity keys, `prior8_yard_mae`, `difficulty_score`, `width_mult`,
+  baseline/candidate quantiles needed for CRPS and 50/75/100-yard tail probabilities,
+  `baseline_mean`, `candidate_mean`, frozen-parent blob-SHA columns (one per pinned
+  file above).
+- **Manifest contents**: `content_sha256` of the sidecar file, the frozen-parent blob
+  SHAs used to build that week's rows, the git commit/tag identity of the shadow-job
+  code itself, and a pre-kickoff timestamp proof (the write timestamp and that slate's
+  earliest kickoff timestamp, with the write strictly earlier).
+- **Fail if the `(season, week)` evidence object already exists.** The write step
+  hard-checks for an existing sidecar/manifest pair for that identity and refuses to
+  proceed (rather than overwrite) if one is found -- append-only, no overwrite/rewrite
+  path, ever.
+- **Retention**: committed to the repository (not a time-limited Actions artifact
+  retention window), so it survives through at least the end-of-season audit and
+  indefinitely thereafter. Outcome grading later *reads* the committed sidecar/
+  manifest pair; it never edits them -- a grading result is its own separate,
+  additional file, never a mutation of the pre-kickoff evidence.
 
 ## What does not change
 
