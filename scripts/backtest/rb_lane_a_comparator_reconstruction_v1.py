@@ -6,6 +6,15 @@ sections of ``docs/research/RB_LANE_A_TRANSITION_GATED_ALLOCATION_V1_PLAN.md``
 (``ensemble_proj``, the real Weeks-2-18 production route). The diagnostic-only
 mechanism comparator (P3/STACK2) is reconstructed separately and is not gating.
 
+Per Amendment 6 (Issue #535 comment `5704381940`), the promotion comparator's
+cross-run parity requirement against run `35032590321` is replaced by a
+same-job double-build authority contract: `35032590321` turned out to be
+itself a reconstruction of an expired original artifact, not a legitimate
+permanent authority. ``same_job_double_build_disposition()`` implements that
+replacement -- two builds of `walk_forward.py` from one frozen historical-
+input snapshot, in the same CI job, must agree on row identity and
+`mc_proj`/`ml_proj`/`state_proj` to `<=1e-6`.
+
 This module contains NO candidate mechanism, NO scoring logic, and computes NO
 candidate outcome. It only reconstructs what production already does today, so
 the candidate has something real to beat.
@@ -19,6 +28,7 @@ already-merged (#545) 2023-only frozen fit instead. Rotation 2 (test season
 """
 from __future__ import annotations
 
+import hashlib
 import subprocess
 import sys
 from pathlib import Path
@@ -222,3 +232,58 @@ def compare_component_predictions_parity(
         "max_abs_value_delta": max_abs_deltas,
         "tolerance": tolerance,
     }
+
+
+def same_job_double_build_disposition(build_a: pd.DataFrame, build_b: pd.DataFrame) -> dict:
+    """Amendment 6: same-job double-build authority contract.
+
+    Two `walk_forward.py` builds from one frozen historical-input snapshot,
+    run in the same CI job, must agree on row identity and
+    `mc_proj`/`ml_proj`/`state_proj` to `<=1e-6`. Reuses the identity/value-
+    parity discipline of `compare_component_predictions_parity()` (same join
+    keys, same tolerance) but reports under Amendment 6's own disposition
+    names so a pass is never confused with "parity passed" against a
+    cross-run artifact.
+    """
+    base = compare_component_predictions_parity(build_a, build_b)
+    disposition = (
+        "SAME_JOB_AUTHORITY_RECONSTRUCTION_PASS"
+        if base.get("disposition") == "PASS"
+        else "SAME_JOB_AUTHORITY_RECONSTRUCTION_FAILURE"
+    )
+    return {**base, "disposition": disposition}
+
+
+def sha256_of_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def build_input_manifest(paths: dict[str, Path]) -> dict:
+    """Amendment 6 evidence: SHA256 of every historical-input file feeding a
+    build, keyed by a caller-supplied label. Fails closed if a path is
+    missing rather than silently omitting it from the manifest.
+    """
+    manifest = {}
+    for label, path in paths.items():
+        if not path.exists():
+            raise RuntimeError(f"input manifest: missing file for {label!r}: {path}")
+        manifest[label] = {"path": str(path), "sha256": sha256_of_file(path)}
+    return manifest
+
+
+def blob_sha_of(repo_root: Path, rel_path: str) -> str:
+    """HEAD blob SHA of a repo-relative file -- used to pin the code identity
+    (e.g. `scripts/simulation_v2.py`) as part of the Amendment 6 evidence.
+    """
+    proc = subprocess.run(
+        ["git", "rev-parse", f"HEAD:{rel_path}"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return proc.stdout.strip()

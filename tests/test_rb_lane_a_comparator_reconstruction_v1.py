@@ -3,9 +3,12 @@ import pytest
 
 from scripts.backtest.rb_lane_a_comparator_reconstruction_v1 import (
     FROZEN_PARENT_BLOBS,
+    build_input_manifest,
     build_promotion_comparator,
     compare_component_predictions_parity,
     load_rotation_rush_yards_weights,
+    same_job_double_build_disposition,
+    sha256_of_file,
     verify_frozen_parent_blobs,
 )
 
@@ -121,3 +124,54 @@ def test_parity_fails_closed_on_missing_columns():
     result = compare_component_predictions_parity(fresh, canonical)
     assert result["disposition"] == "PARITY_FAILURE"
     assert "fresh frame missing" in result["reason"]
+
+
+def test_same_job_double_build_passes_on_identical_builds():
+    frame = _rows([[2024, 1, "KC", "p1", "rush_yards", 80.0, 75.0, 85.0]])
+    result = same_job_double_build_disposition(frame, frame.copy())
+    assert result["disposition"] == "SAME_JOB_AUTHORITY_RECONSTRUCTION_PASS"
+
+
+def test_same_job_double_build_fails_closed_on_value_mismatch():
+    build_a = _rows([[2024, 1, "KC", "p1", "rush_yards", 80.0, 75.0, 85.0]])
+    build_b = _rows([[2024, 1, "KC", "p1", "rush_yards", 80.000002, 75.0, 85.0]])
+    result = same_job_double_build_disposition(build_a, build_b)
+    assert result["disposition"] == "SAME_JOB_AUTHORITY_RECONSTRUCTION_FAILURE"
+
+
+def test_same_job_double_build_fails_closed_on_row_mismatch():
+    build_a = _rows(
+        [
+            [2024, 1, "KC", "p1", "rush_yards", 80.0, 75.0, 85.0],
+            [2024, 1, "SF", "p2", "rush_yards", 60.0, 55.0, 65.0],
+        ]
+    )
+    build_b = _rows([[2024, 1, "KC", "p1", "rush_yards", 80.0, 75.0, 85.0]])
+    result = same_job_double_build_disposition(build_a, build_b)
+    assert result["disposition"] == "SAME_JOB_AUTHORITY_RECONSTRUCTION_FAILURE"
+    assert result["rows_fresh_only"] == 1
+
+
+def test_sha256_of_file_matches_known_content(tmp_path):
+    import hashlib
+
+    content = b"season,week\n2024,1\n"
+    path = tmp_path / "sample.csv"
+    path.write_bytes(content)
+    assert sha256_of_file(path) == hashlib.sha256(content).hexdigest()
+
+
+def test_build_input_manifest_records_sha256_per_label(tmp_path):
+    a = tmp_path / "a.csv"
+    a.write_bytes(b"a")
+    b = tmp_path / "b.csv"
+    b.write_bytes(b"b")
+    manifest = build_input_manifest({"schedule": a, "injuries": b})
+    assert set(manifest) == {"schedule", "injuries"}
+    assert manifest["schedule"]["sha256"] != manifest["injuries"]["sha256"]
+
+
+def test_build_input_manifest_fails_closed_on_missing_file(tmp_path):
+    with pytest.raises(RuntimeError, match="missing file"):
+        build_input_manifest({"schedule": tmp_path / "does_not_exist.csv"})
+
