@@ -133,6 +133,24 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # Rotation 1 only: preserve the intermediate historical-input files so
+      # the mc_proj-drift diagnostic (Issue #535 comment 5703860966) can
+      # re-simulate an affected week with a modified universe, without
+      # rebuilding the whole historical pipeline a second time.
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.rotation == 1
+        with:
+          name: rb-lane-a-m91-historical-inputs-rotation-1
+          path: |
+            /tmp/rb_lane_a_m91/2024/player_game_logs_history.csv
+            /tmp/rb_lane_a_m91/2024/team_weekly_history.csv
+            /tmp/rb_lane_a_m91/2024/schedule_history.csv
+            /tmp/rb_lane_a_m91/2024/injuries_history.csv
+            /tmp/rb_lane_a_m91/2024/weather_history.csv
+            /tmp/rb_lane_a_m91/2024/pregame_universe/**
+          if-no-files-found: error
+          retention-days: 30
+
   reconstruct-and-check-parity:
     needs: build-component-predictions
     if: github.event_name == 'workflow_dispatch'
@@ -212,5 +230,137 @@ jobs:
         with:
           name: rb-lane-a-comparator-reconstruction-report
           path: evidence/rb_lane_a_comparator_reconstruction_report.json
+          if-no-files-found: error
+          retention-days: 30
+
+  diagnose-mc-proj-drift:
+    # GPT-5.6's four-step diagnostic protocol (Issue #535 comment
+    # 5703860966) for the residual mc_proj-only parity delta on Rotation 1
+    # after the exact-invocation fix. Comparator-integrity diagnostic only --
+    # no candidate output, no candidate-vs-outcome comparison.
+    needs: build-component-predictions
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy
+
+      - name: Download fresh Rotation-1 build
+        uses: actions/download-artifact@v4
+        with:
+          name: rb-lane-a-component-predictions-rotation-1
+          path: evidence/rb_lane_a_component_predictions
+
+      - name: Download Rotation-1 historical-input intermediates
+        uses: actions/download-artifact@v4
+        with:
+          name: rb-lane-a-m91-historical-inputs-rotation-1
+          path: evidence/rb_lane_a_m91_inputs
+
+      - name: Download canonical 2024 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/canonical_2024
+          gh run download "$CANONICAL_2024_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "m95q-m91-2024" --dir evidence/canonical_2024
+          test -s evidence/canonical_2024/component_predictions.csv
+
+      - name: Run steps 1-2 (isolate fresh-only rows, compare MC trace columns)
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from scripts.backtest.rb_lane_a_m91_parity_diagnostic_v1 import (
+              compare_trace_columns_by_week,
+              find_fresh_only_rows,
+          )
+
+          fresh = pd.read_csv("evidence/rb_lane_a_component_predictions/component_predictions_2024.csv")
+          canonical = pd.read_csv("evidence/canonical_2024/component_predictions.csv")
+
+          extra = find_fresh_only_rows(fresh, canonical)
+          extra.to_csv("evidence/rb_lane_a_fresh_only_rows.csv", index=False)
+
+          affected_weeks = sorted(int(w) for w in extra["week"].unique())
+          trace = compare_trace_columns_by_week(fresh, canonical)
+
+          report = {
+              "fresh_only_row_count": int(len(extra)),
+              "affected_weeks": affected_weeks,
+              "fresh_only_by_week_team_player": extra.groupby(
+                  ["week", "team", "player", "player_clean_key"]
+              ).size().reset_index(name="market_rows").to_dict(orient="records"),
+              "trace_column_max_abs_delta_by_week": trace,
+          }
+          with open("evidence/rb_lane_a_mc_proj_drift_step1_2.json", "w") as f:
+              json.dump(report, f, indent=2, default=str)
+          print(json.dumps(report, indent=2, default=str))
+          PY
+
+      - name: Run step 3 falsification (resimulate affected week excluding the fresh-only player)
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          from scripts.backtest.rb_lane_a_m91_parity_diagnostic_v1 import (
+              compare_common_universe_mc_proj,
+              rerun_week_excluding_players,
+          )
+
+          fresh = pd.read_csv("evidence/rb_lane_a_component_predictions/component_predictions_2024.csv")
+          canonical = pd.read_csv("evidence/canonical_2024/component_predictions.csv")
+          extra = pd.read_csv("evidence/rb_lane_a_fresh_only_rows.csv")
+
+          inputs_dir = Path("evidence/rb_lane_a_m91_inputs")
+          player_logs = pd.read_csv(inputs_dir / "player_game_logs_history.csv")
+          team_weekly = pd.read_csv(inputs_dir / "team_weekly_history.csv")
+          schedule = pd.read_csv(inputs_dir / "schedule_history.csv")
+          universe_dir = inputs_dir / "pregame_universe"
+
+          results = []
+          affected_weeks = sorted(int(w) for w in extra["week"].unique())
+          for week in affected_weeks:
+              week_extra = extra.loc[extra.week == week]
+              exclude_names = sorted(week_extra["player"].unique())
+              resim = rerun_week_excluding_players(
+                  season=2024,
+                  week=week,
+                  prior_season=2023,
+                  player_logs=player_logs,
+                  team_weekly=team_weekly,
+                  schedule=schedule,
+                  universe_dir=universe_dir,
+                  injuries_path=inputs_dir / "injuries_history.csv",
+                  weather_path=inputs_dir / "weather_history.csv",
+                  exclude_player_names=exclude_names,
+                  iterations=2000,
+              )
+              result = compare_common_universe_mc_proj(resim, canonical, week)
+              result["excluded_players"] = exclude_names
+              results.append(result)
+              print(json.dumps(result, indent=2, default=str))
+
+          with open("evidence/rb_lane_a_mc_proj_drift_step3.json", "w") as f:
+              json.dump(results, f, indent=2, default=str)
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-lane-a-mc-proj-drift-diagnostic
+          path: |
+            evidence/rb_lane_a_fresh_only_rows.csv
+            evidence/rb_lane_a_mc_proj_drift_step1_2.json
+            evidence/rb_lane_a_mc_proj_drift_step3.json
           if-no-files-found: error
           retention-days: 30
