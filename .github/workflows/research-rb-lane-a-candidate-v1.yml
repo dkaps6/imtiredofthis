@@ -138,6 +138,12 @@ jobs:
           gh run download 35154020594 --repo "$GITHUB_REPOSITORY" \
             --name rb-lane-a-mechanism-comparator-reconstruction \
             --dir evidence/rb_lane_a_mechanism
+          REPORT_SRC="$(find evidence/rb_lane_a_mechanism -type f -name 'rb_lane_a_mechanism_comparator_reconstruction_report.json' -print -quit)"
+          CASEBOOK_SRC="$(find evidence/rb_lane_a_mechanism -type f -name 'stack2_2025_casebook.csv' -print -quit)"
+          test -n "$REPORT_SRC"
+          test -n "$CASEBOOK_SRC"
+          cp "$REPORT_SRC" evidence/rb_lane_a_mechanism/rb_lane_a_mechanism_comparator_reconstruction_report.json
+          cp "$CASEBOOK_SRC" evidence/rb_lane_a_mechanism/stack2_2025_casebook.csv
           test -s evidence/rb_lane_a_mechanism/rb_lane_a_mechanism_comparator_reconstruction_report.json
           test -s evidence/rb_lane_a_mechanism/stack2_2025_casebook.csv
 
