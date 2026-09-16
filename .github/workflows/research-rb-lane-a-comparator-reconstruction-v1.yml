@@ -1,0 +1,212 @@
+name: RB Lane A Comparator Reconstruction V1
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'scripts/backtest/rb_lane_a_comparator_reconstruction_v1.py'
+      - 'tests/test_rb_lane_a_comparator_reconstruction_v1.py'
+      - '.github/workflows/research-rb-lane-a-comparator-reconstruction-v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  # Canonical historical M91 artifacts (2020-2024), already used elsewhere in
+  # this repo (research-rb-pd2-fresh-source-revalidation-v1.yml) as the
+  # cross-run ground truth for this exact pipeline's 2024 output. Rotation 1's
+  # (test=2024) authority/value-parity check reuses it unchanged.
+  CANONICAL_2024_RUN_ID: '35032590321'
+
+jobs:
+  helper-contract-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest nflreadpy
+      - name: Compile + unit test (network-free contract tests only)
+        run: |
+          python -m py_compile scripts/backtest/rb_lane_a_comparator_reconstruction_v1.py
+          python -m pytest tests/test_rb_lane_a_comparator_reconstruction_v1.py -v
+
+  build-component-predictions:
+    needs: helper-contract-tests
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      matrix:
+        include:
+          - rotation: 1
+            test_season: 2024
+            prior_season: 2023
+            history_seasons: '2022,2023,2024'
+          - rotation: 2
+            test_season: 2025
+            prior_season: 2024
+            history_seasons: '2023,2024,2025'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyarrow
+
+      - name: Build per-season historical inputs
+        run: |
+          set -euo pipefail
+          IFS=',' read -ra SEASONS <<< "${{ matrix.history_seasons }}"
+          for s in "${SEASONS[@]}"; do
+            prior=$((s - 1))
+            mkdir -p "/tmp/hist_${s}"
+            python scripts/backtest/build_historical_inputs.py \
+              --season "$s" --prior-season "$prior" --weeks 1-18 \
+              --out-dir "/tmp/hist_${s}"
+          done
+
+      - name: Combine schedule + team-week history across the lookback window
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/combined
+          python - <<PY
+          import pandas as pd
+          from pathlib import Path
+          seasons = "${{ matrix.history_seasons }}".split(",")
+          out = Path("/tmp/combined")
+          for name in ["schedule_history.csv", "team_weekly_history.csv"]:
+              parts = [pd.read_csv(f"/tmp/hist_{s}/" + name) for s in seasons]
+              x = pd.concat(parts, ignore_index=True)
+              keys = ["season", "week", "team"]
+              x = x.sort_values(keys).drop_duplicates(keys, keep="last").reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f"duplicate combined historical identity rows in {name}")
+              x.to_csv(out / name, index=False)
+              print(name, len(x), sorted(x.season.unique()))
+          PY
+
+      - name: Build canonical player game logs across the lookback window
+        run: |
+          python scripts/backtest/historical_player_logs.py \
+            --seasons "${{ matrix.history_seasons }}" \
+            --schedule /tmp/combined/schedule_history.csv \
+            --out /tmp/combined/player_game_logs_history.csv
+
+      - name: Build component predictions for the test season (frozen-parent pipeline)
+        run: |
+          python scripts/backtest/walk_forward.py \
+            --season ${{ matrix.test_season }} \
+            --prior-season ${{ matrix.prior_season }} \
+            --weeks 1-18 \
+            --iterations 5000 \
+            --player-logs /tmp/combined/player_game_logs_history.csv \
+            --team-weekly /tmp/combined/team_weekly_history.csv \
+            --schedule /tmp/combined/schedule_history.csv \
+            --universe-dir "/tmp/hist_${{ matrix.test_season }}/pregame_universe" \
+            --out "/tmp/component_predictions_${{ matrix.test_season }}.csv"
+
+      - name: Show output summary
+        if: always()
+        run: |
+          wc -l "/tmp/component_predictions_${{ matrix.test_season }}.csv" 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-lane-a-component-predictions-rotation-${{ matrix.rotation }}
+          path: /tmp/component_predictions_${{ matrix.test_season }}.csv
+          if-no-files-found: error
+          retention-days: 30
+
+  reconstruct-and-check-parity:
+    needs: build-component-predictions
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Download fresh rotation builds
+        uses: actions/download-artifact@v4
+        with:
+          pattern: rb-lane-a-component-predictions-rotation-*
+          path: evidence/rb_lane_a_component_predictions
+          merge-multiple: true
+
+      - name: Download canonical 2024 artifact for Rotation-1 parity check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence/canonical_2024
+          gh run download "$CANONICAL_2024_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "m95q-m91-2024" --dir evidence/canonical_2024
+          test -s evidence/canonical_2024/component_predictions.csv
+
+      - name: Reconstruct promotion comparator + run parity checks
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from scripts.backtest.rb_lane_a_comparator_reconstruction_v1 import (
+              build_promotion_comparator,
+              compare_component_predictions_parity,
+              verify_frozen_parent_blobs,
+          )
+
+          report = {"blob_check": verify_frozen_parent_blobs()}
+
+          fresh_2024 = pd.read_csv("evidence/rb_lane_a_component_predictions/component_predictions_2024.csv")
+          canonical_2024 = pd.read_csv("evidence/canonical_2024/component_predictions.csv")
+          report["rotation_1_parity"] = compare_component_predictions_parity(fresh_2024, canonical_2024)
+          report["rotation_1_promotion_comparator_rows"] = int(
+              len(build_promotion_comparator(fresh_2024, rotation=1))
+          )
+
+          fresh_2025 = pd.read_csv("evidence/rb_lane_a_component_predictions/component_predictions_2025.csv")
+          report["rotation_2_parity"] = {
+              "disposition": "NO_PRIOR_CANONICAL_ARTIFACT",
+              "reason": (
+                  "No prior CI run of this exact frozen-parent pipeline exists for "
+                  "season 2025 anywhere in this repo -- this build establishes the "
+                  "first canonical artifact for that season. Not a cross-run value "
+                  "parity proof; documented honestly as such, not silently upgraded "
+                  "to a PASS."
+              ),
+              "rows": int(len(fresh_2025)),
+          }
+          report["rotation_2_promotion_comparator_rows"] = int(
+              len(build_promotion_comparator(fresh_2025, rotation=2))
+          )
+
+          with open("evidence/rb_lane_a_comparator_reconstruction_report.json", "w") as f:
+              json.dump(report, f, indent=2, default=str)
+          print(json.dumps(report, indent=2, default=str))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rb-lane-a-comparator-reconstruction-report
+          path: evidence/rb_lane_a_comparator_reconstruction_report.json
+          if-no-files-found: error
+          retention-days: 30

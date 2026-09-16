@@ -4,6 +4,7 @@ import pytest
 from scripts.backtest.rb_lane_a_comparator_reconstruction_v1 import (
     FROZEN_PARENT_BLOBS,
     build_promotion_comparator,
+    compare_component_predictions_parity,
     load_rotation_rush_yards_weights,
     verify_frozen_parent_blobs,
 )
@@ -72,3 +73,51 @@ def test_build_promotion_comparator_rotation_gives_different_result_than_rotatio
     r1 = build_promotion_comparator(cp, rotation=1)["promotion_comparator_rush_yards"].iloc[0]
     r2 = build_promotion_comparator(cp, rotation=2)["promotion_comparator_rush_yards"].iloc[0]
     assert r1 != pytest.approx(r2)
+
+
+def _rows(rows):
+    cols = ["season", "week", "team", "player_clean_key", "market", "mc_proj", "ml_proj", "state_proj"]
+    return pd.DataFrame(rows, columns=cols)
+
+
+def test_parity_passes_on_identical_frames():
+    frame = _rows(
+        [
+            [2024, 1, "KC", "p1", "rush_yards", 80.0, 75.0, 85.0],
+            [2024, 1, "SF", "p2", "rush_yards", 60.0, 55.0, 65.0],
+        ]
+    )
+    result = compare_component_predictions_parity(frame, frame.copy())
+    assert result["disposition"] == "PASS"
+    assert result["rows_fresh_only"] == 0
+    assert result["rows_canonical_only"] == 0
+    assert result["max_abs_value_delta"]["mc_proj"] == 0.0
+
+
+def test_parity_fails_closed_on_value_mismatch():
+    fresh = _rows([[2024, 1, "KC", "p1", "rush_yards", 80.0, 75.0, 85.0]])
+    canonical = _rows([[2024, 1, "KC", "p1", "rush_yards", 80.5, 75.0, 85.0]])
+    result = compare_component_predictions_parity(fresh, canonical)
+    assert result["disposition"] == "PARITY_FAILURE"
+    assert result["max_abs_value_delta"]["mc_proj"] == pytest.approx(0.5)
+
+
+def test_parity_fails_closed_on_unmatched_rows():
+    fresh = _rows(
+        [
+            [2024, 1, "KC", "p1", "rush_yards", 80.0, 75.0, 85.0],
+            [2024, 1, "SF", "p2", "rush_yards", 60.0, 55.0, 65.0],
+        ]
+    )
+    canonical = _rows([[2024, 1, "KC", "p1", "rush_yards", 80.0, 75.0, 85.0]])
+    result = compare_component_predictions_parity(fresh, canonical)
+    assert result["disposition"] == "PARITY_FAILURE"
+    assert result["rows_fresh_only"] == 1
+
+
+def test_parity_fails_closed_on_missing_columns():
+    fresh = pd.DataFrame({"season": [2024]})
+    canonical = _rows([[2024, 1, "KC", "p1", "rush_yards", 80.0, 75.0, 85.0]])
+    result = compare_component_predictions_parity(fresh, canonical)
+    assert result["disposition"] == "PARITY_FAILURE"
+    assert "fresh frame missing" in result["reason"]

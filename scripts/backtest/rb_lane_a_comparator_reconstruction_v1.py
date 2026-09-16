@@ -165,3 +165,60 @@ def build_promotion_comparator(component_predictions: pd.DataFrame, rotation: in
         str(ROTATION_1_2023_FIT_WEIGHTS) if rotation == 1 else str(PRODUCTION_WEIGHTS)
     )
     return ensembled
+
+
+PARITY_JOIN_KEYS = ["season", "week", "team", "player_clean_key", "market"]
+PARITY_VALUE_COLS = ["mc_proj", "ml_proj", "state_proj"]
+
+
+def compare_component_predictions_parity(
+    fresh: pd.DataFrame, canonical: pd.DataFrame
+) -> dict:
+    """Authority/value-parity proof: fresh rebuild vs. a canonical historical source.
+
+    Reports row-count deltas and max-abs-value deltas per component
+    (mc_proj/ml_proj/state_proj) on the shared identity key. Fails closed
+    (PARITY_FAILURE) if either frame is missing required columns, or if any
+    matched row's component value differs beyond floating-point tolerance.
+    Unmatched rows on either side are reported, not silently dropped.
+    """
+    required = set(PARITY_JOIN_KEYS) | set(PARITY_VALUE_COLS)
+    for label, frame in (("fresh", fresh), ("canonical", canonical)):
+        missing = required - set(frame.columns)
+        if missing:
+            return {
+                "disposition": "PARITY_FAILURE",
+                "reason": f"{label} frame missing required columns: {sorted(missing)}",
+            }
+
+    f = fresh[PARITY_JOIN_KEYS + PARITY_VALUE_COLS].copy()
+    c = canonical[PARITY_JOIN_KEYS + PARITY_VALUE_COLS].copy()
+    f = f.drop_duplicates(PARITY_JOIN_KEYS, keep="last")
+    c = c.drop_duplicates(PARITY_JOIN_KEYS, keep="last")
+
+    merged = f.merge(c, on=PARITY_JOIN_KEYS, how="outer", suffixes=("_fresh", "_canonical"), indicator=True)
+    matched = merged.loc[merged["_merge"] == "both"]
+    fresh_only = int((merged["_merge"] == "left_only").sum())
+    canonical_only = int((merged["_merge"] == "right_only").sum())
+
+    max_abs_deltas = {}
+    for col in PARITY_VALUE_COLS:
+        a = pd.to_numeric(matched[f"{col}_fresh"], errors="coerce")
+        b = pd.to_numeric(matched[f"{col}_canonical"], errors="coerce")
+        delta = (a - b).abs()
+        max_abs_deltas[col] = float(delta.max()) if len(delta) else float("nan")
+
+    tolerance = 1e-6
+    value_mismatch = any(
+        (not pd.isna(v)) and v > tolerance for v in max_abs_deltas.values()
+    )
+    disposition = "PARITY_FAILURE" if (fresh_only or canonical_only or value_mismatch) else "PASS"
+
+    return {
+        "disposition": disposition,
+        "rows_matched": int(len(matched)),
+        "rows_fresh_only": fresh_only,
+        "rows_canonical_only": canonical_only,
+        "max_abs_value_delta": max_abs_deltas,
+        "tolerance": tolerance,
+    }
