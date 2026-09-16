@@ -40,9 +40,13 @@ def main() -> int:
     ap.add_argument("--root", type=Path, required=True,
                      help="Directory with one subdir per season (2020-2024), each "
                           "containing component_predictions.csv, from a fresh M91 rebuild.")
-    ap.add_argument("--source-run-id", required=True,
-                     help="The GitHub Actions run ID the fresh M91 artifacts came from, "
-                          "recorded for the lineage record (not re-derived/re-fetched here).")
+    ap.add_argument("--target-source-label", required=True,
+                     help="Where the 2021-2024 target-season components came from, recorded "
+                          "for the lineage record (not re-derived/re-fetched here). E.g. "
+                          "'in_job_same_run:<run id>' when built in this same workflow run.")
+    ap.add_argument("--prior-2020-source-run-id", required=True,
+                     help="The GitHub Actions run ID the 2020 prior-season-only component "
+                          "artifact came from (outside this PR's own rebuild matrix).")
     ap.add_argument("--out-dir", type=Path, required=True)
     a = ap.parse_args()
     a.out_dir.mkdir(parents=True, exist_ok=True)
@@ -62,7 +66,8 @@ def main() -> int:
         "supersedes": "verify_m95q_parity (PR #556 original, provenance-only, "
                        "not a scientific input to this candidate -- see Issue #535 "
                        "comment 5689291516)",
-        "fresh_m91_source_run_id": str(a.source_run_id),
+        "target_2021_2024_source": str(a.target_source_label),
+        "prior_2020_source_run": str(a.prior_2020_source_run_id),
         "target_seasons_exact": sorted(panel["season"].unique().tolist()) == TARGET_SEASONS,
         "zero_2025_rows": bool(not panel["season"].eq(2025).any()),
         "unique_identity_contract_pass": True,  # build_panel raises before returning otherwise

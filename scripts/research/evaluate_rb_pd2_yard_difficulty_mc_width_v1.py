@@ -74,12 +74,59 @@ def verify_fresh_source_revalidation(fresh_root: Path) -> tuple[dict, pd.DataFra
     }
     if not all(checks.values()):
         raise RuntimeError(f"fresh-source PD2 revalidation failed: {checks}")
+    # Composite provenance (Issue #535, GPT-5.6 review of run 35037087309): the
+    # 2021-2024 target components are built in-job in the same run as this width
+    # evaluation, not downloaded from the pinned M95Q_RUN_ID -- only the 2020
+    # prior-season leg (outside this PR's own rebuild matrix) still comes from
+    # that pinned run. Recording a single "fresh_m91_source_run_id" mislabeled
+    # the target components' real lineage.
+    source_parity = result.get("source_parity", {})
     return {
         "verification_method": "FRESH_SOURCE_STRUCTURAL_REVALIDATION_V1",
-        "fresh_m91_source_run_id": result.get("source_parity", {}).get("fresh_m91_source_run_id"),
+        "target_2021_2024_source": source_parity.get("target_2021_2024_source"),
+        "prior_2020_source_run": source_parity.get("prior_2020_source_run"),
         "yard_width_unlocked_on_fresh_source": True,
         "checks": checks,
     }, manifest
+
+
+def verify_fresh_parent_value_parity(fresh_root: Path, parent_panel: pd.DataFrame) -> dict:
+    """Fail-closed value-level parity (Issue #535, GPT-5.6 review of run 35037087309).
+
+    Identity-key equality alone (A_parent_identity_matches_fresh_revalidation)
+    cannot rule out a drifted source silently substituting different pred/actual
+    values under the same identity keys. This compares pred_carry/actual_carry/
+    pred_yard/actual_yard row-for-row between this evaluator's own parent panel
+    and the fresh-source revalidation's parent panel that re-earned #556's
+    authorization, at near-machine-precision tolerance. This, together with the
+    identity check, is the prospectively authorized replacement for the old
+    fixed EXPECTED_PARENT_ROWS/EXPECTED_PARENT_SCOREABLE fatal gate once the
+    source was intentionally rebased off PR #556's original frozen artifact.
+    """
+    fresh_panel = pd.read_csv(fresh_root / "rb_pd2_fresh_parent_panel.csv", low_memory=False)
+    fresh_panel.columns = [str(c).strip().lower() for c in fresh_panel.columns]
+    keys = ["season", "week", "team", "player_key"]
+    value_cols = ["pred_carry", "actual_carry", "pred_yard", "actual_yard"]
+    own = parent_panel[keys + value_cols].drop_duplicates(keys)
+    fresh = fresh_panel[keys + value_cols].drop_duplicates(keys)
+    merged = own.merge(fresh, on=keys, how="outer", suffixes=("_own", "_fresh"), indicator=True)
+    both = merged.loc[merged["_merge"].eq("both")]
+    only_one_side = int((merged["_merge"] != "both").sum())
+    max_abs_delta = 0.0
+    for col in value_cols:
+        delta = (
+            pd.to_numeric(both[f"{col}_own"], errors="coerce")
+            - pd.to_numeric(both[f"{col}_fresh"], errors="coerce")
+        ).abs()
+        if len(delta):
+            max_abs_delta = max(max_abs_delta, float(delta.max()))
+    return {
+        "fresh_parent_rows": int(len(fresh_panel)),
+        "own_parent_rows": int(len(parent_panel)),
+        "identity_only_one_side_count": only_one_side,
+        "max_abs_value_delta": max_abs_delta,
+        "value_parity_pass": bool(only_one_side == 0 and max_abs_delta <= 1e-8),
+    }
 
 
 def strict_prior_difficulty_scores(wf: pd.DataFrame) -> pd.DataFrame:
@@ -208,6 +255,41 @@ def player_cluster_bootstrap_probability(rows: pd.DataFrame) -> float:
     return float(wins / BOOTSTRAP_REPS)
 
 
+def crossed_player_game_bootstrap_probability(rows: pd.DataFrame) -> float:
+    """Amendment 3.A: dependence-aware crossed player x game paired CRPS bootstrap.
+
+    Additive to player_cluster_bootstrap_probability and cannot rescue its
+    failure -- Final Gate C requires both probabilities >= 0.95.
+    """
+    z = rows[["player_key", "game_key", "baseline_crps", "candidate_crps"]].copy()
+    z["delta"] = pd.to_numeric(z.candidate_crps, errors="coerce") - pd.to_numeric(z.baseline_crps, errors="coerce")
+    z = z.dropna(subset=["player_key", "game_key", "delta"])
+    if z.empty:
+        return np.nan
+    players = np.sort(z.player_key.unique())
+    games = np.sort(z.game_key.unique())
+    n_players, n_games = len(players), len(games)
+    player_idx = {p: i for i, p in enumerate(players)}
+    game_idx = {g: i for i, g in enumerate(games)}
+    row_player = z.player_key.map(player_idx).to_numpy()
+    row_game = z.game_key.map(game_idx).to_numpy()
+    deltas = z.delta.to_numpy(float)
+    rng = np.random.default_rng(BOOTSTRAP_SEED)
+    wins = 0
+    valid = 0
+    while valid < BOOTSTRAP_REPS:
+        player_mult = np.bincount(rng.integers(0, n_players, size=n_players), minlength=n_players)
+        game_mult = np.bincount(rng.integers(0, n_games, size=n_games), minlength=n_games)
+        weight = player_mult[row_player] * game_mult[row_game]
+        denom = float(weight.sum())
+        if denom <= 0.0:
+            continue
+        mean_delta = float(np.dot(weight, deltas) / denom)
+        wins += int(np.isfinite(mean_delta) and mean_delta < 0.0)
+        valid += 1
+    return float(wins / BOOTSTRAP_REPS)
+
+
 def build_yard_lineage(component_root: Path, parent_panel: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for season in TARGET_SEASONS:
@@ -314,6 +396,8 @@ def grade_distributions(rows: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, flo
         candidate_mean = float(np.mean(candidate))
         max_candidate_mean_delta = max(max_candidate_mean_delta, abs(candidate_mean - baseline_mean))
         rec = {c: getattr(r, c) for c in ["season", "week", "team", "opponent", "player_key", "market"]}
+        # Amendment 3.A: game_key = (season, week, min(team,opponent), max(team,opponent)).
+        rec["game_key"] = f"{r.season}_{r.week}_{min(r.team, r.opponent)}_{max(r.team, r.opponent)}"
         rec.update({
             "actual": float(r.actual),
             "mc_proj": source_mc,
@@ -348,6 +432,7 @@ def evaluate_gates(casebook: pd.DataFrame, checks: dict[str, float], parent_sour
     pooled_cand = pooled_metrics(casebook, "candidate")
     pooled_crps_improvement = improvement_pct(pooled_base["crps"], pooled_cand["crps"])
     bootstrap_p = player_cluster_bootstrap_probability(casebook)
+    crossed_bootstrap_p = crossed_player_game_bootstrap_probability(casebook)
 
     # difficulty_score is itself a strictly-prior percentile. The global Q75 of
     # those scores implements the preregistered "top quartile among primary rows" slice.
@@ -396,8 +481,8 @@ def evaluate_gates(casebook: pd.DataFrame, checks: dict[str, float], parent_sour
     recent = by_season.set_index("season")
     gates = {
         "A_fresh_source_revalidated": bool(parity.get("yard_width_unlocked_on_fresh_source") is True),
-        "A_parent_panel_matches_556": bool(parent_source_rows == EXPECTED_PARENT_ROWS and parent_scoreable_rows == EXPECTED_PARENT_SCOREABLE),
         "A_parent_identity_matches_fresh_revalidation": bool(parity.get("identity_exact_match_fresh_revalidation") is True),
+        "A_fresh_parent_value_parity": bool(parity.get("value_parity_pass") is True),
         "A_prior_season_only_ensemble_weights": bool(checks.get("prior_season_weight_lineage_pass", False)),
         "A_target_seasons_exact_no_2025": bool(set(casebook.season.astype(int).unique()) == set(TARGET_SEASONS) and not casebook.season.eq(2025).any()),
         "A_raw_mc_reproduces_source": bool(checks["max_abs_raw_mc_vs_source_mc_proj"] <= 1e-8),
@@ -413,6 +498,7 @@ def evaluate_gates(casebook: pd.DataFrame, checks: dict[str, float], parent_sour
         "B_no_carry_mean_ypc_allocation_change": True,
         "C_pooled_crps_improvement_ge_0_5pct": bool(np.isfinite(pooled_crps_improvement) and pooled_crps_improvement >= 0.5),
         "C_player_cluster_bootstrap_p_ge_0_95": bool(np.isfinite(bootstrap_p) and bootstrap_p >= 0.95),
+        "C_crossed_player_game_bootstrap_p_ge_0_95": bool(np.isfinite(crossed_bootstrap_p) and crossed_bootstrap_p >= 0.95),
         "D_high_crps_improvement_ge_1pct": bool(np.isfinite(high_crps_improvement) and high_crps_improvement >= 1.0),
         "D_high_coverage80_gap_strictly_better": bool(high_cand["coverage80_gap"] < high_base["coverage80_gap"]),
         "D_high_coverage90_gap_strictly_better": bool(high_cand["coverage90_gap"] < high_base["coverage90_gap"]),
@@ -451,6 +537,20 @@ def evaluate_gates(casebook: pd.DataFrame, checks: dict[str, float], parent_sour
         "high_difficulty_rows": int(len(high)),
         "parent_source_rows": int(parent_source_rows),
         "parent_scoreable_rows": int(parent_scoreable_rows),
+        # Non-fatal disclosure only (Issue #535, GPT-5.6 review of run 35037087309):
+        # the old EXPECTED_PARENT_ROWS/EXPECTED_PARENT_SCOREABLE exact-count check
+        # against PR #556's original frozen artifact is no longer the fatal gate --
+        # A_fresh_parent_value_parity + A_parent_identity_matches_fresh_revalidation
+        # are the prospectively authorized replacement now that the source was
+        # intentionally rebased to an in-job rebuild.
+        "historical_source_delta_disclosure": {
+            "expected_parent_rows_pr556": EXPECTED_PARENT_ROWS,
+            "expected_parent_scoreable_pr556": EXPECTED_PARENT_SCOREABLE,
+            "observed_parent_rows": int(parent_source_rows),
+            "observed_parent_scoreable": int(parent_scoreable_rows),
+            "parent_rows_delta": int(parent_source_rows - EXPECTED_PARENT_ROWS),
+            "parent_scoreable_delta": int(parent_scoreable_rows - EXPECTED_PARENT_SCOREABLE),
+        },
         "baseline_point_mae": baseline_point_mae,
         "candidate_point_mae": candidate_point_mae,
         "point_mae_delta": point_mae_delta,
@@ -458,6 +558,7 @@ def evaluate_gates(casebook: pd.DataFrame, checks: dict[str, float], parent_sour
         "pooled_candidate": pooled_cand,
         "pooled_crps_improvement_pct": pooled_crps_improvement,
         "cluster_bootstrap_p_candidate_crps_lower": bootstrap_p,
+        "crossed_player_game_bootstrap_p_candidate_crps_lower": crossed_bootstrap_p,
         "high_baseline": high_base,
         "high_candidate": high_cand,
         "high_crps_improvement_pct": high_crps_improvement,
@@ -480,16 +581,18 @@ def run(component_root: Path, parity_root: Path, distribution_root: Path, out_di
     parent_panel, weights = build_panel(component_root)
     wf = build_wf(parent_panel)
 
-    # A_parent_identity_matches_fresh_revalidation: not merely the same row
-    # count (EXPECTED_PARENT_ROWS below already checks that) but the exact
-    # same (season, week, team, player_key) identity set the fresh PD2
+    # A_parent_identity_matches_fresh_revalidation: the exact same
+    # (season, week, team, player_key) identity set the fresh PD2
     # replication just re-earned its authorization on -- per GPT-5.6's ask.
+    # A_fresh_parent_value_parity (below) checks the actual pred/actual
+    # values under those identities, not just the key set.
     own_identity = parent_panel[["season", "week", "team", "player_key"]].drop_duplicates()
     own_keys = set(map(tuple, own_identity.itertuples(index=False, name=None)))
     fresh_keys = set(map(tuple, fresh_identity[["season", "week", "team", "player_key"]].itertuples(index=False, name=None)))
     identity_match = bool(own_keys == fresh_keys)
     parity["identity_exact_match_fresh_revalidation"] = identity_match
     parity["identity_symmetric_difference_count"] = len(own_keys ^ fresh_keys)
+    parity.update(verify_fresh_parent_value_parity(parity_root, parent_panel))
     parent_scoreable = int((pd.to_numeric(wf.prior_games, errors="coerce") >= MIN_PRIOR).sum())
     scored = strict_prior_difficulty_scores(wf)
     lineage = build_yard_lineage(component_root, parent_panel)

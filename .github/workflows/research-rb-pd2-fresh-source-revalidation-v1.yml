@@ -47,7 +47,8 @@ jobs:
         run: |
           python scripts/research/evaluate_rb_pd2_multiseason_fresh_source_v1.py \
             --root evidence/fresh_m91 \
-            --source-run-id "$FRESH_M91_RUN_ID" \
+            --target-source-label "cross_run:${FRESH_M91_RUN_ID}" \
+            --prior-2020-source-run-id "$FRESH_M91_RUN_ID" \
             --out-dir evidence/rb_pd2_fresh_result
       - name: Show result
         if: always()

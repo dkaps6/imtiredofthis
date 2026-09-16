@@ -237,7 +237,8 @@ jobs:
           mkdir -p evidence/pd2_fresh
           python scripts/research/evaluate_rb_pd2_multiseason_fresh_source_v1.py \
             --root evidence/m91 \
-            --source-run-id "$M95Q_RUN_ID" \
+            --target-source-label "in_job_same_run:${{ github.run_id }}" \
+            --prior-2020-source-run-id "$M95Q_RUN_ID" \
             --out-dir evidence/pd2_fresh
           test -s evidence/pd2_fresh/rb_pd2_fresh_result.json
           test -s evidence/pd2_fresh/rb_pd2_fresh_identity_manifest.csv

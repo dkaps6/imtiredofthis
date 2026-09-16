@@ -3,6 +3,7 @@ import pandas as pd
 
 from scripts.research.evaluate_rb_pd2_yard_difficulty_mc_width_v1 import (
     BOOTSTRAP_REPS,
+    crossed_player_game_bootstrap_probability,
     empirical_crps,
     player_cluster_bootstrap_probability,
     strict_prior_difficulty_scores,
@@ -71,3 +72,23 @@ def test_player_cluster_bootstrap_is_paired_and_detects_uniform_improvement():
     })
     assert BOOTSTRAP_REPS == 10_000
     assert player_cluster_bootstrap_probability(rows) == 1.0
+
+
+def test_crossed_player_game_bootstrap_detects_uniform_improvement():
+    rows = pd.DataFrame({
+        "player_key": ["a", "a", "b", "b", "c"],
+        "game_key": ["g1", "g2", "g1", "g3", "g2"],
+        "baseline_crps": [10.0, 11.0, 12.0, 13.0, 9.0],
+        "candidate_crps": [9.0, 10.0, 11.0, 12.0, 8.0],
+    })
+    assert crossed_player_game_bootstrap_probability(rows) == 1.0
+
+
+def test_crossed_player_game_bootstrap_detects_uniform_regression():
+    rows = pd.DataFrame({
+        "player_key": ["a", "a", "b", "b", "c"],
+        "game_key": ["g1", "g2", "g1", "g3", "g2"],
+        "baseline_crps": [9.0, 10.0, 11.0, 12.0, 8.0],
+        "candidate_crps": [10.0, 11.0, 12.0, 13.0, 9.0],
+    })
+    assert crossed_player_game_bootstrap_probability(rows) == 0.0
