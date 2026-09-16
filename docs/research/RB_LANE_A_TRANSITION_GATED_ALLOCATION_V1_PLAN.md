@@ -63,6 +63,30 @@ diagnostic-only, never defines production output) -- with a new hard stable-iden
 gate and a whole-season integration-sanity check added to the protected gates. See
 "Two candidate arms" below.
 
+**Amendment 5** (this revision): adjudicated by GPT-5.6 on Issue #535 during
+implementation itself (comment `5701881512`), resolving three empirical findings
+surfaced while building Gate 0, before any candidate output exists. (1) **Gate 0.1
+disposition corrected**: since no date-stamped 2023-2024 depth source exists
+anywhere (confirmed empirically against `nflreadpy` and ND2B's preserved lineage),
+the originally-specified semantic-parity check is recorded as
+`NOT_CONSTRUCTIBLE_NO_OVERLAP`, not silently treated as a pass. This does **not**
+block scored V1 science: per Amendment 3, the scored V1 trigger is loss/vacancy
+only (status-onset-loss, roster-membership-shrink) and never depends on depth
+rank; depth-chart harmonization remains available only for the broad
+`detected_transition` disclosure population, unchanged. (2) **Gate 0.2 confirmed
+PASS**: empirically verified `nflreadpy.load_injuries(seasons=[2025])` is natively
+`season`/`week`-tagged (`report_status`/`practice_status` present, matching
+2016-2024), so the plan's as-of-join contingency never triggers. (3) **Gate 0.3
+source formally replaced**: `ACTIVE_ROLES_CSV` cannot reconstruct any past week
+(current-snapshot-only generation, no historical-replay mode) and is replaced with
+`nflreadpy.load_rosters_weekly` -- the same canonical weekly pregame-universe
+source `scripts/backtest/historical_inputs.py` already uses, under seven frozen
+requirements (see revised Gate 0.3 below). (4) **HHI prose corrected**: the
+mechanism's step 4 said `H = sum(raw_w_j^2)`; STACK2's actual `prior_backfield_hhi`
+field computes `sum((ownshares/ownshares.sum())^2)` -- normalized, not raw. Prose
+corrected to match; the existing field is reused byte-for-byte, unchanged, no new
+calculation.
+
 ## Why this candidate, and why it is not a disguised STACK2 retest
 
 The Lane A audit established: STACK2 (`scripts/backtest/evaluate_rb_stack2_enriched_
@@ -136,26 +160,35 @@ Harmonizer, built before any candidate feature is computed:
    audit only confirmed `load_depth_charts` returns the native week-tagged schema for
    2022-2024 with no date-stamped variant observed. If no such historical as-of source
    exists in `nflreadpy`, check whether ND2B's own preserved source/lineage (branch
-   `6a01c631`) retained a usable date-stamped snapshot for any overlap season. If
-   neither exists, **the parity check as originally specified cannot be constructed --
-   do not manufacture a synthetic overlap.** In that case Gate 0.1 fails closed
-   pending a different verification method (e.g. auditing ND2B's own disclosed
-   coverage/timing evidence directly, without a fresh parity re-derivation) rather than
-   silently skipping the requirement.
-4. **Semantic parity proof, exact numeric bar (Amendment 1 point #5), only if step 3
-   confirms a real overlap exists:** for every 2023-2024 team-week where both a native
-   week-tagged row and an as-of-joined snapshot (using that team-week's actual
-   historical kickoff time, reconstructed from `schedule_history.csv`) are available,
-   compute the RB-room `pos_rank`-ordering
-   agreement rate between the two methods. **Pass bar: agreement rate `>= 0.90`, and
-   pregame-coverage rate (fraction of team-weeks with a resolvable as-of state)
-   `>= 0.95`** -- adopted from ND2B's own disclosed coverage figures (100% pregame
-   depth coverage, 78.6-83.7% prior-week snap coverage) as the nearest existing
-   precedent in this repo for this exact source family. Below either bar: **fail
-   closed**, do not proceed to candidate science.
+   `6a01c631`) retained a usable date-stamped snapshot for any overlap season.
+   **Amendment 5 records the result of this check empirically, done during
+   implementation**: neither `nflreadpy` (confirmed via `evaluate_rb_stack2_enriched_
+   allocation.py::depth_tables`, native week-tagged 2016-2024, date-stamped only from
+   2025) nor ND2B's preserved lineage (`origin/research-rb-nd2b-allocation-env-atlas`
+   at `6a01c631`, whose own disclosed audit confirms its date-stamped coverage is
+   2025-only) provides a 2023-2024 date-stamped source. **The parity check as
+   originally specified cannot be constructed -- no synthetic overlap is manufactured.**
+4. **Disposition when no overlap exists (Amendment 5, replaces the original step 4
+   numeric-bar check for this case):** GPT-5.6's adjudication (Issue #535 comment
+   `5701881512`) is that this is **not** treated as a Gate-0.1 pass via a
+   post-hoc-invented numeric bar, and does **not** block scored V1 science either.
+   Instead: (a) the 2023-2024 semantic-parity check's disposition is recorded exactly
+   as `NOT_CONSTRUCTIBLE_NO_OVERLAP`, disclosed alongside Gate 0's report, never
+   silently upgraded to a pass; (b) depth-chart harmonization (both the native
+   2016-2024 side and the as-of 2025+ side) remains available **only** for the broad
+   `detected_transition` disclosure population defined in "Transition definition"
+   below -- it was never an input to the scored V1 trigger, the candidate mechanism,
+   any adequacy cohort, or any promotion gate (per Amendment 3's scope narrowing to
+   loss/vacancy events, which never depend on depth rank), so this disclosure-only
+   limitation carries no scientific cost to the decisive science; (c) any 2025+ depth
+   row used anywhere, even for disclosure, must still satisfy the strict `dt <
+   kickoff_utc` hard assertion from step 2 above, unchanged; (d) no depth-derived
+   field may be introduced into the scored V1 population, candidate formula, or any
+   gate later without a new preregistered experiment -- this is a scope/dependency
+   correction made prospectively, not a loosening of a gate after seeing results.
 5. **Coverage/missingness disclosure by season:** report, per season 2016-2025, the
    fraction of team-weeks with a resolvable depth state under each method's own native
-   contract.
+   contract, alongside the `NOT_CONSTRUCTIBLE_NO_OVERLAP` disposition from step 4.
 
 ### 0.2 Injury/status source
 
@@ -168,26 +201,79 @@ Harmonizer, built before any candidate feature is computed:
   bars as 0.1**: agreement `>= 0.90`, coverage `>= 0.95`.
 - **Fail closed** if 2025+ injury-report timing cannot be proven pregame-safe by either
   a native week-tag or a validated as-of join.
+- **Resolved PASS (Amendment 5):** empirically verified during implementation --
+  `nfl.load_injuries(seasons=[2025])` returns natively `season`/`week`-tagged rows
+  (weeks 1-22 incl. playoffs, zero null season/week, `report_status`/`practice_status`
+  present) -- identical schema shape to 2016-2024, not date-stamped. The as-of-join
+  contingency above never triggers; Gate 0.2 passes on the native week-tag contract
+  alone for every season 2016-2025. Preserve this schema/coverage confirmation in the
+  Gate-0 report.
 
-### 0.3 Roster-membership source
+### 0.3 Roster-membership source (Amendment 5 -- source formally replaced)
 
-- `ACTIVE_ROLES_CSV` is named in the audit as the current production availability
-  contract, but per GPT-5.6's correction it **cannot be assumed timestamp-safe for
-  2023-2025 reconstruction without proof**. Before use in transition detection,
-  reconstruct `ACTIVE_ROLES_CSV`'s own generation lineage for 2023-2025 and confirm
-  each week's active-room snapshot reflects only information available strictly before
-  that week's kickoff (no same-week or postgame roster-move leakage). Report the exact
-  audit method and result. **Fail closed** if this cannot be proven; do not substitute
-  an unverified proxy silently.
+`ACTIVE_ROLES_CSV` was originally named as the audit target, but empirically (during
+implementation) its default resolution (`scripts/utils/current_roles_v1.py` ->
+`data/roles_ourlads_active_v1.csv`, generated by `scripts/build/
+build_production_eligible_active_roles_v1.py`) turns out to be a **current-snapshot-
+only** artifact -- its generator has no season/week parameter and no historical-
+replay mode, so it cannot reconstruct what active-room state existed for any past
+2023-2025 week. It is the correct source for live production, structurally the wrong
+source for this candidate's backtest. Per GPT-5.6's adjudication (Issue #535 comment
+`5701881512`), this is a **formal source-contract amendment**, not a silent
+substitution: `ACTIVE_ROLES_CSV` is replaced by **`nflreadpy.load_rosters_weekly`**
+-- the same canonical weekly pregame-universe source
+`scripts/backtest/historical_inputs.py::build_pregame_universe_for_week` already
+uses, under the explicit contract that target-week box scores are never used to
+decide universe membership. Reuse that contract exactly; do not invent a third
+source.
 
-### 0.4 Gate 0 disposition
+Seven frozen requirements, all verified and reported before any candidate outcome is
+computed or inspected:
+
+1. Seasons 2023-2025 must each expose `season`, `week`, `team`, `position`, and a
+   resolvable player-name identity from `load_rosters_weekly`.
+2. RB-room membership is the canonical weekly-roster universe using the same
+   team/position/status normalization already used by `build_pregame_universe_for_
+   week` (`RB`/`FB`/`HB` subset; same accepted roster-status rule where present,
+   e.g. `ALLOWED_ROSTER_STATUS = {"ACT", "INA"}`).
+3. Zero duplicate `(season, week, team, player_key)` identities after
+   canonicalization.
+4. Every regular-season scheduled team-week in **both** OOS test seasons (2024 and
+   2025) must have a resolvable RB-room roster state; a team-week with no resolvable
+   state is **not** silently dropped -- it routes Gate 0.3 to fail-closed.
+5. Every **scored** loss/vacancy event (per "Scored V1 transition" below) must have
+   both the current and immediately previous resolvable roster state available from
+   this same source lineage -- no substitute or interpolated state.
+6. Zero target-week statistics or outcomes may enter membership construction, at any
+   step.
+7. Report exact source coverage, missingness, duplicate counts, and identity lineage
+   for every season 2023-2025 before any candidate outcome is computed or inspected.
+- **Fail closed** if requirements 1, 3, 4, 5, or 6 cannot be satisfied; do not
+  substitute an unverified proxy silently, and do not drop a team-week to force a
+  pass.
+
+### 0.4 Gate 0 disposition (Amendment 5 revision)
 
 Gate 0 is scored and reported **before any candidate outcome is computed or
 inspected** -- exactly the same ordering discipline #562 used for its own
-reconstruction checksum. All three sub-gates (0.1, 0.2, 0.3) must independently pass
-their stated numeric bars. Any one failing routes the whole plan to
-`RB_LANE_A_TRANSITION_ALLOCATION_GATE0_BLOCKED` (see Promotion disposition rule) --
-never a silent fallback to a coarser, less leakage-safe source.
+reconstruction checksum. The three sub-gates are no longer symmetric under
+Amendment 5:
+
+- **0.2 and 0.3 must independently pass their stated numeric bars/requirements.**
+  Either failing routes the whole plan to
+  `RB_LANE_A_TRANSITION_ALLOCATION_GATE0_BLOCKED` (see Promotion disposition rule)
+  -- never a silent fallback to a coarser, less leakage-safe source.
+- **0.1 is disclosure-only and does not gate Gate 0's pass/fail disposition.** Its
+  step-2 live-side `dt < kickoff_utc` hard assertion still must hold whenever any
+  2025+ depth row is used for disclosure (a violation there is a real leakage bug
+  and still fails closed), but the step-4 `NOT_CONSTRUCTIBLE_NO_OVERLAP` semantic-
+  parity disposition itself does not block Gate 0 as a whole, per Amendment 5 --
+  because no scored V1 gate, cohort, or candidate-construction step depends on
+  depth rank (see "Detected vs. scored V1 transition" above).
+
+So: `RB_LANE_A_TRANSITION_ALLOCATION_GATE0_BLOCKED` is triggered by a 0.2 or 0.3
+failure, or by a 0.1 live-side `dt < kickoff_utc` assertion violation -- never by
+0.1's `NOT_CONSTRUCTIBLE_NO_OVERLAP` disposition alone.
 
 ## Transition definition (exact, leakage-safe)
 
@@ -297,9 +383,12 @@ pool defined above.
    team-week and it is excluded from the transition subpopulation (reported, not
    silently dropped) -- consistent with V1's explicit exclusion of the "new-role
    initialization" class above.
-4. **HHI**: `H = prior_backfield_hhi` (STACK2's own existing pre-transition
-   concentration index, `sum(raw_w_j^2)` over the **pre-transition** room, computed
-   from history alone and not dependent on any current-week row), reused unchanged.
+4. **HHI (prose corrected, Amendment 5)**: `H = prior_backfield_hhi` (STACK2's own
+   existing pre-transition concentration index, `sum((ownshares/ownshares.sum())^2)`
+   over the **pre-transition** room -- i.e. the sum of *squared, normalized* shares,
+   not raw un-normalized shares as earlier revisions of this document stated --
+   computed from history alone and not dependent on any current-week row), reused
+   byte-for-byte unchanged; no new HHI calculation or tuning.
 5. **Concentration exponent**: `p = 1 + 2*H` (frozen constant `2`, chosen
    prospectively and disclosed as a design choice, not fit to any data -- at `H=0`
    (perfectly even committee), `p=1` (plain share-proportional split); as `H`
