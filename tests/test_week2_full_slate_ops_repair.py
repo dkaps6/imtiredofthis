@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from scripts.operations import validate_playerform_runtime_strict_prior_v1 as strict_prior
-import scripts.run_team_form_context_week2_compat as team_compat
+import scripts.run_team_form_context as team_context
 
 
 TEAMS = [
@@ -48,7 +48,7 @@ def test_week2_strict_prior_rejects_week2_or_later(monkeypatch, tmp_path):
 
 def _valid_core_teamform() -> pd.DataFrame:
     rows = []
-    for i, team in enumerate(TEAMS):
+    for team in TEAMS:
         rows.append({
             "team": team,
             "season": 2026,
@@ -70,10 +70,10 @@ def _valid_core_teamform() -> pd.DataFrame:
 def test_teamform_compat_accepts_only_missing_legacy_coverage(monkeypatch, tmp_path):
     path = tmp_path / "team_form.csv"
     _valid_core_teamform().to_csv(path, index=False)
-    monkeypatch.setattr(team_compat.base, "TEAM_FORM_PATH", path)
+    monkeypatch.setattr(team_context, "TEAM_FORM_PATH", path)
 
     # No exception: core TeamForm is valid and legacy man/zone values are absent.
-    team_compat._validate_coverage_only_legacy_exit()
+    team_context._validate_coverage_only_legacy_exit()
 
 
 def test_teamform_compat_refuses_to_mask_noncoverage_failure(monkeypatch, tmp_path):
@@ -81,7 +81,7 @@ def test_teamform_compat_refuses_to_mask_noncoverage_failure(monkeypatch, tmp_pa
     df = _valid_core_teamform()
     df.loc[0, "def_pass_epa"] = pd.NA
     df.to_csv(path, index=False)
-    monkeypatch.setattr(team_compat.base, "TEAM_FORM_PATH", path)
+    monkeypatch.setattr(team_context, "TEAM_FORM_PATH", path)
 
     with pytest.raises(RuntimeError, match="Required team_form metrics missing"):
-        team_compat._validate_coverage_only_legacy_exit()
+        team_context._validate_coverage_only_legacy_exit()
