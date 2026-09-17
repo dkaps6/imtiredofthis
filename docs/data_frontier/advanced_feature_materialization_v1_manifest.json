@@ -1,0 +1,99 @@
+{
+  "materialization_version": "NFL_ADVANCED_FEATURE_MATERIALIZER_V1",
+  "feature_contract_version": "NFL_ADVANCED_FEATURE_DICTIONARY_V1",
+  "run_id": 35287452116,
+  "run_head_sha": "98aaed4f64a71d81a4dba24a7a820a1da7a5674c",
+  "predictive_experiment": false,
+  "production_changed": false,
+  "sportsbook_inputs_used": false,
+  "raw_competition_files_uploaded": false,
+  "derived_per_row_feature_files_uploaded": false,
+  "disposition": "NFL_ADVANCED_FEATURE_MATERIALIZATION_V1_ALL_SOURCES_PASS",
+  "sources": {
+    "BDB2021_ROUTE_GEOMETRY": {
+      "source_hash_verified": true,
+      "source_hash_sha256": "55de76561799514779f3fd64b57c02a52430596f4f104c2b6060f3df8fd9e1b4",
+      "contracted_fields": 12,
+      "materialized_fields": 12,
+      "raw_rows": 78343,
+      "strict_prior_history_rows": 58484,
+      "temporal_violations": 0,
+      "artifact_id": 10525126488,
+      "artifact_digest": "sha256:6d0ffc264a6c49b0b8fd0257a5ec933c8bd55a23b53efd04a1a2311465174ed6",
+      "ephemeral_tables": {
+        "route_playerplays": {
+          "rows": 78343,
+          "sha256": "3b97f8afbf26cd39cc4ba1a5f043677ce48c900c9350a285b2e7380d8aee0ea4"
+        },
+        "route_history_snapshots": {
+          "rows": 58484,
+          "sha256": "e9e4cd626a0e0cacd8e8abc9e5266867ba3352ddaa6460cd4c5a9fe19184f2bf"
+        }
+      }
+    },
+    "BDB2023_PROTECTION_GEOMETRY": {
+      "source_hash_verified": true,
+      "source_hash_sha256": "1c3e1eb6fcd0cf85807c649804fa0c72421c76e973e40a742523f1dd3a929182",
+      "contracted_fields": 13,
+      "materialized_fields": 13,
+      "source_interactions": 46524,
+      "reconstructed_interactions": 46396,
+      "pooled_geometry_coverage": 0.9972487318373313,
+      "unresolved_blocked_player_refs": 2,
+      "strict_prior_history_rows": 3935,
+      "temporal_violations": 0,
+      "artifact_id": 10524658390,
+      "artifact_digest": "sha256:e0b4a53508869255706889a5e3202664641c63c451737af7e20df6cc80557400",
+      "ephemeral_tables": {
+        "protection_interactions": {
+          "rows": 46396,
+          "sha256": "521682a6c2e0e5ced6b4ab96accf793aae061c63a0234dca76ce4459e6dd206d"
+        },
+        "blocker_history_snapshots": {
+          "rows": 3935,
+          "sha256": "d09077cdb81a4b53676070f213f3ee4662e0eb06f853b1dbf35f3c1a138bcb78"
+        }
+      }
+    },
+    "BDB2026_THROW_WINDOW": {
+      "source_hash_verified": true,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "contracted_fields": 22,
+      "materialized_fields": 22,
+      "plays_total": 14108,
+      "release_geometry_rows": 14107,
+      "release_geometry_rate": 0.999929118230791,
+      "terminal_target_geometry_rows": 14107,
+      "terminal_target_geometry_rate": 1,
+      "official_output_missing_predicted_defender_plays": 1141,
+      "strict_prior_receiver_history_rows": 7161,
+      "strict_prior_receiver_route_history_rows": 35417,
+      "temporal_violations": 0,
+      "landing_or_postrelease_pregame_uses": 0,
+      "artifact_id": 10525021698,
+      "artifact_digest": "sha256:c4e7aa3f781bca0becfd97df6674eb63351459685a2d724e1806b6c37fefa4bf",
+      "ephemeral_tables": {
+        "targeted_receiver_plays": {
+          "rows": 14107,
+          "sha256": "dbdfc1cebb95d8c0cd31b2be71311fb7289c5d3db643c86bab3ed43e342340fd"
+        },
+        "receiver_history_snapshots": {
+          "rows": 7161,
+          "sha256": "e60882727a03ba14ff9e43d5229d6d491d8833a76f91d9f6412f313c89993efe"
+        },
+        "receiver_route_history_snapshots": {
+          "rows": 35417,
+          "sha256": "f75be8dd9907eb5396f7f050952c23271a128ff64ef8422fe1d35785a7b0a44f"
+        },
+        "route_man_zone_benchmark": {
+          "rows": 24,
+          "sha256": "68a8cb8351fdc830f92c52bd42ad5153e8855ce946286c62b24c1ea2538abb0c"
+        },
+        "route_coverage_family_benchmark": {
+          "rows": 93,
+          "sha256": "44b3c31390afce8d0e85ed5970d5160a79262fcecf048b7d1e9af69ec03b05ba"
+        }
+      }
+    }
+  }
+}
