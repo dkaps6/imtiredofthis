@@ -1,0 +1,144 @@
+name: Data Frontier BDB2023 Week1 Geometry Exceptions
+
+on:
+  push:
+    branches:
+      - data-frontier-phase0-bdb-contact-v1
+    paths:
+      - '.github/workflows/data-frontier-bdb2023-week1-geometry-exceptions.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_SECRET_RAW: ${{ secrets.KAGGLE_API_TOKEN }}
+  BDB2023_COMPETITION: nfl-big-data-bowl-2023
+
+jobs:
+  audit-week1-geometry-exceptions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Normalize Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          token="${raw#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          [[ "$token" == KGAT_* ]]
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+      - name: Install dependencies
+        run: pip install kaggle pandas numpy
+      - name: Download official BDB 2023 corpus ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/bdb2023_geomexc_download"
+          c="${RUNNER_TEMP}/bdb2023_geomexc_corpus"
+          mkdir -p "$d" "$c"
+          kaggle competitions download -c "${BDB2023_COMPETITION}" -p "$d"
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$z"
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "BDB2023_CORPUS_DIR=$c" >> "$GITHUB_ENV"
+      - name: Classify Week1 geometry exceptions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/bdb2023_week1_geometry_exceptions"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import pandas as pd
+
+          root = Path(os.environ['BDB2023_CORPUS_DIR'])
+          out = Path(os.environ['RUNNER_TEMP']) / 'bdb2023_week1_geometry_exceptions'
+          games = pd.read_csv(next(root.rglob('games.csv')))
+          pff = pd.read_csv(next(root.rglob('pffScoutingData.csv')))
+          tr = pd.read_csv(next(root.rglob('week1.csv')))
+          week1_games = set(games.loc[games['week'].eq(1),'gameId'])
+          pff = pff[pff['gameId'].isin(week1_games)].copy()
+          pff['blockedNflId'] = pd.to_numeric(pff['pff_nflIdBlockedPlayer'], errors='coerce').astype('Int64')
+          inter = pff[pff['blockedNflId'].notna()].copy()
+          lookup = pff[['gameId','playId','nflId','pff_role']].rename(columns={'nflId':'blockedNflId','pff_role':'blockedPlayerRole'})
+          inter = inter.merge(lookup,on=['gameId','playId','blockedNflId'],how='left')
+          inter = inter[inter['blockedPlayerRole'].notna()].rename(columns={'nflId':'blockerNflId'})
+          keys=['gameId','playId','blockerNflId','blockedNflId']
+          inter=inter[keys+['pff_role','blockedPlayerRole','pff_blockType']].drop_duplicates()
+
+          tracked = tr[tr['nflId'].notna()][['gameId','playId','nflId']].drop_duplicates()
+          blocker_track = tracked.rename(columns={'nflId':'blockerNflId'}).assign(blockerTracked=True)
+          target_track = tracked.rename(columns={'nflId':'blockedNflId'}).assign(targetTracked=True)
+          c = inter.merge(blocker_track,on=['gameId','playId','blockerNflId'],how='left').merge(target_track,on=['gameId','playId','blockedNflId'],how='left')
+          c['blockerTracked']=c['blockerTracked'].fillna(False).astype(bool)
+          c['targetTracked']=c['targetTracked'].fillna(False).astype(bool)
+
+          ev = tr[['gameId','playId','frameId','event']].dropna().drop_duplicates()
+          def ef(name): return ev[ev['event'].eq(name)].groupby(['gameId','playId'])['frameId'].min().rename(name)
+          ft = tr.groupby(['gameId','playId'])['frameId'].agg(['min','max'])
+          for name in ['ball_snap','autoevent_ballsnap','pass_forward','autoevent_passforward','qb_sack','qb_strip_sack']:
+              ft=ft.join(ef(name),how='left')
+          ft=ft.reset_index()
+          ft['hasSnap']=ft['ball_snap'].notna()|ft['autoevent_ballsnap'].notna()
+          c=c.merge(ft[['gameId','playId','hasSnap']],on=['gameId','playId'],how='left')
+          c['hasSnap']=c['hasSnap'].fillna(False).astype(bool)
+          c['geometryEligible']=c['blockerTracked'] & c['targetTracked'] & c['hasSnap']
+          missing=c[~c['geometryEligible']].copy()
+          missing['reason']=''
+          missing.loc[~missing['blockerTracked'],'reason'] += 'blocker_not_tracked;'
+          missing.loc[~missing['targetTracked'],'reason'] += 'target_not_tracked;'
+          missing.loc[~missing['hasSnap'],'reason'] += 'snap_missing;'
+
+          both=ft[ft['ball_snap'].notna() & ft['autoevent_ballsnap'].notna()].copy()
+          both['absDiff']=(both['ball_snap']-both['autoevent_ballsnap']).abs()
+          outliers=both[both['absDiff']>3].copy()
+          outlier_event_sets=[]
+          for _,r in outliers.iterrows():
+              vals=sorted(ev[(ev['gameId'].eq(r['gameId']))&(ev['playId'].eq(r['playId']))]['event'].astype(str).unique().tolist())
+              outlier_event_sets.append({'abs_diff':int(r['absDiff']),'ball_snap_frame':int(r['ball_snap']),'autoevent_ballsnap_frame':int(r['autoevent_ballsnap']),'event_labels':vals})
+
+          summary={
+              'audit_version':'BDB2023_WEEK1_GEOMETRY_EXCEPTIONS_V1',
+              'git_sha':os.environ.get('GITHUB_SHA'),
+              'raw_competition_files_uploaded':False,
+              'predictive_experiment':False,
+              'production_changed':False,
+              'expected_interactions':int(len(inter)),
+              'geometry_eligible_interactions':int(c['geometryEligible'].sum()),
+              'exception_interactions':int(len(missing)),
+              'exception_reason_counts':{str(k):int(v) for k,v in missing['reason'].value_counts().items()},
+              'exception_source_role_counts':{str(k):int(v) for k,v in missing['pff_role'].value_counts().items()},
+              'exception_target_role_counts':{str(k):int(v) for k,v in missing['blockedPlayerRole'].value_counts().items()},
+              'exception_block_type_counts':{str(k):int(v) for k,v in missing['pff_blockType'].fillna('<NULL>').value_counts().items()},
+              'plays_missing_snap':int((~ft['hasSnap']).sum()),
+              'manual_auto_snap_pairs':int(len(both)),
+              'manual_auto_snap_diff_gt3_frames':int((both['absDiff']>3).sum()),
+              'manual_auto_snap_diff_gt10_frames':int((both['absDiff']>10).sum()),
+              'snap_outlier_event_summaries':outlier_event_sets[:50],
+          }
+          (out/'bdb2023_week1_geometry_exceptions.json').write_text(json.dumps(summary,indent=2,sort_keys=True),encoding='utf-8')
+          print(json.dumps(summary,indent=2,sort_keys=True))
+          if summary['geometry_eligible_interactions'] < 6295:
+              raise SystemExit('Exception classification explains fewer pairs than prior geometry run')
+          PY
+      - name: Upload sanitized Week1 geometry exceptions
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2023-week1-geometry-exceptions
+          path: ${{ runner.temp }}/bdb2023_week1_geometry_exceptions
+          if-no-files-found: error
+          retention-days: 30
