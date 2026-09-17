@@ -1,11 +1,13 @@
 """Fail-closed file-level preflight for the official BDB 2024 corpus.
 
-This checks only corpus packaging/completeness. It does not inspect outcomes,
-change the frozen contact detector, or compute predictive metrics.
+This checks only corpus packaging/completeness and records immutable source-file
+fingerprints. It does not inspect outcomes, change the frozen contact detector,
+or compute predictive metrics.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -13,6 +15,14 @@ from pathlib import Path
 EXPECTED_TRACKING_WEEKS = tuple(range(1, 10))
 REQUIRED_STATIC_FILES = ("plays.csv", "tackles.csv")
 _TRACKING_RE = re.compile(r"^tracking_week_(\d+)\.csv$")
+
+
+def _sha256(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(chunk_size), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def inspect_corpus(input_dir: Path) -> dict:
@@ -25,11 +35,14 @@ def inspect_corpus(input_dir: Path) -> dict:
     missing_weeks = sorted(set(EXPECTED_TRACKING_WEEKS) - set(weeks))
     unexpected_weeks = sorted(set(weeks) - set(EXPECTED_TRACKING_WEEKS))
     duplicate_weeks = sorted({w for w in weeks if weeks.count(w) > 1})
-    zero_byte = sorted(
-        p.name for p in [*(input_dir / n for n in REQUIRED_STATIC_FILES), *tracking_files]
-        if p.exists() and p.stat().st_size == 0
-    )
+    required_present = [p for p in [*(input_dir / n for n in REQUIRED_STATIC_FILES), *tracking_files] if p.is_file()]
+    zero_byte = sorted(p.name for p in required_present if p.stat().st_size == 0)
     passed = not (missing_static or missing_weeks or unexpected_weeks or duplicate_weeks or zero_byte)
+    source_files = []
+    if passed:
+        ordered = [*(input_dir / n for n in REQUIRED_STATIC_FILES)] + [input_dir / f"tracking_week_{week}.csv" for week in EXPECTED_TRACKING_WEEKS]
+        source_files = [{"name": path.name, "size_bytes": path.stat().st_size, "sha256": _sha256(path)} for path in ordered]
+
     return {
         "contract": "BDB_2024_OFFICIAL_CORPUS_FILESET_V1",
         "passed": passed,
@@ -40,19 +53,21 @@ def inspect_corpus(input_dir: Path) -> dict:
         "unexpected_tracking_weeks": unexpected_weeks,
         "duplicate_tracking_weeks": duplicate_weeks,
         "zero_byte_files": zero_byte,
+        "source_files": source_files,
+        "source_fingerprint_algorithm": "sha256",
         "contact_detector_changed": False,
     }
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Validate BDB 2024 corpus packaging before Phase-0 execution.")
+    ap = argparse.ArgumentParser(description="Validate and fingerprint BDB 2024 corpus packaging before Phase-0 execution.")
     ap.add_argument("--input-dir", type=Path, required=True)
     ap.add_argument("--report", type=Path)
     args = ap.parse_args()
     try:
         report = inspect_corpus(args.input_dir)
     except FileNotFoundError as exc:
-        report = {"contract": "BDB_2024_OFFICIAL_CORPUS_FILESET_V1", "passed": False, "failure": str(exc), "contact_detector_changed": False}
+        report = {"contract": "BDB_2024_OFFICIAL_CORPUS_FILESET_V1", "passed": False, "failure": str(exc), "source_files": [], "source_fingerprint_algorithm": "sha256", "contact_detector_changed": False}
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)
         args.report.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
