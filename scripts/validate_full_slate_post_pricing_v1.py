@@ -206,25 +206,56 @@ def audit() -> dict:
         if qproj.isna().any() or not np.allclose(qproj, final, rtol=0, atol=1e-8):
             raise RuntimeError("final pass-yards projection differs from promoted QB synthesis")
 
-    # RB P3 is position-specific, not a generic rush-yards model. Require every
-    # current RB/FB rush prop to use P3 and every QB/WR/TE rush prop not to use it.
+    # RB P3 is a Week-1-only, position-specific specialist.  Within Week 1 it
+    # is required only for teams present in the built P3 context; a certified
+    # team that arrived after context build legitimately falls back.  Outside
+    # Week 1 every RB/FB rush row must remain on the generic calibrated route.
     priced = _attach_pricing_positions(priced)
     rush_rows = priced.loc[priced["source_market"].astype(str).eq("player_rush_yds")].copy()
     rb_rush = rush_rows.loc[rush_rows["position_family_audit"].isin({"RB", "FB"})].copy()
     non_rb_rush = rush_rows.loc[~rush_rows["position_family_audit"].isin({"RB", "FB"})].copy()
+
+    context_path = DATA / "rb_rush_synthesis_context.csv"
+    if not context_path.exists() or context_path.stat().st_size <= 0:
+        raise RuntimeError("RB P3 scope artifact missing/empty at post-pricing certification")
+    context_scope = pd.read_csv(context_path, usecols=["team"], low_memory=False)
+    rb_p3_teams = set(context_scope["team"].dropna().astype(str).str.upper().str.strip())
+
+    rb_p3_in_scope = rb_rush.iloc[0:0].copy()
+    rb_p3_fallback = rb_rush.iloc[0:0].copy()
     if not rb_rush.empty:
-        applied = pd.to_numeric(rb_rush.get("rb_synthesis_applied", 0), errors="coerce").fillna(0)
-        if not applied.eq(1).all():
-            sample = rb_rush.loc[~applied.eq(1), ["player", "team", "position_family_audit"]].drop_duplicates().head(20).to_dict("records")
-            raise RuntimeError(f"eligible RB/FB rush-yards rows did not all use promoted RB synthesis: {sample}")
-        if not rb_rush["rb_synthesis_version"].astype(str).eq("RB_P3_SYNTHESIS_V1").all():
-            raise RuntimeError("eligible RB/FB rush-yards pricing did not use RB_P3_SYNTHESIS_V1 everywhere")
-        if not rb_rush["rb_synthesis_route"].astype(str).eq("WEEK1_STACK_OVERRIDE").all():
-            raise RuntimeError("eligible RB/FB rush-yards pricing used a non-Week1 RB route")
-        rb_proj = pd.to_numeric(rb_rush["rb_synthesis_proj"], errors="coerce")
-        final = pd.to_numeric(rb_rush["model_proj"], errors="coerce")
-        if rb_proj.isna().any() or not np.allclose(rb_proj, final, rtol=0, atol=1e-8):
-            raise RuntimeError("final RB/FB rush-yards projection differs from promoted RB synthesis")
+        if "week" not in rb_rush.columns:
+            raise RuntimeError("RB routing audit missing week column")
+        rb_week = pd.to_numeric(rb_rush["week"], errors="coerce")
+        if rb_week.isna().any():
+            raise RuntimeError("RB routing audit contains invalid week")
+        wk1 = rb_rush.loc[rb_week.eq(1)].copy()
+        other = rb_rush.loc[rb_week.ne(1)].copy()
+        in_scope = wk1["team"].astype(str).str.upper().str.strip().isin(rb_p3_teams)
+        rb_p3_in_scope = wk1.loc[in_scope].copy()
+        wk1_out = wk1.loc[~in_scope].copy()
+        rb_p3_fallback = pd.concat([wk1_out, other], ignore_index=False)
+
+        if not rb_p3_in_scope.empty:
+            applied = pd.to_numeric(rb_p3_in_scope.get("rb_synthesis_applied", 0), errors="coerce").fillna(0)
+            if not applied.eq(1).all():
+                sample = rb_p3_in_scope.loc[~applied.eq(1), ["player", "team", "position_family_audit"]].drop_duplicates().head(20).to_dict("records")
+                raise RuntimeError(f"eligible Week-1 RB/FB rush-yards rows bypassed promoted RB synthesis: {sample}")
+            if not rb_p3_in_scope["rb_synthesis_version"].astype(str).eq("RB_P3_SYNTHESIS_V1").all():
+                raise RuntimeError("eligible Week-1 RB/FB rush-yards pricing did not use RB_P3_SYNTHESIS_V1 everywhere")
+            if not rb_p3_in_scope["rb_synthesis_route"].astype(str).eq("WEEK1_STACK_OVERRIDE").all():
+                raise RuntimeError("eligible Week-1 RB/FB rush-yards pricing used a non-Week1 RB route")
+            rb_proj = pd.to_numeric(rb_p3_in_scope["rb_synthesis_proj"], errors="coerce")
+            final = pd.to_numeric(rb_p3_in_scope["model_proj"], errors="coerce")
+            if rb_proj.isna().any() or not np.allclose(rb_proj, final, rtol=0, atol=1e-8):
+                raise RuntimeError("final Week-1 RB/FB rush-yards projection differs from promoted RB synthesis")
+
+        if not rb_p3_fallback.empty:
+            applied = pd.to_numeric(rb_p3_fallback.get("rb_synthesis_applied", 0), errors="coerce").fillna(0)
+            if not applied.eq(0).all():
+                sample = rb_p3_fallback.loc[~applied.eq(0), ["player", "team", "week", "position_family_audit"]].drop_duplicates().head(20).to_dict("records")
+                raise RuntimeError(f"RB/FB rows outside qualified Week-1 P3 scope incorrectly consumed RB P3: {sample}")
+
     if not non_rb_rush.empty:
         applied = pd.to_numeric(non_rb_rush.get("rb_synthesis_applied", 0), errors="coerce").fillna(0)
         if not applied.eq(0).all():
@@ -265,7 +296,11 @@ def audit() -> dict:
         {
             "check": "position_specific_synthesis_routing",
             "status": "PASS",
-            "detail": f"qb_pass_side_rows={len(pass_rows)} rb_fb_rush_side_rows={len(rb_rush)} non_rb_rush_side_rows={len(non_rb_rush)}",
+            "detail": (
+                f"qb_pass_side_rows={len(pass_rows)} rb_fb_rush_side_rows={len(rb_rush)} "
+                f"rb_p3_in_scope_side_rows={len(rb_p3_in_scope)} rb_p3_fallback_side_rows={len(rb_p3_fallback)} "
+                f"non_rb_rush_side_rows={len(non_rb_rush)}"
+            ),
         },
         {
             "check": "direct_wr_cb_consumption_gate",
@@ -290,6 +325,8 @@ def audit() -> dict:
         "component_consumption_by_market": consumption,
         "qb_pass_side_rows": int(len(pass_rows)),
         "rb_fb_rush_side_rows": int(len(rb_rush)),
+        "rb_p3_in_scope_side_rows": int(len(rb_p3_in_scope)),
+        "rb_p3_fallback_side_rows": int(len(rb_p3_fallback)),
         "non_rb_rush_side_rows": int(len(non_rb_rush)),
         "direct_wr_cb_context_rows_consumed": int(max(direct_context_rows, 0)),
         "data_quality_disposition": quality_disposition,
