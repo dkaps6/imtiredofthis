@@ -1,0 +1,174 @@
+name: Data Frontier BDB2023 Protection Contract
+
+on:
+  push:
+    branches:
+      - data-frontier-phase0-bdb-contact-v1
+    paths:
+      - '.github/workflows/data-frontier-bdb2023-protection-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_SECRET_RAW: ${{ secrets.KAGGLE_API_TOKEN }}
+  BDB2023_COMPETITION: nfl-big-data-bowl-2023
+
+jobs:
+  audit-protection-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout isolated data-frontier branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Normalize Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          token="${raw#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          if [[ "$token" != KGAT_* ]]; then
+            echo "Invalid Kaggle token transport."
+            exit 2
+          fi
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+
+      - name: Install dependencies
+        run: pip install kaggle pandas
+
+      - name: Download official BDB 2023 corpus ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/bdb2023_contract_download"
+          c="${RUNNER_TEMP}/bdb2023_contract_corpus"
+          mkdir -p "$d" "$c"
+          kaggle competitions download -c "${BDB2023_COMPETITION}" -p "$d"
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$z"
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "BDB2023_CORPUS_DIR=$c" >> "$GITHUB_ENV"
+
+      - name: Audit blocker-rusher assignment contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/bdb2023_protection_contract"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import pandas as pd
+
+          root = Path(os.environ['BDB2023_CORPUS_DIR'])
+          out = Path(os.environ['RUNNER_TEMP']) / 'bdb2023_protection_contract'
+          pff_path = next(root.rglob('pffScoutingData.csv'))
+          games_path = next(root.rglob('games.csv'))
+          pff = pd.read_csv(pff_path)
+          games = pd.read_csv(games_path)[['gameId','week']]
+
+          role_counts = {str(k): int(v) for k,v in pff['pff_role'].value_counts(dropna=False).items()}
+          blockers = pff[pff['pff_role'].eq('Pass Block')].copy()
+          rushers = pff[pff['pff_role'].eq('Pass Rush')].copy()
+          blockers['rusherNflId'] = pd.to_numeric(blockers['pff_nflIdBlockedPlayer'], errors='coerce').astype('Int64')
+          assignments = blockers[blockers['rusherNflId'].notna()].copy()
+
+          rusher_cols = ['gameId','playId','nflId','pff_positionLinedUp','pff_hit','pff_hurry','pff_sack']
+          r = rushers[rusher_cols].rename(columns={
+              'nflId':'rusherNflId',
+              'pff_positionLinedUp':'rusherPositionLinedUp',
+              'pff_hit':'rusherHit',
+              'pff_hurry':'rusherHurry',
+              'pff_sack':'rusherSack',
+          })
+          joined = assignments.merge(r, on=['gameId','playId','rusherNflId'], how='left', indicator=True)
+          joined['rusherPressure'] = joined[['rusherHit','rusherHurry','rusherSack']].fillna(0).max(axis=1)
+          joined['blockerAllowedPressure'] = joined[['pff_hitAllowed','pff_hurryAllowed','pff_sackAllowed']].fillna(0).max(axis=1)
+          joined['blockerLost'] = joined['pff_beatenByDefender'].fillna(0)
+
+          group_counts = joined.groupby(['gameId','playId','rusherNflId']).size()
+          pressure_table = pd.crosstab(joined['blockerAllowedPressure'], joined['rusherPressure'])
+          loss_table = pd.crosstab(joined['blockerLost'], joined['rusherPressure'])
+
+          block_type_counts = {str(k): int(v) for k,v in blockers['pff_blockType'].value_counts(dropna=False).items()}
+          block_type_assignment = {}
+          for bt, g in blockers.groupby(blockers['pff_blockType'].fillna('<NULL>')):
+              block_type_assignment[str(bt)] = {
+                  'rows': int(len(g)),
+                  'assigned_rows': int(g['pff_nflIdBlockedPlayer'].notna().sum()),
+                  'assignment_rate': float(g['pff_nflIdBlockedPlayer'].notna().mean()),
+              }
+
+          weekly = assignments.merge(games, on='gameId', how='left').groupby('week').size()
+          weekly_counts = {str(int(k)): int(v) for k,v in weekly.items() if pd.notna(k)}
+
+          summary = {
+              'audit_version': 'BDB2023_PROTECTION_CONTRACT_V1',
+              'git_sha': os.environ.get('GITHUB_SHA'),
+              'raw_competition_files_uploaded': False,
+              'predictive_experiment': False,
+              'production_changed': False,
+              'role_counts': role_counts,
+              'pass_block_rows': int(len(blockers)),
+              'pass_rush_rows': int(len(rushers)),
+              'assignment_rows': int(len(assignments)),
+              'assignment_rate_over_pass_block_rows': float(len(assignments)/len(blockers)),
+              'unassigned_pass_block_rows': int(blockers['rusherNflId'].isna().sum()),
+              'assignment_refs_matching_same_play_pass_rusher': int((joined['_merge']=='both').sum()),
+              'assignment_refs_missing_same_play_pass_rusher': int((joined['_merge']!='both').sum()),
+              'self_assignments': int((joined['nflId'].astype('Int64') == joined['rusherNflId']).sum()),
+              'unique_assignment_pairs': int(joined[['gameId','playId','nflId','rusherNflId']].drop_duplicates().shape[0]),
+              'duplicate_assignment_pair_rows': int(joined.duplicated(['gameId','playId','nflId','rusherNflId'], keep=False).sum()),
+              'rusher_assignment_multiplicity': {
+                  'groups': int(len(group_counts)),
+                  'single_blocker_groups': int((group_counts==1).sum()),
+                  'multi_blocker_groups': int((group_counts>1).sum()),
+                  'max_blockers_on_one_rusher': int(group_counts.max()) if len(group_counts) else 0,
+              },
+              'block_type_counts': block_type_counts,
+              'block_type_assignment_coverage': block_type_assignment,
+              'backfield_block_rows': int(blockers['pff_backFieldBlock'].fillna(0).sum()),
+              'blocker_beaten_rows': int(blockers['pff_beatenByDefender'].fillna(0).sum()),
+              'hit_allowed_rows': int(blockers['pff_hitAllowed'].fillna(0).sum()),
+              'hurry_allowed_rows': int(blockers['pff_hurryAllowed'].fillna(0).sum()),
+              'sack_allowed_rows': int(blockers['pff_sackAllowed'].fillna(0).sum()),
+              'matched_rusher_hit_rows': int(joined['rusherHit'].fillna(0).sum()),
+              'matched_rusher_hurry_rows': int(joined['rusherHurry'].fillna(0).sum()),
+              'matched_rusher_sack_rows': int(joined['rusherSack'].fillna(0).sum()),
+              'allowed_pressure_vs_matched_rusher_pressure': pressure_table.to_dict(),
+              'blocker_beaten_vs_matched_rusher_pressure': loss_table.to_dict(),
+              'assignment_rows_by_week': weekly_counts,
+          }
+          (out/'bdb2023_protection_contract.json').write_text(json.dumps(summary, indent=2, sort_keys=True), encoding='utf-8')
+          print(json.dumps(summary, indent=2, sort_keys=True))
+
+          if summary['assignment_refs_missing_same_play_pass_rusher'] != 0:
+              raise SystemExit('Blocked-player references did not resolve to same-play Pass Rush rows')
+          if summary['self_assignments'] != 0:
+              raise SystemExit('Self assignments detected')
+          if summary['duplicate_assignment_pair_rows'] != 0:
+              raise SystemExit('Duplicate assignment pair rows detected')
+          PY
+
+      - name: Upload sanitized protection-contract audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2023-protection-contract
+          path: ${{ runner.temp }}/bdb2023_protection_contract
+          if-no-files-found: error
+          retention-days: 30
