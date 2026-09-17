@@ -1,0 +1,168 @@
+name: Data Frontier BDB2021 All Weeks Route Geometry
+
+on:
+  push:
+    branches:
+      - data-frontier-phase0-bdb-contact-v1
+    paths:
+      - '.github/workflows/data-frontier-bdb2021-allweeks-route-geometry.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_SECRET_RAW: ${{ secrets.KAGGLE_API_TOKEN }}
+  COMPETITION: nfl-big-data-bowl-2021
+
+jobs:
+  audit-allweeks-route-geometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Normalize Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          token="${raw#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          [[ "$token" == KGAT_* ]]
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+      - name: Install dependencies
+        run: pip install kaggle pandas numpy
+      - name: Download official BDB 2021 corpus ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/bdb2021_allgeom_download"
+          c="${RUNNER_TEMP}/bdb2021_allgeom_corpus"
+          mkdir -p "$d" "$c"
+          kaggle competitions download -c "${COMPETITION}" -p "$d"
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$z"
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "BDB2021_CORPUS_DIR=$c" >> "$GITHUB_ENV"
+      - name: Derive all-weeks route nearest-defender geometry
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/bdb2021_allweeks_route_geometry"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import numpy as np
+          import pandas as pd
+
+          root=Path(os.environ['BDB2021_CORPUS_DIR'])
+          out=Path(os.environ['RUNNER_TEMP'])/'bdb2021_allweeks_route_geometry'
+          games=pd.read_csv(next(root.rglob('games.csv')))[['gameId','homeTeamAbbr','visitorTeamAbbr','week']]
+          plays=pd.read_csv(next(root.rglob('plays.csv')))[['gameId','playId','possessionTeam','passResult']]
+          meta=plays.merge(games,on='gameId',how='left')
+          meta['offenseSide']=np.where(meta['possessionTeam'].eq(meta['homeTeamAbbr']),'home',np.where(meta['possessionTeam'].eq(meta['visitorTeamAbbr']),'away','unresolved'))
+          if int(meta['offenseSide'].eq('unresolved').sum())!=0: raise SystemExit('Possession side unresolved')
+
+          snapshots=[]
+          week_summaries=[]
+          route_counts={}; pos_counts={}
+          total_route=0; wrong_side=0; multi_route=0
+          for week in range(1,18):
+              tr=pd.read_csv(next(root.rglob(f'week{week}.csv')))
+              mw=meta[meta['week'].eq(week)][['gameId','playId','offenseSide']]
+              route_pp=tr[tr['route'].notna() & tr['nflId'].notna()][['gameId','playId','nflId','position','team','route']].drop_duplicates()
+              per=route_pp.groupby(['gameId','playId','nflId'])['route'].nunique()
+              multi_route += int((per>1).sum())
+              route_pp=route_pp.merge(mw,on=['gameId','playId'],how='left')
+              off=route_pp[route_pp['team'].eq(route_pp['offenseSide'])].copy()
+              wrong=int((~route_pp['team'].eq(route_pp['offenseSide'])).sum()); wrong_side+=wrong
+              total_route+=len(off)
+              for k,v in off['route'].value_counts().items(): route_counts[str(k)]=route_counts.get(str(k),0)+int(v)
+              for k,v in off['position'].value_counts().items(): pos_counts[str(k)]=pos_counts.get(str(k),0)+int(v)
+
+              ev=tr[['gameId','playId','frameId','event']].dropna().drop_duplicates()
+              def evt_frame(name): return ev[ev['event'].eq(name)].groupby(['gameId','playId'])['frameId'].min().rename(name)
+              evt=evt_frame('ball_snap').to_frame().join(evt_frame('pass_forward'),how='outer').join(evt_frame('pass_arrived'),how='outer').reset_index()
+              player=tr[tr['nflId'].notna()][['gameId','playId','nflId','frameId','team','x','y']]
+              dbase=player.merge(mw,on=['gameId','playId'],how='inner')
+              defenders=dbase[dbase['team'].isin(['home','away']) & ~dbase['team'].eq(dbase['offenseSide'])]
+
+              wsum={'week':week,'route_playerplays':int(len(off)),'wrong_side_route_rows':wrong}
+              for event_col,label in [('ball_snap','snap'),('pass_forward','throw'),('pass_arrived','arrival')]:
+                  ef=evt[['gameId','playId',event_col]].dropna().rename(columns={event_col:'eventFrame'})
+                  rr=off.merge(ef,on=['gameId','playId'],how='inner')
+                  rp=rr.merge(player,left_on=['gameId','playId','nflId','team','eventFrame'],right_on=['gameId','playId','nflId','team','frameId'],how='inner')
+                  dp=defenders.merge(ef,on=['gameId','playId'],how='inner')
+                  dp=dp[dp['frameId'].eq(dp['eventFrame'])][['gameId','playId','eventFrame','nflId','x','y']].rename(columns={'nflId':'defenderNflId','x':'dx','y':'dy'})
+                  cand=rp[['gameId','playId','nflId','route','position','eventFrame','x','y']].merge(dp,on=['gameId','playId','eventFrame'],how='left')
+                  cand['distance']=np.hypot(cand['x']-cand['dx'],cand['y']-cand['dy'])
+                  cand=cand.sort_values(['gameId','playId','nflId','distance','defenderNflId'])
+                  cand['rank']=cand.groupby(['gameId','playId','nflId']).cumcount()+1
+                  nearest=cand[cand['rank'].le(2)].pivot_table(index=['gameId','playId','nflId','route','position'],columns='rank',values='distance',aggfunc='first').reset_index().rename(columns={1:'nearestDistance',2:'secondDistance'})
+                  nearest['event']=label; nearest['week']=week
+                  snapshots.append(nearest)
+                  wsum[f'{label}_expected_route_playerplays']=int(len(rr))
+                  wsum[f'{label}_tracked_route_playerplays']=int(rp[['gameId','playId','nflId']].drop_duplicates().shape[0])
+                  wsum[f'{label}_geometry_rows']=int(nearest['nearestDistance'].notna().sum())
+              week_summaries.append(wsum)
+              del tr, ev, evt, player, dbase, defenders
+
+          allg=pd.concat(snapshots,ignore_index=True)
+          def q(s):
+              s=pd.to_numeric(s,errors='coerce').dropna()
+              if s.empty:return {}
+              qs=s.quantile([0,.1,.25,.5,.75,.9,.99,1]); names={0:'p0',.1:'p10',.25:'p25',.5:'p50',.75:'p75',.9:'p90',.99:'p99',1:'p100'}
+              return {names[i]:float(v) for i,v in qs.items()}
+          event_stats={}
+          for event,g in allg.groupby('event'):
+              event_stats[str(event)]={
+                  'rows':int(len(g)),
+                  'nearest_distance_quantiles':q(g['nearestDistance']),
+                  'second_distance_quantiles':q(g['secondDistance']),
+              }
+          route_throw={}
+          tg=allg[allg['event'].eq('throw')]
+          for route,g in tg.groupby('route'):
+              route_throw[str(route)]={'rows':int(len(g)),'nearest_distance_quantiles':q(g['nearestDistance'])}
+
+          summary={
+              'audit_version':'BDB2021_ALLWEEKS_ROUTE_NEAREST_DEFENDER_GEOMETRY_V1',
+              'git_sha':os.environ.get('GITHUB_SHA'),
+              'raw_competition_files_uploaded':False,
+              'predictive_experiment':False,
+              'production_changed':False,
+              'semantic_warning':'Nearest defender is geometric proximity only and MUST NOT be interpreted as coverage responsibility.',
+              'route_playerplays':int(total_route),
+              'wrong_side_route_rows':int(wrong_side),
+              'multi_route_label_playerplays':int(multi_route),
+              'route_counts':dict(sorted(route_counts.items(),key=lambda kv:(-kv[1],kv[0]))),
+              'position_counts':dict(sorted(pos_counts.items(),key=lambda kv:(-kv[1],kv[0]))),
+              'event_geometry':event_stats,
+              'throw_nearest_distance_by_route':route_throw,
+              'week_summaries':week_summaries,
+          }
+          (out/'bdb2021_allweeks_route_geometry.json').write_text(json.dumps(summary,indent=2,sort_keys=True),encoding='utf-8')
+          print(json.dumps(summary,indent=2,sort_keys=True))
+          if wrong_side>20: raise SystemExit('Too many route labels on non-offense side')
+          if multi_route!=0: raise SystemExit('Route label instability detected')
+          for w in week_summaries:
+              if w['snap_geometry_rows']/max(1,w['route_playerplays']) < .995: raise SystemExit(f"Week {w['week']} snap geometry coverage below 99.5%")
+          PY
+      - name: Upload sanitized all-weeks route geometry audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2021-allweeks-route-geometry
+          path: ${{ runner.temp }}/bdb2021_allweeks_route_geometry
+          if-no-files-found: error
+          retention-days: 30
