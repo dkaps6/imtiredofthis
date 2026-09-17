@@ -1,0 +1,2687 @@
+{
+  "feature_contract_version": "NFL_ADVANCED_FEATURE_DICTIONARY_V1",
+  "contract_status": "FROZEN_ENGINEERING_CONTRACT_RESEARCH_ONLY",
+  "created_date": "2026-09-17",
+  "parent_handoff_commit": "66e9d5d41e7e4e6187ecc2ab317f8a6f2d52c748",
+  "branch": "data-frontier-advanced-feature-contract-v1",
+  "purpose": "Freeze deterministic advanced-data feature semantics, provenance, temporal-use classes, confidence and abstention rules before any predictive experiment or production integration.",
+  "temporal_classifications": {
+    "PREGAME_HISTORICAL_DERIVABLE": "A named aggregate or summary computed only from completed observations strictly prior to target kickoff. Target-game observation is forbidden.",
+    "TARGET_GAME_POST_KICKOFF": "Value exists only after target game begins. It may be raw laboratory geometry and may only reach future pregame work through a separate named strict-prior aggregate.",
+    "RETROSPECTIVE_VALIDATION_ONLY": "Outcome-window or official retrospective semantic label reserved for validation, QA, descriptive benchmarks or future separately-authorized work; prohibited as a V1 pregame predictor."
+  },
+  "source_registry": {
+    "BDB2021_ROUTE_GEOMETRY": {
+      "source_dataset": "BDB_2021",
+      "kaggle_slug": "nfl-big-data-bowl-2021",
+      "source_season": 2018,
+      "source_hash_sha256": "55de76561799514779f3fd64b57c02a52430596f4f104c2b6060f3df8fd9e1b4",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_checkpoint": "docs/data_frontier/BDB2021_ROUTE_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_workflow": ".github/workflows/data-frontier-bdb2021-allweeks-route-geometry.yml",
+      "disposition": "BDB2021_ROUTE_NEAREST_DEFENDER_GEOMETRY_LAB_VALIDATED",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    "BDB2023_PROTECTION_GEOMETRY": {
+      "source_dataset": "BDB_2023",
+      "kaggle_slug": "nfl-big-data-bowl-2023",
+      "source_season": 2021,
+      "source_hash_sha256": "1c3e1eb6fcd0cf85807c649804fa0c72421c76e973e40a742523f1dd3a929182",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_checkpoint": "docs/data_frontier/BDB2023_BLOCKING_INTERACTION_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_workflow": ".github/workflows/data-frontier-bdb2023-allweeks-geometry.yml",
+      "disposition": "BDB2023_PROTECTION_INTERACTION_GEOMETRY_LAB_VALIDATED",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    "BDB2026_THROW_WINDOW": {
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "semantic_checkpoint": "docs/data_frontier/BDB2026_ANALYTICS_SEMANTIC_CHECKPOINT_2026-09-17.md",
+      "canonical_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "disposition": "BDB2026_THROW_WINDOW_GEOMETRY_LAB_VALIDATED_WITH_OUTPUT_DEFENDER_SCOPE_LIMIT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    }
+  },
+  "global_semantic_rules": [
+    "Nearest defender is geometric proximity only and never exact coverage responsibility.",
+    "pff_nflIdBlockedPlayer is blocked-player/blocking-interaction identity, not a universal primary blocker-rusher assignment.",
+    "BDB2026 team coverage labels are play/team semantics and do not identify individual defender responsibility.",
+    "BDB2026 post-release defender metrics use only official player_to_predict output defenders and must abstain when that output scope contains no defender.",
+    "No sportsbook or market input is permitted anywhere in this feature layer.",
+    "Raw Kaggle competition CSV/video files remain ephemeral in GitHub Actions and are not committed to the repository.",
+    "Any pregame field must exclude the target game and use only completed strictly-prior observations.",
+    "No predictive experiment, model retune, or production promotion is authorized by this dictionary."
+  ],
+  "pregame_history_global_rule": {
+    "cutoff": "observation_end_time < target_kickoff_utc; if exact temporal ordering unavailable, completed prior NFL weeks only",
+    "target_game_excluded": true,
+    "same_game_partial_history_forbidden": true,
+    "post_kickoff_target_game_inputs_forbidden": true,
+    "identity_must_be_resolved": true,
+    "source_hash_must_match_registry": true
+  },
+  "fields": [
+    {
+      "field_name": "route_label",
+      "feature_family": "ROUTE_GEOMETRY",
+      "source_key": "BDB2021_ROUTE_GEOMETRY",
+      "source_dataset": "BDB_2021",
+      "source_kaggle_slug": "nfl-big-data-bowl-2021",
+      "source_season": 2018,
+      "source_hash_sha256": "55de76561799514779f3fd64b57c02a52430596f4f104c2b6060f3df8fd9e1b4",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2021_ROUTE_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2021-allweeks-route-geometry.yml",
+      "grain": "player-play",
+      "deterministic_definition": "Official non-null source route label after verifying a player-play has at most one distinct non-null label. Preserve source 'undefined'; do not rewrite anomalies.",
+      "units": "categorical",
+      "temporal_availability": {
+        "classification": "TARGET_GAME_POST_KICKOFF",
+        "first_known_time": "Observed on tracking rows for the completed route/player-play.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": true,
+        "leakage_guard": "Target-game value is post-kickoff information and may not enter a pregame target-game feature. A separate named hist_* field is required for lagged use."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when exactly one non-null source route label exists on the player-play; abstain on conflicting labels. Preserve source undefined as an explicit value.",
+        "abstain_if": [
+          "more than one distinct non-null route label on player-play"
+        ],
+        "required_quality_flags": [
+          "route_label_unique"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Not a targeted-receiver label.",
+        "Does not identify coverage responsibility.",
+        "Target-game route is not a pregame feature."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "snap_nearest_defender_distance_yards",
+      "feature_family": "ROUTE_GEOMETRY",
+      "source_key": "BDB2021_ROUTE_GEOMETRY",
+      "source_dataset": "BDB_2021",
+      "source_kaggle_slug": "nfl-big-data-bowl-2021",
+      "source_season": 2018,
+      "source_hash_sha256": "55de76561799514779f3fd64b57c02a52430596f4f104c2b6060f3df8fd9e1b4",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2021_ROUTE_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2021-allweeks-route-geometry.yml",
+      "grain": "player-play-event",
+      "deterministic_definition": "Euclidean distance in source field coordinates: sqrt((x1-x2)^2 + (y1-y2)^2). At the minimum frameId labeled ball_snap for the play, compute distance from route runner to all opposite-side defenders, sort by distance then defenderNflId, take rank 1.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "TARGET_GAME_POST_KICKOFF",
+        "first_known_time": "At explicit ball_snap frame.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": true,
+        "leakage_guard": "Target-game value is post-kickoff information and may not enter a pregame target-game feature. A separate named hist_* field is required for lagged use."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when the required explicit source event frame exists and both receiver and at least one defender have valid x/y at that frame; MEDIUM only for second-nearest when exactly two+ defenders are present; otherwise abstain.",
+        "abstain_if": [
+          "required event frame absent",
+          "receiver frame absent",
+          "no valid defensive snapshot",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "event_source",
+          "defender_count_at_event",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "snap_second_nearest_defender_distance_yards",
+      "feature_family": "ROUTE_GEOMETRY",
+      "source_key": "BDB2021_ROUTE_GEOMETRY",
+      "source_dataset": "BDB_2021",
+      "source_kaggle_slug": "nfl-big-data-bowl-2021",
+      "source_season": 2018,
+      "source_hash_sha256": "55de76561799514779f3fd64b57c02a52430596f4f104c2b6060f3df8fd9e1b4",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2021_ROUTE_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2021-allweeks-route-geometry.yml",
+      "grain": "player-play-event",
+      "deterministic_definition": "Euclidean distance in source field coordinates: sqrt((x1-x2)^2 + (y1-y2)^2). Same snap frame and candidate set as snap_nearest_defender_distance_yards; take rank 2 after deterministic distance/defenderNflId ordering.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "TARGET_GAME_POST_KICKOFF",
+        "first_known_time": "At explicit ball_snap frame.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": true,
+        "leakage_guard": "Target-game value is post-kickoff information and may not enter a pregame target-game feature. A separate named hist_* field is required for lagged use."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when the required explicit source event frame exists and both receiver and at least one defender have valid x/y at that frame; MEDIUM only for second-nearest when exactly two+ defenders are present; otherwise abstain.",
+        "abstain_if": [
+          "required event frame absent",
+          "receiver frame absent",
+          "no valid defensive snapshot",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "event_source",
+          "defender_count_at_event",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Requires at least two valid defenders at the event frame."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "throw_nearest_defender_distance_yards",
+      "feature_family": "ROUTE_GEOMETRY",
+      "source_key": "BDB2021_ROUTE_GEOMETRY",
+      "source_dataset": "BDB_2021",
+      "source_kaggle_slug": "nfl-big-data-bowl-2021",
+      "source_season": 2018,
+      "source_hash_sha256": "55de76561799514779f3fd64b57c02a52430596f4f104c2b6060f3df8fd9e1b4",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2021_ROUTE_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2021-allweeks-route-geometry.yml",
+      "grain": "player-play-event",
+      "deterministic_definition": "Euclidean distance in source field coordinates: sqrt((x1-x2)^2 + (y1-y2)^2). At the minimum frameId labeled pass_forward for the play, compute route-runner distance to all opposite-side defenders and take deterministic rank 1.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "TARGET_GAME_POST_KICKOFF",
+        "first_known_time": "At explicit pass_forward frame.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": true,
+        "leakage_guard": "Target-game value is post-kickoff information and may not enter a pregame target-game feature. A separate named hist_* field is required for lagged use."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when the required explicit source event frame exists and both receiver and at least one defender have valid x/y at that frame; MEDIUM only for second-nearest when exactly two+ defenders are present; otherwise abstain.",
+        "abstain_if": [
+          "required event frame absent",
+          "receiver frame absent",
+          "no valid defensive snapshot",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "event_source",
+          "defender_count_at_event",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "BDB2021 does not semantically identify which route runner was targeted."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "throw_second_nearest_defender_distance_yards",
+      "feature_family": "ROUTE_GEOMETRY",
+      "source_key": "BDB2021_ROUTE_GEOMETRY",
+      "source_dataset": "BDB_2021",
+      "source_kaggle_slug": "nfl-big-data-bowl-2021",
+      "source_season": 2018,
+      "source_hash_sha256": "55de76561799514779f3fd64b57c02a52430596f4f104c2b6060f3df8fd9e1b4",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2021_ROUTE_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2021-allweeks-route-geometry.yml",
+      "grain": "player-play-event",
+      "deterministic_definition": "Euclidean distance in source field coordinates: sqrt((x1-x2)^2 + (y1-y2)^2). Same pass_forward frame and candidate set as throw_nearest_defender_distance_yards; take deterministic rank 2.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "TARGET_GAME_POST_KICKOFF",
+        "first_known_time": "At explicit pass_forward frame.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": true,
+        "leakage_guard": "Target-game value is post-kickoff information and may not enter a pregame target-game feature. A separate named hist_* field is required for lagged use."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when the required explicit source event frame exists and both receiver and at least one defender have valid x/y at that frame; MEDIUM only for second-nearest when exactly two+ defenders are present; otherwise abstain.",
+        "abstain_if": [
+          "required event frame absent",
+          "receiver frame absent",
+          "no valid defensive snapshot",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "event_source",
+          "defender_count_at_event",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Requires at least two valid defenders.",
+        "BDB2021 does not semantically identify which route runner was targeted."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "arrival_nearest_defender_distance_yards",
+      "feature_family": "ROUTE_GEOMETRY",
+      "source_key": "BDB2021_ROUTE_GEOMETRY",
+      "source_dataset": "BDB_2021",
+      "source_kaggle_slug": "nfl-big-data-bowl-2021",
+      "source_season": 2018,
+      "source_hash_sha256": "55de76561799514779f3fd64b57c02a52430596f4f104c2b6060f3df8fd9e1b4",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2021_ROUTE_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2021-allweeks-route-geometry.yml",
+      "grain": "player-play-event",
+      "deterministic_definition": "Euclidean distance in source field coordinates: sqrt((x1-x2)^2 + (y1-y2)^2). At the minimum frameId labeled pass_arrived for the play, compute route-runner distance to all opposite-side defenders and take deterministic rank 1.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "At explicit pass_arrived frame.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when the required explicit source event frame exists and both receiver and at least one defender have valid x/y at that frame; MEDIUM only for second-nearest when exactly two+ defenders are present; otherwise abstain.",
+        "abstain_if": [
+          "required event frame absent",
+          "receiver frame absent",
+          "no valid defensive snapshot",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "event_source",
+          "defender_count_at_event",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Arrival is outcome-window information and is reserved for retrospective validation in V1.",
+        "BDB2021 does not guarantee the route runner is the target."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "arrival_second_nearest_defender_distance_yards",
+      "feature_family": "ROUTE_GEOMETRY",
+      "source_key": "BDB2021_ROUTE_GEOMETRY",
+      "source_dataset": "BDB_2021",
+      "source_kaggle_slug": "nfl-big-data-bowl-2021",
+      "source_season": 2018,
+      "source_hash_sha256": "55de76561799514779f3fd64b57c02a52430596f4f104c2b6060f3df8fd9e1b4",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2021_ROUTE_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2021-allweeks-route-geometry.yml",
+      "grain": "player-play-event",
+      "deterministic_definition": "Euclidean distance in source field coordinates: sqrt((x1-x2)^2 + (y1-y2)^2). Same pass_arrived frame and candidate set as arrival_nearest_defender_distance_yards; take deterministic rank 2.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "At explicit pass_arrived frame.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when the required explicit source event frame exists and both receiver and at least one defender have valid x/y at that frame; MEDIUM only for second-nearest when exactly two+ defenders are present; otherwise abstain.",
+        "abstain_if": [
+          "required event frame absent",
+          "receiver frame absent",
+          "no valid defensive snapshot",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "event_source",
+          "defender_count_at_event",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Arrival is outcome-window information and is reserved for retrospective validation in V1."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "snap_to_throw_nearest_defender_delta_yards",
+      "feature_family": "ROUTE_GEOMETRY",
+      "source_key": "BDB2021_ROUTE_GEOMETRY",
+      "source_dataset": "BDB_2021",
+      "source_kaggle_slug": "nfl-big-data-bowl-2021",
+      "source_season": 2018,
+      "source_hash_sha256": "55de76561799514779f3fd64b57c02a52430596f4f104c2b6060f3df8fd9e1b4",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2021_ROUTE_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2021-allweeks-route-geometry.yml",
+      "grain": "player-play",
+      "deterministic_definition": "throw_nearest_defender_distance_yards - snap_nearest_defender_distance_yards for the same player-play; both source event geometries must be non-null.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "TARGET_GAME_POST_KICKOFF",
+        "first_known_time": "At explicit pass_forward frame after both snap and throw geometries exist.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": true,
+        "leakage_guard": "Target-game value is post-kickoff information and may not enter a pregame target-game feature. A separate named hist_* field is required for lagged use."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when the required explicit source event frame exists and both receiver and at least one defender have valid x/y at that frame; MEDIUM only for second-nearest when exactly two+ defenders are present; otherwise abstain.",
+        "abstain_if": [
+          "required event frame absent",
+          "receiver frame absent",
+          "no valid defensive snapshot",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "event_source",
+          "defender_count_at_event",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Negative values mean the nearest geometric defender is closer at throw than snap; defender identity may change between frames."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "hist_player_route_throw_nearest_defender_median_yards",
+      "feature_family": "ROUTE_HISTORY",
+      "source_key": "BDB2021_ROUTE_GEOMETRY",
+      "source_dataset": "BDB_2021",
+      "source_kaggle_slug": "nfl-big-data-bowl-2021",
+      "source_season": 2018,
+      "source_hash_sha256": "55de76561799514779f3fd64b57c02a52430596f4f104c2b6060f3df8fd9e1b4",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2021_ROUTE_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2021-allweeks-route-geometry.yml",
+      "grain": "player-route-history",
+      "deterministic_definition": "Median throw_nearest_defender_distance_yards over strictly-prior completed player-plays for the same nfl_id and route_label. Target game excluded. Require sample_count >= 5.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "PREGAME_HISTORICAL_DERIVABLE",
+        "first_known_time": "Before target kickoff after all contributing prior games are complete.",
+        "target_game_pregame_allowed": true,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Target game excluded. Only completed observations strictly earlier than target kickoff may contribute; if exact kickoff ordering is unavailable, use completed prior weeks only."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "LOW for n=5-9, MEDIUM for n=10-24, HIGH for n>=25; abstain below n=5.",
+        "abstain_if": [
+          "strict-prior qualifying sample_count < 5",
+          "identity unresolved",
+          "target-game observation included"
+        ],
+        "required_quality_flags": [
+          "sample_count",
+          "history_cutoff_utc",
+          "strict_prior_only",
+          "identity_confidence"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Historical geometry profile only; does not reveal target-game route or coverage assignment."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_PLAYER_SAME_ROUTE_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "hist_player_route_throw_second_defender_median_yards",
+      "feature_family": "ROUTE_HISTORY",
+      "source_key": "BDB2021_ROUTE_GEOMETRY",
+      "source_dataset": "BDB_2021",
+      "source_kaggle_slug": "nfl-big-data-bowl-2021",
+      "source_season": 2018,
+      "source_hash_sha256": "55de76561799514779f3fd64b57c02a52430596f4f104c2b6060f3df8fd9e1b4",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2021_ROUTE_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2021-allweeks-route-geometry.yml",
+      "grain": "player-route-history",
+      "deterministic_definition": "Median throw_second_nearest_defender_distance_yards over strictly-prior completed player-plays for the same nfl_id and route_label. Target game excluded. Require sample_count >= 5.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "PREGAME_HISTORICAL_DERIVABLE",
+        "first_known_time": "Before target kickoff after all contributing prior games are complete.",
+        "target_game_pregame_allowed": true,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Target game excluded. Only completed observations strictly earlier than target kickoff may contribute; if exact kickoff ordering is unavailable, use completed prior weeks only."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "LOW for n=5-9, MEDIUM for n=10-24, HIGH for n>=25; abstain below n=5.",
+        "abstain_if": [
+          "strict-prior qualifying sample_count < 5",
+          "identity unresolved",
+          "target-game observation included"
+        ],
+        "required_quality_flags": [
+          "sample_count",
+          "history_cutoff_utc",
+          "strict_prior_only",
+          "identity_confidence"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Historical spacing profile only; target-game route remains unknown pregame."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_PLAYER_SAME_ROUTE_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "hist_player_route_throw_spacing_gap_median_yards",
+      "feature_family": "ROUTE_HISTORY",
+      "source_key": "BDB2021_ROUTE_GEOMETRY",
+      "source_dataset": "BDB_2021",
+      "source_kaggle_slug": "nfl-big-data-bowl-2021",
+      "source_season": 2018,
+      "source_hash_sha256": "55de76561799514779f3fd64b57c02a52430596f4f104c2b6060f3df8fd9e1b4",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2021_ROUTE_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2021-allweeks-route-geometry.yml",
+      "grain": "player-route-history",
+      "deterministic_definition": "For each strictly-prior qualifying player-play compute throw_second_nearest_defender_distance_yards - throw_nearest_defender_distance_yards; emit the median for same nfl_id and route_label when sample_count >= 5.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "PREGAME_HISTORICAL_DERIVABLE",
+        "first_known_time": "Before target kickoff after all contributing prior games are complete.",
+        "target_game_pregame_allowed": true,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Target game excluded. Only completed observations strictly earlier than target kickoff may contribute; if exact kickoff ordering is unavailable, use completed prior weeks only."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "LOW for n=5-9, MEDIUM for n=10-24, HIGH for n>=25; abstain below n=5.",
+        "abstain_if": [
+          "strict-prior qualifying sample_count < 5",
+          "identity unresolved",
+          "target-game observation included"
+        ],
+        "required_quality_flags": [
+          "sample_count",
+          "history_cutoff_utc",
+          "strict_prior_only",
+          "identity_confidence"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Measures geometric spacing between first and second nearest defenders, not bracket/help responsibility."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_PLAYER_SAME_ROUTE_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "hist_player_route_throw_geometry_sample_count",
+      "feature_family": "ROUTE_HISTORY",
+      "source_key": "BDB2021_ROUTE_GEOMETRY",
+      "source_dataset": "BDB_2021",
+      "source_kaggle_slug": "nfl-big-data-bowl-2021",
+      "source_season": 2018,
+      "source_hash_sha256": "55de76561799514779f3fd64b57c02a52430596f4f104c2b6060f3df8fd9e1b4",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2021_ROUTE_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2021-allweeks-route-geometry.yml",
+      "grain": "player-route-history",
+      "deterministic_definition": "Count of strictly-prior completed same-player, same-route player-plays with non-null throw nearest-defender geometry used by V1 route-history summaries.",
+      "units": "count",
+      "temporal_availability": {
+        "classification": "PREGAME_HISTORICAL_DERIVABLE",
+        "first_known_time": "Before target kickoff.",
+        "target_game_pregame_allowed": true,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Target game excluded. Only completed observations strictly earlier than target kickoff may contribute; if exact kickoff ordering is unavailable, use completed prior weeks only."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "Metadata/support field; exact non-negative integer. HIGH integrity when strict-prior cutoff and identity are verified.",
+        "abstain_if": [
+          "identity unresolved",
+          "target-game row included"
+        ],
+        "required_quality_flags": [
+          "history_cutoff_utc",
+          "strict_prior_only",
+          "identity_confidence"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Support count only; not a quality/performance metric."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "blocker_target_snap_distance_yards",
+      "feature_family": "PROTECTION_GEOMETRY",
+      "source_key": "BDB2023_PROTECTION_GEOMETRY",
+      "source_dataset": "BDB_2023",
+      "source_kaggle_slug": "nfl-big-data-bowl-2023",
+      "source_season": 2021,
+      "source_hash_sha256": "1c3e1eb6fcd0cf85807c649804fa0c72421c76e973e40a742523f1dd3a929182",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2023_BLOCKING_INTERACTION_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2023-allweeks-geometry.yml",
+      "grain": "blocking-interaction",
+      "deterministic_definition": "Euclidean distance in source field coordinates: sqrt((x1-x2)^2 + (y1-y2)^2). For the source blocker and pff_nflIdBlockedPlayer interaction identity, use reconciled snapFrame: manual snap if manual/auto within 3 frames; earlier label if divergent >3; single label if only one; abstain if neither. Distance is blocker-to-referenced-player at snapFrame.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "TARGET_GAME_POST_KICKOFF",
+        "first_known_time": "At reconciled snap frame.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": true,
+        "leakage_guard": "Target-game value is post-kickoff information and may not enter a pregame target-game feature. A separate named hist_* field is required for lagged use."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when snap and terminal are resolved without last-frame terminal fallback; MEDIUM when terminal uses explicit last-frame fallback; abstain when snap is unresolved.",
+        "abstain_if": [
+          "no manual or auto snap label",
+          "blocker or blocked-player tracking identity unresolved",
+          "no shared blocker-target frames in protection window",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "snap_source",
+          "terminal_source",
+          "terminal_last_frame_fallback",
+          "shared_frames",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "pff_nflIdBlockedPlayer is a blocked-player/blocking-interaction identity, not a universal primary blocker-rusher assignment.",
+        "Referenced player can have source role Pass Rush or Coverage."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "blocker_target_min_distance_yards",
+      "feature_family": "PROTECTION_GEOMETRY",
+      "source_key": "BDB2023_PROTECTION_GEOMETRY",
+      "source_dataset": "BDB_2023",
+      "source_kaggle_slug": "nfl-big-data-bowl-2023",
+      "source_season": 2021,
+      "source_hash_sha256": "1c3e1eb6fcd0cf85807c649804fa0c72421c76e973e40a742523f1dd3a929182",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2023_BLOCKING_INTERACTION_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2023-allweeks-geometry.yml",
+      "grain": "blocking-interaction-window",
+      "deterministic_definition": "Minimum Euclidean blocker-to-referenced-player distance across shared tracking frames from reconciled snapFrame through terminalFrame inclusive.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "After the protection window terminal frame is resolved.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": true,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when snap and terminal are resolved without last-frame terminal fallback; MEDIUM when terminal uses explicit last-frame fallback; abstain when snap is unresolved.",
+        "abstain_if": [
+          "no manual or auto snap label",
+          "blocker or blocked-player tracking identity unresolved",
+          "no shared blocker-target frames in protection window",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "snap_source",
+          "terminal_source",
+          "terminal_last_frame_fallback",
+          "shared_frames",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Interaction geometry only; not unconditional assignment responsibility.",
+        "Uses future frames relative to snap; target-game value is not pregame/live-safe."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "blocker_target_terminal_distance_yards",
+      "feature_family": "PROTECTION_GEOMETRY",
+      "source_key": "BDB2023_PROTECTION_GEOMETRY",
+      "source_dataset": "BDB_2023",
+      "source_kaggle_slug": "nfl-big-data-bowl-2023",
+      "source_season": 2021,
+      "source_hash_sha256": "1c3e1eb6fcd0cf85807c649804fa0c72421c76e973e40a742523f1dd3a929182",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2023_BLOCKING_INTERACTION_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2023-allweeks-geometry.yml",
+      "grain": "blocking-interaction",
+      "deterministic_definition": "Euclidean blocker-to-referenced-player distance at reconciled terminalFrame. Terminal resolution: manual/auto pass-forward within 3 -> manual; divergent -> earlier; single label; then qb_sack/qb_strip_sack; else flagged last_frame_fallback.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "At resolved terminal protection frame.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": true,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when snap and terminal are resolved without last-frame terminal fallback; MEDIUM when terminal uses explicit last-frame fallback; abstain when snap is unresolved.",
+        "abstain_if": [
+          "no manual or auto snap label",
+          "blocker or blocked-player tracking identity unresolved",
+          "no shared blocker-target frames in protection window",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "snap_source",
+          "terminal_source",
+          "terminal_last_frame_fallback",
+          "shared_frames",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Last-frame fallback is lower-confidence provenance and must remain flagged.",
+        "Interaction identity is not universal assignment responsibility."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "blocker_target_time_to_min_distance_seconds",
+      "feature_family": "PROTECTION_GEOMETRY",
+      "source_key": "BDB2023_PROTECTION_GEOMETRY",
+      "source_dataset": "BDB_2023",
+      "source_kaggle_slug": "nfl-big-data-bowl-2023",
+      "source_season": 2021,
+      "source_hash_sha256": "1c3e1eb6fcd0cf85807c649804fa0c72421c76e973e40a742523f1dd3a929182",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2023_BLOCKING_INTERACTION_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2023-allweeks-geometry.yml",
+      "grain": "blocking-interaction-window",
+      "deterministic_definition": "(frameId_of_first_minimum_distance - snapFrame) / 10.0 using the first frame selected by deterministic group idxmin on distance.",
+      "units": "seconds",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "After the full protection window is observed.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": true,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when snap and terminal are resolved without last-frame terminal fallback; MEDIUM when terminal uses explicit last-frame fallback; abstain when snap is unresolved.",
+        "abstain_if": [
+          "no manual or auto snap label",
+          "blocker or blocked-player tracking identity unresolved",
+          "no shared blocker-target frames in protection window",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "snap_source",
+          "terminal_source",
+          "terminal_last_frame_fallback",
+          "shared_frames",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Outcome-window geometry; target-game value is not pregame/live-safe.",
+        "10 Hz timing is inherited from source tracking frame cadence.",
+        "Blocking-interaction geometry only; does not establish universal primary blocker-rusher assignment responsibility."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "blocker_target_shared_protection_frames",
+      "feature_family": "PROTECTION_GEOMETRY",
+      "source_key": "BDB2023_PROTECTION_GEOMETRY",
+      "source_dataset": "BDB_2023",
+      "source_kaggle_slug": "nfl-big-data-bowl-2023",
+      "source_season": 2021,
+      "source_hash_sha256": "1c3e1eb6fcd0cf85807c649804fa0c72421c76e973e40a742523f1dd3a929182",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2023_BLOCKING_INTERACTION_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2023-allweeks-geometry.yml",
+      "grain": "blocking-interaction-window",
+      "deterministic_definition": "Count of frames where blocker and referenced player both have tracking rows and frameId is between reconciled snapFrame and terminalFrame inclusive.",
+      "units": "frames",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "After the protection window is complete.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": true,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when snap and terminal are resolved without last-frame terminal fallback; MEDIUM when terminal uses explicit last-frame fallback; abstain when snap is unresolved.",
+        "abstain_if": [
+          "no manual or auto snap label",
+          "blocker or blocked-player tracking identity unresolved",
+          "no shared blocker-target frames in protection window",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "snap_source",
+          "terminal_source",
+          "terminal_last_frame_fallback",
+          "shared_frames",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Window completeness depends on source tracking presence for both players.",
+        "Blocking-interaction geometry only; does not establish universal primary blocker-rusher assignment responsibility."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "protection_window_length_seconds",
+      "feature_family": "PROTECTION_GEOMETRY",
+      "source_key": "BDB2023_PROTECTION_GEOMETRY",
+      "source_dataset": "BDB_2023",
+      "source_kaggle_slug": "nfl-big-data-bowl-2023",
+      "source_season": 2021,
+      "source_hash_sha256": "1c3e1eb6fcd0cf85807c649804fa0c72421c76e973e40a742523f1dd3a929182",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2023_BLOCKING_INTERACTION_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2023-allweeks-geometry.yml",
+      "grain": "play",
+      "deterministic_definition": "(terminalFrame - snapFrame) / 10.0 for a play with resolved snapFrame and terminalFrame under the frozen reconciliation contract.",
+      "units": "seconds",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "After terminal frame is resolved.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": true,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when snap and terminal are resolved without last-frame terminal fallback; MEDIUM when terminal uses explicit last-frame fallback; abstain when snap is unresolved.",
+        "abstain_if": [
+          "no manual or auto snap label",
+          "blocker or blocked-player tracking identity unresolved",
+          "no shared blocker-target frames in protection window",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "snap_source",
+          "terminal_source",
+          "terminal_last_frame_fallback",
+          "shared_frames",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Last-frame terminal fallback must be surfaced in provenance.",
+        "Play-level timing context, not an individual assignment label."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "block_interaction_role",
+      "feature_family": "PROTECTION_LABEL",
+      "source_key": "BDB2023_PROTECTION_GEOMETRY",
+      "source_dataset": "BDB_2023",
+      "source_kaggle_slug": "nfl-big-data-bowl-2023",
+      "source_season": 2021,
+      "source_hash_sha256": "1c3e1eb6fcd0cf85807c649804fa0c72421c76e973e40a742523f1dd3a929182",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2023_BLOCKING_INTERACTION_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2023-allweeks-geometry.yml",
+      "grain": "blocking-interaction",
+      "deterministic_definition": "Exact source PFF role for the blocker row, preserved without reinterpretation. Valid observed roles in the validated interaction corpus include Pass Block and Pass Route.",
+      "units": "categorical",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "After source PFF annotation is available.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when source PFF row uniquely resolves for the blocker-play; abstain otherwise.",
+        "abstain_if": [
+          "source PFF blocker row unresolved or duplicated ambiguously"
+        ],
+        "required_quality_flags": [
+          "source_pff_row_resolved"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Pass Route interactions can represent chip/release contact and must not be discarded.",
+        "Role is source annotation, not a pregame target-game feature."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "blocked_defender_source_role",
+      "feature_family": "PROTECTION_LABEL",
+      "source_key": "BDB2023_PROTECTION_GEOMETRY",
+      "source_dataset": "BDB_2023",
+      "source_kaggle_slug": "nfl-big-data-bowl-2023",
+      "source_season": 2021,
+      "source_hash_sha256": "1c3e1eb6fcd0cf85807c649804fa0c72421c76e973e40a742523f1dd3a929182",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2023_BLOCKING_INTERACTION_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2023-allweeks-geometry.yml",
+      "grain": "blocking-interaction",
+      "deterministic_definition": "Exact same-play source PFF role of pff_nflIdBlockedPlayer when that referenced player resolves uniquely. Preserve Pass Rush, Coverage, or other source value; do not coerce to Pass Rush.",
+      "units": "categorical",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "After source PFF annotation is available.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when referenced player resolves to exactly one same-play PFF row; abstain when unresolved.",
+        "abstain_if": [
+          "pff_nflIdBlockedPlayer missing",
+          "referenced same-play PFF row unresolved or ambiguous"
+        ],
+        "required_quality_flags": [
+          "blocked_player_same_play_resolved"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Referenced player role is descriptive source truth; pff_nflIdBlockedPlayer remains interaction identity, not universal responsibility."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "chip_release_interaction_flag",
+      "feature_family": "PROTECTION_LABEL",
+      "source_key": "BDB2023_PROTECTION_GEOMETRY",
+      "source_dataset": "BDB_2023",
+      "source_kaggle_slug": "nfl-big-data-bowl-2023",
+      "source_season": 2021,
+      "source_hash_sha256": "1c3e1eb6fcd0cf85807c649804fa0c72421c76e973e40a742523f1dd3a929182",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2023_BLOCKING_INTERACTION_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2023-allweeks-geometry.yml",
+      "grain": "blocking-interaction",
+      "deterministic_definition": "1 when source blocker role is Pass Route and source block type indicates an interaction recorded in the validated chip/release family; 0 only when the applicable source fields explicitly indicate otherwise; null when source applicability is ambiguous.",
+      "units": "boolean",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "After source PFF interaction annotation is available.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when source blocker role and block-type fields are non-null and mapped by the frozen V1 mapping; otherwise abstain rather than infer from geometry.",
+        "abstain_if": [
+          "source role/block type missing",
+          "block type not in frozen V1 mapping"
+        ],
+        "required_quality_flags": [
+          "source_role_present",
+          "source_block_type_present",
+          "chip_mapping_version"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Do not infer chip/release solely from proximity.",
+        "The validated corpus includes Pass Route interactions and they are semantically meaningful."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "terminal_frame_fallback_flag",
+      "feature_family": "PROTECTION_PROVENANCE",
+      "source_key": "BDB2023_PROTECTION_GEOMETRY",
+      "source_dataset": "BDB_2023",
+      "source_kaggle_slug": "nfl-big-data-bowl-2023",
+      "source_season": 2021,
+      "source_hash_sha256": "1c3e1eb6fcd0cf85807c649804fa0c72421c76e973e40a742523f1dd3a929182",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2023_BLOCKING_INTERACTION_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2023-allweeks-geometry.yml",
+      "grain": "play",
+      "deterministic_definition": "1 iff terminalSource == 'last_frame_fallback'; otherwise 0 for resolved manual/auto pass, sack, or strip-sack terminal sources.",
+      "units": "boolean",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "When terminal frame resolution is complete.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "Exact provenance flag; HIGH integrity when terminalSource is recorded.",
+        "abstain_if": [
+          "terminalSource missing"
+        ],
+        "required_quality_flags": [
+          "terminal_source"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "A value of 1 is not a geometry failure; it signals lower-confidence terminal timing and must be retained downstream."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "hist_blocker_snap_distance_median_yards",
+      "feature_family": "PROTECTION_HISTORY",
+      "source_key": "BDB2023_PROTECTION_GEOMETRY",
+      "source_dataset": "BDB_2023",
+      "source_kaggle_slug": "nfl-big-data-bowl-2023",
+      "source_season": 2021,
+      "source_hash_sha256": "1c3e1eb6fcd0cf85807c649804fa0c72421c76e973e40a742523f1dd3a929182",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2023_BLOCKING_INTERACTION_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2023-allweeks-geometry.yml",
+      "grain": "blocker-history",
+      "deterministic_definition": "Median blocker_target_snap_distance_yards over strictly-prior completed interactions for the same blocker nfl_id; target game excluded; require sample_count >= 10.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "PREGAME_HISTORICAL_DERIVABLE",
+        "first_known_time": "Before target kickoff after contributing prior games complete.",
+        "target_game_pregame_allowed": true,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Target game excluded. Only completed observations strictly earlier than target kickoff may contribute; if exact kickoff ordering is unavailable, use completed prior weeks only."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "LOW for n=10-19, MEDIUM for n=20-49, HIGH for n>=50; abstain below n=10.",
+        "abstain_if": [
+          "strict-prior qualifying sample_count < 10",
+          "identity unresolved",
+          "target-game observation included"
+        ],
+        "required_quality_flags": [
+          "sample_count",
+          "history_cutoff_utc",
+          "strict_prior_only",
+          "identity_confidence"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Historical interaction geometry only; does not assert the blocker will face the same rusher or assignment in the target game."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_BLOCKER_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "hist_blocker_min_distance_median_yards",
+      "feature_family": "PROTECTION_HISTORY",
+      "source_key": "BDB2023_PROTECTION_GEOMETRY",
+      "source_dataset": "BDB_2023",
+      "source_kaggle_slug": "nfl-big-data-bowl-2023",
+      "source_season": 2021,
+      "source_hash_sha256": "1c3e1eb6fcd0cf85807c649804fa0c72421c76e973e40a742523f1dd3a929182",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2023_BLOCKING_INTERACTION_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2023-allweeks-geometry.yml",
+      "grain": "blocker-history",
+      "deterministic_definition": "Median blocker_target_min_distance_yards over strictly-prior completed interactions for the same blocker nfl_id, excluding rows with unresolved snap; target game excluded; require sample_count >= 10.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "PREGAME_HISTORICAL_DERIVABLE",
+        "first_known_time": "Before target kickoff.",
+        "target_game_pregame_allowed": true,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Target game excluded. Only completed observations strictly earlier than target kickoff may contribute; if exact kickoff ordering is unavailable, use completed prior weeks only."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "LOW for n=10-19, MEDIUM for n=20-49, HIGH for n>=50; abstain below n=10.",
+        "abstain_if": [
+          "strict-prior qualifying sample_count < 10",
+          "identity unresolved",
+          "target-game observation included"
+        ],
+        "required_quality_flags": [
+          "sample_count",
+          "history_cutoff_utc",
+          "strict_prior_only",
+          "identity_confidence"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Derived only from completed prior-game windows; does not make target-game interaction assignment claims."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_BLOCKER_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "hist_blocker_time_to_min_distance_median_seconds",
+      "feature_family": "PROTECTION_HISTORY",
+      "source_key": "BDB2023_PROTECTION_GEOMETRY",
+      "source_dataset": "BDB_2023",
+      "source_kaggle_slug": "nfl-big-data-bowl-2023",
+      "source_season": 2021,
+      "source_hash_sha256": "1c3e1eb6fcd0cf85807c649804fa0c72421c76e973e40a742523f1dd3a929182",
+      "source_hash_scope": "SOURCE_MANIFEST",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2023_BLOCKING_INTERACTION_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2023-allweeks-geometry.yml",
+      "grain": "blocker-history",
+      "deterministic_definition": "Median blocker_target_time_to_min_distance_seconds over strictly-prior completed interactions for the same blocker nfl_id; target game excluded; require sample_count >= 10.",
+      "units": "seconds",
+      "temporal_availability": {
+        "classification": "PREGAME_HISTORICAL_DERIVABLE",
+        "first_known_time": "Before target kickoff.",
+        "target_game_pregame_allowed": true,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Target game excluded. Only completed observations strictly earlier than target kickoff may contribute; if exact kickoff ordering is unavailable, use completed prior weeks only."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "LOW for n=10-19, MEDIUM for n=20-49, HIGH for n>=50; abstain below n=10.",
+        "abstain_if": [
+          "strict-prior qualifying sample_count < 10",
+          "identity unresolved",
+          "target-game observation included"
+        ],
+        "required_quality_flags": [
+          "sample_count",
+          "history_cutoff_utc",
+          "strict_prior_only",
+          "identity_confidence"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Historical interaction timing profile; no target-game rusher assignment is implied."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_BLOCKER_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "receiver_release_nearest_defender_distance_yards",
+      "feature_family": "THROW_WINDOW_RELEASE",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "targeted-receiver-play",
+      "deterministic_definition": "Euclidean distance in source field coordinates: sqrt((x1-x2)^2 + (y1-y2)^2). Release frame is the maximum published pre-throw input frame_id for the play. Select the unique Targeted Receiver and all Defensive Coverage rows at that frame; take minimum target-to-defender distance.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "TARGET_GAME_POST_KICKOFF",
+        "first_known_time": "At final published pre-throw input frame.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": true,
+        "leakage_guard": "Target-game value is post-kickoff information and may not enter a pregame target-game feature. A separate named hist_* field is required for lagged use."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when exactly one Targeted Receiver exists, final pre-throw frame exists, target and defensive coordinates are valid; abstain otherwise. Second-defender metrics additionally require at least two defenders.",
+        "abstain_if": [
+          "Targeted Receiver role non-unique",
+          "target not present at release frame",
+          "no defensive coverage rows at release",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "target_role_unique",
+          "release_frame_id",
+          "defender_count_release",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Target identity is source-provided; individual defender responsibility is not."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "receiver_release_second_defender_distance_yards",
+      "feature_family": "THROW_WINDOW_RELEASE",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "targeted-receiver-play",
+      "deterministic_definition": "Euclidean distance in source field coordinates: sqrt((x1-x2)^2 + (y1-y2)^2). Same release frame and source roles as receiver_release_nearest_defender_distance_yards; sort target-to-defender distances and take rank 2.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "TARGET_GAME_POST_KICKOFF",
+        "first_known_time": "At final published pre-throw input frame.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": true,
+        "leakage_guard": "Target-game value is post-kickoff information and may not enter a pregame target-game feature. A separate named hist_* field is required for lagged use."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when exactly one Targeted Receiver exists, final pre-throw frame exists, target and defensive coordinates are valid; abstain otherwise. Second-defender metrics additionally require at least two defenders.",
+        "abstain_if": [
+          "Targeted Receiver role non-unique",
+          "target not present at release frame",
+          "no defensive coverage rows at release",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "target_role_unique",
+          "release_frame_id",
+          "defender_count_release",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Requires at least two Defensive Coverage rows at release."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "receiver_release_defenders_within_2yd_count",
+      "feature_family": "THROW_WINDOW_RELEASE",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "targeted-receiver-play",
+      "deterministic_definition": "Count Defensive Coverage players at release frame whose Euclidean distance to the unique Targeted Receiver is <= 2.0 yards.",
+      "units": "count",
+      "temporal_availability": {
+        "classification": "TARGET_GAME_POST_KICKOFF",
+        "first_known_time": "At final published pre-throw input frame.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": true,
+        "leakage_guard": "Target-game value is post-kickoff information and may not enter a pregame target-game feature. A separate named hist_* field is required for lagged use."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when exactly one Targeted Receiver exists, final pre-throw frame exists, target and defensive coordinates are valid; abstain otherwise. Second-defender metrics additionally require at least two defenders.",
+        "abstain_if": [
+          "Targeted Receiver role non-unique",
+          "target not present at release frame",
+          "no defensive coverage rows at release",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "target_role_unique",
+          "release_frame_id",
+          "defender_count_release",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Crowding count is geometry only; multiple nearby defenders do not prove bracket responsibility."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "receiver_release_defenders_within_3yd_count",
+      "feature_family": "THROW_WINDOW_RELEASE",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "targeted-receiver-play",
+      "deterministic_definition": "Count Defensive Coverage players at release frame whose Euclidean distance to the unique Targeted Receiver is <= 3.0 yards.",
+      "units": "count",
+      "temporal_availability": {
+        "classification": "TARGET_GAME_POST_KICKOFF",
+        "first_known_time": "At final published pre-throw input frame.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": true,
+        "leakage_guard": "Target-game value is post-kickoff information and may not enter a pregame target-game feature. A separate named hist_* field is required for lagged use."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when exactly one Targeted Receiver exists, final pre-throw frame exists, target and defensive coordinates are valid; abstain otherwise. Second-defender metrics additionally require at least two defenders.",
+        "abstain_if": [
+          "Targeted Receiver role non-unique",
+          "target not present at release frame",
+          "no defensive coverage rows at release",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "target_role_unique",
+          "release_frame_id",
+          "defender_count_release",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Crowding count is geometry only; multiple nearby defenders do not prove bracket responsibility."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "receiver_release_target_to_land_distance_yards",
+      "feature_family": "THROW_WINDOW_LANDING",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "targeted-receiver-play",
+      "deterministic_definition": "Euclidean distance in source field coordinates: sqrt((x1-x2)^2 + (y1-y2)^2). Distance from unique Targeted Receiver x/y at release frame to the source ball_land_x/ball_land_y coordinate for the play.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "Only after the play's realized ball landing coordinate is known.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH for target-only terminal geometry when target output exists; HIGH for defender metrics only when at least one official player_to_predict Defensive Coverage output exists. Otherwise abstain for defender metrics.",
+        "abstain_if": [
+          "target missing from official output",
+          "no official predicted defender for defender-scoped metric",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "terminal_frame_id",
+          "predicted_defender_count_terminal",
+          "official_output_scope_only",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Ball landing point is future information relative to release and is prohibited as a target-game pregame/live predictor in V1."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "release_nearest_defender_to_landing_zone_yards",
+      "feature_family": "THROW_WINDOW_LANDING",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "play",
+      "deterministic_definition": "Euclidean distance in source field coordinates: sqrt((x1-x2)^2 + (y1-y2)^2). At release frame, compute distance from each Defensive Coverage player to source ball landing coordinates and take the minimum.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "Only after realized ball landing coordinate is known.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH for target-only terminal geometry when target output exists; HIGH for defender metrics only when at least one official player_to_predict Defensive Coverage output exists. Otherwise abstain for defender metrics.",
+        "abstain_if": [
+          "target missing from official output",
+          "no official predicted defender for defender-scoped metric",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "terminal_frame_id",
+          "predicted_defender_count_terminal",
+          "official_output_scope_only",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Landing coordinate is future information relative to release; validation-only in V1."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "terminal_receiver_to_land_distance_yards",
+      "feature_family": "THROW_WINDOW_POSTRELEASE",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "targeted-receiver-play",
+      "deterministic_definition": "Euclidean distance in source field coordinates: sqrt((x1-x2)^2 + (y1-y2)^2). Distance from targeted receiver x/y at final published post-release output frame to source ball landing coordinates.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "At final published post-release output frame.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH for target-only terminal geometry when target output exists; HIGH for defender metrics only when at least one official player_to_predict Defensive Coverage output exists. Otherwise abstain for defender metrics.",
+        "abstain_if": [
+          "target missing from official output",
+          "no official predicted defender for defender-scoped metric",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "terminal_frame_id",
+          "predicted_defender_count_terminal",
+          "official_output_scope_only",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Terminal frame is not relabeled catch/arrival without a separate event marker.",
+        "Outcome-window measurement; validation-only in V1."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "terminal_nearest_predicted_defender_to_target_yards",
+      "feature_family": "THROW_WINDOW_POSTRELEASE",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "targeted-receiver-play",
+      "deterministic_definition": "Euclidean distance in source field coordinates: sqrt((x1-x2)^2 + (y1-y2)^2). At final published post-release output frame, minimum distance from targeted receiver to Defensive Coverage players present in the official player_to_predict output set.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "At final published post-release output frame.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH for target-only terminal geometry when target output exists; HIGH for defender metrics only when at least one official player_to_predict Defensive Coverage output exists. Otherwise abstain for defender metrics.",
+        "abstain_if": [
+          "target missing from official output",
+          "no official predicted defender for defender-scoped metric",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "terminal_frame_id",
+          "predicted_defender_count_terminal",
+          "official_output_scope_only",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Defender metric is scoped only to official player_to_predict output defenders; 1,141 validated plays contain no predicted defender and must abstain."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "terminal_nearest_predicted_defender_to_land_yards",
+      "feature_family": "THROW_WINDOW_POSTRELEASE",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "play",
+      "deterministic_definition": "Euclidean distance in source field coordinates: sqrt((x1-x2)^2 + (y1-y2)^2). At final published post-release output frame, minimum distance from official output Defensive Coverage players to source ball landing coordinates.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "At final published post-release output frame.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH for target-only terminal geometry when target output exists; HIGH for defender metrics only when at least one official player_to_predict Defensive Coverage output exists. Otherwise abstain for defender metrics.",
+        "abstain_if": [
+          "target missing from official output",
+          "no official predicted defender for defender-scoped metric",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "terminal_frame_id",
+          "predicted_defender_count_terminal",
+          "official_output_scope_only",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Official output defender scope only; validation-only."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "postrelease_min_nearest_predicted_defender_distance_yards",
+      "feature_family": "THROW_WINDOW_POSTRELEASE",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "targeted-receiver-play-window",
+      "deterministic_definition": "For each published post-release output frame containing target and at least one official output Defensive Coverage player, compute nearest target-defender Euclidean distance; take the minimum across frames.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "After all published post-release output frames are known.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH for target-only terminal geometry when target output exists; HIGH for defender metrics only when at least one official player_to_predict Defensive Coverage output exists. Otherwise abstain for defender metrics.",
+        "abstain_if": [
+          "target missing from official output",
+          "no official predicted defender for defender-scoped metric",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "terminal_frame_id",
+          "predicted_defender_count_terminal",
+          "official_output_scope_only",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Official player_to_predict defender scope only.",
+        "Explicitly prohibited from V1 pregame feature use."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "postrelease_closing_delta_yards",
+      "feature_family": "THROW_WINDOW_POSTRELEASE",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "targeted-receiver-play-window",
+      "deterministic_definition": "receiver_release_nearest_defender_distance_yards - postrelease_min_nearest_predicted_defender_distance_yards when both are non-null.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "After post-release output window is complete.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH for target-only terminal geometry when target output exists; HIGH for defender metrics only when at least one official player_to_predict Defensive Coverage output exists. Otherwise abstain for defender metrics.",
+        "abstain_if": [
+          "target missing from official output",
+          "no official predicted defender for defender-scoped metric",
+          "non-finite coordinates"
+        ],
+        "required_quality_flags": [
+          "terminal_frame_id",
+          "predicted_defender_count_terminal",
+          "official_output_scope_only",
+          "geometry_valid"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Positive value indicates a smaller nearest-defender distance occurred post-release; defender identity can change across frames.",
+        "Validation-only."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "source_target_route_label",
+      "feature_family": "THROW_WINDOW_LABEL",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "play",
+      "deterministic_definition": "Exact supplementary_data.csv route_of_targeted_receiver value, preserving nulls and the official route taxonomy; no route is inferred from geometry.",
+      "units": "categorical",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "After official supplementary label is available.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when exactly one non-null official source label exists for the play; otherwise null/abstain.",
+        "abstain_if": [
+          "source route label null or conflicting"
+        ],
+        "required_quality_flags": [
+          "supplementary_join_valid",
+          "source_route_present"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Source semantic label used for retrospective stratification and construction of strictly-prior route-history tables; target-game route label itself is not pregame-safe."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "source_team_coverage_man_zone",
+      "feature_family": "THROW_WINDOW_LABEL",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "play",
+      "deterministic_definition": "Exact supplementary_data.csv team_coverage_man_zone value. Preserve MAN_COVERAGE, ZONE_COVERAGE, and null exactly; do not infer from nearest-defender geometry.",
+      "units": "categorical",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "After official supplementary label is available.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when official non-null label exists; null remains abstention.",
+        "abstain_if": [
+          "source label null"
+        ],
+        "required_quality_flags": [
+          "supplementary_join_valid",
+          "source_coverage_label_present"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Team/play coverage semantics only; does not identify individual defender responsibility."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "source_team_coverage_type",
+      "feature_family": "THROW_WINDOW_LABEL",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "play",
+      "deterministic_definition": "Exact supplementary_data.csv team_coverage_type value. Preserve official COVER_0_MAN, COVER_1_MAN, COVER_2_MAN, COVER_2_ZONE, COVER_3_ZONE, COVER_4_ZONE, COVER_6_ZONE, PREVENT, and null.",
+      "units": "categorical",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "After official supplementary label is available.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "HIGH when official non-null label exists; null remains abstention.",
+        "abstain_if": [
+          "source label null"
+        ],
+        "required_quality_flags": [
+          "supplementary_join_valid",
+          "source_coverage_type_present"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Team/play scheme label only; not individual assignment."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "hist_receiver_release_nearest_defender_median_yards",
+      "feature_family": "THROW_WINDOW_HISTORY",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "receiver-history",
+      "deterministic_definition": "Median receiver_release_nearest_defender_distance_yards over strictly-prior completed targeted plays for the same nfl_id; target game excluded; require sample_count >= 8.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "PREGAME_HISTORICAL_DERIVABLE",
+        "first_known_time": "Before target kickoff after contributing prior games complete.",
+        "target_game_pregame_allowed": true,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Target game excluded. Only completed observations strictly earlier than target kickoff may contribute; if exact kickoff ordering is unavailable, use completed prior weeks only."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "LOW for n=8-15, MEDIUM for n=16-39, HIGH for n>=40; abstain below n=8.",
+        "abstain_if": [
+          "strict-prior qualifying sample_count < 8",
+          "identity unresolved",
+          "target-game observation included"
+        ],
+        "required_quality_flags": [
+          "sample_count",
+          "history_cutoff_utc",
+          "strict_prior_only",
+          "identity_confidence"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Historical release-space profile; does not reveal target-game route or coverage."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_TARGETED_RECEIVER_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "hist_receiver_release_second_defender_median_yards",
+      "feature_family": "THROW_WINDOW_HISTORY",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "receiver-history",
+      "deterministic_definition": "Median receiver_release_second_defender_distance_yards over strictly-prior completed targeted plays for same nfl_id; target game excluded; require sample_count >= 8.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "PREGAME_HISTORICAL_DERIVABLE",
+        "first_known_time": "Before target kickoff.",
+        "target_game_pregame_allowed": true,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Target game excluded. Only completed observations strictly earlier than target kickoff may contribute; if exact kickoff ordering is unavailable, use completed prior weeks only."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "LOW for n=8-15, MEDIUM for n=16-39, HIGH for n>=40; abstain below n=8.",
+        "abstain_if": [
+          "strict-prior qualifying sample_count < 8",
+          "identity unresolved",
+          "target-game observation included"
+        ],
+        "required_quality_flags": [
+          "sample_count",
+          "history_cutoff_utc",
+          "strict_prior_only",
+          "identity_confidence"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Historical second-defender spacing profile only."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_TARGETED_RECEIVER_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "hist_receiver_release_crowding_2yd_rate",
+      "feature_family": "THROW_WINDOW_HISTORY",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "receiver-history",
+      "deterministic_definition": "Mean indicator(receiver_release_defenders_within_2yd_count >= 1) over strictly-prior completed targeted plays for same nfl_id; target game excluded; require sample_count >= 8.",
+      "units": "rate_0_1",
+      "temporal_availability": {
+        "classification": "PREGAME_HISTORICAL_DERIVABLE",
+        "first_known_time": "Before target kickoff.",
+        "target_game_pregame_allowed": true,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Target game excluded. Only completed observations strictly earlier than target kickoff may contribute; if exact kickoff ordering is unavailable, use completed prior weeks only."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "LOW for n=8-15, MEDIUM for n=16-39, HIGH for n>=40; abstain below n=8.",
+        "abstain_if": [
+          "strict-prior qualifying sample_count < 8",
+          "identity unresolved",
+          "target-game observation included"
+        ],
+        "required_quality_flags": [
+          "sample_count",
+          "history_cutoff_utc",
+          "strict_prior_only",
+          "identity_confidence"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Historical geometric crowding rate; not a bracket/double-coverage rate."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_TARGETED_RECEIVER_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "hist_receiver_release_crowding_3yd_rate",
+      "feature_family": "THROW_WINDOW_HISTORY",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "receiver-history",
+      "deterministic_definition": "Mean indicator(receiver_release_defenders_within_3yd_count >= 1) over strictly-prior completed targeted plays for same nfl_id; target game excluded; require sample_count >= 8.",
+      "units": "rate_0_1",
+      "temporal_availability": {
+        "classification": "PREGAME_HISTORICAL_DERIVABLE",
+        "first_known_time": "Before target kickoff.",
+        "target_game_pregame_allowed": true,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Target game excluded. Only completed observations strictly earlier than target kickoff may contribute; if exact kickoff ordering is unavailable, use completed prior weeks only."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "LOW for n=8-15, MEDIUM for n=16-39, HIGH for n>=40; abstain below n=8.",
+        "abstain_if": [
+          "strict-prior qualifying sample_count < 8",
+          "identity unresolved",
+          "target-game observation included"
+        ],
+        "required_quality_flags": [
+          "sample_count",
+          "history_cutoff_utc",
+          "strict_prior_only",
+          "identity_confidence"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Historical geometric crowding rate; not a coverage-responsibility label."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_TARGETED_RECEIVER_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "hist_receiver_release_geometry_sample_count",
+      "feature_family": "THROW_WINDOW_HISTORY",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "receiver-history",
+      "deterministic_definition": "Count of strictly-prior completed targeted plays with valid release geometry for the same nfl_id used by V1 receiver-history summaries.",
+      "units": "count",
+      "temporal_availability": {
+        "classification": "PREGAME_HISTORICAL_DERIVABLE",
+        "first_known_time": "Before target kickoff.",
+        "target_game_pregame_allowed": true,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Target game excluded. Only completed observations strictly earlier than target kickoff may contribute; if exact kickoff ordering is unavailable, use completed prior weeks only."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "Metadata/support field; exact integer under strict-prior cutoff.",
+        "abstain_if": [
+          "identity unresolved",
+          "target-game observation included"
+        ],
+        "required_quality_flags": [
+          "history_cutoff_utc",
+          "strict_prior_only",
+          "identity_confidence"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Support count only."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "hist_receiver_route_release_nearest_defender_median_yards",
+      "feature_family": "THROW_WINDOW_HISTORY",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "receiver-route-history",
+      "deterministic_definition": "Median receiver_release_nearest_defender_distance_yards over strictly-prior completed targeted plays for same nfl_id and source_target_route_label; target game excluded; require sample_count >= 5.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "PREGAME_HISTORICAL_DERIVABLE",
+        "first_known_time": "Before target kickoff.",
+        "target_game_pregame_allowed": true,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Target game excluded. Only completed observations strictly earlier than target kickoff may contribute; if exact kickoff ordering is unavailable, use completed prior weeks only."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "LOW for n=5-9, MEDIUM for n=10-24, HIGH for n>=25; abstain below n=5.",
+        "abstain_if": [
+          "strict-prior qualifying sample_count < 5",
+          "identity unresolved",
+          "target-game observation included"
+        ],
+        "required_quality_flags": [
+          "sample_count",
+          "history_cutoff_utc",
+          "strict_prior_only",
+          "identity_confidence"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "This is a historical route-conditioned lookup. It does not authorize using the target-game realized route label. Any target-game use must come through an independently pregame-safe route tendency/scenario mechanism."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_TARGETED_RECEIVER_SAME_ROUTE_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "route_x_man_zone_release_nearest_defender_median_yards",
+      "feature_family": "THROW_WINDOW_BENCHMARK",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "route-coverage-benchmark",
+      "deterministic_definition": "Median receiver_release_nearest_defender_distance_yards grouped by source_target_route_label and source_team_coverage_man_zone over the validated corpus.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "After official route and team coverage labels are available.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "Descriptive benchmark; report sample_count and null when group is empty.",
+        "abstain_if": [
+          "route label null",
+          "man/zone label null",
+          "group sample_count == 0"
+        ],
+        "required_quality_flags": [
+          "sample_count",
+          "source_labels_complete"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Descriptive benchmark only; no causal or predictive interpretation and no target-game realized coverage leakage."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    },
+    {
+      "field_name": "route_x_coverage_family_release_nearest_defender_median_yards",
+      "feature_family": "THROW_WINDOW_BENCHMARK",
+      "source_key": "BDB2026_THROW_WINDOW",
+      "source_dataset": "BDB_2026_ANALYTICS",
+      "source_kaggle_slug": "nfl-big-data-bowl-2026-analytics",
+      "source_season": 2023,
+      "source_hash_sha256": "228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07",
+      "source_hash_scope": "OFFICIAL_CORPUS",
+      "canonical_source_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
+      "canonical_source_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
+      "grain": "route-coverage-benchmark",
+      "deterministic_definition": "Median receiver_release_nearest_defender_distance_yards grouped by source_target_route_label and source_team_coverage_type over the validated corpus.",
+      "units": "yards",
+      "temporal_availability": {
+        "classification": "RETROSPECTIVE_VALIDATION_ONLY",
+        "first_known_time": "After official route and coverage-family labels are available.",
+        "target_game_pregame_allowed": false,
+        "strict_prior_transform_allowed": false,
+        "leakage_guard": "Never consume as a target-game pregame/live predictor in V1. Reserved for labeling, QA, calibration diagnostics, or future separately-authorized historical summaries."
+      },
+      "confidence_abstention": {
+        "confidence_tier_rule": "Descriptive benchmark; report sample_count and null when group is empty.",
+        "abstain_if": [
+          "route label null",
+          "coverage type null",
+          "group sample_count == 0"
+        ],
+        "required_quality_flags": [
+          "sample_count",
+          "source_labels_complete"
+        ]
+      },
+      "provenance_required": [
+        "source_dataset",
+        "source_kaggle_slug",
+        "source_hash_sha256",
+        "source_hash_scope",
+        "feature_contract_version",
+        "algorithm_version",
+        "game_id",
+        "play_id",
+        "generated_at_utc"
+      ],
+      "semantic_limitations": [
+        "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment.",
+        "Team coverage family is play-level semantics, not defender assignment; benchmark is validation-only."
+      ],
+      "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
+    }
+  ]
+}
