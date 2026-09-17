@@ -34,6 +34,20 @@ from sklearn.preprocessing import StandardScaler
 
 JOIN_KEYS = ["season", "week", "team", "player_clean_key"]
 
+# Columns that reveal a realized/graded outcome (actual result, model-vs-line
+# grading, ROI, or a downstream betting decision). These must never reach the
+# join/missingness/scaler/distance/density path (Sections 1, 3-6) — only
+# `attach_outcomes_at_confirmation_boundary` (Section 8's single sanctioned
+# entry point) may ever merge them back in. Named defensively/broadly on
+# purpose: any column matching this list on the real Vegas artifact is held
+# back, whether or not this exact V1 mechanism ends up reading it.
+OUTCOME_COLUMNS = [
+    "actual_pass_yards", "actual", "projection", "football_synthesis",
+    "vegas_line", "side", "best_side", "odds", "best_odds", "roi",
+    "realized_roi", "realized_direction", "ev_roi", "best_ev_roi",
+    "probability_edge", "decision", "bettable_now", "snapshot_signal",
+]
+
 DISAGREEMENT_FEATURES = ["component_sd", "component_range", "pred_attempts", "pred_ypa"]
 PLAYER_PRIOR_FEATURES = ["qb_prior_attempts", "qb_prior_ypa"]
 OPPONENT_PRIOR_FEATURES = [
@@ -60,8 +74,50 @@ DISPOSITION_SUPPORTED = "QB_CONDITIONAL_ANALOG_RELIABILITY_SUPPORTED"
 DISPOSITION_NOT_ACTIONABLE = "NO_ACTIONABLE_QB_CONDITIONAL_ANALOG_RELIABILITY"
 
 
+def split_population_and_outcomes(vegas_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Outcome-boundary hardening: separate pre-outcome population/identity columns
+    from realized-outcome columns before anything touches the join/scaler/distance/
+    density path.
+
+    Returns (population_df, outcomes_df). `population_df` carries JOIN_KEYS plus any
+    non-outcome identity/context columns (opponent, game_id, player, position, market,
+    benchmark_arm, etc.) and is the only object Sections 1 and 3-6 may ever see.
+    `outcomes_df` carries JOIN_KEYS plus whichever OUTCOME_COLUMNS are present, and may
+    only ever be reattached by `attach_outcomes_at_confirmation_boundary` — the single
+    sanctioned Section 8 entry point.
+    """
+    present_outcome_cols = [c for c in OUTCOME_COLUMNS if c in vegas_df.columns]
+    population_cols = [c for c in vegas_df.columns if c not in present_outcome_cols]
+    population_df = vegas_df[population_cols].copy()
+    outcomes_df = vegas_df[JOIN_KEYS + present_outcome_cols].copy()
+    return population_df, outcomes_df
+
+
+def attach_outcomes_at_confirmation_boundary(
+    evidence_df: pd.DataFrame, outcomes_df: pd.DataFrame
+) -> pd.DataFrame:
+    """Section 8's single sanctioned entry point for opening realized outcomes.
+
+    `evidence_df` is the already-computed, outcome-blind row table (join + missingness
+    + scaler + distances + neighbors + density gate + evidence class), keyed on
+    JOIN_KEYS. This is the only function in this module permitted to merge
+    `outcomes_df` (from `split_population_and_outcomes`) back onto it, and it must be
+    called at most once, immediately before `score_architecture_gate`.
+    """
+    missing = sorted(set(JOIN_KEYS) - set(evidence_df.columns))
+    if missing:
+        raise RuntimeError(f"evidence_df missing join keys: {missing}")
+    return evidence_df.merge(outcomes_df, on=JOIN_KEYS, how="left", validate="one_to_one")
+
+
 def join_vegas_and_features(vegas_df: pd.DataFrame, features_df: pd.DataFrame) -> pd.DataFrame:
-    """Section 1: inner join the grading population to the feature trace on JOIN_KEYS."""
+    """Section 1: inner join the grading population to the feature trace on JOIN_KEYS.
+
+    `vegas_df` here must already be outcome-stripped (i.e. the `population_df` output
+    of `split_population_and_outcomes`) for any real, non-test data path — this
+    function itself is a generic merge and does not enforce that by inspection, so
+    callers on real data must pass the pre-outcome population, never the raw artifact.
+    """
     missing_v = sorted(set(JOIN_KEYS) - set(vegas_df.columns))
     missing_f = sorted(set(JOIN_KEYS) - set(features_df.columns))
     if missing_v:
@@ -228,9 +284,17 @@ def main() -> int:
         return 0
     if not a.vegas_csv.exists() or not a.features_csv.exists():
         raise RuntimeError("qb conditional analog v1: input CSV path does not exist")
-    vegas_df = pd.read_csv(a.vegas_csv, low_memory=False)
+    vegas_df_raw = pd.read_csv(a.vegas_csv, low_memory=False)
     features_df = pd.read_csv(a.features_csv, low_memory=False)
-    merged = join_vegas_and_features(vegas_df, features_df)
+    # Outcome-boundary hardening: strip realized-outcome columns before anything
+    # downstream (join, missingness exclusion, and — when wired in a future
+    # orchestration step — scaler/distance/density) can see them. `outcomes_df` is
+    # computed but deliberately never read past this point in this CLI path; it
+    # exists only so a future confirmation step can call
+    # attach_outcomes_at_confirmation_boundary() exactly once, at the Section 8
+    # gate, never earlier.
+    population_df, outcomes_df = split_population_and_outcomes(vegas_df_raw)
+    merged = join_vegas_and_features(population_df, features_df)
     clean, dropped = exclude_missing(merged)
     a.out_dir.mkdir(parents=True, exist_ok=True)
     summary = {
@@ -238,14 +302,18 @@ def main() -> int:
         "rows_joined": int(len(merged)),
         "rows_excluded_missingness": dropped,
         "rows_clean": int(len(clean)),
+        "outcome_columns_held_back": sorted(set(outcomes_df.columns) - set(JOIN_KEYS)),
         "note": (
-            "This CLI path performs Sections 1 and 3 only (join + missingness exclusion). "
-            "Sections 4-8 (scaler fit, distances, neighbor rule, density gate, evidence "
-            "classes, and the 2025 architecture gate) are implemented as library functions "
-            "in this module and proven on synthetic fixtures in "
+            "This CLI path performs Sections 1 and 3 only (join + missingness exclusion), "
+            "and it does so on an outcome-stripped population frame -- merged/clean above "
+            "structurally cannot contain any OUTCOME_COLUMNS value, only the identity/context "
+            "and pregame feature columns. Sections 4-8 (scaler fit, distances, neighbor rule, "
+            "density gate, evidence classes, and the 2025 architecture gate) are implemented "
+            "as library functions in this module and proven on synthetic fixtures in "
             "tests/test_qb_conditional_analog_v1.py, but are deliberately not wired to real "
-            "outcome data by this CLI, per the handoff constraint against opening 2025 "
-            "outcomes without a separate explicit step."
+            "outcome data by this CLI. The held-back outcome columns are reported by name "
+            "only (never their values) so this summary stays auditable without opening any "
+            "real 2025 result."
         ),
     }
     (a.out_dir / "qb_conditional_analog_v1_join_summary.json").write_text(

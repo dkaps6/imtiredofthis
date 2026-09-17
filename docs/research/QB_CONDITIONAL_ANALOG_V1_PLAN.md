@@ -67,13 +67,13 @@ existing, already-frozen pregame columns are selected and standardized.
    `market_abs_spread`, `market_team_implied`, `market_opp_implied`,
    `market_is_underdog`, `market_moneyline`.
 
-Fifteen columns total, equally weighted (see distance metric below — no
-per-dimension weighting is fit or tuned for V1).
+Seventeen columns total (4 + 2 + 4 + 7), equally weighted (see distance
+metric below — no per-dimension weighting is fit or tuned for V1).
 
 ## 3. Missingness policy
 
 **Exclude, never impute.** Any row (in either the 2024 reference pool or
-the 2025 evaluation pool) with a null value in any of the 15 frozen feature
+the 2025 evaluation pool) with a null value in any of the 17 frozen feature
 columns is dropped from the analog population entirely before distances are
 computed. `run_m89_pregame_synthesis.py` imputes internally for its own
 regression fit; that imputation is not reused here, because imputing a
@@ -94,7 +94,7 @@ freeze/evaluate-2025 discipline already used by
 ## 5. Distance metric
 
 One frozen metric only, no metric shopping: **Euclidean distance in the
-standardized 15-dimension feature space** described above. No Mahalanobis,
+standardized 17-dimension feature space** described above. No Mahalanobis,
 cosine, or learned-weighting alternative is evaluated for V1.
 
 ## 6. Neighbor rule, sample size, and quality gate

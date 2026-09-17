@@ -37,6 +37,71 @@ def test_join_vegas_and_features_inner_join_on_keys():
     assert "component_range" in merged.columns
 
 
+def test_split_population_and_outcomes_strips_known_outcome_columns():
+    vegas_df = pd.DataFrame([{
+        "season": 2024, "week": 1, "team": "KC", "player_clean_key": "pmahomes",
+        "opponent": "BAL", "game_id": "2024_01_KC_BAL", "player": "P Mahomes",
+        "position": "QB", "market": "pass_yards", "benchmark_arm": "CURRENT_PRODUCTION_ORDER",
+        "actual_pass_yards": 291, "projection": 275.0, "vegas_line": 270.5,
+        "side": "OVER", "odds": -110, "roi": 0.08, "decision": "PLAY",
+    }])
+    population_df, outcomes_df = m.split_population_and_outcomes(vegas_df)
+
+    for outcome_col in [
+        "actual_pass_yards", "projection", "vegas_line", "side", "odds", "roi", "decision",
+    ]:
+        assert outcome_col not in population_df.columns
+        assert outcome_col in outcomes_df.columns
+
+    for context_col in ["opponent", "game_id", "player", "position", "market", "benchmark_arm"]:
+        assert context_col in population_df.columns
+
+    for key in m.JOIN_KEYS:
+        assert key in population_df.columns
+        assert key in outcomes_df.columns
+
+
+def test_split_population_and_outcomes_handles_no_outcome_columns_present():
+    vegas_df = pd.DataFrame([
+        {"season": 2024, "week": 1, "team": "KC", "player_clean_key": "pmahomes", "opponent": "BAL"}
+    ])
+    population_df, outcomes_df = m.split_population_and_outcomes(vegas_df)
+    assert list(population_df.columns) == list(vegas_df.columns)
+    assert list(outcomes_df.columns) == m.JOIN_KEYS
+
+
+def test_pre_outcome_join_path_cannot_see_outcome_columns():
+    """Structural proof: joining the split-off population frame to the feature
+    trace produces a table with zero OUTCOME_COLUMNS present, even though the
+    raw vegas_df those population rows came from carried several.
+    """
+    vegas_df = pd.DataFrame([{
+        "season": 2024, "week": 1, "team": "KC", "player_clean_key": "pmahomes",
+        "actual_pass_yards": 291, "roi": 0.08, "decision": "PLAY",
+    }])
+    features_df = pd.DataFrame([
+        {**_feature_row(component_range=10.0), "season": 2024, "week": 1, "team": "KC", "player_clean_key": "pmahomes"}
+    ])
+    population_df, outcomes_df = m.split_population_and_outcomes(vegas_df)
+    merged = m.join_vegas_and_features(population_df, features_df)
+    assert not (set(merged.columns) & set(m.OUTCOME_COLUMNS))
+    assert "actual_pass_yards" in outcomes_df.columns
+
+
+def test_attach_outcomes_at_confirmation_boundary_merges_back_correctly():
+    evidence_df = pd.DataFrame([
+        {"season": 2025, "week": 1, "team": "KC", "player_clean_key": "pmahomes", "evidence_class": "SUPPORTED"},
+        {"season": 2025, "week": 2, "team": "KC", "player_clean_key": "pmahomes", "evidence_class": "NO_ANALOG_SUPPORT"},
+    ])
+    outcomes_df = pd.DataFrame([
+        {"season": 2025, "week": 1, "team": "KC", "player_clean_key": "pmahomes", "actual_pass_yards": 300, "roi": 0.10},
+        {"season": 2025, "week": 2, "team": "KC", "player_clean_key": "pmahomes", "actual_pass_yards": 200, "roi": -0.05},
+    ])
+    out = m.attach_outcomes_at_confirmation_boundary(evidence_df, outcomes_df)
+    assert list(out["actual_pass_yards"]) == [300, 200]
+    assert list(out["evidence_class"]) == ["SUPPORTED", "NO_ANALOG_SUPPORT"]
+
+
 def test_join_raises_on_missing_feature_column():
     vegas_df = pd.DataFrame([{"season": 2024, "week": 1, "team": "KC", "player_clean_key": "x"}])
     features_df = pd.DataFrame([
