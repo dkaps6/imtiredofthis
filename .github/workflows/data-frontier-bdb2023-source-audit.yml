@@ -1,0 +1,216 @@
+name: Data Frontier BDB2023 Source Audit
+
+on:
+  push:
+    branches:
+      - data-frontier-phase0-bdb-contact-v1
+    paths:
+      - '.github/workflows/data-frontier-bdb2023-source-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_SECRET_RAW: ${{ secrets.KAGGLE_API_TOKEN }}
+  BDB2023_COMPETITION: nfl-big-data-bowl-2023
+
+jobs:
+  audit-bdb2023-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout isolated data-frontier branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Normalize and validate Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          if [ -z "$raw" ]; then
+            echo "KAGGLE_API_TOKEN repository secret is missing or empty."
+            exit 2
+          fi
+          token="$raw"
+          token="${token#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          if [[ "$token" != KGAT_* ]]; then
+            echo "Kaggle secret does not normalize to a KGAT token."
+            exit 2
+          fi
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+          TOKEN_FOR_CHECK="$token" python - <<'PY'
+          import json, os, urllib.request
+          token = os.environ['TOKEN_FOR_CHECK']
+          req = urllib.request.Request(
+              'https://www.kaggle.com/api/v1/oauth2/introspect',
+              data=json.dumps({'token': token}).encode(),
+              headers={'Content-Type': 'application/json'},
+              method='POST',
+          )
+          with urllib.request.urlopen(req, timeout=30) as r:
+              payload = json.load(r)
+          if not payload.get('active'):
+              raise SystemExit('Kaggle token is not active')
+          print('Kaggle token active; value not printed.')
+          PY
+
+      - name: Install source-audit dependencies
+        run: pip install kaggle pandas
+
+      - name: Download official BDB 2023 corpus ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          download_dir="${RUNNER_TEMP}/bdb2023_download"
+          corpus_dir="${RUNNER_TEMP}/bdb2023_corpus"
+          mkdir -p "$download_dir" "$corpus_dir"
+          kaggle competitions download -c "${BDB2023_COMPETITION}" -p "$download_dir"
+          archive="$(find "$download_dir" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          if [ -z "$archive" ]; then
+            echo "Official Kaggle download did not produce a zip archive."
+            exit 2
+          fi
+          unzip -q "$archive" -d "$corpus_dir"
+          rm -f "$archive"
+          echo "BDB2023_CORPUS_DIR=$corpus_dir" >> "$GITHUB_ENV"
+          echo "Official BDB 2023 corpus downloaded to runner temp storage only."
+
+      - name: Build sanitized source audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          audit_dir="${RUNNER_TEMP}/bdb2023_source_audit"
+          mkdir -p "$audit_dir"
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          from pathlib import Path
+          import pandas as pd
+
+          root = Path(os.environ['BDB2023_CORPUS_DIR'])
+          out = Path(os.environ['RUNNER_TEMP']) / 'bdb2023_source_audit'
+          expected = ['games.csv', 'players.csv', 'plays.csv', 'pffScoutingData.csv'] + [f'week{i}.csv' for i in range(1,9)]
+          present = {p.name: p for p in root.rglob('*') if p.is_file()}
+          missing = [name for name in expected if name not in present]
+
+          def sha256(path):
+              h = hashlib.sha256()
+              with path.open('rb') as f:
+                  for chunk in iter(lambda: f.read(1024 * 1024), b''):
+                      h.update(chunk)
+              return h.hexdigest()
+
+          files = []
+          for name in expected:
+              p = present.get(name)
+              if p is None:
+                  continue
+              header = pd.read_csv(p, nrows=0)
+              row_count = sum(1 for _ in p.open('rb')) - 1
+              files.append({
+                  'name': name,
+                  'bytes': p.stat().st_size,
+                  'sha256': sha256(p),
+                  'row_count': max(row_count, 0),
+                  'column_count': len(header.columns),
+                  'columns': list(header.columns),
+              })
+
+          manifest_material = '\n'.join(f"{x['name']}:{x['sha256']}" for x in sorted(files, key=lambda z: z['name']))
+          corpus_sha256 = hashlib.sha256(manifest_material.encode()).hexdigest()
+
+          pff = pd.read_csv(present['pffScoutingData.csv']) if 'pffScoutingData.csv' in present else pd.DataFrame()
+          pff_profile = []
+          for col in pff.columns:
+              s = pff[col]
+              item = {
+                  'column': col,
+                  'dtype': str(s.dtype),
+                  'null_count': int(s.isna().sum()),
+                  'nonnull_count': int(s.notna().sum()),
+                  'nunique_nonnull': int(s.nunique(dropna=True)),
+              }
+              if s.dtype == 'object' or s.nunique(dropna=True) <= 30:
+                  vals = [str(v) for v in s.dropna().drop_duplicates().head(30).tolist()]
+                  item['sample_unique_values'] = vals
+              pff_profile.append(item)
+
+          semantic_regex = re.compile(r'(block|rush|pressure|sack|hit|hurry|respons|assign|beat|win|loss|qb|pass)', re.I)
+          semantic_candidates = [x for x in pff_profile if semantic_regex.search(x['column'])]
+
+          week1 = pd.read_csv(present['week1.csv']) if 'week1.csv' in present else pd.DataFrame()
+          tracking_profile = {
+              'columns': list(week1.columns),
+              'row_count': int(len(week1)),
+              'event_values': sorted([str(v) for v in week1['event'].dropna().unique().tolist()])[:200] if 'event' in week1.columns else [],
+              'displayName_count': int(week1['displayName'].nunique(dropna=True)) if 'displayName' in week1.columns else None,
+          }
+
+          join = {}
+          if not pff.empty:
+              key_cols = [c for c in ['gameId','playId','nflId'] if c in pff.columns]
+              join['pff_key_columns'] = key_cols
+              if key_cols:
+                  join['pff_duplicate_key_rows'] = int(pff.duplicated(key_cols, keep=False).sum())
+          if 'plays.csv' in present:
+              plays = pd.read_csv(present['plays.csv'])
+              if {'gameId','playId'}.issubset(plays.columns):
+                  join['plays_duplicate_game_play_rows'] = int(plays.duplicated(['gameId','playId'], keep=False).sum())
+                  if {'gameId','playId'}.issubset(pff.columns):
+                      pff_pairs = pff[['gameId','playId']].drop_duplicates()
+                      play_pairs = plays[['gameId','playId']].drop_duplicates()
+                      merged = pff_pairs.merge(play_pairs, on=['gameId','playId'], how='left', indicator=True)
+                      join['pff_game_play_pairs'] = int(len(pff_pairs))
+                      join['pff_game_play_pairs_missing_from_plays'] = int((merged['_merge'] != 'both').sum())
+
+          payload = {
+              'audit_version': 'BDB2023_SOURCE_AUDIT_V1',
+              'competition': os.environ.get('BDB2023_COMPETITION'),
+              'git_sha': os.environ.get('GITHUB_SHA'),
+              'raw_competition_files_uploaded': False,
+              'predictive_experiment': False,
+              'production_changed': False,
+              'missing_expected_files': missing,
+              'corpus_sha256': corpus_sha256,
+              'files': files,
+              'pff_profile': pff_profile,
+              'semantic_candidates': semantic_candidates,
+              'tracking_week1_profile': tracking_profile,
+              'join_integrity': join,
+          }
+          (out / 'bdb2023_source_audit.json').write_text(json.dumps(payload, indent=2, sort_keys=True), encoding='utf-8')
+          (out / 'bdb2023_semantic_candidates.json').write_text(json.dumps(semantic_candidates, indent=2, sort_keys=True), encoding='utf-8')
+          (out / 'bdb2023_source_manifest.json').write_text(json.dumps({'corpus_sha256': corpus_sha256, 'files': files}, indent=2, sort_keys=True), encoding='utf-8')
+
+          print(f"missing_expected_files={missing}")
+          print(f"corpus_sha256={corpus_sha256}")
+          print('pff_columns=' + ','.join(pff.columns))
+          print('semantic_candidate_columns=' + ','.join(x['column'] for x in semantic_candidates))
+          print('join_integrity=' + json.dumps(join, sort_keys=True))
+          if missing:
+              raise SystemExit(2)
+          PY
+
+      - name: Upload sanitized BDB 2023 source audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2023-source-audit
+          path: ${{ runner.temp }}/bdb2023_source_audit
+          if-no-files-found: error
+          retention-days: 30
