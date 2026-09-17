@@ -2,10 +2,15 @@
 """Replay PlayerForm while preserving verified current-name identity aliases.
 
 This is an operational recovery wrapper for a preserved paid Full Slate artifact.
-It does not change PlayerForm formulas or model features.  Before invoking the
+It does not change PlayerForm formulas or model features. Before invoking the
 canonical current-roles PlayerForm entry point, it decorates the existing identity
 registry builder so verified aliases remain addressable even when a newer log for
 the same stable GSIS identity/team uses a different name variant.
+
+Persistent aliases still come from ``data/player_identity_aliases.csv``. The Matt
+Hibner recovery row is deliberately replay-local because its GSIS anchor is present
+in the preserved historical game-log registry but not in the older weekly-roster
+source that production alias configuration requires for global promotion.
 """
 from __future__ import annotations
 
@@ -19,6 +24,15 @@ from scripts.runtime_context import resolve_season
 from scripts.utils.player_identity_v3 import clean_player_id, player_name_key
 
 ALIASES = Path("data/player_identity_aliases.csv")
+REPLAY_LOCAL_ALIASES = [
+    {
+        "current_name": "Matt Hibner",
+        "player_id": "00-0040879",
+        "current_team": "BAL",
+        "position": "TE",
+        "anchor_name": "Matthew Hibner",
+    }
+]
 
 
 def _position(value) -> str:
@@ -39,11 +53,19 @@ def _position(value) -> str:
 def install_verified_alias_overlay() -> None:
     if not ALIASES.exists() or ALIASES.stat().st_size == 0:
         raise RuntimeError("verified identity alias config missing/empty")
-    aliases = pd.read_csv(ALIASES, dtype="string").fillna("")
+    persistent = pd.read_csv(ALIASES, dtype="string").fillna("")
     required = {"current_name", "player_id", "current_team", "position"}
-    missing = required - set(aliases.columns)
+    missing = required - set(persistent.columns)
     if missing:
         raise RuntimeError(f"verified identity alias config missing columns: {sorted(missing)}")
+
+    aliases = pd.concat(
+        [persistent[list(required)], pd.DataFrame(REPLAY_LOCAL_ALIASES)[list(required)]],
+        ignore_index=True,
+        sort=False,
+    ).fillna("")
+    if aliases["current_name"].duplicated().any() or aliases["player_id"].duplicated().any():
+        raise RuntimeError("verified/replay-local identity alias overlay contains duplicate names or player IDs")
 
     pf = current_roles.loader.runner.pf
     base_builder = pf.build_identity_registry
@@ -116,7 +138,8 @@ def install_verified_alias_overlay() -> None:
 
         print(
             "[verified_alias_recovery] "
-            f"configured_aliases={len(aliases)} added_registry_alias_rows={len(additions)} registry_rows={len(out)}"
+            f"persistent_aliases={len(persistent)} replay_local_aliases={len(REPLAY_LOCAL_ALIASES)} "
+            f"added_registry_alias_rows={len(additions)} registry_rows={len(out)}"
         )
         return out.reset_index(drop=True)
 
