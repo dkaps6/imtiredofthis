@@ -1,0 +1,338 @@
+name: Data Frontier BDB2026 Throw Window Benchmark
+
+on:
+  push:
+    branches:
+      - data-frontier-bdb2026-throw-window-benchmark
+    paths:
+      - '.github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_SECRET_RAW: ${{ secrets.KAGGLE_API_TOKEN }}
+  COMPETITION: nfl-big-data-bowl-2026-analytics
+  EXPECTED_CORPUS_SHA256: 228554c6600ac4e73529e5b6309193c8a3371acca7b4bc59792188acd814fb07
+
+jobs:
+  benchmark-throw-window:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Normalize Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          token="${raw#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          [[ "$token" == KGAT_* ]]
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+
+      - name: Install dependencies
+        run: pip install kaggle pandas numpy
+
+      - name: Download official BDB 2026 Analytics corpus ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/bdb2026tw_download"
+          c="${RUNNER_TEMP}/bdb2026tw_corpus"
+          mkdir -p "$d" "$c"
+          kaggle competitions download -c "${COMPETITION}" -p "$d"
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$z"
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "CORPUS_DIR=$c" >> "$GITHUB_ENV"
+
+      - name: Run 2023 throw-window geometry benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/bdb2026_throw_window"
+          python - <<'PY'
+          import hashlib, json, math, os
+          from pathlib import Path
+          import numpy as np
+          import pandas as pd
+
+          root = Path(os.environ['CORPUS_DIR'])
+          outdir = Path(os.environ['RUNNER_TEMP']) / 'bdb2026_throw_window'
+          expected_hash = os.environ['EXPECTED_CORPUS_SHA256']
+
+          # Recompute the same file-content corpus fingerprint used by the source audit.
+          paths = sorted([p for p in root.rglob('*') if p.is_file()])
+          manifest = []
+          for p in paths:
+              h = hashlib.sha256()
+              with p.open('rb') as f:
+                  for chunk in iter(lambda: f.read(1024*1024), b''):
+                      h.update(chunk)
+              manifest.append((str(p.relative_to(root)), h.hexdigest()))
+          material = '\n'.join(f'{name}:{sha}' for name, sha in manifest)
+          corpus_hash = hashlib.sha256(material.encode()).hexdigest()
+          if corpus_hash != expected_hash:
+              raise SystemExit(f'Corpus hash mismatch: {corpus_hash} != {expected_hash}')
+
+          supp = pd.read_csv(next(root.rglob('supplementary_data.csv')))
+          supp = supp[supp['season'].eq(2023)].copy()
+          supp_keys = ['game_id','play_id']
+
+          def safe_quantiles(series):
+              s = pd.to_numeric(series, errors='coerce').dropna()
+              if s.empty:
+                  return {'n':0,'mean':None,'p10':None,'p25':None,'median':None,'p75':None,'p90':None}
+              q = s.quantile([.10,.25,.50,.75,.90])
+              return {
+                  'n': int(len(s)),
+                  'mean': float(s.mean()),
+                  'p10': float(q.loc[.10]),
+                  'p25': float(q.loc[.25]),
+                  'median': float(q.loc[.50]),
+                  'p75': float(q.loc[.75]),
+                  'p90': float(q.loc[.90]),
+              }
+
+          def geometry_at_frame(frame, target_id, land_x, land_y):
+              target = frame[frame['nfl_id'].eq(target_id)]
+              defense = frame[frame['player_role'].eq('Defensive Coverage')]
+              if len(target) != 1 or defense.empty:
+                  return None
+              tr = target.iloc[0]
+              dx = defense['x'].to_numpy(dtype=float) - float(tr['x'])
+              dy = defense['y'].to_numpy(dtype=float) - float(tr['y'])
+              dist = np.hypot(dx, dy)
+              ldx = defense['x'].to_numpy(dtype=float) - float(land_x)
+              ldy = defense['y'].to_numpy(dtype=float) - float(land_y)
+              ldist = np.hypot(ldx, ldy)
+              sdist = np.sort(dist)
+              return {
+                  'target_x_release': float(tr['x']),
+                  'target_y_release': float(tr['y']),
+                  'target_speed_release': float(tr['s']) if pd.notna(tr['s']) else np.nan,
+                  'target_accel_release': float(tr['a']) if pd.notna(tr['a']) else np.nan,
+                  'target_to_land_release': float(math.hypot(float(tr['x'])-float(land_x), float(tr['y'])-float(land_y))),
+                  'nearest_defender_to_target_release': float(sdist[0]),
+                  'second_defender_to_target_release': float(sdist[1]) if len(sdist) > 1 else np.nan,
+                  'nearest_defender_to_land_release': float(np.min(ldist)),
+                  'defenders_within_1_target_release': int((dist <= 1).sum()),
+                  'defenders_within_2_target_release': int((dist <= 2).sum()),
+                  'defenders_within_3_target_release': int((dist <= 3).sum()),
+                  'defenders_within_5_target_release': int((dist <= 5).sum()),
+                  'defenders_within_1_land_release': int((ldist <= 1).sum()),
+                  'defenders_within_2_land_release': int((ldist <= 2).sum()),
+                  'defenders_within_3_land_release': int((ldist <= 3).sum()),
+                  'defenders_within_5_land_release': int((ldist <= 5).sum()),
+                  'defender_count_release': int(len(defense)),
+              }
+
+          def terminal_output_geometry(out, meta, target_id, land_x, land_y):
+              if out.empty:
+                  return None
+              out = out.merge(meta[['nfl_id','player_role']].drop_duplicates(), on='nfl_id', how='left')
+              target_out = out[out['nfl_id'].eq(target_id)]
+              if target_out.empty:
+                  return None
+              final_frame = int(out['frame_id'].max())
+              ff = out[out['frame_id'].eq(final_frame)]
+              tr = ff[ff['nfl_id'].eq(target_id)]
+              defense = ff[ff['player_role'].eq('Defensive Coverage')]
+              if len(tr) != 1:
+                  return None
+              tr = tr.iloc[0]
+              result = {
+                  'terminal_frame_id': final_frame,
+                  'target_to_land_terminal': float(math.hypot(float(tr['x'])-float(land_x), float(tr['y'])-float(land_y))),
+                  'predicted_defender_count_terminal': int(len(defense)),
+                  'nearest_predicted_defender_to_target_terminal': np.nan,
+                  'nearest_predicted_defender_to_land_terminal': np.nan,
+                  'minimum_nearest_predicted_defender_postrelease': np.nan,
+              }
+              if not defense.empty:
+                  dist = np.hypot(defense['x'].to_numpy(dtype=float)-float(tr['x']), defense['y'].to_numpy(dtype=float)-float(tr['y']))
+                  ldist = np.hypot(defense['x'].to_numpy(dtype=float)-float(land_x), defense['y'].to_numpy(dtype=float)-float(land_y))
+                  result['nearest_predicted_defender_to_target_terminal'] = float(np.min(dist))
+                  result['nearest_predicted_defender_to_land_terminal'] = float(np.min(ldist))
+
+              mins = []
+              for _, gf in out.groupby('frame_id', sort=False):
+                  t = gf[gf['nfl_id'].eq(target_id)]
+                  d = gf[gf['player_role'].eq('Defensive Coverage')]
+                  if len(t) == 1 and not d.empty:
+                      t = t.iloc[0]
+                      mins.append(float(np.hypot(d['x'].to_numpy(dtype=float)-float(t['x']), d['y'].to_numpy(dtype=float)-float(t['y'])).min()))
+              if mins:
+                  result['minimum_nearest_predicted_defender_postrelease'] = float(min(mins))
+              return result
+
+          records = []
+          weekly = []
+          structural = {
+              'plays_total': 0,
+              'plays_target_role_not_unique': 0,
+              'plays_missing_final_release_target_or_defense': 0,
+              'plays_target_not_player_to_predict': 0,
+              'plays_missing_target_output': 0,
+              'plays_missing_predicted_defender_output': 0,
+          }
+
+          for week in range(1, 19):
+              inp = pd.read_csv(next(root.rglob(f'input_2023_w{week:02d}.csv')))
+              out = pd.read_csv(next(root.rglob(f'output_2023_w{week:02d}.csv')))
+              meta = inp[['game_id','play_id','nfl_id','player_role','player_to_predict']].drop_duplicates()
+              wk_supp = supp[supp['week'].eq(week)].copy()
+
+              week_records = []
+              for (game_id, play_id), play in inp.groupby(['game_id','play_id'], sort=False):
+                  structural['plays_total'] += 1
+                  target_ids = play.loc[play['player_role'].eq('Targeted Receiver'),'nfl_id'].dropna().unique()
+                  if len(target_ids) != 1:
+                      structural['plays_target_role_not_unique'] += 1
+                      continue
+                  target_id = target_ids[0]
+                  pmeta = meta[(meta['game_id'].eq(game_id)) & (meta['play_id'].eq(play_id))]
+                  target_predict = pmeta.loc[pmeta['nfl_id'].eq(target_id),'player_to_predict']
+                  if target_predict.empty or not bool(target_predict.iloc[0]):
+                      structural['plays_target_not_player_to_predict'] += 1
+
+                  release_frame_id = int(play['frame_id'].max())
+                  release = play[play['frame_id'].eq(release_frame_id)]
+                  land_x = float(play['ball_land_x'].iloc[0])
+                  land_y = float(play['ball_land_y'].iloc[0])
+                  g = geometry_at_frame(release, target_id, land_x, land_y)
+                  if g is None:
+                      structural['plays_missing_final_release_target_or_defense'] += 1
+                      continue
+
+                  pout = out[(out['game_id'].eq(game_id)) & (out['play_id'].eq(play_id))]
+                  og = terminal_output_geometry(pout, pmeta, target_id, land_x, land_y)
+                  if og is None:
+                      structural['plays_missing_target_output'] += 1
+                  elif og['predicted_defender_count_terminal'] == 0:
+                      structural['plays_missing_predicted_defender_output'] += 1
+
+                  srow = wk_supp[(wk_supp['game_id'].eq(game_id)) & (wk_supp['play_id'].eq(play_id))]
+                  base = {
+                      'week': week,
+                      'route': srow['route_of_targeted_receiver'].iloc[0] if len(srow) else None,
+                      'coverage_man_zone': srow['team_coverage_man_zone'].iloc[0] if len(srow) else None,
+                      'coverage_type': srow['team_coverage_type'].iloc[0] if len(srow) else None,
+                      'receiver_alignment': srow['receiver_alignment'].iloc[0] if len(srow) else None,
+                      'release_frame_id': release_frame_id,
+                  }
+                  base.update(g)
+                  if og is not None:
+                      base.update(og)
+                  week_records.append(base)
+                  records.append(base)
+
+              wdf = pd.DataFrame(week_records)
+              weekly.append({
+                  'week': week,
+                  'plays_with_release_geometry': int(len(wdf)),
+                  'plays_with_terminal_target_geometry': int(wdf['target_to_land_terminal'].notna().sum()) if len(wdf) else 0,
+                  'release_nearest_defender': safe_quantiles(wdf['nearest_defender_to_target_release']) if len(wdf) else safe_quantiles(pd.Series(dtype=float)),
+                  'release_target_to_land': safe_quantiles(wdf['target_to_land_release']) if len(wdf) else safe_quantiles(pd.Series(dtype=float)),
+                  'release_nearest_defender_to_land': safe_quantiles(wdf['nearest_defender_to_land_release']) if len(wdf) else safe_quantiles(pd.Series(dtype=float)),
+                  'terminal_target_to_land': safe_quantiles(wdf.get('target_to_land_terminal', pd.Series(dtype=float))),
+                  'terminal_nearest_predicted_defender_to_target': safe_quantiles(wdf.get('nearest_predicted_defender_to_target_terminal', pd.Series(dtype=float))),
+                  'postrelease_min_nearest_predicted_defender': safe_quantiles(wdf.get('minimum_nearest_predicted_defender_postrelease', pd.Series(dtype=float))),
+              })
+
+          df = pd.DataFrame(records)
+
+          def grouped_summary(group_col):
+              result = {}
+              if group_col not in df.columns:
+                  return result
+              for key, g in df.groupby(group_col, dropna=False):
+                  k = '<NULL>' if pd.isna(key) else str(key)
+                  result[k] = {
+                      'plays': int(len(g)),
+                      'release_nearest_defender': safe_quantiles(g['nearest_defender_to_target_release']),
+                      'release_target_to_land': safe_quantiles(g['target_to_land_release']),
+                      'release_nearest_defender_to_land': safe_quantiles(g['nearest_defender_to_land_release']),
+                      'terminal_target_to_land': safe_quantiles(g.get('target_to_land_terminal', pd.Series(dtype=float))),
+                      'terminal_nearest_predicted_defender_to_target': safe_quantiles(g.get('nearest_predicted_defender_to_target_terminal', pd.Series(dtype=float))),
+                      'postrelease_min_nearest_predicted_defender': safe_quantiles(g.get('minimum_nearest_predicted_defender_postrelease', pd.Series(dtype=float))),
+                  }
+              return result
+
+          payload = {
+              'benchmark_version': 'BDB2026_THROW_WINDOW_GEOMETRY_V1',
+              'git_sha': os.environ.get('GITHUB_SHA'),
+              'competition': os.environ.get('COMPETITION'),
+              'corpus_sha256': corpus_hash,
+              'raw_competition_files_uploaded': False,
+              'per_play_rows_uploaded': False,
+              'predictive_experiment': False,
+              'production_changed': False,
+              'exact_coverage_responsibility_claimed': False,
+              'structural_diagnostics': structural,
+              'pooled': {
+                  'plays_with_release_geometry': int(len(df)),
+                  'plays_with_terminal_target_geometry': int(df['target_to_land_terminal'].notna().sum()),
+                  'release_nearest_defender': safe_quantiles(df['nearest_defender_to_target_release']),
+                  'release_second_nearest_defender': safe_quantiles(df['second_defender_to_target_release']),
+                  'release_target_to_land': safe_quantiles(df['target_to_land_release']),
+                  'release_nearest_defender_to_land': safe_quantiles(df['nearest_defender_to_land_release']),
+                  'release_defenders_within_2_target': safe_quantiles(df['defenders_within_2_target_release']),
+                  'release_defenders_within_3_target': safe_quantiles(df['defenders_within_3_target_release']),
+                  'terminal_target_to_land': safe_quantiles(df['target_to_land_terminal']),
+                  'terminal_nearest_predicted_defender_to_target': safe_quantiles(df['nearest_predicted_defender_to_target_terminal']),
+                  'terminal_nearest_predicted_defender_to_land': safe_quantiles(df['nearest_predicted_defender_to_land_terminal']),
+                  'postrelease_min_nearest_predicted_defender': safe_quantiles(df['minimum_nearest_predicted_defender_postrelease']),
+              },
+              'by_week': weekly,
+              'by_route': grouped_summary('route'),
+              'by_man_zone': grouped_summary('coverage_man_zone'),
+              'by_coverage_type': grouped_summary('coverage_type'),
+              'notes': [
+                  'Release frame is the final published pre-throw input frame for the play.',
+                  'Terminal frame is the final published post-release output frame for the play; this benchmark does not independently relabel it as catch/arrival without an event marker.',
+                  'Nearest defender is geometric proximity only and is not treated as exact coverage responsibility.',
+                  'Post-release nearest-defender metrics use only defenders included in the official player_to_predict output set.',
+              ],
+          }
+          (outdir/'bdb2026_throw_window_geometry_v1.json').write_text(json.dumps(payload, indent=2, sort_keys=True), encoding='utf-8')
+          (outdir/'bdb2026_throw_window_source_manifest.json').write_text(json.dumps({'corpus_sha256': corpus_hash, 'file_count': len(manifest), 'files': [{'name':n,'sha256':s} for n,s in manifest]}, indent=2, sort_keys=True), encoding='utf-8')
+
+          print(json.dumps({'structural_diagnostics': structural, 'pooled': payload['pooled']}, indent=2, sort_keys=True))
+
+          total = structural['plays_total']
+          if total <= 0:
+              raise SystemExit('No plays found')
+          if structural['plays_target_role_not_unique'] != 0:
+              raise SystemExit('Targeted Receiver role is not unique on one or more plays')
+          release_rate = len(df) / total
+          if release_rate < 0.995:
+              raise SystemExit(f'Release geometry coverage below 99.5%: {release_rate:.6f}')
+          if structural['plays_target_not_player_to_predict'] != 0:
+              raise SystemExit('Targeted receiver is not player_to_predict on one or more plays')
+          terminal_rate = df['target_to_land_terminal'].notna().mean()
+          if terminal_rate < 0.995:
+              raise SystemExit(f'Terminal target geometry coverage below 99.5%: {terminal_rate:.6f}')
+          PY
+
+      - name: Upload sanitized throw-window benchmark
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2026-throw-window-geometry-v1
+          path: ${{ runner.temp }}/bdb2026_throw_window
+          if-no-files-found: error
+          retention-days: 30
