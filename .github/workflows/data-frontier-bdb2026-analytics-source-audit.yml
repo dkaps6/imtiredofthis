@@ -1,0 +1,147 @@
+name: Data Frontier BDB2026 Analytics Source Audit
+
+on:
+  push:
+    branches:
+      - data-frontier-phase0-bdb-contact-v1
+    paths:
+      - '.github/workflows/data-frontier-bdb2026-analytics-source-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_SECRET_RAW: ${{ secrets.KAGGLE_API_TOKEN }}
+  COMPETITION: nfl-big-data-bowl-2026-analytics
+
+jobs:
+  audit-bdb2026-analytics-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Normalize Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          token="${raw#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          [[ "$token" == KGAT_* ]]
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+      - name: Install dependencies
+        run: pip install kaggle pandas
+      - name: Download official BDB 2026 Analytics corpus ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/bdb2026a_download"
+          c="${RUNNER_TEMP}/bdb2026a_corpus"
+          mkdir -p "$d" "$c"
+          kaggle competitions download -c "${COMPETITION}" -p "$d"
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$z"
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "CORPUS_DIR=$c" >> "$GITHUB_ENV"
+      - name: Build sanitized source audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/bdb2026a_source_audit"
+          python - <<'PY'
+          import hashlib, json, os, re
+          from pathlib import Path
+          import pandas as pd
+
+          root=Path(os.environ['CORPUS_DIR'])
+          out=Path(os.environ['RUNNER_TEMP'])/'bdb2026a_source_audit'
+          paths=sorted([p for p in root.rglob('*') if p.is_file()])
+          files=[]
+          def sha(path):
+              h=hashlib.sha256()
+              with path.open('rb') as f:
+                  for chunk in iter(lambda:f.read(1024*1024),b''): h.update(chunk)
+              return h.hexdigest()
+          for p in paths:
+              rel=str(p.relative_to(root))
+              item={'name':rel,'bytes':p.stat().st_size,'sha256':sha(p)}
+              if p.suffix.lower()=='.csv':
+                  hdr=pd.read_csv(p,nrows=0)
+                  item['column_count']=len(hdr.columns)
+                  item['columns']=list(hdr.columns)
+              files.append(item)
+          material='\n'.join(f"{x['name']}:{x['sha256']}" for x in files)
+          corpus_hash=hashlib.sha256(material.encode()).hexdigest()
+
+          csvs=[x for x in files if x['name'].lower().endswith('.csv')]
+          input_files=[x for x in csvs if 'input' in x['name'].lower()]
+          output_files=[x for x in csvs if 'output' in x['name'].lower()]
+          supplementary=[x for x in csvs if 'supplement' in x['name'].lower()]
+          trainish=[x for x in csvs if 'train' in x['name'].lower()]
+          testish=[x for x in csvs if 'test' in x['name'].lower()]
+
+          samples={}
+          candidates=[]
+          for label, group in [('input',input_files),('output',output_files),('supplementary',supplementary),('train',trainish),('test',testish)]:
+              if group:
+                  p=root/group[0]['name']
+                  df=pd.read_csv(p,nrows=5000)
+                  samples[label]={
+                      'representative_file':group[0]['name'],
+                      'sample_rows_read':int(len(df)),
+                      'columns':list(df.columns),
+                      'null_counts_sample':{str(c):int(df[c].isna().sum()) for c in df.columns},
+                      'nunique_sample':{str(c):int(df[c].nunique(dropna=True)) for c in df.columns},
+                  }
+                  semantic=[c for c in df.columns if re.search(r'(game|play|player|nfl|frame|x|y|speed|accel|dir|orient|role|side|target|landing|route|week|height|weight)',c,re.I)]
+                  samples[label]['semantic_candidate_columns']=semantic
+                  candidates.extend(semantic)
+
+          payload={
+              'audit_version':'BDB2026_ANALYTICS_SOURCE_AUDIT_V1',
+              'competition':os.environ.get('COMPETITION'),
+              'git_sha':os.environ.get('GITHUB_SHA'),
+              'raw_competition_files_uploaded':False,
+              'predictive_experiment':False,
+              'production_changed':False,
+              'file_count':len(files),
+              'csv_count':len(csvs),
+              'corpus_sha256':corpus_hash,
+              'input_file_count':len(input_files),
+              'output_file_count':len(output_files),
+              'supplementary_file_count':len(supplementary),
+              'train_named_file_count':len(trainish),
+              'test_named_file_count':len(testish),
+              'files':files,
+              'representative_samples':samples,
+              'semantic_candidate_columns_union':sorted(set(candidates)),
+          }
+          (out/'bdb2026_analytics_source_audit.json').write_text(json.dumps(payload,indent=2,sort_keys=True),encoding='utf-8')
+          (out/'bdb2026_analytics_source_manifest.json').write_text(json.dumps({'corpus_sha256':corpus_hash,'files':files},indent=2,sort_keys=True),encoding='utf-8')
+          print('file_count='+str(len(files)))
+          print('csv_count='+str(len(csvs)))
+          print('corpus_sha256='+corpus_hash)
+          print('input_files='+str(len(input_files))+' output_files='+str(len(output_files))+' supplementary='+str(len(supplementary)))
+          print('sample_schema='+json.dumps(samples,sort_keys=True))
+          if len(csvs)<20: raise SystemExit('Unexpectedly small BDB 2026 Analytics CSV corpus')
+          if not input_files or not output_files: raise SystemExit('Expected input/output file families not found')
+          PY
+      - name: Upload sanitized source audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2026-analytics-source-audit
+          path: ${{ runner.temp }}/bdb2026a_source_audit
+          if-no-files-found: error
+          retention-days: 30
