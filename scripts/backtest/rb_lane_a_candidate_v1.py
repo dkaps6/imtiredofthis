@@ -455,3 +455,138 @@ def check_stable_identity_gate(deployable_candidate: pd.DataFrame) -> dict:
         "rows_checked": int(len(non_scored)),
         "max_abs_delta": max_delta,
     }
+
+
+# ---------------------------------------------------------------------------
+# Orchestration: per-event room construction + reallocation across a rotation
+# ---------------------------------------------------------------------------
+
+
+def build_active_and_pre_transition_rooms(
+    scored_events: pd.DataFrame, roster_state: pd.DataFrame
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """For every scored V1 event (season, week, team, prior_season,
+    prior_week), extract the active (post-transition) room at the event's
+    own coordinates and the pre-transition room re-tagged onto those same
+    coordinates (membership from `prior_season`/`prior_week`, per
+    `compute_role_weights_and_hhi`'s corrected contract). Both outputs carry
+    `name_key` and `player_clean_key` from `roster_state` (Gate 0's
+    `harmonize_roster_membership`, extended with `player_clean_key`).
+    """
+    required = {"season", "week", "team", "name_key", "player_clean_key"}
+    missing = required - set(roster_state.columns)
+    if missing:
+        raise RuntimeError(f"build_active_and_pre_transition_rooms: roster_state missing {sorted(missing)}")
+
+    active_frames, pre_frames = [], []
+    for ev in scored_events.itertuples(index=False):
+        active = roster_state.loc[
+            (roster_state["season"] == ev.season)
+            & (roster_state["week"] == ev.week)
+            & (roster_state["team"] == ev.team)
+        ]
+        active_frames.append(active)
+
+        pre = roster_state.loc[
+            (roster_state["season"] == ev.prior_season)
+            & (roster_state["week"] == ev.prior_week)
+            & (roster_state["team"] == ev.team)
+        ].copy()
+        pre["season"] = ev.season
+        pre["week"] = ev.week
+        pre_frames.append(pre)
+
+    active_room = (
+        pd.concat(active_frames, ignore_index=True).drop_duplicates(["season", "week", "team", "player_clean_key"])
+        if active_frames
+        else roster_state.iloc[0:0].copy()
+    )
+    pre_transition_room = (
+        pd.concat(pre_frames, ignore_index=True).drop_duplicates(["season", "week", "team", "player_clean_key"])
+        if pre_frames
+        else roster_state.iloc[0:0].copy()
+    )
+    return active_room, pre_transition_room
+
+
+def run_candidate_mechanism_for_rotation(
+    *,
+    scored_events: pd.DataFrame,
+    roster_state: pd.DataFrame,
+    player_logs: pd.DataFrame,
+    component_predictions: pd.DataFrame,
+    rotation: int,
+) -> dict:
+    """Full "Candidate mechanism" pipeline (Amendments 1-2, 5, 8) for one
+    rotation: conservation pool -> role weights/HHI -> HHI-dampened
+    reallocation -> Amendment-8 translation to rush yards, across every
+    scored V1 transition team-week. Returns the per-player candidate rows
+    plus disclosure of any team-weeks excluded for all-zero role weights
+    (Amendment 1 step 3 -- never silently dropped).
+    """
+    from scripts.backtest.rb_lane_a_comparator_reconstruction_v1 import (
+        build_dual_market_promotion_comparator,
+    )
+
+    if scored_events.empty:
+        return {
+            "candidate_rows": pd.DataFrame(),
+            "excluded_all_zero_weight_team_weeks": [],
+            "dual_market_comparator": pd.DataFrame(),
+        }
+
+    active_room, pre_transition_room = build_active_and_pre_transition_rooms(scored_events, roster_state)
+    active_enriched, hhi_lookup = compute_role_weights_and_hhi(active_room, pre_transition_room, player_logs)
+
+    historical_share = compute_historical_rb_room_rush_share(player_logs)
+    pool = compute_conservation_pool(component_predictions, historical_share)
+    pool_by_team_week = {
+        (int(r["season"]), int(r["week"]), r["team"]): r for _, r in pool.iterrows()
+    }
+
+    dual_market = build_dual_market_promotion_comparator(component_predictions, rotation)
+
+    candidate_frames = []
+    excluded = []
+    for (season, week, team), room_group in active_enriched.groupby(["season", "week", "team"], sort=False):
+        pool_row = pool_by_team_week.get((int(season), int(week), team))
+        if pool_row is None or pd.isna(pool_row.get("pool")):
+            excluded.append(
+                {"season": int(season), "week": int(week), "team": team, "reason": "no_conservation_pool"}
+            )
+            continue
+        realloc, meta = compute_hhi_dampened_reallocation(room_group, hhi_lookup, pool_row.to_dict())
+        if meta["all_zero_weights"]:
+            excluded.append({"season": int(season), "week": int(week), "team": team, "reason": "all_zero_weights"})
+            continue
+        candidate_frames.append(realloc)
+
+    candidate_att = (
+        pd.concat(candidate_frames, ignore_index=True) if candidate_frames else pd.DataFrame()
+    )
+    if candidate_att.empty:
+        return {
+            "candidate_rows": pd.DataFrame(),
+            "excluded_all_zero_weight_team_weeks": excluded,
+            "dual_market_comparator": dual_market,
+        }
+
+    constructibility_input = candidate_att[["season", "week", "team", "player_clean_key"]].drop_duplicates()
+    constructibility = check_rush_yard_translation_constructibility(constructibility_input, dual_market)
+    if constructibility["disposition"] != "RUSH_YARD_TRANSLATION_CONSTRUCTIBLE":
+        return {
+            "candidate_rows": pd.DataFrame(),
+            "excluded_all_zero_weight_team_weeks": excluded,
+            "dual_market_comparator": dual_market,
+            "constructibility": constructibility,
+        }
+
+    incumbent_ypc = compute_incumbent_ypc(dual_market)
+    translated = translate_candidate_rush_yards(candidate_att, incumbent_ypc)
+
+    return {
+        "candidate_rows": translated,
+        "excluded_all_zero_weight_team_weeks": excluded,
+        "dual_market_comparator": dual_market,
+        "constructibility": constructibility,
+    }

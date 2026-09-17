@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 
 from scripts.backtest.rb_lane_a_candidate_v1 import (
+    build_active_and_pre_transition_rooms,
     build_deployable_candidate,
     build_mechanism_diagnostic,
     check_rush_yard_translation_constructibility,
@@ -281,3 +282,77 @@ def test_build_mechanism_diagnostic_fails_closed_on_missing_columns():
     )
     with pytest.raises(RuntimeError, match="candidate frame missing"):
         build_mechanism_diagnostic(scored, mechanism)
+
+
+def test_build_active_and_pre_transition_rooms_retags_prior_week_onto_transition_week():
+    roster_state = pd.DataFrame(
+        [
+            {"season": 2024, "week": 2, "team": "TB", "name_key": "p1", "player_clean_key": "p1"},
+            {"season": 2024, "week": 2, "team": "TB", "name_key": "p2", "player_clean_key": "p2"},
+            {"season": 2024, "week": 3, "team": "TB", "name_key": "p1", "player_clean_key": "p1"},
+        ]
+    )
+    scored_events = pd.DataFrame(
+        [{"season": 2024, "week": 3, "team": "TB", "prior_season": 2024, "prior_week": 2}]
+    )
+    active, pre = build_active_and_pre_transition_rooms(scored_events, roster_state)
+    assert active["player_clean_key"].tolist() == ["p1"]
+    assert set(pre["player_clean_key"]) == {"p1", "p2"}
+    # pre-transition room is re-tagged onto the transition week's own coordinates
+    assert set(pre["week"]) == {3}
+
+
+def test_run_candidate_mechanism_for_rotation_end_to_end():
+    from scripts.backtest.rb_lane_a_candidate_v1 import run_candidate_mechanism_for_rotation
+
+    roster_state = pd.DataFrame(
+        [
+            {"season": 2024, "week": 2, "team": "TB", "name_key": "p1", "player_clean_key": "p1"},
+            {"season": 2024, "week": 2, "team": "TB", "name_key": "p2", "player_clean_key": "p2"},
+            {"season": 2024, "week": 3, "team": "TB", "name_key": "p1", "player_clean_key": "p1"},
+        ]
+    )
+    scored_events = pd.DataFrame(
+        [{"season": 2024, "week": 3, "team": "TB", "prior_season": 2024, "prior_week": 2}]
+    )
+    player_logs = pd.DataFrame(
+        [
+            _player_log_row(2024, 1, "TB", "RB", rushes=12, rush_yards=50, name_key="p1"),
+            _player_log_row(2024, 1, "TB", "RB", rushes=3, rush_yards=10, name_key="p2"),
+            _player_log_row(2024, 1, "TB", "QB", rushes=2, name_key="qb1"),
+            _player_log_row(2024, 2, "TB", "RB", rushes=14, rush_yards=60, name_key="p1"),
+            _player_log_row(2024, 2, "TB", "RB", rushes=2, rush_yards=8, name_key="p2"),
+            _player_log_row(2024, 2, "TB", "QB", rushes=1, name_key="qb1"),
+            # week 3 itself needs a row so compute_historical_rb_room_rush_share
+            # knows this team-week exists to compute a trailing share for --
+            # its own rushes don't matter, only prior weeks feed the mean.
+            _player_log_row(2024, 3, "TB", "RB", rushes=16, rush_yards=70, name_key="p1"),
+        ]
+    )
+    cp_rows = []
+    for market, mc, ml, state in [("rush_att", 15.0, 14.0, 16.0), ("rush_yards", 80.0, 75.0, 85.0)]:
+        cp_rows.append(
+            {
+                "season": 2024, "week": 3, "team": "TB", "player_clean_key": "p1", "market": market,
+                "mc_proj": mc, "ml_proj": ml, "state_proj": state,
+                "mc_projected_plays": 60.0, "mc_dropback_rate": 0.6,
+            }
+        )
+    component_predictions = pd.DataFrame(cp_rows)
+
+    result = run_candidate_mechanism_for_rotation(
+        scored_events=scored_events,
+        roster_state=roster_state,
+        player_logs=player_logs,
+        component_predictions=component_predictions,
+        rotation=1,
+    )
+    assert result["excluded_all_zero_weight_team_weeks"] == []
+    rows = result["candidate_rows"]
+    assert len(rows) == 1
+    assert rows.iloc[0]["player_clean_key"] == "p1"
+    assert rows.iloc[0]["candidate_rush_yards"] > 0
+    # sole active-room player after the departure gets the whole conservation
+    # pool: pool = 60 * (1-0.6) * mean(week1_rb_share=15/17, week2_rb_share=16/17)
+    expected_pool = 60.0 * 0.4 * (((12 + 3) / 17) + ((14 + 2) / 17)) / 2
+    assert rows.iloc[0]["candidate_att"] == pytest.approx(expected_pool, rel=1e-6)
