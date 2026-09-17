@@ -27,17 +27,31 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def corpus_sha256(root: Path) -> tuple[str, list[dict]]:
-    files = []
-    for path in sorted(p for p in root.rglob("*") if p.is_file()):
-        rel = str(path.relative_to(root))
-        files.append(
-            {
-                "name": rel,
-                "bytes": int(path.stat().st_size),
-                "sha256": sha256_file(path),
-            }
-        )
+def corpus_sha256(
+    root: Path,
+    expected_names: list[str] | None = None,
+    *,
+    relative_names: bool = True,
+) -> tuple[str, list[dict]]:
+    if expected_names is None:
+        paths = sorted(p for p in root.rglob("*") if p.is_file())
+        named = [(str(path.relative_to(root)) if relative_names else path.name, path) for path in paths]
+    else:
+        present = {p.name: p for p in root.rglob("*") if p.is_file()}
+        missing = [name for name in expected_names if name not in present]
+        if missing:
+            raise ValueError(f"expected source files missing: {missing}")
+        named = [(name, present[name]) for name in expected_names]
+
+    files = [
+        {
+            "name": name,
+            "bytes": int(path.stat().st_size),
+            "sha256": sha256_file(path),
+        }
+        for name, path in named
+    ]
+    files = sorted(files, key=lambda x: x["name"])
     material = "\n".join(f"{x['name']}:{x['sha256']}" for x in files)
     return hashlib.sha256(material.encode("utf-8")).hexdigest(), files
 
