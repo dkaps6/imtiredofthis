@@ -57,7 +57,7 @@ jobs:
           cp -a replay_source/outputs/. outputs/
           git show HEAD:data/player_identity_aliases.csv > data/player_identity_aliases.csv
           test -s data/player_identity_aliases.csv
-          grep -q '^Matt Hibner,Matthew Hibner,00-0040879,BAL,TE,' data/player_identity_aliases.csv
+          grep -q '^Joshua Palmer,Josh Palmer,00-0036988,BUF,WR,' data/player_identity_aliases.csv
           test -s data/live_odds_status.json
           test -s outputs/odds_game.csv
           test -s outputs/props_raw_compact.csv
