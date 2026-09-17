@@ -24,8 +24,9 @@ Authoritative lineage before this plan freeze:
 - Prospective design review comments: `5707262504`, `5707304196`, `5707483934`, `5707523675`, `5714574380`
 - Initial prospective plan freeze: `7fac65c960422bd87d40f45cff85ba5f4fc55c85`
 - Implementation-readiness ambiguity review: Issue #535 comment `5714817311`
+- Chronology two-rotation amendment (supersedes Section 4 and its downstream year-references only; see Section 16): Issue #535 comments `5715606827`, `5715781636`, `5715821516`
 
-As of this plan freeze and the prospective implementation clarifications in Section 15, no Workhorse-Gate classifier has been fit; no event probabilities have been generated; no feature/outcome relationship has been inspected; no cutoff has been selected; V2 has not been rerun; and 2024-2025 outcomes have not been reopened for this gate experiment.
+As of this plan freeze, the prospective implementation clarifications in Section 15, and the chronology supersession in Section 16, no Workhorse-Gate classifier has been fit; no event probabilities have been generated; no feature/outcome relationship has been inspected; no cutoff has been selected; V2 has not been rerun; and 2024-2025 outcomes have not been reopened for this gate experiment.
 
 ## 2. Scientific question
 
@@ -51,22 +52,32 @@ if and only if at least one post-transition active RB/FB/HB records **>=20 actua
 
 The >=20 boundary is inherited from the already-preregistered Lane-A protected-workload cohort. It was not selected by searching the V2 result.
 
-Actual rushing attempts are target/evaluation data only. They may not enter transition detection, feature construction, scaling, fitting, cutoff selection inputs other than the 2022 binary labels, or any pregame production value.
+Actual rushing attempts are target/evaluation data only. They may not enter transition detection, feature construction, scaling, fitting, cutoff selection inputs other than each rotation's own cutoff-year binary labels (Section 16), or any pregame production value.
 
 Do not use `actual rush_yards >= 100` as a training target. That slice mixes workload and efficiency and remains evaluation-only.
 
-## 4. Frozen temporal design
+## 4. Frozen temporal design (two-rotation, see Section 16)
 
-The chronology is fixed:
+The chronology uses two independent historical rotations rather than a single fit/calibrate/confirm sequence, so a production-integration review does not have to wait on a full forward 2026 season for its only confirmation evidence (Section 16).
 
-- **2018:** history seed only. Never scored as a gate-development target.
+- **2018:** history seed only, for both rotations. Never scored as a gate-development target.
+
+**Rotation A**
+- **2019-2020:** classifier fit/development sample only.
+- **2021:** probability-cutoff calibration sample only. No coefficient refit on 2021.
+- **2022:** one untouched confirmation. No feature, target, model-family, coefficient, scaling, cutoff-grid, threshold-selection rule, or gate may change after 2022 is opened for Rotation A.
+
+**Rotation B**
 - **2019-2021:** classifier fit/development sample only.
 - **2022:** probability-cutoff calibration sample only. No coefficient refit on 2022.
-- **2023:** one untouched earlier-season confirmation. No feature, target, model-family, coefficient, scaling, cutoff-grid, threshold-selection rule, or gate may change after 2023 is opened.
-- **2024-2025:** no-tuning transport/disclosure only, and only if 2023 clears every confirmation gate. These years already informed the hypothesis through Lane-A V2 and are not independent confirmation evidence.
-- **2026:** genuine forward/shadow confirmation is required before any production-integration proposal.
+- **2023:** one untouched confirmation. No feature, target, model-family, coefficient, scaling, cutoff-grid, threshold-selection rule, or gate may change after 2023 is opened for Rotation B.
 
-No year substitution is allowed after any classifier result is exposed.
+No architecture, feature, target, metric, cutoff-grid, confirmation-gate, or fail-closed rule may differ between Rotation A and Rotation B.
+
+- **2024-2025:** no-tuning transport/disclosure only, and only if BOTH Rotation A's 2022 confirmation and Rotation B's 2023 confirmation independently pass every gate. These years already informed the hypothesis through Lane-A V2 and are not independent confirmation evidence for either rotation.
+- **2026:** eligible for a separate production-integration review once both rotations confirm and the 2024-2025 transport passes its safety stack -- not conditioned on first accumulating a full forward season of live evidence. If the architecture is later promoted under that separate review, permanent 2026 shadow monitoring is mandatory (Section 13).
+
+No year substitution is allowed after either rotation's classifier result is exposed. No rescue or selective use of the surviving rotation if the other rotation fails.
 
 ## 5. Counts-only adequacy already disclosed before fitting
 
@@ -75,11 +86,15 @@ The authorized census exposed only event counts, positive counts/prevalence, and
 - 2019: 98 scored events, 24 positive (24.5%)
 - 2020: 154 scored events, 25 positive (16.2%)
 - 2021: 167 scored events, 34 positive (20.4%)
-- 2019-2021 combined fit sample: 419 events, 83 positive
 - 2022: 113 scored events, 25 positive (22.1%)
 - 2023: 123 scored events, 23 positive (18.7%)
 
-Frozen adequacy floors for both 2022 and 2023 are >=30 scored events and >=10 positive events. Both floors passed before model fitting. This does not qualify the science; it only authorizes implementation.
+Rotation-pooled fit samples (Section 16):
+
+- Rotation A fit (2019-2020): 252 events, 49 positive.
+- Rotation B fit (2019-2021): 419 events, 83 positive.
+
+Frozen adequacy floors: each rotation's own cutoff year and confirmation year individually require >=30 scored events and >=10 positive events; each rotation's pooled fit sample requires both classes present and >=30 positive events total. All six checks -- Rotation A fit/2021-cutoff/2022-confirm and Rotation B fit/2022-cutoff/2023-confirm -- pass on the counts above. This does not qualify the science; it only authorizes implementation.
 
 ## 6. Source/timing contract and mandatory Gate-0 repair
 
@@ -140,9 +155,9 @@ Every scored event in the frozen event population must produce one complete fini
 
 ## 8. Frozen classifier family
 
-Use exactly one classifier family:
+Use exactly one classifier family, fit independently once per rotation (Section 16):
 
-- `StandardScaler` fit on 2019-2021 only;
+- `StandardScaler` fit on the rotation's own fit years only (Rotation A: 2019-2020; Rotation B: 2019-2021);
 - L2 logistic regression only;
 - `C = 1.0`;
 - `class_weight = 'balanced'`;
@@ -151,46 +166,46 @@ Use exactly one classifier family:
 - `max_iter = 1000`;
 - `random_state = 42` where applicable.
 
-The scaler and classifier coefficients are fit once on 2019-2021 and remain frozen for 2022, 2023, 2024, 2025, and any 2026 shadow application.
+Each rotation's scaler and classifier coefficients are fit once, on that rotation's own fit years only, and remain frozen for that rotation's own cutoff year, that rotation's own confirmation year, and -- if both rotations confirm -- the shared 2024-2025 transport and any 2026 shadow application. Rotation A's fitted model is never applied to Rotation B's years or vice versa outside the shared 2024-2025 transport step.
 
-No trees, boosting, neural networks, splines, polynomial expansion, interaction search, alternate regularization sweep, alternate C search, model-family tournament, isotonic/Platt recalibration, or feature-selection loop is permitted in V1.
+No trees, boosting, neural networks, splines, polynomial expansion, interaction search, alternate regularization sweep, alternate C search, model-family tournament, isotonic/Platt recalibration, or feature-selection loop is permitted in either rotation.
 
-## 9. Frozen 2022 cutoff protocol
+## 9. Frozen cutoff protocol (per rotation)
 
-After the 2019-2021 scaler/classifier is frozen, generate 2022 probabilities once.
+After a rotation's fit-year scaler/classifier is frozen, generate that rotation's own cutoff-year probabilities once (Rotation A: 2021; Rotation B: 2022).
 
 Candidate probability cutoffs are exactly:
 
 `{0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90}`.
 
-Select the cutoff that maximizes **F0.5** on 2022, weighting precision more heavily than recall because V2's broad failure mode was false-positive activation of the aggressive allocation mechanism.
+Select the cutoff that maximizes **F0.5** on that rotation's cutoff year, weighting precision more heavily than recall because V2's broad failure mode was false-positive activation of the aggressive allocation mechanism. The grid, metric, and tie rule are identical for both rotations.
 
-For any candidate cutoff producing zero predicted positives, record precision, recall, and F0.5 as `0.0` for cutoff-selection purposes (`zero_division=0` semantics). If multiple cutoffs tie exactly on F0.5, choose the higher cutoff, including a possible all-zero tie. Do not replace the frozen tie rule after seeing 2022.
+For any candidate cutoff producing zero predicted positives, record precision, recall, and F0.5 as `0.0` for cutoff-selection purposes (`zero_division=0` semantics). If multiple cutoffs tie exactly on F0.5, choose the higher cutoff, including a possible all-zero tie. Do not replace the frozen tie rule after seeing either rotation's cutoff-year probabilities.
 
-Do not refit or rescale the model using 2022. Do not change the grid or optimization metric after seeing 2022. Preserve the complete 2022 cutoff table in the evidence artifact.
+Do not refit or rescale either rotation's model using its cutoff year. Do not change the grid or optimization metric after seeing either rotation's cutoff-year probabilities. Preserve the complete cutoff table for both rotations in the evidence artifact.
 
-## 10. Frozen 2023 confirmation gates
+## 10. Frozen confirmation gates (per rotation)
 
-Open 2023 once using the unchanged 2019-2021 model and the single cutoff selected on 2022.
+Open each rotation's confirmation year exactly once, using that rotation's own unchanged fit-year model and its own cutoff-year-selected cutoff (Rotation A: confirm on 2022; Rotation B: confirm on 2023).
 
-All gates below must pass:
+All gates below must pass **independently in each rotation**:
 
-1. Source/timing/leakage integrity PASS, including generalized earlier-season schedule coverage and complete finite 13-feature constructibility for every scored event.
-2. Adequacy: >=30 scored loss/vacancy transition events and >=10 positive `WORKHORSE_EVENT` events. This count is already known to pass (123 / 23) and may not be used to alter any other rule.
-3. Precision exceeds unconditional 2023 workhorse prevalence by **>=10 percentage points**.
+1. Source/timing/leakage integrity PASS, including generalized earlier-season schedule coverage and complete finite 13-feature constructibility for every scored event in that rotation's confirmation year.
+2. Adequacy: >=30 scored loss/vacancy transition events and >=10 positive `WORKHORSE_EVENT` events. Already known to pass for both (Rotation A 2022: 113/25; Rotation B 2023: 123/23) and may not be used to alter any other rule.
+3. Precision exceeds that confirmation year's unconditional workhorse prevalence by **>=10 percentage points**.
 4. Precision **>=0.60**.
 5. Recall **>=0.25**.
 6. ROC-AUC **>0.60**.
 7. PR-AUC **> positive-class prevalence**.
 8. `sportsbook_inputs_used = 0`.
 
-If the frozen cutoff produces zero predicted positives on 2023, precision is treated as undefined for scientific confirmation and gates 3 and 4 fail closed; record disposition detail `PRECISION_UNDEFINED_NO_PREDICTED_POSITIVES`. Do not rescue by changing the cutoff.
+If a rotation's frozen cutoff produces zero predicted positives on its confirmation year, precision is treated as undefined for scientific confirmation and gates 3 and 4 fail closed for that rotation; record disposition detail `PRECISION_UNDEFINED_NO_PREDICTED_POSITIVES`. Do not rescue by changing that rotation's cutoff.
 
-If any required gate fails, final V1 gate disposition is `RB_WORKHORSE_TRANSITION_GATE_V1_NOT_QUALIFIED` (or `INSUFFICIENT_EVIDENCE` only for a true adequacy failure) and the experiment stops before 2024-2025 transport. A pre-outcome constructibility/source/timing failure must retain its specific integrity failure label rather than being relabeled as scientific nonqualification. No rescue fitting, feature change, threshold change, alternate classifier, event exclusion, or year substitution is permitted.
+If either rotation fails any required gate, final V1 gate disposition is `RB_WORKHORSE_TRANSITION_GATE_V1_NOT_QUALIFIED` (or `INSUFFICIENT_EVIDENCE` only for a true adequacy failure) and the experiment stops before 2024-2025 transport. A pre-outcome constructibility/source/timing failure must retain its specific integrity failure label rather than being relabeled as scientific nonqualification. No rescue fitting, feature change, threshold change, alternate classifier, event exclusion, rotation substitution, or selective use of only the surviving rotation is permitted.
 
-If all required gates pass, disposition is `RB_WORKHORSE_TRANSITION_GATE_V1_CONFIRMED_EARLY_OOS`, which authorizes only the frozen 2024-2025 transport/disclosure described below. It does not authorize production.
+Only if BOTH Rotation A and Rotation B independently pass every gate above does disposition become `RB_WORKHORSE_TRANSITION_GATE_V1_CONFIRMED_EARLY_OOS`, which authorizes only the frozen 2024-2025 transport/disclosure described below. It does not authorize production.
 
-## 11. Frozen downstream router if 2023 confirms
+## 11. Frozen downstream router if both rotations confirm
 
 For each scored loss/vacancy transition event:
 
@@ -201,7 +216,7 @@ The workhorse gate may only route between those two already-defined arms. It may
 
 ## 12. 2024-2025 transport/disclosure
 
-Only after every 2023 confirmation gate passes may the fully frozen gate+router be transported onto 2024 and 2025 once.
+Only after both Rotation A's 2022 confirmation and Rotation B's 2023 confirmation independently pass every gate may the fully frozen gate+router be transported onto 2024 and 2025 once.
 
 Those years are hypothesis-generating/exposed data from Lane-A V2. They therefore cannot serve as independent qualification evidence and may not be used to retune anything.
 
@@ -213,7 +228,9 @@ The transport must report the existing Lane-A safety table unchanged, including 
 
 No part of this plan changes production.
 
-Even if 2023 confirms and the 2024-2025 transport is supportive, any production-integration proposal requires a separately frozen genuine 2026 pre-kickoff shadow/forward-confirmation contract. The gate, cutoff, feature list, and V2 router must remain unchanged entering that forward evidence.
+If both rotations confirm and the 2024-2025 transport is supportive, the architecture may become eligible for a separately approved production-integration review during 2026. That eligibility is not conditioned on first accumulating a full forward 2026 season of live evidence -- Section 16 supersedes the earlier single-rotation requirement that such forward evidence precede any production-integration proposal. The gate, cutoff, feature list, and V2 router must remain unchanged entering that review.
+
+If the architecture is promoted under that separate review, permanent 2026 shadow monitoring is mandatory afterward.
 
 No sportsbook information may enter the football-side gate or allocation mechanism. Market comparison, if any, remains downstream evaluation only.
 
@@ -222,9 +239,11 @@ No sportsbook information may enter the football-side gate or allocation mechani
 - V1/V2 historical results remain terminal and are never rewritten.
 - No post-result rescue of Workhorse-Gate V1.
 - No feature additions/deletions after fit begins.
-- No cutoff-grid or F0.5 rule change after 2022 probabilities are exposed.
-- No parameter/model-family changes after 2023 is opened.
+- No cutoff-grid or F0.5 rule change after either rotation's cutoff-year probabilities are exposed.
+- No parameter/model-family changes after either rotation's confirmation year is opened.
 - No scored-event exclusion for feature/source/identity defects.
+- No rotation substitution after either rotation's confirmation year is opened.
+- No rescue or selective use of a surviving rotation if the other rotation fails.
 - No 2024/2025 tuning.
 - No production mutation from this research branch.
 - Mechanical defects may be repaired only when the scientific meaning is unchanged, with the defect, repair, before/after lineage, and rerun authority documented explicitly.
@@ -241,3 +260,17 @@ These clarifications resolve the ambiguities raised in Issue #535 comment `57148
 6. **Gate-0 schedule repair:** generalize requirement 4 with an additive evaluated-season parameter/default-preserving implementation before fitting; existing V1/V2 semantics must remain unchanged.
 7. **Redundant prevalence gate:** the already-known 2023 prevalence makes the `precision >= prevalence + 10pp` gate weaker than the fixed `precision >= 0.60` gate in this specific year. Both remain frozen exactly as written; no gate is removed or weakened.
 8. **Authorization boundary:** after this clarification commit, implementation may be reviewed and coded, but classifier fitting remains unauthorized until the reviewer returns `IMPLEMENTATION_PLAN_REVIEW_PASS` against this amended plan.
+
+## 16. Chronology supersession (two-rotation amendment)
+
+This section supersedes ONLY the single-rotation chronology and its downstream year-references in Sections 3.2, 4, 5, 8, 9, 10, 11, 12, 13, and 14 as amended above. The event population (Section 3.1), 13-feature contract (Section 7), ambiguity resolutions (Section 15), classifier hyperparameters, cutoff grid/F0.5 rule, source/timing rules, sportsbook prohibition, and unchanged V2 router are NOT altered by this section.
+
+Authoritative lineage for this amendment:
+
+- Superseding chronology comment: Issue #535 `5715606827`
+- State-mismatch hold (correctly declined to guess rather than silently redo or silently override): Issue #535 `5715781636`
+- Reconciliation confirming supersession scope: Issue #535 `5715821516`
+
+Rationale: the single-rotation design's original Section 13 treated a genuine forward 2026 season as a hard prerequisite for any production-integration proposal, which risked converting this research lane into a live-season-only path inconsistent with the `live production authority + permanent shadow laboratory` operating model. Two independent historical rotations -- Rotation A (fit 2019-2020 / cutoff 2021 / confirm 2022) and Rotation B (fit 2019-2021 / cutoff 2022 / confirm 2023) -- provide two independent out-of-sample confirmations without waiting on 2026 to accumulate first. 2024-2025 remain non-independent transport/disclosure only, exactly as before. 2026 becomes eligible for a separate production-integration review once both rotations confirm and the 2024-2025 transport passes, rather than a precondition for even proposing that review; permanent 2026 shadow monitoring remains mandatory if the architecture is later promoted.
+
+No rescue or selective use of a surviving rotation if the other fails. No rotation substitution after either rotation's confirmation year is opened. This section does not authorize any fitting; it only amends the chronology contract prospectively, before any classifier has been fit, any probability generated, or any cutoff selected.
