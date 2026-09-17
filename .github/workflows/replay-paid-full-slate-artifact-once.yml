@@ -62,6 +62,17 @@ jobs:
           grep -q '^Joshua Palmer,Josh Palmer,00-0036988,BUF,WR,' data/player_identity_aliases.csv
           grep -q '^Carson Wentz,MIN,2026,2,' data/manual_final_board_quarantine.csv
           test -s data/live_odds_status.json
+          python - <<'EOF'
+          import json, os
+          from pathlib import Path
+          path=Path('data/live_odds_status.json')
+          status=json.loads(path.read_text(encoding='utf-8'))
+          status['replay_source_run']=int(os.environ['FULL_SLATE_SOURCE_RUN_ID'])
+          status['odds_api_refetched']=False
+          status['replay_mode']='OFFLINE_PRESERVED_ARTIFACT'
+          path.write_text(json.dumps(status,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          print('OFFLINE_REPLAY_PROVENANCE_STAMPED', status['replay_source_run'])
+          EOF
           test -s outputs/odds_game.csv
           test -s outputs/props_raw_compact.csv
           echo "OFFLINE REPLAY ONLY: preserved run=${FULL_SLATE_SOURCE_RUN_ID}; no OddsAPI acquisition command exists in this workflow"
@@ -210,6 +221,9 @@ jobs:
             data/full_slate_data_quality_audit.csv
             data/full_slate_data_quality_audit.json
             data/live_pricing_offer_audit.json
+            data/live_odds_status.json
+            data/qb_c2_pricing_lineage_stamp_audit.json
+            data/market_model_lineage_current.json
             data/full_slate_post_pricing_audit.csv
             data/certified_full_slate_stack_audit.json
             data/final_priced_props_quarantine_status.json
