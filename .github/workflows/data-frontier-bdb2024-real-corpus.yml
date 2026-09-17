@@ -101,14 +101,15 @@ jobs:
           pip install -r requirements.txt
           pip install kaggle pyyaml
 
-      - name: Download official BDB 2024 competition corpus
+      - name: Download and resolve official BDB 2024 competition corpus
         id: download
         shell: bash
         run: |
           set -euo pipefail
           download_dir="${RUNNER_TEMP}/bdb2024_download"
-          corpus_dir="${RUNNER_TEMP}/bdb2024_corpus"
-          mkdir -p "$download_dir" "$corpus_dir"
+          extract_dir="${RUNNER_TEMP}/bdb2024_extract"
+          diagnostics_dir="${RUNNER_TEMP}/bdb2024_download_diagnostics"
+          mkdir -p "$download_dir" "$extract_dir" "$diagnostics_dir"
           kaggle competitions download \
             -c "${BDB2024_COMPETITION}" \
             -p "$download_dir"
@@ -117,14 +118,57 @@ jobs:
             echo "Official Kaggle download did not produce a zip archive."
             exit 2
           fi
-          unzip -q "$archive" -d "$corpus_dir"
+          archive_size="$(stat -c '%s' "$archive")"
+          echo "Downloaded official archive bytes=${archive_size}"
+          unzip -q "$archive" -d "$extract_dir"
           rm -f "$archive"
-          echo "corpus_dir=$corpus_dir" >> "$GITHUB_OUTPUT"
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ['RUNNER_TEMP']) / 'bdb2024_extract'
+          diag = Path(os.environ['RUNNER_TEMP']) / 'bdb2024_download_diagnostics'
+          files = sorted(p for p in root.rglob('*') if p.is_file())
+          inventory = [
+              {'relative_path': str(p.relative_to(root)), 'size_bytes': p.stat().st_size}
+              for p in files
+          ]
+          (diag / 'package_inventory.json').write_text(
+              json.dumps({'file_count': len(inventory), 'files': inventory}, indent=2, sort_keys=True),
+              encoding='utf-8',
+          )
+          required = {'plays.csv', 'tackles.csv', *{f'tracking_week_{w}.csv' for w in range(1, 10)}}
+          parents = {}
+          for p in files:
+              if p.name in required:
+                  parents.setdefault(p.parent, set()).add(p.name)
+          candidates = [parent for parent, names in parents.items() if required.issubset(names)]
+          if len(candidates) != 1:
+              print(f'Could not uniquely resolve complete BDB 2024 corpus root; candidates={len(candidates)}')
+              print(f'Extracted file count={len(files)}; see sanitized package inventory artifact.')
+              raise SystemExit(2)
+          corpus_root = candidates[0]
+          with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as handle:
+              handle.write(f'corpus_dir={corpus_root}\n')
+          print(f'Official BDB 2024 corpus root resolved at relative depth={len(corpus_root.relative_to(root).parts)}')
+          PY
           echo "Official BDB 2024 corpus downloaded to ephemeral runner storage."
           echo "Raw competition files will not be uploaded as workflow artifacts."
 
+      - name: Upload sanitized download diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2024-download-diagnostics
+          path: ${{ runner.temp }}/bdb2024_download_diagnostics
+          if-no-files-found: ignore
+          retention-days: 30
+
       - name: Run fail-closed real-corpus Phase-0 benchmark
         id: phase0
+        if: steps.download.outcome == 'success'
         shell: bash
         run: |
           export PYTHONPATH="${PWD}"
@@ -194,6 +238,13 @@ jobs:
           path: ${{ runner.temp }}/bdb2024_phase0_summary
           if-no-files-found: error
           retention-days: 30
+
+      - name: Enforce download result
+        if: steps.download.outcome != 'success'
+        run: |
+          echo "Official BDB 2024 corpus download/package resolution failed."
+          echo "See bdb2024-download-diagnostics; no detector science was changed."
+          exit 1
 
       - name: Enforce Phase-0 result
         if: steps.download.outcome == 'success' && steps.phase0.outputs.exit_code != '0'
