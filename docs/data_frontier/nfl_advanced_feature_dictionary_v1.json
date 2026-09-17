@@ -964,7 +964,8 @@
       ],
       "semantic_limitations": [
         "Outcome-window geometry; target-game value is not pregame/live-safe.",
-        "10 Hz timing is inherited from source tracking frame cadence."
+        "10 Hz timing is inherited from source tracking frame cadence.",
+        "Blocking-interaction geometry only; does not establish universal primary blocker-rusher assignment responsibility."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
       "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
@@ -1021,7 +1022,8 @@
         "generated_at_utc"
       ],
       "semantic_limitations": [
-        "Window completeness depends on source tracking presence for both players."
+        "Window completeness depends on source tracking presence for both players.",
+        "Blocking-interaction geometry only; does not establish universal primary blocker-rusher assignment responsibility."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
       "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
