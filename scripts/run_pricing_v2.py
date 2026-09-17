@@ -425,8 +425,8 @@ def price(season: int) -> pd.DataFrame:
         raise RuntimeError("Monte Carlo pricing produced 0 rows")
     if has_qb_pass and qb_synthesis_rows == 0:
         raise RuntimeError("promoted QB synthesis applied to zero pass_yards pricing rows")
-    if has_rb_rush and rb_synthesis_rows == 0:
-        raise RuntimeError("promoted RB synthesis applied to zero eligible RB/FB rush_yards pricing rows")
+    if has_rb_rush and 1 in rush_weeks and rb_synthesis_rows == 0:
+        raise RuntimeError("promoted RB synthesis applied to zero eligible Week-1 RB/FB rush_yards pricing rows")
 
     if missed:
         debug = DATA / "_debug" / "pricing_unsimulated_props.csv"
