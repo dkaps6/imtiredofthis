@@ -1,0 +1,159 @@
+name: Data Frontier BDB2021 Source Audit
+
+on:
+  push:
+    branches:
+      - data-frontier-phase0-bdb-contact-v1
+    paths:
+      - '.github/workflows/data-frontier-bdb2021-source-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_SECRET_RAW: ${{ secrets.KAGGLE_API_TOKEN }}
+  COMPETITION: nfl-big-data-bowl-2021
+
+jobs:
+  audit-bdb2021-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Normalize Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          token="${raw#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          [[ "$token" == KGAT_* ]]
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+      - name: Install dependencies
+        run: pip install kaggle pandas
+      - name: Download official BDB 2021 corpus ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/bdb2021_download"
+          c="${RUNNER_TEMP}/bdb2021_corpus"
+          mkdir -p "$d" "$c"
+          kaggle competitions download -c "${COMPETITION}" -p "$d"
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$z"
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "BDB2021_CORPUS_DIR=$c" >> "$GITHUB_ENV"
+      - name: Build sanitized source audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/bdb2021_source_audit"
+          python - <<'PY'
+          import hashlib, json, os, re
+          from pathlib import Path
+          import pandas as pd
+
+          root=Path(os.environ['BDB2021_CORPUS_DIR'])
+          out=Path(os.environ['RUNNER_TEMP'])/'bdb2021_source_audit'
+          expected=['games.csv','players.csv','plays.csv']+[f'week{i}.csv' for i in range(1,18)]
+          present={p.name:p for p in root.rglob('*') if p.is_file()}
+          missing=[x for x in expected if x not in present]
+          def sha(path):
+              h=hashlib.sha256()
+              with path.open('rb') as f:
+                  for chunk in iter(lambda:f.read(1024*1024),b''): h.update(chunk)
+              return h.hexdigest()
+          files=[]
+          for name in expected:
+              p=present.get(name)
+              if not p: continue
+              hdr=pd.read_csv(p,nrows=0)
+              rows=sum(1 for _ in p.open('rb'))-1
+              files.append({'name':name,'bytes':p.stat().st_size,'sha256':sha(p),'row_count':max(rows,0),'column_count':len(hdr.columns),'columns':list(hdr.columns)})
+          material='\n'.join(f"{x['name']}:{x['sha256']}" for x in sorted(files,key=lambda z:z['name']))
+          corpus_hash=hashlib.sha256(material.encode()).hexdigest()
+
+          plays=pd.read_csv(present['plays.csv']) if 'plays.csv' in present else pd.DataFrame()
+          players=pd.read_csv(present['players.csv']) if 'players.csv' in present else pd.DataFrame()
+          w1=pd.read_csv(present['week1.csv']) if 'week1.csv' in present else pd.DataFrame()
+
+          semantic_regex=re.compile(r'(route|target|receiver|pass|coverage|defen|epa|air|yard|result|outcome|personnel|formation)',re.I)
+          play_semantic=[c for c in plays.columns if semantic_regex.search(c)]
+          player_semantic=[c for c in players.columns if re.search(r'(position|height|weight|birth|display|name)',c,re.I)]
+          tracking_semantic=[c for c in w1.columns if re.search(r'(event|team|x|y|speed|accel|dir|orientation|position|route)',c,re.I)]
+
+          cardinalities={}
+          for c in play_semantic:
+              s=plays[c]
+              cardinalities[c]={
+                  'nonnull':int(s.notna().sum()),
+                  'null':int(s.isna().sum()),
+                  'nunique_nonnull':int(s.nunique(dropna=True)),
+              }
+              if s.dtype=='object' or s.nunique(dropna=True)<=40:
+                  cardinalities[c]['sample_unique_values']=[str(v) for v in s.dropna().drop_duplicates().head(40).tolist()]
+
+          tracking={
+              'columns':list(w1.columns),
+              'row_count':int(len(w1)),
+              'event_values':sorted([str(v) for v in w1['event'].dropna().unique().tolist()])[:300] if 'event' in w1.columns else [],
+              'team_values':sorted([str(v) for v in w1['team'].dropna().unique().tolist()]) if 'team' in w1.columns else [],
+              'unique_game_play_pairs':int(w1[['gameId','playId']].drop_duplicates().shape[0]) if {'gameId','playId'}.issubset(w1.columns) else None,
+          }
+          joins={}
+          if {'gameId','playId'}.issubset(plays.columns) and {'gameId','playId'}.issubset(w1.columns):
+              wp=w1[['gameId','playId']].drop_duplicates()
+              pp=plays[['gameId','playId']].drop_duplicates()
+              m=wp.merge(pp,on=['gameId','playId'],how='left',indicator=True)
+              joins['week1_tracking_pairs_missing_from_plays']=int((m['_merge']!='both').sum())
+              joins['plays_duplicate_game_play_rows']=int(plays.duplicated(['gameId','playId'],keep=False).sum())
+
+          payload={
+              'audit_version':'BDB2021_SOURCE_AUDIT_V1',
+              'competition':os.environ.get('COMPETITION'),
+              'git_sha':os.environ.get('GITHUB_SHA'),
+              'raw_competition_files_uploaded':False,
+              'predictive_experiment':False,
+              'production_changed':False,
+              'missing_expected_files':missing,
+              'corpus_sha256':corpus_hash,
+              'files':files,
+              'plays_columns':list(plays.columns),
+              'players_columns':list(players.columns),
+              'tracking_week1_profile':tracking,
+              'play_semantic_candidate_columns':play_semantic,
+              'player_semantic_candidate_columns':player_semantic,
+              'tracking_semantic_candidate_columns':tracking_semantic,
+              'play_semantic_cardinalities':cardinalities,
+              'join_integrity':joins,
+          }
+          (out/'bdb2021_source_audit.json').write_text(json.dumps(payload,indent=2,sort_keys=True),encoding='utf-8')
+          (out/'bdb2021_source_manifest.json').write_text(json.dumps({'corpus_sha256':corpus_hash,'files':files},indent=2,sort_keys=True),encoding='utf-8')
+          print('corpus_sha256='+corpus_hash)
+          print('missing_expected_files='+json.dumps(missing))
+          print('plays_columns='+','.join(plays.columns))
+          print('tracking_columns='+','.join(w1.columns))
+          print('play_semantic_candidates='+','.join(play_semantic))
+          print('join_integrity='+json.dumps(joins,sort_keys=True))
+          if missing: raise SystemExit(2)
+          if joins.get('week1_tracking_pairs_missing_from_plays',0)!=0: raise SystemExit('Week1 tracking play pairs missing from plays table')
+          PY
+      - name: Upload sanitized BDB 2021 source audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2021-source-audit
+          path: ${{ runner.temp }}/bdb2021_source_audit
+          if-no-files-found: error
+          retention-days: 30
