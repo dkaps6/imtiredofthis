@@ -1,0 +1,104 @@
+name: Data Frontier WR Advanced Feature Integration Preflight V1
+
+on:
+  push:
+    branches:
+      - data-frontier-advanced-feature-integration-preflight-v1
+    paths:
+      - '.github/workflows/data-frontier-wr-advanced-feature-integration-preflight-v1.yml'
+      - 'scripts/data_frontier/advanced_feature_wr_integration_preflight_v1.py'
+      - 'scripts/data_frontier/materialize_bdb2026_advanced_features_v1.py'
+      - 'scripts/data_frontier/advanced_feature_materializer_common_v1.py'
+      - 'tests/test_advanced_feature_wr_integration_preflight_v1.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_SECRET_RAW: ${{ secrets.KAGGLE_API_TOKEN }}
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Normalize Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          token="${raw#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          [[ "$token" == KGAT_* ]]
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install kaggle pandas numpy pytest pyarrow nflreadpy
+
+      - name: Compile and test integration guards
+        run: |
+          python -m compileall             scripts/data_frontier/advanced_feature_wr_integration_preflight_v1.py             tests/test_advanced_feature_wr_integration_preflight_v1.py
+          PYTHONPATH="${PWD}" pytest -q tests/test_advanced_feature_wr_integration_preflight_v1.py
+
+      - name: Download BDB 2026 Analytics ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/bdb2026_integration_download"
+          c="${RUNNER_TEMP}/bdb2026_integration_corpus"
+          mkdir -p "$d" "$c"
+          kaggle competitions download -c nfl-big-data-bowl-2026-analytics -p "$d"
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$z"
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "CORPUS_DIR=$c" >> "$GITHUB_ENV"
+
+      - name: Rebuild BDB 2026 advanced features ephemerally
+        run: |
+          PYTHONPATH="${PWD}" python scripts/data_frontier/materialize_bdb2026_advanced_features_v1.py             --corpus-dir "${CORPUS_DIR}"             --out-dir "${RUNNER_TEMP}/bdb2026_materialized"
+
+      - name: Download nflverse player identity table
+        shell: bash
+        run: |
+          set -euo pipefail
+          p="${RUNNER_TEMP}/nflverse_players.csv"
+          curl -L --fail --retry 3             https://github.com/nflverse/nflverse-data/releases/download/players/players.csv             -o "$p"
+          test -s "$p"
+          sha256sum "$p"
+          echo "NFLVERSE_PLAYERS=$p" >> "$GITHUB_ENV"
+
+      - name: Run WR identity/outcome integration preflight
+        run: |
+          PYTHONPATH="${PWD}" python scripts/data_frontier/advanced_feature_wr_integration_preflight_v1.py             --corpus-dir "${CORPUS_DIR}"             --materialized-dir "${RUNNER_TEMP}/bdb2026_materialized"             --nflverse-players "${NFLVERSE_PLAYERS}"             --out-dir "${RUNNER_TEMP}/wr_advanced_preflight"
+
+      - name: Enforce sanitized artifact boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "${RUNNER_TEMP}/wr_advanced_preflight/private"
+          test -d "${RUNNER_TEMP}/wr_advanced_preflight/sanitized"
+          find "${RUNNER_TEMP}/wr_advanced_preflight/sanitized" -type f -not -name '*.json' -print -quit | grep -q . && exit 1 || true
+          test "$(find "${RUNNER_TEMP}/wr_advanced_preflight/sanitized" -type f -name '*.json' | wc -l)" -eq 1
+
+      - name: Upload sanitized integration preflight
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-advanced-feature-integration-preflight-v1
+          path: ${{ runner.temp }}/wr_advanced_preflight/sanitized
+          if-no-files-found: error
+          retention-days: 30
