@@ -42,6 +42,9 @@ REQUIRED_FIELD_KEYS = {
     "source_season",
     "source_hash_sha256",
     "source_hash_scope",
+    "source_access_status",
+    "raw_data_handling",
+    "source_license_lineage",
     "canonical_source_checkpoint",
     "canonical_source_workflow",
     "grain",
@@ -179,6 +182,14 @@ def validate_contract(contract: dict) -> dict:
             # Provenance/support flags can be source-label fields; all must still avoid universal assignment claims.
             if "assignment" not in limitations and "interaction" not in limitations and "responsibility" not in limitations:
                 errors.append(f"{label}: blocking interaction semantic limitation missing")
+
+        if feature.get("source_access_status") != "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE":
+            errors.append(f"{label}: source access status drift")
+        if feature.get("raw_data_handling") != "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED":
+            errors.append(f"{label}: raw-data handling policy weakened")
+        rights = feature.get("source_license_lineage", "").lower()
+        if "does not imply" not in rights or "production" not in rights:
+            errors.append(f"{label}: source/license lineage is not explicit enough")
 
         if feature.get("production_status") != "RESEARCH_ONLY_NOT_PROMOTED":
             errors.append(f"{label}: production status weakened")
