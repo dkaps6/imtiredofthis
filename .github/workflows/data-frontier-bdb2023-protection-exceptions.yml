@@ -1,0 +1,141 @@
+name: Data Frontier BDB2023 Protection Exceptions
+
+on:
+  push:
+    branches:
+      - data-frontier-phase0-bdb-contact-v1
+    paths:
+      - '.github/workflows/data-frontier-bdb2023-protection-exceptions.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_SECRET_RAW: ${{ secrets.KAGGLE_API_TOKEN }}
+  BDB2023_COMPETITION: nfl-big-data-bowl-2023
+
+jobs:
+  classify-protection-exceptions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout isolated data-frontier branch
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Normalize Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          token="${raw#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          [[ "$token" == KGAT_* ]]
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+      - name: Install dependencies
+        run: pip install kaggle pandas
+      - name: Download official BDB 2023 corpus ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/bdb2023_exception_download"
+          c="${RUNNER_TEMP}/bdb2023_exception_corpus"
+          mkdir -p "$d" "$c"
+          kaggle competitions download -c "${BDB2023_COMPETITION}" -p "$d"
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$z"
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "BDB2023_CORPUS_DIR=$c" >> "$GITHUB_ENV"
+      - name: Classify blocked-player reference exceptions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/bdb2023_protection_exceptions"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import pandas as pd
+
+          root = Path(os.environ['BDB2023_CORPUS_DIR'])
+          out = Path(os.environ['RUNNER_TEMP']) / 'bdb2023_protection_exceptions'
+          pff = pd.read_csv(next(root.rglob('pffScoutingData.csv')))
+          players = pd.read_csv(next(root.rglob('players.csv')))
+
+          nonnull_blocked_by_source_role = {
+              str(k): int(v) for k,v in pff.loc[pff['pff_nflIdBlockedPlayer'].notna(), 'pff_role'].value_counts().items()
+          }
+
+          blockers = pff[pff['pff_role'].eq('Pass Block')].copy()
+          blockers['rusherNflId'] = pd.to_numeric(blockers['pff_nflIdBlockedPlayer'], errors='coerce').astype('Int64')
+          assigned = blockers[blockers['rusherNflId'].notna()].copy()
+
+          lookup = pff[['gameId','playId','nflId','pff_role','pff_positionLinedUp']].rename(columns={
+              'nflId':'rusherNflId',
+              'pff_role':'referencedPffRole',
+              'pff_positionLinedUp':'referencedPositionLinedUp',
+          })
+          c = assigned.merge(lookup, on=['gameId','playId','rusherNflId'], how='left')
+          c['exception'] = c['referencedPffRole'].ne('Pass Rush')
+          exc = c[c['exception']].copy()
+
+          official = players[['nflId','officialPosition']].rename(columns={'nflId':'rusherNflId'})
+          exc = exc.merge(official, on='rusherNflId', how='left')
+
+          role_counts = {str(k): int(v) for k,v in c['referencedPffRole'].fillna('<MISSING>').value_counts().items()}
+          exception_role_counts = {str(k): int(v) for k,v in exc['referencedPffRole'].fillna('<MISSING>').value_counts().items()}
+          exception_block_types = {str(k): int(v) for k,v in exc['pff_blockType'].fillna('<NULL>').value_counts().items()}
+          exception_blocker_positions = {str(k): int(v) for k,v in exc['pff_positionLinedUp'].fillna('<NULL>').value_counts().items()}
+          exception_referenced_positions = {str(k): int(v) for k,v in exc['referencedPositionLinedUp'].fillna('<NULL>').value_counts().items()}
+          exception_official_positions = {str(k): int(v) for k,v in exc['officialPosition'].fillna('<NULL>').value_counts().items()}
+
+          unassigned = blockers[blockers['rusherNflId'].isna()].copy()
+          unassigned_by_block_type = {str(k): int(v) for k,v in unassigned['pff_blockType'].fillna('<NULL>').value_counts().items()}
+
+          summary = {
+              'audit_version': 'BDB2023_PROTECTION_EXCEPTION_CLASSIFICATION_V1',
+              'git_sha': os.environ.get('GITHUB_SHA'),
+              'raw_competition_files_uploaded': False,
+              'predictive_experiment': False,
+              'production_changed': False,
+              'pff_rows': int(len(pff)),
+              'pff_game_play_pairs': int(pff[['gameId','playId']].drop_duplicates().shape[0]),
+              'pff_rows_per_play_exactly_22': bool((pff.groupby(['gameId','playId']).size() == 22).all()),
+              'nonnull_blocked_player_id_by_source_role': nonnull_blocked_by_source_role,
+              'assigned_pass_block_rows': int(len(assigned)),
+              'referenced_role_counts': role_counts,
+              'non_pass_rush_reference_rows': int(len(exc)),
+              'non_pass_rush_reference_role_counts': exception_role_counts,
+              'non_pass_rush_reference_block_types': exception_block_types,
+              'non_pass_rush_reference_blocker_positions': exception_blocker_positions,
+              'non_pass_rush_reference_pff_positions': exception_referenced_positions,
+              'non_pass_rush_reference_official_positions': exception_official_positions,
+              'referenced_player_missing_from_pff_play_rows': int(exc['referencedPffRole'].isna().sum()),
+              'referenced_player_missing_from_players_table': int(exc['officialPosition'].isna().sum()),
+              'unassigned_pass_block_rows': int(len(unassigned)),
+              'unassigned_pass_block_rows_by_block_type': unassigned_by_block_type,
+          }
+          (out/'bdb2023_protection_exception_classification.json').write_text(json.dumps(summary, indent=2, sort_keys=True), encoding='utf-8')
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          if not summary['pff_rows_per_play_exactly_22']:
+              raise SystemExit('PFF table does not contain exactly 22 player rows for every play')
+          if summary['referenced_player_missing_from_pff_play_rows'] != 0:
+              raise SystemExit('At least one blocked-player ID does not resolve to any same-play PFF player row')
+          PY
+      - name: Upload sanitized exception classification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2023-protection-exceptions
+          path: ${{ runner.temp }}/bdb2023_protection_exceptions
+          if-no-files-found: error
+          retention-days: 30
