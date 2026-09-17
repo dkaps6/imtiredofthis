@@ -1,0 +1,43 @@
+name: Data Frontier Advanced Feature Contract V1
+
+on:
+  push:
+    branches:
+      - data-frontier-advanced-feature-contract-v1
+    paths:
+      - '.github/workflows/data-frontier-advanced-feature-contract-v1.yml'
+      - 'docs/data_frontier/nfl_advanced_feature_dictionary_v1.json'
+      - 'docs/data_frontier/nfl_advanced_feature_dictionary_schema_v1.json'
+      - 'docs/data_frontier/NFL_ADVANCED_FEATURE_DICTIONARY_V1.md'
+      - 'scripts/data_frontier/validate_advanced_feature_dictionary_v1.py'
+      - 'tests/test_advanced_feature_dictionary_v1.py'
+  pull_request:
+    branches:
+      - data-frontier-bdb2026-throw-window-benchmark
+    paths:
+      - 'docs/data_frontier/nfl_advanced_feature_dictionary_v1.json'
+      - 'docs/data_frontier/nfl_advanced_feature_dictionary_schema_v1.json'
+      - 'docs/data_frontier/NFL_ADVANCED_FEATURE_DICTIONARY_V1.md'
+      - 'scripts/data_frontier/validate_advanced_feature_dictionary_v1.py'
+      - 'tests/test_advanced_feature_dictionary_v1.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install focused test dependency
+        run: python -m pip install pytest
+      - name: Compile validator and test
+        run: python -m compileall scripts/data_frontier/validate_advanced_feature_dictionary_v1.py tests/test_advanced_feature_dictionary_v1.py
+      - name: Validate advanced feature dictionary
+        run: python scripts/data_frontier/validate_advanced_feature_dictionary_v1.py
+      - name: Run focused contract tests
+        run: PYTHONPATH="${PWD}" pytest -q tests/test_advanced_feature_dictionary_v1.py
