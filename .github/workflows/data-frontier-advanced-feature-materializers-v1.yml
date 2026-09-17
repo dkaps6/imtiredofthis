@@ -1,0 +1,208 @@
+name: Data Frontier Advanced Feature Materializers V1
+
+on:
+  push:
+    branches:
+      - data-frontier-advanced-feature-materializers-v1
+    paths:
+      - '.github/workflows/data-frontier-advanced-feature-materializers-v1.yml'
+      - 'docs/data_frontier/nfl_advanced_feature_dictionary_v1.json'
+      - 'scripts/data_frontier/advanced_feature_materializer_common_v1.py'
+      - 'scripts/data_frontier/materialize_bdb2021_advanced_features_v1.py'
+      - 'scripts/data_frontier/materialize_bdb2023_advanced_features_v1.py'
+      - 'scripts/data_frontier/materialize_bdb2026_advanced_features_v1.py'
+      - 'tests/test_advanced_feature_materializers_v1.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_SECRET_RAW: ${{ secrets.KAGGLE_API_TOKEN }}
+
+jobs:
+  contract-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install focused dependencies
+        run: pip install pandas numpy pytest
+      - name: Compile materializers
+        run: |
+          python -m compileall             scripts/data_frontier/advanced_feature_materializer_common_v1.py             scripts/data_frontier/materialize_bdb2021_advanced_features_v1.py             scripts/data_frontier/materialize_bdb2023_advanced_features_v1.py             scripts/data_frontier/materialize_bdb2026_advanced_features_v1.py             tests/test_advanced_feature_materializers_v1.py
+      - name: Run materializer guard tests
+        run: PYTHONPATH="${PWD}" pytest -q tests/test_advanced_feature_materializers_v1.py
+
+  bdb2021-route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Normalize Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          token="${raw#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          [[ "$token" == KGAT_* ]]
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+      - name: Install dependencies
+        run: pip install kaggle pandas numpy
+      - name: Download BDB 2021 ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/bdb2021_download"
+          c="${RUNNER_TEMP}/bdb2021_corpus"
+          mkdir -p "$d" "$c"
+          kaggle competitions download -c nfl-big-data-bowl-2021 -p "$d"
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$z"
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "CORPUS_DIR=$c" >> "$GITHUB_ENV"
+      - name: Materialize contracted BDB 2021 features
+        run: |
+          PYTHONPATH="${PWD}" python scripts/data_frontier/materialize_bdb2021_advanced_features_v1.py             --corpus-dir "${CORPUS_DIR}"             --out-dir "${RUNNER_TEMP}/bdb2021_features"
+      - name: Sanitize artifact boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "${RUNNER_TEMP}/bdb2021_features/private"
+          test -d "${RUNNER_TEMP}/bdb2021_features/sanitized"
+          find "${RUNNER_TEMP}/bdb2021_features/sanitized" -type f -not -name '*.json' -print -quit | grep -q . && exit 1 || true
+          test "$(find "${RUNNER_TEMP}/bdb2021_features/sanitized" -type f -name '*.json' | wc -l)" -ge 1
+      - name: Upload sanitized BDB 2021 QA only
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2021-advanced-feature-qa-v1
+          path: ${{ runner.temp }}/bdb2021_features/sanitized
+          if-no-files-found: error
+          retention-days: 30
+
+  bdb2023-protection:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Normalize Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          token="${raw#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          [[ "$token" == KGAT_* ]]
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+      - name: Install dependencies
+        run: pip install kaggle pandas numpy
+      - name: Download BDB 2023 ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/bdb2023_download"
+          c="${RUNNER_TEMP}/bdb2023_corpus"
+          mkdir -p "$d" "$c"
+          kaggle competitions download -c nfl-big-data-bowl-2023 -p "$d"
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$z"
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "CORPUS_DIR=$c" >> "$GITHUB_ENV"
+      - name: Materialize contracted BDB 2023 features
+        run: |
+          PYTHONPATH="${PWD}" python scripts/data_frontier/materialize_bdb2023_advanced_features_v1.py             --corpus-dir "${CORPUS_DIR}"             --out-dir "${RUNNER_TEMP}/bdb2023_features"
+      - name: Sanitize artifact boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "${RUNNER_TEMP}/bdb2023_features/private"
+          test -d "${RUNNER_TEMP}/bdb2023_features/sanitized"
+          find "${RUNNER_TEMP}/bdb2023_features/sanitized" -type f -not -name '*.json' -print -quit | grep -q . && exit 1 || true
+          test "$(find "${RUNNER_TEMP}/bdb2023_features/sanitized" -type f -name '*.json' | wc -l)" -ge 1
+      - name: Upload sanitized BDB 2023 QA only
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2023-advanced-feature-qa-v1
+          path: ${{ runner.temp }}/bdb2023_features/sanitized
+          if-no-files-found: error
+          retention-days: 30
+
+  bdb2026-throw-window:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Normalize Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          token="${raw#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          [[ "$token" == KGAT_* ]]
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+      - name: Install dependencies
+        run: pip install kaggle pandas numpy
+      - name: Download BDB 2026 Analytics ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/bdb2026_download"
+          c="${RUNNER_TEMP}/bdb2026_corpus"
+          mkdir -p "$d" "$c"
+          kaggle competitions download -c nfl-big-data-bowl-2026-analytics -p "$d"
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$z"
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "CORPUS_DIR=$c" >> "$GITHUB_ENV"
+      - name: Materialize contracted BDB 2026 features
+        run: |
+          PYTHONPATH="${PWD}" python scripts/data_frontier/materialize_bdb2026_advanced_features_v1.py             --corpus-dir "${CORPUS_DIR}"             --out-dir "${RUNNER_TEMP}/bdb2026_features"
+      - name: Sanitize artifact boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "${RUNNER_TEMP}/bdb2026_features/private"
+          test -d "${RUNNER_TEMP}/bdb2026_features/sanitized"
+          find "${RUNNER_TEMP}/bdb2026_features/sanitized" -type f -not -name '*.json' -print -quit | grep -q . && exit 1 || true
+          test "$(find "${RUNNER_TEMP}/bdb2026_features/sanitized" -type f -name '*.json' | wc -l)" -ge 1
+      - name: Upload sanitized BDB 2026 QA only
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2026-advanced-feature-qa-v1
+          path: ${{ runner.temp }}/bdb2026_features/sanitized
+          if-no-files-found: error
+          retention-days: 30
