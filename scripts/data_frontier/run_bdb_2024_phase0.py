@@ -2,7 +2,7 @@
 
 Order is deliberately fail-closed:
 source normalization/QA -> frozen contact features -> geometry enrichment ->
-structural integrity -> fidelity report.
+structural integrity -> cryptographic provenance seal -> fidelity report.
 
 No predictive metrics, model tuning, sportsbook logic, or production integration.
 """
@@ -35,6 +35,7 @@ def main() -> int:
         ("scripts.data_frontier.bdb_2024_artifact_qa", ["--input-dir", str(args.input_dir), "--out-dir", str(args.out_dir)]),
         ("scripts.data_frontier.bdb_2024_contact_enrichment", ["--artifact-dir", str(args.out_dir)]),
         ("scripts.data_frontier.bdb_2024_artifact_integrity", ["--artifact-dir", str(args.out_dir)]),
+        ("scripts.data_frontier.bdb_2024_artifact_provenance", ["--artifact-dir", str(args.out_dir)]),
         ("scripts.data_frontier.bdb_2024_contact_fidelity", ["--artifact-dir", str(args.out_dir)]),
     ]
     completed: list[str] = []
@@ -54,11 +55,15 @@ def main() -> int:
         print(json.dumps(status, sort_keys=True), file=sys.stderr)
         return 2
 
+    provenance_path = args.out_dir / "artifact_provenance_v1.json"
+    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
     status = {
         "pipeline_version": PIPELINE_VERSION,
         "passed": True,
         "completed_stages": completed,
         "contact_detector_changed": False,
+        "provenance_manifest": str(provenance_path),
+        "artifact_set_sha256": provenance.get("artifact_set_sha256"),
         "fidelity_report": str(args.out_dir / "contact_fidelity_report_v1.json"),
     }
     (args.out_dir / "phase0_pipeline_status.json").write_text(json.dumps(status, indent=2, sort_keys=True), encoding="utf-8")
