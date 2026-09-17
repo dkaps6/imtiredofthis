@@ -44,6 +44,16 @@ jobs:
           fi
           echo "Kaggle credential is configured (value intentionally not printed)."
 
+      - name: Materialize Kaggle access token for CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "${KAGGLE_API_TOKEN}" | tr -d '\r\n' > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+          test -s "${HOME}/.kaggle/access_token"
+          echo "Kaggle access token file created securely (value intentionally not printed)."
+
       - name: Download official BDB 2024 competition corpus
         id: download
         shell: bash
