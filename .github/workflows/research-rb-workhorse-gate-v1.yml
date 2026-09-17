@@ -1,0 +1,204 @@
+name: RB Workhorse-Gate V1 Two-Rotation One-Shot
+
+on:
+  workflow_dispatch:
+  # Deliberately trigger automatically only when this workflow file itself is
+  # introduced/changed. Candidate/scoring code pushes do not silently rerun the
+  # one-shot science after outcomes have been exposed.
+  push:
+    branches:
+      - research-rb-workhorse-transition-gate-v1
+    paths:
+      - '.github/workflows/research-rb-workhorse-gate-v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+
+jobs:
+  frozen-contract-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+      - name: Compile all Workhorse-Gate V1 modules
+        run: |
+          python -m py_compile scripts/backtest/rb_lane_a_gate0_v1.py
+          python -m py_compile scripts/backtest/rb_lane_a_transition_detector_v1.py
+          python -m py_compile scripts/backtest/rb_workhorse_gate_v1_adequacy_census.py
+          python -m py_compile scripts/backtest/rb_workhorse_gate_v1_features.py
+          python -m py_compile scripts/backtest/rb_workhorse_gate_v1_classifier.py
+          python -m py_compile scripts/backtest/run_rb_workhorse_gate_v1.py
+      - name: Run full Workhorse-Gate V1 contract suite (plus unchanged Lane-A dependencies)
+        run: |
+          python -m pytest \
+            tests/test_rb_lane_a_gate0_v1.py \
+            tests/test_rb_lane_a_transition_detector_v1.py \
+            tests/test_rb_lane_a_comparator_reconstruction_v1.py \
+            tests/test_rb_lane_a_m91_parity_diagnostic_v1.py \
+            tests/test_rb_lane_a_candidate_v1.py \
+            tests/test_rb_lane_a_candidate_v2.py \
+            tests/test_rb_lane_a_gate_scoring_v1.py \
+            tests/test_rb_lane_a_final_gates_v1.py \
+            tests/test_rb_workhorse_gate_v1_adequacy_census.py \
+            tests/test_rb_workhorse_gate_v1_features.py \
+            tests/test_rb_workhorse_gate_v1_classifier.py \
+            tests/test_run_rb_workhorse_gate_v1.py -v
+
+  build-earlier-season-walkforward-data:
+    needs: frozen-contract-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install frozen research dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+
+      - name: Build Build-A walk-forward data for each target season 2019-2023 (canonical Build A only -- no Build B needed for this gate)
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/rb_workhorse_gate/seasons
+          mkdir -p /tmp/rb_workhorse_gate/seasons
+          for SPEC in "2019 2018" "2020 2019" "2021 2020" "2022 2021" "2023 2022"; do
+            set -- $SPEC
+            SEASON="$1"
+            PRIOR="$2"
+            WEEKS='1-18'
+            D="/tmp/rb_workhorse_gate/seasons/${SEASON}"
+            rm -rf "$D"
+            mkdir -p "$D"
+            echo "=== target=$SEASON prior=$PRIOR ==="
+            python scripts/backtest/build_historical_inputs.py \
+              --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" --out-dir "$D"
+            python scripts/backtest/enrich_historical_defense.py \
+              --team-weekly "$D/team_weekly_history.csv" \
+              --seasons "$PRIOR,$SEASON" \
+              --audit "$D/historical_defense_enrichment_audit.csv" \
+              --observations "$D/historical_defense_observations.csv"
+            python scripts/backtest/validate_historical_inputs.py \
+              --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" \
+              --data-dir "$D" --report "$D/historical_input_validation.csv"
+            python scripts/backtest/historical_player_logs_m95q.py \
+              --seasons "$PRIOR,$SEASON" --schedule "$D/schedule_history.csv" \
+              --out "$D/player_game_logs_history.csv"
+            python scripts/backtest/build_historical_injuries.py \
+              --seasons "$PRIOR,$SEASON" --out "$D/injuries_history.csv"
+            python scripts/backtest/build_historical_weather.py \
+              --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv"
+            rm -f "$D/component_predictions_build_a.csv"
+            python scripts/backtest/walk_forward.py \
+              --season "$SEASON" --prior-season "$PRIOR" --weeks "$WEEKS" \
+              --player-logs "$D/player_game_logs_history.csv" \
+              --team-weekly "$D/team_weekly_history.csv" \
+              --schedule "$D/schedule_history.csv" \
+              --universe-dir "$D/pregame_universe" \
+              --injuries "$D/injuries_history.csv" \
+              --weather "$D/weather_history.csv" \
+              --out "$D/component_predictions_build_a.csv" \
+              --iterations 2000
+            test -s "$D/component_predictions_build_a.csv"
+            test -s "$D/player_game_logs_history.csv"
+          done
+
+      - name: Combine per-season player logs (2018-2023) and Build-A component predictions (2019-2023)
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/rb_workhorse_gate_v1/combined
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+
+          root = Path("/tmp/rb_workhorse_gate/seasons")
+          season_dirs = sorted((p for p in root.iterdir() if p.is_dir()), key=lambda p: p.name)
+          logs = pd.concat(
+              [pd.read_csv(p / "player_game_logs_history.csv", low_memory=False) for p in season_dirs],
+              ignore_index=True, sort=False,
+          )
+          logs.columns = [c.strip().lower() for c in logs.columns]
+          key_cols = [c for c in ["season", "week", "team", "player_clean_key"] if c in logs.columns]
+          logs = logs.drop_duplicates(key_cols) if key_cols else logs.drop_duplicates()
+          logs.to_csv("evidence/rb_workhorse_gate_v1/combined/player_game_logs_history.csv", index=False)
+          print(f"[combine] player logs rows={len(logs)}")
+
+          cp = pd.concat(
+              [pd.read_csv(p / "component_predictions_build_a.csv", low_memory=False) for p in season_dirs],
+              ignore_index=True, sort=False,
+          )
+          cp.to_csv("evidence/rb_workhorse_gate_v1/combined/component_predictions_build_a.csv", index=False)
+          print(f"[combine] component predictions (Build A) rows={len(cp)}")
+          PY
+          test -s evidence/rb_workhorse_gate_v1/combined/player_game_logs_history.csv
+          test -s evidence/rb_workhorse_gate_v1/combined/component_predictions_build_a.csv
+
+      - name: Preserve combined walk-forward inputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-workhorse-gate-v1-combined-inputs
+          path: |
+            evidence/rb_workhorse_gate_v1/combined/**
+          if-no-files-found: warn
+          retention-days: 30
+
+  two-rotation-evaluation:
+    needs: build-earlier-season-walkforward-data
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install frozen research dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: rb-workhorse-gate-v1-combined-inputs
+          path: evidence/rb_workhorse_gate_v1/combined
+
+      - name: Run the frozen Workhorse-Gate V1 two-rotation evaluation exactly once
+        run: |
+          set -euo pipefail
+          rm -rf evidence/rb_workhorse_gate_v1/run
+          python scripts/backtest/run_rb_workhorse_gate_v1.py \
+            --player-logs evidence/rb_workhorse_gate_v1/combined/player_game_logs_history.csv \
+            --component-predictions-build-a evidence/rb_workhorse_gate_v1/combined/component_predictions_build_a.csv \
+            --out-dir evidence/rb_workhorse_gate_v1/run
+          test -s evidence/rb_workhorse_gate_v1/run/rb_workhorse_gate_v1_final_report.json
+
+      - name: Show raw final disposition and gate table
+        if: always()
+        run: |
+          echo '=== RB WORKHORSE-GATE V1 FINAL REPORT ==='
+          cat evidence/rb_workhorse_gate_v1/run/rb_workhorse_gate_v1_final_report.json 2>/dev/null || true
+
+      - name: Preserve one-shot evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-workhorse-gate-v1-one-shot
+          path: |
+            evidence/rb_workhorse_gate_v1/run/**
+          if-no-files-found: warn
+          retention-days: 30
