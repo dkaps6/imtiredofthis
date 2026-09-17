@@ -1,9 +1,9 @@
 """One-command Phase-0 BDB 2024 contact benchmark orchestration.
 
 Order is deliberately fail-closed:
-source normalization/QA -> frozen contact features -> geometry enrichment ->
-structural integrity -> cryptographic provenance seal -> fidelity report ->
-post-fidelity provenance verification.
+corpus preflight -> source normalization/QA -> frozen contact features -> geometry
+enrichment -> structural integrity -> cryptographic provenance seal -> fidelity
+report -> post-fidelity provenance verification.
 
 No predictive metrics, model tuning, sportsbook logic, or production integration.
 """
@@ -32,6 +32,7 @@ def main() -> int:
     args = ap.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
     stages = [
+        ("scripts.data_frontier.bdb_2024_corpus_preflight", ["--input-dir", str(args.input_dir), "--report", str(args.out_dir / "corpus_preflight_v1.json")]),
         ("scripts.data_frontier.bdb_2024_artifact_qa", ["--input-dir", str(args.input_dir), "--out-dir", str(args.out_dir)]),
         ("scripts.data_frontier.bdb_2024_contact_enrichment", ["--artifact-dir", str(args.out_dir)]),
         ("scripts.data_frontier.bdb_2024_artifact_integrity", ["--artifact-dir", str(args.out_dir)]),
