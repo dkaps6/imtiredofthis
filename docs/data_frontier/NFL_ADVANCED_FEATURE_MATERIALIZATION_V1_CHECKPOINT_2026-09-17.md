@@ -22,10 +22,10 @@ Parent feature-contract branch:
 `data-frontier-advanced-feature-contract-v1`
 
 Canonical Actions run:
-`35287452116`
+`35288075143`
 
 Run source SHA:
-`98aaed4f64a71d81a4dba24a7a820a1da7a5674c`
+`7c6bfbae5f0057ec5bff803ec65c713907ea6d12`
 
 Final disposition:
 
@@ -84,9 +84,9 @@ Ephemeral derivative hashes:
 
 Sanitized QA artifact:
 
-- artifact ID: `10525126488`
+- artifact ID: `10524554981`
 - digest:
-  `sha256:6d0ffc264a6c49b0b8fd0257a5ec933c8bd55a23b53efd04a1a2311465174ed6`
+  `sha256:af87ee860680097a4264d1dd4293fb2c4683c40c8e9168becd35502557c2ec00`
 
 ## BDB 2023 protection result
 
@@ -127,9 +127,9 @@ Ephemeral derivative hashes:
 
 Sanitized QA artifact:
 
-- artifact ID: `10524658390`
+- artifact ID: `10525017257`
 - digest:
-  `sha256:e0b4a53508869255706889a5e3202664641c63c451737af7e20df6cc80557400`
+  `sha256:80a0d97aea6841b0df4c754c4bbf59f6ce6cbab825e6e924d97bd74ad38eb7ae`
 
 ## BDB 2026 throw-window result
 
@@ -187,9 +187,9 @@ Ephemeral derivative hashes:
 
 Sanitized QA artifact:
 
-- artifact ID: `10525021698`
+- artifact ID: `10525237411`
 - digest:
-  `sha256:c4e7aa3f781bca0becfd97df6674eb63351459685a2d724e1806b6c37fefa4bf`
+  `sha256:a0eab857c219b2cbe61fe2ceecea4b7f98ec003482b60f306ca174725acf5036`
 
 ## Temporal-use result
 
@@ -276,3 +276,24 @@ rather than being mixed casually into the first WR candidate.
 Feature contracts and deterministic materializers are now frozen enough to support
 an explicitly authorized, leakage-safe research candidate without recreating the
 underlying data-discovery work.
+
+
+## Final hardening note
+
+The canonical run above was executed after source-fingerprint handling was aligned exactly to the previously frozen source-audit manifest scopes.
+
+It therefore supersedes the earlier successful materializer run as the canonical certification evidence.
+
+Additional canonical checks:
+
+- materializer contract tests: PASS
+- repository CI on hardened materializer branch: PASS
+- all three official-source downloads: PASS
+- all three source hashes: verified
+- all 47 contracted fields: materialized
+- target-game rows consumed into pregame history: 0
+- BDB2026 landing/post-release pregame consumption: 0
+
+Final certified disposition:
+
+**`NFL_ADVANCED_FEATURE_MATERIALIZATION_V1_CERTIFIED`**
