@@ -180,8 +180,11 @@ def test_tracked_manual_final_board_quarantine_file_is_well_formed():
     }
 
 
-def test_tracked_manual_final_board_quarantine_file_does_not_apply_to_other_weeks():
+def test_tracked_manual_final_board_quarantine_file_scopes_week2_wentz():
     from pathlib import Path
 
     path = Path("data/manual_final_board_quarantine.csv")
-    assert _load_quarantine_keys(path, season=2026, week=2) == set()
+    assert _load_quarantine_keys(path, season=2026, week=2) == {
+        ("MIN", "carsonwentz"),
+    }
+    assert _load_quarantine_keys(path, season=2026, week=3) == set()
