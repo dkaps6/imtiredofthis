@@ -1,0 +1,212 @@
+name: Data Frontier BDB2023 All Weeks Geometry
+
+on:
+  push:
+    branches:
+      - data-frontier-phase0-bdb-contact-v1
+    paths:
+      - '.github/workflows/data-frontier-bdb2023-allweeks-geometry.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_SECRET_RAW: ${{ secrets.KAGGLE_API_TOKEN }}
+  BDB2023_COMPETITION: nfl-big-data-bowl-2023
+
+jobs:
+  audit-allweeks-geometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Normalize Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          token="${raw#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          [[ "$token" == KGAT_* ]]
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+      - name: Install dependencies
+        run: pip install kaggle pandas numpy
+      - name: Download official BDB 2023 corpus ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/bdb2023_allgeom_download"
+          c="${RUNNER_TEMP}/bdb2023_allgeom_corpus"
+          mkdir -p "$d" "$c"
+          kaggle competitions download -c "${BDB2023_COMPETITION}" -p "$d"
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$z"
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "BDB2023_CORPUS_DIR=$c" >> "$GITHUB_ENV"
+      - name: Reconstruct all-weeks interaction geometry
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/bdb2023_allweeks_geometry"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import numpy as np
+          import pandas as pd
+
+          root = Path(os.environ['BDB2023_CORPUS_DIR'])
+          out = Path(os.environ['RUNNER_TEMP']) / 'bdb2023_allweeks_geometry'
+          games = pd.read_csv(next(root.rglob('games.csv')))[['gameId','week']]
+          pff = pd.read_csv(next(root.rglob('pffScoutingData.csv')))
+          pff['blockedNflId'] = pd.to_numeric(pff['pff_nflIdBlockedPlayer'], errors='coerce').astype('Int64')
+          inter = pff[pff['blockedNflId'].notna()].copy()
+          lookup = pff[['gameId','playId','nflId','pff_role']].rename(columns={'nflId':'blockedNflId','pff_role':'blockedPlayerRole'})
+          inter = inter.merge(lookup,on=['gameId','playId','blockedNflId'],how='left')
+          inter = inter[inter['blockedPlayerRole'].notna()].rename(columns={'nflId':'blockerNflId'})
+          keys=['gameId','playId','blockerNflId','blockedNflId']
+          inter=inter[keys+['pff_role','blockedPlayerRole','pff_blockType']].drop_duplicates().merge(games,on='gameId',how='left')
+
+          pair_metrics=[]
+          week_summaries=[]
+          for week in range(1,9):
+              path=next(root.rglob(f'week{week}.csv'))
+              tr=pd.read_csv(path)
+              iw=inter[inter['week'].eq(week)].drop(columns=['week']).copy()
+              expected=len(iw)
+              ev=tr[['gameId','playId','frameId','event']].dropna().drop_duplicates()
+              ft=tr.groupby(['gameId','playId'])['frameId'].agg(['min','max']).reset_index().rename(columns={'min':'firstFrame','max':'lastFrame'})
+              def ef(name):
+                  return ev[ev['event'].eq(name)].groupby(['gameId','playId'])['frameId'].min().rename(name)
+              for name in ['ball_snap','autoevent_ballsnap','pass_forward','autoevent_passforward','qb_sack','qb_strip_sack']:
+                  ft=ft.set_index(['gameId','playId']).join(ef(name),how='left').reset_index()
+
+              manual=ft['ball_snap']; auto=ft['autoevent_ballsnap']
+              both=manual.notna() & auto.notna()
+              close=both & ((manual-auto).abs()<=3)
+              divergent=both & ((manual-auto).abs()>3)
+              ft['snapFrame']=np.nan
+              ft['snapSource']='missing'
+              ft.loc[close,'snapFrame']=manual[close]
+              ft.loc[close,'snapSource']='manual_close_agreement'
+              ft.loc[divergent,'snapFrame']=np.minimum(manual[divergent],auto[divergent])
+              ft.loc[divergent,'snapSource']='earlier_of_divergent_labels'
+              only_manual=manual.notna() & auto.isna()
+              only_auto=auto.notna() & manual.isna()
+              ft.loc[only_manual,'snapFrame']=manual[only_manual]
+              ft.loc[only_manual,'snapSource']='manual_only'
+              ft.loc[only_auto,'snapFrame']=auto[only_auto]
+              ft.loc[only_auto,'snapSource']='auto_only'
+
+              pm=ft['pass_forward']; pa=ft['autoevent_passforward']
+              pboth=pm.notna() & pa.notna()
+              pclose=pboth & ((pm-pa).abs()<=3)
+              pdiv=pboth & ((pm-pa).abs()>3)
+              ft['terminalFrame']=np.nan
+              ft['terminalSource']='missing'
+              ft.loc[pclose,'terminalFrame']=pm[pclose]
+              ft.loc[pclose,'terminalSource']='pass_manual_close_agreement'
+              ft.loc[pdiv,'terminalFrame']=np.minimum(pm[pdiv],pa[pdiv])
+              ft.loc[pdiv,'terminalSource']='pass_earlier_of_divergent_labels'
+              po_m=pm.notna()&pa.isna(); po_a=pa.notna()&pm.isna()
+              ft.loc[po_m,'terminalFrame']=pm[po_m]; ft.loc[po_m,'terminalSource']='pass_manual_only'
+              ft.loc[po_a,'terminalFrame']=pa[po_a]; ft.loc[po_a,'terminalSource']='pass_auto_only'
+              sack=ft['terminalFrame'].isna()&ft['qb_sack'].notna()
+              strip=ft['terminalFrame'].isna()&ft['qb_strip_sack'].notna()
+              ft.loc[sack,'terminalFrame']=ft.loc[sack,'qb_sack']; ft.loc[sack,'terminalSource']='qb_sack'
+              ft.loc[strip,'terminalFrame']=ft.loc[strip,'qb_strip_sack']; ft.loc[strip,'terminalSource']='qb_strip_sack'
+              fallback=ft['terminalFrame'].isna()
+              ft.loc[fallback,'terminalFrame']=ft.loc[fallback,'lastFrame']; ft.loc[fallback,'terminalSource']='last_frame_fallback'
+
+              base=tr[tr['nflId'].notna()][['gameId','playId','nflId','frameId','x','y']]
+              bt=base.merge(iw,left_on=['gameId','playId','nflId'],right_on=['gameId','playId','blockerNflId'],how='inner').drop(columns=['nflId']).rename(columns={'x':'bx','y':'by'})
+              dt=base.merge(iw,left_on=['gameId','playId','nflId'],right_on=['gameId','playId','blockedNflId'],how='inner').drop(columns=['nflId','pff_role','blockedPlayerRole','pff_blockType']).rename(columns={'x':'dx','y':'dy'})
+              pairs=bt.merge(dt,on=keys+['frameId'],how='inner').merge(ft[['gameId','playId','snapFrame','terminalFrame','snapSource','terminalSource']],on=['gameId','playId'],how='left')
+              pairs=pairs[pairs['snapFrame'].notna() & (pairs['frameId']>=pairs['snapFrame']) & (pairs['frameId']<=pairs['terminalFrame'])].copy()
+              pairs['distance']=np.hypot(pairs['bx']-pairs['dx'],pairs['by']-pairs['dy'])
+              pairs['elapsedSeconds']=(pairs['frameId']-pairs['snapFrame'])/10.0
+              agg=pairs.groupby(keys).agg(sharedFrames=('frameId','size'),minDistance=('distance','min'),meanDistance=('distance','mean')).reset_index()
+              sr=pairs[pairs['frameId'].eq(pairs['snapFrame'])][keys+['distance']].rename(columns={'distance':'snapDistance'})
+              er=pairs[pairs['frameId'].eq(pairs['terminalFrame'])][keys+['distance']].rename(columns={'distance':'terminalDistance'})
+              if len(pairs):
+                  mi=pairs.loc[pairs.groupby(keys)['distance'].idxmin(),keys+['elapsedSeconds']].rename(columns={'elapsedSeconds':'secondsToMinDistance'})
+              else:
+                  mi=pd.DataFrame(columns=keys+['secondsToMinDistance'])
+              agg=agg.merge(sr,on=keys,how='left').merge(er,on=keys,how='left').merge(mi,on=keys,how='left').merge(iw,on=keys,how='left')
+              agg['week']=week
+              pair_metrics.append(agg)
+              week_summaries.append({
+                  'week':week,
+                  'tracking_rows':int(len(tr)),
+                  'expected_interactions':int(expected),
+                  'reconstructed_interactions':int(len(agg)),
+                  'geometry_coverage':float(len(agg)/expected) if expected else None,
+                  'snap_geometry_coverage_of_reconstructed':float(agg['snapDistance'].notna().mean()) if len(agg) else None,
+                  'terminal_geometry_coverage_of_reconstructed':float(agg['terminalDistance'].notna().mean()) if len(agg) else None,
+                  'plays_missing_snap':int(ft['snapFrame'].isna().sum()),
+                  'divergent_snap_label_plays':int(divergent.sum()),
+                  'terminal_last_frame_fallback_plays':int((ft['terminalSource']=='last_frame_fallback').sum()),
+                  'snap_source_counts':{str(k):int(v) for k,v in ft['snapSource'].value_counts().items()},
+                  'terminal_source_counts':{str(k):int(v) for k,v in ft['terminalSource'].value_counts().items()},
+              })
+              del tr, ev, ft, bt, dt, pairs, agg
+
+          allm=pd.concat(pair_metrics,ignore_index=True)
+          def q(s):
+              s=pd.to_numeric(s,errors='coerce').dropna()
+              if s.empty:return {}
+              qs=s.quantile([0,.1,.25,.5,.75,.9,.99,1])
+              labels={0:'p0',.1:'p10',.25:'p25',.5:'p50',.75:'p75',.9:'p90',.99:'p99',1:'p100'}
+              return {labels[i]:float(v) for i,v in qs.items()}
+          total_expected=int(inter.shape[0])
+          summary={
+              'audit_version':'BDB2023_ALLWEEKS_INTERACTION_GEOMETRY_V1',
+              'git_sha':os.environ.get('GITHUB_SHA'),
+              'raw_competition_files_uploaded':False,
+              'predictive_experiment':False,
+              'production_changed':False,
+              'event_reconciliation_contract':{
+                  'snap':'manual if manual/auto within 3 frames; otherwise earlier labeled snap; single label if only one; abstain if neither',
+                  'terminal':'manual pass if manual/auto within 3 frames; otherwise earlier labeled pass; sack/strip-sack fallback; last-frame flagged fallback if none',
+              },
+              'expected_interactions':total_expected,
+              'reconstructed_interactions':int(len(allm)),
+              'pooled_geometry_coverage':float(len(allm)/total_expected),
+              'pooled_snap_geometry_coverage_of_reconstructed':float(allm['snapDistance'].notna().mean()),
+              'pooled_terminal_geometry_coverage_of_reconstructed':float(allm['terminalDistance'].notna().mean()),
+              'week_summaries':week_summaries,
+              'snap_distance_yards_quantiles':q(allm['snapDistance']),
+              'min_distance_yards_quantiles':q(allm['minDistance']),
+              'terminal_distance_yards_quantiles':q(allm['terminalDistance']),
+              'seconds_to_min_distance_quantiles':q(allm['secondsToMinDistance']),
+              'shared_frame_count_quantiles':q(allm['sharedFrames']),
+              'reconstructed_by_source_role':{str(k):int(v) for k,v in allm['pff_role'].value_counts().items()},
+              'reconstructed_by_target_role':{str(k):int(v) for k,v in allm['blockedPlayerRole'].value_counts().items()},
+          }
+          (out/'bdb2023_allweeks_geometry_audit.json').write_text(json.dumps(summary,indent=2,sort_keys=True),encoding='utf-8')
+          print(json.dumps(summary,indent=2,sort_keys=True))
+          if summary['pooled_geometry_coverage'] < 0.995:
+              raise SystemExit('Pooled geometry coverage below 99.5%')
+          if any((w['geometry_coverage'] or 0)<0.99 for w in week_summaries):
+              raise SystemExit('At least one week geometry coverage below 99%')
+          if summary['pooled_snap_geometry_coverage_of_reconstructed'] < 0.999:
+              raise SystemExit('Pooled snap geometry coverage below 99.9%')
+          PY
+      - name: Upload sanitized all-weeks geometry audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2023-allweeks-geometry-audit
+          path: ${{ runner.temp }}/bdb2023_allweeks_geometry
+          if-no-files-found: error
+          retention-days: 30
