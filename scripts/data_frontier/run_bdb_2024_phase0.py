@@ -55,12 +55,13 @@ def main() -> int:
     fidelity_path = args.out_dir / "contact_fidelity_report_v1.json"
     fidelity = json.loads(fidelity_path.read_text(encoding="utf-8"))
     artifact_hash = provenance.get("artifact_set_sha256")
+    source_corpus_hash = provenance.get("source_corpus_sha256")
     if fidelity.get("upstream_artifact_set_sha256") != artifact_hash:
         status = {"pipeline_version": PIPELINE_VERSION, "passed": False, "completed_stages": completed, "failure": "fidelity provenance hash does not match sealed upstream artifact set", "contact_detector_changed": False}
         (args.out_dir / "phase0_pipeline_status.json").write_text(json.dumps(status, indent=2, sort_keys=True), encoding="utf-8")
         print(json.dumps(status, sort_keys=True), file=sys.stderr)
         return 2
-    status = {"pipeline_version": PIPELINE_VERSION, "passed": True, "completed_stages": completed, "contact_detector_changed": False, "provenance_manifest": str(provenance_path), "artifact_set_sha256": artifact_hash, "post_fidelity_provenance_verified": True, "fidelity_report": str(fidelity_path)}
+    status = {"pipeline_version": PIPELINE_VERSION, "passed": True, "completed_stages": completed, "contact_detector_changed": False, "provenance_manifest": str(provenance_path), "source_corpus_sha256": source_corpus_hash, "artifact_set_sha256": artifact_hash, "post_fidelity_provenance_verified": True, "fidelity_report": str(fidelity_path)}
     (args.out_dir / "phase0_pipeline_status.json").write_text(json.dumps(status, indent=2, sort_keys=True), encoding="utf-8")
     print(json.dumps(status, sort_keys=True))
     return 0
