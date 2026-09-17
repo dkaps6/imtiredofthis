@@ -93,6 +93,8 @@ def test_non_week1_rb_route_fails_closed_without_aborting_full_slate():
     pricing = Path("scripts/run_pricing_v2.py").read_text(encoding="utf-8")
     workflow = Path(".github/workflows/full-slate.yml").read_text(encoding="utf-8")
     assert "refusing unsupported RB/FB rush_yards weeks" not in pricing
+    assert "if has_rb_rush and 1 in rush_weeks and rb_synthesis_rows == 0:" in pricing
+    assert "promoted RB synthesis applied to zero eligible Week-1 RB/FB rush_yards pricing rows" in pricing
     assert 'if [ "${WEEK_RESOLVED}" != "1" ]; then' in workflow
     rb_step = workflow.split("Build promoted RB P3 from production-eligible current roles")[1]
     rb_step = rb_step.split("- name:")[0]
