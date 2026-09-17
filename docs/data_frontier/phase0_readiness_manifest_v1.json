@@ -18,12 +18,31 @@
     "orchestration_failure_order_tests": "IMPLEMENTED"
   },
   "execution_required_gates": {
-    "focused_test_suite_executed_in_verified_runtime": "PENDING_EXECUTION",
+    "focused_test_suite_executed_in_verified_runtime": "PASSED",
     "real_bdb_2024_source_files_available_under_accepted_terms": "BLOCKED_EXTERNAL_ACCESS",
     "real_corpus_schema_validation": "PENDING_REAL_CORPUS",
     "real_corpus_structural_integrity": "PENDING_REAL_CORPUS",
     "real_corpus_provenance_seal_and_reverification": "PENDING_REAL_CORPUS",
     "real_corpus_fidelity_report": "PENDING_REAL_CORPUS"
+  },
+  "verified_runtime_evidence": {
+    "github_actions_run_id": 35233814638,
+    "head_sha": "df7bc928ad4ac2bc58ed9222cd15854d901d902e",
+    "focused_tests_passed": 32,
+    "focused_tests_failed": 0,
+    "warnings": 41,
+    "elapsed_seconds": 0.81,
+    "diagnostic_artifact_id": 10502760121,
+    "diagnostic_artifact_digest": "sha256:39e8cfabd33909f4a92c258a422c8881018137b3a82570af89f1b75091922481",
+    "stale_test_fixture_repair_commit": "df7bc928ad4ac2bc58ed9222cd15854d901d902e",
+    "repair_scope": "test fixture only: defenderNflId -> persisted defenderId; no detector/scientific logic changed"
+  },
+  "authorized_source_audit": {
+    "repo_branch_tree_tracking_week_files_found": false,
+    "repo_branch_tree_tackles_csv_found": false,
+    "conversation_files_bdb_2024_found": false,
+    "library_exact_title_bdb_2024_found": false,
+    "external_access_status": "No lawful real BDB 2024 corpus is currently available in the authorized repo/conversation/library surfaces. Competition terms were not accepted and unofficial mirrors were not used."
   },
   "prohibited_in_phase0": [
     "predictive_experiments",
@@ -34,6 +53,6 @@
     "frozen_wr_rb_qb_te_plan_changes",
     "paid_production_runs"
   ],
-  "readiness_interpretation": "Engineering gates are implemented, but Phase-0 is not empirically certified until focused tests execute in a verified runtime and the lawful real BDB 2024 corpus passes the full fail-closed pipeline.",
-  "next_checkpoint": "Execute the focused Phase-0 test suite in a verified branch runtime; when lawful BDB 2024 files are available, run the real-corpus contract/integrity/provenance/fidelity pipeline without tuning the frozen detector."
+  "readiness_interpretation": "Phase-0 engineering and the focused verified-runtime test gate are green. Empirical real-corpus certification remains blocked only on lawful access to the actual BDB 2024 competition files; once available, they must pass the frozen schema/integrity/provenance/fidelity pipeline without detector tuning.",
+  "next_checkpoint": "When lawful BDB 2024 files are available, run the real-corpus contract/integrity/provenance/fidelity pipeline without tuning the frozen detector. Until then, advance only source-independent engineering and QA work."
 }
