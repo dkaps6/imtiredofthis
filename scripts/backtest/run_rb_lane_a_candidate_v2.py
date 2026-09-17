@@ -358,14 +358,18 @@ def score_rotation(rotation: int, context: dict, out_dir: Path) -> tuple[dict, p
     all_rows = _all_rb_rush_yards_rows(context["component_predictions"], context["dual"])
     keys = ["season", "week", "team", "player_clean_key"]
 
+    # translate_candidate_rush_yards() only carries CONSTRUCTIBILITY_IDENTITY_KEYS
+    # + incumbent_ypc + candidate_rush_yards forward -- it never attaches
+    # promotion_rush_att/promotion_rush_yards to `candidate`, so those must be
+    # pulled from `all_rows` here, same as the outcome columns.
     scored_eval = candidate.merge(
-        all_rows[keys + ["actual_rush_yards", "actual_rush_att", "game_key"]],
+        all_rows[keys + ["promotion_rush_att", "promotion_rush_yards", "actual_rush_yards", "actual_rush_att", "game_key"]],
         on=keys,
         how="left",
         validate="one_to_one",
     )
-    if scored_eval[["actual_rush_yards", "actual_rush_att"]].isna().any().any():
-        raise RuntimeError("constructed scored candidate has unresolved outcome row after constructibility passed")
+    if scored_eval[["promotion_rush_att", "promotion_rush_yards", "actual_rush_yards", "actual_rush_att"]].isna().any().any():
+        raise RuntimeError("constructed scored candidate has unresolved comparator/outcome row after constructibility passed")
 
     deployable = build_deployable_candidate(all_rows, candidate)
     deployable = deployable.merge(

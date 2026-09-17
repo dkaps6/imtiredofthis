@@ -198,3 +198,72 @@ def test_construct_rotation_outcome_blind_v2_excludes_ineligible_recipient_befor
     # total = 14+6+1=21.
     expected_pool = 60.0 * 0.4 * (((12 + 8) / 22) + ((14 + 6) / 21)) / 2
     assert candidate.iloc[0]["candidate_att"] == pytest.approx(expected_pool, rel=1e-6)
+
+
+def test_score_rotation_v2_attaches_promotion_columns_before_gating(tmp_path):
+    """Regression test for a real bug caught by the live one-shot run
+    (35168950219): translate_candidate_rush_yards() never carries
+    promotion_rush_att/promotion_rush_yards forward onto `candidate`, so
+    score_rotation()'s merge from all_rows must explicitly re-attach them --
+    omitting them crashed transition_mae_gate() with "missing required
+    scoring column 'promotion_rush_yards'" the moment outcomes opened.
+    """
+    from scripts.backtest.run_rb_lane_a_candidate_v2 import (
+        construct_rotation_outcome_blind_v2,
+        score_rotation,
+    )
+
+    logs = pd.DataFrame(
+        [
+            _player_log_row(2024, 1, "TB", "RB", rushes=12, rush_yards=50, name_key="p1"),
+            _player_log_row(2024, 1, "TB", "QB", rushes=2, name_key="qb1"),
+            _player_log_row(2024, 2, "TB", "RB", rushes=14, rush_yards=60, name_key="p1"),
+            _player_log_row(2024, 2, "TB", "QB", rushes=1, name_key="qb1"),
+            _player_log_row(2024, 3, "TB", "RB", rushes=20, rush_yards=90, name_key="p1"),
+        ]
+    )
+    logs["player_clean_key"] = logs["name_key"]
+    root = tmp_path / "rotation1"
+    root.mkdir()
+    logs.to_csv(root / "player_game_logs_history.csv", index=False)
+
+    roster_state = pd.DataFrame(
+        [
+            {"season": 2024, "week": 2, "team": "TB", "name_key": "p1", "player_clean_key": "p1"},
+            {"season": 2024, "week": 3, "team": "TB", "name_key": "p1", "player_clean_key": "p1"},
+        ]
+    )
+    injury_state = pd.DataFrame(columns=["season", "week", "team", "player", "status"])
+    scored_events = pd.DataFrame(
+        [{"season": 2024, "week": 3, "team": "TB", "prior_season": 2024, "prior_week": 2}]
+    )
+
+    cp_rows = []
+    for market, mc, ml, state in [("rush_att", 15.0, 14.0, 16.0), ("rush_yards", 80.0, 75.0, 85.0)]:
+        row = {
+            "season": 2024, "week": 3, "team": "TB", "player_clean_key": "p1", "market": market,
+            "position": "RB", "mc_proj": mc, "ml_proj": ml, "state_proj": state,
+            "mc_projected_plays": 60.0, "mc_dropback_rate": 0.6,
+        }
+        if market == "rush_yards":
+            row["actual"] = 75.0
+            row["actual_opportunities"] = 18.0
+        cp_rows.append(row)
+    component_predictions = pd.DataFrame(cp_rows)
+
+    context = construct_rotation_outcome_blind_v2(
+        rotation=1,
+        root=root,
+        component_predictions=component_predictions,
+        roster_state=roster_state,
+        injury_state=injury_state,
+        scored_events=scored_events,
+    )
+    assert context["constructibility"]["disposition"] == "RUSH_YARD_TRANSLATION_CONSTRUCTIBLE"
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    report, delta_rows = score_rotation(1, context, out_dir)
+    assert report["transition_mae_gate"]["n"] == 1
+    assert report["transition_mae_gate"]["comparator_mae"] is not None
+    assert len(delta_rows) == 1
