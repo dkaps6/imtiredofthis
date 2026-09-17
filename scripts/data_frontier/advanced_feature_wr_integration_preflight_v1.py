@@ -258,8 +258,9 @@ def certify_crosswalk(bdb: pd.DataFrame, nfl_alias: pd.DataFrame) -> tuple[pd.Da
             cand = nfl_alias.loc[
                 nfl_alias["name_key"].eq(b["bdb_name_key"]) & nfl_alias["gsis_id"].ne("")
             ].drop_duplicates("gsis_id")
-            if b.get("bdb_position_norm"):
-                pos = cand.loc[cand["position_norm"].eq(b["bdb_position_norm"])]
+            bpos = b.get("bdb_position_norm")
+            if pd.notna(bpos) and str(bpos).strip():
+                pos = cand.loc[cand["position_norm"].eq(str(bpos).strip())]
                 if not pos.empty:
                     cand = pos
 
