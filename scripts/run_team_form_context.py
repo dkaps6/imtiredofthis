@@ -11,6 +11,12 @@ The legacy make_team_form module contains a late 2025-specific success/explosive
 PBP derivation. Until Team Context v3 replaces that module, this wrapper repairs
 those four fields after the legacy build using the guarded runtime PBP source and
 a strict current-season `week < target_week` cutoff.
+
+The legacy TeamForm builder also predates canonical Coverage-v2 and still exits
+when Sharp's old man/zone coverage table is unavailable. For Week 2+ this runner
+may accept that exit only after proving the published TeamForm has a complete
+32-team universe and passes every non-coverage core requirement. No coverage
+values are created or substituted; canonical Coverage-v2 remains authoritative.
 """
 from __future__ import annotations
 
@@ -279,6 +285,44 @@ def _stamp_provenance(active_season: int, prior_season: int, state: dict[str, ob
     )
 
 
+def _validate_coverage_only_legacy_exit() -> None:
+    """Fail closed unless the legacy exit is provably coverage-source-only."""
+    if not TEAM_FORM_PATH.exists() or TEAM_FORM_PATH.stat().st_size == 0:
+        raise RuntimeError("legacy TeamForm failed without publishing a recoverable artifact")
+
+    tf = pd.read_csv(TEAM_FORM_PATH, low_memory=False)
+    if tf.empty:
+        raise RuntimeError("legacy TeamForm failed and published zero rows")
+    team_col = "team" if "team" in tf.columns else "team_abbr" if "team_abbr" in tf.columns else None
+    if team_col is None:
+        raise RuntimeError("legacy TeamForm recovery artifact has no team identity column")
+    teams = tf[team_col].map(make_team_form.canon_team)
+    if teams.eq("").any() or teams.nunique() != 32 or len(tf) != 32:
+        raise RuntimeError(
+            f"legacy TeamForm recovery artifact invalid team universe rows={len(tf)} teams={teams.nunique()}"
+        )
+
+    # Re-run the legacy non-coverage contract so this path can never mask a
+    # pace/EPA/PROE/red-zone/air-yard/box failure.
+    make_team_form._validate_required(tf, allow_missing_box=False)
+    for col in ("neutral_pace", "pass_rate_over_expected"):
+        if col not in tf.columns or pd.to_numeric(tf[col], errors="coerce").dropna().empty:
+            raise RuntimeError(f"legacy TeamForm recovery missing real required Sharp field: {col}")
+
+    coverage_available = any(
+        col in tf.columns and pd.to_numeric(tf[col], errors="coerce").notna().any()
+        for col in ("coverage_man_rate", "coverage_zone_rate")
+    )
+    if coverage_available:
+        raise RuntimeError(
+            "legacy TeamForm exited despite usable legacy coverage; refusing to mask a non-coverage failure"
+        )
+    print(
+        "[run_team_form_context] LEGACY_COVERAGE_ONLY_FAILURE_ACCEPTED "
+        "core_teamform=PASS teams=32 coverage_values_fabricated=0 downstream_authority=Coverage-v2"
+    )
+
+
 def main() -> None:
     season = resolve_season()
     prior = resolve_prior_season()
@@ -291,7 +335,16 @@ def main() -> None:
         argv = ["--season", str(season), *argv]
     sys.argv = [sys.argv[0], *argv]
 
-    make_team_form.main()
+    try:
+        make_team_form.main()
+    except SystemExit as exc:
+        code = int(exc.code or 0)
+        if code == 0:
+            pass
+        elif code == 1 and int(week) > 1:
+            _validate_coverage_only_legacy_exit()
+        else:
+            raise
     _repair_success_explosive_context(season, week, state)
     _stamp_provenance(season, prior, state)
 

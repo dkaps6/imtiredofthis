@@ -132,7 +132,7 @@ jobs:
           print('AVAILABILITY_BEFORE_OPPORTUNITY_PASS', {'availability_rows':len(a),'eligible_role_rows':len(r),'eligible_teams':r.team.nunique()})
           EOF
 
-      - name: Build TeamForm with explicit Week1 strict-prior authority
+      - name: Build TeamForm with runtime strict-prior authority
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/run_sharpfootball_v2.py --season "${SEASON}" --dump-html
@@ -178,22 +178,11 @@ jobs:
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
           python scripts/run_player_form_current_roles_v1.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
           python scripts/enrich_player_scoring_v2.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
           for f in data/player_game_logs.csv data/player_season_totals.csv data/player_form.csv data/player_form_consensus.csv data/player_identity_validation.csv; do test -s "$f"; done
-          python - <<'EOF'
-          import pandas as pd
-          a=pd.read_csv('data/current_player_availability.csv')
-          f=pd.read_csv('data/player_form_consensus.csv')
-          bad=set(zip(a.loc[pd.to_numeric(a.definitive_unavailable,errors='coerce').fillna(0).eq(1),'team'].astype(str),a.loc[pd.to_numeric(a.definitive_unavailable,errors='coerce').fillna(0).eq(1),'player_clean_key'].astype(str)))
-          got=set(zip(f.team.astype(str),f.player_clean_key.astype(str)))
-          if bad & got: raise SystemExit(f'FATAL: unavailable PlayerForm identities: {sorted(bad & got)[:20]}')
-          logs=pd.read_csv('data/player_game_logs.csv')
-          season=pd.to_numeric(logs.season,errors='coerce'); week=pd.to_numeric(logs.week,errors='coerce')
-          illegal=season.eq(int(2026)) & week.ge(1)
-          if illegal.fillna(False).any(): raise SystemExit('FATAL: PlayerForm published current/future Week1 history')
-          print('PLAYERFORM_CURRENT_ROLES_AND_STRICT_PRIOR_PASS')
-          EOF
+          python scripts/operations/validate_playerform_runtime_strict_prior_v1.py --season "${SEASON}" --week "${WEEK_RESOLVED}"
 
       - name: Gate football providers and materialize canonical Team Context v3
         env:
@@ -453,10 +442,6 @@ jobs:
           pos=metrics[['player','team',pos_col]].drop_duplicates(['player','team']).copy(); pos['position_family']=pos[pos_col].fillna('').astype(str).str.upper().str.strip().replace({'HB':'RB','TB':'RB'})
           rush=df.loc[df['source_market'].astype(str).eq('player_rush_yds')].merge(pos[['player','team','position_family']],on=['player','team'],how='left',validate='many_to_one')
           rb=rush.loc[rush['position_family'].isin({'RB','FB'})].copy(); nonrb=rush.loc[~rush['position_family'].isin({'RB','FB'})].copy()
-          # RB P3 is Week-1-only, and only for the teams its context was actually
-          # built for. A certified-eligible team whose props went live after that
-          # context was built is legitimately outside its scope: its Week-1 RB/FB
-          # rows must provably NOT claim P3 either, same as a non-Week-1 row.
           rb_p3_teams=set(pd.read_csv('data/rb_rush_synthesis_context.csv',usecols=['team'])['team'].astype(str))
           if not rb.empty:
               rb_week=pd.to_numeric(rb['week'],errors='coerce')
