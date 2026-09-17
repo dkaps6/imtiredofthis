@@ -1,0 +1,148 @@
+name: RB Lane A Candidate V1 Resume From Preserved Checkpoint
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-lane-a-transition-gated-allocation-v1
+    paths:
+      - '.github/workflows/research-rb-lane-a-candidate-v1-resume.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+
+jobs:
+  resume-frozen-candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install frozen research dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+
+      - name: Restore exact Run-2 pre-outcome checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf checkpoint evidence/rb_lane_a_gate0 evidence/rb_lane_a_mechanism /tmp/rb_lane_a_candidate
+          mkdir -p checkpoint evidence/rb_lane_a_gate0 evidence/rb_lane_a_mechanism /tmp/rb_lane_a_candidate
+          gh run download 35163503278 --repo "$GITHUB_REPOSITORY" \
+            --name rb-lane-a-candidate-v1-one-shot \
+            --dir checkpoint
+
+          GATE_SRC="$(find checkpoint -type d -path '*/evidence/rb_lane_a_gate0' -print -quit)"
+          test -n "$GATE_SRC"
+          cp -a "$GATE_SRC/." evidence/rb_lane_a_gate0/
+          test -s evidence/rb_lane_a_gate0/gate0_report.json
+
+          REPORT_SRC="$(find checkpoint -type f -name 'rb_lane_a_mechanism_comparator_reconstruction_report.json' -print | sort | head -1)"
+          CASEBOOK_SRC="$(find checkpoint -type f -name 'stack2_2025_casebook.csv' -print | sort | head -1)"
+          test -n "$REPORT_SRC"
+          test -n "$CASEBOOK_SRC"
+          cp "$REPORT_SRC" evidence/rb_lane_a_mechanism/rb_lane_a_mechanism_comparator_reconstruction_report.json
+          cp "$CASEBOOK_SRC" evidence/rb_lane_a_mechanism/stack2_2025_casebook.csv
+
+          test -d checkpoint/tmp/rb_lane_a_candidate/2024
+          test -d checkpoint/tmp/rb_lane_a_candidate/2025
+          cp -a checkpoint/tmp/rb_lane_a_candidate/2024 /tmp/rb_lane_a_candidate/
+          cp -a checkpoint/tmp/rb_lane_a_candidate/2025 /tmp/rb_lane_a_candidate/
+          test -s /tmp/rb_lane_a_candidate/2024/component_predictions_build_a.csv
+          test -s /tmp/rb_lane_a_candidate/2024/component_predictions_build_b.csv
+          test -s /tmp/rb_lane_a_candidate/2025/component_predictions_build_a.csv
+          test -s /tmp/rb_lane_a_candidate/2025/component_predictions_build_b.csv
+
+      - name: Reconstruct only omitted deterministic authority-manifest inputs
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/rb_lane_a_manifest
+          for SPEC in "2024 2023" "2025 2024"; do
+            set -- $SPEC
+            SEASON="$1"
+            PRIOR="$2"
+            D="/tmp/rb_lane_a_candidate/${SEASON}"
+            M="/tmp/rb_lane_a_manifest/${SEASON}"
+            mkdir -p "$M"
+
+            python scripts/backtest/build_historical_inputs.py \
+              --season "$SEASON" --prior-season "$PRIOR" --weeks '1-18' --out-dir "$M"
+            python scripts/backtest/enrich_historical_defense.py \
+              --team-weekly "$M/team_weekly_history.csv" \
+              --seasons "$PRIOR,$SEASON" \
+              --audit "$M/historical_defense_enrichment_audit.csv" \
+              --observations "$M/historical_defense_observations.csv"
+            python scripts/backtest/validate_historical_inputs.py \
+              --season "$SEASON" --prior-season "$PRIOR" --weeks '1-18' \
+              --data-dir "$M" --report "$M/historical_input_validation.csv"
+
+            cp "$M/schedule_history.csv" "$D/schedule_history.csv"
+            cp "$M/team_weekly_history.csv" "$D/team_weekly_history.csv"
+            python scripts/backtest/build_historical_injuries.py \
+              --seasons "$PRIOR,$SEASON" --out "$D/injuries_history.csv"
+            python scripts/backtest/build_historical_weather.py \
+              --schedule "$D/schedule_history.csv" --out "$D/weather_history.csv"
+          done
+
+      - name: Verify frozen checkpoint before outcome boundary
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          r=json.load(open('evidence/rb_lane_a_gate0/gate0_report.json'))
+          assert r.get('gate0_overall_disposition') == 'GATE0_PASS', r
+          PY
+          test "$(find evidence/rb_lane_a_mechanism -type f -name 'rb_lane_a_mechanism_comparator_reconstruction_report.json' | wc -l)" -eq 1
+          test "$(find evidence/rb_lane_a_mechanism -type f -name 'stack2_2025_casebook.csv' | wc -l)" -eq 1
+          python -m pytest \
+            tests/test_rb_lane_a_candidate_v1.py \
+            tests/test_rb_lane_a_gate_scoring_v1.py \
+            tests/test_rb_lane_a_final_gates_v1.py -q
+
+      - name: Run the unchanged frozen Lane-A candidate exactly once
+        run: |
+          set -euo pipefail
+          rm -rf evidence/rb_lane_a_candidate_v1
+          python scripts/backtest/run_rb_lane_a_candidate_v1.py \
+            --gate0-dir evidence/rb_lane_a_gate0 \
+            --rotation-1-root /tmp/rb_lane_a_candidate/2024 \
+            --rotation-2-root /tmp/rb_lane_a_candidate/2025 \
+            --mechanism-dir evidence/rb_lane_a_mechanism \
+            --out-dir evidence/rb_lane_a_candidate_v1
+          test -s evidence/rb_lane_a_candidate_v1/rb_lane_a_final_report.json
+
+      - name: Show raw final disposition and gate table
+        if: always()
+        run: |
+          echo '=== RB LANE A FINAL REPORT ==='
+          cat evidence/rb_lane_a_candidate_v1/rb_lane_a_final_report.json 2>/dev/null || true
+
+      - name: Preserve resumed one-shot evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-lane-a-candidate-v1-resumed-one-shot
+          path: |
+            evidence/rb_lane_a_gate0/**
+            evidence/rb_lane_a_mechanism/**
+            evidence/rb_lane_a_candidate_v1/**
+            /tmp/rb_lane_a_candidate/2024/component_predictions_build_a.csv
+            /tmp/rb_lane_a_candidate/2024/component_predictions_build_b.csv
+            /tmp/rb_lane_a_candidate/2024/player_game_logs_history.csv
+            /tmp/rb_lane_a_candidate/2024/pregame_universe/**
+            /tmp/rb_lane_a_candidate/2025/component_predictions_build_a.csv
+            /tmp/rb_lane_a_candidate/2025/component_predictions_build_b.csv
+            /tmp/rb_lane_a_candidate/2025/player_game_logs_history.csv
+            /tmp/rb_lane_a_candidate/2025/pregame_universe/**
+          if-no-files-found: warn
+          retention-days: 30
