@@ -225,8 +225,19 @@ The validator checks, at minimum:
 
 ## Disposition
 
-**`NFL_ADVANCED_FEATURE_DICTIONARY_V1_FROZEN_PENDING_CLEAN_CI`**
+**`NFL_ADVANCED_FEATURE_DICTIONARY_V1_FROZEN_CI_CERTIFIED`**
 
-Once a clean checkout passes the dedicated validator/tests, V1 is ready for the next **engineering-only** phase: deterministic ephemeral materializers and sanitized QA summaries for these exact fields.
+Clean-checkout certification:
+
+- Actions run: `35286331321`
+- disposition: `NFL_ADVANCED_FEATURE_DICTIONARY_V1_VALIDATED`
+- fields: `47`
+- source hashes verified: `3`
+- temporal classes: `13 PREGAME_HISTORICAL_DERIVABLE / 11 TARGET_GAME_POST_KICKOFF / 23 RETROSPECTIVE_VALIDATION_ONLY`
+- focused tests: `3 passed`
+- predictive experiments authorized: `false`
+- production changes authorized: `false`
+
+V1 is ready for the next **engineering-only** phase: deterministic ephemeral materializers and sanitized QA summaries for these exact fields.
 
 That next phase still does not authorize predictive testing. Any candidate experiment must be separately coordinated with the active research lane after the feature materializers and temporal audits are frozen.
