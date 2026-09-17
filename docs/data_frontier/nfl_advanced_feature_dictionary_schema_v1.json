@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "NFL_ADVANCED_FEATURE_DICTIONARY_SCHEMA_V1",
+  "title": "NFL Advanced Feature Dictionary V1",
+  "type": "object",
+  "required": [
+    "feature_contract_version",
+    "contract_status",
+    "parent_handoff_commit",
+    "source_registry",
+    "global_semantic_rules",
+    "pregame_history_global_rule",
+    "fields"
+  ],
+  "properties": {
+    "feature_contract_version": {
+      "const": "NFL_ADVANCED_FEATURE_DICTIONARY_V1"
+    },
+    "contract_status": {
+      "const": "FROZEN_ENGINEERING_CONTRACT_RESEARCH_ONLY"
+    },
+    "parent_handoff_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "source_registry": {
+      "type": "object",
+      "minProperties": 3
+    },
+    "global_semantic_rules": {
+      "type": "array",
+      "minItems": 8,
+      "items": {
+        "type": "string"
+      }
+    },
+    "pregame_history_global_rule": {
+      "type": "object"
+    },
+    "fields": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "field_name",
+          "feature_family",
+          "source_key",
+          "source_dataset",
+          "source_kaggle_slug",
+          "source_season",
+          "source_hash_sha256",
+          "source_hash_scope",
+          "canonical_source_checkpoint",
+          "canonical_source_workflow",
+          "grain",
+          "deterministic_definition",
+          "units",
+          "temporal_availability",
+          "confidence_abstention",
+          "provenance_required",
+          "semantic_limitations",
+          "production_status",
+          "predictive_experiment_status"
+        ],
+        "properties": {
+          "field_name": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]+$"
+          },
+          "source_hash_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "source_hash_scope": {
+            "enum": [
+              "SOURCE_MANIFEST",
+              "OFFICIAL_CORPUS"
+            ]
+          },
+          "source_season": {
+            "type": "integer",
+            "minimum": 1900,
+            "maximum": 2100
+          },
+          "temporal_availability": {
+            "type": "object",
+            "required": [
+              "classification",
+              "first_known_time",
+              "target_game_pregame_allowed",
+              "strict_prior_transform_allowed",
+              "leakage_guard"
+            ],
+            "properties": {
+              "classification": {
+                "enum": [
+                  "PREGAME_HISTORICAL_DERIVABLE",
+                  "TARGET_GAME_POST_KICKOFF",
+                  "RETROSPECTIVE_VALIDATION_ONLY"
+                ]
+              },
+              "target_game_pregame_allowed": {
+                "type": "boolean"
+              },
+              "strict_prior_transform_allowed": {
+                "type": "boolean"
+              }
+            }
+          },
+          "confidence_abstention": {
+            "type": "object",
+            "required": [
+              "confidence_tier_rule",
+              "abstain_if",
+              "required_quality_flags"
+            ],
+            "properties": {
+              "abstain_if": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "required_quality_flags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "provenance_required": {
+            "type": "array",
+            "minItems": 8,
+            "items": {
+              "type": "string"
+            }
+          },
+          "semantic_limitations": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "production_status": {
+            "const": "RESEARCH_ONLY_NOT_PROMOTED"
+          },
+          "predictive_experiment_status": {
+            "const": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+          }
+        }
+      }
+    }
+  }
+}
