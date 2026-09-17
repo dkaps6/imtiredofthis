@@ -33,13 +33,49 @@ def main() -> int:
     if not CONSERVATION.exists() or CONSERVATION.stat().st_size == 0:
         raise RuntimeError("RB rush+receiving conservation input audit missing")
     meta = json.loads(CONSERVATION.read_text(encoding="utf-8"))
-    if meta.get("disposition") != "RB_RUSH_REC_DISTRIBUTION_CONSERVED_WITH_PROMOTED_P3":
-        raise RuntimeError(f"RB rush+receiving input conservation not certified: {meta.get('disposition')}")
     if meta.get("sportsbook_inputs_used") is not False:
         raise RuntimeError("RB rush+receiving conservation reports sportsbook inputs")
 
     priced = pd.read_csv(PRICED, low_memory=False)
     priced.columns = [str(c).strip().lower() for c in priced.columns]
+
+    # RB P3 and its rush+receiving conservation guarantee are Week-1-only.
+    # Outside Week 1 the production contract explicitly uses the calibrated
+    # generic ensemble.  The correct certified state is therefore a no-op with
+    # zero P3-applied priced rows, not a fabricated P3 context and not a slate
+    # abort.  Week 1 remains strict below.
+    disposition = str(meta.get("disposition", ""))
+    if disposition == "NO_ELIGIBLE_RB_RUSH_REC_ROWS":
+        if "week" not in priced.columns or "rb_synthesis_applied" not in priced.columns:
+            raise RuntimeError("non-Week-1 RB conservation audit missing week/rb_synthesis_applied columns")
+        weeks = sorted(set(pd.to_numeric(priced["week"], errors="coerce").dropna().astype(int).tolist()))
+        if not weeks or 1 in weeks:
+            raise RuntimeError(
+                "RB rush+receiving conservation reported no eligible rows for a slate containing Week 1"
+            )
+        applied = pd.to_numeric(priced["rb_synthesis_applied"], errors="coerce").fillna(0)
+        if not applied.eq(0).all():
+            sample = priced.loc[~applied.eq(0), [c for c in ("player", "team", "week", "source_market", "rb_synthesis_applied") if c in priced.columns]].head(20).to_dict("records")
+            raise RuntimeError(f"non-Week-1 priced rows incorrectly claim RB P3 application: {sample}")
+        if int(meta.get("players", -1)) != 0:
+            raise RuntimeError(f"non-Week-1 RB conservation no-op reports players={meta.get('players')}")
+        OUT.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(columns=["team", "player_base_key"]).to_csv(OUT, index=False)
+        print(
+            "[rb_rush_rec_final] "
+            + json.dumps({
+                "disposition": "FINAL_RB_RUSH_REC_NOT_APPLICABLE_OUTSIDE_WEEK1",
+                "weeks": weeks,
+                "players_checked": 0,
+                "p3_applied_rows": 0,
+                "max_gap": 0.0,
+            }, sort_keys=True)
+        )
+        return 0
+
+    if disposition != "RB_RUSH_REC_DISTRIBUTION_CONSERVED_WITH_PROMOTED_P3":
+        raise RuntimeError(f"RB rush+receiving input conservation not certified: {disposition}")
+
     required = {"player", "team", "source_market", "side", "model_proj", "rb_synthesis_applied"}
     missing = required - set(priced.columns)
     if missing:
