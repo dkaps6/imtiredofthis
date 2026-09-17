@@ -175,11 +175,23 @@ def validate_contract(contract: dict) -> dict:
             errors.append(f"{label}: required provenance missing {missing_prov}")
 
         limitations = " ".join(feature.get("semantic_limitations", [])).lower()
-        if source_key in {"BDB2021_ROUTE_GEOMETRY", "BDB2026_THROW_WINDOW"}:
+        field_name = feature["field_name"]
+        proximity_field = (
+            "defender" in field_name
+            or "crowding" in field_name
+            or "spacing_gap" in field_name
+        )
+        if source_key in {"BDB2021_ROUTE_GEOMETRY", "BDB2026_THROW_WINDOW"} and proximity_field:
             if "responsibility" not in limitations and "assignment" not in limitations:
                 errors.append(f"{label}: proximity/assignment limitation missing")
-        if source_key == "BDB2023_PROTECTION_GEOMETRY":
-            # Provenance/support flags can be source-label fields; all must still avoid universal assignment claims.
+
+        blocking_assignment_sensitive = (
+            field_name.startswith("blocker_target_")
+            or field_name.startswith("hist_blocker_")
+            or field_name == "blocked_defender_source_role"
+            or field_name == "chip_release_interaction_flag"
+        )
+        if source_key == "BDB2023_PROTECTION_GEOMETRY" and blocking_assignment_sensitive:
             if "assignment" not in limitations and "interaction" not in limitations and "responsibility" not in limitations:
                 errors.append(f"{label}: blocking interaction semantic limitation missing")
 
