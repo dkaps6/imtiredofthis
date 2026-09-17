@@ -38,7 +38,7 @@ The gate is not trained or evaluated on the broader `detected_transition` disclo
 
 ### 3.1 Event population
 
-Use the exact scored V1/V2 loss/vacancy population produced by the already-audited transition machinery (`build_detected_transitions` -> `build_scored_v1_event_population`).
+Use the exact scored V1/V2 loss/vacancy population produced by the already-audited transition machinery (`build_detected_transitions` -> `build_scored_v1_event_population`), **intersected with canonical scheduled target-game team-weeks per Section 17** before any Gate-0.3 event check or feature construction.
 
 The post-transition active room must use the same Gate-0 roster/status semantics as V1/V2, including the same unavailable-status filtering. Do not redefine active-room membership for this experiment.
 
@@ -274,3 +274,22 @@ Authoritative lineage for this amendment:
 Rationale: the single-rotation design's original Section 13 treated a genuine forward 2026 season as a hard prerequisite for any production-integration proposal, which risked converting this research lane into a live-season-only path inconsistent with the `live production authority + permanent shadow laboratory` operating model. Two independent historical rotations -- Rotation A (fit 2019-2020 / cutoff 2021 / confirm 2022) and Rotation B (fit 2019-2021 / cutoff 2022 / confirm 2023) -- provide two independent out-of-sample confirmations without waiting on 2026 to accumulate first. 2024-2025 remain non-independent transport/disclosure only, exactly as before. 2026 becomes eligible for a separate production-integration review once both rotations confirm and the 2024-2025 transport passes, rather than a precondition for even proposing that review; permanent 2026 shadow monitoring remains mandatory if the architecture is later promoted.
 
 No rescue or selective use of a surviving rotation if the other fails. No rotation substitution after either rotation's confirmation year is opened. This section does not authorize any fitting; it only amends the chronology contract prospectively, before any classifier has been fit, any probability generated, or any cutoff selected.
+
+## 17. Schedule-domain correction to the scored event population
+
+Amends ONLY Section 3.1's event-population definition, by adding a filtering step. It does not alter `build_detected_transitions`/`build_scored_v1_event_population` (the frozen V1/V2 transition trigger logic), the binary target (Section 3.2), the 13-feature contract (Section 7), the classifier family (Section 8), the cutoff protocol (Section 9), the confirmation gates (Section 10), the router (Section 11), or the two-rotation chronology (Section 16).
+
+**Defect found**: the first real two-rotation-evaluation CI run (`35243854637`, head `e8f5532e`) reached `WORKHORSE_GATE_V1_WHOLE_EXPERIMENT_FAIL_CLOSED` -- 5 of 655 scored events (2019-2023) could not produce a complete finite 13-feature row, triggering the whole-experiment fail-closed rule (Section 15 point 2) before any outcome was opened. Auditing the artifact (Issue #535 comment `5718356931`) showed all 5 were non-game team-weeks, not a genuine feature-construction gap:
+
+- 2019 W18 NO, 2020 W18 BUF, 2020 W18 NO, 2020 W18 LAR -- 2019 and 2020 regular seasons ended at Week 17; these are fictitious post-season-end roster-snapshot rows.
+- 2020 W5 DEN -- a COVID-postponed, bye-shifted week with no scheduled game.
+
+The frozen transition detector (Section 3.1's `build_detected_transitions`) can flag a membership/status change on any roster-snapshot week in its 1-18 range; it does not itself verify the target `(season, week, team)` is an actual scheduled game, because Lane-A V1/V2 only ever evaluated 2024/2025, both full 18-week seasons with no such gaps. A gate that predicts whether an RB gets 20+ carries "in that game" cannot be scored against a team-week with no game, and Build-A production MC inputs correctly do not exist for one -- which is exactly why those 5 rows failed feature construction.
+
+**Correction**: before Gate-0.3 event checks (`gate03_event_report`) and before feature construction, intersect the scored loss/vacancy population with canonical scheduled target-game team-weeks, built by reusing (unchanged) `rb_lane_a_gate0_v1.build_team_week_kickoffs`/`get_nfl_schedule` -- the same already-audited schedule path used elsewhere in Gate 0. Implemented in `scripts/backtest/rb_workhorse_gate_v1_event_population.py::filter_scored_events_to_scheduled_games`. Every excluded row is preserved with reason `NO_SCHEDULED_TARGET_GAME` in a disclosure artifact -- never silently dropped -- and an explicit integrity assertion proves every retained row is a scheduled game team-week.
+
+**Corrected counts-only census** (2019-2023, run before any fitting, per Section 5's discipline): 655 scored events pre-correction -> 650 retained (5 excluded, matching the diagnosis exactly). Per-season counts after correction: 2019 n=97/pos=24 (24.7%), 2020 n=150/pos=25 (16.7%), 2021 n=167/pos=34 (20.4%), 2022 n=113/pos=25 (22.1%), 2023 n=123/pos=23 (18.7%). All seasons remain far above the adequacy floor (>=30 events, >=10 positive); the correction does not threaten adequacy in either rotation.
+
+Lineage: Issue #535 comments `5718111356` (Run 3 fail-closed result reported), `5718356931` (GPT-5.6's artifact audit, root cause, and authorization of this correction), this amendment.
+
+This section does not authorize any fitting. The two-rotation classifier run remains on hold pending review of this amendment, per the same comment.

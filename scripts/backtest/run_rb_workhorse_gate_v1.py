@@ -50,6 +50,7 @@ from scripts.backtest.rb_lane_a_transition_detector_v1 import (
 )
 from scripts.backtest.rb_workhorse_gate_v1_adequacy_census import compute_workhorse_events
 from scripts.backtest.rb_workhorse_gate_v1_classifier import CONFIRMED, INSUFFICIENT_EVIDENCE, run_rotation
+from scripts.backtest.rb_workhorse_gate_v1_event_population import filter_scored_events_to_scheduled_games
 from scripts.backtest.rb_workhorse_gate_v1_features import FEATURES_CONSTRUCTIBLE, build_event_features
 
 SCORED_WEEK_FLOOR = 2
@@ -92,6 +93,15 @@ def build_gate0_and_scored_population() -> dict:
     """Gate 0 for the full evaluated earlier-season window, plus the scored
     loss/vacancy event population restricted to weeks 2-18 -- the exact same
     definition used throughout Lane-A V1/V2 and the adequacy census.
+
+    Additionally intersects that population with canonical scheduled target
+    -game team-weeks (Issue #535 comment `5718356931`, after CI run 3
+    exposed 5 non-game rows -- legacy 17-week-season fictitious W18 rows and
+    a COVID-postponed bye-shifted week -- that the frozen transition
+    detector can flag but that have no game, and thus no Build-A production
+    inputs, to build a feature row from). This is pre-outcome, additive, and
+    does not alter the transition trigger logic itself; excluded rows are
+    preserved with their reason, never silently dropped.
     """
     roster_state = harmonize_roster_membership(EVALUATED_SEASONS)
     injury_state = harmonize_injury_state(EVALUATED_SEASONS)
@@ -100,8 +110,11 @@ def build_gate0_and_scored_population() -> dict:
     gate03 = gate03_report(roster_state, EVALUATED_SEASONS, oos_test_seasons=EVALUATED_SEASONS)
 
     detected = build_detected_transitions(roster_state, injury_state)
-    scored = build_scored_v1_event_population(detected)
-    scored = scored.loc[scored["week"].between(SCORED_WEEK_FLOOR, SCORED_WEEK_CEIL)].reset_index(drop=True)
+    scored_raw = build_scored_v1_event_population(detected)
+    scored_raw = scored_raw.loc[scored_raw["week"].between(SCORED_WEEK_FLOOR, SCORED_WEEK_CEIL)].reset_index(drop=True)
+
+    schedule_domain = filter_scored_events_to_scheduled_games(scored_raw, EVALUATED_SEASONS)
+    scored = schedule_domain["retained_events"]
 
     gate03_events = gate03_event_report(scored, roster_state)
 
@@ -115,7 +128,14 @@ def build_gate0_and_scored_population() -> dict:
     return {
         "roster_state": roster_state,
         "injury_state": injury_state,
+        "scored_events_pre_schedule_domain": scored_raw,
         "scored_events": scored,
+        "excluded_non_game_events": schedule_domain["excluded_events"],
+        "schedule_domain_counts": {
+            "events_checked": schedule_domain["events_checked"],
+            "events_retained": schedule_domain["events_retained"],
+            "events_excluded": schedule_domain["events_excluded"],
+        },
         "gate0_pass": gate0_pass,
         "gate02": gate02,
         "gate03": gate03,

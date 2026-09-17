@@ -44,6 +44,7 @@ from scripts.backtest.rb_lane_a_transition_detector_v1 import (
     build_player_week_status,
     build_scored_v1_event_population,
 )
+from scripts.backtest.rb_workhorse_gate_v1_event_population import filter_scored_events_to_scheduled_games
 
 SCORED_WEEK_FLOOR = 2
 SCORED_WEEK_CEIL = 18
@@ -132,9 +133,20 @@ def main() -> int:
     gate03 = gate03_report(roster_state, seasons, oos_test_seasons=seasons)
 
     detected = build_detected_transitions(roster_state, injury_state)
-    scored = build_scored_v1_event_population(detected)
-    scored = scored.loc[scored["week"].between(SCORED_WEEK_FLOOR, SCORED_WEEK_CEIL)].reset_index(drop=True)
+    scored_raw = build_scored_v1_event_population(detected)
+    scored_raw = scored_raw.loc[scored_raw["week"].between(SCORED_WEEK_FLOOR, SCORED_WEEK_CEIL)].reset_index(drop=True)
+    scored_raw.to_csv(args.out_dir / "scored_v1_events_pre_schedule_domain.csv", index=False)
+
+    # Schedule-domain correction (Issue #535 comment 5718356931): intersect
+    # with canonical scheduled target-game team-weeks so the census -- and
+    # everything downstream of it -- never counts a non-game row (legacy
+    # 17-week-season fictitious W18, a COVID-postponed bye-shifted week,
+    # etc.) as a scored event. Additive, pre-outcome; does not touch the
+    # transition detector itself. Excluded rows are preserved, not dropped.
+    schedule_domain = filter_scored_events_to_scheduled_games(scored_raw, seasons)
+    scored = schedule_domain["retained_events"]
     scored.to_csv(args.out_dir / "scored_v1_events.csv", index=False)
+    schedule_domain["excluded_events"].to_csv(args.out_dir / "excluded_non_game_events.csv", index=False)
 
     gate03_events = gate03_event_report(scored, roster_state)
 
@@ -162,6 +174,17 @@ def main() -> int:
                 "Schedule-coverage completeness (requirement 4) now runs for these "
                 "evaluated earlier seasons via the additive oos_test_seasons "
                 "parameter on gate03_report() (default unchanged for V1/V2)."
+            ),
+        },
+        "schedule_domain_correction": {
+            "events_checked_pre_schedule_domain": schedule_domain["events_checked"],
+            "events_retained": schedule_domain["events_retained"],
+            "events_excluded_non_game": schedule_domain["events_excluded"],
+            "note": (
+                "Scored population intersected with canonical scheduled "
+                "target-game team-weeks before this census (Issue #535 "
+                "comment 5718356931); excluded_non_game_events.csv preserves "
+                "every dropped row with its reason."
             ),
         },
         "census_by_season": census,
