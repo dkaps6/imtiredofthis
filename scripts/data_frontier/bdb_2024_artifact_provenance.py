@@ -1,7 +1,9 @@
 """Cryptographic provenance manifest for BDB 2024 Phase-0 artifacts.
 
 Data-engineering only. SHA-256 binds downstream QA/fidelity output to exact
-normalized inputs and upstream artifacts. No predictive science or tuning.
+normalized inputs and upstream artifacts. The official-corpus preflight report
+is part of the seal, so its source-file byte hashes are transitively bound to
+every fidelity result. No predictive science or tuning.
 """
 from __future__ import annotations
 
@@ -12,6 +14,7 @@ from pathlib import Path
 
 PROVENANCE_VERSION = "BDB_2024_ARTIFACT_PROVENANCE_V1"
 REQUIRED_FILES = (
+    "corpus_preflight_v1.json",
     "normalized/tracking.csv",
     "normalized/plays.csv",
     "normalized/tackles.csv",
@@ -40,21 +43,27 @@ def build_manifest(artifact_dir: Path) -> dict:
     integrity = json.loads((artifact_dir / "artifact_integrity_v1.json").read_text(encoding="utf-8"))
     if integrity.get("passed") is not True:
         raise RuntimeError("refusing provenance seal: structural integrity did not pass")
+    corpus_preflight = json.loads((artifact_dir / "corpus_preflight_v1.json").read_text(encoding="utf-8"))
+    if corpus_preflight.get("passed") is not True or not corpus_preflight.get("source_files"):
+        raise RuntimeError("refusing provenance seal: official-corpus preflight/fingerprint did not pass")
     files = {}
     for rel in (*REQUIRED_FILES, *OPTIONAL_FILES):
         path = artifact_dir / rel
         if path.is_file():
             files[rel] = {"sha256": sha256_file(path), "bytes": path.stat().st_size}
     canonical = json.dumps(files, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    source_canonical = json.dumps(corpus_preflight["source_files"], sort_keys=True, separators=(",", ":")).encode("utf-8")
     return {
         "provenance_version": PROVENANCE_VERSION,
         "scope": "phase0_data_fidelity_only",
         "hash_algorithm": "sha256",
         "passed_structural_integrity": True,
+        "passed_official_corpus_preflight": True,
         "contact_detector_changed": False,
         "files": files,
+        "source_corpus_sha256": hashlib.sha256(source_canonical).hexdigest(),
         "artifact_set_sha256": hashlib.sha256(canonical).hexdigest(),
-        "guardrail": "Any upstream byte change invalidates this seal; regenerate integrity and provenance before fidelity reporting.",
+        "guardrail": "Any source-corpus or upstream artifact byte change invalidates this seal; rerun preflight, integrity, provenance, and fidelity before reporting.",
     }
 
 
@@ -86,11 +95,11 @@ def main() -> int:
         return 0 if report["passed"] else 2
     try:
         manifest = build_manifest(args.artifact_dir)
-    except (FileNotFoundError, RuntimeError) as exc:
+    except (FileNotFoundError, RuntimeError, json.JSONDecodeError) as exc:
         print(json.dumps({"passed": False, "failure": str(exc)}, sort_keys=True))
         return 2
     out.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
-    print(json.dumps({"passed": True, "provenance_version": PROVENANCE_VERSION, "artifact_set_sha256": manifest["artifact_set_sha256"], "output": str(out)}, sort_keys=True))
+    print(json.dumps({"passed": True, "provenance_version": PROVENANCE_VERSION, "source_corpus_sha256": manifest["source_corpus_sha256"], "artifact_set_sha256": manifest["artifact_set_sha256"], "output": str(out)}, sort_keys=True))
     return 0
 
 
