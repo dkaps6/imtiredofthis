@@ -1,0 +1,191 @@
+name: Data Frontier BDB2023 Week1 Geometry
+
+on:
+  push:
+    branches:
+      - data-frontier-phase0-bdb-contact-v1
+    paths:
+      - '.github/workflows/data-frontier-bdb2023-week1-geometry.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_SECRET_RAW: ${{ secrets.KAGGLE_API_TOKEN }}
+  BDB2023_COMPETITION: nfl-big-data-bowl-2023
+
+jobs:
+  audit-week1-geometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Normalize Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          token="${raw#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          [[ "$token" == KGAT_* ]]
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+      - name: Install dependencies
+        run: pip install kaggle pandas numpy
+      - name: Download official BDB 2023 corpus ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/bdb2023_geometry_download"
+          c="${RUNNER_TEMP}/bdb2023_geometry_corpus"
+          mkdir -p "$d" "$c"
+          kaggle competitions download -c "${BDB2023_COMPETITION}" -p "$d"
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$z"
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "BDB2023_CORPUS_DIR=$c" >> "$GITHUB_ENV"
+      - name: Reconstruct Week1 interaction geometry
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/bdb2023_week1_geometry"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import numpy as np
+          import pandas as pd
+
+          root = Path(os.environ['BDB2023_CORPUS_DIR'])
+          out = Path(os.environ['RUNNER_TEMP']) / 'bdb2023_week1_geometry'
+          games = pd.read_csv(next(root.rglob('games.csv')))
+          pff = pd.read_csv(next(root.rglob('pffScoutingData.csv')))
+          tr = pd.read_csv(next(root.rglob('week1.csv')))
+
+          week1_games = set(games.loc[games['week'].eq(1), 'gameId'].tolist())
+          pff = pff[pff['gameId'].isin(week1_games)].copy()
+          pff['blockedNflId'] = pd.to_numeric(pff['pff_nflIdBlockedPlayer'], errors='coerce').astype('Int64')
+          interactions = pff[pff['blockedNflId'].notna()].copy()
+          lookup = pff[['gameId','playId','nflId','pff_role']].rename(columns={'nflId':'blockedNflId','pff_role':'blockedPlayerRole'})
+          interactions = interactions.merge(lookup, on=['gameId','playId','blockedNflId'], how='left')
+          interactions = interactions[interactions['blockedPlayerRole'].notna()].copy()
+          interactions = interactions.rename(columns={'nflId':'blockerNflId'})
+          interaction_cols = ['gameId','playId','blockerNflId','blockedNflId','pff_role','blockedPlayerRole','pff_blockType']
+          interactions = interactions[interaction_cols].drop_duplicates()
+
+          events = tr[['gameId','playId','frameId','event']].dropna().drop_duplicates()
+          plays = tr[['gameId','playId','frameId']].groupby(['gameId','playId'])['frameId'].agg(['min','max']).reset_index().rename(columns={'min':'firstFrame','max':'lastFrame'})
+
+          def event_frame(name):
+              return events[events['event'].eq(name)].groupby(['gameId','playId'])['frameId'].min().rename(name)
+
+          frame_table = plays.set_index(['gameId','playId'])
+          for name in ['ball_snap','autoevent_ballsnap','pass_forward','autoevent_passforward','qb_sack','qb_strip_sack']:
+              frame_table = frame_table.join(event_frame(name), how='left')
+          frame_table = frame_table.reset_index()
+
+          frame_table['snapFrame'] = frame_table['ball_snap'].combine_first(frame_table['autoevent_ballsnap'])
+          frame_table['snapSource'] = np.where(frame_table['ball_snap'].notna(), 'ball_snap', np.where(frame_table['autoevent_ballsnap'].notna(), 'autoevent_ballsnap', 'missing'))
+          frame_table['terminalFrame'] = frame_table['pass_forward'].combine_first(frame_table['autoevent_passforward'])
+          frame_table['terminalSource'] = np.where(frame_table['pass_forward'].notna(), 'pass_forward', np.where(frame_table['autoevent_passforward'].notna(), 'autoevent_passforward', 'missing'))
+          sack_mask = frame_table['terminalFrame'].isna() & frame_table['qb_sack'].notna()
+          frame_table.loc[sack_mask, 'terminalFrame'] = frame_table.loc[sack_mask, 'qb_sack']
+          frame_table.loc[sack_mask, 'terminalSource'] = 'qb_sack'
+          strip_mask = frame_table['terminalFrame'].isna() & frame_table['qb_strip_sack'].notna()
+          frame_table.loc[strip_mask, 'terminalFrame'] = frame_table.loc[strip_mask, 'qb_strip_sack']
+          frame_table.loc[strip_mask, 'terminalSource'] = 'qb_strip_sack'
+          last_mask = frame_table['terminalFrame'].isna()
+          frame_table.loc[last_mask, 'terminalFrame'] = frame_table.loc[last_mask, 'lastFrame']
+          frame_table.loc[last_mask, 'terminalSource'] = 'last_frame_fallback'
+
+          both_snap = frame_table['ball_snap'].notna() & frame_table['autoevent_ballsnap'].notna()
+          both_throw = frame_table['pass_forward'].notna() & frame_table['autoevent_passforward'].notna()
+          snap_diff = (frame_table.loc[both_snap,'ball_snap'] - frame_table.loc[both_snap,'autoevent_ballsnap']).abs()
+          throw_diff = (frame_table.loc[both_throw,'pass_forward'] - frame_table.loc[both_throw,'autoevent_passforward']).abs()
+
+          bt = tr[tr['nflId'].notna()][['gameId','playId','nflId','frameId','x','y','s','a','dir','o']].merge(
+              interactions, left_on=['gameId','playId','nflId'], right_on=['gameId','playId','blockerNflId'], how='inner'
+          ).drop(columns=['nflId']).rename(columns={'x':'blockerX','y':'blockerY','s':'blockerS','a':'blockerA','dir':'blockerDir','o':'blockerO'})
+          dt = tr[tr['nflId'].notna()][['gameId','playId','nflId','frameId','x','y','s','a','dir','o']].merge(
+              interactions, left_on=['gameId','playId','nflId'], right_on=['gameId','playId','blockedNflId'], how='inner'
+          ).drop(columns=['nflId','pff_role','blockedPlayerRole','pff_blockType']).rename(columns={'x':'defenderX','y':'defenderY','s':'defenderS','a':'defenderA','dir':'defenderDir','o':'defenderO'})
+
+          pair_keys = ['gameId','playId','blockerNflId','blockedNflId','frameId']
+          pairs = bt.merge(dt, on=pair_keys, how='inner')
+          pairs = pairs.merge(frame_table[['gameId','playId','snapFrame','terminalFrame','snapSource','terminalSource']], on=['gameId','playId'], how='left')
+          pairs = pairs[(pairs['snapFrame'].notna()) & (pairs['frameId'] >= pairs['snapFrame']) & (pairs['frameId'] <= pairs['terminalFrame'])].copy()
+          pairs['distance'] = np.hypot(pairs['blockerX'] - pairs['defenderX'], pairs['blockerY'] - pairs['defenderY'])
+          pairs['elapsedSeconds'] = (pairs['frameId'] - pairs['snapFrame']) / 10.0
+
+          id_keys = ['gameId','playId','blockerNflId','blockedNflId']
+          agg = pairs.groupby(id_keys).agg(
+              sharedFrames=('frameId','size'),
+              firstPairedFrame=('frameId','min'),
+              lastPairedFrame=('frameId','max'),
+              minDistance=('distance','min'),
+              meanDistance=('distance','mean'),
+          ).reset_index()
+          snap_rows = pairs[pairs['frameId'].eq(pairs['snapFrame'])][id_keys+['distance']].rename(columns={'distance':'snapDistance'})
+          end_rows = pairs[pairs['frameId'].eq(pairs['terminalFrame'])][id_keys+['distance']].rename(columns={'distance':'terminalDistance'})
+          min_idx = pairs.groupby(id_keys)['distance'].idxmin()
+          min_rows = pairs.loc[min_idx, id_keys+['elapsedSeconds']].rename(columns={'elapsedSeconds':'secondsToMinDistance'})
+          agg = agg.merge(snap_rows, on=id_keys, how='left').merge(end_rows, on=id_keys, how='left').merge(min_rows, on=id_keys, how='left')
+          agg = agg.merge(interactions, on=id_keys, how='left')
+
+          def qstats(s):
+              s = pd.to_numeric(s, errors='coerce').dropna()
+              if s.empty: return {}
+              return {k: float(v) for k,v in s.quantile([0,.1,.25,.5,.75,.9,1]).rename(index={0:'p0',.1:'p10',.25:'p25',.5:'p50',.75:'p75',.9:'p90',1:'p100'}).items()}
+
+          expected = len(interactions)
+          summary = {
+              'audit_version': 'BDB2023_WEEK1_INTERACTION_GEOMETRY_V1',
+              'git_sha': os.environ.get('GITHUB_SHA'),
+              'raw_competition_files_uploaded': False,
+              'predictive_experiment': False,
+              'production_changed': False,
+              'week1_tracking_rows': int(len(tr)),
+              'week1_interaction_rows_expected': int(expected),
+              'week1_interaction_pairs_with_any_window_geometry': int(len(agg)),
+              'interaction_geometry_coverage': float(len(agg)/expected) if expected else None,
+              'pairs_with_snap_geometry': int(agg['snapDistance'].notna().sum()),
+              'pairs_with_terminal_geometry': int(agg['terminalDistance'].notna().sum()),
+              'snap_geometry_coverage': float(agg['snapDistance'].notna().mean()) if len(agg) else None,
+              'terminal_geometry_coverage': float(agg['terminalDistance'].notna().mean()) if len(agg) else None,
+              'snap_source_counts': {str(k): int(v) for k,v in frame_table['snapSource'].value_counts().items()},
+              'terminal_source_counts': {str(k): int(v) for k,v in frame_table['terminalSource'].value_counts().items()},
+              'manual_vs_auto_snap_abs_frame_diff': qstats(snap_diff),
+              'manual_vs_auto_throw_abs_frame_diff': qstats(throw_diff),
+              'shared_frame_count_quantiles': qstats(agg['sharedFrames']),
+              'snap_distance_yards_quantiles': qstats(agg['snapDistance']),
+              'min_distance_yards_quantiles': qstats(agg['minDistance']),
+              'terminal_distance_yards_quantiles': qstats(agg['terminalDistance']),
+              'seconds_to_min_distance_quantiles': qstats(agg['secondsToMinDistance']),
+              'geometry_rows_by_source_role': {str(k): int(v) for k,v in agg['pff_role'].value_counts().items()},
+              'geometry_rows_by_target_role': {str(k): int(v) for k,v in agg['blockedPlayerRole'].value_counts().items()},
+              'geometry_rows_by_block_type': {str(k): int(v) for k,v in agg['pff_blockType'].fillna('<NULL>').value_counts().items()},
+          }
+          (out/'bdb2023_week1_geometry_audit.json').write_text(json.dumps(summary, indent=2, sort_keys=True), encoding='utf-8')
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          if summary['interaction_geometry_coverage'] < 0.995:
+              raise SystemExit('Week1 interaction geometry coverage below 99.5%')
+          if summary['snap_geometry_coverage'] < 0.99:
+              raise SystemExit('Week1 snap geometry coverage below 99%')
+          PY
+      - name: Upload sanitized Week1 geometry audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2023-week1-geometry-audit
+          path: ${{ runner.temp }}/bdb2023_week1_geometry
+          if-no-files-found: error
+          retention-days: 30
