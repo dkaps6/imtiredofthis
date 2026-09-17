@@ -61,7 +61,10 @@
           "provenance_required",
           "semantic_limitations",
           "production_status",
-          "predictive_experiment_status"
+          "predictive_experiment_status",
+          "source_access_status",
+          "raw_data_handling",
+          "source_license_lineage"
         ],
         "properties": {
           "field_name": {
@@ -149,6 +152,16 @@
           },
           "predictive_experiment_status": {
             "const": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+          },
+          "source_access_status": {
+            "const": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE"
+          },
+          "raw_data_handling": {
+            "const": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED"
+          },
+          "source_license_lineage": {
+            "type": "string",
+            "minLength": 40
           }
         }
       }
