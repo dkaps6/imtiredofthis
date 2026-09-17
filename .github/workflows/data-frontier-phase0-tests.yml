@@ -33,8 +33,11 @@ jobs:
         run: |
           python -m compileall data_frontier scripts/data_frontier tests/test_bdb_2024_*.py
       - name: Run focused Phase-0 suite
+        id: focused_tests
+        shell: bash
         run: |
           export PYTHONPATH="${PWD}"
+          set +e
           pytest -q \
             tests/test_bdb_2024_artifact_integrity.py \
             tests/test_bdb_2024_artifact_provenance.py \
@@ -43,4 +46,20 @@ jobs:
             tests/test_bdb_2024_contact_enrichment.py \
             tests/test_bdb_2024_contact_fidelity.py \
             tests/test_bdb_2024_contact_geometry.py \
-            tests/test_bdb_2024_phase0_orchestration.py
+            tests/test_bdb_2024_phase0_orchestration.py \
+            2>&1 | tee phase0_pytest.log
+          code=${PIPESTATUS[0]}
+          echo "exit_code=${code}" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Upload focused pytest diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase0-pytest-diagnostics
+          path: phase0_pytest.log
+          if-no-files-found: error
+      - name: Enforce focused test result
+        if: steps.focused_tests.outputs.exit_code != '0'
+        run: |
+          echo "Focused Phase-0 tests failed. See phase0-pytest-diagnostics artifact."
+          exit 1
