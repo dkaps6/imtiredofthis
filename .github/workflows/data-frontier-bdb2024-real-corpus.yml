@@ -29,12 +29,6 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Phase-0 and Kaggle dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install kaggle pyyaml
-
       - name: Verify Kaggle credential is present
         shell: bash
         run: |
@@ -43,6 +37,35 @@ jobs:
             exit 2
           fi
           echo "Kaggle credential is configured (value intentionally not printed)."
+
+      - name: Validate Kaggle token with official introspection
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          token = os.environ['KAGGLE_API_TOKEN'].strip()
+          print(f"token_prefix_ok={token.startswith('KGAT_')}")
+          print(f"token_length={len(token)}")
+          request = urllib.request.Request(
+              'https://www.kaggle.com/api/v1/oauth2/introspect',
+              data=json.dumps({'token': token}).encode('utf-8'),
+              headers={'Content-Type': 'application/json'},
+              method='POST',
+          )
+          try:
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  payload = json.load(response)
+          except Exception as exc:
+              print(f"Kaggle token introspection request failed: {type(exc).__name__}")
+              raise SystemExit(2)
+          active = bool(payload.get('active'))
+          print(f"kaggle_token_active={active}")
+          if not active:
+              raise SystemExit(2)
+          PY
 
       - name: Materialize Kaggle access token for CLI
         shell: bash
@@ -53,6 +76,12 @@ jobs:
           chmod 600 "${HOME}/.kaggle/access_token"
           test -s "${HOME}/.kaggle/access_token"
           echo "Kaggle access token file created securely (value intentionally not printed)."
+
+      - name: Install Phase-0 and Kaggle dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install kaggle pyyaml
 
       - name: Download official BDB 2024 competition corpus
         id: download
