@@ -141,7 +141,7 @@ jobs:
           if [ "${WEEK_RESOLVED}" = "1" ]; then
             python scripts/run_team_form_context_week1_prior_v1.py --season "${SEASON}" --box-backfill-prev
           else
-            python scripts/run_team_form_context_week2_compat.py --season "${SEASON}" --box-backfill-prev
+            python scripts/run_team_form_context.py --season "${SEASON}" --box-backfill-prev
           fi
           test -s data/team_form.csv
 
@@ -442,10 +442,6 @@ jobs:
           pos=metrics[['player','team',pos_col]].drop_duplicates(['player','team']).copy(); pos['position_family']=pos[pos_col].fillna('').astype(str).str.upper().str.strip().replace({'HB':'RB','TB':'RB'})
           rush=df.loc[df['source_market'].astype(str).eq('player_rush_yds')].merge(pos[['player','team','position_family']],on=['player','team'],how='left',validate='many_to_one')
           rb=rush.loc[rush['position_family'].isin({'RB','FB'})].copy(); nonrb=rush.loc[~rush['position_family'].isin({'RB','FB'})].copy()
-          # RB P3 is Week-1-only, and only for the teams its context was actually
-          # built for. A certified-eligible team whose props went live after that
-          # context was built is legitimately outside its scope: its Week-1 RB/FB
-          # rows must provably NOT claim P3 either, same as a non-Week-1 row.
           rb_p3_teams=set(pd.read_csv('data/rb_rush_synthesis_context.csv',usecols=['team'])['team'].astype(str))
           if not rb.empty:
               rb_week=pd.to_numeric(rb['week'],errors='coerce')
