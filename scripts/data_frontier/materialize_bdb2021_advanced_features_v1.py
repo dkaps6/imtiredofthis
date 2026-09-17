@@ -115,7 +115,8 @@ def _history_snapshots(raw: pd.DataFrame) -> pd.DataFrame:
 def materialize(corpus_dir: Path, out_root: Path) -> dict:
     dictionary = load_dictionary()
     source, _ = source_contract(SOURCE_KEY, dictionary)
-    observed_hash, manifest = corpus_sha256(corpus_dir)
+    expected_files = ['games.csv', 'players.csv', 'plays.csv'] + [f'week{i}.csv' for i in range(1, 18)]
+    observed_hash, manifest = corpus_sha256(corpus_dir, expected_files, relative_names=False)
     if observed_hash != source["source_hash_sha256"]:
         raise SystemExit(f"BDB2021 source hash mismatch: {observed_hash} != {source['source_hash_sha256']}")
 
