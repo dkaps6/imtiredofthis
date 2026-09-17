@@ -1,0 +1,215 @@
+{
+  "version": "NFL_CROSS_POSITION_CONTEXT_STATE_SOURCE_REGISTRY_V1",
+  "status": "ENGINEERING_SOURCE_REGISTRY_NO_PREDICTIVE_AUTHORIZATION",
+  "created_date": "2026-09-17",
+  "parent_materialization_commit": "ecd45f9064b605a93ea4a8fc9651a3b4dfa23e88",
+  "global_rules": [
+    "All target-game context must be known before kickoff.",
+    "Completed-game performance sources may enter only through strict-prior transforms.",
+    "Depth chart is contextual evidence and never direct workload authority.",
+    "Sportsbook prices are prohibited as football-context inputs.",
+    "Generic M76-M77 personnel-discontinuity counts remain closed and are not authorized for retest.",
+    "Advanced BDB geometry is historical laboratory evidence; no target-game BDB geometry exists for 2026 production.",
+    "Missing or temporally ambiguous source evidence must abstain rather than backfill from target-game outcomes."
+  ],
+  "sources": [
+    {
+      "source_key": "NFLVERSE_WEEKLY_ROSTER",
+      "implementation": "nflreadpy.load_rosters_weekly",
+      "repo_authority": "scripts/player_identity_roster_history_v1.py",
+      "identity_grain": "season-week-team-gsis_id",
+      "use_classes": [
+        "stable_identity",
+        "team_transition",
+        "roster_membership"
+      ],
+      "temporal_status": "QUALIFIED_WEEK_TAGGED_HISTORICAL",
+      "target_game_use": "pregame roster/identity only under existing historical-input contract",
+      "limitations": [
+        "identity/roster source only; performance is not supplied by the identity history builder"
+      ]
+    },
+    {
+      "source_key": "NFLVERSE_DEPTH_CHART",
+      "implementation": "nflreadpy.load_depth_charts",
+      "repo_authority": "scripts/backtest/historical_inputs.py",
+      "identity_grain": "season-week-or-datetime-team-player",
+      "use_classes": [
+        "role_context",
+        "starter_context",
+        "depth_rank_delta"
+      ],
+      "temporal_status": "QUALIFIED_ONLY_WHEN_WEEK_TAGGED_OR_CUTOFF_SAFE",
+      "target_game_use": "contextual evidence only",
+      "limitations": [
+        "date-based/full-season rows without reliable pregame cutoff must abstain",
+        "depth chart is not direct workload authority",
+        "M76-M77 generic depth/personnel discontinuity remains closed"
+      ]
+    },
+    {
+      "source_key": "NFLVERSE_SNAP_COUNTS",
+      "implementation": "nflreadpy.load_snap_counts",
+      "repo_authority": "scripts/modeling/te_r5p_entitlement_adapter_v1.py",
+      "identity_grain": "season-week-player/team",
+      "use_classes": [
+        "strict_prior_participation",
+        "role_transition",
+        "room_competition"
+      ],
+      "temporal_status": "COMPLETED_GAME_STRICT_PRIOR_ONLY",
+      "target_game_use": "no target-week realized snaps",
+      "limitations": [
+        "lagged participation signal only"
+      ]
+    },
+    {
+      "source_key": "NFLVERSE_WEEKLY_PLAYER_STATS",
+      "implementation": "nflreadpy.load_player_stats(summary_level=week)",
+      "repo_authority": "scripts/player_stats_loader_v2.py",
+      "identity_grain": "season-week-gsis_id",
+      "use_classes": [
+        "strict_prior_usage",
+        "strict_prior_efficiency",
+        "qb_environment",
+        "room_competition"
+      ],
+      "temporal_status": "COMPLETED_GAME_STRICT_PRIOR_ONLY",
+      "target_game_use": "no target-week outcome fields",
+      "limitations": [
+        "box-score/weekly-stat evidence only; context deltas must remain pregame-safe"
+      ]
+    },
+    {
+      "source_key": "NFLVERSE_PBP_TEAM_CONTEXT",
+      "implementation": "scripts.utils.pbp.get_pbp / nflreadpy PBP",
+      "repo_authority": "scripts/backtest/historical_inputs.py",
+      "identity_grain": "season-week-team/game/play",
+      "use_classes": [
+        "team_pass_opportunity",
+        "team_rush_opportunity",
+        "pressure_environment",
+        "explosive_environment",
+        "playcaller_tendency"
+      ],
+      "temporal_status": "COMPLETED_GAME_STRICT_PRIOR_ONLY",
+      "target_game_use": "strictly prior team/game history only",
+      "limitations": [
+        "target-game play calls and outcomes prohibited"
+      ]
+    },
+    {
+      "source_key": "OURLADS_CURRENT_DEPTH_ROLE",
+      "implementation": "scripts/providers/ourlads_depth_status_v1.py",
+      "repo_authority": "docs/operations/CURRENT_PLAYER_AVAILABILITY_PRODUCTION_PROMOTION_V1_IMPLEMENTATION_LOCK.md",
+      "identity_grain": "current-team-player-role",
+      "use_classes": [
+        "current_role_context",
+        "current_depth_context"
+      ],
+      "temporal_status": "CURRENT_PREGAME_CERTIFIED_ROLE_PLUMBING",
+      "target_game_use": "allowed as current pregame contextual evidence",
+      "limitations": [
+        "not direct workload authority; identity/role must pass current availability plumbing"
+      ]
+    },
+    {
+      "source_key": "NFL_OFFICIAL_INACTIVES",
+      "implementation": "scripts/providers/nfl_official_inactives_v1.py",
+      "repo_authority": "docs/operations/CURRENT_PLAYER_AVAILABILITY_PRODUCTION_PROMOTION_V1_IMPLEMENTATION_LOCK.md",
+      "identity_grain": "game-team-player",
+      "use_classes": [
+        "definitive_availability",
+        "injury_created_vacancy",
+        "teammate_return_state"
+      ],
+      "temporal_status": "CURRENT_PREGAME_AUTHORITY_WITH_T75_RULE",
+      "target_game_use": "within frozen timing rules",
+      "limitations": [
+        "more than 75 minutes before kickoff official inactives are not required; within T-75 incomplete evidence fails closed"
+      ]
+    },
+    {
+      "source_key": "PLAYCALLER_HISTORY",
+      "implementation": "SEASON_OPENING_CALLER + CALLER_OVERRIDES",
+      "repo_authority": "scripts/backtest/build_qb_playcaller_opening_leverage.py",
+      "identity_grain": "season-week-team-playcaller",
+      "use_classes": [
+        "coordinator_playcaller_change",
+        "scheme_continuity"
+      ],
+      "temporal_status": "PARTIAL_MANUALLY_VERIFIED_HISTORY_2023_2025",
+      "target_game_use": "SOURCE_GATED",
+      "limitations": [
+        "must be expanded/certified for 2026 before production use",
+        "coordinator title is not always identical to game-day play caller",
+        "no silent fill for unresolved teams/weeks"
+      ]
+    },
+    {
+      "source_key": "BDB2021_ROUTE_HISTORY",
+      "implementation": "NFL_ADVANCED_FEATURE_MATERIALIZER_V1",
+      "repo_authority": "docs/data_frontier/NFL_ADVANCED_FEATURE_MATERIALIZATION_V1_CHECKPOINT_2026-09-17.md",
+      "identity_grain": "2018 player-route history",
+      "use_classes": [
+        "historical_route_spacing_prior"
+      ],
+      "temporal_status": "HISTORICAL_LAB_ONLY",
+      "target_game_use": "strict-prior/stable-skill prior only; never target-game geometry",
+      "limitations": [
+        "2018 slice; nearest defender is geometry not assignment"
+      ]
+    },
+    {
+      "source_key": "BDB2023_PROTECTION_HISTORY",
+      "implementation": "NFL_ADVANCED_FEATURE_MATERIALIZER_V1",
+      "repo_authority": "docs/data_frontier/NFL_ADVANCED_FEATURE_MATERIALIZATION_V1_CHECKPOINT_2026-09-17.md",
+      "identity_grain": "2021 blocker-interaction history",
+      "use_classes": [
+        "historical_protection_geometry_prior"
+      ],
+      "temporal_status": "HISTORICAL_LAB_ONLY",
+      "target_game_use": "strict-prior/stable-skill prior only",
+      "limitations": [
+        "2021 slice; blocked-player identity is interaction identity not universal assignment"
+      ]
+    },
+    {
+      "source_key": "BDB2026_THROW_WINDOW_HISTORY",
+      "implementation": "NFL_ADVANCED_FEATURE_MATERIALIZER_V1",
+      "repo_authority": "docs/data_frontier/NFL_ADVANCED_FEATURE_MATERIALIZATION_V1_CHECKPOINT_2026-09-17.md",
+      "identity_grain": "2023 targeted-receiver history",
+      "use_classes": [
+        "historical_release_space_prior",
+        "historical_crowding_prior",
+        "route_conditioned_space_prior"
+      ],
+      "temporal_status": "HISTORICAL_LAB_ONLY",
+      "target_game_use": "strict-prior/stable-skill prior only",
+      "limitations": [
+        "2023 slice, not current live tracking",
+        "nearest defender is geometry not responsibility",
+        "landing/post-release fields remain retrospective only"
+      ]
+    }
+  ],
+  "unresolved_sources": [
+    {
+      "family": "CURRENT_2026_PLAYCALLER_COORDINATOR",
+      "status": "SOURCE_CERTIFICATION_REQUIRED",
+      "reason": "existing playcaller authority is historical/manual and must be extended with timestamped official 2026 evidence"
+    },
+    {
+      "family": "CURRENT_ADVANCED_TRACKING_GEOMETRY",
+      "status": "NO_AUTHORIZED_LIVE_EQUIVALENT_YET",
+      "reason": "BDB laboratories provide historical competition slices, not a 2026 live NGS tracking feed"
+    },
+    {
+      "family": "CURRENT_OL_STARTER_UNIT_CONTINUITY",
+      "status": "ENGINEERING_JOIN_REQUIRED",
+      "reason": "current role sources exist but a frozen GSIS-keyed OL unit context materializer has not yet been built"
+    }
+  ],
+  "predictive_experiments_authorized": false,
+  "production_changes_authorized": false
+}
