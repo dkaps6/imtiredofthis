@@ -21,6 +21,7 @@ OUT_JSON = DATA / "market_model_lineage_current.json"
 
 QB_C2_VERSION = "C2_QB_MEAN_NEUTRAL_DISTRIBUTION_V1"
 QB_C2_SELECTOR = "QB_DISTRIBUTION_STATE_SELECTOR_V1"
+QB_FINAL_BOARD_QUARANTINE_ROUTE = "FINAL_BOARD_QUARANTINE"
 
 
 def _read(path: Path) -> pd.DataFrame:
@@ -165,14 +166,39 @@ def _certify_qb_c2(priced: pd.DataFrame) -> tuple[dict, dict]:
     if missing:
         raise RuntimeError(f"priced output missing QB C2 lineage columns: {missing}")
 
-    qb = priced.loc[priced["source_market"].astype(str).eq("player_pass_yds")].copy()
-    if qb.empty:
+    all_qb = priced.loc[priced["source_market"].astype(str).eq("player_pass_yds")].copy()
+    if all_qb.empty:
         raise RuntimeError("QB C2 lineage found zero priced pass-yard rows")
+    quarantine_mask = all_qb["qb_distribution_route"].astype(str).eq(QB_FINAL_BOARD_QUARANTINE_ROUTE)
+    quarantined_qb = all_qb.loc[quarantine_mask].copy()
+    qb = all_qb.loc[~quarantine_mask].copy()
+    if qb.empty:
+        raise RuntimeError("QB C2 lineage found zero certified non-quarantined pass-yard rows")
+    expected_quarantined_qbs = int(stamp.get("quarantined_pass_yard_qbs", 0))
+    actual_quarantined_qbs = int(quarantined_qb[["team", "player"]].drop_duplicates().shape[0])
+    if actual_quarantined_qbs != expected_quarantined_qbs:
+        raise RuntimeError(
+            "QB C2 quarantined priced-QB count differs from pricing lineage stamp; "
+            f"priced={actual_quarantined_qbs} stamp={expected_quarantined_qbs}"
+        )
+    if not quarantined_qb.empty:
+        q_applied = pd.to_numeric(quarantined_qb["qb_distribution_specialist_applied"], errors="coerce").fillna(0)
+        if not q_applied.eq(0).all():
+            raise RuntimeError("final-board-quarantined QB rows incorrectly claim C2 specialist consumption")
+        for col in (
+            "qb_distribution_specialist_version",
+            "qb_distribution_candidate_version",
+            "qb_distribution_selector_version",
+        ):
+            if quarantined_qb[col].fillna("").astype(str).str.strip().ne("").any():
+                raise RuntimeError(f"final-board-quarantined QB rows contain C2 lineage field {col}")
+        if not quarantined_qb["qb_distribution_starter_authority_source"].astype(str).eq("FINAL_BOARD_QUARANTINE").all():
+            raise RuntimeError("final-board-quarantined QB rows missing quarantine authority marker")
     priced_qbs = int(qb[["team", "player"]].drop_duplicates().shape[0])
     if not qb["qb_distribution_candidate_version"].astype(str).eq(QB_C2_VERSION).all():
-        raise RuntimeError("priced QB rows do not all record frozen C2 candidate version")
+        raise RuntimeError("certified priced QB rows do not all record frozen C2 candidate version")
     if not qb["qb_distribution_selector_version"].astype(str).eq(QB_C2_SELECTOR).all():
-        raise RuntimeError("priced QB rows do not all record frozen C2 selector version")
+        raise RuntimeError("certified priced QB rows do not all record frozen C2 selector version")
     applied = pd.to_numeric(qb["qb_distribution_specialist_applied"], errors="coerce")
     if applied.isna().any() or not applied.isin([0, 1]).all():
         raise RuntimeError("priced QB C2 applied flag invalid")
@@ -366,6 +392,7 @@ def main() -> int:
         "qb_c2_state_capture_exact": int(c2.get("state_capture_changed_arrays", -1)) == 0,
         "qb_c2_max_raw_mean_gap": float(c2.get("max_raw_qb_mean_gap")),
         "qb_c2_pricing_lineage_stamp_certified": c2_stamp.get("disposition") == "QB_C2_PRICING_LINEAGE_STAMP_CERTIFIED",
+        "qb_c2_quarantined_pass_yard_qbs": int(c2_stamp.get("quarantined_pass_yard_qbs", 0)),
         "qb_c2_distribution_audit": "data/qb_c2_production_integration_audit.json",
         "c2_full_stack_receiver_conservation_consumed": False,
         "c2_full_stack_consumed": False,

@@ -11,7 +11,7 @@ specialists exactly as intended:
 - explicit conserved team target entitlement;
 - TE-R5P inside the conserved TE room;
 - QB C2 mean-neutral distribution selector with M89/M90 retaining mean authority;
-- RB P3 rushing plus rush+receiving conservation;
+- RB P3 rushing plus rush+receiving conservation on its qualified Week-1 route;
 - exact bookmaker offer expansion and downstream-only sportsbook usage;
 - explicit player-level model lineage;
 - ATD execution allowed only with its not-yet-certified science status declared.
@@ -129,11 +129,27 @@ def main() -> int:
     _require(int(stamp.get("protected_columns_changed", 1)) == 0, "QB C2 lineage stamp changed protected columns")
     _require(int(stamp.get("pass_yard_qbs", 0)) == 32, "QB C2 pricing lineage does not cover 32 QBs")
 
-    _require(rb_input.get("disposition") == "RB_RUSH_REC_DISTRIBUTION_CONSERVED_WITH_PROMOTED_P3", "RB P3 input conservation not certified")
+    rb_disposition = str(rb_input.get("disposition", ""))
+    rb_p3_active = rb_disposition == "RB_RUSH_REC_DISTRIBUTION_CONSERVED_WITH_PROMOTED_P3"
     _require(rb_input.get("sportsbook_inputs_used") is False, "sportsbook input leaked into RB P3 conservation")
     rb_gap = pd.to_numeric(rb_final.get("conservation_gap"), errors="coerce")
     _require(rb_gap.notna().all() and np.isfinite(rb_gap.to_numpy(float)).all(), "RB final conservation audit has non-finite gaps")
-    _require(float(rb_gap.abs().max()) <= 1e-6, "RB final rush+receiving conservation failed")
+    if rb_p3_active:
+        _require(float(rb_gap.abs().max()) <= 1e-6, "RB final rush+receiving conservation failed")
+    else:
+        _require(
+            rb_disposition == "NO_ELIGIBLE_RB_RUSH_REC_ROWS",
+            f"RB P3 input conservation not certified or explicitly non-applicable: {rb_disposition}",
+        )
+        priced_weeks = sorted(set(pd.to_numeric(priced.get("week"), errors="coerce").dropna().astype(int).tolist()))
+        _require(bool(priced_weeks) and 1 not in priced_weeks, f"RB P3 no-op invalid for priced weeks={priced_weeks}")
+        _require(int(rb_input.get("players", -1)) == 0, "non-Week-1 RB P3 no-op reports promoted players")
+        _require(
+            rb_final.get("audit_state", pd.Series(dtype="string")).astype(str).eq("NOT_APPLICABLE_OUTSIDE_WEEK1").all(),
+            "non-Week-1 RB final conservation audit missing not-applicable sentinel",
+        )
+        applied = pd.to_numeric(priced.get("rb_synthesis_applied"), errors="coerce").fillna(0)
+        _require(applied.eq(0).all(), "non-Week-1 priced output incorrectly claims RB P3 application")
 
     _require(lineage.get("disposition") == "MARKET_MODEL_LINEAGE_EXPLICIT", "market model lineage not explicit")
     _require(lineage.get("qb_c2_distribution_consumed") is True, "lineage does not record QB C2 distribution consumption")
@@ -166,7 +182,8 @@ def main() -> int:
         "sportsbook_inputs_used_for_football_distributions": False,
         "sportsbook_role": "DOWNSTREAM_PRICING_COMPARISON_ONLY",
         "m89_m90_qb_mean_authority": True,
-        "rb_p3_rushing_authority": True,
+        "rb_p3_rushing_authority": bool(rb_p3_active),
+        "rb_p3_week1_only": True,
         "wr_m38_finite_pool_active": True,
         "te_r5p_entitlement_active": True,
         "atd_dedicated_science_certified": False,

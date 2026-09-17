@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 
 from scripts._opponent_map import canon_team
+from scripts.operations.quarantine_final_priced_props_v1 import _load_quarantine_keys
 from scripts.utils.eligible_team_set_v1 import validate_current_team_set
 from scripts.utils.player_identity_v3 import player_name_key
 
@@ -34,6 +35,7 @@ OUT_AUDIT = DATA / "qb_c2_pricing_lineage_stamp_audit.json"
 
 SPECIALIST_VERSION = "C2_QB_MEAN_NEUTRAL_DISTRIBUTION_V1"
 CANONICAL_FALLBACK = "CANONICAL_QB_DISTRIBUTION"
+FINAL_BOARD_QUARANTINE_ROUTE = "FINAL_BOARD_QUARANTINE"
 
 
 def _read(path: Path) -> pd.DataFrame:
@@ -167,6 +169,12 @@ def main() -> int:
     scope = _validate_current_c2_scope(status, c2)
     expected_qbs = int(scope["observed_teams"])
 
+    priced_seasons = sorted(set(pd.to_numeric(priced.get("season"), errors="coerce").dropna().astype(int).tolist()))
+    priced_weeks = sorted(set(pd.to_numeric(priced.get("week"), errors="coerce").dropna().astype(int).tolist()))
+    if len(priced_seasons) != 1 or len(priced_weeks) != 1:
+        raise RuntimeError(f"QB C2 pricing lineage requires one season/week, got seasons={priced_seasons} weeks={priced_weeks}")
+    quarantine_keys = _load_quarantine_keys(season=priced_seasons[0], week=priced_weeks[0])
+
     # Build an identity key independently from display-name punctuation/suffixes.
     c2["_team_key"] = c2["team"].map(canon_team)
     c2["_player_key"] = c2["player"].map(_key)
@@ -222,8 +230,14 @@ def main() -> int:
     }
     missing_rows: list[dict] = []
     matched_identities: set[tuple[str, str]] = set()
+    quarantined_identities: set[tuple[str, str]] = set()
     for idx, row in priced.loc[pass_mask].iterrows():
         identity = (canon_team(row.get("team")), _key(row.get("player")))
+        if identity in quarantine_keys:
+            quarantined_identities.add(identity)
+            priced.at[idx, "qb_distribution_starter_authority_source"] = "FINAL_BOARD_QUARANTINE"
+            priced.at[idx, "qb_distribution_route"] = FINAL_BOARD_QUARANTINE_ROUTE
+            continue
         cr = lookup.get(identity)
         if cr is None:
             missing_rows.append({"team": row.get("team"), "player": row.get("player")})
@@ -243,8 +257,20 @@ def main() -> int:
         raise RuntimeError(f"priced pass-yard rows missing QB C2 audit identity: {missing_rows[:20]}")
 
     pass_rows = priced.loc[pass_mask].copy()
+    quarantined_pass = pass_rows.loc[pass_rows["qb_distribution_route"].astype(str).eq(FINAL_BOARD_QUARANTINE_ROUTE)].copy()
+    certified_pass = pass_rows.loc[~pass_rows["qb_distribution_route"].astype(str).eq(FINAL_BOARD_QUARANTINE_ROUTE)].copy()
+    if len(quarantined_identities) != int(quarantined_pass[["team", "player"]].drop_duplicates().shape[0]):
+        raise RuntimeError("QB C2 final-board quarantine identity count drift")
+    if not quarantined_pass.empty:
+        if not pd.to_numeric(quarantined_pass["qb_distribution_specialist_applied"], errors="coerce").fillna(0).eq(0).all():
+            raise RuntimeError("final-board-quarantined QB rows incorrectly claim C2 specialist consumption")
+        for col in ("qb_distribution_specialist_version", "qb_distribution_candidate_version", "qb_distribution_selector_version"):
+            if quarantined_pass[col].fillna("").astype(str).str.strip().ne("").any():
+                raise RuntimeError(f"final-board-quarantined QB rows incorrectly contain C2 lineage field {col}")
+        if not quarantined_pass["qb_distribution_starter_authority_source"].astype(str).eq("FINAL_BOARD_QUARANTINE").all():
+            raise RuntimeError("final-board-quarantined QB rows missing quarantine authority marker")
     selected_players = int(
-        pass_rows.loc[pd.to_numeric(pass_rows["qb_distribution_specialist_applied"], errors="coerce").eq(1), ["team", "player"]]
+        certified_pass.loc[pd.to_numeric(certified_pass["qb_distribution_specialist_applied"], errors="coerce").eq(1), ["team", "player"]]
         .drop_duplicates().shape[0]
     )
     priced_scope = _validate_priced_c2_subset(lookup, matched_identities, selected_players)
@@ -258,11 +284,13 @@ def main() -> int:
             "QB C2 selected football-QB count differs between CSV and JSON audit; "
             f"csv={priced_scope['c2_selected_football_qbs']} json={status.get('selected_qb_rows')}"
         )
-    if not pass_rows["qb_distribution_candidate_version"].eq(SPECIALIST_VERSION).all():
-        raise RuntimeError("not every pass-yard row records the frozen C2 candidate version")
-    if pass_rows["qb_distribution_selector_version"].astype(str).str.strip().eq("").any():
-        raise RuntimeError("pass-yard row missing QB C2 selector version")
-    gap = pd.to_numeric(pass_rows["qb_distribution_raw_mean_gap"], errors="coerce")
+    if certified_pass.empty:
+        raise RuntimeError("QB C2 pricing lineage has zero non-quarantined pass-yard rows")
+    if not certified_pass["qb_distribution_candidate_version"].eq(SPECIALIST_VERSION).all():
+        raise RuntimeError("not every certified pass-yard row records the frozen C2 candidate version")
+    if certified_pass["qb_distribution_selector_version"].astype(str).str.strip().eq("").any():
+        raise RuntimeError("certified pass-yard row missing QB C2 selector version")
+    gap = pd.to_numeric(certified_pass["qb_distribution_raw_mean_gap"], errors="coerce")
     if gap.isna().any() or float(gap.abs().max()) > 1e-10:
         raise RuntimeError("stamped QB C2 raw mean-neutrality drift")
 
@@ -296,6 +324,9 @@ def main() -> int:
         "priced_side_rows": int(len(priced)),
         "pass_yard_side_rows": int(pass_mask.sum()),
         "pass_yard_qbs": int(len(matched_identities)),
+        "quarantined_pass_yard_qbs": int(len(quarantined_identities)),
+        "quarantined_pass_yard_side_rows": int(len(quarantined_pass)),
+        "quarantined_pass_yard_identities": [{"team": team, "player_key": player_key} for team, player_key in sorted(quarantined_identities)],
         "football_qbs": int(priced_scope["football_qbs"]),
         "football_qbs_without_priced_pass_yard_offer": int(priced_scope["football_qbs_without_priced_pass_yard_offer"]),
         "football_qbs_without_priced_pass_yard_offer_identities": priced_scope["football_qbs_without_priced_pass_yard_offer_identities"],
@@ -306,7 +337,7 @@ def main() -> int:
         "c2_selected_unpriced_qbs": int(priced_scope["c2_selected_unpriced_qbs"]),
         "c2_unselected_priced_qbs": int(len(matched_identities) - selected_players),
         "specialist_version": SPECIALIST_VERSION,
-        "selector_version": str(pass_rows["qb_distribution_selector_version"].iloc[0]),
+        "selector_version": str(certified_pass["qb_distribution_selector_version"].iloc[0]),
         "max_raw_mean_gap": float(gap.abs().max()),
         "non_pass_specialist_rows": 0,
         "protected_columns_changed": 0,
