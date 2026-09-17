@@ -1,0 +1,171 @@
+name: Data Frontier Kaggle NFL Availability
+
+on:
+  push:
+    branches:
+      - data-frontier-phase0-bdb-contact-v1
+    paths:
+      - '.github/workflows/data-frontier-kaggle-nfl-availability.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe-nfl-kaggle-corpora:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      KAGGLE_SECRET_RAW: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - name: Checkout isolated data-frontier branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Normalize and validate Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          if [ -z "$raw" ]; then
+            echo "KAGGLE_API_TOKEN repository secret is missing or empty."
+            exit 2
+          fi
+          token="$raw"
+          token="${token#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          if [[ "$token" != KGAT_* ]]; then
+            echo "Kaggle secret does not normalize to a KGAT token."
+            exit 2
+          fi
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+          TOKEN_FOR_CHECK="$token" python - <<'PY'
+          import json, os, urllib.request
+          token = os.environ['TOKEN_FOR_CHECK']
+          req = urllib.request.Request(
+              'https://www.kaggle.com/api/v1/oauth2/introspect',
+              data=json.dumps({'token': token}).encode(),
+              headers={'Content-Type': 'application/json'},
+              method='POST',
+          )
+          with urllib.request.urlopen(req, timeout=30) as r:
+              payload = json.load(r)
+          if not payload.get('active'):
+              raise SystemExit('Kaggle token is not active')
+          print('Kaggle token active; value not printed.')
+          PY
+
+      - name: Install Kaggle CLI
+        run: pip install kaggle
+
+      - name: Probe authenticated NFL competition file visibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/nfl_kaggle_availability"
+          mkdir -p "$out/raw"
+          python - <<'PY'
+          import csv
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          competitions = [
+              ('BDB_2020', 'nfl-big-data-bowl-2020'),
+              ('BDB_2021', 'nfl-big-data-bowl-2021'),
+              ('BDB_2022', 'nfl-big-data-bowl-2022'),
+              ('BDB_2023', 'nfl-big-data-bowl-2023'),
+              ('BDB_2024', 'nfl-big-data-bowl-2024'),
+              ('BDB_2025', 'nfl-big-data-bowl-2025'),
+              ('BDB_2026_ANALYTICS', 'nfl-big-data-bowl-2026-analytics'),
+              ('BDB_2026_PREDICTION', 'nfl-big-data-bowl-2026-prediction'),
+              ('PLAYER_CONTACT_DETECTION', 'nfl-player-contact-detection'),
+          ]
+
+          root = Path(os.environ['RUNNER_TEMP']) / 'nfl_kaggle_availability'
+          raw_dir = root / 'raw'
+          rows = []
+          for label, slug in competitions:
+              cp = subprocess.run(
+                  ['kaggle', 'competitions', 'files', '-c', slug],
+                  text=True,
+                  capture_output=True,
+                  check=False,
+              )
+              text = (cp.stdout or '') + ('\n' + cp.stderr if cp.stderr else '')
+              (raw_dir / f'{label}.txt').write_text(text, encoding='utf-8')
+              low = text.lower()
+              nonempty = [ln.strip() for ln in text.splitlines() if ln.strip()]
+              data_lines = [
+                  ln for ln in nonempty
+                  if not re.match(r'^(name|----|ref\s|warning|next page token)', ln, re.I)
+              ]
+              readme_78 = ('readme' in low and bool(re.search(r'\b78\s*(b|bytes?)\b', low)))
+              if cp.returncode == 0:
+                  if readme_78 and not any('.csv' in ln.lower() or '.parquet' in ln.lower() for ln in data_lines):
+                      status = 'HOST_WITHDRAWN_OR_README_SHELL'
+                  elif any(ext in low for ext in ('.csv', '.parquet', '.json', '.npy', '.npz', '.mp4')):
+                      status = 'ACCESSIBLE_REAL_FILES'
+                  else:
+                      status = 'ACCESSIBLE_UNCLASSIFIED_FILESET'
+              elif '403' in low or 'forbidden' in low or 'permission' in low or 'must accept' in low or 'rules' in low:
+                  status = 'ACCESS_DENIED_OR_RULES'
+              elif '404' in low or 'not found' in low:
+                  status = 'NOT_FOUND'
+              elif 'authentication required' in low or 'unauthorized' in low:
+                  status = 'AUTH_ERROR'
+              else:
+                  status = 'API_OR_CLI_ERROR'
+
+              filenames = []
+              for ln in nonempty:
+                  m = re.match(r'^([^\s]+\.(?:csv|parquet|json|npy|npz|mp4|zip|txt|md)|README)\b', ln, re.I)
+                  if m:
+                      filenames.append(m.group(1))
+              rows.append({
+                  'label': label,
+                  'slug': slug,
+                  'status': status,
+                  'return_code': cp.returncode,
+                  'observed_filename_count': len(dict.fromkeys(filenames)),
+                  'observed_filenames': sorted(dict.fromkeys(filenames))[:200],
+                  'readme_78_byte_shell_detected': readme_78,
+              })
+
+          payload = {
+              'probe_version': 'NFL_KAGGLE_AUTHENTICATED_AVAILABILITY_V1',
+              'scope': 'read_only_file_listing',
+              'raw_competition_data_downloaded': False,
+              'raw_competition_data_uploaded': False,
+              'predictive_experiment': False,
+              'production_changed': False,
+              'competitions': rows,
+          }
+          (root / 'availability.json').write_text(json.dumps(payload, indent=2, sort_keys=True), encoding='utf-8')
+          with (root / 'availability.csv').open('w', newline='', encoding='utf-8') as f:
+              w = csv.DictWriter(f, fieldnames=['label','slug','status','return_code','observed_filename_count','readme_78_byte_shell_detected'])
+              w.writeheader()
+              for r in rows:
+                  w.writerow({k: r[k] for k in w.fieldnames})
+          print(json.dumps([{k:r[k] for k in ('label','status','observed_filename_count')} for r in rows], indent=2))
+          PY
+
+      - name: Upload sanitized availability matrix
+        uses: actions/upload-artifact@v4
+        with:
+          name: nfl-kaggle-authenticated-availability
+          path: ${{ runner.temp }}/nfl_kaggle_availability
+          if-no-files-found: error
+          retention-days: 30
