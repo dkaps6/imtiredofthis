@@ -1,0 +1,179 @@
+name: Data Frontier BDB2026 Analytics Semantic Contract
+
+on:
+  push:
+    branches:
+      - data-frontier-phase0-bdb-contact-v1
+    paths:
+      - '.github/workflows/data-frontier-bdb2026-analytics-semantic-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_SECRET_RAW: ${{ secrets.KAGGLE_API_TOKEN }}
+  COMPETITION: nfl-big-data-bowl-2026-analytics
+
+jobs:
+  audit-bdb2026-analytics-semantics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Normalize Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          token="${raw#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          [[ "$token" == KGAT_* ]]
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+      - name: Install dependencies
+        run: pip install kaggle pandas numpy
+      - name: Download official BDB 2026 Analytics corpus ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/bdb2026a_sem_download"
+          c="${RUNNER_TEMP}/bdb2026a_sem_corpus"
+          mkdir -p "$d" "$c"
+          kaggle competitions download -c "${COMPETITION}" -p "$d"
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$z"
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "CORPUS_DIR=$c" >> "$GITHUB_ENV"
+      - name: Audit 2023 player-role and output semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/bdb2026a_semantic_contract"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import numpy as np
+          import pandas as pd
+
+          root=Path(os.environ['CORPUS_DIR'])
+          outdir=Path(os.environ['RUNNER_TEMP'])/'bdb2026a_semantic_contract'
+          supp=pd.read_csv(next(root.rglob('supplementary_data.csv')))
+          roles={}; sides={}; predict_counts={}; positions={}; weeks=[]
+          total_input_rows=0; total_output_rows=0; total_input_playerplays=0; total_output_playerplays=0
+          output_missing_input_pp=0; output_nonpredict_playerplays=0; output_count_mismatch_playerplays=0
+          plays_multi_ball_land=0; plays_multi_output_length=0; input_plays=0
+          supp_missing_input_plays=0
+
+          all_input_pairs=[]
+          for week in range(1,19):
+              inp=pd.read_csv(next(root.rglob(f'input_2023_w{week:02d}.csv')))
+              out=pd.read_csv(next(root.rglob(f'output_2023_w{week:02d}.csv')))
+              total_input_rows += len(inp); total_output_rows += len(out)
+              ipp=inp[['game_id','play_id','nfl_id','player_to_predict','num_frames_output']].drop_duplicates()
+              opp=out[['game_id','play_id','nfl_id']].drop_duplicates()
+              total_input_playerplays += len(ipp); total_output_playerplays += len(opp)
+              input_plays += inp[['game_id','play_id']].drop_duplicates().shape[0]
+              all_input_pairs.append(inp[['game_id','play_id']].drop_duplicates())
+              for k,v in inp['player_role'].value_counts(dropna=False).items(): roles[str(k)]=roles.get(str(k),0)+int(v)
+              for k,v in inp['player_side'].value_counts(dropna=False).items(): sides[str(k)]=sides.get(str(k),0)+int(v)
+              for k,v in inp['player_to_predict'].value_counts(dropna=False).items(): predict_counts[str(k)]=predict_counts.get(str(k),0)+int(v)
+              for k,v in inp['player_position'].value_counts(dropna=False).items(): positions[str(k)]=positions.get(str(k),0)+int(v)
+
+              lands=inp.groupby(['game_id','play_id'])[['ball_land_x','ball_land_y']].nunique(dropna=False)
+              multi_land=int(((lands['ball_land_x']>1)|(lands['ball_land_y']>1)).sum()); plays_multi_ball_land += multi_land
+              nf=inp.groupby(['game_id','play_id'])['num_frames_output'].nunique(dropna=False)
+              multi_nf=int((nf>1).sum()); plays_multi_output_length += multi_nf
+
+              m=opp.merge(ipp,on=['game_id','play_id','nfl_id'],how='left',indicator=True)
+              miss=int((m['_merge']!='both').sum()); output_missing_input_pp += miss
+              nonpred=int(((m['_merge']=='both') & ~m['player_to_predict'].astype('boolean').fillna(False)).sum()); output_nonpredict_playerplays += nonpred
+              oc=out.groupby(['game_id','play_id','nfl_id'])['frame_id'].nunique().rename('output_frames').reset_index()
+              cc=oc.merge(ipp,on=['game_id','play_id','nfl_id'],how='left')
+              mismatch=int((cc['output_frames']!=cc['num_frames_output']).sum()); output_count_mismatch_playerplays += mismatch
+
+              weeks.append({
+                  'week':week,
+                  'input_rows':int(len(inp)),
+                  'output_rows':int(len(out)),
+                  'input_plays':int(inp[['game_id','play_id']].drop_duplicates().shape[0]),
+                  'input_playerplays':int(len(ipp)),
+                  'output_playerplays':int(len(opp)),
+                  'player_to_predict_playerplays':int(ipp['player_to_predict'].astype('boolean').fillna(False).sum()),
+                  'output_playerplays_missing_input':miss,
+                  'output_nonpredict_playerplays':nonpred,
+                  'output_frame_count_mismatch_playerplays':mismatch,
+                  'plays_with_multiple_ball_land_coordinates':multi_land,
+                  'plays_with_multiple_num_frames_output_values':multi_nf,
+              })
+
+          inp_pairs=pd.concat(all_input_pairs,ignore_index=True).drop_duplicates()
+          sp=supp[['game_id','play_id']].drop_duplicates()
+          j=inp_pairs.merge(sp,on=['game_id','play_id'],how='left',indicator=True)
+          supp_missing_input_plays=int((j['_merge']!='both').sum())
+
+          def value_counts(col):
+              return {str(k):int(v) for k,v in supp[col].fillna('<NULL>').value_counts().items()}
+          def nunique_null(col):
+              s=supp[col]
+              return {'rows':int(len(s)),'nonnull':int(s.notna().sum()),'null':int(s.isna().sum()),'nunique_nonnull':int(s.nunique(dropna=True))}
+
+          summary={
+              'audit_version':'BDB2026_ANALYTICS_SEMANTIC_CONTRACT_V1',
+              'git_sha':os.environ.get('GITHUB_SHA'),
+              'raw_competition_files_uploaded':False,
+              'predictive_experiment':False,
+              'production_changed':False,
+              'supplementary_rows':int(len(supp)),
+              'supplementary_unique_plays':int(len(sp)),
+              'supplementary_seasons':value_counts('season'),
+              'supplementary_weeks':value_counts('week'),
+              'target_route_counts':value_counts('route_of_targeted_receiver'),
+              'receiver_alignment_counts':value_counts('receiver_alignment'),
+              'coverage_man_zone_counts':value_counts('team_coverage_man_zone'),
+              'coverage_type_counts':value_counts('team_coverage_type'),
+              'target_route_completeness':nunique_null('route_of_targeted_receiver'),
+              'coverage_man_zone_completeness':nunique_null('team_coverage_man_zone'),
+              'coverage_type_completeness':nunique_null('team_coverage_type'),
+              'player_role_row_counts':dict(sorted(roles.items(),key=lambda kv:(-kv[1],kv[0]))),
+              'player_side_row_counts':dict(sorted(sides.items(),key=lambda kv:(-kv[1],kv[0]))),
+              'player_to_predict_row_counts':dict(sorted(predict_counts.items())),
+              'player_position_row_counts':dict(sorted(positions.items(),key=lambda kv:(-kv[1],kv[0]))),
+              'total_input_rows':int(total_input_rows),
+              'total_output_rows':int(total_output_rows),
+              'total_input_playerplays':int(total_input_playerplays),
+              'total_output_playerplays':int(total_output_playerplays),
+              'output_playerplays_missing_input':int(output_missing_input_pp),
+              'output_nonpredict_playerplays':int(output_nonpredict_playerplays),
+              'output_frame_count_mismatch_playerplays':int(output_count_mismatch_playerplays),
+              'plays_with_multiple_ball_land_coordinates':int(plays_multi_ball_land),
+              'plays_with_multiple_num_frames_output_values':int(plays_multi_output_length),
+              'input_plays_missing_supplementary_row':int(supp_missing_input_plays),
+              'week_summaries':weeks,
+          }
+          (outdir/'bdb2026_analytics_semantic_contract.json').write_text(json.dumps(summary,indent=2,sort_keys=True),encoding='utf-8')
+          print(json.dumps(summary,indent=2,sort_keys=True))
+          if output_missing_input_pp!=0: raise SystemExit('Output player-play missing from input')
+          if output_nonpredict_playerplays!=0: raise SystemExit('Output includes player_to_predict=false player-play')
+          if output_count_mismatch_playerplays!=0: raise SystemExit('Output frame count does not match num_frames_output')
+          if plays_multi_ball_land!=0: raise SystemExit('Multiple ball landing coordinates within a play')
+          if plays_multi_output_length!=0: raise SystemExit('Multiple output lengths within a play')
+          if supp_missing_input_plays!=0: raise SystemExit('Input play missing supplementary metadata')
+          PY
+      - name: Upload sanitized semantic contract
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2026-analytics-semantic-contract
+          path: ${{ runner.temp }}/bdb2026a_semantic_contract
+          if-no-files-found: error
+          retention-days: 30
