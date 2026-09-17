@@ -7,6 +7,7 @@ requiring a context the workflow intentionally removed.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -86,8 +87,10 @@ def test_nonweek1_conservation_noop_is_certified(tmp_path, monkeypatch):
     out_path = _install_conservation_paths(tmp_path, monkeypatch, applied=0)
 
     assert conservation.main() == 0
-    assert out_path.exists()
-    assert pd.read_csv(out_path).empty
+    audit = pd.read_csv(out_path)
+    assert len(audit) == 1
+    assert audit.loc[0, "audit_state"] == "NOT_APPLICABLE_OUTSIDE_WEEK1"
+    assert audit.loc[0, "conservation_gap"] == pytest.approx(0.0)
 
 
 def test_nonweek1_conservation_still_fails_if_p3_was_applied(tmp_path, monkeypatch):
@@ -95,3 +98,10 @@ def test_nonweek1_conservation_still_fails_if_p3_was_applied(tmp_path, monkeypat
 
     with pytest.raises(RuntimeError, match="incorrectly claim RB P3 application"):
         conservation.main()
+
+
+def test_certified_stack_declares_p3_week1_only_and_accepts_explicit_noop():
+    text = Path("scripts/validate_certified_full_slate_stack_v1.py").read_text(encoding="utf-8")
+    assert 'rb_disposition == "NO_ELIGIBLE_RB_RUSH_REC_ROWS"' in text
+    assert '"rb_p3_rushing_authority": bool(rb_p3_active)' in text
+    assert '"rb_p3_week1_only": True' in text
