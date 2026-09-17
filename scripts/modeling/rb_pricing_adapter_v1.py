@@ -17,6 +17,11 @@ from scripts.utils.player_identity_v3 import player_name_key
 RB_CONTEXT_PATH = Path("data/rb_rush_synthesis_context.csv")
 WEEK1_ROUTE = "WEEK1_STACK_OVERRIDE"
 RB_VERSION = "RB_P3_SYNTHESIS_V1"
+RB_CONTEXT_COLUMNS = [
+    "season", "week", "player", "team", "opponent", "rb_synthesis_proj",
+    "rb_synthesis_route", "rb_synthesis_version", "rb_synthesis_applied",
+    "football_only_no_odds", "sportsbook_inputs_used",
+]
 
 
 def _base_key(value) -> str:
@@ -29,16 +34,19 @@ def load_rb_context(path: Path = RB_CONTEXT_PATH) -> pd.DataFrame:
         raise RuntimeError(f"promoted RB synthesis context missing/empty: {path}")
     out = pd.read_csv(path, low_memory=False)
     out.columns = [str(c).strip().lower() for c in out.columns]
-    required = {
-        "season", "week", "player", "team", "opponent", "rb_synthesis_proj",
-        "rb_synthesis_route", "rb_synthesis_version", "rb_synthesis_applied",
-        "football_only_no_odds", "sportsbook_inputs_used",
-    }
+    required = set(RB_CONTEXT_COLUMNS)
     missing = sorted(required - set(out.columns))
     if missing:
         raise RuntimeError(f"promoted RB synthesis context missing columns: {missing}")
+
+    # A schema-valid zero-row file is the explicit non-Week-1 scope sentinel.
+    # The canonical Full Slate contract promotes RB P3 for Week 1 only.  Keeping
+    # the file present with zero rows lets downstream governance prove that P3
+    # has an empty team scope outside Week 1 without inventing any projections.
+    # Week-1 pricing still fails closed in run_pricing_v2 if no Week-1 rows exist.
     if out.empty:
-        raise RuntimeError("promoted RB synthesis context has zero rows")
+        out["player_base_key"] = pd.Series(dtype="string")
+        return out
 
     out["season"] = pd.to_numeric(out["season"], errors="coerce")
     out["week"] = pd.to_numeric(out["week"], errors="coerce")
