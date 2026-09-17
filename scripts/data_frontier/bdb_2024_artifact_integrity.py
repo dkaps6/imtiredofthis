@@ -14,7 +14,8 @@ import pandas as pd
 
 INTEGRITY_VERSION = "BDB_2024_ARTIFACT_INTEGRITY_V1"
 PLAY_KEY = ["gameId", "playId"]
-DEFENDER_KEY = ["gameId", "playId", "defenderNflId"]
+# Enrichment V1 emits `defenderId`; keep the gate bound to the persisted schema.
+DEFENDER_KEY = ["gameId", "playId", "defenderId"]
 
 
 def _duplicate_count(df: pd.DataFrame, key: list[str]) -> int:
@@ -41,19 +42,9 @@ def _finite_failures(df: pd.DataFrame, columns: list[str]) -> dict[str, int]:
     return out
 
 
-def validate_artifacts(
-    enriched: pd.DataFrame,
-    defenders: pd.DataFrame,
-    dispositions: pd.DataFrame,
-    qa_summary: dict,
-) -> dict:
-    """Return a deterministic fail-closed structural-integrity report."""
+def validate_artifacts(enriched: pd.DataFrame, defenders: pd.DataFrame, dispositions: pd.DataFrame, qa_summary: dict) -> dict:
     failures: list[dict] = []
-
-    required = {
-        "enriched": (enriched, PLAY_KEY),
-        "dispositions": (dispositions, PLAY_KEY),
-    }
+    required = {"enriched": (enriched, PLAY_KEY), "dispositions": (dispositions, PLAY_KEY)}
     for name, (df, key) in required.items():
         missing = [c for c in key if c not in df.columns]
         if missing:
@@ -63,19 +54,12 @@ def validate_artifacts(
         if dupes:
             failures.append({"check": f"{name}_key_unique", "detail": f"duplicate rows participating in duplicate keys: {dupes}"})
 
-    scoreable = dispositions.loc[
-        dispositions.get("benchmark_disposition", pd.Series(index=dispositions.index, dtype=object)).eq("SCOREABLE")
-    ]
+    scoreable = dispositions.loc[dispositions.get("benchmark_disposition", pd.Series(index=dispositions.index, dtype=object)).eq("SCOREABLE")]
     if not scoreable.empty and all(c in scoreable.columns for c in PLAY_KEY) and all(c in enriched.columns for c in PLAY_KEY):
-        scoreable_keys = _key_set(scoreable, PLAY_KEY)
-        enriched_keys = _key_set(enriched, PLAY_KEY)
-        missing_enriched = scoreable_keys - enriched_keys
-        extra_enriched = enriched_keys - scoreable_keys
+        scoreable_keys, enriched_keys = _key_set(scoreable, PLAY_KEY), _key_set(enriched, PLAY_KEY)
+        missing_enriched, extra_enriched = scoreable_keys - enriched_keys, enriched_keys - scoreable_keys
         if missing_enriched or extra_enriched:
-            failures.append({
-                "check": "scoreable_enriched_key_parity",
-                "detail": f"missing_enriched={len(missing_enriched)} extra_enriched={len(extra_enriched)}",
-            })
+            failures.append({"check": "scoreable_enriched_key_parity", "detail": f"missing_enriched={len(missing_enriched)} extra_enriched={len(extra_enriched)}"})
 
     if not defenders.empty:
         missing_def_key = [c for c in DEFENDER_KEY if c not in defenders.columns]
@@ -100,7 +84,6 @@ def validate_artifacts(
             bad = int((x.notna() & ((x < lo) | (x > hi))).sum())
             if bad:
                 failures.append({"check": f"range_{col}", "detail": f"out_of_range_rows={bad} allowed=[{lo},{hi}]"})
-
     if "pursuitAngleErrorDeg" in defenders.columns:
         x = pd.to_numeric(defenders["pursuitAngleErrorDeg"], errors="coerce")
         bad = int((x.notna() & ((x < 0.0) | (x > 180.0))).sum())
@@ -108,16 +91,8 @@ def validate_artifacts(
             failures.append({"check": "range_defender_pursuitAngleErrorDeg", "detail": f"out_of_range_rows={bad}"})
 
     finite = {}
-    finite.update({f"enriched.{k}": v for k, v in _finite_failures(enriched, [
-        "firstContactCarrierSidelineDistanceYards",
-        "firstContactMaxClosingSpeedProxyYdsPerSec",
-        "firstContactMeanClosingSpeedProxyYdsPerSec",
-        "firstContactMinPursuitAngleErrorDeg",
-        "firstContactMeanPursuitAngleErrorDeg",
-    ]).items()})
-    finite.update({f"defenders.{k}": v for k, v in _finite_failures(defenders, [
-        "closingSpeedProxyYdsPerSec", "pursuitAngleErrorDeg"
-    ]).items()})
+    finite.update({f"enriched.{k}": v for k, v in _finite_failures(enriched, ["firstContactCarrierSidelineDistanceYards", "firstContactMaxClosingSpeedProxyYdsPerSec", "firstContactMeanClosingSpeedProxyYdsPerSec", "firstContactMinPursuitAngleErrorDeg", "firstContactMeanPursuitAngleErrorDeg"]).items()})
+    finite.update({f"defenders.{k}": v for k, v in _finite_failures(defenders, ["closingSpeedProxyYdsPerSec", "pursuitAngleErrorDeg"]).items()})
     for col, count in finite.items():
         if count:
             failures.append({"check": f"finite_{col}", "detail": f"nonfinite_rows={count}"})
@@ -127,29 +102,13 @@ def validate_artifacts(
         failures.append({"check": "qa_feature_version_present", "detail": "qa_summary.feature_version missing"})
     if qa_summary.get("contact_detector_changed") is not False:
         failures.append({"check": "contact_detector_immutability", "detail": "qa_summary.contact_detector_changed must be false"})
-
     normalized = qa_summary.get("normalized_artifacts", {})
     for table in ("tracking", "plays", "tackles"):
         meta = normalized.get(table)
         if not isinstance(meta, dict) or "rows" not in meta or "columns" not in meta:
             failures.append({"check": f"normalized_manifest_{table}", "detail": "missing rows/columns manifest metadata"})
 
-    return {
-        "integrity_version": INTEGRITY_VERSION,
-        "scope": "structural_data_integrity_only",
-        "passed": not failures,
-        "failure_count": len(failures),
-        "failures": failures,
-        "counts": {
-            "enriched_rows": int(len(enriched)),
-            "defender_rows": int(len(defenders)),
-            "disposition_rows": int(len(dispositions)),
-            "scoreable_rows": int(len(scoreable)),
-        },
-        "feature_version": qa_feature_version,
-        "contact_detector_changed": False,
-        "guardrail": "A failed integrity report is a hard stop for downstream fidelity reporting; do not repair by dropping or imputing corrupt rows silently.",
-    }
+    return {"integrity_version": INTEGRITY_VERSION, "scope": "structural_data_integrity_only", "passed": not failures, "failure_count": len(failures), "failures": failures, "counts": {"enriched_rows": int(len(enriched)), "defender_rows": int(len(defenders)), "disposition_rows": int(len(dispositions)), "scoreable_rows": int(len(scoreable))}, "feature_version": qa_feature_version, "contact_detector_changed": False, "guardrail": "A failed integrity report is a hard stop for downstream fidelity reporting; do not repair by dropping or imputing corrupt rows silently."}
 
 
 def main() -> int:
