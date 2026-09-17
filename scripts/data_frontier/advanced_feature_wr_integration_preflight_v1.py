@@ -347,6 +347,7 @@ def weekly_outcomes_2023() -> tuple[pd.DataFrame, dict]:
     )
     out = out.loc[out["week"].notna() & out["gsis_id"].ne("")].copy()
     out["week"] = out["week"].astype(int)
+    out = out.loc[out["week"].between(1, 18)].copy()
     audit = {
         "weekly_rows": int(len(out)),
         "unique_gsis_ids": int(out["gsis_id"].nunique()),
@@ -364,6 +365,7 @@ def build_integration_panel(
     weekly: pd.DataFrame,
 ) -> tuple[pd.DataFrame, dict]:
     hist = pd.read_csv(history_path, low_memory=False)
+    hist["nfl_id"] = hist["nfl_id"].astype(str).str.strip()
     assert_strict_prior(hist)
     cert = crosswalk.loc[crosswalk["identity_certified"] & crosswalk["gsis_id"].ne("")].copy()
     x = hist.merge(cert[["bdb_nfl_id", "gsis_id"]], left_on="nfl_id", right_on="bdb_nfl_id", how="left")
