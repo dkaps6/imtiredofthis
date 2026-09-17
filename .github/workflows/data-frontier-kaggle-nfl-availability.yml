@@ -112,7 +112,8 @@ jobs:
                   ln for ln in nonempty
                   if not re.match(r'^(name|----|ref\s|warning|next page token)', ln, re.I)
               ]
-              readme_78 = ('readme' in low and bool(re.search(r'\b78\s*(b|bytes?)\b', low)))
+              readme_78 = bool(re.search(r'(?mi)^README\s+78(?:\s|$)', text))
+              listing_paginated = 'next page token =' in low
               if cp.returncode == 0:
                   if readme_78 and not any('.csv' in ln.lower() or '.parquet' in ln.lower() for ln in data_lines):
                       status = 'HOST_WITHDRAWN_OR_README_SHELL'
@@ -141,12 +142,14 @@ jobs:
                   'return_code': cp.returncode,
                   'observed_filename_count': len(dict.fromkeys(filenames)),
                   'observed_filenames': sorted(dict.fromkeys(filenames))[:200],
+                  'listing_paginated': listing_paginated,
                   'readme_78_byte_shell_detected': readme_78,
               })
 
           payload = {
-              'probe_version': 'NFL_KAGGLE_AUTHENTICATED_AVAILABILITY_V1',
+              'probe_version': 'NFL_KAGGLE_AUTHENTICATED_AVAILABILITY_V2',
               'scope': 'read_only_file_listing',
+              'count_note': 'observed_filename_count is the visible first-page count when listing_paginated=true; status does not require full pagination',
               'raw_competition_data_downloaded': False,
               'raw_competition_data_uploaded': False,
               'predictive_experiment': False,
@@ -155,11 +158,11 @@ jobs:
           }
           (root / 'availability.json').write_text(json.dumps(payload, indent=2, sort_keys=True), encoding='utf-8')
           with (root / 'availability.csv').open('w', newline='', encoding='utf-8') as f:
-              w = csv.DictWriter(f, fieldnames=['label','slug','status','return_code','observed_filename_count','readme_78_byte_shell_detected'])
+              w = csv.DictWriter(f, fieldnames=['label','slug','status','return_code','observed_filename_count','listing_paginated','readme_78_byte_shell_detected'])
               w.writeheader()
               for r in rows:
                   w.writerow({k: r[k] for k in w.fieldnames})
-          print(json.dumps([{k:r[k] for k in ('label','status','observed_filename_count')} for r in rows], indent=2))
+          print(json.dumps([{k:r[k] for k in ('label','status','observed_filename_count','listing_paginated')} for r in rows], indent=2))
           PY
 
       - name: Upload sanitized availability matrix
