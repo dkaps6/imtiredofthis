@@ -1,0 +1,39 @@
+{
+  "manifest_version": "BDB_2024_PHASE0_READINESS_V1",
+  "scope": "isolated_data_engineering_only",
+  "branch": "data-frontier-phase0-bdb-contact-v1",
+  "contact_detector_changed": false,
+  "implemented_gates": {
+    "official_schema_contract_audit": "IMPLEMENTED",
+    "normalized_source_persistence": "IMPLEMENTED",
+    "event_window_diagnostics": "IMPLEMENTED",
+    "frozen_contact_derivation": "IMPLEMENTED",
+    "contact_geometry_enrichment": "IMPLEMENTED",
+    "source_label_reconciliation": "IMPLEMENTED",
+    "structural_integrity_fail_closed": "IMPLEMENTED",
+    "upstream_sha256_seal": "IMPLEMENTED",
+    "fidelity_requires_provenance": "IMPLEMENTED",
+    "post_fidelity_sha256_verification": "IMPLEMENTED",
+    "fidelity_provenance_identity_check": "IMPLEMENTED",
+    "orchestration_failure_order_tests": "IMPLEMENTED"
+  },
+  "execution_required_gates": {
+    "focused_test_suite_executed_in_verified_runtime": "PENDING_EXECUTION",
+    "real_bdb_2024_source_files_available_under_accepted_terms": "BLOCKED_EXTERNAL_ACCESS",
+    "real_corpus_schema_validation": "PENDING_REAL_CORPUS",
+    "real_corpus_structural_integrity": "PENDING_REAL_CORPUS",
+    "real_corpus_provenance_seal_and_reverification": "PENDING_REAL_CORPUS",
+    "real_corpus_fidelity_report": "PENDING_REAL_CORPUS"
+  },
+  "prohibited_in_phase0": [
+    "predictive_experiments",
+    "detector_threshold_tuning",
+    "production_science_changes",
+    "sportsbook_logic_changes",
+    "issue_535_scientific_direction",
+    "frozen_wr_rb_qb_te_plan_changes",
+    "paid_production_runs"
+  ],
+  "readiness_interpretation": "Engineering gates are implemented, but Phase-0 is not empirically certified until focused tests execute in a verified runtime and the lawful real BDB 2024 corpus passes the full fail-closed pipeline.",
+  "next_checkpoint": "Execute the focused Phase-0 test suite in a verified branch runtime; when lawful BDB 2024 files are available, run the real-corpus contract/integrity/provenance/fidelity pipeline without tuning the frozen detector."
+}
