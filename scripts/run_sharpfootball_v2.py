@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Run the Sharp Football collector with maintained pace-schema adapters.
 
-Sharp's pace table has changed headers over time.  Keep provider-specific
+Sharp's pace table has changed headers over time. Keep provider-specific
 changes at this boundary and continue exposing the canonical ``team`` +
 ``neutral_pace`` contract expected by TeamForm.
 
 As of 2026-09-03 the live table exposes:
 ``Offense`` + ``Play Clock Used`` + ``Neutral`` + ``Neutral Pass Rate``.
 Sharp defines ``Neutral`` as neutral-situation play clock used (lower is faster),
-so that exact column maps to canonical ``neutral_pace``.  ``Play Clock Used`` is
+so that exact column maps to canonical ``neutral_pace``. ``Play Clock Used`` is
 the all-situation value and must not be substituted for neutral pace.
 
 The legacy generic alias pass also strips underscores while comparing names. If
@@ -16,17 +16,27 @@ it is run twice, an already-canonical ``neutral_pace`` becomes ``neutralpace``
 and can be mistaken for its own alias, causing the canonical column to be
 coalesced with and then dropped from itself. The v2 pace alias adapter is
 idempotent and never drops an existing canonical target.
+
+Week-2 operations note (2026-09-17): the old Sharp team-form merger predates the
+canonical Coverage-v2 layer and hard-fails when Sharp's legacy coverage tables
+are unavailable. Coverage-v2 is built later from its own provider/fallback path
+and is the canonical coverage authority. This runner therefore permits a
+*coverage-only* Sharp source outage to publish the real non-coverage Sharp
+fields, while never inventing or imputing man/zone rates. Any non-coverage
+failure remains fatal.
 """
 from __future__ import annotations
 
+import os
 from io import StringIO
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 import pandas as pd
 
 import scripts.providers.sharpfootball_pull as sharp
 
 _ORIGINAL_RENAME_EXPECTED_COLS = sharp._rename_expected_cols
+_ORIGINAL_MERGE_TEAM_FORM = sharp.merge_team_form
 
 
 def _flatten_col(col: Any) -> str:
@@ -61,7 +71,7 @@ def normalize_pace_table_v2(df: pd.DataFrame) -> pd.DataFrame:
 
     neutral_col = None
     exact = (
-        # Current live Sharp schema.  This is neutral play-clock-used pace,
+        # Current live Sharp schema. This is neutral play-clock-used pace,
         # distinct from the adjacent all-situation Play Clock Used column.
         "NEUTRAL",
         # Historical/live variants retained for source continuity.
@@ -122,7 +132,7 @@ def normalize_pace_table_v2(df: pd.DataFrame) -> pd.DataFrame:
     if pace["neutral_pace"].notna().sum() == 0:
         raise RuntimeError("[sharp_v2] neutral pace column normalized to all missing")
     # Semantic guard: Sharp neutral play-clock-used values are seconds on the
-    # 40-second play clock.  This catches accidental mapping to percentages,
+    # 40-second play clock. This catches accidental mapping to percentages,
     # ranks, or pass-rate fields without fabricating/substituting data.
     usable = pace["neutral_pace"].dropna()
     if not usable.between(10.0, 40.0, inclusive="both").all():
@@ -190,10 +200,126 @@ def fallback_pace_table_v2(
     return None
 
 
+def _merge_without_legacy_coverage_requirement(
+    season: int,
+    pieces: Dict[str, pd.DataFrame],
+) -> int:
+    """Publish real Sharp fields when only the legacy coverage table is absent.
+
+    This mirrors the mechanical merge portion of the legacy provider, but it
+    requires only a real neutral-pace column. Coverage columns are preserved if
+    actually returned and otherwise remain absent; they are never fabricated.
+    The canonical Coverage-v2 step downstream owns man/zone coverage semantics.
+    """
+    prepared: Dict[str, pd.DataFrame] = {}
+    for kind, df in pieces.items():
+        prepped = sharp._prepare_piece_for_merge(kind, df)
+        if prepped is not None:
+            prepared[kind] = prepped
+    if not prepared:
+        return 0
+
+    base = pd.DataFrame({"team": sorted(sharp.TEAM_CODES)})
+    for kind in ("def_tend", "off_tend", "pace", "coverage_pos", "coverage_scheme", "dl", "ol"):
+        df = prepared.get(kind)
+        if df is None or df.empty:
+            continue
+        base = base.merge(df, on="team", how="left")
+
+    raw_cols = [c for c in base.columns if c.startswith("team_raw_")]
+    if raw_cols:
+        base["team_raw"] = base[raw_cols].bfill(axis=1).iloc[:, 0]
+        base.drop(columns=raw_cols, inplace=True)
+    base["team_abbr"] = base["team"]
+
+    pace_df = prepared.get("pace")
+    if pace_df is not None and "neutral_pace" in pace_df.columns:
+        base = base.merge(
+            pace_df[["team", "neutral_pace"]],
+            on="team",
+            how="left",
+            suffixes=("", "_pace"),
+        )
+        if "neutral_pace_pace" in base.columns:
+            if "neutral_pace" in base.columns:
+                base["neutral_pace"] = base["neutral_pace"].combine_first(base["neutral_pace_pace"])
+            else:
+                base["neutral_pace"] = base["neutral_pace_pace"]
+            base.drop(columns=["neutral_pace_pace"], inplace=True)
+
+    cov_df = prepared.get("coverage_scheme")
+    if cov_df is not None:
+        cov_cols = [c for c in ("coverage_man_rate", "coverage_zone_rate") if c in cov_df.columns]
+        if cov_cols:
+            base = base.merge(
+                cov_df[["team"] + cov_cols],
+                on="team",
+                how="left",
+                suffixes=("", "_cov"),
+            )
+            for col in cov_cols:
+                aux = f"{col}_cov"
+                if aux in base.columns:
+                    if col in base.columns:
+                        base[col] = base[col].combine_first(base[aux])
+                    else:
+                        base[col] = base[aux]
+                    base.drop(columns=[aux], inplace=True)
+
+    if "neutral_pace" not in base.columns or pd.to_numeric(base["neutral_pace"], errors="coerce").isna().all():
+        fallback = fallback_pace_table_v2(season=season)
+        if fallback is not None and not fallback.empty:
+            base = base.merge(fallback, on="team", how="left", suffixes=("", "_fallback"))
+            if "neutral_pace_fallback" in base.columns:
+                if "neutral_pace" in base.columns:
+                    base["neutral_pace"] = pd.to_numeric(base["neutral_pace"], errors="coerce").combine_first(
+                        pd.to_numeric(base["neutral_pace_fallback"], errors="coerce")
+                    )
+                else:
+                    base["neutral_pace"] = pd.to_numeric(base["neutral_pace_fallback"], errors="coerce")
+                base.drop(columns=["neutral_pace_fallback"], inplace=True)
+
+    if "neutral_pace" not in base.columns:
+        raise RuntimeError("[sharp_v2] coverage-only fallback could not recover neutral_pace")
+    base["neutral_pace"] = pd.to_numeric(base["neutral_pace"], errors="coerce")
+    if base["neutral_pace"].isna().all():
+        raise RuntimeError("[sharp_v2] coverage-only fallback neutral_pace is all missing")
+    base["neutral_pace"] = base["neutral_pace"].fillna(base["neutral_pace"].median())
+
+    for col in ("coverage_man_rate", "coverage_zone_rate"):
+        if col in base.columns:
+            base[col] = pd.to_numeric(base[col], errors="coerce")
+
+    out_path = os.path.join(sharp.DATA_DIR, "sharp_team_form.csv")
+    base.to_csv(out_path, index=False)
+    present = [c for c in ("coverage_man_rate", "coverage_zone_rate") if c in base.columns and base[c].notna().any()]
+    print(
+        "[sharp_v2] LEGACY_COVERAGE_SOURCE_UNAVAILABLE_CONTINUING_TO_COVERAGE_V2 "
+        f"rows={len(base)} real_coverage_cols={present} out={out_path}"
+    )
+    return len(base)
+
+
+def merge_team_form_v2(season: int, pieces: Dict[str, pd.DataFrame]) -> int:
+    try:
+        return _ORIGINAL_MERGE_TEAM_FORM(season, pieces)
+    except RuntimeError as exc:
+        msg = str(exc)
+        coverage_only = (
+            "coverage_man_rate" in msg
+            or "coverage_zone_rate" in msg
+            or "missing or empty required col coverage_" in msg
+        )
+        if not coverage_only:
+            raise
+        return _merge_without_legacy_coverage_requirement(season, pieces)
+
+
 def main() -> None:
     sharp._normalize_pace_table = normalize_pace_table_v2
     sharp._rename_expected_cols = rename_expected_cols_v2
     sharp._fallback_pace_table = fallback_pace_table_v2
+    sharp.merge_team_form = merge_team_form_v2
     sharp.main()
 
 
