@@ -46,6 +46,7 @@ jobs:
             tests/test_bdb_2024_contact_enrichment.py \
             tests/test_bdb_2024_contact_fidelity.py \
             tests/test_bdb_2024_contact_geometry.py \
+            tests/test_bdb_2024_corpus_preflight.py \
             tests/test_bdb_2024_phase0_orchestration.py \
             2>&1 | tee phase0_pytest.log
           code=${PIPESTATUS[0]}
