@@ -2,7 +2,8 @@
 
 Order is deliberately fail-closed:
 source normalization/QA -> frozen contact features -> geometry enrichment ->
-structural integrity -> cryptographic provenance seal -> fidelity report.
+structural integrity -> cryptographic provenance seal -> fidelity report ->
+post-fidelity provenance verification.
 
 No predictive metrics, model tuning, sportsbook logic, or production integration.
 """
@@ -30,42 +31,35 @@ def main() -> int:
     ap.add_argument("--out-dir", type=Path, required=True)
     args = ap.parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
-
     stages = [
         ("scripts.data_frontier.bdb_2024_artifact_qa", ["--input-dir", str(args.input_dir), "--out-dir", str(args.out_dir)]),
         ("scripts.data_frontier.bdb_2024_contact_enrichment", ["--artifact-dir", str(args.out_dir)]),
         ("scripts.data_frontier.bdb_2024_artifact_integrity", ["--artifact-dir", str(args.out_dir)]),
         ("scripts.data_frontier.bdb_2024_artifact_provenance", ["--artifact-dir", str(args.out_dir)]),
         ("scripts.data_frontier.bdb_2024_contact_fidelity", ["--artifact-dir", str(args.out_dir)]),
+        ("scripts.data_frontier.bdb_2024_artifact_provenance", ["--artifact-dir", str(args.out_dir), "--verify"]),
     ]
     completed: list[str] = []
     try:
         for module, stage_args in stages:
             _run(module, stage_args)
-            completed.append(module)
+            completed.append(module + (":verify" if "--verify" in stage_args else ""))
     except RuntimeError as exc:
-        status = {
-            "pipeline_version": PIPELINE_VERSION,
-            "passed": False,
-            "completed_stages": completed,
-            "failure": str(exc),
-            "contact_detector_changed": False,
-        }
+        status = {"pipeline_version": PIPELINE_VERSION, "passed": False, "completed_stages": completed, "failure": str(exc), "contact_detector_changed": False}
         (args.out_dir / "phase0_pipeline_status.json").write_text(json.dumps(status, indent=2, sort_keys=True), encoding="utf-8")
         print(json.dumps(status, sort_keys=True), file=sys.stderr)
         return 2
-
     provenance_path = args.out_dir / "artifact_provenance_v1.json"
     provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
-    status = {
-        "pipeline_version": PIPELINE_VERSION,
-        "passed": True,
-        "completed_stages": completed,
-        "contact_detector_changed": False,
-        "provenance_manifest": str(provenance_path),
-        "artifact_set_sha256": provenance.get("artifact_set_sha256"),
-        "fidelity_report": str(args.out_dir / "contact_fidelity_report_v1.json"),
-    }
+    fidelity_path = args.out_dir / "contact_fidelity_report_v1.json"
+    fidelity = json.loads(fidelity_path.read_text(encoding="utf-8"))
+    artifact_hash = provenance.get("artifact_set_sha256")
+    if fidelity.get("upstream_artifact_set_sha256") != artifact_hash:
+        status = {"pipeline_version": PIPELINE_VERSION, "passed": False, "completed_stages": completed, "failure": "fidelity provenance hash does not match sealed upstream artifact set", "contact_detector_changed": False}
+        (args.out_dir / "phase0_pipeline_status.json").write_text(json.dumps(status, indent=2, sort_keys=True), encoding="utf-8")
+        print(json.dumps(status, sort_keys=True), file=sys.stderr)
+        return 2
+    status = {"pipeline_version": PIPELINE_VERSION, "passed": True, "completed_stages": completed, "contact_detector_changed": False, "provenance_manifest": str(provenance_path), "artifact_set_sha256": artifact_hash, "post_fidelity_provenance_verified": True, "fidelity_report": str(fidelity_path)}
     (args.out_dir / "phase0_pipeline_status.json").write_text(json.dumps(status, indent=2, sort_keys=True), encoding="utf-8")
     print(json.dumps(status, sort_keys=True))
     return 0
