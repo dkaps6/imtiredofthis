@@ -60,7 +60,12 @@ def main() -> int:
         if int(meta.get("players", -1)) != 0:
             raise RuntimeError(f"non-Week-1 RB conservation no-op reports players={meta.get('players')}")
         OUT.parent.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame(columns=["team", "player_base_key"]).to_csv(OUT, index=False)
+        pd.DataFrame([{
+            "team": "",
+            "player_base_key": "",
+            "conservation_gap": 0.0,
+            "audit_state": "NOT_APPLICABLE_OUTSIDE_WEEK1",
+        }]).to_csv(OUT, index=False)
         print(
             "[rb_rush_rec_final] "
             + json.dumps({
