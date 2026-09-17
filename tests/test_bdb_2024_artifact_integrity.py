@@ -18,7 +18,7 @@ def _qa():
 def test_integrity_passes_clean_artifacts():
     enriched = pd.DataFrame([{ "gameId": 1, "playId": 2, "firstContactCarrierSidelineDistanceYards": 10.0,
         "firstContactMinPursuitAngleErrorDeg": 15.0, "firstContactMeanPursuitAngleErrorDeg": 20.0 }])
-    defenders = pd.DataFrame([{ "gameId": 1, "playId": 2, "defenderNflId": 99,
+    defenders = pd.DataFrame([{ "gameId": 1, "playId": 2, "defenderId": 99,
         "closingSpeedProxyYdsPerSec": 2.0, "pursuitAngleErrorDeg": 15.0 }])
     dispositions = pd.DataFrame([{ "gameId": 1, "playId": 2, "benchmark_disposition": "SCOREABLE" }])
     report = validate_artifacts(enriched, defenders, dispositions, _qa())
@@ -28,7 +28,7 @@ def test_integrity_passes_clean_artifacts():
 
 def test_integrity_fails_duplicate_and_orphan_defender():
     enriched = pd.DataFrame([{ "gameId": 1, "playId": 2 }, { "gameId": 1, "playId": 2 }])
-    defenders = pd.DataFrame([{ "gameId": 1, "playId": 999, "defenderNflId": 99 }])
+    defenders = pd.DataFrame([{ "gameId": 1, "playId": 999, "defenderId": 99 }])
     dispositions = pd.DataFrame([{ "gameId": 1, "playId": 2, "benchmark_disposition": "SCOREABLE" }])
     report = validate_artifacts(enriched, defenders, dispositions, _qa())
     checks = {x["check"] for x in report["failures"]}
