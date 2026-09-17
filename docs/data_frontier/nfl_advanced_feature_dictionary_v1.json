@@ -19,7 +19,10 @@
       "source_hash_scope": "SOURCE_MANIFEST",
       "canonical_checkpoint": "docs/data_frontier/BDB2021_ROUTE_GEOMETRY_CHECKPOINT_2026-09-17.md",
       "canonical_workflow": ".github/workflows/data-frontier-bdb2021-allweeks-route-geometry.yml",
-      "disposition": "BDB2021_ROUTE_NEAREST_DEFENDER_GEOMETRY_LAB_VALIDATED"
+      "disposition": "BDB2021_ROUTE_NEAREST_DEFENDER_GEOMETRY_LAB_VALIDATED",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     "BDB2023_PROTECTION_GEOMETRY": {
       "source_dataset": "BDB_2023",
@@ -29,7 +32,10 @@
       "source_hash_scope": "SOURCE_MANIFEST",
       "canonical_checkpoint": "docs/data_frontier/BDB2023_BLOCKING_INTERACTION_GEOMETRY_CHECKPOINT_2026-09-17.md",
       "canonical_workflow": ".github/workflows/data-frontier-bdb2023-allweeks-geometry.yml",
-      "disposition": "BDB2023_PROTECTION_INTERACTION_GEOMETRY_LAB_VALIDATED"
+      "disposition": "BDB2023_PROTECTION_INTERACTION_GEOMETRY_LAB_VALIDATED",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     "BDB2026_THROW_WINDOW": {
       "source_dataset": "BDB_2026_ANALYTICS",
@@ -40,7 +46,10 @@
       "canonical_checkpoint": "docs/data_frontier/BDB2026_THROW_WINDOW_GEOMETRY_CHECKPOINT_2026-09-17.md",
       "semantic_checkpoint": "docs/data_frontier/BDB2026_ANALYTICS_SEMANTIC_CHECKPOINT_2026-09-17.md",
       "canonical_workflow": ".github/workflows/data-frontier-bdb2026-throw-window-benchmark.yml",
-      "disposition": "BDB2026_THROW_WINDOW_GEOMETRY_LAB_VALIDATED_WITH_OUTPUT_DEFENDER_SCOPE_LIMIT"
+      "disposition": "BDB2026_THROW_WINDOW_GEOMETRY_LAB_VALIDATED_WITH_OUTPUT_DEFENDER_SCOPE_LIMIT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     }
   },
   "global_semantic_rules": [
@@ -109,7 +118,10 @@
         "Target-game route is not a pregame feature."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "snap_nearest_defender_distance_yards",
@@ -161,7 +173,10 @@
         "Nearest/second-nearest defender means geometric proximity only; it is not coverage responsibility, matchup assignment, shadow responsibility, bracket responsibility, or proof of man/zone assignment."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "snap_second_nearest_defender_distance_yards",
@@ -214,7 +229,10 @@
         "Requires at least two valid defenders at the event frame."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "throw_nearest_defender_distance_yards",
@@ -267,7 +285,10 @@
         "BDB2021 does not semantically identify which route runner was targeted."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "throw_second_nearest_defender_distance_yards",
@@ -321,7 +342,10 @@
         "BDB2021 does not semantically identify which route runner was targeted."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "arrival_nearest_defender_distance_yards",
@@ -375,7 +399,10 @@
         "BDB2021 does not guarantee the route runner is the target."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "arrival_second_nearest_defender_distance_yards",
@@ -428,7 +455,10 @@
         "Arrival is outcome-window information and is reserved for retrospective validation in V1."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "snap_to_throw_nearest_defender_delta_yards",
@@ -481,7 +511,10 @@
         "Negative values mean the nearest geometric defender is closer at throw than snap; defender identity may change between frames."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "hist_player_route_throw_nearest_defender_median_yards",
@@ -535,7 +568,10 @@
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
       "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
-      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_PLAYER_SAME_ROUTE_V1"
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_PLAYER_SAME_ROUTE_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "hist_player_route_throw_second_defender_median_yards",
@@ -589,7 +625,10 @@
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
       "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
-      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_PLAYER_SAME_ROUTE_V1"
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_PLAYER_SAME_ROUTE_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "hist_player_route_throw_spacing_gap_median_yards",
@@ -643,7 +682,10 @@
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
       "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
-      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_PLAYER_SAME_ROUTE_V1"
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_PLAYER_SAME_ROUTE_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "hist_player_route_throw_geometry_sample_count",
@@ -693,7 +735,10 @@
         "Support count only; not a quality/performance metric."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "blocker_target_snap_distance_yards",
@@ -748,7 +793,10 @@
         "Referenced player can have source role Pass Rush or Coverage."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "blocker_target_min_distance_yards",
@@ -803,7 +851,10 @@
         "Uses future frames relative to snap; target-game value is not pregame/live-safe."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "blocker_target_terminal_distance_yards",
@@ -858,7 +909,10 @@
         "Interaction identity is not universal assignment responsibility."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "blocker_target_time_to_min_distance_seconds",
@@ -913,7 +967,10 @@
         "10 Hz timing is inherited from source tracking frame cadence."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "blocker_target_shared_protection_frames",
@@ -967,7 +1024,10 @@
         "Window completeness depends on source tracking presence for both players."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "protection_window_length_seconds",
@@ -1022,7 +1082,10 @@
         "Play-level timing context, not an individual assignment label."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "block_interaction_role",
@@ -1070,7 +1133,10 @@
         "Role is source annotation, not a pregame target-game feature."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "blocked_defender_source_role",
@@ -1118,7 +1184,10 @@
         "Referenced player role is descriptive source truth; pff_nflIdBlockedPlayer remains interaction identity, not universal responsibility."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "chip_release_interaction_flag",
@@ -1169,7 +1238,10 @@
         "The validated corpus includes Pass Route interactions and they are semantically meaningful."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "terminal_frame_fallback_flag",
@@ -1216,7 +1288,10 @@
         "A value of 1 is not a geometry failure; it signals lower-confidence terminal timing and must be retained downstream."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "hist_blocker_snap_distance_median_yards",
@@ -1269,7 +1344,10 @@
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
       "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
-      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_BLOCKER_V1"
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_BLOCKER_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "hist_blocker_min_distance_median_yards",
@@ -1322,7 +1400,10 @@
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
       "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
-      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_BLOCKER_V1"
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_BLOCKER_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "hist_blocker_time_to_min_distance_median_seconds",
@@ -1375,7 +1456,10 @@
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
       "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
-      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_BLOCKER_V1"
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_BLOCKER_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "receiver_release_nearest_defender_distance_yards",
@@ -1429,7 +1513,10 @@
         "Target identity is source-provided; individual defender responsibility is not."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "receiver_release_second_defender_distance_yards",
@@ -1483,7 +1570,10 @@
         "Requires at least two Defensive Coverage rows at release."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "receiver_release_defenders_within_2yd_count",
@@ -1537,7 +1627,10 @@
         "Crowding count is geometry only; multiple nearby defenders do not prove bracket responsibility."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "receiver_release_defenders_within_3yd_count",
@@ -1591,7 +1684,10 @@
         "Crowding count is geometry only; multiple nearby defenders do not prove bracket responsibility."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "receiver_release_target_to_land_distance_yards",
@@ -1643,7 +1739,10 @@
         "Ball landing point is future information relative to release and is prohibited as a target-game pregame/live predictor in V1."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "release_nearest_defender_to_landing_zone_yards",
@@ -1696,7 +1795,10 @@
         "Landing coordinate is future information relative to release; validation-only in V1."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "terminal_receiver_to_land_distance_yards",
@@ -1749,7 +1851,10 @@
         "Outcome-window measurement; validation-only in V1."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "terminal_nearest_predicted_defender_to_target_yards",
@@ -1802,7 +1907,10 @@
         "Defender metric is scoped only to official player_to_predict output defenders; 1,141 validated plays contain no predicted defender and must abstain."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "terminal_nearest_predicted_defender_to_land_yards",
@@ -1855,7 +1963,10 @@
         "Official output defender scope only; validation-only."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "postrelease_min_nearest_predicted_defender_distance_yards",
@@ -1909,7 +2020,10 @@
         "Explicitly prohibited from V1 pregame feature use."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "postrelease_closing_delta_yards",
@@ -1963,7 +2077,10 @@
         "Validation-only."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "source_target_route_label",
@@ -2011,7 +2128,10 @@
         "Source semantic label used for retrospective stratification and construction of strictly-prior route-history tables; target-game route label itself is not pregame-safe."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "source_team_coverage_man_zone",
@@ -2059,7 +2179,10 @@
         "Team/play coverage semantics only; does not identify individual defender responsibility."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "source_team_coverage_type",
@@ -2107,7 +2230,10 @@
         "Team/play scheme label only; not individual assignment."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "hist_receiver_release_nearest_defender_median_yards",
@@ -2161,7 +2287,10 @@
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
       "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
-      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_TARGETED_RECEIVER_V1"
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_TARGETED_RECEIVER_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "hist_receiver_release_second_defender_median_yards",
@@ -2215,7 +2344,10 @@
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
       "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
-      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_TARGETED_RECEIVER_V1"
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_TARGETED_RECEIVER_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "hist_receiver_release_crowding_2yd_rate",
@@ -2269,7 +2401,10 @@
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
       "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
-      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_TARGETED_RECEIVER_V1"
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_TARGETED_RECEIVER_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "hist_receiver_release_crowding_3yd_rate",
@@ -2323,7 +2458,10 @@
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
       "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
-      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_TARGETED_RECEIVER_V1"
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_TARGETED_RECEIVER_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "hist_receiver_release_geometry_sample_count",
@@ -2373,7 +2511,10 @@
         "Support count only."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "hist_receiver_route_release_nearest_defender_median_yards",
@@ -2427,7 +2568,10 @@
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
       "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
-      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_TARGETED_RECEIVER_SAME_ROUTE_V1"
+      "aggregation_contract": "EXPANDING_STRICT_PRIOR_SAME_TARGETED_RECEIVER_SAME_ROUTE_V1",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "route_x_man_zone_release_nearest_defender_median_yards",
@@ -2478,7 +2622,10 @@
         "Descriptive benchmark only; no causal or predictive interpretation and no target-game realized coverage leakage."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     },
     {
       "field_name": "route_x_coverage_family_release_nearest_defender_median_yards",
@@ -2529,7 +2676,10 @@
         "Team coverage family is play-level semantics, not defender assignment; benchmark is validation-only."
       ],
       "production_status": "RESEARCH_ONLY_NOT_PROMOTED",
-      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT"
+      "predictive_experiment_status": "NOT_AUTHORIZED_BY_THIS_CONTRACT",
+      "source_access_status": "ACCESSIBLE_REAL_FILES_AUTHENTICATED_KAGGLE",
+      "raw_data_handling": "EPHEMERAL_GITHUB_ACTIONS_ONLY_NOT_COMMITTED",
+      "source_license_lineage": "Official Kaggle competition corpus research access. Competition/source terms govern use; authenticated research access does not imply unrestricted commercial, live-feed, or production deployment rights."
     }
   ]
 }
