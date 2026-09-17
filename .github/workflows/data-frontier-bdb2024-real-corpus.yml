@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KAGGLE_API_TOKEN_RAW: ${{ secrets.KAGGLE_API_TOKEN }}
     steps:
       - name: Checkout isolated data-frontier branch
         uses: actions/checkout@v4
@@ -29,14 +29,40 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Verify Kaggle credential is present
+      - name: Normalize Kaggle credential transport
         shell: bash
         run: |
-          if [ -z "${KAGGLE_API_TOKEN:-}" ]; then
-            echo "KAGGLE_API_TOKEN repository secret is missing or empty."
-            exit 2
-          fi
-          echo "Kaggle credential is configured (value intentionally not printed)."
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          raw = os.environ.get('KAGGLE_API_TOKEN_RAW', '').strip()
+          if not raw:
+              print('KAGGLE_API_TOKEN repository secret is missing or empty.')
+              raise SystemExit(2)
+          token = raw
+          for prefix in ('export KAGGLE_API_TOKEN=', 'KAGGLE_API_TOKEN='):
+              if token.startswith(prefix):
+                  token = token[len(prefix):].strip()
+                  break
+          if len(token) >= 2 and token[0] == token[-1] and token[0] in ('"', "'"):
+              token = token[1:-1].strip()
+          token = token.replace('\r', '').replace('\n', '')
+          print(f"normalized_token_prefix_ok={token.startswith('KGAT_')}")
+          print(f"normalized_token_length={len(token)}")
+          if not token.startswith('KGAT_'):
+              print('Stored Kaggle secret is not a KGAT_ API token after safe normalization.')
+              raise SystemExit(2)
+          github_env = Path(os.environ['GITHUB_ENV'])
+          with github_env.open('a', encoding='utf-8') as handle:
+              handle.write(f'KAGGLE_API_TOKEN={token}\n')
+          token_dir = Path.home() / '.kaggle'
+          token_dir.mkdir(parents=True, exist_ok=True)
+          token_path = token_dir / 'access_token'
+          token_path.write_text(token, encoding='utf-8')
+          token_path.chmod(0o600)
+          print('Kaggle credential normalized and materialized securely; value not printed.')
+          PY
 
       - name: Validate Kaggle token with official introspection
         shell: bash
@@ -44,11 +70,10 @@ jobs:
           python - <<'PY'
           import json
           import os
+          import urllib.error
           import urllib.request
 
           token = os.environ['KAGGLE_API_TOKEN'].strip()
-          print(f"token_prefix_ok={token.startswith('KGAT_')}")
-          print(f"token_length={len(token)}")
           request = urllib.request.Request(
               'https://www.kaggle.com/api/v1/oauth2/introspect',
               data=json.dumps({'token': token}).encode('utf-8'),
@@ -58,6 +83,9 @@ jobs:
           try:
               with urllib.request.urlopen(request, timeout=30) as response:
                   payload = json.load(response)
+          except urllib.error.HTTPError as exc:
+              print(f"Kaggle token introspection HTTP status={exc.code}")
+              raise SystemExit(2)
           except Exception as exc:
               print(f"Kaggle token introspection request failed: {type(exc).__name__}")
               raise SystemExit(2)
@@ -66,16 +94,6 @@ jobs:
           if not active:
               raise SystemExit(2)
           PY
-
-      - name: Materialize Kaggle access token for CLI
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "${HOME}/.kaggle"
-          printf '%s' "${KAGGLE_API_TOKEN}" | tr -d '\r\n' > "${HOME}/.kaggle/access_token"
-          chmod 600 "${HOME}/.kaggle/access_token"
-          test -s "${HOME}/.kaggle/access_token"
-          echo "Kaggle access token file created securely (value intentionally not printed)."
 
       - name: Install Phase-0 and Kaggle dependencies
         run: |
