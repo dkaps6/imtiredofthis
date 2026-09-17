@@ -18,6 +18,7 @@ import scripts.run_pricing_with_full_roster_universe_v1 as base
 import scripts.run_pricing_with_full_roster_universe_v2 as v2
 import scripts.run_pricing_with_full_roster_universe_v3_core as v3
 import scripts.run_pricing_with_full_roster_universe_v4_production as v4
+from scripts.modeling.rb_pricing_adapter_v1 import RB_CONTEXT_COLUMNS, RB_CONTEXT_PATH
 from scripts.modeling.rb_r26_receptions_production_adapter_v1 import (
     AUDIT_JSON as R26_AUDIT_JSON,
     TRACE_CSV as R26_TRACE_CSV,
@@ -28,6 +29,7 @@ from scripts.runtime_context import resolve_week
 
 OUT = Path("outputs/props_priced_clean.csv")
 R26_PRICING_AUDIT = Path("data/rb_r26_receptions_pricing_lineage_audit.json")
+RB_NONWEEK1_SCOPE_AUDIT = Path("data/rb_p3_nonweek1_scope_audit.json")
 
 
 def _simulate_v5(metrics: pd.DataFrame, *, iterations=None, seed=None, allocation_trace=None):
@@ -199,7 +201,39 @@ def _clarify_r22_lineage_after_r26(*, week: int) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _materialize_nonweek1_rb_p3_scope_sentinel() -> dict | None:
+    """Make the intentional empty RB-P3 scope explicit outside Week 1.
+
+    The canonical Full Slate workflow deletes the Week-1-only P3 context for
+    later weeks.  Several downstream governance readers still need a readable
+    team-scope artifact to prove that no Week-1 P3 team was eligible.  A
+    header-only context expresses exactly that: zero promoted teams and zero
+    promoted projections.  No football values or sportsbook inputs are added.
+    """
+    week = int(resolve_week())
+    if week == 1:
+        return None
+    RB_CONTEXT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(columns=RB_CONTEXT_COLUMNS).to_csv(RB_CONTEXT_PATH, index=False)
+    payload = {
+        "disposition": "RB_P3_NOT_APPLICABLE_OUTSIDE_WEEK1_EMPTY_SCOPE",
+        "week": week,
+        "promoted_players": 0,
+        "promoted_teams": 0,
+        "sportsbook_inputs_used": False,
+        "football_values_fabricated": False,
+        "context_path": str(RB_CONTEXT_PATH),
+    }
+    RB_NONWEEK1_SCOPE_AUDIT.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return payload
+
+
 def main() -> int:
+    rb_scope = _materialize_nonweek1_rb_p3_scope_sentinel()
+    if rb_scope is not None:
+        print("[rb_p3_scope] " + json.dumps(rb_scope, sort_keys=True))
     base._identity_frame = v2._canonical_identity_frame
     base._validate_priced_distribution_coverage = v2._install_provider_player_aliases_and_validate
     base._build_full_universe = v3._build_with_promoted_entitlement_specialists
