@@ -80,7 +80,18 @@ jobs:
             set -- $SPEC
             SEASON="$1"
             PRIOR="$2"
-            WEEKS='1-18'
+            # The NFL regular season was 17 weeks (16 games) through 2020 and
+            # expanded to 18 weeks (17 games) starting 2021. Hardcoding '1-18'
+            # here fails closed with "schedule has no rows for 2019 W18" --
+            # confirmed empirically by the Workhorse-Gate adequacy census's own
+            # M95Q output (max_regular_week=17 for 2019/2020, =18 for
+            # 2021-2023). This is a purely mechanical schedule-length
+            # correction, not a science change.
+            if [ "$SEASON" -le 2020 ]; then
+              WEEKS='1-17'
+            else
+              WEEKS='1-18'
+            fi
             D="/tmp/rb_workhorse_gate/seasons/${SEASON}"
             rm -rf "$D"
             mkdir -p "$D"
