@@ -22,8 +22,10 @@ Authoritative lineage before this plan freeze:
 - Counts-only adequacy commit: `2b64ac2cfc333a4fa1eed714916b0f0d50fa0da3`
 - Counts-only Issue #535 comment: `5714642809`
 - Prospective design review comments: `5707262504`, `5707304196`, `5707483934`, `5707523675`, `5714574380`
+- Initial prospective plan freeze: `7fac65c960422bd87d40f45cff85ba5f4fc55c85`
+- Implementation-readiness ambiguity review: Issue #535 comment `5714817311`
 
-As of this plan freeze, no Workhorse-Gate classifier has been fit; no event probabilities have been generated; no feature/outcome relationship has been inspected; no cutoff has been selected; V2 has not been rerun; and 2024-2025 outcomes have not been reopened for this gate experiment.
+As of this plan freeze and the prospective implementation clarifications in Section 15, no Workhorse-Gate classifier has been fit; no event probabilities have been generated; no feature/outcome relationship has been inspected; no cutoff has been selected; V2 has not been rerun; and 2024-2025 outcomes have not been reopened for this gate experiment.
 
 ## 2. Scientific question
 
@@ -91,7 +93,7 @@ The counts-only census established:
 
 One mechanical gap is known and must be repaired **before any fit**: Gate 0.3 schedule-coverage requirement 4 is hardcoded to seasons `(2024, 2025)`. Generalize that check to the actual evaluated earlier seasons (2019-2023) without changing its scientific meaning. It must fail closed if schedule coverage is incomplete.
 
-That generalization is plumbing, not a new scientific feature. The implementation review must verify it before the first model fit.
+That generalization is plumbing, not a new scientific feature. The implementation review must verify it before the first model fit. The preferred implementation is an additive optional evaluated-season parameter whose default preserves existing V1/V2 behavior; no existing V1/V2 call-site semantics may change.
 
 Raw MC/ML/state component generation for the earlier seasons must use the existing walk-forward path. The audit verified that `component_predictions.py::predict_week` retrains the ML/state tiers from history cutoff to the target season/week and does not load a hidden 2024-fitted bundle.
 
@@ -124,15 +126,17 @@ The following exact derived redundancies are deliberately excluded: `active_top_
 Feature semantics:
 
 - `prior3_rb_share` and `pre_transition_backfield_hhi` must reuse the existing STACK2/V1/V2 strictly-prior history machinery unchanged.
+- `active_top_prior3_rb_share` and `active_second_prior3_rb_share` are the largest and second-largest existing-helper `prior3_rb_share` values among members of the post-transition active room. If the active room contains exactly one member, the second value is structurally `0.0`. If the post-transition active room contains zero members, the entire experiment fails closed before fitting/scoring. Existing helper behavior for a player with no prior history remains unchanged; this clarification does not introduce a new missing-history imputation.
 - `departed_room_*` is computed only from players present in the immediately prior resolvable pre-transition room but absent/unavailable from the post-transition active room for the scored loss/vacancy event, using the transition detector's own audited current/prior states.
 - `active_rb_room_size` and `prior_rb_room_size` are counts under those same room definitions.
-- `mc_projected_plays` and `mc_dropback_rate` are the raw pregame MC team-week values emitted by the historical walk-forward build.
+- `mc_projected_plays` and `mc_dropback_rate` are the raw pregame MC team-week values emitted by the historical walk-forward **canonical Build A**. Build B exists only for same-job authority/parity verification and may not be used as a feature source.
 - `raw_mc_team_rush_volume = mc_projected_plays * (1 - mc_dropback_rate)`.
 - `historical_rb_room_rush_share` reuses the V1/V2 strictly-prior trailing-3 team RB-room rush-share calculation unchanged.
-- `raw_mc_top_active_rush_att` and `raw_mc_second_active_rush_att` are the largest and second-largest raw `mc_proj` values for `market == rush_att` among exact-identity matched members of the post-transition active room. If exactly one matched active player exists, the second value is structurally `0.0`. If no active player can be matched to a raw MC rush-att row, feature construction fails closed for the experiment; do not impute a projection.
+- `raw_mc_top_active_rush_att` and `raw_mc_second_active_rush_att` are the largest and second-largest raw canonical Build-A `mc_proj` values for `market == rush_att` among exact-identity matched members of the post-transition active room. If exactly one matched active player exists, the second value is structurally `0.0`. If no active player can be matched to a raw MC rush-att row, the **entire Workhorse-Gate V1 experiment fails closed** before classifier fitting/scoring; do not impute a projection and do not drop only that event.
 - Existing strictly-prior history helper behavior for players with no prior history must be reused unchanged. Do not introduce a new missing-history imputation rule for this gate.
+- The existing role-weight/HHI helper may be extended mechanically to expose the already-computed per-player strictly-prior role-share frame needed for the two `departed_room_*` features. Such an extension must not alter any existing role-share or HHI formula, event membership, or V1/V2 output.
 
-Every emitted feature row must be finite before fitting/scoring. A source or timing defect is a pre-outcome integrity failure, not a reason to drop the event silently.
+Every scored event in the frozen event population must produce one complete finite 13-feature row before any fit/calibration/confirmation step. A source, identity, coverage, or timing defect in **any** scored event is a pre-outcome integrity failure for the whole V1 experiment. Event-level exclusion is forbidden. The failing event keys and exact reasons must be preserved in the evidence artifact.
 
 ## 8. Frozen classifier family
 
@@ -161,7 +165,7 @@ Candidate probability cutoffs are exactly:
 
 Select the cutoff that maximizes **F0.5** on 2022, weighting precision more heavily than recall because V2's broad failure mode was false-positive activation of the aggressive allocation mechanism.
 
-If multiple cutoffs tie exactly on F0.5, choose the higher cutoff.
+For any candidate cutoff producing zero predicted positives, record precision, recall, and F0.5 as `0.0` for cutoff-selection purposes (`zero_division=0` semantics). If multiple cutoffs tie exactly on F0.5, choose the higher cutoff, including a possible all-zero tie. Do not replace the frozen tie rule after seeing 2022.
 
 Do not refit or rescale the model using 2022. Do not change the grid or optimization metric after seeing 2022. Preserve the complete 2022 cutoff table in the evidence artifact.
 
@@ -171,7 +175,7 @@ Open 2023 once using the unchanged 2019-2021 model and the single cutoff selecte
 
 All gates below must pass:
 
-1. Source/timing/leakage integrity PASS, including generalized earlier-season schedule coverage.
+1. Source/timing/leakage integrity PASS, including generalized earlier-season schedule coverage and complete finite 13-feature constructibility for every scored event.
 2. Adequacy: >=30 scored loss/vacancy transition events and >=10 positive `WORKHORSE_EVENT` events. This count is already known to pass (123 / 23) and may not be used to alter any other rule.
 3. Precision exceeds unconditional 2023 workhorse prevalence by **>=10 percentage points**.
 4. Precision **>=0.60**.
@@ -180,7 +184,9 @@ All gates below must pass:
 7. PR-AUC **> positive-class prevalence**.
 8. `sportsbook_inputs_used = 0`.
 
-If any required gate fails, final V1 gate disposition is `RB_WORKHORSE_TRANSITION_GATE_V1_NOT_QUALIFIED` (or `INSUFFICIENT_EVIDENCE` only for a true adequacy failure) and the experiment stops before 2024-2025 transport. No rescue fitting, feature change, threshold change, alternate classifier, or year substitution is permitted.
+If the frozen cutoff produces zero predicted positives on 2023, precision is treated as undefined for scientific confirmation and gates 3 and 4 fail closed; record disposition detail `PRECISION_UNDEFINED_NO_PREDICTED_POSITIVES`. Do not rescue by changing the cutoff.
+
+If any required gate fails, final V1 gate disposition is `RB_WORKHORSE_TRANSITION_GATE_V1_NOT_QUALIFIED` (or `INSUFFICIENT_EVIDENCE` only for a true adequacy failure) and the experiment stops before 2024-2025 transport. A pre-outcome constructibility/source/timing failure must retain its specific integrity failure label rather than being relabeled as scientific nonqualification. No rescue fitting, feature change, threshold change, alternate classifier, event exclusion, or year substitution is permitted.
 
 If all required gates pass, disposition is `RB_WORKHORSE_TRANSITION_GATE_V1_CONFIRMED_EARLY_OOS`, which authorizes only the frozen 2024-2025 transport/disclosure described below. It does not authorize production.
 
@@ -218,6 +224,20 @@ No sportsbook information may enter the football-side gate or allocation mechani
 - No feature additions/deletions after fit begins.
 - No cutoff-grid or F0.5 rule change after 2022 probabilities are exposed.
 - No parameter/model-family changes after 2023 is opened.
+- No scored-event exclusion for feature/source/identity defects.
 - No 2024/2025 tuning.
 - No production mutation from this research branch.
 - Mechanical defects may be repaired only when the scientific meaning is unchanged, with the defect, repair, before/after lineage, and rerun authority documented explicitly.
+
+## 15. Prospective implementation clarifications frozen before fitting
+
+These clarifications resolve the ambiguities raised in Issue #535 comment `5714817311`. They were committed before classifier fitting, before probability generation, before cutoff selection, and before any 2023 model result was exposed. They do not use model outcomes and therefore do not constitute post-result rescue tuning.
+
+1. **Single-member active room:** for the prior3-share top/second pair, exactly one active member means second share is structurally `0.0`, mirroring the already-frozen raw-MC pair. Zero active members fail the entire experiment.
+2. **Meaning of fail closed:** any scored 2019-2023 event that cannot produce the complete finite 13-feature vector terminates V1 before scientific scoring. No event is silently or explicitly excluded to make the model run.
+3. **Raw component authority:** all raw MC feature values come from canonical same-job Build A. Build B remains parity verification only.
+4. **Role-share exposure helper:** exposing already-computed per-player prior3 shares from the existing role/HHI machinery is permitted as a mechanical implementation extension only; formulas and semantics remain unchanged.
+5. **Zero predicted positives:** 2022 cutoff-table metrics use zero-division=0 semantics; on 2023, zero predicted positives is a fail-closed scientific confirmation state with `PRECISION_UNDEFINED_NO_PREDICTED_POSITIVES`.
+6. **Gate-0 schedule repair:** generalize requirement 4 with an additive evaluated-season parameter/default-preserving implementation before fitting; existing V1/V2 semantics must remain unchanged.
+7. **Redundant prevalence gate:** the already-known 2023 prevalence makes the `precision >= prevalence + 10pp` gate weaker than the fixed `precision >= 0.60` gate in this specific year. Both remain frozen exactly as written; no gate is removed or weakened.
+8. **Authorization boundary:** after this clarification commit, implementation may be reviewed and coded, but classifier fitting remains unauthorized until the reviewer returns `IMPLEMENTATION_PLAN_REVIEW_PASS` against this amended plan.
