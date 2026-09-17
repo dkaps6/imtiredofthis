@@ -1,0 +1,146 @@
+name: Data Frontier BDB2024 Real Corpus
+
+on:
+  push:
+    branches:
+      - data-frontier-phase0-bdb-contact-v1
+    paths:
+      - '.github/workflows/data-frontier-bdb2024-real-corpus.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  BDB2024_COMPETITION: nfl-big-data-bowl-2024
+
+jobs:
+  real-corpus-phase0:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+    steps:
+      - name: Checkout isolated data-frontier branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Phase-0 and Kaggle dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install kaggle pyyaml
+
+      - name: Verify Kaggle credential is present
+        shell: bash
+        run: |
+          if [ -z "${KAGGLE_API_TOKEN:-}" ]; then
+            echo "KAGGLE_API_TOKEN repository secret is missing or empty."
+            exit 2
+          fi
+          echo "Kaggle credential is configured (value intentionally not printed)."
+
+      - name: Download official BDB 2024 competition corpus
+        id: download
+        shell: bash
+        run: |
+          set -euo pipefail
+          download_dir="${RUNNER_TEMP}/bdb2024_download"
+          corpus_dir="${RUNNER_TEMP}/bdb2024_corpus"
+          mkdir -p "$download_dir" "$corpus_dir"
+          kaggle competitions download \
+            -c "${BDB2024_COMPETITION}" \
+            -p "$download_dir"
+          archive="$(find "$download_dir" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          if [ -z "$archive" ]; then
+            echo "Official Kaggle download did not produce a zip archive."
+            exit 2
+          fi
+          unzip -q "$archive" -d "$corpus_dir"
+          rm -f "$archive"
+          echo "corpus_dir=$corpus_dir" >> "$GITHUB_OUTPUT"
+          echo "Official BDB 2024 corpus downloaded to ephemeral runner storage."
+          echo "Raw competition files will not be uploaded as workflow artifacts."
+
+      - name: Run fail-closed real-corpus Phase-0 benchmark
+        id: phase0
+        shell: bash
+        run: |
+          export PYTHONPATH="${PWD}"
+          out_dir="${RUNNER_TEMP}/bdb2024_phase0"
+          mkdir -p "$out_dir"
+          set +e
+          python -m scripts.data_frontier.run_bdb_2024_phase0 \
+            --input-dir "${{ steps.download.outputs.corpus_dir }}" \
+            --out-dir "$out_dir" \
+            2>&1 | tee "${RUNNER_TEMP}/bdb2024_phase0.log"
+          code=${PIPESTATUS[0]}
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          echo "out_dir=$out_dir" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Build sanitized benchmark artifact
+        if: always() && steps.download.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          summary_dir="${RUNNER_TEMP}/bdb2024_phase0_summary"
+          out_dir="${RUNNER_TEMP}/bdb2024_phase0"
+          mkdir -p "$summary_dir"
+          for name in \
+            corpus_preflight_v1.json \
+            qa_summary.json \
+            source_manifest.json \
+            artifact_provenance_v1.json \
+            contact_fidelity_report_v1.json \
+            phase0_pipeline_status.json; do
+            if [ -f "$out_dir/$name" ]; then
+              cp "$out_dir/$name" "$summary_dir/$name"
+            fi
+          done
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          summary_dir = Path(os.environ['RUNNER_TEMP']) / 'bdb2024_phase0_summary'
+          payload = {
+              'workflow': 'Data Frontier BDB2024 Real Corpus',
+              'repository': os.environ.get('GITHUB_REPOSITORY'),
+              'git_sha': os.environ.get('GITHUB_SHA'),
+              'git_ref': os.environ.get('GITHUB_REF'),
+              'run_id': os.environ.get('GITHUB_RUN_ID'),
+              'run_attempt': os.environ.get('GITHUB_RUN_ATTEMPT'),
+              'competition': os.environ.get('BDB2024_COMPETITION'),
+              'raw_competition_files_uploaded': False,
+              'predictive_experiment': False,
+              'production_changed': False,
+              'contact_detector_changed': False,
+          }
+          (summary_dir / 'execution_metadata.json').write_text(
+              json.dumps(payload, indent=2, sort_keys=True), encoding='utf-8'
+          )
+          PY
+          if [ -f "${RUNNER_TEMP}/bdb2024_phase0.log" ]; then
+            cp "${RUNNER_TEMP}/bdb2024_phase0.log" "$summary_dir/phase0_execution.log"
+          fi
+
+      - name: Upload sanitized Phase-0 benchmark summary
+        if: always() && steps.download.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2024-real-corpus-phase0-summary
+          path: ${{ runner.temp }}/bdb2024_phase0_summary
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Enforce Phase-0 result
+        if: steps.download.outcome == 'success' && steps.phase0.outputs.exit_code != '0'
+        run: |
+          echo "BDB 2024 real-corpus Phase-0 benchmark failed closed."
+          echo "See sanitized summary artifact for corpus/fidelity diagnostics."
+          exit 1
