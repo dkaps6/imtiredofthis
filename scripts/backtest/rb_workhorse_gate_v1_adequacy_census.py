@@ -125,7 +125,11 @@ def main() -> int:
     injury_state.to_csv(args.out_dir / "injury_state.csv", index=False)
 
     gate02 = gate02_report(injury_state, seasons)
-    gate03 = gate03_report(roster_state, seasons)
+    # Additive oos_test_seasons parameter (rb_lane_a_gate0_v1.py) -- exercises
+    # real requirement-4 schedule-coverage completeness for these earlier
+    # seasons instead of silently not running it, per the Workhorse-Gate V1
+    # plan's mandatory Gate-0 repair (Section 6).
+    gate03 = gate03_report(roster_state, seasons, oos_test_seasons=seasons)
 
     detected = build_detected_transitions(roster_state, injury_state)
     scored = build_scored_v1_event_population(detected)
@@ -155,9 +159,9 @@ def main() -> int:
             "gate0_3_event_checks_disposition": gate03_events["disposition"],
             "gate0_3_event_checks_failures": gate03_events["failures"],
             "gate0_3_requirement_4_note": (
-                "Schedule-coverage completeness (requirement 4) is scoped in "
-                "gate03_report() to seasons (2024, 2025) and does not execute for "
-                "these earlier seasons -- disclosed, not silently skipped."
+                "Schedule-coverage completeness (requirement 4) now runs for these "
+                "evaluated earlier seasons via the additive oos_test_seasons "
+                "parameter on gate03_report() (default unchanged for V1/V2)."
             ),
         },
         "census_by_season": census,

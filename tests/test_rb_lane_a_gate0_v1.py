@@ -1,3 +1,5 @@
+from unittest import mock
+
 import pandas as pd
 
 from scripts.backtest.rb_lane_a_gate0_v1 import (
@@ -95,6 +97,55 @@ def test_gate03_report_passes_clean_with_no_duplicates():
     # Structural pass only -- per GPT-5.6's adjudication (5702132088), requirements
     # 5/6 (event-level checks) are separate and not folded into this disposition.
     assert report["disposition"] == "PASS_STRUCTURAL_EVENT_CHECKS_PENDING"
+
+
+def test_gate03_report_oos_test_seasons_default_preserves_existing_behavior():
+    # Additive parameter (RB Workhorse-Transition-Gate V1, Issue #535 Section
+    # 6/15.6): omitting oos_test_seasons must reproduce the exact original
+    # (2024, 2025)-only requirement-4 scoping. Season 2023 stays network-free
+    # since it's outside that default.
+    roster_state = pd.DataFrame(
+        {
+            "season": [2023], "week": [1], "team": ["KC"],
+            "player_key": ["p1"], "position": ["RB"], "status": ["ACT"],
+        }
+    )
+    report = gate03_report(roster_state, [2023])
+    assert report["scheduled_team_week_coverage_gap"] == {}
+
+
+def test_gate03_report_oos_test_seasons_param_scopes_requirement_4_to_empty():
+    # Passing an empty oos_test_seasons must skip requirement 4 entirely
+    # (no network call) even when the evaluated season set includes years
+    # that would otherwise be checked under a non-default scope.
+    roster_state = pd.DataFrame(
+        {
+            "season": [2023], "week": [1], "team": ["KC"],
+            "player_key": ["p1"], "position": ["RB"], "status": ["ACT"],
+        }
+    )
+    report = gate03_report(roster_state, [2023], oos_test_seasons=[])
+    assert report["scheduled_team_week_coverage_gap"] == {}
+    assert report["failures"] == []
+
+
+def test_gate03_report_oos_test_seasons_param_activates_requirement_4_for_earlier_season():
+    # With a mocked schedule (network-free), passing oos_test_seasons=[2019]
+    # must actually run requirement 4 for 2019 -- proving the check is driven
+    # by the parameter, not the hardcoded (2024, 2025) tuple.
+    roster_state = pd.DataFrame(
+        {
+            "season": [2019], "week": [1], "team": ["KC"],
+            "player_key": ["p1"], "position": ["RB"], "status": ["ACT"],
+        }
+    )
+    fake_schedule = pd.DataFrame({"week": [1, 1], "home": ["KC", "SF"], "away": ["SF", "KC"]})
+    with mock.patch("scripts.backtest.rb_lane_a_gate0_v1.get_nfl_schedule", return_value=fake_schedule):
+        report = gate03_report(roster_state, [2019], oos_test_seasons=[2019])
+    # KC has a resolvable roster row; SF does not -> exactly one gap.
+    assert report["scheduled_team_week_coverage_gap"] == {"2019": 1}
+    assert any("requirement_4_unresolvable_team_weeks_2019" in f for f in report["failures"])
+    assert report["disposition"] == "GATE0_BLOCKED"
 
 
 def test_gate03_event_report_passes_when_current_and_prior_state_resolvable():

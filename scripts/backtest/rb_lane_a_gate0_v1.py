@@ -346,9 +346,25 @@ def harmonize_roster_membership(seasons: Iterable[int]) -> pd.DataFrame:
     return result.drop_duplicates(["season", "week", "team", "player_key"], keep="last")
 
 
-def gate03_report(roster_state: pd.DataFrame, seasons: Iterable[int]) -> dict:
-    """Score the seven frozen Amendment-5 requirements. Fail-closed, not silent."""
+def gate03_report(
+    roster_state: pd.DataFrame,
+    seasons: Iterable[int],
+    *,
+    oos_test_seasons: Iterable[int] = (2024, 2025),
+) -> dict:
+    """Score the seven frozen Amendment-5 requirements. Fail-closed, not silent.
+
+    ``oos_test_seasons`` is an additive, default-preserving parameter (Issue
+    #535 RB Workhorse-Transition-Gate V1 plan, Section 6/15.6): requirement 4's
+    schedule-coverage completeness check runs only for seasons in this set.
+    The default ``(2024, 2025)`` reproduces V1/V2's exact original behavior
+    for every existing call site -- no existing V1/V2 semantics change. A
+    caller evaluating earlier seasons (e.g. the Workhorse-Gate census) passes
+    its own evaluated-season set here to get real requirement-4 coverage
+    instead of the check silently not running for those seasons.
+    """
     seasons = sorted({int(s) for s in seasons})
+    oos_test_seasons = sorted({int(s) for s in oos_test_seasons})
     failures: list[str] = []
 
     # Requirement 3: zero duplicate (season, week, team, player_key) identities.
@@ -362,10 +378,10 @@ def gate03_report(roster_state: pd.DataFrame, seasons: Iterable[int]) -> dict:
     if not required_cols.issubset(roster_state.columns):
         failures.append(f"requirement_1_schema_missing: {required_cols - set(roster_state.columns)}")
 
-    # Requirement 4: every scheduled team-week in both OOS test seasons (2024, 2025)
-    # has a resolvable RB-room roster state.
+    # Requirement 4: every scheduled team-week in every evaluated OOS test
+    # season has a resolvable RB-room roster state.
     coverage_gap: dict[str, int] = {}
-    for season in (2024, 2025):
+    for season in oos_test_seasons:
         if season not in seasons:
             continue
         sched = get_nfl_schedule(season)
