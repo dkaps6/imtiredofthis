@@ -218,6 +218,8 @@ The workhorse gate may only route between those two already-defined arms. It may
 
 Only after both Rotation A's 2022 confirmation and Rotation B's 2023 confirmation independently pass every gate may the fully frozen gate+router be transported onto 2024 and 2025 once.
 
+**Transport-model lock** (Issue #535 comments `5718249725`/`5718559240` -- resolved and frozen prospectively, before any Workhorse-Gate label or classifier result was ever opened): if and only if both rotations confirm, **Rotation B's already-frozen scaler, coefficients, and 2022-selected cutoff are the sole 2024/2025 transport classifier**, unchanged. Rotation A remains the independent replication/confirmation check only and never drives transport. No A/B blending, no refit on 2022 or 2023, no third/final model, no choosing the better-performing rotation after results are seen. This resolves the ambiguity originally flagged in Section 15/the runner's own docstring; it does not by itself authorize transport, which still requires both rotations to confirm first.
+
 Those years are hypothesis-generating/exposed data from Lane-A V2. They therefore cannot serve as independent qualification evidence and may not be used to retune anything.
 
 The transport must report the existing Lane-A safety table unchanged, including at minimum transition rushing-yard MAE, protected workload/tail slices, p90/catastrophic error, player-cluster and crossed bootstrap diagnostics, stable-row identity, conservation, per-season results, and whole-season deployable safety.

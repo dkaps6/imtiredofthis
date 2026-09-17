@@ -37,6 +37,7 @@ jobs:
           python -m py_compile scripts/backtest/rb_lane_a_gate0_v1.py
           python -m py_compile scripts/backtest/rb_lane_a_transition_detector_v1.py
           python -m py_compile scripts/backtest/rb_workhorse_gate_v1_adequacy_census.py
+          python -m py_compile scripts/backtest/rb_workhorse_gate_v1_event_population.py
           python -m py_compile scripts/backtest/rb_workhorse_gate_v1_features.py
           python -m py_compile scripts/backtest/rb_workhorse_gate_v1_classifier.py
           python -m py_compile scripts/backtest/run_rb_workhorse_gate_v1.py
@@ -52,6 +53,7 @@ jobs:
             tests/test_rb_lane_a_gate_scoring_v1.py \
             tests/test_rb_lane_a_final_gates_v1.py \
             tests/test_rb_workhorse_gate_v1_adequacy_census.py \
+            tests/test_rb_workhorse_gate_v1_event_population.py \
             tests/test_rb_workhorse_gate_v1_features.py \
             tests/test_rb_workhorse_gate_v1_classifier.py \
             tests/test_run_rb_workhorse_gate_v1.py -v

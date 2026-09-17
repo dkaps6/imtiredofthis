@@ -3,25 +3,26 @@
 
 Implements the frozen plan (``docs/research/
 RB_WORKHORSE_TRANSITION_GATE_V1_PLAN.md``, as amended by Section 16's
-two-rotation chronology). Wires Gate 0 (generalized to the evaluated
-earlier seasons), the frozen 13-feature event builder, and the frozen
-two-rotation classifier pipeline into one run.
+two-rotation chronology and Section 17's schedule-domain correction).
+Wires Gate 0 (generalized to the evaluated earlier seasons), the
+schedule-domain intersection (Section 17), the frozen 13-feature event
+builder, and the frozen two-rotation classifier pipeline into one run.
 
 Outcomes (the realized ``WORKHORSE_EVENT`` labels) are attached only after
-Gate 0 and feature-construction integrity both pass for the WHOLE 2019-2023
-scored population -- matching the frozen plan's whole-experiment
-fail-closed semantics (Section 15 point 2): a single unconstructible event
-anywhere in the population stops the run before any label is ever
-attached, not just for that event.
+Gate 0, the schedule-domain correction, and feature-construction integrity
+all pass for the WHOLE retained 2019-2023 scored population -- matching the
+frozen plan's whole-experiment fail-closed semantics (Section 15 point 2):
+a single unconstructible event anywhere in the retained population stops
+the run before any label is ever attached, not just for that event.
 
 2024-2025 no-tuning transport (plan Section 12) is NOT executed by this
-runner. It is only authorized if both rotations independently confirm,
-and the frozen plan does not specify which rotation's fitted classifier
-should drive the transport router when both confirm -- that is a genuine
-ambiguity to resolve prospectively (matching the "stop and post it"
-discipline already used twice in this research thread) rather than guess,
-and it only matters if this run's result ever reaches that state. This
-runner stops at the two-rotation confirmation result and reports it.
+runner. It is only authorized if both rotations independently confirm.
+Which rotation's classifier drives that transport is already resolved
+prospectively (Section 12's transport-model lock, Issue #535 comments
+`5718249725`/`5718559240`): Rotation B's frozen scaler/coefficients/cutoff,
+unchanged, Rotation A replication-only, no blend/refit/third model. This
+runner stops at the two-rotation confirmation result and reports it;
+transport itself is a separate, still-unauthorized step.
 
 No sportsbook input. No production change.
 """
@@ -175,6 +176,7 @@ def main() -> int:
     gate0["roster_state"].to_csv(args.out_dir / "roster_state.csv", index=False)
     gate0["injury_state"].to_csv(args.out_dir / "injury_state.csv", index=False)
     gate0["scored_events"].to_csv(args.out_dir / "scored_v1_events.csv", index=False)
+    gate0["excluded_non_game_events"].to_csv(args.out_dir / "scored_v1_events_excluded_non_game.csv", index=False)
 
     pre_science = {
         "stage": "pre_outcome_integrity",
@@ -187,6 +189,7 @@ def main() -> int:
         "gate0_3_roster_structural_failures": gate0["gate03"]["failures"],
         "gate0_3_event_checks_disposition": gate0["gate03_events"]["disposition"],
         "gate0_3_event_checks_failures": gate0["gate03_events"]["failures"],
+        "schedule_domain_correction": gate0["schedule_domain_counts"],
         "scored_events_count": int(len(gate0["scored_events"])),
         "sportsbook_inputs_used": 0,
     }
@@ -285,10 +288,12 @@ def main() -> int:
         "final_disposition": final_disposition,
         "transport_2024_2025": (
             "NOT_EXECUTED -- authorized only if final_disposition is "
-            f"{BOTH_ROTATIONS_CONFIRMED}; which rotation's classifier drives the "
-            "transport router is not yet specified in the frozen plan and requires "
-            "prospective clarification before execution, per the 'stop and post it' "
-            "discipline already used for the plan's other ambiguities."
+            f"{BOTH_ROTATIONS_CONFIRMED}. The transport-model lock (plan Section 12, "
+            "Issue #535 comments 5718249725/5718559240) is already resolved "
+            "prospectively: Rotation B's frozen scaler/coefficients/2022-selected "
+            "cutoff, unchanged, is the sole transport classifier; Rotation A is "
+            "replication-only. This does not itself authorize transport, which "
+            "remains a separate step this runner does not execute."
         ),
         "stop_rule": "No rescue tuning, feature changes, cutoff changes, or rotation substitution after this result.",
     }
