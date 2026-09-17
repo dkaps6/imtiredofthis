@@ -1,0 +1,144 @@
+name: Data Frontier BDB2021 Route Contract
+
+on:
+  push:
+    branches:
+      - data-frontier-phase0-bdb-contact-v1
+    paths:
+      - '.github/workflows/data-frontier-bdb2021-route-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_SECRET_RAW: ${{ secrets.KAGGLE_API_TOKEN }}
+  COMPETITION: nfl-big-data-bowl-2021
+
+jobs:
+  audit-route-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Normalize Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          token="${raw#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          [[ "$token" == KGAT_* ]]
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+      - name: Install dependencies
+        run: pip install kaggle pandas
+      - name: Download official BDB 2021 corpus ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/bdb2021_route_download"
+          c="${RUNNER_TEMP}/bdb2021_route_corpus"
+          mkdir -p "$d" "$c"
+          kaggle competitions download -c "${COMPETITION}" -p "$d"
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$z"
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "BDB2021_CORPUS_DIR=$c" >> "$GITHUB_ENV"
+      - name: Audit route labels and event coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/bdb2021_route_contract"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import pandas as pd
+
+          root=Path(os.environ['BDB2021_CORPUS_DIR'])
+          out=Path(os.environ['RUNNER_TEMP'])/'bdb2021_route_contract'
+          route_counts={}
+          position_route_rows={}
+          position_route_playerplays={}
+          event_counts={}
+          week_summaries=[]
+          total_playerplays=0
+          total_route_playerplays=0
+          multi_route_playerplays=0
+          route_null_position_counts={}
+          football_missing_plays=0
+
+          for week in range(1,18):
+              tr=pd.read_csv(next(root.rglob(f'week{week}.csv')),usecols=['gameId','playId','nflId','frameId','event','displayName','position','team','route'])
+              plays=tr[['gameId','playId']].drop_duplicates()
+              pp=tr[tr['nflId'].notna()][['gameId','playId','nflId','position','team','route']].drop_duplicates()
+              total_playerplays += int(pp[['gameId','playId','nflId']].drop_duplicates().shape[0])
+              rc=pp[pp['route'].notna()].copy()
+              total_route_playerplays += int(rc[['gameId','playId','nflId']].drop_duplicates().shape[0])
+              per=rc.groupby(['gameId','playId','nflId'])['route'].nunique()
+              multi=int((per>1).sum())
+              multi_route_playerplays += multi
+              for k,v in rc['route'].value_counts().items(): route_counts[str(k)]=route_counts.get(str(k),0)+int(v)
+              for k,v in rc['position'].fillna('<NULL>').value_counts().items(): position_route_playerplays[str(k)]=position_route_playerplays.get(str(k),0)+int(v)
+              rr=tr[tr['route'].notna()]
+              for k,v in rr['position'].fillna('<NULL>').value_counts().items(): position_route_rows[str(k)]=position_route_rows.get(str(k),0)+int(v)
+              for k,v in tr['event'].dropna().value_counts().items(): event_counts[str(k)]=event_counts.get(str(k),0)+int(v)
+              football_pairs=tr[tr['team'].eq('football')][['gameId','playId']].drop_duplicates()
+              m=plays.merge(football_pairs,on=['gameId','playId'],how='left',indicator=True)
+              miss_ball=int((m['_merge']!='both').sum())
+              football_missing_plays += miss_ball
+              evpairs=tr[tr['event'].notna()][['gameId','playId','event']].drop_duplicates()
+              def nplays(evt): return int(evpairs[evpairs['event'].eq(evt)][['gameId','playId']].drop_duplicates().shape[0])
+              week_summaries.append({
+                  'week':week,
+                  'tracking_rows':int(len(tr)),
+                  'plays':int(len(plays)),
+                  'route_labeled_playerplays':int(rc[['gameId','playId','nflId']].drop_duplicates().shape[0]),
+                  'multi_route_label_playerplays':multi,
+                  'plays_with_ball_snap':nplays('ball_snap'),
+                  'plays_with_pass_forward':nplays('pass_forward'),
+                  'plays_with_pass_arrived':nplays('pass_arrived'),
+                  'plays_with_caught_event':nplays('pass_outcome_caught'),
+                  'plays_with_incomplete_event':nplays('pass_outcome_incomplete'),
+                  'plays_with_interception_event':nplays('pass_outcome_interception'),
+                  'plays_missing_football_track':miss_ball,
+              })
+
+          summary={
+              'audit_version':'BDB2021_ROUTE_CONTRACT_V1',
+              'git_sha':os.environ.get('GITHUB_SHA'),
+              'raw_competition_files_uploaded':False,
+              'predictive_experiment':False,
+              'production_changed':False,
+              'total_tracked_playerplays':total_playerplays,
+              'route_labeled_playerplays':total_route_playerplays,
+              'multi_route_label_playerplays':multi_route_playerplays,
+              'route_values':dict(sorted(route_counts.items(),key=lambda kv:(-kv[1],kv[0]))),
+              'route_playerplays_by_position':dict(sorted(position_route_playerplays.items(),key=lambda kv:(-kv[1],kv[0]))),
+              'route_tracking_rows_by_position':dict(sorted(position_route_rows.items(),key=lambda kv:(-kv[1],kv[0]))),
+              'event_row_counts':dict(sorted(event_counts.items(),key=lambda kv:(-kv[1],kv[0]))),
+              'plays_missing_football_track':football_missing_plays,
+              'week_summaries':week_summaries,
+          }
+          (out/'bdb2021_route_contract.json').write_text(json.dumps(summary,indent=2,sort_keys=True),encoding='utf-8')
+          print(json.dumps(summary,indent=2,sort_keys=True))
+          if multi_route_playerplays != 0: raise SystemExit('Route label is not stable within player-play')
+          if football_missing_plays != 0: raise SystemExit('At least one play lacks football tracking')
+          PY
+      - name: Upload sanitized route contract
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2021-route-contract
+          path: ${{ runner.temp }}/bdb2021_route_contract
+          if-no-files-found: error
+          retention-days: 30
