@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -71,6 +72,10 @@ def _read_csv(path: Path, label: str) -> pd.DataFrame:
     x = pd.read_csv(path, low_memory=False)
     x.columns = [str(c).strip().lower() for c in x.columns]
     return x
+
+
+def _name_key(value) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(value or "").lower())
 
 
 def _write_json(path: Path, value: dict) -> None:
@@ -174,6 +179,16 @@ def main() -> int:
         return 0
 
     player_logs = _read_csv(args.player_logs, "combined player logs")
+    # compute_role_weights_and_hhi (reused unchanged from
+    # rb_lane_a_candidate_v1.py) requires a name_key join column on
+    # player_logs. The raw M95Q CSV only carries player_clean_key; every
+    # other caller (e.g. run_rb_lane_a_candidate_v1.py's
+    # _prepare_player_logs) derives name_key the same deterministic way
+    # before use. This is that same derivation, not a new join rule.
+    source = player_logs["player_clean_key"] if "player_clean_key" in player_logs.columns else player_logs.get(
+        "player", pd.Series("", index=player_logs.index)
+    )
+    player_logs["name_key"] = source.map(_name_key)
     component_predictions = _read_csv(args.component_predictions_build_a, "combined Build-A component predictions")
 
     feature_result = build_event_features(
