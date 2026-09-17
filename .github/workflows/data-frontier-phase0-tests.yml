@@ -1,0 +1,46 @@
+name: Data Frontier Phase0 Tests
+
+on:
+  push:
+    branches:
+      - data-frontier-phase0-bdb-contact-v1
+    paths:
+      - '.github/workflows/data-frontier-phase0-tests.yml'
+      - 'data_frontier/**'
+      - 'scripts/data_frontier/**'
+      - 'tests/test_bdb_2024_*.py'
+      - 'docs/data_frontier/**'
+      - 'requirements.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused-phase0-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install focused test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyyaml
+      - name: Compile Phase-0 modules and tests
+        run: |
+          python -m compileall data_frontier scripts/data_frontier tests/test_bdb_2024_*.py
+      - name: Run focused Phase-0 suite
+        run: |
+          export PYTHONPATH="${PWD}"
+          pytest -q \
+            tests/test_bdb_2024_artifact_integrity.py \
+            tests/test_bdb_2024_artifact_provenance.py \
+            tests/test_bdb_2024_artifact_qa.py \
+            tests/test_bdb_2024_contact.py \
+            tests/test_bdb_2024_contact_enrichment.py \
+            tests/test_bdb_2024_contact_fidelity.py \
+            tests/test_bdb_2024_contact_geometry.py \
+            tests/test_bdb_2024_phase0_orchestration.py
