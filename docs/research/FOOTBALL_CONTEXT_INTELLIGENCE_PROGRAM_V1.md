@@ -139,6 +139,43 @@ These are engineered assets, not predictive winners yet.
 
 ---
 
+
+# Workstream K — Advanced Data Signal Exploration
+
+**Branch:** `research-advanced-data-signal-exploration-v1`
+
+**Status:** ACTIVE / DESCRIPTIVE + SIGNAL-RECONNAISSANCE ENGINEERING
+
+The 47 newly materialized advanced fields are not merely support assets for the other context workstreams. They have their own dedicated research program.
+
+Primary questions:
+
+1. Which player-level geometry/protection traits are persistent enough to be knowable before a future game?
+2. Which features are mostly play-level noise and should remain descriptive/retrospective only?
+3. Which route, alignment, coverage-family and personnel strata materially change those distributions?
+4. Do strict-prior player summaries preserve useful information when evaluated against later completed observations?
+5. Which advanced feature families are genuinely novel versus information the current production model already captures?
+6. Which feature families deserve a separately frozen position-specific predictive experiment?
+
+Immediate non-production exploration families:
+
+- receiver release separation persistence;
+- second-defender spacing persistence;
+- 2/3-yard crowding persistence;
+- route-conditioned receiver spacing persistence;
+- BDB2021 snap-to-throw spacing change;
+- blocker snap/minimum/terminal distance persistence;
+- time-to-engagement/minimum-distance persistence;
+- chip/release interaction structure;
+- geometry versus PFF beaten/hit/hurry/sack labels for retrospective validation;
+- route × man/zone and route × detailed coverage geometry;
+- player-level heterogeneity and sample-size stability;
+- out-of-distribution / sparse-history rates under the frozen abstention thresholds.
+
+This workstream may run descriptive, persistence, reliability, novelty and retrospective-validation analyses in parallel.
+
+It may **not** change production or silently run a model-selection tournament. A future predictive candidate must be named, frozen and isolated by position/target mechanism.
+
 # Workstream C — Player Role & Environment Regime
 
 **Branch:** `research-player-role-environment-regime-v1-plan`
@@ -536,17 +573,19 @@ Engineering may proceed concurrently:
 5. design historical analog-state schema;
 6. extend BDB route geometry into deterministic proximity-exposure summaries;
 7. build BDB protection interaction archetype summaries;
-8. establish forward collection design for authoritative role statements and WR-CB reports.
+8. establish forward collection design for authoritative role statements and WR-CB reports;
+9. run Advanced Data Signal Exploration V1 persistence/reliability/novelty audits across all three validated labs.
 
 ### After engineering QA
-9. generate coverage/abstention reports;
-10. quantify historical cohort sizes / out-of-distribution frequency;
-11. freeze first position-specific predictive candidate.
+10. generate coverage/abstention reports;
+11. quantify historical cohort sizes / out-of-distribution frequency;
+12. rank advanced-data families by persistence, temporal usability, novelty and evidence quality — not by outcome-tuned winner selection;
+13. freeze first position-specific predictive candidate.
 
 ### Only after qualification
-12. shadow live 2026;
-13. compare against production;
-14. consider promotion.
+14. shadow live 2026;
+15. compare against production;
+16. consider promotion.
 
 ---
 
