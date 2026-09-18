@@ -144,7 +144,7 @@ These are engineered assets, not predictive winners yet.
 
 **Branch:** `research-advanced-data-signal-exploration-v1`
 
-**Status:** ACTIVE / DESCRIPTIVE + SIGNAL-RECONNAISSANCE ENGINEERING
+**Status:** INITIAL RECONNAISSANCE PASS — MULTIPLE PERSISTENT FAMILIES FOUND
 
 The 47 newly materialized advanced fields are not merely support assets for the other context workstreams. They have their own dedicated research program.
 
@@ -172,6 +172,21 @@ Immediate non-production exploration families:
 - player-level heterogeneity and sample-size stability;
 - out-of-distribution / sparse-history rates under the frozen abstention thresholds.
 
+Canonical initial run: `35289753485`.
+
+Initial result:
+- BDB2026 receiver release nearest spacing early/late Spearman: **0.705**
+- BDB2026 receiver×route nearest spacing persistence: **0.730**
+- BDB2026 strict-prior nearest spacing vs later same-family geometry: **0.482**
+- BDB2021 player×route nearest throw spacing persistence: **0.593**
+- BDB2023 blocker snap-separation persistence: **0.847**
+- BDB2023 blocker time-to-minimum persistence: **0.575**
+
+Result authority:
+`docs/research/ADVANCED_DATA_SIGNAL_EXPLORATION_V1_RESULT.md`
+
+The first reconnaissance therefore establishes that several newly engineered families behave like persistent football traits, while still making no yards/receptions/QB/RB predictive-lift claim.
+
 This workstream may run descriptive, persistence, reliability, novelty and retrospective-validation analyses in parallel.
 
 It may **not** change production or silently run a model-selection tournament. A future predictive candidate must be named, frozen and isolated by position/target mechanism.
@@ -180,7 +195,7 @@ It may **not** change production or silently run a model-selection tournament. A
 
 **Branch:** `research-player-role-environment-regime-v1-plan`
 
-**Status:** CROSS-POSITION PLAN FROZEN; SOURCE ENGINEERING NEXT
+**Status:** CROSS-POSITION PLAN FROZEN; EVIDENCE SCHEMA V1 CI-VALIDATED; SOURCE ENGINEERING NEXT
 
 Positions:
 
@@ -213,6 +228,13 @@ Examples:
 - DJ Moore: new-team primary receiver + QB/play-caller environment transition.
 
 No fixed player boost is allowed.
+
+Evidence contract:
+- `docs/research/player_role_environment_evidence_v1.json`
+- `docs/research/PLAYER_ROLE_ENVIRONMENT_EVIDENCE_V1.md`
+- CI run `35290091425`: PASS
+
+The contract preserves the existing certified current-availability authority and adds evidence families for team/room continuity, vacancy, strict-prior current-season usage, QB environment, coaching, trenches and timestamped qualitative role statements.
 
 ---
 
