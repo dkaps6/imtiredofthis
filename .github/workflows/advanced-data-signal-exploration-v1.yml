@@ -1,0 +1,214 @@
+name: Advanced Data Signal Exploration V1
+
+on:
+  push:
+    branches:
+      - research-advanced-data-signal-exploration-v1
+    paths:
+      - '.github/workflows/advanced-data-signal-exploration-v1.yml'
+      - 'scripts/data_frontier/advanced_data_signal_exploration_common_v1.py'
+      - 'scripts/data_frontier/explore_bdb2021_advanced_signal_v1.py'
+      - 'scripts/data_frontier/explore_bdb2023_advanced_signal_v1.py'
+      - 'scripts/data_frontier/explore_bdb2026_advanced_signal_v1.py'
+      - 'tests/test_advanced_data_signal_exploration_v1.py'
+      - 'docs/research/ADVANCED_DATA_SIGNAL_EXPLORATION_V1_PLAN.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_SECRET_RAW: ${{ secrets.KAGGLE_API_TOKEN }}
+
+jobs:
+  exploration-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install focused dependencies
+        run: pip install pandas numpy pytest
+      - name: Compile exploration code
+        run: |
+          python -m compileall             scripts/data_frontier/advanced_data_signal_exploration_common_v1.py             scripts/data_frontier/explore_bdb2021_advanced_signal_v1.py             scripts/data_frontier/explore_bdb2023_advanced_signal_v1.py             scripts/data_frontier/explore_bdb2026_advanced_signal_v1.py             tests/test_advanced_data_signal_exploration_v1.py
+      - name: Run exploration helper tests
+        run: PYTHONPATH="${PWD}" pytest -q tests/test_advanced_data_signal_exploration_v1.py
+
+  bdb2021:
+    needs: exploration-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Normalize Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          token="${raw#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          [[ "$token" == KGAT_* ]]
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+      - name: Install source dependencies
+        run: pip install kaggle pandas numpy
+      - name: Download official BDB 2021 ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/bdb2021_download"
+          c="${RUNNER_TEMP}/bdb2021_corpus"
+          mkdir -p "$d" "$c"
+          kaggle competitions download -c nfl-big-data-bowl-2021 -p "$d"
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$z"
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "CORPUS_DIR=$c" >> "$GITHUB_ENV"
+      - name: Materialize BDB 2021 features ephemerally
+        run: |
+          PYTHONPATH="${PWD}" python scripts/data_frontier/materialize_bdb2021_advanced_features_v1.py             --corpus-dir "${CORPUS_DIR}"             --out-dir "${RUNNER_TEMP}/bdb2021_materialized"
+      - name: Run BDB 2021 signal exploration
+        run: |
+          PYTHONPATH="${PWD}" python scripts/data_frontier/explore_bdb2021_advanced_signal_v1.py             --materialized-dir "${RUNNER_TEMP}/bdb2021_materialized"             --out-dir "${RUNNER_TEMP}/bdb2021_exploration"
+      - name: Verify aggregate-only upload boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "${RUNNER_TEMP}/bdb2021_exploration/bdb2021_advanced_signal_exploration_v1.json"
+          find "${RUNNER_TEMP}/bdb2021_exploration" -type f | grep -E '/private/|route_playerplays' && exit 1 || true
+      - name: Upload BDB 2021 aggregate exploration
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2021-advanced-signal-exploration-v1
+          path: ${{ runner.temp }}/bdb2021_exploration
+          if-no-files-found: error
+          retention-days: 30
+
+  bdb2023:
+    needs: exploration-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Normalize Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          token="${raw#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          [[ "$token" == KGAT_* ]]
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+      - name: Install source dependencies
+        run: pip install kaggle pandas numpy
+      - name: Download official BDB 2023 ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/bdb2023_download"
+          c="${RUNNER_TEMP}/bdb2023_corpus"
+          mkdir -p "$d" "$c"
+          kaggle competitions download -c nfl-big-data-bowl-2023 -p "$d"
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$z"
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "CORPUS_DIR=$c" >> "$GITHUB_ENV"
+      - name: Materialize BDB 2023 features ephemerally
+        run: |
+          PYTHONPATH="${PWD}" python scripts/data_frontier/materialize_bdb2023_advanced_features_v1.py             --corpus-dir "${CORPUS_DIR}"             --out-dir "${RUNNER_TEMP}/bdb2023_materialized"
+      - name: Run BDB 2023 signal exploration
+        run: |
+          PYTHONPATH="${PWD}" python scripts/data_frontier/explore_bdb2023_advanced_signal_v1.py             --materialized-dir "${RUNNER_TEMP}/bdb2023_materialized"             --corpus-dir "${CORPUS_DIR}"             --out-dir "${RUNNER_TEMP}/bdb2023_exploration"
+      - name: Verify aggregate-only upload boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "${RUNNER_TEMP}/bdb2023_exploration/bdb2023_advanced_signal_exploration_v1.json"
+          find "${RUNNER_TEMP}/bdb2023_exploration" -type f | grep -E '/private/|protection_interactions' && exit 1 || true
+      - name: Upload BDB 2023 aggregate exploration
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2023-advanced-signal-exploration-v1
+          path: ${{ runner.temp }}/bdb2023_exploration
+          if-no-files-found: error
+          retention-days: 30
+
+  bdb2026:
+    needs: exploration-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Normalize Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          token="${raw#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          [[ "$token" == KGAT_* ]]
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+      - name: Install source dependencies
+        run: pip install kaggle pandas numpy
+      - name: Download official BDB 2026 Analytics ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/bdb2026_download"
+          c="${RUNNER_TEMP}/bdb2026_corpus"
+          mkdir -p "$d" "$c"
+          kaggle competitions download -c nfl-big-data-bowl-2026-analytics -p "$d"
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$z"
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "CORPUS_DIR=$c" >> "$GITHUB_ENV"
+      - name: Materialize BDB 2026 features ephemerally
+        run: |
+          PYTHONPATH="${PWD}" python scripts/data_frontier/materialize_bdb2026_advanced_features_v1.py             --corpus-dir "${CORPUS_DIR}"             --out-dir "${RUNNER_TEMP}/bdb2026_materialized"
+      - name: Run BDB 2026 signal exploration
+        run: |
+          PYTHONPATH="${PWD}" python scripts/data_frontier/explore_bdb2026_advanced_signal_v1.py             --materialized-dir "${RUNNER_TEMP}/bdb2026_materialized"             --out-dir "${RUNNER_TEMP}/bdb2026_exploration"
+      - name: Verify aggregate-only upload boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "${RUNNER_TEMP}/bdb2026_exploration/bdb2026_advanced_signal_exploration_v1.json"
+          find "${RUNNER_TEMP}/bdb2026_exploration" -type f | grep -E '/private/|targeted_receiver_throw_window' && exit 1 || true
+      - name: Upload BDB 2026 aggregate exploration
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2026-advanced-signal-exploration-v1
+          path: ${{ runner.temp }}/bdb2026_exploration
+          if-no-files-found: error
+          retention-days: 30
