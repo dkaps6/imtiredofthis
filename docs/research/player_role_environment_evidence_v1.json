@@ -1,0 +1,494 @@
+{
+  "contract_version": "PLAYER_ROLE_ENVIRONMENT_EVIDENCE_V1",
+  "status": "FROZEN_EVIDENCE_SCHEMA_SOURCE_ENGINEERING_ONLY",
+  "created_date": "2026-09-17",
+  "grain": "player_team_target_game",
+  "target_positions": [
+    "QB",
+    "RB",
+    "WR",
+    "TE"
+  ],
+  "purpose": "Represent current football role/environment evidence without directly assigning projected stats.",
+  "global_rules": [
+    "All evidence must be available before target kickoff.",
+    "Sportsbook data is prohibited.",
+    "Target-game partial usage is prohibited.",
+    "Depth chart is contextual evidence only and cannot directly determine opportunity.",
+    "Qualitative statements are structured evidence and cannot directly add carries, targets, receptions, or yards.",
+    "Current certified availability/eligible-role artifacts remain authoritative for who is available; this layer does not override them.",
+    "Unknown evidence must remain null/abstain rather than fabricated.",
+    "Any eventual regime-state classifier is deterministic evidence synthesis before predictive coefficients are tested."
+  ],
+  "source_registry": {
+    "CURRENT_AVAILABILITY": {
+      "status": "QUALIFIED_CURRENT_PRODUCTION_AUTHORITY",
+      "artifacts": [
+        "data/current_player_availability.csv",
+        "data/roles_current_production_eligible_v1.csv"
+      ],
+      "lineage": [
+        "Ourlads current depth/status",
+        "weekly injury evidence",
+        "official game-day inactive evidence",
+        "T-75 timing certification"
+      ],
+      "temporal_rule": "snapshot and certification must be valid before target kickoff"
+    },
+    "STRICT_PRIOR_PLAYER_HISTORY": {
+      "status": "QUALIFIED_CURRENT_PRODUCTION_STRICT_PRIOR",
+      "artifacts": [
+        "data/player_game_logs.csv",
+        "data/player_form_consensus.csv"
+      ],
+      "temporal_rule": "active-season game log week must be strictly less than target week"
+    },
+    "HISTORICAL_ROSTER_TEAM_HISTORY": {
+      "status": "AVAILABLE_NEEDS_REGIME_ENGINEERING",
+      "lineage": [
+        "nflverse weekly rosters",
+        "historical player/team game logs",
+        "stable player identity bridge"
+      ],
+      "temporal_rule": "only roster/team facts established before target kickoff"
+    },
+    "CURRENT_DEPTH_CONTEXT": {
+      "status": "QUALIFIED_CURRENT_CONTEXT",
+      "lineage": [
+        "Ourlads depth/status"
+      ],
+      "temporal_rule": "timestamped pre-kickoff snapshot",
+      "limitation": "WR LWR/RWR/SWR depth lanes are not a unique WR1/WR2 hierarchy"
+    },
+    "COACH_PLAYCALLER_HISTORY": {
+      "status": "SOURCE_CONTRACT_REQUIRED",
+      "limitation": "No production-qualified historical/current coaching-change contract frozen yet."
+    },
+    "AUTHORITATIVE_ROLE_STATEMENT": {
+      "status": "FORWARD_ARCHIVE_REQUIRED",
+      "allowed_source_tiers": [
+        "official team/NFL transaction or depth information",
+        "official coach/GM/player transcript",
+        "official team editorial/reporting",
+        "NFL.com directly attributed reporting",
+        "separately approved high-quality reporting"
+      ],
+      "temporal_rule": "publication timestamp < target kickoff",
+      "limitation": "statement is evidence only, never a direct numerical projection adjustment"
+    },
+    "TRANSACTION_EVENT_HISTORY": {
+      "status": "SOURCE_CONTRACT_REQUIRED_OR_DERIVABLE_WITH_AUDIT",
+      "temporal_rule": "transaction must be established before target kickoff"
+    },
+    "CURRENT_TRENCH_PERSONNEL": {
+      "status": "PARTIAL_CURRENT_CONTEXT_AVAILABLE",
+      "lineage": [
+        "current depth/status",
+        "current availability",
+        "strict-prior snap/pass-rush history where qualified"
+      ],
+      "limitation": "does not provide exact target-game blocker-rusher assignment"
+    }
+  },
+  "evidence_fields": [
+    {
+      "name": "current_availability_state",
+      "family": "availability",
+      "type": "categorical",
+      "source": "CURRENT_AVAILABILITY",
+      "required": true
+    },
+    {
+      "name": "eligible_for_opportunity",
+      "family": "availability",
+      "type": "boolean",
+      "source": "CURRENT_AVAILABILITY",
+      "required": true
+    },
+    {
+      "name": "availability_authority",
+      "family": "availability",
+      "type": "categorical",
+      "source": "CURRENT_AVAILABILITY",
+      "required": true
+    },
+    {
+      "name": "official_depth_rank",
+      "family": "hierarchy",
+      "type": "number_nullable",
+      "source": "CURRENT_DEPTH_CONTEXT",
+      "required": false
+    },
+    {
+      "name": "raw_depth_role",
+      "family": "hierarchy",
+      "type": "categorical_nullable",
+      "source": "CURRENT_DEPTH_CONTEXT",
+      "required": false
+    },
+    {
+      "name": "depth_source_asof_utc",
+      "family": "hierarchy",
+      "type": "timestamp_nullable",
+      "source": "CURRENT_DEPTH_CONTEXT",
+      "required": false
+    },
+    {
+      "name": "team_changed_since_prior_season",
+      "family": "team_continuity",
+      "type": "boolean_nullable",
+      "source": "HISTORICAL_ROSTER_TEAM_HISTORY",
+      "required": false
+    },
+    {
+      "name": "team_changed_since_last_game",
+      "family": "team_continuity",
+      "type": "boolean_nullable",
+      "source": "HISTORICAL_ROSTER_TEAM_HISTORY",
+      "required": false
+    },
+    {
+      "name": "same_team_prior_games",
+      "family": "team_continuity",
+      "type": "integer_nullable",
+      "source": "STRICT_PRIOR_PLAYER_HISTORY",
+      "required": false
+    },
+    {
+      "name": "prior_season_team",
+      "family": "team_continuity",
+      "type": "categorical_nullable",
+      "source": "HISTORICAL_ROSTER_TEAM_HISTORY",
+      "required": false
+    },
+    {
+      "name": "credible_competitors_added",
+      "family": "room_continuity",
+      "type": "integer_nullable",
+      "source": "HISTORICAL_ROSTER_TEAM_HISTORY",
+      "required": false
+    },
+    {
+      "name": "credible_competitors_departed",
+      "family": "room_continuity",
+      "type": "integer_nullable",
+      "source": "HISTORICAL_ROSTER_TEAM_HISTORY",
+      "required": false
+    },
+    {
+      "name": "vacated_prior_opportunity_share",
+      "family": "room_continuity",
+      "type": "number_nullable",
+      "source": "STRICT_PRIOR_PLAYER_HISTORY",
+      "required": false
+    },
+    {
+      "name": "returning_room_opportunity_share",
+      "family": "room_continuity",
+      "type": "number_nullable",
+      "source": "STRICT_PRIOR_PLAYER_HISTORY",
+      "required": false
+    },
+    {
+      "name": "current_room_competitor_count",
+      "family": "room_continuity",
+      "type": "integer_nullable",
+      "source": "CURRENT_AVAILABILITY",
+      "required": false
+    },
+    {
+      "name": "definitive_unavailable_competitor_count",
+      "family": "vacancy",
+      "type": "integer_nullable",
+      "source": "CURRENT_AVAILABILITY",
+      "required": false
+    },
+    {
+      "name": "questionable_competitor_count",
+      "family": "vacancy",
+      "type": "integer_nullable",
+      "source": "CURRENT_AVAILABILITY",
+      "required": false
+    },
+    {
+      "name": "injury_created_vacated_share",
+      "family": "vacancy",
+      "type": "number_nullable",
+      "source": "CURRENT_AVAILABILITY",
+      "required": false
+    },
+    {
+      "name": "strict_prior_current_season_games",
+      "family": "current_season_role",
+      "type": "integer_nullable",
+      "source": "STRICT_PRIOR_PLAYER_HISTORY",
+      "required": false
+    },
+    {
+      "name": "strict_prior_carry_share",
+      "family": "current_season_role",
+      "type": "number_nullable",
+      "source": "STRICT_PRIOR_PLAYER_HISTORY",
+      "positions": [
+        "RB",
+        "QB"
+      ],
+      "required": false
+    },
+    {
+      "name": "strict_prior_target_share",
+      "family": "current_season_role",
+      "type": "number_nullable",
+      "source": "STRICT_PRIOR_PLAYER_HISTORY",
+      "positions": [
+        "RB",
+        "WR",
+        "TE"
+      ],
+      "required": false
+    },
+    {
+      "name": "strict_prior_reception_share",
+      "family": "current_season_role",
+      "type": "number_nullable",
+      "source": "STRICT_PRIOR_PLAYER_HISTORY",
+      "positions": [
+        "RB",
+        "WR",
+        "TE"
+      ],
+      "required": false
+    },
+    {
+      "name": "primary_qb_changed",
+      "family": "qb_environment",
+      "type": "boolean_nullable",
+      "source": "HISTORICAL_ROSTER_TEAM_HISTORY",
+      "positions": [
+        "RB",
+        "WR",
+        "TE"
+      ],
+      "required": false
+    },
+    {
+      "name": "qb_prior_player_overlap_games",
+      "family": "qb_environment",
+      "type": "integer_nullable",
+      "source": "STRICT_PRIOR_PLAYER_HISTORY",
+      "positions": [
+        "RB",
+        "WR",
+        "TE"
+      ],
+      "required": false
+    },
+    {
+      "name": "head_coach_changed",
+      "family": "coaching",
+      "type": "boolean_nullable",
+      "source": "COACH_PLAYCALLER_HISTORY",
+      "required": false
+    },
+    {
+      "name": "offensive_coordinator_changed",
+      "family": "coaching",
+      "type": "boolean_nullable",
+      "source": "COACH_PLAYCALLER_HISTORY",
+      "required": false
+    },
+    {
+      "name": "primary_play_caller_changed",
+      "family": "coaching",
+      "type": "boolean_nullable",
+      "source": "COACH_PLAYCALLER_HISTORY",
+      "required": false
+    },
+    {
+      "name": "play_caller_prior_player_overlap",
+      "family": "coaching",
+      "type": "integer_nullable",
+      "source": "COACH_PLAYCALLER_HISTORY",
+      "required": false
+    },
+    {
+      "name": "ol_returning_starter_count",
+      "family": "trench_context",
+      "type": "integer_nullable",
+      "source": "CURRENT_TRENCH_PERSONNEL",
+      "required": false
+    },
+    {
+      "name": "key_ol_absence_count",
+      "family": "trench_context",
+      "type": "integer_nullable",
+      "source": "CURRENT_TRENCH_PERSONNEL",
+      "required": false
+    },
+    {
+      "name": "front_returning_starter_count",
+      "family": "trench_context",
+      "type": "integer_nullable",
+      "source": "CURRENT_TRENCH_PERSONNEL",
+      "required": false
+    },
+    {
+      "name": "key_pass_rusher_absence_count",
+      "family": "trench_context",
+      "type": "integer_nullable",
+      "source": "CURRENT_TRENCH_PERSONNEL",
+      "required": false
+    },
+    {
+      "name": "official_lead_role_signal",
+      "family": "qualitative_role",
+      "type": "boolean_nullable",
+      "source": "AUTHORITATIVE_ROLE_STATEMENT",
+      "required": false
+    },
+    {
+      "name": "official_committee_signal",
+      "family": "qualitative_role",
+      "type": "boolean_nullable",
+      "source": "AUTHORITATIVE_ROLE_STATEMENT",
+      "required": false
+    },
+    {
+      "name": "official_primary_target_signal",
+      "family": "qualitative_role",
+      "type": "boolean_nullable",
+      "source": "AUTHORITATIVE_ROLE_STATEMENT",
+      "positions": [
+        "WR",
+        "TE",
+        "RB"
+      ],
+      "required": false
+    },
+    {
+      "name": "official_workload_expansion_signal",
+      "family": "qualitative_role",
+      "type": "boolean_nullable",
+      "source": "AUTHORITATIVE_ROLE_STATEMENT",
+      "required": false
+    },
+    {
+      "name": "official_workload_contraction_signal",
+      "family": "qualitative_role",
+      "type": "boolean_nullable",
+      "source": "AUTHORITATIVE_ROLE_STATEMENT",
+      "required": false
+    },
+    {
+      "name": "official_pass_down_role_signal",
+      "family": "qualitative_role",
+      "type": "boolean_nullable",
+      "source": "AUTHORITATIVE_ROLE_STATEMENT",
+      "positions": [
+        "RB"
+      ],
+      "required": false
+    },
+    {
+      "name": "official_goal_line_role_signal",
+      "family": "qualitative_role",
+      "type": "boolean_nullable",
+      "source": "AUTHORITATIVE_ROLE_STATEMENT",
+      "positions": [
+        "RB",
+        "TE"
+      ],
+      "required": false
+    },
+    {
+      "name": "official_outside_receiver_signal",
+      "family": "qualitative_role",
+      "type": "boolean_nullable",
+      "source": "AUTHORITATIVE_ROLE_STATEMENT",
+      "positions": [
+        "WR"
+      ],
+      "required": false
+    },
+    {
+      "name": "official_slot_receiver_signal",
+      "family": "qualitative_role",
+      "type": "boolean_nullable",
+      "source": "AUTHORITATIVE_ROLE_STATEMENT",
+      "positions": [
+        "WR"
+      ],
+      "required": false
+    },
+    {
+      "name": "role_statement_confidence",
+      "family": "qualitative_role",
+      "type": "categorical_nullable",
+      "allowed": [
+        "HIGH",
+        "MEDIUM",
+        "LOW"
+      ],
+      "source": "AUTHORITATIVE_ROLE_STATEMENT",
+      "required": false
+    },
+    {
+      "name": "role_evidence_coverage",
+      "family": "meta",
+      "type": "number_0_1",
+      "source": "DERIVED",
+      "required": true
+    },
+    {
+      "name": "role_evidence_confidence",
+      "family": "meta",
+      "type": "categorical",
+      "allowed": [
+        "HIGH",
+        "MEDIUM",
+        "LOW",
+        "ABSTAIN"
+      ],
+      "source": "DERIVED",
+      "required": true
+    }
+  ],
+  "qualitative_statement_grain": {
+    "grain": "one_authoritative_statement_or_fact",
+    "required_fields": [
+      "player_id_or_resolved_identity",
+      "team",
+      "normalized_role_concept",
+      "source_reference",
+      "published_at_utc",
+      "available_before_kickoff",
+      "authority_tier",
+      "direct_vs_interpreted",
+      "confidence"
+    ],
+    "normalized_role_concepts": [
+      "LEAD_ROLE",
+      "COMMITTEE_ROLE",
+      "WORKLOAD_EXPANSION",
+      "WORKLOAD_CONTRACTION",
+      "PRIMARY_OUTSIDE_RECEIVER",
+      "PRIMARY_SLOT_RECEIVER",
+      "PRIMARY_TARGET",
+      "DEEP_ROLE",
+      "POSSESSION_ROLE",
+      "PASS_DOWN_ROLE",
+      "TWO_MINUTE_ROLE",
+      "GOAL_LINE_ROLE",
+      "BLOCKING_HEAVY_ROLE",
+      "STARTER_CONFIRMED",
+      "STARTER_UNCERTAIN",
+      "LIMITED_ROLE"
+    ]
+  },
+  "output_boundary": {
+    "direct_projection_adjustment_authorized": false,
+    "predictive_coefficients_authorized": false,
+    "production_integration_authorized": false,
+    "market_inputs_authorized": false
+  }
+}
