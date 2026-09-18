@@ -1,0 +1,30 @@
+name: Player Role Environment Evidence V1
+
+on:
+  push:
+    branches:
+      - research-player-role-environment-regime-v1-plan
+    paths:
+      - 'docs/research/player_role_environment_evidence_v1.json'
+      - 'scripts/research/validate_player_role_environment_evidence_v1.py'
+      - 'tests/test_player_role_environment_evidence_v1.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pytest
+      - name: Compile
+        run: python -m compileall scripts/research/validate_player_role_environment_evidence_v1.py tests/test_player_role_environment_evidence_v1.py
+      - name: Validate evidence contract
+        run: python scripts/research/validate_player_role_environment_evidence_v1.py
+      - name: Run focused tests
+        run: PYTHONPATH="${PWD}" pytest -q tests/test_player_role_environment_evidence_v1.py
