@@ -1,6 +1,26 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 GitHub is canonical; chat memory is secondary.
 
+## ACTIVE FOOTBALL-CONTEXT / CLAUDE-MAUDE HANDOFF — 2026-09-18
+
+The user has explicitly resumed Claude/Maude collaboration on the cross-position Football Context Intelligence Program.
+
+**Read this first for that program:**
+
+`docs/handoffs/NFL_HANDOFF_2026-09-18_FOOTBALL_CONTEXT_CLAUDE_CURRENT.md`
+
+Canonical program branch:
+
+`research-football-context-program-v1`
+
+This handoff covers the full current pipeline: historical-data reuse, role/environment regimes, personnel continuity, historical analog infrastructure, WR/TE defender proximity, OL/DL protection context, advanced BDB feature materialization and signal exploration, qualification gates, no-retest boundaries, and the exact next execution sequence.
+
+**Important collaboration rule:** an hourly GPT engineering process is still advancing `research-football-context-program-v1`. Claude/Maude should fetch the latest head, then use a separate branch for implementation rather than competing direct pushes.
+
+**Program scientific boundary:** engineering/source/QA/qualification work is authorized; production-science changes and uncontrolled predictive experiments are not. Do not interfere with the active WR work coordinated through Issue #535.
+
+---
+
 ## ACTIVE RESEARCH CHECKPOINT — 2026-09-14
 
 The user's explicit current priority is **WR receiving yards**. Do not skip ahead to RB until the user changes priority.
