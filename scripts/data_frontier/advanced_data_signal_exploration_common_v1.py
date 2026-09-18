@@ -104,6 +104,7 @@ def future_geometry_validation(
     history: pd.DataFrame,
     target_keys: list[str],
     target_week_col: str,
+    history_target_week_col: str,
     history_pred_actual_pairs: list[tuple[str, str]],
     history_count_col: str,
     tier_breaks: tuple[int, int, int],
@@ -119,8 +120,11 @@ def future_geometry_validation(
         actual_aggs.append(a)
     actual = pd.concat(actual_aggs, ignore_index=True) if actual_aggs else pd.DataFrame()
 
+    hist = history.copy()
+    if history_target_week_col != target_week_col:
+        hist = hist.rename(columns={history_target_week_col: target_week_col})
     join_keys = [target_week_col] + target_keys
-    z = history.merge(actual, on=join_keys, how="inner", suffixes=("", "_actual"))
+    z = hist.merge(actual, on=join_keys, how="inner", suffixes=("", "_actual"))
     z["confidence_tier"] = confidence_tier(
         z[history_count_col],
         low_min=tier_breaks[0],
