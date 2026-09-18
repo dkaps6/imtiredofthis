@@ -18,7 +18,8 @@
     "Qualitative statements are structured evidence and cannot directly add carries, targets, receptions, or yards.",
     "Current certified availability/eligible-role artifacts remain authoritative for who is available; this layer does not override them.",
     "Unknown evidence must remain null/abstain rather than fabricated.",
-    "Any eventual regime-state classifier is deterministic evidence synthesis before predictive coefficients are tested."
+    "Any eventual regime-state classifier is deterministic evidence synthesis before predictive coefficients are tested.",
+    "Current-vs-prior usage deltas are descriptive regime diagnostics only; they do not authorize direct projection multipliers."
   ],
   "source_registry": {
     "CURRENT_AVAILABILITY": {
@@ -449,6 +450,83 @@
         "LOW",
         "ABSTAIN"
       ],
+      "source": "DERIVED",
+      "required": true
+    },
+    {
+      "name": "prior_season_target_share",
+      "family": "historical_role_baseline",
+      "type": "number_nullable",
+      "source": "STRICT_PRIOR_PLAYER_HISTORY",
+      "positions": [
+        "RB",
+        "WR",
+        "TE"
+      ],
+      "required": false
+    },
+    {
+      "name": "prior_season_rush_share",
+      "family": "historical_role_baseline",
+      "type": "number_nullable",
+      "source": "STRICT_PRIOR_PLAYER_HISTORY",
+      "positions": [
+        "RB",
+        "QB"
+      ],
+      "required": false
+    },
+    {
+      "name": "prior_season_reception_share",
+      "family": "historical_role_baseline",
+      "type": "number_nullable",
+      "source": "STRICT_PRIOR_PLAYER_HISTORY",
+      "positions": [
+        "RB",
+        "WR",
+        "TE"
+      ],
+      "required": false
+    },
+    {
+      "name": "current_minus_prior_target_share_delta",
+      "family": "role_transition_diagnostic",
+      "type": "number_nullable",
+      "source": "DERIVED",
+      "positions": [
+        "RB",
+        "WR",
+        "TE"
+      ],
+      "required": false
+    },
+    {
+      "name": "current_minus_prior_rush_share_delta",
+      "family": "role_transition_diagnostic",
+      "type": "number_nullable",
+      "source": "DERIVED",
+      "positions": [
+        "RB",
+        "QB"
+      ],
+      "required": false
+    },
+    {
+      "name": "current_minus_prior_reception_share_delta",
+      "family": "role_transition_diagnostic",
+      "type": "number_nullable",
+      "source": "DERIVED",
+      "positions": [
+        "RB",
+        "WR",
+        "TE"
+      ],
+      "required": false
+    },
+    {
+      "name": "current_role_sample_is_cold_start",
+      "family": "role_transition_diagnostic",
+      "type": "boolean",
       "source": "DERIVED",
       "required": true
     }
