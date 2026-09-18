@@ -57,6 +57,8 @@ def validate_contract(d: dict) -> dict:
         errors.append(f"missing sources {missing_sources}")
 
     fields=d.get("evidence_fields",[])
+    if len(fields) < 40:
+        errors.append(f"evidence field inventory unexpectedly small: {len(fields)}")
     names=[x.get("name") for x in fields]
     dup=sorted(k for k,v in Counter(names).items() if v>1)
     if dup:
