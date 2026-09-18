@@ -54,6 +54,7 @@ def run(materialized_dir: Path, out_dir: Path) -> dict:
         history=hist,
         target_keys=["nfl_id"],
         target_week_col="week",
+        history_target_week_col="target_week",
         history_pred_actual_pairs=[
             ("hist_receiver_release_nearest_defender_median_yards", "receiver_release_nearest_defender_distance_yards"),
             ("hist_receiver_release_second_defender_median_yards", "receiver_release_second_defender_distance_yards"),
