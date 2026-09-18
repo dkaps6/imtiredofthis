@@ -24,6 +24,13 @@ def confidence_tier(n: pd.Series, low_min: int, medium_min: int, high_min: int) 
     )
 
 
+def _spearman(a: pd.Series, b: pd.Series) -> float:
+    q = pd.DataFrame({"a": pd.to_numeric(a, errors="coerce"), "b": pd.to_numeric(b, errors="coerce")}).dropna()
+    if len(q) < 3:
+        return np.nan
+    return q["a"].rank(method="average").corr(q["b"].rank(method="average"), method="pearson")
+
+
 def pair_metrics(frame: pd.DataFrame, pred: str, actual: str) -> dict:
     x = frame[[pred, actual]].copy()
     x[pred] = pd.to_numeric(x[pred], errors="coerce")
@@ -40,7 +47,7 @@ def pair_metrics(frame: pd.DataFrame, pred: str, actual: str) -> dict:
         }
     err = x[pred] - x[actual]
     pearson = x[pred].corr(x[actual], method="pearson") if len(x) >= 3 else np.nan
-    spearman = x[pred].corr(x[actual], method="spearman") if len(x) >= 3 else np.nan
+    spearman = _spearman(x[pred], x[actual]) if len(x) >= 3 else np.nan
     return {
         "n": int(len(x)),
         "mae": float(err.abs().mean()),
@@ -151,6 +158,8 @@ def future_geometry_validation(
 
 def numeric_correlation_matrix(frame: pd.DataFrame, columns: list[str], method: str = "spearman") -> pd.DataFrame:
     q = frame[columns].apply(pd.to_numeric, errors="coerce")
+    if method == "spearman":
+        return q.rank(method="average").corr(method="pearson")
     return q.corr(method=method)
 
 
