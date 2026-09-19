@@ -66,6 +66,8 @@ Audit:
 - season-boundary reset behavior;
 - team-change alignment where applicable.
 
+Operational V1 precision gate, frozen before any event-regime outcome test: at least **80% of positive binary-event rows must be true onsets** (event true now and false on the player's immediately previous observed row in the same season). This is intended to reject mechanically forward-filled pseudo-events while allowing a small amount of legitimate multi-week regime persistence. The threshold is an engineering semantic gate, not an outcome-tuned cutoff.
+
 ### 5. Novelty / redundancy versus production state — hard gate for experiment readiness
 
 Compare the event signal with canonical pregame production opportunity/role inputs without reading outcomes.
