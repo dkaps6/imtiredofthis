@@ -34,7 +34,7 @@ jobs:
       - name: Compile and focused tests
         run: |
           python -m compileall scripts/research/rehydrate_and_run_role_room_qualification.py scripts/research/run_role_room_qualification_pipeline.py
-          PYTHONPATH="${PWD}" pytest -q tests/test_role_room_qualification_pipeline.py tests/test_usage_regime_context.py tests/test_room_continuity_context.py
+          PYTHONPATH="${PWD}" pytest -q tests/test_role_room_qualification_pipeline.py tests/test_build_usage_regime_context.py tests/test_build_room_continuity_context.py tests/test_role_room_context.py tests/test_role_room_transition_diagnostics.py tests/test_build_context_stability_evidence.py tests/test_build_context_candidate_profile.py
       - name: Rehydrate canonical 2019-2025 history and qualify role-room signals
         run: |
           PYTHONPATH="${PWD}" python scripts/research/rehydrate_and_run_role_room_qualification.py \
