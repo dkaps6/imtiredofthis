@@ -38,17 +38,19 @@ def main() -> int:
     stability = out / "role_room_stability.csv"
     profile = out / "role_room_candidate_profile.csv"
 
-    run([a.python, str(s / "build_usage_regime_context.py"), "--input", str(a.historical), "--out", str(usage)])
-    run([a.python, str(s / "build_room_continuity_context.py"), "--input", str(a.historical), "--out", str(room)])
+    # Both strict-prior materializers expose --history as their canonical input contract.
+    run([a.python, str(s / "build_usage_regime_context.py"), "--history", str(a.historical), "--out", str(usage)])
+    run([a.python, str(s / "build_room_continuity_context.py"), "--history", str(a.historical), "--out", str(room)])
     run([a.python, str(s / "build_role_room_context.py"), "--usage", str(usage), "--room", str(room), "--out", str(joined)])
     run([a.python, str(s / "build_role_room_transition_diagnostics.py"), "--input", str(joined), "--detail-out", str(transition), "--summary-out", str(transition_summary)])
 
+    # Use the exact published materializer column names. These are all strict-prior values.
     features = ",".join([
-        "prior_tgt_share_game", "rolling3_tgt_share", "rolling5_tgt_share",
-        "prior_rush_share_game", "rolling3_rush_share", "rolling5_rush_share",
+        "prior_tgt_share_game", "prior3_tgt_share_game_mean", "prior5_tgt_share_game_mean",
+        "prior_rush_share_game", "prior3_rush_share_game_mean", "prior5_rush_share_game_mean",
         "prior_tgt_share_game_top1", "prior_tgt_share_game_top2",
         "prior_rush_share_game_top1", "prior_rush_share_game_top2",
-        "returning_target_opportunity_overlap", "returning_rush_opportunity_overlap",
+        "prior_tgt_share_game_returning_overlap", "prior_rush_share_game_returning_overlap",
     ])
     run([a.python, str(s / "build_context_stability_evidence.py"), "--input", str(joined),
          "--entity-key", "player_identity_key", "--features", features, "--out", str(stability)])
