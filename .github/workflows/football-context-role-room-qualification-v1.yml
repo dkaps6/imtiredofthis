@@ -1,0 +1,54 @@
+name: Football Context Role Room Qualification V1
+
+on:
+  push:
+    branches:
+      - research-football-context-execution-v1
+    paths:
+      - 'scripts/research/rehydrate_and_run_role_room_qualification.py'
+      - 'scripts/research/run_role_room_qualification_pipeline.py'
+      - 'scripts/research/build_usage_regime_context.py'
+      - 'scripts/research/build_room_continuity_context.py'
+      - 'scripts/research/build_role_room_context.py'
+      - 'scripts/research/build_role_room_transition_diagnostics.py'
+      - 'scripts/research/build_context_stability_evidence.py'
+      - 'scripts/research/build_context_candidate_profile.py'
+      - '.github/workflows/football-context-role-room-qualification-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+      - name: Compile and focused tests
+        run: |
+          python -m compileall scripts/research/rehydrate_and_run_role_room_qualification.py scripts/research/run_role_room_qualification_pipeline.py
+          PYTHONPATH="${PWD}" pytest -q tests/test_role_room_qualification_pipeline.py tests/test_usage_regime_context.py tests/test_room_continuity_context.py
+      - name: Rehydrate canonical 2019-2025 history and qualify role-room signals
+        run: |
+          PYTHONPATH="${PWD}" python scripts/research/rehydrate_and_run_role_room_qualification.py \
+            --seasons 2019-2025 \
+            --out-dir artifacts/football_context_role_room_v1 \
+            --builder-commit "${GITHUB_SHA}"
+      - name: Publish sanitized qualification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: football-context-role-room-qualification-v1
+          path: |
+            artifacts/football_context_role_room_v1/historical_base_manifest_v1.json
+            artifacts/football_context_role_room_v1/role_room_qualification/role_room_transition_summary.csv
+            artifacts/football_context_role_room_v1/role_room_qualification/role_room_stability.csv
+            artifacts/football_context_role_room_v1/role_room_qualification/role_room_candidate_profile.csv
+          if-no-files-found: error
+          retention-days: 30
