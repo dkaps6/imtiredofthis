@@ -14,6 +14,8 @@ on:
       - 'scripts/research/build_context_stability_evidence.py'
       - 'scripts/research/build_context_candidate_profile.py'
       - 'scripts/research/build_role_room_redundancy_audit.py'
+      - 'scripts/research/evaluate_role_room_concentration_opportunity_v1.py'
+      - 'docs/research/ROLE_ROOM_CONCENTRATION_OPPORTUNITY_EXPERIMENT_V1.md'
       - 'tests/test_role_room_redundancy_audit.py'
       - '.github/workflows/football-context-role-room-qualification-v1.yml'
   workflow_dispatch:
@@ -35,7 +37,7 @@ jobs:
         run: pip install -r requirements.txt pytest
       - name: Compile and focused tests
         run: |
-          python -m compileall scripts/research/rehydrate_and_run_role_room_qualification.py scripts/research/run_role_room_qualification_pipeline.py scripts/research/build_role_room_redundancy_audit.py
+          python -m compileall scripts/research/rehydrate_and_run_role_room_qualification.py scripts/research/run_role_room_qualification_pipeline.py scripts/research/build_role_room_redundancy_audit.py scripts/research/evaluate_role_room_concentration_opportunity_v1.py
           PYTHONPATH="${PWD}" pytest -q tests/test_role_room_qualification_pipeline.py tests/test_build_usage_regime_context.py tests/test_build_room_continuity_context.py tests/test_role_room_context.py tests/test_role_room_transition_diagnostics.py tests/test_build_context_stability_evidence.py tests/test_build_context_candidate_profile.py tests/test_role_room_redundancy_audit.py
       - name: Rehydrate canonical 2019-2025 history and qualify role-room signals
         run: |
@@ -43,7 +45,15 @@ jobs:
             --seasons 2019-2025 \
             --out-dir artifacts/football_context_role_room_v1 \
             --builder-commit "${GITHUB_SHA}"
-      - name: Publish sanitized qualification evidence
+      - name: Execute frozen opportunity experiment
+        run: |
+          PYTHONPATH="${PWD}" python scripts/research/evaluate_role_room_concentration_opportunity_v1.py \
+            --history artifacts/football_context_role_room_v1/player_game_logs_history.csv \
+            --context artifacts/football_context_role_room_v1/role_room_qualification/role_room_context.csv \
+            --metrics-out artifacts/football_context_role_room_v1/role_room_qualification/opportunity_experiment_v1_metrics.csv \
+            --gates-out artifacts/football_context_role_room_v1/role_room_qualification/opportunity_experiment_v1_gates.csv \
+            --manifest-out artifacts/football_context_role_room_v1/role_room_qualification/opportunity_experiment_v1_manifest.json
+      - name: Publish sanitized qualification and experiment evidence
         uses: actions/upload-artifact@v4
         with:
           name: football-context-role-room-qualification-v1
@@ -53,5 +63,8 @@ jobs:
             artifacts/football_context_role_room_v1/role_room_qualification/role_room_stability.csv
             artifacts/football_context_role_room_v1/role_room_qualification/role_room_candidate_profile.csv
             artifacts/football_context_role_room_v1/role_room_qualification/role_room_redundancy_audit.csv
+            artifacts/football_context_role_room_v1/role_room_qualification/opportunity_experiment_v1_metrics.csv
+            artifacts/football_context_role_room_v1/role_room_qualification/opportunity_experiment_v1_gates.csv
+            artifacts/football_context_role_room_v1/role_room_qualification/opportunity_experiment_v1_manifest.json
           if-no-files-found: error
           retention-days: 30
