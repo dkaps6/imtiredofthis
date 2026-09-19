@@ -15,6 +15,19 @@ import pandas as pd
 def build_transition_diagnostics(df: pd.DataFrame, usage_delta_threshold: float = 0.05,
                                  room_overlap_threshold: float = 0.70) -> tuple[pd.DataFrame,pd.DataFrame]:
     x=df.copy(); x.columns=[str(c).strip().lower() for c in x.columns]
+
+    # Canonical joined materializers publish these strict-prior names. Retain
+    # backwards-compatible aliases for already-created diagnostic fixtures/tables.
+    aliases={
+        "target_share_delta_vs_roll3":"prior_tgt_share_game_delta_vs3",
+        "rush_share_delta_vs_roll3":"prior_rush_share_game_delta_vs3",
+        "returning_target_opportunity_overlap":"prior_tgt_share_game_returning_overlap",
+        "returning_rush_opportunity_overlap":"prior_rush_share_game_returning_overlap",
+    }
+    for friendly, canonical in aliases.items():
+        if friendly not in x.columns and canonical in x.columns:
+            x[friendly]=x[canonical]
+
     required={"season","week","position","player_identity_key","team_change_prior",
               "target_share_delta_vs_roll3","rush_share_delta_vs_roll3",
               "returning_target_opportunity_overlap","returning_rush_opportunity_overlap",
