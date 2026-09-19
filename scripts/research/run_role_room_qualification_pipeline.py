@@ -3,8 +3,8 @@
 
 This orchestrator deliberately stops before predictive science. It materializes strict-prior
 player usage, room continuity, their canonical join, transition diagnostics, stability evidence,
-and qualification-ready candidate profiles. Target-game outcomes and sportsbook data are never
-read by this script.
+candidate profiles, and an outcome-free redundancy audit against the canonical PlayerForm
+opportunity state. Target-game outcomes and sportsbook data are never read by this script.
 """
 from __future__ import annotations
 
@@ -37,14 +37,13 @@ def main() -> int:
     transition_summary = out / "role_room_transition_summary.csv"
     stability = out / "role_room_stability.csv"
     profile = out / "role_room_candidate_profile.csv"
+    redundancy = out / "role_room_redundancy_audit.csv"
 
-    # Both strict-prior materializers expose --history as their canonical input contract.
     run([a.python, str(s / "build_usage_regime_context.py"), "--history", str(a.historical), "--out", str(usage)])
     run([a.python, str(s / "build_room_continuity_context.py"), "--history", str(a.historical), "--out", str(room)])
     run([a.python, str(s / "build_role_room_context.py"), "--usage", str(usage), "--room", str(room), "--out", str(joined)])
     run([a.python, str(s / "build_role_room_transition_diagnostics.py"), "--input", str(joined), "--detail-out", str(transition), "--summary-out", str(transition_summary)])
 
-    # Use the exact published materializer column names. These are all strict-prior values.
     features = ",".join([
         "prior_tgt_share_game", "prior3_tgt_share_game_mean", "prior5_tgt_share_game_mean",
         "prior_rush_share_game", "prior3_rush_share_game_mean", "prior5_rush_share_game_mean",
@@ -61,8 +60,13 @@ def main() -> int:
          "--prior-support-col", "strict_prior_support_games", "--stability", str(stability),
          "--intended-component", "player opportunity entitlement and regime uncertainty",
          "--mechanism-note", "strict-prior player usage plus position-room continuity can identify stale-history regimes",
-         "--redundancy-notes", "requires downstream comparison with canonical production opportunity inputs before experiment",
+         "--redundancy-notes", "quantified against canonical prior/current PlayerForm opportunity state",
          "--out", str(profile)])
+    # Outcome-free incremental-information gate. Thresholds are frozen in the audit script
+    # before this historical run: holdout reconstructibility R2 >= .90 is redundant,
+    # .75-.90 requires review, and < .75 survives the redundancy gate.
+    run([a.python, str(s / "build_role_room_redundancy_audit.py"),
+         "--history", str(a.historical), "--context", str(joined), "--out", str(redundancy)])
 
     print(f"[role_room_pipeline] complete -> {out}")
     return 0
