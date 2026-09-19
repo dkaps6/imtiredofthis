@@ -24,27 +24,12 @@ CANDIDATES = [
     "prior_tgt_share_game_top1", "prior_tgt_share_game_top2",
     "prior_rush_share_game_top1", "prior_rush_share_game_top2",
 ]
+PRODUCTION_STATE_PREFIX = "prod_"
 
 
 def _safe_spearman(a: pd.Series, b: pd.Series) -> float:
     z = pd.DataFrame({"a": pd.to_numeric(a, errors="coerce"), "b": pd.to_numeric(b, errors="coerce")}).dropna()
     return float(z["a"].corr(z["b"], method="spearman")) if len(z) >= 3 else np.nan
-
-
-def _season_player_aggregate(history: pd.DataFrame, share_col: str, weight_col: str) -> pd.DataFrame:
-    x = history.copy()
-    x[share_col] = pd.to_numeric(x[share_col], errors="coerce")
-    x[weight_col] = pd.to_numeric(x[weight_col], errors="coerce").fillna(0.0)
-    # Production PlayerForm season share is ratio-of-totals, not mean game share.
-    num_col = "targets" if share_col == "tgt_share_game" else "rushes"
-    den_col = "team_targets" if share_col == "tgt_share_game" else "team_rushes"
-    x[num_col] = pd.to_numeric(x[num_col], errors="coerce").fillna(0.0)
-    x[den_col] = pd.to_numeric(x[den_col], errors="coerce").fillna(0.0)
-    g = x.groupby(["season", "player_identity_key"], dropna=False).agg(
-        games=("week", "nunique"), num=(num_col, "sum"), den=(den_col, "sum")
-    ).reset_index()
-    g["share"] = np.where(g["den"] > 0, g["num"] / g["den"], np.nan)
-    return g[["season", "player_identity_key", "games", "share"]]
 
 
 def build_production_opportunity_state(history: pd.DataFrame) -> pd.DataFrame:
@@ -67,7 +52,6 @@ def build_production_opportunity_state(history: pd.DataFrame) -> pd.DataFrame:
     ]:
         num = pd.to_numeric(h[num_col], errors="coerce").fillna(0.0)
         den = pd.to_numeric(h[den_col], errors="coerce").fillna(0.0)
-        # Strict-prior current-season cumulative ratio-of-totals.
         grp = [h["season"], h["player_identity_key"]]
         prior_num = num.groupby(grp).cumsum() - num
         prior_den = den.groupby(grp).cumsum() - den
@@ -76,7 +60,6 @@ def build_production_opportunity_state(history: pd.DataFrame) -> pd.DataFrame:
         out[f"prod_{prefix}_current_share"] = current_share
         out[f"prod_{prefix}_current_games"] = current_games.astype(float)
 
-        # Prior-season aggregate for the same stable player identity.
         agg = h.assign(_num=num, _den=den).groupby(["season", "player_identity_key"], dropna=False).agg(
             prior_games=("week", "nunique"), prior_num=("_num", "sum"), prior_den=("_den", "sum")
         ).reset_index()
@@ -87,7 +70,6 @@ def build_production_opportunity_state(history: pd.DataFrame) -> pd.DataFrame:
         })[["season", "player_identity_key", f"prod_{prefix}_prior_games", f"prod_{prefix}_prior_share"]]
         out = out.merge(lookup, on=["season", "player_identity_key"], how="left", validate="many_to_one")
         out[f"prod_{prefix}_prior_games"] = pd.to_numeric(out[f"prod_{prefix}_prior_games"], errors="coerce").fillna(0.0)
-        # Exact PlayerForm blend before empirical-Bayes shrinkage: four prior-season pseudo-games.
         cg = out[f"prod_{prefix}_current_games"]
         pv = pd.to_numeric(out[f"prod_{prefix}_prior_share"], errors="coerce")
         cv = pd.to_numeric(out[f"prod_{prefix}_current_share"], errors="coerce")
@@ -125,6 +107,11 @@ def audit_redundancy(history: pd.DataFrame, context: pd.DataFrame) -> pd.DataFra
     c.columns = [str(x).strip().lower() for x in c.columns]
     if c.duplicated(KEY).any():
         raise RuntimeError("context has duplicate canonical player-game keys")
+    # Context may be an enriched fixture in tests or a future upstream table that
+    # already carries production-state columns. The audit owns those columns, so
+    # discard any copies before the canonical one-to-one join. This prevents
+    # pandas _x/_y suffixing from silently removing the expected field names.
+    c = c.drop(columns=[col for col in c.columns if col.startswith(PRODUCTION_STATE_PREFIX)], errors="ignore")
     x = c.merge(state, on=KEY, how="left", validate="one_to_one")
     rows = []
     for feature in CANDIDATES:
