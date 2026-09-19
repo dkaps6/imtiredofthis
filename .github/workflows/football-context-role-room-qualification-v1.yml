@@ -13,6 +13,8 @@ on:
       - 'scripts/research/build_role_room_transition_diagnostics.py'
       - 'scripts/research/build_context_stability_evidence.py'
       - 'scripts/research/build_context_candidate_profile.py'
+      - 'scripts/research/build_role_room_redundancy_audit.py'
+      - 'tests/test_role_room_redundancy_audit.py'
       - '.github/workflows/football-context-role-room-qualification-v1.yml'
   workflow_dispatch:
 
@@ -33,8 +35,8 @@ jobs:
         run: pip install -r requirements.txt pytest
       - name: Compile and focused tests
         run: |
-          python -m compileall scripts/research/rehydrate_and_run_role_room_qualification.py scripts/research/run_role_room_qualification_pipeline.py
-          PYTHONPATH="${PWD}" pytest -q tests/test_role_room_qualification_pipeline.py tests/test_build_usage_regime_context.py tests/test_build_room_continuity_context.py tests/test_role_room_context.py tests/test_role_room_transition_diagnostics.py tests/test_build_context_stability_evidence.py tests/test_build_context_candidate_profile.py
+          python -m compileall scripts/research/rehydrate_and_run_role_room_qualification.py scripts/research/run_role_room_qualification_pipeline.py scripts/research/build_role_room_redundancy_audit.py
+          PYTHONPATH="${PWD}" pytest -q tests/test_role_room_qualification_pipeline.py tests/test_build_usage_regime_context.py tests/test_build_room_continuity_context.py tests/test_role_room_context.py tests/test_role_room_transition_diagnostics.py tests/test_build_context_stability_evidence.py tests/test_build_context_candidate_profile.py tests/test_role_room_redundancy_audit.py
       - name: Rehydrate canonical 2019-2025 history and qualify role-room signals
         run: |
           PYTHONPATH="${PWD}" python scripts/research/rehydrate_and_run_role_room_qualification.py \
@@ -50,5 +52,6 @@ jobs:
             artifacts/football_context_role_room_v1/role_room_qualification/role_room_transition_summary.csv
             artifacts/football_context_role_room_v1/role_room_qualification/role_room_stability.csv
             artifacts/football_context_role_room_v1/role_room_qualification/role_room_candidate_profile.csv
+            artifacts/football_context_role_room_v1/role_room_qualification/role_room_redundancy_audit.csv
           if-no-files-found: error
           retention-days: 30
