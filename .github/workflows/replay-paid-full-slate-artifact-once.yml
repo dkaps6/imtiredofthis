@@ -3,6 +3,7 @@ name: Replay Paid Full Slate Artifact Once
 on:
   pull_request:
     branches: [main]
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -208,6 +209,28 @@ jobs:
           python scripts/utils/audit_repo.py --strict
           python scripts/audit_2026_production_readiness.py --strict
 
+      - name: Build master betting workbook artifact
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          mkdir -p outputs
+          python scripts/build_master_betting_workbook_v1.py \
+            --root . \
+            --out outputs/NFL_BETTING_MODEL_MASTER.xlsx \
+            --run-id "${GITHUB_RUN_ID}" \
+            --sha "${GITHUB_SHA}" \
+            --ref-name "${GITHUB_REF_NAME}" \
+            --fetch-live-odds true
+          test -s outputs/NFL_BETTING_MODEL_MASTER.xlsx
+
+      - name: Print Sunday HAS-EDGE board summary
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/print_sunday_board_summary_v1.py \
+            --workbook outputs/NFL_BETTING_MODEL_MASTER.xlsx \
+            --weekday Sunday
+
       - name: Upload offline replay evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -230,5 +253,6 @@ jobs:
             outputs/paid_full_slate_replay_result.json
             outputs/props_pricing_offers.csv
             outputs/props_priced_clean.csv
+            outputs/NFL_BETTING_MODEL_MASTER.xlsx
           if-no-files-found: warn
           retention-days: 7
