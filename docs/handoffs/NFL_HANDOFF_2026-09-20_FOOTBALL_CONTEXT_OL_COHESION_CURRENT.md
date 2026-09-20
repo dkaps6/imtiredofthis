@@ -213,3 +213,73 @@ experiment if a non-duplicative target remains justified.
 
 Preserve the original rejected run and the forensic lineage. Do not waive identity gates,
 do not re-key the candidate to ESB/Smart IDs, and do not touch production or Issue #535.
+
+
+## Defensive front cohesion pressure mechanism — failed closed
+
+After the recovered defensive-front qualification, the repository no-retest audit
+authorized one narrow intermediate mechanism experiment. It did **not** authorize a
+direct QB/player use.
+
+Frozen plan:
+
+`docs/research/DEFENSIVE_FRONT_PAIRWISE_COHESION_PRESSURE_MECHANISM_EXPERIMENT_V1.md`
+
+Canonical execution:
+
+- implementation/workflow commit: `21fd6ced6e52fdfff379c1f5eeda55b6e7874980`
+- run: `35517405126`
+- job: `106095556525`
+- artifact: `10607820423`
+- digest: `sha256:232758a13a42e4f05571daf8768e2bebd62c5382a902d6d4bebcccd19b183c40`
+
+Frozen baseline controlled for immediate front continuity, prior defense state, opponent
+prior offensive/protection state, target week, defense identity and opponent identity.
+
+2019-2023 fit:
+
+- train rows: **2,622**
+- cohesion coefficient: **-0.000647723**
+- frozen expected direction: positive
+
+2024 primary:
+
+- scored rows: **544 / 544**
+- coverage: **100%**
+- baseline MAE: **0.058079**
+- candidate MAE: **0.058080**
+- MAE gain: **-0.000001**
+- RMSE gain: **-0.000003**
+- p90 absolute-error gain: **-0.000041**
+- correlation gain: **-0.000050**
+- 5,000-replicate defense-team bootstrap CI for mean AE gain:
+  **[-0.000011, +0.000007]**
+
+Only support and coverage passed. MAE, bootstrap, RMSE, p90 and coefficient-direction
+gates all failed.
+
+Final:
+
+`DEFENSIVE_FRONT_PAIRWISE_COHESION_PRESSURE_MECHANISM_V1_FAILED_CLOSED_PRIMARY`
+
+2025 remained sealed:
+
+`team_weekly_replication_sha256 = NOT_READ_NOT_HASHED`
+
+Result authority:
+
+`docs/research/DEFENSIVE_FRONT_PAIRWISE_COHESION_PRESSURE_MECHANISM_EXPERIMENT_V1_RESULT_2026-09-20.md`
+
+### Updated next-action boundary
+
+Do not rescue OL or defensive-front pairwise cohesion with alternate lookbacks,
+starter-only subsets, target substitutions, interactions or model changes.
+
+Both pairwise-cohesion contexts may remain descriptive/engineering information, but
+their frozen pressure-mechanism paths are closed.
+
+The next football-context research step must use **materially different information or
+a different pre-registered mechanism**, after another no-retest audit.
+
+Production remains untouched. RB predictive research remains pinned/paused. Do not
+touch Issue #535.
