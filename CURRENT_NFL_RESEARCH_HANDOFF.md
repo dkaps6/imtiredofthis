@@ -1,4 +1,91 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
+## ACTIVE FOOTBALL-CONTEXT UPDATE — 2026-09-20 — DEFENSIVE FRONT PRESSURE MECHANISM FAILED CLOSED
+
+Defensive Front Pairwise Cohesion V1 was mechanically recovered from its original
+identity-integrity rejection and remains a clean, qualified descriptive/context feature.
+
+The original qualification run `35515764090` is preserved as `REJECTED_INTEGRITY`.
+Forensic audit proved its 13 same-week conflicts were a source GSIS collision between
+different people, not transaction timing. A general ESB/Smart-ID semantic quarantine
+was added without selecting a team/person or changing the frozen feature definition.
+
+Corrected qualification authority:
+
+- implementation: `2aeacc2004a42cda9a21282d21d2d09f2dfce15c`
+- run: `35517035459`
+- job: `106094605432`
+- artifact: `10607480543`
+- digest: `sha256:367a608fbf6f37d83b63befbc405d38579702fda98b399c16147e80606363fa0`
+- pregame coverage: **99.1448%**
+- stable-ID coverage after quarantine: **99.8141%**
+- ambiguity after quarantine: **0**
+- stability Spearman: **0.813629**
+- redundancy holdout R2: **0.401720**
+- qualification: `READY_FOR_FROZEN_EXPERIMENT`
+
+A no-retest audit then authorized one narrow intermediate mechanism test only:
+whether accumulated defensive-front cohesion predicts next-game
+`pressure_rate_generated` beyond immediate front continuity, prior defense state,
+opponent prior offensive/protection state, target week, defense identity and opponent
+identity.
+
+Frozen pressure-mechanism authority:
+
+- plan: `docs/research/DEFENSIVE_FRONT_PAIRWISE_COHESION_PRESSURE_MECHANISM_EXPERIMENT_V1.md`
+- implementation/workflow: `21fd6ced6e52fdfff379c1f5eeda55b6e7874980`
+- run: `35517405126`
+- job: `106095556525`
+- artifact: `10607820423`
+- digest: `sha256:232758a13a42e4f05571daf8768e2bebd62c5382a902d6d4bebcccd19b183c40`
+
+2024 primary result:
+
+- scored rows: **544 / 544**
+- coverage: **100%**
+- cohesion coefficient: **-0.000647723** (frozen expected direction was positive)
+- baseline MAE: **0.058079**
+- candidate MAE: **0.058080**
+- MAE gain: **-0.000001**
+- RMSE gain: **-0.000003**
+- p90 absolute-error gain: **-0.000041**
+- correlation gain: **-0.000050**
+- team-cluster bootstrap 95% CI for mean absolute-error gain:
+  **[-0.000011, +0.000007]**
+
+Only support and coverage passed. MAE, bootstrap, RMSE, p90 and coefficient-direction
+gates all failed.
+
+Final:
+
+`DEFENSIVE_FRONT_PAIRWISE_COHESION_PRESSURE_MECHANISM_V1_FAILED_CLOSED_PRIMARY`
+
+2025 remained physically sealed and was not read or hashed:
+
+`team_weekly_replication_sha256 = NOT_READ_NOT_HASHED`
+
+Result authority:
+
+`docs/research/DEFENSIVE_FRONT_PAIRWISE_COHESION_PRESSURE_MECHANISM_EXPERIMENT_V1_RESULT_2026-09-20.md`
+
+### Active boundary / next action
+
+Do **not** rescue either OL or defensive-front pairwise cohesion with alternate
+lookbacks, starter-only subsets, target substitutions, interactions, favorable
+subsets, model changes, or 2025 exposure.
+
+Both pairwise-cohesion features may remain useful descriptive/engineering context,
+but their frozen pressure-mechanism paths are closed.
+
+The next football-context research step must use **materially different information or
+a materially different pre-registered football mechanism** after a fresh no-retest
+audit. Do not treat another cohesion target as the default next experiment.
+
+Production main remains `f0dad2c6711e85104eeffedfa5f5112fd172cbf5`.
+RB predictive research remains pinned/paused.
+Do not touch GitHub Issue #535 / the separate WR-data-frontier lane.
+
+---
+
 ## ACTIVE FOOTBALL-CONTEXT UPDATE — 2026-09-20 — DEFENSIVE FRONT COHESION QUALIFIED
 
 Defensive Front Pairwise Cohesion V1 is now **READY_FOR_FROZEN_EXPERIMENT** after a
