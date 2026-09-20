@@ -1,4 +1,34 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
+## ACTIVE CHECKPOINT — 2026-09-20 — RB PD2 FORWARD / SHADOW CONFIRMATION
+
+User has explicitly re-opened RB as an unresolved priority.
+
+Read first:
+
+`docs/handoffs/NFL_HANDOFF_2026-09-20_RB_PD2_FORWARD_SHADOW_CURRENT.md`
+
+Active branch:
+
+`research-rb-pd2-forward-shadow-confirmation-v1`
+
+Branch was created from clean production main:
+
+`f0dad2c6711e85104eeffedfa5f5112fd172cbf5`
+
+The strongest unfinished RB result is already positive:
+
+`RB_YARD_DIFFICULTY_MC_WIDTH_QUALIFIED`
+
+PR #562 / run `35039152022` passed all 28 gates, but the separately required
+forward/shadow confirmation has never been started. The current task is to design and
+lock that prospective confirmation without retuning the qualified 0.30 mean-neutral
+width mapping and without changing production.
+
+Issue #535 is again an active GPT-5.6 + Claude collaboration surface at the user's
+explicit request.
+
+---
+
 GitHub is canonical; chat memory is secondary.
 
 ## ACTIVE RESEARCH CHECKPOINT — 2026-09-14
