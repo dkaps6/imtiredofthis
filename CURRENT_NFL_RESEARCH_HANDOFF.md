@@ -1,4 +1,23 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
+## ACTIVE CHECKPOINT — 2026-09-20 — EXACT ASSIGNMENT CLOSED / RB FORWARD CONFIRMATION NEXT
+
+Read first:
+
+`docs/handoffs/NFL_HANDOFF_2026-09-20_EXACT_ASSIGNMENT_CLOSED_RB_FORWARD_NEXT.md`
+
+The football-context exact blocker-rusher source qualified strongly, but its frozen
+hindsight value-of-information experiment failed closed on Weeks 7-8. Do not rescue it.
+
+The user has explicitly re-opened RB as an unresolved priority. The strongest positive
+RB result is already `RB_YARD_DIFFICULTY_MC_WIDTH_QUALIFIED` (PR #562 / run
+`35039152022`), all 28 gates passed. It has **not** received the separately required
+forward/shadow confirmation. That is now the next task.
+
+Production main remains `f0dad2c6711e85104eeffedfa5f5112fd172cbf5`.
+Do not touch GitHub Issue #535 / the separate WR lane.
+
+---
+
 ## ACTIVE FOOTBALL-CONTEXT UPDATE — 2026-09-20 — DEFENSIVE FRONT PRESSURE MECHANISM FAILED CLOSED
 
 Defensive Front Pairwise Cohesion V1 was mechanically recovered from its original
