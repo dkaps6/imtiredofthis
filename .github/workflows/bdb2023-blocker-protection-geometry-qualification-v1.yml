@@ -80,9 +80,12 @@ jobs:
         run: |
           set -euo pipefail
           out="${RUNNER_TEMP}/bdb2023_features"
+          matvenv="${RUNNER_TEMP}/bdb2023_materializer_venv"
+          python -m venv "$matvenv"
+          "$matvenv/bin/pip" install --disable-pip-version-check "pandas>=2.2,<3" "numpy>=1.26,<3"
           (
             cd _advanced_materializer
-            PYTHONPATH="${PWD}" python scripts/data_frontier/materialize_bdb2023_advanced_features_v1.py \
+            PYTHONPATH="${PWD}" "$matvenv/bin/python" scripts/data_frontier/materialize_bdb2023_advanced_features_v1.py \
               --corpus-dir "${CORPUS_DIR}" \
               --out-dir "$out"
           )
