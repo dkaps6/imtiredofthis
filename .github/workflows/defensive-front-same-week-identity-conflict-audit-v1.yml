@@ -1,0 +1,75 @@
+name: Defensive Front Same-Week Identity Conflict Audit V1
+
+on:
+  push:
+    branches: [research-football-context-event-redundancy-v1]
+    paths:
+      - 'scripts/football_context/audit_defensive_front_same_week_identity_conflicts_v1.py'
+      - '.github/workflows/defensive-front-same-week-identity-conflict-audit-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Compile audit
+        run: python -m compileall scripts/football_context/audit_defensive_front_same_week_identity_conflicts_v1.py
+      - name: Rehydrate exact qualification source family
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/def_front_identity_audit_inputs"
+          mkdir -p "$out"
+          PYTHONPATH="${PWD}" python - <<'PY'
+          from pathlib import Path
+          import os
+          import pandas as pd
+          import nflreadpy as nfl
+          from scripts.backtest.historical_inputs import build_schedule_history
+
+          def to_pd(obj):
+              if isinstance(obj, pd.DataFrame):
+                  return obj.copy()
+              if hasattr(obj, "to_pandas"):
+                  return obj.to_pandas()
+              return pd.DataFrame(obj)
+
+          seasons=list(range(2019,2026))
+          out=Path(os.environ["RUNNER_TEMP"])/"def_front_identity_audit_inputs"
+          schedule=build_schedule_history(seasons)
+          roster=pd.concat([to_pd(nfl.load_rosters_weekly(s)) for s in seasons],ignore_index=True,sort=False)
+          schedule.to_csv(out/"schedule_2019_2025.csv",index=False)
+          roster.to_csv(out/"weekly_rosters_2019_2025.csv",index=False)
+          print({"schedule_rows":len(schedule),"roster_rows":len(roster),"roster_columns":list(roster.columns)})
+          PY
+          echo "AUDIT_INPUT_DIR=$out" >> "$GITHUB_ENV"
+      - name: Execute source-only conflict audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/def_front_identity_audit"
+          PYTHONPATH="${PWD}" python scripts/football_context/audit_defensive_front_same_week_identity_conflicts_v1.py \
+            --schedule "${AUDIT_INPUT_DIR}/schedule_2019_2025.csv" \
+            --roster "${AUDIT_INPUT_DIR}/weekly_rosters_2019_2025.csv" \
+            --out-dir "$out" \
+            --git-sha "${GITHUB_SHA}"
+          echo "AUDIT_OUT=$out" >> "$GITHUB_ENV"
+      - name: Upload forensic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: defensive-front-same-week-identity-conflict-audit-v1
+          path: ${{ runner.temp }}/def_front_identity_audit
+          if-no-files-found: warn
+          retention-days: 30
