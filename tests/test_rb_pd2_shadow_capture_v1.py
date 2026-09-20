@@ -491,8 +491,14 @@ def test_capture_failure_leaves_production_untouched_and_invalidates_the_session
     receipt = json.loads((session_dir / "session_receipt.json").read_text())
     assert receipt["valid"] is False
     assert receipt["rows_written"] == 0
-    assert {s["kind"] for s in receipt["sentinels"]} == {"capture_exception"}
+    # Both gates fire, and they are independent: every eligible row raised, and
+    # the completeness check separately noticed every expected key is absent.
+    kinds = [s["kind"] for s in receipt["sentinels"]]
+    assert set(kinds) == {"capture_exception", "missing_expected_key"}
+    assert kinds.count("capture_exception") == len(BOOKS) * 2
+    assert kinds.count("missing_expected_key") == 1
     assert "synthetic shadow failure" in receipt["sentinels"][0]["detail"]
+    assert len(receipt["missing_expected_keys"]) == 2
 
     with pytest.raises(RuntimeError, match="is invalid"):
         shadow.assert_session_valid(receipt)
@@ -506,6 +512,74 @@ def test_missing_expected_key_invalidates_the_session(priced_fixture, monkeypatc
     assert receipt["valid"] is False
     assert receipt["missing_expected_keys"] == ["2026|2|X|CHI|CAR|ghostback|rush_yards"]
     shadow.reset()
+
+
+# --------------------------------------------------------------------------
+# Completeness -- wired into the real finalizer, not just the API
+# --------------------------------------------------------------------------
+def test_expected_key_set_is_sportsbook_independent_and_matches_what_was_captured(priced_fixture, monkeypatch):
+    _priced, _session_dir, records, receipt = _run_capture(priced_fixture, monkeypatch)
+
+    metrics = pd.read_csv(priced_fixture["data"] / "metrics_ready.csv")
+    expected = shadow.expected_keys(metrics, season=SEASON)
+
+    # 3 books x 2 RBs in the frame collapse to 2 football keys.
+    assert len(expected) == 2
+    assert expected == {r["football_key"] for r in records}
+    assert receipt["missing_expected_keys"] == []
+    assert receipt["valid"] is True
+
+    for book, book_title, _offset in BOOKS:
+        assert not any(book in key or book_title in key for key in expected)
+
+
+def test_a_row_skipped_before_the_hook_invalidates_the_real_pricing_session(priced_fixture, monkeypatch):
+    """The failure class the completeness gate exists for.
+
+    `run_pricing_v2.py:226-229` drops a row whose simulation lookup returned
+    nothing, *before* the capture seam. That row produces neither a record nor a
+    sentinel, so only an independently-derived expected set can notice it is
+    gone. Reproduced here with the genuine mechanism rather than by stubbing
+    `capture()`.
+    """
+    real_lookup = run_pricing_v2.lookup
+
+    def lookup_missing_one(sims, row, raw_market):
+        if str(row.get("player_clean_key")) == "bravoback" and str(raw_market) == "rush_yards":
+            return None
+        return real_lookup(sims, row, raw_market)
+
+    monkeypatch.setattr(run_pricing_v2, "lookup", lookup_missing_one)
+
+    # Flag OFF: production's own behaviour under the same lookup failure.
+    monkeypatch.delenv(shadow.FLAG, raising=False)
+    without_shadow = run_pricing_v2.price(SEASON)
+
+    # Flag ON: identical production output, but the session must refuse to validate.
+    monkeypatch.setenv(shadow.FLAG, "1")
+    monkeypatch.setattr(shadow, "DEFAULT_ROOT", priced_fixture["research"])
+    with_shadow = run_pricing_v2.price(SEASON)
+
+    pd.testing.assert_frame_equal(without_shadow, with_shadow)
+    assert "bravoback" not in set(
+        with_shadow.loc[with_shadow["market"].eq("rush_yards"), "player_clean_key"]
+    )
+    assert "alphaback" in set(
+        with_shadow.loc[with_shadow["market"].eq("rush_yards"), "player_clean_key"]
+    )
+
+    session_dir = sorted(priced_fixture["research"].iterdir())[0]
+    records, receipt = shadow.load_session(session_dir)
+
+    assert len(records) == 1
+    assert records[0]["player_clean_key"] == "alphaback"
+    assert len(receipt["missing_expected_keys"]) == 1
+    assert "bravoback" in receipt["missing_expected_keys"][0]
+    assert receipt["valid"] is False
+    assert {s["kind"] for s in receipt["sentinels"]} == {"missing_expected_key"}
+
+    with pytest.raises(RuntimeError, match="is invalid"):
+        shadow.assert_session_valid(receipt)
 
 
 # --------------------------------------------------------------------------

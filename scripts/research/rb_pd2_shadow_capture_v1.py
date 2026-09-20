@@ -325,6 +325,53 @@ def _same_float(a: float, b: float) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Completeness
+# ---------------------------------------------------------------------------
+def expected_keys(metrics, *, season: int) -> set[str]:
+    """Football keys that MUST appear in a complete capture set.
+
+    Derived from the pricing frame itself, deliberately *not* from the capture
+    path -- that independence is the whole point. The pricing loop can skip a row
+    before it ever reaches the hook (`run_pricing_v2.py:226-229` drops a row whose
+    simulation lookup returned nothing), which produces neither a record nor a
+    sentinel. Without an externally-derived expected set that row vanishes and
+    the session still finalizes valid.
+
+    Production's own `_position_family` / `_runtime_week` / `MARKET_MAP` do the
+    resolving, so the expected set cannot drift away from the eligibility test
+    the hook applies. Keys are sportsbook-independent, so book/line expansion
+    collapses here exactly as it does in `capture()`.
+    """
+    # Imported lazily: `run_pricing_v2` imports this module from inside `price()`,
+    # so it is fully loaded by the time this runs, and no import cycle forms.
+    from scripts.run_pricing_v2 import _position_family, _runtime_week
+    from scripts.simulation_v2 import MARKET_MAP
+
+    keys: set[str] = set()
+    for _, row in metrics.iterrows():
+        raw_market = str(row.get("market", "") or "").lower()
+        market = MARKET_MAP.get(raw_market, raw_market)
+        if not is_eligible(_position_family(row), market):
+            continue
+        identity = {
+            "season": int(season),
+            "week": int(_runtime_week(row)),
+            "event_id": str(row.get("event_id") or "").strip(),
+            "team": str(row.get("team") or "").upper().strip(),
+            "opponent": str(row.get("opponent") or "").upper().strip(),
+            "player_clean_key": str(row.get("player_clean_key") or "").strip(),
+            "market": ELIGIBLE_MARKET,
+        }
+        # A blank-identity row cannot form a join key; `capture()` raises its own
+        # `blank_identity` sentinel for it, so counting it missing here too would
+        # only double-report the same defect.
+        if any(not identity[f] for f in REQUIRED_IDENTITY):
+            continue
+        keys.add(_football_key(identity))
+    return keys
+
+
+# ---------------------------------------------------------------------------
 # Finalization
 # ---------------------------------------------------------------------------
 def finalize(*, expected_football_keys: set[str] | None = None) -> dict:
