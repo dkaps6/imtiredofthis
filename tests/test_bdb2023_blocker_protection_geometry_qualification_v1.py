@@ -73,6 +73,35 @@ def test_ambiguous_bdb_id_fails_coverage_instead_of_name_rescue():
     assert report["direct_stable_id_bridge_coverage"] == 0.0
     assert bridge.empty
 
+def test_name_variation_under_same_gsis_is_diagnostic_not_identity_ambiguity():
+    raw = pd.DataFrame({"blocker_nfl_id": [111]})
+    players = pd.DataFrame({"nfl_id": [111], "gsis_id": ["00-001"]})
+    roster = _roster()
+    roster.loc[
+        roster["gsis_id"].eq("00-001") & roster["week"].eq(8), "full_name"
+    ] = "Blocker One Jr."
+    bridge, report = build_direct_identity_bridge(raw, players, roster)
+    assert report["direct_stable_id_bridge_coverage"] == 1.0
+    assert report["ambiguous_roster_gsis_count"] == 0
+    assert report["roster_name_variation_gsis_count"] == 1
+    assert len(bridge) == 1
+
+
+def test_same_week_conflicting_team_for_gsis_is_real_roster_ambiguity():
+    raw = pd.DataFrame({"blocker_nfl_id": [111]})
+    players = pd.DataFrame({"nfl_id": [111], "gsis_id": ["00-001"]})
+    roster = _roster()
+    conflict = roster[
+        roster["gsis_id"].eq("00-001") & roster["week"].eq(4)
+    ].iloc[[0]].copy()
+    conflict["team"] = "B"
+    roster = pd.concat([roster, conflict], ignore_index=True)
+    bridge, report = build_direct_identity_bridge(raw, players, roster)
+    assert report["ambiguous_roster_gsis_count"] == 1
+    assert report["direct_stable_id_bridge_coverage"] == 0.0
+    assert bridge.empty
+
+
 
 def test_broad_ol_universe_keeps_week1_and_backups_and_excludes_wr():
     universe, report = build_broad_ol_universe(_roster())

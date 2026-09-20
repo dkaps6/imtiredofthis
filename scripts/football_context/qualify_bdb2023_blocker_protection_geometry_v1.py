@@ -167,22 +167,35 @@ def build_direct_identity_bridge(
 
     rr = r.copy()
     rr["gsis_id"] = rr[roster_gsis_col].map(_norm_gsis)
-    roster_amb = (
-        rr.loc[rr["gsis_id"].ne("")]
-        .groupby("gsis_id")
-        .size()
-    )
-    # Repeated weeks are expected. Ambiguity here means the same GSIS ID resolves
-    # to more than one player name when a name field is available, not row count.
+
+    # GSIS is the stable identity authority. Name drift under the same GSIS ID is
+    # diagnostic only and must not invalidate a direct stable-ID bridge.
     name_col = _first_col(rr, ["full_name", "football_name", "player_name", "player", "name"])
-    ambiguous_roster_gsis: list[str] = []
+    roster_name_variation_gsis: list[str] = []
     if name_col:
         names = rr.loc[rr["gsis_id"].ne(""), ["gsis_id", name_col]].copy()
         names["_name"] = (
             names[name_col].astype(str).str.lower().str.replace(r"[^a-z0-9]", "", regex=True)
         )
         nuniq = names.loc[names["_name"].ne("")].groupby("gsis_id")["_name"].nunique()
-        ambiguous_roster_gsis = sorted(nuniq[nuniq.gt(1)].index.tolist())
+        roster_name_variation_gsis = sorted(nuniq[nuniq.gt(1)].index.tolist())
+
+    # A real roster ambiguity is the same stable GSIS identity resolving to
+    # conflicting teams in the same target week. Repeated weekly rows and name
+    # variants are not identity ambiguity.
+    week_col = _first_col(rr, ["week"])
+    team_col = _first_col(rr, ["team", "team_abbr", "club_code"])
+    ambiguous_roster_gsis: list[str] = []
+    if week_col and team_col:
+        rr["_week"] = pd.to_numeric(rr[week_col], errors="coerce")
+        rr["_team"] = rr[team_col].astype(str).str.upper().str.strip()
+        weekly = rr.loc[
+            rr["gsis_id"].ne("") & rr["_week"].notna() & rr["_team"].ne("")
+        ]
+        conflicts = weekly.groupby(["_week", "gsis_id"])["_team"].nunique()
+        ambiguous_roster_gsis = sorted(set(
+            conflicts[conflicts.gt(1)].index.get_level_values("gsis_id").tolist()
+        ))
 
     roster_ids = set(rr["gsis_id"]) - {""}
     safe = cross.loc[
@@ -204,6 +217,8 @@ def build_direct_identity_bridge(
         "direct_stable_id_bridge_coverage": coverage,
         "ambiguous_bdb_nfl_id_count": int(len(ambiguous_bdb_ids)),
         "ambiguous_roster_gsis_count": int(len(ambiguous_roster_gsis)),
+        "roster_name_variation_gsis_count": int(len(roster_name_variation_gsis)),
+        "roster_name_variation_is_diagnostic_only": True,
         "name_fallback_used": False,
     }
     return safe[["bdb_nfl_id", "gsis_id"]].reset_index(drop=True), report
