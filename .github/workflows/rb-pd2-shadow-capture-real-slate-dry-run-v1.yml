@@ -3,8 +3,19 @@ name: RB PD2 Shadow Capture Real Slate Dry Run V1
 # Dispatch-only. This is a research validation of the plan section 7 capture
 # hook against a real slate; it must never run on every PR, and it must never
 # be mistaken for the certified replay it is derived from.
+# `workflow_dispatch` by filename only works once the file is on the default
+# branch, so this also carries the branch-scoped push trigger this repo already
+# uses to run a workflow from a research branch (see
+# backtest-week1-gsis-corrected-v1.yml). The paths filter keeps it to an
+# explicit touch of this file rather than every push to the branch -- the job
+# replays a full slate and takes well over an hour.
 on:
   workflow_dispatch: {}
+  push:
+    branches:
+      - research-rb-pd2-shadow-capture-hook-v1
+    paths:
+      - '.github/workflows/rb-pd2-shadow-capture-real-slate-dry-run-v1.yml'
 
 permissions:
   contents: read
