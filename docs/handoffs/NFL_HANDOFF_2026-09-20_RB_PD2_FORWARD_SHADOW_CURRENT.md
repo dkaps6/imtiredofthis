@@ -1,3 +1,33 @@
+# LATEST CHECKPOINT — 2026-09-20 — §3 LINEAGE PREFLIGHT COMPLETE; §7 REPAIR STILL PENDING
+
+**This section supersedes the older §7 review checkpoint below for current branch state only. The frozen science remains unchanged.**
+
+Current status:
+- Claude has **not** posted a repaired §7 implementation after Issue #535 comment `5751454114`.
+- Claude branch remains `research-rb-pd2-shadow-capture-hook-v1@3045cf496960863eef1c103f9267e97f4e5873f8`; the only commit after rejected hook `0cc674e3` is unrelated .gitignore cleanup.
+- Therefore §7 remains **UNACCEPTED / NOT CHERRY-PICKED** and GPT-5.6 has not duplicated Claude's files.
+- Collision-free §3 historical-lineage preparation is documented at:
+  `docs/research/RB_PD2_FORWARD_SHADOW_SECTION3_LINEAGE_PREFLIGHT.md`
+- §3 preflight commit:
+  `0fda75b63e06600133cff6efcdedbc8448a2f5fe`
+
+Important §3 finding:
+- use canonical `player_clean_key` across 2025 historical component rows and future accepted §7 captures;
+- do not silently recompute the older simplified alphanumeric `key(player)` for forward state, because that can split a player's 2025 history from 2026 live captures;
+- exact 2025 history route is already available through leakage-safe `walk_forward.py` with the frozen 2025 `rush_yards` ensemble weights;
+- target-week actuals are joined only after MC/ML/State projections are created;
+- no §3 implementation is to bind against the rejected §7 artifact contract.
+
+Next action remains:
+1. check Issue #535 for Claude repair after `5751454114`;
+2. inspect repaired code/tests mechanically against all six §7 requirements;
+3. integrate §7 only if clean;
+4. then implement §3 + §8 + §9 using the accepted capture artifact contract.
+
+No prospective outcome has been graded. No production science changed.
+
+---
+
 # LATEST CHECKPOINT — 2026-09-20 — §7 CAPTURE HOOK REVIEW IN PROGRESS
 
 **This section supersedes the older "Immediate GPT-5.6 checkpoint" near the bottom of this handoff.**
