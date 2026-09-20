@@ -61,4 +61,24 @@ jobs:
           export PYTHONPATH="${PWD}"
           python scripts/operations/grade_market_track_record_gsis_v1.py \
             --season "${BACKTEST_SEASON}" \
-            --weeks "${BACKTEST_WEEK}"
+            --weeks "${BACKTEST_WEEK}" \
+            --detail-out data/market_track_record/graded_detail_${BACKTEST_SEASON}_wk${BACKTEST_WEEK}.csv
+
+      - name: Slice the graded track record for profitable categories
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/research/slice_graded_track_record_v1.py \
+            --detail data/market_track_record/graded_detail_${BACKTEST_SEASON}_wk${BACKTEST_WEEK}.csv \
+            --min-n 25 \
+            --fdr-q 0.10
+
+      - name: Upload graded detail and ledger
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: week${{ env.BACKTEST_WEEK }}_graded_slices_${{ github.run_id }}
+          path: |
+            data/market_track_record/graded_detail_*.csv
+            data/market_track_record/boards/*.csv
+          if-no-files-found: warn
+          retention-days: 14

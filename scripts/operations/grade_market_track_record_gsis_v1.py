@@ -171,7 +171,7 @@ def resolve_gsis(player_clean_key: str, team: str, idx: dict) -> tuple[str, str]
     return "", "UNRESOLVED_IDENTITY"
 
 
-def grade(season: int, weeks: list[int]) -> dict:
+def grade(season: int, weeks: list[int], detail_out: Path | None = None) -> dict:
     board = load_boards(season, weeks)
     bets = select_model_bet(board)
     bets["team"] = bets["team"].map(canon_team)
@@ -262,6 +262,10 @@ def grade(season: int, weeks: list[int]) -> dict:
         print("still-unresolved rows after GSIS fix + zero-usage-preserving loader:")
         cols = [c for c in ["player", "team", "opponent", "market", "identity_status"] if c in unresolved.columns]
         print(unresolved[cols].drop_duplicates().to_string(index=False))
+    if detail_out is not None:
+        detail_out.parent.mkdir(parents=True, exist_ok=True)
+        graded.to_csv(detail_out, index=False)
+        print(f"graded detail rows written: {len(graded)} -> {detail_out}")
     return summary
 
 
@@ -269,9 +273,11 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", type=int, required=True)
     ap.add_argument("--weeks", required=True)
+    ap.add_argument("--detail-out", type=Path, default=None,
+                    help="optional path to write the per-bet graded detail rows")
     args = ap.parse_args()
     weeks = [int(w) for w in args.weeks.split(",") if w.strip()]
-    result = grade(args.season, weeks)
+    result = grade(args.season, weeks, detail_out=args.detail_out)
     print("\n=== CORRECTED MARKET TRACK RECORD GRADING (GSIS identity + zero-usage-preserving actuals) ===")
     for k, v in result.items():
         print(f"  {k}: {v}")
