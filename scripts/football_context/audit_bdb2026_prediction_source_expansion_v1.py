@@ -31,19 +31,20 @@ def sha256(path: Path) -> str:
 
 def corpus_sha256(root: Path) -> tuple[str, list[dict[str, object]]]:
     rows: list[dict[str, object]] = []
-    h = hashlib.sha256()
     for path in sorted(p for p in root.rglob("*") if p.is_file()):
         rel = path.relative_to(root).as_posix()
-        digest = sha256(path)
-        size = path.stat().st_size
-        rows.append({"relative_path": rel, "bytes": size, "sha256": digest})
-        h.update(rel.encode())
-        h.update(b"\0")
-        h.update(str(size).encode())
-        h.update(b"\0")
-        h.update(digest.encode())
-        h.update(b"\n")
-    return h.hexdigest(), rows
+        rows.append(
+            {
+                "relative_path": rel,
+                "bytes": path.stat().st_size,
+                "sha256": sha256(path),
+            }
+        )
+    rows = sorted(rows, key=lambda x: x["relative_path"])
+    material = "\n".join(
+        f"{row['relative_path']}:{row['sha256']}" for row in rows
+    )
+    return hashlib.sha256(material.encode("utf-8")).hexdigest(), rows
 
 
 def csv_columns(path: Path) -> list[str]:
