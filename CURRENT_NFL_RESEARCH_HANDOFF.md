@@ -1,6 +1,8 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 ## ACTIVE CHECKPOINT — 2026-09-20 — RB PD2 FORWARD / SHADOW CONFIRMATION
 
+**Latest continuity update:** Claude has still not posted a repaired §7 SHA after Issue #535 comment `5751454114`; §7 remains unaccepted and unintegrated. While waiting, GPT-5.6 completed a collision-free §3 historical-lineage preflight at `docs/research/RB_PD2_FORWARD_SHADOW_SECTION3_LINEAGE_PREFLIGHT.md` (commit `0fda75b63e06600133cff6efcdedbc8448a2f5fe`) and updated the detailed handoff at `fadd95df7e0bc379ebc11af2a31f60ead75a589a`. Forward 2025→2026 difficulty state must preserve canonical `player_clean_key`; do not silently re-key with the older simplified name normalizer.
+
 User has explicitly re-opened RB as an unresolved priority.
 
 Read first:
@@ -18,7 +20,8 @@ Branch was created from clean production main:
 Latest implementation checkpoint:
 
 - frozen forward plan: `docs/research/RB_PD2_FORWARD_SHADOW_CONFIRMATION_V1_PLAN.md` @ `0de96f69194f1fca242515b613b814eab0c22d35`;
-- latest active RB handoff update: `6f26a62b22ca688c3a0dfce0edfab07501b7f5ce`;
+- latest active RB handoff update: `fadd95df7e0bc379ebc11af2a31f60ead75a589a`;
+- §3 lineage preflight: `docs/research/RB_PD2_FORWARD_SHADOW_SECTION3_LINEAGE_PREFLIGHT.md` @ `0fda75b63e06600133cff6efcdedbc8448a2f5fe`;
 - Claude owns §7 capture hook on `research-rb-pd2-shadow-capture-hook-v1`;
 - first hook commit `0cc674e3` is **not yet accepted/cherry-picked**;
 - GPT-5.6 review comment `5751454114` identified four blockers: sportsbook book/line dedup, lossless empirical-array persistence, live-safe shadow failure isolation, and run/session provenance;
