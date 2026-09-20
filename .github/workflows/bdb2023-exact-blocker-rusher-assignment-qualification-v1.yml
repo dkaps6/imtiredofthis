@@ -1,0 +1,143 @@
+name: BDB2023 Exact Blocker-Rusher Assignment Qualification V1
+
+on:
+  push:
+    branches: [research-football-context-event-redundancy-v1]
+    paths:
+      - 'scripts/football_context/qualify_bdb2023_exact_blocker_rusher_assignment_v1.py'
+      - 'tests/test_bdb2023_exact_blocker_rusher_assignment_qualification_v1.py'
+      - '.github/workflows/bdb2023-exact-blocker-rusher-assignment-qualification-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_SECRET_RAW: ${{ secrets.KAGGLE_API_TOKEN }}
+  COMPETITION: nfl-big-data-bowl-2023
+  CERTIFIED_MATERIALIZER_SHA: 47bcd58aecf453f54b3f5db06a9dbdc94b000ad2
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - name: Checkout active Football Context branch
+        uses: actions/checkout@v4
+
+      - name: Checkout certified advanced materializer
+        uses: actions/checkout@v4
+        with:
+          repository: dkaps6/imtiredofthis
+          ref: ${{ env.CERTIFIED_MATERIALIZER_SHA }}
+          path: _advanced_materializer
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest kaggle
+
+      - name: Compile and focused tests
+        run: |
+          python -m compileall scripts/football_context/qualify_bdb2023_exact_blocker_rusher_assignment_v1.py
+          PYTHONPATH="${PWD}" pytest -q tests/test_bdb2023_exact_blocker_rusher_assignment_qualification_v1.py
+
+      - name: Normalize Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          token="${raw#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          [[ "$token" == KGAT_* ]]
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+
+      - name: Download certified BDB2023 source ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/bdb2023_download"
+          c="${RUNNER_TEMP}/bdb2023_corpus"
+          mkdir -p "$d" "$c"
+          kaggle competitions download -c "${COMPETITION}" -p "$d"
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$z"
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "CORPUS_DIR=$c" >> "$GITHUB_ENV"
+
+      - name: Materialize certified exact blocker interactions ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/bdb2023_features"
+          matvenv="${RUNNER_TEMP}/bdb2023_materializer_venv"
+          python -m venv "$matvenv"
+          "$matvenv/bin/pip" install --disable-pip-version-check "pandas>=2.2,<3" "numpy>=1.26,<3"
+          (
+            cd _advanced_materializer
+            PYTHONPATH="${PWD}" "$matvenv/bin/python" scripts/data_frontier/materialize_bdb2023_advanced_features_v1.py \
+              --corpus-dir "${CORPUS_DIR}" \
+              --out-dir "$out"
+          )
+          test -f "$out/private/bdb2023_protection_interactions_v1.csv"
+          echo "BDB_FEATURE_DIR=$out" >> "$GITHUB_ENV"
+
+      - name: Build nflverse stable-ID crosswalk
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/context_inputs"
+          mkdir -p "$out"
+          PYTHONPATH="${PWD}" python - <<'PY'
+          from pathlib import Path
+          import nflreadpy as nfl
+          from scripts.player_form_v2 import _to_pandas
+
+          out = Path(__import__("os").environ["RUNNER_TEMP"]) / "context_inputs"
+          players = _to_pandas(nfl.load_players())
+          players.to_csv(out / "nflverse_players_crosswalk.csv", index=False)
+          print("players_rows", len(players))
+          print("players_columns", sorted(players.columns.tolist()))
+          PY
+          echo "PLAYERS_CROSSWALK=$out/nflverse_players_crosswalk.csv" >> "$GITHUB_ENV"
+
+      - name: Execute outcome-free exact-assignment qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/bdb2023_exact_assignment_qualification"
+          PYTHONPATH="${PWD}" python scripts/football_context/qualify_bdb2023_exact_blocker_rusher_assignment_v1.py \
+            --materialized-dir "${BDB_FEATURE_DIR}" \
+            --players "${PLAYERS_CROSSWALK}" \
+            --out-dir "$out" \
+            --active-sha "${GITHUB_SHA}" \
+            --materializer-sha "${CERTIFIED_MATERIALIZER_SHA}"
+          echo "QUAL_OUT=$out" >> "$GITHUB_ENV"
+
+      - name: Enforce sanitized artifact boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "${QUAL_OUT}"
+          test "$(find "${QUAL_OUT}" -maxdepth 1 -type f | wc -l)" -eq 4
+          ! find "${QUAL_OUT}" -type f -name '*interactions*.csv' -print -quit | grep -q .
+          ! find "${QUAL_OUT}" -type f -name '*players_crosswalk*.csv' -print -quit | grep -q .
+          find "${QUAL_OUT}" -maxdepth 1 -type f -print
+
+      - name: Upload sanitized qualification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2023-exact-blocker-rusher-assignment-qualification-v1
+          path: ${{ runner.temp }}/bdb2023_exact_assignment_qualification
+          if-no-files-found: error
+          retention-days: 30
