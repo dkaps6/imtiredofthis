@@ -3,26 +3,32 @@ GitHub is canonical; chat memory is secondary.
 
 ## ACTIVE FOOTBALL-CONTEXT HANDOFF — 2026-09-20
 
-The current Football Context Intelligence frontier is now the frozen historical-analog reliability experiment.
+The Historical Analog State Experiment V1 has executed once and **failed closed in
+the 2024 primary holdout**. No family legally exposed 2025.
 
 **Read this first for the active context lane:**
 
-`docs/handoffs/NFL_HANDOFF_2026-09-20_FOOTBALL_CONTEXT_ANALOG_RELIABILITY_CURRENT.md`
+`docs/handoffs/NFL_HANDOFF_2026-09-20_FOOTBALL_CONTEXT_ADVANCED_GEOMETRY_QUALIFICATION_CURRENT.md`
 
 Active branch:
 
 `research-football-context-event-redundancy-v1`
 
-The handoff contains:
-- all closed role/room/event/continuity V1 results;
-- exact runs/jobs/artifacts/digests;
-- historical analog-state qualification and redundancy results;
-- the frozen `HISTORICAL_ANALOG_STATE_EXPERIMENT_V1`;
-- the exact next implementation/execution task;
-- production and Issue #535 boundaries;
-- no-retest rules.
+Canonical analog execution:
+- commit `9a15d082a4c7da793f098e565d12ac6a7ce56f40`
+- run `35512335301`
+- job `106082294476`
+- artifact `10605238933`
+- digest `sha256:70a188482f627fc74dc7ddf5ae16d26d32cd9ddb3a3f13e956130bc3e5d85c1d`
 
-**Immediate next action:** implement and execute `HISTORICAL_ANALOG_STATE_EXPERIMENT_V1` exactly as frozen. Do not redesign the geometry, novelty score, threshold, temporal split, gates, or failed prior mechanisms.
+All analog families are now closed under V1. Do not lower the 0.80 novelty cutoff,
+pool positions, alter support floors, or inspect 2025 to rescue them.
+
+**Immediate next action:** move to the distinct advanced-geometry lane and perform
+formal **outcome-free BDB2026 targeted-receiver release-spacing qualification /
+redundancy** using the already-certified source/materializer. Do not read WR
+receiving-yard outcomes or interfere with Issue #535 before a separate predictive
+plan is frozen.
 
 ---
 

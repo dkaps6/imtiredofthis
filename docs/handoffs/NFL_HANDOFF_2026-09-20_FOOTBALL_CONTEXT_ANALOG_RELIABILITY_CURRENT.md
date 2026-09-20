@@ -1,5 +1,7 @@
 # NFL HANDOFF — 2026-09-20 — FOOTBALL CONTEXT / HISTORICAL ANALOG RELIABILITY CURRENT
 
+> **SUPERSEDED AFTER CANONICAL EXECUTION.** Historical Analog State Experiment V1 is now closed failed. Continue from `docs/handoffs/NFL_HANDOFF_2026-09-20_FOOTBALL_CONTEXT_ADVANCED_GEOMETRY_QUALIFICATION_CURRENT.md`. Preserve this file as the pre-execution checkpoint.
+
 **Repository:** `dkaps6/imtiredofthis`  
 **GitHub is canonical; chat memory is secondary.**  
 **Active branch:** `research-football-context-event-redundancy-v1`  
