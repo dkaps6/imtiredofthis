@@ -1,6 +1,31 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 GitHub is canonical; chat memory is secondary.
 
+## ACTIVE FOOTBALL-CONTEXT HANDOFF — 2026-09-20
+
+The current Football Context Intelligence frontier is now the frozen historical-analog reliability experiment.
+
+**Read this first for the active context lane:**
+
+`docs/handoffs/NFL_HANDOFF_2026-09-20_FOOTBALL_CONTEXT_ANALOG_RELIABILITY_CURRENT.md`
+
+Active branch:
+
+`research-football-context-event-redundancy-v1`
+
+The handoff contains:
+- all closed role/room/event/continuity V1 results;
+- exact runs/jobs/artifacts/digests;
+- historical analog-state qualification and redundancy results;
+- the frozen `HISTORICAL_ANALOG_STATE_EXPERIMENT_V1`;
+- the exact next implementation/execution task;
+- production and Issue #535 boundaries;
+- no-retest rules.
+
+**Immediate next action:** implement and execute `HISTORICAL_ANALOG_STATE_EXPERIMENT_V1` exactly as frozen. Do not redesign the geometry, novelty score, threshold, temporal split, gates, or failed prior mechanisms.
+
+---
+
 ## ACTIVE FOOTBALL-CONTEXT / CLAUDE-MAUDE HANDOFF — 2026-09-18
 
 The user has explicitly resumed Claude/Maude collaboration on the cross-position Football Context Intelligence Program.
