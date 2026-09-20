@@ -9,6 +9,8 @@ safe to run against any already-built outputs/NFL_BETTING_MODEL_MASTER.xlsx.
 from __future__ import annotations
 
 import argparse
+import csv
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -61,18 +63,23 @@ def main() -> int:
     rows.sort(key=lambda x: (x["best_ev"] if x["best_ev"] is not None else -999), reverse=True)
 
     print(f"=== {a.weekday} HAS-EDGE rows: {len(rows)} ===")
-    print(
-        f"{'Player':<24}{'Team':<5}{'Opp':<5}{'Market':<18}{'Side':<6}{'Line':>8}"
-        f"{'Proj':>8}{'Odds':>8}{'ProbEdge':>10}{'BestEV':>10}  Kickoff"
-    )
+    writer = csv.writer(sys.stdout)
+    writer.writerow([
+        "player", "team", "opp", "market", "side", "line", "proj",
+        "gap_pct_of_line", "odds", "prob_edge_pct", "best_ev_pct", "kickoff_utc",
+    ])
     for r in rows:
-        pe = f"{r['prob_edge']*100:.1f}%" if isinstance(r["prob_edge"], (int, float)) else ""
-        ev = f"{r['best_ev']*100:.1f}%" if isinstance(r["best_ev"], (int, float)) else ""
-        print(
-            f"{str(r['player'])[:23]:<24}{str(r['team'])[:4]:<5}{str(r['opp'])[:4]:<5}"
-            f"{str(r['market'])[:17]:<18}{str(r['side'])[:5]:<6}{str(r['line']):>8}"
-            f"{str(r['proj']):>8}{str(r['odds']):>8}{pe:>10}{ev:>10}  {r['kickoff']}"
-        )
+        line = r["line"] if isinstance(r["line"], (int, float)) else None
+        proj = r["proj"] if isinstance(r["proj"], (int, float)) else None
+        gap_pct = f"{abs(proj - line) / line * 100:.1f}" if line and proj else ""
+        pe = f"{r['prob_edge']*100:.1f}" if isinstance(r["prob_edge"], (int, float)) else ""
+        ev = f"{r['best_ev']*100:.1f}" if isinstance(r["best_ev"], (int, float)) else ""
+        writer.writerow([
+            r["player"], r["team"], r["opp"], r["market"], r["side"],
+            f"{line:.1f}" if line is not None else "",
+            f"{proj:.1f}" if proj is not None else "",
+            gap_pct, r["odds"], pe, ev, r["kickoff"],
+        ])
     return 0
 
 
