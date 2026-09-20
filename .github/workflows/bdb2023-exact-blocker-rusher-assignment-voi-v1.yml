@@ -1,0 +1,105 @@
+name: BDB2023 Exact Blocker-Rusher Assignment VOI V1
+
+on:
+  push:
+    branches: [research-football-context-event-redundancy-v1]
+    paths:
+      - 'docs/research/BDB2023_EXACT_BLOCKER_RUSHER_ASSIGNMENT_VOI_EXPERIMENT_V1.md'
+      - 'scripts/football_context/evaluate_bdb2023_exact_blocker_rusher_assignment_voi_v1.py'
+      - 'tests/test_bdb2023_exact_blocker_rusher_assignment_voi_v1.py'
+      - '.github/workflows/bdb2023-exact-blocker-rusher-assignment-voi-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_SECRET_RAW: ${{ secrets.KAGGLE_API_TOKEN }}
+  COMPETITION: nfl-big-data-bowl-2023
+  FROZEN_PLAN_SHA: 7590d5d867a4a368624ef923b72da8146dd7a7ee
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest kaggle
+
+      - name: Compile and focused tests
+        run: |
+          python -m compileall scripts/football_context/evaluate_bdb2023_exact_blocker_rusher_assignment_voi_v1.py
+          PYTHONPATH="${PWD}" pytest -q tests/test_bdb2023_exact_blocker_rusher_assignment_voi_v1.py
+
+      - name: Verify frozen plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e "${FROZEN_PLAN_SHA}^{commit}"
+          git show "${FROZEN_PLAN_SHA}:docs/research/BDB2023_EXACT_BLOCKER_RUSHER_ASSIGNMENT_VOI_EXPERIMENT_V1.md" >/dev/null
+
+      - name: Normalize Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          token="${raw#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          [[ "$token" == KGAT_* ]]
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+
+      - name: Download frozen BDB2023 source ephemerally
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/bdb2023_download"
+          c="${RUNNER_TEMP}/bdb2023_corpus"
+          mkdir -p "$d" "$c"
+          kaggle competitions download -c "${COMPETITION}" -p "$d"
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$z"
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "CORPUS_DIR=$c" >> "$GITHUB_ENV"
+
+      - name: Execute frozen VOI experiment
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/bdb2023_exact_assignment_voi"
+          PYTHONPATH="${PWD}" python scripts/football_context/evaluate_bdb2023_exact_blocker_rusher_assignment_voi_v1.py \
+            --corpus-dir "${CORPUS_DIR}" \
+            --out-dir "$out" \
+            --active-sha "${GITHUB_SHA}" \
+            --frozen-plan-sha "${FROZEN_PLAN_SHA}"
+          echo "VOI_OUT=$out" >> "$GITHUB_ENV"
+
+      - name: Enforce sanitized artifact boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "${VOI_OUT}"
+          test "$(find "${VOI_OUT}" -maxdepth 1 -type f | wc -l)" -eq 4
+          ! find "${VOI_OUT}" -type f \( -name 'pffScoutingData.csv' -o -name 'plays.csv' -o -name 'games.csv' \) -print -quit | grep -q .
+          find "${VOI_OUT}" -maxdepth 1 -type f -print
+
+      - name: Upload sanitized VOI evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2023-exact-blocker-rusher-assignment-voi-v1
+          path: ${{ runner.temp }}/bdb2023_exact_assignment_voi
+          if-no-files-found: error
+          retention-days: 30
