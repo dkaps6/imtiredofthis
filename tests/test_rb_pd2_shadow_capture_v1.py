@@ -619,6 +619,91 @@ def test_a_row_that_never_reached_the_seam_is_not_in_the_expected_set(priced_fix
 
 
 # --------------------------------------------------------------------------
+# Player identity -- one canonical key across §3 history and §7 capture
+# --------------------------------------------------------------------------
+def test_capture_key_matches_the_key_every_other_consumer_joins_on():
+    """`metrics_ready.player_clean_key` is not already canonical.
+
+    `canonicalize_player_name()` remaps through a manual map and the roles
+    lookup; every manual-map entry changes the key, and several are running
+    backs. The ML/State adapters and the backtest component builder all
+    canonicalize before joining, so a capture that stored the raw value would
+    hand section 9 a second identity system and silently split those
+    player-games across the 2025 history / 2026 capture boundary.
+    """
+    from scripts.utils.canonical_names import build_manual_map, norm_key
+    from scripts.modeling.ml_v2 import _key as ml_key
+
+    # `build_manual_map` is @lru_cache(maxsize=1) on a RELATIVE path, so the
+    # first call in the process wins: a test that chdirs into a tmp dir with its
+    # own overrides file poisons the table for everything after it. Clear it so
+    # this asserts against the repo's real alias table regardless of test order.
+    build_manual_map.cache_clear()
+    remapped = {k: v for k, v in build_manual_map().items() if norm_key(v) != k}
+    assert remapped, "manual map no longer remaps; this test's premise needs rechecking"
+
+    for raw_key, canonical_name in remapped.items():
+        row = pd.Series({"player_clean_key": raw_key, "player": canonical_name})
+        captured, source = shadow.canonical_player_key(row)
+        assert source == raw_key
+        # The capture key must equal what ML/State/backtest join on...
+        assert captured == ml_key(raw_key)
+        # ...and must NOT be the raw pre-remap value.
+        assert captured == norm_key(canonical_name) != raw_key
+
+
+def test_an_alias_remapped_back_is_captured_under_its_canonical_key(tmp_path):
+    """End-to-end on a real remapped RB: Zonovan Knight -> Bam Knight."""
+    from scripts.utils.canonical_names import build_manual_map, norm_key
+
+    build_manual_map.cache_clear()  # see the note in the test above
+    manual = build_manual_map()
+    raw_key = "zonovanknight"
+    assert raw_key in manual, "Zonovan Knight override missing from the real alias table"
+    canonical_key = norm_key(manual[raw_key])
+    assert canonical_key != raw_key
+
+    shadow.reset()
+    shadow.begin_session(season=SEASON, out_root=tmp_path)
+    row = pd.Series({
+        "event_id": EVENT_ID, "team": "NYJ", "opponent": "PIT",
+        "player": "Zonovan Knight", "player_clean_key": raw_key,
+    })
+    kw = dict(row=row, market="rush_yards", position="RB", season=SEASON, week=WEEK)
+
+    assert shadow.note_expected(**kw) is True
+    assert shadow.capture(adjusted_outcomes=np.linspace(1.0, 99.0, 64),
+                          target_mean=50.0, mc_proj=49.0, **kw) is True
+
+    receipt = shadow.finalize(expected_football_keys=shadow.noted_expected_keys())
+    assert receipt["valid"] is True
+    records, _ = shadow.load_session(Path(receipt["dir"]))
+
+    assert records[0]["player_clean_key"] == canonical_key
+    assert raw_key not in records[0]["football_key"]
+    assert canonical_key in records[0]["football_key"]
+    # The remap is auditable rather than inferred silently.
+    assert records[0]["player_clean_key_source"] == raw_key
+    assert records[0]["player_clean_key_remapped"] is True
+    shadow.reset()
+
+
+def test_a_key_needing_no_remap_is_not_flagged_as_remapped(tmp_path):
+    shadow.reset()
+    shadow.begin_session(season=SEASON, out_root=tmp_path)
+    row = pd.Series({"event_id": EVENT_ID, "team": "CHI", "opponent": "CAR",
+                     "player": "Alpha Back", "player_clean_key": "alphaback"})
+    assert shadow.capture(row=row, adjusted_outcomes=np.linspace(1.0, 99.0, 64), target_mean=50.0,
+                          mc_proj=49.0, market="rush_yards", position="RB",
+                          season=SEASON, week=WEEK) is True
+    receipt = shadow.finalize()
+    records, _ = shadow.load_session(Path(receipt["dir"]))
+    assert records[0]["player_clean_key"] == "alphaback"
+    assert records[0]["player_clean_key_remapped"] is False
+    shadow.reset()
+
+
+# --------------------------------------------------------------------------
 # Session isolation
 # --------------------------------------------------------------------------
 def test_two_sessions_in_one_interpreter_do_not_share_state(priced_fixture, monkeypatch):
@@ -673,6 +758,10 @@ def test_session_carries_run_provenance(priced_fixture, monkeypatch):
     assert receipt["provenance"]["workflow_run_id"] == "987654321"
     assert receipt["provenance"]["workflow_run_attempt"] == "2"
     assert receipt["provenance"]["workflow_job"] == "full-slate"
+
+    # The alias table is fingerprinted, so section 9 can refuse to join a
+    # capture to history that was keyed under a different table.
+    assert len(receipt["provenance"]["manual_name_overrides_sha256"]) == 64
 
     # Per-record provenance needed for an immutable section 9 join.
     for record in records:

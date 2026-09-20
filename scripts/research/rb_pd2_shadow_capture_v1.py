@@ -58,6 +58,8 @@ from typing import Any
 
 import numpy as np
 
+from scripts.utils.canonical_names import canonicalize_player_name_safe
+
 FLAG = "RB_PD2_SHADOW_CAPTURE"
 DEFAULT_ROOT = Path("data/research/rb_pd2_shadow")
 
@@ -103,7 +105,20 @@ def _provenance() -> dict:
         "workflow_run_attempt": os.getenv("GITHUB_RUN_ATTEMPT", ""),
         "workflow_job": os.getenv("GITHUB_JOB", ""),
         "runner_ref": os.getenv("GITHUB_REF", ""),
+        # Player identity is resolved through a mutable alias table. If it
+        # changes between the section 3 history build and a capture, the same
+        # back gets two keys -- so section 9 can compare these fingerprints and
+        # refuse to join across a table it cannot prove was identical.
+        "manual_name_overrides_sha256": _file_digest(Path("data/manual_name_overrides.csv")),
+        "roles_ourlads_sha256": _file_digest(Path("data/roles_ourlads.csv")),
     }
+
+
+def _file_digest(path: Path) -> str:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except Exception:
+        return ""
 
 
 def begin_session(*, season: int, out_root: Path | None = None) -> str:
@@ -203,14 +218,40 @@ def _num(value, default=float("nan")) -> float:
 # ---------------------------------------------------------------------------
 # Expected-set accumulation (at the seam, independent of capture)
 # ---------------------------------------------------------------------------
+def canonical_player_key(row) -> tuple[str, str]:
+    """Return (canonical key, the raw source value it was derived from).
+
+    `metrics_ready.player_clean_key` is NOT already canonical. Every consumer
+    canonicalizes it defensively -- `ml_v2.apply_ml_to_metrics`,
+    `state_v2.apply_state_to_metrics` and `backtest/component_predictions.py`
+    all map the column through `canonicalize_player_name_safe` before joining --
+    because `canonicalize_player_name()` is a remapper, not a normalizer: it
+    resolves through a manual map and the Ourlads roles lookup, and every entry
+    in that manual map changes the key. Several are running backs
+    (`zonovanknight` -> `bamknight`, `chrisrodriguez` -> `chrisrodriguezjr`,
+    `lequintallen` -> `lequintallenjr`).
+
+    Storing the raw value would give section 7 a different identity system from
+    the section 3 history built off the component path, so the section 9 join
+    would silently drop or split those player-games. The same source precedence
+    as the adapters is used deliberately, so one player has one key everywhere.
+    """
+    source = str((row.get("player_clean_key") if "player_clean_key" in row else row.get("player")) or "").strip()
+    if not source:
+        return "", source
+    _, canonical = canonicalize_player_name_safe(source)
+    return str(canonical or "").strip(), source
+
+
 def _identity(row, *, season: int, week: int) -> dict:
+    canonical, _source = canonical_player_key(row)
     return {
         "season": int(season),
         "week": int(week),
         "event_id": str(row.get("event_id") or "").strip(),
         "team": str(row.get("team") or "").upper().strip(),
         "opponent": str(row.get("opponent") or "").upper().strip(),
-        "player_clean_key": str(row.get("player_clean_key") or "").strip(),
+        "player_clean_key": canonical,
         "market": ELIGIBLE_MARKET,
     }
 
@@ -273,6 +314,7 @@ def capture(
         _SESSION["pricing_rows_seen"] += 1
 
         identity = _identity(row, season=season, week=week)
+        _, _raw_player_key = canonical_player_key(row)
         football_key = _football_key(identity)
 
         missing = [f for f in REQUIRED_IDENTITY if not identity[f]]
@@ -333,6 +375,11 @@ def capture(
             "array_file": DRAWS_FILE,
             **identity,
             "player": str(row.get("player") or ""),
+            # Section 3 of the lineage preflight requires an alias remap to be
+            # auditable rather than inferred on the fly, so the pre-canonical
+            # value travels with the record.
+            "player_clean_key_source": _raw_player_key,
+            "player_clean_key_remapped": bool(_raw_player_key and _raw_player_key != identity["player_clean_key"]),
             "position": str(position).upper().strip(),
             "target_mean": target,
             "mc_proj": mc,
