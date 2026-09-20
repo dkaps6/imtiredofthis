@@ -2,7 +2,7 @@ name: Football Context Role Room Qualification V1
 on:
   push:
     branches: [research-football-context-execution-v1, research-football-context-event-redundancy-v1]
-    paths: ['scripts/research/**','docs/research/**','tests/test_historical_analog_state_v1.py','.github/workflows/football-context-role-room-qualification-v1.yml']
+    paths: ['scripts/research/**','docs/research/**','tests/test_historical_analog_state_v1.py','tests/test_historical_analog_reliability_v1.py','.github/workflows/football-context-role-room-qualification-v1.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -18,10 +18,20 @@ jobs:
         run: pip install -r requirements.txt pytest
       - name: Compile and focused tests
         run: |
-          python -m compileall scripts/research/build_historical_analog_state_v1.py scripts/research/build_historical_analog_redundancy_audit_v1.py scripts/research/run_role_room_qualification_pipeline.py
-          PYTHONPATH="${PWD}" pytest -q tests/test_historical_analog_state_v1.py tests/test_event_regime_qualification.py tests/test_event_regime_redundancy_audit.py tests/test_role_room_qualification_pipeline.py
+          python -m compileall scripts/research/build_historical_analog_state_v1.py scripts/research/build_historical_analog_redundancy_audit_v1.py scripts/research/evaluate_historical_analog_reliability_v1.py scripts/research/run_role_room_qualification_pipeline.py
+          PYTHONPATH="${PWD}" pytest -q tests/test_historical_analog_state_v1.py tests/test_historical_analog_reliability_v1.py tests/test_event_regime_qualification.py tests/test_event_regime_redundancy_audit.py tests/test_role_room_qualification_pipeline.py
       - name: Rehydrate canonical history and qualify context
         run: PYTHONPATH="${PWD}" python scripts/research/rehydrate_and_run_role_room_qualification.py --seasons 2019-2025 --out-dir artifacts/football_context_role_room_v1 --builder-commit "${GITHUB_SHA}"
+      - name: Execute frozen Historical Analog State Experiment V1
+        run: |
+          PYTHONPATH="${PWD}" python scripts/research/evaluate_historical_analog_reliability_v1.py \
+            --history artifacts/football_context_role_room_v1/player_game_logs_history.csv \
+            --states artifacts/football_context_role_room_v1/role_room_qualification/historical_analog_state_v1.csv \
+            --neighbors artifacts/football_context_role_room_v1/role_room_qualification/historical_analog_neighbors_v1.csv \
+            --risk-out artifacts/football_context_role_room_v1/role_room_qualification/historical_analog_novelty_risk_v1.csv \
+            --metrics-out artifacts/football_context_role_room_v1/role_room_qualification/historical_analog_reliability_metrics_v1.csv \
+            --gates-out artifacts/football_context_role_room_v1/role_room_qualification/historical_analog_reliability_gates_v1.csv \
+            --manifest-out artifacts/football_context_role_room_v1/role_room_qualification/historical_analog_reliability_manifest_v1.json
       - name: Publish sanitized qualification evidence
         uses: actions/upload-artifact@v4
         with:
@@ -35,5 +45,9 @@ jobs:
             artifacts/football_context_role_room_v1/role_room_qualification/historical_analog_neighbors_v1.csv
             artifacts/football_context_role_room_v1/role_room_qualification/historical_analog_audit_v1.csv
             artifacts/football_context_role_room_v1/role_room_qualification/historical_analog_redundancy_audit_v1.csv
+            artifacts/football_context_role_room_v1/role_room_qualification/historical_analog_novelty_risk_v1.csv
+            artifacts/football_context_role_room_v1/role_room_qualification/historical_analog_reliability_metrics_v1.csv
+            artifacts/football_context_role_room_v1/role_room_qualification/historical_analog_reliability_gates_v1.csv
+            artifacts/football_context_role_room_v1/role_room_qualification/historical_analog_reliability_manifest_v1.json
           if-no-files-found: error
           retention-days: 30
