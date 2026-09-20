@@ -119,3 +119,32 @@ It asks whether accumulated OL cohesion improves target-game team pressure-rate
 prediction beyond prior pressure/team state and immediate OL continuity.
 
 2024 is primary; 2025 is conditionally exposed only after full 2024 passage.
+
+
+## OL cohesion pressure mechanism result
+
+Canonical run:
+
+- run `35515454686`
+- job `106090515886`
+- artifact `10607110400`
+- digest `sha256:90d3021fb88169b95f7a640967ace4449d01510792c109032251dad53ba4fb2b`
+
+Disposition:
+
+`OL_PAIRWISE_COHESION_PRESSURE_MECHANISM_V1_FAILED_CLOSED_PRIMARY`
+
+2024 had a tiny MAE/RMSE improvement and negative cohesion coefficient, but the frozen
+team-cluster bootstrap CI crossed zero and p90 error worsened. 2025 remained sealed and
+was not scored.
+
+Do not rescue this mechanism.
+
+## Next outcome-free mechanism
+
+Frozen plan:
+
+`docs/research/DEFENSIVE_FRONT_PAIRWISE_COHESION_QUALIFICATION_V1.md`
+
+The next task is qualification only. It tests accumulated front-seven shared roster
+history, not another OL variant and not a QB outcome.
