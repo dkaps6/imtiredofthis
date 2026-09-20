@@ -1,0 +1,149 @@
+name: BDB2026 Prediction Source Expansion Audit V1
+
+on:
+  push:
+    branches: [research-football-context-event-redundancy-v1]
+    paths:
+      - 'scripts/football_context/audit_bdb2026_prediction_source_expansion_v1.py'
+      - 'tests/test_bdb2026_prediction_source_expansion_audit_v1.py'
+      - '.github/workflows/bdb2026-prediction-source-expansion-audit-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KAGGLE_SECRET_RAW: ${{ secrets.KAGGLE_API_TOKEN }}
+  ANALYTICS_COMPETITION: nfl-big-data-bowl-2026-analytics
+  PREDICTION_COMPETITION: nfl-big-data-bowl-2026-prediction
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest kaggle
+
+      - name: Compile and focused tests
+        run: |
+          python -m compileall scripts/football_context/audit_bdb2026_prediction_source_expansion_v1.py
+          PYTHONPATH="${PWD}" pytest -q tests/test_bdb2026_prediction_source_expansion_audit_v1.py
+
+      - name: Normalize Kaggle token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${KAGGLE_SECRET_RAW:-}"
+          token="${raw#export KAGGLE_API_TOKEN=}"
+          token="${token#KAGGLE_API_TOKEN=}"
+          token="${token//$'\r'/}"
+          token="${token//$'\n'/}"
+          [[ "$token" == KGAT_* ]]
+          echo "::add-mask::$token"
+          echo "KAGGLE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          mkdir -p "${HOME}/.kaggle"
+          printf '%s' "$token" > "${HOME}/.kaggle/access_token"
+          chmod 600 "${HOME}/.kaggle/access_token"
+
+      - name: Download certified analytics corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/analytics_download"
+          c="${RUNNER_TEMP}/analytics_corpus"
+          mkdir -p "$d" "$c"
+          kaggle competitions download -c "${ANALYTICS_COMPETITION}" -p "$d"
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$z"
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "ANALYTICS_CORPUS=$c" >> "$GITHUB_ENV"
+
+      - name: Attempt prediction corpus download
+        id: prediction_access
+        shell: bash
+        run: |
+          set -u
+          d="${RUNNER_TEMP}/prediction_download"
+          c="${RUNNER_TEMP}/prediction_corpus"
+          mkdir -p "$d" "$c"
+          set +e
+          kaggle competitions download -c "${PREDICTION_COMPETITION}" -p "$d" >"${RUNNER_TEMP}/prediction_download.log" 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "PREDICTION_ACCESS=false" >> "$GITHUB_ENV"
+            sed -E 's/(KGAT_[A-Za-z0-9_-]+)/[MASKED]/g' "${RUNNER_TEMP}/prediction_download.log" | tail -80
+            exit 0
+          fi
+          z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          if [ -z "$z" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "PREDICTION_ACCESS=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          unzip -q "$z" -d "$c"
+          rm -f "$z"
+          echo "available=true" >> "$GITHUB_OUTPUT"
+          echo "PREDICTION_ACCESS=true" >> "$GITHUB_ENV"
+          echo "PREDICTION_CORPUS=$c" >> "$GITHUB_ENV"
+
+      - name: Execute source expansion audit
+        if: steps.prediction_access.outputs.available == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/bdb2026_prediction_source_audit"
+          PYTHONPATH="${PWD}" python scripts/football_context/audit_bdb2026_prediction_source_expansion_v1.py \
+            --analytics-dir "${ANALYTICS_CORPUS}" \
+            --prediction-dir "${PREDICTION_CORPUS}" \
+            --out-dir "$out"
+          echo "AUDIT_OUT=$out" >> "$GITHUB_ENV"
+
+      - name: Materialize access-blocked result
+        if: steps.prediction_access.outputs.available != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/bdb2026_prediction_source_audit"
+          mkdir -p "$out"
+          cat > "$out/bdb2026_prediction_source_expansion_audit_v1.json" <<'JSON'
+          {
+            "audit": "BDB2026_PREDICTION_SOURCE_EXPANSION_AUDIT_V1",
+            "comparison": {
+              "disposition": "PREDICTION_ARCHIVE_ACCESS_BLOCKED",
+              "materially_expands_certified_analytics_history": null,
+              "sportsbook_read": false,
+              "football_outcomes_used_for_predictive_scoring": false,
+              "production_change_authorized": false,
+              "issue_535_touched": false
+            },
+            "rb_research_note": "RB predictive research remains unresolved and pinned; this source-only audit does not claim to solve or advance the RB model."
+          }
+          JSON
+          echo "AUDIT_OUT=$out" >> "$GITHUB_ENV"
+
+      - name: Enforce sanitized artifact boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "${AUDIT_OUT}"
+          ! find "${AUDIT_OUT}" -type f \( -name 'input_*.csv' -o -name 'output_*.csv' -o -name 'test_input.csv' \) -print -quit | grep -q .
+          find "${AUDIT_OUT}" -maxdepth 1 -type f -print
+
+      - name: Upload sanitized audit evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdb2026-prediction-source-expansion-audit-v1
+          path: ${{ runner.temp }}/bdb2026_prediction_source_audit
+          if-no-files-found: error
+          retention-days: 30
