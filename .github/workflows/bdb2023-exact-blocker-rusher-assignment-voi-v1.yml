@@ -42,6 +42,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # actions/checkout is shallow by default; fetch the already-frozen plan
+          # object only so verification does not depend on local checkout depth.
+          git fetch --no-tags --depth=1 origin "${FROZEN_PLAN_SHA}"
           git cat-file -e "${FROZEN_PLAN_SHA}^{commit}"
           git show "${FROZEN_PLAN_SHA}:docs/research/BDB2023_EXACT_BLOCKER_RUSHER_ASSIGNMENT_VOI_EXPERIMENT_V1.md" >/dev/null
 
