@@ -61,38 +61,59 @@ jobs:
           c="${RUNNER_TEMP}/bdb2025_corpus"
           mkdir -p "$d" "$c"
 
-          download_one() {
-            local f="$1"
-            kaggle competitions download -c "${COMPETITION}" -f "$f" -p "$d"
-          }
-
+          # Old Kaggle competitions can return 404 for individual-file download even
+          # when the full archive remains available. Try the narrow path first, then
+          # fall back mechanically to the full archive without changing science.
           set +e
-          download_one games.csv >"${RUNNER_TEMP}/bdb2025_games.log" 2>&1
+          kaggle competitions download -c "${COMPETITION}" -f games.csv -p "$d" >"${RUNNER_TEMP}/bdb2025_games.log" 2>&1
           rc1=$?
-          download_one player_play.csv >"${RUNNER_TEMP}/bdb2025_player_play.log" 2>&1
+          kaggle competitions download -c "${COMPETITION}" -f player_play.csv -p "$d" >"${RUNNER_TEMP}/bdb2025_player_play.log" 2>&1
           rc2=$?
           set -e
 
-          if [ "$rc1" -ne 0 ] || [ "$rc2" -ne 0 ]; then
+          if [ "$rc1" -eq 0 ] && [ "$rc2" -eq 0 ]; then
+            for f in games.csv player_play.csv; do
+              if [ -f "$d/$f" ]; then
+                cp "$d/$f" "$c/$f"
+              elif [ -f "$d/$f.zip" ]; then
+                unzip -q "$d/$f.zip" -d "$c"
+              else
+                z="$(find "$d" -maxdepth 1 -type f -name "*$f*.zip" -print -quit)"
+                if [ -n "$z" ]; then unzip -q "$z" -d "$c"; fi
+              fi
+            done
+          fi
+
+          if [ ! -f "$c/games.csv" ] || [ ! -f "$c/player_play.csv" ]; then
+            rm -rf "$d"/*
+            set +e
+            kaggle competitions download -c "${COMPETITION}" -p "$d" >"${RUNNER_TEMP}/bdb2025_full.log" 2>&1
+            rcfull=$?
+            set -e
+            if [ "$rcfull" -eq 0 ]; then
+              z="$(find "$d" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+              if [ -n "$z" ]; then
+                x="${RUNNER_TEMP}/bdb2025_full"
+                mkdir -p "$x"
+                unzip -q "$z" -d "$x"
+                gf="$(find "$x" -type f -name 'games.csv' -print -quit)"
+                pf="$(find "$x" -type f -name 'player_play.csv' -print -quit)"
+                if [ -n "$gf" ] && [ -n "$pf" ]; then
+                  cp "$gf" "$c/games.csv"
+                  cp "$pf" "$c/player_play.csv"
+                fi
+              fi
+            fi
+          fi
+
+          if [ ! -f "$c/games.csv" ] || [ ! -f "$c/player_play.csv" ]; then
             echo "available=false" >> "$GITHUB_OUTPUT"
             echo "SOURCE_ACCESS=false" >> "$GITHUB_ENV"
-            cat "${RUNNER_TEMP}/bdb2025_games.log" "${RUNNER_TEMP}/bdb2025_player_play.log" \
-              | sed -E 's/(KGAT_[A-Za-z0-9_-]+)/[MASKED]/g' | tail -100
+            cat "${RUNNER_TEMP}/bdb2025_games.log" "${RUNNER_TEMP}/bdb2025_player_play.log" "${RUNNER_TEMP}/bdb2025_full.log" 2>/dev/null \
+              | sed -E 's/(KGAT_[A-Za-z0-9_-]+)/[MASKED]/g' | tail -120
             exit 0
           fi
 
-          for f in games.csv player_play.csv; do
-            if [ -f "$d/$f" ]; then
-              cp "$d/$f" "$c/$f"
-            elif [ -f "$d/$f.zip" ]; then
-              unzip -q "$d/$f.zip" -d "$c"
-            else
-              z="$(find "$d" -maxdepth 1 -type f -name "*$f*.zip" -print -quit)"
-              if [ -n "$z" ]; then unzip -q "$z" -d "$c"; fi
-            fi
-          done
-          test -f "$c/games.csv"
-          test -f "$c/player_play.csv"
           echo "available=true" >> "$GITHUB_OUTPUT"
           echo "SOURCE_ACCESS=true" >> "$GITHUB_ENV"
           echo "BDB2025_CORPUS=$c" >> "$GITHUB_ENV"
