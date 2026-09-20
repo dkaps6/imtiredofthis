@@ -4,16 +4,56 @@
 **GitHub is canonical; chat memory is secondary.**  
 **User explicitly re-opened RB as an unresolved priority on 2026-09-20.**
 
+## 2026-09-20 FREEZE UPDATE — THIS SUPERSEDES THE EARLIER "PROPOSED / NOT YET FROZEN" SECTION
+
+The RB forward/shadow confirmation protocol is now formally frozen.
+
+Frozen plan:
+
+`docs/research/RB_PD2_FORWARD_SHADOW_CONFIRMATION_V1_PLAN.md`
+
+Freeze commit:
+
+`0de96f69194f1fca242515b613b814eab0c22d35`
+
+The plan was frozen after GPT-5.6 / Claude review in Issue #535 and before any prospectively locked 2026 candidate outcome was graded.
+
+Key frozen decisions:
+- exact empirical production `adjusted_outcomes` array; no Normal approximation;
+- same-process observational shadow capture, opt-in and default OFF;
+- exact historical mean-neutral `widen_mean_neutral` transform;
+- width cap `0.30`, onset `0.50`, last-8/min-4 history, reference minimum 100 unchanged;
+- rolling strictly-prior empirical percentile reference with same-week deferral;
+- 2025 predictor history uses the calibrated generic ensemble with promoted RB weights fit on 2024 OOS only and frozen for 2025;
+- completed 2026 games may become later predictor history, but no played game can be backfilled as prospective confirmation;
+- confirmation population = unique eligible RB/HB/FB `rush_yards` player-games that reach the certified offer-bearing production pricing loop and receive a final football target mean;
+- minimum support = >=8 prospectively locked weeks AND >=400 unique eligible player-games;
+- primary scientific gate = paired pooled CRPS gain > 0 with 10,000-replicate game-cluster bootstrap 95% CI lower bound > 0;
+- crossed player × game bootstrap remains a required additive robustness gate with P(candidate better) >=0.95;
+- no prospective requirement to reproduce historical +0.5%/+1.0% qualification magnitudes;
+- pooled/high-difficulty interval calibration and fixed 50/75/100-yard Brier protections remain hard guardrails;
+- exact mean neutrality and zero production-output mutation are hard integrity gates;
+- insufficient support by regular-season end => `NO_FORWARD_CONFIRMATION_INSUFFICIENT_SUPPORT` / HOLD, not scientific failure;
+- PASS => `RB_PD2_YARD_DIFFICULTY_WIDTH_FORWARD_CONFIRMED`;
+- support-sufficient scientific failure => `NO_ACTIONABLE_RB_PD2_YARD_DIFFICULTY_WIDTH_FORWARD_CONFIRMATION`;
+- even a PASS does not automatically promote production.
+
+Claude's WR disposition-catalog correction is canonical at:
+`research/disposition-catalog-v1@ffc16219`.
+
+The earlier proposed architecture below is retained only as historical context; where it conflicts with the frozen plan, the frozen plan controls.
+
 ## Read order
 
 1. `AGENTS.md`
 2. this handoff
 3. `CURRENT_NFL_RESEARCH_HANDOFF.md`
-4. `docs/research/RB_PD2_YARD_DIFFICULTY_MC_WIDTH_V1_PLAN.md`
-5. `docs/research/RB_PD2_YARD_DIFFICULTY_MC_WIDTH_V1_RUN.md`
-6. `docs/research/overnight/RB_POST_WEEK1_GAP_FINDINGS.md`
-7. `docs/research/overnight/RB_PD_CHAIN_STATUS.md`
-8. the latest GPT-5.6 / Claude checkpoints in GitHub Issue #535
+4. `docs/research/RB_PD2_FORWARD_SHADOW_CONFIRMATION_V1_PLAN.md`
+5. `docs/research/RB_PD2_YARD_DIFFICULTY_MC_WIDTH_V1_PLAN.md`
+6. `docs/research/RB_PD2_YARD_DIFFICULTY_MC_WIDTH_V1_RUN.md`
+7. `docs/research/overnight/RB_POST_WEEK1_GAP_FINDINGS.md`
+8. `docs/research/overnight/RB_PD_CHAIN_STATUS.md`
+9. the latest GPT-5.6 / Claude checkpoints in GitHub Issue #535
 
 ## Branch / production boundary
 
@@ -166,39 +206,15 @@ The live shadow must preserve the same semantic order.
 
 ## Critical design question now being audited
 
-The next blocker is not the width formula.
+This section is superseded by the frozen plan above. It is preserved for chronology only.
 
-It is constructing the **2026 pregame difficulty score** correctly and prospectively.
+The width formula itself was not the blocker. The open issue was constructing the 2026 pregame difficulty score correctly and prospectively.
 
-For a 2026 RB target game, the shadow needs:
-- the player's last up to 8 completed prior-game rushing-yard prediction errors;
-- those historical predictions must correspond to the legitimate football mean route available for each historical game;
-- no target-week or future information;
-- enough reference history to compute the same strict-prior percentile;
-- no sportsbook inputs.
+That lineage is now frozen in `docs/research/RB_PD2_FORWARD_SHADOW_CONFIRMATION_V1_PLAN.md`.
 
-### 2025 use must be handled carefully
+## Proposed shadow architecture — SUPERSEDED
 
-The original MC-width qualification explicitly excluded 2025 as a qualification / replication cohort because the broader PD chain had already observed 2025.
-
-That does **not automatically mean 2025 must be erased from 2026 predictor history**.
-
-For an actual 2026 pregame shadow, completed 2025 games are temporally prior and are naturally candidates for the player's last-8 error history.
-
-However, this must be treated as a source/chronology contract, not silently assumed.
-
-Claude + GPT-5.6 should independently verify:
-
-1. Which canonical football projection lineage should define the 2025 RB rushing-yard prediction errors used as 2026 history?
-2. Can that 2025 history be rebuilt authority-exact without fabricating P3 outside its qualified Week-1 scope?
-3. Is it scientifically clean to use completed 2025 outcomes **only as predictor history for 2026**, while keeping 2026 as the sole forward confirmation cohort?
-4. What exact historical reference population should compute the 2026 difficulty percentile so the frozen percentile meaning is preserved without outcome-informed retuning?
-
-The expected conceptual answer is that 2025 may be strict-prior history but is **not** a new confirmation cohort. This still needs to be proven against repo lineage before implementation.
-
-## Proposed shadow architecture — not yet frozen
-
-Do not treat this section as final until Claude + GPT-5.6 review it.
+The proposal below is retained for historical traceability only. **Do not use it as authority.** The frozen plan controls.
 
 Candidate direction:
 
@@ -272,23 +288,19 @@ At minimum:
 - tail Brier at frozen 50 / 75 / 100 yard thresholds
 - point mean parity assertion
 
-The exact prospective pass/fail sample-size and dependence-aware bootstrap gates must be frozen **before first 2026 shadow outcomes are scored**.
-
-Do not choose thresholds after looking at Week 1/2 results.
+The exact prospective pass/fail sample-size and dependence-aware bootstrap gates are now frozen in `docs/research/RB_PD2_FORWARD_SHADOW_CONFIRMATION_V1_PLAN.md`.
 
 ## Important current-date / sample issue
 
 Current date is 2026-09-20.
 
-The 2026 regular season is already underway. Any shadow confirmation started now cannot honestly claim to have prospectively locked Weeks 1-2 if no candidate artifacts were persisted before those games.
+The 2026 regular season is already underway. Any shadow confirmation started now cannot honestly claim to have prospectively locked already-played weeks if no candidate artifacts were persisted before those games.
 
 Therefore:
-- do not reconstruct Weeks 1-2 after the fact and call them forward confirmation;
-- the forward/shadow cohort starts only with the first future week for which the candidate is locked pregame under the frozen protocol;
-- previously played 2026 weeks may potentially become strict-prior history for later 2026 weeks only if their football prediction lineage can be reconstructed without using the new candidate and without violating chronology;
+- do not reconstruct played games after the fact and call them forward confirmation;
+- the forward/shadow cohort starts only with the first future player-game for which the candidate is locked pregame under the frozen protocol;
+- previously played 2026 weeks may become strict-prior history for later 2026 weeks only if their football prediction lineage can be reconstructed without using the new candidate and without violating chronology;
 - they cannot count as prospectively locked confirmation observations.
-
-This point should be explicitly reviewed before the plan is frozen.
 
 ## Separate football-context work just completed — do not reopen
 
@@ -392,24 +404,20 @@ Failures remain failures.
 
 ## Claude collaboration request
 
-The user explicitly wants Claude reconnected to the GPT-5.6 back-and-forth now.
+Claude is actively rejoined in Issue #535.
 
-Claude should **not restart from scratch**.
+Latest resolved review points:
+- empirical MC path confirmed;
+- rolling strictly-prior reference confirmed;
+- 2025 generic-ensemble predictor-history lineage confirmed;
+- offer-bearing pricing-loop confirmation population confirmed;
+- same-process observational capture endorsed;
+- >=8 weeks / >=400 rows endorsed;
+- CRPS sign + dependence-aware confidence endorsed;
+- WR disposition-catalog correction accepted and committed at `ffc16219`.
 
-Requested independent review:
-
-1. Audit the proposed RB forward/shadow architecture against the frozen PR #562 plan/result.
-2. Determine the exact authority-exact 2025 RB rushing projection lineage suitable for use as strict-prior 2026 history.
-3. Challenge whether completed 2025 / already-played 2026 rows may be used as predictor history without contaminating the future 2026 confirmation cohort.
-4. Recommend exact frozen sample-size / dependence-aware prospective confirmation gates **before any future outcome is opened**.
-5. Audit the cleanest non-production integration seam for persisting baseline + candidate RB rush-yard distributions during the live Full Slate workflow without changing production probabilities.
-6. Post concerns / corrections back to Issue #535 before GPT-5.6 freezes the forward-shadow plan.
-
-No production promotion is authorized yet.
+No production promotion is authorized.
 
 ## Immediate GPT-5.6 checkpoint
 
-GPT-5.6 had just begun auditing how to construct 2025 component/projection history for the 2026 predictor state when the user requested this Claude handoff.
-
-Resume there after Claude review.
-
+The forward protocol is frozen. Next action is implementation of the observational capture + pregame lock path, followed by mechanical no-op/parity gates. No prospectively locked outcome should be graded until those gates pass.
