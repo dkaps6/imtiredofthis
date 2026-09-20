@@ -18,7 +18,7 @@ jobs:
         run: pip install -r requirements.txt pytest
       - name: Compile and focused tests
         run: |
-          python -m compileall scripts/research/build_historical_analog_state_v1.py scripts/research/run_role_room_qualification_pipeline.py
+          python -m compileall scripts/research/build_historical_analog_state_v1.py scripts/research/build_historical_analog_redundancy_audit_v1.py scripts/research/run_role_room_qualification_pipeline.py
           PYTHONPATH="${PWD}" pytest -q tests/test_historical_analog_state_v1.py tests/test_event_regime_qualification.py tests/test_event_regime_redundancy_audit.py tests/test_role_room_qualification_pipeline.py
       - name: Rehydrate canonical history and qualify context
         run: PYTHONPATH="${PWD}" python scripts/research/rehydrate_and_run_role_room_qualification.py --seasons 2019-2025 --out-dir artifacts/football_context_role_room_v1 --builder-commit "${GITHUB_SHA}"
@@ -34,5 +34,6 @@ jobs:
             artifacts/football_context_role_room_v1/role_room_qualification/historical_analog_state_v1.csv
             artifacts/football_context_role_room_v1/role_room_qualification/historical_analog_neighbors_v1.csv
             artifacts/football_context_role_room_v1/role_room_qualification/historical_analog_audit_v1.csv
+            artifacts/football_context_role_room_v1/role_room_qualification/historical_analog_redundancy_audit_v1.csv
           if-no-files-found: error
           retention-days: 30
