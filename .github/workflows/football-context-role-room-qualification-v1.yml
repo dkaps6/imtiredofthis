@@ -1,22 +1,11 @@
 name: Football Context Role Room Qualification V1
-
 on:
   push:
     branches: [research-football-context-execution-v1, research-football-context-event-redundancy-v1]
-    paths:
-      - 'scripts/research/**'
-      - 'docs/research/FOOTBALL_CONTEXT_EVENT_REGIME_QUALIFICATION_V1.md'
-      - 'docs/research/EVENT_REGIME_RELIABILITY_EXPERIMENT_V1.md'
-      - 'docs/research/RETURNING_OPPORTUNITY_CONTINUITY_EXPERIMENT_V1.md'
-      - 'tests/test_event_regime_qualification.py'
-      - 'tests/test_event_regime_redundancy_audit.py'
-      - 'tests/test_event_regime_reliability_v1.py'
-      - '.github/workflows/football-context-role-room-qualification-v1.yml'
+    paths: ['scripts/research/**','docs/research/**','tests/test_historical_analog_state_v1.py','.github/workflows/football-context-role-room-qualification-v1.yml']
   workflow_dispatch:
-
 permissions:
   contents: read
-
 jobs:
   qualify:
     runs-on: ubuntu-latest
@@ -24,35 +13,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
+        with: {python-version: '3.11', cache: 'pip'}
       - name: Install dependencies
         run: pip install -r requirements.txt pytest
       - name: Compile and focused tests
         run: |
-          python -m compileall scripts/research/rehydrate_and_run_role_room_qualification.py scripts/research/run_role_room_qualification_pipeline.py scripts/research/build_event_regime_qualification.py scripts/research/build_event_regime_redundancy_audit.py scripts/research/build_role_room_redundancy_audit.py scripts/research/evaluate_event_regime_reliability_v1.py scripts/research/evaluate_returning_opportunity_continuity_v1.py
-          PYTHONPATH="${PWD}" pytest -q tests/test_role_room_qualification_pipeline.py tests/test_build_usage_regime_context.py tests/test_build_room_continuity_context.py tests/test_role_room_context.py tests/test_role_room_transition_diagnostics.py tests/test_build_context_stability_evidence.py tests/test_build_context_candidate_profile.py tests/test_role_room_redundancy_audit.py tests/test_event_regime_qualification.py tests/test_event_regime_redundancy_audit.py tests/test_event_regime_reliability_v1.py
-      - name: Rehydrate canonical 2019-2025 history and qualify role-room signals
-        run: |
-          PYTHONPATH="${PWD}" python scripts/research/rehydrate_and_run_role_room_qualification.py --seasons 2019-2025 --out-dir artifacts/football_context_role_room_v1 --builder-commit "${GITHUB_SHA}"
-      - name: Execute frozen returning opportunity continuity experiment
-        run: |
-          PYTHONPATH="${PWD}" python scripts/research/evaluate_returning_opportunity_continuity_v1.py --history artifacts/football_context_role_room_v1/player_game_logs_history.csv --context artifacts/football_context_role_room_v1/role_room_qualification/role_room_context.csv --metrics-out artifacts/football_context_role_room_v1/role_room_qualification/returning_opportunity_continuity_v1_metrics.csv --gates-out artifacts/football_context_role_room_v1/role_room_qualification/returning_opportunity_continuity_v1_gates.csv --manifest-out artifacts/football_context_role_room_v1/role_room_qualification/returning_opportunity_continuity_v1_manifest.json
-      - name: Publish sanitized qualification and continuity evidence
+          python -m compileall scripts/research/build_historical_analog_state_v1.py scripts/research/run_role_room_qualification_pipeline.py
+          PYTHONPATH="${PWD}" pytest -q tests/test_historical_analog_state_v1.py tests/test_event_regime_qualification.py tests/test_event_regime_redundancy_audit.py tests/test_role_room_qualification_pipeline.py
+      - name: Rehydrate canonical history and qualify context
+        run: PYTHONPATH="${PWD}" python scripts/research/rehydrate_and_run_role_room_qualification.py --seasons 2019-2025 --out-dir artifacts/football_context_role_room_v1 --builder-commit "${GITHUB_SHA}"
+      - name: Publish sanitized qualification evidence
         uses: actions/upload-artifact@v4
         with:
           name: football-context-role-room-qualification-v1
           path: |
             artifacts/football_context_role_room_v1/historical_base_manifest_v1.json
-            artifacts/football_context_role_room_v1/role_room_qualification/role_room_transition_summary.csv
             artifacts/football_context_role_room_v1/role_room_qualification/event_regime_qualification.csv
             artifacts/football_context_role_room_v1/role_room_qualification/event_regime_redundancy_audit.csv
-            artifacts/football_context_role_room_v1/role_room_qualification/role_room_stability.csv
-            artifacts/football_context_role_room_v1/role_room_qualification/role_room_candidate_profile.csv
             artifacts/football_context_role_room_v1/role_room_qualification/role_room_redundancy_audit.csv
-            artifacts/football_context_role_room_v1/role_room_qualification/returning_opportunity_continuity_v1_metrics.csv
-            artifacts/football_context_role_room_v1/role_room_qualification/returning_opportunity_continuity_v1_gates.csv
-            artifacts/football_context_role_room_v1/role_room_qualification/returning_opportunity_continuity_v1_manifest.json
+            artifacts/football_context_role_room_v1/role_room_qualification/historical_analog_state_v1.csv
+            artifacts/football_context_role_room_v1/role_room_qualification/historical_analog_neighbors_v1.csv
+            artifacts/football_context_role_room_v1/role_room_qualification/historical_analog_audit_v1.csv
           if-no-files-found: error
           retention-days: 30
