@@ -3,32 +3,30 @@ GitHub is canonical; chat memory is secondary.
 
 ## ACTIVE FOOTBALL-CONTEXT HANDOFF — 2026-09-20
 
-The Historical Analog State Experiment V1 has executed once and **failed closed in
-the 2024 primary holdout**. No family legally exposed 2025.
+The analog reliability experiment is closed failed, and the first advanced-geometry
+qualification is now also closed as source-thin.
 
 **Read this first for the active context lane:**
 
-`docs/handoffs/NFL_HANDOFF_2026-09-20_FOOTBALL_CONTEXT_ADVANCED_GEOMETRY_QUALIFICATION_CURRENT.md`
+`docs/handoffs/NFL_HANDOFF_2026-09-20_FOOTBALL_CONTEXT_BLOCKER_GEOMETRY_QUALIFICATION_CURRENT.md`
 
 Active branch:
 
 `research-football-context-event-redundancy-v1`
 
-Canonical analog execution:
-- commit `9a15d082a4c7da793f098e565d12ac6a7ce56f40`
-- run `35512335301`
-- job `106082294476`
-- artifact `10605238933`
-- digest `sha256:70a188482f627fc74dc7ddf5ae16d26d32cd9ddb3a3f13e956130bc3e5d85c1d`
+Latest BDB2026 qualification:
+- commit `c91c0f78c2b1dc1fb5ba2c5af60172b629dde2a6`
+- run `35513387991`
+- job `106085119188`
+- artifact `10606360377`
+- digest `sha256:4a34f88c204334d7f255cbea1d0fe59ab1854ef2e0fd7429d6404c2f5c89c88a`
+- broad pregame coverage: **59.7063%**
+- final: `ENGINEERING_READY_SOURCE_THIN` for both receiver-spacing candidates
 
-All analog families are now closed under V1. Do not lower the 0.80 novelty cutoff,
-pool positions, alter support floors, or inspect 2025 to rescue them.
+Do not rescue with late-season or WR-only subsets.
 
-**Immediate next action:** move to the distinct advanced-geometry lane and perform
-formal **outcome-free BDB2026 targeted-receiver release-spacing qualification /
-redundancy** using the already-certified source/materializer. Do not read WR
-receiving-yard outcomes or interfere with Issue #535 before a separate predictive
-plan is frozen.
+**Immediate next action:** implement and execute the frozen
+`BDB2023_BLOCKER_PROTECTION_GEOMETRY_QUALIFICATION_V1` outcome-free qualification.
 
 ---
 
