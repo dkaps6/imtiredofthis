@@ -3,30 +3,28 @@ GitHub is canonical; chat memory is secondary.
 
 ## ACTIVE FOOTBALL-CONTEXT HANDOFF — 2026-09-20
 
-The analog reliability experiment is closed failed, and the first advanced-geometry
-qualification is now also closed as source-thin.
+BDB2026 receiver geometry and BDB2023 blocker geometry are both now closed as
+`ENGINEERING_READY_SOURCE_THIN` under their frozen broad-coverage gates.
 
 **Read this first for the active context lane:**
 
-`docs/handoffs/NFL_HANDOFF_2026-09-20_FOOTBALL_CONTEXT_BLOCKER_GEOMETRY_QUALIFICATION_CURRENT.md`
+`docs/handoffs/NFL_HANDOFF_2026-09-20_FOOTBALL_CONTEXT_OL_ROSTER_CONTINUITY_CURRENT.md`
 
 Active branch:
 
 `research-football-context-event-redundancy-v1`
 
-Latest BDB2026 qualification:
-- commit `c91c0f78c2b1dc1fb5ba2c5af60172b629dde2a6`
-- run `35513387991`
-- job `106085119188`
-- artifact `10606360377`
-- digest `sha256:4a34f88c204334d7f255cbea1d0fe59ab1854ef2e0fd7429d6404c2f5c89c88a`
-- broad pregame coverage: **59.7063%**
-- final: `ENGINEERING_READY_SOURCE_THIN` for both receiver-spacing candidates
+Latest canonical blocker qualification:
+- commit `e70517d477739ef95dc02138e6f51a864f32aaed`
+- run `35514256900`
+- job `106087402711`
+- artifact `10605059418`
+- digest `sha256:e725bdef9e2c461f405ebaf5fd50a2e0d72400834232dfac09fbb6ea5473f929`
+- broad coverage: **39.5382%**
+- final: `ENGINEERING_READY_SOURCE_THIN` for all three blocker candidates
 
-Do not rescue with late-season or WR-only subsets.
-
-**Immediate next action:** implement and execute the frozen
-`BDB2023_BLOCKER_PROTECTION_GEOMETRY_QUALIFICATION_V1` outcome-free qualification.
+**Immediate next action:** implement and execute
+`OL_ROSTER_CONTINUITY_QUALIFICATION_V1` exactly as frozen.
 
 ---
 
