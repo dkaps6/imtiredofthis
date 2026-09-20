@@ -15,6 +15,16 @@ Branch was created from clean production main:
 
 `f0dad2c6711e85104eeffedfa5f5112fd172cbf5`
 
+Latest implementation checkpoint:
+
+- frozen forward plan: `docs/research/RB_PD2_FORWARD_SHADOW_CONFIRMATION_V1_PLAN.md` @ `0de96f69194f1fca242515b613b814eab0c22d35`;
+- latest active RB handoff update: `6f26a62b22ca688c3a0dfce0edfab07501b7f5ce`;
+- Claude owns §7 capture hook on `research-rb-pd2-shadow-capture-hook-v1`;
+- first hook commit `0cc674e3` is **not yet accepted/cherry-picked**;
+- GPT-5.6 review comment `5751454114` identified four blockers: sportsbook book/line dedup, lossless empirical-array persistence, live-safe shadow failure isolation, and run/session provenance;
+- next action is to inspect Claude's repaired §7 SHA, integrate only if the six requested tests pass, then build §3 + §8 + §9;
+- no prospective outcome may be graded yet.
+
 The strongest unfinished RB result is already positive:
 
 `RB_YARD_DIFFICULTY_MC_WIDTH_QUALIFIED`
