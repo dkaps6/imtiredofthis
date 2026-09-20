@@ -94,3 +94,28 @@ If it qualifies, perform another anti-retest authorization audit before freezing
 - RB predictive research remains pinned/paused
 - do not touch Issue #535 / the separate WR lane
 - preserve failed experiments; no threshold rescue
+
+
+## Frozen mechanism experiment — next authorized execution
+
+Pairwise cohesion qualified cleanly on the first frozen run:
+
+- implementation commit `638f7cc59f97e007d05407ff68172454754c203d`
+- run `35515200623`
+- job `106089849313`
+- artifact `10606781837`
+- digest `sha256:3ecd4ddea00e46686bdd00e181b20c6dea6fdd7c8e1cc9d3e8b17cf0071d8bf1`
+- broad coverage **99.1448%**
+- stability Spearman **0.822048** on **3,678** adjacent pairs
+- redundancy holdout R2 **0.425764** even after immediate OL continuity + prior team state
+- qualification `READY_FOR_FROZEN_EXPERIMENT`
+
+The next authorized experiment is deliberately an intermediate-mechanism test, not
+a QB mean test:
+
+`docs/research/OL_PAIRWISE_COHESION_PRESSURE_MECHANISM_EXPERIMENT_V1.md`
+
+It asks whether accumulated OL cohesion improves target-game team pressure-rate
+prediction beyond prior pressure/team state and immediate OL continuity.
+
+2024 is primary; 2025 is conditionally exposed only after full 2024 passage.
