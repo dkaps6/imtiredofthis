@@ -53,9 +53,16 @@ EVENT_ID = "2026_02_CAR_CHI"
 # --------------------------------------------------------------------------
 # Fixture construction
 # --------------------------------------------------------------------------
+# `materialize_pricing_offers_v1.py` expands the compact live layer to one row
+# per book/line, so the fixture must too -- a one-row-per-player fixture cannot
+# exercise the deduplication contract at all.
+BOOKS = [("draftkings", "DraftKings", 0.0), ("fanduel", "FanDuel", -1.5), ("betmgm", "BetMGM", 1.5)]
+
+
 def _metrics_frame() -> pd.DataFrame:
     rows = []
     for player, key, team, opp, pos, market, line in PLAYERS:
+      for book, book_title, line_offset in BOOKS:
         rows.append({
             "season": SEASON,
             "week": WEEK,
@@ -67,11 +74,12 @@ def _metrics_frame() -> pd.DataFrame:
             "position": pos,
             "position_group": pos,
             "market": market,
-            "line": line,
+            "line": line + line_offset,
             "over_odds": -110,
             "under_odds": -110,
-            "book": "FIXTURE",
-            "book_title": "Fixture Book",
+            "book": book,
+            "book_title": book_title,
+            "commence_time": "2026-09-17T17:00:00Z",
             "tgt_share": 0.12 if pos == "RB" else 0.26,
             "rush_share": 0.58 if pos == "RB" else 0.0,
             "ypt": 6.4,
@@ -225,7 +233,7 @@ def test_flag_on_and_off_price_identically_end_to_end(priced_fixture, monkeypatc
     off.to_csv(off_csv, index=False)
 
     monkeypatch.setenv(shadow.FLAG, "1")
-    monkeypatch.setattr(shadow, "DEFAULT_OUT", priced_fixture["research"] / "baseline_capture.jsonl")
+    monkeypatch.setattr(shadow, "DEFAULT_ROOT", priced_fixture["research"])
     on = run_pricing_v2.price(SEASON)
 
     on_csv = (priced_fixture["outputs"] / "on.csv")
@@ -320,19 +328,23 @@ def test_hook_disabled_output_is_identical_to_the_hookless_module(tmp_path, monk
 # --------------------------------------------------------------------------
 # Proof 3 -- shadow output exists only in the research artifact
 # --------------------------------------------------------------------------
-def test_shadow_output_lands_only_in_the_research_artifact(priced_fixture, monkeypatch):
+def _run_capture(priced_fixture, monkeypatch):
     monkeypatch.setenv(shadow.FLAG, "1")
-    out_path = priced_fixture["research"] / "baseline_capture.jsonl"
-    monkeypatch.setattr(shadow, "DEFAULT_OUT", out_path)
-
+    monkeypatch.setattr(shadow, "DEFAULT_ROOT", priced_fixture["research"])
     priced = run_pricing_v2.price(SEASON)
     run_pricing_v2.OUTPUTS.mkdir(parents=True, exist_ok=True)
     priced.to_csv(run_pricing_v2.OUT, index=False)
 
-    assert out_path.exists()
-    records = [json.loads(line) for line in out_path.read_text().splitlines() if line.strip()]
+    sessions = sorted(priced_fixture["research"].iterdir())
+    assert len(sessions) == 1, "one pricing invocation must produce exactly one session dir"
+    records, receipt = shadow.load_session(sessions[0])
+    return priced, sessions[0], records, receipt
 
-    # Only the eligible RB rush_yards rows, and every one of them.
+
+def test_shadow_output_lands_only_in_the_research_artifact(priced_fixture, monkeypatch):
+    _priced, session_dir, records, receipt = _run_capture(priced_fixture, monkeypatch)
+
+    # Only the eligible RB rush_yards player-games, and every one of them.
     assert len(records) == 2
     assert {r["player_clean_key"] for r in records} == {"alphaback", "bravoback"}
     assert {r["market"] for r in records} == {"rush_yards"}
@@ -341,14 +353,224 @@ def test_shadow_output_lands_only_in_the_research_artifact(priced_fixture, monke
     assert all(r["sportsbook_inputs_used_in_candidate"] is False for r in records)
     assert all(r["production_output_mutated"] is False for r in records)
     assert all(r["outcome_present_at_lock"] is False for r in records)
+    assert receipt["valid"] is True
+
+    # No sportsbook field may appear anywhere in the scientific artifact.
+    forbidden = {"book", "book_title", "line", "vegas_line", "side", "over_odds",
+                 "under_odds", "odds", "edge", "decision", "ev_roi"}
+    for record in records:
+        assert forbidden.isdisjoint(record.keys()), record.keys() & forbidden
 
     # No shadow field leaked into the production board.
     board = pd.read_csv(run_pricing_v2.OUT)
     leaked = [c for c in board.columns if "shadow" in c.lower() or "pd2" in c.lower()]
     assert leaked == []
 
-    # The research artifact is the only file the hook created.
-    assert sorted(p.name for p in priced_fixture["research"].iterdir()) == ["baseline_capture.jsonl"]
+    assert sorted(p.name for p in session_dir.iterdir()) == [
+        "baseline_capture.jsonl", "baseline_draws.npz", "session_receipt.json",
+    ]
+
+
+# --------------------------------------------------------------------------
+# Proof 5 -- book/line expansion collapses to one capture per football key
+# --------------------------------------------------------------------------
+def test_multi_book_rows_collapse_to_exactly_one_capture_per_football_key(priced_fixture, monkeypatch):
+    _priced, _session_dir, records, receipt = _run_capture(priced_fixture, monkeypatch)
+
+    # The fixture prices 3 books x 3 players = 9 rows, 6 of them eligible RB
+    # rush_yards rows spanning 2 player-games.
+    assert receipt["pricing_rows_seen"] == len(BOOKS) * 2
+    assert receipt["duplicate_rows_collapsed"] == (len(BOOKS) - 1) * 2
+    assert receipt["rows_written"] == 2
+    assert len(records) == 2
+    assert len({r["football_key"] for r in records}) == 2
+    assert all(r["duplicate_pricing_rows"] == len(BOOKS) for r in records)
+
+    # The football key itself must be sportsbook-independent.
+    for record in records:
+        for book, book_title, _offset in BOOKS:
+            assert book not in record["football_key"]
+            assert book_title not in record["football_key"]
+
+
+def test_repeated_football_key_with_different_draws_is_an_integrity_failure(tmp_path):
+    shadow.reset()
+    shadow.begin_session(season=SEASON, out_root=tmp_path)
+    row = pd.Series({"event_id": EVENT_ID, "team": "CHI", "opponent": "CAR",
+                     "player": "Alpha Back", "player_clean_key": "alphaback"})
+    kw = dict(row=row, market="rush_yards", position="RB", season=SEASON, week=WEEK)
+
+    assert shadow.capture(adjusted_outcomes=np.linspace(1.0, 100.0, 64), target_mean=50.0, mc_proj=49.0, **kw) is True
+    # Identical repeat: collapsed, session stays valid.
+    assert shadow.capture(adjusted_outcomes=np.linspace(1.0, 100.0, 64), target_mean=50.0, mc_proj=49.0, **kw) is False
+    assert shadow.sentinels() == []
+    # Same key, different draws: integrity failure.
+    assert shadow.capture(adjusted_outcomes=np.linspace(2.0, 100.0, 64), target_mean=50.0, mc_proj=49.0, **kw) is False
+    kinds = [s["kind"] for s in shadow.sentinels()]
+    assert kinds == ["duplicate_football_key_mismatch"]
+    assert shadow.finalize()["valid"] is False
+    shadow.reset()
+
+
+def test_repeated_football_key_with_different_target_mean_is_an_integrity_failure(tmp_path):
+    shadow.reset()
+    shadow.begin_session(season=SEASON, out_root=tmp_path)
+    row = pd.Series({"event_id": EVENT_ID, "team": "CHI", "opponent": "CAR",
+                     "player": "Alpha Back", "player_clean_key": "alphaback"})
+    draws = np.linspace(1.0, 100.0, 64)
+    kw = dict(row=row, adjusted_outcomes=draws, market="rush_yards", position="RB", season=SEASON, week=WEEK)
+
+    assert shadow.capture(target_mean=50.0, mc_proj=49.0, **kw) is True
+    assert shadow.capture(target_mean=51.0, mc_proj=49.0, **kw) is False
+    assert [s["kind"] for s in shadow.sentinels()] == ["duplicate_football_key_mismatch"]
+    assert "target_mean" in shadow.sentinels()[0]["detail"]
+    shadow.reset()
+
+
+# --------------------------------------------------------------------------
+# Proof: the exact array survives, losslessly
+# --------------------------------------------------------------------------
+def test_exact_draws_round_trip_losslessly_with_digest_verification(priced_fixture, monkeypatch):
+    priced, session_dir, records, _receipt = _run_capture(priced_fixture, monkeypatch)
+
+    for record in records:
+        draws = shadow.load_draws(session_dir, record)
+        assert draws.dtype == np.float64
+        assert draws.size == record["baseline"]["draw_count"]
+        # The persisted array must reproduce the recorded summary exactly, which
+        # a digest alone could never establish.
+        assert shadow._digest(draws) == record["baseline"]["draw_digest_sha256"]
+        assert float(np.mean(draws)) == record["baseline"]["mean"]
+
+        # ...and must be the array production actually priced from.
+        row = priced.loc[
+            priced["player_clean_key"].eq(record["player_clean_key"])
+            & priced["market"].eq("rush_yards")
+        ].iloc[0]
+        assert float(np.mean(draws)) == pytest.approx(float(row["model_proj"]), rel=0, abs=1e-9)
+
+        # Section 8 needs the draws elementwise; prove the transform can run.
+        mu = float(np.mean(draws))
+        candidate_raw = np.maximum(0.0, mu + 1.3 * (draws - mu))
+        candidate = candidate_raw * (mu / float(np.mean(candidate_raw)))
+        assert float(np.mean(candidate)) == pytest.approx(mu, abs=1e-8)
+        assert candidate.size == draws.size
+
+
+def test_load_draws_rejects_a_tampered_digest(priced_fixture, monkeypatch):
+    _priced, session_dir, records, _receipt = _run_capture(priced_fixture, monkeypatch)
+    tampered = dict(records[0])
+    tampered["baseline"] = dict(tampered["baseline"], draw_digest_sha256="0" * 64)
+    with pytest.raises(RuntimeError, match="digest mismatch"):
+        shadow.load_draws(session_dir, tampered)
+
+
+# --------------------------------------------------------------------------
+# Proof 6 -- a capture failure cannot touch the canonical priced output
+# --------------------------------------------------------------------------
+def test_capture_failure_leaves_production_untouched_and_invalidates_the_session(priced_fixture, monkeypatch):
+    """The flag is ON during the authoritative pregame run, so this is the case
+    that matters: research breakage must cost the study, never the board."""
+    monkeypatch.delenv(shadow.FLAG, raising=False)
+    clean = run_pricing_v2.price(SEASON)
+
+    monkeypatch.setenv(shadow.FLAG, "1")
+    monkeypatch.setattr(shadow, "DEFAULT_ROOT", priced_fixture["research"])
+
+    def explode(_draws):
+        raise ValueError("synthetic shadow failure")
+
+    monkeypatch.setattr(shadow, "_summary", explode)
+
+    broken = run_pricing_v2.price(SEASON)
+
+    # Production is byte-identical despite every capture failing.
+    pd.testing.assert_frame_equal(clean, broken)
+
+    session_dir = sorted(priced_fixture["research"].iterdir())[0]
+    receipt = json.loads((session_dir / "session_receipt.json").read_text())
+    assert receipt["valid"] is False
+    assert receipt["rows_written"] == 0
+    assert {s["kind"] for s in receipt["sentinels"]} == {"capture_exception"}
+    assert "synthetic shadow failure" in receipt["sentinels"][0]["detail"]
+
+    with pytest.raises(RuntimeError, match="is invalid"):
+        shadow.assert_session_valid(receipt)
+
+
+def test_missing_expected_key_invalidates_the_session(priced_fixture, monkeypatch):
+    monkeypatch.setenv(shadow.FLAG, "1")
+    monkeypatch.setattr(shadow, "DEFAULT_ROOT", priced_fixture["research"])
+    shadow.begin_session(season=SEASON, out_root=priced_fixture["research"])
+    receipt = shadow.finalize(expected_football_keys={"2026|2|X|CHI|CAR|ghostback|rush_yards"})
+    assert receipt["valid"] is False
+    assert receipt["missing_expected_keys"] == ["2026|2|X|CHI|CAR|ghostback|rush_yards"]
+    shadow.reset()
+
+
+# --------------------------------------------------------------------------
+# Session isolation
+# --------------------------------------------------------------------------
+def test_two_sessions_in_one_interpreter_do_not_share_state(priced_fixture, monkeypatch):
+    monkeypatch.setenv(shadow.FLAG, "1")
+    monkeypatch.setattr(shadow, "DEFAULT_ROOT", priced_fixture["research"])
+
+    run_pricing_v2.price(SEASON)
+    run_pricing_v2.price(SEASON)
+
+    sessions = sorted(priced_fixture["research"].iterdir())
+    assert len(sessions) == 2
+    ids = set()
+    for session in sessions:
+        records, receipt = shadow.load_session(session)
+        # Each session holds its own two captures, not four.
+        assert len(records) == 2
+        assert receipt["rows_written"] == 2
+        assert receipt["valid"] is True
+        assert {r["session_id"] for r in records} == {receipt["session_id"]}
+        ids.add(receipt["session_id"])
+    assert len(ids) == 2
+
+
+def test_a_crash_between_capture_and_finalize_cannot_leak_into_the_next_session(tmp_path):
+    """begin_session replaces state unconditionally, which is what makes a
+    half-finished invocation unable to contaminate the next one."""
+    shadow.reset()
+    shadow.begin_session(season=SEASON, out_root=tmp_path)
+    row = pd.Series({"event_id": EVENT_ID, "team": "CHI", "opponent": "CAR",
+                     "player": "Ghost", "player_clean_key": "ghost"})
+    assert shadow.capture(row=row, adjusted_outcomes=np.linspace(1.0, 9.0, 16), target_mean=5.0,
+                          mc_proj=5.0, market="rush_yards", position="RB", season=SEASON, week=WEEK) is True
+    assert shadow.pending() == 1
+
+    # Pricing raises here; finalize never runs. The next invocation opens a session.
+    shadow.begin_session(season=SEASON, out_root=tmp_path)
+    assert shadow.pending() == 0
+    receipt = shadow.finalize()
+    assert receipt["rows_written"] == 0
+    assert receipt["valid"] is True
+    shadow.reset()
+
+
+def test_session_carries_run_provenance(priced_fixture, monkeypatch):
+    monkeypatch.setenv("GITHUB_SHA", "d" * 40)
+    monkeypatch.setenv("GITHUB_RUN_ID", "987654321")
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "2")
+    monkeypatch.setenv("GITHUB_JOB", "full-slate")
+    _priced, _session_dir, records, receipt = _run_capture(priced_fixture, monkeypatch)
+
+    assert receipt["provenance"]["code_sha"] == "d" * 40
+    assert receipt["provenance"]["workflow_run_id"] == "987654321"
+    assert receipt["provenance"]["workflow_run_attempt"] == "2"
+    assert receipt["provenance"]["workflow_job"] == "full-slate"
+
+    # Per-record provenance needed for an immutable section 9 join.
+    for record in records:
+        assert record["session_id"] == receipt["session_id"]
+        assert record["commence_time"] == "2026-09-17T17:00:00Z"
+        assert np.isfinite(record["mc_proj"])
+        assert record["captured_at_utc"].endswith("Z")
+        assert record["baseline_lock_eligible"] is True
 
 
 # --------------------------------------------------------------------------
@@ -426,23 +648,28 @@ def test_research_module_is_imported_only_under_the_flag():
 # --------------------------------------------------------------------------
 # Capture-module invariants
 # --------------------------------------------------------------------------
-def test_capture_copies_and_never_mutates_or_aliases_the_source_array():
+def test_capture_copies_and_never_mutates_or_aliases_the_source_array(tmp_path):
     shadow.reset()
+    shadow.begin_session(season=SEASON, out_root=tmp_path)
     draws = np.linspace(10.0, 90.0, 256)
     original = draws.copy()
-    row = pd.Series({"player": "Alpha Back", "player_clean_key": "alphaback", "team": "CHI", "opponent": "CAR"})
+    row = pd.Series({"event_id": EVENT_ID, "team": "CHI", "opponent": "CAR",
+                     "player": "Alpha Back", "player_clean_key": "alphaback"})
 
     assert shadow.capture(
-        row=row, adjusted_outcomes=draws, target_mean=float(draws.mean()),
+        row=row, adjusted_outcomes=draws, target_mean=float(draws.mean()), mc_proj=float(draws.mean()),
         market="rush_yards", position="RB", season=SEASON, week=WEEK,
     ) is True
     assert shadow.pending() == 1
     np.testing.assert_array_equal(draws, original)
 
-    # Mutating the production array after capture must not change what was recorded.
-    before = shadow._BUFFER[0]["baseline"]["draw_digest_sha256"]
+    # Mutating the production array after capture must not change what was stored.
+    key = next(iter(shadow._SESSION["records"]))
+    before = shadow._SESSION["records"][key]["baseline"]["draw_digest_sha256"]
+    stored = shadow._SESSION["arrays"][shadow._SESSION["records"][key]["array_key"]].copy()
     draws *= 2.0
-    assert shadow._BUFFER[0]["baseline"]["draw_digest_sha256"] == before
+    assert shadow._SESSION["records"][key]["baseline"]["draw_digest_sha256"] == before
+    np.testing.assert_array_equal(shadow._SESSION["arrays"][shadow._SESSION["records"][key]["array_key"]], stored)
     shadow.reset()
 
 
@@ -450,22 +677,64 @@ def test_capture_copies_and_never_mutates_or_aliases_the_source_array():
     ("WR", "rush_yards"), ("QB", "rush_yards"), ("TE", "rec_yards"),
     ("RB", "rec_yards"), ("RB", "rush_att"), ("RB", "rush_rec_yards"), ("RB", "anytime_td"),
 ])
-def test_capture_refuses_out_of_scope_rows(position, market):
+def test_capture_refuses_out_of_scope_rows(position, market, tmp_path):
     shadow.reset()
+    shadow.begin_session(season=SEASON, out_root=tmp_path)
     assert shadow.capture(
-        row=pd.Series({"player": "x"}), adjusted_outcomes=np.ones(8), target_mean=1.0,
+        row=pd.Series({"event_id": EVENT_ID, "team": "CHI", "opponent": "CAR", "player_clean_key": "x"}),
+        adjusted_outcomes=np.ones(8), target_mean=1.0, mc_proj=1.0,
         market=market, position=position, season=SEASON, week=WEEK,
     ) is False
     assert shadow.pending() == 0
-
-
-def test_capture_fails_loudly_on_a_degenerate_array():
+    assert shadow.sentinels() == []
     shadow.reset()
-    row = pd.Series({"player": "x"})
-    with pytest.raises(RuntimeError):
-        shadow.capture(row=row, adjusted_outcomes=np.array([]), target_mean=0.0,
-                       market="rush_yards", position="RB", season=SEASON, week=WEEK)
-    with pytest.raises(RuntimeError):
-        shadow.capture(row=row, adjusted_outcomes=np.array([1.0, np.nan]), target_mean=1.0,
-                       market="rush_yards", position="RB", season=SEASON, week=WEEK)
+
+
+@pytest.mark.parametrize("draws,kind", [
+    (np.array([]), "bad_array_shape"),
+    (np.array([1.0, np.nan]), "non_finite_draw"),
+    (np.array([1.0, -2.0]), "negative_draw"),
+])
+def test_a_degenerate_array_records_a_sentinel_instead_of_raising(draws, kind, tmp_path):
+    """Never raise: the flag is ON during the authoritative pregame pricing run."""
+    shadow.reset()
+    shadow.begin_session(season=SEASON, out_root=tmp_path)
+    row = pd.Series({"event_id": EVENT_ID, "team": "CHI", "opponent": "CAR", "player_clean_key": "x"})
+    assert shadow.capture(row=row, adjusted_outcomes=draws, target_mean=1.0, mc_proj=1.0,
+                          market="rush_yards", position="RB", season=SEASON, week=WEEK) is False
+    assert [s["kind"] for s in shadow.sentinels()] == [kind]
+    assert shadow.finalize()["valid"] is False
+    shadow.reset()
+
+
+def test_blank_identity_records_a_sentinel(tmp_path):
+    shadow.reset()
+    shadow.begin_session(season=SEASON, out_root=tmp_path)
+    row = pd.Series({"event_id": "", "team": "CHI", "opponent": "CAR", "player_clean_key": "x"})
+    assert shadow.capture(row=row, adjusted_outcomes=np.ones(8), target_mean=1.0, mc_proj=1.0,
+                          market="rush_yards", position="RB", season=SEASON, week=WEEK) is False
+    assert [s["kind"] for s in shadow.sentinels()] == ["blank_identity"]
+    shadow.reset()
+
+
+def test_non_finite_target_mean_is_recorded_but_marked_lock_ineligible(tmp_path):
+    """A non-finite ensemble mean is a real production fallback, not a capture
+    bug, so it must not invalidate the whole session -- but it must never become
+    a section 9 lock either."""
+    shadow.reset()
+    shadow.begin_session(season=SEASON, out_root=tmp_path)
+    row = pd.Series({"event_id": EVENT_ID, "team": "CHI", "opponent": "CAR",
+                     "player": "Alpha Back", "player_clean_key": "alphaback"})
+    assert shadow.capture(row=row, adjusted_outcomes=np.linspace(1.0, 9.0, 32), target_mean=float("nan"),
+                          mc_proj=5.0, market="rush_yards", position="RB", season=SEASON, week=WEEK) is True
+    receipt = shadow.finalize()
+    assert receipt["valid"] is True
+    assert receipt["rows_written"] == 1
+    assert receipt["lock_eligible_rows"] == 0
+
+    records, _ = shadow.load_session(Path(receipt["dir"]))
+    assert records[0]["baseline_lock_eligible"] is False
+    assert records[0]["baseline_lock_ineligible_reason"] == "non_finite_target_mean"
+    # JSON must not carry a bare NaN.
+    assert records[0]["target_mean"] is None
     shadow.reset()

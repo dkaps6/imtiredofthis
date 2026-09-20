@@ -101,6 +101,7 @@ def price(season: int) -> pd.DataFrame:
         from scripts.research import rb_pd2_shadow_capture_v1 as _shadow_mod
 
         if _shadow_mod.capture_enabled():
+            _shadow_mod.begin_session(season=int(season))
             shadow = _shadow_mod
 
     metrics_path = DATA / "metrics_ready.csv"
@@ -353,6 +354,7 @@ def price(season: int) -> pd.DataFrame:
                 row=row,
                 adjusted_outcomes=adjusted_outcomes,
                 target_mean=target_mean,
+                mc_proj=mc_proj,
                 market=market,
                 position=row_position,
                 season=int(season),
@@ -453,8 +455,12 @@ def price(season: int) -> pd.DataFrame:
         raise RuntimeError("promoted RB synthesis applied to zero eligible Week-1 RB/FB rush_yards pricing rows")
 
     if shadow is not None:
-        info = shadow.flush()
-        print(f"[pricing] RB PD2 shadow capture rows={info['rows_written']} -> {info['path']}")
+        info = shadow.finalize()
+        print(
+            f"[pricing] RB PD2 shadow capture session={info['session_id']} "
+            f"rows={info['rows_written']} collapsed={info['duplicate_rows_collapsed']} "
+            f"valid={info['valid']} sentinels={len(info['sentinels'])} -> {info['dir']}"
+        )
 
     if missed:
         debug = DATA / "_debug" / "pricing_unsimulated_props.csv"
