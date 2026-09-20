@@ -350,6 +350,13 @@ def price(season: int) -> pd.DataFrame:
             adjusted_outcomes = base_outcomes
 
         if shadow is not None:
+            shadow.note_expected(
+                row=row,
+                market=market,
+                position=row_position,
+                season=int(season),
+                week=_runtime_week(row),
+            )
             shadow.capture(
                 row=row,
                 adjusted_outcomes=adjusted_outcomes,
@@ -455,12 +462,16 @@ def price(season: int) -> pd.DataFrame:
         raise RuntimeError("promoted RB synthesis applied to zero eligible Week-1 RB/FB rush_yards pricing rows")
 
     if shadow is not None:
-        info = shadow.finalize(expected_football_keys=shadow.expected_keys(df, season=int(season)))
+        info = shadow.finalize(
+            expected_football_keys=shadow.noted_expected_keys(),
+            pre_seam_eligible_keys=shadow.expected_keys(df, season=int(season)),
+        )
         print(
             f"[pricing] RB PD2 shadow capture session={info['session_id']} "
             f"rows={info['rows_written']} collapsed={info['duplicate_rows_collapsed']} "
             f"valid={info['valid']} sentinels={len(info['sentinels'])} "
-            f"missing={len(info['missing_expected_keys'])} -> {info['dir']}"
+            f"missing={len(info['missing_expected_keys'])} "
+            f"dropped_before_seam={len(info['dropped_before_seam_keys'])} -> {info['dir']}"
         )
 
     if missed:

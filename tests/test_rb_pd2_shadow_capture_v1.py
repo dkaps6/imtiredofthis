@@ -523,9 +523,13 @@ def test_expected_key_set_is_sportsbook_independent_and_matches_what_was_capture
     metrics = pd.read_csv(priced_fixture["data"] / "metrics_ready.csv")
     expected = shadow.expected_keys(metrics, season=SEASON)
 
-    # 3 books x 2 RBs in the frame collapse to 2 football keys.
+    # 3 books x 2 RBs in the frame collapse to 2 football keys, and on a healthy
+    # run the pre-seam population and the seam gate agree exactly.
     assert len(expected) == 2
     assert expected == {r["football_key"] for r in records}
+    assert receipt["expected_key_count"] == 2
+    assert receipt["pre_seam_eligible_count"] == 2
+    assert receipt["dropped_before_seam_keys"] == []
     assert receipt["missing_expected_keys"] == []
     assert receipt["valid"] is True
 
@@ -533,14 +537,52 @@ def test_expected_key_set_is_sportsbook_independent_and_matches_what_was_capture
         assert not any(book in key or book_title in key for key in expected)
 
 
-def test_a_row_skipped_before_the_hook_invalidates_the_real_pricing_session(priced_fixture, monkeypatch):
-    """The failure class the completeness gate exists for.
+def test_a_silently_unstored_eligible_key_invalidates_the_real_pricing_session(priced_fixture, monkeypatch):
+    """The failure class the gate exists for.
 
-    `run_pricing_v2.py:226-229` drops a row whose simulation lookup returned
-    nothing, *before* the capture seam. That row produces neither a record nor a
-    sentinel, so only an independently-derived expected set can notice it is
-    gone. Reproduced here with the genuine mechanism rather than by stubbing
-    `capture()`.
+    The row reaches the seam and obtains its baseline, but `capture()` fails to
+    store it -- without raising, so no sentinel fires. Only an expected set
+    accumulated independently of `capture()` can notice.
+    """
+    real_capture = shadow.capture
+
+    def capture_dropping_one(**kwargs):
+        if str(kwargs["row"].get("player_clean_key")) == "bravoback":
+            return False
+        return real_capture(**kwargs)
+
+    monkeypatch.delenv(shadow.FLAG, raising=False)
+    clean = run_pricing_v2.price(SEASON)
+
+    monkeypatch.setenv(shadow.FLAG, "1")
+    monkeypatch.setattr(shadow, "DEFAULT_ROOT", priced_fixture["research"])
+    monkeypatch.setattr(shadow, "capture", capture_dropping_one)
+    broken = run_pricing_v2.price(SEASON)
+
+    pd.testing.assert_frame_equal(clean, broken)
+
+    session_dir = sorted(priced_fixture["research"].iterdir())[0]
+    records, receipt = shadow.load_session(session_dir)
+
+    assert receipt["expected_key_count"] == 2, "both RBs reached the seam"
+    assert len(records) == 1
+    assert records[0]["player_clean_key"] == "alphaback"
+    assert len(receipt["missing_expected_keys"]) == 1
+    assert "bravoback" in receipt["missing_expected_keys"][0]
+    assert receipt["valid"] is False
+    assert {s["kind"] for s in receipt["sentinels"]} == {"missing_expected_key"}
+
+    with pytest.raises(RuntimeError, match="is invalid"):
+        shadow.assert_session_valid(receipt)
+
+
+def test_a_row_that_never_reached_the_seam_is_not_in_the_expected_set(priced_fixture, monkeypatch):
+    """The reciprocal boundary.
+
+    A row whose simulation lookup returned nothing (`run_pricing_v2.py:226-229`)
+    never obtained an empirical baseline, so it was never a frozen section 5
+    forward observation. It must not be counted as a missing capture, and the
+    session must stay valid.
     """
     real_lookup = run_pricing_v2.lookup
 
@@ -551,35 +593,29 @@ def test_a_row_skipped_before_the_hook_invalidates_the_real_pricing_session(pric
 
     monkeypatch.setattr(run_pricing_v2, "lookup", lookup_missing_one)
 
-    # Flag OFF: production's own behaviour under the same lookup failure.
     monkeypatch.delenv(shadow.FLAG, raising=False)
     without_shadow = run_pricing_v2.price(SEASON)
 
-    # Flag ON: identical production output, but the session must refuse to validate.
     monkeypatch.setenv(shadow.FLAG, "1")
     monkeypatch.setattr(shadow, "DEFAULT_ROOT", priced_fixture["research"])
     with_shadow = run_pricing_v2.price(SEASON)
 
     pd.testing.assert_frame_equal(without_shadow, with_shadow)
-    assert "bravoback" not in set(
-        with_shadow.loc[with_shadow["market"].eq("rush_yards"), "player_clean_key"]
-    )
-    assert "alphaback" in set(
-        with_shadow.loc[with_shadow["market"].eq("rush_yards"), "player_clean_key"]
-    )
 
     session_dir = sorted(priced_fixture["research"].iterdir())[0]
     records, receipt = shadow.load_session(session_dir)
 
+    assert receipt["expected_key_count"] == 1, "only the back that reached the seam"
+    assert receipt["missing_expected_keys"] == []
+    assert receipt["valid"] is True
     assert len(records) == 1
     assert records[0]["player_clean_key"] == "alphaback"
-    assert len(receipt["missing_expected_keys"]) == 1
-    assert "bravoback" in receipt["missing_expected_keys"][0]
-    assert receipt["valid"] is False
-    assert {s["kind"] for s in receipt["sentinels"]} == {"missing_expected_key"}
+    shadow.assert_session_valid(receipt)
 
-    with pytest.raises(RuntimeError, match="is invalid"):
-        shadow.assert_session_valid(receipt)
+    # ...but the population shrink is still visible, without failing the session.
+    assert receipt["pre_seam_eligible_count"] == 2
+    assert len(receipt["dropped_before_seam_keys"]) == 1
+    assert "bravoback" in receipt["dropped_before_seam_keys"][0]
 
 
 # --------------------------------------------------------------------------

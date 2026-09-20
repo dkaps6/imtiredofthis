@@ -122,6 +122,7 @@ def begin_session(*, season: int, out_root: Path | None = None) -> str:
         "started_at_utc": _utc_now(),
         "dir": root / session_id,
         "provenance": _provenance(),
+        "expected": set(),      # football keys noted AT the capture-eligible seam
         "records": {},          # football key -> manifest record
         "arrays": {},           # array_key -> exact float64 draws
         "sentinels": [],        # research-scoped failures
@@ -200,6 +201,51 @@ def _num(value, default=float("nan")) -> float:
 
 
 # ---------------------------------------------------------------------------
+# Expected-set accumulation (at the seam, independent of capture)
+# ---------------------------------------------------------------------------
+def _identity(row, *, season: int, week: int) -> dict:
+    return {
+        "season": int(season),
+        "week": int(week),
+        "event_id": str(row.get("event_id") or "").strip(),
+        "team": str(row.get("team") or "").upper().strip(),
+        "opponent": str(row.get("opponent") or "").upper().strip(),
+        "player_clean_key": str(row.get("player_clean_key") or "").strip(),
+        "market": ELIGIBLE_MARKET,
+    }
+
+
+def note_expected(*, row, market: str, position: str, season: int, week: int) -> bool:
+    """Record that one eligible player-game reached the capture-eligible seam.
+
+    Called from the pricing loop immediately before `capture()`, so a key is
+    noted only once the row has a valid `base_outcomes`, a resolved `mc_proj`
+    and final football `target_mean`, and an exact `adjusted_outcomes` baseline.
+    That is the frozen section 5 denominator: a row the pricing loop dropped
+    earlier never had a baseline distribution and was never a forward
+    observation, so it must not appear here.
+
+    Deliberately a separate call from `capture()` rather than a side effect of
+    it. If `capture()` fails to store a scientifically eligible key -- by
+    raising, by sentinel, or by silently returning -- this set still holds the
+    key, and finalization reports it missing. Deriving the expected set from
+    anything `capture()` produced would make that class undetectable.
+    """
+    if _SESSION is None or not is_eligible(position, market):
+        return False
+    identity = _identity(row, season=season, week=week)
+    if any(not identity[f] for f in REQUIRED_IDENTITY):
+        # `capture()` raises its own `blank_identity` sentinel for this row.
+        return False
+    _SESSION["expected"].add(_football_key(identity))
+    return True
+
+
+def noted_expected_keys() -> set[str]:
+    return set() if _SESSION is None else set(_SESSION["expected"])
+
+
+# ---------------------------------------------------------------------------
 # Capture
 # ---------------------------------------------------------------------------
 def capture(
@@ -226,15 +272,7 @@ def capture(
     try:
         _SESSION["pricing_rows_seen"] += 1
 
-        identity = {
-            "season": int(season),
-            "week": int(week),
-            "event_id": str(row.get("event_id") or "").strip(),
-            "team": str(row.get("team") or "").upper().strip(),
-            "opponent": str(row.get("opponent") or "").upper().strip(),
-            "player_clean_key": str(row.get("player_clean_key") or "").strip(),
-            "market": ELIGIBLE_MARKET,
-        }
+        identity = _identity(row, season=season, week=week)
         football_key = _football_key(identity)
 
         missing = [f for f in REQUIRED_IDENTITY if not identity[f]]
@@ -328,19 +366,25 @@ def _same_float(a: float, b: float) -> bool:
 # Completeness
 # ---------------------------------------------------------------------------
 def expected_keys(metrics, *, season: int) -> set[str]:
-    """Football keys that MUST appear in a complete capture set.
+    """Eligible football keys present in the pricing frame, before the seam.
 
-    Derived from the pricing frame itself, deliberately *not* from the capture
-    path -- that independence is the whole point. The pricing loop can skip a row
-    before it ever reaches the hook (`run_pricing_v2.py:226-229` drops a row whose
-    simulation lookup returned nothing), which produces neither a record nor a
-    sentinel. Without an externally-derived expected set that row vanishes and
-    the session still finalizes valid.
+    This is a *diagnostic* population, not the validity gate. It counts every
+    RB/HB/FB `rush_yards` player-game in `metrics_ready`, including rows the
+    pricing loop later drops (`run_pricing_v2.py:226-229` drops a row whose
+    simulation lookup returned nothing). Such a row never obtained an empirical
+    baseline, so it is not part of the frozen section 5 forward population and
+    must not invalidate a session -- `note_expected()` supplies the gate.
+
+    It is still worth measuring: a slate where simulation quietly misses several
+    eligible backs yields a smaller study population than the frame implies, and
+    a forward confirmation that cannot see its own population shrink is not
+    trustworthy. `finalize()` reports the difference as
+    `dropped_before_seam_keys` without failing the session.
 
     Production's own `_position_family` / `_runtime_week` / `MARKET_MAP` do the
-    resolving, so the expected set cannot drift away from the eligibility test
-    the hook applies. Keys are sportsbook-independent, so book/line expansion
-    collapses here exactly as it does in `capture()`.
+    resolving, so this cannot drift away from the eligibility test the hook
+    applies. Keys are sportsbook-independent, so book/line expansion collapses
+    here exactly as it does in `capture()`.
     """
     # Imported lazily: `run_pricing_v2` imports this module from inside `price()`,
     # so it is fully loaded by the time this runs, and no import cycle forms.
@@ -353,18 +397,7 @@ def expected_keys(metrics, *, season: int) -> set[str]:
         market = MARKET_MAP.get(raw_market, raw_market)
         if not is_eligible(_position_family(row), market):
             continue
-        identity = {
-            "season": int(season),
-            "week": int(_runtime_week(row)),
-            "event_id": str(row.get("event_id") or "").strip(),
-            "team": str(row.get("team") or "").upper().strip(),
-            "opponent": str(row.get("opponent") or "").upper().strip(),
-            "player_clean_key": str(row.get("player_clean_key") or "").strip(),
-            "market": ELIGIBLE_MARKET,
-        }
-        # A blank-identity row cannot form a join key; `capture()` raises its own
-        # `blank_identity` sentinel for it, so counting it missing here too would
-        # only double-report the same defect.
+        identity = _identity(row, season=season, week=_runtime_week(row))
         if any(not identity[f] for f in REQUIRED_IDENTITY):
             continue
         keys.add(_football_key(identity))
@@ -374,12 +407,22 @@ def expected_keys(metrics, *, season: int) -> set[str]:
 # ---------------------------------------------------------------------------
 # Finalization
 # ---------------------------------------------------------------------------
-def finalize(*, expected_football_keys: set[str] | None = None) -> dict:
+def finalize(
+    *,
+    expected_football_keys: set[str] | None = None,
+    pre_seam_eligible_keys: set[str] | None = None,
+) -> dict:
     """Write the session artifacts and return a receipt. Never raises.
 
-    `valid` is False when any sentinel fired, when an expected eligible key is
-    missing, or when writing failed. A section 9 prospective lock may only be
-    assembled from a session whose receipt is valid.
+    `expected_football_keys` is the gate: it must be the set accumulated at the
+    capture-eligible seam by `note_expected()`. `valid` is False when any
+    sentinel fired, when one of those keys is missing, or when writing failed.
+    A section 9 prospective lock may only be assembled from a valid receipt.
+
+    `pre_seam_eligible_keys` is reported, never gated on. The difference between
+    it and the gate set is how many eligible player-games the pricing loop
+    dropped before they could obtain a baseline -- real information about
+    population shrink, but not a capture defect.
     """
     if _SESSION is None:
         return {"session_id": "", "valid": False, "rows_written": 0,
@@ -396,12 +439,21 @@ def finalize(*, expected_football_keys: set[str] | None = None) -> dict:
         "rows_written": 0,
         "lock_eligible_rows": 0,
         "missing_expected_keys": [],
+        "expected_key_count": 0 if expected_football_keys is None else len(expected_football_keys),
+        "pre_seam_eligible_count": 0 if pre_seam_eligible_keys is None else len(pre_seam_eligible_keys),
+        "dropped_before_seam_keys": [],
         "sentinels": list(_SESSION["sentinels"]),
         "valid": False,
         "dir": str(_SESSION["dir"]),
     }
 
     try:
+        if pre_seam_eligible_keys is not None:
+            # Diagnostic only: these never reached the seam, so they were never
+            # forward observations. Reported so population shrink is visible.
+            gate = set(expected_football_keys or ())
+            receipt["dropped_before_seam_keys"] = sorted(set(pre_seam_eligible_keys) - gate)
+
         if expected_football_keys is not None:
             missing = sorted(set(expected_football_keys) - set(_SESSION["records"]))
             receipt["missing_expected_keys"] = missing
