@@ -1,4 +1,45 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
+## ACTIVE FOOTBALL-CONTEXT UPDATE — 2026-09-20 — DEFENSIVE FRONT COHESION QUALIFIED
+
+Defensive Front Pairwise Cohesion V1 is now **READY_FOR_FROZEN_EXPERIMENT** after a
+source-identity forensic correction.
+
+The original qualification run `35515764090` remains preserved as
+`REJECTED_INTEGRITY` because it found 13 same-week GSIS/team conflicts. A dedicated
+audit showed all 13 were the same corrupted GSIS shared by two distinct people rather
+than a transaction-timing ambiguity.
+
+A general, outcome-free rule now quarantines any GSIS proven to map to multiple upstream
+ESB IDs or Smart IDs. It does not choose a team/person and it preserves the original
+same-person multi-team ambiguity gate.
+
+Corrected canonical run:
+
+- implementation: `2aeacc2004a42cda9a21282d21d2d09f2dfce15c`
+- run: `35517035459`
+- job: `106094605432`
+- artifact: `10607480543`
+- digest: `sha256:367a608fbf6f37d83b63befbc405d38579702fda98b399c16147e80606363fa0`
+- same frozen weekly-roster SHA: `f2b791d47b146fe703a73d3111d609504779c7e9d2dc0ad47b3bd1996776f18a`
+- pregame coverage: **99.1448%**
+- stable-ID coverage after semantic quarantine: **99.8141%**
+- same-week ambiguity: **0**
+- stability Spearman: **0.813629**
+- redundancy holdout R2: **0.401720**
+- final: `READY_FOR_FROZEN_EXPERIMENT`
+
+Result authority:
+
+`docs/research/DEFENSIVE_FRONT_PAIRWISE_COHESION_QUALIFICATION_V1_RESULT_2026-09-20.md`
+
+**Immediate next action:** perform a defensive-front cohesion no-retest/mechanism
+authorization audit before freezing or executing any predictive/mechanism outcome test.
+
+Production main remains `f0dad2c6711e85104eeffedfa5f5112fd172cbf5`.
+Do not touch Issue #535. RB predictive research remains pinned/paused.
+
+---
+
 ## ACTIVE FOOTBALL-CONTEXT UPDATE — 2026-09-20
 
 OL pairwise cohesion qualified as context but **failed** its frozen target-game pressure
