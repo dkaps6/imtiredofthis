@@ -1,3 +1,136 @@
+# LATEST CHECKPOINT — 2026-09-20 — §7 CAPTURE HOOK REVIEW IN PROGRESS
+
+**This section supersedes the older "Immediate GPT-5.6 checkpoint" near the bottom of this handoff.**
+
+## Exact current state
+
+The forward/shadow confirmation plan is already frozen and must not be changed:
+
+- plan: `docs/research/RB_PD2_FORWARD_SHADOW_CONFIRMATION_V1_PLAN.md`
+- freeze commit: `0de96f69194f1fca242515b613b814eab0c22d35`
+- active integration branch: `research-rb-pd2-forward-shadow-confirmation-v1`
+- most recent handoff update before this checkpoint: `1185975ef71fd2ab9174f2301d6ce4e0b86f6564`
+
+Claude is implementing **§7 only** on a separate branch to avoid collisions:
+
+- branch: `research-rb-pd2-shadow-capture-hook-v1`
+- first implementation commit: `0cc674e36c93826b62bc13e0a8fae808775843a0`
+- branch later advanced to `3045cf496960863eef1c103f9267e97f4e5873f8` for an unrelated .gitignore cleanup
+- Issue #535 implementation post: comment `5751442104`
+
+Claude's first §7 implementation has strong no-op engineering but is **NOT YET ACCEPTED / NOT YET CHERRY-PICKED** into the active RB branch.
+
+Accepted pieces from `0cc674e3`:
+- correct insertion seam immediately after production `adjusted_outcomes` exists and before sportsbook line probability;
+- default-OFF guarded import;
+- copied array cannot alias production memory;
+- flag OFF vs ON full priced-frame parity test;
+- hookless-source AST parity proof;
+- correct RB/HB/FB `rush_yards` scope;
+- §3/§8/§9 science remains outside the production pricing loop;
+- **do not add a week filter at capture**; prospective eligibility belongs in §9 lock assembly.
+
+## Four blockers sent back to Claude
+
+GPT-5.6 reviewed the actual code/tests and posted Issue #535 comment **`5751454114`**. §7 remains unaccepted until all four are repaired.
+
+### Blocker 1 — deduplicate sportsbook-expanded pricing rows
+
+`metrics_ready` is downstream of `materialize_pricing_offers_v1.py`, whose pricing grain includes book + line. The same football distribution can therefore appear multiple times for one player-game-market.
+
+Required scientific key:
+
+`(season, week, event_id, team, opponent, player_clean_key, canonical_market)`
+
+Required behavior:
+- first occurrence stores the capture;
+- repeated book/line occurrence must match exact draw digest + target mean + draw count (preferably `mc_proj`) and then be skipped;
+- mismatch => shadow integrity error;
+- exactly one capture per football key.
+
+### Blocker 2 — persist the exact empirical draw array losslessly
+
+Claude currently copies `adjusted_outcomes`, hashes/summarizes it, then discards the actual draws.
+
+That is insufficient. §8/§9 needs the exact empirical array for:
+- `widen_mean_neutral()`;
+- empirical CRPS;
+- interval/tail grading.
+
+Required fix:
+- persist exact float64 draws losslessly, preferably NPZ/NPY;
+- metadata must include array key/path + SHA-256 digest + summaries;
+- round-trip test must prove `np.array_equal()` and digest equality.
+
+### Blocker 3 — live shadow failure must not abort production
+
+Claude currently raises capture exceptions when the flag is ON, based on the assumption the flag will be OFF in production.
+
+That conflicts with the frozen same-process live capture design. The flag must be ON during the authoritative pregame pricing invocation if we want the exact live empirical array.
+
+Required fix:
+- capture failure cannot abort the canonical Full Slate;
+- catch at the tiny hook boundary;
+- write a loud research-scoped sentinel/error;
+- production pricing completes unchanged;
+- post-pricing shadow finalization marks the entire capture session invalid if any capture error or missing expected eligible key exists;
+- invalid session contributes **zero** prospective §9 locks;
+- synthetic failure test must prove production still completes unchanged while shadow finalization fails.
+
+### Blocker 4 — add run/session provenance and prevent stale buffer carryover
+
+Current single append-only JSONL has insufficient run boundaries.
+
+Required fields / behavior:
+- `mc_proj`;
+- kickoff / `commence_time` when present;
+- production code SHA (`GITHUB_SHA` or equivalent);
+- workflow run ID / run attempt / job when available;
+- explicit capture-session/invocation ID;
+- preferably input/source hashes or manifest reference;
+- session initialization must clear stale state;
+- session manifest/finalization receipt;
+- run-scoped filenames or otherwise unambiguous session grouping;
+- if pricing fails before flush, a later in-process invocation must not inherit stale buffered rows.
+
+Additional integrity checks requested:
+- finite target mean;
+- nonblank football-key identity fields;
+- 1-D finite nonempty nonnegative draw array;
+- JSON must not silently emit NaN;
+- repeated football-key comparison uses football data, not sportsbook metadata.
+
+## Tests still required before §7 acceptance
+
+Keep Claude's existing 15 tests and add at minimum:
+
+1. multi-book/multi-line duplicate rows => exactly one football capture;
+2. repeated football key with changed draws/target mean => shadow integrity failure;
+3. exact array persistence round-trip + digest equality;
+4. capture exception => production pricing completes unchanged + shadow session invalid;
+5. session A then session B in one interpreter => no stale-buffer carryover;
+6. run/session provenance present and stable within one capture session.
+
+## Work split / collision boundary
+
+Until Claude posts a repaired §7 SHA:
+- **Claude owns §7 only** on `research-rb-pd2-shadow-capture-hook-v1`.
+- GPT-5.6 must **not** independently modify the same capture files.
+- GPT-5.6 owns §3 historical difficulty state and §8/§9 assembler/immutable pregame lock **after** the §7 artifact contract is accepted.
+- Do not cherry-pick `0cc674e3` yet.
+
+Immediate next action in the next chat:
+1. read the newest Issue #535 comments after `5751454114`;
+2. if Claude posts a repair SHA, inspect the actual diff/tests against the six requirements above;
+3. only if all pass, integrate §7 into `research-rb-pd2-forward-shadow-confirmation-v1`;
+4. then build §3 + §8 + §9 against the accepted capture contract;
+5. no prospectively locked outcome may be graded before the full pregame-lock path is green;
+6. after the first successful future pregame shadow lock, start the separate RB mean-information audit in parallel: routes/route-volume -> opponent-injury propagation -> CLV diagnostic architecture.
+
+No production promotion is authorized. No paid OddsAPI pull is authorized.
+
+---
+
 # NFL HANDOFF — 2026-09-20 — RB PD2 FORWARD / SHADOW CONFIRMATION CURRENT
 
 **Repository:** `dkaps6/imtiredofthis`  
