@@ -148,3 +148,68 @@ Frozen plan:
 
 The next task is qualification only. It tests accumulated front-seven shared roster
 history, not another OL variant and not a QB outcome.
+
+
+## Defensive front pairwise cohesion — identity audit and recovered qualification
+
+The first frozen qualification run was correctly rejected on the identity gate:
+
+- original implementation: `dc34825ebd0c7a2c37bf530bf369d5c92fd32ba4`
+- original run: `35515764090`
+- original job: `106091315051`
+- original artifact: `10606857557`
+- original digest: `sha256:c3a5d19b130569f30f85068fa4da5562aee5630e8ab2c1728b30eb4f53657c65`
+- ambiguous same-week GSIS/team groups: **13**
+- disposition: `REJECTED_INTEGRITY`
+
+A source-only forensic audit reproduced the exact frozen weekly-roster hash and showed
+all 13 groups were one GSIS (`00-0035718`) incorrectly shared by two different people:
+Quinnen Williams (NYJ) and Isaiah Searight (NYG). Their upstream ESB and Smart IDs differ,
+so this is a person-identity collision, not an in-week team transaction.
+
+Enhanced audit:
+
+- commit: `c63bbbbf5caf593bcc4d21bbeb5f5d2192b8cc31`
+- run: `35516818596`
+- job: `106094055976`
+- artifact: `10606947000`
+- digest: `sha256:ef8b0d3f164e1ebaf7052602da4b9acb261cac9f664bac3a684ac4e5ff708414`
+
+Mechanical correction:
+
+- commit: `2aeacc2004a42cda9a21282d21d2d09f2dfce15c`
+- rule: quarantine any GSIS proven to map to multiple nonblank ESB IDs or multiple
+  nonblank Smart IDs across the frozen roster horizon
+- do not select a team/person
+- same-person multi-team ambiguity still fails the original gate
+- no formula, position, lookback, threshold, outcome, or sportsbook change
+
+Corrected canonical qualification:
+
+- run: `35517035459`
+- job: `106094605432`
+- artifact: `10607480543`
+- digest: `sha256:367a608fbf6f37d83b63befbc405d38579702fda98b399c16147e80606363fa0`
+- same weekly-roster SHA as original: `f2b791d47b146fe703a73d3111d609504779c7e9d2dc0ad47b3bd1996776f18a`
+- 14 semantic GSIS collisions detected globally
+- 136 front-roster rows quarantined
+- stable-ID coverage: **99.8141%**
+- same-week ambiguity after quarantine: **0**
+- pregame coverage: **99.1448%**
+- stability Spearman: **0.813629** on **3,678** adjacent pairs
+- redundancy holdout R2: **0.401720**
+- integrity/fanout/chronology: clean
+- final: `READY_FOR_FROZEN_EXPERIMENT`
+
+Result authority:
+
+`docs/research/DEFENSIVE_FRONT_PAIRWISE_COHESION_QUALIFICATION_V1_RESULT_2026-09-20.md`
+
+### Exact next task
+
+Do **not** score an outcome casually. First perform the no-retest / mechanism-authorization
+audit for defensive-front pairwise cohesion, then freeze one distinct mechanism
+experiment if a non-duplicative target remains justified.
+
+Preserve the original rejected run and the forensic lineage. Do not waive identity gates,
+do not re-key the candidate to ESB/Smart IDs, and do not touch production or Issue #535.
