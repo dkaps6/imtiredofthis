@@ -5,7 +5,6 @@ import argparse
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
 
 KEY=["season","week","team","player_identity_key"]
@@ -13,6 +12,18 @@ POSITIONS={"QB","RB","WR","TE"}
 FEATURES=["prior_tgt_share_game","prior3_tgt_share_game_mean","prior5_tgt_share_game_mean","prior_rush_share_game","prior3_rush_share_game_mean","prior5_rush_share_game_mean","prior_tgt_share_game_top1","prior_tgt_share_game_top2","prior_rush_share_game_top1","prior_rush_share_game_top2","prior_tgt_share_game_returning_overlap","prior_rush_share_game_returning_overlap"]
 K=10
 MIN_PRIOR=25
+
+
+def _frozen_impute(prior:pd.DataFrame, query:pd.DataFrame)->tuple[np.ndarray,np.ndarray]:
+    """Expanding strict-prior median imputation while preserving all frozen dimensions.
+
+    Early position pools can have a feature that is entirely unknown. sklearn's
+    SimpleImputer drops such columns, which changes the preregistered geometry.
+    Keep the dimension and use neutral 0.0 only when the strict-prior pool has
+    no observed value at all; otherwise use that pool's median.
+    """
+    med=prior.median(axis=0,skipna=True).fillna(0.0)
+    return prior.fillna(med).to_numpy(dtype=float),query.fillna(med).to_numpy(dtype=float)
 
 
 def materialize(context:pd.DataFrame)->tuple[pd.DataFrame,pd.DataFrame]:
@@ -36,7 +47,7 @@ def materialize(context:pd.DataFrame)->tuple[pd.DataFrame,pd.DataFrame]:
                 rec.update({"nearest_distance":np.nan,"mean_k_distance":np.nan,"effective_analog_count":0.0,"same_player_share":np.nan,"same_team_share":np.nan,"same_season_share":np.nan})
                 out.append(rec); continue
             X=prior[FEATURES].apply(pd.to_numeric,errors="coerce"); q=pd.DataFrame([{f:r[f] for f in FEATURES}]).apply(pd.to_numeric,errors="coerce")
-            imp=SimpleImputer(strategy="median"); Xi=imp.fit_transform(X); qi=imp.transform(q)
+            Xi,qi=_frozen_impute(X,q)
             sc=StandardScaler(); Xs=sc.fit_transform(Xi); qs=sc.transform(qi)[0]
             dist=np.sqrt(((Xs-qs)**2).sum(axis=1)); order=np.argsort(dist,kind="stable")[:min(K,len(prior))]
             nn=prior.iloc[order].copy(); dd=dist[order]; w=1/(1+dd); eff=float((w.sum()**2)/(w@w)) if (w@w)>0 else 0.0
