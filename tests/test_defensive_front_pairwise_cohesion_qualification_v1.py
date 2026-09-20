@@ -23,6 +23,58 @@ def test_front_eligibility_uses_position_or_depth_and_excludes_db():
     assert report["stable_id_coverage"]==1.0
 
 
+def test_semantic_gsis_collision_is_quarantined_without_team_selection():
+    schedule=ol.normalize_schedule(pd.DataFrame([
+        {"season":2024,"week":1,"team":"A"},
+        {"season":2024,"week":1,"team":"B"},
+    ]))
+    roster=pd.DataFrame([
+        {
+            "season":2024,"week":1,"team":"A","gsis_id":"shared",
+            "esb_id":"PERSON_A","smart_id":"SMART_A",
+            "position":"DE","depth_chart_position":"DE",
+        },
+        {
+            "season":2024,"week":1,"team":"B","gsis_id":"shared",
+            "esb_id":"PERSON_B","smart_id":"SMART_B",
+            "position":"DE","depth_chart_position":"DE",
+        },
+    ])
+    sets,report=build_front_sets(roster,schedule)
+    assert all("shared" not in ids for ids in sets.values())
+    assert report["semantic_gsis_collision_ids"]==["shared"]
+    assert report["semantic_gsis_collision_id_count"]==1
+    assert report["semantic_gsis_collision_rows_quarantined"]==2
+    assert report["ambiguous_same_week_gsis_team_conflicts"]==0
+    assert report["stable_id_coverage"]==0.0
+
+
+def test_same_person_multiteam_week_remains_ambiguous_and_fails_closed():
+    schedule=ol.normalize_schedule(pd.DataFrame([
+        {"season":2024,"week":1,"team":"A"},
+        {"season":2024,"week":1,"team":"B"},
+    ]))
+    roster=pd.DataFrame([
+        {
+            "season":2024,"week":1,"team":"A","gsis_id":"same_person",
+            "esb_id":"PERSON_X","smart_id":"SMART_X",
+            "position":"DE","depth_chart_position":"DE",
+        },
+        {
+            "season":2024,"week":1,"team":"B","gsis_id":"same_person",
+            "esb_id":"PERSON_X","smart_id":"SMART_X",
+            "position":"DE","depth_chart_position":"DE",
+        },
+    ])
+    sets,report=build_front_sets(roster,schedule)
+    assert sets[(2024,1,"A")]=={"same_person"}
+    assert sets[(2024,1,"B")]=={"same_person"}
+    assert report["semantic_gsis_collision_id_count"]==0
+    assert report["semantic_gsis_collision_rows_quarantined"]==0
+    assert report["ambiguous_same_week_gsis_team_conflicts"]==1
+    assert report["stable_id_coverage"]==1.0
+
+
 def test_crossseason_pair_history_and_immediate_continuity():
     schedule=ol.normalize_schedule(pd.DataFrame([
         {"season":2023,"week":18,"team":"A"},

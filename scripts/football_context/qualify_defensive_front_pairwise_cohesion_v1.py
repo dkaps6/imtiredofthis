@@ -64,6 +64,45 @@ def _safe_spearman(a: pd.Series, b: pd.Series) -> float:
     return float(z["a"].corr(z["b"], method="spearman"))
 
 
+def _norm_alt_id(value) -> str:
+    if value is None or pd.isna(value):
+        return ""
+    text = str(value).strip()
+    if text.lower() in {"", "nan", "none", "<na>"}:
+        return ""
+    return text
+
+
+def _semantic_gsis_collision_ids(roster: pd.DataFrame) -> tuple[set[str], list[str]]:
+    """Find GSIS values positively proven to represent multiple source people.
+
+    ESB ID and Smart ID are upstream person identifiers carried by the same weekly
+    roster source. A GSIS is quarantined only when one of those authorities has
+    multiple distinct nonblank values for that GSIS. Same-person multi-team rows
+    are deliberately not resolved here and remain subject to the frozen ambiguity
+    gate.
+    """
+    alt_cols = [c for c in ["esb_id", "smart_id"] if c in roster.columns]
+    if not alt_cols:
+        return set(), []
+
+    q = roster.loc[
+        roster["season"].isin(SEASONS)
+        & roster["week"].gt(0)
+        & roster["gsis_id"].ne("")
+    ].copy()
+    collision_ids: set[str] = set()
+    for col in alt_cols:
+        z = q[["gsis_id", col]].copy()
+        z["_alt"] = z[col].map(_norm_alt_id)
+        z = z.loc[z["_alt"].ne("")]
+        if z.empty:
+            continue
+        counts = z.groupby("gsis_id")["_alt"].nunique()
+        collision_ids.update(counts.loc[counts.gt(1)].index.astype(str).tolist())
+    return collision_ids, alt_cols
+
+
 def build_front_sets(
     roster: pd.DataFrame,
     schedule: pd.DataFrame,
@@ -82,6 +121,7 @@ def build_front_sets(
     r["gsis_id"] = r[gsis_col].map(ol._norm_gsis)
     r["position_norm"] = r[pos_col].map(ol._norm_pos)
     r["depth_position_norm"] = r[depth_col].map(ol._norm_pos) if depth_col else ""
+    semantic_collision_ids, semantic_authority_cols = _semantic_gsis_collision_ids(r)
     eligible = (
         r["position_norm"].isin(FRONT_POSITIONS)
         | r["depth_position_norm"].isin(FRONT_POSITIONS)
@@ -95,8 +135,12 @@ def build_front_sets(
     r = r.merge(keys, on=["season", "week", "team"], how="inner", validate="many_to_one")
     on_schedule = int(len(r))
 
-    stable = r["gsis_id"].ne("")
+    raw_nonblank = r["gsis_id"].ne("")
+    semantic_collision = r["gsis_id"].isin(semantic_collision_ids)
+    stable = raw_nonblank & ~semantic_collision
+    raw_nonblank_cov = float(raw_nonblank.mean()) if len(r) else 0.0
     stable_cov = float(stable.mean()) if len(r) else 0.0
+    quarantined_rows = int((raw_nonblank & semantic_collision).sum())
     valid = r.loc[stable].copy()
     conflicts = valid.groupby(["season", "week", "gsis_id"])["team"].nunique()
     ambiguous = int((conflicts > 1).sum())
@@ -110,7 +154,13 @@ def build_front_sets(
     return sets, {
         "source_front_rows_before_schedule_filter": before,
         "source_front_rows_on_scheduled_games": on_schedule,
+        "raw_nonblank_gsis_coverage": raw_nonblank_cov,
         "stable_id_coverage": stable_cov,
+        "semantic_gsis_collision_ids": sorted(semantic_collision_ids),
+        "semantic_gsis_collision_id_count": int(len(semantic_collision_ids)),
+        "semantic_gsis_collision_rows_quarantined": quarantined_rows,
+        "semantic_gsis_collision_authority_columns": semantic_authority_cols,
+        "semantic_gsis_collision_rule": "quarantine_gsis_if_esb_id_or_smart_id_has_multiple_nonblank_values",
         "ambiguous_same_week_gsis_team_conflicts": ambiguous,
         "duplicate_source_identity_rows_collapsed_to_set": duplicates,
         "depth_chart_position_available": bool(depth_col),
