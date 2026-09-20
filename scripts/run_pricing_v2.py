@@ -21,6 +21,7 @@ weight, or synthesis correction.
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 import numpy as np
@@ -90,6 +91,18 @@ def _position_family(row: pd.Series) -> str:
 
 
 def price(season: int) -> pd.DataFrame:
+    # Research-only observational shadow capture (RB_PD2_FORWARD_SHADOW_
+    # CONFIRMATION_V1 plan section 7). Opt-in, default OFF. When the flag is
+    # unset the research module is never imported and the per-row cost is one
+    # `is None` check; production values are computed from the unmodified
+    # `adjusted_outcomes` array either way.
+    shadow = None
+    if os.getenv("RB_PD2_SHADOW_CAPTURE"):
+        from scripts.research import rb_pd2_shadow_capture_v1 as _shadow_mod
+
+        if _shadow_mod.capture_enabled():
+            shadow = _shadow_mod
+
     metrics_path = DATA / "metrics_ready.csv"
     if not metrics_path.exists() or metrics_path.stat().st_size == 0:
         raise RuntimeError("data/metrics_ready.csv missing or empty")
@@ -335,6 +348,17 @@ def price(season: int) -> pd.DataFrame:
         else:
             adjusted_outcomes = base_outcomes
 
+        if shadow is not None:
+            shadow.capture(
+                row=row,
+                adjusted_outcomes=adjusted_outcomes,
+                target_mean=target_mean,
+                market=market,
+                position=row_position,
+                season=int(season),
+                week=_runtime_week(row),
+            )
+
         if market == "anytime_td":
             line = 0.5
             p_over = float(np.mean(adjusted_outcomes >= 1.0))
@@ -427,6 +451,10 @@ def price(season: int) -> pd.DataFrame:
         raise RuntimeError("promoted QB synthesis applied to zero pass_yards pricing rows")
     if has_rb_rush and 1 in rush_weeks and rb_synthesis_rows == 0:
         raise RuntimeError("promoted RB synthesis applied to zero eligible Week-1 RB/FB rush_yards pricing rows")
+
+    if shadow is not None:
+        info = shadow.flush()
+        print(f"[pricing] RB PD2 shadow capture rows={info['rows_written']} -> {info['path']}")
 
     if missed:
         debug = DATA / "_debug" / "pricing_unsimulated_props.csv"
