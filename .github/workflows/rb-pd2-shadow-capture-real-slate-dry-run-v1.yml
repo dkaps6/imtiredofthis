@@ -1,0 +1,269 @@
+name: RB PD2 Shadow Capture Real Slate Dry Run V1
+
+# Dispatch-only. This is a research validation of the plan section 7 capture
+# hook against a real slate; it must never run on every PR, and it must never
+# be mistaken for the certified replay it is derived from.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  SEASON: "2026"
+  PRIOR_SEASON: "2025"
+  SLATE_DATE: ""
+  FETCH_LIVE_ODDS: "false"
+  FULL_SLATE_SOURCE_RUN_ID: "35282021679"
+  ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml beautifulsoup4 lxml pytest
+
+      - name: Download preserved paid artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: run_35282021679
+          path: replay_source
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 35282021679
+
+      - name: Restore preserved data and outputs
+        run: |
+          set -euo pipefail
+          test -d replay_source/data
+          test -d replay_source/outputs
+          rm -rf data outputs
+          mkdir -p data outputs
+          cp -a replay_source/data/. data/
+          cp -a replay_source/outputs/. outputs/
+          git show HEAD:data/player_identity_aliases.csv > data/player_identity_aliases.csv
+          git show HEAD:data/manual_final_board_quarantine.csv > data/manual_final_board_quarantine.csv
+          test -s data/player_identity_aliases.csv
+          test -s data/manual_final_board_quarantine.csv
+          grep -q '^Joshua Palmer,Josh Palmer,00-0036988,BUF,WR,' data/player_identity_aliases.csv
+          grep -q '^Carson Wentz,MIN,2026,2,' data/manual_final_board_quarantine.csv
+          test -s data/live_odds_status.json
+          python - <<'EOF'
+          import json, os
+          from pathlib import Path
+          path=Path('data/live_odds_status.json')
+          status=json.loads(path.read_text(encoding='utf-8'))
+          status['replay_source_run']=int(os.environ['FULL_SLATE_SOURCE_RUN_ID'])
+          status['odds_api_refetched']=False
+          status['replay_mode']='OFFLINE_PRESERVED_ARTIFACT'
+          path.write_text(json.dumps(status,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          print('OFFLINE_REPLAY_PROVENANCE_STAMPED', status['replay_source_run'])
+          EOF
+          test -s outputs/odds_game.csv
+          test -s outputs/props_raw_compact.csv
+          echo "OFFLINE REPLAY ONLY: preserved run=${FULL_SLATE_SOURCE_RUN_ID}; no OddsAPI acquisition command exists in this workflow"
+
+      - name: Certify preserved injury report scope without mutating injury rows
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/certify_preserved_injury_scope_v1.py
+          test -s data/preserved_replay_injury_scope_audit.json
+          test -s data/injury_team_scope.csv
+
+      - name: Rebuild PlayerForm with verified identity aliases
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
+          python scripts/operations/run_player_form_verified_alias_recovery_v1.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
+          python scripts/enrich_player_scoring_v2.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
+          python scripts/operations/validate_playerform_runtime_strict_prior_v1.py --season "${SEASON}" --week "${WEEK_RESOLVED}"
+          python scripts/validate_player_identity_semantics_v1.py
+          test -s data/player_identity_semantic_audit.json
+          python - <<'EOF'
+          import json
+          import pandas as pd
+          summary=json.load(open('data/player_identity_semantic_audit.json',encoding='utf-8'))
+          if int(summary.get('temporary_possible_historical_aliases',-1)) != 0:
+              raise SystemExit(f'FATAL: historical identity aliases still unresolved: {summary}')
+          pf=pd.read_csv('data/player_form.csv',low_memory=False)
+          expected={
+              'Joshua Palmer':'gsis:00-0036988',
+              'Matt Hibner':'gsis:00-0040879',
+          }
+          for player,identity in expected.items():
+              rows=pf.loc[pf['player'].astype(str).eq(player)]
+              if len(rows) != 1:
+                  raise SystemExit(f'FATAL: expected one PlayerForm row for {player}, got {len(rows)}')
+              actual=str(rows.iloc[0]['player_identity_key'])
+              if actual != identity:
+                  raise SystemExit(f'FATAL: identity recovery failed {player}: {actual} != {identity}')
+          print('VERIFIED_ALIAS_PLAYERFORM_RECOVERY_PASS')
+          EOF
+
+      - name: Rebuild downstream football model bridges
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/run_model_context_bridge.py
+          python scripts/run_model_bayesian_bridge.py
+          python scripts/run_model_ml_bridge.py
+          python scripts/run_model_state_bridge.py
+          python scripts/run_model_rules_bridge.py
+          python scripts/run_model_ensemble_bridge.py
+          for f in data/model_context_bridge.csv data/model_bayesian_diagnostics.csv data/model_ml_diagnostics.csv data/model_state_diagnostics.csv data/model_rule_diagnostics.csv data/model_ensemble_diagnostics.csv; do test -s "$f"; done
+
+      - name: Rebuild QB C2 football-only distribution state
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
+          python scripts/run_qb_distribution_state_context.py --season "${SEASON}" --week "${WEEK_RESOLVED}"
+          test -s data/qb_distribution_state_context.csv
+          test -s data/qb_distribution_state_context_audit.csv
+
+      - name: Apply locked current-availability production seams
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+          python scripts/operations/apply_current_availability_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_primary_team_seam_v1.py
+          python -m py_compile scripts/run_pricing_with_full_roster_universe_v1.py scripts/modeling/rb_r26_receptions_production_adapter_v1.py scripts/modeling/qb_c2_production_adapter_v1.py
+
+      - name: Replay Step 29 data quality classifier
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/validate_full_slate_data_quality_v1.py
+          test -s data/full_slate_data_quality_audit.json
+
+      - name: Replay Step 30 pricing inputs and metrics
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/materialize_pricing_offers_v1.py
+          test -s outputs/props_pricing_offers.csv
+          test -s data/live_pricing_offer_audit.json
+          python scripts/run_metrics_context.py --season "${SEASON}" --mode full --date "${SLATE_DATE}"
+          python scripts/validate_build_integrity.py
+          python scripts/metrics_ready.py --season "${SEASON}" --date "${SLATE_DATE}"
+          test -s data/metrics_ready.csv
+
+      - name: Price the real slate with the shadow capture flag ON
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+          # The point of the exercise: the authoritative pricing path, unchanged,
+          # with the research flag enabled. No new odds are fetched -- this prices
+          # the preserved artifact restored above.
+          export RB_PD2_SHADOW_CAPTURE=1
+          python scripts/run_pricing_with_full_roster_universe_v3.py --season "${SEASON}"
+          test -s outputs/props_priced_clean.csv
+          test -s data/football_simulation_universe_audit.json
+          test -s data/wr_r15_full_slate_entitlement_audit.json
+          test -s data/qb_c2_production_integration_audit.json
+          python scripts/stamp_qb_c2_pricing_lineage_v1.py
+          test -s data/qb_c2_pricing_lineage_stamp_audit.json
+          python scripts/validate_rb_rush_rec_conservation_v1.py
+          python scripts/audit_market_model_lineage_v2.py
+          python scripts/validate_anytime_td_model_status_v1.py
+          python scripts/validate_team_target_pool_full_universe_v2.py
+          python scripts/validate_certified_full_slate_stack_v2.py
+          python scripts/validate_full_slate_mechanical_certification_v1.py
+          test -s outputs/paid_full_slate_replay_result.json
+          test -s data/full_slate_post_pricing_audit.csv
+
+      - name: Apply final-board-only verified prop quarantines
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/quarantine_final_priced_props_v1.py
+          test -s data/final_priced_props_quarantine_status.json
+          python - <<'EOF'
+          import json
+          s=json.load(open('data/final_priced_props_quarantine_status.json',encoding='utf-8'))
+          if int(s.get('rows_removed',0)) <= 0:
+              raise SystemExit(f'FATAL: expected verified Week-2 final-board quarantine to remove rows: {s}')
+          if 'MIN:carsonwentz' not in set(s.get('quarantined_team_name_keys',[])):
+              raise SystemExit(f'FATAL: Wentz quarantine key absent: {s}')
+          print('FINAL_BOARD_QUARANTINE_CERTIFIED', s)
+          EOF
+
+      - name: Strict repository audits
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/utils/audit_repo.py --strict
+          python scripts/audit_2026_production_readiness.py --strict
+
+      - name: Upload offline replay evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline_replay_${{ github.run_id }}
+          path: |
+            data/preserved_replay_injury_scope_audit.json
+            data/injury_team_scope.csv
+            data/player_identity_semantic_audit.csv
+            data/player_identity_semantic_audit.json
+            data/full_slate_data_quality_audit.csv
+            data/full_slate_data_quality_audit.json
+            data/live_pricing_offer_audit.json
+            data/live_odds_status.json
+            data/qb_c2_pricing_lineage_stamp_audit.json
+            data/market_model_lineage_current.json
+            data/full_slate_post_pricing_audit.csv
+            data/certified_full_slate_stack_audit.json
+            data/final_priced_props_quarantine_status.json
+            outputs/paid_full_slate_replay_result.json
+            outputs/props_pricing_offers.csv
+            outputs/props_priced_clean.csv
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Report the real capture session
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          test -d data/research/rb_pd2_shadow
+          python scripts/research/report_rb_pd2_shadow_session_v1.py
+
+      - name: Prove the shadow left the priced board untouched
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python - <<'EOF'
+          import pandas as pd
+          board = pd.read_csv('outputs/props_priced_clean.csv', low_memory=False)
+          leaked = [c for c in board.columns if 'shadow' in c.lower() or 'pd2' in c.lower()]
+          if leaked:
+              raise SystemExit(f'FATAL: shadow columns leaked onto the board: {leaked}')
+          print(f'BOARD_CLEAN rows={len(board)} columns={len(board.columns)}')
+          EOF
+
+      - name: Upload the capture session
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb_pd2_shadow_session
+          path: data/research/rb_pd2_shadow
+          if-no-files-found: error
+          retention-days: 30
