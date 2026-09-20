@@ -33,6 +33,10 @@ DIAGNOSTIC_CANDIDATES = [
     "date", "game_date", "timestamp", "updated_at", "last_modified",
     "entry_year", "rookie_year", "years_exp", "birth_date",
     "draft_club", "draft_number",
+    "esb_id", "gsis_it_id", "smart_id",
+    "espn_id", "sportradar_id", "yahoo_id", "rotowire_id",
+    "pff_id", "pfr_id", "fantasy_data_id", "sleeper_id",
+    "jersey_number", "first_name", "last_name", "college",
 ]
 
 
