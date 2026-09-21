@@ -916,6 +916,30 @@ def test_blank_identity_records_a_sentinel(tmp_path):
     shadow.reset()
 
 
+@pytest.mark.parametrize("field", ["event_id", "team", "opponent", "player_clean_key"])
+def test_nan_identity_is_treated_as_blank_not_literal_nan(field, tmp_path):
+    shadow.reset()
+    shadow.begin_session(season=SEASON, out_root=tmp_path)
+    values = {
+        "event_id": EVENT_ID,
+        "team": "CHI",
+        "opponent": "CAR",
+        "player_clean_key": "x",
+    }
+    values[field] = np.nan
+    row = pd.Series(values)
+    assert shadow.note_expected(
+        row=row, market="rush_yards", position="RB", season=SEASON, week=WEEK
+    ) is False
+    assert shadow.capture(
+        row=row, adjusted_outcomes=np.ones(8), target_mean=1.0, mc_proj=1.0,
+        market="rush_yards", position="RB", season=SEASON, week=WEEK,
+    ) is False
+    assert [s["kind"] for s in shadow.sentinels()] == ["blank_identity"]
+    assert all("|nan|" not in key.lower() for key in shadow._SESSION["records"])
+    shadow.reset()
+
+
 def test_non_finite_target_mean_is_recorded_but_marked_lock_ineligible(tmp_path):
     """A non-finite ensemble mean is a real production fallback, not a capture
     bug, so it must not invalidate the whole session -- but it must never become
