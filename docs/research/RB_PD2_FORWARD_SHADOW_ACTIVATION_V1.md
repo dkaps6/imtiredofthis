@@ -105,8 +105,11 @@ artifact proves all of the following:
 
 - capture session receipt is valid;
 - capture provenance run ID / code SHA match the authoritative Full Slate run;
-- identity-source fingerprints are non-empty and exactly match the history
-  manifest;
+- stable identity-contract fingerprints are non-empty and exactly match the
+  history manifest: `manual_name_overrides.csv` plus the exact
+  `scripts/utils/canonical_names.py` implementation;
+- `roles_ourlads.csv` whole-file SHA is retained as diagnostic provenance,
+  not a hard equality gate, because it is a mutable weekly enrichment artifact;
 - final football mean / exact baseline empirical array were captured before
   kickoff;
 - schedule matchup matches both canonical team and opponent;
