@@ -620,7 +620,13 @@ def lock_row(
         "history_state_sha256": hist_digest,
         "manual_name_overrides_sha256": str(history_manifest["manual_name_overrides_sha256"]),
         "canonical_names_py_sha256": str(history_manifest["canonical_names_py_sha256"]),
-        "roles_ourlads_sha256": str(history_manifest.get("roles_ourlads_sha256") or ""),
+        "history_roles_ourlads_sha256": str(history_manifest.get("roles_ourlads_sha256") or ""),
+        "capture_roles_ourlads_sha256": str(provenance.get("roles_ourlads_sha256") or ""),
+        "roles_ourlads_sha256_match": bool(
+            str(history_manifest.get("roles_ourlads_sha256") or "")
+            and str(history_manifest.get("roles_ourlads_sha256") or "")
+            == str(provenance.get("roles_ourlads_sha256") or "")
+        ),
         "target_mean": float(capture_record["target_mean"]),
         "prior_games": int(state["prior_games"]),
         "prior8_yard_mae": float(state["prior8_yard_mae"]) if np.isfinite(state["prior8_yard_mae"]) else None,
