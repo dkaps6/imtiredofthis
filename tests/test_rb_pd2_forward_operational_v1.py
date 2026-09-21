@@ -107,6 +107,7 @@ def _make_capture_session(tmp_path: Path, monkeypatch):
         "workflow_job": "full-slate",
         "runner_ref": "refs/heads/test",
         "manual_name_overrides_sha256": "a" * 64,
+        "canonical_names_py_sha256": "c" * 64,
         "roles_ourlads_sha256": "b" * 64,
     })
     capture.reset()
@@ -156,6 +157,7 @@ def test_lock_assembler_writes_self_contained_baseline_and_candidate_arrays(tmp_
     manifest = {
         "history_state_sha256": fwd.history_state_digest(history),
         "manual_name_overrides_sha256": "a" * 64,
+        "canonical_names_py_sha256": "c" * 64,
         "roles_ourlads_sha256": "b" * 64,
     }
     manifest_path = tmp_path / "history.json"
