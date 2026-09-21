@@ -130,7 +130,9 @@ Validation PR:
 - schedule matching verifies canonical team **and opponent**;
 - missing/NaN capture identities fail closed instead of becoming literal
   `"nan"` keys;
-- identity-source fingerprints are non-empty/equal-or-fail;
+- stable identity hard gates are the manual-name override digest plus the exact
+  canonicalization-code digest; the mutable weekly Ourlads whole-file hash is
+  retained as diagnostic provenance rather than an all-lock equality gate;
 - Week-1 P3/STACK1 parity is mechanically recomputed from the underlying
   projection values rather than trusted from a caller boolean.
 
