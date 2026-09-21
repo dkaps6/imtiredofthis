@@ -232,3 +232,21 @@ def test_live_lock_rejects_ambiguous_same_run_sessions(tmp_path):
         live_lock.find_capture_session(
             root, workflow_run_id="123", code_sha="d" * 40
         )
+
+
+
+def test_full_slate_shadow_activation_is_opt_in_and_locks_before_postprocessing():
+    source = Path(".github/workflows/full-slate.yml").read_text(encoding="utf-8")
+    assert "rb_pd2_shadow_capture:" in source
+    assert "default: false" in source
+    assert "RB_PD2_SHADOW_CAPTURE: ${{ github.event_name == 'workflow_dispatch'" in source
+    assert "RB_PD2_PROSPECTIVE_START_UTC: \"2026-09-22T12:00:00Z\"" in source
+    assert "Restore pinned RB PD2 forward-history artifact" in source
+    assert "Assemble immutable RB PD2 prospective pregame lock" in source
+    assert "Upload RB PD2 prospective lock immediately" in source
+
+    pricing = source.index("Price from certified football-first Full Slate stack")
+    assemble = source.index("Assemble immutable RB PD2 prospective pregame lock")
+    upload = source.index("Upload RB PD2 prospective lock immediately")
+    quarantine = source.index("Apply final-board-only verified prop quarantines")
+    assert pricing < assemble < upload < quarantine
