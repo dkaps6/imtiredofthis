@@ -22,6 +22,15 @@ on:
         required: false
         type: boolean
         default: false
+      rb_pd2_shadow_capture:
+        description: "Research only: capture and pregame-lock frozen RB PD2 distributions"
+        required: false
+        type: boolean
+        default: false
+      rb_pd2_forward_history_run_id:
+        description: "Pinned successful RB PD2 forward-history workflow run ID"
+        required: false
+        default: ""
 
 concurrency:
   group: full-slate-${{ github.ref }}
@@ -29,15 +38,22 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 env:
   PYTHONDONTWRITEBYTECODE: "1"
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+  GH_TOKEN: ${{ github.token }}
   SEASON: ${{ github.event.inputs.season || '2026' }}
   PRIOR_SEASON: ${{ github.event.inputs.prior_season || '2025' }}
   SLATE_DATE: ${{ github.event.inputs.date || '' }}
   FETCH_LIVE_ODDS: ${{ github.event.inputs.fetch_live_odds || 'false' }}
+  RB_PD2_SHADOW_CAPTURE: ${{ github.event.inputs.rb_pd2_shadow_capture || 'false' }}
+  RB_PD2_FORWARD_HISTORY_RUN_ID: ${{ github.event.inputs.rb_pd2_forward_history_run_id || '' }}
+  RB_PD2_FORWARD_HISTORY_ARTIFACT: rb-pd2-forward-history-v1
+  # Operational activation boundary: Week 2 can never become a prospective observation.
+  RB_PD2_PROSPECTIVE_START_UTC: "2026-09-22T12:00:00Z"
   ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
 
 jobs:
@@ -465,6 +481,51 @@ jobs:
           if not nonrb.empty and not pd.to_numeric(nonrb['rb_synthesis_applied'],errors='coerce').fillna(0).eq(0).all(): raise SystemExit('FATAL: non-RB rushing rows incorrectly consumed RB P3')
           print(f"CERTIFIED LIVE PRICING rows={len(df)} players={df.player.nunique()} QB_side_rows={len(qb)} RB_FB_rush_side_rows={len(rb)} non_RB_rush_side_rows={len(nonrb)}")
           EOF
+
+      - name: Restore pinned RB PD2 forward-history artifact
+        id: rb_pd2_history
+        if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' && env.RB_PD2_SHADOW_CAPTURE == 'true' }}
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          if [ -z "${RB_PD2_FORWARD_HISTORY_RUN_ID}" ]; then
+            echo "RB PD2 shadow requested without a pinned forward-history run ID"
+            exit 2
+          fi
+          rm -rf /tmp/rb_pd2_forward_history_live
+          mkdir -p /tmp/rb_pd2_forward_history_live
+          gh run download "${RB_PD2_FORWARD_HISTORY_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name "${RB_PD2_FORWARD_HISTORY_ARTIFACT}" \
+            --dir /tmp/rb_pd2_forward_history_live
+          test -s /tmp/rb_pd2_forward_history_live/history/rb_pd2_forward_history_state.csv
+          test -s /tmp/rb_pd2_forward_history_live/history/rb_pd2_forward_history_manifest.json
+
+      - name: Assemble immutable RB PD2 prospective pregame lock
+        id: rb_pd2_lock
+        if: ${{ always() && env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' && env.RB_PD2_SHADOW_CAPTURE == 'true' }}
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          rm -rf data/research/rb_pd2_forward/live_lock
+          mkdir -p data/research/rb_pd2_forward/live_lock
+          python scripts/research/run_rb_pd2_live_lock_v1.py \
+            --history-root /tmp/rb_pd2_forward_history_live \
+            --history-run-id "${RB_PD2_FORWARD_HISTORY_RUN_ID}" \
+            --prospective-start-utc "${RB_PD2_PROSPECTIVE_START_UTC}" \
+            --out-dir data/research/rb_pd2_forward/live_lock
+
+      - name: Upload RB PD2 prospective lock immediately
+        if: ${{ always() && env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' && env.RB_PD2_SHADOW_CAPTURE == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-pd2-forward-lock-${{ github.run_id }}
+          path: |
+            data/research/rb_pd2_shadow/**
+            data/research/rb_pd2_forward/live_lock/**
+          if-no-files-found: warn
+          retention-days: 90
 
       - name: Apply final-board-only verified prop quarantines
         if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' }}
