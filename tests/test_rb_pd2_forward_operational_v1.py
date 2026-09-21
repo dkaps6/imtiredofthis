@@ -80,6 +80,16 @@ def test_week1_2026_additional_history_recomputes_p3_stack1_parity():
     out = history_builder.validate_additional_history(row)
     assert len(out) == 1
 
+    bad_cert = row.copy()
+    bad_cert["pregame_lineage_certified"] = "False"
+    with pytest.raises(RuntimeError, match="uncertified or malformed"):
+        history_builder.validate_additional_history(bad_cert)
+
+    missing_cert = row.copy()
+    missing_cert["pregame_lineage_certified"] = np.nan
+    with pytest.raises(RuntimeError, match="uncertified or malformed"):
+        history_builder.validate_additional_history(missing_cert)
+
     drifted = row.copy()
     drifted["week1_stack1_projection"] = 49.0
     with pytest.raises(RuntimeError, match="recomputation failed"):
@@ -145,6 +155,15 @@ def _history_for_lock():
                 "actual_rush_yards": 45.0 + (week % 3) + p,
                 "pregame_lineage_certified": True,
             })
+    for p in range(20):
+        rows.append({
+            "season": 2026, "week": 1,
+            "team": "CAR" if p % 2 == 0 else "ATL",
+            "player_clean_key": f"back{p}", "position": "RB",
+            "projection_mean": 51.0 + p,
+            "actual_rush_yards": 46.0 + p,
+            "pregame_lineage_certified": True,
+        })
     return fwd.build_history_state(pd.DataFrame(rows))
 
 
@@ -159,6 +178,7 @@ def test_lock_assembler_writes_self_contained_baseline_and_candidate_arrays(tmp_
         "manual_name_overrides_sha256": "a" * 64,
         "canonical_names_py_sha256": "c" * 64,
         "roles_ourlads_sha256": "b" * 64,
+        "completed_2026_through_week": 1,
     }
     manifest_path = tmp_path / "history.json"
     manifest_path.write_text(json.dumps(manifest))
@@ -194,7 +214,36 @@ def test_lock_assembler_writes_self_contained_baseline_and_candidate_arrays(tmp_
     assert len(base) == len(cand)
     assert float(np.mean(base)) == pytest.approx(float(np.mean(cand)), abs=1e-8)
     assert rows[0]["outcome_present_at_lock"] is False
+    receipt = json.loads((out_dir / assembler.LOCK_RECEIPT).read_text())
+    assert receipt["target_week"] == 2
+    assert receipt["history_completed_through_week"] == 1
 
+
+
+def test_history_must_be_current_through_exactly_target_week_minus_one():
+    history = _history_for_lock()
+    manifest = {"completed_2026_through_week": 1}
+    valid = assembler._assert_history_current_for_capture(
+        history,
+        manifest,
+        [{"season": 2026, "week": 2, "baseline_lock_eligible": True}],
+    )
+    assert valid["history_completed_through_week"] == 1
+
+    with pytest.raises(RuntimeError, match="requires completed through Week 2"):
+        assembler._assert_history_current_for_capture(
+            history,
+            manifest,
+            [{"season": 2026, "week": 3, "baseline_lock_eligible": True}],
+        )
+
+    future_manifest = {"completed_2026_through_week": 2}
+    with pytest.raises(RuntimeError, match="manifest/state completed-through mismatch"):
+        assembler._assert_history_current_for_capture(
+            history,
+            future_manifest,
+            [{"season": 2026, "week": 2, "baseline_lock_eligible": True}],
+        )
 
 
 def test_live_lock_selects_exact_current_capture_session(tmp_path):
@@ -243,6 +292,10 @@ def test_full_slate_shadow_activation_is_opt_in_and_locks_before_postprocessing(
     assert "default: false" in source
     assert "RB_PD2_SHADOW_CAPTURE: ${{ github.event_name == 'workflow_dispatch'" in source
     assert "RB_PD2_PROSPECTIVE_START_UTC: \"2026-09-22T12:00:00Z\"" in source
+    assert "RB_PD2_FORWARD_HISTORY_ARTIFACT_ID" in source
+    assert "RB_PD2_FORWARD_HISTORY_ARTIFACT_DIGEST" in source
+    assert "actions/runs/${RB_PD2_FORWARD_HISTORY_RUN_ID}/artifacts" in source
+    assert "pinned RB history artifact digest drift" in source
     assert "Restore pinned RB PD2 forward-history artifact" in source
     assert "Assemble immutable RB PD2 prospective pregame lock" in source
     assert "Upload RB PD2 prospective lock immediately" in source
