@@ -219,7 +219,7 @@ def _capture_receipt():
             "workflow_job": "full-slate",
             "manual_name_overrides_sha256": "a" * 64,
             "canonical_names_py_sha256": "e" * 64,
-            "roles_ourlads_sha256": "b" * 64,
+            "roles_ourlads_sha256": "f" * 64,
         },
     }
 
@@ -265,6 +265,9 @@ def test_lock_row_requires_capture_and_artifact_to_both_be_pregame():
     assert rec["baseline"]["draw_count"] == rec["candidate"]["draw_count"]
     assert rec["baseline"]["mean"] == pytest.approx(rec["candidate"]["mean"], abs=1e-8)
     assert fwd.draw_digest(candidate) == rec["candidate"]["draw_digest_sha256"]
+    assert rec["history_roles_ourlads_sha256"] == "b" * 64
+    assert rec["capture_roles_ourlads_sha256"] == "f" * 64
+    assert rec["roles_ourlads_sha256_match"] is False
 
     with pytest.raises(RuntimeError, match="persisted pregame"):
         fwd.lock_row(
