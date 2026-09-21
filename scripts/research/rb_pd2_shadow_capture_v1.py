@@ -57,6 +57,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pandas as pd
 
 from scripts.utils.canonical_names import canonicalize_player_name_safe
 
@@ -218,6 +219,14 @@ def _num(value, default=float("nan")) -> float:
 # ---------------------------------------------------------------------------
 # Expected-set accumulation (at the seam, independent of capture)
 # ---------------------------------------------------------------------------
+def _identity_text(value, *, upper: bool = False) -> str:
+    """Normalize an identity scalar while treating pandas/NumPy missing as blank."""
+    if value is None or bool(pd.isna(value)):
+        return ""
+    text = str(value).strip()
+    return text.upper() if upper else text
+
+
 def canonical_player_key(row) -> tuple[str, str]:
     """Return (canonical key, the raw source value it was derived from).
 
@@ -236,7 +245,8 @@ def canonical_player_key(row) -> tuple[str, str]:
     would silently drop or split those player-games. The same source precedence
     as the adapters is used deliberately, so one player has one key everywhere.
     """
-    source = str((row.get("player_clean_key") if "player_clean_key" in row else row.get("player")) or "").strip()
+    source_value = row.get("player_clean_key") if "player_clean_key" in row else row.get("player")
+    source = _identity_text(source_value)
     if not source:
         return "", source
     _, canonical = canonicalize_player_name_safe(source)
@@ -248,9 +258,9 @@ def _identity(row, *, season: int, week: int) -> dict:
     return {
         "season": int(season),
         "week": int(week),
-        "event_id": str(row.get("event_id") or "").strip(),
-        "team": str(row.get("team") or "").upper().strip(),
-        "opponent": str(row.get("opponent") or "").upper().strip(),
+        "event_id": _identity_text(row.get("event_id")),
+        "team": _identity_text(row.get("team"), upper=True),
+        "opponent": _identity_text(row.get("opponent"), upper=True),
         "player_clean_key": canonical,
         "market": ELIGIBLE_MARKET,
     }
