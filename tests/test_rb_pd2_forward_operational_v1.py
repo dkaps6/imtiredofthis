@@ -11,6 +11,7 @@ from scripts.research import assemble_rb_pd2_forward_locks_v1 as assembler
 from scripts.research import build_rb_pd2_forward_history_v1 as history_builder
 from scripts.research import rb_pd2_shadow_capture_v1 as capture
 from scripts.research import rb_pd2_forward_shadow_v1 as fwd
+from scripts.research import run_rb_pd2_live_lock_v1 as live_lock
 
 
 def test_2025_history_builder_uses_pregame_components_only():
@@ -191,3 +192,43 @@ def test_lock_assembler_writes_self_contained_baseline_and_candidate_arrays(tmp_
     assert len(base) == len(cand)
     assert float(np.mean(base)) == pytest.approx(float(np.mean(cand)), abs=1e-8)
     assert rows[0]["outcome_present_at_lock"] is False
+
+
+
+def test_live_lock_selects_exact_current_capture_session(tmp_path):
+    root = tmp_path / "capture"
+    for sid, run_id, sha in [
+        ("a", "111", "a" * 40),
+        ("b", "222", "b" * 40),
+    ]:
+        d = root / sid
+        d.mkdir(parents=True)
+        (d / "session_receipt.json").write_text(json.dumps({
+            "session_id": sid,
+            "provenance": {"workflow_run_id": run_id, "code_sha": sha},
+        }))
+
+    got = live_lock.find_capture_session(
+        root, workflow_run_id="222", code_sha="b" * 40
+    )
+    assert got == root / "b"
+
+    with pytest.raises(RuntimeError, match="found=0"):
+        live_lock.find_capture_session(
+            root, workflow_run_id="333", code_sha="c" * 40
+        )
+
+
+def test_live_lock_rejects_ambiguous_same_run_sessions(tmp_path):
+    root = tmp_path / "capture"
+    for sid in ["a", "b"]:
+        d = root / sid
+        d.mkdir(parents=True)
+        (d / "session_receipt.json").write_text(json.dumps({
+            "session_id": sid,
+            "provenance": {"workflow_run_id": "123", "code_sha": "d" * 40},
+        }))
+    with pytest.raises(RuntimeError, match="found=2"):
+        live_lock.find_capture_session(
+            root, workflow_run_id="123", code_sha="d" * 40
+        )
