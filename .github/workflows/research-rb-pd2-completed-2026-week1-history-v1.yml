@@ -1,0 +1,90 @@
+name: RB PD2 Completed 2026 Week1 History V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-pd2-forward-shadow-confirmation-v1
+    paths:
+      - "scripts/research/build_rb_pd2_completed_2026_history_v1.py"
+      - "tests/test_rb_pd2_completed_2026_history_v1.py"
+      - ".github/workflows/research-rb-pd2-completed-2026-week1-history-v1.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  reconstruct-week1:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN_ID: '33993595929'
+      SOURCE_ARTIFACT: 'rb-week1-production-promotion-gate'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml pyarrow
+
+      - name: Run completed-history tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest -q tests/test_rb_pd2_completed_2026_history_v1.py
+
+      - name: Download frozen football-only Week 1 P3 context
+        run: |
+          rm -rf /tmp/rb_w1_source /tmp/rb_w1_history
+          mkdir -p /tmp/rb_w1_source /tmp/rb_w1_history
+          gh run download "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" --name "${SOURCE_ARTIFACT}" --dir /tmp/rb_w1_source
+          test -s /tmp/rb_w1_source/rb_rush_synthesis_context.csv
+
+      - name: Build certified completed Week 1 history
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/build_rb_pd2_completed_2026_history_v1.py             --week1-context /tmp/rb_w1_source/rb_rush_synthesis_context.csv             --out-dir /tmp/rb_w1_history
+
+      - name: Assert Week 1 history contract
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from pathlib import Path
+          root=Path('/tmp/rb_w1_history')
+          x=pd.read_csv(root/'rb_pd2_completed_2026_week1_history.csv')
+          a=json.loads((root/'rb_pd2_completed_2026_week1_audit.json').read_text())
+          assert len(x)>0
+          assert set(x.season.unique())=={2026}
+          assert set(x.week.unique())=={1}
+          assert x.pregame_lineage_certified.astype(bool).all()
+          assert x.week1_p3_stack1_parity_pass.astype(bool).all()
+          assert (x.projection_lineage.astype(str).str.contains('2026_W1_P3_STACK1')).all()
+          assert a['projection_audit']['projection_rows']==107
+          assert a['projection_audit']['sportsbook_inputs_used']==0
+          assert a['outcomes_loaded_after_projection_freeze'] is True
+          assert a['prospective_confirmation_observations_created']==0
+          print({'certified_rows':len(x),'players':x.player_clean_key.nunique(),'actual_source':x.actual_source.value_counts().to_dict()})
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload certified completed Week 1 history
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-pd2-completed-2026-week1-history-v1
+          path: |
+            /tmp/rb_w1_history/rb_pd2_completed_2026_week1_history.csv
+            /tmp/rb_w1_history/rb_pd2_completed_2026_week1_audit.json
+          if-no-files-found: error
+          retention-days: 30
