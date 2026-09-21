@@ -126,6 +126,8 @@ def build_week1_projection_frame(context: pd.DataFrame) -> tuple[pd.DataFrame, d
         "opponent": x["opponent"].astype(str),
         "position": pos,
         "projection_mean": p3.astype(float),
+        "week1_p3_projection": p3.astype(float),
+        "week1_stack1_projection": stack.astype(float),
         "pregame_lineage_certified": True,
         "projection_lineage": (
             f"2026_W1_P3_STACK1|run={WEEK1_SOURCE_RUN_ID}|"
