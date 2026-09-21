@@ -400,6 +400,7 @@ def resolve_kickoff_utc(
     season: int,
     week: int,
     team: str,
+    opponent: str | None = None,
 ) -> pd.Timestamp:
     s = normalize_schedule(schedule)
     t = canon_team(team)
@@ -414,7 +415,18 @@ def resolve_kickoff_utc(
         raise RuntimeError(
             f"schedule match must be exactly one row season={season} week={week} team={t}; found={len(q)}"
         )
-    return pd.Timestamp(q.iloc[0]["kickoff_utc"])
+    row = q.iloc[0]
+    if opponent is not None:
+        opp = canon_team(opponent)
+        if opp not in CANON_TEAM_CODES:
+            raise RuntimeError(f"target opponent cannot canonicalize: {opponent!r}")
+        other = str(row["away"] if str(row["home"]) == t else row["home"])
+        if other != opp:
+            raise RuntimeError(
+                f"schedule opponent mismatch season={season} week={week} team={t}: "
+                f"capture={opp} schedule={other}"
+            )
+    return pd.Timestamp(row["kickoff_utc"])
 
 
 def schedule_row_sha256(
@@ -539,7 +551,13 @@ def lock_row(
     season = int(capture_record["season"])
     week = int(capture_record["week"])
     team = canon_team(capture_record["team"])
-    kickoff = resolve_kickoff_utc(schedule, season=season, week=week, team=team)
+    kickoff = resolve_kickoff_utc(
+        schedule,
+        season=season,
+        week=week,
+        team=team,
+        opponent=capture_record.get("opponent"),
+    )
     if captured >= kickoff:
         raise RuntimeError("baseline capture was not pregame")
     if locked >= kickoff:
