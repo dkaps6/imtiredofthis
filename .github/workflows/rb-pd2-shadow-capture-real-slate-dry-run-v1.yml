@@ -1,5 +1,6 @@
 name: RB PD2 Shadow Capture Real Slate Dry Run V1
 
+# Re-run 2: isolating where commence_time is lost.
 # Dispatch-only. This is a research validation of the plan section 7 capture
 # hook against a real slate; it must never run on every PR, and it must never
 # be mistaken for the certified replay it is derived from.

@@ -100,6 +100,24 @@ def main() -> int:
         print(f"  sample value             : {sample!r}")
     else:
         print("  NONE -- section 9 cannot derive a kickoff boundary from the capture alone")
+        # Isolate WHICH link drops it rather than guessing: the field is in the
+        # carry list at materialize_pricing_offers_v1.py:102, so either the
+        # compact frame never had it, or it is lost between the offers file and
+        # metrics_ready.
+        for label, path in (("props_raw_compact", "outputs/props_raw_compact.csv"),
+                            ("props_pricing_offers", "outputs/props_pricing_offers.csv"),
+                            ("metrics_ready", "data/metrics_ready.csv")):
+            f = Path(path)
+            if not f.exists():
+                print(f"    {label:<22}: (file absent)")
+                continue
+            import pandas as pd
+            df = pd.read_csv(f, low_memory=False)
+            if "commence_time" not in df.columns:
+                print(f"    {label:<22}: column ABSENT  (rows={len(df)})")
+            else:
+                nn = int(df["commence_time"].notna().sum())
+                print(f"    {label:<22}: column present, non-null {nn}/{len(df)}")
 
     print("-" * 78)
     print("Q3. Alias remapping on a real slate")
