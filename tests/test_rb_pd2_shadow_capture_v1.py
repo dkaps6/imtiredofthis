@@ -504,6 +504,48 @@ def test_capture_failure_leaves_production_untouched_and_invalidates_the_session
         shadow.assert_session_valid(receipt)
 
 
+def test_note_expected_exception_is_research_only_and_cannot_abort_pricing(priced_fixture, monkeypatch):
+    monkeypatch.delenv(shadow.FLAG, raising=False)
+    clean = run_pricing_v2.price(SEASON)
+
+    monkeypatch.setenv(shadow.FLAG, "1")
+    monkeypatch.setattr(shadow, "DEFAULT_ROOT", priced_fixture["research"])
+
+    def explode_note(**_kwargs):
+        raise RuntimeError("synthetic note failure")
+
+    monkeypatch.setattr(shadow, "note_expected", explode_note)
+    broken = run_pricing_v2.price(SEASON)
+    pd.testing.assert_frame_equal(clean, broken)
+
+    session_dir = sorted(priced_fixture["research"].iterdir())[0]
+    receipt = json.loads((session_dir / "session_receipt.json").read_text())
+    assert receipt["valid"] is False
+    assert "note_expected_exception" in {s["kind"] for s in receipt["sentinels"]}
+    assert any("synthetic note failure" in s["detail"] for s in receipt["sentinels"])
+
+
+def test_expected_keys_exception_is_research_only_and_cannot_abort_pricing(priced_fixture, monkeypatch):
+    monkeypatch.delenv(shadow.FLAG, raising=False)
+    clean = run_pricing_v2.price(SEASON)
+
+    monkeypatch.setenv(shadow.FLAG, "1")
+    monkeypatch.setattr(shadow, "DEFAULT_ROOT", priced_fixture["research"])
+
+    def explode_expected(*_args, **_kwargs):
+        raise RuntimeError("synthetic completeness failure")
+
+    monkeypatch.setattr(shadow, "expected_keys", explode_expected)
+    broken = run_pricing_v2.price(SEASON)
+    pd.testing.assert_frame_equal(clean, broken)
+
+    session_dir = sorted(priced_fixture["research"].iterdir())[0]
+    receipt = json.loads((session_dir / "session_receipt.json").read_text())
+    assert receipt["valid"] is False
+    assert "expected_keys_exception" in {s["kind"] for s in receipt["sentinels"]}
+    assert any("synthetic completeness failure" in s["detail"] for s in receipt["sentinels"])
+
+
 def test_missing_expected_key_invalidates_the_session(priced_fixture, monkeypatch):
     monkeypatch.setenv(shadow.FLAG, "1")
     monkeypatch.setattr(shadow, "DEFAULT_ROOT", priced_fixture["research"])
