@@ -283,7 +283,7 @@ def test_week3_history_gate_matrix_is_fail_closed():
             [{"season": 2026, "week": 3, "baseline_lock_eligible": True}],
         )
 
-    with pytest.raises(RuntimeError, match="requires completed through Week 2"):
+    with pytest.raises(RuntimeError, match="requires completed through Week 1"):
         assembler._assert_history_current_for_capture(
             history_w2,
             {"completed_2026_through_week": 2},
