@@ -105,118 +105,84 @@ to read them** — use `git show origin/research-current-state:<path>`.
 
 ---
 
-## ACTIVE CHECKPOINT — 2026-09-21 — RB PD2 FORWARD / SHADOW IMPLEMENTATION
+## ACTIVE CHECKPOINT — 2026-09-21 — FINISH RB PD2 FORWARD LOCK, THEN RETURN TO MODEL IMPROVEMENT
 
-The user's current RB priority is the already-frozen RB-PD2 yard-difficulty width
-forward confirmation. GitHub remains canonical over chat memory.
+**Current detailed handoff:**
 
-Active implementation branch:
+`docs/handoffs/NFL_HANDOFF_2026-09-21_RB_PD2_FORWARD_LOCK_AND_MODEL_IMPROVEMENT_CURRENT.md`
+
+Read that file before taking action.
+
+### Exact repository state before the handoff-only commits
+
+Production `main`:
+
+`76e5e0452a88018b95ebc212fb0d1b21a2ca90a3`
+
+Active branch:
 
 `research-rb-pd2-forward-shadow-confirmation-v1`
 
-Validation PR:
+Last code-bearing head:
+
+`ab7e268429d4e33000d84388246aaaf1aad3f99c`
+
+PR:
 
 `#625 — WIP: RB PD2 forward-shadow implementation validation`
 
-### What is now implemented
+At that code head:
 
-- accepted §7 same-process empirical-array capture contract is integrated;
-- §3 strict-prior historical difficulty state is implemented;
-- §8 exact frozen mean-neutral empirical width transform is implemented;
-- §9 immutable pregame lock assembler is implemented;
-- true `kickoff_utc` comes from
-  `scripts/build/_schedule_utils.py:get_nfl_schedule`, not sportsbook
-  `commence_time` and not date-only `team_week_map.gameday`;
-- schedule matching verifies canonical team **and opponent**;
-- missing/NaN capture identities fail closed instead of becoming literal
-  `"nan"` keys;
-- stable identity hard gates are the manual-name override digest plus the exact
-  canonicalization-code digest; the mutable weekly Ourlads whole-file hash is
-  retained as diagnostic provenance rather than an all-lock equality gate;
-- Week-1 P3/STACK1 parity is mechanically recomputed from the underlying
-  projection values rather than trusted from a caller boolean.
+- Repo CI run `35633599108` = **green**;
+- preserved paid Full Slate replay run `35633599273` = **green**;
+- PR is clean/mergeable;
+- three late automated-review defects were fixed and their threads resolved;
+- exactly one review blocker remains intentionally open:
+  **advance certified predictor history through target_week - 1 before every live lock**.
 
-The three integrity defects raised by the PR #625 automated review
-(mechanical Week-1 parity, opponent validation, NaN identity handling) have
-been fixed with regression tests and their review threads resolved.
+The lock assembler correctly fails closed on stale history. The live workflow,
+however, still pins a history artifact completed only through 2026 Week 1.
+Therefore a Week-3 lock cannot count until Week 2 is leakage-safely certified,
+appended, rebuilt and re-pinned.
 
-### Certified completed 2026 history
+**Do not merge PR #625 until that final history-freshness path is implemented and
+tested.**
 
-Week-1 completed-history workflow:
+### What PD2 is — and what it is not
 
-- run `35619889214`;
-- artifact `rb-pd2-completed-2026-week1-history-v1`;
-- artifact ID `10649235022`;
-- 107 verified completed Week-1 rows;
-- zero prospective observations created.
+PD2 is a mean-neutral **distribution-calibration** mechanism.
 
-Combined forward-history workflow:
+Historical qualification improved pooled CRPS by +1.218% and high-difficulty
+CRPS by +2.624%, with better coverage/tail calibration, but **point MAE is
+unchanged by design**.
 
-- run `35620321000` — green;
-- artifact `rb-pd2-forward-history-v1`;
-- artifact ID `10648116139`;
-- artifact digest
-  `sha256:52e56ce090576480d9b8cf4ec1999bfaf9e6884e6a0d1266efc075f1afac3af8`;
-- 90-day retention;
-- 1,500 history rows / 168 players;
-- 808 scoreable rows under the frozen prior/reference contract;
-- maximum strict-prior reference N = 882;
-- includes the 107 certified Week-1 rows.
+It does not fix RB carries, YPC, or rushing-yard mean accuracy.
 
-The Full Slate activation path pins that exact green history run for the first
-future lock.
+The user explicitly wants this implementation finished, then wants the project
+back on actual model-metric improvement.
 
-### Prospective activation boundary
+### Immediate sequence
 
-Operational start is frozen at:
+1. finish the Week-2 -> Week-3 certified-history advance path;
+2. rerun PR #625 gates and review;
+3. merge #625;
+4. after Week 2 is fully final, grade the current production slate and build a
+   position/market error table;
+5. take over Claude's unfinished injury self-haircut production audit;
+6. begin the strongest sanctioned RB mean-information lane using genuinely new
+   pregame information, not another exposed-2025 router.
 
-`2026-09-22T12:00:00Z`
+The strongest new-data lead already identified is **backfield teammate
+availability / injury propagation into rushing opportunity**. Existing live/free
+injury data are already keyed, but production has no mechanism for an absent RB
+to increase another back's carries. Prior-week snap share is also live/free as a
+lagged opportunity proxy. Exact routes-run is unavailable for 2026 in nflverse
+and would require a current-season external source.
 
-Therefore **no Week-1 or Week-2 2026 game can ever become a prospective
-confirmation observation**. The first possible scientific observation is a
-future Week-3-or-later eligible player-game.
+Claude is temporarily unavailable because the user is out of credits. Do not
+wait for Claude; GPT-5.6 continues solo.
 
-See:
-
-`docs/research/RB_PD2_FORWARD_SHADOW_ACTIVATION_V1.md`
-
-### Live collection wiring
-
-`.github/workflows/full-slate.yml` now has an opt-in manual input
-`rb_pd2_shadow_capture`, default **false**.
-
-When live odds are explicitly requested/available and that input is true:
-
-1. canonical production pricing runs first;
-2. §7 captures exact `adjusted_outcomes` in-process;
-3. the pinned green history artifact is restored;
-4. §8/§9 assemble the immutable pregame candidate lock;
-5. the dedicated `rb-pd2-forward-lock-<run_id>` artifact is uploaded
-   immediately.
-
-History restore, lock assembly, and research upload are all non-blocking for
-canonical production pricing. A research failure invalidates only the research
-lock.
-
-No paid OddsAPI pull has been triggered by this implementation work.
-
-### What remains before observation #1
-
-1. finish the latest PR #625 CI / preserved-artifact replay / re-review on the
-   exact live-wiring head;
-2. land the implementation only after those gates are green;
-3. the first future paid Full Slate with `rb_pd2_shadow_capture=true` still
-   requires explicit user authorization because it consumes OddsAPI credits;
-4. verify its dedicated lock artifact was uploaded before kickoff and is valid;
-5. only then may the separate RB mean-information lane formally open in
-   parallel.
-
-Claude's new-data readiness inventory is on
-`research/rb-new-data-readiness-v1@355ce5c7`. A separate docs/evidence-only
-audit of the OUT/DOUBTFUL/IR/PUP self-haircut production behavior was assigned
-in Issue #535; do not let that audit mutate the frozen PD2 study.
-
-The M96E standing retrospective stop recorded above remains fully operative.
+No paid OddsAPI pull is authorized without explicit user approval.
 
 ---
 
