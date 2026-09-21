@@ -1,0 +1,68 @@
+name: Report MNF Week 2 Board
+
+# Read-only. Reads the already-preserved Week 2 paid board artifact and prints
+# the Monday-night game's priced rows to the job log. Artifact download out of
+# CI is blocked by the org egress policy, so the log is the channel.
+# No odds fetch, no pricing, no production change.
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - ops/report-mnf-week2-board
+    paths:
+      - '.github/workflows/report-mnf-week2-board.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pandas
+
+      - name: Download preserved Week 2 paid board
+        uses: actions/download-artifact@v4
+        with:
+          name: run_35282021679
+          path: src
+          repository: ${{ github.repository }}
+          run-id: 35282021679
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Print the Monday-night rows
+        run: |
+          set -euo pipefail
+          python - <<'EOF'
+          import pandas as pd
+          pd.set_option('display.width', 250)
+          b = pd.read_csv('src/outputs/props_priced_clean.csv', low_memory=False)
+          b.columns = [c.lower() for c in b.columns]
+          print(f"board rows={len(b)} cols={len(b.columns)}")
+          teams = {'NYG', 'LA', 'LAR'}
+          g = b[b['team'].astype(str).str.upper().isin(teams) | b['opponent'].astype(str).str.upper().isin(teams)]
+          print(f"\nMNF rows: {len(g)}   teams present: {sorted(g['team'].astype(str).str.upper().unique())}")
+          if g.empty:
+              print("NO MNF ROWS ON THIS BOARD")
+              raise SystemExit(0)
+
+          cols = [c for c in ['player','team','opponent','market','side','vegas_line','model_proj',
+                              'model_sd','fair_prob','vegas_over_odds','vegas_under_odds','ev_roi',
+                              'edge','snapshot_signal','decision','book'] if c in g.columns]
+          print("\navailable cols:", [c for c in g.columns])
+
+          print("\n================ ALL MNF PRICED ROWS ================")
+          for mkt, sub in g.groupby('market'):
+              print(f"\n--- {mkt}  (n={len(sub)}) ---")
+              s = sub[cols].copy()
+              for c in ('model_proj','vegas_line','model_sd','ev_roi','edge'):
+                  if c in s.columns:
+                      s[c] = pd.to_numeric(s[c], errors='coerce').round(3)
+              print(s.sort_values('player').to_string(index=False))
+          EOF
