@@ -124,8 +124,9 @@ def validate_additional_history(frame: pd.DataFrame) -> pd.DataFrame:
     week = pd.to_numeric(x["week"], errors="coerce")
     if not season.eq(2026).all():
         raise RuntimeError("additional history may contain completed 2026 rows only")
-    if not x["pregame_lineage_certified"].astype(bool).all():
-        raise RuntimeError("additional 2026 history contains uncertified pregame lineage")
+    cert = x["pregame_lineage_certified"].astype(str).str.strip().str.lower()
+    if not cert.isin({"true", "1"}).all():
+        raise RuntimeError("additional 2026 history contains uncertified or malformed pregame lineage")
     if x["projection_lineage"].fillna("").astype(str).str.strip().eq("").any():
         raise RuntimeError("additional 2026 history missing projection_lineage")
 
