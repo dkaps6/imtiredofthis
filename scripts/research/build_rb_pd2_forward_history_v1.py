@@ -26,6 +26,7 @@ from scripts.research.rb_pd2_forward_shadow_v1 import (
 
 DEFAULT_COMPONENTS = Path("data/backtests/component_predictions.csv")
 DEFAULT_WEIGHTS = Path("data/model_ensemble_weights.csv")
+WEEK1_PARITY_TOLERANCE = 1e-8
 
 
 def _file_sha256(path: Path) -> str:
@@ -130,10 +131,37 @@ def validate_additional_history(frame: pd.DataFrame) -> pd.DataFrame:
 
     w1 = week.eq(1)
     if w1.any():
-        if "week1_p3_stack1_parity_pass" not in x.columns:
-            raise RuntimeError("2026 Week 1 history requires P3/STACK1 parity proof")
-        if not x.loc[w1, "week1_p3_stack1_parity_pass"].astype(bool).all():
-            raise RuntimeError("2026 Week 1 P3/STACK1 parity did not pass")
+        parity_required = {
+            "week1_p3_stack1_parity_pass",
+            "week1_p3_projection",
+            "week1_stack1_projection",
+        }
+        missing_parity = parity_required - set(x.columns)
+        if missing_parity:
+            raise RuntimeError(
+                f"2026 Week 1 history requires mechanical P3/STACK1 parity inputs: {sorted(missing_parity)}"
+            )
+
+        # The flag is only an audit field; never trust it as the parity proof.
+        # Parse it strictly so a string such as "False" cannot become truthy.
+        flags = (
+            x.loc[w1, "week1_p3_stack1_parity_pass"]
+            .astype(str)
+            .str.strip()
+            .str.lower()
+        )
+        if not flags.isin({"true", "1"}).all():
+            raise RuntimeError("2026 Week 1 P3/STACK1 parity audit flag did not pass")
+
+        p3 = pd.to_numeric(x.loc[w1, "week1_p3_projection"], errors="coerce")
+        stack = pd.to_numeric(x.loc[w1, "week1_stack1_projection"], errors="coerce")
+        if p3.isna().any() or stack.isna().any():
+            raise RuntimeError("2026 Week 1 P3/STACK1 parity inputs are non-finite")
+        max_abs_diff = float((p3 - stack).abs().max())
+        if max_abs_diff > WEEK1_PARITY_TOLERANCE:
+            raise RuntimeError(
+                f"2026 Week 1 P3/STACK1 parity recomputation failed max_abs_diff={max_abs_diff}"
+            )
 
     return x
 
