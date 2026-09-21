@@ -35,6 +35,8 @@ def test_week1_projection_freezes_exact_p3_stack1_parent():
     assert len(out)==107
     assert out["pregame_lineage_certified"].all()
     assert out["week1_p3_stack1_parity_pass"].all()
+    assert np.allclose(out["week1_p3_projection"], out["week1_stack1_projection"], rtol=0.0, atol=1e-12)
+    assert np.allclose(out["projection_mean"], out["week1_p3_projection"], rtol=0.0, atol=1e-12)
     assert audit["max_p3_stack1_abs_diff"] == 0.0
     assert audit["sportsbook_inputs_used"] == 0
 
