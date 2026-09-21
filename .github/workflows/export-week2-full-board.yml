@@ -1,0 +1,85 @@
+name: Export Week 2 Full Board
+
+# Read-only. Extracts the complete Week 2 priced board (every row, not just
+# HAS EDGE) from the already-preserved paid artifact and re-uploads it as a
+# small standalone download, plus a summary in the job log.
+# No odds fetch, no pricing, no production change.
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - ops/export-week2-full-board
+    paths:
+      - '.github/workflows/export-week2-full-board.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pandas openpyxl
+
+      - name: Download preserved Week 2 paid artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: run_35282021679
+          path: src
+          repository: ${{ github.repository }}
+          run-id: 35282021679
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Collect the board and summarize
+        run: |
+          set -euo pipefail
+          mkdir -p export
+          echo "=== everything in outputs/ ==="
+          ls -la src/outputs/ || true
+          echo
+          cp src/outputs/props_priced_clean.csv export/week2_full_board.csv
+          for f in src/outputs/*.xlsx src/outputs/*.csv; do
+            [ -e "$f" ] || continue
+            cp "$f" export/ 2>/dev/null || true
+          done
+          python - <<'EOF'
+          import pandas as pd
+          b = pd.read_csv('export/week2_full_board.csv', low_memory=False)
+          b.columns = [c.lower() for c in b.columns]
+          print(f"\n=== FULL WEEK 2 BOARD: {len(b)} rows x {len(b.columns)} cols ===")
+          print(f"season/week : {sorted(b['season'].unique())} / {sorted(b['week'].unique())}")
+          print(f"games       : {b['event_id'].nunique()}")
+          print(f"teams       : {b['team'].nunique()}")
+          print(f"players     : {b['player_clean_key'].nunique()}")
+          print(f"books       : {sorted(b['book'].dropna().unique())}")
+          print("\nrows by market:")
+          print(b['market'].value_counts().to_string())
+          print("\nrows by side:")
+          print(b['side'].value_counts().to_string())
+          for col in ('snapshot_signal','decision','ensemble_status'):
+              if col in b.columns:
+                  print(f"\n{col}:")
+                  print(b[col].value_counts(dropna=False).to_string())
+          if 'edge_pct' in b.columns:
+              e = pd.to_numeric(b['edge_pct'], errors='coerce')
+              print(f"\nedge_pct: n={e.notna().sum()} min={e.min():.4f} med={e.median():.4f} max={e.max():.4f}")
+              print(f"rows with edge_pct > 0 : {(e>0).sum()}")
+              print(f"rows with edge_pct > .05: {(e>0.05).sum()}")
+          print("\nall columns:")
+          for c in b.columns: print(" ", c)
+          EOF
+          ls -la export/
+
+      - name: Upload the full board
+        uses: actions/upload-artifact@v4
+        with:
+          name: week2_full_board
+          path: export/
+          if-no-files-found: error
+          retention-days: 30
