@@ -1,48 +1,222 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
-## ACTIVE CHECKPOINT — 2026-09-20 — RB PD2 FORWARD / SHADOW CONFIRMATION
-
-**Latest continuity update:** Claude has still not posted a repaired §7 SHA after Issue #535 comment `5751454114`; §7 remains unaccepted and unintegrated. While waiting, GPT-5.6 completed a collision-free §3 historical-lineage preflight at `docs/research/RB_PD2_FORWARD_SHADOW_SECTION3_LINEAGE_PREFLIGHT.md` (commit `0fda75b63e06600133cff6efcdedbc8448a2f5fe`) and updated the detailed handoff at `fadd95df7e0bc379ebc11af2a31f60ead75a589a`. Forward 2025→2026 difficulty state must preserve canonical `player_clean_key`; do not silently re-key with the older simplified name normalizer.
-
-User has explicitly re-opened RB as an unresolved priority.
-
-Read first:
-
-`docs/handoffs/NFL_HANDOFF_2026-09-20_RB_PD2_FORWARD_SHADOW_CURRENT.md`
-
-Active branch:
-
-`research-rb-pd2-forward-shadow-confirmation-v1`
-
-Branch was created from clean production main:
-
-`f0dad2c6711e85104eeffedfa5f5112fd172cbf5`
-
-Latest implementation checkpoint:
-
-- frozen forward plan: `docs/research/RB_PD2_FORWARD_SHADOW_CONFIRMATION_V1_PLAN.md` @ `0de96f69194f1fca242515b613b814eab0c22d35`;
-- latest active RB handoff update: `fadd95df7e0bc379ebc11af2a31f60ead75a589a`;
-- §3 lineage preflight: `docs/research/RB_PD2_FORWARD_SHADOW_SECTION3_LINEAGE_PREFLIGHT.md` @ `0fda75b63e06600133cff6efcdedbc8448a2f5fe`;
-- Claude owns §7 capture hook on `research-rb-pd2-shadow-capture-hook-v1`;
-- first hook commit `0cc674e3` is **not yet accepted/cherry-picked**;
-- GPT-5.6 review comment `5751454114` identified four blockers: sportsbook book/line dedup, lossless empirical-array persistence, live-safe shadow failure isolation, and run/session provenance;
-- next action is to inspect Claude's repaired §7 SHA, integrate only if the six requested tests pass, then build §3 + §8 + §9;
-- no prospective outcome may be graded yet.
-
-The strongest unfinished RB result is already positive:
-
-`RB_YARD_DIFFICULTY_MC_WIDTH_QUALIFIED`
-
-PR #562 / run `35039152022` passed all 28 gates, but the separately required
-forward/shadow confirmation has never been started. The current task is to design and
-lock that prospective confirmation without retuning the qualified 0.30 mean-neutral
-width mapping and without changing production.
-
-Issue #535 is again an active GPT-5.6 + Claude collaboration surface at the user's
-explicit request.
+GitHub is canonical; chat memory is secondary.
 
 ---
 
-GitHub is canonical; chat memory is secondary.
+## STANDING PROHIBITION — RETROSPECTIVE RB RUSHING RESEARCH IS CLOSED
+
+**This is an operative rule, not a history note. Read it before proposing any RB rushing work.**
+
+The M96 chain ran the RB opportunity/efficiency program to a pre-committed
+terminal stop. Its artifacts live on unmerged research branches, so this
+prohibition was previously invisible to any session working from `main` — which
+is exactly how it came to be violated in Issue #535 (proposal `5754250023`,
+retracted in `5754278269`). Recorded here so that cannot recur.
+
+### Terminal disposition
+
+`M96E_FINAL_RETROSPECTIVE_ROUTER_FAILED_STOP` / `AUTONOMOUS_RB_RESEARCH_STOP`
+(run `33467630395`, job `99730679349`).
+
+Eight of nine frozen retention checks passed. The only failure was the
+predeclared materiality requirement:
+
+- required all-RB rushing-yard MAE gain: **>= `0.150000` yards**
+- observed gain: **`0.141791` yards**
+- **shortfall: `0.008209` yards**
+
+Read those carefully: `0.141791` is the gain the candidate *achieved*, not the
+amount it missed by. The chain was closed by a shortfall of eight thousandths
+of a yard, with a working mechanism and eight of nine gates passed -- not by a
+failed or broken one.
+
+### The continuation rule — verbatim intent
+
+> Any further retrospective router threshold/feature variants would reuse
+> exposed 2025 outcomes and risk overfitting. New RB architecture evidence must
+> now come from genuinely prospective/untouched 2026 games or a separately
+> justified new-data source that does not retune against the exposed historical
+> outcomes.
+
+Exactly two continuations are sanctioned:
+
+1. **genuinely prospective / untouched 2026 evidence** — this is what the RB PD2
+   forward/shadow confirmation lane produces. That lane is a sanctioned
+   continuation of RB science, not incidental plumbing.
+2. **a separately justified new-data source** that does not retune against
+   exposed historical outcomes.
+
+Anything else — another router variant, threshold search, feature hunt or
+re-decomposition against the exposed 2025 sample — is overfitting, and is
+forbidden regardless of how it is framed.
+
+### M96A standing attribution result — do not re-derive this
+
+M96A already performed the opportunity-vs-efficiency attribution
+(run `33459376333`, job `99706110345`, artifact `9782611047`,
+branch `research-rb-m96a-opportunity-efficiency-attribution`), n = 1,393
+RB/FB player-games, 2025:
+
+| Quantity | Value |
+|---|---:|
+| pregame M94C rush-yard MAE | **21.0312** |
+| perfect actual carries, frozen efficiency | **13.3535** |
+| opportunity MAE recovery | **7.6777** |
+| perfect game efficiency, frozen carries | **14.3055** |
+| efficiency MAE recovery | **6.7256** |
+| opportunity-dominant share of games | **59.73%** |
+| efficiency-dominant share of games | **40.27%** |
+
+Routed **JOINT**: opportunity cleared the component-share gate but missed the
+>= 1.0-yard recovery-margin gate by `0.048` yards.
+
+**RB rushing yards is therefore not irreducible** — roughly seven yards of MAE
+is recoverable from each factor. The binding question is *which* factor, and
+that flips by workload regime:
+
+| Actual carries | Pregame MAE | Perfect carries | Perfect efficiency | Opportunity recovery | Efficiency recovery |
+|---|---:|---:|---:|---:|---:|
+| 0–5 | 13.288 | 5.245 | 10.027 | **8.043** | 3.261 |
+| 6–10 | 21.191 | 13.561 | 13.188 | 7.630 | **8.002** |
+| 11–14 | 25.812 | 19.270 | 15.208 | 6.542 | **10.605** |
+| 15–19 | 29.764 | 23.749 | 16.989 | 6.015 | **12.775** |
+| 20+ | 40.005 | 28.636 | 36.409 | **11.369** | 3.596 |
+| 25+ | 49.310 | 37.549 | 54.390 | **11.762** | −5.079 |
+
+Low-volume (0–5) and high-volume (20+, 25+) games are **opportunity** problems.
+The 11–19 middle is an **efficiency** problem. Any future new-data justification
+should cite this table rather than re-running the attribution.
+
+### Chain lineage and where the artifacts live
+
+| Migration | Disposition |
+|---|---|
+| M96A — opportunity vs efficiency attribution | `JOINT_ADVANCE_M96B_SEPARATE_WORKLOAD_AND_EFFICIENCY_DISTRIBUTIONS` |
+| M96B — modular joint workload × efficiency synthesis | `M96B_MODULAR_SYNTHESIS_COMPLETE`; M95C residual not plug-compatible with M94C |
+| M96C — M94C-anchored efficiency residual | `M96C_NO_GLOBAL_WINNER_CONDITIONAL_EFFICIENCY_SIGNAL_SUPPORTED` |
+| M96D — pregame conditional efficiency routing | `M96D_PRIMARY_ROUTER_FAILED` |
+| M96E — role router with frozen workload-risk guard | `M96E_FINAL_RETROSPECTIVE_ROUTER_FAILED_STOP` |
+
+Full plans and results are preserved on the research branches
+`research-current-state` and `research-rb-final-qualification` under
+`docs/migrations/M96A_*` through `M96E_*`, with evaluators under
+`scripts/backtest/evaluate_rb_m96*`. **Do not merge those branches into `main`
+to read them** — use `git show origin/research-current-state:<path>`.
+
+---
+
+## ACTIVE CHECKPOINT — 2026-09-21 — RB PD2 FORWARD / SHADOW IMPLEMENTATION
+
+The user's current RB priority is the already-frozen RB-PD2 yard-difficulty width
+forward confirmation. GitHub remains canonical over chat memory.
+
+Active implementation branch:
+
+`research-rb-pd2-forward-shadow-confirmation-v1`
+
+Validation PR:
+
+`#625 — WIP: RB PD2 forward-shadow implementation validation`
+
+### What is now implemented
+
+- accepted §7 same-process empirical-array capture contract is integrated;
+- §3 strict-prior historical difficulty state is implemented;
+- §8 exact frozen mean-neutral empirical width transform is implemented;
+- §9 immutable pregame lock assembler is implemented;
+- true `kickoff_utc` comes from
+  `scripts/build/_schedule_utils.py:get_nfl_schedule`, not sportsbook
+  `commence_time` and not date-only `team_week_map.gameday`;
+- schedule matching verifies canonical team **and opponent**;
+- missing/NaN capture identities fail closed instead of becoming literal
+  `"nan"` keys;
+- identity-source fingerprints are non-empty/equal-or-fail;
+- Week-1 P3/STACK1 parity is mechanically recomputed from the underlying
+  projection values rather than trusted from a caller boolean.
+
+The three integrity defects raised by the PR #625 automated review
+(mechanical Week-1 parity, opponent validation, NaN identity handling) have
+been fixed with regression tests and their review threads resolved.
+
+### Certified completed 2026 history
+
+Week-1 completed-history workflow:
+
+- run `35619889214`;
+- artifact `rb-pd2-completed-2026-week1-history-v1`;
+- artifact ID `10649235022`;
+- 107 verified completed Week-1 rows;
+- zero prospective observations created.
+
+Combined forward-history workflow:
+
+- run `35620321000` — green;
+- artifact `rb-pd2-forward-history-v1`;
+- artifact ID `10648116139`;
+- artifact digest
+  `sha256:52e56ce090576480d9b8cf4ec1999bfaf9e6884e6a0d1266efc075f1afac3af8`;
+- 90-day retention;
+- 1,500 history rows / 168 players;
+- 808 scoreable rows under the frozen prior/reference contract;
+- maximum strict-prior reference N = 882;
+- includes the 107 certified Week-1 rows.
+
+The Full Slate activation path pins that exact green history run for the first
+future lock.
+
+### Prospective activation boundary
+
+Operational start is frozen at:
+
+`2026-09-22T12:00:00Z`
+
+Therefore **no Week-1 or Week-2 2026 game can ever become a prospective
+confirmation observation**. The first possible scientific observation is a
+future Week-3-or-later eligible player-game.
+
+See:
+
+`docs/research/RB_PD2_FORWARD_SHADOW_ACTIVATION_V1.md`
+
+### Live collection wiring
+
+`.github/workflows/full-slate.yml` now has an opt-in manual input
+`rb_pd2_shadow_capture`, default **false**.
+
+When live odds are explicitly requested/available and that input is true:
+
+1. canonical production pricing runs first;
+2. §7 captures exact `adjusted_outcomes` in-process;
+3. the pinned green history artifact is restored;
+4. §8/§9 assemble the immutable pregame candidate lock;
+5. the dedicated `rb-pd2-forward-lock-<run_id>` artifact is uploaded
+   immediately.
+
+History restore, lock assembly, and research upload are all non-blocking for
+canonical production pricing. A research failure invalidates only the research
+lock.
+
+No paid OddsAPI pull has been triggered by this implementation work.
+
+### What remains before observation #1
+
+1. finish the latest PR #625 CI / preserved-artifact replay / re-review on the
+   exact live-wiring head;
+2. land the implementation only after those gates are green;
+3. the first future paid Full Slate with `rb_pd2_shadow_capture=true` still
+   requires explicit user authorization because it consumes OddsAPI credits;
+4. verify its dedicated lock artifact was uploaded before kickoff and is valid;
+5. only then may the separate RB mean-information lane formally open in
+   parallel.
+
+Claude's new-data readiness inventory is on
+`research/rb-new-data-readiness-v1@355ce5c7`. A separate docs/evidence-only
+audit of the OUT/DOUBTFUL/IR/PUP self-haircut production behavior was assigned
+in Issue #535; do not let that audit mutate the frozen PD2 study.
+
+The M96E standing retrospective stop recorded above remains fully operative.
+
+---
 
 ## ACTIVE RESEARCH CHECKPOINT — 2026-09-14
 
