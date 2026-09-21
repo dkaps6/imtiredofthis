@@ -258,6 +258,71 @@ def test_history_must_be_current_through_exactly_target_week_minus_one():
         )
 
 
+
+def test_week3_history_gate_matrix_is_fail_closed():
+    history_w1 = _history_for_lock()
+
+    week2 = history_w1.loc[
+        pd.to_numeric(history_w1["season"], errors="coerce").eq(2026)
+        & pd.to_numeric(history_w1["week"], errors="coerce").eq(1)
+    ].copy()
+    week2["week"] = 2
+    history_w2 = pd.concat([history_w1, week2], ignore_index=True)
+
+    valid = assembler._assert_history_current_for_capture(
+        history_w2,
+        {"completed_2026_through_week": 2},
+        [{"season": 2026, "week": 3, "baseline_lock_eligible": True}],
+    )
+    assert valid["history_completed_through_week"] == 2
+
+    with pytest.raises(RuntimeError, match="requires completed through Week 2"):
+        assembler._assert_history_current_for_capture(
+            history_w1,
+            {"completed_2026_through_week": 1},
+            [{"season": 2026, "week": 3, "baseline_lock_eligible": True}],
+        )
+
+    with pytest.raises(RuntimeError, match="requires completed through Week 2"):
+        assembler._assert_history_current_for_capture(
+            history_w2,
+            {"completed_2026_through_week": 2},
+            [{"season": 2026, "week": 2, "baseline_lock_eligible": True}],
+        )
+
+    week3_only = week2.copy()
+    week3_only["week"] = 3
+    noncontiguous = pd.concat([history_w1, week3_only], ignore_index=True)
+    with pytest.raises(RuntimeError, match="not contiguous"):
+        assembler._assert_history_current_for_capture(
+            noncontiguous,
+            {"completed_2026_through_week": 3},
+            [{"season": 2026, "week": 4, "baseline_lock_eligible": True}],
+        )
+
+
+def test_week2_additional_history_requires_certified_pregame_lineage():
+    row = pd.DataFrame([{
+        "season": 2026,
+        "week": 2,
+        "team": "CHI",
+        "player_clean_key": "x",
+        "position": "RB",
+        "projection_mean": 50.0,
+        "actual_rush_yards": 55.0,
+        "pregame_lineage_certified": True,
+        "projection_lineage": "2026_W2_GENERIC_ENSEMBLE_FULL_ROSTER",
+    }])
+    out = history_builder.validate_additional_history(row)
+    assert len(out) == 1
+
+    for malformed in ("False", "", "yes", np.nan):
+        bad = row.copy()
+        bad["pregame_lineage_certified"] = malformed
+        with pytest.raises(RuntimeError, match="uncertified or malformed"):
+            history_builder.validate_additional_history(bad)
+
+
 def test_live_lock_selects_exact_current_capture_session(tmp_path):
     root = tmp_path / "capture"
     for sid, run_id, sha in [

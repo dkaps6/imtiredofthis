@@ -393,7 +393,7 @@ def build_projection_frame(
         "projection_players": int(projection["player_clean_key"].nunique()),
         "simulation_iterations": sim_iterations,
         "priced_parity_rows": int(len(parity)),
-        "priced_parity_players": int(parity[["team", "player_clean_key"]].drop_duplicates().shape[0]),
+        "priced_parity_players": int(parity[["team", "canonical_player_key"]].drop_duplicates().shape[0]),
         "max_abs_priced_mc_parity_gap": float(mc_gap.max()),
         "max_abs_priced_ensemble_parity_gap": float(ens_gap.max()),
         "max_abs_priced_model_parity_gap": float(model_gap.max()),
