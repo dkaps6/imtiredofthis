@@ -106,11 +106,13 @@ def _provenance() -> dict:
         "workflow_run_attempt": os.getenv("GITHUB_RUN_ATTEMPT", ""),
         "workflow_job": os.getenv("GITHUB_JOB", ""),
         "runner_ref": os.getenv("GITHUB_REF", ""),
-        # Player identity is resolved through a mutable alias table. If it
-        # changes between the section 3 history build and a capture, the same
-        # back gets two keys -- so section 9 can compare these fingerprints and
-        # refuse to join across a table it cannot prove was identical.
+        # Hard identity contract: stable manual overrides + the exact
+        # canonicalization implementation.  roles_ourlads.csv is intentionally
+        # retained as diagnostic provenance only: it is a weekly production
+        # enrichment artifact and whole-file equality would invalidate healthy
+        # future locks whenever unrelated depth-chart rows changed.
         "manual_name_overrides_sha256": _file_digest(Path("data/manual_name_overrides.csv")),
+        "canonical_names_py_sha256": _file_digest(Path("scripts/utils/canonical_names.py")),
         "roles_ourlads_sha256": _file_digest(Path("data/roles_ourlads.csv")),
     }
 
