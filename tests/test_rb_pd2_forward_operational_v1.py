@@ -101,6 +101,18 @@ def test_week1_2026_additional_history_recomputes_p3_stack1_parity():
         history_builder.validate_additional_history(false_string)
 
 
+def test_history_state_rejects_string_false_or_missing_lineage_certification():
+    base = {
+        "season": 2025, "week": 1, "team": "CHI",
+        "player_clean_key": "x", "position": "RB",
+        "projection_mean": 10.0, "actual_rush_yards": 11.0,
+    }
+    for bad in ("False", np.nan, "", "yes"):
+        row = pd.DataFrame([{**base, "pregame_lineage_certified": bad}])
+        with pytest.raises(RuntimeError, match="uncertified or malformed"):
+            fwd.build_history_state(row)
+
+
 def _make_capture_session(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(capture, "DEFAULT_ROOT", tmp_path / "capture")
     monkeypatch.setenv("GITHUB_SHA", "d" * 40)
