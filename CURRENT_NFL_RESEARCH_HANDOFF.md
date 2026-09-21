@@ -1,6 +1,106 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 GitHub is canonical; chat memory is secondary.
 
+---
+
+## STANDING PROHIBITION — RETROSPECTIVE RB RUSHING RESEARCH IS CLOSED
+
+**This is an operative rule, not a history note. Read it before proposing any RB rushing work.**
+
+The M96 chain ran the RB opportunity/efficiency program to a pre-committed
+terminal stop. Its artifacts live on unmerged research branches, so this
+prohibition was previously invisible to any session working from `main` — which
+is exactly how it came to be violated in Issue #535 (proposal `5754250023`,
+retracted in `5754278269`). Recorded here so that cannot recur.
+
+### Terminal disposition
+
+`M96E_FINAL_RETROSPECTIVE_ROUTER_FAILED_STOP` / `AUTONOMOUS_RB_RESEARCH_STOP`
+(run `33467630395`, job `99730679349`).
+
+Eight of nine frozen retention checks passed. The only failure was the
+predeclared materiality requirement:
+
+- required all-RB rushing-yard MAE gain: **>= `0.150000` yards**
+- observed gain: **`0.141791` yards**
+
+The chain was closed by that margin, not by a broken mechanism.
+
+### The continuation rule — verbatim intent
+
+> Any further retrospective router threshold/feature variants would reuse
+> exposed 2025 outcomes and risk overfitting. New RB architecture evidence must
+> now come from genuinely prospective/untouched 2026 games or a separately
+> justified new-data source that does not retune against the exposed historical
+> outcomes.
+
+Exactly two continuations are sanctioned:
+
+1. **genuinely prospective / untouched 2026 evidence** — this is what the RB PD2
+   forward/shadow confirmation lane produces. That lane is a sanctioned
+   continuation of RB science, not incidental plumbing.
+2. **a separately justified new-data source** that does not retune against
+   exposed historical outcomes.
+
+Anything else — another router variant, threshold search, feature hunt or
+re-decomposition against the exposed 2025 sample — is overfitting, and is
+forbidden regardless of how it is framed.
+
+### M96A standing attribution result — do not re-derive this
+
+M96A already performed the opportunity-vs-efficiency attribution
+(run `33459376333`, job `99706110345`, artifact `9782611047`,
+branch `research-rb-m96a-opportunity-efficiency-attribution`), n = 1,393
+RB/FB player-games, 2025:
+
+| Quantity | Value |
+|---|---:|
+| pregame M94C rush-yard MAE | **21.0312** |
+| perfect actual carries, frozen efficiency | **13.3535** |
+| opportunity MAE recovery | **7.6777** |
+| perfect game efficiency, frozen carries | **14.3055** |
+| efficiency MAE recovery | **6.7256** |
+| opportunity-dominant share of games | **59.73%** |
+| efficiency-dominant share of games | **40.27%** |
+
+Routed **JOINT**: opportunity cleared the component-share gate but missed the
+>= 1.0-yard recovery-margin gate by `0.048` yards.
+
+**RB rushing yards is therefore not irreducible** — roughly seven yards of MAE
+is recoverable from each factor. The binding question is *which* factor, and
+that flips by workload regime:
+
+| Actual carries | Pregame MAE | Perfect carries | Perfect efficiency | Opportunity recovery | Efficiency recovery |
+|---|---:|---:|---:|---:|---:|
+| 0–5 | 13.288 | 5.245 | 10.027 | **8.043** | 3.261 |
+| 6–10 | 21.191 | 13.561 | 13.188 | 7.630 | **8.002** |
+| 11–14 | 25.812 | 19.270 | 15.208 | 6.542 | **10.605** |
+| 15–19 | 29.764 | 23.749 | 16.989 | 6.015 | **12.775** |
+| 20+ | 40.005 | 28.636 | 36.409 | **11.369** | 3.596 |
+| 25+ | 49.310 | 37.549 | 54.390 | **11.762** | −5.079 |
+
+Low-volume (0–5) and high-volume (20+, 25+) games are **opportunity** problems.
+The 11–19 middle is an **efficiency** problem. Any future new-data justification
+should cite this table rather than re-running the attribution.
+
+### Chain lineage and where the artifacts live
+
+| Migration | Disposition |
+|---|---|
+| M96A — opportunity vs efficiency attribution | `JOINT_ADVANCE_M96B_SEPARATE_WORKLOAD_AND_EFFICIENCY_DISTRIBUTIONS` |
+| M96B — modular joint workload × efficiency synthesis | `M96B_MODULAR_SYNTHESIS_COMPLETE`; M95C residual not plug-compatible with M94C |
+| M96C — M94C-anchored efficiency residual | `M96C_NO_GLOBAL_WINNER_CONDITIONAL_EFFICIENCY_SIGNAL_SUPPORTED` |
+| M96D — pregame conditional efficiency routing | `M96D_PRIMARY_ROUTER_FAILED` |
+| M96E — role router with frozen workload-risk guard | `M96E_FINAL_RETROSPECTIVE_ROUTER_FAILED_STOP` |
+
+Full plans and results are preserved on the research branches
+`research-current-state` and `research-rb-final-qualification` under
+`docs/migrations/M96A_*` through `M96E_*`, with evaluators under
+`scripts/backtest/evaluate_rb_m96*`. **Do not merge those branches into `main`
+to read them** — use `git show origin/research-current-state:<path>`.
+
+---
+
 ## ACTIVE RESEARCH CHECKPOINT — 2026-09-14
 
 The user's explicit current priority is **WR receiving yards**. Do not skip ahead to RB until the user changes priority.
