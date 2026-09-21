@@ -274,3 +274,21 @@ def test_lock_row_rejects_rows_before_frozen_prospective_start():
             prospective_start_utc="2026-09-20T16:00:00Z",
             lock_timestamp_utc="2026-09-20T16:05:00Z",
         )
+
+
+def test_lock_row_excludes_unscoreable_targets_from_scientific_population():
+    small = fwd.build_history_state(_history(n_players=2, weeks=(1, 2, 3, 4, 5)))
+    draws = np.linspace(0.0, 120.0, 64, dtype=np.float64)
+    rec = _capture_record(draws)
+    rec["player_clean_key"] = "back0"
+    with pytest.raises(RuntimeError, match="outside scientific population"):
+        fwd.lock_row(
+            capture_record=rec,
+            capture_receipt=_capture_receipt(),
+            baseline_draws=draws,
+            history_state=small,
+            history_manifest=_history_manifest(),
+            schedule=_schedule(),
+            prospective_start_utc="2026-09-20T14:00:00Z",
+            lock_timestamp_utc="2026-09-20T15:05:00Z",
+        )

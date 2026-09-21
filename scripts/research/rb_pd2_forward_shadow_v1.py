@@ -557,6 +557,12 @@ def lock_row(
         season=season,
         week=week,
     )
+    # Frozen section 5 population requires a scoreable difficulty state.
+    if int(state["prior_games"]) < MIN_PRIOR_GAMES:
+        raise RuntimeError("target is outside scientific population: insufficient prior games")
+    if int(state["difficulty_reference_n"]) < REFERENCE_MIN or not np.isfinite(state["difficulty_score"]):
+        raise RuntimeError("target is outside scientific population: invalid difficulty score/reference floor")
+
     candidate, mult = build_candidate(baseline, state["difficulty_score"])
     cand_summary = distribution_summary(candidate)
     if abs(cand_summary["mean"] - base_summary["mean"]) > MEAN_TOLERANCE:
