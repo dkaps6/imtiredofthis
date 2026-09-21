@@ -359,7 +359,8 @@ Historical project shorthand from prior chat audits:
 - M95R/T and M96D/E were rejected by stability/materiality gates.
 - **M96E closed the retrospective RB rushing program entirely**
   (`M96E_FINAL_RETROSPECTIVE_ROUTER_FAILED_STOP` / `AUTONOMOUS_RB_RESEARCH_STOP`,
-  missing its materiality gate by `0.141791` vs a required `0.150000` yards).
+  observed `0.141791` yards all-RB MAE gain vs a required `0.150000`,
+  a shortfall of `0.008209` yards).
   This is a standing prohibition on further retrospective RB router/threshold/
   feature work against the exposed 2025 sample, not merely a record of failure.
   The operative rule, the sanctioned continuations and M96A's standing

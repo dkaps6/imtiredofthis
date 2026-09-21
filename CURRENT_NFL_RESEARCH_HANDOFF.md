@@ -23,8 +23,12 @@ predeclared materiality requirement:
 
 - required all-RB rushing-yard MAE gain: **>= `0.150000` yards**
 - observed gain: **`0.141791` yards**
+- **shortfall: `0.008209` yards**
 
-The chain was closed by that margin, not by a broken mechanism.
+Read those carefully: `0.141791` is the gain the candidate *achieved*, not the
+amount it missed by. The chain was closed by a shortfall of eight thousandths
+of a yard, with a working mechanism and eight of nine gates passed -- not by a
+failed or broken one.
 
 ### The continuation rule — verbatim intent
 
