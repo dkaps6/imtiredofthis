@@ -61,7 +61,7 @@ def test_2025_history_builder_rejects_nonpregame_lineage():
         history_builder.build_2025_seed(row, weights)
 
 
-def test_week1_2026_additional_history_requires_p3_stack1_parity():
+def test_week1_2026_additional_history_recomputes_p3_stack1_parity():
     row = pd.DataFrame([{
         "season": 2026, "week": 1, "team": "CHI", "player_clean_key": "x",
         "position": "RB", "projection_mean": 50.0, "actual_rush_yards": 55.0,
@@ -69,9 +69,25 @@ def test_week1_2026_additional_history_requires_p3_stack1_parity():
     }])
     with pytest.raises(RuntimeError, match="parity"):
         history_builder.validate_additional_history(row)
+
     row["week1_p3_stack1_parity_pass"] = True
+    with pytest.raises(RuntimeError, match="mechanical"):
+        history_builder.validate_additional_history(row)
+
+    row["week1_p3_projection"] = 50.0
+    row["week1_stack1_projection"] = 50.0
     out = history_builder.validate_additional_history(row)
     assert len(out) == 1
+
+    drifted = row.copy()
+    drifted["week1_stack1_projection"] = 49.0
+    with pytest.raises(RuntimeError, match="recomputation failed"):
+        history_builder.validate_additional_history(drifted)
+
+    false_string = row.copy()
+    false_string["week1_p3_stack1_parity_pass"] = "False"
+    with pytest.raises(RuntimeError, match="audit flag"):
+        history_builder.validate_additional_history(false_string)
 
 
 def _make_capture_session(tmp_path: Path, monkeypatch):
