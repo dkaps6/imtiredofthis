@@ -25,6 +25,8 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       IDENTITY_SOURCE_RUN_ID: '35282021679'
       IDENTITY_SOURCE_ARTIFACT: 'run_35282021679'
+      WEEK1_HISTORY_RUN_ID: '35619889214'
+      WEEK1_HISTORY_ARTIFACT: 'rb-pd2-completed-2026-week1-history-v1'
     steps:
       - uses: actions/checkout@v4
 
@@ -58,6 +60,23 @@ jobs:
           from pathlib import Path
           for p in [Path('data/manual_name_overrides.csv'), Path('data/roles_ourlads.csv')]:
               print(p, hashlib.sha256(p.read_bytes()).hexdigest())
+          PY
+
+      - name: Restore certified completed 2026 Week 1 history
+        run: |
+          rm -rf /tmp/rb_pd2_w1_history
+          mkdir -p /tmp/rb_pd2_w1_history
+          gh run download "${WEEK1_HISTORY_RUN_ID}" --repo "${GITHUB_REPOSITORY}" --name "${WEEK1_HISTORY_ARTIFACT}" --dir /tmp/rb_pd2_w1_history
+          test -s /tmp/rb_pd2_w1_history/rb_pd2_completed_2026_week1_history.csv
+          test -s /tmp/rb_pd2_w1_history/rb_pd2_completed_2026_week1_audit.json
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          p=Path('/tmp/rb_pd2_w1_history/rb_pd2_completed_2026_week1_history.csv')
+          a=json.loads(Path('/tmp/rb_pd2_w1_history/rb_pd2_completed_2026_week1_audit.json').read_text())
+          assert a['disposition']=='WEEK1_COMPLETED_HISTORY_CERTIFIED'
+          assert a['prospective_confirmation_observations_created']==0
+          print({'week1_history_sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'verified_rows':a['actual_audit']['verified_rows']})
           PY
 
       - name: Build independent 2024 and 2025 historical inputs
@@ -107,7 +126,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/research/build_rb_pd2_forward_history_v1.py             --components /tmp/rb_pd2_forward/component_predictions_2025.csv             --weights data/model_ensemble_weights.csv             --out-dir /tmp/rb_pd2_forward/history
+          python scripts/research/build_rb_pd2_forward_history_v1.py             --components /tmp/rb_pd2_forward/component_predictions_2025.csv             --weights data/model_ensemble_weights.csv             --additional-certified-history /tmp/rb_pd2_w1_history/rb_pd2_completed_2026_week1_history.csv             --out-dir /tmp/rb_pd2_forward/history
 
       - name: Assert history artifact contract
         env:
@@ -123,13 +142,16 @@ jobs:
           manifest = json.loads((root / 'rb_pd2_forward_history_manifest.json').read_text())
 
           assert len(state) > 0
-          assert set(state.season.unique()) == {2025}
+          assert set(pd.to_numeric(state.season).astype(int).unique()) == {2025, 2026}
+          assert set(pd.to_numeric(state.loc[pd.to_numeric(state.season).eq(2026), 'week']).astype(int).unique()) == {1}
           assert int(manifest['row_count']) == len(state)
           assert manifest['zero_prospective_outcomes_used'] is True
           assert manifest['rush_yards_fit_scope'] == 'all_2024_oos_frozen_for_2025'
           assert manifest['rush_yards_promotion_lineage'] == 'RB_STACK1_RUN_33535308110_FOR_P3'
           assert len(manifest['manual_name_overrides_sha256']) == 64
           assert len(manifest['roles_ourlads_sha256']) == 64
+          assert len(manifest['additional_history_sha256']) == 64
+          assert manifest['additional_history_path'].endswith('rb_pd2_completed_2026_week1_history.csv')
 
           scoreable = state[
               (pd.to_numeric(state.prior_games, errors='coerce') >= 4)
@@ -160,4 +182,4 @@ jobs:
             /tmp/rb_pd2_forward/history/rb_pd2_forward_history_state.csv
             /tmp/rb_pd2_forward/history/rb_pd2_forward_history_manifest.json
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
