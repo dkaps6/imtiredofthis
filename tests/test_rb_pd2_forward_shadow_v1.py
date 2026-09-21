@@ -168,6 +168,18 @@ def test_schedule_resolver_canonicalizes_la_to_lar_and_handles_utc_day_rollover(
     assert snf == pd.Timestamp("2026-09-21T00:20:00Z")
 
 
+def test_schedule_resolver_rejects_capture_opponent_mismatch():
+    with pytest.raises(RuntimeError, match="opponent mismatch"):
+        fwd.resolve_kickoff_utc(
+            _schedule(), season=2026, week=2, team="CAR", opponent="IND"
+        )
+
+    kickoff = fwd.resolve_kickoff_utc(
+        _schedule(), season=2026, week=2, team="CAR", opponent="ATL"
+    )
+    assert kickoff == pd.Timestamp("2026-09-20T17:00:00Z")
+
+
 def test_date_only_or_ambiguous_schedule_fails_closed():
     date_only = pd.DataFrame([{
         "season": 2026, "week": 2, "home": "CAR", "away": "ATL",
