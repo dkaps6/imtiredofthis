@@ -759,9 +759,10 @@ def test_session_carries_run_provenance(priced_fixture, monkeypatch):
     assert receipt["provenance"]["workflow_run_attempt"] == "2"
     assert receipt["provenance"]["workflow_job"] == "full-slate"
 
-    # The alias table is fingerprinted, so section 9 can refuse to join a
-    # capture to history that was keyed under a different table.
+    # Stable identity authorities are fingerprinted. The mutable weekly Ourlads
+    # file remains diagnostic provenance rather than a hard equality gate.
     assert len(receipt["provenance"]["manual_name_overrides_sha256"]) == 64
+    assert len(receipt["provenance"]["canonical_names_py_sha256"]) == 64
 
     # Per-record provenance needed for an immutable section 9 join.
     for record in records:
