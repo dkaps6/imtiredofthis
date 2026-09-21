@@ -204,6 +204,7 @@ def _history_manifest():
     return {
         "history_state_sha256": "c" * 64,
         "manual_name_overrides_sha256": good1,
+        "canonical_names_py_sha256": "e" * 64,
         "roles_ourlads_sha256": good2,
     }
 
@@ -217,6 +218,7 @@ def _capture_receipt():
             "workflow_run_attempt": "1",
             "workflow_job": "full-slate",
             "manual_name_overrides_sha256": "a" * 64,
+            "canonical_names_py_sha256": "e" * 64,
             "roles_ourlads_sha256": "b" * 64,
         },
     }
