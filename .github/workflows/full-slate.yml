@@ -49,7 +49,7 @@ env:
   PRIOR_SEASON: ${{ github.event.inputs.prior_season || '2025' }}
   SLATE_DATE: ${{ github.event.inputs.date || '' }}
   FETCH_LIVE_ODDS: ${{ github.event.inputs.fetch_live_odds || 'false' }}
-  RB_PD2_SHADOW_CAPTURE: ${{ github.event.inputs.rb_pd2_shadow_capture || 'false' }}
+  RB_PD2_SHADOW_CAPTURE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.rb_pd2_shadow_capture == 'true' && 'true' || '' }}
   RB_PD2_FORWARD_HISTORY_RUN_ID: ${{ github.event.inputs.rb_pd2_forward_history_run_id || '' }}
   RB_PD2_FORWARD_HISTORY_ARTIFACT: rb-pd2-forward-history-v1
   # Operational activation boundary: Week 2 can never become a prospective observation.
