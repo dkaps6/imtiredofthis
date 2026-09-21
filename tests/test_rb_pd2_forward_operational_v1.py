@@ -250,3 +250,11 @@ def test_full_slate_shadow_activation_is_opt_in_and_locks_before_postprocessing(
     upload = source.index("Upload RB PD2 prospective lock immediately")
     quarantine = source.index("Apply final-board-only verified prop quarantines")
     assert pricing < assemble < upload < quarantine
+
+    # Every post-pricing research operation is non-blocking for canonical pricing.
+    history_block = source[source.index("Restore pinned RB PD2 forward-history artifact"):assemble]
+    lock_block = source[assemble:upload]
+    upload_block = source[upload:quarantine]
+    assert "continue-on-error: true" in history_block
+    assert "continue-on-error: true" in lock_block
+    assert "continue-on-error: true" in upload_block
