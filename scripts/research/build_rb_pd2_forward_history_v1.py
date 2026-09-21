@@ -190,7 +190,21 @@ def build_artifacts(
         root=Path("."),
         source_label="2025 leakage-safe components + explicitly certified completed 2026 history",
     )
+    completed_2026_weeks = sorted(
+        pd.to_numeric(
+            state.loc[pd.to_numeric(state["season"], errors="coerce").eq(2026), "week"],
+            errors="coerce",
+        ).dropna().astype(int).unique().tolist()
+    )
+    if completed_2026_weeks:
+        expected_weeks = list(range(1, max(completed_2026_weeks) + 1))
+        if completed_2026_weeks != expected_weeks:
+            raise RuntimeError(
+                f"completed 2026 history is not contiguous from Week 1: {completed_2026_weeks}"
+            )
     manifest.update({
+        "completed_2026_weeks": completed_2026_weeks,
+        "completed_2026_through_week": max(completed_2026_weeks) if completed_2026_weeks else 0,
         "component_predictions_path": str(components_path),
         "component_predictions_sha256": _file_sha256(components_path),
         "ensemble_weights_path": str(weights_path),
