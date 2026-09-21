@@ -13,10 +13,18 @@ on:
       - "tests/test_rb_pd2_forward_operational_v1.py"
       - ".github/workflows/research-rb-pd2-forward-history-v1.yml"
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   build-history:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      IDENTITY_SOURCE_RUN_ID: '35282021679'
+      IDENTITY_SOURCE_ARTIFACT: 'run_35282021679'
     steps:
       - uses: actions/checkout@v4
 
@@ -35,6 +43,22 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           pytest -q             tests/test_rb_pd2_shadow_capture_v1.py             tests/test_rb_pd2_forward_shadow_v1.py             tests/test_rb_pd2_forward_operational_v1.py
+
+      - name: Restore production identity sources from preserved Week 2 run
+        run: |
+          rm -rf /tmp/rb_pd2_identity_source
+          mkdir -p /tmp/rb_pd2_identity_source
+          gh run download "${IDENTITY_SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" --name "${IDENTITY_SOURCE_ARTIFACT}" --dir /tmp/rb_pd2_identity_source
+          test -s /tmp/rb_pd2_identity_source/data/manual_name_overrides.csv
+          test -s /tmp/rb_pd2_identity_source/data/roles_ourlads.csv
+          cp /tmp/rb_pd2_identity_source/data/manual_name_overrides.csv data/manual_name_overrides.csv
+          cp /tmp/rb_pd2_identity_source/data/roles_ourlads.csv data/roles_ourlads.csv
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          for p in [Path('data/manual_name_overrides.csv'), Path('data/roles_ourlads.csv')]:
+              print(p, hashlib.sha256(p.read_bytes()).hexdigest())
+          PY
 
       - name: Build independent 2024 and 2025 historical inputs
         env:
