@@ -298,6 +298,51 @@ def noted_expected_keys() -> set[str]:
     return set() if _SESSION is None else set(_SESSION["expected"])
 
 
+def observe_pricing_row(
+    *,
+    row,
+    adjusted_outcomes,
+    target_mean: float,
+    market: str,
+    position: str,
+    season: int,
+    week: int,
+    mc_proj: float = float("nan"),
+) -> bool:
+    """No-raise production seam wrapper around expectation + capture.
+
+    Every research helper invoked by production must be contained here. Any
+    unexpected failure invalidates the research session through a sentinel but
+    returns control to canonical pricing.
+    """
+    if _SESSION is None or not is_eligible(position, market):
+        return False
+    try:
+        note_expected(
+            row=row,
+            market=market,
+            position=position,
+            season=season,
+            week=week,
+        )
+    except Exception as exc:  # pragma: no cover - defensive production isolation
+        _sentinel("note_expected_exception", "", f"{type(exc).__name__}: {exc}")
+    try:
+        return capture(
+            row=row,
+            adjusted_outcomes=adjusted_outcomes,
+            target_mean=target_mean,
+            mc_proj=mc_proj,
+            market=market,
+            position=position,
+            season=season,
+            week=week,
+        )
+    except Exception as exc:  # pragma: no cover - capture itself is no-raise
+        _sentinel("capture_wrapper_exception", "", f"{type(exc).__name__}: {exc}")
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Capture
 # ---------------------------------------------------------------------------
@@ -466,6 +511,28 @@ def expected_keys(metrics, *, season: int) -> set[str]:
 # ---------------------------------------------------------------------------
 # Finalization
 # ---------------------------------------------------------------------------
+def finalize_pricing_session(metrics, *, season: int) -> dict:
+    """No-raise production wrapper for completeness derivation + finalization."""
+    expected: set[str] = set()
+    pre_seam: set[str] | None = None
+    try:
+        expected = noted_expected_keys()
+    except Exception as exc:  # pragma: no cover - defensive production isolation
+        _sentinel("noted_expected_keys_exception", "", f"{type(exc).__name__}: {exc}")
+    try:
+        pre_seam = expected_keys(metrics, season=season)
+    except Exception as exc:  # pragma: no cover - defensive production isolation
+        _sentinel("expected_keys_exception", "", f"{type(exc).__name__}: {exc}")
+    try:
+        return finalize(
+            expected_football_keys=expected,
+            pre_seam_eligible_keys=pre_seam,
+        )
+    except Exception as exc:  # pragma: no cover - finalize itself is no-raise
+        _sentinel("finalize_wrapper_exception", "", f"{type(exc).__name__}: {exc}")
+        return finalize()
+
+
 def finalize(
     *,
     expected_football_keys: set[str] | None = None,
