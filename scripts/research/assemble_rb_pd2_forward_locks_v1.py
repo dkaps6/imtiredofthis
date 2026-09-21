@@ -47,6 +47,68 @@ def _load_schedule(records: list[dict], schedule_csv: Path | None) -> pd.DataFra
     return pd.concat(frames, ignore_index=True)
 
 
+def _assert_history_current_for_capture(
+    history: pd.DataFrame,
+    history_manifest: dict,
+    records: list[dict],
+) -> dict:
+    """Require completed predictor history through exactly target_week - 1."""
+    targets = {
+        (int(r["season"]), int(r["week"]))
+        for r in records
+        if r.get("baseline_lock_eligible")
+    }
+    if not targets:
+        return {"target_season": None, "target_week": None, "history_completed_through_week": None}
+    if len(targets) != 1:
+        raise RuntimeError(f"capture session spans multiple target season/weeks: {sorted(targets)}")
+
+    target_season, target_week = next(iter(targets))
+    weeks = sorted(
+        pd.to_numeric(
+            history.loc[
+                pd.to_numeric(history["season"], errors="coerce").eq(target_season),
+                "week",
+            ],
+            errors="coerce",
+        ).dropna().astype(int).unique().tolist()
+    )
+    through = max(weeks) if weeks else 0
+    if weeks and weeks != list(range(1, through + 1)):
+        raise RuntimeError(
+            f"current-season history is not contiguous through target: weeks={weeks}"
+        )
+
+    manifest_field = (
+        "completed_2026_through_week"
+        if target_season == 2026
+        else f"completed_{target_season}_through_week"
+    )
+    declared = history_manifest.get(manifest_field)
+    if declared is None:
+        raise RuntimeError(f"history manifest missing {manifest_field}")
+    try:
+        declared_int = int(declared)
+    except Exception as exc:
+        raise RuntimeError(f"history manifest has malformed {manifest_field}: {declared!r}") from exc
+    if declared_int != through:
+        raise RuntimeError(
+            f"history manifest/state completed-through mismatch: manifest={declared_int} state={through}"
+        )
+
+    required = max(0, int(target_week) - 1)
+    if through != required:
+        raise RuntimeError(
+            f"stale or future predictor history for target Week {target_week}: "
+            f"requires completed through Week {required}, found Week {through}"
+        )
+    return {
+        "target_season": int(target_season),
+        "target_week": int(target_week),
+        "history_completed_through_week": int(through),
+    }
+
+
 def assemble(
     *,
     session_dir: Path,
@@ -65,6 +127,9 @@ def assemble(
     actual_history_digest = history_state_digest(history)
     if actual_history_digest != str(history_manifest.get("history_state_sha256") or ""):
         raise RuntimeError("history-state file does not match manifest digest")
+    history_alignment = _assert_history_current_for_capture(
+        history, history_manifest, records
+    )
 
     schedule = _load_schedule(records, schedule_csv)
     lock_ts = (
@@ -150,6 +215,7 @@ def assemble(
         "history_state_path": str(history_state_path),
         "history_manifest_path": str(history_manifest_path),
         "history_state_sha256": actual_history_digest,
+        **history_alignment,
         "prospective_start_utc": pd.to_datetime(
             prospective_start_utc, utc=True, errors="raise"
         ).isoformat(),
