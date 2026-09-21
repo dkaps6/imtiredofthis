@@ -517,6 +517,7 @@ jobs:
 
       - name: Upload RB PD2 prospective lock immediately
         if: ${{ always() && env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' && env.RB_PD2_SHADOW_CAPTURE == 'true' }}
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: rb-pd2-forward-lock-${{ github.run_id }}
