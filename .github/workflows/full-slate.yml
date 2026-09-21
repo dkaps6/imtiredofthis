@@ -493,6 +493,26 @@ jobs:
           fi
           rm -rf /tmp/rb_pd2_forward_history_live
           mkdir -p /tmp/rb_pd2_forward_history_live
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RB_PD2_FORWARD_HISTORY_RUN_ID}/artifacts?per_page=100" \
+            > /tmp/rb_pd2_forward_history_artifacts.json
+          python - <<'PY'
+          import json, os
+          meta=json.load(open('/tmp/rb_pd2_forward_history_artifacts.json',encoding='utf-8'))
+          want_id=int(os.environ['RB_PD2_FORWARD_HISTORY_ARTIFACT_ID'])
+          want_name=os.environ['RB_PD2_FORWARD_HISTORY_ARTIFACT']
+          want_digest=os.environ['RB_PD2_FORWARD_HISTORY_ARTIFACT_DIGEST']
+          matches=[a for a in meta.get('artifacts',[]) if int(a.get('id',-1))==want_id]
+          if len(matches)!=1:
+              raise SystemExit(f'FATAL: pinned RB history artifact id not unique/present: id={want_id} found={len(matches)}')
+          a=matches[0]
+          if a.get('name')!=want_name:
+              raise SystemExit(f"FATAL: pinned RB history artifact name drift: {a.get('name')!r} != {want_name!r}")
+          if a.get('digest')!=want_digest:
+              raise SystemExit(f"FATAL: pinned RB history artifact digest drift: {a.get('digest')!r} != {want_digest!r}")
+          if bool(a.get('expired')):
+              raise SystemExit('FATAL: pinned RB history artifact is expired')
+          print({'verified_artifact_id':want_id,'name':want_name,'digest':want_digest})
+          PY
           gh run download "${RB_PD2_FORWARD_HISTORY_RUN_ID}" \
             --repo "${GITHUB_REPOSITORY}" \
             --name "${RB_PD2_FORWARD_HISTORY_ARTIFACT}" \
