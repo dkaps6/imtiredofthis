@@ -158,9 +158,9 @@ def build_history_state(history: pd.DataFrame) -> pd.DataFrame:
     if not x["week"].between(1, 18).all():
         raise RuntimeError("history contains week outside 1..18")
 
-    certified = x["pregame_lineage_certified"].astype(bool)
-    if not certified.all():
-        raise RuntimeError("uncertified pregame projection lineage in history")
+    certified = x["pregame_lineage_certified"].astype(str).str.strip().str.lower()
+    if not certified.isin({"true", "1"}).all():
+        raise RuntimeError("uncertified or malformed pregame projection lineage in history")
 
     x["team"] = x["team"].map(canon_team)
     x["player_clean_key"] = x["player_clean_key"].map(_canonical_player_key)
