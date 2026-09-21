@@ -109,9 +109,9 @@ jobs:
           rm -rf /tmp/rb_pd2_source /tmp/rb_pd2_prior /tmp/rb_pd2_advance
           mkdir -p /tmp/rb_pd2_source /tmp/rb_pd2_prior /tmp/rb_pd2_advance
 
-          gh api "repos/${{GITHUB_REPOSITORY}}/actions/runs/${{SOURCE_RUN_ID}}" > /tmp/source_run.json
-          gh api "repos/${{GITHUB_REPOSITORY}}/actions/runs/${{SOURCE_RUN_ID}}/artifacts?per_page=100" > /tmp/source_artifacts.json
-          gh api "repos/${{GITHUB_REPOSITORY}}/actions/runs/${{PRIOR_HISTORY_RUN_ID}}/artifacts?per_page=100" > /tmp/prior_artifacts.json
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}" > /tmp/source_run.json
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts?per_page=100" > /tmp/source_artifacts.json
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${PRIOR_HISTORY_RUN_ID}/artifacts?per_page=100" > /tmp/prior_artifacts.json
 
           python - <<'PY'
           import json, os
@@ -148,19 +148,19 @@ jobs:
           print(json.load(open('/tmp/source_run.json'))['head_sha'])
           PY
           )"
-          git cat-file -e "${{SOURCE_SHA}}^{commit}"
-          git diff --exit-code "${{SOURCE_SHA}}" -- \
+          git cat-file -e "${SOURCE_SHA}^{commit}"
+          git diff --exit-code "${SOURCE_SHA}" -- \
             scripts/simulation_v2.py \
             scripts/simulation_explicit_entitlement_v1.py \
             scripts/modeling/ensemble_v2.py
-          echo "Historical reconstruction code parity PASS source_sha=${{SOURCE_SHA}}"
+          echo "Historical reconstruction code parity PASS source_sha=${SOURCE_SHA}"
 
       - name: Download immutable pregame source artifact
         run: |
           set -euo pipefail
-          gh run download "${{SOURCE_RUN_ID}}" \
-            --repo "${{GITHUB_REPOSITORY}}" \
-            --name "${{SOURCE_ARTIFACT_NAME}}" \
+          gh run download "${SOURCE_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name "${SOURCE_ARTIFACT_NAME}" \
             --dir /tmp/rb_pd2_source
           test -s /tmp/rb_pd2_source/data/football_simulation_universe.csv
           test -s /tmp/rb_pd2_source/data/target_entitlement_v1_trace.csv
@@ -172,9 +172,9 @@ jobs:
       - name: Restore pinned prior cumulative certified history
         run: |
           set -euo pipefail
-          gh run download "${{PRIOR_HISTORY_RUN_ID}}" \
-            --repo "${{GITHUB_REPOSITORY}}" \
-            --name "${{PRIOR_HISTORY_ARTIFACT_NAME}}" \
+          gh run download "${PRIOR_HISTORY_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name "${PRIOR_HISTORY_ARTIFACT_NAME}" \
             --dir /tmp/rb_pd2_prior
           if [ -s /tmp/rb_pd2_prior/rb_pd2_completed_2026_history.csv ]; then
             cp /tmp/rb_pd2_prior/rb_pd2_completed_2026_history.csv /tmp/prior_certified_history.csv
@@ -196,7 +196,7 @@ jobs:
             --source-run-metadata /tmp/source_run.json \
             --source-artifact-metadata /tmp/source_artifact.json \
             --prior-certified-history /tmp/prior_certified_history.csv \
-            --completed-week "${{COMPLETED_WEEK}}" \
+            --completed-week "${COMPLETED_WEEK}" \
             --out-dir /tmp/rb_pd2_advance
 
       - name: Assert cumulative history contract
