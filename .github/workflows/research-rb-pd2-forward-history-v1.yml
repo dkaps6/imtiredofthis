@@ -149,6 +149,7 @@ jobs:
           assert manifest['rush_yards_fit_scope'] == 'all_2024_oos_frozen_for_2025'
           assert manifest['rush_yards_promotion_lineage'] == 'RB_STACK1_RUN_33535308110_FOR_P3'
           assert len(manifest['manual_name_overrides_sha256']) == 64
+          assert len(manifest['canonical_names_py_sha256']) == 64
           assert len(manifest['roles_ourlads_sha256']) == 64
           assert len(manifest['additional_history_sha256']) == 64
           assert manifest['additional_history_path'].endswith('rb_pd2_completed_2026_week1_history.csv')
