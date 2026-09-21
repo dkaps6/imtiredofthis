@@ -121,16 +121,20 @@ def test_empty_or_mismatched_identity_fingerprints_fail_closed():
     good = "a" * 64
     hist = {
         "manual_name_overrides_sha256": good,
-        "roles_ourlads_sha256": good,
+        "canonical_names_py_sha256": good,
+        "roles_ourlads_sha256": "1" * 64,
     }
     receipt = {"provenance": {
         "manual_name_overrides_sha256": good,
-        "roles_ourlads_sha256": good,
+        "canonical_names_py_sha256": good,
+        # Ourlads whole-file provenance may legitimately differ week to week.
+        "roles_ourlads_sha256": "2" * 64,
     }}
     fwd.assert_identity_fingerprints_match(hist, receipt)
 
     bad_empty = {"provenance": {
         "manual_name_overrides_sha256": "",
+        "canonical_names_py_sha256": good,
         "roles_ourlads_sha256": good,
     }}
     with pytest.raises(RuntimeError, match="unprovable"):
@@ -138,6 +142,7 @@ def test_empty_or_mismatched_identity_fingerprints_fail_closed():
 
     bad_mismatch = {"provenance": {
         "manual_name_overrides_sha256": "b" * 64,
+        "canonical_names_py_sha256": good,
         "roles_ourlads_sha256": good,
     }}
     with pytest.raises(RuntimeError, match="mismatch"):
