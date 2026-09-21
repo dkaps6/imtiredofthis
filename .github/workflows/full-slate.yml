@@ -27,10 +27,6 @@ on:
         required: false
         type: boolean
         default: false
-      rb_pd2_forward_history_run_id:
-        description: "Pinned successful RB PD2 forward-history workflow run ID"
-        required: false
-        default: ""
 
 concurrency:
   group: full-slate-${{ github.ref }}
@@ -50,8 +46,11 @@ env:
   SLATE_DATE: ${{ github.event.inputs.date || '' }}
   FETCH_LIVE_ODDS: ${{ github.event.inputs.fetch_live_odds || 'false' }}
   RB_PD2_SHADOW_CAPTURE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.rb_pd2_shadow_capture == 'true' && 'true' || '' }}
-  RB_PD2_FORWARD_HISTORY_RUN_ID: ${{ github.event.inputs.rb_pd2_forward_history_run_id || '' }}
+  # Pinned green history build: 2025 leakage-safe seed + certified completed 2026 Week 1.
+  RB_PD2_FORWARD_HISTORY_RUN_ID: "35620321000"
   RB_PD2_FORWARD_HISTORY_ARTIFACT: rb-pd2-forward-history-v1
+  RB_PD2_FORWARD_HISTORY_ARTIFACT_ID: "10648116139"
+  RB_PD2_FORWARD_HISTORY_ARTIFACT_DIGEST: "sha256:52e56ce090576480d9b8cf4ec1999bfaf9e6884e6a0d1266efc075f1afac3af8"
   # Operational activation boundary: Week 2 can never become a prospective observation.
   RB_PD2_PROSPECTIVE_START_UTC: "2026-09-22T12:00:00Z"
   ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
