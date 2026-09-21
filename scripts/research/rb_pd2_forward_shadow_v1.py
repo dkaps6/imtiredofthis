@@ -40,7 +40,7 @@ RUSH_YARDS_PROMOTION_LINEAGE = "RB_STACK1_RUN_33535308110_FOR_P3"
 
 IDENTITY_FINGERPRINT_FIELDS = (
     "manual_name_overrides_sha256",
-    "roles_ourlads_sha256",
+    "canonical_names_py_sha256",
 )
 ELIGIBLE_POSITIONS = {"RB", "HB", "FB"}
 DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -73,6 +73,10 @@ def identity_source_fingerprints(root: Path = Path(".")) -> dict[str, str]:
     root = Path(root)
     return {
         "manual_name_overrides_sha256": _file_sha256(root / "data/manual_name_overrides.csv"),
+        "canonical_names_py_sha256": _file_sha256(root / "scripts/utils/canonical_names.py"),
+        # Diagnostic only. Ourlads is a mutable weekly enrichment source, not a
+        # stable identity-contract file. Actual target identity still has to
+        # resolve to the canonical key present in the frozen history state.
         "roles_ourlads_sha256": _file_sha256(root / "data/roles_ourlads.csv"),
     }
 
