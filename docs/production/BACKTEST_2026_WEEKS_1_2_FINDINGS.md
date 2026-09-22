@@ -1,153 +1,222 @@
-# 2026 Weeks 1–2 graded backtest — findings
+# 2026 Weeks 1–2 production-decision backtest — findings
 
-Source: `data/market_track_record/boards/2026_wk01.csv`, `2026_wk02.csv`
-Full graded rows: `data/market_track_record/graded/2026_wk01_wk02_graded.csv` (866 rows)
-Reproduce: `PYTHONPATH=. python scripts/operations/backtest_full_report_v1.py --season 2026 --weeks 1,2`
+Source boards:
+- `data/market_track_record/boards/2026_wk01.csv`
+- `data/market_track_record/boards/2026_wk02.csv`
 
-One bet per player-market. The median consensus line selects the intended
-model side; W/L, Vegas error and units are then attached to the nearest
-captured real-book quote whose own line agrees with that side. Equidistant
-cross-book ties use the lexicographically smallest normalized provider
-`book` key (`book_title` fallback), never line direction or price. Duplicate
-rows at one canonical book+line use the least
-favorable captured American price; an unresolved same-book/equidistant-line
-ambiguity fails closed. The rule is outcome-independent and row-order
-invariant. On Weeks 1–2 it yields 866 identity-resolved bets and no
-abstentions. `anytime_td` is not graded (standing policy), which leaves
-2,908 archived rows unmeasured. Zero pushes.
+Canonical selected settlement rows:
+- `data/market_track_record/graded/2026_wk01_wk02_graded.csv`
+
+Reproduce:
+`PYTHONPATH=. python scripts/operations/backtest_full_report_v1.py --season 2026 --weeks 1,2`
+
+## What counts as a bet
+
+This scorecard now reproduces the deployed downstream **Best Snapshot** decision,
+not mean-vs-line direction.
+
+For every concrete captured book+line offer:
+
+1. compute OVER and UNDER expected ROI from the archived side-specific
+   `fair_prob` and captured American price;
+2. choose the higher-EV side, matching production;
+3. across real offers for the same player-market, keep the highest-EV offer;
+4. if the best EV is nonpositive, production says PASS and no bet is graded;
+5. an exact best-EV tie that represents different wagers fails closed rather
+   than using row order;
+6. an identical-wager tie uses a deterministic normalized provider key;
+7. `consensus_line` is diagnostic only and does not choose the wager.
+
+Sportsbook information remains downstream only. None of these rules alter the
+football projection.
+
+## Settlement integrity
+
+Roster identity alone does not prove sportsbook action.
+
+For selected player props absent from the weekly stats table:
+
+- positive PFR snap participation -> verified zero outcome;
+- explicit inactive/DNP with no participation on the captured DraftKings or
+  FanDuel offer -> VOID;
+- missing/ambiguous participation evidence -> fail closed as unresolved.
+
+Canonical W1/W2 settlement inventory:
+
+- selected settlement rows: **810**
+- decided bets: **802**
+- void DNP rows: **8**
+- stats-table outcomes: **791**
+- snap-confirmed verified-zero outcomes: **11**
+- additional positive-EV rows still unresolved: **2** (Joshua Palmer receiving
+  yards and receptions, Week 2); they are excluded from W/L and units.
+
+`anytime_td` remains ungraded by standing project policy.
 
 ## Headline
 
-866 bets, **440-426 (50.8%)**, −41.94 units. Model MAE 18.08 vs line 17.13;
-the model is closer than the line on 45.0% of bets. Week 1 is 226-212; Week 2
-is 214-214.
+**802 decided bets: 397-405 (49.5%), -44.09 units.**
 
-## The board is one market
+- Week 1: **204-205**, -20.92u
+- Week 2: **193-200**, -23.17u
+- model MAE: **18.42**
+- selected sportsbook-line MAE: **17.38**
+- model closer than selected line: **44.9%**
+
+The old 438-428, 439-427 and 440-426 records are superseded. They graded a
+different wager-selection or settlement convention and are not production
+track records.
+
+## By market
 
 | market | W-L | win% | units | model MAE | line MAE | model bias | line bias | closer |
-|---|---|---|---|---|---|---|---|---|
-| pass_yards | 38-20 | 65.5% | +13.95 | 57.53 | 61.10 | −1.92 | −3.55 | .603 |
-| rush_yards | 78-73 | 51.7% | −2.65 | 20.00 | 17.92 | −6.60 | −1.41 | .430 |
-| receptions | 148-145 | 50.5% | −22.18 | 1.72 | 1.59 | −0.63 | −0.10 | .454 |
-| rush_rec_yards | 33-34 | 49.3% | −4.84 | 31.84 | 26.34 | −20.20 | −1.07 | .433 |
-| rec_yards | 143-154 | 48.1% | −26.21 | 22.45 | 21.40 | −7.27 | −4.12 | .431 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| pass_yards | 36-17 | 67.9% | +14.99 | 56.50 | 60.88 | -1.21 | -2.65 | .623 |
+| rush_yards | 71-66 | 51.8% | -1.55 | 21.17 | 18.84 | -7.44 | -1.55 | .438 |
+| rush_rec_yards | 33-33 | 50.0% | -3.81 | 32.15 | 26.55 | -20.67 | -1.15 | .439 |
+| rec_yards | 132-145 | 47.7% | -27.65 | 22.72 | 21.51 | -7.95 | -4.30 | .419 |
+| receptions | 125-144 | 46.5% | -26.07 | 1.72 | 1.57 | -0.74 | -0.20 | .454 |
 
-`pass_yards` is the only market where the model is more accurate than the
-line. Remove it and the remaining 808 bets go **402-406 (49.8%)**.
+QB pass yards remains the standout early market after production-decision
+alignment: **36-17, +14.99u**. Removing pass yards leaves the other markets
+**361-388 (48.2%)**.
 
-Within QB, `pass_yards` is 38-20 and `rush_yards` is exactly 26-26. Whatever
-is working is the passing-yards path specifically — the one carrying the
-promoted M89/M90 synthesis — not "the QB model".
+That is encouraging, not a promotion/tuning instruction. It is still only
+53 bets across 30 game clusters.
 
-## Finding 1 — the stated probability is not a probability
+## Finding 1 — probabilities remain materially overconfident
 
-| stated band | bets | mean stated | actual | gap |
-|---|---|---|---|---|
-| ≤50% | 103 | 45.2% | 49.5% | +4.3pp |
-| 50–55% | 62 | 52.8% | 50.0% | −2.8pp |
-| 55–60% | 126 | 57.5% | 45.2% | −12.3pp |
-| 60–65% | 112 | 62.4% | 53.6% | −8.8pp |
-| 65–70% | 91 | 67.4% | 57.1% | −10.3pp |
-| **>70%** | **372** | **81.4%** | **50.8%** | **−30.6pp** |
+| selected-side stated probability | n | mean stated | actual hit | record | units |
+|---|---:|---:|---:|---:|---:|
+| <=50% | 18 | 45.7% | 16.7% | 3-15 | -11.40 |
+| 50-55% | 65 | 53.6% | 40.0% | 26-39 | -12.64 |
+| 55-60% | 130 | 57.4% | 50.0% | 65-65 | -3.44 |
+| 60-65% | 129 | 62.4% | 51.2% | 66-63 | -3.28 |
+| 65-70% | 89 | 67.5% | 57.3% | 51-38 | +7.47 |
+| >70% | 371 | 81.3% | 50.1% | 186-185 | -20.81 |
 
-Above roughly 55% stated, realized hit rates remain far below the stated
-probabilities and are not monotonic with confidence. The largest band is also
-the most confident and the most populous — 43% of the board sits at a mean
-stated 81.4% and returns 189-183, −18.72 units.
+The >70% group is the clearest problem: stated probability averages 81.3% but
+realizes essentially 50/50.
 
-Overconfidence is not concentrated anywhere. In the >70% band: QB 19-10,
-WR 79-68, RB 72-76, TE 19-29.
+## Finding 2 — simulated distributions still look too narrow
 
-## Finding 2 — the mechanism is a distribution that is too narrow
+Realized projection-error SD versus the model's stated `model_sd`:
 
-Realized projection-error spread against the model's own stated `model_sd`:
+| market | stated SD | realized error SD | ratio |
+|---|---:|---:|---:|
+| pass_yards | 54.62 | 78.83 | 1.44x |
+| rush_yards | 15.65 | 29.23 | 1.87x |
+| rec_yards | 17.46 | 31.16 | 1.78x |
+| receptions | 1.62 | 2.14 | 1.32x |
 
-| market | stated sd | realized error sd | ratio |
-|---|---|---|---|
-| pass_yards | 54.44 | 78.67 | 1.45× |
-| rush_yards | 15.23 | 28.13 | 1.85× |
-| rec_yards | 17.40 | 31.18 | 1.79× |
-| receptions | 1.62 | 2.17 | 1.33× |
+This remains a strong cross-position diagnostic, but two live weeks do **not**
+license a global SD rescale. Existing position-specific distribution
+authorities must be evaluated independently.
 
-The simulated outcome distribution is 1.3–1.9× too tight. A distribution that
-narrow pushes P(over) and P(under) toward the extremes, which is exactly the
-overconfidence in Finding 1. This is one defect, not two.
+## Finding 3 — declared probability edge still does not rank outcomes monotonically
 
-## Finding 3 — the model's own declared edge does not rank its bets
+Quintiles of absolute fractional `edge_pct` after fixing its units:
 
-Quintiles of |`edge_pct`|:
+| quintile | n | W-L | win% | units | model bias |
+|---|---:|---:|---:|---:|---:|
+| Q1 smallest | 161 | 68-93 | 42.2% | -33.03 | +2.30 |
+| Q2 | 160 | 87-73 | 54.4% | +5.20 | -3.74 |
+| Q3 | 160 | 78-82 | 48.8% | -10.67 | -4.83 |
+| Q4 | 160 | 78-82 | 48.8% | -11.59 | -5.59 |
+| Q5 largest | 161 | 86-75 | 53.4% | +6.01 | -18.35 |
 
-| quintile | W-L | win% | units | model bias |
-|---|---|---|---|---|
-| Q1 smallest | 82-92 | 47.1% | −23.50 | −0.21 |
-| Q2 | 97-76 | 56.1% | +7.24 | −0.71 |
-| Q3 | 83-90 | 48.0% | −18.39 | −3.69 |
-| Q4 | 86-87 | 49.7% | −11.42 | −5.40 |
-| Q5 largest | 92-81 | 53.2% | +4.13 | −17.76 |
+The ordering is non-monotonic. The largest-edge quintile also has by far the
+largest negative projection bias. Raw `edge_pct` is therefore not supported
+as a confidence-ranking or staking variable from this sample.
 
-Not monotonic. The largest-edge quintile also carries the largest projection
-bias (−17.76): a big declared "edge" is mostly the model being wrong about the
-number, not disagreeing usefully with the market. Ranking or sizing by
-`edge_pct` has no support here.
+## Finding 4 — cluster-aware inference finds no certified slice
 
-### Cluster-aware inference check
+The board contains mechanically related props within the same NFL games.
+Inference therefore centers each decided bet by its own price-implied
+break-even probability, sums residuals within game, tests across game clusters,
+then applies BH/FDR.
 
-The board is not 866 independent trials: many bets share the same NFL game and
-are mechanically related. The significance layer therefore centers each bet
-by its own captured-price break-even probability, sums those residuals inside
-each game, and tests across independent game clusters before BH/FDR correction.
+With corrected fractional edge bins:
 
-All 38 slices meeting the sample gate were cluster-testable; **0 of 38 survive
-BH-FDR at q=0.10**. QB pass yards has a raw game-cluster-aware one-sided
-p-value of **0.0307**, but it does **not** survive the multiple-comparisons
-gate. That makes it an encouraging frozen prospective lead, not a certified
-bet-selection edge.
+- **50** slices meet the sample/cluster gates;
+- **0 of 50 survive BH-FDR at q=0.10**;
+- QB pass yards raw game-cluster one-sided p = **0.0119**, but it does not
+  survive the multiple-comparisons gate;
+- TE overall raw cluster p = **0.9449**;
+- TE receiving yards raw cluster p = **0.9727**.
 
-## Finding 4 — `rush_rec_yards` looks like a construction defect
+So QB pass yards remains a prospective lead, not a certified betting edge.
 
-| | mean |
-|---|---|
-| model projection | 53.7 |
-| sportsbook line | 72.9 |
-| actual | 73.9 |
+## Finding 5 — rush + receiving yards still has a construction/bias concern
 
-The line is essentially unbiased (−1.07). The model is **19 yards low on a
-73-yard market**, roughly 26%, and consequently picks UNDER on 59 of 67 bets.
-A systematic one-directional shortfall of that size on a market that is the
-sum of two components the model already projects separately is not variance.
-`rush_yards` bias is −6.60 and `rec_yards` is −7.27; summed that is about
-−13.9, so roughly −6 yards of the gap is unexplained by the parts.
+For the 66 production-selected decided `rush_rec_yards` bets:
 
-## Finding 5 — TE is a no-edge market, not an inverted one
+- mean model projection: **53.79**
+- mean selected line: **73.30**
+- mean actual: **74.45**
+- model bias: **-20.67**
+- selected-line bias: **-1.15**
+- side mix: **59 UNDER / 7 OVER**
 
-TE overall 60-82 (42.3%). Week 1 36-36, Week 2 24-46.
+The selected market line is close to unbiased while the model is about 21
+yards low. This remains a seam/construction audit target, not proof of one
+specific cause.
 
-Week 2 TE: mean projection minus line **−0.07**, median |projection − line|
-**1.16 yards** on a ~16-yard line. The model is agreeing with the number and
-then taking whichever side the rounding lands on. TE bias is only −0.29 in
-Week 2, so this is not the under-projection problem — it is an absence of
-signal. Week 2 OVERs went 8-25 while UNDERs went 16-21.
+## Finding 6 — TE remains the clearest positional weakness
 
-The 60-82 aggregate is poor descriptively, but the rows are clustered by
-game and should not be treated as 142 independent trials. The cluster-aware
-slice test does not produce a multiple-comparisons-surviving TE signal. The
-mechanism still does not require a sign error: the model is essentially on the
-market number, leaving no demonstrated edge to harvest at that line proximity.
+TE production-selected decided bets:
 
-## Finding 6 — a systemic low bias drives a 2:1 UNDER book
+- overall: **58-75 (43.6%), -21.45u**
+- receiving yards: **28-41, -16.09u**
+- receptions: **30-34, -5.37u**
+- Week 1: **32-37**
+- Week 2: **26-38**
 
-Overall model bias −5.55 vs line bias −2.01. By side: UNDER bets carry a
-−9.82 bias, OVER bets +2.59. The board is 568 UNDER to 298 OVER because the
-projections run low, not because the model found 568 unders.
+Week-2 TE remains close to the market number on average:
 
-This replicates the under-projection finding from the 2024/2025 clean-cohort
-re-grade, now on live 2026 slates.
+- mean projection minus selected line: **-0.21**
+- median absolute projection-line gap: **1.26**
+- model bias: **-0.53**
+- OVER: **6-17**
+- UNDER: **20-21**
+
+This is not evidence of a simple sign inversion. Receiving yards is materially
+worse than receptions, and the model often sits near the posted number while
+failing to separate the better side.
+
+That matters because independent historical evidence says TE target-share
+state is highly persistent, while TE-R1 attributed about 45% of receiving-yard
+error mass to targets/entitlement and about 55% to catch-rate + YPR efficiency.
+PR #627 also begins feeding 2026 strict-prior snap participation into TE-R5P
+starting Week 3 without refitting coefficients.
+
+The next TE diagnostic should therefore separate **entitlement/opportunity
+error from downstream efficiency/distribution error**, rather than label the
+entire TE authority "bad."
+
+## Finding 7 — the board still carries a systemic low projection bias
+
+Across decided bets:
+
+- overall model bias: **-6.05**
+- selected-line bias: **-2.09**
+- OVER bets: 178, model bias **+4.81**
+- UNDER bets: 624, model bias **-9.14**
+
+The production Best Snapshot still produces a heavily UNDER-skewed board, and
+large negative projection bias is concentrated there. Treat this as a
+cross-position diagnostic, not as evidence that UNDER itself is predictive.
 
 ## What this does and does not license
 
-Nothing here is a tuning instruction. The calibration and `model_sd` findings
-are defects with identified mechanisms and should be evaluated authority by
-authority rather than globally rescaled from two weeks. The `pass_yards`
-result is one market over two weeks at n=58 across 30 game clusters; its raw
-cluster-aware p-value is encouraging but does not survive FDR. It needs Weeks
-3–6 under frozen parameters before it can support a stronger claim.
+Nothing here authorizes a model retune.
+
+The repaired production scoreboard says:
+
+- keep QB passing-yard parameters frozen and score prospectively;
+- investigate TE entitlement-vs-efficiency first;
+- audit rush+receiving construction separately;
+- evaluate probability/distribution calibration authority-by-authority;
+- do not use sportsbook lines upstream;
+- do not globally rescale distributions from two live weeks;
+- do not interpret raw `edge_pct` as trustworthy ranking signal yet.
