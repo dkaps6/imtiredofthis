@@ -117,11 +117,14 @@ def select_model_bet(board: pd.DataFrame) -> pd.DataFrame:
     falls between two books' lines (216.5 and 221.5) and the arbitrary
     survivor decided whether the model was betting over or under.
 
-    The consensus line is the median across the distinct book lines for that
+    The consensus line is the median across the captured book lines for that
     player-market, taken BEFORE the side is chosen so the choice of number
-    cannot be steered by which side looks better. Ties break toward the
-    lower line, then by captured odds and book, so the result is a pure
-    function of the board's contents and not of its row order.
+    cannot be steered by which side looks better. The consensus determines
+    only the intended model side. The wager is then tied to a real captured
+    quote whose own line puts the projection on that same side; if no such
+    quote exists, that player-market abstains. Among compatible quotes, the
+    nearest line to consensus wins, with deterministic line/odds/book
+    tie-breaks. Outcomes are never consulted, and row order cannot matter.
     """
     if board.empty:
         return board.copy()
@@ -139,14 +142,24 @@ def select_model_bet(board: pd.DataFrame) -> pd.DataFrame:
     b["model_pick_side"] = [
         model_side(p, l) for p, l in zip(num(b.model_proj), b["consensus_line"])
     ]
-    b = b.loc[b.side.astype(str).str.upper().eq(b.model_pick_side)].copy()
+    b["_own_line_side"] = [
+        model_side(p, l) for p, l in zip(num(b.model_proj), b["_line"])
+    ]
+    # Consensus chooses the intended side, but W/L, Vegas error and units must
+    # all be attached to one real quote whose own line agrees with that side.
+    # A straddling quote on the opposite side is not a valid representation of
+    # the wager, even when its row carries the requested OVER/UNDER price.
+    b = b.loc[
+        b.side.astype(str).str.upper().eq(b.model_pick_side)
+        & b["_own_line_side"].eq(b.model_pick_side)
+    ].copy()
     if b.empty:
-        return b.drop(columns=["_line", "_line_gap"], errors="ignore")
+        return b.drop(columns=["_line", "_line_gap", "_own_line_side"], errors="ignore")
 
     sort_cols = ["_line_gap", "_line"] + [c for c in ("vegas_odds", "book") if c in b.columns]
     b = b.sort_values(key + sort_cols, kind="mergesort")
     out = b.drop_duplicates(subset=key, keep="first")
-    return out.drop(columns=["_line", "_line_gap"], errors="ignore")
+    return out.drop(columns=["_line", "_line_gap", "_own_line_side"], errors="ignore")
 
 
 def load_actual_stats(season: int, weeks: list[int]) -> pd.DataFrame:
