@@ -507,17 +507,132 @@ def assert_week_complete_after_freeze(completed_week: int) -> dict:
     }
 
 
+def load_pbp_rushing_actuals(season: int, weeks: list[int] | None) -> pd.DataFrame:
+    """Independent nflverse PBP rushing totals used only as a postgame fallback.
+
+    This source is loaded only after the football projection frame is frozen.
+    It never participates in model construction. GSIS identity comes directly
+    from nflverse PBP and full display names are bridged from nflverse players.
+    """
+    import nflreadpy as nfl
+
+    raw = nfl.load_pbp(seasons=[int(season)])
+    x = raw.to_pandas() if hasattr(raw, "to_pandas") else pd.DataFrame(raw)
+    x.columns = [str(c).strip().lower() for c in x.columns]
+    required = {"season", "week", "posteam", "rush_attempt", "rusher_player_id", "rushing_yards"}
+    missing = required - set(x.columns)
+    if missing:
+        raise RuntimeError(f"nflverse PBP fallback missing columns: {sorted(missing)}")
+
+    x["season"] = pd.to_numeric(x["season"], errors="coerce")
+    x["week"] = pd.to_numeric(x["week"], errors="coerce")
+    x = x.loc[x["season"].eq(int(season)) & x["week"].notna()].copy()
+    x["week"] = x["week"].astype(int)
+    if weeks:
+        x = x.loc[x["week"].isin([int(v) for v in weeks])].copy()
+    if "season_type" in x.columns:
+        reg = x.loc[x["season_type"].astype(str).str.upper().eq("REG")].copy()
+        if not reg.empty:
+            x = reg
+
+    rush = pd.to_numeric(x["rush_attempt"], errors="coerce").fillna(0).eq(1)
+    x = x.loc[rush].copy()
+    x["gsis_id"] = x["rusher_player_id"].astype("string").fillna("").str.strip()
+    x["team"] = x["posteam"].astype("string").fillna("").str.strip().map(canon_team)
+    x["rush_yards"] = pd.to_numeric(x["rushing_yards"], errors="coerce")
+    x = x.loc[
+        x["gsis_id"].ne("") & x["team"].ne("") & x["rush_yards"].notna()
+    ].copy()
+    if x.empty:
+        raise RuntimeError(f"nflverse PBP fallback has zero rushing rows for {season} weeks={weeks}")
+
+    # Primary rushing_yards excludes lateral-rushing segments. Add those
+    # segments to the credited lateral rusher when the canonical fields exist.
+    pieces = [
+        x.groupby(["season", "week", "team", "gsis_id"], as_index=False)["rush_yards"].sum()
+    ]
+    if {"lateral_rusher_player_id", "lateral_rushing_yards"}.issubset(x.columns):
+        lat = x.copy()
+        lat["gsis_id"] = lat["lateral_rusher_player_id"].astype("string").fillna("").str.strip()
+        lat["rush_yards"] = pd.to_numeric(lat["lateral_rushing_yards"], errors="coerce")
+        lat = lat.loc[lat["gsis_id"].ne("") & lat["rush_yards"].notna()].copy()
+        if not lat.empty:
+            pieces.append(
+                lat.groupby(["season", "week", "team", "gsis_id"], as_index=False)["rush_yards"].sum()
+            )
+    totals = pd.concat(pieces, ignore_index=True)
+    totals = totals.groupby(["season", "week", "team", "gsis_id"], as_index=False)["rush_yards"].sum()
+
+    players_raw = nfl.load_players()
+    players = (
+        players_raw.to_pandas()
+        if hasattr(players_raw, "to_pandas")
+        else pd.DataFrame(players_raw)
+    )
+    players.columns = [str(c).strip().lower() for c in players.columns]
+    id_col = next((c for c in ("gsis_id", "player_id") if c in players.columns), None)
+    name_col = next(
+        (c for c in ("display_name", "full_name", "football_name", "short_name") if c in players.columns),
+        None,
+    )
+    if id_col is None or name_col is None:
+        raise RuntimeError(
+            "nflverse players fallback missing GSIS/name bridge "
+            f"id_col={id_col} name_col={name_col}"
+        )
+    bridge = players[[id_col, name_col]].copy()
+    bridge.columns = ["gsis_id", "player"]
+    bridge["gsis_id"] = bridge["gsis_id"].astype("string").fillna("").str.strip()
+    bridge["player"] = bridge["player"].astype("string").fillna("").str.strip()
+    bridge = bridge.loc[bridge["gsis_id"].ne("") & bridge["player"].ne("")].drop_duplicates(
+        "gsis_id", keep="last"
+    )
+
+    totals = totals.merge(bridge, on="gsis_id", how="left", validate="many_to_one")
+    # The PBP name is only a fallback if the player master lacks this GSIS id.
+    if totals["player"].isna().any() and "rusher_player_name" in x.columns:
+        raw_names = (
+            x.loc[:, ["rusher_player_id", "rusher_player_name"]]
+            .rename(columns={"rusher_player_id": "gsis_id", "rusher_player_name": "_pbp_name"})
+            .dropna()
+            .drop_duplicates("gsis_id", keep="last")
+        )
+        raw_names["gsis_id"] = raw_names["gsis_id"].astype(str).str.strip()
+        totals = totals.merge(raw_names, on="gsis_id", how="left", validate="many_to_one")
+        totals["player"] = totals["player"].fillna(totals["_pbp_name"])
+        totals = totals.drop(columns=["_pbp_name"])
+    totals["player"] = totals["player"].astype("string").fillna("").str.strip()
+    canon = totals["player"].map(canonicalize_player_name_safe)
+    totals["player"] = canon.map(lambda t: t[0])
+    totals["player_clean_key"] = canon.map(lambda t: t[1])
+    totals = totals.loc[totals["player_clean_key"].astype(str).ne("")].copy()
+    return totals[
+        ["season", "week", "team", "gsis_id", "player", "player_clean_key", "rush_yards"]
+    ].drop_duplicates(["season", "week", "team", "gsis_id"], keep="last")
+
+
 def attach_verified_actuals(
     projections: pd.DataFrame,
     actual: pd.DataFrame,
     roster: pd.DataFrame,
+    pbp_actual: pd.DataFrame,
 ) -> tuple[pd.DataFrame, dict]:
     p = projections.copy()
     a = actual.copy()
     r = roster.copy()
-    idx = build_alias_index(a, r)
+    b = pbp_actual.copy()
+
+    idx_primary = build_alias_index(a, r)
+    # Reuse the existing deterministic exact/base resolver for PBP identity.
+    idx_pbp = build_alias_index(b, b.iloc[0:0].copy())
     actual_by_id = (
         a[["season", "week", "gsis_id", "rush_yards"]]
+        .drop_duplicates(["season", "week", "gsis_id"], keep="last")
+        .set_index(["season", "week", "gsis_id"])["rush_yards"]
+        .to_dict()
+    )
+    pbp_by_id = (
+        b[["season", "week", "gsis_id", "rush_yards"]]
         .drop_duplicates(["season", "week", "gsis_id"], keep="last")
         .set_index(["season", "week", "gsis_id"])["rush_yards"]
         .to_dict()
@@ -526,9 +641,15 @@ def attach_verified_actuals(
 
     rows: list[dict] = []
     exclusions: list[dict] = []
-    stats_n = zero_n = 0
+    stats_n = zero_n = pbp_n = 0
     for rec in p.to_dict("records"):
-        gsis, status = resolve_gsis(str(rec["player_clean_key"]), str(rec["team"]), idx)
+        player_key = str(rec["player_clean_key"])
+        team = str(rec["team"])
+        gsis, status = resolve_gsis(player_key, team, idx_primary)
+        used_pbp_identity = False
+        if status != "RESOLVED_GSIS" or not gsis:
+            gsis, status = resolve_gsis(player_key, team, idx_pbp)
+            used_pbp_identity = status == "RESOLVED_GSIS" and bool(gsis)
         if status != "RESOLVED_GSIS" or not gsis:
             exclusions.append({
                 "player_clean_key": rec["player_clean_key"],
@@ -536,15 +657,25 @@ def attach_verified_actuals(
                 "reason": status,
             })
             continue
+
         key = (int(rec["season"]), int(rec["week"]), str(gsis))
+        roster_key = (int(rec["season"]), int(rec["week"]), team, str(gsis))
         if key in actual_by_id:
             value = float(actual_by_id[key])
             source = "stats_table"
             stats_n += 1
-        elif (int(rec["season"]), int(rec["week"]), str(rec["team"]), str(gsis)) in roster_keys:
+        elif key in pbp_by_id and (used_pbp_identity or roster_key not in roster_keys):
+            value = float(pbp_by_id[key])
+            source = "pbp_fallback"
+            pbp_n += 1
+        elif roster_key in roster_keys:
             value = 0.0
             source = "roster_confirmed_verified_zero"
             zero_n += 1
+        elif key in pbp_by_id:
+            value = float(pbp_by_id[key])
+            source = "pbp_fallback"
+            pbp_n += 1
         else:
             exclusions.append({
                 "player_clean_key": rec["player_clean_key"],
@@ -552,6 +683,7 @@ def attach_verified_actuals(
                 "reason": "NO_VERIFIED_COMPLETED_OUTCOME",
             })
             continue
+
         if not np.isfinite(value):
             raise RuntimeError("non-finite verified rushing outcome")
         rec["actual_rush_yards"] = value
@@ -559,17 +691,28 @@ def attach_verified_actuals(
         rec["gsis_id"] = str(gsis)
         rows.append(rec)
 
+    if exclusions:
+        raise RuntimeError(
+            "unresolved completed rushing outcome(s) after stats/roster/PBP fallback: "
+            + json.dumps(exclusions, sort_keys=True)
+        )
+
     out = pd.DataFrame(rows)
     if out.empty:
         raise RuntimeError("zero completed-history rows survived verified actual join")
     if out.duplicated(["season", "week", "team", "player_clean_key"]).any():
         raise RuntimeError("duplicate completed-history identity after actual join")
+    if len(out) != len(p):
+        raise RuntimeError(
+            f"completed-history outcome coverage is not exact: projections={len(p)} verified={len(out)}"
+        )
     return out, {
         "verified_rows": int(len(out)),
         "verified_stats_table": int(stats_n),
+        "verified_pbp_fallback": int(pbp_n),
         "verified_roster_zero": int(zero_n),
-        "excluded_rows": int(len(exclusions)),
-        "exclusions": exclusions,
+        "excluded_rows": 0,
+        "exclusions": [],
     }
 
 
@@ -633,7 +776,10 @@ def build_completed_history(
     completion_audit = assert_week_complete_after_freeze(int(completed_week))
     actual = load_actual_stats_unfiltered(SEASON, [int(completed_week)])
     roster = load_roster_identity(SEASON, [int(completed_week)])
-    completed, actual_audit = attach_verified_actuals(projections, actual, roster)
+    pbp_actual = load_pbp_rushing_actuals(SEASON, [int(completed_week)])
+    completed, actual_audit = attach_verified_actuals(
+        projections, actual, roster, pbp_actual
+    )
 
     prior = _read_csv(prior_history_path, "prior certified cumulative history")
     cumulative = append_to_prior_history(
