@@ -70,15 +70,18 @@ def model_side(proj: float, line: float) -> str:
 
 
 def edge_bucket(v: float) -> str:
+    """Bucket fractional probability edge (0.10 == ten percentage points)."""
     if not np.isfinite(v):
         return "missing"
-    if v < 2:
+    if v <= 0:
+        return "<=0"
+    if v < 0.02:
         return "0-2"
-    if v < 5:
+    if v < 0.05:
         return "2-5"
-    if v < 10:
+    if v < 0.10:
         return "5-10"
-    if v < 20:
+    if v < 0.20:
         return "10-20"
     return "20+"
 
@@ -103,115 +106,152 @@ def load_boards(season: int, weeks: list[int] | None) -> pd.DataFrame:
 BET_KEY = ["season", "week", "event_id", "player", "market"]
 
 
+def _ev_roi(probability, odds) -> float:
+    """Match the downstream production workbook's EV ROI arithmetic."""
+    try:
+        p = float(probability)
+        o = float(odds)
+    except Exception:
+        return np.nan
+    if not np.isfinite(p) or not np.isfinite(o) or o == 0:
+        return np.nan
+    profit = o / 100.0 if o > 0 else 100.0 / abs(o)
+    return p * profit - (1.0 - p)
+
+
+def _normalized_book_key(frame: pd.DataFrame) -> pd.Series:
+    if "book" in frame.columns:
+        book = frame["book"].astype("string").fillna("").str.strip().str.lower()
+    else:
+        book = pd.Series("", index=frame.index, dtype="string")
+    if "book_title" in frame.columns:
+        title = (
+            frame["book_title"].astype("string").fillna("").str.strip().str.lower()
+        )
+        book = book.mask(book.eq(""), title)
+    return book.mask(book.eq(""), "~missing-book")
+
+
 def select_model_bet(board: pd.DataFrame) -> pd.DataFrame:
-    """Collapse the archived rows for one player-market into a single graded
-    bet: the side the model picked at the consensus line, keeping that row's
-    own captured odds.
+    """Reproduce the deployed Best Snapshot EV decision from an archived board.
 
-    Books disagree about the line, so a player-market can carry several rows
-    at different numbers. The previous implementation took whichever row
-    happened to sort last, which is not a rule at all: re-archiving the same
-    board reorders the ledger and silently regrades it. Observed on the real
-    2026 Week 2 board, where the graded record moved 214-214 -> 215-213 with
-    no change to the source, because Jacoby Brissett's projection (219.81)
-    falls between two books' lines (216.5 and 221.5) and the arbitrary
-    survivor decided whether the model was betting over or under.
+    Production does *not* choose a side from mean-vs-line geometry. For every
+    real book+line offer it compares OVER and UNDER expected ROI using the
+    model's side-specific fair probability and that side's captured American
+    price, chooses the higher-EV side, then the Best Snapshot sheet keeps the
+    player-market offer with the highest EV. If that best EV is nonpositive,
+    production says PASS and there is no bet to grade.
 
-    The consensus line is the median across the captured book lines for that
-    player-market, taken BEFORE the side is chosen so the choice of number
-    cannot be steered by which side looks better. The consensus determines
-    only the intended model side. The wager is then tied to a real captured
-    quote whose own line puts the projection on that same side; if no such
-    quote exists, that player-market abstains. Among compatible quotes, the
-    nearest line to consensus wins. Equidistant cross-book ties are broken by
-    the lexicographically smallest normalized provider `book` key (with
-    `book_title` as the legacy fallback) -- never by line direction or price -- so
-    the rule is side-neutral and cannot price-shop. If the chosen canonical
-    book itself has multiple distinct equally-near compatible lines, the
-    player-market abstains rather than inventing a favorable line. Duplicate
-    quotes at the same book+line use the least favorable captured American
-    price. Outcomes are never consulted, and row order cannot matter.
+    This function reproduces that deployed decision using only already-captured
+    downstream sportsbook data. Sportsbook information never feeds the football
+    projection itself.
+
+    Exact-EV cross-book ties are made deterministic for replay. If tied offers
+    imply different wagers (side/line/odds), the player-market fails closed
+    rather than letting archive row order decide. Ties that represent the same
+    wager use the lexicographically smallest normalized provider book key.
     """
     if board.empty:
         return board.copy()
+
     b = board.copy()
     key = [c for c in BET_KEY if c in b.columns]
-    b["_line"] = num(b.vegas_line)
-    b = b.loc[b["_line"].notna()].copy()
+    if not key:
+        return b.iloc[0:0].copy()
 
-    consensus = b.groupby(key, dropna=False)["_line"].median().rename("consensus_line")
+    b["_line"] = num(b.get("vegas_line"))
+    b["_fair_prob"] = num(b.get("fair_prob"))
+    b["_odds"] = num(b.get("vegas_odds"))
+    b["_row_ev"] = [
+        _ev_roi(p, o) for p, o in zip(b["_fair_prob"], b["_odds"])
+    ]
+    b["_side"] = b.get("side", "").astype(str).str.upper().str.strip()
+    b["_book_key"] = _normalized_book_key(b)
+
+    # Keep the consensus number as a diagnostic only. It has no role in the
+    # deployed betting decision.
+    consensus = (
+        b.loc[b["_line"].notna()]
+        .groupby(key, dropna=False)["_line"]
+        .median()
+        .rename("consensus_line")
+    )
     b = b.merge(consensus, left_on=key, right_index=True, how="left")
-    # Keep the quoted line nearest the consensus; a book that is exactly at
-    # the consensus always wins over one that is not.
-    b["_line_gap"] = (b["_line"] - b["consensus_line"]).abs()
 
-    b["model_pick_side"] = [
-        model_side(p, l) for p, l in zip(num(b.model_proj), b["consensus_line"])
+    quote_key = [
+        c for c in (
+            "season", "week", "event_id", "player_clean_key", "team",
+            "opponent", "source_market", "book", "vegas_line",
+        ) if c in b.columns
     ]
-    b["_own_line_side"] = [
-        model_side(p, l) for p, l in zip(num(b.model_proj), b["_line"])
-    ]
-    # Consensus chooses the intended side, but W/L, Vegas error and units must
-    # all be attached to one real quote whose own line agrees with that side.
-    # A straddling quote on the opposite side is not a valid representation of
-    # the wager, even when its row carries the requested OVER/UNDER price.
-    b = b.loc[
-        b.side.astype(str).str.upper().eq(b.model_pick_side)
-        & b["_own_line_side"].eq(b.model_pick_side)
+    if not quote_key:
+        return b.iloc[0:0].copy()
+
+    # Production chooses the higher-EV side at each concrete book+line quote.
+    # Its >= tie goes to OVER; preserve that semantic deterministically.
+    b["_side_rank"] = b["_side"].map({"OVER": 0, "UNDER": 1}).fillna(9)
+    q = b.loc[
+        b["_row_ev"].notna() & b["_side"].isin(["OVER", "UNDER"])
     ].copy()
-    if b.empty:
-        return b.drop(columns=["_line", "_line_gap", "_own_line_side"], errors="ignore")
-
-    # First reduce each player-market to the minimum distance from consensus.
-    # This is the only line-value criterion. Do not use line direction to
-    # break an equidistant tie: lower-vs-higher would favor opposite sides.
-    min_gap = b.groupby(key, dropna=False)["_line_gap"].transform("min")
-    b = b.loc[np.isclose(b["_line_gap"], min_gap, rtol=0.0, atol=1e-12)].copy()
-
-    # Cross-book ties are resolved only by a canonical, side/price-neutral
-    # bookmaker identity. The provider book key is preferred; book_title is
-    # a fallback for older rows. Missing identities sort last.
-    if "book" in b.columns:
-        book_key = b["book"].astype("string").fillna("").str.strip().str.lower()
-    else:
-        book_key = pd.Series("", index=b.index, dtype="string")
-    if "book_title" in b.columns:
-        title_key = (
-            b["book_title"].astype("string").fillna("").str.strip().str.lower()
+    if q.empty:
+        return q.drop(
+            columns=["_line", "_fair_prob", "_odds", "_row_ev", "_side",
+                     "_book_key", "_side_rank"],
+            errors="ignore",
         )
-        book_key = book_key.mask(book_key.eq(""), title_key)
-    b["_book_key"] = book_key.mask(book_key.eq(""), "~missing-book")
-    canonical_book = b.groupby(key, dropna=False)["_book_key"].transform("min")
-    b = b.loc[b["_book_key"].eq(canonical_book)].copy()
+    q = q.sort_values(
+        quote_key + ["_row_ev", "_side_rank"],
+        ascending=[True] * len(quote_key) + [False, True],
+        kind="mergesort",
+    )
+    offers = q.drop_duplicates(subset=quote_key, keep="first").copy()
+    offers["production_best_ev"] = offers["_row_ev"]
 
-    # If one canonical book somehow supplied two distinct equally-near lines,
-    # there is no side-neutral basis to prefer either one. Fail closed.
-    distinct_lines = b.groupby(key, dropna=False)["_line"].transform("nunique")
-    b = b.loc[distinct_lines.eq(1)].copy()
-    if b.empty:
-        return b.drop(
-            columns=["_line", "_line_gap", "_own_line_side", "_book_key"],
+    # Best Snapshot keeps the highest-EV concrete offer per player-market.
+    max_ev = offers.groupby(key, dropna=False)["production_best_ev"].transform("max")
+    candidates = offers.loc[
+        np.isclose(
+            offers["production_best_ev"],
+            max_ev,
+            rtol=0.0,
+            atol=1e-12,
+        )
+    ].copy()
+
+    # Exact EV ties must not silently choose different wagers by archive order.
+    sig_cols = [c for c in ("side", "vegas_line", "vegas_odds") if c in candidates.columns]
+    if sig_cols:
+        sig_count = candidates.groupby(key, dropna=False)[sig_cols].transform("nunique").max(axis=1)
+        ambiguous_keys = candidates.loc[sig_count.gt(1), key].drop_duplicates()
+        if len(ambiguous_keys):
+            marker = ambiguous_keys.assign(_ambiguous_offer_tie=True)
+            candidates = candidates.merge(marker, on=key, how="left")
+            candidates = candidates.loc[candidates["_ambiguous_offer_tie"].isna()].copy()
+            candidates = candidates.drop(columns=["_ambiguous_offer_tie"], errors="ignore")
+
+    if candidates.empty:
+        return candidates.drop(
+            columns=["_line", "_fair_prob", "_odds", "_row_ev", "_side",
+                     "_book_key", "_side_rank"],
             errors="ignore",
         )
 
-    # Duplicate rows at one canonical book+line use the least favorable
-    # captured payout. Numeric American odds are monotone with decimal payout:
-    # smaller numbers (-130 < -110 < +100 < +120) pay less.
-    if "vegas_odds" in b.columns:
-        b["_odds"] = num(b["vegas_odds"])
-    else:
-        b["_odds"] = np.nan
-    b = b.sort_values(
-        key + ["_book_key", "_odds"],
+    candidates = candidates.sort_values(
+        key + ["_book_key", "_line", "_odds"],
         kind="mergesort",
         na_position="last",
     )
-    out = b.drop_duplicates(subset=key, keep="first")
+    out = candidates.drop_duplicates(subset=key, keep="first").copy()
+
+    # Production signals HAS EDGE only for strictly positive best EV.
+    out = out.loc[out["production_best_ev"].gt(0)].copy()
+    out["model_pick_side"] = out["side"].astype(str).str.upper()
+    out["production_decision"] = "BET"
     return out.drop(
-        columns=["_line", "_line_gap", "_own_line_side", "_book_key", "_odds"],
+        columns=["_line", "_fair_prob", "_odds", "_row_ev", "_side",
+                 "_book_key", "_side_rank"],
         errors="ignore",
     )
-
 
 def load_actual_stats(season: int, weeks: list[int]) -> pd.DataFrame:
     import nflreadpy as nfl
