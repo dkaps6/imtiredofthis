@@ -153,7 +153,8 @@ def build_persistence_panel(logs: pd.DataFrame) -> pd.DataFrame:
             joined = joined.merge(current, on="player_identity_key", how="left", validate="one_to_one")
 
             for _, rec in joined.iterrows():
-                pos = str(rec.get("position") or "").upper().strip()
+                pos_raw = rec.get("position")
+                pos = "" if pd.isna(pos_raw) else str(pos_raw).upper().strip()
                 if pos not in METRICS:
                     continue
                 for metric, actual_col in METRICS[pos]:
@@ -172,8 +173,8 @@ def build_persistence_panel(logs: pd.DataFrame) -> pd.DataFrame:
                         "season": int(season),
                         "target_week": int(week),
                         "player_identity_key": str(rec["player_identity_key"]),
-                        "player": str(rec.get("player") or ""),
-                        "team": str(rec.get("team") or ""),
+                        "player": "" if pd.isna(rec.get("player")) else str(rec.get("player")),
+                        "team": "" if pd.isna(rec.get("team")) else str(rec.get("team")),
                         "position": pos,
                         "metric": metric,
                         "prior_games": int(prior_games),
