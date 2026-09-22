@@ -162,10 +162,12 @@ def test_material_exact_ev_cross_book_tie_fails_closed():
 
 
 def test_identical_wager_ev_tie_uses_row_level_book_title_fallback():
+    # Both legacy provider keys are blank. book_title must keep the offers
+    # distinct before the deterministic cross-book tie-break.
     a = _quote_rows(book="", line=49.5, p_over=0.60, p_under=0.40)
     for row in a:
         row["book_title"] = "Alpha Sports"
-    b = _quote_rows(book="bookB", line=49.5, p_over=0.60, p_under=0.40)
+    b = _quote_rows(book="", line=49.5, p_over=0.60, p_under=0.40)
     for row in b:
         row["book_title"] = "Beta Sports"
     got = select_model_bet(pd.DataFrame(a + b))
