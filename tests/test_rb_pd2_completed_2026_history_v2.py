@@ -205,6 +205,64 @@ def _week1_row() -> dict:
     }
 
 
+def test_attach_verified_actuals_uses_pbp_only_for_unresolved_identity():
+    projections = pd.DataFrame([
+        {
+            "season": 2026, "week": 2, "team": "KC",
+            "player": "Kenneth Walker III", "player_clean_key": "kennethwalker",
+            "position": "RB", "projection_mean": 50.0,
+        },
+        {
+            "season": 2026, "week": 2, "team": "SEA",
+            "player": "Roster Zero", "player_clean_key": "rosterzero",
+            "position": "RB", "projection_mean": 5.0,
+        },
+    ])
+    actual = pd.DataFrame(columns=[
+        "season", "week", "team", "gsis_id", "player", "player_clean_key", "rush_yards"
+    ])
+    roster = pd.DataFrame([
+        {
+            "season": 2026, "week": 2, "team": "SEA", "gsis_id": "00-zero",
+            "player_clean_key": "rosterzero", "status": "ACT",
+        }
+    ])
+    pbp = pd.DataFrame([
+        {
+            "season": 2026, "week": 2, "team": "KC", "gsis_id": "00-walker",
+            "player": "Kenneth Walker III", "player_clean_key": "kennethwalkeriii",
+            "rush_yards": 117.0,
+        }
+    ])
+
+    out, audit = v2.attach_verified_actuals(projections, actual, roster, pbp)
+    got = out.set_index("player_clean_key")["actual_rush_yards"].to_dict()
+    src = out.set_index("player_clean_key")["actual_source"].to_dict()
+    assert got["kennethwalker"] == 117.0
+    assert src["kennethwalker"] == "pbp_fallback"
+    assert got["rosterzero"] == 0.0
+    assert audit["verified_pbp_fallback"] == 1
+    assert audit["verified_roster_zero"] == 1
+    assert audit["excluded_rows"] == 0
+
+
+def test_attach_verified_actuals_fails_closed_on_any_remaining_unresolved_identity():
+    projections = pd.DataFrame([{
+        "season": 2026, "week": 2, "team": "KC",
+        "player": "Unknown Back", "player_clean_key": "unknownback",
+        "position": "RB", "projection_mean": 1.0,
+    }])
+    empty_actual = pd.DataFrame(columns=[
+        "season", "week", "team", "gsis_id", "player", "player_clean_key", "rush_yards"
+    ])
+    empty_roster = pd.DataFrame(columns=[
+        "season", "week", "team", "gsis_id", "player_clean_key", "status"
+    ])
+    empty_pbp = empty_actual.copy()
+    with pytest.raises(RuntimeError, match="unresolved completed rushing outcome"):
+        v2.attach_verified_actuals(projections, empty_actual, empty_roster, empty_pbp)
+
+
 def test_cumulative_append_requires_exact_contiguous_prior_week():
     prior = pd.DataFrame([_week1_row()])
     new = pd.DataFrame([{
