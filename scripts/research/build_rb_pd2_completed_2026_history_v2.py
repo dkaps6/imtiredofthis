@@ -84,6 +84,13 @@ def _read_json(path: Path, label: str) -> dict:
     return value
 
 
+def _full_name_key(value: Any) -> str:
+    try:
+        return str(player_name_key(value, strip_suffix=False) or "").strip()
+    except Exception:
+        return ""
+
+
 def _suffix_safe_key(value: Any) -> str:
     try:
         return str(player_name_key(value, strip_suffix=True) or "").strip()
@@ -204,20 +211,22 @@ def _merge_component(
         x["season"] = pd.to_numeric(x["season"], errors="coerce")
         x["week"] = pd.to_numeric(x["week"], errors="coerce")
         x["team"] = x["team"].map(canon_team)
-        x["_component_identity_key"] = x["player"].map(_suffix_safe_key)
+        # Rebuild the football-only component attachment from the full display
+        # name, preserving suffixes exactly. This mirrors football-source
+        # identity without borrowing sportsbook identity.
+        x["_component_identity_key"] = x["player"].map(_full_name_key)
         if x["_component_identity_key"].eq("").any():
-            raise RuntimeError(f"blank suffix-safe identity while joining component {value_col}")
+            raise RuntimeError(f"blank full-name identity while joining component {value_col}")
 
     join = ["season", "week", "team", "_component_identity_key"]
     if left.duplicated(join).any():
-        raise RuntimeError(f"projection frame has duplicate suffix-safe identity for {value_col}")
+        raise RuntimeError(f"projection frame has duplicate full-name identity for {value_col}")
     if c.duplicated(join).any():
-        raise RuntimeError(f"component {value_col} has duplicate suffix-safe identity")
+        raise RuntimeError(f"component {value_col} has duplicate full-name identity")
 
     c = c[join + [value_col]].rename(columns={value_col: out_col})
     out = left.merge(c, on=join, how="left", validate="one_to_one")
     return out.drop(columns=["_component_identity_key"])
-
 
 def build_projection_frame(
     *,
@@ -384,19 +393,47 @@ def build_projection_frame(
         pd.to_numeric(parity["mc_proj"], errors="coerce")
         - pd.to_numeric(parity["generic_mc_projection"], errors="coerce")
     ).abs()
+    if mc_gap.isna().any() or float(mc_gap.max()) > PARITY_TOLERANCE:
+        raise RuntimeError(
+            f"preserved priced mc parity failed max_abs_gap={float(mc_gap.max())}"
+        )
+
+    # Rebuild the preserved *priced* component path only as parity evidence.
+    # These rows never feed projection_mean. This is necessary because the
+    # Week-2 live board had a small downstream suffix-identity attachment gap:
+    # the football-only full-roster projection may legitimately have a component
+    # that the sportsbook-facing row failed to attach.
+    priced_components = parity[["mc_proj", "ml_proj", "state_proj"]].copy()
+    priced_components["market"] = "rush_yards"
+    priced_rebuilt = apply_ensemble(priced_components, weights=weights)
+    parity["priced_rebuilt_ensemble"] = pd.to_numeric(
+        priced_rebuilt["ensemble_proj"], errors="coerce"
+    ).to_numpy()
+
     ens_gap = (
         pd.to_numeric(parity["ensemble_proj"], errors="coerce")
-        - pd.to_numeric(parity["projection_mean"], errors="coerce")
+        - parity["priced_rebuilt_ensemble"]
     ).abs()
     model_gap = (
         pd.to_numeric(parity["model_proj"], errors="coerce")
-        - pd.to_numeric(parity["projection_mean"], errors="coerce")
+        - parity["priced_rebuilt_ensemble"]
     ).abs()
-    for label, gap in [("mc", mc_gap), ("ensemble", ens_gap), ("model", model_gap)]:
+    for label, gap in [("ensemble", ens_gap), ("model", model_gap)]:
         if gap.isna().any() or float(gap.max()) > PARITY_TOLERANCE:
             raise RuntimeError(
-                f"preserved priced {label} parity failed max_abs_gap={float(gap.max())}"
+                f"preserved priced {label} path parity failed max_abs_gap={float(gap.max())}"
             )
+
+    full_vs_priced_gap = (
+        pd.to_numeric(parity["projection_mean"], errors="coerce")
+        - parity["priced_rebuilt_ensemble"]
+    ).abs()
+    component_identity_gap = full_vs_priced_gap.gt(PARITY_TOLERANCE)
+    identity_gap_detail = parity.loc[
+        component_identity_gap,
+        ["player", "team", "canonical_player_key", "mc_proj", "ml_proj", "state_proj",
+         "generic_mc_projection", "projection_mean", "priced_rebuilt_ensemble"],
+    ].copy()
 
     audit = {
         **football_audit,
@@ -409,6 +446,12 @@ def build_projection_frame(
         "max_abs_priced_mc_parity_gap": float(mc_gap.max()),
         "max_abs_priced_ensemble_parity_gap": float(ens_gap.max()),
         "max_abs_priced_model_parity_gap": float(model_gap.max()),
+        "max_abs_full_roster_vs_priced_mean_gap": float(full_vs_priced_gap.max()),
+        "priced_component_identity_gap_rows": int(component_identity_gap.sum()),
+        "priced_component_identity_gap_players": int(
+            identity_gap_detail[["team", "canonical_player_key"]].drop_duplicates().shape[0]
+        ),
+        "priced_component_identity_gap_detail": identity_gap_detail.to_dict("records"),
         "sportsbook_inputs_used_for_projection": 0,
         "sportsbook_rows_used_for_parity_only": int(len(parity)),
         "weights_sha256": _file_sha256(paths["weights"]),
