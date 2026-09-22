@@ -25,16 +25,13 @@ nflreadpy:
    tonight, then joins actuals by (season, week, resolved GSIS) instead of
    by name key.
 
-3. A player who was genuinely inactive/DNP that week has NO row at all in
-   nflreadpy's weekly stats table (not even a zero row), so bug #2's fix
-   alone can't identity-resolve them -- their name never appears in a
-   stats-table-derived alias index (found: Odell Beckham Jr., Calvin
-   Ridley, Jalen Tolbert). The alias index is extended with weekly roster
-   data (which does have them, including Tolbert's explicit `INA` status),
-   so identity can resolve from roster presence alone; once resolved, a
-   confirmed-rostered GSIS with no stats-table row is graded as a verified
-   zero for every stat column, since a real inactive player is a real,
-   gradable 0-yard/0-reception outcome, not missing data.
+3. A player absent from the weekly stats table may either have participated
+   with zero box-score usage or may have been inactive/DNP. Roster presence
+   proves identity, not sportsbook action. The grader therefore joins
+   postgame PFR snap counts: any positive offense/defense/special-teams snap
+   confirms participation and permits a verified zero; explicit `INA` with
+   no participation is settled VOID for the captured DraftKings/FanDuel
+   player-prop books; missing/ambiguous participation evidence fails closed.
 
 Source-only. No production change; this does not modify player_form_v2 or
 the live pricing pipeline, only how already-priced boards get graded.
@@ -55,6 +52,15 @@ from scripts.operations.grade_market_track_record_v1 import (
 from scripts.utils.canonical_names import canonicalize_player_name_safe
 
 TG = ["season", "week", "team"]
+DNP_VOID_BOOKS = {"draftkings", "fanduel"}
+ACTIVE_ROSTER_STATUSES = {"ACT", "ACTIVE"}
+INACTIVE_ROSTER_STATUSES = {"INA", "INACTIVE", "DNP"}
+
+
+def _book_key(value) -> str:
+    return str(value or "").strip().lower()
+
+
 
 
 def _to_pandas(obj):
@@ -137,6 +143,134 @@ def load_roster_identity(season: int, weeks: list[int] | None) -> pd.DataFrame:
     return x[["season", "week", "team", "gsis_id", "player_clean_key", "status", "position"]].drop_duplicates()
 
 
+def load_snap_participation(season: int, weeks: list[int] | None) -> pd.DataFrame:
+    """Postgame participation evidence from PFR snap counts.
+
+    Any positive offense, defense, or special-teams snap proves the player
+    participated in the event. Rows are team/name keyed because the PFR snap
+    source does not expose GSIS ids.
+    """
+    import nflreadpy as nfl
+
+    raw = nfl.load_snap_counts(seasons=[int(season)])
+    x = _to_pandas(raw)
+    x.columns = [str(c).strip().lower() for c in x.columns]
+    x["season"] = pd.to_numeric(x.get("season", season), errors="coerce")
+    x["week"] = pd.to_numeric(x.get("week"), errors="coerce")
+    x = x.loc[
+        x["season"].eq(int(season))
+        & x["week"].notna()
+        & x["week"].between(1, 18)
+    ].copy()
+    x["week"] = x["week"].astype(int)
+    if weeks:
+        x = x.loc[x["week"].isin(weeks)].copy()
+
+    team_col = next((c for c in ("team", "team_abbr", "club") if c in x.columns), None)
+    name_col = next((c for c in ("player", "player_name", "full_name") if c in x.columns), None)
+    if team_col is None or name_col is None:
+        raise RuntimeError("snap participation source missing team/player")
+
+    x["team"] = (
+        x[team_col].astype("string").fillna("").str.strip().map(canon_team)
+    )
+    canon = (
+        x[name_col].astype("string").fillna("").str.strip()
+        .map(canonicalize_player_name_safe)
+    )
+    x["player_clean_key"] = canon.map(lambda t: t[1])
+
+    snap_cols = [c for c in ("offense_snaps", "defense_snaps", "st_snaps") if c in x.columns]
+    if not snap_cols:
+        raise RuntimeError("snap participation source missing snap-count columns")
+    total = pd.Series(0.0, index=x.index)
+    for c in snap_cols:
+        total = total + pd.to_numeric(x[c], errors="coerce").fillna(0.0)
+    x["snap_participated"] = total.gt(0)
+
+    x = x.loc[
+        x["team"].astype(str).ne("")
+        & x["player_clean_key"].astype(str).ne("")
+    ].copy()
+    return (
+        x[["season", "week", "team", "player_clean_key", "snap_participated"]]
+        .groupby(["season", "week", "team", "player_clean_key"], as_index=False)
+        .agg(snap_participated=("snap_participated", "max"))
+    )
+
+
+def _status_map(roster: pd.DataFrame) -> dict:
+    out = {}
+    for key, q in roster.groupby(["season", "week", "team", "gsis_id"], dropna=False):
+        vals = sorted({
+            str(v).strip().upper()
+            for v in q["status"].tolist()
+            if str(v).strip()
+        })
+        out[key] = vals[0] if len(vals) == 1 else ("AMBIGUOUS:" + "|".join(vals) if vals else "")
+    return out
+
+
+def _snap_participation_sets(snaps: pd.DataFrame) -> tuple[set, set]:
+    exact = set()
+    base = set()
+    for r in snaps.loc[snaps["snap_participated"]].itertuples(index=False):
+        exact.add((int(r.season), int(r.week), r.team, r.player_clean_key))
+        base.add((int(r.season), int(r.week), r.team, _suffix_strip(r.player_clean_key)))
+    return exact, base
+
+
+def apply_postgame_settlement(detail: pd.DataFrame) -> pd.DataFrame:
+    """Classify actual/void/unresolved outcomes without turning DNP into zero."""
+    out = detail.copy()
+    resolved = out["identity_status"].eq("RESOLVED_GSIS")
+    has_stat_row = out["actual"].notna()
+    participated = out.get("snap_participated", False)
+    if not isinstance(participated, pd.Series):
+        participated = pd.Series(bool(participated), index=out.index)
+    participated = participated.fillna(False).astype(bool)
+
+    status = (
+        out.get("roster_status", pd.Series("", index=out.index))
+        .astype("string").fillna("").str.strip().str.upper()
+    )
+    book = (
+        out.get("book", pd.Series("", index=out.index))
+        .astype("string").fillna("").str.strip().str.lower()
+    )
+    rostered = out.get(
+        "roster_confirmed_this_team_week",
+        pd.Series(False, index=out.index),
+    ).fillna(False).astype(bool)
+
+    missing_stat = resolved & ~has_stat_row
+    participated_zero = missing_stat & participated
+    explicit_dnp = (
+        missing_stat
+        & rostered
+        & ~participated
+        & status.isin(INACTIVE_ROSTER_STATUSES)
+        & book.isin(DNP_VOID_BOOKS)
+    )
+
+    out.loc[participated_zero, "actual"] = 0.0
+    out["actual_source"] = np.select(
+        [resolved & has_stat_row, participated_zero, explicit_dnp],
+        ["stats_table", "snap_confirmed_verified_zero", "sportsbook_void_dnp"],
+        default="unresolved",
+    )
+    out["settlement_status"] = np.select(
+        [
+            out["actual_source"].isin(["stats_table", "snap_confirmed_verified_zero"]),
+            out["actual_source"].eq("sportsbook_void_dnp"),
+        ],
+        ["SETTLED", "VOID"],
+        default="UNRESOLVED",
+    )
+    out["has_verified_actual"] = out["settlement_status"].eq("SETTLED")
+    return out
+
+
 def build_alias_index(actual: pd.DataFrame, roster: pd.DataFrame) -> dict:
     """team-scoped exact/suffix-stripped alias -> set of GSIS ids, plus a
     global (any-team) index for the fallback tiers, built from the UNION of
@@ -181,8 +315,11 @@ def grade(season: int, weeks: list[int], detail_out: Path | None = None) -> dict
     bets["team"] = bets["team"].map(canon_team)
     actual = load_actual_stats_unfiltered(season, weeks)
     roster = load_roster_identity(season, weeks)
+    snaps = load_snap_participation(season, weeks)
     idx = build_alias_index(actual, roster)
     roster_confirmed = set(zip(roster["season"], roster["week"], roster["team"], roster["gsis_id"]))
+    roster_status = _status_map(roster)
+    snap_exact, snap_base = _snap_participation_sets(snaps)
 
     resolved = []
     for r in bets.itertuples(index=False):
@@ -192,6 +329,19 @@ def grade(season: int, weeks: list[int], detail_out: Path | None = None) -> dict
     res_df["roster_confirmed_this_team_week"] = [
         (s, w, t, g) in roster_confirmed
         for s, w, t, g in zip(res_df["season"], res_df["week"], res_df["team"], res_df["gsis_id"])
+    ]
+    res_df["roster_status"] = [
+        roster_status.get((s, w, t, g), "")
+        for s, w, t, g in zip(res_df["season"], res_df["week"], res_df["team"], res_df["gsis_id"])
+    ]
+    res_df["snap_participated"] = [
+        (
+            (int(s), int(w), t, k) in snap_exact
+            or (int(s), int(w), t, _suffix_strip(k)) in snap_base
+        )
+        for s, w, t, k in zip(
+            res_df["season"], res_df["week"], res_df["team"], res_df["player_clean_key"]
+        )
     ]
 
     detail_parts = []
@@ -222,31 +372,27 @@ def grade(season: int, weeks: list[int], detail_out: Path | None = None) -> dict
                 pos_map[gid] = str(pos).strip().upper()
     detail["position"] = detail["gsis_id"].map(pos_map).fillna("UNKNOWN")
 
-    # A resolved GSIS with a real stats-table row: use it. A resolved GSIS
-    # confirmed on that team's roster that week but absent from the stats
-    # table: a genuine inactive/zero-involvement outcome, so it's a real
-    # verified zero, not missing data -- fill it in rather than drop it.
-    resolved_ok = detail["identity_status"].eq("RESOLVED_GSIS")
-    has_stat_row = detail["actual"].notna()
-    verified_zero = resolved_ok & ~has_stat_row & detail["roster_confirmed_this_team_week"]
-    detail.loc[verified_zero, "actual"] = 0.0
-    detail["actual_source"] = np.select(
-        [resolved_ok & has_stat_row, verified_zero],
-        ["stats_table", "roster_confirmed_verified_zero"], default="unresolved",
-    )
-    detail["has_verified_actual"] = detail["actual_source"].ne("unresolved")
-    unresolved = detail.loc[~detail["has_verified_actual"]]
-    graded = detail.loc[detail["has_verified_actual"]].copy()
+    detail = apply_postgame_settlement(detail)
+    unresolved = detail.loc[detail["settlement_status"].eq("UNRESOLVED")]
+    graded = detail.loc[~detail["settlement_status"].eq("UNRESOLVED")].copy()
 
     graded["vegas_line"] = num(graded["vegas_line"])
     graded["model_proj"] = num(graded["model_proj"])
     graded["model_error"] = graded["model_proj"] - graded["actual"]
     graded["vegas_error"] = graded["vegas_line"] - graded["actual"]
     graded["model_closer_than_vegas"] = graded["model_error"].abs() < graded["vegas_error"].abs()
-    graded["actual_side"] = [outcome_side(a, l) for a, l in zip(graded["actual"], graded["vegas_line"])]
+    graded["actual_side"] = [
+        outcome_side(a, l) if pd.notna(a) else "VOID"
+        for a, l in zip(graded["actual"], graded["vegas_line"])
+    ]
     graded["bet_result"] = np.select(
-        [graded["actual_side"].eq("PUSH"), graded["side"].astype(str).str.upper().eq(graded["actual_side"])],
-        ["PUSH", "WIN"], default="LOSS",
+        [
+            graded["settlement_status"].eq("VOID"),
+            graded["actual_side"].eq("PUSH"),
+            graded["side"].astype(str).str.upper().eq(graded["actual_side"]),
+        ],
+        ["VOID", "PUSH", "WIN"],
+        default="LOSS",
     )
     graded["unit_result"] = np.where(
         graded["bet_result"].eq("WIN"), [american_profit(o) for o in graded["vegas_odds"]],
@@ -256,9 +402,11 @@ def grade(season: int, weeks: list[int], detail_out: Path | None = None) -> dict
     summary = {
         "status": "graded",
         "archived_bet_rows": int(len(detail)),
-        "verified_actual_rows": int(len(graded)),
+        "selected_settlement_rows": int(len(graded)),
+        "verified_actual_rows": int(graded["has_verified_actual"].sum()),
         "verified_via_stats_table": int((graded["actual_source"] == "stats_table").sum()),
-        "verified_via_roster_confirmed_zero": int((graded["actual_source"] == "roster_confirmed_verified_zero").sum()),
+        "verified_via_snap_confirmed_zero": int((graded["actual_source"] == "snap_confirmed_verified_zero").sum()),
+        "void_dnp_rows": int((graded["actual_source"] == "sportsbook_void_dnp").sum()),
         "still_unresolved_rows": int(len(unresolved)),
         "unresolved_identity_status_counts": unresolved["identity_status"].value_counts().to_dict(),
         "decided_bets": int(len(decided)),
