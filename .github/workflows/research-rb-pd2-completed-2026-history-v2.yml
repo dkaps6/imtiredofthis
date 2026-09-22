@@ -75,24 +75,21 @@ jobs:
         run: python scripts/utils/audit_repo.py --strict
 
   certify:
-    # One exact-message push bridge lets the connected GitHub automation run the
-    # already-frozen Week-2 certification when workflow_dispatch is unavailable.
-    # This bridge is reverted after the resulting immutable artifact is pinned.
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Run Week 2 RB PD2 certification' }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     needs: test
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
       GH_TOKEN: ${{ github.token }}
-      COMPLETED_WEEK: ${{ inputs.completed_week || '2' }}
-      SOURCE_RUN_ID: ${{ inputs.source_run_id || '35282021679' }}
-      SOURCE_ARTIFACT_NAME: ${{ inputs.source_artifact_name || 'run_35282021679' }}
-      SOURCE_ARTIFACT_ID: ${{ inputs.source_artifact_id || '10523345092' }}
-      SOURCE_ARTIFACT_DIGEST: ${{ inputs.source_artifact_digest || 'sha256:6024ed21d7032e6e6440145277d9d4b74e98f319ef286962bac2a786a8d28e3c' }}
-      PRIOR_HISTORY_RUN_ID: ${{ inputs.prior_history_run_id || '35619889214' }}
-      PRIOR_HISTORY_ARTIFACT_NAME: ${{ inputs.prior_history_artifact_name || 'rb-pd2-completed-2026-week1-history-v1' }}
-      PRIOR_HISTORY_ARTIFACT_ID: ${{ inputs.prior_history_artifact_id || '10649235022' }}
-      PRIOR_HISTORY_ARTIFACT_DIGEST: ${{ inputs.prior_history_artifact_digest || 'sha256:99541ebc07e4fec1214bd3d42f5d5d00bbff0ea20c671cdc288147aa46cfa079' }}
+      COMPLETED_WEEK: ${{ inputs.completed_week }}
+      SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+      SOURCE_ARTIFACT_NAME: ${{ inputs.source_artifact_name }}
+      SOURCE_ARTIFACT_ID: ${{ inputs.source_artifact_id }}
+      SOURCE_ARTIFACT_DIGEST: ${{ inputs.source_artifact_digest }}
+      PRIOR_HISTORY_RUN_ID: ${{ inputs.prior_history_run_id }}
+      PRIOR_HISTORY_ARTIFACT_NAME: ${{ inputs.prior_history_artifact_name }}
+      PRIOR_HISTORY_ARTIFACT_ID: ${{ inputs.prior_history_artifact_id }}
+      PRIOR_HISTORY_ARTIFACT_DIGEST: ${{ inputs.prior_history_artifact_digest }}
     steps:
       - uses: actions/checkout@v4
         with:
