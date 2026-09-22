@@ -173,10 +173,13 @@ def select_model_bet(board: pd.DataFrame) -> pd.DataFrame:
     # a fallback for older rows. Missing identities sort last.
     if "book" in b.columns:
         book_key = b["book"].astype("string").fillna("").str.strip().str.lower()
-    elif "book_title" in b.columns:
-        book_key = b["book_title"].astype("string").fillna("").str.strip().str.lower()
     else:
         book_key = pd.Series("", index=b.index, dtype="string")
+    if "book_title" in b.columns:
+        title_key = (
+            b["book_title"].astype("string").fillna("").str.strip().str.lower()
+        )
+        book_key = book_key.mask(book_key.eq(""), title_key)
     b["_book_key"] = book_key.mask(book_key.eq(""), "~missing-book")
     canonical_book = b.groupby(key, dropna=False)["_book_key"].transform("min")
     b = b.loc[b["_book_key"].eq(canonical_book)].copy()
