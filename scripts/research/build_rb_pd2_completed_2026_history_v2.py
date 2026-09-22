@@ -44,6 +44,7 @@ from scripts.research.rb_pd2_forward_shadow_v1 import (
     verify_frozen_2025_weights,
 )
 from scripts.simulation_explicit_entitlement_v1 import simulate as explicit_simulate
+from scripts.utils.canonical_names import canonicalize_player_name_safe
 from scripts.utils.player_identity_v3 import player_name_key
 
 SEASON = 2026
