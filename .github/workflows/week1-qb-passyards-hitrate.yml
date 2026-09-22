@@ -16,8 +16,6 @@ permissions:
   actions: read
 
 env:
-  SOURCE_REPLAY_RUN_ID: '34910010508'
-  SOURCE_REPLAY_ARTIFACT_NAME: offline_replay_34910010508
   BACKTEST_SEASON: '2026'
   BACKTEST_WEEK: '1'
 
@@ -38,22 +36,22 @@ jobs:
           pip install -r requirements.txt
           pip install nflreadpy
 
-      - name: Download the preserved Week 1 board
+      - name: Verify the committed durable Week 1 board
         run: |
           set -euo pipefail
-          rm -rf /tmp/board && mkdir -p /tmp/board
-          gh run download "${SOURCE_REPLAY_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
-            --name "${SOURCE_REPLAY_ARTIFACT_NAME}" --dir /tmp/board
-          test -s /tmp/board/outputs/props_priced_clean.csv
-          mkdir -p outputs && cp /tmp/board/outputs/props_priced_clean.csv outputs/
+          test -s data/market_track_record/boards/2026_wk01.csv
+          python - <<'EOF'
+          import pandas as pd
+          p = 'data/market_track_record/boards/2026_wk01.csv'
+          d = pd.read_csv(p, low_memory=False)
+          assert len(d) > 0, 'committed Week 1 board is empty'
+          print(f'committed Week 1 board: {len(d)} rows, {d["market"].nunique()} markets')
+          EOF
 
-      - name: Archive and grade
+      - name: Grade committed Week 1 board
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
-          python scripts/operations/archive_priced_board_v1.py \
-            --priced-file outputs/props_priced_clean.csv \
-            --season "${BACKTEST_SEASON}" --week "${BACKTEST_WEEK}"
           python scripts/operations/grade_market_track_record_gsis_v1.py \
             --season "${BACKTEST_SEASON}" --weeks "${BACKTEST_WEEK}" \
             --detail-out /tmp/graded_detail.csv
