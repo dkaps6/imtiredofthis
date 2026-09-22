@@ -238,6 +238,13 @@ def apply_postgame_settlement(detail: pd.DataFrame) -> pd.DataFrame:
         out.get("book", pd.Series("", index=out.index))
         .astype("string").fillna("").str.strip().str.lower()
     )
+    book_title = (
+        out.get("book_title", pd.Series("", index=out.index))
+        .astype("string").fillna("").str.strip().str.lower()
+    )
+    # Match the selection layer's row-level legacy provider fallback:
+    # a blank provider key may still be a known DraftKings/FanDuel offer.
+    book = book.mask(book.eq(""), book_title)
     rostered = out.get(
         "roster_confirmed_this_team_week",
         pd.Series(False, index=out.index),
