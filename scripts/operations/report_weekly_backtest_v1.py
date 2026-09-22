@@ -156,6 +156,27 @@ def report(detail_path: Path) -> int:
              .value_counts().unstack(fill_value=0))
     print(bal.to_string())
 
+    section("FALSIFICATION CHECK 4 — how much did the books disagree")
+    print("Rows are graded at the consensus (median) line. Where books quoted")
+    print("different numbers, the choice of line can decide the side, so the")
+    print("spread below bounds how much of the record is line-selection rather")
+    print("than football.")
+    if "consensus_line" in d.columns and "vegas_line" in d.columns:
+        gap = (pd.to_numeric(d["vegas_line"], errors="coerce")
+               - pd.to_numeric(d["consensus_line"], errors="coerce")).abs()
+        off = int((gap > 1e-9).sum())
+        print(f"\n  graded rows priced away from consensus: {off} / {len(d)} ({off / len(d):.1%})")
+        if off:
+            print(f"  median absolute gap where it happens : {gap[gap > 1e-9].median():.2f}")
+        straddle = d.loc[
+            (pd.to_numeric(d["model_proj"], errors="coerce")
+             - pd.to_numeric(d["consensus_line"], errors="coerce")).abs() < gap.fillna(0)
+        ]
+        print(f"  rows where the projection sits inside the book spread: {len(straddle)}")
+        print("  (for those, a different book would have flipped the side)")
+    else:
+        print("\n  consensus_line is absent from the graded detail -- cannot bound this.")
+
     # ---- the QB pass-yards hypothesis -----------------------------------
     q = d[d["market"].astype(str).eq(QB_MARKET)].copy()
     if not q.empty:

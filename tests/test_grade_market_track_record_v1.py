@@ -104,3 +104,45 @@ def test_grade_matched_rows_reports_status_when_nothing_matches():
     graded, summary = grade_matched_rows(detail, season=2026, present_weeks=[1])
     assert summary["status"] == "matched_zero_rows_to_actual_results"
     assert graded.empty
+
+
+def _multi_book_board():
+    """Two books quoting different lines for one player-market, with the
+    model's projection sitting between them -- the real 2026 Week 2 Jacoby
+    Brissett shape, where the surviving row decides the side."""
+    rows = []
+    for book, line in (("bookA", 216.5), ("bookB", 221.5)):
+        for side in ("OVER", "UNDER"):
+            rows.append({
+                "season": 2026, "week": 2, "event_id": "evt1", "book": book,
+                "player": "Jacoby Brissett", "player_clean_key": "jacobybrissett",
+                "team": "ARI", "market": "pass_yards", "side": side,
+                "vegas_line": line, "vegas_odds": -114.0, "model_proj": 219.805606,
+            })
+    return pd.DataFrame(rows)
+
+
+def test_select_model_bet_is_independent_of_row_order():
+    board = _multi_book_board()
+    picks = []
+    for order in ([0, 1, 2, 3], [3, 2, 1, 0], [2, 0, 3, 1]):
+        got = select_model_bet(board.iloc[order].reset_index(drop=True))
+        assert len(got) == 1
+        picks.append((got.iloc[0]["side"], float(got.iloc[0]["vegas_line"])))
+    assert len(set(picks)) == 1, f"row order changed the graded bet: {picks}"
+
+
+def test_select_model_bet_uses_the_consensus_line_not_an_arbitrary_book():
+    # Median of {216.5, 221.5} is 219.0; the projection 219.81 is above it,
+    # so the model is on OVER regardless of which book sorted last.
+    got = select_model_bet(_multi_book_board())
+    assert got.iloc[0]["side"] == "OVER"
+
+
+def test_select_model_bet_still_collapses_a_single_book_pair():
+    board = _multi_book_board()
+    board = board.loc[board["book"].eq("bookA")].reset_index(drop=True)
+    got = select_model_bet(board)
+    assert len(got) == 1
+    assert got.iloc[0]["side"] == "OVER"
+    assert float(got.iloc[0]["vegas_line"]) == 216.5

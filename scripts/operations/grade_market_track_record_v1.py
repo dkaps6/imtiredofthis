@@ -100,19 +100,53 @@ def load_boards(season: int, weeks: list[int] | None) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True, sort=False)
 
 
+BET_KEY = ["season", "week", "event_id", "player", "market"]
+
+
 def select_model_bet(board: pd.DataFrame) -> pd.DataFrame:
-    """Collapse the archived OVER/UNDER row pair into one graded bet per
-    (season, week, event_id, player, market): the side the model actually
-    picked, keeping that row's own captured odds."""
+    """Collapse the archived rows for one player-market into a single graded
+    bet: the side the model picked at the consensus line, keeping that row's
+    own captured odds.
+
+    Books disagree about the line, so a player-market can carry several rows
+    at different numbers. The previous implementation took whichever row
+    happened to sort last, which is not a rule at all: re-archiving the same
+    board reorders the ledger and silently regrades it. Observed on the real
+    2026 Week 2 board, where the graded record moved 214-214 -> 215-213 with
+    no change to the source, because Jacoby Brissett's projection (219.81)
+    falls between two books' lines (216.5 and 221.5) and the arbitrary
+    survivor decided whether the model was betting over or under.
+
+    The consensus line is the median across the distinct book lines for that
+    player-market, taken BEFORE the side is chosen so the choice of number
+    cannot be steered by which side looks better. Ties break toward the
+    lower line, then by captured odds and book, so the result is a pure
+    function of the board's contents and not of its row order.
+    """
     if board.empty:
         return board.copy()
     b = board.copy()
+    key = [c for c in BET_KEY if c in b.columns]
+    b["_line"] = num(b.vegas_line)
+    b = b.loc[b["_line"].notna()].copy()
+
+    consensus = b.groupby(key, dropna=False)["_line"].median().rename("consensus_line")
+    b = b.merge(consensus, left_on=key, right_index=True, how="left")
+    # Keep the quoted line nearest the consensus; a book that is exactly at
+    # the consensus always wins over one that is not.
+    b["_line_gap"] = (b["_line"] - b["consensus_line"]).abs()
+
     b["model_pick_side"] = [
-        model_side(p, l) for p, l in zip(num(b.model_proj), num(b.vegas_line))
+        model_side(p, l) for p, l in zip(num(b.model_proj), b["consensus_line"])
     ]
     b = b.loc[b.side.astype(str).str.upper().eq(b.model_pick_side)].copy()
-    key = [c for c in ["season", "week", "event_id", "player", "market"] if c in b.columns]
-    return b.drop_duplicates(subset=key, keep="last")
+    if b.empty:
+        return b.drop(columns=["_line", "_line_gap"], errors="ignore")
+
+    sort_cols = ["_line_gap", "_line"] + [c for c in ("vegas_odds", "book") if c in b.columns]
+    b = b.sort_values(key + sort_cols, kind="mergesort")
+    out = b.drop_duplicates(subset=key, keep="first")
+    return out.drop(columns=["_line", "_line_gap"], errors="ignore")
 
 
 def load_actual_stats(season: int, weeks: list[int]) -> pd.DataFrame:
