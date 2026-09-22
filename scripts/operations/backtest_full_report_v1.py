@@ -88,7 +88,9 @@ def build_graded(season: int, weeks: list[int]) -> pd.DataFrame:
     g["model_proj"] = G.num(g.model_proj)
     g["model_error"] = g.model_proj - g.actual
     g["vegas_error"] = g.vegas_line - g.actual
-    g["model_closer"] = g.model_error.abs() < g.vegas_error.abs()
+    closer = g.model_error.abs() < g.vegas_error.abs()
+    g["model_closer"] = closer.where(g["settlement_status"].eq("SETTLED"))
+    g["model_closer_than_vegas"] = g["model_closer"]
     g["actual_side"] = [
         G.outcome_side(a, l) if pd.notna(a) else "VOID"
         for a, l in zip(g.actual, g.vegas_line)
@@ -123,11 +125,11 @@ def _cell(f: pd.DataFrame) -> dict:
         "win": w / n if n else np.nan,
         "units": float(dec.unit_result.sum()),
         "roi": float(dec.unit_result.mean()) if n else np.nan,
-        "m_mae": float(f.model_error.abs().mean()),
-        "v_mae": float(f.vegas_error.abs().mean()),
-        "m_bias": float(f.model_error.mean()),
-        "v_bias": float(f.vegas_error.mean()),
-        "closer": float(f.model_closer.mean()),
+        "m_mae": float(dec.model_error.abs().mean()),
+        "v_mae": float(dec.vegas_error.abs().mean()),
+        "m_bias": float(dec.model_error.mean()),
+        "v_bias": float(dec.vegas_error.mean()),
+        "closer": float(dec.model_closer.mean()),
     }
 
 
