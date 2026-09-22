@@ -125,3 +125,13 @@ def test_accuracy_metrics_exclude_void_rows_from_denominator():
     assert full["closer"] == weekly["closer"] == 0.5
     assert full["m_mae"] == weekly["model_mae"] == 2.0
     assert full["v_mae"] == weekly["vegas_mae"] == 2.0
+
+
+
+def test_dnp_void_uses_row_level_book_title_fallback():
+    row = _rows().iloc[[2]].copy()
+    row["book"] = ""
+    row["book_title"] = "DraftKings"
+    out = apply_postgame_settlement(row)
+    assert out.iloc[0]["actual_source"] == "sportsbook_void_dnp"
+    assert out.iloc[0]["settlement_status"] == "VOID"
