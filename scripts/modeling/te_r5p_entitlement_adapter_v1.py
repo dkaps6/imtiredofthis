@@ -21,6 +21,8 @@ import pandas as pd
 
 MODEL_PATH = Path("data/models/te_r5p_production_model_v1/te_r5p_production_model_v1.json")
 SOURCE_SEASONS = [2020, 2021, 2022, 2023, 2024, 2025]
+CURRENT_SEASON_SNAP_ACTIVATION_SEASON = 2026
+CURRENT_SEASON_SNAP_ACTIVATION_WEEK = 3
 TEAM_MAP = {"OAK":"LV","SD":"LAC","STL":"LAR","LA":"LAR","JAC":"JAX","ARZ":"ARI","WSH":"WAS"}
 EXPECTED_VERSION = "TE_R5P_PRODUCTION_MODEL_V1"
 EXPECTED_FINAL_FIT_RUN = 34153141322
@@ -87,15 +89,175 @@ def _load_model() -> dict:
     return model
 
 
-def _load_snaps() -> tuple[pd.DataFrame, float, list[int]]:
+def _snap_source_seasons(target_season: int | None = None, target_week: int | None = None) -> list[int]:
+    """Resolve snap-source seasons without rewriting the historical 2026 W1-W2 record."""
+    if target_season is None or target_week is None:
+        return list(SOURCE_SEASONS)
+    season = int(target_season)
+    week = int(target_week)
+    if season <= 2025:
+        return list(SOURCE_SEASONS)
+    if season == CURRENT_SEASON_SNAP_ACTIVATION_SEASON:
+        if week < CURRENT_SEASON_SNAP_ACTIVATION_WEEK:
+            return list(SOURCE_SEASONS)
+        return [*SOURCE_SEASONS, CURRENT_SEASON_SNAP_ACTIVATION_SEASON]
+    raise RuntimeError(
+        f"TE-R5P snap source continuation is not certified for target season={season} week={week}"
+    )
+
+
+def _target_season_week(frame: pd.DataFrame, label: str) -> tuple[int, int]:
+    season = pd.to_numeric(frame.get("season"), errors="coerce")
+    week = pd.to_numeric(frame.get("week"), errors="coerce")
+    seasons = sorted(int(v) for v in season.dropna().unique())
+    weeks = sorted(int(v) for v in week.dropna().unique())
+    if len(seasons) != 1 or len(weeks) != 1:
+        raise RuntimeError(
+            f"{label} requires one target season/week, got seasons={seasons} weeks={weeks}"
+        )
+    return seasons[0], weeks[0]
+
+
+def _expected_regular_season_teams(season: int, week: int) -> set[str]:
+    """Return the canonical teams scheduled to play in one regular-season week."""
     import nflreadpy as nfl
 
-    q = _lower(_pdx(nfl.load_snap_counts(seasons=SOURCE_SEASONS)))
+    raw = _lower(_pdx(nfl.load_schedules(seasons=[int(season)])))
+    if raw.empty:
+        raise RuntimeError(
+            f"TE-R5P snap freshness schedule returned zero rows season={season}"
+        )
+
+    if "season" in raw.columns:
+        season_num = pd.to_numeric(raw["season"], errors="coerce")
+        raw = raw.loc[season_num.eq(int(season))].copy()
+
+    game_type_col = next(
+        (name for name in ("game_type", "season_type") if name in raw.columns),
+        None,
+    )
+    if game_type_col is not None:
+        game_type = raw[game_type_col].astype("string").str.upper().str.strip()
+        regular = raw.loc[game_type.eq("REG")].copy()
+        if not regular.empty:
+            raw = regular
+
+    if "week" not in raw.columns:
+        raise RuntimeError("TE-R5P snap freshness schedule missing week")
+    week_num = pd.to_numeric(raw["week"], errors="coerce")
+    raw = raw.loc[week_num.eq(int(week))].copy()
+    if raw.empty:
+        raise RuntimeError(
+            f"TE-R5P snap freshness schedule has no regular-season rows "
+            f"season={season} week={week}"
+        )
+
+    home = _first(raw, ["home_team", "home"]).map(_team)
+    away = _first(raw, ["away_team", "away"]).map(_team)
+    teams = {v for v in pd.concat([home, away], ignore_index=True).astype(str) if v}
+    if not teams:
+        raise RuntimeError(
+            f"TE-R5P snap freshness schedule resolved zero teams "
+            f"season={season} week={week}"
+        )
+    return teams
+
+
+def _validate_snap_week_coverage(
+    snaps: pd.DataFrame,
+    *,
+    season: int,
+    week: int,
+    expected_teams: set[str],
+) -> dict:
+    """Fail closed unless one completed source week has exact scheduled-team coverage."""
+    q = snaps.loc[
+        pd.to_numeric(snaps["season"], errors="coerce").eq(int(season))
+        & pd.to_numeric(snaps["week"], errors="coerce").eq(int(week))
+    ].copy()
+    expected = {str(v).upper().strip() for v in expected_teams if str(v).strip()}
+    actual = {str(v).upper().strip() for v in q["team"].dropna().astype(str) if str(v).strip()}
+
+    missing = sorted(expected - actual)
+    unexpected = sorted(actual - expected)
+    if missing or unexpected:
+        raise RuntimeError(
+            "TE-R5P current-season snap source prior-week team coverage incomplete: "
+            f"season={season} week={week} missing={missing} unexpected={unexpected}"
+        )
+
+    usable = q.loc[
+        pd.to_numeric(q["offense_snaps"], errors="coerce").notna()
+        & pd.to_numeric(q["offense_pct"], errors="coerce").notna()
+    ].copy()
+    usable_teams = {
+        str(v).upper().strip()
+        for v in usable["team"].dropna().astype(str)
+        if str(v).strip()
+    }
+    missing_usable = sorted(expected - usable_teams)
+    if missing_usable:
+        raise RuntimeError(
+            "TE-R5P current-season snap source prior-week offensive fields incomplete: "
+            f"season={season} week={week} missing_usable_teams={missing_usable}"
+        )
+
+    if len(q) == 0:
+        raise RuntimeError(
+            f"TE-R5P current-season snap source prior week has zero rows "
+            f"season={season} week={week}"
+        )
+
+    return {
+        "required": True,
+        "season": int(season),
+        "week": int(week),
+        "expected_team_count": int(len(expected)),
+        "actual_team_count": int(len(actual)),
+        "rows": int(len(q)),
+        "usable_rows": int(len(usable)),
+    }
+
+
+def _validate_current_season_snap_completeness(
+    snaps: pd.DataFrame,
+    *,
+    target_season: int | None,
+    target_week: int | None,
+) -> dict:
+    if target_season is None or target_week is None:
+        return {"required": False}
+    season = int(target_season)
+    week = int(target_week)
+    active = (
+        season == CURRENT_SEASON_SNAP_ACTIVATION_SEASON
+        and week >= CURRENT_SEASON_SNAP_ACTIVATION_WEEK
+    )
+    if not active:
+        return {"required": False}
+    prior_week = week - 1
+    expected = _expected_regular_season_teams(season, prior_week)
+    return _validate_snap_week_coverage(
+        snaps,
+        season=season,
+        week=prior_week,
+        expected_teams=expected,
+    )
+
+
+def _load_snaps(
+    target_season: int | None = None,
+    target_week: int | None = None,
+) -> tuple[pd.DataFrame, float, list[int]]:
+    import nflreadpy as nfl
+
+    expected_seasons = _snap_source_seasons(target_season, target_week)
+    q = _lower(_pdx(nfl.load_snap_counts(seasons=expected_seasons)))
     if "season" not in q.columns or "week" not in q.columns:
         raise RuntimeError("TE-R5P snap source missing season/week")
     q["season"] = pd.to_numeric(q["season"], errors="coerce")
     q["week"] = pd.to_numeric(q["week"], errors="coerce")
-    q = q.loc[q["season"].isin(SOURCE_SEASONS) & q["week"].between(1, 18)].copy()
+    q = q.loc[q["season"].isin(expected_seasons) & q["week"].between(1, 18)].copy()
     q["team"] = _first(q, ["team", "team_abbr", "club"]).map(_team)
     q["player_key"] = _first(q, ["player", "player_name", "full_name"]).map(_key)
     q["offense_pct"] = pd.to_numeric(_first(q, ["offense_pct", "offense_percentage"]), errors="coerce")
@@ -106,10 +268,18 @@ def _load_snaps() -> tuple[pd.DataFrame, float, list[int]]:
     dup_rate = float(q.duplicated(keys, keep=False).mean()) if len(q) else 1.0
     q = q.sort_values(keys, kind="stable").drop_duplicates(keys, keep="last").reset_index(drop=True)
     seasons = sorted(int(v) for v in q["season"].dropna().unique())
-    if seasons != SOURCE_SEASONS:
-        raise RuntimeError(f"TE-R5P snap source seasons drifted: {seasons}")
+    if seasons != expected_seasons:
+        raise RuntimeError(
+            f"TE-R5P snap source seasons drifted: got={seasons} expected={expected_seasons}"
+        )
     if dup_rate > 0.01:
         raise RuntimeError(f"TE-R5P raw snap duplicate rate too high: {dup_rate}")
+    freshness = _validate_current_season_snap_completeness(
+        q,
+        target_season=target_season,
+        target_week=target_week,
+    )
+    q.attrs["current_season_snap_freshness"] = freshness
     return q, dup_rate, seasons
 
 
@@ -198,7 +368,11 @@ def apply_te_r5p_entitlement(metrics: pd.DataFrame) -> tuple[pd.DataFrame, pd.Da
     if te.empty:
         raise RuntimeError("TE-R5P found zero tight ends on Full Slate")
 
-    snaps, dup_rate, source_seasons = _load_snaps()
+    target_season, target_week = _target_season_week(te, "TE-R5P")
+    snaps, dup_rate, source_seasons = _load_snaps(
+        target_season=target_season,
+        target_week=target_week,
+    )
     feat = _strict_prior_features(te, snaps)
     feat["b0_te_pool"] = feat.groupby(["event_id", "team"])["baseline_entitlement_tgt_share"].transform("sum")
     feat["b0_te_room_share"] = np.where(
@@ -310,6 +484,15 @@ def apply_te_r5p_entitlement(metrics: pd.DataFrame) -> tuple[pd.DataFrame, pd.Da
         "training_rows": int(model["training_rows"]),
         "snap_source": "nflreadpy.load_snap_counts",
         "snap_source_seasons": source_seasons,
+        "snap_source_target_season": int(target_season),
+        "snap_source_target_week": int(target_week),
+        "snap_source_current_season_continuation_active": bool(
+            target_season == CURRENT_SEASON_SNAP_ACTIVATION_SEASON
+            and target_week >= CURRENT_SEASON_SNAP_ACTIVATION_WEEK
+        ),
+        "snap_source_current_season_freshness": dict(
+            snaps.attrs.get("current_season_snap_freshness", {"required": False})
+        ),
         "raw_snap_duplicate_rate": dup_rate,
         "current_te_rows": int(te_mask.sum()),
         "teams_with_te_rows": int(te["team"].nunique()),

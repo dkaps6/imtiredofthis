@@ -105,6 +105,63 @@ to read them** — use `git show origin/research-current-state:<path>`.
 
 ---
 
+
+## ACTIVE CHECKPOINT — 2026-09-22 — CURRENT-SEASON STATE + LIVE SCOREBOARD
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-09-22_CURRENT_SEASON_STATE_AND_LIVE_SCOREBOARD_CURRENT.md`
+
+This is the current operating checkpoint and supersedes older active-priority
+language below where the two conflict.
+
+### Current state in one screen
+
+- PR #625 is **MERGED/CLOSED**. Do not reopen it. RB PD2 is prospective
+  distribution calibration, not an RB mean fix.
+- Current-Season State Persistence V1 is **COMPLETE**:
+  - run `35741758765` SUCCESS;
+  - artifact `10699781744`;
+  - 41,745 rows;
+  - 9/10 production-aligned metrics improved on 2025 replication;
+  - strongest live signals are RB rush share, WR target share and TE target share;
+  - RB YPC is the key non-replicating early-state metric.
+- PR #627 is **MERGED** at `5ecd4da5a7ba7ab314f11ae9e8cff9ef7f6308fc`.
+  WR-R15/TE-R5P may consume 2026 strict-prior snaps beginning Week 3 only after
+  a schedule-aware, bye-aware immediately-prior-week freshness gate passes.
+  No model refit occurred.
+- Claude completed the Week-1/Week-2 full-board backtest in PR #626 and preserved
+  the raw boards + 866-row graded log. Canonical run `35740684289`, artifact
+  `10699408992`.
+- **PR #626 is NOT merge-ready.** Four Codex review threads remain, including a
+  P1 grading-line/side inconsistency that can change exact W/L/units. Repair and
+  regenerate/reconfirm the scorecard before canonizing the current 438-428
+  headline.
+- Claude's major diagnosis is still important: probability overconfidence /
+  too-narrow simulated distributions, TE weakness, a rush+receiving-yard
+  construction concern, systemic low bias, and encouraging early QB pass-yards
+  performance.
+- Next model-improvement selection should use the intersection of:
+  **live weakness + historical state persistence + missing/newly restored
+  pregame state + deployable data + no closed-family retest**.
+- Likely first high-value diagnostic after #626 repair: TE receiving-yards
+  entitlement-vs-efficiency after Week-3 current-snap activation.
+- RB injury-created vacancy / teammate opportunity propagation remains a strong
+  sanctioned parallel mean-information lead.
+- No paid OddsAPI pull without explicit user approval.
+
+### Start-of-chat read order
+
+1. `AGENTS.md`
+2. `CURRENT_NFL_RESEARCH_HANDOFF.md`
+3. `docs/handoffs/NFL_HANDOFF_2026-09-22_CURRENT_SEASON_STATE_AND_LIVE_SCOREBOARD_CURRENT.md`
+4. latest Issue #535 comments after `5779220450`
+5. live PR #626 head/review threads/checks
+
+Verify current GitHub state before mutation. GitHub is canonical over chat memory.
+
+---
+
 ## ACTIVE CHECKPOINT — 2026-09-22 — RB PD2 FORWARD LOCK CLOSED; PR #625 MERGED
 
 **Current detailed handoff:**
@@ -236,10 +293,100 @@ teammate availability / injury-created vacancy propagation into rushing
 opportunity**, with prior-week snap share as a second live/free lagged
 opportunity proxy.
 
-Claude is temporarily unavailable because the user is out of credits. Do not
-wait for Claude; GPT-5.6 continues solo.
+Claude is independently running the Week-1/Week-2 full-board backtest. Do not duplicate that lane; GPT-5.6 continues the current-season state/new-information lane in parallel.
 
 No paid OddsAPI pull is authorized without explicit user approval.
+
+---
+
+
+## ACTIVE CHECKPOINT — 2026-09-22 — CURRENT-SEASON STATE PERSISTENCE V1 COMPLETE
+
+Branch:
+
+`research-current-season-state-persistence-v1`
+
+Frozen plan:
+
+`docs/research/CURRENT_SEASON_STATE_PERSISTENCE_V1_PLAN.md`
+
+Canonical run:
+
+- run `35741758765` = **SUCCESS**
+- head `28d79153f723765b01a447c2023b47108b14138c`
+- artifact `10699781744` / `current-season-state-persistence-v1`
+- digest `sha256:2d81bcb5222136ae812575b15a0d79952d27a03e68034cd312aa0f927503868a`
+- frozen tests 4/4 PASS
+- strict repo audit PASS
+- row-level panel: 41,745 rows
+- sportsbook inputs: 0
+- 2026 outcomes used: 0
+- production changes: 0
+
+### Main scientific result
+
+The user's live-season premise is supported. Current-season football state
+contains substantial next-game information, but the useful signal is strongest
+in **opportunity / role**, not raw early-season efficiency.
+
+On untouched 2025 replication, the existing historical + current-season
+PlayerForm four-game pseudo-prior blend improved over prior-season-only for
+9 of 10 production-aligned metrics.
+
+Most important replicated signals:
+
+- RB rush-share MAE: `0.1486 -> 0.1166` (**21.53% improvement**), state-delta
+  Spearman `+0.6256`;
+- TE target-share MAE: `0.05153 -> 0.04553` (**11.66% improvement**);
+- WR target-share MAE: `0.06773 -> 0.06144` (**9.30% improvement**);
+- QB YPA full-season blend MAE: `1.7386 -> 1.6548` (**4.82% improvement**).
+
+The lone non-replicating metric is RB YPC: `1.9135 -> 1.9160`. Do not chase
+early-season RB efficiency noise.
+
+### Exact Week-3 analogue: two completed current-season games
+
+On 2025 rows with exactly two prior current-season games:
+
+- RB rush share: `0.1288 prior -> 0.1113 blend`;
+- WR target share: `0.05933 -> 0.05451`;
+- TE target share: `0.03941 -> 0.03428`;
+- QB YPA: prior-only beats the early blend (`1.7383 vs 1.7983`);
+- RB YPC: prior-only beats the early blend (`2.0697 vs 2.1239`);
+- WR/TE catch rate and raw current-only efficiency remain noisy.
+
+Operational interpretation:
+
+> historical prior + faster current opportunity/role updating + heavier
+> efficiency shrinkage.
+
+### Newly confirmed live 2026 source gap
+
+The maintained nflverse snap source already has complete 2026 Weeks 1-2:
+
+- Week 1: 1,492 rows, all 32 teams, complete offense snaps / offense pct;
+- Week 2: 1,502 rows, all 32 teams, complete offense snaps / offense pct.
+
+But WR-R15 and TE-R5P share a production snap loader hardcoded to source
+seasons `2020-2025`. Therefore their strict-prior entitlement layers currently
+do **not** consume available 2026 snap participation.
+
+Disposition:
+
+`CURRENT_2026_SNAP_SOURCE_AVAILABLE_NOT_CONSUMED`
+
+Authorized next research action:
+
+`WR_TE_2026_SNAP_SOURCE_CONTINUATION_V1`
+
+This must be a frozen source-continuation/parity test only: no coefficient
+refit, no sportsbook input, no production change. It must prove Week 1
+invariance, strict-prior Week 2+ semantics, and quantify football-projection
+impact before any production edit.
+
+Claude is independently handling the Week-1/Week-2 full-board model/betting
+grade. Do not duplicate that work. Use his result together with this state
+audit to prioritize the next position/market improvement lane.
 
 ---
 
