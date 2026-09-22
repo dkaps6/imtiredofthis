@@ -89,6 +89,19 @@ bias (−17.76): a big declared "edge" is mostly the model being wrong about the
 number, not disagreeing usefully with the market. Ranking or sizing by
 `edge_pct` has no support here.
 
+### Cluster-aware inference check
+
+The board is not 866 independent trials: many bets share the same NFL game and
+are mechanically related. The significance layer therefore centers each bet
+by its own captured-price break-even probability, sums those residuals inside
+each game, and tests across independent game clusters before BH/FDR correction.
+
+All 38 slices meeting the sample gate were cluster-testable; **0 of 38 survive
+BH-FDR at q=0.10**. QB pass yards has a raw game-cluster-aware one-sided
+p-value of **0.0307**, but it does **not** survive the multiple-comparisons
+gate. That makes it an encouraging frozen prospective lead, not a certified
+bet-selection edge.
+
 ## Finding 4 — `rush_rec_yards` looks like a construction defect
 
 | | mean |
@@ -114,9 +127,11 @@ then taking whichever side the rounding lands on. TE bias is only −0.29 in
 Week 2, so this is not the under-projection problem — it is an absence of
 signal. Week 2 OVERs went 8-25 while UNDERs went 16-21.
 
-At n=142 a 60-82 record is about 2.1 SD from a coin, so the record is
-suggestive but the *mechanism* is clear and does not require a sign error:
-there is no edge to harvest at that line proximity, and juice does the rest.
+The 60-82 aggregate is poor descriptively, but the rows are clustered by
+game and should not be treated as 142 independent trials. The cluster-aware
+slice test does not produce a multiple-comparisons-surviving TE signal. The
+mechanism still does not require a sign error: the model is essentially on the
+market number, leaving no demonstrated edge to harvest at that line proximity.
 
 ## Finding 6 — a systemic low bias drives a 2:1 UNDER book
 
@@ -130,6 +145,8 @@ re-grade, now on live 2026 slates.
 ## What this does and does not license
 
 Nothing here is a tuning instruction. The calibration and `model_sd` findings
-are defects with identified mechanisms and should be fixed as such. The
-`pass_yards` result is one market over two weeks at n=58 with game-clustered
-bets; it needs Weeks 3–6 under frozen parameters before it means anything.
+are defects with identified mechanisms and should be evaluated authority by
+authority rather than globally rescaled from two weeks. The `pass_yards`
+result is one market over two weeks at n=58 across 30 game clusters; its raw
+cluster-aware p-value is encouraging but does not survive FDR. It needs Weeks
+3–6 under frozen parameters before it can support a stronger claim.
