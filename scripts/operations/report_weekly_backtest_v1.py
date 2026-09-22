@@ -83,6 +83,11 @@ def report(detail_path: Path) -> int:
     weeks = sorted(pd.to_numeric(d["week"], errors="coerce").dropna().astype(int).unique())
     section(f"SLATE BACKTEST — season {d['season'].iloc[0]}, weeks {weeks}")
     print(f"graded rows: {len(d)}")
+    print(f"graded detail columns: {sorted(d.columns)}")
+    if "position" not in d.columns:
+        print("\n  ** position is absent from the graded detail, so the per-position")
+        print("  ** tables below are skipped. That is a grader defect, not an")
+        print("  ** empty result -- do not read its absence as 'no position data'.")
 
     section("OVERALL")
     print(_fmt_table({"all markets": _row_stats(d)}))
