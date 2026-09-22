@@ -17,6 +17,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy import stats
 
 NFL_TEAMS = 32
 QB_MARKET = "pass_yards"
@@ -59,21 +60,31 @@ def _fmt_table(rows: dict[str, dict]) -> str:
     return "\n".join(out)
 
 
-def poisson_binomial_tail(k: int, probabilities) -> float:
-    """Exact P(X >= k) for independent Bernoulli trials with unequal p_i."""
+def cluster_score_pvalue(df: pd.DataFrame, probabilities) -> tuple[float, int]:
+    """One-sided score test over independent NFL game clusters."""
+    required = ["season", "week", "event_id"]
+    if any(c not in df.columns for c in required):
+        return float("nan"), 0
+    frame = df[required].copy()
+    for c in required:
+        if frame[c].isna().any() or frame[c].astype(str).str.strip().eq("").any():
+            return float("nan"), 0
+
     p = np.asarray(list(probabilities), dtype=float)
-    if len(p) == 0:
-        return float("nan")
-    if np.any(~np.isfinite(p)) or np.any((p < 0.0) | (p > 1.0)):
-        return float("nan")
-    if k <= 0:
-        return 1.0
-    if k > len(p):
-        return 0.0
-    pmf = np.array([1.0])
-    for pi in p:
-        pmf = np.convolve(pmf, np.array([1.0 - pi, pi]))
-    return float(np.clip(pmf[k:].sum(), 0.0, 1.0))
+    if len(p) != len(df) or np.any(~np.isfinite(p)):
+        return float("nan"), 0
+
+    frame["_score"] = df["bet_result"].eq("WIN").astype(float).to_numpy() - p
+    scores = frame.groupby(required, dropna=False)["_score"].sum().to_numpy(dtype=float)
+    n_clusters = int(len(scores))
+    if n_clusters < 8:
+        return float("nan"), n_clusters
+
+    sd = float(np.std(scores, ddof=1))
+    if not np.isfinite(sd) or sd <= 0.0:
+        return float("nan"), n_clusters
+    t_stat = float(np.mean(scores)) / (sd / np.sqrt(n_clusters))
+    return float(stats.t.sf(t_stat, df=n_clusters - 1)), n_clusters
 
 
 def breakeven(odds: float) -> float:
@@ -208,11 +219,18 @@ def report(detail_path: Path) -> int:
             be = float(null_p.mean())
             p = w / n
             ci = 1.96 * sqrt(p * (1 - p) / n)
+            cluster_p, n_clusters = cluster_score_pvalue(dec, null_p)
             print(f"\n  mean individual breakeven : {be:.4f}")
             print(f"  observed hit rate          : {p:.4f}   95% CI [{p - ci:.4f}, {p + ci:.4f}]")
-            print(f"  Poisson-binomial one-tail p: {poisson_binomial_tail(w, null_p):.5f}")
-            print(f"\n  NOTE: bets cluster by game, so these are not {n} independent draws.")
-            print(f"  A design-effect haircut widens the interval; treat z as an upper bound.")
+            print(f"  independent game clusters  : {n_clusters}")
+            if np.isfinite(cluster_p):
+                print(f"  cluster-aware one-tail p   : {cluster_p:.5f}")
+            else:
+                print("  cluster-aware one-tail p   : NA (insufficient/invalid clusters)")
+            print(
+                f"\n  NOTE: the confidence interval is descriptive at the bet-row level; "
+                "the hypothesis p-value above is computed from game-cluster score sums."
+            )
 
         print(f"\nevery {QB_MARKET} bet:")
         cols = [c for c in ["week", "player", "team", "opponent", "side", "vegas_line",
