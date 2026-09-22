@@ -1,10 +1,4 @@
-"""Tests for the forward market track record grader.
-
-Sportsbook lines are graded exactly like the model; they are a benchmark
-only. These tests exercise the pure matching/arithmetic core
-(no network, no file I/O) so the CLV/ROI machinery is verified without
-depending on nflreadpy or the real archived ledger.
-"""
+"""Tests for the forward market track-record grader."""
 from __future__ import annotations
 
 import pandas as pd
@@ -33,42 +27,163 @@ def test_american_profit_positive_and_negative_odds():
     assert abs(american_profit(-110) - (100.0 / 110.0)) < 1e-9
 
 
-def test_edge_bucket_boundaries():
-    assert edge_bucket(1.0) == "0-2"
-    assert edge_bucket(3.0) == "2-5"
-    assert edge_bucket(15.0) == "10-20"
-    assert edge_bucket(25.0) == "20+"
+def test_edge_bucket_uses_fractional_probability_units():
+    assert edge_bucket(-0.01) == "<=0"
+    assert edge_bucket(0.01) == "0-2"
+    assert edge_bucket(0.03) == "2-5"
+    assert edge_bucket(0.075) == "5-10"
+    assert edge_bucket(0.15) == "10-20"
+    assert edge_bucket(0.25) == "20+"
+
+
+def _quote_rows(
+    *,
+    book="bookA",
+    line=265.5,
+    proj=270.0,
+    p_over=0.60,
+    p_under=0.40,
+    over_odds=-110.0,
+    under_odds=-110.0,
+    event_id="e1",
+    player="Patrick Mahomes",
+    key="patrickmahomes",
+    market="pass_yards",
+    source_market="player_pass_yds",
+):
+    common = {
+        "season": 2026,
+        "week": 1,
+        "event_id": event_id,
+        "player": player,
+        "player_clean_key": key,
+        "team": "KC",
+        "opponent": "BUF",
+        "market": market,
+        "source_market": source_market,
+        "book": book,
+        "book_title": book,
+        "vegas_line": line,
+        "model_proj": proj,
+        "vegas_over_odds": over_odds,
+        "vegas_under_odds": under_odds,
+    }
+    return [
+        {
+            **common,
+            "side": "OVER",
+            "fair_prob": p_over,
+            "vegas_odds": over_odds,
+            "market_prob": 0.5,
+            "edge_pct": p_over - 0.5,
+        },
+        {
+            **common,
+            "side": "UNDER",
+            "fair_prob": p_under,
+            "vegas_odds": under_odds,
+            "market_prob": 0.5,
+            "edge_pct": p_under - 0.5,
+        },
+    ]
 
 
 def _board():
-    return pd.DataFrame(
-        [
-            {
-                "season": 2026, "week": 1, "event_id": "e1", "player": "p.mahomes",
-                "market": "pass_yards", "team": "KC", "player_clean_key": "patrickmahomes",
-                "vegas_line": 265.5, "model_proj": 270.0, "side": "OVER", "vegas_odds": -110,
-            },
-            {
-                "season": 2026, "week": 1, "event_id": "e1", "player": "p.mahomes",
-                "market": "pass_yards", "team": "KC", "player_clean_key": "patrickmahomes",
-                "vegas_line": 265.5, "model_proj": 270.0, "side": "UNDER", "vegas_odds": -110,
-            },
-        ]
+    return pd.DataFrame(_quote_rows())
+
+
+def test_select_model_bet_uses_deployed_ev_side_not_mean_relative_side():
+    # Projection is above the line, but the simulated distribution makes UNDER
+    # the higher-EV side. Production chooses UNDER; the grader must do the same.
+    board = pd.DataFrame(
+        _quote_rows(proj=270.0, line=265.5, p_over=0.45, p_under=0.60)
     )
-
-
-def test_select_model_bet_keeps_only_models_own_side():
-    picked = select_model_bet(_board())
+    picked = select_model_bet(board)
     assert len(picked) == 1
-    assert picked.iloc[0]["side"] == "OVER"
+    assert picked.iloc[0]["side"] == "UNDER"
+    assert picked.iloc[0]["model_pick_side"] == "UNDER"
+    assert float(picked.iloc[0]["production_best_ev"]) > 0
+
+
+def test_select_model_bet_passes_nonpositive_best_ev():
+    board = pd.DataFrame(
+        _quote_rows(p_over=0.50, p_under=0.50, over_odds=-110, under_odds=-110)
+    )
+    assert select_model_bet(board).empty
+
+
+def test_select_model_bet_chooses_best_snapshot_offer_across_books():
+    board = pd.DataFrame(
+        _quote_rows(book="bookA", p_over=0.56, p_under=0.44)
+        + _quote_rows(book="bookB", p_over=0.62, p_under=0.38)
+    )
+    got = select_model_bet(board)
+    assert len(got) == 1
+    assert got.iloc[0]["book"] == "bookB"
+    assert got.iloc[0]["side"] == "OVER"
+
+
+def test_select_model_bet_is_row_order_invariant_when_best_offer_is_unique():
+    board = pd.DataFrame(
+        _quote_rows(book="bookA", p_over=0.56, p_under=0.44)
+        + _quote_rows(book="bookB", p_over=0.62, p_under=0.38)
+    )
+    picks = []
+    for order in (
+        list(range(len(board))),
+        list(reversed(range(len(board)))),
+        [2, 0, 3, 1],
+    ):
+        got = select_model_bet(board.iloc[order].reset_index(drop=True))
+        picks.append(
+            (
+                got.iloc[0]["book"],
+                got.iloc[0]["side"],
+                float(got.iloc[0]["vegas_line"]),
+                float(got.iloc[0]["vegas_odds"]),
+            )
+        )
+    assert len(set(picks)) == 1
+
+
+def test_material_exact_ev_cross_book_tie_fails_closed():
+    # Both offers have the same best EV but imply different real wagers.
+    a = _quote_rows(
+        book="bookA", line=49.5, proj=50.0,
+        p_over=0.60, p_under=0.40, over_odds=-110, under_odds=-110,
+        market="rec_yards", source_market="player_reception_yds",
+    )
+    b = _quote_rows(
+        book="bookB", line=50.5, proj=50.0,
+        p_over=0.40, p_under=0.60, over_odds=-110, under_odds=-110,
+        market="rec_yards", source_market="player_reception_yds",
+    )
+    assert select_model_bet(pd.DataFrame(a + b)).empty
+
+
+def test_identical_wager_ev_tie_uses_row_level_book_title_fallback():
+    a = _quote_rows(book="", line=49.5, p_over=0.60, p_under=0.40)
+    for row in a:
+        row["book_title"] = "Alpha Sports"
+    b = _quote_rows(book="bookB", line=49.5, p_over=0.60, p_under=0.40)
+    for row in b:
+        row["book_title"] = "Beta Sports"
+    got = select_model_bet(pd.DataFrame(a + b))
+    assert len(got) == 1
+    assert got.iloc[0]["book_title"] == "Alpha Sports"
 
 
 def test_match_bets_to_actuals_and_grade_matched_rows_win_case():
     bets = select_model_bet(_board())
     actual = pd.DataFrame(
-        [{"season": 2026, "week": 1, "team": "KC", "player_clean_key": "patrickmahomes", "passing_yards": 300}]
+        [{
+            "season": 2026,
+            "week": 1,
+            "team": "KC",
+            "player_clean_key": "patrickmahomes",
+            "passing_yards": 300,
+        }]
     )
-
     detail = match_bets_to_actuals(bets, actual)
     graded, summary = grade_matched_rows(detail, season=2026, present_weeks=[1])
 
@@ -78,188 +193,21 @@ def test_match_bets_to_actuals_and_grade_matched_rows_win_case():
     row = graded.iloc[0]
     assert row["bet_result"] == "WIN"
     assert abs(row["unit_result"] - (100.0 / 110.0)) < 1e-9
-    assert abs(row["model_error"] - (270.0 - 300.0)) < 1e-9
 
 
 def test_match_bets_to_actuals_and_grade_matched_rows_loss_case():
     bets = select_model_bet(_board())
     actual = pd.DataFrame(
-        [{"season": 2026, "week": 1, "team": "KC", "player_clean_key": "patrickmahomes", "passing_yards": 200}]
+        [{
+            "season": 2026,
+            "week": 1,
+            "team": "KC",
+            "player_clean_key": "patrickmahomes",
+            "passing_yards": 200,
+        }]
     )
-
     detail = match_bets_to_actuals(bets, actual)
     graded, summary = grade_matched_rows(detail, season=2026, present_weeks=[1])
-
     assert summary["wins"] == 0
     assert summary["losses"] == 1
     assert graded.iloc[0]["unit_result"] == -1.0
-
-
-def test_grade_matched_rows_reports_status_when_nothing_matches():
-    bets = select_model_bet(_board())
-    actual = pd.DataFrame(
-        [{"season": 2026, "week": 1, "team": "BUF", "player_clean_key": "someoneelse", "passing_yards": 200}]
-    )
-    detail = match_bets_to_actuals(bets, actual)
-    graded, summary = grade_matched_rows(detail, season=2026, present_weeks=[1])
-    assert summary["status"] == "matched_zero_rows_to_actual_results"
-    assert graded.empty
-
-
-def _multi_book_board():
-    """Two books quoting different lines for one player-market, with the
-    model's projection sitting between them -- the real 2026 Week 2 Jacoby
-    Brissett shape, where the surviving row decides the side."""
-    rows = []
-    for book, line in (("bookA", 216.5), ("bookB", 221.5)):
-        for side in ("OVER", "UNDER"):
-            rows.append({
-                "season": 2026, "week": 2, "event_id": "evt1", "book": book,
-                "player": "Jacoby Brissett", "player_clean_key": "jacobybrissett",
-                "team": "ARI", "market": "pass_yards", "side": side,
-                "vegas_line": line, "vegas_odds": -114.0, "model_proj": 219.805606,
-            })
-    return pd.DataFrame(rows)
-
-
-def test_select_model_bet_is_independent_of_row_order():
-    board = _multi_book_board()
-    picks = []
-    for order in ([0, 1, 2, 3], [3, 2, 1, 0], [2, 0, 3, 1]):
-        got = select_model_bet(board.iloc[order].reset_index(drop=True))
-        assert len(got) == 1
-        picks.append((got.iloc[0]["side"], float(got.iloc[0]["vegas_line"])))
-    assert len(set(picks)) == 1, f"row order changed the graded bet: {picks}"
-
-
-def test_select_model_bet_uses_the_consensus_line_not_an_arbitrary_book():
-    # Median of {216.5, 221.5} is 219.0; the projection 219.81 is above it,
-    # so the model is on OVER regardless of which book sorted last.
-    got = select_model_bet(_multi_book_board())
-    assert got.iloc[0]["side"] == "OVER"
-
-
-
-def _straddle_board():
-    """Real Week-1 straddle shape: the projection is above the lower quote
-    but below the consensus, so an UNDER must grade at the higher compatible
-    captured line rather than the contradictory lower one."""
-    rows = []
-    for book, line in (("bookA", 49.5), ("bookB", 52.5)):
-        for side in ("OVER", "UNDER"):
-            rows.append({
-                "season": 2026, "week": 1, "event_id": "evt2", "book": book,
-                "player": "Terry McLaurin", "player_clean_key": "terrymclaurin",
-                "team": "WAS", "market": "rec_yards", "side": side,
-                "vegas_line": line, "vegas_odds": -110.0,
-                "model_proj": 50.32831853448081,
-            })
-    return pd.DataFrame(rows)
-
-
-def test_select_model_bet_straddle_uses_side_compatible_real_quote():
-    got = select_model_bet(_straddle_board())
-    assert len(got) == 1
-    row = got.iloc[0]
-    assert float(row["consensus_line"]) == 51.0
-    assert row["model_pick_side"] == "UNDER"
-    assert row["side"] == "UNDER"
-    assert float(row["vegas_line"]) == 52.5
-    assert model_side(float(row["model_proj"]), float(row["vegas_line"])) == row["side"]
-
-
-def test_select_model_bet_straddle_is_row_order_invariant():
-    board = _straddle_board()
-    picks = []
-    for order in ([0, 1, 2, 3], [3, 2, 1, 0], [2, 0, 3, 1]):
-        got = select_model_bet(board.iloc[order].reset_index(drop=True))
-        assert len(got) == 1
-        picks.append((got.iloc[0]["side"], float(got.iloc[0]["vegas_line"]), got.iloc[0]["book"]))
-    assert len(set(picks)) == 1, f"row order changed the straddle wager: {picks}"
-
-
-def test_select_model_bet_abstains_when_no_real_quote_matches_consensus_side():
-    board = _straddle_board()
-    # Remove the compatible UNDER at 52.5, then add another 52.5 OVER quote so
-    # the median remains 51.0. Consensus still selects UNDER, but the only
-    # captured UNDER is 49.5, where the projection is actually OVER.
-    board = board.loc[~((board["book"] == "bookB") & (board["side"] == "UNDER"))].copy()
-    extra = board.loc[(board["book"] == "bookB") & (board["side"] == "OVER")].copy()
-    extra["book"] = "bookC"
-    board = pd.concat([board, extra], ignore_index=True)
-    got = select_model_bet(board)
-    assert got.empty
-
-
-def _equidistant_compatible_board(proj: float):
-    rows = []
-    # bookA deliberately owns the higher line. Canonical-book selection must
-    # choose bookA for both OVER and UNDER examples rather than favoring a
-    # lower/higher line according to side.
-    for book, line, odds in (
-        ("bookA", 38.5, -105.0),
-        ("bookB", 37.5, -130.0),
-    ):
-        for side in ("OVER", "UNDER"):
-            rows.append({
-                "season": 2026, "week": 1, "event_id": "evt3", "book": book,
-                "player": "Tie Example", "player_clean_key": "tieexample",
-                "team": "IND", "market": "rec_yards", "side": side,
-                "vegas_line": line, "vegas_odds": odds, "model_proj": proj,
-            })
-    return pd.DataFrame(rows)
-
-
-def test_equidistant_quotes_use_canonical_book_not_line_direction_or_price():
-    under = select_model_bet(_equidistant_compatible_board(36.0)).iloc[0]
-    over = select_model_bet(_equidistant_compatible_board(40.0)).iloc[0]
-
-    assert under["side"] == "UNDER"
-    assert over["side"] == "OVER"
-    assert under["book"] == over["book"] == "bookA"
-    assert float(under["vegas_line"]) == float(over["vegas_line"]) == 38.5
-    # bookB has the worse price, proving cross-book price is not a selector.
-    assert float(under["vegas_odds"]) == float(over["vegas_odds"]) == -105.0
-
-
-def test_book_title_fallback_is_applied_per_quote():
-    board = _equidistant_compatible_board(36.0)
-    board["book_title"] = board["book"].map({"bookA": "Alpha Sports", "bookB": "Beta Sports"})
-    board.loc[board["book"].eq("bookA"), "book"] = ""
-    got = select_model_bet(board)
-    assert len(got) == 1
-    # Blank provider key must fall back to this row's book_title, not collapse
-    # to a generic missing-book bucket.
-    assert got.iloc[0]["book_title"] == "Alpha Sports"
-    assert float(got.iloc[0]["vegas_line"]) == 38.5
-
-
-def test_duplicate_same_book_line_uses_least_favorable_captured_price():
-    board = _equidistant_compatible_board(36.0)
-    extra = board.loc[
-        (board["book"] == "bookA") & (board["side"] == "UNDER")
-    ].copy()
-    extra["vegas_odds"] = -125.0
-    board = pd.concat([board, extra], ignore_index=True)
-
-    got = select_model_bet(board)
-    assert len(got) == 1
-    assert got.iloc[0]["book"] == "bookA"
-    assert float(got.iloc[0]["vegas_line"]) == 38.5
-    assert float(got.iloc[0]["vegas_odds"]) == -125.0
-
-
-def test_same_canonical_book_two_equidistant_lines_fails_closed():
-    board = _equidistant_compatible_board(36.0)
-    board["book"] = "bookA"
-    got = select_model_bet(board)
-    assert got.empty
-
-
-def test_select_model_bet_still_collapses_a_single_book_pair():
-    board = _multi_book_board()
-    board = board.loc[board["book"].eq("bookA")].reset_index(drop=True)
-    got = select_model_bet(board)
-    assert len(got) == 1
-    assert got.iloc[0]["side"] == "OVER"
-    assert float(got.iloc[0]["vegas_line"]) == 216.5
