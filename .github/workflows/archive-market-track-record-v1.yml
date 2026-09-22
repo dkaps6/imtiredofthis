@@ -48,10 +48,18 @@ jobs:
         run: |
           rm -rf /tmp/fs_artifact
           mkdir -p /tmp/fs_artifact
-          gh run download "${SOURCE_RUN_ID}" \
-            --repo "${GITHUB_REPOSITORY}" \
-            --name "run_${SOURCE_RUN_ID}" \
-            --dir /tmp/fs_artifact || echo "no run_${SOURCE_RUN_ID} artifact found (likely no live odds this run)"
+          # Full Slate names its artifact run_<id>; the preserved-artifact
+          # replay path names it offline_replay_<id>. Either one carries a
+          # priced board, so try both before giving up.
+          for NAME in "run_${SOURCE_RUN_ID}" "offline_replay_${SOURCE_RUN_ID}"; do
+            if gh run download "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+                 --name "${NAME}" --dir /tmp/fs_artifact 2>/dev/null; then
+              echo "downloaded ${NAME}"
+              break
+            fi
+          done
+          test -s /tmp/fs_artifact/outputs/props_priced_clean.csv \
+            || echo "no priced board artifact for run ${SOURCE_RUN_ID} (likely no live odds this run)"
 
       - name: Archive priced board, if this run produced one
         run: |
@@ -72,13 +80,40 @@ jobs:
       - name: Commit archived board to the durable ledger
         run: |
           set -euo pipefail
+          # A no-live-odds run archives nothing, so the ledger directory may
+          # not exist at all. That is the normal case, not a failure: every
+          # archive run in this workflow's history died here on
+          # "pathspec did not match any files" under set -e, which is why the
+          # committed ledger was empty for the whole 2026 season to date.
+          if [ ! -d data/market_track_record/boards ]; then
+            echo "no ledger directory -- this run archived nothing"
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/market_track_record/boards/
           if git diff --cached --quiet; then
             echo "no market track record changes to commit"
-          else
-            git commit -m "market track record: archive Full Slate run ${SOURCE_RUN_ID}"
-            git pull --rebase origin main
-            git push origin HEAD:main
+            exit 0
           fi
+          git commit -m "market track record: archive Full Slate run ${SOURCE_RUN_ID}"
+          for ATTEMPT in 1 2 3 4; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            echo "push attempt ${ATTEMPT} failed; retrying"
+            sleep $((2 ** ATTEMPT))
+          done
+          echo "::error::could not push the archived board to main"
+          exit 1
+
+      - name: Preserve the ledger as a long-retention artifact
+        # Backstop for the failure mode that nearly lost Week 1: Full Slate
+        # artifacts expire after 7 days, so a board that is not committed is
+        # unrecoverable a week later. This keeps a copy for 90 days even when
+        # the commit above cannot run.
+        if: ${{ hashFiles('data/market_track_record/boards/**') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: market_track_record_ledger_${{ github.run_id }}
+          path: data/market_track_record/boards/
+          if-no-files-found: ignore
+          retention-days: 90

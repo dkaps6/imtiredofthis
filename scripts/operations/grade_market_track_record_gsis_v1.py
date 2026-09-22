@@ -99,8 +99,9 @@ def load_actual_stats_unfiltered(season: int, weeks: list[int] | None) -> pd.Dat
     x["rec_yards"] = pd.to_numeric(x.get("receiving_yards"), errors="coerce").fillna(0.0)
     x["rush_yards"] = pd.to_numeric(x.get("rushing_yards"), errors="coerce").fillna(0.0)
     x["pass_yards"] = pd.to_numeric(x.get("passing_yards"), errors="coerce").fillna(0.0)
+    x["position"] = x.get("position", x.get("position_group", "")).astype("string").fillna("").str.strip().str.upper()
     x = x.loc[x["team"].astype(str).ne("") & x["gsis_id"].astype(str).ne("")].copy()
-    keep = ["season", "week", "team", "gsis_id", "player", "player_clean_key",
+    keep = ["season", "week", "team", "gsis_id", "player", "player_clean_key", "position",
             "receptions", "rec_yards", "rush_yards", "pass_yards"]
     out = x[keep].drop_duplicates(["season", "week", "gsis_id"], keep="last")
     return out
@@ -131,8 +132,9 @@ def load_roster_identity(season: int, weeks: list[int] | None) -> pd.DataFrame:
     canon = raw_name.map(canonicalize_player_name_safe)
     x["player_clean_key"] = canon.map(lambda t: t[1])
     x["status"] = x.get("status", "").astype("string").fillna("")
+    x["position"] = x.get("position", x.get("depth_chart_position", "")).astype("string").fillna("").str.strip().str.upper()
     x = x.loc[x["team"].astype(str).ne("") & x["gsis_id"].astype(str).ne("") & x["player_clean_key"].astype(str).ne("")]
-    return x[["season", "week", "team", "gsis_id", "player_clean_key", "status"]].drop_duplicates()
+    return x[["season", "week", "team", "gsis_id", "player_clean_key", "status", "position"]].drop_duplicates()
 
 
 def build_alias_index(actual: pd.DataFrame, roster: pd.DataFrame) -> dict:
@@ -210,6 +212,15 @@ def grade(season: int, weeks: list[int], detail_out: Path | None = None) -> dict
         d = rr.merge(a[["season", "week", "gsis_id", "actual"]], on=["season", "week", "gsis_id"], how="left", validate="many_to_one")
         detail_parts.append(d)
     detail = pd.concat(detail_parts, ignore_index=True, sort=False) if detail_parts else pd.DataFrame()
+
+    # Position is identity, not outcome: it classifies who the bet was on so
+    # the board can be read per position. It never feeds pricing or selection.
+    pos_map: dict[str, str] = {}
+    for source in (roster, actual):
+        for gid, pos in zip(source["gsis_id"], source["position"]):
+            if str(pos).strip():
+                pos_map[gid] = str(pos).strip().upper()
+    detail["position"] = detail["gsis_id"].map(pos_map).fillna("UNKNOWN")
 
     # A resolved GSIS with a real stats-table row: use it. A resolved GSIS
     # confirmed on that team's roster that week but absent from the stats

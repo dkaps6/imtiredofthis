@@ -95,8 +95,28 @@ def report(detail_path: Path) -> int:
     print(_fmt_table(dict(sorted(by_mkt.items(), key=lambda kv: -kv[1]["hit"]))))
 
     if "position" in d.columns:
+        pos_order = ["QB", "RB", "WR", "TE"]
+        def _ordered(frame):
+            seen = [p for p in pos_order if (frame["position"] == p).any()]
+            rest = sorted(set(frame["position"].astype(str)) - set(pos_order))
+            return seen + rest
+
         section("BY POSITION")
-        print(_fmt_table({str(p): _row_stats(g) for p, g in d.groupby("position")}))
+        print(_fmt_table({p: _row_stats(d[d["position"] == p]) for p in _ordered(d)}))
+
+        for wk, gw in d.groupby("week"):
+            section(f"BY POSITION — WEEK {int(wk)}")
+            print(_fmt_table({p: _row_stats(gw[gw["position"] == p]) for p in _ordered(gw)}))
+
+        section("BY POSITION x MARKET")
+        rows = {}
+        for p in _ordered(d):
+            gp = d[d["position"] == p]
+            for m, gm in gp.groupby("market"):
+                if len(_decided(gm)) >= 5:
+                    rows[f"{p} {m}"] = _row_stats(gm)
+        print(_fmt_table(rows))
+        print("\n(cells with fewer than 5 decided bets are omitted)")
 
     section("BY SIDE")
     print(_fmt_table({str(s): _row_stats(g) for s, g in d.groupby(d["side"].astype(str).str.upper())}))

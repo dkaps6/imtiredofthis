@@ -14,7 +14,7 @@ on:
       - 'scripts/operations/report_weekly_backtest_v1.py'
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 env:
@@ -92,6 +92,27 @@ jobs:
           python scripts/operations/report_weekly_backtest_v1.py \
             --detail /tmp/graded_weeks_1_2.csv
 
+      - name: Commit the ledger so the board stops living on an artifact clock
+        run: |
+          set -euo pipefail
+          test -d data/market_track_record/boards
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/market_track_record/boards/
+          if git diff --cached --quiet; then
+            echo "ledger already committed and unchanged"
+            exit 0
+          fi
+          git commit -m "market track record: commit the Week 1 and Week 2 boards"
+          for ATTEMPT in 1 2 3 4; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" \
+              && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            echo "push attempt ${ATTEMPT} failed; retrying"
+            sleep $((2 ** ATTEMPT))
+          done
+          echo "::error::could not push the ledger"
+          exit 1
+
       - name: Upload graded detail
         uses: actions/upload-artifact@v4
         with:
@@ -100,4 +121,4 @@ jobs:
             /tmp/graded_weeks_1_2.csv
             data/market_track_record/boards/
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
