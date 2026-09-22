@@ -105,7 +105,7 @@ to read them** — use `git show origin/research-current-state:<path>`.
 
 ---
 
-## ACTIVE CHECKPOINT — 2026-09-22 — RB PD2 FORWARD LOCK CLOSED; PR #625 READY TO MERGE
+## ACTIVE CHECKPOINT — 2026-09-22 — RB PD2 FORWARD LOCK CLOSED; PR #625 MERGED
 
 **Current detailed handoff:**
 
@@ -116,7 +116,11 @@ its stale pre-Week-2 status.
 
 ### Final validated PR #625 state
 
-Production `main` before merge:
+PR #625 merged successfully into `main` at:
+
+`2a8b4e5622df3917c672212b16a8189c2bab7921`
+
+Production `main` immediately before that merge was:
 
 `76e5e0452a88018b95ebc212fb0d1b21a2ca90a3`
 
@@ -130,7 +134,7 @@ Final **code-bearing** head before this handoff-only documentation update:
 
 PR:
 
-`#625 — WIP: RB PD2 forward-shadow implementation validation`
+`#625 — RB PD2 forward-shadow implementation validation — MERGED`
 
 The previously open Week-2 history-freshness blocker is **closed**. The real
 Week-2 outcomes were certified and the forward-history state was rebuilt and
@@ -218,13 +222,13 @@ back on actual model-metric improvement.
 
 ### Authorized next step after PR #625 merge
 
-1. verify the merge commit on `main` and preserve the final PR/artifact lineage;
-2. update Issue #535 / the canonical paper trail with the merge SHA and the
-   final Week-2 certification + forward-history artifacts;
-3. return immediately to actual model performance / new-information research;
-4. use the real Week-2 slate to build the authority-exact position/market
+The merge is complete. Do **not** reopen PR #625 or repeat its Week-2 certification.
+
+1. preserve the final PR/artifact lineage in Issue #535 / the canonical paper trail;
+2. return immediately to actual model performance / new-information research;
+3. use the real Week-2 slate to build the authority-exact position/market
    scoreboard (including the downstream deduplicated betting hit-rate view);
-5. prioritize sanctioned new pregame information rather than reopening exposed
+4. prioritize sanctioned new pregame information rather than reopening exposed
    retrospective RB router variants.
 
 The strongest already-identified RB mean-information lead remains **backfield
