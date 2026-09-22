@@ -212,7 +212,7 @@ def test_gsis_suffix_strip_uses_longest_suffix_token_first():
     assert _suffix_strip("playeriv") == "player"
 
 
-def test_attach_verified_actuals_uses_pbp_only_for_unresolved_identity():
+def test_attach_verified_actuals_resolves_suffix_variant_from_stats_and_roster_zero():
     projections = pd.DataFrame([
         {
             "season": 2026, "week": 2, "team": "KC",
@@ -225,8 +225,12 @@ def test_attach_verified_actuals_uses_pbp_only_for_unresolved_identity():
             "position": "RB", "projection_mean": 5.0,
         },
     ])
-    actual = pd.DataFrame(columns=[
-        "season", "week", "team", "gsis_id", "player", "player_clean_key", "rush_yards"
+    actual = pd.DataFrame([
+        {
+            "season": 2026, "week": 2, "team": "KC", "gsis_id": "00-walker",
+            "player": "Kenneth Walker III", "player_clean_key": "kennethwalkeriii",
+            "rush_yards": 117.0,
+        }
     ])
     roster = pd.DataFrame([
         {
@@ -234,21 +238,14 @@ def test_attach_verified_actuals_uses_pbp_only_for_unresolved_identity():
             "player_clean_key": "rosterzero", "status": "ACT",
         }
     ])
-    pbp = pd.DataFrame([
-        {
-            "season": 2026, "week": 2, "team": "KC", "gsis_id": "00-walker",
-            "player": "Kenneth Walker III", "player_clean_key": "kennethwalkeriii",
-            "rush_yards": 117.0,
-        }
-    ])
 
-    out, audit = v2.attach_verified_actuals(projections, actual, roster, pbp)
+    out, audit = v2.attach_verified_actuals(projections, actual, roster)
     got = out.set_index("player_clean_key")["actual_rush_yards"].to_dict()
     src = out.set_index("player_clean_key")["actual_source"].to_dict()
     assert got["kennethwalker"] == 117.0
-    assert src["kennethwalker"] == "pbp_fallback"
+    assert src["kennethwalker"] == "stats_table"
     assert got["rosterzero"] == 0.0
-    assert audit["verified_pbp_fallback"] == 1
+    assert audit["verified_stats_table"] == 1
     assert audit["verified_roster_zero"] == 1
     assert audit["excluded_rows"] == 0
 
@@ -265,10 +262,8 @@ def test_attach_verified_actuals_fails_closed_on_any_remaining_unresolved_identi
     empty_roster = pd.DataFrame(columns=[
         "season", "week", "team", "gsis_id", "player_clean_key", "status"
     ])
-    empty_pbp = empty_actual.copy()
     with pytest.raises(RuntimeError, match="unresolved completed rushing outcome"):
-        v2.attach_verified_actuals(projections, empty_actual, empty_roster, empty_pbp)
-
+        v2.attach_verified_actuals(projections, empty_actual, empty_roster)
 
 def test_cumulative_append_requires_exact_contiguous_prior_week():
     prior = pd.DataFrame([_week1_row()])
