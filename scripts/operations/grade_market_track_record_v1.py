@@ -123,8 +123,13 @@ def select_model_bet(board: pd.DataFrame) -> pd.DataFrame:
     only the intended model side. The wager is then tied to a real captured
     quote whose own line puts the projection on that same side; if no such
     quote exists, that player-market abstains. Among compatible quotes, the
-    nearest line to consensus wins, with deterministic line/odds/book
-    tie-breaks. Outcomes are never consulted, and row order cannot matter.
+    nearest line to consensus wins. Equidistant cross-book ties are broken by
+    a canonical bookmaker key only -- never by line direction or price -- so
+    the rule is side-neutral and cannot price-shop. If the chosen canonical
+    book itself has multiple distinct equally-near compatible lines, the
+    player-market abstains rather than inventing a favorable line. Duplicate
+    quotes at the same book+line use the least favorable captured American
+    price. Outcomes are never consulted, and row order cannot matter.
     """
     if board.empty:
         return board.copy()
@@ -156,10 +161,52 @@ def select_model_bet(board: pd.DataFrame) -> pd.DataFrame:
     if b.empty:
         return b.drop(columns=["_line", "_line_gap", "_own_line_side"], errors="ignore")
 
-    sort_cols = ["_line_gap", "_line"] + [c for c in ("vegas_odds", "book") if c in b.columns]
-    b = b.sort_values(key + sort_cols, kind="mergesort")
+    # First reduce each player-market to the minimum distance from consensus.
+    # This is the only line-value criterion. Do not use line direction to
+    # break an equidistant tie: lower-vs-higher would favor opposite sides.
+    min_gap = b.groupby(key, dropna=False)["_line_gap"].transform("min")
+    b = b.loc[np.isclose(b["_line_gap"], min_gap, rtol=0.0, atol=1e-12)].copy()
+
+    # Cross-book ties are resolved only by a canonical, side/price-neutral
+    # bookmaker identity. The provider book key is preferred; book_title is
+    # a fallback for older rows. Missing identities sort last.
+    if "book" in b.columns:
+        book_key = b["book"].astype("string").fillna("").str.strip().str.lower()
+    elif "book_title" in b.columns:
+        book_key = b["book_title"].astype("string").fillna("").str.strip().str.lower()
+    else:
+        book_key = pd.Series("", index=b.index, dtype="string")
+    b["_book_key"] = book_key.mask(book_key.eq(""), "~missing-book")
+    canonical_book = b.groupby(key, dropna=False)["_book_key"].transform("min")
+    b = b.loc[b["_book_key"].eq(canonical_book)].copy()
+
+    # If one canonical book somehow supplied two distinct equally-near lines,
+    # there is no side-neutral basis to prefer either one. Fail closed.
+    distinct_lines = b.groupby(key, dropna=False)["_line"].transform("nunique")
+    b = b.loc[distinct_lines.eq(1)].copy()
+    if b.empty:
+        return b.drop(
+            columns=["_line", "_line_gap", "_own_line_side", "_book_key"],
+            errors="ignore",
+        )
+
+    # Duplicate rows at one canonical book+line use the least favorable
+    # captured payout. Numeric American odds are monotone with decimal payout:
+    # smaller numbers (-130 < -110 < +100 < +120) pay less.
+    if "vegas_odds" in b.columns:
+        b["_odds"] = num(b["vegas_odds"])
+    else:
+        b["_odds"] = np.nan
+    b = b.sort_values(
+        key + ["_book_key", "_odds"],
+        kind="mergesort",
+        na_position="last",
+    )
     out = b.drop_duplicates(subset=key, keep="first")
-    return out.drop(columns=["_line", "_line_gap", "_own_line_side"], errors="ignore")
+    return out.drop(
+        columns=["_line", "_line_gap", "_own_line_side", "_book_key", "_odds"],
+        errors="ignore",
+    )
 
 
 def load_actual_stats(season: int, weeks: list[int]) -> pd.DataFrame:
