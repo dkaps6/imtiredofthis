@@ -105,7 +105,11 @@ def report(detail_path: Path) -> int:
 
     weeks = sorted(pd.to_numeric(d["week"], errors="coerce").dropna().astype(int).unique())
     section(f"SLATE BACKTEST — season {d['season'].iloc[0]}, weeks {weeks}")
-    print(f"graded rows: {len(d)}")
+    print(
+        f"selected settlement rows: {len(d)}; "
+        f"decided={int(d['bet_result'].isin(['WIN','LOSS']).sum())}; "
+        f"void={int(d['bet_result'].eq('VOID').sum())}"
+    )
     print(f"graded detail columns: {sorted(d.columns)}")
     if "position" not in d.columns:
         print("\n  ** position is absent from the graded detail, so the per-position")
@@ -179,12 +183,11 @@ def report(detail_path: Path) -> int:
              .value_counts().unstack(fill_value=0))
     print(bal.to_string())
 
-    section("FALSIFICATION CHECK 4 — how much did the books disagree")
-    print("Consensus (median) chooses the intended side; grading then uses the")
-    print("nearest captured quote whose own line agrees with that side. Where books")
-    print("quoted different numbers, the choice of real line can still matter, so the")
-    print("spread below bounds how much of the record is line-selection rather")
-    print("than football.")
+    section("FALSIFICATION CHECK 4 — Best Snapshot quote vs consensus")
+    print("The deployed betting layer chooses the highest-EV real book+line offer")
+    print("and its higher-EV side; nonpositive-EV player-markets PASS. Consensus")
+    print("line is retained only as a diagnostic. The spread below measures how far")
+    print("the production-selected quote sat from the cross-book median.")
     if "consensus_line" in d.columns and "vegas_line" in d.columns:
         gap = (pd.to_numeric(d["vegas_line"], errors="coerce")
                - pd.to_numeric(d["consensus_line"], errors="coerce")).abs()
@@ -197,7 +200,7 @@ def report(detail_path: Path) -> int:
              - pd.to_numeric(d["consensus_line"], errors="coerce")).abs() < gap.fillna(0)
         ]
         print(f"  rows where the projection sits inside the book spread: {len(straddle)}")
-        print("  (for those, a different book would have flipped the side)")
+        print("  (mean-vs-line direction is diagnostic only; production side is EV-selected)")
     else:
         print("\n  consensus_line is absent from the graded detail -- cannot bound this.")
 
