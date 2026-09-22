@@ -90,13 +90,16 @@ jobs:
               low_memory=False,
           )
           key = ['season', 'week', 'event_id', 'player', 'market']
-          cols = key + ['book', 'vegas_line', 'vegas_odds', 'bet_result', 'unit_result']
+          cols = key + [
+              'book', 'vegas_line', 'vegas_odds', 'actual', 'actual_source',
+              'bet_result', 'unit_result',
+          ]
           a = live[cols].sort_values(key).reset_index(drop=True)
           b = committed[cols].sort_values(key).reset_index(drop=True)
           assert len(a) == len(b) == 866, (len(a), len(b))
-          for c in key + ['book', 'bet_result']:
+          for c in key + ['book', 'actual_source', 'bet_result']:
               assert a[c].astype(str).equals(b[c].astype(str)), c
-          for c in ['vegas_line', 'vegas_odds', 'unit_result']:
+          for c in ['vegas_line', 'vegas_odds', 'actual', 'unit_result']:
               av = pd.to_numeric(a[c], errors='coerce').to_numpy()
               bv = pd.to_numeric(b[c], errors='coerce').to_numpy()
               assert np.allclose(av, bv, equal_nan=True), c
