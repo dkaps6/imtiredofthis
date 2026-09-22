@@ -87,7 +87,7 @@ def test_full_roster_projection_reconstruction_uses_football_sources_and_exact_p
         },
         {
             "season": 2026, "week": 2, "event_id": game,
-            "player": "Beta Back", "player_clean_key": "betaback",
+            "player": "Beta Back III", "player_clean_key": "betabackiii",
             "team": "SEA", "opponent": "ARI", "position": "FB",
         },
     ])
@@ -132,7 +132,7 @@ def test_full_roster_projection_reconstruction_uses_football_sources_and_exact_p
         key: RUSH_YARDS_MC_WEIGHT * value + RUSH_YARDS_ML_WEIGHT * ml_value
         for key, value, ml_value in [
             ("alphaback", 15.0, 30.0),
-            ("betaback", 40.0, 50.0),
+            ("betabackiii", 40.0, 50.0),
         ]
     }
     priced = pd.DataFrame([
@@ -144,10 +144,10 @@ def test_full_roster_projection_reconstruction_uses_football_sources_and_exact_p
             "rb_synthesis_applied": 0,
         },
         {
-            "source_market": "player_rush_yds", "player": "Beta Back",
-            "player_clean_key": "betaback", "team": "SEA",
+            "source_market": "player_rush_yds", "player": "Beta Back III",
+            "player_clean_key": "betabackiii", "team": "SEA",
             "simulation_iterations": 2, "mc_proj": 40.0,
-            "ensemble_proj": expected["betaback"], "model_proj": expected["betaback"],
+            "ensemble_proj": expected["betabackiii"], "model_proj": expected["betabackiii"],
             "rb_synthesis_applied": 0,
         },
     ])
@@ -156,7 +156,7 @@ def test_full_roster_projection_reconstruction_uses_football_sources_and_exact_p
     class FakeResult:
         values = {
             (game, "alphaback", "rush_yards"): np.array([10.0, 20.0]),
-            (game, "betaback", "rush_yards"): np.array([30.0, 50.0]),
+            (game, "betabackiii", "rush_yards"): np.array([30.0, 50.0]),
         }
 
     monkeypatch.setattr(v2, "explicit_simulate", lambda *args, **kwargs: FakeResult())
@@ -172,7 +172,7 @@ def test_full_roster_projection_reconstruction_uses_football_sources_and_exact_p
     )
     got = projection.set_index("player_clean_key")["projection_mean"].to_dict()
     assert got["alphaback"] == pytest.approx(expected["alphaback"])
-    assert got["betaback"] == pytest.approx(expected["betaback"])
+    assert got["betabackiii"] == pytest.approx(expected["betabackiii"])
     assert audit["sportsbook_inputs_used_for_projection"] == 0
     assert audit["priced_parity_rows"] == 2
     assert audit["max_abs_priced_mc_parity_gap"] <= 1e-12
