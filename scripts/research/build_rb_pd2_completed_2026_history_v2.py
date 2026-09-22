@@ -349,9 +349,14 @@ def build_projection_frame(
     if q.empty:
         raise RuntimeError("preserved priced parity file contains zero rush-yards rows")
     q["team"] = q["team"].map(canon_team)
-    q["canonical_player_key"] = q["player"].map(_suffix_safe_key)
+    if "player_clean_key" in q.columns:
+        preserved_key = q["player_clean_key"].fillna("").astype(str).str.strip()
+    else:
+        preserved_key = pd.Series("", index=q.index, dtype=object)
+    fallback_key = q["player"].map(_suffix_safe_key)
+    q["canonical_player_key"] = preserved_key.where(preserved_key.ne(""), fallback_key)
     if q["canonical_player_key"].eq("").any():
-        raise RuntimeError("preserved priced parity file has unresolved suffix-safe player identity")
+        raise RuntimeError("preserved priced parity file has unresolved canonical player identity")
     pkey = projection[["team", "player_clean_key", "position", "generic_mc_projection", "projection_mean"]].copy()
     parity = q.merge(
         pkey,
