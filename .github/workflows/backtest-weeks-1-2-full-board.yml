@@ -1,8 +1,9 @@
 name: Backtest Weeks 1-2 Full Board
 
 # Full graded backtest of the real priced boards for Week 1 and Week 2,
-# now that nflverse carries final Week 2 stats. Read-only: it replays two
-# already-paid-for Full Slate artifacts and never fetches sportsbook odds.
+# now that nflverse carries final Week 2 stats. Read-only: it replays the
+# committed durable copies of the already-paid-for boards and never fetches
+# sportsbook odds.
 
 on:
   workflow_dispatch:
