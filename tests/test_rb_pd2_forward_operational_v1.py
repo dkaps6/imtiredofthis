@@ -203,6 +203,9 @@ def test_lock_assembler_writes_self_contained_baseline_and_candidate_arrays(tmp_
     schedule.to_csv(schedule_path, index=False)
 
     out_dir = tmp_path / "locks"
+    monkeypatch.setattr(
+        assembler, "_utc_now", lambda: pd.Timestamp("2026-09-20T15:06:00Z")
+    )
     result = assembler.assemble(
         session_dir=session,
         history_state_path=history_path,
@@ -229,7 +232,20 @@ def test_lock_assembler_writes_self_contained_baseline_and_candidate_arrays(tmp_
     receipt = json.loads((out_dir / assembler.LOCK_RECEIPT).read_text())
     assert receipt["target_week"] == 2
     assert receipt["history_completed_through_week"] == 1
+    assert receipt["artifact_persisted_at_utc"] == "2026-09-20T15:06:00+00:00"
+    assert receipt["minimum_pregame_persistence_buffer_seconds"] == 900
 
+
+def test_post_persistence_gate_requires_fifteen_minute_upload_buffer():
+    rows = [{"player_clean_key": "back0", "kickoff_utc": "2026-09-20T17:00:00Z"}]
+    assert assembler._post_persistence_integrity_failures(
+        rows, "2026-09-20T16:45:00Z"
+    ) == []
+    failures = assembler._post_persistence_integrity_failures(
+        rows, "2026-09-20T16:45:00.001Z"
+    )
+    assert len(failures) == 1
+    assert "required pre-kickoff upload buffer" in failures[0]["reason"]
 
 
 def test_history_must_be_current_through_exactly_target_week_minus_one():
