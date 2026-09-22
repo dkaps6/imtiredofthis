@@ -361,5 +361,8 @@ def apply_wr_r15_entitlement(metrics: pd.DataFrame) -> tuple[pd.DataFrame, pd.Da
             target_season == CURRENT_SEASON_SNAP_ACTIVATION_SEASON
             and target_week >= CURRENT_SEASON_SNAP_ACTIVATION_WEEK
         ),
+        "snap_source_current_season_freshness": dict(
+            snaps.attrs.get("current_season_snap_freshness", {"required": False})
+        ),
     }
     return out, trace, audit
