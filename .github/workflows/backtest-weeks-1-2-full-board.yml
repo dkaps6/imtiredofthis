@@ -11,22 +11,17 @@ on:
       - claude/nice-cori-4qkwqs
     paths:
       - '.github/workflows/backtest-weeks-1-2-full-board.yml'
+      - 'scripts/operations/grade_market_track_record_v1.py'
+      - 'scripts/operations/grade_market_track_record_gsis_v1.py'
       - 'scripts/operations/report_weekly_backtest_v1.py'
+      - 'scripts/operations/backtest_full_report_v1.py'
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 env:
   BACKTEST_SEASON: '2026'
-  # The original Week 1 priced-board artifact (run 34910010508) EXPIRED on
-  # 2026-09-21T23:44Z. The only surviving copy of that board is the archived
-  # ledger inside the Week 1 slice run's artifact, so Week 1 is restored from
-  # the ledger rather than re-archived from a priced board.
-  WEEK1_LEDGER_RUN_ID: '35520068364'
-  WEEK1_LEDGER_ARTIFACT: week1_graded_slices_35520068364
-  WEEK2_RUN_ID: '35282021679'
-  WEEK2_ARTIFACT: run_35282021679
 
 jobs:
   backtest:
@@ -46,35 +41,17 @@ jobs:
           pip install -r requirements.txt
           pip install nflreadpy
 
-      - name: Restore the Week 1 board from the surviving archived ledger
+      - name: Verify the committed Week 1 and Week 2 boards
         run: |
           set -euo pipefail
-          rm -rf /tmp/wk1 && mkdir -p /tmp/wk1
-          gh run download "${WEEK1_LEDGER_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
-            --name "${WEEK1_LEDGER_ARTIFACT}" --dir /tmp/wk1
-          echo "--- artifact contents ---"
-          find /tmp/wk1 -type f | sed 's#^#  #'
-          SRC=$(find /tmp/wk1 -type f -name '2026_wk01.csv' | head -1)
-          if [ -z "$SRC" ]; then
-            echo "::error::no 2026_wk01.csv in ${WEEK1_LEDGER_ARTIFACT};" \
-                 "the Week 1 board has no surviving copy in this artifact"
-            exit 1
-          fi
-          mkdir -p data/market_track_record/boards
-          cp "$SRC" data/market_track_record/boards/2026_wk01.csv
-          python -c "import pandas as pd; d=pd.read_csv('data/market_track_record/boards/2026_wk01.csv'); print(f'week 1 ledger restored: {len(d)} rows, {d[\"market\"].nunique()} markets')"
-
-      - name: Archive the Week 2 priced board into the ledger
-        run: |
-          set -euo pipefail
-          export PYTHONPATH="${PWD}"
-          rm -rf /tmp/wk2 && mkdir -p /tmp/wk2
-          gh run download "${WEEK2_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
-            --name "${WEEK2_ARTIFACT}" --dir /tmp/wk2
-          test -s /tmp/wk2/outputs/props_priced_clean.csv
-          python scripts/operations/archive_priced_board_v1.py \
-            --priced-file /tmp/wk2/outputs/props_priced_clean.csv \
-            --season "${BACKTEST_SEASON}" --week 2 --run-id "${WEEK2_RUN_ID}"
+          python - <<'EOF'
+          import pandas as pd
+          for week in (1, 2):
+              p = f'data/market_track_record/boards/2026_wk{week:02d}.csv'
+              d = pd.read_csv(p, low_memory=False)
+              assert len(d) > 0, f'{p} is empty'
+              print(f'week {week} committed board: {len(d)} rows, {d["market"].nunique()} markets')
+          EOF
 
       - name: Grade both weeks against final nflverse actuals
         run: |
@@ -91,27 +68,6 @@ jobs:
           export PYTHONPATH="${PWD}"
           python scripts/operations/report_weekly_backtest_v1.py \
             --detail /tmp/graded_weeks_1_2.csv
-
-      - name: Commit the ledger so the board stops living on an artifact clock
-        run: |
-          set -euo pipefail
-          test -d data/market_track_record/boards
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/market_track_record/boards/
-          if git diff --cached --quiet; then
-            echo "ledger already committed and unchanged"
-            exit 0
-          fi
-          git commit -m "market track record: commit the Week 1 and Week 2 boards"
-          for ATTEMPT in 1 2 3 4; do
-            git pull --rebase origin "${GITHUB_REF_NAME}" \
-              && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
-            echo "push attempt ${ATTEMPT} failed; retrying"
-            sleep $((2 ** ATTEMPT))
-          done
-          echo "::error::could not push the ledger"
-          exit 1
 
       - name: Upload graded detail
         uses: actions/upload-artifact@v4
