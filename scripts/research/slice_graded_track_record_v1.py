@@ -169,9 +169,13 @@ def main() -> int:
     }
     if "edge_pct" in df.columns:
         df["edge_pct"] = pd.to_numeric(df["edge_pct"], errors="coerce")
+        # edge_pct is persisted as a fractional probability difference
+        # (0.10 == ten percentage points), not as a 0-100 percentage.
         df["edge_bin"] = pd.cut(
-            df["edge_pct"], [-np.inf, 2, 5, 10, 20, np.inf],
-            labels=["0-2", "2-5", "5-10", "10-20", "20+"],
+            df["edge_pct"],
+            [-np.inf, 0.0, 0.02, 0.05, 0.10, 0.20, np.inf],
+            labels=["<=0", "0-2", "2-5", "5-10", "10-20", "20+"],
+            include_lowest=True,
         ).astype(str)
         dims["edge_bin"] = df["edge_bin"]
         dims["market_x_edge"] = df["market"].astype(str) + " | " + df["edge_bin"]
