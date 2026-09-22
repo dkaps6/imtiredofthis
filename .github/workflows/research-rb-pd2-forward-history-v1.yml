@@ -1,0 +1,265 @@
+name: RB PD2 Forward History Build V1
+
+on:
+  workflow_dispatch:
+    inputs:
+      certified_history_run_id:
+        description: "Workflow run containing cumulative certified 2026 completed history"
+        required: true
+        default: "35732450688"
+      certified_history_artifact_name:
+        description: "Cumulative certified-history artifact name"
+        required: true
+        default: "rb-pd2-completed-2026-history-v2-week"
+      certified_history_artifact_id:
+        description: "Pinned cumulative certified-history artifact ID"
+        required: true
+        default: "10695992072"
+      certified_history_artifact_digest:
+        description: "Pinned cumulative certified-history artifact sha256 digest"
+        required: true
+        default: "sha256:a84aa005dfdd35d16f891c40c1cafbad5c2779aca3dad16214624d0216e052bb"
+      completed_2026_through_week:
+        description: "Exact completed 2026 week represented by the certified-history artifact"
+        required: true
+        default: "2"
+  push:
+    branches:
+      - research-rb-pd2-forward-shadow-confirmation-v1
+    paths:
+      - "scripts/research/rb_pd2_forward_shadow_v1.py"
+      - "scripts/research/build_rb_pd2_forward_history_v1.py"
+      - "scripts/research/assemble_rb_pd2_forward_locks_v1.py"
+      - "tests/test_rb_pd2_forward_shadow_v1.py"
+      - "tests/test_rb_pd2_forward_operational_v1.py"
+      - ".github/workflows/research-rb-pd2-forward-history-v1.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-history:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      IDENTITY_SOURCE_RUN_ID: '35282021679'
+      IDENTITY_SOURCE_ARTIFACT: 'run_35282021679'
+      CERT_HISTORY_RUN_ID: ${{ inputs.certified_history_run_id || '35732450688' }}
+      CERT_HISTORY_ARTIFACT: ${{ inputs.certified_history_artifact_name || 'rb-pd2-completed-2026-history-v2-week' }}
+      CERT_HISTORY_ARTIFACT_ID: ${{ inputs.certified_history_artifact_id || '10695992072' }}
+      CERT_HISTORY_ARTIFACT_DIGEST: ${{ inputs.certified_history_artifact_digest || 'sha256:a84aa005dfdd35d16f891c40c1cafbad5c2779aca3dad16214624d0216e052bb' }}
+      CERT_HISTORY_THROUGH_WEEK: ${{ inputs.completed_2026_through_week || '2' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml pyarrow tabulate
+
+      - name: Run frozen forward-layer tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q             tests/test_rb_pd2_shadow_capture_v1.py             tests/test_rb_pd2_forward_shadow_v1.py             tests/test_rb_pd2_forward_operational_v1.py
+
+      - name: Restore production identity sources from preserved Week 2 run
+        run: |
+          rm -rf /tmp/rb_pd2_identity_source
+          mkdir -p /tmp/rb_pd2_identity_source
+          gh run download "${IDENTITY_SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" --name "${IDENTITY_SOURCE_ARTIFACT}" --dir /tmp/rb_pd2_identity_source
+          test -s /tmp/rb_pd2_identity_source/data/manual_name_overrides.csv
+          test -s /tmp/rb_pd2_identity_source/data/roles_ourlads.csv
+          cp /tmp/rb_pd2_identity_source/data/manual_name_overrides.csv data/manual_name_overrides.csv
+          cp /tmp/rb_pd2_identity_source/data/roles_ourlads.csv data/roles_ourlads.csv
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          for p in [Path('data/manual_name_overrides.csv'), Path('data/roles_ourlads.csv')]:
+              print(p, hashlib.sha256(p.read_bytes()).hexdigest())
+          PY
+
+      - name: Restore pinned cumulative certified 2026 history
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/rb_pd2_cert_history
+          mkdir -p /tmp/rb_pd2_cert_history
+
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${CERT_HISTORY_RUN_ID}/artifacts?per_page=100" > /tmp/cert_history_artifacts.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          meta=json.loads(Path('/tmp/cert_history_artifacts.json').read_text())
+          want_id=int(os.environ['CERT_HISTORY_ARTIFACT_ID'])
+          want_name=os.environ['CERT_HISTORY_ARTIFACT']
+          want_digest=os.environ['CERT_HISTORY_ARTIFACT_DIGEST']
+          matches=[a for a in meta.get('artifacts',[]) if int(a.get('id',-1))==want_id]
+          if len(matches)!=1:
+              raise SystemExit(f'FATAL: pinned certified-history artifact id not unique/present id={want_id} found={len(matches)}')
+          a=matches[0]
+          if a.get('name') != want_name:
+              raise SystemExit(f"FATAL: certified-history artifact name drift {a.get('name')!r} != {want_name!r}")
+          if a.get('digest') != want_digest:
+              raise SystemExit(f"FATAL: certified-history artifact digest drift {a.get('digest')!r} != {want_digest!r}")
+          if bool(a.get('expired')):
+              raise SystemExit('FATAL: pinned certified-history artifact is expired')
+          Path('/tmp/cert_history_artifact.json').write_text(json.dumps(a,indent=2,sort_keys=True))
+          print({'verified_artifact_id':want_id,'name':want_name,'digest':want_digest})
+          PY
+
+          gh run download "${CERT_HISTORY_RUN_ID}" --repo "${GITHUB_REPOSITORY}" --name "${CERT_HISTORY_ARTIFACT}" --dir /tmp/rb_pd2_cert_history
+
+          if [ -s /tmp/rb_pd2_cert_history/rb_pd2_completed_2026_history.csv ]; then
+            cp /tmp/rb_pd2_cert_history/rb_pd2_completed_2026_history.csv /tmp/certified_completed_2026_history.csv
+            AUDIT=/tmp/rb_pd2_cert_history/rb_pd2_completed_2026_history_audit.json
+          elif [ -s /tmp/rb_pd2_cert_history/rb_pd2_completed_2026_week1_history.csv ]; then
+            cp /tmp/rb_pd2_cert_history/rb_pd2_completed_2026_week1_history.csv /tmp/certified_completed_2026_history.csv
+            AUDIT=/tmp/rb_pd2_cert_history/rb_pd2_completed_2026_week1_audit.json
+          else
+            echo "FATAL: pinned certified-history artifact contains no supported cumulative history file"
+            exit 2
+          fi
+          test -s /tmp/certified_completed_2026_history.csv
+          test -s "${AUDIT}"
+          cp "${AUDIT}" /tmp/certified_completed_2026_history_audit.json
+
+          python - <<'PY'
+          import hashlib, json, os
+          import pandas as pd
+          from pathlib import Path
+          p=Path('/tmp/certified_completed_2026_history.csv')
+          a=json.loads(Path('/tmp/certified_completed_2026_history_audit.json').read_text())
+          expected=int(os.environ['CERT_HISTORY_THROUGH_WEEK'])
+          x=pd.read_csv(p,low_memory=False)
+          weeks=sorted(pd.to_numeric(x['week'],errors='coerce').dropna().astype(int).unique().tolist())
+          if weeks != list(range(1,expected+1)):
+              raise SystemExit(f'FATAL: certified history weeks {weeks} != expected contiguous 1..{expected}')
+          if expected == 1 and a.get('disposition') == 'WEEK1_COMPLETED_HISTORY_CERTIFIED':
+              assert a['prospective_confirmation_observations_created']==0
+          else:
+              assert a.get('disposition')=='COMPLETED_2026_HISTORY_CERTIFIED',a
+              assert int(a.get('completed_2026_through_week',-1))==expected,a
+              assert a.get('projection_frame_frozen_before_completion_check') is True,a
+              assert a.get('outcomes_loaded_after_projection_freeze') is True,a
+              assert int(a.get('sportsbook_inputs_used_for_projection',-1))==0,a
+              assert int(a.get('prospective_confirmation_observations_created',-1))==0,a
+          print({'certified_through_week':expected,'history_sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'rows':len(x)})
+          PY
+
+      - name: Build independent 2024 and 2025 historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/rb_pd2_hist_2024 /tmp/rb_pd2_hist_2025 /tmp/rb_pd2_forward
+          mkdir -p /tmp/rb_pd2_hist_2024 /tmp/rb_pd2_hist_2025 /tmp/rb_pd2_forward
+          python scripts/backtest/build_historical_inputs.py             --season 2024 --prior-season 2023 --weeks 1-18 --out-dir /tmp/rb_pd2_hist_2024
+          python scripts/backtest/build_historical_inputs.py             --season 2025 --prior-season 2024 --weeks 1-18 --out-dir /tmp/rb_pd2_hist_2025
+
+      - name: Combine authoritative schedule and team-week history
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out = Path('/tmp/rb_pd2_forward')
+          for name in ['schedule_history.csv', 'team_weekly_history.csv']:
+              parts = [
+                  pd.read_csv('/tmp/rb_pd2_hist_2024/' + name),
+                  pd.read_csv('/tmp/rb_pd2_hist_2025/' + name),
+              ]
+              x = pd.concat(parts, ignore_index=True)
+              keys = ['season', 'week', 'team']
+              x = x.sort_values(keys).drop_duplicates(keys, keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined historical identity rows in {name}')
+              x.to_csv(out / name, index=False)
+              print(name, len(x), sorted(x.season.unique()))
+          PY
+
+      - name: Build canonical 2023-2025 player game logs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py             --seasons 2023,2024,2025             --schedule /tmp/rb_pd2_forward/schedule_history.csv             --out /tmp/rb_pd2_forward/player_game_logs_history.csv
+
+      - name: Build leakage-safe 2025 component trace
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/walk_forward.py             --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000             --player-logs /tmp/rb_pd2_forward/player_game_logs_history.csv             --team-weekly /tmp/rb_pd2_forward/team_weekly_history.csv             --schedule /tmp/rb_pd2_forward/schedule_history.csv             --universe-dir /tmp/rb_pd2_hist_2025/pregame_universe             --out /tmp/rb_pd2_forward/component_predictions_2025.csv
+
+      - name: Build frozen RB PD2 forward history state
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/build_rb_pd2_forward_history_v1.py             --components /tmp/rb_pd2_forward/component_predictions_2025.csv             --weights data/model_ensemble_weights.csv             --additional-certified-history /tmp/certified_completed_2026_history.csv             --out-dir /tmp/rb_pd2_forward/history
+
+      - name: Assert history artifact contract
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from pathlib import Path
+
+          root = Path('/tmp/rb_pd2_forward/history')
+          state = pd.read_csv(root / 'rb_pd2_forward_history_state.csv')
+          manifest = json.loads((root / 'rb_pd2_forward_history_manifest.json').read_text())
+
+          assert len(state) > 0
+          assert set(pd.to_numeric(state.season).astype(int).unique()) == {2025, 2026}
+          import os
+          expected_week=int(os.environ['CERT_HISTORY_THROUGH_WEEK'])
+          observed_weeks=sorted(pd.to_numeric(state.loc[pd.to_numeric(state.season).eq(2026), 'week']).astype(int).unique().tolist())
+          assert observed_weeks == list(range(1,expected_week+1)), (observed_weeks, expected_week)
+          assert manifest['completed_2026_weeks'] == list(range(1,expected_week+1))
+          assert int(manifest['completed_2026_through_week']) == expected_week
+          assert int(manifest['row_count']) == len(state)
+          assert manifest['zero_prospective_outcomes_used'] is True
+          assert manifest['rush_yards_fit_scope'] == 'all_2024_oos_frozen_for_2025'
+          assert manifest['rush_yards_promotion_lineage'] == 'RB_STACK1_RUN_33535308110_FOR_P3'
+          assert len(manifest['manual_name_overrides_sha256']) == 64
+          assert len(manifest['canonical_names_py_sha256']) == 64
+          assert len(manifest['roles_ourlads_sha256']) == 64
+          assert len(manifest['additional_history_sha256']) == 64
+          assert manifest['additional_history_path'].endswith('certified_completed_2026_history.csv')
+
+          scoreable = state[
+              (pd.to_numeric(state.prior_games, errors='coerce') >= 4)
+              & (pd.to_numeric(state.difficulty_reference_n, errors='coerce') >= 100)
+              & pd.to_numeric(state.difficulty_score, errors='coerce').notna()
+          ]
+          assert len(scoreable) > 0
+          print({
+              'rows': len(state),
+              'players': state.player_clean_key.nunique(),
+              'scoreable_rows': len(scoreable),
+              'max_reference_n': int(pd.to_numeric(state.difficulty_reference_n).max()),
+          })
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload forward-history artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-pd2-forward-history-v1
+          path: |
+            /tmp/rb_pd2_forward/component_predictions_2025.csv
+            /tmp/rb_pd2_forward/history/rb_pd2_forward_history_state.csv
+            /tmp/rb_pd2_forward/history/rb_pd2_forward_history_manifest.json
+          if-no-files-found: error
+          retention-days: 90

@@ -1,0 +1,6 @@
+# Research-only shadow capture sessions (RB PD2 forward confirmation V1, plan section 7).
+# Written only when RB_PD2_SHADOW_CAPTURE is explicitly enabled. Never production artifacts.
+*/
+*.jsonl
+*.npz
+*.json
