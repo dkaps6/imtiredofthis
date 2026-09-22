@@ -1,0 +1,87 @@
+name: Backtest Weeks 1-2 Full Board
+
+# Full graded backtest of the real priced boards for Week 1 and Week 2,
+# now that nflverse carries final Week 2 stats. Read-only: it replays two
+# already-paid-for Full Slate artifacts and never fetches sportsbook odds.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/nice-cori-4qkwqs
+    paths:
+      - '.github/workflows/backtest-weeks-1-2-full-board.yml'
+      - 'scripts/operations/report_weekly_backtest_v1.py'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  BACKTEST_SEASON: '2026'
+  WEEK1_RUN_ID: '34910010508'
+  WEEK1_ARTIFACT: offline_replay_34910010508
+  WEEK2_RUN_ID: '35282021679'
+  WEEK2_ARTIFACT: run_35282021679
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy
+
+      - name: Archive both preserved priced boards into the ledger
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          mkdir -p outputs
+          for SPEC in "1:${WEEK1_RUN_ID}:${WEEK1_ARTIFACT}" "2:${WEEK2_RUN_ID}:${WEEK2_ARTIFACT}"; do
+            WK="${SPEC%%:*}"; REST="${SPEC#*:}"; RUN="${REST%%:*}"; ART="${REST#*:}"
+            echo "::group::week ${WK} <- run ${RUN} artifact ${ART}"
+            rm -rf "/tmp/board_${WK}" && mkdir -p "/tmp/board_${WK}"
+            gh run download "${RUN}" --repo "${GITHUB_REPOSITORY}" \
+              --name "${ART}" --dir "/tmp/board_${WK}"
+            test -s "/tmp/board_${WK}/outputs/props_priced_clean.csv"
+            python scripts/operations/archive_priced_board_v1.py \
+              --priced-file "/tmp/board_${WK}/outputs/props_priced_clean.csv" \
+              --season "${BACKTEST_SEASON}" --week "${WK}" --run-id "${RUN}"
+            echo "::endgroup::"
+          done
+
+      - name: Grade both weeks against final nflverse actuals
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/grade_market_track_record_gsis_v1.py \
+            --season "${BACKTEST_SEASON}" --weeks "1,2" \
+            --detail-out /tmp/graded_weeks_1_2.csv
+          test -s /tmp/graded_weeks_1_2.csv
+
+      - name: Report the full decomposition
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/report_weekly_backtest_v1.py \
+            --detail /tmp/graded_weeks_1_2.csv
+
+      - name: Upload graded detail
+        uses: actions/upload-artifact@v4
+        with:
+          name: backtest_weeks_1_2_graded
+          path: |
+            /tmp/graded_weeks_1_2.csv
+            data/market_track_record/boards/
+          if-no-files-found: error
+          retention-days: 30
