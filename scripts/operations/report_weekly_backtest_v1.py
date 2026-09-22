@@ -12,7 +12,7 @@ Read-only. Never touches pricing, projection or model selection.
 from __future__ import annotations
 
 import argparse
-from math import comb, sqrt
+from math import sqrt
 from pathlib import Path
 
 import numpy as np
@@ -59,9 +59,21 @@ def _fmt_table(rows: dict[str, dict]) -> str:
     return "\n".join(out)
 
 
-def binom_tail(k: int, n: int, p0: float) -> float:
-    """P(X >= k) under Binomial(n, p0)."""
-    return sum(comb(n, i) * p0 ** i * (1 - p0) ** (n - i) for i in range(k, n + 1))
+def poisson_binomial_tail(k: int, probabilities) -> float:
+    """Exact P(X >= k) for independent Bernoulli trials with unequal p_i."""
+    p = np.asarray(list(probabilities), dtype=float)
+    if len(p) == 0:
+        return float("nan")
+    if np.any(~np.isfinite(p)) or np.any((p < 0.0) | (p > 1.0)):
+        return float("nan")
+    if k <= 0:
+        return 1.0
+    if k > len(p):
+        return 0.0
+    pmf = np.array([1.0])
+    for pi in p:
+        pmf = np.convolve(pmf, np.array([1.0 - pi, pi]))
+    return float(np.clip(pmf[k:].sum(), 0.0, 1.0))
 
 
 def breakeven(odds: float) -> float:
@@ -157,8 +169,9 @@ def report(detail_path: Path) -> int:
     print(bal.to_string())
 
     section("FALSIFICATION CHECK 4 — how much did the books disagree")
-    print("Rows are graded at the consensus (median) line. Where books quoted")
-    print("different numbers, the choice of line can decide the side, so the")
+    print("Consensus (median) chooses the intended side; grading then uses the")
+    print("nearest captured quote whose own line agrees with that side. Where books")
+    print("quoted different numbers, the choice of real line can still matter, so the")
     print("spread below bounds how much of the record is line-selection rather")
     print("than football.")
     if "consensus_line" in d.columns and "vegas_line" in d.columns:
@@ -191,14 +204,13 @@ def report(detail_path: Path) -> int:
         dec = _decided(dq)
         n, w = len(dec), int(dec["bet_result"].eq("WIN").sum())
         if n:
-            be = float(np.mean([breakeven(o) for o in dec["vegas_odds"]]))
+            null_p = np.array([breakeven(o) for o in dec["vegas_odds"]], dtype=float)
+            be = float(null_p.mean())
             p = w / n
-            se = sqrt(be * (1 - be) / n)
             ci = 1.96 * sqrt(p * (1 - p) / n)
-            print(f"\n  breakeven at mean price : {be:.4f}")
-            print(f"  observed hit rate       : {p:.4f}   95% CI [{p - ci:.4f}, {p + ci:.4f}]")
-            print(f"  z vs breakeven          : {(p - be) / se:+.2f}")
-            print(f"  exact one-tail p        : {binom_tail(w, n, be):.5f}")
+            print(f"\n  mean individual breakeven : {be:.4f}")
+            print(f"  observed hit rate          : {p:.4f}   95% CI [{p - ci:.4f}, {p + ci:.4f}]")
+            print(f"  Poisson-binomial one-tail p: {poisson_binomial_tail(w, null_p):.5f}")
             print(f"\n  NOTE: bets cluster by game, so these are not {n} independent draws.")
             print(f"  A design-effect haircut widens the interval; treat z as an upper bound.")
 
