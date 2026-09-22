@@ -6,6 +6,7 @@ import pandas as pd
 
 from scripts.research.slice_graded_track_record_v1 import (
     cluster_score_pvalue,
+    fractional_edge_bins,
     poisson_binomial_tail,
     summarize,
 )
@@ -70,3 +71,11 @@ def test_summarize_uses_cluster_p_for_discovery_but_keeps_independent_reference(
     assert out["clusters"] == 8
     assert np.isfinite(out["p_value"])
     assert np.isfinite(out["independent_p_value"])
+
+
+
+def test_fractional_edge_bins_use_probability_units_and_keep_nonpositive_separate():
+    got = fractional_edge_bins(
+        pd.Series([-0.01, 0.0, 0.01, 0.03, 0.075, 0.15, 0.25])
+    ).tolist()
+    assert got == ["<=0", "<=0", "0-2", "2-5", "5-10", "10-20", "20+"]
