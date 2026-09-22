@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 
 from scripts.operations.grade_market_track_record_gsis_v1 import apply_postgame_settlement
+from scripts.operations.backtest_full_report_v1 import _cell
+from scripts.operations.report_weekly_backtest_v1 import _row_stats
 
 
 def _rows():
@@ -83,3 +85,43 @@ def test_dnp_void_rule_is_fail_closed_for_unknown_book():
     row["book"] = "unknownbook"
     out = apply_postgame_settlement(row)
     assert out.iloc[0]["settlement_status"] == "UNRESOLVED"
+
+
+
+def test_accuracy_metrics_exclude_void_rows_from_denominator():
+    rows = pd.DataFrame(
+        [
+            {
+                "bet_result": "WIN",
+                "unit_result": 1.0,
+                "model_error": 1.0,
+                "vegas_error": 2.0,
+                "model_closer": True,
+                "model_closer_than_vegas": True,
+            },
+            {
+                "bet_result": "LOSS",
+                "unit_result": -1.0,
+                "model_error": 3.0,
+                "vegas_error": 2.0,
+                "model_closer": False,
+                "model_closer_than_vegas": False,
+            },
+            {
+                "bet_result": "VOID",
+                "unit_result": 0.0,
+                "model_error": np.nan,
+                "vegas_error": np.nan,
+                "model_closer": False,
+                "model_closer_than_vegas": False,
+            },
+        ]
+    )
+
+    full = _cell(rows)
+    weekly = _row_stats(rows)
+
+    assert full["bets"] == weekly["bets"] == 2
+    assert full["closer"] == weekly["closer"] == 0.5
+    assert full["m_mae"] == weekly["model_mae"] == 2.0
+    assert full["v_mae"] == weekly["vegas_mae"] == 2.0
