@@ -20,7 +20,14 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from scripts.modeling.te_r5p_entitlement_adapter_v1 import _key, _load_snaps, _team
+from scripts.modeling.te_r5p_entitlement_adapter_v1 import (
+    CURRENT_SEASON_SNAP_ACTIVATION_SEASON,
+    CURRENT_SEASON_SNAP_ACTIVATION_WEEK,
+    _key,
+    _load_snaps,
+    _target_season_week,
+    _team,
+)
 
 MODEL_PATH = Path("data/models/wr_r15_production_model_v1/wr_r15_production_model_v1.json")
 EXPECTED_VERSION = "WR_R15_PRODUCTION_MODEL_V1"
@@ -201,7 +208,11 @@ def apply_wr_r15_entitlement(metrics: pd.DataFrame) -> tuple[pd.DataFrame, pd.Da
     sec["log_b0_secondary_pool"] = np.log1p(sec["b0_secondary_pool"].clip(lower=0.0))
     sec["secondary_room_size"] = sec.groupby(["event_id", "team"])["player_clean_key"].transform("count").astype(float)
 
-    snaps, dup_rate, source_seasons = _load_snaps()
+    target_season, target_week = _target_season_week(sec, "WR-R15")
+    snaps, dup_rate, source_seasons = _load_snaps(
+        target_season=target_season,
+        target_week=target_week,
+    )
     feat, future_violations = _strict_prior_features(sec, snaps)
     if future_violations != 0:
         raise RuntimeError(f"WR-R15 strict-prior construction used same/future rows: {future_violations}")
@@ -344,5 +355,11 @@ def apply_wr_r15_entitlement(metrics: pd.DataFrame) -> tuple[pd.DataFrame, pd.Da
         "prior3_same_team_coverage": float(feat["prior3_same_team"].mean()),
         "raw_snap_duplicate_rate": float(dup_rate),
         "snap_source_seasons": source_seasons,
+        "snap_source_target_season": int(target_season),
+        "snap_source_target_week": int(target_week),
+        "snap_source_current_season_continuation_active": bool(
+            target_season == CURRENT_SEASON_SNAP_ACTIVATION_SEASON
+            and target_week >= CURRENT_SEASON_SNAP_ACTIVATION_WEEK
+        ),
     }
     return out, trace, audit
