@@ -6,23 +6,23 @@ on:
       certified_history_run_id:
         description: "Workflow run containing cumulative certified 2026 completed history"
         required: true
-        default: "35619889214"
+        default: "35730620030"
       certified_history_artifact_name:
         description: "Cumulative certified-history artifact name"
         required: true
-        default: "rb-pd2-completed-2026-week1-history-v1"
+        default: "rb-pd2-completed-2026-history-v2-week"
       certified_history_artifact_id:
         description: "Pinned cumulative certified-history artifact ID"
         required: true
-        default: "10649235022"
+        default: "10695900655"
       certified_history_artifact_digest:
         description: "Pinned cumulative certified-history artifact sha256 digest"
         required: true
-        default: "sha256:99541ebc07e4fec1214bd3d42f5d5d00bbff0ea20c671cdc288147aa46cfa079"
+        default: "sha256:d5fc1e20c02c295c1cfc4e32e4bf3852854e54521de13db93bbc6f75c308790f"
       completed_2026_through_week:
         description: "Exact completed 2026 week represented by the certified-history artifact"
         required: true
-        default: "1"
+        default: "2"
   push:
     branches:
       - research-rb-pd2-forward-shadow-confirmation-v1
@@ -46,11 +46,11 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       IDENTITY_SOURCE_RUN_ID: '35282021679'
       IDENTITY_SOURCE_ARTIFACT: 'run_35282021679'
-      CERT_HISTORY_RUN_ID: ${{ inputs.certified_history_run_id || '35619889214' }}
-      CERT_HISTORY_ARTIFACT: ${{ inputs.certified_history_artifact_name || 'rb-pd2-completed-2026-week1-history-v1' }}
-      CERT_HISTORY_ARTIFACT_ID: ${{ inputs.certified_history_artifact_id || '10649235022' }}
-      CERT_HISTORY_ARTIFACT_DIGEST: ${{ inputs.certified_history_artifact_digest || 'sha256:99541ebc07e4fec1214bd3d42f5d5d00bbff0ea20c671cdc288147aa46cfa079' }}
-      CERT_HISTORY_THROUGH_WEEK: ${{ inputs.completed_2026_through_week || '1' }}
+      CERT_HISTORY_RUN_ID: ${{ inputs.certified_history_run_id || '35730620030' }}
+      CERT_HISTORY_ARTIFACT: ${{ inputs.certified_history_artifact_name || 'rb-pd2-completed-2026-history-v2-week' }}
+      CERT_HISTORY_ARTIFACT_ID: ${{ inputs.certified_history_artifact_id || '10695900655' }}
+      CERT_HISTORY_ARTIFACT_DIGEST: ${{ inputs.certified_history_artifact_digest || 'sha256:d5fc1e20c02c295c1cfc4e32e4bf3852854e54521de13db93bbc6f75c308790f' }}
+      CERT_HISTORY_THROUGH_WEEK: ${{ inputs.completed_2026_through_week || '2' }}
     steps:
       - uses: actions/checkout@v4
 
