@@ -41,9 +41,9 @@ def _row_stats(df: pd.DataFrame) -> dict:
         "hit": (w / n) if n else np.nan,
         "units": units,
         "roi": (units / n) if n else np.nan,
-        "model_mae": float(df["model_error"].abs().mean()),
-        "vegas_mae": float(df["vegas_error"].abs().mean()),
-        "closer": float(df["model_closer_than_vegas"].mean()),
+        "model_mae": float(dec["model_error"].abs().mean()),
+        "vegas_mae": float(dec["vegas_error"].abs().mean()),
+        "closer": float(dec["model_closer_than_vegas"].mean()),
     }
 
 
