@@ -1,0 +1,56 @@
+name: Current-Season State Persistence V1
+
+on:
+  push:
+    branches:
+      - research-current-season-state-persistence-v1
+    paths:
+      - "scripts/research/current_season_state_persistence_v1.py"
+      - "tests/test_current_season_state_persistence_v1.py"
+      - "docs/research/CURRENT_SEASON_STATE_PERSISTENCE_V1_PLAN.md"
+      - ".github/workflows/research-current-season-state-persistence-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run frozen tests
+        run: |
+          export PYTHONPATH="${PWD}"
+          pytest -q tests/test_current_season_state_persistence_v1.py
+
+      - name: Run current-season persistence atlas
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/research/current_season_state_persistence_v1.py \
+            --out-dir /tmp/current_season_state_persistence_v1
+
+      - name: Strict repository audit
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/utils/audit_repo.py --strict
+
+      - name: Upload research artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: current-season-state-persistence-v1
+          path: /tmp/current_season_state_persistence_v1
+          if-no-files-found: error
+          retention-days: 90
