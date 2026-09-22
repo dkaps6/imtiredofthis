@@ -28,6 +28,21 @@ POSITIONS = ["QB", "RB", "WR", "TE"]
 MARKETS = ["pass_yards", "rush_yards", "rec_yards", "receptions", "rush_rec_yards"]
 
 
+def _apply_verified_zero_outcomes(d: pd.DataFrame) -> pd.DataFrame:
+    """Fill roster-confirmed missing stat rows with zero and preserve provenance."""
+    out = d.copy()
+    resolved = out["identity_status"].eq("RESOLVED_GSIS")
+    has_stat_row = out["actual"].notna()
+    verified_zero = resolved & ~has_stat_row & out["roster_confirmed"]
+    out.loc[verified_zero, "actual"] = 0.0
+    out["actual_source"] = np.select(
+        [resolved & has_stat_row, verified_zero],
+        ["stats_table", "roster_confirmed_verified_zero"],
+        default="unresolved",
+    )
+    return out
+
+
 def build_graded(season: int, weeks: list[int]) -> pd.DataFrame:
     board = G.load_boards(season, weeks)
     if board.empty:
@@ -63,11 +78,7 @@ def build_graded(season: int, weeks: list[int]) -> pd.DataFrame:
                               on=["season", "week", "gsis_id"], how="left"))
     d = pd.concat(parts, ignore_index=True, sort=False)
 
-    ok = d.identity_status.eq("RESOLVED_GSIS")
-    d.loc[ok & d.actual.isna() & d.roster_confirmed, "actual"] = 0.0
-    d["actual_source"] = np.select(
-        [ok & d.actual.notna() & ~(ok & d.actual.isna() & d.roster_confirmed), ok & d.roster_confirmed],
-        ["stats_table", "roster_confirmed_zero"], default="unresolved")
+    d = _apply_verified_zero_outcomes(d)
 
     g = d.loc[d.actual.notna()].copy()
     g["vegas_line"] = G.num(g.vegas_line)
@@ -132,7 +143,7 @@ def report(g: pd.DataFrame, season: int, weeks: list[int]) -> None:
     print("one bet per player-market: consensus selects side, compatible captured quote grades it; anytime_td not graded")
     print(bar)
     print(f"graded rows: {len(g)}   pushes: {int(g.bet_result.eq('PUSH').sum())}   "
-          f"verified-zero outcomes: {int(g.actual_source.eq('roster_confirmed_zero').sum())}")
+          f"verified-zero outcomes: {int(g.actual_source.eq('roster_confirmed_verified_zero').sum())}")
     print("\nmBias / vBias are signed (projection - actual). Negative means the")
     print("number was too low. closer = share of bets where the model's absolute")
     print("error beat the line's.")
