@@ -18,6 +18,8 @@ on:
       - 'scripts/operations/backtest_full_report_v1.py'
       - 'data/market_track_record/graded/2026_wk01_wk02_graded.csv'
       - 'docs/production/BACKTEST_2026_WEEKS_1_2_FINDINGS.md'
+      - 'scripts/operations/verify_market_board_origin_v1.py'
+      - 'data/market_track_record/ORIGIN_PROVENANCE_V1.json'
 
 permissions:
   contents: read
@@ -55,6 +57,12 @@ jobs:
               assert len(d) > 0, f'{p} is empty'
               print(f'week {week} committed board: {len(d)} rows, {d["market"].nunique()} markets')
           EOF
+
+      - name: Verify frozen origin/content provenance
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/verify_market_board_origin_v1.py
 
       - name: Grade both weeks against final nflverse actuals
         run: |
