@@ -27,13 +27,12 @@ def test_american_profit_positive_and_negative_odds():
     assert abs(american_profit(-110) - (100.0 / 110.0)) < 1e-9
 
 
-def test_edge_bucket_uses_fractional_probability_units():
-    assert edge_bucket(-0.01) == "<=0"
-    assert edge_bucket(0.01) == "0-2"
-    assert edge_bucket(0.03) == "2-5"
-    assert edge_bucket(0.075) == "5-10"
-    assert edge_bucket(0.15) == "10-20"
-    assert edge_bucket(0.25) == "20+"
+def test_edge_bucket_uses_native_stat_units():
+    assert edge_bucket(1.0) == "0-2"
+    assert edge_bucket(3.0) == "2-5"
+    assert edge_bucket(7.5) == "5-10"
+    assert edge_bucket(15.0) == "10-20"
+    assert edge_bucket(25.0) == "20+"
 
 
 def _quote_rows(
