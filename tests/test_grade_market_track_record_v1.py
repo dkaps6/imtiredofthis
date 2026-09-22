@@ -191,6 +191,59 @@ def test_select_model_bet_abstains_when_no_real_quote_matches_consensus_side():
     assert got.empty
 
 
+def _equidistant_compatible_board(proj: float):
+    rows = []
+    # bookA deliberately owns the higher line. Canonical-book selection must
+    # choose bookA for both OVER and UNDER examples rather than favoring a
+    # lower/higher line according to side.
+    for book, line, odds in (
+        ("bookA", 38.5, -105.0),
+        ("bookB", 37.5, -130.0),
+    ):
+        for side in ("OVER", "UNDER"):
+            rows.append({
+                "season": 2026, "week": 1, "event_id": "evt3", "book": book,
+                "player": "Tie Example", "player_clean_key": "tieexample",
+                "team": "IND", "market": "rec_yards", "side": side,
+                "vegas_line": line, "vegas_odds": odds, "model_proj": proj,
+            })
+    return pd.DataFrame(rows)
+
+
+def test_equidistant_quotes_use_canonical_book_not_line_direction_or_price():
+    under = select_model_bet(_equidistant_compatible_board(36.0)).iloc[0]
+    over = select_model_bet(_equidistant_compatible_board(40.0)).iloc[0]
+
+    assert under["side"] == "UNDER"
+    assert over["side"] == "OVER"
+    assert under["book"] == over["book"] == "bookA"
+    assert float(under["vegas_line"]) == float(over["vegas_line"]) == 38.5
+    # bookB has the worse price, proving cross-book price is not a selector.
+    assert float(under["vegas_odds"]) == float(over["vegas_odds"]) == -105.0
+
+
+def test_duplicate_same_book_line_uses_least_favorable_captured_price():
+    board = _equidistant_compatible_board(36.0)
+    extra = board.loc[
+        (board["book"] == "bookA") & (board["side"] == "UNDER")
+    ].copy()
+    extra["vegas_odds"] = -125.0
+    board = pd.concat([board, extra], ignore_index=True)
+
+    got = select_model_bet(board)
+    assert len(got) == 1
+    assert got.iloc[0]["book"] == "bookA"
+    assert float(got.iloc[0]["vegas_line"]) == 38.5
+    assert float(got.iloc[0]["vegas_odds"]) == -125.0
+
+
+def test_same_canonical_book_two_equidistant_lines_fails_closed():
+    board = _equidistant_compatible_board(36.0)
+    board["book"] = "bookA"
+    got = select_model_bet(board)
+    assert got.empty
+
+
 def test_select_model_bet_still_collapses_a_single_book_pair():
     board = _multi_book_board()
     board = board.loc[board["book"].eq("bookA")].reset_index(drop=True)
