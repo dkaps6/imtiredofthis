@@ -380,7 +380,10 @@ def grade(season: int, weeks: list[int], detail_out: Path | None = None) -> dict
     graded["model_proj"] = num(graded["model_proj"])
     graded["model_error"] = graded["model_proj"] - graded["actual"]
     graded["vegas_error"] = graded["vegas_line"] - graded["actual"]
-    graded["model_closer_than_vegas"] = graded["model_error"].abs() < graded["vegas_error"].abs()
+    closer = graded["model_error"].abs() < graded["vegas_error"].abs()
+    graded["model_closer_than_vegas"] = closer.where(
+        graded["settlement_status"].eq("SETTLED")
+    )
     graded["actual_side"] = [
         outcome_side(a, l) if pd.notna(a) else "VOID"
         for a, l in zip(graded["actual"], graded["vegas_line"])
