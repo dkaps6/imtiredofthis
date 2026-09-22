@@ -1,0 +1,37 @@
+{
+  "version": "MARKET_BOARD_ORIGIN_PROVENANCE_V1",
+  "note": "Frozen origin/content evidence for the real 2026 Week-1 and Week-2 paid live boards. Sportsbook data remains downstream-only.",
+  "weeks": {
+    "1": {
+      "board_path": "data/market_track_record/boards/2026_wk01.csv",
+      "rows": 3048,
+      "content_columns": 77,
+      "canonical_content_sha256": "b830655c127c089cf1980f1af230444bfde11f8ad27c77b0051bcfd7c123ef82",
+      "source_run_id": "34650067599",
+      "source_git_sha": "be061eaf23372f080db3911d3b4919120c744c53",
+      "origin_artifact_id": "10283817522",
+      "origin_artifact_name": "run_34650067599",
+      "origin_artifact_sha256": "a70c90023632059476cc688070fb21ad63b9ebd14aa4db102844b9e342188359",
+      "origin_artifact_expired": true,
+      "recovery_replay_run_id": "34910010508",
+      "recovery_replay_source_run_id": "34650067599",
+      "recovery_artifact_run_id": "35520068364",
+      "recovery_artifact_id": "10607998417",
+      "origin_evidence": "Origin artifact later expired. No-paid replay run 34910010508 logs FULL_SLATE_SOURCE_RUN_ID=34650067599 and downloaded artifact run_34650067599; surviving Week-1 board copy was preserved in artifact 10607998417."
+    },
+    "2": {
+      "board_path": "data/market_track_record/boards/2026_wk02.csv",
+      "rows": 3178,
+      "content_columns": 66,
+      "canonical_content_sha256": "d461ef415e86d6b5a986bd39893f2a6e40d3d07852cf419bee11ba0afc1793d2",
+      "source_run_id": "35282021679",
+      "source_git_sha": "c6ec55be70d6e05bbd1dbae83d7d5c86ac8aa00a",
+      "origin_artifact_id": "10523345092",
+      "origin_artifact_name": "run_35282021679",
+      "origin_artifact_sha256": "6024ed21d7032e6e6440145277d9d4b74e98f319ef286962bac2a786a8d28e3c",
+      "priced_board_raw_sha256": "1f38c995011a54fddaa73457c4db0fdb746ee2be027c735ee25d842f8160b40c",
+      "uploaded_workbook_sha256": "962ef8dc048783bd90a7441652d910180e05b1b96a9608f0203607c6668b189c",
+      "origin_evidence": "Origin Full Slate run 35282021679 failed in pricing step 31 after props_priced_clean.csv existed; final-board quarantine step 32 was skipped, while workbook build and artifact upload succeeded. The uploaded workbook itself contains Carson Wentz in Best Snapshot Edges, Bet Evidence V0 and Master Betting Board, matching the 12 Wentz rows in the origin artifact's props_priced_clean.csv."
+    }
+  }
+}
