@@ -19,8 +19,12 @@ permissions:
 
 env:
   BACKTEST_SEASON: '2026'
-  WEEK1_RUN_ID: '34910010508'
-  WEEK1_ARTIFACT: offline_replay_34910010508
+  # The original Week 1 priced-board artifact (run 34910010508) EXPIRED on
+  # 2026-09-21T23:44Z. The only surviving copy of that board is the archived
+  # ledger inside the Week 1 slice run's artifact, so Week 1 is restored from
+  # the ledger rather than re-archived from a priced board.
+  WEEK1_LEDGER_RUN_ID: '35520068364'
+  WEEK1_LEDGER_ARTIFACT: week1_graded_slices_35520068364
   WEEK2_RUN_ID: '35282021679'
   WEEK2_ARTIFACT: run_35282021679
 
@@ -42,23 +46,35 @@ jobs:
           pip install -r requirements.txt
           pip install nflreadpy
 
-      - name: Archive both preserved priced boards into the ledger
+      - name: Restore the Week 1 board from the surviving archived ledger
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/wk1 && mkdir -p /tmp/wk1
+          gh run download "${WEEK1_LEDGER_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --name "${WEEK1_LEDGER_ARTIFACT}" --dir /tmp/wk1
+          echo "--- artifact contents ---"
+          find /tmp/wk1 -type f | sed 's#^#  #'
+          SRC=$(find /tmp/wk1 -type f -name '2026_wk01.csv' | head -1)
+          if [ -z "$SRC" ]; then
+            echo "::error::no 2026_wk01.csv in ${WEEK1_LEDGER_ARTIFACT};" \
+                 "the Week 1 board has no surviving copy in this artifact"
+            exit 1
+          fi
+          mkdir -p data/market_track_record/boards
+          cp "$SRC" data/market_track_record/boards/2026_wk01.csv
+          python -c "import pandas as pd; d=pd.read_csv('data/market_track_record/boards/2026_wk01.csv'); print(f'week 1 ledger restored: {len(d)} rows, {d[\"market\"].nunique()} markets')"
+
+      - name: Archive the Week 2 priced board into the ledger
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
-          mkdir -p outputs
-          for SPEC in "1:${WEEK1_RUN_ID}:${WEEK1_ARTIFACT}" "2:${WEEK2_RUN_ID}:${WEEK2_ARTIFACT}"; do
-            WK="${SPEC%%:*}"; REST="${SPEC#*:}"; RUN="${REST%%:*}"; ART="${REST#*:}"
-            echo "::group::week ${WK} <- run ${RUN} artifact ${ART}"
-            rm -rf "/tmp/board_${WK}" && mkdir -p "/tmp/board_${WK}"
-            gh run download "${RUN}" --repo "${GITHUB_REPOSITORY}" \
-              --name "${ART}" --dir "/tmp/board_${WK}"
-            test -s "/tmp/board_${WK}/outputs/props_priced_clean.csv"
-            python scripts/operations/archive_priced_board_v1.py \
-              --priced-file "/tmp/board_${WK}/outputs/props_priced_clean.csv" \
-              --season "${BACKTEST_SEASON}" --week "${WK}" --run-id "${RUN}"
-            echo "::endgroup::"
-          done
+          rm -rf /tmp/wk2 && mkdir -p /tmp/wk2
+          gh run download "${WEEK2_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --name "${WEEK2_ARTIFACT}" --dir /tmp/wk2
+          test -s /tmp/wk2/outputs/props_priced_clean.csv
+          python scripts/operations/archive_priced_board_v1.py \
+            --priced-file /tmp/wk2/outputs/props_priced_clean.csv \
+            --season "${BACKTEST_SEASON}" --week 2 --run-id "${WEEK2_RUN_ID}"
 
       - name: Grade both weeks against final nflverse actuals
         run: |
