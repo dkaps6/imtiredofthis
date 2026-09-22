@@ -82,12 +82,12 @@ def test_full_roster_projection_reconstruction_uses_football_sources_and_exact_p
     universe = pd.DataFrame([
         {
             "season": 2026, "week": 2, "event_id": game,
-            "player": "Alpha Back", "player_clean_key": "alphaback",
+            "player": "Alpha Back III", "player_clean_key": "alphaback",
             "team": "ARI", "opponent": "SEA", "position": "RB",
         },
         {
             "season": 2026, "week": 2, "event_id": game,
-            "player": "Beta Back III", "player_clean_key": "betaback",
+            "player": "Beta Back", "player_clean_key": "betaback",
             "team": "SEA", "opponent": "ARI", "position": "FB",
         },
     ])
@@ -109,12 +109,14 @@ def test_full_roster_projection_reconstruction_uses_football_sources_and_exact_p
         "sportsbook_inputs_used": False,
     })
 
+    # Diagnostics retain their own football-only identity. Alpha preserves III,
+    # while Beta has no suffix.
     ml = universe[["season", "week", "team", "player", "player_clean_key"]].copy()
-    ml.loc[ml["player"].eq("Beta Back III"), "player_clean_key"] = "betabackiii"
+    ml.loc[ml["player"].eq("Alpha Back III"), "player_clean_key"] = "alphabackiii"
     ml["ml_rush_yards"] = [30.0, 50.0]
     ml.to_csv(source / "data/model_ml_diagnostics.csv", index=False)
     state = universe[["season", "week", "team", "player", "player_clean_key"]].copy()
-    state.loc[state["player"].eq("Beta Back III"), "player_clean_key"] = "betabackiii"
+    state.loc[state["player"].eq("Alpha Back III"), "player_clean_key"] = "alphabackiii"
     state["state_rush_yards"] = [999.0, 999.0]
     state.to_csv(source / "data/model_state_diagnostics.csv", index=False)
 
@@ -131,25 +133,27 @@ def test_full_roster_projection_reconstruction_uses_football_sources_and_exact_p
     weights.to_csv(source / "data/model_ensemble_weights.csv", index=False)
 
     expected = {
-        key: RUSH_YARDS_MC_WEIGHT * value + RUSH_YARDS_ML_WEIGHT * ml_value
-        for key, value, ml_value in [
-            ("alphaback", 15.0, 30.0),
-            ("betaback", 40.0, 50.0),
-        ]
+        "alphaback": RUSH_YARDS_MC_WEIGHT * 15.0 + RUSH_YARDS_ML_WEIGHT * 30.0,
+        "betaback": RUSH_YARDS_MC_WEIGHT * 40.0 + RUSH_YARDS_ML_WEIGHT * 50.0,
     }
+
+    # Beta mimics the Week-2 downstream suffix mismatch: priced identity adds
+    # Jr., so its preserved priced path has no ML/State and falls back to MC.
     priced = pd.DataFrame([
         {
-            "source_market": "player_rush_yds", "player": "Alpha Back",
-            "player_clean_key": "alphaback", "team": "ARI",
+            "source_market": "player_rush_yds", "player": "Alpha Back III",
+            "player_clean_key": "alphabackiii", "team": "ARI",
             "simulation_iterations": 2, "mc_proj": 15.0,
+            "ml_proj": 30.0, "state_proj": 999.0,
             "ensemble_proj": expected["alphaback"], "model_proj": expected["alphaback"],
             "rb_synthesis_applied": 0,
         },
         {
-            "source_market": "player_rush_yds", "player": "Beta Back III",
-            "player_clean_key": "betabackiii", "team": "SEA",
+            "source_market": "player_rush_yds", "player": "Beta Back Jr.",
+            "player_clean_key": "betabackjr", "team": "SEA",
             "simulation_iterations": 2, "mc_proj": 40.0,
-            "ensemble_proj": expected["betaback"], "model_proj": expected["betaback"],
+            "ml_proj": np.nan, "state_proj": np.nan,
+            "ensemble_proj": 40.0, "model_proj": 40.0,
             "rb_synthesis_applied": 0,
         },
     ])
@@ -174,9 +178,12 @@ def test_full_roster_projection_reconstruction_uses_football_sources_and_exact_p
     )
     got = projection.set_index("player_clean_key")["projection_mean"].to_dict()
     assert got["alphaback"] == pytest.approx(expected["alphaback"])
+    # Football-only history keeps Beta's ML contribution even though the priced
+    # parity arm had a downstream identity miss and fell back to MC.
     assert got["betaback"] == pytest.approx(expected["betaback"])
     assert audit["sportsbook_inputs_used_for_projection"] == 0
     assert audit["priced_parity_rows"] == 2
+    assert audit["priced_component_identity_gap_rows"] == 1
     assert audit["max_abs_priced_mc_parity_gap"] <= 1e-12
     assert audit["max_abs_priced_model_parity_gap"] <= 1e-12
 
