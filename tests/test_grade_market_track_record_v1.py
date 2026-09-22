@@ -222,6 +222,18 @@ def test_equidistant_quotes_use_canonical_book_not_line_direction_or_price():
     assert float(under["vegas_odds"]) == float(over["vegas_odds"]) == -105.0
 
 
+def test_book_title_fallback_is_applied_per_quote():
+    board = _equidistant_compatible_board(36.0)
+    board["book_title"] = board["book"].map({"bookA": "Alpha Sports", "bookB": "Beta Sports"})
+    board.loc[board["book"].eq("bookA"), "book"] = ""
+    got = select_model_bet(board)
+    assert len(got) == 1
+    # Blank provider key must fall back to this row's book_title, not collapse
+    # to a generic missing-book bucket.
+    assert got.iloc[0]["book_title"] == "Alpha Sports"
+    assert float(got.iloc[0]["vegas_line"]) == 38.5
+
+
 def test_duplicate_same_book_line_uses_least_favorable_captured_price():
     board = _equidistant_compatible_board(36.0)
     extra = board.loc[
