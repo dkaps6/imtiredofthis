@@ -40,6 +40,11 @@ preserves the paid Week-2 replay exactly.
 
 ## Required gates
 
+- current-season continuation must fail closed unless the immediately completed
+  prior regular-season week is present in nflverse snap counts for every team
+  scheduled to play that week, with usable offense snap count / percentage
+  evidence; this gate is schedule-sized and therefore bye-aware rather than
+  hardcoded to 32 teams;
 - pure activation-boundary unit test;
 - 2025 target resolves legacy source;
 - 2026 W1/W2 resolve legacy source;
@@ -59,3 +64,21 @@ correctness/integrity defect.
 ## Disposition
 
 `WR_TE_2026_SNAP_SOURCE_CONTINUATION_PRODUCTION_PLAN_FROZEN`
+
+
+## Amendment 1 — post-review freshness gate
+
+Codex review on the first production head identified a real integrity gap: the
+loader originally proved only that the 2026 season existed in the snap payload.
+A delayed feed containing Week 1 but not completed Week 2 could therefore have
+activated Week-3 continuation on stale participation.
+
+The implementation now validates the immediately completed prior week against
+the authoritative regular-season schedule before current-season continuation
+is usable. Missing scheduled teams, unexpected teams, or missing offensive snap
+fields fail closed. Regression tests include a stale Week-1-only Week-3 feed,
+partial-team coverage, missing offensive fields, a complete Week-2 feed, and a
+bye-sized expected team set.
+
+No model coefficient, feature definition, activation date, or football
+hypothesis changed.
