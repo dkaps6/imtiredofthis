@@ -110,7 +110,7 @@ jobs:
         # artifacts expire after 7 days, so a board that is not committed is
         # unrecoverable a week later. This keeps a copy for 90 days even when
         # the commit above cannot run.
-        if: ${{ hashFiles('data/market_track_record/boards/**') != '' }}
+        if: ${{ always() && hashFiles('data/market_track_record/boards/**') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: market_track_record_ledger_${{ github.run_id }}
