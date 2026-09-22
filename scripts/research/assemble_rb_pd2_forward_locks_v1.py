@@ -21,6 +21,42 @@ from scripts.research.rb_pd2_forward_shadow_v1 import (
 LOCK_MANIFEST = "rb_pd2_forward_locks.jsonl"
 LOCK_ARRAYS = "rb_pd2_forward_lock_arrays.npz"
 LOCK_RECEIPT = "rb_pd2_forward_lock_receipt.json"
+# The local lock must be fully persisted with enough headroom for the immediate
+# GitHub artifact upload. This is an operational integrity guard only; it does
+# not alter the frozen RB-PD2 science.
+MIN_PREGAME_PERSISTENCE_BUFFER = pd.Timedelta(minutes=15)
+
+
+def _utc_now() -> pd.Timestamp:
+    return pd.Timestamp(datetime.now(timezone.utc))
+
+
+def _post_persistence_integrity_failures(
+    locked_rows: list[dict],
+    persisted_at_utc,
+) -> list[dict]:
+    """Reject a session unless its persisted files retain the upload buffer."""
+    persisted = pd.to_datetime(persisted_at_utc, utc=True, errors="raise")
+    failures: list[dict] = []
+    for row in locked_rows:
+        kickoff = pd.to_datetime(row.get("kickoff_utc"), utc=True, errors="coerce")
+        if pd.isna(kickoff):
+            failures.append({
+                "football_key": str(row.get("football_key") or row.get("player_clean_key") or ""),
+                "reason": "persisted lock has malformed/missing kickoff_utc",
+            })
+            continue
+        latest_safe = pd.Timestamp(kickoff) - MIN_PREGAME_PERSISTENCE_BUFFER
+        if pd.Timestamp(persisted) > latest_safe:
+            failures.append({
+                "football_key": str(row.get("football_key") or row.get("player_clean_key") or ""),
+                "reason": (
+                    "lock files were persisted without the required pre-kickoff upload buffer: "
+                    f"persisted_at={pd.Timestamp(persisted).isoformat()} "
+                    f"latest_safe={latest_safe.isoformat()} kickoff={pd.Timestamp(kickoff).isoformat()}"
+                ),
+            })
+    return failures
 
 
 def _read_json(path: Path) -> dict:
@@ -135,7 +171,7 @@ def assemble(
     lock_ts = (
         pd.to_datetime(lock_timestamp_utc, utc=True, errors="raise")
         if lock_timestamp_utc is not None
-        else pd.Timestamp(datetime.now(timezone.utc))
+        else _utc_now()
     )
 
     locked_rows: list[dict] = []
@@ -202,10 +238,30 @@ def assemble(
         arrays = {}
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(out_dir / LOCK_ARRAYS, **arrays)
-    with (out_dir / LOCK_MANIFEST).open("w", encoding="utf-8") as fh:
-        for row in locked_rows:
-            fh.write(_strict_json(row) + "\n")
+
+    def _persist_lock_files() -> None:
+        np.savez_compressed(out_dir / LOCK_ARRAYS, **arrays)
+        with (out_dir / LOCK_MANIFEST).open("w", encoding="utf-8") as fh:
+            for row in locked_rows:
+                fh.write(_strict_json(row) + "\n")
+
+    # Persist first, then timestamp/check the persisted state. The earlier
+    # per-row lock timestamp is only an assembly-time precheck; session-level
+    # validity is not granted until these files exist and retain the frozen
+    # 15-minute pre-kickoff upload buffer.
+    _persist_lock_files()
+    artifact_persisted_at = _utc_now()
+    if valid:
+        persistence_failures = _post_persistence_integrity_failures(
+            locked_rows, artifact_persisted_at
+        )
+        if persistence_failures:
+            integrity_failures.extend(persistence_failures)
+            valid = False
+            locked_rows = []
+            arrays = {}
+            _persist_lock_files()
+            artifact_persisted_at = _utc_now()
 
     result = {
         "version": "RB_PD2_FORWARD_LOCK_SESSION_V1",
@@ -219,7 +275,12 @@ def assemble(
         "prospective_start_utc": pd.to_datetime(
             prospective_start_utc, utc=True, errors="raise"
         ).isoformat(),
-        "lock_timestamp_utc": pd.Timestamp(lock_ts).isoformat(),
+        "lock_timestamp_utc": pd.Timestamp(artifact_persisted_at).isoformat(),
+        "assembly_validation_timestamp_utc": pd.Timestamp(lock_ts).isoformat(),
+        "artifact_persisted_at_utc": pd.Timestamp(artifact_persisted_at).isoformat(),
+        "minimum_pregame_persistence_buffer_seconds": int(
+            MIN_PREGAME_PERSISTENCE_BUFFER.total_seconds()
+        ),
         "capture_rows": len(records),
         "locked_rows": len(locked_rows),
         "population_exclusions": population_exclusions,
