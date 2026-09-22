@@ -7,8 +7,9 @@ Reproduce: `PYTHONPATH=. python scripts/operations/backtest_full_report_v1.py --
 One bet per player-market. The median consensus line selects the intended
 model side; W/L, Vegas error and units are then attached to the nearest
 captured real-book quote whose own line agrees with that side. Equidistant
-cross-book ties are resolved by a canonical bookmaker key only, never by line
-direction or price. Duplicate rows at one canonical book+line use the least
+cross-book ties use the lexicographically smallest normalized provider
+`book` key (`book_title` fallback), never line direction or price. Duplicate
+rows at one canonical book+line use the least
 favorable captured American price; an unresolved same-book/equidistant-line
 ambiguity fails closed. The rule is outcome-independent and row-order
 invariant. On Weeks 1–2 it yields 866 identity-resolved bets and no
