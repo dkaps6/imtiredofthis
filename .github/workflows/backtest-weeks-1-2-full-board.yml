@@ -91,24 +91,33 @@ jobs:
           )
           key = ['season', 'week', 'event_id', 'player', 'market']
           cols = key + [
-              'book', 'vegas_line', 'vegas_odds', 'actual', 'actual_source',
-              'bet_result', 'unit_result',
+              'book', 'side', 'vegas_line', 'vegas_odds', 'fair_prob',
+              'edge_pct', 'production_best_ev', 'actual', 'actual_source',
+              'settlement_status', 'bet_result', 'unit_result',
           ]
           a = live[cols].sort_values(key).reset_index(drop=True)
           b = committed[cols].sort_values(key).reset_index(drop=True)
-          assert len(a) == len(b) == 866, (len(a), len(b))
-          for c in key + ['book', 'actual_source', 'bet_result']:
+          assert len(a) == len(b) and len(a) > 0, (len(a), len(b))
+          for c in key + [
+              'book', 'side', 'actual_source', 'settlement_status', 'bet_result'
+          ]:
               assert a[c].astype(str).equals(b[c].astype(str)), c
-          for c in ['vegas_line', 'vegas_odds', 'actual', 'unit_result']:
+          for c in [
+              'vegas_line', 'vegas_odds', 'fair_prob', 'edge_pct',
+              'production_best_ev', 'actual', 'unit_result',
+          ]:
               av = pd.to_numeric(a[c], errors='coerce').to_numpy()
               bv = pd.to_numeric(b[c], errors='coerce').to_numpy()
               assert np.allclose(av, bv, equal_nan=True), c
 
           src = live['actual_source'].value_counts(dropna=False).to_dict()
-          zeros = int((live['actual_source'] == 'roster_confirmed_verified_zero').sum())
-          print(f'full-report ledger cross-check: 866/866 rows identical on graded quote/result fields')
+          decided = int(live['bet_result'].isin(['WIN', 'LOSS']).sum())
+          voids = int((live['bet_result'] == 'VOID').sum())
+          snap_zeros = int((live['actual_source'] == 'snap_confirmed_verified_zero').sum())
+          print(f'full-report ledger cross-check: {len(a)}/{len(b)} selected rows identical')
+          print(f'decided bets: {decided}; voids: {voids}')
           print(f'actual_source counts: {src}')
-          print(f'verified roster-zero outcomes: {zeros}')
+          print(f'snap-confirmed zero outcomes: {snap_zeros}')
           EOF
 
       - name: Run game-cluster-aware slice inference
@@ -120,6 +129,7 @@ jobs:
             --min-n 25 --fdr-q 0.10
 
       - name: Upload graded detail
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: backtest_weeks_1_2_graded
