@@ -105,6 +105,63 @@ to read them** — use `git show origin/research-current-state:<path>`.
 
 ---
 
+
+## ACTIVE CHECKPOINT — 2026-09-22 — CURRENT-SEASON STATE + LIVE SCOREBOARD
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-09-22_CURRENT_SEASON_STATE_AND_LIVE_SCOREBOARD_CURRENT.md`
+
+This is the current operating checkpoint and supersedes older active-priority
+language below where the two conflict.
+
+### Current state in one screen
+
+- PR #625 is **MERGED/CLOSED**. Do not reopen it. RB PD2 is prospective
+  distribution calibration, not an RB mean fix.
+- Current-Season State Persistence V1 is **COMPLETE**:
+  - run `35741758765` SUCCESS;
+  - artifact `10699781744`;
+  - 41,745 rows;
+  - 9/10 production-aligned metrics improved on 2025 replication;
+  - strongest live signals are RB rush share, WR target share and TE target share;
+  - RB YPC is the key non-replicating early-state metric.
+- PR #627 is **MERGED** at `5ecd4da5a7ba7ab314f11ae9e8cff9ef7f6308fc`.
+  WR-R15/TE-R5P may consume 2026 strict-prior snaps beginning Week 3 only after
+  a schedule-aware, bye-aware immediately-prior-week freshness gate passes.
+  No model refit occurred.
+- Claude completed the Week-1/Week-2 full-board backtest in PR #626 and preserved
+  the raw boards + 866-row graded log. Canonical run `35740684289`, artifact
+  `10699408992`.
+- **PR #626 is NOT merge-ready.** Four Codex review threads remain, including a
+  P1 grading-line/side inconsistency that can change exact W/L/units. Repair and
+  regenerate/reconfirm the scorecard before canonizing the current 438-428
+  headline.
+- Claude's major diagnosis is still important: probability overconfidence /
+  too-narrow simulated distributions, TE weakness, a rush+receiving-yard
+  construction concern, systemic low bias, and encouraging early QB pass-yards
+  performance.
+- Next model-improvement selection should use the intersection of:
+  **live weakness + historical state persistence + missing/newly restored
+  pregame state + deployable data + no closed-family retest**.
+- Likely first high-value diagnostic after #626 repair: TE receiving-yards
+  entitlement-vs-efficiency after Week-3 current-snap activation.
+- RB injury-created vacancy / teammate opportunity propagation remains a strong
+  sanctioned parallel mean-information lead.
+- No paid OddsAPI pull without explicit user approval.
+
+### Start-of-chat read order
+
+1. `AGENTS.md`
+2. `CURRENT_NFL_RESEARCH_HANDOFF.md`
+3. `docs/handoffs/NFL_HANDOFF_2026-09-22_CURRENT_SEASON_STATE_AND_LIVE_SCOREBOARD_CURRENT.md`
+4. latest Issue #535 comments after `5779220450`
+5. live PR #626 head/review threads/checks
+
+Verify current GitHub state before mutation. GitHub is canonical over chat memory.
+
+---
+
 ## ACTIVE CHECKPOINT — 2026-09-22 — RB PD2 FORWARD LOCK CLOSED; PR #625 MERGED
 
 **Current detailed handoff:**
