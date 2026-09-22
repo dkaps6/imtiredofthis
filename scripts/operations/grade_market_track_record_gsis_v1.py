@@ -62,7 +62,9 @@ def _to_pandas(obj):
 
 
 def _suffix_strip(key: str) -> str:
-    for suf in ("jr", "sr", "ii", "iii", "iv", "v"):
+    # Longest-first is required: a III key also ends with II, and an IV key
+    # also ends with V. Checking the shorter token first corrupts the base key.
+    for suf in ("iii", "jr", "sr", "ii", "iv", "v"):
         if key.endswith(suf) and len(key) > len(suf):
             return key[: -len(suf)]
     return key

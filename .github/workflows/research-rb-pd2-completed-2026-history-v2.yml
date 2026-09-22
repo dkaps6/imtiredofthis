@@ -1,0 +1,238 @@
+name: RB PD2 Completed 2026 History Advance V2
+
+on:
+  workflow_dispatch:
+    inputs:
+      completed_week:
+        description: "Completed 2026 regular-season week to certify and append"
+        required: true
+        default: "2"
+      source_run_id:
+        description: "Pregame Full Slate workflow run ID"
+        required: true
+        default: "35282021679"
+      source_artifact_name:
+        description: "Pregame Full Slate artifact name"
+        required: true
+        default: "run_35282021679"
+      source_artifact_id:
+        description: "Pinned pregame Full Slate artifact ID"
+        required: true
+        default: "10523345092"
+      source_artifact_digest:
+        description: "Pinned pregame Full Slate artifact sha256 digest"
+        required: true
+        default: "sha256:6024ed21d7032e6e6440145277d9d4b74e98f319ef286962bac2a786a8d28e3c"
+      prior_history_run_id:
+        description: "Workflow run containing cumulative certified history through completed_week-1"
+        required: true
+        default: "35619889214"
+      prior_history_artifact_name:
+        description: "Prior cumulative certified-history artifact name"
+        required: true
+        default: "rb-pd2-completed-2026-week1-history-v1"
+      prior_history_artifact_id:
+        description: "Pinned prior-history artifact ID"
+        required: true
+        default: "10649235022"
+      prior_history_artifact_digest:
+        description: "Pinned prior-history artifact sha256 digest"
+        required: true
+        default: "sha256:99541ebc07e4fec1214bd3d42f5d5d00bbff0ea20c671cdc288147aa46cfa079"
+  push:
+    branches:
+      - research-rb-pd2-forward-shadow-confirmation-v1
+    paths:
+      - "scripts/research/build_rb_pd2_completed_2026_history_v2.py"
+      - "tests/test_rb_pd2_completed_2026_history_v2.py"
+      - ".github/workflows/research-rb-pd2-completed-2026-history-v2.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml pyarrow
+      - name: Run completed-history advance tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest -q tests/test_rb_pd2_completed_2026_history_v2.py
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+  certify:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      COMPLETED_WEEK: ${{ inputs.completed_week }}
+      SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+      SOURCE_ARTIFACT_NAME: ${{ inputs.source_artifact_name }}
+      SOURCE_ARTIFACT_ID: ${{ inputs.source_artifact_id }}
+      SOURCE_ARTIFACT_DIGEST: ${{ inputs.source_artifact_digest }}
+      PRIOR_HISTORY_RUN_ID: ${{ inputs.prior_history_run_id }}
+      PRIOR_HISTORY_ARTIFACT_NAME: ${{ inputs.prior_history_artifact_name }}
+      PRIOR_HISTORY_ARTIFACT_ID: ${{ inputs.prior_history_artifact_id }}
+      PRIOR_HISTORY_ARTIFACT_DIGEST: ${{ inputs.prior_history_artifact_digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml pyarrow tabulate
+
+      - name: Verify pinned source and prior-history artifacts
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/rb_pd2_source /tmp/rb_pd2_prior /tmp/rb_pd2_advance
+          mkdir -p /tmp/rb_pd2_source /tmp/rb_pd2_prior /tmp/rb_pd2_advance
+
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}" > /tmp/source_run.json
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts?per_page=100" > /tmp/source_artifacts.json
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${PRIOR_HISTORY_RUN_ID}/artifacts?per_page=100" > /tmp/prior_artifacts.json
+
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          def select(src, want_id, want_name, want_digest, out):
+              meta=json.loads(Path(src).read_text())
+              matches=[a for a in meta.get('artifacts',[]) if int(a.get('id',-1))==int(want_id)]
+              if len(matches)!=1:
+                  raise SystemExit(f'FATAL: pinned artifact id not unique/present id={want_id} found={len(matches)}')
+              a=matches[0]
+              if a.get('name') != want_name:
+                  raise SystemExit(f"FATAL: pinned artifact name drift {a.get('name')!r} != {want_name!r}")
+              if a.get('digest') != want_digest:
+                  raise SystemExit(f"FATAL: pinned artifact digest drift {a.get('digest')!r} != {want_digest!r}")
+              if bool(a.get('expired')):
+                  raise SystemExit('FATAL: pinned artifact is expired')
+              Path(out).write_text(json.dumps(a, indent=2, sort_keys=True))
+              print({'verified_artifact_id':int(want_id),'name':want_name,'digest':want_digest})
+
+          select('/tmp/source_artifacts.json', os.environ['SOURCE_ARTIFACT_ID'],
+                 os.environ['SOURCE_ARTIFACT_NAME'], os.environ['SOURCE_ARTIFACT_DIGEST'],
+                 '/tmp/source_artifact.json')
+          select('/tmp/prior_artifacts.json', os.environ['PRIOR_HISTORY_ARTIFACT_ID'],
+                 os.environ['PRIOR_HISTORY_ARTIFACT_NAME'], os.environ['PRIOR_HISTORY_ARTIFACT_DIGEST'],
+                 '/tmp/prior_artifact.json')
+          PY
+
+      - name: Prove historical source code parity for reconstruction seam
+        run: |
+          set -euo pipefail
+          SOURCE_SHA="$(python - <<'PY'
+          import json
+          print(json.load(open('/tmp/source_run.json'))['head_sha'])
+          PY
+          )"
+          git cat-file -e "${SOURCE_SHA}^{commit}"
+          git diff --exit-code "${SOURCE_SHA}" -- \
+            scripts/simulation_v2.py \
+            scripts/simulation_explicit_entitlement_v1.py \
+            scripts/modeling/ensemble_v2.py
+          echo "Historical reconstruction code parity PASS source_sha=${SOURCE_SHA}"
+
+      - name: Download immutable pregame source artifact
+        run: |
+          set -euo pipefail
+          gh run download "${SOURCE_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name "${SOURCE_ARTIFACT_NAME}" \
+            --dir /tmp/rb_pd2_source
+          test -s /tmp/rb_pd2_source/data/football_simulation_universe.csv
+          test -s /tmp/rb_pd2_source/data/target_entitlement_v1_trace.csv
+          test -s /tmp/rb_pd2_source/data/model_ml_diagnostics.csv
+          test -s /tmp/rb_pd2_source/data/model_state_diagnostics.csv
+          test -s /tmp/rb_pd2_source/data/model_ensemble_weights.csv
+          test -s /tmp/rb_pd2_source/outputs/props_priced_clean.csv
+
+      - name: Restore pinned prior cumulative certified history
+        run: |
+          set -euo pipefail
+          gh run download "${PRIOR_HISTORY_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name "${PRIOR_HISTORY_ARTIFACT_NAME}" \
+            --dir /tmp/rb_pd2_prior
+          if [ -s /tmp/rb_pd2_prior/rb_pd2_completed_2026_history.csv ]; then
+            cp /tmp/rb_pd2_prior/rb_pd2_completed_2026_history.csv /tmp/prior_certified_history.csv
+          elif [ -s /tmp/rb_pd2_prior/rb_pd2_completed_2026_week1_history.csv ]; then
+            cp /tmp/rb_pd2_prior/rb_pd2_completed_2026_week1_history.csv /tmp/prior_certified_history.csv
+          else
+            echo "FATAL: prior certified history artifact contains no supported cumulative history file"
+            exit 2
+          fi
+          test -s /tmp/prior_certified_history.csv
+
+      - name: Certify and append completed week
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python scripts/research/build_rb_pd2_completed_2026_history_v2.py \
+            --source-root /tmp/rb_pd2_source \
+            --source-run-metadata /tmp/source_run.json \
+            --source-artifact-metadata /tmp/source_artifact.json \
+            --prior-certified-history /tmp/prior_certified_history.csv \
+            --completed-week "${COMPLETED_WEEK}" \
+            --out-dir /tmp/rb_pd2_advance
+
+      - name: Assert cumulative history contract
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          import pandas as pd
+          from pathlib import Path
+          root=Path('/tmp/rb_pd2_advance')
+          hist=pd.read_csv(root/'rb_pd2_completed_2026_history.csv',low_memory=False)
+          audit=json.loads((root/'rb_pd2_completed_2026_history_audit.json').read_text())
+          week=int(os.environ['COMPLETED_WEEK'])
+          weeks=sorted(pd.to_numeric(hist['week'],errors='coerce').dropna().astype(int).unique().tolist())
+          assert weeks == list(range(1, week+1)), (weeks, week)
+          assert audit['disposition']=='COMPLETED_2026_HISTORY_CERTIFIED'
+          assert int(audit['completed_2026_through_week'])==week
+          assert audit['projection_frame_frozen_before_completion_check'] is True
+          assert audit['outcomes_loaded_after_projection_freeze'] is True
+          assert int(audit['sportsbook_inputs_used_for_projection'])==0
+          assert int(audit['prospective_confirmation_observations_created'])==0
+          print({'completed_through_week':week,'rows':len(hist),'weeks':weeks})
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload cumulative certified completed history
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-pd2-completed-2026-history-v2-week${{ inputs.completed_week }}
+          path: |
+            /tmp/rb_pd2_advance/rb_pd2_completed_2026_history.csv
+            /tmp/rb_pd2_advance/rb_pd2_completed_2026_week${{ inputs.completed_week }}_history.csv
+            /tmp/rb_pd2_advance/rb_pd2_completed_2026_history_audit.json
+          if-no-files-found: error
+          retention-days: 90

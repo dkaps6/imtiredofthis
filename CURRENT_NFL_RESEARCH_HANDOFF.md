@@ -105,6 +105,140 @@ to read them** — use `git show origin/research-current-state:<path>`.
 
 ---
 
+## ACTIVE CHECKPOINT — 2026-09-22 — RB PD2 FORWARD LOCK CLOSED; PR #625 READY TO MERGE
+
+**Current detailed handoff:**
+
+`docs/handoffs/NFL_HANDOFF_2026-09-21_RB_PD2_FORWARD_LOCK_AND_MODEL_IMPROVEMENT_CURRENT.md`
+
+Read that file for the implementation lineage, but this root checkpoint supersedes
+its stale pre-Week-2 status.
+
+### Final validated PR #625 state
+
+Production `main` before merge:
+
+`76e5e0452a88018b95ebc212fb0d1b21a2ca90a3`
+
+Active branch:
+
+`research-rb-pd2-forward-shadow-confirmation-v1`
+
+Final **code-bearing** head before this handoff-only documentation update:
+
+`c58860b0dee02d18a93e870d3541e8212987ae31`
+
+PR:
+
+`#625 — WIP: RB PD2 forward-shadow implementation validation`
+
+The previously open Week-2 history-freshness blocker is **closed**. The real
+Week-2 outcomes were certified and the forward-history state was rebuilt and
+re-pinned before any Week-3 lock can count.
+
+### Final Week-2 certification evidence
+
+Completed-history certification:
+
+- run `35732450688` = **SUCCESS**
+- artifact `10695992072`
+- artifact name `rb-pd2-completed-2026-history-v2-week`
+- digest `sha256:a84aa005dfdd35d16f891c40c1cafbad5c2779aca3dad16214624d0216e052bb`
+- 108 / 108 Week-2 RB/FB football-projection rows received verified outcomes
+- 93 rows from the nflverse weekly stats table
+- 15 roster-confirmed verified zeroes
+- 0 exclusions
+- cumulative certified history = 215 rows across Weeks `[1,2]`
+- sportsbook inputs used for football projection = 0
+
+The final implementation uses the authoritative nflverse weekly player-stats
+table plus weekly roster identity/verified-zero evidence only. A temporary PBP
+fallback explored during debugging was removed before the final certification.
+The shared GSIS suffix resolver was corrected to handle `III` / `II` / `IV`
+longest-token-first, which allowed suffix variants such as Kenneth Walker III
+to resolve through the normal stats path.
+
+### Final forward-history evidence
+
+Forward-history rebuild:
+
+- run `35732782075` = **SUCCESS**
+- artifact `10696312599`
+- artifact name `rb-pd2-forward-history-v1`
+- digest `sha256:1205ea152b4702e19d12379c79e29ff7fc20fd2a632a61f7c519980f64b648fb`
+- 1,608 state rows
+- 169 players
+- 889 scoreable rows
+- manifest `completed_2026_through_week = 2`
+- manifest completed weeks = `[1,2]`
+- zero prospective outcomes used
+
+Full Slate now pins that exact immutable Week1+2 forward-history artifact.
+
+### Prospective lock-integrity closure
+
+The second late P1 is also closed. Lock assembly now:
+
+1. writes the NPZ/JSONL lock files first;
+2. records the actual persisted timestamp;
+3. requires every persisted lock to retain a frozen **15-minute pre-kickoff
+   upload buffer**;
+4. clears the session lock and fails closed if that post-persistence gate fails.
+
+Regression coverage proves that exactly 15 minutes before kickoff passes and
+1 ms later fails.
+
+### Exact-head validation at the final code-bearing head
+
+At `c58860b0dee02d18a93e870d3541e8212987ae31`:
+
+- Repo CI run `35733488365` = **SUCCESS**
+- preserved paid Full Slate replay run `35733488509` = **SUCCESS**
+- PR was clean/mergeable
+- both prior P1 review threads were resolved
+- no paid/live OddsAPI pull was triggered
+
+A final Codex exact-head review found only one P2 documentation defect: this
+root handoff still described the now-completed Week-2 blocker. This section is
+the fix for that documentation defect; it does not change model science or the
+validated runtime behavior above.
+
+### What PD2 is — and what it is not
+
+PD2 is a mean-neutral **distribution-calibration** mechanism.
+
+Historical qualification improved pooled CRPS by +1.218% and high-difficulty
+CRPS by +2.624%, with better coverage/tail calibration, but **point MAE is
+unchanged by design**.
+
+It does not fix RB carries, YPC, or rushing-yard mean accuracy.
+
+The user explicitly wants this implementation finished, then wants the project
+back on actual model-metric improvement.
+
+### Authorized next step after PR #625 merge
+
+1. verify the merge commit on `main` and preserve the final PR/artifact lineage;
+2. update Issue #535 / the canonical paper trail with the merge SHA and the
+   final Week-2 certification + forward-history artifacts;
+3. return immediately to actual model performance / new-information research;
+4. use the real Week-2 slate to build the authority-exact position/market
+   scoreboard (including the downstream deduplicated betting hit-rate view);
+5. prioritize sanctioned new pregame information rather than reopening exposed
+   retrospective RB router variants.
+
+The strongest already-identified RB mean-information lead remains **backfield
+teammate availability / injury-created vacancy propagation into rushing
+opportunity**, with prior-week snap share as a second live/free lagged
+opportunity proxy.
+
+Claude is temporarily unavailable because the user is out of credits. Do not
+wait for Claude; GPT-5.6 continues solo.
+
+No paid OddsAPI pull is authorized without explicit user approval.
+
+---
+
 ## ACTIVE RESEARCH CHECKPOINT — 2026-09-14
 
 The user's explicit current priority is **WR receiving yards**. Do not skip ahead to RB until the user changes priority.
