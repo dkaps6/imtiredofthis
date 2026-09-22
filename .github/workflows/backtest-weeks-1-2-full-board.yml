@@ -16,6 +16,8 @@ on:
       - 'scripts/operations/grade_market_track_record_gsis_v1.py'
       - 'scripts/operations/report_weekly_backtest_v1.py'
       - 'scripts/operations/backtest_full_report_v1.py'
+      - 'data/market_track_record/graded/2026_wk01_wk02_graded.csv'
+      - 'docs/production/BACKTEST_2026_WEEKS_1_2_FINDINGS.md'
 
 permissions:
   contents: read
