@@ -178,12 +178,15 @@ def select_model_bet(board: pd.DataFrame) -> pd.DataFrame:
     )
     b = b.merge(consensus, left_on=key, right_index=True, how="left")
 
+    # Use the normalized row-level book identity in the quote key so legacy
+    # blank `book` rows from different `book_title` providers never collapse
+    # into one synthetic offer.
     quote_key = [
         c for c in (
             "season", "week", "event_id", "player_clean_key", "team",
-            "opponent", "source_market", "book", "vegas_line",
+            "opponent", "source_market",
         ) if c in b.columns
-    ]
+    ] + ["_book_key", "_line"]
     if not quote_key:
         return b.iloc[0:0].copy()
 
