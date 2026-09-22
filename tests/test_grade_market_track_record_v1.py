@@ -180,9 +180,13 @@ def test_select_model_bet_straddle_is_row_order_invariant():
 
 def test_select_model_bet_abstains_when_no_real_quote_matches_consensus_side():
     board = _straddle_board()
-    # Keep only the contradictory UNDER row at 49.5 plus OVER rows. Consensus
-    # still selects UNDER, but no captured UNDER quote has projection < line.
+    # Remove the compatible UNDER at 52.5, then add another 52.5 OVER quote so
+    # the median remains 51.0. Consensus still selects UNDER, but the only
+    # captured UNDER is 49.5, where the projection is actually OVER.
     board = board.loc[~((board["book"] == "bookB") & (board["side"] == "UNDER"))].copy()
+    extra = board.loc[(board["book"] == "bookB") & (board["side"] == "OVER")].copy()
+    extra["book"] = "bookC"
+    board = pd.concat([board, extra], ignore_index=True)
     got = select_model_bet(board)
     assert got.empty
 
