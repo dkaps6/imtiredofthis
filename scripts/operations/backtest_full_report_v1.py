@@ -129,7 +129,7 @@ def report(g: pd.DataFrame, season: int, weeks: list[int]) -> None:
     bar = "=" * 104
     print(bar)
     print(f"FULL GRADED BACKTEST — {season}, weeks {weeks}")
-    print("one bet per player-market at the consensus line; anytime_td not graded")
+    print("one bet per player-market: consensus selects side, compatible captured quote grades it; anytime_td not graded")
     print(bar)
     print(f"graded rows: {len(g)}   pushes: {int(g.bet_result.eq('PUSH').sum())}   "
           f"verified-zero outcomes: {int(g.actual_source.eq('roster_confirmed_zero').sum())}")
