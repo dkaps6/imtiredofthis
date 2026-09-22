@@ -94,13 +94,14 @@ jobs:
               'book', 'side', 'vegas_line', 'vegas_odds', 'fair_prob',
               'edge_pct', 'production_best_ev', 'actual', 'actual_source',
               'settlement_status', 'bet_result', 'unit_result',
-              'model_closer_than_vegas',
+              'model_closer_than_vegas', 'source_run_id', 'source_git_sha',
           ]
           a = live[cols].sort_values(key).reset_index(drop=True)
           b = committed[cols].sort_values(key).reset_index(drop=True)
           assert len(a) == len(b) and len(a) > 0, (len(a), len(b))
           for c in key + [
-              'book', 'side', 'actual_source', 'settlement_status', 'bet_result'
+              'book', 'side', 'actual_source', 'settlement_status', 'bet_result',
+              'source_run_id', 'source_git_sha',
           ]:
               assert a[c].astype(str).equals(b[c].astype(str)), c
           for c in [
@@ -111,6 +112,15 @@ jobs:
               av = pd.to_numeric(a[c], errors='coerce').to_numpy()
               bv = pd.to_numeric(b[c], errors='coerce').to_numpy()
               assert np.allclose(av, bv, equal_nan=True), c
+
+          expected_provenance = {
+              1: ('34650067599', 'be061eaf23372f080db3911d3b4919120c744c53'),
+              2: ('35282021679', 'c6ec55be70d6e05bbd1dbae83d7d5c86ac8aa00a'),
+          }
+          for week, (run_id, sha) in expected_provenance.items():
+              q = committed.loc[committed['week'].eq(week)]
+              assert set(q['source_run_id'].astype(str)) == {run_id}, (week, 'source_run_id')
+              assert set(q['source_git_sha'].astype(str)) == {sha}, (week, 'source_git_sha')
 
           src = live['actual_source'].value_counts(dropna=False).to_dict()
           decided = int(live['bet_result'].isin(['WIN', 'LOSS']).sum())
