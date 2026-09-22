@@ -70,18 +70,16 @@ def model_side(proj: float, line: float) -> str:
 
 
 def edge_bucket(v: float) -> str:
-    """Bucket fractional probability edge (0.10 == ten percentage points)."""
+    """Bucket absolute projection-to-line gap in native stat units."""
     if not np.isfinite(v):
         return "missing"
-    if v <= 0:
-        return "<=0"
-    if v < 0.02:
+    if v < 2:
         return "0-2"
-    if v < 0.05:
+    if v < 5:
         return "2-5"
-    if v < 0.10:
+    if v < 10:
         return "5-10"
-    if v < 0.20:
+    if v < 20:
         return "10-20"
     return "20+"
 
