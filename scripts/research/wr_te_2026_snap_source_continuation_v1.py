@@ -144,8 +144,12 @@ def _features(target: pd.DataFrame, snaps: pd.DataFrame) -> pd.DataFrame:
     return out.sort_values(["team", "player_clean_key"]).reset_index(drop=True)
 
 
-def assert_week1_invariance(base: pd.DataFrame, candidate: pd.DataFrame) -> dict:
-    target = _week1_synthetic_targets(base)
+def assert_week1_invariance(
+    base: pd.DataFrame,
+    candidate: pd.DataFrame,
+    target_source: pd.DataFrame,
+) -> dict:
+    target = _week1_synthetic_targets(target_source)
     a = _features(target, base)
     b = _features(target, candidate)
     pd.testing.assert_frame_equal(a, b, check_dtype=False, check_exact=True)
@@ -269,7 +273,7 @@ def main() -> int:
         raise RuntimeError(f"candidate source seasons incomplete: {candidate_seasons}")
 
     historical = assert_historical_parity(base, candidate_2025)
-    week1 = assert_week1_invariance(base, candidate)
+    week1 = assert_week1_invariance(base, candidate, candidate_2025)
 
     source26 = candidate.loc[candidate["season"].eq(TARGET_SEASON)].copy()
     source_quality = {
