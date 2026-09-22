@@ -434,6 +434,9 @@ def build_projection_frame(
         ["player", "team", "canonical_player_key", "mc_proj", "ml_proj", "state_proj",
          "generic_mc_projection", "projection_mean", "priced_rebuilt_ensemble"],
     ].copy()
+    identity_gap_detail = identity_gap_detail.astype(object).where(
+        pd.notna(identity_gap_detail), None
+    )
 
     audit = {
         **football_audit,
