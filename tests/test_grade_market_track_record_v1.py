@@ -139,6 +139,54 @@ def test_select_model_bet_uses_the_consensus_line_not_an_arbitrary_book():
     assert got.iloc[0]["side"] == "OVER"
 
 
+
+def _straddle_board():
+    """Real Week-1 straddle shape: the projection is above the lower quote
+    but below the consensus, so an UNDER must grade at the higher compatible
+    captured line rather than the contradictory lower one."""
+    rows = []
+    for book, line in (("bookA", 49.5), ("bookB", 52.5)):
+        for side in ("OVER", "UNDER"):
+            rows.append({
+                "season": 2026, "week": 1, "event_id": "evt2", "book": book,
+                "player": "Terry McLaurin", "player_clean_key": "terrymclaurin",
+                "team": "WAS", "market": "rec_yards", "side": side,
+                "vegas_line": line, "vegas_odds": -110.0,
+                "model_proj": 50.32831853448081,
+            })
+    return pd.DataFrame(rows)
+
+
+def test_select_model_bet_straddle_uses_side_compatible_real_quote():
+    got = select_model_bet(_straddle_board())
+    assert len(got) == 1
+    row = got.iloc[0]
+    assert float(row["consensus_line"]) == 51.0
+    assert row["model_pick_side"] == "UNDER"
+    assert row["side"] == "UNDER"
+    assert float(row["vegas_line"]) == 52.5
+    assert model_side(float(row["model_proj"]), float(row["vegas_line"])) == row["side"]
+
+
+def test_select_model_bet_straddle_is_row_order_invariant():
+    board = _straddle_board()
+    picks = []
+    for order in ([0, 1, 2, 3], [3, 2, 1, 0], [2, 0, 3, 1]):
+        got = select_model_bet(board.iloc[order].reset_index(drop=True))
+        assert len(got) == 1
+        picks.append((got.iloc[0]["side"], float(got.iloc[0]["vegas_line"]), got.iloc[0]["book"]))
+    assert len(set(picks)) == 1, f"row order changed the straddle wager: {picks}"
+
+
+def test_select_model_bet_abstains_when_no_real_quote_matches_consensus_side():
+    board = _straddle_board()
+    # Keep only the contradictory UNDER row at 49.5 plus OVER rows. Consensus
+    # still selects UNDER, but no captured UNDER quote has projection < line.
+    board = board.loc[~((board["book"] == "bookB") & (board["side"] == "UNDER"))].copy()
+    got = select_model_bet(board)
+    assert got.empty
+
+
 def test_select_model_bet_still_collapses_a_single_book_pair():
     board = _multi_book_board()
     board = board.loc[board["book"].eq("bookA")].reset_index(drop=True)
