@@ -13,7 +13,8 @@ env:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   SEASON: "2026"
   PRIOR_SEASON: "2025"
-  # Historical replay must resolve the preserved Week-2 slate, not wall-clock current week.\n  SLATE_DATE: "2026-09-17"
+  # Historical replay must resolve the preserved Week-2 slate, not wall-clock current week.
+  SLATE_DATE: "2026-09-17"
   FETCH_LIVE_ODDS: "false"
   FULL_SLATE_SOURCE_RUN_ID: "35282021679"
   ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
