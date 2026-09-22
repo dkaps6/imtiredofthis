@@ -191,26 +191,32 @@ def _merge_component(
     value_col: str,
     out_col: str,
 ) -> pd.DataFrame:
-    need = {"season", "week", "team", "player_clean_key", value_col}
+    need = {"season", "week", "team", "player", "player_clean_key", value_col}
     missing = need - set(component.columns)
     if missing:
         raise RuntimeError(f"component {value_col} missing columns: {sorted(missing)}")
+    if "player" not in frame.columns:
+        raise RuntimeError(f"projection frame missing player display name for {value_col} identity bridge")
+
+    left = frame.copy()
     c = component.copy()
-    c["season"] = pd.to_numeric(c["season"], errors="coerce")
-    c["week"] = pd.to_numeric(c["week"], errors="coerce")
-    c["team"] = c["team"].map(canon_team)
-    c["player_clean_key"] = c["player_clean_key"].astype(str).str.strip()
-    if c.duplicated(["season", "week", "team", "player_clean_key"]).any():
-        raise RuntimeError(f"component {value_col} has duplicate football identity")
-    c = c[["season", "week", "team", "player_clean_key", value_col]].rename(
-        columns={value_col: out_col}
-    )
-    return frame.merge(
-        c,
-        on=["season", "week", "team", "player_clean_key"],
-        how="left",
-        validate="one_to_one",
-    )
+    for x in (left, c):
+        x["season"] = pd.to_numeric(x["season"], errors="coerce")
+        x["week"] = pd.to_numeric(x["week"], errors="coerce")
+        x["team"] = x["team"].map(canon_team)
+        x["_component_identity_key"] = x["player"].map(_suffix_safe_key)
+        if x["_component_identity_key"].eq("").any():
+            raise RuntimeError(f"blank suffix-safe identity while joining component {value_col}")
+
+    join = ["season", "week", "team", "_component_identity_key"]
+    if left.duplicated(join).any():
+        raise RuntimeError(f"projection frame has duplicate suffix-safe identity for {value_col}")
+    if c.duplicated(join).any():
+        raise RuntimeError(f"component {value_col} has duplicate suffix-safe identity")
+
+    c = c[join + [value_col]].rename(columns={value_col: out_col})
+    out = left.merge(c, on=join, how="left", validate="one_to_one")
+    return out.drop(columns=["_component_identity_key"])
 
 
 def build_projection_frame(
@@ -349,19 +355,20 @@ def build_projection_frame(
     if q.empty:
         raise RuntimeError("preserved priced parity file contains zero rush-yards rows")
     q["team"] = q["team"].map(canon_team)
-    if "player_clean_key" in q.columns:
-        preserved_key = q["player_clean_key"].fillna("").astype(str).str.strip()
-    else:
-        preserved_key = pd.Series("", index=q.index, dtype=object)
-    fallback_key = q["player"].map(_suffix_safe_key)
-    q["canonical_player_key"] = preserved_key.where(preserved_key.ne(""), fallback_key)
+    q["canonical_player_key"] = q["player"].map(_suffix_safe_key)
     if q["canonical_player_key"].eq("").any():
-        raise RuntimeError("preserved priced parity file has unresolved canonical player identity")
-    pkey = projection[["team", "player_clean_key", "position", "generic_mc_projection", "projection_mean"]].copy()
+        raise RuntimeError("preserved priced parity file has unresolved suffix-safe player identity")
+    pkey = projection[
+        ["team", "player", "player_clean_key", "position", "generic_mc_projection", "projection_mean"]
+    ].copy()
+    pkey["canonical_player_key"] = pkey["player"].map(_suffix_safe_key)
+    if pkey["canonical_player_key"].eq("").any():
+        raise RuntimeError("reconstructed projection has unresolved suffix-safe player identity")
+    if pkey.duplicated(["team", "canonical_player_key"]).any():
+        raise RuntimeError("reconstructed RB/FB projection has duplicate suffix-safe player identity")
     parity = q.merge(
-        pkey,
-        left_on=["team", "canonical_player_key"],
-        right_on=["team", "player_clean_key"],
+        pkey.drop(columns=["player"]),
+        on=["team", "canonical_player_key"],
         how="inner",
         validate="many_to_one",
     )
