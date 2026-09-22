@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 from scripts.research import build_rb_pd2_completed_2026_history_v2 as v2
+from scripts.operations.grade_market_track_record_gsis_v1 import _suffix_strip
 from scripts.research.rb_pd2_forward_shadow_v1 import (
     RUSH_YARDS_FIT_SCOPE,
     RUSH_YARDS_MC_WEIGHT,
@@ -203,6 +204,12 @@ def _week1_row() -> dict:
         "week1_p3_projection": 50.0,
         "week1_stack1_projection": 50.0,
     }
+
+
+def test_gsis_suffix_strip_uses_longest_suffix_token_first():
+    assert _suffix_strip("kennethwalkeriii") == "kennethwalker"
+    assert _suffix_strip("playerii") == "player"
+    assert _suffix_strip("playeriv") == "player"
 
 
 def test_attach_verified_actuals_uses_pbp_only_for_unresolved_identity():
