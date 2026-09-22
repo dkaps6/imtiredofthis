@@ -124,7 +124,8 @@ def select_model_bet(board: pd.DataFrame) -> pd.DataFrame:
     quote whose own line puts the projection on that same side; if no such
     quote exists, that player-market abstains. Among compatible quotes, the
     nearest line to consensus wins. Equidistant cross-book ties are broken by
-    a canonical bookmaker key only -- never by line direction or price -- so
+    the lexicographically smallest normalized provider `book` key (with
+    `book_title` as the legacy fallback) -- never by line direction or price -- so
     the rule is side-neutral and cannot price-shop. If the chosen canonical
     book itself has multiple distinct equally-near compatible lines, the
     player-market abstains rather than inventing a favorable line. Duplicate
