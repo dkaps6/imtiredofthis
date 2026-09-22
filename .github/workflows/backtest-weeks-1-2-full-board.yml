@@ -20,7 +20,7 @@ on:
       - 'docs/production/BACKTEST_2026_WEEKS_1_2_FINDINGS.md'
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 env:
@@ -71,21 +71,6 @@ jobs:
           export PYTHONPATH="${PWD}"
           python scripts/operations/report_weekly_backtest_v1.py \
             --detail /tmp/graded_weeks_1_2.csv
-
-      - name: Refresh canonical graded ledger on this PR branch
-        if: ${{ github.ref == 'refs/heads/claude/nice-cori-4qkwqs' }}
-        run: |
-          set -euo pipefail
-          cp /tmp/graded_weeks_1_2.csv data/market_track_record/graded/2026_wk01_wk02_graded.csv
-          if git diff --quiet -- data/market_track_record/graded/2026_wk01_wk02_graded.csv; then
-            echo "canonical ledger already current"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/market_track_record/graded/2026_wk01_wk02_graded.csv
-          git commit -m "Refresh canonical W1-W2 production bet ledger"
-          git push origin HEAD:claude/nice-cori-4qkwqs
 
       - name: Rebuild the independent full-report ledger and cross-check the committed record
         run: |
