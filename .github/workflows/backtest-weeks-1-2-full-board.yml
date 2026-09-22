@@ -94,6 +94,7 @@ jobs:
               'book', 'side', 'vegas_line', 'vegas_odds', 'fair_prob',
               'edge_pct', 'production_best_ev', 'actual', 'actual_source',
               'settlement_status', 'bet_result', 'unit_result',
+              'model_closer_than_vegas',
           ]
           a = live[cols].sort_values(key).reset_index(drop=True)
           b = committed[cols].sort_values(key).reset_index(drop=True)
@@ -105,6 +106,7 @@ jobs:
           for c in [
               'vegas_line', 'vegas_odds', 'fair_prob', 'edge_pct',
               'production_best_ev', 'actual', 'unit_result',
+              'model_closer_than_vegas',
           ]:
               av = pd.to_numeric(a[c], errors='coerce').to_numpy()
               bv = pd.to_numeric(b[c], errors='coerce').to_numpy()
