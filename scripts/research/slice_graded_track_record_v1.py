@@ -116,6 +116,17 @@ def cluster_score_pvalue(
     return p_value, n_clusters
 
 
+def fractional_edge_bins(values: pd.Series) -> pd.Series:
+    """Bucket fractional probability edge (0.10 == ten percentage points)."""
+    x = pd.to_numeric(values, errors="coerce")
+    return pd.cut(
+        x,
+        [-np.inf, 0.0, 0.02, 0.05, 0.10, 0.20, np.inf],
+        labels=["<=0", "0-2", "2-5", "5-10", "10-20", "20+"],
+        include_lowest=True,
+    ).astype(str)
+
+
 def summarize(df: pd.DataFrame, label: str, slice_name: str) -> dict:
     n = len(df)
     wins = int((df["bet_result"] == "WIN").sum())
@@ -169,14 +180,8 @@ def main() -> int:
     }
     if "edge_pct" in df.columns:
         df["edge_pct"] = pd.to_numeric(df["edge_pct"], errors="coerce")
-        # edge_pct is persisted as a fractional probability difference
-        # (0.10 == ten percentage points), not as a 0-100 percentage.
-        df["edge_bin"] = pd.cut(
-            df["edge_pct"],
-            [-np.inf, 0.0, 0.02, 0.05, 0.10, 0.20, np.inf],
-            labels=["<=0", "0-2", "2-5", "5-10", "10-20", "20+"],
-            include_lowest=True,
-        ).astype(str)
+        # edge_pct is persisted as a fractional probability difference.
+        df["edge_bin"] = fractional_edge_bins(df["edge_pct"])
         dims["edge_bin"] = df["edge_bin"]
         dims["market_x_edge"] = df["market"].astype(str) + " | " + df["edge_bin"]
         dims["side_x_edge"] = df["side"].astype(str).str.upper() + " | " + df["edge_bin"]
