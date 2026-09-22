@@ -28,21 +28,6 @@ POSITIONS = ["QB", "RB", "WR", "TE"]
 MARKETS = ["pass_yards", "rush_yards", "rec_yards", "receptions", "rush_rec_yards"]
 
 
-def _apply_verified_zero_outcomes(d: pd.DataFrame) -> pd.DataFrame:
-    """Fill roster-confirmed missing stat rows with zero and preserve provenance."""
-    out = d.copy()
-    resolved = out["identity_status"].eq("RESOLVED_GSIS")
-    has_stat_row = out["actual"].notna()
-    verified_zero = resolved & ~has_stat_row & out["roster_confirmed"]
-    out.loc[verified_zero, "actual"] = 0.0
-    out["actual_source"] = np.select(
-        [resolved & has_stat_row, verified_zero],
-        ["stats_table", "roster_confirmed_verified_zero"],
-        default="unresolved",
-    )
-    return out
-
-
 def build_graded(season: int, weeks: list[int]) -> pd.DataFrame:
     board = G.load_boards(season, weeks)
     if board.empty:
@@ -52,16 +37,34 @@ def build_graded(season: int, weeks: list[int]) -> pd.DataFrame:
 
     actual = GG.load_actual_stats_unfiltered(season, weeks)
     roster = GG.load_roster_identity(season, weeks)
+    snaps = GG.load_snap_participation(season, weeks)
     idx = GG.build_alias_index(actual, roster)
     confirmed = set(zip(roster.season, roster.week, roster.team, roster.gsis_id))
+    roster_status = GG._status_map(roster)
+    snap_exact, snap_base = GG._snap_participation_sets(snaps)
 
     resolved = [GG.resolve_gsis(r.player_clean_key, r.team, idx)
                 for r in bets.itertuples(index=False)]
     b = bets.reset_index(drop=True)
     b["gsis_id"] = [g for g, _ in resolved]
     b["identity_status"] = [s for _, s in resolved]
-    b["roster_confirmed"] = [(s, w, t, g) in confirmed for s, w, t, g
-                             in zip(b.season, b.week, b.team, b.gsis_id)]
+    b["roster_confirmed_this_team_week"] = [
+        (s, w, t, g) in confirmed
+        for s, w, t, g in zip(b.season, b.week, b.team, b.gsis_id)
+    ]
+    b["roster_status"] = [
+        roster_status.get((s, w, t, g), "")
+        for s, w, t, g in zip(b.season, b.week, b.team, b.gsis_id)
+    ]
+    b["snap_participated"] = [
+        (
+            (int(s), int(w), t, k) in snap_exact
+            or (int(s), int(w), t, GG._suffix_strip(k)) in snap_base
+        )
+        for s, w, t, k in zip(
+            b.season, b.week, b.team, b.player_clean_key
+        )
+    ]
 
     parts = []
     for market, col in [("pass_yards", "pass_yards"), ("rush_yards", "rush_yards"),
@@ -78,18 +81,27 @@ def build_graded(season: int, weeks: list[int]) -> pd.DataFrame:
                               on=["season", "week", "gsis_id"], how="left"))
     d = pd.concat(parts, ignore_index=True, sort=False)
 
-    d = _apply_verified_zero_outcomes(d)
+    d = GG.apply_postgame_settlement(d)
 
-    g = d.loc[d.actual.notna()].copy()
+    g = d.loc[~d.settlement_status.eq("UNRESOLVED")].copy()
     g["vegas_line"] = G.num(g.vegas_line)
     g["model_proj"] = G.num(g.model_proj)
     g["model_error"] = g.model_proj - g.actual
     g["vegas_error"] = g.vegas_line - g.actual
     g["model_closer"] = g.model_error.abs() < g.vegas_error.abs()
-    g["actual_side"] = [G.outcome_side(a, l) for a, l in zip(g.actual, g.vegas_line)]
+    g["actual_side"] = [
+        G.outcome_side(a, l) if pd.notna(a) else "VOID"
+        for a, l in zip(g.actual, g.vegas_line)
+    ]
     g["bet_result"] = np.select(
-        [g.actual_side.eq("PUSH"), g.side.astype(str).str.upper().eq(g.actual_side)],
-        ["PUSH", "WIN"], default="LOSS")
+        [
+            g.settlement_status.eq("VOID"),
+            g.actual_side.eq("PUSH"),
+            g.side.astype(str).str.upper().eq(g.actual_side),
+        ],
+        ["VOID", "PUSH", "WIN"],
+        default="LOSS",
+    )
     g["unit_result"] = np.where(
         g.bet_result.eq("WIN"), [G.american_profit(o) for o in g.vegas_odds],
         np.where(g.bet_result.eq("LOSS"), -1.0, 0.0))
@@ -140,10 +152,13 @@ def report(g: pd.DataFrame, season: int, weeks: list[int]) -> None:
     bar = "=" * 104
     print(bar)
     print(f"FULL GRADED BACKTEST — {season}, weeks {weeks}")
-    print("one bet per player-market: consensus selects side, compatible captured quote grades it; anytime_td not graded")
+    print("production Best Snapshot only: highest-EV real offer per player-market; nonpositive EV passes; DNP voids")
     print(bar)
-    print(f"graded rows: {len(g)}   pushes: {int(g.bet_result.eq('PUSH').sum())}   "
-          f"verified-zero outcomes: {int(g.actual_source.eq('roster_confirmed_verified_zero').sum())}")
+    print(
+        f"selected settlement rows: {len(g)}   decided: {int(g.bet_result.isin(['WIN','LOSS']).sum())}   "
+        f"voids: {int(g.bet_result.eq('VOID').sum())}   pushes: {int(g.bet_result.eq('PUSH').sum())}   "
+        f"snap-confirmed zero outcomes: {int(g.actual_source.eq('snap_confirmed_verified_zero').sum())}"
+    )
     print("\nmBias / vBias are signed (projection - actual). Negative means the")
     print("number was too low. closer = share of bets where the model's absolute")
     print("error beat the line's.")
