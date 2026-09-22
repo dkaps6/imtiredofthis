@@ -236,10 +236,100 @@ teammate availability / injury-created vacancy propagation into rushing
 opportunity**, with prior-week snap share as a second live/free lagged
 opportunity proxy.
 
-Claude is temporarily unavailable because the user is out of credits. Do not
-wait for Claude; GPT-5.6 continues solo.
+Claude is independently running the Week-1/Week-2 full-board backtest. Do not duplicate that lane; GPT-5.6 continues the current-season state/new-information lane in parallel.
 
 No paid OddsAPI pull is authorized without explicit user approval.
+
+---
+
+
+## ACTIVE CHECKPOINT — 2026-09-22 — CURRENT-SEASON STATE PERSISTENCE V1 COMPLETE
+
+Branch:
+
+`research-current-season-state-persistence-v1`
+
+Frozen plan:
+
+`docs/research/CURRENT_SEASON_STATE_PERSISTENCE_V1_PLAN.md`
+
+Canonical run:
+
+- run `35741758765` = **SUCCESS**
+- head `28d79153f723765b01a447c2023b47108b14138c`
+- artifact `10699781744` / `current-season-state-persistence-v1`
+- digest `sha256:2d81bcb5222136ae812575b15a0d79952d27a03e68034cd312aa0f927503868a`
+- frozen tests 4/4 PASS
+- strict repo audit PASS
+- row-level panel: 41,745 rows
+- sportsbook inputs: 0
+- 2026 outcomes used: 0
+- production changes: 0
+
+### Main scientific result
+
+The user's live-season premise is supported. Current-season football state
+contains substantial next-game information, but the useful signal is strongest
+in **opportunity / role**, not raw early-season efficiency.
+
+On untouched 2025 replication, the existing historical + current-season
+PlayerForm four-game pseudo-prior blend improved over prior-season-only for
+9 of 10 production-aligned metrics.
+
+Most important replicated signals:
+
+- RB rush-share MAE: `0.1486 -> 0.1166` (**21.53% improvement**), state-delta
+  Spearman `+0.6256`;
+- TE target-share MAE: `0.05153 -> 0.04553` (**11.66% improvement**);
+- WR target-share MAE: `0.06773 -> 0.06144` (**9.30% improvement**);
+- QB YPA full-season blend MAE: `1.7386 -> 1.6548` (**4.82% improvement**).
+
+The lone non-replicating metric is RB YPC: `1.9135 -> 1.9160`. Do not chase
+early-season RB efficiency noise.
+
+### Exact Week-3 analogue: two completed current-season games
+
+On 2025 rows with exactly two prior current-season games:
+
+- RB rush share: `0.1288 prior -> 0.1113 blend`;
+- WR target share: `0.05933 -> 0.05451`;
+- TE target share: `0.03941 -> 0.03428`;
+- QB YPA: prior-only beats the early blend (`1.7383 vs 1.7983`);
+- RB YPC: prior-only beats the early blend (`2.0697 vs 2.1239`);
+- WR/TE catch rate and raw current-only efficiency remain noisy.
+
+Operational interpretation:
+
+> historical prior + faster current opportunity/role updating + heavier
+> efficiency shrinkage.
+
+### Newly confirmed live 2026 source gap
+
+The maintained nflverse snap source already has complete 2026 Weeks 1-2:
+
+- Week 1: 1,492 rows, all 32 teams, complete offense snaps / offense pct;
+- Week 2: 1,502 rows, all 32 teams, complete offense snaps / offense pct.
+
+But WR-R15 and TE-R5P share a production snap loader hardcoded to source
+seasons `2020-2025`. Therefore their strict-prior entitlement layers currently
+do **not** consume available 2026 snap participation.
+
+Disposition:
+
+`CURRENT_2026_SNAP_SOURCE_AVAILABLE_NOT_CONSUMED`
+
+Authorized next research action:
+
+`WR_TE_2026_SNAP_SOURCE_CONTINUATION_V1`
+
+This must be a frozen source-continuation/parity test only: no coefficient
+refit, no sportsbook input, no production change. It must prove Week 1
+invariance, strict-prior Week 2+ semantics, and quantify football-projection
+impact before any production edit.
+
+Claude is independently handling the Week-1/Week-2 full-board model/betting
+grade. Do not duplicate that work. Use his result together with this state
+audit to prioritize the next position/market improvement lane.
 
 ---
 
