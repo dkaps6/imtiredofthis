@@ -1,0 +1,44 @@
+name: WR TE 2026 Snap Source Continuation V1
+
+on:
+  push:
+    branches:
+      - research-wr-te-2026-snap-source-continuation-v1
+    paths:
+      - "scripts/research/wr_te_2026_snap_source_continuation_v1.py"
+      - "docs/research/WR_TE_2026_SNAP_SOURCE_CONTINUATION_V1_PLAN.md"
+      - ".github/workflows/research-wr-te-2026-snap-source-continuation-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyyaml
+      - name: Run frozen source-continuation audit
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/research/wr_te_2026_snap_source_continuation_v1.py
+      - name: Strict repository audit
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/utils/audit_repo.py --strict
+      - name: Upload audit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-te-2026-snap-source-continuation-v1
+          path: data/research/wr_te_2026_snap_source_continuation_v1
+          if-no-files-found: error
+          retention-days: 90
