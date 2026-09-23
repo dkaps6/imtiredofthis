@@ -43,10 +43,10 @@ For selected player props absent from the weekly stats table:
 
 Canonical W1/W2 settlement inventory:
 
-- selected settlement rows: **810**
-- decided bets: **802**
+- selected settlement rows: **808**
+- decided bets: **800**
 - void DNP rows: **8**
-- stats-table outcomes: **791**
+- stats-table outcomes: **789**
 - snap-confirmed verified-zero outcomes: **11**
 - additional positive-EV rows still unresolved: **2** (Joshua Palmer receiving
   yards and receptions, Week 2); they are excluded from W/L and units.
@@ -55,12 +55,12 @@ Canonical W1/W2 settlement inventory:
 
 ## Headline
 
-**802 decided bets: 397-405 (49.5%), -44.09 units.**
+**800 decided bets: 396-404 (49.5%), -43.99 units.**
 
 - Week 1: **204-205**, -20.92u
-- Week 2: **193-200**, -23.17u
-- model MAE: **18.42**
-- selected sportsbook-line MAE: **17.38**
+- Week 2: **192-199**, -23.06u
+- model MAE: **18.36**
+- selected sportsbook-line MAE: **17.33**
 - model closer than selected line: **44.9%**
 
 The old 438-428, 439-427 and 440-426 records are superseded. They graded a
@@ -71,18 +71,18 @@ track records.
 
 | market | W-L | win% | units | model MAE | line MAE | model bias | line bias | closer |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| pass_yards | 36-17 | 67.9% | +14.99 | 56.50 | 60.88 | -1.21 | -2.65 | .623 |
-| rush_yards | 71-66 | 51.8% | -1.55 | 21.17 | 18.84 | -7.44 | -1.55 | .438 |
+| pass_yards | 36-16 | 69.2% | +15.99 | 56.03 | 60.65 | -2.79 | -4.10 | .635 |
+| rush_yards | 70-66 | 51.5% | -2.45 | 21.32 | 18.96 | -7.49 | -1.59 | .434 |
 | rush_rec_yards | 33-33 | 50.0% | -3.81 | 32.15 | 26.55 | -20.67 | -1.15 | .439 |
 | rec_yards | 132-145 | 47.7% | -27.65 | 22.72 | 21.51 | -7.95 | -4.30 | .419 |
 | receptions | 125-144 | 46.5% | -26.07 | 1.72 | 1.57 | -0.74 | -0.20 | .454 |
 
 QB pass yards remains the standout early market after production-decision
-alignment: **36-17, +14.99u**. Removing pass yards leaves the other markets
-**361-388 (48.2%)**.
+alignment: **36-16, +15.99u**. Removing pass yards leaves the other markets
+**360-388 (48.1%)**.
 
 That is encouraging, not a promotion/tuning instruction. It is still only
-53 bets across 30 game clusters.
+52 bets across 30 game clusters.
 
 ## Finding 1 — probabilities remain materially overconfident
 
@@ -90,13 +90,13 @@ That is encouraging, not a promotion/tuning instruction. It is still only
 |---|---:|---:|---:|---:|---:|
 | <=50% | 18 | 45.7% | 16.7% | 3-15 | -11.40 |
 | 50-55% | 65 | 53.6% | 40.0% | 26-39 | -12.64 |
-| 55-60% | 130 | 57.4% | 50.0% | 65-65 | -3.44 |
+| 55-60% | 129 | 57.5% | 50.4% | 65-64 | -2.44 |
 | 60-65% | 129 | 62.4% | 51.2% | 66-63 | -3.28 |
 | 65-70% | 89 | 67.5% | 57.3% | 51-38 | +7.47 |
-| >70% | 371 | 81.3% | 50.1% | 186-185 | -20.81 |
+| >70% | 370 | 81.3% | 50.0% | 185-185 | -21.70 |
 
 The >70% group is the clearest problem: stated probability averages 81.3% but
-realizes essentially 50/50.
+realizes exactly 50/50 in this two-week sample.
 
 ## Finding 2 — simulated distributions still look too narrow
 
@@ -104,8 +104,8 @@ Realized projection-error SD versus the model's stated `model_sd`:
 
 | market | stated SD | realized error SD | ratio |
 |---|---:|---:|---:|
-| pass_yards | 54.62 | 78.83 | 1.44x |
-| rush_yards | 15.65 | 29.23 | 1.87x |
+| pass_yards | 54.85 | 78.75 | 1.44x |
+| rush_yards | 15.71 | 29.33 | 1.87x |
 | rec_yards | 17.46 | 31.16 | 1.78x |
 | receptions | 1.62 | 2.14 | 1.32x |
 
@@ -119,11 +119,11 @@ Quintiles of absolute fractional `edge_pct` after fixing its units:
 
 | quintile | n | W-L | win% | units | model bias |
 |---|---:|---:|---:|---:|---:|
-| Q1 smallest | 161 | 68-93 | 42.2% | -33.03 | +2.30 |
+| Q1 smallest | 160 | 68-92 | 42.5% | -32.03 | +1.80 |
 | Q2 | 160 | 87-73 | 54.4% | +5.20 | -3.74 |
 | Q3 | 160 | 78-82 | 48.8% | -10.67 | -4.83 |
-| Q4 | 160 | 78-82 | 48.8% | -11.59 | -5.59 |
-| Q5 largest | 161 | 86-75 | 53.4% | +6.01 | -18.35 |
+| Q4 | 160 | 78-82 | 48.8% | -11.81 | -5.57 |
+| Q5 largest | 160 | 85-75 | 53.1% | +5.33 | -18.48 |
 
 The ordering is non-monotonic. The largest-edge quintile also has by far the
 largest negative projection bias. Raw `edge_pct` is therefore not supported
@@ -140,7 +140,7 @@ With corrected fractional edge bins:
 
 - **50** slices meet the sample/cluster gates;
 - **0 of 50 survive BH-FDR at q=0.10**;
-- QB pass yards raw game-cluster one-sided p = **0.0119**, but it does not
+- QB pass yards raw game-cluster one-sided p = **0.0081**, but it does not
   survive the multiple-comparisons gate;
 - TE overall raw cluster p = **0.9449**;
 - TE receiving yards raw cluster p = **0.9727**.
@@ -198,10 +198,10 @@ entire TE authority "bad."
 
 Across decided bets:
 
-- overall model bias: **-6.05**
-- selected-line bias: **-2.09**
-- OVER bets: 178, model bias **+4.81**
-- UNDER bets: 624, model bias **-9.14**
+- overall model bias: **-6.16**
+- selected-line bias: **-2.19**
+- OVER bets: 177, model bias **+4.38**
+- UNDER bets: 623, model bias **-9.16**
 
 The production Best Snapshot still produces a heavily UNDER-skewed board, and
 large negative projection bias is concentrated there. Treat this as a
