@@ -37,6 +37,14 @@ def build_graded(season: int, weeks: list[int]) -> pd.DataFrame:
     bets = G.select_model_bet(board)
     if bets.empty:
         return GG.empty_graded_frame(bets)
+    # The production selector can legitimately retain markets this historical
+    # report does not settle (for example anytime_td). Filter to the report's
+    # supported market contract before identity resolution/concatenation so an
+    # unsupported-only selected slate is a structured zero-bet report rather
+    # than pd.concat([]).
+    bets = bets.loc[bets.market.isin(MARKETS)].copy()
+    if bets.empty:
+        return GG.empty_graded_frame(bets)
     bets["team"] = bets["team"].map(canon_team)
 
     actual = GG.load_actual_stats_unfiltered(season, weeks)
