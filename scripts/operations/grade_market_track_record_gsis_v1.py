@@ -85,10 +85,14 @@ def empty_graded_frame(bets: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _zero_selected_summary(source_board_rows: int) -> dict:
+def _zero_selected_summary(
+    source_board_rows: int,
+    *,
+    selection_status: str = "all_pass_zero_selected_bets",
+) -> dict:
     return {
         "status": "graded",
-        "selection_status": "all_pass_zero_selected_bets",
+        "selection_status": selection_status,
         "source_board_rows": int(source_board_rows),
         "archived_bet_rows": 0,
         "selected_settlement_rows": 0,
@@ -380,6 +384,22 @@ def grade(season: int, weeks: list[int], detail_out: Path | None = None) -> dict
             graded.to_csv(detail_out, index=False)
             print(f"graded detail rows written: 0 -> {detail_out}")
         return _zero_selected_summary(len(board))
+
+    # Selection can legitimately retain markets outside this historical
+    # grader's settlement contract (for example anytime_td). Filter those
+    # before loading identity/actual providers so an unsupported-only slate
+    # is a structured zero-gradeable-bet result, not a columnless DataFrame.
+    bets = bets.loc[bets["market"].isin(MARKET_STAT_COLUMNS)].copy()
+    if bets.empty:
+        graded = empty_graded_frame(bets)
+        if detail_out is not None:
+            detail_out.parent.mkdir(parents=True, exist_ok=True)
+            graded.to_csv(detail_out, index=False)
+            print(f"graded detail rows written: 0 -> {detail_out}")
+        return _zero_selected_summary(
+            len(board),
+            selection_status="unsupported_only_zero_gradeable_bets",
+        )
 
     bets["team"] = bets["team"].map(canon_team)
     actual = load_actual_stats_unfiltered(season, weeks)
