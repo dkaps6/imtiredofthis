@@ -33,6 +33,7 @@ def build_graded(season: int, weeks: list[int]) -> pd.DataFrame:
     if board.empty:
         raise SystemExit(f"no archived boards for {season} weeks {weeks}")
     board = G.apply_final_board_quarantine(board)
+    board = G.apply_production_decision_gates(board)
     bets = G.select_model_bet(board)
     if bets.empty:
         return GG.empty_graded_frame(bets)
