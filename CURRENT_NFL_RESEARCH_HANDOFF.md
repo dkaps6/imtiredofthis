@@ -106,6 +106,67 @@ to read them** — use `git show origin/research-current-state:<path>`.
 ---
 
 
+## ACTIVE CHECKPOINT — 2026-09-23 — PR #626 INTEGRITY REPAIR + LIVE MODEL DIAGNOSIS
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-09-23_PR626_INTEGRITY_AND_MODEL_DIAGNOSIS_CURRENT.md`
+
+This is the current operating checkpoint and supersedes the 2026-09-22 active
+checkpoint below where they conflict.
+
+### Current state in one screen
+
+- PR #625: merged/finished. Do not reopen.
+- PR #627: merged/finished. Do not duplicate.
+- PR #626: **OPEN / NOT MERGE-READY**.
+- Physical GitHub PR #626 head at handoff:
+  `a8973fc2e398a7b842736dd0481857391d387829`.
+- Six unresolved review threads remain, representing four unique blockers:
+  1. all-PASS / zero-selected-bet crash (three duplicate P2 threads);
+  2. P1 historical replay depends on the moving current NFL.com injury page;
+  3. P1 board-provenance verifier is self-referential to an editable manifest;
+  4. P2 final-board quarantine is not applied to the current production record.
+- Several Codex summaries claim local fixes/commits that never advanced the
+  physical GitHub PR head. They are **not canonical**. Verify remote head after
+  every write.
+- Latest exact-head checks on `a8973fc2...`:
+  - Repo CI `35824360282` SUCCESS;
+  - W1/W2 full-board/provenance `35824360270` SUCCESS;
+  - preserved no-paid Full Slate replay `35824360266` FAILURE because a
+    historical Week-2 replay fetched the now-current Week-3 NFL.com injury page;
+  - earlier same-SHA replay `35816381724` succeeded before the source rolled.
+- Claude's original W1/W2 full-board acquisition/backtest was **not duplicated**.
+  GPT-5.6's later work repaired grading/decision/settlement/inference integrity
+  on the same preserved boards.
+- Current branch scorecard is 810 selected settlement rows / 802 decided bets /
+  397-405 / -44.09u, but exact W/L/units remain provisional until #626 closes.
+- Current live scientific leads remain:
+  - QB pass yards encouraging;
+  - TE the clearest positional weakness;
+  - probability/distribution layer overconfident/too narrow;
+  - rush+receiving yards has a major low-bias construction concern.
+- Current-Season State Persistence V1 remains valid: role/opportunity state,
+  especially RB rush share and WR/TE target share, updates quickly; early
+  efficiency such as RB YPC requires heavier shrinkage.
+- After #626 closes, pivot immediately to **TE receiving-yards
+  entitlement-vs-efficiency**, with RB teammate-vacancy opportunity propagation
+  as the strongest sanctioned parallel mean-information lane.
+- No paid OddsAPI pull without explicit user approval.
+
+### Start-of-chat read order
+
+1. `AGENTS.md`
+2. `CURRENT_NFL_RESEARCH_HANDOFF.md`
+3. `docs/handoffs/NFL_HANDOFF_2026-09-23_PR626_INTEGRITY_AND_MODEL_DIAGNOSIS_CURRENT.md`
+4. newest Issue #535 comments after the 2026-09-23 handoff checkpoint
+5. live PR #626 head/checks/reviews/unresolved threads
+
+GitHub is canonical over chat memory. Do not trust local/container-only Codex
+commit summaries unless the remote PR head actually contains them.
+
+---
+
 ## ACTIVE CHECKPOINT — 2026-09-22 — CURRENT-SEASON STATE + LIVE SCOREBOARD
 
 **Read this detailed handoff next:**
