@@ -98,20 +98,25 @@ jobs:
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
-          python scripts/operations/grade_market_track_record_gsis_v1.py             --season "${BACKTEST_SEASON}" --weeks "1,2"             --detail-out /tmp/graded_weeks_1_2.csv
+          python scripts/operations/grade_market_track_record_gsis_v1.py \
+            --season "${BACKTEST_SEASON}" --weeks "1,2" \
+            --detail-out /tmp/graded_weeks_1_2.csv
           test -s /tmp/graded_weeks_1_2.csv
 
       - name: Report the full decomposition
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
-          python scripts/operations/report_weekly_backtest_v1.py             --detail /tmp/graded_weeks_1_2.csv
+          python scripts/operations/report_weekly_backtest_v1.py \
+            --detail /tmp/graded_weeks_1_2.csv
 
       - name: Rebuild the independent full-report ledger and cross-check the committed record
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
-          python scripts/operations/backtest_full_report_v1.py             --season "${BACKTEST_SEASON}" --weeks "1,2"             --out /tmp/full_report_graded.csv
+          python scripts/operations/backtest_full_report_v1.py \
+            --season "${BACKTEST_SEASON}" --weeks "1,2" \
+            --out /tmp/full_report_graded.csv
           test -s /tmp/full_report_graded.csv
           python - <<'EOF'
           import numpy as np
@@ -123,25 +128,23 @@ jobs:
               low_memory=False,
           )
           key = ['season', 'week', 'event_id', 'player', 'market']
-          cols = key + [
-              'book', 'side', 'vegas_line', 'vegas_odds', 'fair_prob',
-              'edge_pct', 'production_best_ev', 'actual', 'actual_source',
-              'settlement_status', 'bet_result', 'unit_result',
-              'model_closer_than_vegas', 'source_run_id', 'source_git_sha',
+          text_cols = key + [
+              'team', 'opponent', 'position', 'book', 'side', 'actual_source',
+              'settlement_status', 'bet_result', 'source_run_id', 'source_git_sha',
           ]
+          numeric_cols = [
+              'vegas_line', 'vegas_odds', 'fair_prob', 'edge_pct',
+              'production_best_ev', 'model_proj', 'model_sd', 'actual',
+              'model_error', 'vegas_error', 'unit_result',
+              'model_closer_than_vegas',
+          ]
+          cols = text_cols + numeric_cols
           a = live[cols].sort_values(key).reset_index(drop=True)
           b = committed[cols].sort_values(key).reset_index(drop=True)
           assert len(a) == len(b) and len(a) > 0, (len(a), len(b))
-          for c in key + [
-              'book', 'side', 'actual_source', 'settlement_status', 'bet_result',
-              'source_run_id', 'source_git_sha',
-          ]:
+          for c in text_cols:
               assert a[c].astype(str).equals(b[c].astype(str)), c
-          for c in [
-              'vegas_line', 'vegas_odds', 'fair_prob', 'edge_pct',
-              'production_best_ev', 'actual', 'unit_result',
-              'model_closer_than_vegas',
-          ]:
+          for c in numeric_cols:
               av = pd.to_numeric(a[c], errors='coerce').to_numpy()
               bv = pd.to_numeric(b[c], errors='coerce').to_numpy()
               assert np.allclose(av, bv, equal_nan=True), c
@@ -169,7 +172,9 @@ jobs:
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
-          python scripts/research/slice_graded_track_record_v1.py             --detail /tmp/graded_weeks_1_2.csv             --min-n 25 --fdr-q 0.10
+          python scripts/research/slice_graded_track_record_v1.py \
+            --detail /tmp/graded_weeks_1_2.csv \
+            --min-n 25 --fdr-q 0.10
 
       - name: Upload graded detail
         if: always()
