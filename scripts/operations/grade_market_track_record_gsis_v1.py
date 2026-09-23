@@ -46,8 +46,8 @@ import pandas as pd
 
 from scripts._opponent_map import canon_team
 from scripts.operations.grade_market_track_record_v1 import (
-    MARKET_STAT_COLUMNS, load_boards, select_model_bet, num, outcome_side,
-    american_profit, edge_bucket,
+    MARKET_STAT_COLUMNS, apply_final_board_quarantine, load_boards,
+    select_model_bet, num, outcome_side, american_profit, edge_bucket,
 )
 from scripts.utils.canonical_names import canonicalize_player_name_safe
 
@@ -55,6 +55,58 @@ TG = ["season", "week", "team"]
 DNP_VOID_BOOKS = {"draftkings", "fanduel"}
 ACTIVE_ROSTER_STATUSES = {"ACT", "ACTIVE"}
 INACTIVE_ROSTER_STATUSES = {"INA", "INACTIVE", "DNP"}
+
+EMPTY_GRADED_COLUMNS = {
+    "gsis_id": "string",
+    "identity_status": "string",
+    "roster_confirmed_this_team_week": "bool",
+    "roster_status": "string",
+    "snap_participated": "bool",
+    "actual": "float64",
+    "position": "string",
+    "actual_source": "string",
+    "settlement_status": "string",
+    "has_verified_actual": "bool",
+    "model_error": "float64",
+    "vegas_error": "float64",
+    "model_closer_than_vegas": "boolean",
+    "actual_side": "string",
+    "bet_result": "string",
+    "unit_result": "float64",
+}
+
+
+def empty_graded_frame(bets: pd.DataFrame) -> pd.DataFrame:
+    out = bets.iloc[0:0].copy()
+    for col, dtype in EMPTY_GRADED_COLUMNS.items():
+        if col not in out.columns:
+            out[col] = pd.Series(index=out.index, dtype=dtype)
+    return out
+
+
+def _zero_selected_summary(source_board_rows: int) -> dict:
+    return {
+        "status": "graded",
+        "selection_status": "all_pass_zero_selected_bets",
+        "source_board_rows": int(source_board_rows),
+        "archived_bet_rows": 0,
+        "selected_settlement_rows": 0,
+        "verified_actual_rows": 0,
+        "verified_via_stats_table": 0,
+        "verified_via_snap_confirmed_zero": 0,
+        "void_dnp_rows": 0,
+        "still_unresolved_rows": 0,
+        "unresolved_identity_status_counts": {},
+        "decided_bets": 0,
+        "wins": 0,
+        "losses": 0,
+        "win_rate": np.nan,
+        "units": 0.0,
+        "roi_per_unit": np.nan,
+        "model_mae": np.nan,
+        "vegas_mae": np.nan,
+        "model_closer_than_vegas_rate": np.nan,
+    }
 
 
 def _book_key(value) -> str:
@@ -317,8 +369,16 @@ def resolve_gsis(player_clean_key: str, team: str, idx: dict) -> tuple[str, str]
 
 
 def grade(season: int, weeks: list[int], detail_out: Path | None = None) -> dict:
-    board = load_boards(season, weeks)
+    board = apply_final_board_quarantine(load_boards(season, weeks))
     bets = select_model_bet(board)
+    if bets.empty:
+        graded = empty_graded_frame(bets)
+        if detail_out is not None:
+            detail_out.parent.mkdir(parents=True, exist_ok=True)
+            graded.to_csv(detail_out, index=False)
+            print(f"graded detail rows written: 0 -> {detail_out}")
+        return _zero_selected_summary(len(board))
+
     bets["team"] = bets["team"].map(canon_team)
     actual = load_actual_stats_unfiltered(season, weeks)
     roster = load_roster_identity(season, weeks)
