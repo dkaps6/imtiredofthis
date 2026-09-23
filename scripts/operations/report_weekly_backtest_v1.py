@@ -103,6 +103,12 @@ def report(detail_path: Path) -> int:
         if col not in d.columns:
             raise SystemExit(f"graded detail is missing required column {col!r}")
 
+    if d.empty:
+        section("SLATE BACKTEST — ZERO SELECTED PRODUCTION BETS")
+        print("selected settlement rows: 0; decided=0; void=0")
+        print("No publishable positive-EV bets were selected; report exits cleanly.")
+        return 0
+
     weeks = sorted(pd.to_numeric(d["week"], errors="coerce").dropna().astype(int).unique())
     section(f"SLATE BACKTEST — season {d['season'].iloc[0]}, weeks {weeks}")
     print(
