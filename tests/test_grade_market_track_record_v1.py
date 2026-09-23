@@ -5,6 +5,7 @@ import pandas as pd
 
 from scripts.operations.grade_market_track_record_v1 import (
     american_profit,
+    apply_production_decision_gates,
     edge_bucket,
     grade_matched_rows,
     match_bets_to_actuals,
@@ -212,3 +213,74 @@ def test_match_bets_to_actuals_and_grade_matched_rows_loss_case():
     assert summary["wins"] == 0
     assert summary["losses"] == 1
     assert graded.iloc[0]["unit_result"] == -1.0
+
+
+def _gate_evidence_for_test():
+    return {
+        "version": "PRODUCTION_DECISION_GATES_V1",
+        "weeks": {
+            "1": {
+                "source_run_id": "111",
+                "source_git_sha": "sha1",
+                "block_rules": [
+                    {"scope": "TEAM_ALL", "team": "SEA", "reason": "KICKED_OFF_LOCKED"}
+                ],
+            },
+            "2": {
+                "source_run_id": "222",
+                "source_git_sha": "sha2",
+                "block_rules": [
+                    {
+                        "scope": "PLAYER_MARKET",
+                        "team": "DET",
+                        "player_clean_key": "amonrastbrown",
+                        "market": "rec_yards",
+                        "reason": "UNMATCHED_CURRENT_ROSTER",
+                    }
+                ],
+            },
+        },
+    }
+
+
+def test_production_decision_gates_remove_team_and_player_market_blocks():
+    rows = [
+        {
+            "season": 2026, "week": 1, "team": "SEA",
+            "player": "A", "player_clean_key": "a", "market": "rec_yards",
+            "source_run_id": "111", "source_git_sha": "sha1",
+        },
+        {
+            "season": 2026, "week": 1, "team": "KC",
+            "player": "B", "player_clean_key": "b", "market": "rec_yards",
+            "source_run_id": "111", "source_git_sha": "sha1",
+        },
+        {
+            "season": 2026, "week": 2, "team": "DET",
+            "player": "Amon-Ra St. Brown", "player_clean_key": "amonrastbrown",
+            "market": "rec_yards", "source_run_id": "222", "source_git_sha": "sha2",
+        },
+        {
+            "season": 2026, "week": 2, "team": "DET",
+            "player": "Amon-Ra St. Brown", "player_clean_key": "amonrastbrown",
+            "market": "receptions", "source_run_id": "222", "source_git_sha": "sha2",
+        },
+    ]
+    got = apply_production_decision_gates(
+        pd.DataFrame(rows), evidence=_gate_evidence_for_test()
+    )
+    assert list(got["player_clean_key"]) == ["b", "amonrastbrown"]
+    assert list(got["market"]) == ["rec_yards", "receptions"]
+
+
+def test_production_decision_gates_fail_closed_on_source_lineage_drift():
+    row = pd.DataFrame(
+        [{
+            "season": 2026, "week": 1, "team": "KC",
+            "player": "B", "player_clean_key": "b", "market": "rec_yards",
+            "source_run_id": "wrong", "source_git_sha": "sha1",
+        }]
+    )
+    import pytest
+    with pytest.raises(RuntimeError, match="source_run_id drift"):
+        apply_production_decision_gates(row, evidence=_gate_evidence_for_test())
