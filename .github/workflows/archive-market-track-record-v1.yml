@@ -77,6 +77,15 @@ jobs:
             --week "${WEEK_RESOLVED}" \
             --run-id "${SOURCE_RUN_ID}"
 
+      - name: Snapshot recoverable ledger before git mutation
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/market_track_record_ledger
+          if [ -d data/market_track_record/boards ]; then
+            mkdir -p /tmp/market_track_record_ledger
+            cp -a data/market_track_record/boards/. /tmp/market_track_record_ledger/
+          fi
+
       - name: Commit archived board to the durable ledger
         run: |
           set -euo pipefail
@@ -98,22 +107,31 @@ jobs:
           fi
           git commit -m "market track record: archive Full Slate run ${SOURCE_RUN_ID}"
           for ATTEMPT in 1 2 3 4; do
-            git pull --rebase origin main && git push origin HEAD:main && exit 0
-            echo "push attempt ${ATTEMPT} failed; retrying"
+            if git pull --rebase origin main; then
+              if git push origin HEAD:main; then
+                exit 0
+              fi
+              echo "push attempt ${ATTEMPT} lost a race; retrying from clean branch state"
+            else
+              echo "rebase attempt ${ATTEMPT} conflicted; aborting before retry/preservation"
+              git rebase --abort || true
+            fi
             sleep $((2 ** ATTEMPT))
           done
-          echo "::error::could not push the archived board to main"
+          # Never leave a conflicted/in-progress rebase for the retention step.
+          git rebase --abort 2>/dev/null || true
+          echo "::error::could not push the archived board to main; recoverable pre-git snapshot will be retained"
           exit 1
 
       - name: Preserve the ledger as a long-retention artifact
         # Backstop for the failure mode that nearly lost Week 1: Full Slate
         # artifacts expire after 7 days, so a board that is not committed is
-        # unrecoverable a week later. This keeps a copy for 90 days even when
-        # the commit above cannot run.
-        if: ${{ always() && hashFiles('data/market_track_record/boards/**') != '' }}
+        # unrecoverable a week later. Upload the pre-git snapshot, never the
+        # working tree, so rebase conflicts cannot contaminate retained evidence.
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: market_track_record_ledger_${{ github.run_id }}
-          path: data/market_track_record/boards/
+          path: /tmp/market_track_record_ledger/
           if-no-files-found: ignore
           retention-days: 90
