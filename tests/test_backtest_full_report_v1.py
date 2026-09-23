@@ -100,6 +100,17 @@ def _all_pass_board() -> pd.DataFrame:
     )
 
 
+def _unsupported_only_board() -> pd.DataFrame:
+    board = _all_pass_board().copy()
+    board["market"] = "anytime_td"
+    board["source_market"] = "player_anytime_td"
+    board["vegas_line"] = 0.5
+    board["model_proj"] = 0.8
+    board.loc[board.side.eq("OVER"), "fair_prob"] = 0.80
+    board.loc[board.side.eq("UNDER"), "fair_prob"] = 0.20
+    return board
+
+
 def test_postgame_settlement_distinguishes_stats_zero_dnp_and_unknown():
     out = apply_postgame_settlement(_rows())
 
@@ -200,6 +211,18 @@ def test_gsis_grader_all_pass_returns_structured_zero_and_empty_detail(
 
 def test_full_report_all_pass_returns_downstream_safe_empty_frame(monkeypatch):
     monkeypatch.setattr(G, "load_boards", lambda season, weeks: _all_pass_board())
+    graded = BF.build_graded(2026, [1])
+
+    assert graded.empty
+    assert {"gsis_id", "settlement_status", "bet_result", "unit_result"} <= set(
+        graded.columns
+    )
+
+
+def test_full_report_unsupported_only_selection_returns_safe_empty_frame(monkeypatch):
+    monkeypatch.setattr(G, "load_boards", lambda season, weeks: _unsupported_only_board())
+    monkeypatch.setattr(G, "apply_final_board_quarantine", lambda board: board)
+    monkeypatch.setattr(G, "apply_production_decision_gates", lambda board: board)
     graded = BF.build_graded(2026, [1])
 
     assert graded.empty
