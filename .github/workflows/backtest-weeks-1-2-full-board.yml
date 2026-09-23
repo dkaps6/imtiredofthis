@@ -24,6 +24,7 @@ on:
       - 'docs/production/BACKTEST_2026_WEEKS_1_2_FINDINGS.md'
       - 'scripts/operations/verify_market_board_origin_v1.py'
       - 'data/market_track_record/ORIGIN_PROVENANCE_V1.json'
+      - 'data/market_track_record/IMMUTABLE_ORIGIN_ANCHORS_V1.json'
   pull_request:
     branches:
       - main
@@ -40,6 +41,7 @@ on:
       - 'docs/production/BACKTEST_2026_WEEKS_1_2_FINDINGS.md'
       - 'scripts/operations/verify_market_board_origin_v1.py'
       - 'data/market_track_record/ORIGIN_PROVENANCE_V1.json'
+      - 'data/market_track_record/IMMUTABLE_ORIGIN_ANCHORS_V1.json'
 
 permissions:
   contents: read
@@ -56,6 +58,8 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -88,25 +92,20 @@ jobs:
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
-          python scripts/operations/grade_market_track_record_gsis_v1.py \
-            --season "${BACKTEST_SEASON}" --weeks "1,2" \
-            --detail-out /tmp/graded_weeks_1_2.csv
+          python scripts/operations/grade_market_track_record_gsis_v1.py             --season "${BACKTEST_SEASON}" --weeks "1,2"             --detail-out /tmp/graded_weeks_1_2.csv
           test -s /tmp/graded_weeks_1_2.csv
 
       - name: Report the full decomposition
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
-          python scripts/operations/report_weekly_backtest_v1.py \
-            --detail /tmp/graded_weeks_1_2.csv
+          python scripts/operations/report_weekly_backtest_v1.py             --detail /tmp/graded_weeks_1_2.csv
 
       - name: Rebuild the independent full-report ledger and cross-check the committed record
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
-          python scripts/operations/backtest_full_report_v1.py \
-            --season "${BACKTEST_SEASON}" --weeks "1,2" \
-            --out /tmp/full_report_graded.csv
+          python scripts/operations/backtest_full_report_v1.py             --season "${BACKTEST_SEASON}" --weeks "1,2"             --out /tmp/full_report_graded.csv
           test -s /tmp/full_report_graded.csv
           python - <<'EOF'
           import numpy as np
@@ -164,12 +163,10 @@ jobs:
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
-          python scripts/research/slice_graded_track_record_v1.py \
-            --detail /tmp/graded_weeks_1_2.csv \
-            --min-n 25 --fdr-q 0.10
+          python scripts/research/slice_graded_track_record_v1.py             --detail /tmp/graded_weeks_1_2.csv             --min-n 25 --fdr-q 0.10
 
       - name: Upload graded detail
-        if: ${{ always() }}
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: backtest_weeks_1_2_graded
