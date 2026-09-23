@@ -20,7 +20,9 @@ research-only per project policy and is skipped here, matching production).
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
+import subprocess
 
 import numpy as np
 import pandas as pd
@@ -36,6 +38,8 @@ ROOT = Path(__file__).resolve().parents[2]
 BOARDS_DIR = ROOT / "data" / "market_track_record" / "boards"
 GRADED_DIR = ROOT / "data" / "market_track_record" / "graded"
 ALL_TIME_SUMMARY = ROOT / "data" / "market_track_record" / "summary_all_time.csv"
+PRODUCTION_GATE_EVIDENCE_COMMIT = "8133975f505365234dbdb75ff0fad0c715f68e31"
+PRODUCTION_GATE_EVIDENCE_PATH = "data/market_track_record/PRODUCTION_DECISION_GATES_V1.json"
 
 MARKET_STAT_COLUMNS: dict[str, list[str]] = {
     "pass_yards": ["passing_yards"],
@@ -144,6 +148,132 @@ def apply_final_board_quarantine(
             for team, keys in zip(teams, player_keys)
         ]
     return out.loc[~remove].copy()
+
+
+def _load_immutable_production_gate_evidence() -> dict:
+    """Load preserved pregame decision gates from their first immutable commit."""
+    proc = subprocess.run(
+        [
+            "git",
+            "show",
+            f"{PRODUCTION_GATE_EVIDENCE_COMMIT}:{PRODUCTION_GATE_EVIDENCE_PATH}",
+        ],
+        cwd=ROOT,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if proc.returncode != 0 or not proc.stdout.strip():
+        detail = proc.stderr.strip()
+        raise RuntimeError(
+            "unable to load immutable production decision gate evidence from "
+            f"{PRODUCTION_GATE_EVIDENCE_COMMIT}: {detail}"
+        )
+    payload = json.loads(proc.stdout)
+    if str(payload.get("version", "")) != "PRODUCTION_DECISION_GATES_V1":
+        raise RuntimeError("unexpected production decision gate evidence version")
+    return payload
+
+
+def apply_production_decision_gates(
+    board: pd.DataFrame,
+    *,
+    evidence: dict | None = None,
+) -> pd.DataFrame:
+    """Replay preserved pregame workbook blockers before selecting a wager.
+
+    These are downstream publication/eligibility gates only. They never feed a
+    sportsbook line or outcome into a football projection. The evidence is
+    pinned to the commit that first preserved it so a later board/edit cannot
+    silently rewrite the historical decision contract.
+    """
+    if board.empty:
+        return board.copy()
+
+    required = {
+        "season",
+        "week",
+        "team",
+        "player_clean_key",
+        "market",
+        "source_run_id",
+        "source_git_sha",
+    }
+    missing = required - set(board.columns)
+    if missing:
+        raise RuntimeError(
+            f"archived board missing production-gate columns: {sorted(missing)}"
+        )
+
+    gates = (
+        evidence
+        if evidence is not None
+        else _load_immutable_production_gate_evidence()
+    )
+    week_specs = gates.get("weeks", {})
+    out = board.copy()
+    seasons = pd.to_numeric(out["season"], errors="coerce")
+    weeks = pd.to_numeric(out["week"], errors="coerce")
+    if seasons.isna().any() or weeks.isna().any():
+        raise RuntimeError("archived board contains non-numeric season/week")
+
+    out["_gate_season"] = seasons.astype(int)
+    out["_gate_week"] = weeks.astype(int)
+    remove = pd.Series(False, index=out.index)
+
+    for (season, week), idx in out.groupby(
+        ["_gate_season", "_gate_week"], sort=False
+    ).groups.items():
+        spec = week_specs.get(str(int(week)))
+        if int(season) != 2026 or spec is None:
+            raise RuntimeError(
+                f"no preserved production decision gate evidence for {season} week {week}"
+            )
+
+        run_ids = set(out.loc[idx, "source_run_id"].astype(str))
+        source_shas = set(out.loc[idx, "source_git_sha"].astype(str))
+        if run_ids != {str(spec.get("source_run_id", ""))}:
+            raise RuntimeError(
+                f"Week {week} production-gate source_run_id drift: {sorted(run_ids)}"
+            )
+        if source_shas != {str(spec.get("source_git_sha", ""))}:
+            raise RuntimeError(
+                f"Week {week} production-gate source_git_sha drift: {sorted(source_shas)}"
+            )
+
+        teams = out.loc[idx, "team"].map(canon_team)
+        player_keys = (
+            out.loc[idx, "player_clean_key"]
+            .astype("string")
+            .fillna("")
+            .str.strip()
+            .str.lower()
+        )
+        markets = out.loc[idx, "market"].astype(str)
+
+        for rule in spec.get("block_rules", []):
+            scope = str(rule.get("scope", "")).strip().upper()
+            rule_team = canon_team(rule.get("team", ""))
+            if scope == "TEAM_ALL":
+                mask = teams.eq(rule_team)
+            elif scope == "PLAYER_MARKET":
+                mask = (
+                    teams.eq(rule_team)
+                    & player_keys.eq(
+                        str(rule.get("player_clean_key", "")).strip().lower()
+                    )
+                    & markets.eq(str(rule.get("market", "")))
+                )
+            else:
+                raise RuntimeError(
+                    f"Week {week} unknown production decision gate scope {scope!r}"
+                )
+            remove.loc[idx] = remove.loc[idx] | mask.to_numpy()
+
+    return out.loc[~remove].drop(
+        columns=["_gate_season", "_gate_week"], errors="ignore"
+    ).copy()
 
 
 BET_KEY = ["season", "week", "event_id", "player", "market"]
@@ -397,6 +527,7 @@ def grade(season: int, weeks: list[int] | None) -> dict:
     if board.empty:
         return {"status": "no_archived_board_rows", "season": season, "weeks": weeks}
     board = apply_final_board_quarantine(board)
+    board = apply_production_decision_gates(board)
     if board.empty:
         return {
             "status": "no_publishable_board_rows_after_final_quarantine",
