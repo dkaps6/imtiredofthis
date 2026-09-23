@@ -1,0 +1,69 @@
+{
+  "version": "PRODUCTION_DECISION_GATES_V1",
+  "purpose": "Preserved pregame workbook eligibility gates for the canonical 2026 Week 1-2 production betting track record. Sportsbook data remains downstream only.",
+  "weeks": {
+    "1": {
+      "source_run_id": "34650067599",
+      "source_git_sha": "be061eaf23372f080db3911d3b4919120c744c53",
+      "source_job_id": "103429972300",
+      "evidence_basis": "Original paid Full Slate run logs plus frozen source lineage code and the recovered priced board.",
+      "source_facts": {
+        "availability_asof_utc": "2026-09-11T21:36:40.970365+00:00",
+        "game_count": 16,
+        "eligible_games": 14,
+        "kicked_off_locked_games": 2,
+        "kicked_off_locked_teams": ["LAR", "NE", "SEA", "SF"],
+        "core_unresolved_player_rows": 0,
+        "sportsbook_current_roster_mismatches": 0,
+        "temporary_possible_historical_aliases": 0,
+        "definitive_unavailable_excluded_before_opportunity": 1,
+        "lineage_version": "MARKET_MODEL_LINEAGE_V3_R22_WEEK1_PROMOTED"
+      },
+      "block_rules": [
+        {"scope": "TEAM_ALL", "team": "LAR", "reason": "KICKED_OFF_LOCKED"},
+        {"scope": "TEAM_ALL", "team": "NE", "reason": "KICKED_OFF_LOCKED"},
+        {"scope": "TEAM_ALL", "team": "SEA", "reason": "KICKED_OFF_LOCKED"},
+        {"scope": "TEAM_ALL", "team": "SF", "reason": "KICKED_OFF_LOCKED"}
+      ],
+      "notes": "The recovered priced Week-1 board already contains no rows for these four locked teams. Source identity logs show no unresolved core sportsbook player rows/current-roster mismatches, and every selected non-ATD position-market family is represented by the frozen source lineage registry."
+    },
+    "2": {
+      "source_run_id": "35282021679",
+      "source_git_sha": "c6ec55be70d6e05bbd1dbae83d7d5c86ac8aa00a",
+      "source_artifact_id": "10523345092",
+      "source_artifact_sha256": "6024ed21d7032e6e6440145277d9d4b74e98f319ef286962bac2a786a8d28e3c",
+      "source_workbook_sha256": "962ef8dc048783bd90a7441652d910180e05b1b96a9608f0203607c6668b189c",
+      "evidence_basis": "Exact uploaded source workbook Decision/Snapshot Signal fields matched against reconstructed highest-EV player-market selections.",
+      "block_rules": [
+        {
+          "scope": "PLAYER_MARKET",
+          "team": "DET",
+          "player_clean_key": "amonrastbrown",
+          "market": "rec_yards",
+          "reason": "UNMATCHED_CURRENT_ROSTER",
+          "source_signal": "BLOCKED",
+          "source_decision": "BLOCKED"
+        },
+        {
+          "scope": "PLAYER_MARKET",
+          "team": "DET",
+          "player_clean_key": "amonrastbrown",
+          "market": "receptions",
+          "reason": "UNMATCHED_CURRENT_ROSTER",
+          "source_signal": "BLOCKED",
+          "source_decision": "BLOCKED"
+        },
+        {
+          "scope": "PLAYER_MARKET",
+          "team": "SF",
+          "player_clean_key": "deebosamuelsr",
+          "market": "rush_rec_yards",
+          "reason": "LINEAGE_NOT_RESOLVED",
+          "source_signal": "RESEARCH ONLY",
+          "source_decision": "BLOCKED"
+        }
+      ],
+      "notes": "These three blocks are independent of the separate final-board Carson Wentz quarantine. Among the reconstructed positive-EV player-market selections, all other source-workbook rows had an actionable Decision and matching side."
+    }
+  }
+}
