@@ -9,7 +9,23 @@ on:
   workflow_dispatch:
   push:
     branches:
+      - main
       - claude/nice-cori-4qkwqs
+    paths:
+      - '.github/workflows/backtest-weeks-1-2-full-board.yml'
+      - 'scripts/operations/grade_market_track_record_v1.py'
+      - 'scripts/operations/grade_market_track_record_gsis_v1.py'
+      - 'scripts/operations/report_weekly_backtest_v1.py'
+      - 'scripts/operations/backtest_full_report_v1.py'
+      - 'data/market_track_record/boards/2026_wk01.csv'
+      - 'data/market_track_record/boards/2026_wk02.csv'
+      - 'data/market_track_record/graded/2026_wk01_wk02_graded.csv'
+      - 'docs/production/BACKTEST_2026_WEEKS_1_2_FINDINGS.md'
+      - 'scripts/operations/verify_market_board_origin_v1.py'
+      - 'data/market_track_record/ORIGIN_PROVENANCE_V1.json'
+  pull_request:
+    branches:
+      - main
     paths:
       - '.github/workflows/backtest-weeks-1-2-full-board.yml'
       - 'scripts/operations/grade_market_track_record_v1.py'
