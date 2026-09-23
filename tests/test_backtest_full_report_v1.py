@@ -231,6 +231,28 @@ def test_full_report_unsupported_only_selection_returns_safe_empty_frame(monkeyp
     )
 
 
+def test_gsis_grader_unsupported_only_selection_returns_structured_zero(
+    monkeypatch,
+    tmp_path: Path,
+):
+    monkeypatch.setattr(GG, "load_boards", lambda season, weeks: _unsupported_only_board())
+    monkeypatch.setattr(GG, "apply_final_board_quarantine", lambda board: board)
+    monkeypatch.setattr(GG, "apply_production_decision_gates", lambda board: board)
+    detail_path = tmp_path / "unsupported_detail.csv"
+
+    summary = GG.grade(2026, [1], detail_out=detail_path)
+
+    assert summary["selection_status"] == "unsupported_only_zero_gradeable_bets"
+    assert summary["selected_settlement_rows"] == 0
+    assert summary["decided_bets"] == 0
+    assert summary["units"] == 0.0
+    detail = pd.read_csv(detail_path)
+    assert detail.empty
+    assert {"gsis_id", "settlement_status", "bet_result", "unit_result"} <= set(
+        detail.columns
+    )
+
+
 def test_weekly_report_all_pass_header_only_detail_exits_cleanly(tmp_path: Path):
     detail_path = tmp_path / "detail.csv"
     empty = GG.empty_graded_frame(_all_pass_board().iloc[0:0])
