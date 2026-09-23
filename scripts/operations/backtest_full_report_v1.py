@@ -32,7 +32,10 @@ def build_graded(season: int, weeks: list[int]) -> pd.DataFrame:
     board = G.load_boards(season, weeks)
     if board.empty:
         raise SystemExit(f"no archived boards for {season} weeks {weeks}")
+    board = G.apply_final_board_quarantine(board)
     bets = G.select_model_bet(board)
+    if bets.empty:
+        return GG.empty_graded_frame(bets)
     bets["team"] = bets["team"].map(canon_team)
 
     actual = GG.load_actual_stats_unfiltered(season, weeks)
@@ -156,6 +159,10 @@ def report(g: pd.DataFrame, season: int, weeks: list[int]) -> None:
     print(f"FULL GRADED BACKTEST — {season}, weeks {weeks}")
     print("production Best Snapshot only: highest-EV real offer per player-market; nonpositive EV passes; DNP voids")
     print(bar)
+    if g.empty:
+        print("selected settlement rows: 0   decided: 0   voids: 0   pushes: 0   snap-confirmed zero outcomes: 0")
+        print("\nNo production BET rows: every publishable player-market PASSed or failed closed.")
+        return
     print(
         f"selected settlement rows: {len(g)}   decided: {int(g.bet_result.isin(['WIN','LOSS']).sum())}   "
         f"voids: {int(g.bet_result.eq('VOID').sum())}   pushes: {int(g.bet_result.eq('PUSH').sum())}   "
