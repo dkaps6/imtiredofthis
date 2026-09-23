@@ -25,6 +25,7 @@ on:
       - 'scripts/operations/verify_market_board_origin_v1.py'
       - 'data/market_track_record/ORIGIN_PROVENANCE_V1.json'
       - 'data/market_track_record/IMMUTABLE_ORIGIN_ANCHORS_V1.json'
+      - 'data/market_track_record/PRODUCTION_DECISION_GATES_V1.json'
   pull_request:
     branches:
       - main
@@ -42,6 +43,7 @@ on:
       - 'scripts/operations/verify_market_board_origin_v1.py'
       - 'data/market_track_record/ORIGIN_PROVENANCE_V1.json'
       - 'data/market_track_record/IMMUTABLE_ORIGIN_ANCHORS_V1.json'
+      - 'data/market_track_record/PRODUCTION_DECISION_GATES_V1.json'
 
 permissions:
   contents: read
