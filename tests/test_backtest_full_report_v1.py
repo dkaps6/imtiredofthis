@@ -77,6 +77,8 @@ def _all_pass_board() -> pd.DataFrame:
         "book_title": "DraftKings",
         "vegas_line": 250.5,
         "model_proj": 250.0,
+        "source_run_id": "34650067599",
+        "source_git_sha": "be061eaf23372f080db3911d3b4919120c744c53",
     }
     return pd.DataFrame(
         [
