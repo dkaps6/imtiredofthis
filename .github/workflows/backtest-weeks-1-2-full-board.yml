@@ -44,7 +44,7 @@ on:
       - 'data/market_track_record/IMMUTABLE_ORIGIN_ANCHORS_V1.json'
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 env:
@@ -94,22 +94,6 @@ jobs:
           export PYTHONPATH="${PWD}"
           python scripts/operations/grade_market_track_record_gsis_v1.py             --season "${BACKTEST_SEASON}" --weeks "1,2"             --detail-out /tmp/graded_weeks_1_2.csv
           test -s /tmp/graded_weeks_1_2.csv
-
-      - name: Refresh canonical ledger once on PR626 branch
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/claude/nice-cori-4qkwqs' }}
-        run: |
-          set -euo pipefail
-          CANONICAL=data/market_track_record/graded/2026_wk01_wk02_graded.csv
-          cp /tmp/graded_weeks_1_2.csv "${CANONICAL}"
-          if git diff --quiet -- "${CANONICAL}"; then
-            echo "canonical ledger already current"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add "${CANONICAL}"
-            git commit -m "Refresh canonical W1/W2 ledger after final-board quarantine"
-            git push origin HEAD:claude/nice-cori-4qkwqs
-          fi
 
       - name: Report the full decomposition
         run: |
