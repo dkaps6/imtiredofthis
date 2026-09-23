@@ -25,6 +25,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from scripts._opponent_map import canon_team
+from scripts.operations.quarantine_final_priced_props_v1 import (
+    QUARANTINE as FINAL_BOARD_QUARANTINE,
+    _load_quarantine_keys,
+)
+from scripts.repair_live_prop_identity_v1 import _name_keys
+
 ROOT = Path(__file__).resolve().parents[2]
 BOARDS_DIR = ROOT / "data" / "market_track_record" / "boards"
 GRADED_DIR = ROOT / "data" / "market_track_record" / "graded"
@@ -99,6 +106,44 @@ def load_boards(season: int, weeks: list[int] | None) -> pd.DataFrame:
         return pd.DataFrame()
     frames = [pd.read_csv(p) for p in paths]
     return pd.concat(frames, ignore_index=True, sort=False)
+
+
+def apply_final_board_quarantine(
+    board: pd.DataFrame,
+    quarantine_path: Path = FINAL_BOARD_QUARANTINE,
+) -> pd.DataFrame:
+    """Apply the verified final-board publication policy before grading."""
+    if board.empty:
+        return board.copy()
+    required = {"season", "week", "team", "player"}
+    missing = required - set(board.columns)
+    if missing:
+        raise RuntimeError(
+            f"archived board missing final-quarantine columns: {sorted(missing)}"
+        )
+    out = board.copy()
+    seasons = pd.to_numeric(out["season"], errors="coerce")
+    weeks = pd.to_numeric(out["week"], errors="coerce")
+    if seasons.isna().any() or weeks.isna().any():
+        raise RuntimeError("archived board contains non-numeric season/week")
+
+    remove = pd.Series(False, index=out.index)
+    scope = pd.DataFrame(
+        {"season": seasons.astype(int), "week": weeks.astype(int)}, index=out.index
+    )
+    for (season, week), idx in scope.groupby(["season", "week"]).groups.items():
+        quarantine_keys = _load_quarantine_keys(
+            quarantine_path, season=int(season), week=int(week)
+        )
+        if not quarantine_keys:
+            continue
+        teams = out.loc[idx, "team"].map(canon_team)
+        player_keys = out.loc[idx, "player"].map(_name_keys)
+        remove.loc[idx] = [
+            bool({(team, key) for key in keys} & quarantine_keys)
+            for team, keys in zip(teams, player_keys)
+        ]
+    return out.loc[~remove].copy()
 
 
 BET_KEY = ["season", "week", "event_id", "player", "market"]
@@ -351,6 +396,13 @@ def grade(season: int, weeks: list[int] | None) -> dict:
     board = load_boards(season, weeks)
     if board.empty:
         return {"status": "no_archived_board_rows", "season": season, "weeks": weeks}
+    board = apply_final_board_quarantine(board)
+    if board.empty:
+        return {
+            "status": "no_publishable_board_rows_after_final_quarantine",
+            "season": season,
+            "weeks": weeks,
+        }
 
     present_weeks = sorted(set(num(board.week).dropna().astype(int)))
     actual = load_actual_stats(season, present_weeks)
