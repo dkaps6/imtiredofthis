@@ -46,7 +46,8 @@ import pandas as pd
 
 from scripts._opponent_map import canon_team
 from scripts.operations.grade_market_track_record_v1 import (
-    MARKET_STAT_COLUMNS, apply_final_board_quarantine, load_boards,
+    MARKET_STAT_COLUMNS, apply_final_board_quarantine,
+    apply_production_decision_gates, load_boards,
     select_model_bet, num, outcome_side, american_profit, edge_bucket,
 )
 from scripts.utils.canonical_names import canonicalize_player_name_safe
@@ -370,6 +371,7 @@ def resolve_gsis(player_clean_key: str, team: str, idx: dict) -> tuple[str, str]
 
 def grade(season: int, weeks: list[int], detail_out: Path | None = None) -> dict:
     board = apply_final_board_quarantine(load_boards(season, weeks))
+    board = apply_production_decision_gates(board)
     bets = select_model_bet(board)
     if bets.empty:
         graded = empty_graded_frame(bets)
