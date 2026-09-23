@@ -26,6 +26,8 @@ on:
       - 'data/market_track_record/ORIGIN_PROVENANCE_V1.json'
       - 'data/market_track_record/IMMUTABLE_ORIGIN_ANCHORS_V1.json'
       - 'data/market_track_record/PRODUCTION_DECISION_GATES_V1.json'
+      - 'data/manual_final_board_quarantine.csv'
+      - 'scripts/operations/quarantine_final_priced_props_v1.py'
   pull_request:
     branches:
       - main
@@ -44,6 +46,8 @@ on:
       - 'data/market_track_record/ORIGIN_PROVENANCE_V1.json'
       - 'data/market_track_record/IMMUTABLE_ORIGIN_ANCHORS_V1.json'
       - 'data/market_track_record/PRODUCTION_DECISION_GATES_V1.json'
+      - 'data/manual_final_board_quarantine.csv'
+      - 'scripts/operations/quarantine_final_priced_props_v1.py'
 
 permissions:
   contents: read
