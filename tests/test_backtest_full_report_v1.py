@@ -9,6 +9,7 @@ import pandas as pd
 from scripts.operations import backtest_full_report_v1 as BF
 from scripts.operations import grade_market_track_record_gsis_v1 as GG
 from scripts.operations import grade_market_track_record_v1 as G
+from scripts.operations import report_weekly_backtest_v1 as RW
 from scripts.operations.grade_market_track_record_gsis_v1 import apply_postgame_settlement
 from scripts.operations.backtest_full_report_v1 import _cell
 from scripts.operations.report_weekly_backtest_v1 import _row_stats
@@ -203,3 +204,11 @@ def test_full_report_all_pass_returns_downstream_safe_empty_frame(monkeypatch):
     assert {"gsis_id", "settlement_status", "bet_result", "unit_result"} <= set(
         graded.columns
     )
+
+
+def test_weekly_report_all_pass_header_only_detail_exits_cleanly(tmp_path: Path):
+    detail_path = tmp_path / "detail.csv"
+    empty = GG.empty_graded_frame(_all_pass_board().iloc[0:0])
+    empty.to_csv(detail_path, index=False)
+
+    assert RW.report(detail_path) == 0
