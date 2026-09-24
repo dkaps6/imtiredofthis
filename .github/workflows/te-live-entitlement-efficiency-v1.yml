@@ -1,0 +1,91 @@
+name: TE Live Entitlement Efficiency V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-te-live-entitlement-efficiency-v1
+    paths:
+      - '.github/workflows/te-live-entitlement-efficiency-v1.yml'
+      - 'docs/research/TE_LIVE_ENTITLEMENT_EFFICIENCY_V1_PLAN.md'
+      - 'scripts/research/te_live_entitlement_efficiency_v1.py'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy
+
+      - name: Verify immutable Week-2 origin artifact metadata
+        run: |
+          set -euo pipefail
+          DIGEST=$(gh api repos/"${GITHUB_REPOSITORY}"/actions/artifacts/10523345092 --jq '.digest')
+          test "${DIGEST}" = "sha256:6024ed21d7032e6e6440145277d9d4b74e98f319ef286962bac2a786a8d28e3c"
+          echo "verified origin artifact digest: ${DIGEST}"
+
+      - name: Download exact paid Week-2 origin artifact
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/w2_origin
+          mkdir -p /tmp/w2_origin
+          gh run download 35282021679             --repo "${GITHUB_REPOSITORY}"             --name run_35282021679             --dir /tmp/w2_origin
+          test -s /tmp/w2_origin/data/te_r5p_full_slate_entitlement_trace.csv
+          test -s /tmp/w2_origin/data/target_entitlement_v1_trace.csv
+          test -s /tmp/w2_origin/data/football_simulation_universe.csv
+
+      - name: Compile diagnostic
+        run: |
+          python -m py_compile scripts/research/te_live_entitlement_efficiency_v1.py
+
+      - name: Run frozen TE live diagnostic
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/research/te_live_entitlement_efficiency_v1.py             --origin-dir /tmp/w2_origin             --ledger data/market_track_record/graded/2026_wk01_wk02_graded.csv             --out-dir /tmp/te_live_v1
+          test -s /tmp/te_live_v1/summary.json
+          test -s /tmp/te_live_v1/RESULT.md
+          test -s /tmp/te_live_v1/week2_all_te_entitlement.csv
+          test -s /tmp/te_live_v1/week2_selected_te_rec_yards.csv
+
+      - name: Confirm research-only invariants
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/te_live_v1/summary.json'))
+          assert p['production_changed'] is False
+          assert p['sportsbook_inputs_added_to_football_model'] == 0
+          assert p['origin_run_id'] == '35282021679'
+          assert p['origin_artifact_id'] == '10523345092'
+          assert p['week2_all_te']['matched_rows'] >= 60
+          assert p['week2_selected_te_rec_yards']['target_outcome_matched_rows'] >= 25
+          print('research invariants PASS')
+          PY
+
+      - name: Upload TE diagnostic artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: te-live-entitlement-efficiency-v1
+          path: /tmp/te_live_v1/
+          if-no-files-found: error
+          retention-days: 90
