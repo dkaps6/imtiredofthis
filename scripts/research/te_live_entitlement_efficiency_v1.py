@@ -32,6 +32,14 @@ def _num(s) -> pd.Series:
     return pd.to_numeric(s, errors="coerce")
 
 
+def _base_key(value) -> str:
+    key = str(value or "").strip().lower()
+    for suffix in ("iii", "jr", "sr", "ii", "iv", "v"):
+        if key.endswith(suffix) and len(key) > len(suffix):
+            return key[: -len(suffix)]
+    return key
+
+
 def _load_origin(root: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     data = root / "data"
     need = {
@@ -300,19 +308,38 @@ def run(origin_dir: Path, ledger_path: Path, out_dir: Path) -> dict:
         & ledger["market"].astype(str).eq("rec_yards")
         & ledger["settlement_status"].astype(str).eq("SETTLED")
     ].copy()
+    # The archived sportsbook board uses provider event hashes while the
+    # football origin trace uses schedule game_ids (e.g. 2026_02_ARI_SEA).
+    # They identify the same game but are not join-compatible.  Resolve the
+    # selected cohort by team + canonical suffix-stripped player identity,
+    # exactly as the production grading identity hierarchy does, and fail
+    # closed on any ambiguity.
+    selected["_join_player_key"] = selected["player_clean_key"].map(_base_key)
+    live_join = live.copy()
+    live_join["_join_player_key"] = live_join["player_clean_key"].map(_base_key)
+    if live_join.duplicated(["team", "_join_player_key"], keep=False).any():
+        dup = live_join.loc[
+            live_join.duplicated(["team", "_join_player_key"], keep=False),
+            ["team", "player", "player_clean_key", "_join_player_key"],
+        ]
+        raise RuntimeError(
+            "ambiguous Week-2 TE football identity after suffix normalization:\n"
+            + dup.to_string(index=False)
+        )
     selected = selected.merge(
-        live[[
-            "event_id", "team", "player_clean_key", "gsis_id",
+        live_join[[
+            "team", "_join_player_key", "gsis_id",
             "actual_targets", "actual_receptions", "actual_rec_yards",
             "actual_team_targets", "actual_target_share", "actual_te_room_share",
             "te_r5p_entitlement_tgt_share", "candidate_entitlement_tgt_share",
             "te_r5p_room_share", "candidate_room_share",
             "prior1_same_team_offense_pct", "prior1_same_team_offense_snaps",
         ]],
-        on=["event_id", "team", "player_clean_key"],
+        on=["team", "_join_player_key"],
         how="left",
         validate="many_to_one",
     )
+    selected.drop(columns=["_join_player_key"], inplace=True)
     # The canonical ledger proves zero outcome for snap-confirmed no-stat rows.
     zero_verified = selected["actual_source"].astype(str).eq("snap_confirmed_verified_zero")
     for col in ("actual_targets", "actual_receptions", "actual_rec_yards"):
