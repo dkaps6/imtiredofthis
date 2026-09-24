@@ -79,3 +79,68 @@ If it identifies one deterministic historical source seam that can be restored t
 If it instead reveals broad historical provider mutation, multiple unresolved seams, or any reconstruction that would require approximating the expired 2,000-draw arrays, Width V2 is parked as source-blocked. The project then pivots immediately to the sanctioned RB teammate-availability / injury-created-vacancy rushing-opportunity science lane.
 
 No Normal approximation. No k search. No relaxed parity. No sportsbook input upstream. No 2026 outcome fit.
+
+
+## Diagnostic run #4 result
+
+Run: `35948975494`  
+Artifact: `10788097328`  
+Artifact digest: `sha256:53bd3156339432f877024f4bafdb63d2aeb3a9649a5bf7f53332d8cbf4863b66`
+
+Run #4 failed closed at the unchanged canonical baseline parity gate, as intended. No Width V2 science ran.
+
+Observed replay drift:
+
+- frozen rows: 51,197
+- current rows: 51,232
+- current-only rows: 35
+- missing frozen rows: 0
+- frozen-key MC drift rows above `1e-10`: 8,457
+- max absolute `mc_proj` drift: 14.020649281259615 yd
+- **all 8,457 MC-drift rows are 2024 Weeks 1-7**
+- **zero MC drift exists in 2024 Weeks 8-18 or in 2025**
+- Tampa Bay is the dominant location; the largest receiving-yard drift is TB Week 7.
+- smaller drift propagates league-wide in Weeks 1-7, consistent with a shared player-consensus/Bayesian layer changing when one historical identity becomes resolvable.
+
+Upstream component localization:
+
+- exact/no drift:
+  - `rules_plays_est`
+  - `rules_pass_rate`
+  - every context-availability flag checked
+  - MC team plays/dropback/pass-attempt fields
+  - `ml_proj`
+  - `state_proj`
+  - `actual`
+- drifted on 4,125 frozen rows:
+  - `rules_tgt_share`
+  - `rules_rush_share`
+  - `rules_ypt`
+  - `rules_ypc`
+  - `rules_ypa`
+  - `rules_catch_rate`
+  - corresponding Bayesian/rules efficiency fields
+
+This pattern, together with the exact Chris Godwin W1-7 current-only output seam, supports the post-#549 manual identity override as the deterministic MC replay cause.
+
+A second independent mechanical drift is also proven:
+
+- `ensemble_proj` differs on 23,403 frozen rows while ML/state are exact.
+- PR #549 source `data/model_ensemble_weights.csv` contains only pass_yards, rush_att, and rush_yards weights.
+- current `data/model_ensemble_weights.csv` adds promoted rec_yards and receptions weights after #549.
+- therefore exact #549 baseline reconstruction must use the source-era ensemble-weight file, not today's production weights.
+
+## Authorized exact repair replay
+
+One repair replay is authorized under the time-box.
+
+Inside the Actions workspace only, before historical reconstruction:
+
+1. restore `data/manual_name_overrides.csv` from source SHA `f04a8a775f4a56fe282cb292f6a52bd509bc8f24`;
+2. restore `data/model_ensemble_weights.csv` from the same source SHA;
+3. do **not** revert either file in production/main;
+4. run the unchanged frozen parity gates.
+
+This is source-environment reconstruction, not model retuning.
+
+If exact baseline parity still fails after these two identified deterministic source seams are restored, Width V2 is parked source-blocked and the project pivots immediately to the sanctioned RB teammate-availability / injury-created-vacancy rushing-opportunity lane. No further open-ended replay plumbing is authorized.
