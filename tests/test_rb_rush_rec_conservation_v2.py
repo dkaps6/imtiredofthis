@@ -76,3 +76,9 @@ def test_non_rb_is_strict_noop():
 def test_missing_standalone_component_fails_closed():
     with pytest.raises(RuntimeError, match="missing standalone component"):
         build_candidate_map(_metrics(include_rush=False), _sims(), pd.DataFrame())
+
+
+def test_fb_is_strict_noop():
+    out, payload = build_candidate_map(_metrics(position="FB"), _sims(), pd.DataFrame())
+    assert out == {}
+    assert payload["players"] == 0
