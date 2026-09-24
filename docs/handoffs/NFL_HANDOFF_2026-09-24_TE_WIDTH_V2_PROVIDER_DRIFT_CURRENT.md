@@ -1,5 +1,26 @@
 # NFL HANDOFF — 2026-09-24 — TE LIVE SCIENCE / WIDTH V2 PROVIDER-DRIFT CHECKPOINT
 
+> **FINAL VERIFIED CONTINUITY NOTE**
+>
+> This is the single canonical detailed handoff for the next chat. It supersedes
+> the stale PR-626-open handoffs and the older
+> `NFL_HANDOFF_2026-09-23_PR626_MERGED_TE_LIVE_SCIENCE_CURRENT.md` reference.
+>
+> Live verification immediately before this handoff refresh:
+> - `main` = `5eda4c5949cb384bbe986d2b80562a278085df45`
+> - active branch = `research-te-live-entitlement-efficiency-v1`
+> - physical branch head = `839f7d206d47709ab8ed5576908dae205057be24`
+> - TE Width V2 run #3 `35944066618` / job `107458022324` = **FAILED CLOSED**
+> - failure occurred at **Reproduce canonical baseline projection**; Width V2
+>   grading itself never ran
+> - exact frozen-row max `mc_proj` drift =
+>   **14.020649281259615 yd**
+> - no Width V2 science conclusion exists from runs #1-#3
+>
+> **Context-budget rule:** the next chat should read only the five items in
+> "Minimal read order" below, then work. Do not recursively open older handoffs
+> unless this file explicitly points to one.
+
 GitHub is canonical. This handoff is designed to let the next GPT-5.6 chat continue without re-reading the entire project history.
 
 ## Minimal read order
