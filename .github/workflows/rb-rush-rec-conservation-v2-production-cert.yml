@@ -74,6 +74,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
           NFL_SEASON: '2026'
           NFL_WEEK: '2'
+          ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
           RB_RUSH_REC_CONSERVATION_V2: '0'
         run: |
           python scripts/run_pricing_with_full_roster_universe_v5_production.py --season 2026
@@ -91,6 +92,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
           NFL_SEASON: '2026'
           NFL_WEEK: '2'
+          ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
         run: |
           python scripts/run_pricing_with_full_roster_universe_v6_production.py --season 2026
           test -s outputs/props_priced_clean.csv
@@ -101,16 +103,11 @@ jobs:
           cp data/rb_rush_rec_conservation_v2_integration_audit.json /tmp/rb_rr_v2_prod/seam_audit.json
           cp data/rb_rush_rec_conservation_v2_integration_audit.csv /tmp/rb_rr_v2_prod/seam_audit.csv
 
-      - name: Apply canonical downstream certification scope seam
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/operations/apply_current_availability_downstream_certification_seam_v1.py
-
       - name: Run existing downstream certification checks
         env:
           PYTHONPATH: ${{ github.workspace }}
           NFL_SEASON: '2026'
+          ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
         run: |
           python scripts/stamp_qb_c2_pricing_lineage_v1.py
           python scripts/validate_rb_rush_rec_conservation_v1.py
