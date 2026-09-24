@@ -20,10 +20,12 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 
-from scripts.backtest.component_predictions import build_mc_predictions
+from scripts.backtest.component_predictions import build_actual_rows, build_mc_predictions, _attach_component_projection
 from scripts.backtest.historical_context import build_historical_context_bundle
 from scripts.backtest.walk_forward import _exact_week, _parse_weeks
 from scripts.modeling.ensemble_v2 import apply_ensemble, load_weights
+from scripts.modeling.ml_v2 import build_and_train as build_ml
+from scripts.modeling.state_v2 import build_state_predictions
 from scripts.modeling.rb_rush_rec_conservation_v2 import build_candidate_map
 from scripts.modeling.rush_pool_evidence_guard_v1 import ENV_VAR, VERSION
 from scripts.modeling.target_entitlement_v1 import materialize_target_entitlement
@@ -169,7 +171,7 @@ def _ensemble_projection(records: pd.DataFrame, *, weights: pd.DataFrame, mc_col
 
 def evaluate_season(*, season:int, prior_season:int, weeks:list[int], player_logs:pd.DataFrame,
                     team_weekly:pd.DataFrame, schedule:pd.DataFrame, universe_dir:Path,
-                    component:pd.DataFrame, injuries:pd.DataFrame, weather:pd.DataFrame,
+                    injuries:pd.DataFrame, weather:pd.DataFrame,
                     te_params:dict, wr_params:dict|None, snaps:pd.DataFrame,
                     weights:pd.DataFrame, iterations:int) -> tuple[pd.DataFrame,pd.DataFrame,dict]:
     details=[]; audits=[]; max_v2_gap=0.0; sportsbook_inputs=0
@@ -218,13 +220,18 @@ def evaluate_season(*, season:int, prior_season:int, weeks:list[int], player_log
             })
             continue
 
-        comp=component.loc[component["season"].eq(int(season)) & component["week"].eq(int(week))].copy()
+        _,ml_pred=build_ml(player_logs,bundle.player_consensus,int(season),int(week))
+        _,state_pred=build_state_predictions(player_logs,bundle.player_consensus,int(season),int(week))
         mcols=["event_id","team","player","player_clean_key","position","market","season","week"]
         market_rows=metrics[mcols].copy()
         market_rows["team"]=market_rows["team"].map(canon_team); market_rows["market"]=market_rows["market"].astype(str).str.lower()
+        market_rows=_attach_component_projection(market_rows,ml_pred,"ml")
+        market_rows=_attach_component_projection(market_rows,state_pred,"state")
+        actual=build_actual_rows(player_logs,int(season),int(week))
+        actual["team"]=actual["team"].map(canon_team); actual["market"]=actual["market"].astype(str).str.lower()
         all_joined=market_rows.merge(
-            comp[KEYS+["ml_proj","state_proj","actual"]],
-            on=KEYS,how="inner",validate="one_to_one"
+            actual[["team","player_clean_key","market","actual"]],
+            on=["team","player_clean_key","market"],how="inner",validate="one_to_one"
         )
         if all_joined.empty: raise RuntimeError(f"{season} W{week:02d} no scored market rows")
         all_joined["position_family"]=all_joined["position"].map(_pos_family)
@@ -325,8 +332,6 @@ def main()->int:
     ap.add_argument("--schedule",type=Path,required=True)
     ap.add_argument("--universe-2024",type=Path,required=True)
     ap.add_argument("--universe-2025",type=Path,required=True)
-    ap.add_argument("--component-2024",type=Path,required=True)
-    ap.add_argument("--component-2025",type=Path,required=True)
     ap.add_argument("--injuries",type=Path,required=True)
     ap.add_argument("--weather",type=Path,required=True)
     ap.add_argument("--te-coefficients",type=Path,required=True)
@@ -341,8 +346,6 @@ def main()->int:
     team=_read(a.team_weekly,"team weekly")
     sched=_read(a.schedule,"schedule")
     injuries=_optional(a.injuries); weather=_optional(a.weather)
-    c24=_canon_frame(_read(a.component_2024,"2024 component predictions"))
-    c25=_canon_frame(_read(a.component_2025,"2025 component predictions"))
     weights=load_weights(a.weights)
     te24=_load_fold_params(a.te_coefficients,test_season=2024,features=TE_FEATURES,label="TE-R5P")
     te25=_load_fold_params(a.te_coefficients,test_season=2025,features=TE_FEATURES,label="TE-R5P")
@@ -352,10 +355,10 @@ def main()->int:
     weeks=_parse_weeks(a.weeks)
 
     d24,a24,s24=evaluate_season(season=2024,prior_season=2023,weeks=weeks,player_logs=logs,team_weekly=team,
-        schedule=sched,universe_dir=a.universe_2024,component=c24,injuries=injuries,weather=weather,
+        schedule=sched,universe_dir=a.universe_2024,injuries=injuries,weather=weather,
         te_params=te24,wr_params=wr24,snaps=snaps,weights=weights,iterations=a.iterations)
     d25,a25,s25=evaluate_season(season=2025,prior_season=2024,weeks=weeks,player_logs=logs,team_weekly=team,
-        schedule=sched,universe_dir=a.universe_2025,component=c25,injuries=injuries,weather=weather,
+        schedule=sched,universe_dir=a.universe_2025,injuries=injuries,weather=weather,
         te_params=te25,wr_params=None,snaps=snaps,weights=weights,iterations=a.iterations)
 
     gates=apply_gates(s24,s25)
