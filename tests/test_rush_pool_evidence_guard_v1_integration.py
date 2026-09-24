@@ -4,6 +4,8 @@ import pytest
 
 from scripts.modeling.rush_pool_evidence_guard_v1 import ENV_VAR, VERSION, stable_rush_seed
 from scripts.simulation_v2 import simulate
+from scripts.simulation_explicit_entitlement_v1 import simulate as explicit_simulate
+from scripts.simulation_c2_qb_candidate import simulate_with_states
 
 
 def _metrics(week=2):
@@ -118,3 +120,22 @@ def test_enabled_guard_fails_closed_without_evidence_state(monkeypatch):
     bad = _metrics(week=2).drop(columns=["bayes_evidence_state"])
     with pytest.raises(RuntimeError, match="bayes_evidence_state"):
         simulate(bad, iterations=10, seed=1)
+
+
+def test_enabled_guard_fails_closed_without_event_identity(monkeypatch):
+    monkeypatch.setenv(ENV_VAR, "1")
+    bad = _metrics(week=2).drop(columns=["event_id"])
+    with pytest.raises(RuntimeError, match="explicit event_id"):
+        simulate(bad, iterations=10, seed=1)
+
+
+def test_qb_c2_state_shadow_remains_exact_under_guard(monkeypatch):
+    monkeypatch.setenv(ENV_VAR, "1")
+    metrics = _metrics(week=2).copy()
+    metrics["entitlement_tgt_share"] = metrics["rules_tgt_share"].astype(float)
+    explicit = explicit_simulate(metrics, iterations=300, seed=777)
+    stateful = simulate_with_states(metrics, iterations=300, seed=777)
+
+    assert set(explicit.values) == set(stateful.values)
+    for key in explicit.values:
+        assert np.array_equal(explicit.values[key], stateful.values[key]), key
