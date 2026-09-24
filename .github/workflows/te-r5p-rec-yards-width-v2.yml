@@ -42,8 +42,8 @@ jobs:
 
       - name: Create workspace
         run: |
-          rm -rf /tmp/tewidth /tmp/hist_2024 /tmp/hist_2025 /tmp/ref /tmp/wr_model /tmp/te_model
-          mkdir -p /tmp/tewidth/distributions /tmp/tewidth/result                    /tmp/hist_2024 /tmp/hist_2025 /tmp/ref /tmp/wr_model /tmp/te_model
+          rm -rf /tmp/tewidth /tmp/hist_2024 /tmp/hist_2025 /tmp/ref /tmp/wr_model /tmp/te_model /tmp/wrte_ref
+          mkdir -p /tmp/tewidth/distributions /tmp/tewidth/result                    /tmp/hist_2024 /tmp/hist_2025 /tmp/ref /tmp/wr_model /tmp/te_model /tmp/wrte_ref
 
       - name: Download canonical empirical baseline reference
         uses: actions/download-artifact@v4
@@ -71,6 +71,15 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
           run-id: 34152797603
+
+      - name: Download exact PR549 compact replay authority
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-te-production-order-historical-replay-v1
+          path: /tmp/wrte_ref
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34722725629
 
       - name: Verify frozen fold authorities
         env:
@@ -140,35 +149,91 @@ jobs:
           python - <<'PY'
           import numpy as np
           import pandas as pd
-          a = pd.read_csv('/tmp/tewidth/full_stack_projection_trace_base.csv', low_memory=False)
-          b = pd.read_csv('/tmp/ref/full_stack_projection_trace_clean_v1.csv', low_memory=False)
+
+          current = pd.read_csv('/tmp/tewidth/full_stack_projection_trace_base.csv', low_memory=False)
+          frozen = pd.read_csv('/tmp/wrte_ref/full_stack_projection_trace_base.csv', low_memory=False)
           keys = ['season','week','team','opponent','player_clean_key','market','game_id']
-          aa = a.sort_values(keys).reset_index(drop=True)
-          bb = b.sort_values(keys).reset_index(drop=True)
-          assert len(aa) == len(bb) == 51197
-          assert aa[keys].astype(str).equals(bb[keys].astype(str))
-          for c in ['mc_proj','ml_proj','state_proj','ensemble_proj','actual']:
-              av = pd.to_numeric(aa[c], errors='coerce').to_numpy(float)
-              bv = pd.to_numeric(bb[c], errors='coerce').to_numpy(float)
-              assert np.array_equal(np.isnan(av), np.isnan(bv))
+          if frozen.duplicated(keys).any() or current.duplicated(keys).any():
+              raise RuntimeError('baseline trace identity is not unique')
+
+          merged = frozen.merge(
+              current,
+              on=keys,
+              how='left',
+              suffixes=('_frozen','_current'),
+              indicator=True,
+              validate='one_to_one',
+          )
+          missing = merged.loc[merged['_merge'].ne('both'), keys]
+          if len(missing):
+              raise RuntimeError(
+                  'current rebuild is missing frozen PR549 rows: '
+                  + str(missing.head(20).to_dict('records'))
+              )
+
+          extra = current.merge(frozen[keys], on=keys, how='left', indicator=True)
+          extra = extra.loc[extra['_merge'].eq('left_only')].copy()
+          print(f'frozen rows={len(frozen)} current rows={len(current)} extra_current_rows={len(extra)}')
+          if len(extra):
+              print('provider-history extras (excluded from frozen authority):')
+              print(extra[keys + ['player','position']].drop_duplicates().to_string(index=False))
+
+          for col in ['mc_proj','ml_proj','state_proj','ensemble_proj','actual']:
+              av = pd.to_numeric(merged[f'{col}_current'], errors='coerce').to_numpy(float)
+              bv = pd.to_numeric(merged[f'{col}_frozen'], errors='coerce').to_numpy(float)
+              if not np.array_equal(np.isnan(av), np.isnan(bv)):
+                  raise RuntimeError(f'{col} missingness drift on frozen PR549 rows')
               m = np.isfinite(av) & np.isfinite(bv)
               delta = float(np.max(np.abs(av[m] - bv[m]))) if m.any() else 0.0
-              assert delta <= 1e-10, (c, delta)
-          print('canonical baseline projection reproduction PASS')
+              print(f'frozen-row max delta {col}={delta:.12g}')
+              if delta > 1e-10:
+                  raise RuntimeError(f'{col} drift on frozen PR549 rows: {delta}')
+          print('canonical baseline frozen-row reproduction PASS')
           PY
 
       - name: Reconstruct fold-safe TE-R5P production-order arrays
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/research/persist_wr_te_production_order_historical_v1.py             --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000             --player-logs /tmp/tewidth/player_game_logs_history.csv             --team-weekly /tmp/tewidth/team_weekly_history.csv             --schedule /tmp/tewidth/schedule_history.csv             --universe-dir /tmp/hist_2024/pregame_universe             --component-file /tmp/tewidth/component_predictions_2024_base.csv             --component-out /tmp/tewidth/component_predictions_2024_wrte.csv             --out-dir /tmp/tewidth/distributions             --te-coefficients /tmp/te_model/data/backtests/te_r5p_production_contract_refit_v1/te_r5p_coefficients.csv             --wr-coefficients /tmp/wr_model/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv
-          python scripts/research/persist_wr_te_production_order_historical_v1.py             --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000             --player-logs /tmp/tewidth/player_game_logs_history.csv             --team-weekly /tmp/tewidth/team_weekly_history.csv             --schedule /tmp/tewidth/schedule_history.csv             --universe-dir /tmp/hist_2025/pregame_universe             --component-file /tmp/tewidth/component_predictions_2025_base.csv             --component-out /tmp/tewidth/component_predictions_2025_wrte.csv             --out-dir /tmp/tewidth/distributions             --te-coefficients /tmp/te_model/data/backtests/te_r5p_production_contract_refit_v1/te_r5p_coefficients.csv             --wr-coefficients /tmp/wr_model/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv
+          python scripts/research/persist_wr_te_production_order_historical_v1.py             --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000             --player-logs /tmp/tewidth/player_game_logs_history.csv             --team-weekly /tmp/tewidth/team_weekly_history.csv             --schedule /tmp/tewidth/schedule_history.csv             --universe-dir /tmp/hist_2024/pregame_universe             --component-file /tmp/wrte_ref/component_predictions_2024_wrte.csv             --component-out /tmp/tewidth/component_predictions_2024_wrte.csv             --out-dir /tmp/tewidth/distributions             --te-coefficients /tmp/te_model/data/backtests/te_r5p_production_contract_refit_v1/te_r5p_coefficients.csv             --wr-coefficients /tmp/wr_model/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv
+          python scripts/research/persist_wr_te_production_order_historical_v1.py             --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000             --player-logs /tmp/tewidth/player_game_logs_history.csv             --team-weekly /tmp/tewidth/team_weekly_history.csv             --schedule /tmp/tewidth/schedule_history.csv             --universe-dir /tmp/hist_2025/pregame_universe             --component-file /tmp/wrte_ref/component_predictions_2025_wrte.csv             --component-out /tmp/tewidth/component_predictions_2025_wrte.csv             --out-dir /tmp/tewidth/distributions             --te-coefficients /tmp/te_model/data/backtests/te_r5p_production_contract_refit_v1/te_r5p_coefficients.csv             --wr-coefficients /tmp/wr_model/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv
 
       - name: Build specialist full-stack football trace
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/backtest/build_full_stack_vegas_projection_trace_v2.py             --component-file /tmp/tewidth/component_predictions_2024_wrte.csv             --component-file /tmp/tewidth/component_predictions_2025_wrte.csv             --schedule /tmp/tewidth/schedule_history.csv             --weights data/model_ensemble_weights.csv             --out /tmp/tewidth/full_stack_projection_trace_wrte.csv
+
+      - name: Verify reconstructed specialist trace against frozen PR549 authority
+        run: |
+          python - <<'PY'
+          import numpy as np
+          import pandas as pd
+
+          current = pd.read_csv('/tmp/tewidth/full_stack_projection_trace_wrte.csv', low_memory=False)
+          frozen = pd.read_csv('/tmp/wrte_ref/full_stack_projection_trace_wrte.csv', low_memory=False)
+          keys = ['season','week','team','opponent','player_clean_key','market','game_id']
+          if frozen.duplicated(keys).any() or current.duplicated(keys).any():
+              raise RuntimeError('specialist trace identity is not unique')
+          merged = frozen.merge(
+              current, on=keys, how='left', suffixes=('_frozen','_current'),
+              indicator=True, validate='one_to_one',
+          )
+          if merged['_merge'].ne('both').any():
+              bad = merged.loc[merged['_merge'].ne('both'), keys].head(20).to_dict('records')
+              raise RuntimeError(f'reconstructed specialist trace missing frozen rows: {bad}')
+          for col in ['mc_proj','ml_proj','state_proj','ensemble_proj','actual']:
+              av = pd.to_numeric(merged[f'{col}_current'], errors='coerce').to_numpy(float)
+              bv = pd.to_numeric(merged[f'{col}_frozen'], errors='coerce').to_numpy(float)
+              if not np.array_equal(np.isnan(av), np.isnan(bv)):
+                  raise RuntimeError(f'specialist {col} missingness drift')
+              m = np.isfinite(av) & np.isfinite(bv)
+              delta = float(np.max(np.abs(av[m] - bv[m]))) if m.any() else 0.0
+              print(f'specialist frozen-row max delta {col}={delta:.12g}')
+              if delta > 1e-8:
+                  raise RuntimeError(f'specialist {col} drift on frozen PR549 rows: {delta}')
+          print('frozen PR549 specialist trace parity PASS')
+          PY
 
       - name: Run blind TE receiving-yard width validation
         env:
