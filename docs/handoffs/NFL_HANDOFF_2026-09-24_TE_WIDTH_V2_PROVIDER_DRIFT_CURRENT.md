@@ -7,7 +7,7 @@
 > `NFL_HANDOFF_2026-09-23_PR626_MERGED_TE_LIVE_SCIENCE_CURRENT.md` reference.
 >
 > Live verification immediately before this handoff refresh:
-> - `main` = `5eda4c5949cb384bbe986d2b80562a278085df45`
+> - `main` = `401306155c2cf14c4e9d740ed0e9769bc0709856` at the final low-memory handoff checkpoint before this refresh
 > - active branch = `research-te-live-entitlement-efficiency-v1`
 > - physical branch head = `839f7d206d47709ab8ed5576908dae205057be24`
 > - TE Width V2 run #3 `35944066618` / job `107458022324` = **FAILED CLOSED**
@@ -16,6 +16,7 @@
 > - exact frozen-row max `mc_proj` drift =
 >   **14.020649281259615 yd**
 > - no Width V2 science conclusion exists from runs #1-#3
+> - reusable low-memory prompt: `docs/handoffs/NEXT_CHAT_PROMPT_2026-09-24_TE_WIDTH_V2.md`
 >
 > **Context-budget rule:** the next chat should read only the five items in
 > "Minimal read order" below, then work. Do not recursively open older handoffs
