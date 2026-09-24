@@ -13,6 +13,13 @@ import pandas as pd
 
 TOL = 1e-10
 FORBIDDEN = {"actual", "actual_rushes", "actual_rush_yards", "target_game_snaps", "line", "odds", "sportsbook", "bookmaker"}
+STATE_COLUMNS = [
+    "target_season", "target_week", "team", "successor_player_clean_key",
+    "prior_offense_pct", "snap_source_season", "snap_source_week",
+    "vacated_rush_share", "successor_weight", "transfer_rush_share",
+    "unavailable_players", "unavailable_prior_rush_shares",
+]
+EXCLUSION_COLUMNS = ["team", "player_clean_key", "reason"]
 
 
 def _norm_team(s: pd.Series) -> pd.Series:
@@ -93,7 +100,9 @@ def build_state(availability: pd.DataFrame, roles: pd.DataFrame, logs: pd.DataFr
                          "vacated_rush_share":v,"successor_weight":w,"transfer_rush_share":v*w,
                          "unavailable_players":"|".join(sorted(u.player_clean_key.astype(str))),
                          "unavailable_prior_rush_shares":"|".join(f"{x:.12g}" for x in u.rush_share_game)})
-    out=pd.DataFrame(rows); exc=pd.DataFrame(exclusions)
+    # Keep zero-event artifacts parseable and schema-stable. A legitimate NO_EVENT
+    # cohort is scientific state, not an exceptional/empty-file condition.
+    out=pd.DataFrame(rows, columns=STATE_COLUMNS); exc=pd.DataFrame(exclusions, columns=EXCLUSION_COLUMNS)
     if not out.empty:
         if (out.successor_weight < 0).any() or (out.transfer_rush_share < 0).any(): raise RuntimeError("negative transfer")
         chk=out.groupby("team",as_index=False).agg(weight_sum=("successor_weight","sum"),transfer_sum=("transfer_rush_share","sum"),vacated=("vacated_rush_share","first"))
