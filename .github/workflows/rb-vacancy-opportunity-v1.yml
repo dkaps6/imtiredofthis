@@ -1,0 +1,89 @@
+name: RB Vacancy Opportunity V1
+
+on:
+  push:
+    branches: [research-rb-vacancy-opportunity-v1]
+    paths:
+      - 'scripts/research/rb_vacancy_opportunity_v1.py'
+      - 'tests/test_rb_vacancy_opportunity_v1.py'
+      - '.github/workflows/rb-vacancy-opportunity-v1.yml'
+  workflow_dispatch:
+
+jobs:
+  no-outcome-state:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install pandas numpy pytest
+      - name: Focused invariant tests
+        run: pytest -q tests/test_rb_vacancy_opportunity_v1.py
+      - name: Download frozen Week-2 pregame Full Slate artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: run_35263557385
+          run-id: 35263557385
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: staged
+      - name: Verify frozen pregame provenance
+        run: |
+          test -s staged/data/current_player_availability.csv
+          test -s staged/data/roles_current_production_eligible_v1.csv
+          test -s staged/data/player_game_logs.csv
+          python - <<'PY'
+          import pandas as pd
+          a=pd.read_csv('staged/data/current_player_availability.csv')
+          assert len(a)>0
+          assert a['availability_generated_at_utc'].astype(str).str.startswith('2026-09-17').all()
+          assert pd.to_numeric(a['official_inactive_section_complete'],errors='coerce').fillna(0).eq(1).all()
+          print('availability_rows',len(a),'definitive_unavailable',int(pd.to_numeric(a.definitive_unavailable,errors='coerce').fillna(0).sum()))
+          PY
+      - name: Build strict-prior snap input
+        run: |
+          curl -L --fail --retry 3 -o snap_counts_2025.csv https://github.com/nflverse/nflverse-data/releases/download/snap_counts/snap_counts_2025.csv
+          curl -L --fail --retry 3 -o snap_counts_2026.csv https://github.com/nflverse/nflverse-data/releases/download/snap_counts/snap_counts_2026.csv
+          python - <<'PY'
+          import re, pandas as pd
+          def key(v): return re.sub(r'[^a-z0-9]','',str(v).lower())
+          parts=[]
+          for season in (2025,2026):
+              x=pd.read_csv(f'snap_counts_{season}.csv')
+              x.columns=[str(c).strip().lower() for c in x.columns]
+              name='player' if 'player' in x.columns else 'player_name'
+              team='team' if 'team' in x.columns else 'team_abbr'
+              x['player_clean_key']=x[name].map(key)
+              x['team']=x[team].astype(str).str.upper().replace({'OAK':'LV','SD':'LAC','STL':'LAR','LA':'LAR','JAC':'JAX','ARZ':'ARI','WSH':'WAS'})
+              x['season']=pd.to_numeric(x['season'],errors='coerce')
+              x['week']=pd.to_numeric(x['week'],errors='coerce')
+              x['offense_pct']=pd.to_numeric(x['offense_pct'],errors='coerce')
+              parts.append(x[['season','week','team','player_clean_key','offense_pct']])
+          pd.concat(parts,ignore_index=True).to_csv('snaps_strict_prior.csv',index=False)
+          PY
+      - name: Materialize no-outcome Week-2 vacancy state
+        run: |
+          python scripts/research/rb_vacancy_opportunity_v1.py \
+            --availability staged/data/current_player_availability.csv \
+            --roles staged/data/roles_current_production_eligible_v1.csv \
+            --logs staged/data/player_game_logs.csv \
+            --snaps snaps_strict_prior.csv \
+            --season 2026 --week 2 --outdir rb_vacancy_v1
+          python - <<'PY'
+          import pandas as pd
+          p='rb_vacancy_v1/rb_vacancy_state_no_outcomes.csv'
+          x=pd.read_csv(p) if __import__('pathlib').Path(p).stat().st_size else pd.DataFrame()
+          print('candidate_rows',len(x),'teams',x.team.nunique() if not x.empty else 0)
+          if not x.empty:
+              print(x.groupby('team').agg(vacated=('vacated_rush_share','first'),transfer=('transfer_rush_share','sum'),successors=('successor_player_clean_key','count')).to_string())
+          PY
+      - name: Upload no-outcome artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-vacancy-opportunity-v1-no-outcome-w2
+          path: rb_vacancy_v1/
+          if-no-files-found: error
