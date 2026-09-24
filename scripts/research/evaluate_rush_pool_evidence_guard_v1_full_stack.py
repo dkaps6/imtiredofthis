@@ -222,13 +222,13 @@ def evaluate_season(*, season:int, prior_season:int, weeks:list[int], player_log
         mcols=["event_id","team","player","player_clean_key","position","market","season","week"]
         market_rows=metrics[mcols].copy()
         market_rows["team"]=market_rows["team"].map(canon_team); market_rows["market"]=market_rows["market"].astype(str).str.lower()
-        joined=market_rows.merge(
+        all_joined=market_rows.merge(
             comp[KEYS+["ml_proj","state_proj","actual"]],
             on=KEYS,how="inner",validate="one_to_one"
         )
-        if joined.empty: raise RuntimeError(f"{season} W{week:02d} no scored market rows")
-        joined["position_family"]=joined["position"].map(_pos_family)
-        joined=joined.loc[joined["market"].isin(["rush_att","rush_yards","rush_rec_yards"])].copy()
+        if all_joined.empty: raise RuntimeError(f"{season} W{week:02d} no scored market rows")
+        all_joined["position_family"]=all_joined["position"].map(_pos_family)
+        joined=all_joined.loc[all_joined["market"].isin(["rush_att","rush_yards","rush_rec_yards"])].copy()
         brec=[]; crec=[]
         for _,row in joined.iterrows():
             ba=lookup(base,row,row["market"]); ca=lookup(cand,row,row["market"])
@@ -240,7 +240,7 @@ def evaluate_season(*, season:int, prior_season:int, weeks:list[int], player_log
         joined["candidate_proj"]=_ensemble_projection(joined,weights=weights,mc_col="candidate_mc_proj")
 
         # Apply current non-Week-1 RB Rush+Receiving Conservation V2 final mean authority.
-        scoring_metrics=joined.copy()
+        scoring_metrics=all_joined.copy()
         bmap,bpayload=build_candidate_map(scoring_metrics,base,weights)
         cmap,cpayload=build_candidate_map(scoring_metrics,cand,weights)
         sportsbook_inputs=max(sportsbook_inputs,int(bpayload.get("sportsbook_inputs_used",0)),int(cpayload.get("sportsbook_inputs_used",0)))
