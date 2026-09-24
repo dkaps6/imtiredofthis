@@ -28,7 +28,7 @@ def main():
     (a.out_dir/"raw_columns.txt").write_text("\n".join(raw.columns)+"\n")
 
     season_col=first(raw,["season"]); week_col=first(raw,["week","report_week"])
-    date_col=first(raw,["report_date","date","practice_date","report_timestamp","timestamp"])
+    date_col=first(raw,["report_date","date","practice_date","report_timestamp","timestamp","date_modified"])
     id_col=first(raw,["gsis_id","player_gsis_id","player_id"])
     name_col=first(raw,["full_name","player_name","player","name"])
     pstat_col=first(raw,["practice_status","practice_participation"])
