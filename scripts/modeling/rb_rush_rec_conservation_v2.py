@@ -86,10 +86,10 @@ def build_candidate_map(metrics: pd.DataFrame, sims, weights: pd.DataFrame) -> t
     f["_event"] = f["event_id"].astype(str)
     f["_week"] = pd.to_numeric(f["week"], errors="coerce")
 
-    # Candidate is explicitly non-Week-1 and RB/FB only.
+    # Candidate is explicitly non-Week-1 and RB only.
     combos = f.loc[
         f["_canonical_market"].eq("rush_rec_yards")
-        & f["_position_family"].isin({"RB", "FB"})
+        & f["_position_family"].eq("RB")
         & f["_week"].ne(1)
     ].copy()
 
