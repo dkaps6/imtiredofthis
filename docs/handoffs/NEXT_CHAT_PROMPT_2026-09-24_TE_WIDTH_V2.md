@@ -12,12 +12,14 @@ Do NOT ingest the entire project history up front. Read only:
 4. Issue #535 comments from `5805281169` onward, especially `5805404034`, `5805487318`, `5805942946`, and the newest elite handoff checkpoint
 5. the live state of branch `research-te-live-entitlement-efficiency-v1`
 
+That is enough context. Do NOT open older handoffs unless the current handoff explicitly directs you to one.
+
 Do not read older handoffs unless the current handoff explicitly sends you there. Do not recursively summarize the full project history. I am trying to preserve conversation memory and want this chat to last.
 
 VERIFY LIVE STATE BEFORE MUTATION.
 
 Expected checkpoint:
-- main at or after canonical handoff refresh `7d40f53251d8e7bee4122702a21314ca840d3cb6` (VERIFY LIVE)
+- main at or after canonical handoff refresh `b1c6ed318520088006640ce3af7c954fac84a6f8` (VERIFY LIVE)
 - PR #626 MERGED/CLOSED; do not reopen
 - canonical W1/W2 production record fixed at 805 selected / 797 decided / 395-402 / -42.86u
 - TE Live Entitlement vs Efficiency V1 COMPLETE/SUCCESS
