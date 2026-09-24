@@ -3,6 +3,74 @@ GitHub is canonical; chat memory is secondary.
 
 ---
 
+## ACTIVE CHECKPOINT — 2026-09-24 — RUSH POOL V1 INTEGRATION FAILED CLOSED / NEW SCIENCE NEXT
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-09-24_RUSH_POOL_V1_FAILED_CLOSED_CURRENT.md`
+
+This supersedes the prior TE-Width/new-science checkpoint for immediate execution.
+
+### Current state in one screen
+
+- physical production main entering this docs-only closure: `b5b1816e7d11cadca412faf841fbfe5336798c2e`
+- RB Rush+Receiving Conservation V2 remains production-active/protected
+- Rush Pool Evidence Guard V1's allocator-only research signal qualified, but its exact production integration **FAILED CLOSED**
+- authoritative integration run: `36049144898`
+- exact integration head: `808072634603c03e6c86fd3c45ea311a39b13fa6`
+- result artifact: `10830277740`
+- digest: `sha256:b6a0715d38984fa91b8815561b4e72679684affcc142ee773a8b7428342412a5`
+- mechanics/invariance all passed: Week-1 no-op, non-rushing bit identity, team-rush identity, target identity, raw-share identity, zero sportsbook inputs, RB-V2 pathwise identity
+- science failed:
+  - 2025 ALL rush-att MAE `1.249158 -> 1.253482`
+  - 2025 RB rush-att MAE `3.442835 -> 3.456101`
+  - 2025 QB rush-att MAE `1.726906 -> 1.733759`
+  - 2025 ALL rush-yard MAE `7.845055 -> 7.855806`
+  - QB rush-yard MAE worsened in both seasons
+- positive but insufficient: RB rush-yard MAE and RB rush+receiving MAE/p90 improved in both seasons
+- PR #633 is **CLOSED / NOT MERGED**
+- Repo CI `36049328629` SUCCESS
+- preserved paid-artifact Full Slate replay `36049328727` SUCCESS
+- production behavior remains unchanged
+
+### Permanent closure
+
+Do not rescue Rush Pool Evidence Guard V1 with:
+- RB/QB/OTHER carveouts
+- a different evidence state
+- another top-N
+- share thresholds
+- depth rank
+- injury/rookie exceptions
+- Bayesian retuning
+- 2026 outcome fitting
+
+### Exact next action
+
+Move to a genuinely different structural/new-information hypothesis.
+
+Start read-only from current production evidence. Prefer:
+- current-season role/participation information that fails to reach final opportunity;
+- stale player-level room hierarchy despite correct team opportunity;
+- injury/personnel transitions that fail to propagate across markets;
+- cross-market contradictions created after specialist layers;
+- 2026 usage states that diverge from strict-prior hierarchy without target-game leakage.
+
+Prospective RB Vacancy V1 remains separate and unchanged.
+
+### Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-09-24_RUSH_POOL_V1_FAILED_CLOSED_CURRENT.md`
+4. newest Issue #535 comments after the V1 closure
+5. live main/current research branch state
+
+Then work. Do not load older handoffs unless explicitly needed.
+
+---
+
 ## ACTIVE CHECKPOINT — 2026-09-24 — TE WIDTH V2 FAILED CLOSED / NEW SCIENCE NEXT
 
 **Read this detailed handoff next:**
