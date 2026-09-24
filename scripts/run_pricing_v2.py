@@ -43,7 +43,7 @@ from scripts.modeling.state_v2 import apply_state_to_metrics
 from scripts.modeling.simulation_rules import apply_rules_to_metrics
 from scripts.pricing_v2 import _fair_market_prob, _fair_odds
 from scripts.runtime_context import resolve_season, resolve_week
-from scripts.simulation_v2 import MARKET_MAP, lookup, simulate
+from scripts.simulation_v2 import MARKET_MAP, _player_key, lookup, simulate
 
 DATA = Path("data")
 OUTPUTS = Path("outputs")
@@ -216,6 +216,17 @@ def price(season: int) -> pd.DataFrame:
             )
 
     sims = simulate(df)
+
+    rb_rush_rec_v2 = {}
+    rb_rush_rec_v2_version = ""
+    if str(os.getenv("RB_RUSH_REC_CONSERVATION_V2", "")).strip().lower() in {"1", "true", "yes", "on"}:
+        from scripts.modeling.rb_rush_rec_conservation_v2 import VERSION as _RB_RR_V2_VERSION
+        from scripts.modeling.rb_rush_rec_conservation_v2 import build_candidate_map as _build_rb_rr_v2
+
+        rb_rush_rec_v2, rb_rr_payload = _build_rb_rr_v2(df, sims, weights)
+        rb_rush_rec_v2_version = _RB_RR_V2_VERSION
+        print("[pricing] RB rush+receiving V2 candidate " + str(rb_rr_payload))
+
     rows, missed = [], []
     qb_synthesis_rows = 0
     rb_synthesis_rows = 0
@@ -229,6 +240,13 @@ def price(season: int) -> pd.DataFrame:
             continue
 
         base_outcomes = np.asarray(outcomes, dtype=float)
+        rb_rush_rec_v2_meta = None
+        if market == "rush_rec_yards" and rb_rush_rec_v2:
+            rb_key = (str(row.get("event_id")), _player_key(row))
+            rb_rush_rec_v2_meta = rb_rush_rec_v2.get(rb_key)
+            if rb_rush_rec_v2_meta is not None:
+                base_outcomes = np.asarray(rb_rush_rec_v2_meta["draws"], dtype=float).copy()
+
         qb_attempt_rate = np.nan
         qb_share = np.nan
 
@@ -259,6 +277,8 @@ def price(season: int) -> pd.DataFrame:
         ensemble_proj = float(ens["ensemble_proj"])
 
         target_mean = ensemble_proj
+        if rb_rush_rec_v2_meta is not None:
+            target_mean = float(rb_rush_rec_v2_meta["target_mean"])
 
         qb_synthesis_proj = np.nan
         qb_synthesis_correction = np.nan
@@ -422,6 +442,11 @@ def price(season: int) -> pd.DataFrame:
             "rb_synthesis_route": rb_synthesis_route,
             "rb_stack_implied_ypc": rb_stack_implied_ypc,
             "rb_ypc_fallback_used": rb_ypc_fallback_used,
+            "rb_rush_rec_conservation_v2_applied": int(rb_rush_rec_v2_meta is not None),
+            "rb_rush_rec_conservation_v2_version": rb_rush_rec_v2_version if rb_rush_rec_v2_meta is not None else "",
+            "rb_rush_rec_conservation_v2_target_mean": float(rb_rush_rec_v2_meta["target_mean"]) if rb_rush_rec_v2_meta is not None else np.nan,
+            "rb_rush_rec_conservation_v2_rush_mean": float(rb_rush_rec_v2_meta["rush_target_mean"]) if rb_rush_rec_v2_meta is not None else np.nan,
+            "rb_rush_rec_conservation_v2_rec_mean": float(rb_rush_rec_v2_meta["rec_target_mean"]) if rb_rush_rec_v2_meta is not None else np.nan,
             "season": int(season),
             "week": row.get("week"),
             "book": row.get("book"),
