@@ -1,0 +1,33 @@
+{
+  "version": "MARKET_BOARD_IMMUTABLE_ORIGIN_ANCHORS_V1",
+  "created_from_verified_github_actions_artifacts_on": "2026-09-23",
+  "purpose": "Pinned independent origin/recovery anchors for canonical W1/W2 paid boards. This file is consumed by verifier code through the immutable commit that first introduced it, not from the mutable working tree.",
+  "weeks": {
+    "1": {
+      "source_run_id": "34650067599",
+      "source_git_sha": "be061eaf23372f080db3911d3b4919120c744c53",
+      "origin_artifact_id": "10283817522",
+      "origin_artifact_sha256": "a70c90023632059476cc688070fb21ad63b9ebd14aa4db102844b9e342188359",
+      "origin_artifact_expired": true,
+      "recovery_run_id": "35520068364",
+      "recovery_artifact_id": "10607998417",
+      "recovery_artifact_name": "week1_graded_slices_35520068364",
+      "recovery_artifact_zip_sha256": "636dac47f3cd4fe306b0af5d38d0fe0839828cb1d34792b99133fc23aec79eb7",
+      "recovery_board_raw_sha256": "d9afba953641e9dd751ada8c1f432e5abb4e055ad91b30c5f27fb031c590e708",
+      "canonical_content_sha256": "b830655c127c089cf1980f1af230444bfde11f8ad27c77b0051bcfd7c123ef82",
+      "rows": 3048,
+      "content_columns": 77
+    },
+    "2": {
+      "source_run_id": "35282021679",
+      "source_git_sha": "c6ec55be70d6e05bbd1dbae83d7d5c86ac8aa00a",
+      "origin_artifact_id": "10523345092",
+      "origin_artifact_name": "run_35282021679",
+      "origin_artifact_zip_sha256": "6024ed21d7032e6e6440145277d9d4b74e98f319ef286962bac2a786a8d28e3c",
+      "priced_board_raw_sha256": "1f38c995011a54fddaa73457c4db0fdb746ee2be027c735ee25d842f8160b40c",
+      "canonical_content_sha256": "d461ef415e86d6b5a986bd39893f2a6e40d3d07852cf419bee11ba0afc1793d2",
+      "rows": 3178,
+      "content_columns": 66
+    }
+  }
+}

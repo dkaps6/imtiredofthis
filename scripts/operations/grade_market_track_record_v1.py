@@ -20,15 +20,26 @@ research-only per project policy and is skipped here, matching production).
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
+import subprocess
 
 import numpy as np
 import pandas as pd
+
+from scripts._opponent_map import canon_team
+from scripts.operations.quarantine_final_priced_props_v1 import (
+    QUARANTINE as FINAL_BOARD_QUARANTINE,
+    _load_quarantine_keys,
+)
+from scripts.repair_live_prop_identity_v1 import _name_keys
 
 ROOT = Path(__file__).resolve().parents[2]
 BOARDS_DIR = ROOT / "data" / "market_track_record" / "boards"
 GRADED_DIR = ROOT / "data" / "market_track_record" / "graded"
 ALL_TIME_SUMMARY = ROOT / "data" / "market_track_record" / "summary_all_time.csv"
+PRODUCTION_GATE_EVIDENCE_COMMIT = "8133975f505365234dbdb75ff0fad0c715f68e31"
+PRODUCTION_GATE_EVIDENCE_PATH = "data/market_track_record/PRODUCTION_DECISION_GATES_V1.json"
 
 MARKET_STAT_COLUMNS: dict[str, list[str]] = {
     "pass_yards": ["passing_yards"],
@@ -70,6 +81,7 @@ def model_side(proj: float, line: float) -> str:
 
 
 def edge_bucket(v: float) -> str:
+    """Bucket absolute projection-to-line gap in native stat units."""
     if not np.isfinite(v):
         return "missing"
     if v < 2:
@@ -100,20 +112,322 @@ def load_boards(season: int, weeks: list[int] | None) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True, sort=False)
 
 
-def select_model_bet(board: pd.DataFrame) -> pd.DataFrame:
-    """Collapse the archived OVER/UNDER row pair into one graded bet per
-    (season, week, event_id, player, market): the side the model actually
-    picked, keeping that row's own captured odds."""
+def apply_final_board_quarantine(
+    board: pd.DataFrame,
+    quarantine_path: Path = FINAL_BOARD_QUARANTINE,
+) -> pd.DataFrame:
+    """Apply the verified final-board publication policy before grading."""
     if board.empty:
         return board.copy()
-    b = board.copy()
-    b["model_pick_side"] = [
-        model_side(p, l) for p, l in zip(num(b.model_proj), num(b.vegas_line))
-    ]
-    b = b.loc[b.side.astype(str).str.upper().eq(b.model_pick_side)].copy()
-    key = [c for c in ["season", "week", "event_id", "player", "market"] if c in b.columns]
-    return b.drop_duplicates(subset=key, keep="last")
+    required = {"season", "week", "team", "player"}
+    missing = required - set(board.columns)
+    if missing:
+        raise RuntimeError(
+            f"archived board missing final-quarantine columns: {sorted(missing)}"
+        )
+    out = board.copy()
+    seasons = pd.to_numeric(out["season"], errors="coerce")
+    weeks = pd.to_numeric(out["week"], errors="coerce")
+    if seasons.isna().any() or weeks.isna().any():
+        raise RuntimeError("archived board contains non-numeric season/week")
 
+    remove = pd.Series(False, index=out.index)
+    scope = pd.DataFrame(
+        {"season": seasons.astype(int), "week": weeks.astype(int)}, index=out.index
+    )
+    for (season, week), idx in scope.groupby(["season", "week"]).groups.items():
+        quarantine_keys = _load_quarantine_keys(
+            quarantine_path, season=int(season), week=int(week)
+        )
+        if not quarantine_keys:
+            continue
+        teams = out.loc[idx, "team"].map(canon_team)
+        player_keys = out.loc[idx, "player"].map(_name_keys)
+        remove.loc[idx] = [
+            bool({(team, key) for key in keys} & quarantine_keys)
+            for team, keys in zip(teams, player_keys)
+        ]
+    return out.loc[~remove].copy()
+
+
+def _load_immutable_production_gate_evidence() -> dict:
+    """Load preserved pregame decision gates from their first immutable commit."""
+    proc = subprocess.run(
+        [
+            "git",
+            "show",
+            f"{PRODUCTION_GATE_EVIDENCE_COMMIT}:{PRODUCTION_GATE_EVIDENCE_PATH}",
+        ],
+        cwd=ROOT,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if proc.returncode != 0 or not proc.stdout.strip():
+        detail = proc.stderr.strip()
+        raise RuntimeError(
+            "unable to load immutable production decision gate evidence from "
+            f"{PRODUCTION_GATE_EVIDENCE_COMMIT}: {detail}"
+        )
+    payload = json.loads(proc.stdout)
+    if str(payload.get("version", "")) != "PRODUCTION_DECISION_GATES_V1":
+        raise RuntimeError("unexpected production decision gate evidence version")
+    return payload
+
+
+def apply_production_decision_gates(
+    board: pd.DataFrame,
+    *,
+    evidence: dict | None = None,
+) -> pd.DataFrame:
+    """Replay preserved pregame workbook blockers before selecting a wager.
+
+    These are downstream publication/eligibility gates only. They never feed a
+    sportsbook line or outcome into a football projection. The evidence is
+    pinned to the commit that first preserved it so a later board/edit cannot
+    silently rewrite the historical decision contract.
+    """
+    if board.empty:
+        return board.copy()
+
+    required = {
+        "season",
+        "week",
+        "team",
+        "player_clean_key",
+        "market",
+        "source_run_id",
+        "source_git_sha",
+    }
+    missing = required - set(board.columns)
+    if missing:
+        raise RuntimeError(
+            f"archived board missing production-gate columns: {sorted(missing)}"
+        )
+
+    gates = (
+        evidence
+        if evidence is not None
+        else _load_immutable_production_gate_evidence()
+    )
+    week_specs = gates.get("weeks", {})
+    out = board.copy()
+    seasons = pd.to_numeric(out["season"], errors="coerce")
+    weeks = pd.to_numeric(out["week"], errors="coerce")
+    if seasons.isna().any() or weeks.isna().any():
+        raise RuntimeError("archived board contains non-numeric season/week")
+
+    out["_gate_season"] = seasons.astype(int)
+    out["_gate_week"] = weeks.astype(int)
+    remove = pd.Series(False, index=out.index)
+
+    for (season, week), idx in out.groupby(
+        ["_gate_season", "_gate_week"], sort=False
+    ).groups.items():
+        spec = week_specs.get(str(int(week)))
+        if int(season) != 2026 or spec is None:
+            raise RuntimeError(
+                f"no preserved production decision gate evidence for {season} week {week}"
+            )
+
+        run_ids = set(out.loc[idx, "source_run_id"].astype(str))
+        source_shas = set(out.loc[idx, "source_git_sha"].astype(str))
+        if run_ids != {str(spec.get("source_run_id", ""))}:
+            raise RuntimeError(
+                f"Week {week} production-gate source_run_id drift: {sorted(run_ids)}"
+            )
+        if source_shas != {str(spec.get("source_git_sha", ""))}:
+            raise RuntimeError(
+                f"Week {week} production-gate source_git_sha drift: {sorted(source_shas)}"
+            )
+
+        teams = out.loc[idx, "team"].map(canon_team)
+        player_keys = (
+            out.loc[idx, "player_clean_key"]
+            .astype("string")
+            .fillna("")
+            .str.strip()
+            .str.lower()
+        )
+        markets = out.loc[idx, "market"].astype(str)
+
+        for rule in spec.get("block_rules", []):
+            scope = str(rule.get("scope", "")).strip().upper()
+            rule_team = canon_team(rule.get("team", ""))
+            if scope == "TEAM_ALL":
+                mask = teams.eq(rule_team)
+            elif scope == "PLAYER_MARKET":
+                mask = (
+                    teams.eq(rule_team)
+                    & player_keys.eq(
+                        str(rule.get("player_clean_key", "")).strip().lower()
+                    )
+                    & markets.eq(str(rule.get("market", "")))
+                )
+            else:
+                raise RuntimeError(
+                    f"Week {week} unknown production decision gate scope {scope!r}"
+                )
+            remove.loc[idx] = remove.loc[idx] | mask.to_numpy()
+
+    return out.loc[~remove].drop(
+        columns=["_gate_season", "_gate_week"], errors="ignore"
+    ).copy()
+
+
+BET_KEY = ["season", "week", "event_id", "player", "market"]
+
+
+def _ev_roi(probability, odds) -> float:
+    """Match the downstream production workbook's EV ROI arithmetic."""
+    try:
+        p = float(probability)
+        o = float(odds)
+    except Exception:
+        return np.nan
+    if not np.isfinite(p) or not np.isfinite(o) or o == 0:
+        return np.nan
+    profit = o / 100.0 if o > 0 else 100.0 / abs(o)
+    return p * profit - (1.0 - p)
+
+
+def _normalized_book_key(frame: pd.DataFrame) -> pd.Series:
+    if "book" in frame.columns:
+        book = frame["book"].astype("string").fillna("").str.strip().str.lower()
+    else:
+        book = pd.Series("", index=frame.index, dtype="string")
+    if "book_title" in frame.columns:
+        title = (
+            frame["book_title"].astype("string").fillna("").str.strip().str.lower()
+        )
+        book = book.mask(book.eq(""), title)
+    return book.mask(book.eq(""), "~missing-book")
+
+
+def select_model_bet(board: pd.DataFrame) -> pd.DataFrame:
+    """Reproduce the deployed Best Snapshot EV decision from an archived board.
+
+    Production does *not* choose a side from mean-vs-line geometry. For every
+    real book+line offer it compares OVER and UNDER expected ROI using the
+    model's side-specific fair probability and that side's captured American
+    price, chooses the higher-EV side, then the Best Snapshot sheet keeps the
+    player-market offer with the highest EV. If that best EV is nonpositive,
+    production says PASS and there is no bet to grade.
+
+    This function reproduces that deployed decision using only already-captured
+    downstream sportsbook data. Sportsbook information never feeds the football
+    projection itself.
+
+    Exact-EV cross-book ties are made deterministic for replay. If tied offers
+    imply different wagers (side/line/odds), the player-market fails closed
+    rather than letting archive row order decide. Ties that represent the same
+    wager use the lexicographically smallest normalized provider book key.
+    """
+    if board.empty:
+        return board.copy()
+
+    b = board.copy()
+    key = [c for c in BET_KEY if c in b.columns]
+    if not key:
+        return b.iloc[0:0].copy()
+
+    b["_line"] = num(b.get("vegas_line"))
+    b["_fair_prob"] = num(b.get("fair_prob"))
+    b["_odds"] = num(b.get("vegas_odds"))
+    b["_row_ev"] = [
+        _ev_roi(p, o) for p, o in zip(b["_fair_prob"], b["_odds"])
+    ]
+    b["_side"] = b.get("side", "").astype(str).str.upper().str.strip()
+    b["_book_key"] = _normalized_book_key(b)
+
+    # Keep the consensus number as a diagnostic only. It has no role in the
+    # deployed betting decision.
+    consensus = (
+        b.loc[b["_line"].notna()]
+        .groupby(key, dropna=False)["_line"]
+        .median()
+        .rename("consensus_line")
+    )
+    b = b.merge(consensus, left_on=key, right_index=True, how="left")
+
+    # Use the normalized row-level book identity in the quote key so legacy
+    # blank `book` rows from different `book_title` providers never collapse
+    # into one synthetic offer.
+    quote_key = [
+        c for c in (
+            "season", "week", "event_id", "player_clean_key", "team",
+            "opponent", "source_market",
+        ) if c in b.columns
+    ] + ["_book_key", "_line"]
+    if not quote_key:
+        return b.iloc[0:0].copy()
+
+    # Production chooses the higher-EV side at each concrete book+line quote.
+    # Its >= tie goes to OVER; preserve that semantic deterministically.
+    b["_side_rank"] = b["_side"].map({"OVER": 0, "UNDER": 1}).fillna(9)
+    q = b.loc[
+        b["_row_ev"].notna() & b["_side"].isin(["OVER", "UNDER"])
+    ].copy()
+    if q.empty:
+        return q.drop(
+            columns=["_line", "_fair_prob", "_odds", "_row_ev", "_side",
+                     "_book_key", "_side_rank"],
+            errors="ignore",
+        )
+    q = q.sort_values(
+        quote_key + ["_row_ev", "_side_rank"],
+        ascending=[True] * len(quote_key) + [False, True],
+        kind="mergesort",
+    )
+    offers = q.drop_duplicates(subset=quote_key, keep="first").copy()
+    offers["production_best_ev"] = offers["_row_ev"]
+
+    # Best Snapshot keeps the highest-EV concrete offer per player-market.
+    max_ev = offers.groupby(key, dropna=False)["production_best_ev"].transform("max")
+    candidates = offers.loc[
+        np.isclose(
+            offers["production_best_ev"],
+            max_ev,
+            rtol=0.0,
+            atol=1e-12,
+        )
+    ].copy()
+
+    # Exact EV ties must not silently choose different wagers by archive order.
+    sig_cols = [c for c in ("side", "vegas_line", "vegas_odds") if c in candidates.columns]
+    if sig_cols:
+        sig_count = candidates.groupby(key, dropna=False)[sig_cols].transform("nunique").max(axis=1)
+        ambiguous_keys = candidates.loc[sig_count.gt(1), key].drop_duplicates()
+        if len(ambiguous_keys):
+            marker = ambiguous_keys.assign(_ambiguous_offer_tie=True)
+            candidates = candidates.merge(marker, on=key, how="left")
+            candidates = candidates.loc[candidates["_ambiguous_offer_tie"].isna()].copy()
+            candidates = candidates.drop(columns=["_ambiguous_offer_tie"], errors="ignore")
+
+    if candidates.empty:
+        return candidates.drop(
+            columns=["_line", "_fair_prob", "_odds", "_row_ev", "_side",
+                     "_book_key", "_side_rank"],
+            errors="ignore",
+        )
+
+    candidates = candidates.sort_values(
+        key + ["_book_key", "_line", "_odds"],
+        kind="mergesort",
+        na_position="last",
+    )
+    out = candidates.drop_duplicates(subset=key, keep="first").copy()
+
+    # Production signals HAS EDGE only for strictly positive best EV.
+    out = out.loc[out["production_best_ev"].gt(0)].copy()
+    out["model_pick_side"] = out["side"].astype(str).str.upper()
+    out["production_decision"] = "BET"
+    return out.drop(
+        columns=["_line", "_fair_prob", "_odds", "_row_ev", "_side",
+                 "_book_key", "_side_rank"],
+        errors="ignore",
+    )
 
 def load_actual_stats(season: int, weeks: list[int]) -> pd.DataFrame:
     import nflreadpy as nfl
@@ -212,6 +526,14 @@ def grade(season: int, weeks: list[int] | None) -> dict:
     board = load_boards(season, weeks)
     if board.empty:
         return {"status": "no_archived_board_rows", "season": season, "weeks": weeks}
+    board = apply_final_board_quarantine(board)
+    board = apply_production_decision_gates(board)
+    if board.empty:
+        return {
+            "status": "no_publishable_board_rows_after_final_quarantine",
+            "season": season,
+            "weeks": weeks,
+        }
 
     present_weeks = sorted(set(num(board.week).dropna().astype(int)))
     actual = load_actual_stats(season, present_weeks)

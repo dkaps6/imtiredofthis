@@ -1,0 +1,100 @@
+name: Week 1 QB Pass Yards Hit Rate
+
+# Read-only. Grades the preserved Week 1 board and reports ONLY the
+# QB pass_yards bet-outcome hit rate, deduplicated to one bet per
+# player-game. No projection-accuracy metric, no production change.
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - ops/week1-qb-passyards-hitrate
+    paths:
+      - '.github/workflows/week1-qb-passyards-hitrate.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  BACKTEST_SEASON: '2026'
+  BACKTEST_WEEK: '1'
+
+jobs:
+  hitrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy
+
+      - name: Verify the committed durable Week 1 board
+        run: |
+          set -euo pipefail
+          test -s data/market_track_record/boards/2026_wk01.csv
+          python - <<'EOF'
+          import pandas as pd
+          p = 'data/market_track_record/boards/2026_wk01.csv'
+          d = pd.read_csv(p, low_memory=False)
+          assert len(d) > 0, 'committed Week 1 board is empty'
+          print(f'committed Week 1 board: {len(d)} rows, {d["market"].nunique()} markets')
+          EOF
+
+      - name: Grade committed Week 1 board
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/grade_market_track_record_gsis_v1.py \
+            --season "${BACKTEST_SEASON}" --weeks "${BACKTEST_WEEK}" \
+            --detail-out /tmp/graded_detail.csv
+          test -s /tmp/graded_detail.csv
+
+      - name: QB pass_yards hit rate, deduplicated
+        run: |
+          set -euo pipefail
+          python - <<'EOF'
+          import pandas as pd
+          d = pd.read_csv('/tmp/graded_detail.csv', low_memory=False)
+          d.columns = [c.lower() for c in d.columns]
+          q = d[d['market'].astype(str).eq('pass_yards')].copy()
+          print(f"pass_yards graded rows (pre-dedupe): {len(q)}")
+
+          key = [c for c in ['season','week','player_clean_key','market'] if c in q.columns]
+          dq = q.drop_duplicates(subset=key, keep='first')
+          print(f"after dedupe on {key}: {len(dq)} unique QB player-games")
+          print(f"duplicate rows collapsed: {len(q) - len(dq)}")
+
+          vc = dq['bet_result'].value_counts(dropna=False)
+          print("\nbet_result:")
+          print(vc.to_string())
+
+          w = int((dq['bet_result']=='WIN').sum())
+          l = int((dq['bet_result']=='LOSS').sum())
+          p = int((dq['bet_result']=='PUSH').sum())
+          dec = w + l
+          print("\n================= WEEK 1 QB PASS YARDS =================")
+          print(f"  unique QB bets : {len(dq)}")
+          print(f"  decided (W/L)  : {dec}    pushes: {p}")
+          if dec:
+              print(f"  record         : {w}-{l}")
+              print(f"  HIT RATE       : {w/dec:.4f}  ({100*w/dec:.2f}%)")
+          if 'unit_result' in dq.columns:
+              u = pd.to_numeric(dq['unit_result'], errors='coerce').fillna(0)
+              print(f"  units          : {u.sum():+.3f}   roi/bet: {u.mean():+.4f}")
+          print("=======================================================")
+
+          cols = [c for c in ['player','team','opponent','side','vegas_line','model_proj',
+                              'actual','bet_result','unit_result','vegas_odds'] if c in dq.columns]
+          print("\nevery QB pass_yards bet:")
+          print(dq[cols].sort_values('player').to_string(index=False))
+          EOF

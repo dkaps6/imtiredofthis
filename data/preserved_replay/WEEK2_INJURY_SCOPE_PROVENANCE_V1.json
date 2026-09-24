@@ -1,0 +1,19 @@
+{
+  "version": "PRESERVED_WEEK2_INJURY_SCOPE_PROVENANCE_V1",
+  "season": 2026,
+  "week": 2,
+  "source_replay_run_id": "35816381724",
+  "source_replay_head_sha": "a8973fc2e398a7b842736dd0481857391d387829",
+  "source_artifact_id": "10731506987",
+  "source_artifact_name": "offline_replay_35816381724",
+  "source_artifact_zip_sha256": "abab16d56c48712234036d10b432ccfb484c85599f3fae1950e046f02df007b6",
+  "scope_csv_sha256": "3a4b7977e53e41a845cb7507af151050d6f26e258c1ea11a0e6acb9978b9d3e4",
+  "scope_audit_sha256": "d3b199b75b9f0838632cee9ad0077556103a32ae817cd9ae9b7d502c8124a0d7",
+  "preserved_injuries_sha256": "165800aaa523d17dc5856e5015a61aee4491cac2a969ac63f2b5b952f94fab01",
+  "scheduled_teams_checked": 32,
+  "teams_with_report_rows": 32,
+  "teams_explicit_no_injuries_reported": 0,
+  "injury_rows_mutated": false,
+  "sportsbook_inputs_used": false,
+  "source": "nfl.com"
+}

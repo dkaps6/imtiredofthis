@@ -1,0 +1,188 @@
+name: Backtest Weeks 1-2 Full Board
+
+# Full graded backtest of the real priced boards for Week 1 and Week 2,
+# now that nflverse carries final Week 2 stats. Read-only: it replays the
+# committed durable copies of the already-paid-for boards and never fetches
+# sportsbook odds.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - claude/nice-cori-4qkwqs
+    paths:
+      - '.github/workflows/backtest-weeks-1-2-full-board.yml'
+      - 'scripts/operations/grade_market_track_record_v1.py'
+      - 'scripts/operations/grade_market_track_record_gsis_v1.py'
+      - 'scripts/operations/report_weekly_backtest_v1.py'
+      - 'scripts/operations/backtest_full_report_v1.py'
+      - 'scripts/research/slice_graded_track_record_v1.py'
+      - 'data/market_track_record/boards/2026_wk01.csv'
+      - 'data/market_track_record/boards/2026_wk02.csv'
+      - 'data/market_track_record/graded/2026_wk01_wk02_graded.csv'
+      - 'docs/production/BACKTEST_2026_WEEKS_1_2_FINDINGS.md'
+      - 'scripts/operations/verify_market_board_origin_v1.py'
+      - 'data/market_track_record/ORIGIN_PROVENANCE_V1.json'
+      - 'data/market_track_record/IMMUTABLE_ORIGIN_ANCHORS_V1.json'
+      - 'data/market_track_record/PRODUCTION_DECISION_GATES_V1.json'
+      - 'data/manual_final_board_quarantine.csv'
+      - 'scripts/operations/quarantine_final_priced_props_v1.py'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/backtest-weeks-1-2-full-board.yml'
+      - 'scripts/operations/grade_market_track_record_v1.py'
+      - 'scripts/operations/grade_market_track_record_gsis_v1.py'
+      - 'scripts/operations/report_weekly_backtest_v1.py'
+      - 'scripts/operations/backtest_full_report_v1.py'
+      - 'scripts/research/slice_graded_track_record_v1.py'
+      - 'data/market_track_record/boards/2026_wk01.csv'
+      - 'data/market_track_record/boards/2026_wk02.csv'
+      - 'data/market_track_record/graded/2026_wk01_wk02_graded.csv'
+      - 'docs/production/BACKTEST_2026_WEEKS_1_2_FINDINGS.md'
+      - 'scripts/operations/verify_market_board_origin_v1.py'
+      - 'data/market_track_record/ORIGIN_PROVENANCE_V1.json'
+      - 'data/market_track_record/IMMUTABLE_ORIGIN_ANCHORS_V1.json'
+      - 'data/market_track_record/PRODUCTION_DECISION_GATES_V1.json'
+      - 'data/manual_final_board_quarantine.csv'
+      - 'scripts/operations/quarantine_final_priced_props_v1.py'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  BACKTEST_SEASON: '2026'
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy
+
+      - name: Verify the committed Week 1 and Week 2 boards
+        run: |
+          set -euo pipefail
+          python - <<'EOF'
+          import pandas as pd
+          for week in (1, 2):
+              p = f'data/market_track_record/boards/2026_wk{week:02d}.csv'
+              d = pd.read_csv(p, low_memory=False)
+              assert len(d) > 0, f'{p} is empty'
+              print(f'week {week} committed board: {len(d)} rows, {d["market"].nunique()} markets')
+          EOF
+
+      - name: Verify frozen origin/content provenance
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/verify_market_board_origin_v1.py
+
+      - name: Grade both weeks against final nflverse actuals
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/grade_market_track_record_gsis_v1.py \
+            --season "${BACKTEST_SEASON}" --weeks "1,2" \
+            --detail-out /tmp/graded_weeks_1_2.csv
+          test -s /tmp/graded_weeks_1_2.csv
+
+      - name: Report the full decomposition
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/report_weekly_backtest_v1.py \
+            --detail /tmp/graded_weeks_1_2.csv
+
+      - name: Rebuild the independent full-report ledger and cross-check the committed record
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/backtest_full_report_v1.py \
+            --season "${BACKTEST_SEASON}" --weeks "1,2" \
+            --out /tmp/full_report_graded.csv
+          test -s /tmp/full_report_graded.csv
+          python - <<'EOF'
+          import numpy as np
+          import pandas as pd
+
+          live = pd.read_csv('/tmp/full_report_graded.csv', low_memory=False)
+          committed = pd.read_csv(
+              'data/market_track_record/graded/2026_wk01_wk02_graded.csv',
+              low_memory=False,
+          )
+          key = ['season', 'week', 'event_id', 'player', 'market']
+          text_cols = key + [
+              'team', 'opponent', 'position', 'book', 'side', 'actual_source',
+              'settlement_status', 'bet_result', 'source_run_id', 'source_git_sha',
+          ]
+          numeric_cols = [
+              'vegas_line', 'vegas_odds', 'fair_prob', 'edge_pct',
+              'production_best_ev', 'model_proj', 'model_sd', 'actual',
+              'model_error', 'vegas_error', 'unit_result',
+              'model_closer_than_vegas',
+          ]
+          cols = text_cols + numeric_cols
+          a = live[cols].sort_values(key).reset_index(drop=True)
+          b = committed[cols].sort_values(key).reset_index(drop=True)
+          assert len(a) == len(b) and len(a) > 0, (len(a), len(b))
+          for c in text_cols:
+              assert a[c].astype(str).equals(b[c].astype(str)), c
+          for c in numeric_cols:
+              av = pd.to_numeric(a[c], errors='coerce').to_numpy()
+              bv = pd.to_numeric(b[c], errors='coerce').to_numpy()
+              assert np.allclose(av, bv, equal_nan=True), c
+
+          expected_provenance = {
+              1: ('34650067599', 'be061eaf23372f080db3911d3b4919120c744c53'),
+              2: ('35282021679', 'c6ec55be70d6e05bbd1dbae83d7d5c86ac8aa00a'),
+          }
+          for week, (run_id, sha) in expected_provenance.items():
+              q = committed.loc[committed['week'].eq(week)]
+              assert set(q['source_run_id'].astype(str)) == {run_id}, (week, 'source_run_id')
+              assert set(q['source_git_sha'].astype(str)) == {sha}, (week, 'source_git_sha')
+
+          src = live['actual_source'].value_counts(dropna=False).to_dict()
+          decided = int(live['bet_result'].isin(['WIN', 'LOSS']).sum())
+          voids = int((live['bet_result'] == 'VOID').sum())
+          snap_zeros = int((live['actual_source'] == 'snap_confirmed_verified_zero').sum())
+          print(f'full-report ledger cross-check: {len(a)}/{len(b)} selected rows identical')
+          print(f'decided bets: {decided}; voids: {voids}')
+          print(f'actual_source counts: {src}')
+          print(f'snap-confirmed zero outcomes: {snap_zeros}')
+          EOF
+
+      - name: Run game-cluster-aware slice inference
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/research/slice_graded_track_record_v1.py \
+            --detail /tmp/graded_weeks_1_2.csv \
+            --min-n 25 --fdr-q 0.10
+
+      - name: Upload graded detail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backtest_weeks_1_2_graded
+          path: |
+            /tmp/graded_weeks_1_2.csv
+            data/market_track_record/boards/
+          if-no-files-found: error
+          retention-days: 90
