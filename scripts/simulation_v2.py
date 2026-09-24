@@ -152,6 +152,11 @@ def simulate(metrics: pd.DataFrame, *, iterations: int | None=None, seed: int | 
             guard_on=rush_pool_evidence_guard_v1_enabled()
             if guard_on:
                 rush_shares,guard_meta=select_rush_pool_evidence_guard_v1_shares(team_df,raw_rush_shares,baseline_rush_shares)
+                if int(guard_meta.get("week",0)) > 1:
+                    if "event_id" not in team_df.columns or team_df["event_id"].isna().any() or team_df["event_id"].astype("string").fillna("").str.strip().eq("").any():
+                        raise RuntimeError(f"{RUSH_POOL_EVIDENCE_GUARD_V1_VERSION} requires explicit event_id")
+                    if pd.isna(team) or not str(team).strip():
+                        raise RuntimeError(f"{RUSH_POOL_EVIDENCE_GUARD_V1_VERSION} requires explicit team identity")
                 if bool(guard_meta.get("applied",False)):
                     guard_rng=np.random.default_rng(rush_pool_evidence_guard_v1_seed(simulation_seed=seed,game=game,team=team))
                     carries=_allocate_counts(guard_rng,rush_att,rush_shares)
