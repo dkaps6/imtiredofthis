@@ -1,0 +1,87 @@
+name: TE Target Quality Efficiency V1 Blind Study
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-te-target-quality-efficiency-v1
+    paths:
+      - 'docs/research/TE_TARGET_QUALITY_EFFICIENCY_V1_PREDICTIVE_PLAN.md'
+      - 'scripts/research/te_target_quality_efficiency_v1.py'
+      - '.github/workflows/te-target-quality-efficiency-v1.yml'
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyarrow scikit-learn
+
+      - name: Download exact PR549 compact replay authority
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-te-production-order-historical-replay-v1
+          path: /tmp/pr549
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34722725629
+
+      - name: Verify frozen authority shape
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          p='/tmp/pr549/full_stack_projection_trace_wrte.csv'
+          x=pd.read_csv(p, low_memory=False)
+          q=x[(x['position'].astype(str).str.upper()=='TE') & (x['market'].astype(str)=='rec_yards') & (x['season'].isin([2024,2025]))]
+          print(q.groupby('season').size())
+          assert set(q['season'].astype(int).unique()) == {2024, 2025}
+          assert len(q) >= 1200
+          PY
+
+      - name: Run frozen blind study
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/te_tq_pred
+          mkdir -p /tmp/te_tq_pred
+          python scripts/research/te_target_quality_efficiency_v1.py \
+            --frozen-trace /tmp/pr549/full_stack_projection_trace_wrte.csv \
+            --out-dir /tmp/te_tq_pred
+
+      - name: Verify integrity boundary
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/te_tq_pred/summary.json'))
+          assert p['study'] == 'TE_TARGET_QUALITY_EFFICIENCY_V1'
+          assert p['frozen_authority'] == 'PR549'
+          assert p['sportsbook_inputs_used'] == 0
+          assert p['outcomes_2026_used'] == 0
+          assert p['production_changed'] is False
+          assert len(p['folds']) == 2
+          print('disposition=', p['disposition'])
+          print('folds=', p['folds'])
+          print('gates=', p['fold_gates'])
+          PY
+
+      - name: Upload blind study
+        uses: actions/upload-artifact@v4
+        with:
+          name: te-target-quality-efficiency-v1
+          path: /tmp/te_tq_pred/
+          if-no-files-found: error
+          retention-days: 90
