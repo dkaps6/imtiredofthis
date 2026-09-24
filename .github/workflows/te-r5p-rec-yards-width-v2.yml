@@ -1,0 +1,214 @@
+name: TE R5P Rec Yards Width V2
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-te-live-entitlement-efficiency-v1
+    paths:
+      - '.github/workflows/te-r5p-rec-yards-width-v2.yml'
+      - 'docs/research/TE_R5P_REC_YARDS_WIDTH_V2_PLAN.md'
+      - 'scripts/research/te_r5p_rec_yards_width_v2.py'
+      - 'tests/test_te_r5p_rec_yards_width_v2.py'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml pyarrow tabulate
+
+      - name: Run frozen mechanics and replay tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q             tests/test_te_r5p_rec_yards_width_v2.py             tests/test_wr_te_production_order_historical_v1.py             tests/test_empirical_fair_prob_v1.py             tests/test_benchmark_identity_v1.py
+
+      - name: Create workspace
+        run: |
+          rm -rf /tmp/tewidth /tmp/hist_2024 /tmp/hist_2025 /tmp/ref /tmp/wr_model /tmp/te_model
+          mkdir -p /tmp/tewidth/distributions /tmp/tewidth/result                    /tmp/hist_2024 /tmp/hist_2025 /tmp/ref /tmp/wr_model /tmp/te_model
+
+      - name: Download canonical empirical baseline reference
+        uses: actions/download-artifact@v4
+        with:
+          name: historical-fair-probability-reconstruction-v1
+          path: /tmp/ref
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34712931786
+
+      - name: Download WR-R15 fold-safe OOS authority
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-r15-wr1-anchor-participation-v1
+          path: /tmp/wr_model
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34238301577
+
+      - name: Download TE-R5P production-contract OOS authority
+        uses: actions/download-artifact@v4
+        with:
+          name: te-r5p-production-contract-refit-v1
+          path: /tmp/te_model
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34152797603
+
+      - name: Verify frozen fold authorities
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from pathlib import Path
+
+          wr_root = Path('/tmp/wr_model/backtests/wr_r15_wr1_anchor_v1')
+          te_root = Path('/tmp/te_model/data/backtests/te_r5p_production_contract_refit_v1')
+          wr = pd.read_csv(wr_root / 'wr_r15_fold_coefficients.csv')
+          te = pd.read_csv(te_root / 'te_r5p_coefficients.csv')
+          wr_result = json.loads((wr_root / 'wr_r15_result.json').read_text())
+          te_result = json.loads((te_root / 'te_r5p_result.json').read_text())
+          assert sorted(wr['test_season'].astype(int).unique().tolist()) == [2023, 2024]
+          assert sorted(te['test_season'].astype(int).unique().tolist()) == [2023, 2024, 2025]
+          assert bool(wr_result.get('design_motivated_by_2025_but_2025_confirmation_forbidden'))
+          assert te_result.get('candidate_team_pool') == 'b0_te_pool'
+          assert float(te_result.get('pool_ratio_contract')) == 1.0
+          assert te_result.get('disposition') == 'TE_R5P_PRODUCTION_CONTRACT_REFIT_ELIGIBLE'
+          print('frozen fold authority PASS')
+          PY
+
+      - name: Build independent historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_historical_inputs.py             --season 2024 --prior-season 2023 --weeks 1-18 --out-dir /tmp/hist_2024
+          python scripts/backtest/build_historical_inputs.py             --season 2025 --prior-season 2024 --weeks 1-18 --out-dir /tmp/hist_2025
+
+      - name: Combine schedule and team-week history
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out = Path('/tmp/tewidth')
+          for name in ['schedule_history.csv', 'team_weekly_history.csv']:
+              parts = [pd.read_csv('/tmp/hist_2024/' + name), pd.read_csv('/tmp/hist_2025/' + name)]
+              x = pd.concat(parts, ignore_index=True)
+              keys = ['season', 'week', 'team']
+              x = x.sort_values(keys).drop_duplicates(keys, keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined historical rows in {name}')
+              x.to_csv(out / name, index=False)
+          PY
+
+      - name: Build canonical historical player logs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py             --seasons 2023,2024,2025             --schedule /tmp/tewidth/schedule_history.csv             --out /tmp/tewidth/player_game_logs_history.csv
+
+      - name: Build canonical baseline component traces
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/walk_forward.py             --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000             --player-logs /tmp/tewidth/player_game_logs_history.csv             --team-weekly /tmp/tewidth/team_weekly_history.csv             --schedule /tmp/tewidth/schedule_history.csv             --universe-dir /tmp/hist_2024/pregame_universe             --out /tmp/tewidth/component_predictions_2024_base.csv
+          python scripts/backtest/walk_forward.py             --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000             --player-logs /tmp/tewidth/player_game_logs_history.csv             --team-weekly /tmp/tewidth/team_weekly_history.csv             --schedule /tmp/tewidth/schedule_history.csv             --universe-dir /tmp/hist_2025/pregame_universe             --out /tmp/tewidth/component_predictions_2025_base.csv
+
+      - name: Reproduce canonical baseline projection
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_full_stack_vegas_projection_trace_v2.py             --component-file /tmp/tewidth/component_predictions_2024_base.csv             --component-file /tmp/tewidth/component_predictions_2025_base.csv             --schedule /tmp/tewidth/schedule_history.csv             --weights data/model_ensemble_weights.csv             --out /tmp/tewidth/full_stack_projection_trace_base.csv
+          python - <<'PY'
+          import numpy as np
+          import pandas as pd
+          a = pd.read_csv('/tmp/tewidth/full_stack_projection_trace_base.csv', low_memory=False)
+          b = pd.read_csv('/tmp/ref/full_stack_projection_trace_clean_v1.csv', low_memory=False)
+          keys = ['season','week','team','opponent','player_clean_key','market','game_id']
+          aa = a.sort_values(keys).reset_index(drop=True)
+          bb = b.sort_values(keys).reset_index(drop=True)
+          assert len(aa) == len(bb) == 51197
+          assert aa[keys].astype(str).equals(bb[keys].astype(str))
+          for c in ['mc_proj','ml_proj','state_proj','ensemble_proj','actual']:
+              av = pd.to_numeric(aa[c], errors='coerce').to_numpy(float)
+              bv = pd.to_numeric(bb[c], errors='coerce').to_numpy(float)
+              assert np.array_equal(np.isnan(av), np.isnan(bv))
+              m = np.isfinite(av) & np.isfinite(bv)
+              delta = float(np.max(np.abs(av[m] - bv[m]))) if m.any() else 0.0
+              assert delta <= 1e-10, (c, delta)
+          print('canonical baseline projection reproduction PASS')
+          PY
+
+      - name: Reconstruct fold-safe TE-R5P production-order arrays
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/persist_wr_te_production_order_historical_v1.py             --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000             --player-logs /tmp/tewidth/player_game_logs_history.csv             --team-weekly /tmp/tewidth/team_weekly_history.csv             --schedule /tmp/tewidth/schedule_history.csv             --universe-dir /tmp/hist_2024/pregame_universe             --component-file /tmp/tewidth/component_predictions_2024_base.csv             --component-out /tmp/tewidth/component_predictions_2024_wrte.csv             --out-dir /tmp/tewidth/distributions             --te-coefficients /tmp/te_model/data/backtests/te_r5p_production_contract_refit_v1/te_r5p_coefficients.csv             --wr-coefficients /tmp/wr_model/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv
+          python scripts/research/persist_wr_te_production_order_historical_v1.py             --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000             --player-logs /tmp/tewidth/player_game_logs_history.csv             --team-weekly /tmp/tewidth/team_weekly_history.csv             --schedule /tmp/tewidth/schedule_history.csv             --universe-dir /tmp/hist_2025/pregame_universe             --component-file /tmp/tewidth/component_predictions_2025_base.csv             --component-out /tmp/tewidth/component_predictions_2025_wrte.csv             --out-dir /tmp/tewidth/distributions             --te-coefficients /tmp/te_model/data/backtests/te_r5p_production_contract_refit_v1/te_r5p_coefficients.csv             --wr-coefficients /tmp/wr_model/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv
+
+      - name: Build specialist full-stack football trace
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_full_stack_vegas_projection_trace_v2.py             --component-file /tmp/tewidth/component_predictions_2024_wrte.csv             --component-file /tmp/tewidth/component_predictions_2025_wrte.csv             --schedule /tmp/tewidth/schedule_history.csv             --weights data/model_ensemble_weights.csv             --out /tmp/tewidth/full_stack_projection_trace_wrte.csv
+
+      - name: Run blind TE receiving-yard width validation
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/te_r5p_rec_yards_width_v2.py             --projection-file /tmp/tewidth/full_stack_projection_trace_wrte.csv             --distribution-dir /tmp/tewidth/distributions             --props /tmp/ref/market_archive/historical_market_props.csv             --out-dir /tmp/tewidth/result
+          test -s /tmp/tewidth/result/summary.json
+          test -s /tmp/tewidth/result/RESULT.md
+
+      - name: Verify V2 scope invariants
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/tewidth/result/summary.json'))
+          assert p['study'] == 'TE_R5P_REC_YARDS_WIDTH_V2'
+          assert p['production_changed'] is False
+          assert p['sportsbook_inputs_used_to_fit_k'] == 0
+          assert set(p['fit']) == {'2024','2025'}
+          assert set(p['blind_evaluations']) == {'fit2024_test2025','fit2025_test2024'}
+          print('V2 scope invariants PASS')
+          PY
+
+      - name: Upload TE width V2 result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: te-r5p-rec-yards-width-v2
+          path: |
+            /tmp/tewidth/result/
+            /tmp/tewidth/distributions/*_wrte_replay_audit.csv
+            /tmp/tewidth/distributions/*_wrte_component_updates.csv
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload reconstructed specialist arrays for audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: te-r5p-rec-yards-width-v2-distributions
+          path: /tmp/tewidth/distributions/*.npz
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 0
