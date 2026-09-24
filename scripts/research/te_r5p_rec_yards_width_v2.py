@@ -100,6 +100,8 @@ def _prepare_projection(projection_file: Path) -> pd.DataFrame:
     p = _read(projection_file, "specialist projection")
     if "ensemble_proj" not in p.columns:
         raise RuntimeError("specialist projection missing ensemble_proj")
+    if "game_id" not in p.columns:
+        raise RuntimeError("specialist projection missing game_id required for secondary market evaluation")
     p["proj"] = num(p["ensemble_proj"]); p["actual"] = num(p["actual"])
     p["season"] = pd.to_numeric(p["season"], errors="coerce"); p["week"] = pd.to_numeric(p["week"], errors="coerce")
     p["position"] = p["position"].astype(str).str.upper().str.strip()
@@ -128,7 +130,7 @@ def evaluate_season(proj, meta, arrays, *, test_season, k):
     for _,r in q.iterrows():
         key=tuple(r[c] for c in KEYS); base=_aligned(arrays[key],float(r["proj"])); wide=_widen(base,float(r["proj"]),float(k)); actual=float(r["actual"])
         b05,b10,b90,b95=np.quantile(base,[.05,.10,.90,.95]); w05,w10,w90,w95=np.quantile(wide,[.05,.10,.90,.95])
-        rows.append({**{c:r[c] for c in KEYS},"position":POSITION,"proj":float(r["proj"]),"actual":actual,"k":float(k),"base_sd":float(np.std(base,ddof=1)),"wide_sd":float(np.std(wide,ddof=1)),"base_crps":empirical_crps(base,actual),"wide_crps":empirical_crps(wide,actual),"base_cover80":bool(b10<=actual<=b90),"wide_cover80":bool(w10<=actual<=w90),"base_cover90":bool(b05<=actual<=b95),"wide_cover90":bool(w05<=actual<=w95),"base_width80":float(b90-b10),"wide_width80":float(w90-w10),"base_width90":float(b95-b05),"wide_width90":float(w95-w05),"base_mean":float(np.mean(base)),"wide_mean":float(np.mean(wide))})
+        rows.append({**{c:r[c] for c in KEYS},"game_id":str(r["game_id"]),"position":POSITION,"proj":float(r["proj"]),"actual":actual,"k":float(k),"base_sd":float(np.std(base,ddof=1)),"wide_sd":float(np.std(wide,ddof=1)),"base_crps":empirical_crps(base,actual),"wide_crps":empirical_crps(wide,actual),"base_cover80":bool(b10<=actual<=b90),"wide_cover80":bool(w10<=actual<=w90),"base_cover90":bool(b05<=actual<=b95),"wide_cover90":bool(w05<=actual<=w95),"base_width80":float(b90-b10),"wide_width80":float(w90-w10),"base_width90":float(b95-b05),"wide_width90":float(w95-w05),"base_mean":float(np.mean(base)),"wide_mean":float(np.mean(wide))})
     d=pd.DataFrame(rows); b80=float(d.base_cover80.mean()); w80=float(d.wide_cover80.mean()); b90=float(d.base_cover90.mean()); w90=float(d.wide_cover90.mean())
     s={"test_season":int(test_season),"n":int(len(d)),"k":float(k),"point_mae_base":float((d.proj-d.actual).abs().mean()),"point_mae_wide":float((d.proj-d.actual).abs().mean()),"max_abs_mean_shift":float((d.wide_mean-d.base_mean).abs().max()),"crps_base":float(d.base_crps.mean()),"crps_wide":float(d.wide_crps.mean()),"crps_improvement_pct":float((d.base_crps.mean()-d.wide_crps.mean())/d.base_crps.mean()),"coverage80_base":b80,"coverage80_wide":w80,"coverage80_gap_base":abs(b80-.8),"coverage80_gap_wide":abs(w80-.8),"coverage90_base":b90,"coverage90_wide":w90,"coverage90_gap_base":abs(b90-.9),"coverage90_gap_wide":abs(w90-.9),"width80_base":float(d.base_width80.mean()),"width80_wide":float(d.wide_width80.mean()),"width90_base":float(d.base_width90.mean()),"width90_wide":float(d.wide_width90.mean())}
     return d,s
