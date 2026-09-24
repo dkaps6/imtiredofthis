@@ -147,8 +147,14 @@ jobs:
         run: |
           python scripts/backtest/build_full_stack_vegas_projection_trace_v2.py             --component-file /tmp/tewidth/component_predictions_2024_base.csv             --component-file /tmp/tewidth/component_predictions_2025_base.csv             --schedule /tmp/tewidth/schedule_history.csv             --weights data/model_ensemble_weights.csv             --out /tmp/tewidth/full_stack_projection_trace_base.csv
           python - <<'PY'
+          import json
+          from pathlib import Path
+
           import numpy as np
           import pandas as pd
+
+          result_dir = Path('/tmp/tewidth/result')
+          result_dir.mkdir(parents=True, exist_ok=True)
 
           current = pd.read_csv('/tmp/tewidth/full_stack_projection_trace_base.csv', low_memory=False)
           frozen = pd.read_csv('/tmp/wrte_ref/full_stack_projection_trace_base.csv', low_memory=False)
@@ -166,6 +172,7 @@ jobs:
           )
           missing = merged.loc[merged['_merge'].ne('both'), keys]
           if len(missing):
+              missing.to_csv(result_dir / 'baseline_missing_frozen_rows.csv', index=False)
               raise RuntimeError(
                   'current rebuild is missing frozen PR549 rows: '
                   + str(missing.head(20).to_dict('records'))
@@ -175,9 +182,150 @@ jobs:
           extra = extra.loc[extra['_merge'].eq('left_only')].copy()
           print(f'frozen rows={len(frozen)} current rows={len(current)} extra_current_rows={len(extra)}')
           if len(extra):
+              extra.to_csv(result_dir / 'baseline_current_only_rows.csv', index=False)
               print('provider-history extras (excluded from frozen authority):')
               print(extra[keys + ['player','position']].drop_duplicates().to_string(index=False))
 
+          diagnostic_cols = [
+              'rules_plays_est',
+              'rules_pass_rate',
+              'rules_tgt_share',
+              'rules_rush_share',
+              'rules_ypt',
+              'rules_catch_rate',
+              'rules_ypc',
+              'rules_ypa',
+              'rules_volatility_mult',
+              'rules_pass_eff_mult',
+              'rules_rush_eff_mult',
+              'rules_injury_redistribution',
+              'ctx_tgt_share_available',
+              'ctx_rush_share_available',
+              'ctx_ypa_available',
+              'ctx_success_rate_available',
+              'ctx_pace_available',
+              'ctx_plays_available',
+              'ctx_proe_available',
+              'ctx_pressure_available',
+              'ctx_explosive_available',
+              'ctx_def_epa_available',
+              'ctx_coverage_scheme_available',
+              'ctx_box_rates_available',
+              'ctx_wr_cb_matchup_available',
+              'ctx_injury_available',
+              'ctx_weather_available',
+              'mc_off_pressure_allowed',
+              'mc_def_pressure_generated',
+              'mc_projected_plays',
+              'mc_dropback_rate',
+              'mc_pass_rate',
+              'mc_team_expected_dropbacks',
+              'mc_team_expected_pass_attempts',
+              'mc_expected_pass_attempts',
+              'mc_base_ypa',
+              'mc_bayes_ypa',
+              'mc_rules_ypa',
+              'mc_pass_eff_mult',
+              'mc_pressure_mismatch',
+              'ml_proj',
+              'state_proj',
+              'ensemble_proj',
+              'actual',
+          ]
+          diagnostic_cols = [
+              c for c in diagnostic_cols
+              if f'{c}_frozen' in merged.columns and f'{c}_current' in merged.columns
+          ]
+
+          summary_rows = []
+          for col in ['mc_proj'] + diagnostic_cols:
+              a = pd.to_numeric(merged[f'{col}_frozen'], errors='coerce').to_numpy(float)
+              b = pd.to_numeric(merged[f'{col}_current'], errors='coerce').to_numpy(float)
+              missingness_mismatch = int(np.count_nonzero(np.isnan(a) != np.isnan(b)))
+              finite = np.isfinite(a) & np.isfinite(b)
+              abs_delta = np.abs(b[finite] - a[finite])
+              summary_rows.append({
+                  'field': col,
+                  'rows_compared': int(finite.sum()),
+                  'missingness_mismatch_rows': missingness_mismatch,
+                  'nonzero_delta_rows_gt_1e12': int(np.count_nonzero(abs_delta > 1e-12)),
+                  'nonzero_delta_rows_gt_1e10': int(np.count_nonzero(abs_delta > 1e-10)),
+                  'mean_abs_delta': float(abs_delta.mean()) if len(abs_delta) else 0.0,
+                  'max_abs_delta': float(abs_delta.max()) if len(abs_delta) else 0.0,
+              })
+          field_summary = pd.DataFrame(summary_rows).sort_values(
+              ['max_abs_delta','mean_abs_delta'], ascending=False
+          )
+          field_summary.to_csv(result_dir / 'baseline_provider_drift_field_summary.csv', index=False)
+
+          mc_frozen = pd.to_numeric(merged['mc_proj_frozen'], errors='coerce')
+          mc_current = pd.to_numeric(merged['mc_proj_current'], errors='coerce')
+          merged['mc_proj_delta'] = mc_current - mc_frozen
+          merged['mc_proj_abs_delta'] = merged['mc_proj_delta'].abs()
+
+          row_cols = keys.copy()
+          for c in ['player','position','role']:
+              for suffix in ['frozen','current']:
+                  name = f'{c}_{suffix}'
+                  if name in merged.columns:
+                      row_cols.append(name)
+          row_cols += ['mc_proj_frozen','mc_proj_current','mc_proj_delta','mc_proj_abs_delta']
+          for col in diagnostic_cols:
+              row_cols.extend([f'{col}_frozen', f'{col}_current'])
+              a = pd.to_numeric(merged[f'{col}_frozen'], errors='coerce')
+              b = pd.to_numeric(merged[f'{col}_current'], errors='coerce')
+              delta_name = f'{col}_delta'
+              merged[delta_name] = b - a
+              row_cols.append(delta_name)
+
+          drift_rows = merged.loc[
+              merged['mc_proj_abs_delta'].fillna(0).gt(1e-12), row_cols
+          ].sort_values('mc_proj_abs_delta', ascending=False)
+          drift_rows.head(2000).to_csv(
+              result_dir / 'baseline_provider_drift_top_rows.csv', index=False
+          )
+
+          grouped = (
+              merged.assign(mc_drift=merged['mc_proj_abs_delta'].fillna(0).gt(1e-12))
+              .groupby(['season','week','team','market'], dropna=False)
+              .agg(
+                  frozen_rows=('mc_proj_abs_delta','size'),
+                  drift_rows=('mc_drift','sum'),
+                  mean_abs_mc_delta=('mc_proj_abs_delta','mean'),
+                  max_abs_mc_delta=('mc_proj_abs_delta','max'),
+              )
+              .reset_index()
+              .sort_values(['max_abs_mc_delta','mean_abs_mc_delta'], ascending=False)
+          )
+          grouped.to_csv(result_dir / 'baseline_provider_drift_group_summary.csv', index=False)
+
+          payload = {
+              'study': 'TE_R5P_WIDTH_V2_PROVIDER_DRIFT_DIAGNOSTIC_V1',
+              'frozen_rows': int(len(frozen)),
+              'current_rows': int(len(current)),
+              'current_only_rows': int(len(extra)),
+              'frozen_missing_rows': int(len(missing)),
+              'mc_drift_rows_gt_1e10': int(merged['mc_proj_abs_delta'].fillna(0).gt(1e-10).sum()),
+              'mc_max_abs_delta': float(merged['mc_proj_abs_delta'].max()),
+              'science_ran': False,
+              'parity_tolerance_changed': False,
+          }
+          (result_dir / 'baseline_provider_drift_summary.json').write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + '\n'
+          )
+
+          print('largest frozen-row mc_proj drift:')
+          print(
+              merged.sort_values('mc_proj_abs_delta', ascending=False)[
+                  keys + ['player_frozen','position_frozen','mc_proj_frozen','mc_proj_current',
+                          'mc_proj_delta','mc_proj_abs_delta']
+              ].head(40).to_string(index=False)
+          )
+          print('largest upstream field drifts:')
+          print(field_summary.head(30).to_string(index=False))
+
+          # Preserve the exact pre-registered replay gate. Diagnostics above are
+          # evidence only; they do not relax or replace frozen PR #549 parity.
           for col in ['mc_proj','ml_proj','state_proj','ensemble_proj','actual']:
               av = pd.to_numeric(merged[f'{col}_current'], errors='coerce').to_numpy(float)
               bv = pd.to_numeric(merged[f'{col}_frozen'], errors='coerce').to_numpy(float)
