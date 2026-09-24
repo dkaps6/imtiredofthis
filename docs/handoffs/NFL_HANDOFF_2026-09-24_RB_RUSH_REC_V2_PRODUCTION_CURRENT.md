@@ -5,12 +5,19 @@ GitHub is canonical over chat memory.
 ## Immediate state
 
 A real model-quality improvement was found, independently backtested, integrated,
-production-certified, and wired to the stable Full Slate pricing entrypoint on
-branch:
+production-certified, and merged into the stable Full Slate production path.
 
-`research-rb-rush-rec-conservation-v2`
+PR #628 is **MERGED/CLOSED**.
 
-Do not restart this work or repeat the historical test.
+- merge SHA: `e26fcedade9a94a9634f6ba74558775968573818`
+- Repo CI: run `36010438820` = SUCCESS
+- preserved paid Full Slate replay: run `36010438890` = SUCCESS
+- replay artifact: `10812077491`
+- replay digest: `sha256:074a0332127a908443c8e9d5b952592dc14d0faf6d147e8f9d63d9567ad15150`
+- replay passed certified pricing, final-board quarantine, and strict repository audits.
+
+Do not restart this work, reopen PR #628, or repeat the historical test absent a
+concrete production defect or genuinely new prospective evidence.
 
 The candidate is:
 
@@ -220,7 +227,15 @@ Do not relabel the existing weekly DNP/LIMITED flag as a new trajectory feature.
 
 ## Immediate next operational action
 
-Open the V2 production PR to `main`, run Repo CI / review, and merge only if
-green. After merge, update this handoff and Issue #535 with the merge SHA.
+Production promotion is complete on `main`.
 
-Then return to actual model-improvement research rather than scoreboard work.
+Return to actual model-improvement/new-information research rather than
+scoreboard work. Preserve these stopping rules:
+
+- do not reopen V2 without a concrete defect or genuinely new evidence;
+- do not reopen M96 retrospective RB routing;
+- keep QB pass yards prospective;
+- keep the public-intent and practice-trajectory source lanes parked unless a
+  materially new data source becomes available;
+- TE Width V2 provider-drift archaeology remains separate and should stay
+  time-boxed rather than becoming another infrastructure loop.

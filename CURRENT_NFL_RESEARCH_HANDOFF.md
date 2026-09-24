@@ -29,9 +29,13 @@ remains preserved below as a separate unresolved research lane.
 - Final stable-entrypoint certification run `36009823313` = **SUCCESS**.
 - Final artifact `10811878970`, digest
   `sha256:c88751876bd42838f312f385377be439e12e46b07e96c0c1d34dc3fd8039a04f`.
-- Stable public pricing entrypoint now points to V6 on the research branch.
+- **PR #628 is MERGED/CLOSED** at main SHA `e26fcedade9a94a9634f6ba74558775968573818`.
+- Repo CI `36010438820` = SUCCESS.
+- Preserved paid Full Slate replay `36010438890` = SUCCESS, including certified pricing, final-board quarantine, and strict audits.
+- Stable public pricing entrypoint on `main` now points to V6.
 - Canonical Full Slate live pricing now has a fail-closed V2 lineage gate.
-- Immediate action: open PR to main; merge only after Repo CI/review is green.
+- Production promotion is complete. Do not reopen/retest V2 absent a concrete defect or genuinely new prospective evidence.
+- Next priority returns to additional model-improvement/new-information research.
 - Public-intent V1B automation is parked as a retrieval-transport failure.
 - Historical practice-trajectory source is parked as not dense.
 - M96 retrospective RB rushing remains CLOSED.
