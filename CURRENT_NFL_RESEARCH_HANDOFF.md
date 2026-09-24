@@ -3,61 +3,71 @@ GitHub is canonical; chat memory is secondary.
 
 ---
 
-## ACTIVE CHECKPOINT — 2026-09-23 — PR #626 MERGED; TE LIVE MODEL SCIENCE ACTIVE
+## ACTIVE CHECKPOINT — 2026-09-24 — TE WIDTH V2 PROVIDER-DRIFT CHECKPOINT
 
 **Read this detailed handoff next:**
 
-`docs/handoffs/NFL_HANDOFF_2026-09-23_PR626_MERGED_TE_LIVE_SCIENCE_CURRENT.md`
+`docs/handoffs/NFL_HANDOFF_2026-09-24_TE_WIDTH_V2_PROVIDER_DRIFT_CURRENT.md`
 
-This checkpoint supersedes the stale PR-626-open language later in this file.
+This supersedes all stale PR-626-open and earlier TE-V2 status language below.
 
 ### Current state in one screen
 
-- PR #626 is **MERGED/CLOSED** at main merge commit
-  `69e9c6211710c60de9aaf07d06aca6cafeff5ccf`.
-- Canonical W1/W2 production record is fixed at:
+- PR #626 is **MERGED/CLOSED**. Canonical W1/W2 record:
   **805 selected / 797 decided / 395-402 / -42.86u**.
-- Scoreboard cleanup is no longer the active research lane. Reopen integrity
-  only if a defect can materially change canonical wagers/settlement or break
-  the canonical replay.
-- TE Live Entitlement vs Efficiency V1 is **COMPLETE**:
-  - run `35939588747` SUCCESS;
-  - artifact `10784323345`;
-  - strict-prior W1 2026 snaps improve Week-2 all-TE target-share MAE
-    **2.32%** and selected-TE target-share MAE **2.84%**;
-  - current-snap entitlement alone does **not** improve selected TE rec-yard
-    MAE;
-  - live error recovery remains larger from efficiency than entitlement
-    (**5.68 yd vs 4.11 yd** on the defined cohort);
+- Scoreboard cleanup is DONE. Reopen only for a defect that materially changes
+  canonical wagers/settlement or breaks the canonical replay.
+- TE Live Entitlement vs Efficiency V1 is **COMPLETE / SUCCESS**:
+  - run `35939588747`
+  - artifact `10784323345`
+  - current-snap counterfactual improves all-TE W2 target-share MAE **2.32%**
+  - selected-TE target-share MAE improves **2.84%**
+  - but rec-yard MAE does not improve from entitlement alone
+  - perfect efficiency recovers **5.68 yd** vs perfect entitlement **4.11 yd**
   - disposition:
-    `CURRENT_SNAP_ENTITLEMENT_SIGNAL_SUPPORTED_EFFICIENCY_REMAINS_PRIMARY_LIVE_GAP`.
-- PR #627 current-season snap continuation is therefore directly supported;
-  do not duplicate/refit it.
-- TE-R5P Receiving-Yards Width V2 is now the active test:
-  - branch `research-te-live-entitlement-efficiency-v1`;
-  - frozen plan `docs/research/TE_R5P_REC_YARDS_WIDTH_V2_PLAN.md`;
-  - first run `35940487155`; verify live status before acting.
-  - blind 2024->2025 and 2025->2024 specialist-width validation;
-  - mean-neutral, TE rec_yards only, no sportsbook input in factor fitting.
-- Historical production-order TE-R5P evidence already shows stable under-width:
-  2024 implied k **1.728**, 2025 **1.688**.
-- After TE V2 is settled, strongest sanctioned parallel mean-information lane
-  is RB teammate availability / injury-created vacancy propagation into
-  rushing opportunity. **Do not reopen the exposed retrospective M96 router
-  family below.**
-- QB pass yards remains frozen/prospective.
-- No global two-week SD rescale.
+    `CURRENT_SNAP_ENTITLEMENT_SIGNAL_SUPPORTED_EFFICIENCY_REMAINS_PRIMARY_LIVE_GAP`
+- PR #627's W3+ strict-prior 2026 snap continuation is therefore supported.
+  Do not duplicate/refit it.
+- TE-R5P Receiving-Yards Width V2 is the active distribution test on branch
+  `research-te-live-entitlement-efficiency-v1`.
+- Physical branch head at checkpoint:
+  `839f7d206d47709ab8ed5576908dae205057be24`.
+- V2 run #1 `35940487155`: failed before science output due provider-history
+  row-universe drift.
+- V2 run #2 `35944049950`: superseded diagnostic run.
+- V2 run #3 `35944066618` / job `107458022324`: **FAILED CLOSED before
+  science output**. Current rebuild has 51,232 rows vs frozen PR #549 51,197;
+  35 extras are excluded, but frozen-row `mc_proj` still drifts by up to
+  **14.0206492813 yd**.
+- Therefore the problem is reproducing the exact frozen PR #549 distribution
+  authority after historical provider/source drift, not the Width V2 candidate.
+  Do not change V2 gates or treat this as a scientific failure.
+- Preserved PR #549 compact artifact `10307242156` remains available until
+  2026-09-26 and is precious; original raw-draw artifact `10306649017` is
+  expired.
+- Exact next action is narrowly diagnose frozen-row `mc_proj` drift / recover
+  exact PR #549 draws if another surviving copy exists. Do not rerun unchanged.
+- Time-box artifact archaeology. If exact replay becomes another open-ended
+  infrastructure loop, document/park it and pivot to the sanctioned RB
+  teammate-availability / injury-created-vacancy rushing-opportunity lane.
+- QB pass yards stays frozen/prospective.
+- No global SD rescale.
+- No sportsbook lines upstream.
 - No paid OddsAPI pull without explicit approval.
 
-### Operating objective
+### Memory-efficient start rule
 
-Use weekly outcomes to improve the next slate:
+A new chat should NOT ingest the entire history. Read only:
 
-`pregame projection -> outcome -> opportunity/role vs efficiency vs
-distribution diagnosis -> historically justified leakage-safe test -> promote
-only if supported`.
+1. `AGENTS.md`
+2. this top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-09-24_TE_WIDTH_V2_PROVIDER_DRIFT_CURRENT.md`
+4. Issue #535 comments from `5805281169` onward
+5. live branch/run state
 
-Every substantive hypothesis/test/result/disposition must be recorded in GitHub
+Then work. Older handoffs are reference-only.
+
+Every substantive hypothesis/test/result/disposition must be written to GitHub
 and Issue #535.
 
 ---
