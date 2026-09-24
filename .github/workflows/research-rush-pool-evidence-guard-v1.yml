@@ -1,0 +1,97 @@
+name: Rush Pool Evidence Guard V1
+
+on:
+  push:
+    branches:
+      - research-rush-pool-evidence-guard-v1
+    paths:
+      - ".github/workflows/research-rush-pool-evidence-guard-v1.yml"
+      - "scripts/research/rush_pool_evidence_guard_v1.py"
+      - "scripts/research/evaluate_rush_pool_evidence_guard_v1.py"
+      - "tests/test_rush_pool_evidence_guard_v1.py"
+      - "docs/research/RUSH_POOL_EVIDENCE_GUARD_V1_PLAN.md"
+  workflow_dispatch:
+
+concurrency:
+  group: rush-pool-evidence-guard-v1
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib
+
+      - name: Verify frozen candidate mechanics
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/rush_pool_evidence_guard_v1.py
+          python -m py_compile scripts/research/evaluate_rush_pool_evidence_guard_v1.py
+          pytest -q tests/test_rush_pool_evidence_guard_v1.py
+
+      - name: Build 2024 timestamp-safe inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests/rush_guard_2024
+          python scripts/backtest/build_historical_inputs.py             --season 2024 --prior-season 2023 --weeks "2-18"             --out-dir data/backtests/rush_guard_2024
+          python scripts/backtest/enrich_historical_defense.py             --team-weekly data/backtests/rush_guard_2024/team_weekly_history.csv             --seasons 2023,2024             --audit data/backtests/rush_guard_2024/historical_defense_enrichment_audit.csv             --observations data/backtests/rush_guard_2024/historical_defense_observations.csv
+          python scripts/backtest/validate_historical_inputs.py             --season 2024 --prior-season 2023 --weeks "2-18"             --data-dir data/backtests/rush_guard_2024             --report data/backtests/rush_guard_2024/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs.py             --seasons 2023,2024             --schedule data/backtests/rush_guard_2024/schedule_history.csv             --out data/backtests/rush_guard_2024/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py             --seasons 2023,2024             --out data/backtests/rush_guard_2024/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py             --schedule data/backtests/rush_guard_2024/schedule_history.csv             --out data/backtests/rush_guard_2024/weather_history.csv
+
+      - name: Score frozen candidate on 2024
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/rush_pool_evidence_guard_v1.py             --season 2024 --prior-season 2023 --weeks "2-18"             --player-logs data/backtests/rush_guard_2024/player_game_logs_history.csv             --team-weekly data/backtests/rush_guard_2024/team_weekly_history.csv             --schedule data/backtests/rush_guard_2024/schedule_history.csv             --universe-dir data/backtests/rush_guard_2024/pregame_universe             --injuries data/backtests/rush_guard_2024/injuries_history.csv             --weather data/backtests/rush_guard_2024/weather_history.csv             --out-dir data/backtests/rush_pool_evidence_guard_v1/2024
+
+      - name: Build 2025 timestamp-safe inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/backtests/rush_guard_2025
+          python scripts/backtest/build_historical_inputs.py             --season 2025 --prior-season 2024 --weeks "2-18"             --out-dir data/backtests/rush_guard_2025
+          python scripts/backtest/enrich_historical_defense.py             --team-weekly data/backtests/rush_guard_2025/team_weekly_history.csv             --seasons 2024,2025             --audit data/backtests/rush_guard_2025/historical_defense_enrichment_audit.csv             --observations data/backtests/rush_guard_2025/historical_defense_observations.csv
+          python scripts/backtest/validate_historical_inputs.py             --season 2025 --prior-season 2024 --weeks "2-18"             --data-dir data/backtests/rush_guard_2025             --report data/backtests/rush_guard_2025/historical_input_validation.csv
+          python scripts/backtest/historical_player_logs.py             --seasons 2024,2025             --schedule data/backtests/rush_guard_2025/schedule_history.csv             --out data/backtests/rush_guard_2025/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py             --seasons 2024,2025             --out data/backtests/rush_guard_2025/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py             --schedule data/backtests/rush_guard_2025/schedule_history.csv             --out data/backtests/rush_guard_2025/weather_history.csv
+
+      - name: Score frozen candidate on 2025
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/rush_pool_evidence_guard_v1.py             --season 2025 --prior-season 2024 --weeks "2-18"             --player-logs data/backtests/rush_guard_2025/player_game_logs_history.csv             --team-weekly data/backtests/rush_guard_2025/team_weekly_history.csv             --schedule data/backtests/rush_guard_2025/schedule_history.csv             --universe-dir data/backtests/rush_guard_2025/pregame_universe             --injuries data/backtests/rush_guard_2025/injuries_history.csv             --weather data/backtests/rush_guard_2025/weather_history.csv             --out-dir data/backtests/rush_pool_evidence_guard_v1/2025
+
+      - name: Apply frozen qualification gates
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/evaluate_rush_pool_evidence_guard_v1.py             --summary-2024 data/backtests/rush_pool_evidence_guard_v1/2024/season_summary.json             --summary-2025 data/backtests/rush_pool_evidence_guard_v1/2025/season_summary.json             --out data/backtests/rush_pool_evidence_guard_v1/summary.json             --result-md data/backtests/rush_pool_evidence_guard_v1/RESULT.md
+          cat data/backtests/rush_pool_evidence_guard_v1/RESULT.md
+
+      - name: Upload frozen result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rush-pool-evidence-guard-v1
+          path: |
+            data/backtests/rush_pool_evidence_guard_v1/**
+            data/backtests/rush_guard_2024/historical_input_validation.csv
+            data/backtests/rush_guard_2025/historical_input_validation.csv
+          if-no-files-found: warn
+          retention-days: 30
