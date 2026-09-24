@@ -3,6 +3,57 @@ GitHub is canonical; chat memory is secondary.
 
 ---
 
+## ACTIVE CHECKPOINT — 2026-09-24 — TE WIDTH V2 FAILED CLOSED / NEW SCIENCE NEXT
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-09-24_TE_WIDTH_V2_FAILED_CLOSED_CURRENT.md`
+
+This supersedes the prior in-progress TE Width V2 checkpoint for immediate execution.
+
+### Current state in one screen
+
+- production main entering this docs-only checkpoint: `cd6cc06459fc88f2bc6d7d2c23d544ca75e9e12f`
+- RB Rush+Receiving Conservation V2 remains production-active and protected
+- TE-R5P Receiving-Yards Width V2 run `36040911515` completed **SUCCESS**
+- exact research head: `a9c7a93ae375f75e926139a0a29675aab89d2fdc`
+- result artifact `10827222034`, digest `sha256:f128cdf5b5d41c18ff1a08f1a9c23f346f911294d6e8e6afe678c8c64f526cc2`
+- disposition: `TE_R5P_REC_YARDS_WIDTH_V2_FAILED_CLOSED`
+- fit2024 -> test2025 CRPS worsened `11.5174 -> 11.6626`
+- that direction's 80% coverage gap worsened `0.08495 -> 0.08780`
+- 90% coverage improved both directions; pooled Brier/log loss improved; means stayed invariant
+- frozen contract required CRPS and 80% coverage-gap improvement in both directions, so exact candidate is CLOSED
+- no k search, cap rescue, subgroup rescue, global TE SD multiplier, sportsbook-conditioned width, 2026 outcome fitting, or production integration
+
+### Exact next action
+
+Move immediately to genuinely new Week-3 model-improvement science.
+
+Start with a read-only structural contradiction audit of preserved/current Full Slate artifacts:
+- conservation identities
+- incompatible final component projections
+- lost opportunity mass
+- specialist overrides that break joint football identities
+- current usage/hierarchy states not represented by historical priors
+- injury/personnel changes that fail to propagate
+
+Do not revive failed C1/C3 pass-receiving formulations or generic QB mean tuning. Preserve prospective RB Vacancy V1 separately.
+
+### Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-09-24_TE_WIDTH_V2_FAILED_CLOSED_CURRENT.md`
+4. newest Issue #535 comments after this disposition
+5. live main / relevant active research state
+
+Then work.
+
+Do not load older handoffs unless this checkpoint explicitly sends you there.
+
+---
+
 ## ACTIVE CHECKPOINT — 2026-09-24 — POST-RB-V2 / TE WIDTH V2 CURRENT
 
 **Read this detailed handoff next:**
