@@ -13,12 +13,19 @@ team WR target-share mass before canonical target allocation.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 from typing import Dict
 
 import numpy as np
 import pandas as pd
 
 from scripts.config import MC
+from scripts.modeling.rush_pool_evidence_guard_v1 import (
+    VERSION as RUSH_POOL_EVIDENCE_GUARD_V1_VERSION,
+    enabled as rush_pool_evidence_guard_v1_enabled,
+    select_shares as select_rush_pool_evidence_guard_v1_shares,
+    stable_rush_seed as rush_pool_evidence_guard_v1_seed,
+)
 
 MARKET_MAP = {
     "player_pass_yds": "pass_yards", "player_passing_yards": "pass_yards", "pass_yards": "pass_yards",
@@ -136,13 +143,24 @@ def simulate(metrics: pd.DataFrame, *, iterations: int | None=None, seed: int | 
             if pd.isna(team) or not str(team).strip(): continue
             plays_mean,pass_rate_mean=_team_inputs(team_df); plays=np.rint(np.clip(rng.normal(plays_mean,3.5,iterations)+game_pace_shock,45,85)).astype(int); pass_rate=np.clip(rng.normal(pass_rate_mean,0.035,iterations),0.25,0.82); pass_att=rng.binomial(plays,pass_rate); rush_att=plays-pass_att
             pass_eff_shock=np.clip(rng.normal(1.0,0.09,iterations),0.65,1.35); rush_eff_shock=np.clip(rng.normal(1.0,0.10,iterations),0.60,1.40)
-            raw_target_shares=np.array([_num(r,"rules_tgt_share","bayes_tgt_share","target_share","tgt_share",default=0.0) for _,r in team_df.iterrows()]); target_shares=_sharpen_wr_target_shares(team_df,raw_target_shares); raw_rush_shares=np.array([_num(r,"rules_rush_share","bayes_rush_share","rush_share",default=0.0) for _,r in team_df.iterrows()]); rush_shares=_top_n_shares(raw_rush_shares,5)
-            targets=_allocate_counts(rng,pass_att,target_shares); carries=_allocate_counts(rng,rush_att,rush_shares)
+            raw_target_shares=np.array([_num(r,"rules_tgt_share","bayes_tgt_share","target_share","tgt_share",default=0.0) for _,r in team_df.iterrows()]); target_shares=_sharpen_wr_target_shares(team_df,raw_target_shares); raw_rush_shares=np.array([_num(r,"rules_rush_share","bayes_rush_share","rush_share",default=0.0) for _,r in team_df.iterrows()]); baseline_rush_shares=_top_n_shares(raw_rush_shares,5)
+            targets=_allocate_counts(rng,pass_att,target_shares)
+            baseline_carries=_allocate_counts(rng,rush_att,baseline_rush_shares)
+            rush_shares=baseline_rush_shares
+            carries=baseline_carries
+            guard_meta={"applied":False,"reason":"disabled","version":RUSH_POOL_EVIDENCE_GUARD_V1_VERSION}
+            guard_on=rush_pool_evidence_guard_v1_enabled()
+            if guard_on:
+                rush_shares,guard_meta=select_rush_pool_evidence_guard_v1_shares(team_df,raw_rush_shares,baseline_rush_shares)
+                if bool(guard_meta.get("applied",False)):
+                    guard_rng=np.random.default_rng(rush_pool_evidence_guard_v1_seed(simulation_seed=seed,game=game,team=team))
+                    carries=_allocate_counts(guard_rng,rush_att,rush_shares)
             if allocation_trace is not None:
                 clean=np.clip(np.nan_to_num(rush_shares.astype(float),nan=0.0,posinf=0.0,neginf=0.0),0.0,0.95); raw_sum=float(clean.sum()); used=clean.copy()
                 if raw_sum>0.95: used*=0.95/raw_sum
                 residual=max(0.0,1.0-float(used.sum())); probs=np.append(used,residual); probs=probs/probs.sum(); team_rush_mean=float(np.mean(rush_att)) if len(rush_att) else np.nan
-                for j,(_,trace_row) in enumerate(team_df.iterrows()): allocation_trace.append({"event_id":str(game),"team":str(team),"player_clean_key":_player_key(trace_row),"sim_selected_market":str(trace_row.get("market","")),"raw_player_rush_share":float(clean[j]),"raw_team_rush_share_sum":raw_sum,"final_player_probability":float(probs[j]),"residual_probability":float(probs[-1]),"team_rush_total_mean":team_rush_mean,"expected_carries_from_final_probability":team_rush_mean*float(probs[j]),"realized_multinomial_mean_carries":float(carries[:,j].mean())})
+                team_rush_digest=hashlib.sha256(np.asarray(rush_att,dtype=np.int64).tobytes()).hexdigest(); target_digest=hashlib.sha256(np.asarray(targets,dtype=np.int64).tobytes()).hexdigest(); baseline_carry_digest=hashlib.sha256(np.asarray(baseline_carries,dtype=np.int64).tobytes()).hexdigest(); final_carry_digest=hashlib.sha256(np.asarray(carries,dtype=np.int64).tobytes()).hexdigest()
+                for j,(_,trace_row) in enumerate(team_df.iterrows()): allocation_trace.append({"event_id":str(game),"team":str(team),"player_clean_key":_player_key(trace_row),"sim_selected_market":str(trace_row.get("market","")),"raw_player_rush_share":float(clean[j]),"raw_team_rush_share_sum":raw_sum,"final_player_probability":float(probs[j]),"residual_probability":float(probs[-1]),"team_rush_total_mean":team_rush_mean,"expected_carries_from_final_probability":team_rush_mean*float(probs[j]),"realized_multinomial_mean_carries":float(carries[:,j].mean()),"rush_pool_evidence_guard_v1_enabled":int(guard_on),"rush_pool_evidence_guard_v1_applied":int(bool(guard_meta.get("applied",False))),"rush_pool_evidence_guard_v1_version":RUSH_POOL_EVIDENCE_GUARD_V1_VERSION if guard_on else "","rush_pool_evidence_guard_v1_reason":str(guard_meta.get("reason","")),"team_rush_total_sha256":team_rush_digest,"target_allocation_sha256":target_digest,"baseline_carry_allocation_sha256":baseline_carry_digest,"final_carry_allocation_sha256":final_carry_digest})
             for j,(_,row) in enumerate(team_df.iterrows()):
                 pkey=_player_key(row)
                 if not pkey: continue
