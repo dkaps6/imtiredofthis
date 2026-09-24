@@ -400,12 +400,14 @@ jobs:
           test -s data/football_simulation_universe_audit.json
           test -s data/wr_r15_full_slate_entitlement_audit.json
           test -s data/qb_c2_production_integration_audit.json
+          test -s data/rb_rush_rec_conservation_v2_production_audit.json
           python - <<'EOF'
           import json, pandas as pd
           from scripts.utils.eligible_team_set_v1 import expected_current_teams
           expected=len(expected_current_teams() or [])
           q=json.load(open('data/qb_c2_production_integration_audit.json',encoding='utf-8'))
           w=json.load(open('data/wr_r15_full_slate_entitlement_audit.json',encoding='utf-8'))
+          rr=json.load(open('data/rb_rush_rec_conservation_v2_production_audit.json',encoding='utf-8'))
           if q.get('disposition') != 'QB_C2_PRODUCTION_DISTRIBUTION_INTEGRATION_PASS': raise SystemExit(f"FATAL: QB C2 production integration not certified: {q.get('disposition')}")
           if int(q.get('football_qb_rows',0)) < expected or int(q.get('selected_qb_rows',0)) <= 0: raise SystemExit(f"FATAL: QB C2 current-output coverage invalid expected>={expected}: {q}")
           if float(q.get('max_raw_qb_mean_gap',1.0)) > 1e-10: raise SystemExit(f"FATAL: QB C2 raw mean drift: {q.get('max_raw_qb_mean_gap')}")
@@ -419,7 +421,17 @@ jobs:
               if w.get(k)!=v: raise SystemExit(f'FATAL: WR-R15 contract drift {k}: {w.get(k)!r}')
           if int(w.get('current_wr1_anchor_rows',0)) < expected: raise SystemExit(f'FATAL: WR-R15 anchor coverage expected>={expected}')
           if float(w.get('max_wr1_anchor_entitlement_delta',1.0)) != 0.0 or float(w.get('max_non_wr_entitlement_delta',1.0)) != 0.0: raise SystemExit('FATAL: WR-R15 changed WR1 or non-WR entitlement')
-          print('M38_R15_TE_R5P_C2_PRODUCTION_INTEGRATION_CERTIFIED')
+          rr_week=int(rr.get('week',-1))
+          if rr_week == 1:
+              if rr.get('disposition') != 'RB_RUSH_REC_CONSERVATION_V2_NOT_APPLICABLE_WEEK1': raise SystemExit(f'FATAL: RB rush-rec V2 Week-1 disposition drift: {rr}')
+              if int(rr.get('applied_rows',-1)) != 0: raise SystemExit(f'FATAL: RB rush-rec V2 changed Week-1 rows: {rr}')
+          else:
+              if rr.get('disposition') != 'RB_RUSH_REC_CONSERVATION_V2_PRODUCTION_CERTIFIED': raise SystemExit(f'FATAL: RB rush-rec V2 production certification missing: {rr}')
+              if rr.get('integration_valid') is not True: raise SystemExit(f'FATAL: RB rush-rec V2 integration invalid: {rr}')
+              if int(rr.get('sportsbook_inputs_to_v2_football',1)) != 0: raise SystemExit(f'FATAL: sportsbook input reached RB rush-rec V2 football: {rr}')
+              if int(rr.get('week1_rows_changed',1)) != 0: raise SystemExit(f'FATAL: RB rush-rec V2 reports Week-1 change: {rr}')
+              if float(rr.get('max_pathwise_identity_gap',1.0)) > 1e-10: raise SystemExit(f'FATAL: RB rush-rec V2 pathwise identity drift: {rr}')
+          print('M38_R15_TE_R5P_C2_RB_RUSH_REC_V2_PRODUCTION_INTEGRATION_CERTIFIED')
           EOF
           python scripts/stamp_qb_c2_pricing_lineage_v1.py
           test -s data/qb_c2_pricing_lineage_stamp_audit.json

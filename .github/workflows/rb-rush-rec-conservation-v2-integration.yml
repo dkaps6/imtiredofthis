@@ -1,0 +1,127 @@
+name: RB Rush Rec Conservation V2 Integration
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-rush-rec-conservation-v2
+    paths:
+      - 'docs/research/RB_RUSH_REC_CONSERVATION_V2_INTEGRATION_PLAN.md'
+      - 'scripts/modeling/rb_rush_rec_conservation_v2.py'
+      - 'scripts/run_pricing_v2.py'
+      - 'scripts/research/validate_rb_rush_rec_conservation_v2_integration.py'
+      - '.github/workflows/rb-rush-rec-conservation-v2-integration.yml'
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyarrow
+
+      - name: Compile candidate
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile \
+            scripts/modeling/rb_rush_rec_conservation_v2.py \
+            scripts/run_pricing_v2.py \
+            scripts/research/validate_rb_rush_rec_conservation_v2_integration.py
+
+      - name: Preserve repo graded authority
+        run: |
+          mkdir -p /tmp/rb_rr_v2
+          cp data/market_track_record/graded/2026_wk01_wk02_graded.csv /tmp/rb_rr_v2/graded.csv
+
+      - name: Download exact Week-2 paid-origin artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: run_35282021679
+          path: /tmp/week2_origin
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 35282021679
+
+      - name: Materialize preserved Week-2 inputs
+        run: |
+          rm -rf data outputs
+          cp -a /tmp/week2_origin/data ./data
+          cp -a /tmp/week2_origin/outputs ./outputs
+          test -s data/metrics_ready.csv
+          test -s outputs/props_pricing_offers.csv
+
+      - name: Reprice current code baseline with V2 OFF
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          NFL_SEASON: '2026'
+          NFL_WEEK: '2'
+          RB_RUSH_REC_CONSERVATION_V2: '0'
+        run: |
+          python scripts/run_pricing_with_full_roster_universe_v3.py --season 2026
+          test -s outputs/props_priced_clean.csv
+          cp outputs/props_priced_clean.csv /tmp/rb_rr_v2/baseline.csv
+
+      - name: Restore preserved Week-2 inputs for candidate
+        run: |
+          rm -rf data outputs
+          cp -a /tmp/week2_origin/data ./data
+          cp -a /tmp/week2_origin/outputs ./outputs
+
+      - name: Reprice current code candidate with V2 ON
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          NFL_SEASON: '2026'
+          NFL_WEEK: '2'
+          RB_RUSH_REC_CONSERVATION_V2: '1'
+        run: |
+          python scripts/run_pricing_with_full_roster_universe_v3.py --season 2026
+          test -s outputs/props_priced_clean.csv
+          test -s data/rb_rush_rec_conservation_v2_integration_audit.json
+          cp outputs/props_priced_clean.csv /tmp/rb_rr_v2/candidate.csv
+          cp data/rb_rush_rec_conservation_v2_integration_audit.json /tmp/rb_rr_v2/seam_audit.json
+          cp data/rb_rush_rec_conservation_v2_integration_audit.csv /tmp/rb_rr_v2/seam_audit.csv
+
+      - name: Validate frozen A/B gates
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/validate_rb_rush_rec_conservation_v2_integration.py \
+            --baseline /tmp/rb_rr_v2/baseline.csv \
+            --candidate /tmp/rb_rr_v2/candidate.csv \
+            --graded /tmp/rb_rr_v2/graded.csv \
+            --out-dir /tmp/rb_rr_v2/result
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/rb_rr_v2/result/summary.json'))
+          if p['disposition'] != 'RB_RUSH_REC_CONSERVATION_V2_INTEGRATION_PASS':
+              raise SystemExit(p)
+          seam=json.load(open('/tmp/rb_rr_v2/seam_audit.json'))
+          if seam.get('sportsbook_inputs_used') != 0:
+              raise SystemExit(f"sportsbook leakage flag: {seam}")
+          if float(seam.get('max_pathwise_identity_gap',1.0)) > 1e-10:
+              raise SystemExit(f"pathwise identity gap: {seam}")
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Upload integration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-rush-rec-conservation-v2-integration
+          path: /tmp/rb_rr_v2/
+          if-no-files-found: error
+          retention-days: 90
