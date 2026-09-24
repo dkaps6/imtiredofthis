@@ -81,6 +81,25 @@ jobs:
           repository: ${{ github.repository }}
           run-id: 34722725629
 
+      - name: Restore exact PR549 replay-only source environment
+        run: |
+          git show f04a8a775f4a56fe282cb292f6a52bd509bc8f24:data/manual_name_overrides.csv > data/manual_name_overrides.csv
+          git show f04a8a775f4a56fe282cb292f6a52bd509bc8f24:data/model_ensemble_weights.csv > data/model_ensemble_weights.csv
+          python - <<'PY'
+          from pathlib import Path
+
+          overrides = Path('data/manual_name_overrides.csv').read_text()
+          weights = Path('data/model_ensemble_weights.csv').read_text()
+          override_lines = [x for x in overrides.splitlines() if x.strip()]
+          weight_lines = [x for x in weights.splitlines() if x.strip()]
+          assert len(override_lines) == 3, f'unexpected PR549 override authority rows: {len(override_lines)-1}'
+          assert 'Chris Godwin,Chris Godwin Jr.' not in overrides
+          assert len(weight_lines) == 4, f'unexpected PR549 ensemble-weight authority rows: {len(weight_lines)-1}'
+          assert 'rec_yards,' not in weights
+          assert 'receptions,' not in weights
+          print('PR549 replay-only source environment restored: manual_name_overrides + model_ensemble_weights')
+          PY
+
       - name: Verify frozen fold authorities
         env:
           PYTHONPATH: ${{ github.workspace }}
