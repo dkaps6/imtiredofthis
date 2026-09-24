@@ -9,15 +9,15 @@ Do NOT ingest the entire project history up front. Read only:
 1. `AGENTS.md`
 2. ONLY the top active checkpoint of `CURRENT_NFL_RESEARCH_HANDOFF.md`
 3. `docs/handoffs/NFL_HANDOFF_2026-09-24_TE_WIDTH_V2_PROVIDER_DRIFT_CURRENT.md`
-4. Issue #535 comments from `5805281169` onward, especially `5805404034`, `5805487318`, and `5805942946`
+4. Issue #535 comments from `5805281169` onward, especially `5805404034`, `5805487318`, `5805942946`, and the newest elite handoff checkpoint
 5. the live state of branch `research-te-live-entitlement-efficiency-v1`
 
-Do not read older handoffs unless the current handoff explicitly sends you there. I am trying to preserve conversation memory and want this chat to last.
+Do not read older handoffs unless the current handoff explicitly sends you there. Do not recursively summarize the full project history. I am trying to preserve conversation memory and want this chat to last.
 
 VERIFY LIVE STATE BEFORE MUTATION.
 
 Expected checkpoint:
-- main around `9b33a3a3d74fa4c75246d0e882e36112a8ab30d0`
+- main at or after canonical handoff refresh `7d40f53251d8e7bee4122702a21314ca840d3cb6` (VERIFY LIVE)
 - PR #626 MERGED/CLOSED; do not reopen
 - canonical W1/W2 production record fixed at 805 selected / 797 decided / 395-402 / -42.86u
 - TE Live Entitlement vs Efficiency V1 COMPLETE/SUCCESS
@@ -87,4 +87,4 @@ STANDING PROHIBITIONS:
 WORK STYLE:
 Work autonomously. Do not merely narrate. Close loops. Verify the physical GitHub remote after every write. Leave a historical trail in GitHub and Issue #535 for every hypothesis/test/result/failure. Distinguish mechanical failures from scientific failures. Never overwrite failed runs.
 
-Pick up exactly from this checkpoint and continue as if you were the prior chat.
+Pick up exactly from this checkpoint and continue as if you were the prior chat. Do not spend the opening turn re-summarizing everything back to me; verify the live state and start the next action.
