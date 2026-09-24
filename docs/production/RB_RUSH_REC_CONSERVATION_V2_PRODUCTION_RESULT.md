@@ -126,3 +126,21 @@ Explicitly unchanged:
 `RB_RUSH_REC_CONSERVATION_V2_PRODUCTION_CERTIFIED`
 
 The RB-only V6 production wrapper is authorized for stable Full Slate promotion.
+
+## Final stable-entrypoint certification
+
+After wiring the stable public pricing entrypoint to V6 and adding the canonical
+Full Slate lineage gate, the complete production certification was rerun again.
+
+- stable-entrypoint certification head: `03bd101c0c4a846ac41002ca37d95ea61525fc12`
+- run: `36009823313`
+- artifact: `10811878970`
+- digest: `sha256:c88751876bd42838f312f385377be439e12e46b07e96c0c1d34dc3fd8039a04f`
+- focused RB V2 unit tests: PASS, including explicit FB no-op
+- stable public entrypoint identity: PASS (`run_pricing_with_full_roster_universe_v3.main is V6.main`)
+- protected V5 baseline: PASS
+- V6 candidate: PASS
+- all existing downstream Full Slate certification checks: PASS
+- exact V5-vs-V6 protections: PASS
+
+This is the final pre-PR production authority.
