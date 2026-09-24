@@ -315,6 +315,71 @@ production-integration validation. V2 itself does not mutate production.
 
 Issue #535 V2 freeze/run checkpoint: `5805487318`.
 
+## 8A. Latest TE Width V2 execution checkpoint — 2026-09-23 late evening
+
+The original handoff was written before the latest repair rerun finished. The
+newest canonical execution state is:
+
+- active branch: `research-te-live-entitlement-efficiency-v1`
+- physical branch head: `839f7d206d47709ab8ed5576908dae205057be24`
+- frozen V2 plan remains unchanged:
+  `docs/research/TE_R5P_REC_YARDS_WIDTH_V2_PLAN.md`
+- run #1: `35940487155` — failed closed before science output because today's
+  historical provider rebuild no longer matched the frozen PR #549 authority;
+- run #2: `35944049950` — diagnostic/superseded; do not use scientifically;
+- run #3 / authoritative repair rerun: `35944066618` — **FAILED CLOSED before
+  V2 science output** at canonical baseline reproduction;
+- run #3 job: `107458022324`;
+- exact failure:
+  `RuntimeError: mc_proj drift on frozen PR549 rows: 14.020649281259615`;
+- frozen PR #549 baseline rows: **51,197**;
+- current rebuild rows: **51,232**;
+- provider-history extras: **35 market rows** (7 additional 2024 non-QB
+  player rows);
+- the failure occurred before specialist reconstruction / width grading, so it
+  is **not a TE-width candidate result** and does not alter any scientific
+  conclusion.
+
+Important interpretation:
+
+The current live nflverse/provider history is no longer byte-for-byte compatible
+with the historical inputs that produced PR #549. Merely excluding the 35 extra
+rows is insufficient because some rows that exist in both cohorts now produce a
+different `mc_proj` (max observed delta ~14.02 yards). Therefore do **not**
+weaken the parity gate, do **not** bless the current rebuild, and do **not**
+interpret run #3 as evidence for or against the width hypothesis.
+
+Frozen authorities that remain available:
+
+- PR #549 compact authority:
+  - run `34722725629`
+  - artifact `10307242156`
+  - digest
+    `sha256:d5a991bd76df5b053e6411e9873b12bdaada1458592c2586e3c1416c6fe37044`
+  - contains exact frozen base/specialist projection traces, component outputs,
+    per-week metadata, audits and graded results;
+- PR #549 raw specialist distribution artifact
+  `10306649017` has expired;
+- canonical empirical baseline compact artifact from run `34712931786`
+  remains available; its raw simulated-outcome-shard artifact has expired.
+
+Next action is a **source-recovery / exact-replay diagnosis only**, not another
+science change:
+
+1. determine whether the original PR #549 historical simulation inputs can be
+   reconstructed from preserved/frozen artifacts or an immutable upstream
+   source/version;
+2. compare frozen PR #549 code and current replay code before attributing all
+   drift to provider history;
+3. if exact 2,000-draw specialist arrays can be recovered/reconstructed under
+   the frozen authority, resume the already-frozen V2 unchanged;
+4. if exact arrays cannot be recovered without changing the frozen cohort or
+   science contract, V2 must fail closed and the project should move to the
+   next sanctioned football-information lane rather than tuning around missing
+   historical evidence.
+
+Issue #535 checkpoint: `5805942946`.
+
 ## 9. RB sanctioned parallel lane — next after TE V2 is in flight/settled
 
 Do not reopen M96 historical router tuning.
