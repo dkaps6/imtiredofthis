@@ -118,10 +118,10 @@ def search_ddg(query: str, limit: int = 5) -> tuple[list[dict], str]:
     url = "https://html.duckduckgo.com/html/?q=" + quote_plus(query)
     try:
         r = requests.get(url, headers={"User-Agent": UA}, timeout=TIMEOUT)
-        status = f"http_{r.status_code}"
+        status = f"ddg_http_{r.status_code}"
         r.raise_for_status()
     except Exception as e:
-        return [], f"{type(e).__name__}:{e}"
+        return [], f"ddg_{type(e).__name__}:{e}"
     soup = BeautifulSoup(r.text, "html.parser")
     rows = []
     seen = set()
@@ -131,10 +131,41 @@ def search_ddg(query: str, limit: int = 5) -> tuple[list[dict], str]:
         if not nu or nu in seen:
             continue
         seen.add(nu)
-        rows.append({"url": href, "norm_url": nu, "title": " ".join(a.stripped_strings)})
+        rows.append({"url": href, "norm_url": nu, "title": " ".join(a.stripped_strings), "transport": "duckduckgo_html"})
         if len(rows) >= limit:
             break
     return rows, status
+
+
+def search_bing(query: str, limit: int = 5) -> tuple[list[dict], str]:
+    url = "https://www.bing.com/search?q=" + quote_plus(query) + "&count=10&setlang=en-US"
+    try:
+        r = requests.get(url, headers={"User-Agent": UA, "Accept-Language": "en-US,en;q=0.9"}, timeout=TIMEOUT)
+        status = f"bing_http_{r.status_code}"
+        r.raise_for_status()
+    except Exception as e:
+        return [], f"bing_{type(e).__name__}:{e}"
+    soup = BeautifulSoup(r.text, "html.parser")
+    rows = []
+    seen = set()
+    for a in soup.select("li.b_algo h2 a"):
+        href = a.get("href", "")
+        nu = norm_url(href)
+        if not nu or nu in seen:
+            continue
+        seen.add(nu)
+        rows.append({"url": href, "norm_url": nu, "title": " ".join(a.stripped_strings), "transport": "bing_html"})
+        if len(rows) >= limit:
+            break
+    return rows, status
+
+
+def search_web(query: str, limit: int = 5) -> tuple[list[dict], str]:
+    rows, ddg_status = search_ddg(query, limit=limit)
+    if rows:
+        return rows, ddg_status
+    rows, bing_status = search_bing(query, limit=limit)
+    return rows, ddg_status + "|" + bing_status
 
 
 def parse_iso(s: str) -> datetime | None:
@@ -233,7 +264,7 @@ def main() -> int:
         discovered = []
         search_errors = []
         for phase, q in queries:
-            results, status = search_ddg(q, limit=5)
+            results, status = search_web(q, limit=5)
             if not results:
                 search_errors.append(f"{phase}:{status}")
             for rank, item in enumerate(results, start=1):
@@ -309,7 +340,7 @@ def main() -> int:
         "gold_rows": int(n),
         "eligible_candidate_recall": recall_rate,
         "canonical_source_retrieval": canonical_rate,
-        "transport": "duckduckgo_html",
+        "transport": "duckduckgo_html_with_bing_html_fallback",
         "football_outcomes_read": 0,
         "model_residuals_read": 0,
         "sportsbook_fields_used": 0,
