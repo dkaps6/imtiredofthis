@@ -9,7 +9,9 @@ on:
       - 'docs/production/RB_RUSH_REC_CONSERVATION_V2_PRODUCTION_PROMOTION_PLAN.md'
       - 'scripts/modeling/rb_rush_rec_conservation_v2.py'
       - 'scripts/run_pricing_v2.py'
+      - 'scripts/run_pricing_with_full_roster_universe_v3.py'
       - 'scripts/run_pricing_with_full_roster_universe_v6_production.py'
+      - '.github/workflows/full-slate.yml'
       - 'scripts/research/validate_rb_rush_rec_conservation_v2_integration.py'
       - 'tests/test_rb_rush_rec_conservation_v2.py'
       - '.github/workflows/rb-rush-rec-conservation-v2-production-cert.yml'
@@ -44,8 +46,15 @@ jobs:
           python -m py_compile \
             scripts/modeling/rb_rush_rec_conservation_v2.py \
             scripts/run_pricing_v2.py \
+            scripts/run_pricing_with_full_roster_universe_v3.py \
             scripts/run_pricing_with_full_roster_universe_v6_production.py
           pytest -q tests/test_rb_rush_rec_conservation_v2.py
+          python - <<'PY'
+          import scripts.run_pricing_with_full_roster_universe_v3 as public
+          import scripts.run_pricing_with_full_roster_universe_v6_production as v6
+          assert public.main is v6.main, 'stable Full Slate pricing entrypoint is not V6'
+          print('STABLE_FULL_SLATE_ENTRYPOINT_IS_RB_RUSH_REC_V2_V6')
+          PY
 
       - name: Preserve settled observational authority
         run: |
