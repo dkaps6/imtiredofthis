@@ -18,6 +18,12 @@ import numpy as np, pandas as pd
 from scripts.config import MC
 from scripts.simulation_v2 import (_num,_clip_prob,_team_inputs,_allocate_counts,_top_n_shares,
     _sharpen_wr_target_shares,_player_key,WR_POSITIONS,MARKET_MAP)
+from scripts.modeling.rush_pool_evidence_guard_v1 import (
+    VERSION as RUSH_POOL_EVIDENCE_GUARD_V1_VERSION,
+    enabled as rush_pool_evidence_guard_v1_enabled,
+    select_shares as select_rush_pool_evidence_guard_v1_shares,
+    stable_rush_seed as rush_pool_evidence_guard_v1_seed,
+)
 
 PASS_CATCHER_POSITIONS={"WR","LWR","RWR","SWR","TE","RB","FB"}
 C2_RESIDUAL_CATCH_RATE=.64; C2_RESIDUAL_YPT=7.5; C2_YPR_MIN=3.; C2_YPR_MAX=35.
@@ -55,8 +61,19 @@ def simulate_with_states(metrics:pd.DataFrame,*,iterations:int|None=None,seed:in
             plays_mean,pass_rate_mean=_team_inputs(tdf);plays=np.rint(np.clip(rng.normal(plays_mean,3.5,iterations)+game_pace_shock,45,85)).astype(int);pass_rate=np.clip(rng.normal(pass_rate_mean,.035,iterations),.25,.82);pass_att=rng.binomial(plays,pass_rate);rush_att=plays-pass_att
             pass_eff=np.clip(rng.normal(1.,.09,iterations),.65,1.35);rush_eff=np.clip(rng.normal(1.,.10,iterations),.60,1.40)
             gs=str(game);ts=str(team);states[(gs,ts,'plays')]=plays.copy();states[(gs,ts,'pass_rate')]=pass_rate.copy();states[(gs,ts,'pass_att')]=pass_att.copy();states[(gs,ts,'rush_att')]=rush_att.copy();states[(gs,ts,'pass_eff_shock')]=pass_eff.copy();states[(gs,ts,'rush_eff_shock')]=rush_eff.copy()
-            tshares=_target_shares(tdf);raw_r=np.array([_num(r,'rules_rush_share','bayes_rush_share','rush_share',default=0.) for _,r in tdf.iterrows()]);rshares=_top_n_shares(raw_r,5)
-            targets=_allocate_counts(rng,pass_att,tshares);carries=_allocate_counts(rng,rush_att,rshares)
+            tshares=_target_shares(tdf);raw_r=np.array([_num(r,'rules_rush_share','bayes_rush_share','rush_share',default=0.) for _,r in tdf.iterrows()]);baseline_rshares=_top_n_shares(raw_r,5)
+            targets=_allocate_counts(rng,pass_att,tshares);baseline_carries=_allocate_counts(rng,rush_att,baseline_rshares)
+            rshares=baseline_rshares;carries=baseline_carries
+            if rush_pool_evidence_guard_v1_enabled():
+                rshares,guard_meta=select_rush_pool_evidence_guard_v1_shares(tdf,raw_r,baseline_rshares)
+                if int(guard_meta.get('week',0))>1:
+                    if 'event_id' not in tdf.columns or tdf['event_id'].isna().any() or tdf['event_id'].astype('string').fillna('').str.strip().eq('').any():
+                        raise RuntimeError(f'{RUSH_POOL_EVIDENCE_GUARD_V1_VERSION} requires explicit event_id')
+                    if pd.isna(team) or not str(team).strip():
+                        raise RuntimeError(f'{RUSH_POOL_EVIDENCE_GUARD_V1_VERSION} requires explicit team identity')
+                if bool(guard_meta.get('applied',False)):
+                    guard_rng=np.random.default_rng(rush_pool_evidence_guard_v1_seed(simulation_seed=seed,game=game,team=team))
+                    carries=_allocate_counts(guard_rng,rush_att,rshares)
             for j,(_,row) in enumerate(tdf.iterrows()):
                 pkey=_player_key(row)
                 if not pkey:continue
