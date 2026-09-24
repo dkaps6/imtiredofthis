@@ -7,6 +7,12 @@ on:
       - 'docs/research/SHARED_PASS_STATE_COHERENCE_V1_AUDIT_PLAN.md'
       - 'scripts/research/audit_shared_pass_state_coherence_v1.py'
       - '.github/workflows/research-shared-pass-state-coherence-v1.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/research/SHARED_PASS_STATE_COHERENCE_V1_AUDIT_PLAN.md'
+      - 'scripts/research/audit_shared_pass_state_coherence_v1.py'
+      - '.github/workflows/research-shared-pass-state-coherence-v1.yml'
   workflow_dispatch:
 
 concurrency:
