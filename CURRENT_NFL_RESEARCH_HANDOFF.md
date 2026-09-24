@@ -3,6 +3,54 @@ GitHub is canonical; chat memory is secondary.
 
 ---
 
+## ACTIVE CHECKPOINT — 2026-09-24 — RB RUSH+RECEIVING V2 PRODUCTION CERTIFIED
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-09-24_RB_RUSH_REC_V2_PRODUCTION_CURRENT.md`
+
+This is the newest model-improvement checkpoint and supersedes the TE Width V2
+checkpoint as the immediate operational priority. The TE provider-drift lane
+remains preserved below as a separate unresolved research lane.
+
+### Current state in one screen
+
+- A concrete non-Week-1 RB rush+receiving construction improvement has qualified.
+- Historical no-fit test: 2,787 RB player-games, 2024-2025.
+- MAE **27.6853 -> 25.5718** (+2.1135 yd).
+- RMSE **39.8437 -> 36.4030**.
+- p90 AE **64.7742 -> 57.2604**.
+- 30+ yd misses **841 -> 768**.
+- Replicated independently in 2024 and 2025.
+- Exact Week-2 production A/B preserved all non-combo outputs at gap 0.0.
+- Week-2 observational MAE **30.3620 -> 28.9014** (+1.4606 yd), supportive only.
+- Final production scope is **RB only**. FB is explicit no-op because historical
+  qualification was RB-only.
+- Final stable-entrypoint certification run `36009823313` = **SUCCESS**.
+- Final artifact `10811878970`, digest
+  `sha256:c88751876bd42838f312f385377be439e12e46b07e96c0c1d34dc3fd8039a04f`.
+- Stable public pricing entrypoint now points to V6 on the research branch.
+- Canonical Full Slate live pricing now has a fail-closed V2 lineage gate.
+- Immediate action: open PR to main; merge only after Repo CI/review is green.
+- Public-intent V1B automation is parked as a retrieval-transport failure.
+- Historical practice-trajectory source is parked as not dense.
+- M96 retrospective RB rushing remains CLOSED.
+- QB pass yards remains frozen/prospective.
+- No paid OddsAPI pull without explicit approval.
+
+### Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-09-24_RB_RUSH_REC_V2_PRODUCTION_CURRENT.md`
+4. newest Issue #535 comments after the V2 checkpoint
+5. live PR/branch/check state
+
+Then work.
+
+---
+
 ## ACTIVE CHECKPOINT — 2026-09-24 — TE WIDTH V2 PROVIDER-DRIFT CHECKPOINT
 
 **Read this detailed handoff next:**
