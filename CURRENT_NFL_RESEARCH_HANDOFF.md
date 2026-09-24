@@ -3,6 +3,65 @@ GitHub is canonical; chat memory is secondary.
 
 ---
 
+## ACTIVE CHECKPOINT — 2026-09-23 — PR #626 MERGED; TE LIVE MODEL SCIENCE ACTIVE
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-09-23_PR626_MERGED_TE_LIVE_SCIENCE_CURRENT.md`
+
+This checkpoint supersedes the stale PR-626-open language later in this file.
+
+### Current state in one screen
+
+- PR #626 is **MERGED/CLOSED** at main merge commit
+  `69e9c6211710c60de9aaf07d06aca6cafeff5ccf`.
+- Canonical W1/W2 production record is fixed at:
+  **805 selected / 797 decided / 395-402 / -42.86u**.
+- Scoreboard cleanup is no longer the active research lane. Reopen integrity
+  only if a defect can materially change canonical wagers/settlement or break
+  the canonical replay.
+- TE Live Entitlement vs Efficiency V1 is **COMPLETE**:
+  - run `35939588747` SUCCESS;
+  - artifact `10784323345`;
+  - strict-prior W1 2026 snaps improve Week-2 all-TE target-share MAE
+    **2.32%** and selected-TE target-share MAE **2.84%**;
+  - current-snap entitlement alone does **not** improve selected TE rec-yard
+    MAE;
+  - live error recovery remains larger from efficiency than entitlement
+    (**5.68 yd vs 4.11 yd** on the defined cohort);
+  - disposition:
+    `CURRENT_SNAP_ENTITLEMENT_SIGNAL_SUPPORTED_EFFICIENCY_REMAINS_PRIMARY_LIVE_GAP`.
+- PR #627 current-season snap continuation is therefore directly supported;
+  do not duplicate/refit it.
+- TE-R5P Receiving-Yards Width V2 is now the active test:
+  - branch `research-te-live-entitlement-efficiency-v1`;
+  - frozen plan `docs/research/TE_R5P_REC_YARDS_WIDTH_V2_PLAN.md`;
+  - first run `35940487155`; verify live status before acting.
+  - blind 2024->2025 and 2025->2024 specialist-width validation;
+  - mean-neutral, TE rec_yards only, no sportsbook input in factor fitting.
+- Historical production-order TE-R5P evidence already shows stable under-width:
+  2024 implied k **1.728**, 2025 **1.688**.
+- After TE V2 is settled, strongest sanctioned parallel mean-information lane
+  is RB teammate availability / injury-created vacancy propagation into
+  rushing opportunity. **Do not reopen the exposed retrospective M96 router
+  family below.**
+- QB pass yards remains frozen/prospective.
+- No global two-week SD rescale.
+- No paid OddsAPI pull without explicit approval.
+
+### Operating objective
+
+Use weekly outcomes to improve the next slate:
+
+`pregame projection -> outcome -> opportunity/role vs efficiency vs
+distribution diagnosis -> historically justified leakage-safe test -> promote
+only if supported`.
+
+Every substantive hypothesis/test/result/disposition must be recorded in GitHub
+and Issue #535.
+
+---
+
 ## STANDING PROHIBITION — RETROSPECTIVE RB RUSHING RESEARCH IS CLOSED
 
 **This is an operative rule, not a history note. Read it before proposing any RB rushing work.**
