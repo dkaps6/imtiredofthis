@@ -3,6 +3,76 @@ GitHub is canonical; chat memory is secondary.
 
 ---
 
+## ACTIVE CHECKPOINT — 2026-09-24 — POST-RB-V2 / TE WIDTH V2 CURRENT
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-09-24_POST_RB_V2_TE_WIDTH_V2_CURRENT.md`
+
+This is the newest checkpoint and supersedes the older RB-V2-open / TE-provider-drift language below for immediate execution.
+
+### Current state in one screen
+
+- current `main`: `28fd7b4b9a4e4f70a45787d4e09d34939d62e775`
+- PR #628: **MERGED/CLOSED** — RB Rush+Receiving Conservation V2 is production-active
+- PR #629: **MERGED/CLOSED** — continuity-only post-merge update
+- Full Slate public pricing entrypoint on `main` routes to V6 and therefore consumes RB V2 for non-Week-1 RB `rush_rec_yards`
+- RB V2 historical MAE: **27.6853 -> 25.5718**
+- Week-2 observational MAE: **30.3620 -> 28.9014**
+- do not reopen RB V2 absent a real defect/new evidence
+
+### Active science now
+
+TE-R5P Receiving-Yards Width V2 is active on:
+
+`research-te-live-entitlement-efficiency-v1`
+
+Current branch head:
+`a9c7a93ae375f75e926139a0a29675aab89d2fdc`
+
+Frozen validation run:
+`36040911515`
+
+At checkpoint creation it is **IN PROGRESS**.
+
+Important: PR #549 provider/parity archaeology is **solved**. Run `35954272152` reproduced:
+- exact 51,197-row baseline
+- zero frozen-row `mc_proj` drift
+- exact specialist trace parity
+
+The remaining failure was a bounded validator schema defect:
+`KeyError: 'game_id'`.
+
+Mechanical repair only:
+- `06bed4ddcad43f014b542fa1f3a4806ba30ccf0c`
+- `a9c7a93ae375f75e926139a0a29675aab89d2fdc`
+
+No k/gate/cohort/mean/parity/sportsbook-role change.
+
+### Exact next action
+
+1. Inspect run `36040911515`; do not duplicate it.
+2. If science completes, obey the frozen Width V2 gates exactly.
+3. If qualified, freeze a separate production-integration plan before any production edit.
+4. If scientifically failed, close exact Width V2 — no rescue/search.
+5. If another failure is not a bounded mechanical defect, park it and move to genuinely-new-information research.
+6. Keep prospective RB Vacancy V1 intact; Week 2 had no qualifying vacancy event, so only pregame prospective 2026 capture is legitimate.
+
+### Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-09-24_POST_RB_V2_TE_WIDTH_V2_CURRENT.md`
+4. Issue #535 from comment `5815680099` onward
+5. live `main`, active TE branch, and run `36040911515`
+
+Then work.
+
+Do not load older handoffs unless the current handoff explicitly sends you there.
+
+---
+
 ## ACTIVE CHECKPOINT — 2026-09-24 — RB RUSH+RECEIVING V2 PRODUCTION CERTIFIED
 
 **Read this detailed handoff next:**
