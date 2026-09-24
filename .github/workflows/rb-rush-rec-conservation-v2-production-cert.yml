@@ -1,0 +1,156 @@
+name: RB Rush Rec Conservation V2 Production Certification
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-rb-rush-rec-conservation-v2
+    paths:
+      - 'docs/production/RB_RUSH_REC_CONSERVATION_V2_PRODUCTION_PROMOTION_PLAN.md'
+      - 'scripts/modeling/rb_rush_rec_conservation_v2.py'
+      - 'scripts/run_pricing_v2.py'
+      - 'scripts/run_pricing_with_full_roster_universe_v6_production.py'
+      - 'scripts/research/validate_rb_rush_rec_conservation_v2_integration.py'
+      - 'tests/test_rb_rush_rec_conservation_v2.py'
+      - '.github/workflows/rb-rush-rec-conservation-v2-production-cert.yml'
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyarrow pytest
+
+      - name: Compile and focused unit tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile \
+            scripts/modeling/rb_rush_rec_conservation_v2.py \
+            scripts/run_pricing_v2.py \
+            scripts/run_pricing_with_full_roster_universe_v6_production.py
+          pytest -q tests/test_rb_rush_rec_conservation_v2.py
+
+      - name: Preserve settled observational authority
+        run: |
+          mkdir -p /tmp/rb_rr_v2_prod
+          cp data/market_track_record/graded/2026_wk01_wk02_graded.csv /tmp/rb_rr_v2_prod/graded.csv
+
+      - name: Download exact Week-2 paid-origin artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: run_35282021679
+          path: /tmp/week2_origin
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 35282021679
+
+      - name: Materialize preserved Week-2 inputs
+        run: |
+          rm -rf data outputs
+          cp -a /tmp/week2_origin/data ./data
+          cp -a /tmp/week2_origin/outputs ./outputs
+          test -s data/metrics_ready.csv
+          test -s outputs/props_pricing_offers.csv
+
+      - name: Run protected V5 baseline
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          NFL_SEASON: '2026'
+          NFL_WEEK: '2'
+          RB_RUSH_REC_CONSERVATION_V2: '0'
+        run: |
+          python scripts/run_pricing_with_full_roster_universe_v5_production.py --season 2026
+          test -s outputs/props_priced_clean.csv
+          cp outputs/props_priced_clean.csv /tmp/rb_rr_v2_prod/baseline.csv
+
+      - name: Restore preserved Week-2 inputs for V6
+        run: |
+          rm -rf data outputs
+          cp -a /tmp/week2_origin/data ./data
+          cp -a /tmp/week2_origin/outputs ./outputs
+
+      - name: Run V6 production candidate
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          NFL_SEASON: '2026'
+          NFL_WEEK: '2'
+        run: |
+          python scripts/run_pricing_with_full_roster_universe_v6_production.py --season 2026
+          test -s outputs/props_priced_clean.csv
+          test -s data/rb_rush_rec_conservation_v2_production_audit.json
+          test -s data/rb_rush_rec_conservation_v2_integration_audit.json
+          cp outputs/props_priced_clean.csv /tmp/rb_rr_v2_prod/candidate.csv
+          cp data/rb_rush_rec_conservation_v2_production_audit.json /tmp/rb_rr_v2_prod/production_audit.json
+          cp data/rb_rush_rec_conservation_v2_integration_audit.json /tmp/rb_rr_v2_prod/seam_audit.json
+          cp data/rb_rush_rec_conservation_v2_integration_audit.csv /tmp/rb_rr_v2_prod/seam_audit.csv
+
+      - name: Run existing downstream certification checks
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          NFL_SEASON: '2026'
+          NFL_WEEK: '2'
+        run: |
+          python scripts/stamp_qb_c2_pricing_lineage_v1.py
+          python scripts/validate_rb_rush_rec_conservation_v1.py
+          python scripts/audit_market_model_lineage_v2.py
+          python scripts/validate_anytime_td_model_status_v1.py
+          python scripts/validate_team_target_pool_full_universe_v2.py
+          python scripts/validate_certified_full_slate_stack_v2.py
+
+      - name: Verify V5 vs V6 exact protections
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/validate_rb_rush_rec_conservation_v2_integration.py \
+            --baseline /tmp/rb_rr_v2_prod/baseline.csv \
+            --candidate /tmp/rb_rr_v2_prod/candidate.csv \
+            --graded /tmp/rb_rr_v2_prod/graded.csv \
+            --out-dir /tmp/rb_rr_v2_prod/result
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/rb_rr_v2_prod/result/summary.json'))
+          prod=json.load(open('/tmp/rb_rr_v2_prod/production_audit.json'))
+          seam=json.load(open('/tmp/rb_rr_v2_prod/seam_audit.json'))
+          assert p['disposition']=='RB_RUSH_REC_CONSERVATION_V2_INTEGRATION_PASS', p
+          assert prod['disposition']=='RB_RUSH_REC_CONSERVATION_V2_PRODUCTION_CERTIFIED', prod
+          assert prod['integration_valid'] is True
+          assert prod['sportsbook_inputs_to_v2_football']==0
+          assert prod['week1_rows_changed']==0
+          assert float(prod['max_pathwise_identity_gap']) <= 1e-10
+          assert float(prod['max_final_vs_target_gap']) <= 1e-8
+          assert float(prod['max_target_vs_component_sum_gap']) <= 1e-8
+          assert seam['sportsbook_inputs_used']==0
+          print('RB_RUSH_REC_CONSERVATION_V2_PRODUCTION_CERTIFIED')
+          print(json.dumps(prod,indent=2,sort_keys=True))
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Upload production certification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-rush-rec-conservation-v2-production-cert
+          path: |
+            /tmp/rb_rr_v2_prod/
+            data/rb_rush_rec_conservation_v2_production_audit.json
+            data/rb_rush_rec_conservation_v2_integration_audit.json
+            data/rb_rush_rec_conservation_v2_integration_audit.csv
+            data/certified_full_slate_stack_audit.json
+            data/market_model_lineage_audit_v2.json
+          if-no-files-found: warn
+          retention-days: 90
