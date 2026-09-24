@@ -67,7 +67,7 @@ def main():
     def summarize(g):
         return pd.Series({
             "raw_rows":len(g),
-            "player_weeks":g[["season","week","player_id","player"]].drop_duplicates().shape[0],
+            "player_weeks":g[["week","player_id","player"]].drop_duplicates().shape[0],
             "dated_rows":int(g.report_date.notna().sum()),
             "unique_dates":int(g.report_date.dt.date.nunique()) if g.report_date.notna().any() else 0,
         })
