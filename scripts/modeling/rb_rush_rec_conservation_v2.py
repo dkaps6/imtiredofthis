@@ -117,10 +117,9 @@ def build_candidate_map(metrics: pd.DataFrame, sims, weights: pd.DataFrame) -> t
                 raise RuntimeError(f"V2 {col} varies across duplicate offers: {bad.head(20).to_dict()}")
 
     reps = f.sort_values(["_event","_pkey","_canonical_market"]).drop_duplicates(key, keep="first")
-    rep = {
-        (str(r._event), str(r._pkey), str(r._canonical_market)): r
-        for r in reps.itertuples(index=False, name="R")
-    }
+    rep = {}
+    for _, r in reps.iterrows():
+        rep[(str(r["_event"]), str(r["_pkey"]), str(r["_canonical_market"]))] = r.copy()
 
     result = {}
     audit_rows = []
@@ -138,8 +137,8 @@ def build_candidate_map(metrics: pd.DataFrame, sims, weights: pd.DataFrame) -> t
         if rush_row is None or rec_row is None:
             raise RuntimeError(f"V2 missing standalone component row event={event} player={pkey}")
 
-        rush_series = pd.Series(rush_row._asdict())
-        rec_series = pd.Series(rec_row._asdict())
+        rush_series = rush_row.copy()
+        rec_series = rec_row.copy()
         rush_draws = lookup(sims, rush_series, "rush_yards")
         rec_draws = lookup(sims, rec_series, "rec_yards")
         combo_before = lookup(sims, combo, "rush_rec_yards")
