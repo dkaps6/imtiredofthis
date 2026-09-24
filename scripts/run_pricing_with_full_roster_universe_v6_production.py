@@ -2,7 +2,7 @@
 """Full Slate V6 production candidate with RB rush+receiving conservation V2.
 
 V6 preserves the certified V5 stack and activates the already-qualified V2
-non-Week-1 RB/FB rush+receiving adapter inside run_pricing_v2. Week 1 remains
+non-Week-1 RB rush+receiving adapter inside run_pricing_v2. Week 1 remains
 governed by P3/R22/R26 and V2 must be a no-op there.
 """
 from __future__ import annotations
@@ -75,7 +75,7 @@ def _stamp(*, week: int) -> dict:
     applied_rows = priced.loc[applied].copy()
     if applied_rows.empty:
         combo_rows = priced.loc[combo]
-        # A slate may legitimately have no RB/FB combo offers; the seam itself
+        # A slate may legitimately have no RB combo offers; the seam itself
         # remains valid as long as it reports no eligible rows.
         if not combo_rows.empty and seam.get("disposition") != "RB_RUSH_REC_CONSERVATION_V2_NO_ELIGIBLE_ROWS":
             raise RuntimeError(
@@ -144,7 +144,7 @@ def _stamp(*, week: int) -> dict:
         "week1_rows_changed": 0,
         "formula": "rush_rec_yards = final-mean-aligned rush_yards draws + final-mean-aligned rec_yards draws",
         "note": (
-            "V2 changes only non-Week-1 RB/FB rush+receiving distributions and means. "
+            "V2 changes only non-Week-1 RB rush+receiving distributions and means. "
             "Standalone rush/receiving authorities and sportsbook inputs are unchanged."
         ),
     }
