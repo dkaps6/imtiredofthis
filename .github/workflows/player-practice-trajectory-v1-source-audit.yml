@@ -1,0 +1,57 @@
+name: Player Practice Trajectory V1 Source Audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-player-practice-trajectory-v1
+    paths:
+      - 'docs/research/PLAYER_PRACTICE_TRAJECTORY_V1_SOURCE_AUDIT_PLAN.md'
+      - 'scripts/research/audit_player_practice_trajectory_v1_sources.py'
+      - '.github/workflows/player-practice-trajectory-v1-source-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas nflreadpy pyarrow
+      - name: Compile
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python -m py_compile scripts/research/audit_player_practice_trajectory_v1_sources.py
+      - name: Run source audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/practice_trajectory_v1
+          mkdir -p /tmp/practice_trajectory_v1
+          python scripts/research/audit_player_practice_trajectory_v1_sources.py --out-dir /tmp/practice_trajectory_v1
+      - name: Verify source-only boundary
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/practice_trajectory_v1/summary.json'))
+          assert p['football_outcomes_read']==0
+          assert p['sportsbook_inputs_used']==0
+          assert p['predictive_models_fit']==0
+          assert p['production_changes']==0
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-practice-trajectory-v1-source-audit
+          path: /tmp/practice_trajectory_v1/
+          if-no-files-found: error
+          retention-days: 90
