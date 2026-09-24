@@ -1,0 +1,70 @@
+name: TE Target Quality Efficiency V1 Source Audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-te-target-quality-efficiency-v1
+    paths:
+      - 'docs/research/TE_TARGET_QUALITY_EFFICIENCY_V1_SOURCE_AUDIT_PLAN.md'
+      - 'scripts/research/audit_te_target_quality_efficiency_v1_sources.py'
+      - '.github/workflows/te-target-quality-efficiency-v1-source-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyarrow
+
+      - name: Compile source audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_te_target_quality_efficiency_v1_sources.py
+
+      - name: Run TE target-quality source audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/te_target_quality
+          mkdir -p /tmp/te_target_quality
+          python scripts/research/audit_te_target_quality_efficiency_v1_sources.py \
+            --seasons 2020,2021,2022,2023,2024,2025,2026 \
+            --out-dir /tmp/te_target_quality
+
+      - name: Verify source-only boundary
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/te_target_quality/summary.json'))
+          assert p['study'] == 'TE_TARGET_QUALITY_EFFICIENCY_V1_SOURCE_AUDIT'
+          assert p['model_fit_performed'] is False
+          assert p['prediction_error_scored'] is False
+          assert p['sportsbook_inputs_used'] == 0
+          assert p['production_changed'] is False
+          print('TE target-quality source-only boundary PASS')
+          print('disposition=', p['disposition'])
+          print('preferred_next_family=', p['preferred_next_family'])
+          PY
+
+      - name: Upload source audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: te-target-quality-efficiency-v1-source-audit
+          path: /tmp/te_target_quality/
+          if-no-files-found: error
+          retention-days: 90
