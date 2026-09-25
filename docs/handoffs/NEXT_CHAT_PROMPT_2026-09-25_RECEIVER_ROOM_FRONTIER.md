@@ -37,16 +37,24 @@ An exact unchanged 2024-2025 confirmation is already running:
 Branch:
 research-receiver-room-targets-per-play-v1-confirm-2024-2025
 
-Head at handoff:
-31e1854be631eeae3b5c6d25aa2c61b3a6c51925
-
-Run:
+First confirmation run:
 36173485673
 
-At handoff time it was IN PROGRESS.
+That run stopped mechanically before science with `KeyError: prior_history_plays`. The confirmation script had accidentally imported room-history/rate helpers from the previous targets-per-dropback evaluator, which is the wrong denominator semantics for this candidate. No scorecard/result artifact was produced.
+
+Bounded repair commit:
+c1b48b90364e2d6f82b66271065cc7b359d725ca
+
+Corrected branch head at handoff:
+c1b48b90364e2d6f82b66271065cc7b359d725ca
+
+Corrected authoritative rerun:
+36174077739
+
+At handoff time it was IN PROGRESS inside frozen 2024-2025 confirmation scoring.
 
 FIRST ACTION:
-Check run 36173485673. Do NOT duplicate it.
+Check run 36174077739. Do NOT duplicate it. Do not interpret run 36173485673 scientifically.
 
 If it passes all 27 frozen gates:
 - document the exact run/job/artifact/digest/result in Issue #535;
