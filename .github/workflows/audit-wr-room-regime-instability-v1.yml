@@ -1,0 +1,131 @@
+name: Audit WR Room Regime Instability V1
+
+on:
+  push:
+    branches: [research-wr-room-regime-instability-audit-v1]
+    paths:
+      - 'docs/research/WR_ROOM_REGIME_INSTABILITY_AUDIT_V1_PLAN.md'
+      - 'scripts/research/audit_wr_room_regime_instability_v1.py'
+      - '.github/workflows/audit-wr-room-regime-instability-v1.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: audit-wr-room-regime-instability-v1
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyarrow pyyaml
+
+      - name: Compile diagnostic
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_wr_room_regime_instability_v1.py
+
+      - name: Create workspace
+        run: |
+          rm -rf /tmp/wr_regime /tmp/hist_2022 /tmp/hist_2023 /tmp/hist_2024 /tmp/hist_2025
+          mkdir -p /tmp/wr_regime/discovery /tmp/wr_regime/confirmation /tmp/wr_regime/result
+
+      - name: Download frozen 2022-2023 discovery authority
+        uses: actions/download-artifact@v4
+        with:
+          name: receiver-room-targets-per-play-v1
+          path: /tmp/wr_regime/discovery
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 36172644864
+
+      - name: Download frozen 2024-2025 confirmation authority
+        uses: actions/download-artifact@v4
+        with:
+          name: receiver-room-targets-per-play-v1-2024-2025
+          path: /tmp/wr_regime/confirmation
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 36174077739
+
+      - name: Verify frozen room-detail authorities
+        run: |
+          test -s /tmp/wr_regime/discovery/room_detail_2022_2023.csv
+          test -s /tmp/wr_regime/confirmation/room_detail_2024_2025.csv
+          sha256sum /tmp/wr_regime/discovery/room_detail_2022_2023.csv
+          sha256sum /tmp/wr_regime/confirmation/room_detail_2024_2025.csv
+
+      - name: Build leakage-safe historical roster and team inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_historical_inputs.py --season 2022 --prior-season 2021 --weeks '1-18' --out-dir /tmp/hist_2022
+          python scripts/backtest/build_historical_inputs.py --season 2023 --prior-season 2022 --weeks '1-18' --out-dir /tmp/hist_2023
+          python scripts/backtest/build_historical_inputs.py --season 2024 --prior-season 2023 --weeks '1-18' --out-dir /tmp/hist_2024
+          python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks '1-18' --out-dir /tmp/hist_2025
+
+      - name: Combine historical schedule and team observations
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out=Path('/tmp/wr_regime')
+          roots=[Path('/tmp/hist_2022'),Path('/tmp/hist_2023'),Path('/tmp/hist_2024'),Path('/tmp/hist_2025')]
+          for name in ['schedule_history.csv','team_weekly_history.csv']:
+              x=pd.concat([pd.read_csv(p/name) for p in roots],ignore_index=True,sort=False)
+              keys=['season','week','team']
+              x=x.sort_values(keys).drop_duplicates(keys,keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined rows in {name}')
+              x.to_csv(out/name,index=False)
+          PY
+
+      - name: Build historical player logs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2021,2022,2023,2024,2025 \
+            --schedule /tmp/wr_regime/schedule_history.csv \
+            --out /tmp/wr_regime/player_game_logs_history.csv
+
+      - name: Run diagnostic-only WR regime audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/audit_wr_room_regime_instability_v1.py \
+            --detail-2022-2023 /tmp/wr_regime/discovery/room_detail_2022_2023.csv \
+            --detail-2024-2025 /tmp/wr_regime/confirmation/room_detail_2024_2025.csv \
+            --player-logs /tmp/wr_regime/player_game_logs_history.csv \
+            --team-weekly /tmp/wr_regime/team_weekly_history.csv \
+            --universe-2022 /tmp/hist_2022/pregame_universe \
+            --universe-2023 /tmp/hist_2023/pregame_universe \
+            --universe-2024 /tmp/hist_2024/pregame_universe \
+            --universe-2025 /tmp/hist_2025/pregame_universe \
+            --out-dir /tmp/wr_regime/result
+          cat /tmp/wr_regime/result/RESULT.md
+
+      - name: Upload diagnostic artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-room-regime-instability-audit-v1
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            /tmp/wr_regime/result/**
