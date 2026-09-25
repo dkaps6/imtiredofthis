@@ -242,8 +242,8 @@ def main()->int:
             state=state_for_week(logs,season,int(week))
             actual,room_actual=actual_week(logs,season,int(week))
             actcols=["player_identity_key","team","targets","actual_tgt_share"]
-            wr=wr.merge(state,on="player_identity_key",how="left",validate="one_to_one")
-            wr=wr.merge(actual[actcols],on=["player_identity_key","team"],how="left",validate="one_to_one")
+            wr=wr.merge(state,on="player_identity_key",how="left",validate="many_to_one")
+            wr=wr.merge(actual[actcols],on=["player_identity_key","team"],how="left",validate="many_to_one")
             wr=wr.merge(room_actual,on="team",how="left",validate="many_to_one")
             wr["entitlement_tgt_share"]=pd.to_numeric(wr.entitlement_tgt_share,errors="coerce")
             wr["actual_wr_room_targets"]=pd.to_numeric(wr.actual_wr_room_targets,errors="coerce").fillna(0.0)
