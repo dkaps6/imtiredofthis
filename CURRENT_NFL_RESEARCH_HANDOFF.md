@@ -1,6 +1,111 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 GitHub is canonical; chat memory is secondary.
 
+
+---
+
+## ACTIVE CHECKPOINT — 2026-09-25 — RECEIVER ROOM TARGETS-PER-PLAY CONFIRMATION ACTIVE
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-09-25_RECEIVER_ROOM_FRONTIER_CURRENT.md`
+
+**Compact prompt for a fresh chat:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-09-25_RECEIVER_ROOM_FRONTIER.md`
+
+This checkpoint supersedes the older Rush-Pool/TE checkpoints for immediate execution.
+
+### Current state in one screen
+
+- production behavior is unchanged from main `5421ba24b28aeff88e1f6466d93970f01264ebfa` before this docs-only handoff
+- Receiver Targetable-Dropback team-volume science replicated in 2022, 2023, 2024, 2025, but uniform player-level translation **FAILED CLOSED**
+- Current-Stack Receiver Compensation Audit proved the valid team-volume signal collides with WR-room / WR1 / Q4 underallocation
+- WR1 current-state has real absolute-share signal, but a WR1-only fixed-room candidate was **NOT justified**
+- Receiver Room Targetable-Rate V1 improved room MAE/tails but **FAILED CLOSED** on bias because the fixed-57% projected-dropback denominator is negatively biased
+- Active-Roster Receiver Room State V1 is **NOT SUPPORTED / CLOSED**
+- Receiver Room Targets-Per-Play V1 on 2022-2023 is **SUPPORTED**
+- authoritative discovery run: `36172644864`
+- artifact: `10880948137`
+- result: `docs/research/RECEIVER_ROOM_TARGETS_PER_PLAY_V1_RESULT.md`
+- exact formula:
+  `R_g_play = prior room targets / prior offensive plays`
+  `candidate room targets = projected offensive plays * R_g_play`
+- pooled macro room MAE `3.337876 -> 3.168127`
+- pooled macro p90 `6.736290 -> 6.434198`
+- pooled macro abs bias `0.323767 -> 0.253029`
+- WR/TE/RB_FB pooled MAE all improved
+- all 23 frozen discovery gates passed
+
+### Active run
+
+Branch:
+`research-receiver-room-targets-per-play-v1-confirm-2024-2025`
+
+Head at checkpoint:
+`31e1854be631eeae3b5c6d25aa2c61b3a6c51925`
+
+Run:
+`36173485673`
+
+Status when this checkpoint was written:
+**IN PROGRESS**
+
+Do not duplicate it.
+
+2024 confirmation baseline:
+- M38
+- fold-safe TE-R5P
+- authorized fold-safe WR-R15
+
+2025 confirmation baseline:
+- M38
+- fold-safe TE-R5P
+- **NO retrospective WR-R15**
+
+Exact candidate/formula/history is unchanged from 2022-2023. There are 27 frozen confirmation gates.
+
+### Exact next action
+
+1. Inspect run `36173485673`.
+2. If all gates pass, document exact lineage and freeze a separate player/full-stack integration **before scoring**.
+3. Player integration must preserve confirmed room totals and allocate inside each room with current authorized within-room entitlement.
+4. Preserve M38 / TE-R5P / authorized WR-R15 ordering, catch rate, YPT, QB, rushing and ATD.
+5. Re-evaluate dependent RB rush+receiving through current RB V2.
+6. Explicitly protect WR/TE/RB receptions, rec-yard MAE/p90/bias, Q4 tails and RB combo tails.
+7. Zero sportsbook, parameters fit 0, one candidate.
+8. Historical qualification still requires prospective 2026 confirmation before production promotion.
+9. If confirmation fails scientifically, close exact targets-per-play V1 with no rescue.
+10. If it fails mechanically, repair only the exact bounded provenance/plumbing defect.
+
+### Permanent anti-retest reminders
+
+Do not reopen:
+- uniform targetable-dropback player thinning
+- official-attempt pool
+- room targetable-rate/dropback-denominator V1
+- active-roster room-state V1
+- WR1-only current-state anchor candidate
+- C1 / C3
+- One-Pass V1
+- hierarchical mean reconciliation
+- generic attempt-semantics C4
+- Migration 18/20/21 pass-rate retuning
+- fixed-57% global pass-rate replacement
+- retrospective RB router/threshold research closed by M96E
+- Rush Pool V1 rescue variants
+
+### Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-09-25_RECEIVER_ROOM_FRONTIER_CURRENT.md`
+4. Issue #535 from `5834428368` onward, especially `5837470764`
+5. live active run/branch state
+
+Then work. Do not recursively load older handoffs.
+
 ---
 
 ## ACTIVE CHECKPOINT — 2026-09-24 — RUSH POOL V1 INTEGRATION FAILED CLOSED / NEW SCIENCE NEXT
