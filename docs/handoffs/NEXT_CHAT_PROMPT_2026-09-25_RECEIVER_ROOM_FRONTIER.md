@@ -4,92 +4,138 @@ Repo: dkaps6/imtiredofthis
 
 GitHub is canonical over chat memory. Do not make me re-explain prior work.
 
-Read ONLY, in this order, to conserve context:
+READ ONLY, in this order, to conserve context:
 1. AGENTS.md
-2. top checkpoint of CURRENT_NFL_RESEARCH_HANDOFF.md
+2. the TOP checkpoint of CURRENT_NFL_RESEARCH_HANDOFF.md
 3. docs/handoffs/NFL_HANDOFF_2026-09-25_RECEIVER_ROOM_FRONTIER_CURRENT.md
-4. Issue #535 from comment 5834428368 onward, especially 5837470764
-5. live branch/run state
+4. Issue #535 from comment 5834428368 onward, especially final disposition comment 5837631919
+5. live main/current research branch state
 
-Do not recursively load older handoffs unless the current handoff explicitly points you there.
+Do NOT recursively load older handoffs unless the current handoff explicitly points you there.
 
-CURRENT ACTIVE PRIORITY
+CURRENT SCIENTIFIC STATE
 
-Receiver Room Targets-Per-Play V1 has QUALIFIED on the untouched 2022-2023 temporal screen.
+Receiver Room Targets-Per-Play V1 was promising on untouched 2022-2023 but FAILED CLOSED on the unchanged 2024-2025 confirmation.
 
-Exact candidate:
+Discovery formula:
 R_g_play = sum(strict-prior room targets) / sum(strict-prior offensive plays)
 candidate room targets = projected offensive plays * R_g_play
 
-2022-2023 authoritative run:
-36172644864
-artifact:
-10880948137
-result:
-docs/research/RECEIVER_ROOM_TARGETS_PER_PLAY_V1_RESULT.md
-disposition:
-RECEIVER_ROOM_TARGETS_PER_PLAY_V1_SUPPORTED
+2022-2023 discovery:
+- run 36172644864
+- artifact 10880948137
+- result docs/research/RECEIVER_ROOM_TARGETS_PER_PLAY_V1_RESULT.md
+- disposition RECEIVER_ROOM_TARGETS_PER_PLAY_V1_SUPPORTED
+- all 23 discovery gates passed
+- pooled macro MAE 3.337876 -> 3.168127
+- pooled macro p90 6.736290 -> 6.434198
+- pooled macro abs bias 0.323767 -> 0.253029
+- WR/TE/RB_FB pooled MAE all improved
 
-All 23 frozen discovery gates passed. Pooled macro room MAE improved 3.337876 -> 3.168127, macro p90 6.736290 -> 6.434198, macro abs bias 0.323767 -> 0.253029. WR, TE, and RB_FB all improved pooled MAE.
+2024-2025 unchanged confirmation:
+- first run 36173485673 was MECHANICAL ONLY: wrong helper import caused KeyError prior_history_plays; no scientific output
+- bounded repair commit c1b48b90364e2d6f82b66271065cc7b359d725ca restored the already-frozen targets-per-play helper semantics
+- authoritative corrected run 36174077739 = SUCCESS mechanically
+- job 108200327879
+- artifact 10881825507
+- digest sha256:3956a8ed9cc2191714787ecab235831b5f9ce39c59f3e08ba260ee2918f2de9c
+- canonical result docs/research/RECEIVER_ROOM_TARGETS_PER_PLAY_V1_2024_2025_CONFIRMATION_RESULT.md
+- result commit fb5a9196d02a69e87dd6ec80418bd01865c3600a
+- disposition RECEIVER_ROOM_TARGETS_PER_PLAY_V1_2024_2025_FAILED_CLOSED
 
-An exact unchanged 2024-2025 confirmation is already running:
+Confirmation result:
+2024:
+- WR MAE 4.561046 -> 4.724467 WORSE
+- TE 2.982040 -> 2.881030
+- RB_FB 2.389736 -> 2.169780
+- macro 3.310940 -> 3.258426
 
-Branch:
-research-receiver-room-targets-per-play-v1-confirm-2024-2025
+2025:
+- WR 4.510085 -> 4.440251
+- TE 2.768463 -> 2.728961
+- RB_FB 2.302348 -> 2.176637
+- macro 3.193632 -> 3.115283
 
-First confirmation run:
-36173485673
+Pooled:
+- WR 4.535565 -> 4.582359 WORSE
+- TE 2.875251 -> 2.804996
+- RB_FB 2.346042 -> 2.173209
+- macro MAE 3.252286 -> 3.186854
+- macro p90 6.646801 -> 6.651926 WORSE
+- macro abs bias 0.404433 -> 0.325998
+- summed-room MAE 6.127841 -> 5.983952
+- summed-room p90 12.704084 -> 12.049116
+- all-room candidate closer 52.27%
 
-That run stopped mechanically before science with `KeyError: prior_history_plays`. The confirmation script had accidentally imported room-history/rate helpers from the previous targets-per-dropback evaluator, which is the wrong denominator semantics for this candidate. No scorecard/result artifact was produced.
+Frozen failures:
+1. 2024 WR room MAE did not improve
+2. pooled WR room MAE did not improve
+3. pooled macro p90 did not remain nonworse
 
-Bounded repair commit:
-c1b48b90364e2d6f82b66271065cc7b359d725ca
+All provenance/specialist/no-sportsbook/no-fit gates passed.
 
-Corrected branch head at handoff:
-c1b48b90364e2d6f82b66271065cc7b359d725ca
+NO PLAYER/FULL-STACK INTEGRATION IS AUTHORIZED.
 
-Corrected authoritative rerun:
-36174077739
+NO RESCUE:
+- no excluding 2024
+- no WR-specific route/multiplier
+- no recency/shrinkage/window search
+- no fixed57 blend
+- no bias offset
+- no WR1/Q4 exemption
+- no specialist-order change
+- no 2026 outcome fitting
+- no sportsbook routing
 
-At handoff time it was IN PROGRESS inside frozen 2024-2025 confirmation scoring.
+NEXT ACTION
 
-FIRST ACTION:
-Check run 36174077739. Do NOT duplicate it. Do not interpret run 36173485673 scientifically.
+Start a DIAGNOSTIC-ONLY WR ROOM REGIME-INSTABILITY AUDIT.
 
-If it passes all 27 frozen gates:
-- document the exact run/job/artifact/digest/result in Issue #535;
-- commit a canonical result;
-- freeze a separate player/full-stack integration plan before any scoring;
-- player integration must preserve confirmed room totals and allocate within each room using existing authorized within-room entitlement;
-- preserve M38, TE-R5P, and authorized specialist ordering;
-- 2024 may use fold-safe WR-R15; retrospective WR-R15 in 2025 remains forbidden;
-- catch rate and YPT unchanged;
-- QB/rushing/ATD unchanged;
-- RB rush+receiving rebuilt through current RB V2;
-- protect WR/TE/RB receptions, receiving-yard MAE/p90/bias/Q4 tails;
-- zero sportsbook;
-- parameters fit 0;
-- one candidate;
-- historical qualification still requires prospective 2026 confirmation before production.
+Goal:
+Explain why WR room targets-per-play appears helpful in 2022/2023/2025 but harmful in 2024, while TE/RB_FB remain directionally stable.
 
-If it fails scientifically:
-close the exact formula. No shrinkage, recency, fixed57 blend, bias offset, room multiplier, WR1/Q4 exemption, specialist change, or sportsbook rescue.
+This diagnostic must score ZERO candidate variants and must not tune the failed formula.
 
-If it fails mechanically:
-repair only the bounded mechanical/provenance defect. Do not alter formula/gates/cohort/baseline ordering.
+Investigate strictly pregame structural explanations such as:
+- prior-season -> current-season WR room target-share/rate drift
+- top-target / WR-room roster continuity and turnover
+- QB change
+- offensive coordinator/play-caller change only if a reliable historical leakage-safe source already exists
+- speed of within-season room adaptation
+- whether 2024 misses are league-wide or concentrated in transition clusters
 
-IMPORTANT RECENT CLOSED RESULTS
+If no strong structural explanation emerges, close this room-history family and move to another architecture frontier instead of searching weights/windows.
 
-- Receiver Targetable-Dropback V1 team-level formula improved team target volume independently in 2022, 2023, 2024 and 2025, but the player full-stack translation FAILED CLOSED (run 36147357028 / artifact 10869364930). Do not uniformly thin every player's entitlement again.
-- Current-stack compensation audit run 36151138507 proved why: team targets improved but WR room worsened; TE/RB room improved; WR1/Q4 were already underallocated.
-- WR1 current-state diagnostic run 36171050355 found strong absolute WR1 state signal, but a fixed-room WR1 candidate was NOT justified. Do not retune M38 or create a WR1-only rescue.
-- Receiver Room Targetable-Rate V1 run 36171462750 failed closed only because the fixed57 projected-dropback denominator is negatively biased. Exact dropback-denominator formulation is closed.
-- Active-Roster Receiver Room State V1 run 36172146432 / artifact 10880536886 is NOT SUPPORTED and CLOSED; WR room gates failed.
-- C1 group target-mass, C3 joint conservation, One-Pass V1, hierarchical receiver mean reconciliation, official-attempt pool, generic attempt-semantics C4, and Rush Pool V1 rescues remain closed.
-- Retrospective RB router/threshold/feature research remains closed under M96E.
-- Sportsbook information is downstream only.
-- No paid OddsAPI pull without my explicit approval.
+IMPORTANT CLOSED RESULTS / ANTI-RETEST
 
-Production main was 5421ba24b28aeff88e1f6466d93970f01264ebfa before the docs-only handoff. Recent receiver research has not changed production behavior.
+- uniform Targetable-Dropback player thinning FAILED CLOSED; do not repeat it
+- Receiver Room Targetable-Rate/dropback-denominator V1 FAILED CLOSED
+- Active-Roster Receiver Room State V1 is NOT SUPPORTED / CLOSED
+- WR1-only current-state candidate NOT JUSTIFIED
+- One-Pass-State V1 CLOSED
+- Hierarchical Receiver Mean Reconciliation V1 CLOSED
+- official-attempt receiver pool CLOSED
+- C1 group target-mass and C3 joint conservation CLOSED
+- generic receiving attempt-semantics C4 CLOSED
+- Migration 18/20/21 pass-rate retuning CLOSED
+- Rush Pool V1 rescue variants CLOSED
+- retrospective RB router/threshold/feature work CLOSED under M96E
+- sportsbook information remains downstream only
+- no paid OddsAPI pull without explicit approval
 
-Keep working autonomously. I do NOT want to be asked to invent the next experiment. Find the next football-grounded structural question yourself, freeze it before scoring, and leave a complete GitHub paper trail. Close loops. Do not rerun failed formulations. Keep chat updates concise and GitHub documentation complete.
+Important preserved signal:
+Targetable team-volume science still improved team target prediction across 2022-2025, and TE/RB_FB room opportunity remains directionally promising. Do not erase those findings just because the exact all-room targets-per-play formula failed confirmation.
+
+PRODUCTION
+
+Recent receiver research has not changed production behavior. The current main after docs-only continuity merge was 67b9aa349258aff78cb0b588432eab91a3f1da78 before the final handoff refresh.
+
+OPERATING STYLE
+
+Keep working autonomously. Do NOT ask me to invent the next experiment.
+Find football-grounded structural explanations yourself.
+Freeze any future candidate before scoring.
+Leave a complete GitHub/Issue #535 paper trail.
+Close loops.
+Do not rerun failed formulations.
+Keep chat updates concise and GitHub documentation exhaustive.
