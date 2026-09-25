@@ -18,11 +18,13 @@ from scripts.modeling.te_r5p_entitlement_adapter_v1 import _load_snaps as _load_
 from scripts.research.evaluate_receiver_room_targetable_rate_v1 import (
     ROOMS,
     FIXED_DROPBACK_RATE,
-    build_room_history,
     optional,
     paired,
     pos_room,
     read,
+)
+from scripts.research.evaluate_receiver_room_targets_per_play_v1 import (
+    build_room_history,
     strict_prior_room_rates,
 )
 from scripts.research.persist_wr_te_production_order_historical_v1 import (
