@@ -20,7 +20,7 @@ permissions:
 jobs:
   audit:
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
 
@@ -52,17 +52,69 @@ jobs:
       - name: Verify authority
         run: |
           test -s /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_predictions.csv
+          test -s /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv
           test -s /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_result.json
           sha256sum /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_predictions.csv
+          sha256sum /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv
 
-      - name: Run diagnostic-only transmission audit
+      - name: Build fold-safe 2023 and 2024 historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/wr_anchor /tmp/hist_2023 /tmp/hist_2024
+          mkdir -p /tmp/wr_anchor /tmp/hist_2023 /tmp/hist_2024
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2023 --prior-season 2022 --weeks '1-18' --out-dir /tmp/hist_2023
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2024 --prior-season 2023 --weeks '1-18' --out-dir /tmp/hist_2024
+
+      - name: Combine schedule and team history
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out=Path('/tmp/wr_anchor')
+          roots=[Path('/tmp/hist_2023'),Path('/tmp/hist_2024')]
+          for name in ['schedule_history.csv','team_weekly_history.csv']:
+              x=pd.concat([pd.read_csv(p/name) for p in roots],ignore_index=True,sort=False)
+              keys=['season','week','team']
+              x=x.sort_values(keys).drop_duplicates(keys,keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined historical rows in {name}')
+              x.to_csv(out/name,index=False)
+          PY
+
+      - name: Build canonical 2022-2024 player logs and context
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2022,2023,2024 \
+            --schedule /tmp/wr_anchor/schedule_history.csv \
+            --out /tmp/wr_anchor/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py \
+            --seasons 2022,2023,2024 \
+            --out /tmp/wr_anchor/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py \
+            --schedule /tmp/wr_anchor/schedule_history.csv \
+            --out /tmp/wr_anchor/weather_history.csv
+
+      - name: Run repaired diagnostic-only transmission audit
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           rm -rf /tmp/wr_anchor_transmission
           mkdir -p /tmp/wr_anchor_transmission
           python scripts/research/audit_wr_anchor_role_transmission_v1.py \
-            --predictions /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_predictions.csv \
+            --authority-predictions /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_predictions.csv \
+            --wr-coefficients /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv \
+            --player-logs /tmp/wr_anchor/player_game_logs_history.csv \
+            --team-weekly /tmp/wr_anchor/team_weekly_history.csv \
+            --schedule /tmp/wr_anchor/schedule_history.csv \
+            --universe-2023 /tmp/hist_2023/pregame_universe \
+            --universe-2024 /tmp/hist_2024/pregame_universe \
+            --injuries /tmp/wr_anchor/injuries_history.csv \
+            --weather /tmp/wr_anchor/weather_history.csv \
             --out-dir /tmp/wr_anchor_transmission
           cat /tmp/wr_anchor_transmission/RESULT.md
 
