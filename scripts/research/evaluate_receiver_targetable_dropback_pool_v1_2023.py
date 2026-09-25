@@ -230,8 +230,9 @@ def forecast_week(
             week=week,
             prior_season=prior_season,
         )
-        if not np.isfinite(rate) or not (0.0 <= rate <= 1.0):
+        if not np.isfinite(rate) or rate < -1e-12 or rate > 1.0 + 1e-12:
             raise RuntimeError(f"invalid strict-prior targetable rate team={team} rate={rate}")
+        rate = float(np.clip(rate, 0.0, 1.0))
         changed = source != "fallback_baseline_no_history"
         candidate = baseline * rate if changed else baseline
 
