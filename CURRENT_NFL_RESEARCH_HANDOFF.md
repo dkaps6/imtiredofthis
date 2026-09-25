@@ -42,16 +42,25 @@ This checkpoint supersedes the older Rush-Pool/TE checkpoints for immediate exec
 Branch:
 `research-receiver-room-targets-per-play-v1-confirm-2024-2025`
 
-Head at checkpoint:
+First run head:
 `31e1854be631eeae3b5c6d25aa2c61b3a6c51925`
 
-Run:
+First run:
 `36173485673`
 
-Status when this checkpoint was written:
+Result:
+**MECHANICAL PRE-SCIENCE STOP** — wrong targets-per-dropback helper import caused `KeyError: prior_history_plays`; no scorecard/result artifact.
+
+Bounded repair commit / current branch head:
+`c1b48b90364e2d6f82b66271065cc7b359d725ca`
+
+Corrected rerun:
+`36174077739`
+
+Status when this checkpoint was refreshed:
 **IN PROGRESS**
 
-Do not duplicate it.
+Do not duplicate it. Do not interpret run `36173485673` scientifically.
 
 2024 confirmation baseline:
 - M38
@@ -67,7 +76,7 @@ Exact candidate/formula/history is unchanged from 2022-2023. There are 27 frozen
 
 ### Exact next action
 
-1. Inspect run `36173485673`.
+1. Inspect corrected rerun `36174077739`.
 2. If all gates pass, document exact lineage and freeze a separate player/full-stack integration **before scoring**.
 3. Player integration must preserve confirmed room totals and allocate inside each room with current authorized within-room entitlement.
 4. Preserve M38 / TE-R5P / authorized WR-R15 ordering, catch rate, YPT, QB, rushing and ATD.
