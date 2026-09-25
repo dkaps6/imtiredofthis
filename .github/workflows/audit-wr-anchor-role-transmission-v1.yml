@@ -59,10 +59,12 @@ jobs:
       - name: Verify frozen authority artifacts
         run: |
           test -s /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_predictions.csv
-          test -s /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv
+          test -s /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_features.csv
+          test -s /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_conservation_audit.csv
           test -s /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_result.json
           sha256sum /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_predictions.csv
-          sha256sum /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv
+          sha256sum /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_features.csv
+          sha256sum /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_conservation_audit.csv
 
       - name: Build exact authority-era 2023 fold inputs
         env:
