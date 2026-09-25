@@ -1,0 +1,103 @@
+name: Research Receiver Room Targetable Rate V1
+
+on:
+  push:
+    branches: [research-receiver-room-targetable-rate-v1]
+    paths:
+      - 'docs/research/RECEIVER_ROOM_TARGETABLE_RATE_V1_PLAN.md'
+      - 'docs/research/RECEIVER_ROOM_TARGETABLE_RATE_V1_HISTORICAL_BASELINE_AMENDMENT.md'
+      - 'scripts/research/evaluate_receiver_room_targetable_rate_v1.py'
+      - '.github/workflows/research-receiver-room-targetable-rate-v1.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: research-receiver-room-targetable-rate-v1
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml pyarrow scikit-learn joblib
+
+      - name: Compile frozen evaluator
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/evaluate_receiver_room_targetable_rate_v1.py
+
+      - name: Build 2022 and 2023 leakage-safe historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/room_rate /tmp/hist_2022 /tmp/hist_2023
+          mkdir -p /tmp/room_rate /tmp/hist_2022 /tmp/hist_2023
+          python scripts/backtest/build_historical_inputs.py --season 2022 --prior-season 2021 --weeks '1-18' --out-dir /tmp/hist_2022
+          python scripts/backtest/build_historical_inputs.py --season 2023 --prior-season 2022 --weeks '1-18' --out-dir /tmp/hist_2023
+
+      - name: Combine historical schedule and team observations
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out=Path('/tmp/room_rate')
+          for name in ['schedule_history.csv','team_weekly_history.csv']:
+              x=pd.concat([pd.read_csv('/tmp/hist_2022/'+name),pd.read_csv('/tmp/hist_2023/'+name)],ignore_index=True)
+              keys=['season','week','team']
+              x=x.sort_values(keys).drop_duplicates(keys,keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any(): raise RuntimeError(f'duplicate combined rows in {name}')
+              x.to_csv(out/name,index=False)
+          PY
+
+      - name: Build historical player targets
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py --seasons 2021,2022,2023 --schedule /tmp/room_rate/schedule_history.csv --out /tmp/room_rate/player_game_logs_history.csv
+
+      - name: Build optional historical context
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_historical_injuries.py --seasons 2021,2022,2023 --out /tmp/room_rate/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule /tmp/room_rate/schedule_history.csv --out /tmp/room_rate/weather_history.csv
+
+      - name: Run frozen room targetable-rate screen
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/evaluate_receiver_room_targetable_rate_v1.py \
+            --player-logs /tmp/room_rate/player_game_logs_history.csv \
+            --team-weekly /tmp/room_rate/team_weekly_history.csv \
+            --schedule /tmp/room_rate/schedule_history.csv \
+            --universe-2022 /tmp/hist_2022/pregame_universe \
+            --universe-2023 /tmp/hist_2023/pregame_universe \
+            --injuries /tmp/room_rate/injuries_history.csv \
+            --weather /tmp/room_rate/weather_history.csv \
+            --weeks '1-18' \
+            --out-dir /tmp/room_rate/result
+          cat /tmp/room_rate/result/RESULT.md
+
+      - name: Upload frozen result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: receiver-room-targetable-rate-v1
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            /tmp/room_rate/result/**
