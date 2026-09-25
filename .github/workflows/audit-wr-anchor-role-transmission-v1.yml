@@ -1,0 +1,77 @@
+name: Audit WR Anchor Role Transmission V1
+
+on:
+  push:
+    branches: [research-wr-anchor-role-transmission-audit-v1]
+    paths:
+      - 'docs/research/WR_ANCHOR_ROLE_TRANSMISSION_AUDIT_V1_PLAN.md'
+      - 'scripts/research/audit_wr_anchor_role_transmission_v1.py'
+      - '.github/workflows/audit-wr-anchor-role-transmission-v1.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: audit-wr-anchor-role-transmission-v1
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyarrow scikit-learn joblib pyyaml
+
+      - name: Compile diagnostic
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_wr_anchor_role_transmission_v1.py
+
+      - name: Download frozen WR-R15 OOS authority
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-r15-wr1-anchor-participation-v1
+          path: /tmp/wr_r15_authority
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34238301577
+
+      - name: Verify authority
+        run: |
+          test -s /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_predictions.csv
+          test -s /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_result.json
+          sha256sum /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_predictions.csv
+
+      - name: Run diagnostic-only transmission audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/wr_anchor_transmission
+          mkdir -p /tmp/wr_anchor_transmission
+          python scripts/research/audit_wr_anchor_role_transmission_v1.py \
+            --predictions /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_predictions.csv \
+            --out-dir /tmp/wr_anchor_transmission
+          cat /tmp/wr_anchor_transmission/RESULT.md
+
+      - name: Upload diagnostic artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-anchor-role-transmission-audit-v1
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            /tmp/wr_anchor_transmission/**
