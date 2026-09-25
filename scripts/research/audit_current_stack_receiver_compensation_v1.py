@@ -33,7 +33,6 @@ from scripts.research.persist_wr_te_production_order_historical_v1 import (
 )
 from scripts.simulation_c2_qb_candidate import simulate_with_states
 from scripts.simulation_v2 import _clip_prob, _num
-from scripts.utils.canonical_names import canon_team
 
 VERSION = "CURRENT_STACK_RECEIVER_COMPENSATION_AUDIT_V1"
 ROOMS = ("WR", "TE", "RB_FB")
@@ -227,6 +226,7 @@ def evaluate_week(
 
     final = final.copy()
     final["team"] = final["team"].map(canon_team)
+    sim_metrics = final.copy()
     final["position_family"] = final["position"].map(pos)
     final["room"] = final["position"].map(room)
     final = final.loc[final["room"].isin(ROOMS)].copy()
@@ -238,7 +238,7 @@ def evaluate_week(
         raise RuntimeError(f"{season} W{week:02d} invalid entitlement")
     final["entitlement_tgt_share"] = entitlement
 
-    state = simulate_with_states(final, iterations=int(iterations), seed=int(seed))
+    state = simulate_with_states(sim_metrics, iterations=int(iterations), seed=int(seed))
     actual = actual_player_frame(player_logs, int(season), int(week))
     final = final.merge(actual, on=["team", "player_clean_key"], how="left", validate="one_to_one")
     for c in ("actual_targets", "actual_receptions", "actual_rec_yards"):
