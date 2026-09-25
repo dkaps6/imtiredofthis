@@ -54,6 +54,7 @@ VERSION = "WR_ANCHOR_ROLE_TRANSMISSION_AUDIT_V1"
 AUTHORITY_SOURCE_COMMIT = "02c3dd1a681d4ab2953683039e39830554f9ec9f"
 AUTHORITY_RUN = 34238301577
 AUTHORITY_ARTIFACT = 10061328722
+AUTHORITY_FROZEN_DATE = "2026-09-08"
 BASELINE_VARIANT = "M38_EXPLICIT_BASELINE"
 CANDIDATE_VARIANT = "WR_R15_WR1_ANCHORED_PARTICIPATION"
 SEASONS = (2023, 2024)
@@ -210,8 +211,53 @@ def prepare_conservation(audit: pd.DataFrame) -> pd.DataFrame:
     return x
 
 
+def _identity_norm(value: object) -> str:
+    s = "" if value is None or pd.isna(value) else str(value).lower().strip()
+    for ch in (" ", "'", "-", ".", "’", "`"):
+        s = s.replace(ch, "")
+    return s
+
+
+def build_post_freeze_inverse_aliases(
+    overrides_path: Path, frozen_keys: set[str]
+) -> tuple[dict[str, str], pd.DataFrame]:
+    """Map current post-freeze canonical identities back to frozen authority keys.
+
+    This is a mechanical identity bridge only. It uses explicit, verified repo
+    overrides added after the WR-R15 freeze and only retains mappings whose
+    pre-freeze/source key is actually present in the frozen WR-R15 authority.
+    """
+    x = read(overrides_path, "manual name overrides")
+    need = {"player_source_name", "full_name", "verified_date"}
+    missing = need - set(x.columns)
+    if missing:
+        raise RuntimeError(f"manual name overrides missing {sorted(missing)}")
+    x["verified_date"] = pd.to_datetime(x["verified_date"], errors="coerce")
+    freeze = pd.Timestamp(AUTHORITY_FROZEN_DATE)
+    x["source_key"] = x["player_source_name"].map(_identity_norm)
+    x["current_key"] = x["full_name"].map(_identity_norm)
+    x = x.loc[
+        x["verified_date"].gt(freeze)
+        & x["source_key"].isin(set(str(k) for k in frozen_keys))
+        & x["current_key"].ne("")
+        & x["source_key"].ne("")
+        & x["current_key"].ne(x["source_key"])
+    ].copy()
+    if x["current_key"].duplicated().any():
+        bad = x.loc[x["current_key"].duplicated(keep=False), [
+            "player_source_name", "full_name", "current_key", "source_key"
+        ]].to_dict("records")
+        raise RuntimeError(f"post-freeze inverse aliases are ambiguous: {bad}")
+    mapping = dict(zip(x["current_key"], x["source_key"]))
+    return mapping, x
+
+
 def reconstruct_bridge(
-    *, data_dirs: dict[int, Path], logs_by_season: dict[int, pd.DataFrame]
+    *,
+    data_dirs: dict[int, Path],
+    logs_by_season: dict[int, pd.DataFrame],
+    overrides_path: Path,
+    frozen_keys: set[str],
 ) -> tuple[pd.DataFrame, dict]:
     snaps, dup_rate, source_seasons = _load_snaps()
     rows: list[pd.DataFrame] = []
@@ -267,11 +313,51 @@ def reconstruct_bridge(
     bridge = pd.concat(rows, ignore_index=True)
     bridge = _canon(bridge)
     bridge["_row_index"] = num(bridge["_row_index"]).astype("Int64")
+
+    # NFLverse/Ourlads retrospective identity normalization changed after the
+    # 2026-09-08 authority freeze. The repo's verified post-freeze overrides
+    # document those suffix corrections. Invert only mappings whose old/source
+    # key exists in the frozen artifact, preserving both current and authority
+    # identities for audit.
+    alias_map, alias_rows = build_post_freeze_inverse_aliases(
+        overrides_path, frozen_keys
+    )
+    bridge["current_player_clean_key"] = bridge["player_clean_key"].astype(str)
+    bridge["authority_player_clean_key"] = bridge["current_player_clean_key"].map(
+        lambda k: alias_map.get(str(k), str(k))
+    )
+    bridge["authority_alias_applied"] = (
+        bridge["authority_player_clean_key"] != bridge["current_player_clean_key"]
+    )
+    bridge["player_clean_key"] = bridge["authority_player_clean_key"]
+
+    if bridge.duplicated(PLAYER_KEYS).any():
+        bad = bridge.loc[
+            bridge.duplicated(PLAYER_KEYS, keep=False),
+            PLAYER_KEYS + ["current_player_clean_key", "authority_alias_applied"],
+        ].head(20).to_dict("records")
+        raise RuntimeError(
+            f"post-freeze authority aliasing created duplicate player identities: {bad}"
+        )
+
     keys = TEAM_KEYS + ["_row_index"]
     if bridge.duplicated(keys).any():
         raise RuntimeError("authority bridge row-index identity is not unique")
+
+    applied = bridge.loc[bridge["authority_alias_applied"]].copy()
+    alias_usage = (
+        applied.groupby(
+            ["current_player_clean_key", "authority_player_clean_key"],
+            as_index=False,
+        ).size().rename(columns={"size": "rows"})
+        if len(applied)
+        else pd.DataFrame(
+            columns=["current_player_clean_key", "authority_player_clean_key", "rows"]
+        )
+    )
     return bridge, {
         "authority_source_commit": AUTHORITY_SOURCE_COMMIT,
+        "authority_frozen_date": AUTHORITY_FROZEN_DATE,
         "raw_snap_duplicate_rate": float(dup_rate),
         "snap_source_seasons": [int(x) for x in source_seasons],
         "strict_prior_future_violations": int(future_total),
@@ -280,6 +366,10 @@ def reconstruct_bridge(
             bridge[["season", "week", "event_id", "team"]]
             .drop_duplicates().shape[0]
         ),
+        "post_freeze_inverse_aliases_available": int(len(alias_map)),
+        "post_freeze_inverse_alias_rows_used": int(len(applied)),
+        "post_freeze_inverse_alias_usage": alias_usage.to_dict("records"),
+        "post_freeze_override_records_eligible": int(len(alias_rows)),
     }
 
 
@@ -812,6 +902,11 @@ def main() -> int:
     ap.add_argument("--authority-predictions", type=Path, required=True)
     ap.add_argument("--authority-features", type=Path, required=True)
     ap.add_argument("--authority-conservation", type=Path, required=True)
+    ap.add_argument(
+        "--manual-name-overrides",
+        type=Path,
+        default=Path("data/manual_name_overrides.csv"),
+    )
     ap.add_argument("--data-2023", type=Path, required=True)
     ap.add_argument("--logs-2023", type=Path, required=True)
     ap.add_argument("--data-2024", type=Path, required=True)
@@ -828,12 +923,17 @@ def main() -> int:
     conservation = prepare_conservation(
         read(args.authority_conservation, "WR-R15 conservation audit")
     )
+    frozen_keys = set(features["player_clean_key"].astype(str)) | set(
+        predictions["player_clean_key"].astype(str)
+    )
     bridge, bridge_audit = reconstruct_bridge(
         data_dirs={2023: args.data_2023, 2024: args.data_2024},
         logs_by_season={
             2023: read(args.logs_2023, "2023 fold player logs"),
             2024: read(args.logs_2024, "2024 fold player logs"),
         },
+        overrides_path=args.manual_name_overrides,
+        frozen_keys=frozen_keys,
     )
     full, mechanical = build_frozen_full_state(
         predictions=predictions,
