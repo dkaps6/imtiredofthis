@@ -203,9 +203,15 @@ def main()->int:
             metrics=build_mc_predictions(bundle,iterations=20,seed=42+int(week))
             players=(metrics.sort_values(["event_id","team","player_clean_key"])
                      .drop_duplicates(["event_id","team","player_clean_key"],keep="last").copy())
-            explicit,audit=materialize_target_entitlement(players)
-            if float(audit.get("max_player_mass_gap",0.0))>1e-10:
-                raise RuntimeError("explicit entitlement mass drift")
+            explicit,trace=materialize_target_entitlement(players)
+            team_trace=trace.drop_duplicates(["event_id","team"]).copy()
+            mass_gap=float(np.max(np.abs(
+                pd.to_numeric(team_trace["modeled_player_sum"],errors="raise").to_numpy(float)
+                + pd.to_numeric(team_trace["residual_share"],errors="raise").to_numpy(float)
+                - 1.0
+            ))) if len(team_trace) else 0.0
+            if mass_gap>1e-10:
+                raise RuntimeError(f"explicit entitlement mass drift {mass_gap}")
             explicit["team"]=explicit["team"].map(canon_team)
             explicit["position"]=explicit["position"].astype(str).str.upper().str.strip()
             wr=explicit.loc[explicit.position.isin(WR_POS)].copy()
@@ -269,7 +275,7 @@ def main()->int:
                     "targetable_helps":bool(ca<ba-1e-12),
                 })
             integrity.append({"season":season,"week":int(week),
-                              "entitlement_residual_gap":float(audit.get("max_residual_gap",0.0))})
+                              "entitlement_mass_identity_gap":mass_gap})
 
     frame=pd.DataFrame(rows)
     if frame.empty: raise RuntimeError("diagnostic produced zero WR1 rows")
