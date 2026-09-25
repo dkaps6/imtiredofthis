@@ -687,16 +687,20 @@ def main() -> int:
         })
     season_summary = pd.DataFrame(season_rows)
 
-    boundary_summary = (
-        detail.groupby(["season", "qb_regime_break", "room"], as_index=False)
-        .apply(lambda z: pd.Series({
-            "n": len(z),
+    boundary_rows = []
+    for (season, qb_break, room), z in detail.groupby(
+        ["season", "qb_regime_break", "room"], sort=True
+    ):
+        boundary_rows.append({
+            "season": int(season),
+            "qb_regime_break": int(qb_break),
+            "room": str(room),
+            "n": int(len(z)),
             "baseline_mae": score(z, "baseline_room_targets")["mae"],
             "parent_mae": score(z, "parent_room_targets")["mae"],
             "candidate_mae": score(z, "candidate_room_targets")["mae"],
-        }), include_groups=False)
-        .reset_index(drop=True)
-    )
+        })
+    boundary_summary = pd.DataFrame(boundary_rows)
 
     source_coverage = (
         audit.groupby(["season", "candidate_history_source"], as_index=False)
