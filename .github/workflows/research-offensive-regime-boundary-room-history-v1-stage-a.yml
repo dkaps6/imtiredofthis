@@ -1,0 +1,108 @@
+name: Research Offensive Regime Boundary Room History V1 Stage A
+
+on:
+  push:
+    branches: [research-offensive-regime-boundary-room-history-v1]
+    paths:
+      - 'docs/research/OFFENSIVE_REGIME_BOUNDARY_ROOM_HISTORY_V1_PLAN.md'
+      - 'scripts/research/evaluate_offensive_regime_boundary_room_history_v1_stage_a.py'
+      - '.github/workflows/research-offensive-regime-boundary-room-history-v1-stage-a.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: research-offensive-regime-boundary-room-history-v1-stage-a
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml pyarrow scikit-learn joblib
+
+      - name: Compile frozen evaluator
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/evaluate_offensive_regime_boundary_room_history_v1_stage_a.py
+
+      - name: Build untouched 2020 and 2021 historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/regime_boundary /tmp/hist_2020 /tmp/hist_2021
+          mkdir -p /tmp/regime_boundary /tmp/hist_2020 /tmp/hist_2021
+          python scripts/backtest/build_historical_inputs.py --season 2020 --prior-season 2019 --weeks '1-17' --out-dir /tmp/hist_2020
+          python scripts/backtest/build_historical_inputs.py --season 2021 --prior-season 2020 --weeks '1-18' --out-dir /tmp/hist_2021
+
+      - name: Combine historical schedule and team observations
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out=Path('/tmp/regime_boundary')
+          roots=[Path('/tmp/hist_2020'),Path('/tmp/hist_2021')]
+          for name in ['schedule_history.csv','team_weekly_history.csv']:
+              x=pd.concat([pd.read_csv(p/name) for p in roots],ignore_index=True,sort=False)
+              keys=['season','week','team']
+              x=x.sort_values(keys).drop_duplicates(keys,keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined rows in {name}')
+              x.to_csv(out/name,index=False)
+          PY
+
+      - name: Build 2019-2021 historical player logs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2019,2020,2021 \
+            --schedule /tmp/regime_boundary/schedule_history.csv \
+            --out /tmp/regime_boundary/player_game_logs_history.csv
+
+      - name: Build optional historical context
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_historical_injuries.py --seasons 2019,2020,2021 --out /tmp/regime_boundary/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule /tmp/regime_boundary/schedule_history.csv --out /tmp/regime_boundary/weather_history.csv
+
+      - name: Run frozen Stage-A falsification
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/evaluate_offensive_regime_boundary_room_history_v1_stage_a.py \
+            --player-logs /tmp/regime_boundary/player_game_logs_history.csv \
+            --team-weekly /tmp/regime_boundary/team_weekly_history.csv \
+            --schedule /tmp/regime_boundary/schedule_history.csv \
+            --universe-2020 /tmp/hist_2020/pregame_universe \
+            --universe-2021 /tmp/hist_2021/pregame_universe \
+            --injuries /tmp/regime_boundary/injuries_history.csv \
+            --weather /tmp/regime_boundary/weather_history.csv \
+            --weeks-2020 '1-17' \
+            --weeks-2021 '1-18' \
+            --out-dir /tmp/regime_boundary/result
+          cat /tmp/regime_boundary/result/RESULT.md
+
+      - name: Upload frozen Stage-A result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: offensive-regime-boundary-room-history-v1-stage-a
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            /tmp/regime_boundary/result/**
