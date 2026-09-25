@@ -1,0 +1,94 @@
+name: Research Receiver Targetable Dropback Pool V1 2023
+
+on:
+  push:
+    branches: [research-receiver-targetable-dropback-pool-v1]
+    paths:
+      - 'docs/research/RECEIVER_TARGETABLE_DROPBACK_POOL_V1_2023_PLAN.md'
+      - 'scripts/research/evaluate_receiver_targetable_dropback_pool_v1_2023.py'
+      - '.github/workflows/research-receiver-targetable-dropback-pool-v1-2023.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: research-receiver-targetable-dropback-pool-v1-2023
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyarrow scikit-learn joblib
+
+      - name: Compile frozen evaluator
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/evaluate_receiver_targetable_dropback_pool_v1_2023.py
+
+      - name: Build 2022-2023 historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/targetable_v1
+          mkdir -p /tmp/targetable_v1/hist /tmp/targetable_v1/result
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2023 \
+            --prior-season 2022 \
+            --weeks '1-18' \
+            --out-dir /tmp/targetable_v1/hist
+
+      - name: Build historical player, injury and weather inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2022,2023 \
+            --schedule /tmp/targetable_v1/hist/schedule_history.csv \
+            --out /tmp/targetable_v1/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py \
+            --seasons 2022,2023 \
+            --out /tmp/targetable_v1/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py \
+            --schedule /tmp/targetable_v1/hist/schedule_history.csv \
+            --out /tmp/targetable_v1/weather_history.csv
+
+      - name: Run frozen 2023 targetable-dropback calibration
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/evaluate_receiver_targetable_dropback_pool_v1_2023.py \
+            --player-logs /tmp/targetable_v1/player_game_logs_history.csv \
+            --team-weekly /tmp/targetable_v1/hist/team_weekly_history.csv \
+            --schedule /tmp/targetable_v1/hist/schedule_history.csv \
+            --universe-dir /tmp/targetable_v1/hist/pregame_universe \
+            --injuries /tmp/targetable_v1/injuries_history.csv \
+            --weather /tmp/targetable_v1/weather_history.csv \
+            --season 2023 \
+            --prior-season 2022 \
+            --weeks '1-18' \
+            --out-dir /tmp/targetable_v1/result
+          cat /tmp/targetable_v1/result/RESULT.md
+
+      - name: Upload frozen result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: receiver-targetable-dropback-pool-v1-2023
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            /tmp/targetable_v1/result/**
