@@ -103,7 +103,7 @@ jobs:
         run: |
           rm -rf /tmp/wr_anchor_transmission
           mkdir -p /tmp/wr_anchor_transmission
-          python scripts/research/audit_wr_anchor_role_transmission_v1.py             --authority-predictions /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_predictions.csv             --wr-coefficients /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv             --data-2023 /tmp/hist_2023             --logs-2023 /tmp/hist_2023/player_game_logs_history.csv             --data-2024 /tmp/hist_2024             --logs-2024 /tmp/hist_2024/player_game_logs_history.csv             --out-dir /tmp/wr_anchor_transmission
+          python scripts/research/audit_wr_anchor_role_transmission_v1.py             --authority-predictions /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_predictions.csv             --authority-features /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_features.csv             --authority-conservation /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_conservation_audit.csv             --data-2023 /tmp/hist_2023             --logs-2023 /tmp/hist_2023/player_game_logs_history.csv             --data-2024 /tmp/hist_2024             --logs-2024 /tmp/hist_2024/player_game_logs_history.csv             --out-dir /tmp/wr_anchor_transmission
           cat /tmp/wr_anchor_transmission/RESULT.md
 
       - name: Upload diagnostic artifact
