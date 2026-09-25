@@ -1,0 +1,131 @@
+name: Research Receiver Targetable Dropback V1 Full Stack
+
+on:
+  push:
+    branches: [research-receiver-targetable-dropback-v1-full-stack]
+    paths:
+      - 'docs/research/RECEIVER_TARGETABLE_DROPBACK_V1_FULL_STACK_PLAN.md'
+      - 'scripts/research/evaluate_receiver_targetable_dropback_v1_full_stack.py'
+      - '.github/workflows/research-receiver-targetable-dropback-v1-full-stack.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: research-receiver-targetable-dropback-v1-full-stack
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyarrow scikit-learn joblib pyyaml
+
+      - name: Compile frozen evaluator
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/evaluate_receiver_targetable_dropback_v1_full_stack.py
+
+      - name: Create workspace
+        run: |
+          rm -rf /tmp/targetable_full /tmp/hist_2024 /tmp/hist_2025 /tmp/wr_model /tmp/te_model
+          mkdir -p /tmp/targetable_full /tmp/hist_2024 /tmp/hist_2025 /tmp/wr_model /tmp/te_model
+
+      - name: Download WR-R15 fold-safe OOS authority
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-r15-wr1-anchor-participation-v1
+          path: /tmp/wr_model
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34238301577
+
+      - name: Download TE-R5P fold-safe OOS authority
+        uses: actions/download-artifact@v4
+        with:
+          name: te-r5p-production-contract-refit-v1
+          path: /tmp/te_model
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34152797603
+
+      - name: Verify specialist authorities
+        run: |
+          set -euo pipefail
+          test -s /tmp/wr_model/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv
+          test -s /tmp/te_model/data/backtests/te_r5p_production_contract_refit_v1/te_r5p_coefficients.csv
+
+      - name: Build independent historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_historical_inputs.py --season 2024 --prior-season 2023 --weeks '1-18' --out-dir /tmp/hist_2024
+          python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks '1-18' --out-dir /tmp/hist_2025
+
+      - name: Combine historical schedule and team state
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out=Path('/tmp/targetable_full')
+          for name in ['schedule_history.csv','team_weekly_history.csv']:
+              x=pd.concat([pd.read_csv('/tmp/hist_2024/'+name),pd.read_csv('/tmp/hist_2025/'+name)],ignore_index=True)
+              keys=['season','week','team']
+              x=x.sort_values(keys).drop_duplicates(keys,keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined rows in {name}')
+              x.to_csv(out/name,index=False)
+          PY
+
+      - name: Build historical player injury and weather inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py --seasons 2023,2024,2025 --schedule /tmp/targetable_full/schedule_history.csv --out /tmp/targetable_full/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2023,2024,2025 --out /tmp/targetable_full/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule /tmp/targetable_full/schedule_history.csv --out /tmp/targetable_full/weather_history.csv
+
+      - name: Run frozen player full-stack A/B
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p /tmp/targetable_full/result
+          python scripts/research/evaluate_receiver_targetable_dropback_v1_full_stack.py \
+            --player-logs /tmp/targetable_full/player_game_logs_history.csv \
+            --team-weekly /tmp/targetable_full/team_weekly_history.csv \
+            --schedule /tmp/targetable_full/schedule_history.csv \
+            --universe-2024 /tmp/hist_2024/pregame_universe \
+            --universe-2025 /tmp/hist_2025/pregame_universe \
+            --injuries /tmp/targetable_full/injuries_history.csv \
+            --weather /tmp/targetable_full/weather_history.csv \
+            --te-coefficients /tmp/te_model/data/backtests/te_r5p_production_contract_refit_v1/te_r5p_coefficients.csv \
+            --wr-coefficients /tmp/wr_model/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv \
+            --weights data/model_ensemble_weights.csv \
+            --weeks '1-18' \
+            --iterations 5000 \
+            --out-dir /tmp/targetable_full/result
+          cat /tmp/targetable_full/result/RESULT.md
+
+      - name: Upload frozen result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: receiver-targetable-dropback-v1-full-stack
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            /tmp/targetable_full/result/**
