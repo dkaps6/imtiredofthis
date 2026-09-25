@@ -60,6 +60,7 @@ CANDIDATE_VARIANT = "WR_R15_WR1_ANCHORED_PARTICIPATION"
 SEASONS = (2023, 2024)
 TEAM_KEYS = ["season", "week", "team"]
 PLAYER_KEYS = ["season", "week", "team", "player_clean_key"]
+BRIDGE_PLAYER_KEYS = ["season", "week", "team", "identity_bridge_key"]
 FULL_KEYS = ["season", "week", "event_id", "team", "player_clean_key"]
 
 
@@ -218,14 +219,15 @@ def _identity_norm(value: object) -> str:
     return s
 
 
-def build_post_freeze_inverse_aliases(
-    overrides_path: Path, frozen_keys: set[str]
+def build_post_freeze_alias_classes(
+    overrides_path: Path,
 ) -> tuple[dict[str, str], pd.DataFrame]:
-    """Map current post-freeze canonical identities back to frozen authority keys.
+    """Build verified bidirectional identity classes for post-freeze aliases.
 
-    This is a mechanical identity bridge only. It uses explicit, verified repo
-    overrides added after the WR-R15 freeze and only retains mappings whose
-    pre-freeze/source key is actually present in the frozen WR-R15 authority.
+    The frozen authority can contain either side of a later suffix correction
+    depending on fold/source. Therefore aliases are NEVER rewritten one-way.
+    Both documented names receive the same mechanical identity_bridge_key while
+    their raw frozen/current player_clean_key values remain untouched.
     """
     x = read(overrides_path, "manual name overrides")
     need = {"player_source_name", "full_name", "verified_date"}
@@ -238,26 +240,61 @@ def build_post_freeze_inverse_aliases(
     x["current_key"] = x["full_name"].map(_identity_norm)
     x = x.loc[
         x["verified_date"].gt(freeze)
-        & x["source_key"].isin(set(str(k) for k in frozen_keys))
         & x["current_key"].ne("")
         & x["source_key"].ne("")
         & x["current_key"].ne(x["source_key"])
     ].copy()
-    if x["current_key"].duplicated().any():
-        bad = x.loc[x["current_key"].duplicated(keep=False), [
-            "player_source_name", "full_name", "current_key", "source_key"
-        ]].to_dict("records")
-        raise RuntimeError(f"post-freeze inverse aliases are ambiguous: {bad}")
-    mapping = dict(zip(x["current_key"], x["source_key"]))
+
+    parent: dict[str, str] = {}
+
+    def find(k: str) -> str:
+        parent.setdefault(k, k)
+        while parent[k] != k:
+            parent[k] = parent[parent[k]]
+            k = parent[k]
+        return k
+
+    def union(a: str, b: str) -> None:
+        ra, rb = find(a), find(b)
+        if ra == rb:
+            return
+        keep, other = sorted([ra, rb])
+        parent[other] = keep
+
+    for r in x.itertuples(index=False):
+        union(str(r.source_key), str(r.current_key))
+
+    members: dict[str, list[str]] = {}
+    for k in list(parent):
+        root = find(k)
+        members.setdefault(root, []).append(k)
+
+    mapping: dict[str, str] = {}
+    for vals in members.values():
+        representative = sorted(set(vals))[0]
+        for k in vals:
+            mapping[k] = representative
+
+    x["identity_bridge_key"] = x["source_key"].map(
+        lambda k: mapping.get(str(k), str(k))
+    )
     return mapping, x
 
 
+def attach_identity_bridge_key(
+    frame: pd.DataFrame, alias_map: dict[str, str]
+) -> pd.DataFrame:
+    y = frame.copy()
+    y["identity_bridge_key"] = y["player_clean_key"].fillna("").astype(str).map(
+        lambda k: alias_map.get(_identity_norm(k), _identity_norm(k))
+    )
+    return y
 def reconstruct_bridge(
     *,
     data_dirs: dict[int, Path],
     logs_by_season: dict[int, pd.DataFrame],
-    overrides_path: Path,
-    frozen_keys: set[str],
+    alias_map: dict[str, str],
+    alias_rows: pd.DataFrame,
 ) -> tuple[pd.DataFrame, dict]:
     snaps, dup_rate, source_seasons = _load_snaps()
     rows: list[pd.DataFrame] = []
@@ -314,30 +351,21 @@ def reconstruct_bridge(
     bridge = _canon(bridge)
     bridge["_row_index"] = num(bridge["_row_index"]).astype("Int64")
 
-    # NFLverse/Ourlads retrospective identity normalization changed after the
-    # 2026-09-08 authority freeze. The repo's verified post-freeze overrides
-    # document those suffix corrections. Invert only mappings whose old/source
-    # key exists in the frozen artifact, preserving both current and authority
-    # identities for audit.
-    alias_map, alias_rows = build_post_freeze_inverse_aliases(
-        overrides_path, frozen_keys
-    )
+    # Preserve raw identity and attach only a verified equivalence key.
     bridge["current_player_clean_key"] = bridge["player_clean_key"].astype(str)
-    bridge["authority_player_clean_key"] = bridge["current_player_clean_key"].map(
-        lambda k: alias_map.get(str(k), str(k))
-    )
+    bridge = attach_identity_bridge_key(bridge, alias_map)
     bridge["authority_alias_applied"] = (
-        bridge["authority_player_clean_key"] != bridge["current_player_clean_key"]
+        bridge["identity_bridge_key"]
+        != bridge["current_player_clean_key"].map(_identity_norm)
     )
-    bridge["player_clean_key"] = bridge["authority_player_clean_key"]
 
-    if bridge.duplicated(PLAYER_KEYS).any():
+    if bridge.duplicated(BRIDGE_PLAYER_KEYS).any():
         bad = bridge.loc[
-            bridge.duplicated(PLAYER_KEYS, keep=False),
-            PLAYER_KEYS + ["current_player_clean_key", "authority_alias_applied"],
+            bridge.duplicated(BRIDGE_PLAYER_KEYS, keep=False),
+            BRIDGE_PLAYER_KEYS + ["player_clean_key"],
         ].head(20).to_dict("records")
         raise RuntimeError(
-            f"post-freeze authority aliasing created duplicate player identities: {bad}"
+            f"verified alias equivalence created duplicate football identities: {bad}"
         )
 
     keys = TEAM_KEYS + ["_row_index"]
@@ -347,12 +375,12 @@ def reconstruct_bridge(
     applied = bridge.loc[bridge["authority_alias_applied"]].copy()
     alias_usage = (
         applied.groupby(
-            ["current_player_clean_key", "authority_player_clean_key"],
+            ["current_player_clean_key", "identity_bridge_key"],
             as_index=False,
         ).size().rename(columns={"size": "rows"})
         if len(applied)
         else pd.DataFrame(
-            columns=["current_player_clean_key", "authority_player_clean_key", "rows"]
+            columns=["current_player_clean_key", "identity_bridge_key", "rows"]
         )
     )
     return bridge, {
@@ -366,9 +394,9 @@ def reconstruct_bridge(
             bridge[["season", "week", "event_id", "team"]]
             .drop_duplicates().shape[0]
         ),
-        "post_freeze_inverse_aliases_available": int(len(alias_map)),
-        "post_freeze_inverse_alias_rows_used": int(len(applied)),
-        "post_freeze_inverse_alias_usage": alias_usage.to_dict("records"),
+        "post_freeze_alias_class_keys": int(len(alias_map)),
+        "post_freeze_alias_rows_used": int(len(applied)),
+        "post_freeze_alias_usage": alias_usage.to_dict("records"),
         "post_freeze_override_records_eligible": int(len(alias_rows)),
     }
 
@@ -385,13 +413,15 @@ def build_frozen_full_state(
     # and can drift when upstream source rows are revised. The frozen artifact
     # already carries stable player identities for every WR2+ row, so secondary
     # bridge parity is keyed only by season/week/team/player.
-    if bridge.duplicated(PLAYER_KEYS).any():
+    if bridge.duplicated(BRIDGE_PLAYER_KEYS).any():
         bad = bridge.loc[
-            bridge.duplicated(PLAYER_KEYS, keep=False), PLAYER_KEYS
+            bridge.duplicated(BRIDGE_PLAYER_KEYS, keep=False),
+            BRIDGE_PLAYER_KEYS + ["player_clean_key"],
         ].head(10).to_dict("records")
-        raise RuntimeError(f"bridge player identities are not unique: {bad}")
+        raise RuntimeError(f"bridge football identities are not unique: {bad}")
 
     bridge_identity = bridge.rename(columns={
+        "player_clean_key": "bridge_player_clean_key",
         "event_id": "bridge_event_id",
         "player": "bridge_player",
         "position": "bridge_position",
@@ -405,13 +435,14 @@ def build_frozen_full_state(
 
     sec = features.merge(
         bridge_identity,
-        on=PLAYER_KEYS,
+        on=BRIDGE_PLAYER_KEYS,
         how="left",
         validate="one_to_one",
     )
     if sec["bridge_event_id"].isna().any():
         missing = sec.loc[
-            sec["bridge_event_id"].isna(), PLAYER_KEYS
+            sec["bridge_event_id"].isna(),
+            PLAYER_KEYS + ["identity_bridge_key"]
         ].head(10).to_dict("records")
         raise RuntimeError(
             f"frozen secondary identity missing from authority-era WR universe: {missing}"
@@ -471,10 +502,10 @@ def build_frozen_full_state(
     # The frozen feature artifact contains every WR2+ row. Therefore the M38
     # anchor is the one WR identity in the authority-era full WR universe that is
     # absent from the frozen secondary identity set for that team-game.
-    frozen_secondary_keys = features[PLAYER_KEYS].drop_duplicates().copy()
+    frozen_secondary_keys = features[BRIDGE_PLAYER_KEYS].drop_duplicates().copy()
     universe = bridge.merge(
         frozen_secondary_keys.assign(_frozen_secondary=True),
-        on=PLAYER_KEYS,
+        on=BRIDGE_PLAYER_KEYS,
         how="left",
         validate="one_to_one",
     )
@@ -538,15 +569,18 @@ def build_frozen_full_state(
     # Independent direct check: 1,026 frozen scored WR1 identities must equal
     # the inferred complement anchor identity.
     rank1_check = rank1_predictions.merge(
-        anchors[TEAM_KEYS + ["player_clean_key"]].rename(
-            columns={"player_clean_key": "mapped_anchor_key"}
+        anchors[TEAM_KEYS + ["player_clean_key", "identity_bridge_key"]].rename(
+            columns={
+                "player_clean_key": "mapped_anchor_key",
+                "identity_bridge_key": "mapped_anchor_identity_bridge_key",
+            }
         ),
         on=TEAM_KEYS,
         how="left",
         validate="one_to_one",
     )
-    rank1_mismatch = rank1_check["player_clean_key"].astype(str).ne(
-        rank1_check["mapped_anchor_key"].astype(str)
+    rank1_mismatch = rank1_check["identity_bridge_key"].astype(str).ne(
+        rank1_check["mapped_anchor_identity_bridge_key"].astype(str)
     )
     mechanical.update({
         "mapped_anchor_rows": int(len(anchors)),
@@ -561,8 +595,8 @@ def build_frozen_full_state(
 
     # Scored actual-target parity against the authority artifact.
     label_check = predictions.merge(
-        bridge[PLAYER_KEYS + ["actual_targets"]],
-        on=PLAYER_KEYS,
+        bridge[BRIDGE_PLAYER_KEYS + ["actual_targets"]],
+        on=BRIDGE_PLAYER_KEYS,
         how="left",
         validate="one_to_one",
     )
@@ -923,17 +957,35 @@ def main() -> int:
     conservation = prepare_conservation(
         read(args.authority_conservation, "WR-R15 conservation audit")
     )
-    frozen_keys = set(features["player_clean_key"].astype(str)) | set(
-        predictions["player_clean_key"].astype(str)
+    alias_map, alias_rows = build_post_freeze_alias_classes(
+        args.manual_name_overrides
     )
+    predictions = attach_identity_bridge_key(predictions, alias_map)
+    rank1 = attach_identity_bridge_key(rank1, alias_map)
+    features = attach_identity_bridge_key(features, alias_map)
+
+    for label, frame in (
+        ("predictions", predictions),
+        ("rank1", rank1),
+        ("features", features),
+    ):
+        if frame.duplicated(BRIDGE_PLAYER_KEYS).any():
+            bad = frame.loc[
+                frame.duplicated(BRIDGE_PLAYER_KEYS, keep=False),
+                BRIDGE_PLAYER_KEYS + ["player_clean_key"],
+            ].head(20).to_dict("records")
+            raise RuntimeError(
+                f"{label} verified alias equivalence is ambiguous: {bad}"
+            )
+
     bridge, bridge_audit = reconstruct_bridge(
         data_dirs={2023: args.data_2023, 2024: args.data_2024},
         logs_by_season={
             2023: read(args.logs_2023, "2023 fold player logs"),
             2024: read(args.logs_2024, "2024 fold player logs"),
         },
-        overrides_path=args.manual_name_overrides,
-        frozen_keys=frozen_keys,
+        alias_map=alias_map,
+        alias_rows=alias_rows,
     )
     full, mechanical = build_frozen_full_state(
         predictions=predictions,
@@ -1010,7 +1062,7 @@ def main() -> int:
         "production_mutations": 0,
         "mechanical_authority_bridge": (
             "frozen_secondary_features+frozen_conservation_anchor_state;"
-            "authority-era replay used only for row-index identity, anchor participation,"
+            "authority-era replay used only for verified identity-equivalence, anchor participation,"
             "and target labels after parity"
         ),
         "criteria": criteria,
