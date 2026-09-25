@@ -118,6 +118,59 @@ def _finite_float(value: object, label: str) -> float:
     return x
 
 
+def _build_current_pricing_metrics() -> pd.DataFrame:
+    """Build football-only current rows on the certified availability team set."""
+    path = Path("data/player_form_consensus.csv")
+    if not path.exists() or path.stat().st_size <= 0:
+        raise RuntimeError("player_form_consensus missing")
+    form = pd.read_csv(path, low_memory=False)
+    form.columns = [str(c).strip().lower() for c in form.columns]
+    required = {"player", "team", "opponent", "season", "week", "position"}
+    missing = sorted(required - set(form.columns))
+    if missing:
+        raise RuntimeError(f"player_form_consensus missing columns: {missing}")
+    if "player_clean_key" not in form.columns:
+        form["player_clean_key"] = form["player"].map(
+            lambda x: "".join(ch.lower() for ch in str(x) if ch.isalnum())
+        )
+    form["team"] = form["team"].map(canon_team)
+    form["opponent"] = form["opponent"].map(canon_team)
+    form["_position_family"] = form["position"].map(_position_family)
+    form = form.loc[
+        form["_position_family"].isin({"QB", "RB", "FB", "WR", "TE"})
+    ].drop(columns="_position_family").copy()
+    if form.duplicated(["team", "player_clean_key"]).any():
+        raise RuntimeError("current football-only comparison frame has duplicate player/team")
+    coverage = validate_current_team_set(
+        form["team"].dropna().astype(str).unique(),
+        label="hierarchical reconciliation current football universe",
+    )
+    form["event_id"] = [
+        base._canonical_game(t, o, s, w)
+        for t, o, s, w in zip(
+            form["team"], form["opponent"], form["season"], form["week"]
+        )
+    ]
+    observed_games = int(form["event_id"].nunique())
+    expected_games = int(coverage.get("canonical_games", observed_games))
+    if observed_games != expected_games:
+        raise RuntimeError(
+            f"current football canonical-game coverage invalid "
+            f"expected={expected_games} observed={observed_games}"
+        )
+    form["market"] = "football_universe"
+    forbidden = sorted(base.FORBIDDEN_SIM_COLUMNS & set(form.columns))
+    if forbidden:
+        raise RuntimeError(f"sportsbook fields leaked into current football frame: {forbidden}")
+    frame = apply_bayesian_to_metrics(form)
+    frame = apply_rules_to_metrics(frame)
+    if not pd.to_numeric(frame["bayes_applied"], errors="coerce").fillna(0).eq(1).all():
+        raise RuntimeError("Bayesian context missing from current football frame")
+    if not pd.to_numeric(frame["rules_applied"], errors="coerce").fillna(0).eq(1).all():
+        raise RuntimeError("rule context missing from current football frame")
+    return frame
+
+
 def _weighted_nonnegative_projection(
     base_means: np.ndarray,
     variances: np.ndarray,
