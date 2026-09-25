@@ -1,0 +1,116 @@
+name: Research WR1 Current State Anchor Diagnostic V1
+
+on:
+  push:
+    branches: [research-wr1-current-state-anchor-diagnostic-v1]
+    paths:
+      - 'docs/research/WR1_CURRENT_STATE_ANCHOR_DIAGNOSTIC_V1_PLAN.md'
+      - 'scripts/research/audit_wr1_current_state_anchor_v1.py'
+      - '.github/workflows/research-wr1-current-state-anchor-diagnostic-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: research-wr1-current-state-anchor-diagnostic-v1
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyarrow scikit-learn joblib pyyaml scipy
+
+      - name: Compile frozen diagnostic
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_wr1_current_state_anchor_v1.py
+
+      - name: Create workspace
+        run: |
+          rm -rf /tmp/wr1_state /tmp/hist_2022 /tmp/hist_2023
+          mkdir -p /tmp/wr1_state /tmp/hist_2022 /tmp/hist_2023
+
+      - name: Build independent historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_historical_inputs.py --season 2022 --prior-season 2021 --weeks '1-18' --out-dir /tmp/hist_2022
+          python scripts/backtest/build_historical_inputs.py --season 2023 --prior-season 2022 --weeks '1-18' --out-dir /tmp/hist_2023
+
+      - name: Combine historical schedule and team state
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out=Path('/tmp/wr1_state')
+          for name in ['schedule_history.csv','team_weekly_history.csv']:
+              x=pd.concat([pd.read_csv('/tmp/hist_2022/'+name),pd.read_csv('/tmp/hist_2023/'+name)],ignore_index=True)
+              keys=['season','week','team']
+              x=x.sort_values(keys).drop_duplicates(keys,keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any(): raise RuntimeError(f'duplicate rows in {name}')
+              x.to_csv(out/name,index=False)
+          PY
+
+      - name: Build player injury and weather history
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py --seasons 2021,2022,2023 --schedule /tmp/wr1_state/schedule_history.csv --out /tmp/wr1_state/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2022,2023 --out /tmp/wr1_state/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule /tmp/wr1_state/schedule_history.csv --out /tmp/wr1_state/weather_history.csv
+
+      - name: Run frozen WR1 state diagnostic
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p /tmp/wr1_state/result
+          python scripts/research/audit_wr1_current_state_anchor_v1.py \
+            --player-logs /tmp/wr1_state/player_game_logs_history.csv \
+            --team-weekly /tmp/wr1_state/team_weekly_history.csv \
+            --schedule /tmp/wr1_state/schedule_history.csv \
+            --universe-2022 /tmp/hist_2022/pregame_universe \
+            --universe-2023 /tmp/hist_2023/pregame_universe \
+            --injuries /tmp/wr1_state/injuries_history.csv \
+            --weather /tmp/wr1_state/weather_history.csv \
+            --weeks '2-18' \
+            --iterations 2000 \
+            --out-dir /tmp/wr1_state/result
+          cat /tmp/wr1_state/result/RESULT.md
+
+      - name: Enforce discovery-only integrity
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/wr1_state/result/summary.json'))
+          assert p['discovery_seasons']==[2022,2023]
+          assert p['confirmation_seasons_inspected']==[]
+          assert p['sportsbook_inputs_used']==0
+          assert p['parameters_fit']==0
+          assert p['candidate_variants_scored']==0
+          assert p['production_changed'] is False
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Upload diagnostic artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr1-current-state-anchor-diagnostic-v1
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            /tmp/wr1_state/result/**
