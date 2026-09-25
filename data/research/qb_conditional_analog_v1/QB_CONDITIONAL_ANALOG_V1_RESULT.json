@@ -1,0 +1,21 @@
+{
+  "density_percentile": 90.0,
+  "density_threshold": 4.221606664273808,
+  "disposition": "NO_ACTIONABLE_QB_CONDITIONAL_ANALOG_RELIABILITY",
+  "evaluation_2025_rows": 364,
+  "gates": {
+    "n_2025_ge_40": true,
+    "roi_2024_supported_positive": false,
+    "roi_2025_beats_unconditional_baseline": false,
+    "roi_2025_positive": false
+  },
+  "k": 15,
+  "n_2024_supported": 217,
+  "n_2025_supported": 180,
+  "production_mutation_authorized": false,
+  "reference_2024_rows": 404,
+  "rescue_authorized": false,
+  "roi_2024_supported": -0.07047303713302512,
+  "roi_2025_supported": -0.09560227128862953,
+  "roi_2025_unconditional_baseline": -0.03228770096991535
+}
