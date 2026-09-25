@@ -218,7 +218,7 @@ def result(detail):
         d=detail.loc[detail["season"].eq(season)].copy()
         out["by_season"][str(season)]={
             "targets":pair(d),
-            "baseline_vs_actual_dropbacks":score(d.rename(columns={"actual_dropbacks":"actual_team_targets"}),"baseline_projected_dropbacks"),
+            "baseline_vs_actual_dropbacks":score(d,"baseline_projected_dropbacks","actual_dropbacks"),
             "rows":int(len(d)),
             "team_source_rows":int(d["conversion_source"].eq("team_strict_prior").sum()),
             "fallback_rows":int(d["conversion_source"].eq("league_fallback").sum()),
