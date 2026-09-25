@@ -22,7 +22,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout current diagnostic branch
+        uses: actions/checkout@v4
+
+      - name: Checkout exact WR-R15 authority source
+        uses: actions/checkout@v4
+        with:
+          ref: 02c3dd1a681d4ab2953683039e39830554f9ec9f
+          path: authority-src
 
       - uses: actions/setup-python@v5
         with:
@@ -31,12 +38,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r authority-src/requirements.txt
           pip install nflreadpy pyarrow scikit-learn joblib pyyaml
 
       - name: Compile diagnostic
         env:
-          PYTHONPATH: ${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}/authority-src:${{ github.workspace }}
         run: |
           python -m py_compile scripts/research/audit_wr_anchor_role_transmission_v1.py
 
@@ -49,7 +56,7 @@ jobs:
           repository: ${{ github.repository }}
           run-id: 34238301577
 
-      - name: Verify authority
+      - name: Verify frozen authority artifacts
         run: |
           test -s /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_predictions.csv
           test -s /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv
@@ -57,65 +64,44 @@ jobs:
           sha256sum /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_predictions.csv
           sha256sum /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv
 
-      - name: Build fold-safe 2023 and 2024 historical inputs
+      - name: Build exact authority-era 2023 fold inputs
         env:
-          PYTHONPATH: ${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}/authority-src
         run: |
-          rm -rf /tmp/wr_anchor /tmp/hist_2023 /tmp/hist_2024
-          mkdir -p /tmp/wr_anchor /tmp/hist_2023 /tmp/hist_2024
-          python scripts/backtest/build_historical_inputs.py \
-            --season 2023 --prior-season 2022 --weeks '1-18' --out-dir /tmp/hist_2023
-          python scripts/backtest/build_historical_inputs.py \
-            --season 2024 --prior-season 2023 --weeks '1-18' --out-dir /tmp/hist_2024
+          rm -rf /tmp/hist_2023
+          python authority-src/scripts/backtest/build_historical_inputs.py             --season 2023 --prior-season 2022 --weeks '1-18' --out-dir /tmp/hist_2023
+          python authority-src/scripts/backtest/enrich_historical_defense.py             --team-weekly /tmp/hist_2023/team_weekly_history.csv             --seasons 2022,2023             --audit /tmp/hist_2023/historical_defense_enrichment_audit.csv             --observations /tmp/hist_2023/historical_defense_observations.csv
+          python authority-src/scripts/backtest/validate_historical_inputs.py             --season 2023 --prior-season 2022 --weeks '1-18'             --data-dir /tmp/hist_2023             --report /tmp/hist_2023/historical_input_validation.csv
+          python authority-src/scripts/backtest/historical_player_logs.py             --seasons 2022,2023             --schedule /tmp/hist_2023/schedule_history.csv             --out /tmp/hist_2023/player_game_logs_history.csv
+          python authority-src/scripts/backtest/build_historical_injuries.py             --seasons 2022,2023             --out /tmp/hist_2023/injuries_history.csv
+          python authority-src/scripts/backtest/build_historical_weather.py             --schedule /tmp/hist_2023/schedule_history.csv             --out /tmp/hist_2023/weather_history.csv
 
-      - name: Combine schedule and team history
-        run: |
-          python - <<'PY'
-          import pandas as pd
-          from pathlib import Path
-          out=Path('/tmp/wr_anchor')
-          roots=[Path('/tmp/hist_2023'),Path('/tmp/hist_2024')]
-          for name in ['schedule_history.csv','team_weekly_history.csv']:
-              x=pd.concat([pd.read_csv(p/name) for p in roots],ignore_index=True,sort=False)
-              keys=['season','week','team']
-              x=x.sort_values(keys).drop_duplicates(keys,keep='last').reset_index(drop=True)
-              if x.duplicated(keys).any():
-                  raise RuntimeError(f'duplicate combined historical rows in {name}')
-              x.to_csv(out/name,index=False)
-          PY
-
-      - name: Build canonical 2022-2024 player logs and context
+      - name: Build exact authority-era 2024 fold inputs
         env:
-          PYTHONPATH: ${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}/authority-src
         run: |
-          python scripts/backtest/historical_player_logs.py \
-            --seasons 2022,2023,2024 \
-            --schedule /tmp/wr_anchor/schedule_history.csv \
-            --out /tmp/wr_anchor/player_game_logs_history.csv
-          python scripts/backtest/build_historical_injuries.py \
-            --seasons 2022,2023,2024 \
-            --out /tmp/wr_anchor/injuries_history.csv
-          python scripts/backtest/build_historical_weather.py \
-            --schedule /tmp/wr_anchor/schedule_history.csv \
-            --out /tmp/wr_anchor/weather_history.csv
+          rm -rf /tmp/hist_2024
+          python authority-src/scripts/backtest/build_historical_inputs.py             --season 2024 --prior-season 2023 --weeks '1-18' --out-dir /tmp/hist_2024
+          python authority-src/scripts/backtest/enrich_historical_defense.py             --team-weekly /tmp/hist_2024/team_weekly_history.csv             --seasons 2023,2024             --audit /tmp/hist_2024/historical_defense_enrichment_audit.csv             --observations /tmp/hist_2024/historical_defense_observations.csv
+          python authority-src/scripts/backtest/validate_historical_inputs.py             --season 2024 --prior-season 2023 --weeks '1-18'             --data-dir /tmp/hist_2024             --report /tmp/hist_2024/historical_input_validation.csv
+          python authority-src/scripts/backtest/historical_player_logs.py             --seasons 2023,2024             --schedule /tmp/hist_2024/schedule_history.csv             --out /tmp/hist_2024/player_game_logs_history.csv
+          python authority-src/scripts/backtest/build_historical_injuries.py             --seasons 2023,2024             --out /tmp/hist_2024/injuries_history.csv
+          python authority-src/scripts/backtest/build_historical_weather.py             --schedule /tmp/hist_2024/schedule_history.csv             --out /tmp/hist_2024/weather_history.csv
 
-      - name: Run repaired diagnostic-only transmission audit
+      - name: Verify exact fold input contracts
+        run: |
+          test -s /tmp/hist_2023/historical_input_validation.csv
+          test -s /tmp/hist_2024/historical_input_validation.csv
+          test -s /tmp/hist_2023/player_game_logs_history.csv
+          test -s /tmp/hist_2024/player_game_logs_history.csv
+
+      - name: Run exact-authority diagnostic-only transmission audit
         env:
-          PYTHONPATH: ${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}/authority-src:${{ github.workspace }}
         run: |
           rm -rf /tmp/wr_anchor_transmission
           mkdir -p /tmp/wr_anchor_transmission
-          python scripts/research/audit_wr_anchor_role_transmission_v1.py \
-            --authority-predictions /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_predictions.csv \
-            --wr-coefficients /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv \
-            --player-logs /tmp/wr_anchor/player_game_logs_history.csv \
-            --team-weekly /tmp/wr_anchor/team_weekly_history.csv \
-            --schedule /tmp/wr_anchor/schedule_history.csv \
-            --universe-2023 /tmp/hist_2023/pregame_universe \
-            --universe-2024 /tmp/hist_2024/pregame_universe \
-            --injuries /tmp/wr_anchor/injuries_history.csv \
-            --weather /tmp/wr_anchor/weather_history.csv \
-            --out-dir /tmp/wr_anchor_transmission
+          python scripts/research/audit_wr_anchor_role_transmission_v1.py             --authority-predictions /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_confirmation_predictions.csv             --wr-coefficients /tmp/wr_r15_authority/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv             --data-2023 /tmp/hist_2023             --logs-2023 /tmp/hist_2023/player_game_logs_history.csv             --data-2024 /tmp/hist_2024             --logs-2024 /tmp/hist_2024/player_game_logs_history.csv             --out-dir /tmp/wr_anchor_transmission
           cat /tmp/wr_anchor_transmission/RESULT.md
 
       - name: Upload diagnostic artifact
@@ -126,4 +112,6 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
           path: |
+            /tmp/hist_2023/historical_input_validation.csv
+            /tmp/hist_2024/historical_input_validation.csv
             /tmp/wr_anchor_transmission/**
