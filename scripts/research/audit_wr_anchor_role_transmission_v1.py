@@ -291,31 +291,44 @@ def build_frozen_full_state(
     conservation: pd.DataFrame,
     bridge: pd.DataFrame,
 ) -> tuple[pd.DataFrame, dict]:
-    bridge_keys = TEAM_KEYS + ["_row_index"]
+    # Row indices inside the historical pregame frame are not football identity
+    # and can drift when upstream source rows are revised. The frozen artifact
+    # already carries stable player identities for every WR2+ row, so secondary
+    # bridge parity is keyed only by season/week/team/player.
+    if bridge.duplicated(PLAYER_KEYS).any():
+        bad = bridge.loc[
+            bridge.duplicated(PLAYER_KEYS, keep=False), PLAYER_KEYS
+        ].head(10).to_dict("records")
+        raise RuntimeError(f"bridge player identities are not unique: {bad}")
 
-    # Secondary identity and participation parity.
+    bridge_identity = bridge.rename(columns={
+        "event_id": "bridge_event_id",
+        "player": "bridge_player",
+        "position": "bridge_position",
+        "prior_count_same_team": "bridge_prior_count_same_team",
+        "prior1_same_team": "bridge_prior1_same_team",
+        "prior1_same_team_offense_pct": "bridge_prior1_same_team_offense_pct",
+        "prior1_same_team_offense_snaps": "bridge_prior1_same_team_offense_snaps",
+        "actual_targets": "bridge_actual_targets",
+        "_row_index": "bridge_row_index",
+    })
+
     sec = features.merge(
-        bridge.rename(columns={
-            "event_id": "bridge_event_id",
-            "player_clean_key": "bridge_player_clean_key",
-            "player": "bridge_player",
-            "position": "bridge_position",
-            "prior_count_same_team": "bridge_prior_count_same_team",
-            "prior1_same_team": "bridge_prior1_same_team",
-            "prior1_same_team_offense_pct": "bridge_prior1_same_team_offense_pct",
-            "prior1_same_team_offense_snaps": "bridge_prior1_same_team_offense_snaps",
-            "actual_targets": "bridge_actual_targets",
-        }),
-        on=bridge_keys,
+        bridge_identity,
+        on=PLAYER_KEYS,
         how="left",
         validate="one_to_one",
     )
-    if sec["bridge_player_clean_key"].isna().any():
-        raise RuntimeError("secondary bridge coverage is incomplete")
-    identity_mismatch = sec["player_clean_key"].astype(str).ne(
-        sec["bridge_player_clean_key"].astype(str)
+    if sec["bridge_event_id"].isna().any():
+        missing = sec.loc[
+            sec["bridge_event_id"].isna(), PLAYER_KEYS
+        ].head(10).to_dict("records")
+        raise RuntimeError(
+            f"frozen secondary identity missing from authority-era WR universe: {missing}"
+        )
+    event_mismatch = sec["event_id"].astype(str).ne(
+        sec["bridge_event_id"].astype(str)
     )
-    event_mismatch = sec["event_id"].astype(str).ne(sec["bridge_event_id"].astype(str))
     count_gap = (
         num(sec["prior_count_same_team"])
         - num(sec["bridge_prior_count_same_team"])
@@ -344,45 +357,96 @@ def build_frozen_full_state(
     )
     mechanical = {
         "frozen_secondary_rows": int(len(sec)),
-        "secondary_bridge_coverage": float(sec["bridge_player_clean_key"].notna().mean()),
-        "secondary_identity_mismatches": int(identity_mismatch.sum()),
+        "secondary_bridge_coverage": float(sec["bridge_event_id"].notna().mean()),
+        "secondary_identity_mismatches": 0,
         "secondary_event_id_mismatches": int(event_mismatch.sum()),
         "secondary_prior_count_max_gap": float(count_gap.max()) if len(count_gap) else 0.0,
         "secondary_prior1_bool_mismatches": int(bool_mismatch.sum()),
         "secondary_prior1_offense_pct_max_gap": pct_gap,
         "secondary_prior1_offense_snaps_max_gap": snap_gap,
     }
-    if mechanical["secondary_identity_mismatches"] != 0:
-        raise RuntimeError(f"secondary identity bridge parity failed: {mechanical}")
     if mechanical["secondary_event_id_mismatches"] != 0:
         raise RuntimeError(f"secondary event bridge parity failed: {mechanical}")
     if mechanical["secondary_prior_count_max_gap"] > 0:
         raise RuntimeError(f"secondary prior-count parity failed: {mechanical}")
     if mechanical["secondary_prior1_bool_mismatches"] != 0:
-        raise RuntimeError(f"secondary participation availability parity failed: {mechanical}")
+        raise RuntimeError(
+            f"secondary participation availability parity failed: {mechanical}"
+        )
     if mechanical["secondary_prior1_offense_pct_max_gap"] > 1e-12:
         raise RuntimeError(f"secondary snap-pct parity failed: {mechanical}")
     if mechanical["secondary_prior1_offense_snaps_max_gap"] > 1e-12:
         raise RuntimeError(f"secondary snap-count parity failed: {mechanical}")
 
-    # Frozen anchor_idx -> identity bridge.
-    anchors = conservation.rename(columns={"anchor_idx": "_row_index"}).merge(
-        bridge,
-        on=bridge_keys,
+    # The frozen feature artifact contains every WR2+ row. Therefore the M38
+    # anchor is the one WR identity in the authority-era full WR universe that is
+    # absent from the frozen secondary identity set for that team-game.
+    frozen_secondary_keys = features[PLAYER_KEYS].drop_duplicates().copy()
+    universe = bridge.merge(
+        frozen_secondary_keys.assign(_frozen_secondary=True),
+        on=PLAYER_KEYS,
         how="left",
         validate="one_to_one",
-        suffixes=("_audit", "_bridge"),
     )
-    if anchors["player_clean_key"].isna().any():
-        raise RuntimeError("anchor bridge coverage is incomplete")
-    if (
-        anchors["event_id_audit"].astype(str)
-        != anchors["event_id_bridge"].astype(str)
-    ).any():
-        raise RuntimeError("anchor bridge event identity mismatch")
+    anchor_candidates = universe.loc[
+        universe["_frozen_secondary"].isna()
+    ].copy()
+    counts = anchor_candidates.groupby(TEAM_KEYS).size()
+    frozen_team_count = int(len(conservation))
+    all_bridge_team_count = int(
+        bridge[TEAM_KEYS].drop_duplicates().shape[0]
+    )
+    mechanical.update({
+        "frozen_team_games": frozen_team_count,
+        "bridge_team_games_for_anchor_inference": all_bridge_team_count,
+        "team_games_with_one_complement_anchor": int(counts.eq(1).sum()),
+        "team_games_with_zero_complement_anchor": int(
+            (counts.reindex(
+                bridge[TEAM_KEYS].drop_duplicates().set_index(TEAM_KEYS).index,
+                fill_value=0,
+            ) == 0).sum()
+        ),
+        "team_games_with_multiple_complement_anchors": int(counts.gt(1).sum()),
+    })
+    if all_bridge_team_count != frozen_team_count:
+        raise RuntimeError(
+            f"bridge/frozen team-game universe mismatch: {mechanical}"
+        )
+    all_team = bridge[TEAM_KEYS].drop_duplicates()
+    anchor_count_check = all_team.merge(
+        counts.rename("anchor_candidates").reset_index(),
+        on=TEAM_KEYS,
+        how="left",
+        validate="one_to_one",
+    )
+    anchor_count_check["anchor_candidates"] = (
+        anchor_count_check["anchor_candidates"].fillna(0).astype(int)
+    )
+    if not anchor_count_check["anchor_candidates"].eq(1).all():
+        bad = anchor_count_check.loc[
+            ~anchor_count_check["anchor_candidates"].eq(1)
+        ].head(20).to_dict("records")
+        raise RuntimeError(
+            f"frozen WR2+ complement does not yield exactly one anchor: {bad}"
+        )
 
-    # Where the frozen prediction artifact includes a scored WR1, it is a direct
-    # independent identity check on the mapped anchor.
+    anchors = anchor_candidates.merge(
+        conservation,
+        on=TEAM_KEYS,
+        how="inner",
+        validate="one_to_one",
+        suffixes=("_bridge", "_audit"),
+    )
+    if len(anchors) != frozen_team_count:
+        raise RuntimeError("complement anchor bridge did not preserve frozen team-game count")
+    if (
+        anchors["event_id_bridge"].astype(str)
+        != anchors["event_id_audit"].astype(str)
+    ).any():
+        raise RuntimeError("complement anchor event identity mismatch")
+
+    # Independent direct check: 1,026 frozen scored WR1 identities must equal
+    # the inferred complement anchor identity.
     rank1_check = rank1_predictions.merge(
         anchors[TEAM_KEYS + ["player_clean_key"]].rename(
             columns={"player_clean_key": "mapped_anchor_key"}
@@ -395,17 +459,14 @@ def build_frozen_full_state(
         rank1_check["mapped_anchor_key"].astype(str)
     )
     mechanical.update({
-        "frozen_team_games": int(len(conservation)),
         "mapped_anchor_rows": int(len(anchors)),
         "frozen_scored_rank1_rows": int(len(rank1_check)),
         "rank1_anchor_identity_mismatches": int(rank1_mismatch.sum()),
     })
-    if len(anchors) != len(conservation):
-        raise RuntimeError("anchor bridge did not preserve team-game count")
     if mechanical["rank1_anchor_identity_mismatches"] != 0:
         bad = rank1_check.loc[rank1_mismatch].head(10).to_dict("records")
         raise RuntimeError(
-            f"mapped anchor disagrees with frozen scored WR1 identity: {bad}"
+            f"complement anchor disagrees with frozen scored WR1 identity: {bad}"
         )
 
     # Scored actual-target parity against the authority artifact.
@@ -428,9 +489,9 @@ def build_frozen_full_state(
     if mechanical["max_scored_actual_target_gap"] > 1e-12:
         raise RuntimeError(f"scored actual-target parity failed: {mechanical}")
 
-    # Build exact frozen secondary rows: entitlements/participation come from the
-    # artifact, not the replay. Replay supplies only labels that have passed
-    # parity on scored rows.
+    # Frozen WR2+ rows: all entitlement and participation values come directly
+    # from the immutable artifact. Replay supplies only the actual-target label,
+    # which is independently exact on all scored rows above.
     secondary = pd.DataFrame({
         "season": sec["season"].astype(int),
         "week": sec["week"].astype(int),
@@ -450,6 +511,9 @@ def build_frozen_full_state(
         "authority_row_type": "FROZEN_SECONDARY",
     })
 
+    # Frozen anchor entitlements come from conservation audit; identity,
+    # participation and actual-target label come from the mechanically validated
+    # complement bridge.
     anchor = pd.DataFrame({
         "season": anchors["season"].astype(int),
         "week": anchors["week"].astype(int),
@@ -466,22 +530,25 @@ def build_frozen_full_state(
         "prior1_same_team_offense_pct": num(anchors["prior1_same_team_offense_pct"]),
         "prior1_same_team_offense_snaps": num(anchors["prior1_same_team_offense_snaps"]),
         "actual_targets": num(anchors["actual_targets"]).fillna(0.0),
-        "authority_row_type": "FROZEN_ANCHOR_IDENTITY_BRIDGE",
+        "authority_row_type": "FROZEN_ANCHOR_IDENTITY_COMPLEMENT_BRIDGE",
     })
 
     full = pd.concat([anchor, secondary], ignore_index=True, sort=False)
     if full.duplicated(FULL_KEYS).any():
-        bad = full.loc[full.duplicated(FULL_KEYS, keep=False), FULL_KEYS].head(10)
-        raise RuntimeError(f"frozen full state has duplicate identities: {bad.to_dict('records')}")
+        bad = full.loc[
+            full.duplicated(FULL_KEYS, keep=False), FULL_KEYS
+        ].head(10).to_dict("records")
+        raise RuntimeError(f"frozen full state has duplicate identities: {bad}")
     anchor_count = (
         full.loc[full["baseline_wr_rank"].eq(1)]
         .groupby(["season", "week", "event_id", "team"])
         .size()
     )
-    if len(anchor_count) != len(conservation) or not anchor_count.eq(1).all():
-        raise RuntimeError("frozen full state does not contain exactly one anchor per team-game")
+    if len(anchor_count) != frozen_team_count or not anchor_count.eq(1).all():
+        raise RuntimeError(
+            "frozen full state does not contain exactly one anchor per team-game"
+        )
 
-    # Frozen conservation should itself prove anchor immutability and room mass.
     mechanical["max_frozen_anchor_entitlement_delta"] = float(
         num(conservation["anchor_entitlement_delta"]).abs().max()
     )
@@ -494,7 +561,6 @@ def build_frozen_full_state(
         raise RuntimeError("frozen authority does not preserve WR room mass")
     mechanical["frozen_full_wr_rows"] = int(len(full))
     return full.sort_values(FULL_KEYS).reset_index(drop=True), mechanical
-
 
 def deterministic_leader(
     g: pd.DataFrame, value_col: str, *, eligibility: pd.Series | None = None
