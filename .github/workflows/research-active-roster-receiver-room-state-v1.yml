@@ -1,0 +1,114 @@
+name: Research Active Roster Receiver Room State V1
+
+on:
+  push:
+    branches: [research-active-roster-receiver-room-state-v1]
+    paths:
+      - 'docs/research/ACTIVE_ROSTER_RECEIVER_ROOM_STATE_V1_PLAN.md'
+      - 'scripts/research/audit_active_roster_receiver_room_state_v1.py'
+      - '.github/workflows/research-active-roster-receiver-room-state-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: research-active-roster-receiver-room-state-v1
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyarrow scikit-learn joblib pyyaml scipy
+
+      - name: Compile frozen diagnostic
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_active_roster_receiver_room_state_v1.py
+
+      - name: Create workspace
+        run: |
+          rm -rf /tmp/room_state /tmp/hist_2022 /tmp/hist_2023
+          mkdir -p /tmp/room_state /tmp/hist_2022 /tmp/hist_2023
+
+      - name: Build independent discovery inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_historical_inputs.py --season 2022 --prior-season 2021 --weeks '1-18' --out-dir /tmp/hist_2022
+          python scripts/backtest/build_historical_inputs.py --season 2023 --prior-season 2022 --weeks '1-18' --out-dir /tmp/hist_2023
+
+      - name: Combine historical schedule and team state
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out=Path('/tmp/room_state')
+          for name in ['schedule_history.csv','team_weekly_history.csv']:
+              x=pd.concat([pd.read_csv('/tmp/hist_2022/'+name),pd.read_csv('/tmp/hist_2023/'+name)],ignore_index=True)
+              keys=['season','week','team']
+              x=x.sort_values(keys).drop_duplicates(keys,keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any(): raise RuntimeError(f'duplicate rows in {name}')
+              x.to_csv(out/name,index=False)
+          PY
+
+      - name: Build discovery player injury and weather history
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py --seasons 2021,2022,2023 --schedule /tmp/room_state/schedule_history.csv --out /tmp/room_state/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2022,2023 --out /tmp/room_state/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule /tmp/room_state/schedule_history.csv --out /tmp/room_state/weather_history.csv
+
+      - name: Run frozen room-state diagnostic
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p /tmp/room_state/result
+          python scripts/research/audit_active_roster_receiver_room_state_v1.py \
+            --player-logs /tmp/room_state/player_game_logs_history.csv \
+            --team-weekly /tmp/room_state/team_weekly_history.csv \
+            --schedule /tmp/room_state/schedule_history.csv \
+            --universe-2022 /tmp/hist_2022/pregame_universe \
+            --universe-2023 /tmp/hist_2023/pregame_universe \
+            --injuries /tmp/room_state/injuries_history.csv \
+            --weather /tmp/room_state/weather_history.csv \
+            --weeks '2-18' \
+            --out-dir /tmp/room_state/result
+          cat /tmp/room_state/result/RESULT.md
+
+      - name: Enforce discovery-only contract
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/room_state/result/summary.json'))
+          assert p['discovery_seasons']==[2022,2023]
+          assert p['confirmation_seasons_inspected']==[]
+          assert p['sportsbook_inputs_used']==0
+          assert p['parameters_fit']==0
+          assert p['candidate_variants_scored']==0
+          assert p['production_changed'] is False
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Upload diagnostic artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: active-roster-receiver-room-state-v1
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            /tmp/room_state/result/**
