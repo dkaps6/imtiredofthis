@@ -156,18 +156,25 @@ def symmetric_decomp(t_actual, y_actual, t_pred, e_pred):
     ep0 = np.asarray(e_pred, dtype=float)
     if not (np.isfinite(ta).all() and np.isfinite(ya).all() and np.isfinite(tp).all() and np.isfinite(ep0).all()):
         raise RuntimeError("non-finite symmetric decomposition inputs")
-    ea = np.divide(ya, ta, out=np.zeros_like(ya), where=ta > 0)
-    ep = ep0.copy()
 
-    actual_zero = ta <= 0
-    ea[actual_zero] = ep[actual_zero]
-
-    pred_zero_actual_pos = (tp <= 0) & (ta > 0)
-    ep[pred_zero_actual_pos] = ea[pred_zero_actual_pos]
-
-    opp = (ta - tp) * (ea + ep) / 2.0
-    eff = (ea - ep) * (ta + tp) / 2.0
     pred_y = tp * ep0
+    ea = np.divide(ya, ta, out=ep0.copy(), where=ta > 0)
+    opp = np.zeros_like(ya)
+    eff = np.zeros_like(ya)
+
+    # Frozen plan semantics:
+    # - when both target counts are positive, use the symmetric product identity;
+    # - when either side has zero targets, assign the entire yard residual to
+    #   opportunity rather than inventing an infinite/undefined efficiency.
+    regular = (ta > 0) & (tp > 0)
+    ep = ep0.copy()
+    opp[regular] = (ta[regular] - tp[regular]) * (ea[regular] + ep[regular]) / 2.0
+    eff[regular] = (ea[regular] - ep[regular]) * (ta[regular] + tp[regular]) / 2.0
+
+    edge = ~regular
+    opp[edge] = ya[edge] - pred_y[edge]
+    eff[edge] = 0.0
+
     gap = ya - pred_y - (opp + eff)
     max_gap = float(np.max(np.abs(gap))) if len(gap) else 0.0
     if max_gap > TOL:
