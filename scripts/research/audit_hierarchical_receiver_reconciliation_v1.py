@@ -21,14 +21,14 @@ import scripts.run_pricing_with_full_roster_universe_v1 as base
 import scripts.run_pricing_with_full_roster_universe_v2 as v2
 import scripts.run_pricing_with_full_roster_universe_v3_core as v3
 from scripts._opponent_map import canon_team
+from scripts.modeling.bayesian_v2 import apply_bayesian_to_metrics
 from scripts.modeling.qb_c2_production_adapter_v1 import (
     annotate_primary_qbs,
     apply_qb_c2_selector,
 )
-from scripts.research.audit_shared_pass_state_coherence_v1 import (
-    _build_synthetic_pricing_metrics,
-    _capture_c2_shadow,
-)
+from scripts.modeling.simulation_rules import apply_rules_to_metrics
+from scripts.research.audit_shared_pass_state_coherence_v1 import _capture_c2_shadow
+from scripts.utils.eligible_team_set_v1 import validate_current_team_set
 from scripts.simulation_c2_qb_candidate import PASS_CATCHER_POSITIONS
 from scripts.simulation_c2_qb_candidate import simulate_with_states
 
@@ -55,6 +55,60 @@ def _position_family(value: object) -> str:
     if p.startswith("QB"):
         return "QB"
     return p or "OTHER"
+
+
+def _build_current_eligible_synthetic_pricing_metrics() -> pd.DataFrame:
+    """Build the sportsbook-free current football frame under production eligibility."""
+    path = Path("data/player_form_consensus.csv")
+    if not path.exists() or path.stat().st_size <= 0:
+        raise RuntimeError("player_form_consensus missing")
+    form = pd.read_csv(path, low_memory=False)
+    form.columns = [str(col).strip().lower() for col in form.columns]
+    required = {"player", "team", "opponent", "season", "week", "position"}
+    missing = sorted(required - set(form.columns))
+    if missing:
+        raise RuntimeError(f"player_form_consensus missing columns: {missing}")
+    if "player_clean_key" not in form.columns:
+        form["player_clean_key"] = form["player"].map(
+            lambda x: "".join(ch.lower() for ch in str(x) if ch.isalnum())
+        )
+    form["team"] = form["team"].map(canon_team)
+    form["opponent"] = form["opponent"].map(canon_team)
+    form["_position_family"] = form["position"].map(_position_family)
+    form = form.loc[
+        form["_position_family"].isin({"QB", "RB", "FB", "WR", "TE"})
+    ].drop(columns="_position_family").copy()
+    if form.duplicated(["team", "player_clean_key"]).any():
+        raise RuntimeError("current eligible synthetic frame has duplicate player/team identities")
+    team_coverage = validate_current_team_set(
+        form["team"].dropna().astype(str).unique(),
+        label="hierarchical reconciliation synthetic football frame",
+    )
+    form["event_id"] = [
+        base._canonical_game(t, o, s, w)
+        for t, o, s, w in zip(
+            form["team"], form["opponent"], form["season"], form["week"]
+        )
+    ]
+    expected_games = int(team_coverage.get("canonical_games", 16))
+    if int(form["event_id"].nunique()) != expected_games:
+        raise RuntimeError(
+            "hierarchical reconciliation canonical-game coverage mismatch "
+            f"expected={expected_games} observed={form['event_id'].nunique()}"
+        )
+    form["market"] = "football_universe"
+    forbidden = sorted(base.FORBIDDEN_SIM_COLUMNS & set(form.columns))
+    if forbidden:
+        raise RuntimeError(
+            f"sportsbook fields leaked into current eligible synthetic frame: {forbidden}"
+        )
+    frame = apply_bayesian_to_metrics(form)
+    frame = apply_rules_to_metrics(frame)
+    if not pd.to_numeric(frame["bayes_applied"], errors="coerce").fillna(0).eq(1).all():
+        raise RuntimeError("Bayesian context missing from current eligible synthetic frame")
+    if not pd.to_numeric(frame["rules_applied"], errors="coerce").fillna(0).eq(1).all():
+        raise RuntimeError("rule context missing from current eligible synthetic frame")
+    return frame
 
 
 def _finite_float(value: object, label: str) -> float:
@@ -135,7 +189,7 @@ def _spearman(df: pd.DataFrame, x: str, y: str) -> float | None:
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
 
-    synthetic = _build_synthetic_pricing_metrics()
+    synthetic = _build_current_eligible_synthetic_pricing_metrics()
     base._identity_frame = v2._canonical_identity_frame
     universe, _, universe_audit = v3._build_with_promoted_entitlement_specialists(synthetic)
 
