@@ -56,21 +56,37 @@ Branch:
 
 Current branch head:
 
-`31e1854be631eeae3b5c6d25aa2c61b3a6c51925`
+`c1b48b90364e2d6f82b66271065cc7b359d725ca`
 
 Frozen plan:
 
 `docs/research/RECEIVER_ROOM_TARGETS_PER_PLAY_V1_2024_2025_CONFIRMATION_PLAN.md`
 
-Active run at handoff time:
+First confirmation run:
 
 `36173485673`
 
+Result: **MECHANICAL PRE-SCIENCE STOP** — no scorecard/result artifact was produced.
+
+Exact failure:
+`KeyError: 'prior_history_plays'`
+
+Cause: the confirmation script accidentally imported `build_room_history` and `strict_prior_room_rates` from the prior **targets-per-dropback** evaluator. That helper both lacked `prior_history_plays` and represented the wrong denominator semantics for this frozen candidate.
+
+Bounded mechanical repair:
+`c1b48b90364e2d6f82b66271065cc7b359d725ca`
+
+The repair changed only the helper imports to the already-frozen targets-per-play implementation. Formula/history/cohort/baseline ordering/gates are unchanged.
+
+Corrected authoritative rerun:
+
+`36174077739`
+
 Status at handoff creation:
 
-**IN PROGRESS**
+**IN PROGRESS — inside frozen 2024-2025 confirmation scoring**
 
-Do not duplicate it.
+Do not duplicate it. Do not interpret run `36173485673` scientifically.
 
 ### Exact unchanged formula
 
@@ -638,9 +654,9 @@ Targets-per-play V1:
 
 # 12. EXACT NEXT ACTION
 
-## First: inspect run 36173485673
+## First: inspect corrected rerun 36174077739
 
-Do not create another confirmation run unless the existing run is mechanically invalid.
+Do not create another confirmation run unless the corrected rerun itself is mechanically invalid. Run `36173485673` is superseded mechanical-only evidence.
 
 ### If it passes
 
@@ -760,7 +776,9 @@ These should guide the next chat:
 - Room targetable-rate: run `36171462750`, artifact `10880311081`
 - Active-roster room state: run `36172146432`, artifact `10880536886`
 - Room targets-per-play 2022-23: run `36172644864`, artifact `10880948137`
-- Active confirmation now: run `36173485673`
+- First confirmation run `36173485673`: mechanical pre-science stop due wrong helper import; no scorecard
+- Mechanical repair commit: `c1b48b90364e2d6f82b66271065cc7b359d725ca`
+- Corrected active confirmation now: run `36174077739`
 
 Latest Issue #535 checkpoint written by this chat:
 
@@ -799,7 +817,8 @@ At the moment this handoff was written:
 - targetable dropback team-level signal = still valid
 - targetable dropback full-stack = **FAILED CLOSED**
 - current priority = **2024-2025 unchanged room-targets-per-play confirmation**
-- run `36173485673` = **IN PROGRESS**
+- run `36173485673` = **MECHANICAL PRE-SCIENCE STOP / superseded**
+- corrected run `36174077739` = **IN PROGRESS**
 - no player-level integration has been authorized yet
 
 Continue from that exact state.
