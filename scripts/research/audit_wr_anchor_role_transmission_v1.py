@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Diagnostic-only audit of WR anchor / current-role transmission.
 
-The first audit launch proved that the frozen WR-R15 scored prediction artifact
-contains only its scored outcome subset and therefore can omit the true M38 WR1
-anchor. This bounded repair reconstructs the full fold-safe pregame WR state
-using the same historical context, explicit M38 entitlement, frozen WR-R15 fold
-coefficients, and exact strict-prior participation builder.
+Bounded mechanical repair history
+---------------------------------
+Run 1 proved the frozen WR-R15 scored artifact is a scored subset and can omit
+true M38 anchors. Run 2 rebuilt the full state through today's production
+helpers, but the frozen-authority parity gate correctly rejected that replay.
 
-The canonical WR-R15 scored artifact remains the numerical parity authority and
-the target-error authority. No new projection candidate is constructed or
-scored.
+This version intentionally imports the exact authority-era WR-R14/R15 builders
+from the WR-R15 run head (02c3dd1...) supplied first on PYTHONPATH by the
+workflow. It consumes the frozen WR-R15 fold coefficients rather than refitting.
+
+No scientific criterion, cohort, season, target label, or candidate is changed.
+Candidate variants scored remains zero.
 """
 from __future__ import annotations
 
@@ -20,24 +23,24 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from scripts._opponent_map import canon_team
-from scripts.backtest.component_predictions import build_mc_predictions
-from scripts.backtest.historical_context import build_historical_context_bundle
-from scripts.modeling.target_entitlement_v1 import materialize_target_entitlement
-from scripts.research.persist_historical_simulated_outcomes_v1 import _exact_week
-from scripts.research.persist_wr_te_production_order_historical_v1 import (
-    WR_FEATURES,
-    _load_fold_params,
-    _load_participation_snaps,
-    _wr_strict_prior_features,
-    apply_wr_fold,
+from scripts.backtest.evaluate_wr_r14_participation_entitlement_v1 import (
+    WR_POS,
+    _build_bundle_frame,
+    _strict_prior_snap_features,
+    _target_actuals,
 )
+from scripts.backtest.evaluate_wr_r15_wr1_anchor_participation_v1 import (
+    FEATURES as WR_FEATURES,
+    _apply_model as authority_apply_model,
+)
+from scripts.modeling.te_r5p_entitlement_adapter_v1 import _load_snaps
+from scripts.utils.canonical_names import canon_team
 
 VERSION = "WR_ANCHOR_ROLE_TRANSMISSION_AUDIT_V1"
+AUTHORITY_SOURCE_COMMIT = "02c3dd1a681d4ab2953683039e39830554f9ec9f"
 BASELINE_VARIANT = "M38_EXPLICIT_BASELINE"
 CANDIDATE_VARIANT = "WR_R15_WR1_ANCHORED_PARTICIPATION"
 SEASONS = (2023, 2024)
-WR_POS = {"WR", "LWR", "RWR", "SWR"}
 AUTH_KEYS = ["season", "week", "team", "player_clean_key"]
 FULL_KEYS = ["season", "week", "event_id", "team", "player_clean_key"]
 
@@ -52,21 +55,8 @@ def read(path: Path, label: str) -> pd.DataFrame:
     return x
 
 
-def optional(path: Path) -> pd.DataFrame:
-    if not path.exists() or path.stat().st_size <= 0:
-        return pd.DataFrame()
-    x = pd.read_csv(path, low_memory=False)
-    x.columns = [str(c).strip().lower() for c in x.columns]
-    return x
-
-
 def num(x: pd.Series) -> pd.Series:
     return pd.to_numeric(x, errors="coerce")
-
-
-def is_wr(value: object) -> bool:
-    p = "" if value is None or pd.isna(value) else str(value).upper().strip()
-    return p in WR_POS or p.startswith("WR")
 
 
 def prepare_authority(pred: pd.DataFrame) -> pd.DataFrame:
@@ -95,7 +85,9 @@ def prepare_authority(pred: pd.DataFrame) -> pd.DataFrame:
     c = x.loc[x["variant"].eq(CANDIDATE_VARIANT)].copy()
     for label, d in (("baseline", b), ("candidate", c)):
         if d.duplicated(AUTH_KEYS).any():
-            bad = d.loc[d.duplicated(AUTH_KEYS, keep=False), AUTH_KEYS].head(10).to_dict("records")
+            bad = d.loc[
+                d.duplicated(AUTH_KEYS, keep=False), AUTH_KEYS
+            ].head(10).to_dict("records")
             raise RuntimeError(f"{label} duplicate prediction identities: {bad}")
 
     b = b[AUTH_KEYS + ["entitlement_tgt_share", "pred_targets", "actual_targets"]].rename(
@@ -114,132 +106,144 @@ def prepare_authority(pred: pd.DataFrame) -> pd.DataFrame:
     )
     out = b.merge(c, on=AUTH_KEYS, how="inner", validate="one_to_one")
     if len(out) != len(b) or len(out) != len(c):
-        raise RuntimeError(
-            f"authority baseline/candidate identity mismatch b={len(b)} c={len(c)} joined={len(out)}"
-        )
-    label_gap = (
-        num(out["authority_actual_targets"]) - num(out["authority_candidate_actual_targets"])
-    ).abs()
-    if len(label_gap) and float(label_gap.max()) > 1e-12:
-        raise RuntimeError("authority baseline/candidate actual labels differ")
-    for c in [
+        raise RuntimeError("authority baseline/candidate identity universe mismatch")
+    if (
+        num(out["authority_actual_targets"])
+        - num(out["authority_candidate_actual_targets"])
+    ).abs().max() > 1e-12:
+        raise RuntimeError("authority actual labels differ by variant")
+    for col in [
         "authority_baseline_entitlement", "authority_candidate_entitlement",
         "authority_baseline_pred_targets", "authority_candidate_pred_targets",
         "authority_actual_targets",
     ]:
-        out[c] = num(out[c])
-        if out[c].isna().any():
-            raise RuntimeError(f"authority non-numeric values in {c}")
+        out[col] = num(out[col])
+        if out[col].isna().any():
+            raise RuntimeError(f"authority non-numeric values in {col}")
     return out
 
 
-def actual_target_labels(logs: pd.DataFrame, season: int, week: int) -> pd.DataFrame:
-    x = logs.copy()
-    x.columns = [str(c).strip().lower() for c in x.columns]
-    need = {"season", "week", "team", "player_clean_key", "targets"}
-    missing = need - set(x.columns)
-    if missing:
-        raise RuntimeError(f"historical player logs missing {sorted(missing)}")
-    x["season"] = num(x["season"])
-    x["week"] = num(x["week"])
-    x["team"] = x["team"].map(canon_team)
-    x["targets"] = num(x["targets"]).fillna(0.0)
-    z = x.loc[
-        x["season"].eq(int(season)) & x["week"].eq(int(week))
-    ].copy()
-    return (
-        z.groupby(["team", "player_clean_key"], as_index=False)
-        .agg(actual_targets=("targets", "sum"))
-    )
+class FrozenFoldModel:
+    """Exact predict() contract reconstructed from frozen scaler/ridge rows."""
+
+    def __init__(self, coef_path: Path, test_season: int):
+        x = read(coef_path, "WR-R15 fold coefficients")
+        x["test_season"] = num(x["test_season"]).astype("Int64")
+        g = x.loc[x["test_season"].eq(int(test_season))].copy()
+        if set(g["feature"].astype(str)) != set(WR_FEATURES):
+            raise RuntimeError(
+                f"WR-R15 feature contract mismatch test={test_season}"
+            )
+        g = g.set_index("feature").loc[WR_FEATURES]
+        self.mean = num(g["scaler_mean"]).to_numpy(float)
+        self.scale = num(g["scaler_scale"]).to_numpy(float)
+        self.coef = num(g["standardized_coefficient"]).to_numpy(float)
+        ints = num(g["ridge_intercept"]).dropna().unique()
+        if len(ints) != 1:
+            raise RuntimeError("WR-R15 frozen fold intercept is not unique")
+        self.intercept = float(ints[0])
+        if not np.isfinite(self.scale).all() or (self.scale <= 0).any():
+            raise RuntimeError("WR-R15 frozen scaler invalid")
+
+    def predict(self, x) -> np.ndarray:
+        if isinstance(x, pd.DataFrame):
+            a = x[WR_FEATURES].to_numpy(float)
+        else:
+            a = np.asarray(x, dtype=float)
+        return ((a - self.mean) / self.scale) @ self.coef + self.intercept
 
 
-def reconstruct_full_state(
+def is_wr(value: object) -> bool:
+    p = "" if value is None or pd.isna(value) else str(value).upper().strip()
+    return p in WR_POS or p.startswith("WR")
+
+
+def reconstruct_authority_state(
     *,
-    player_logs: pd.DataFrame,
-    team_weekly: pd.DataFrame,
-    schedule: pd.DataFrame,
-    universe_dirs: dict[int, Path],
-    injuries_history: pd.DataFrame,
-    weather_history: pd.DataFrame,
+    data_dirs: dict[int, Path],
+    logs_by_season: dict[int, pd.DataFrame],
     coefficients: Path,
 ) -> tuple[pd.DataFrame, dict]:
-    snaps, dup_rate, source_seasons = _load_participation_snaps()
+    snaps, dup_rate, source_seasons = _load_snaps()
     rows: list[pd.DataFrame] = []
-    audit_rows: list[dict] = []
-    total_future = 0
+    future_total = 0
+    fold_future_total = 0
+    max_anchor_gap = 0.0
+    max_room_gap = 0.0
 
     for season in SEASONS:
-        prior = season - 1
-        params = _load_fold_params(
-            coefficients,
-            test_season=int(season),
-            features=WR_FEATURES,
-            label="WR-R15",
-        )
+        model = FrozenFoldModel(coefficients, season)
+        logs = logs_by_season[int(season)]
         for week in range(1, 19):
-            u_path = universe_dirs[int(season)] / f"{season}_week_{week:02d}.csv"
-            if not u_path.exists():
-                raise RuntimeError(f"missing pregame universe: {u_path}")
-            universe = read(u_path, f"{season} W{week} pregame universe")
-            bundle = build_historical_context_bundle(
-                player_logs=player_logs,
-                team_weekly=team_weekly,
-                pregame_universe=universe,
-                schedule=schedule,
+            baseline = _build_bundle_frame(
                 season=int(season),
                 week=int(week),
-                prior_season=int(prior),
-                injuries=_exact_week(injuries_history, season, week),
-                weather=_exact_week(weather_history, season, week),
+                prior_season=int(season - 1),
+                data_dir=data_dirs[int(season)],
+                logs=logs,
             )
-            metrics = build_mc_predictions(bundle, iterations=20, seed=42 + int(week))
-            players = (
-                metrics.sort_values(["event_id", "team", "player_clean_key"])
-                .drop_duplicates(["event_id", "team", "player_clean_key"], keep="last")
-                .copy()
-            )
-            baseline, _ = materialize_target_entitlement(players)
             baseline["team"] = baseline["team"].map(canon_team)
-            baseline["season"] = int(season)
-            baseline["week"] = int(week)
-
             pos = baseline["position"].fillna("").astype(str).str.upper().str.strip()
             wr_base = baseline.loc[pos.map(is_wr)].copy()
             if wr_base.empty:
-                raise RuntimeError(f"{season} W{week} reconstructed zero WR rows")
+                raise RuntimeError(f"{season} W{week} authority replay found zero WR rows")
 
-            # Attach the exact WR-R15 strict-prior participation state to every
-            # WR, including the otherwise-immutable M38 anchor.
-            all_feat, future = _wr_strict_prior_features(wr_base.copy(), snaps)
-            total_future += int(future)
+            # Full-WR strict-prior participation state, including the immutable
+            # M38 anchor. Same source and cutoff function as the original R15.
+            all_feat, future = _strict_prior_snap_features(wr_base.copy(), snaps)
+            future_total += int(future)
             if int(future) != 0:
                 raise RuntimeError(
-                    f"{season} W{week} full-WR participation used same/future rows: {future}"
+                    f"{season} W{week} full-WR participation leakage={future}"
                 )
 
-            final, _, wr_audit = apply_wr_fold(
-                baseline.copy(), snaps=snaps, params=params
+            candidate, _, audits, fold_future = authority_apply_model(
+                baseline.copy(), snaps, model
             )
-            final["team"] = final["team"].map(canon_team)
-            final_pos = final["position"].fillna("").astype(str).str.upper().str.strip()
-            wr_final = final.loc[final_pos.map(is_wr)].copy()
+            fold_future_total += int(fold_future)
+            if int(fold_future) != 0:
+                raise RuntimeError(
+                    f"{season} W{week} R15 apply participation leakage={fold_future}"
+                )
+            if audits:
+                max_anchor_gap = max(
+                    max_anchor_gap,
+                    max(abs(float(a["anchor_entitlement_delta"])) for a in audits),
+                )
+                max_room_gap = max(
+                    max_room_gap,
+                    max(abs(float(a["wr_room_mass_gap"])) for a in audits),
+                )
+
+            candidate["team"] = candidate["team"].map(canon_team)
+            cpos = candidate["position"].fillna("").astype(str).str.upper().str.strip()
+            wr_final = candidate.loc[cpos.map(is_wr)].copy()
 
             key = ["event_id", "team", "player_clean_key"]
-            base_cols = key + [
-                "player", "position", "entitlement_tgt_share",
-            ]
-            feat_cols = key + [
-                "prior1_same_team", "prior1_same_team_offense_pct",
-                "prior1_same_team_offense_snaps", "prior_count_same_team",
-            ]
-            final_cols = key + ["entitlement_tgt_share"]
             z = (
-                wr_base[base_cols]
-                .rename(columns={"entitlement_tgt_share": "baseline_entitlement_tgt_share"})
-                .merge(all_feat[feat_cols], on=key, how="left", validate="one_to_one")
+                wr_base[key + ["player", "position", "entitlement_tgt_share"]]
+                .rename(
+                    columns={
+                        "entitlement_tgt_share": "baseline_entitlement_tgt_share"
+                    }
+                )
                 .merge(
-                    wr_final[final_cols].rename(
-                        columns={"entitlement_tgt_share": "candidate_entitlement_tgt_share"}
+                    all_feat[key + [
+                        "prior1_same_team",
+                        "prior1_same_team_offense_pct",
+                        "prior1_same_team_offense_snaps",
+                        "prior_count_same_team",
+                    ]],
+                    on=key,
+                    how="left",
+                    validate="one_to_one",
+                )
+                .merge(
+                    wr_final[key + ["entitlement_tgt_share"]].rename(
+                        columns={
+                            "entitlement_tgt_share":
+                                "candidate_entitlement_tgt_share"
+                        }
                     ),
                     on=key,
                     how="left",
@@ -248,52 +252,35 @@ def reconstruct_full_state(
             )
             z["season"] = int(season)
             z["week"] = int(week)
-            labels = actual_target_labels(player_logs, season, week)
+
+            actual = _target_actuals(logs, int(season), int(week))
+            actual["team"] = actual["team"].map(canon_team)
             z = z.merge(
-                labels, on=["team", "player_clean_key"], how="left", validate="one_to_one"
+                actual,
+                on=["team", "player_clean_key"],
+                how="left",
+                validate="one_to_one",
             )
             z["actual_targets"] = num(z["actual_targets"]).fillna(0.0)
             rows.append(z)
 
-            audit_rows.append({
-                "season": int(season),
-                "week": int(week),
-                "wr_rows": int(len(z)),
-                "full_wr_future_violations": int(future),
-                "wr_fold_same_future_participation": int(
-                    wr_audit.get("same_future_participation", -1)
-                ),
-                "wr1_anchor_max_abs_gap": float(
-                    wr_audit.get("m38_wr1_anchor_max_abs_gap", np.nan)
-                ),
-                "wr_room_mass_max_abs_gap": float(
-                    wr_audit.get("wr_room_mass_max_abs_gap", np.nan)
-                ),
-            })
-
-    detail = pd.concat(rows, ignore_index=True)
-    if detail.duplicated(FULL_KEYS).any():
-        bad = detail.loc[
-            detail.duplicated(FULL_KEYS, keep=False), FULL_KEYS
-        ].head(10).to_dict("records")
-        raise RuntimeError(f"reconstructed duplicate full WR identities: {bad}")
-
-    audit = {
+    full = pd.concat(rows, ignore_index=True)
+    if full.duplicated(FULL_KEYS).any():
+        raise RuntimeError("authority replay produced duplicate full WR identities")
+    return full.sort_values(FULL_KEYS).reset_index(drop=True), {
+        "authority_source_commit": AUTHORITY_SOURCE_COMMIT,
         "raw_snap_duplicate_rate": float(dup_rate),
         "snap_source_seasons": [int(x) for x in source_seasons],
-        "strict_prior_future_violations": int(total_future),
-        "reconstructed_wr_rows": int(len(detail)),
+        "strict_prior_future_violations": int(future_total),
+        "r15_apply_future_violations": int(fold_future_total),
+        "reconstructed_wr_rows": int(len(full)),
         "reconstructed_team_games": int(
-            detail[["season", "week", "event_id", "team"]].drop_duplicates().shape[0]
+            full[["season", "week", "event_id", "team"]]
+            .drop_duplicates().shape[0]
         ),
-        "max_wr1_anchor_gap": float(
-            pd.DataFrame(audit_rows)["wr1_anchor_max_abs_gap"].max()
-        ),
-        "max_wr_room_mass_gap": float(
-            pd.DataFrame(audit_rows)["wr_room_mass_max_abs_gap"].max()
-        ),
+        "max_anchor_entitlement_gap": float(max_anchor_gap),
+        "max_wr_room_mass_gap": float(max_room_gap),
     }
-    return detail.sort_values(FULL_KEYS).reset_index(drop=True), audit
 
 
 def authority_parity(
@@ -301,12 +288,13 @@ def authority_parity(
 ) -> tuple[pd.DataFrame, dict]:
     recon = full[
         AUTH_KEYS + [
-            "baseline_entitlement_tgt_share", "candidate_entitlement_tgt_share",
+            "baseline_entitlement_tgt_share",
+            "candidate_entitlement_tgt_share",
             "actual_targets",
         ]
     ].copy()
     if recon.duplicated(AUTH_KEYS).any():
-        raise RuntimeError("reconstructed authority join keys are not unique")
+        raise RuntimeError("authority replay parity keys are not unique")
     joined = authority.merge(recon, on=AUTH_KEYS, how="left", validate="one_to_one")
     missing = int(joined["baseline_entitlement_tgt_share"].isna().sum())
     if missing:
@@ -314,7 +302,7 @@ def authority_parity(
             joined["baseline_entitlement_tgt_share"].isna(), AUTH_KEYS
         ].head(10).to_dict("records")
         raise RuntimeError(
-            f"reconstruction missing {missing} scored authority rows sample={sample}"
+            f"authority replay missing scored rows n={missing} sample={sample}"
         )
     base_gap = (
         joined["authority_baseline_entitlement"]
@@ -324,21 +312,19 @@ def authority_parity(
         joined["authority_candidate_entitlement"]
         - joined["candidate_entitlement_tgt_share"]
     ).abs()
-    actual_gap = (
+    label_gap = (
         joined["authority_actual_targets"] - joined["actual_targets"]
     ).abs()
     audit = {
         "authority_rows": int(len(joined)),
         "authority_reconstruction_coverage": 1.0,
-        "max_baseline_entitlement_gap": float(base_gap.max()) if len(base_gap) else 0.0,
-        "max_candidate_entitlement_gap": float(cand_gap.max()) if len(cand_gap) else 0.0,
-        "max_actual_target_label_gap": float(actual_gap.max()) if len(actual_gap) else 0.0,
+        "max_baseline_entitlement_gap": float(base_gap.max()),
+        "max_candidate_entitlement_gap": float(cand_gap.max()),
+        "max_actual_target_label_gap": float(label_gap.max()),
     }
-    # This is a mechanical authority reconstruction. Fail closed if the current
-    # replay cannot reproduce the frozen OOS entitlement values.
-    if audit["max_baseline_entitlement_gap"] > 1e-8:
+    if audit["max_baseline_entitlement_gap"] > 1e-10:
         raise RuntimeError(f"baseline authority parity failed: {audit}")
-    if audit["max_candidate_entitlement_gap"] > 1e-8:
+    if audit["max_candidate_entitlement_gap"] > 1e-10:
         raise RuntimeError(f"candidate authority parity failed: {audit}")
     if audit["max_actual_target_label_gap"] > 1e-12:
         raise RuntimeError(f"actual-label authority parity failed: {audit}")
@@ -407,8 +393,7 @@ def build_team_games(
         season, week, event_id, team = keys
         anchor = deterministic_leader(g, "baseline_entitlement_tgt_share")
         if not anchor:
-            raise RuntimeError(f"missing reconstructed M38 anchor {keys}")
-
+            raise RuntimeError(f"missing M38 anchor {keys}")
         eligible = (
             g["prior1_same_team"].fillna(False).astype(bool)
             & num(g["prior1_same_team_offense_pct"]).notna()
@@ -417,10 +402,7 @@ def build_team_games(
             g, "prior1_same_team_offense_pct", eligibility=eligible
         )
         if not participation:
-            # No imputation: this team-game is outside the frozen participation-
-            # transmission cohort and is accounted for in coverage.
             continue
-
         candidate_leader = deterministic_leader(
             g, "candidate_entitlement_tgt_share"
         )
@@ -469,7 +451,6 @@ def build_team_games(
             "participation_leader_candidate_rank": rank_for_player(
                 g, participation, "candidate_entitlement_tgt_share"
             ),
-            "max_actual_targets": actual_max,
         }
         rec["participation_minus_anchor_actual_targets"] = (
             rec["participation_leader_actual_targets"]
@@ -489,13 +470,7 @@ def build_team_games(
     )
     out = out.loc[out["authority_scored_wr_rows"].notna()].copy()
     if out.empty:
-        raise RuntimeError("zero reconstructed team-games overlap scored WR-R15 authority")
-    out["baseline_target_abs_error_per_scored_wr"] = (
-        out["baseline_target_abs_error_sum"] / out["authority_scored_wr_rows"]
-    )
-    out["candidate_target_abs_error_per_scored_wr"] = (
-        out["candidate_target_abs_error_sum"] / out["authority_scored_wr_rows"]
-    )
+        raise RuntimeError("zero full-state team-games overlap scored WR-R15 authority")
     return out.sort_values(group_cols).reset_index(drop=True)
 
 
@@ -545,9 +520,7 @@ def cohort_row(d: pd.DataFrame, scope: str, cohort: str) -> dict:
     }
 
 
-def summaries(
-    team_games: pd.DataFrame,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+def summaries(team_games: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     cohort_rows = []
     season_rows = []
     for scope, d in [("POOLED", team_games)] + [
@@ -598,32 +571,22 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--authority-predictions", type=Path, required=True)
     ap.add_argument("--wr-coefficients", type=Path, required=True)
-    ap.add_argument("--player-logs", type=Path, required=True)
-    ap.add_argument("--team-weekly", type=Path, required=True)
-    ap.add_argument("--schedule", type=Path, required=True)
-    ap.add_argument("--universe-2023", type=Path, required=True)
-    ap.add_argument("--universe-2024", type=Path, required=True)
-    ap.add_argument("--injuries", type=Path, required=True)
-    ap.add_argument("--weather", type=Path, required=True)
+    ap.add_argument("--data-2023", type=Path, required=True)
+    ap.add_argument("--logs-2023", type=Path, required=True)
+    ap.add_argument("--data-2024", type=Path, required=True)
+    ap.add_argument("--logs-2024", type=Path, required=True)
     ap.add_argument("--out-dir", type=Path, required=True)
     args = ap.parse_args()
 
     authority = prepare_authority(
         read(args.authority_predictions, "WR-R15 OOS predictions")
     )
-    player_logs = read(args.player_logs, "historical player logs")
-    team_weekly = read(args.team_weekly, "historical team-week")
-    schedule = read(args.schedule, "historical schedule")
-    injuries = optional(args.injuries)
-    weather = optional(args.weather)
-
-    full, reconstruction_audit = reconstruct_full_state(
-        player_logs=player_logs,
-        team_weekly=team_weekly,
-        schedule=schedule,
-        universe_dirs={2023: args.universe_2023, 2024: args.universe_2024},
-        injuries_history=injuries,
-        weather_history=weather,
+    full, reconstruction_audit = reconstruct_authority_state(
+        data_dirs={2023: args.data_2023, 2024: args.data_2024},
+        logs_by_season={
+            2023: read(args.logs_2023, "2023 fold player logs"),
+            2024: read(args.logs_2024, "2024 fold player logs"),
+        },
         coefficients=args.wr_coefficients,
     )
     parity_rows, parity_audit = authority_parity(full, authority)
@@ -660,7 +623,8 @@ def main() -> int:
         "mismatch_final_target_error_ge5pct_worse_than_match":
             float(mismatch_err) >= 1.05 * float(match_err),
         "strict_prior_future_violations_zero":
-            int(reconstruction_audit["strict_prior_future_violations"]) == 0,
+            int(reconstruction_audit["strict_prior_future_violations"]) == 0
+            and int(reconstruction_audit["r15_apply_future_violations"]) == 0,
         "sportsbook_inputs_zero": True,
         "candidate_variants_scored_zero": True,
     }
@@ -694,8 +658,8 @@ def main() -> int:
         "sportsbook_inputs_used": 0,
         "production_mutations": 0,
         "mechanical_repair": (
-            "reconstruct_full_fold_safe_WR_universe_to_restore_true_M38_anchor;"
-            "frozen_criteria_unchanged"
+            "exact_authority-era_R14_R15_source_replay;"
+            "frozen_science_unchanged"
         ),
         "criteria": criteria,
         "pooled": {
@@ -737,8 +701,7 @@ def main() -> int:
         "- candidate variants scored: **0**",
         "- parameters fit: **0**",
         "- sportsbook inputs: **0**",
-        "- first-run stop: **MECHANICAL / INCOMPLETE SCORED ARTIFACT OMITTED TRUE ANCHORS**",
-        "- bounded repair: **FULL FOLD-SAFE AUTHORITY RECONSTRUCTION; SCIENCE UNCHANGED**",
+        f"- authority source commit: **{AUTHORITY_SOURCE_COMMIT}**",
         "",
         "## Authority parity",
         "",
