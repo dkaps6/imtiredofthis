@@ -4,105 +4,106 @@ GitHub is canonical; chat memory is secondary.
 
 ---
 
-## ACTIVE CHECKPOINT — 2026-09-25 — RECEIVER ROOM TARGETS-PER-PLAY CONFIRMATION ACTIVE
+## ACTIVE CHECKPOINT — 2026-09-25 — RECEIVER ROOM TARGETS-PER-PLAY FAILED CLOSED / WR REGIME DIAGNOSTIC NEXT
 
 **Read this detailed handoff next:**
 
 `docs/handoffs/NFL_HANDOFF_2026-09-25_RECEIVER_ROOM_FRONTIER_CURRENT.md`
 
-**Compact prompt for a fresh chat:**
+**Compact next-chat prompt:**
 
 `docs/handoffs/NEXT_CHAT_PROMPT_2026-09-25_RECEIVER_ROOM_FRONTIER.md`
 
-This checkpoint supersedes the older Rush-Pool/TE checkpoints for immediate execution.
+This supersedes all older checkpoints for immediate execution.
 
 ### Current state in one screen
 
-- production behavior is unchanged from main `5421ba24b28aeff88e1f6466d93970f01264ebfa` before this docs-only handoff
-- Receiver Targetable-Dropback team-volume science replicated in 2022, 2023, 2024, 2025, but uniform player-level translation **FAILED CLOSED**
-- Current-Stack Receiver Compensation Audit proved the valid team-volume signal collides with WR-room / WR1 / Q4 underallocation
-- WR1 current-state has real absolute-share signal, but a WR1-only fixed-room candidate was **NOT justified**
-- Receiver Room Targetable-Rate V1 improved room MAE/tails but **FAILED CLOSED** on bias because the fixed-57% projected-dropback denominator is negatively biased
-- Active-Roster Receiver Room State V1 is **NOT SUPPORTED / CLOSED**
-- Receiver Room Targets-Per-Play V1 on 2022-2023 is **SUPPORTED**
-- authoritative discovery run: `36172644864`
-- artifact: `10880948137`
-- result: `docs/research/RECEIVER_ROOM_TARGETS_PER_PLAY_V1_RESULT.md`
-- exact formula:
-  `R_g_play = prior room targets / prior offensive plays`
-  `candidate room targets = projected offensive plays * R_g_play`
-- pooled macro room MAE `3.337876 -> 3.168127`
-- pooled macro p90 `6.736290 -> 6.434198`
-- pooled macro abs bias `0.323767 -> 0.253029`
-- WR/TE/RB_FB pooled MAE all improved
-- all 23 frozen discovery gates passed
+- production behavior unchanged by recent receiver research
+- docs-only continuity main before this final refresh: `67b9aa349258aff78cb0b588432eab91a3f1da78`
+- Receiver Targetable-Dropback team-volume science replicated across 2022-2025, but uniform player translation FAILED CLOSED
+- compensation audit showed the valid team-volume signal collides with WR-room / WR1 / Q4 underallocation
+- Active-Roster Receiver Room State V1 is NOT SUPPORTED / CLOSED
+- WR1 current-state has real absolute-share signal, but WR1-only fixed-room candidate is NOT justified
+- Room Targetable-Rate/dropback-denominator V1 FAILED CLOSED
+- Receiver Room Targets-Per-Play V1 passed 2022-2023 discovery but **FAILED CLOSED** unchanged 2024-2025 confirmation
 
-### Active run
+### Authoritative failed confirmation
 
 Branch:
 `research-receiver-room-targets-per-play-v1-confirm-2024-2025`
 
-First run head:
-`31e1854be631eeae3b5c6d25aa2c61b3a6c51925`
+Initial run `36173485673`:
+- mechanical pre-science stop only
+- wrong targets-per-dropback helper import
+- no scorecard/result artifact
 
-First run:
-`36173485673`
-
-Result:
-**MECHANICAL PRE-SCIENCE STOP** — wrong targets-per-dropback helper import caused `KeyError: prior_history_plays`; no scorecard/result artifact.
-
-Bounded repair commit / current branch head:
+Bounded repair:
 `c1b48b90364e2d6f82b66271065cc7b359d725ca`
 
-Corrected rerun:
-`36174077739`
+Authoritative corrected run:
+- run `36174077739`
+- job `108200327879`
+- artifact `10881825507`
+- digest `sha256:3956a8ed9cc2191714787ecab235831b5f9ce39c59f3e08ba260ee2918f2de9c`
+- result: `docs/research/RECEIVER_ROOM_TARGETS_PER_PLAY_V1_2024_2025_CONFIRMATION_RESULT.md`
+- result commit: `fb5a9196d02a69e87dd6ec80418bd01865c3600a`
 
-Status when this checkpoint was refreshed:
-**IN PROGRESS**
+Disposition:
+`RECEIVER_ROOM_TARGETS_PER_PLAY_V1_2024_2025_FAILED_CLOSED`
 
-Do not duplicate it. Do not interpret run `36173485673` scientifically.
+Pooled:
+- WR MAE `4.535565 -> 4.582359` — worse
+- TE `2.875251 -> 2.804996`
+- RB_FB `2.346042 -> 2.173209`
+- macro MAE `3.252286 -> 3.186854`
+- macro p90 `6.646801 -> 6.651926` — worse
+- macro abs bias `0.404433 -> 0.325998`
+- summed-room MAE `6.127841 -> 5.983952`
+- summed-room p90 `12.704084 -> 12.049116`
 
-2024 confirmation baseline:
-- M38
-- fold-safe TE-R5P
-- authorized fold-safe WR-R15
+2024 decisive issue:
+- WR MAE `4.561046 -> 4.724467` worsened
 
-2025 confirmation baseline:
-- M38
-- fold-safe TE-R5P
-- **NO retrospective WR-R15**
+2025:
+- WR MAE `4.510085 -> 4.440251` improved
 
-Exact candidate/formula/history is unchanged from 2022-2023. There are 27 frozen confirmation gates.
+Frozen failures:
+1. 2024 WR room MAE did not improve
+2. pooled WR room MAE did not improve
+3. pooled macro p90 nonworse gate failed
+
+All provenance/specialist/no-sportsbook/no-fit gates passed.
 
 ### Exact next action
 
-1. Inspect corrected rerun `36174077739`.
-2. If all gates pass, document exact lineage and freeze a separate player/full-stack integration **before scoring**.
-3. Player integration must preserve confirmed room totals and allocate inside each room with current authorized within-room entitlement.
-4. Preserve M38 / TE-R5P / authorized WR-R15 ordering, catch rate, YPT, QB, rushing and ATD.
-5. Re-evaluate dependent RB rush+receiving through current RB V2.
-6. Explicitly protect WR/TE/RB receptions, rec-yard MAE/p90/bias, Q4 tails and RB combo tails.
-7. Zero sportsbook, parameters fit 0, one candidate.
-8. Historical qualification still requires prospective 2026 confirmation before production promotion.
-9. If confirmation fails scientifically, close exact targets-per-play V1 with no rescue.
-10. If it fails mechanically, repair only the exact bounded provenance/plumbing defect.
+Do **not** build a player/full-stack integration.
 
-### Permanent anti-retest reminders
+Run a **diagnostic-only WR room regime-instability audit**.
 
-Do not reopen:
-- uniform targetable-dropback player thinning
-- official-attempt pool
-- room targetable-rate/dropback-denominator V1
-- active-roster room-state V1
-- WR1-only current-state anchor candidate
-- C1 / C3
-- One-Pass V1
-- hierarchical mean reconciliation
-- generic attempt-semantics C4
-- Migration 18/20/21 pass-rate retuning
-- fixed-57% global pass-rate replacement
-- retrospective RB router/threshold research closed by M96E
-- Rush Pool V1 rescue variants
+Goal:
+explain why WR room targets-per-play was helpful in 2022/2023/2025 but harmful in 2024, while TE/RB_FB remain directionally stable.
+
+Diagnostic may examine strictly pregame structural variables such as:
+- prior-season -> current-season WR room share/rate drift
+- top-target / WR-room roster turnover
+- QB change
+- coordinator/play-caller change only if a reliable leakage-safe source already exists
+- speed of within-season adaptation
+- whether 2024 misses are broad or transition-clustered
+
+Candidate variants scored = **0**.
+
+No rescue:
+- no exclude-2024 route
+- no WR-specific multiplier
+- no recency/shrinkage/window search
+- no fixed57 blend
+- no bias offset
+- no WR1/Q4 exemption
+- no 2026 fit
+- no sportsbook routing
+
+If no strong structural explanation emerges, close this room-history family and move to another architecture frontier.
 
 ### Memory-efficient start rule
 
@@ -110,8 +111,8 @@ Read only:
 1. `AGENTS.md`
 2. this top checkpoint
 3. `docs/handoffs/NFL_HANDOFF_2026-09-25_RECEIVER_ROOM_FRONTIER_CURRENT.md`
-4. Issue #535 from `5834428368` onward, especially `5837470764`
-5. live active run/branch state
+4. Issue #535 from `5834428368` onward, especially `5837631919`
+5. live main / relevant research state
 
 Then work. Do not recursively load older handoffs.
 
