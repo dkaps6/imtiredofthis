@@ -236,19 +236,52 @@ def _build_ab_states(
 ) -> tuple[StateSimulationResult, StateSimulationResult, dict]:
     selector_week = selector_week.copy()
     selector_week["team"] = selector_week["team"].map(canon_team)
+    frame = final.copy()
+    frame["team"] = frame["team"].map(canon_team)
+    frame["position_family"] = frame["position"].map(_pos)
+
+    selector_teams = set(selector_week["team"].astype(str))
+    football_teams = set(frame["team"].dropna().astype(str))
+    extra_selector = sorted(selector_teams - football_teams)
+    if extra_selector:
+        raise RuntimeError(f"historical selector contains teams absent from football universe: {extra_selector}")
+
+    # C2 consumes one deterministic RNG stream across the entire football slate.
+    # Preserve that exact draw order by building shadow state for every football
+    # team. Teams outside the preserved Phase-C selector universe receive only a
+    # deterministic filler anchor; their shadow outputs are never installed.
     anchors: dict[tuple[str, str], float] = {}
     qb_keys: dict[str, tuple[str, str]] = {}
-    for _, srow in selector_week.iterrows():
-        team = canon_team(srow["team"])
-        game, qpk = _qb_key_for_team(state, final, srow)
+    selector_by_team = {canon_team(r.team): r for r in selector_week.itertuples(index=False)}
+    for team in sorted(football_teams):
+        part = frame.loc[frame["team"].eq(team)].copy()
+        events = part["event_id"].dropna().astype(str).unique().tolist()
+        if len(events) != 1:
+            raise RuntimeError(f"expected one historical event for team={team}, got {events}")
+        game = str(events[0])
+        if team in selector_by_team:
+            srow = pd.Series(selector_by_team[team]._asdict())
+            game, qpk = _qb_key_for_team(state, frame, srow)
+            qb_keys[team] = (game, qpk)
+        else:
+            q = part.loc[part["position_family"].eq("QB")].copy()
+            available = sorted(
+                {
+                    str(r.player_clean_key)
+                    for r in q[["player_clean_key"]].drop_duplicates().itertuples(index=False)
+                    if (game, str(r.player_clean_key), "pass_yards") in state.values
+                }
+            )
+            if not available:
+                raise RuntimeError(f"historical selector-ineligible team has no canonical QB array team={team}")
+            qpk = available[0]
         arr = np.asarray(state.values[(game, qpk, "pass_yards")], dtype=float)
         mean = float(arr.mean())
         if not np.isfinite(mean) or mean <= 0:
             raise RuntimeError(f"invalid canonical QB anchor team={team} mean={mean}")
         anchors[(game, team)] = mean
-        qb_keys[team] = (game, qpk)
 
-    shadow = _capture_c2_shadow(state, final, anchors)
+    shadow = _capture_c2_shadow(state, frame, anchors)
     baseline_values = {k: np.asarray(v).copy() for k, v in state.values.items()}
     candidate_values = {k: np.asarray(v).copy() for k, v in state.values.items()}
 
@@ -262,10 +295,6 @@ def _build_ab_states(
     max_rush_att_gap = 0.0
     max_rush_yards_gap = 0.0
     changed_receiver_keys = 0
-
-    frame = final.copy()
-    frame["team"] = frame["team"].map(canon_team)
-    frame["position_family"] = frame["position"].map(_pos)
 
     for team, (game, qpk) in qb_keys.items():
         selected = team in selected_teams
@@ -354,7 +383,9 @@ def _build_ab_states(
     candidate = StateSimulationResult(candidate_values, state.iterations, state.team_states)
     audit = {
         "selected_teams": int(len(selected_teams)),
-        "total_teams": int(len(qb_keys)),
+        "selector_eligible_teams": int(len(selector_teams)),
+        "selector_ineligible_teams": int(len(football_teams - selector_teams)),
+        "total_teams": int(len(football_teams)),
         "selected_semantic_violations": int(selected_semantic_violations),
         "max_selected_pass_identity_gap": float(max_identity_gap),
         "max_qb_baseline_candidate_gap": float(max_qb_baseline_candidate_gap),
@@ -513,10 +544,12 @@ def evaluate_season(
         selector_week = selector.loc[
             selector["season"].eq(int(season)) & selector["week"].eq(int(week))
         ].copy()
-        team_count = final["team"].map(canon_team).nunique()
-        if len(selector_week) != team_count:
+        football_teams = set(final["team"].map(canon_team).dropna().astype(str))
+        selector_teams = set(selector_week["team"].map(canon_team).dropna().astype(str))
+        extra_selector = sorted(selector_teams - football_teams)
+        if extra_selector:
             raise RuntimeError(
-                f"{season} W{week:02d} selector team count mismatch selector={len(selector_week)} football={team_count}"
+                f"{season} W{week:02d} selector contains teams absent from football universe: {extra_selector}"
             )
 
         baseline, candidate, ab_audit = _build_ab_states(state, final, selector_week)
@@ -644,6 +677,8 @@ def evaluate_season(
     audit = pd.DataFrame(audits)
     scope = {
         "selected_teams": int(audit["selected_teams"].sum()),
+        "selector_eligible_team_games": int(audit["selector_eligible_teams"].sum()),
+        "selector_ineligible_team_games": int(audit["selector_ineligible_teams"].sum()),
         "total_team_games": int(audit["total_teams"].sum()),
         "selected_semantic_violations": int(audit["selected_semantic_violations"].sum()),
         "max_selected_pass_identity_gap": float(audit["max_selected_pass_identity_gap"].max()),
