@@ -78,6 +78,28 @@ def aggregate_tgt_state(logs: pd.DataFrame) -> pd.DataFrame:
     return g
 
 
+def attach_strict_prior_identity(frame: pd.DataFrame, logs: pd.DataFrame, season:int, week:int) -> pd.DataFrame:
+    out=frame.copy()
+    s=pd.to_numeric(logs["season"],errors="coerce")
+    w=pd.to_numeric(logs["week"],errors="coerce")
+    h=logs.loc[s.lt(season)|(s.eq(season)&w.lt(week)),
+               ["season","week","team","player_clean_key","player_identity_key"]].copy()
+    h["team"]=h["team"].map(canon_team)
+    h["player_clean_key"]=h["player_clean_key"].astype(str)
+    h["player_identity_key"]=h["player_identity_key"].astype(str)
+    h=h.loc[h.player_identity_key.ne("")].copy()
+    exact=(h.sort_values(["season","week"])
+             .drop_duplicates(["team","player_clean_key"],keep="last")
+             [["team","player_clean_key","player_identity_key"]])
+    out=out.merge(exact,on=["team","player_clean_key"],how="left",validate="one_to_one")
+    missing=out.player_identity_key.isna()|out.player_identity_key.astype(str).eq("")
+    if missing.any():
+        u=(h.groupby("player_clean_key")["player_identity_key"].agg(lambda x: sorted(set(x))))
+        unique={k:v[0] for k,v in u.items() if len(v)==1}
+        out.loc[missing,"player_identity_key"]=out.loc[missing,"player_clean_key"].map(unique)
+    return out
+
+
 def state_for_week(logs: pd.DataFrame, season:int, week:int) -> pd.DataFrame:
     s=pd.to_numeric(logs["season"],errors="coerce")
     w=pd.to_numeric(logs["week"],errors="coerce")
@@ -214,10 +236,9 @@ def main()->int:
                 raise RuntimeError(f"explicit entitlement mass drift {mass_gap}")
             explicit["team"]=explicit["team"].map(canon_team)
             explicit["position"]=explicit["position"].astype(str).str.upper().str.strip()
+            explicit=attach_strict_prior_identity(explicit,logs,season,int(week))
             wr=explicit.loc[explicit.position.isin(WR_POS)].copy()
             if wr.empty: raise RuntimeError(f"{season} W{week} zero WR rows")
-            if "player_identity_key" not in wr.columns:
-                raise RuntimeError("explicit entitlement missing stable identity")
             state=state_for_week(logs,season,int(week))
             actual,room_actual=actual_week(logs,season,int(week))
             actcols=["player_identity_key","team","targets","actual_tgt_share"]
