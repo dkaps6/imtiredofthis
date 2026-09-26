@@ -57,3 +57,31 @@ No scientific V1 verdict exists. The hypothesis remains open.
 Use the canonical current-player-availability pipeline to freeze the next prospective 2026 slate **before kickoff**. If that frozen slate contains at least one definitive `UNAVAILABLE_*` RB/FB with strict-prior rush-share evidence and at least one eligible successor with strict-prior snap evidence, materialize the no-outcome vacancy state immediately and lock it. Attach target-game outcomes only after the game is complete, then grade once against the frozen V1 gates.
 
 If the next slate again contains no qualifying vacancy event, record `NO_EVENT` and continue prospective capture; do not manufacture a retrospective cohort.
+
+
+## Prospective 2026 Week-3 capture — 2026-09-25
+
+A newer canonical no-live-odds Full Slate artifact was inspected prospectively while Week 3 remained in progress:
+
+- Full Slate run: `36179691351`
+- artifact: `10883314750` (`run_36179691351`)
+- digest: `sha256:7d5b10af63c9a64d58b002f7a5cfad247d1cb5b80f0ec3ee806f412293321645`
+- main head: `6ee39bf86fcf031eb498f10e3e111b71ebcd40c3`
+- availability generated: `2026-09-25T19:28:25.523654+00:00`
+- season/week from game certification: **2026 / Week 3**
+- sportsbook inputs used: **0**
+
+Availability state at this capture:
+- availability rows: **463**
+- definitive unavailable players: **9**
+- definitive-unavailable RB/FB players: **0**
+- game certification: **16** games total; **15** still `NOT_YET_REQUIRED`; ATL-GB already `KICKED_OFF_LOCKED`
+- production-eligible output excludes the already-locked ATL/GB game
+
+Disposition for this timestamped capture:
+
+**`RB_VACANCY_V1_WEEK3_2026_09_25_NO_EVENT_ASOF_CAPTURE`**
+
+This is a legitimate prospective no-event observation, not a scientific failure. Because 15 games had not yet reached their final pre-kickoff availability-certification window, it is also **not** a declaration that all of Week 3 is permanently event-free. Continue prospective capture as the remaining games approach kickoff.
+
+Do not broaden V1 to DOUBTFUL/QUESTIONABLE, infer vacancy from later target-game participation, or attach outcomes when the frozen definitive-unavailable RB/FB condition is absent.
