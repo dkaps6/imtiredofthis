@@ -1,8 +1,8 @@
-name: Verify Week 3 Identity Fix
+name: Diagnose Week 3 Full Slate
 
-# Reproduces the Full Slate step-28 identity-semantics failure against the
-# odds already fetched and preserved by run 36275289734. No OddsAPI request
-# is made here, so this costs no credits.
+# Reproduces a Full Slate failure against odds a paid run already preserved,
+# so debugging costs no OddsAPI credits. Restores the artifact verbatim and
+# re-runs only the step under investigation.
 
 on:
   workflow_dispatch:
@@ -16,11 +16,12 @@ permissions:
 
 env:
   SOURCE_RUN_ID: '36276421905'
+  SEASON: '2026'
 
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -32,69 +33,43 @@ jobs:
       - run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install nflreadpy
 
-      - name: Restore the preserved paid run
+      - name: Restore the preserved paid run verbatim
         run: |
           set -euo pipefail
           rm -rf /tmp/fs && mkdir -p /tmp/fs
           gh run download "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
             --name "run_${SOURCE_RUN_ID}" --dir /tmp/fs
-          cp -r /tmp/fs/data/. data/ 2>/dev/null || true
-          mkdir -p outputs && cp -r /tmp/fs/outputs/. outputs/ 2>/dev/null || true
-          echo "restored: $(find /tmp/fs -type f | wc -l) files"
+          test -d /tmp/fs/data && test -d /tmp/fs/outputs
+          rm -rf data outputs && mkdir -p data outputs
+          cp -a /tmp/fs/data/. data/
+          cp -a /tmp/fs/outputs/. outputs/
+          echo "restored $(find data outputs -type f | wc -l) files"
 
-      - name: Reproduce the identity-semantics validator
+      - name: State of the boundary this run reached
         run: |
-          set +e
           export PYTHONPATH="${PWD}"
-          python scripts/validate_player_identity_semantics_v1.py 2>&1 | tail -60
-          echo "=== exit code: ${PIPESTATUS[0]} ==="
-
-      - name: Confirm the compact boundary and identity audit are clean
-        run: |
-          set -euo pipefail
-          export PYTHONPATH="${PWD}"
-          python scripts/validate_player_identity_semantics_v1.py
           python - <<'EOF'
-          import pandas as pd
-          q = pd.read_csv("data/live_odds_placeholder_rows.csv")
-          print("quarantine reasons:", q["quarantine_reason"].value_counts().to_dict())
-          c = pd.read_csv("outputs/props_raw_compact.csv")
-          print("model-facing compact rows:", len(c))
+          import pandas as pd, pathlib
+          q = pathlib.Path("data/live_odds_placeholder_rows.csv")
+          if q.exists():
+              d = pd.read_csv(q)
+              print("quarantine reasons:", d["quarantine_reason"].value_counts().to_dict())
+              un = d[d["quarantine_reason"].eq("UNROSTERED_NONCORE_PLAYER")]
+              if len(un):
+                  cols = [c for c in ("player","team_abbr","market") if c in un.columns]
+                  print("unrostered non-core:")
+                  print(un[cols].drop_duplicates().to_string(index=False))
+          for f in ("outputs/props_raw_compact.csv", "data/metrics_ready.csv",
+                    "outputs/props_pricing_offers.csv", "outputs/props_priced_clean.csv"):
+              p = pathlib.Path(f)
+              print(f"  {f}: {'ABSENT' if not p.exists() else str(len(pd.read_csv(p, low_memory=False))) + ' rows'}")
           EOF
 
-      - name: (skipped) re-materialize
-        run: |
-          set -euo pipefail
-          export PYTHONPATH="${PWD}"
-          # Clear the idempotent-reuse short circuit so the rule actually runs
-          # against the preserved provider rows rather than replaying the
-          # compact layer the failed run already wrote.
-          python - <<'EOF'
-          import json, pathlib
-          p = pathlib.Path("data/live_odds_status.json")
-          s = json.loads(p.read_text())
-          s.pop("production_compact_disposition", None)
-          p.write_text(json.dumps(s, indent=2, sort_keys=True) + "\n")
-          print("cleared production_compact_disposition for a real re-materialization")
-          EOF
-          python scripts/materialize_live_props_for_model_v1.py
-          python - <<'EOF'
-          import pandas as pd
-          q = pd.read_csv("data/live_odds_placeholder_rows.csv")
-          print("quarantine reasons:", q["quarantine_reason"].value_counts().to_dict())
-          un = q[q["quarantine_reason"].eq("UNROSTERED_NONCORE_PLAYER")]
-          print(f"\nunrostered non-core rows: {len(un)}")
-          if len(un):
-              cols = [c for c in ("player","team_abbr","market") if c in un.columns]
-              print(un[cols].drop_duplicates().to_string(index=False))
-          c = pd.read_csv("outputs/props_raw_compact.csv")
-          print(f"\nmodel-facing compact rows: {len(c)}")
-          EOF
-
-      - name: Reproduce the pricing step that failed
+      - name: Reproduce the failing pricing step
         run: |
           set +e
           export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
-          python scripts/run_pricing_with_full_roster_universe_v3.py --season 2026 2>&1 | tail -45
+          python scripts/run_pricing_with_full_roster_universe_v3.py --season "${SEASON}" 2>&1 | tail -50
           echo "=== pricing exit: ${PIPESTATUS[0]} ==="
