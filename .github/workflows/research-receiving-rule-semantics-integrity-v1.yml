@@ -49,7 +49,7 @@ jobs:
           test -s /tmp/week3/run_36204768034/data/player_form_consensus.csv
           test -s /tmp/week3/run_36204768034/data/model_context_bridge.csv
           test -s /tmp/week3/run_36204768034/data/team_context_v3.csv
-          test -s /tmp/baseline_authority/run_36276121522/target_entitlement_rows.csv
+          test -s /tmp/baseline_authority/availability-opportunity-rule-order-v1/target_entitlement_rows.csv
           cp -a /tmp/week3/run_36204768034/data/. data/
 
       - name: Run frozen no-outcome structural ablation
