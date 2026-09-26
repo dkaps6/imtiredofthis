@@ -68,6 +68,47 @@ jobs:
           print(f"  drifting teams that are Thursday teams: {sorted(set(d['team']) & played) or 'NONE'}")
           PY
 
+      - name: Why do the two paths disagree about the Rams
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python - <<'PY'
+          import pandas as pd
+          from scripts._opponent_map import canon_team
+
+          drift = pd.read_csv("/tmp/universe_drift.csv")
+          teams = sorted(set(drift["team"]))
+          print("drifting teams:", teams)
+          print("\ndrifting rows as dumped:")
+          print(drift.to_string(index=False))
+
+          def load(path, label):
+              d = pd.read_csv(path, low_memory=False)
+              d["team"] = d["team"].map(canon_team)
+              print(f"\n=== {label}: {path} ===")
+              return d
+
+          form = load("data/player_form_consensus.csv", "football side")
+          metr = load("data/metrics_ready.csv", "priced side")
+
+          for t in teams:
+              f = form[form["team"].eq(t)]
+              m = metr[metr["team"].eq(t)]
+              fk = set(f["player_clean_key"].astype(str))
+              mk = set(m["player_clean_key"].astype(str))
+              print(f"\n--- {t} recipient sets ---")
+              print(f"  football rows={len(f)} players={len(fk)}   priced rows={len(m)} players={len(mk)}")
+              print(f"  in football only: {sorted(fk - mk)}")
+              print(f"  in priced only  : {sorted(mk - fk)}")
+              cols = [c for c in ("player","position","tgt_share","bayes_tgt_share","routes",
+                                  "targets","snap_share","definitive_unavailable") if c in f.columns]
+              print(f"\n  {t} football-side receiving inputs:")
+              print(f[cols].sort_values("position").to_string(index=False))
+              mcols = [c for c in cols if c in m.columns]
+              print(f"\n  {t} priced-side receiving inputs:")
+              print(m[mcols].sort_values("position").to_string(index=False))
+          PY
+
       - name: Is the target-share drift about the Thursday game
         run: |
           set -euo pipefail
