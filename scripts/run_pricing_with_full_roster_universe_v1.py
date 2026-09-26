@@ -98,6 +98,51 @@ def _identity_frame(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+GAME_CERTIFICATION = DATA / "current_player_availability_game_certification.csv"
+
+
+def _certified_slate_teams() -> set[str]:
+    """Teams in this week's production-eligible game universe.
+
+    The simulation universe used to require a literal 32 teams, which is only
+    true while an entire week is still upcoming. Once any game has kicked off
+    the books take those teams down, so a mid-week live run can never reach 32
+    and the whole slate failed closed at pricing -- observed on 2026 Week 3,
+    where Thursday had played and live props covered 15 of 16 games.
+
+    A count was the wrong contract anyway: 32 teams passes even if they are the
+    wrong 32. The certification file is the authority the pipeline already uses
+    -- build_production_eligible_active_roles_v1.py derives eligible teams from
+    it in exactly this way, which is how PlayerForm came to hold 30 teams -- so
+    reading it here makes pricing agree with the roster it is pricing instead of
+    contradicting it.
+    """
+    if not GAME_CERTIFICATION.exists() or not GAME_CERTIFICATION.stat().st_size:
+        raise RuntimeError(
+            "game certification missing; the production-eligible slate is unknown, so "
+            f"simulation-universe coverage cannot be verified: {GAME_CERTIFICATION}"
+        )
+    cert = pd.read_csv(GAME_CERTIFICATION)
+    need = {"away_team", "home_team", "production_eligible"}
+    missing = need - set(cert.columns)
+    if missing:
+        raise RuntimeError(f"game certification missing columns: {sorted(missing)}")
+    eligible = pd.to_numeric(cert["production_eligible"], errors="coerce").fillna(0).eq(1)
+    teams = {
+        str(canon_team(t))
+        for t in [*cert.loc[eligible, "away_team"], *cert.loc[eligible, "home_team"]]
+        if str(t).strip()
+    }
+    if not teams:
+        raise RuntimeError("game certification reports zero production-eligible games")
+    if len(teams) % 2 or len(teams) > 32:
+        raise RuntimeError(
+            f"game certification yields an impossible slate of {len(teams)} teams; "
+            "expected an even count of at most 32"
+        )
+    return teams
+
+
 def _build_full_universe(pricing_metrics: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, str], dict]:
     form = _read(DATA / "player_form_consensus.csv", "PlayerForm consensus")
     context = _read(DATA / "model_context_bridge.csv", "model context bridge")
@@ -116,8 +161,18 @@ def _build_full_universe(pricing_metrics: pd.DataFrame) -> tuple[pd.DataFrame, d
     if form.duplicated(["team", "player_clean_key"]).any():
         sample = form.loc[form.duplicated(["team", "player_clean_key"], keep=False), ["player", "team", "player_clean_key"]].head(20).to_dict("records")
         raise RuntimeError(f"football simulation universe duplicate player/team identities: {sample}")
-    if form["team"].nunique() != 32:
-        raise RuntimeError(f"football simulation universe must cover 32 teams, found {form['team'].nunique()}")
+    # Exact set equality against the certified slate, not a count: this also
+    # rejects a universe holding a team that is not playing, which the old
+    # count-of-32 check accepted.
+    certified_teams = _certified_slate_teams()
+    universe_teams = {str(t) for t in form["team"].astype(str)}
+    if universe_teams != certified_teams:
+        raise RuntimeError(
+            "football simulation universe does not match the certified slate; "
+            f"certified={len(certified_teams)} universe={len(universe_teams)} "
+            f"missing_from_universe={sorted(certified_teams - universe_teams)} "
+            f"not_on_slate={sorted(universe_teams - certified_teams)}"
+        )
 
     # model_context_bridge is the already-certified current football context
     # roster.  Require exact identity equality rather than merely a row count.
@@ -211,6 +266,8 @@ def _build_full_universe(pricing_metrics: pd.DataFrame) -> tuple[pd.DataFrame, d
         "football_player_rows": int(len(universe)),
         "football_players": int(len(form_keys)),
         "football_teams": int(universe["team"].nunique()),
+        "certified_slate_teams": int(len(certified_teams)),
+        "full_league_slate": bool(len(certified_teams) == 32),
         "canonical_games": int(universe["event_id"].nunique()),
         "model_context_players": int(len(context_keys)),
         "priced_unique_players": int(len(priced_keys)),
