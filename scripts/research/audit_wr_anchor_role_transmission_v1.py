@@ -468,13 +468,25 @@ def build_frozen_full_state(
         d = (aa[~both_na] - bb[~both_na]).abs()
         return float(d.max()) if len(d) else 0.0
 
+    # Frozen WR-R15 features were persisted from _wr_feature_frame(), which
+    # materializes every modeled FEATURES column with numeric coercion +
+    # fillna(0.0). Reproduce that exact authority-era representation before
+    # parity rather than comparing the frozen post-fill artifact to raw
+    # _strict_prior_snap_features() NaNs.
+    bridge_pct_materialized = num(
+        sec["bridge_prior1_same_team_offense_pct"]
+    ).fillna(0.0)
+    bridge_snaps_materialized = num(
+        sec["bridge_prior1_same_team_offense_snaps"]
+    ).fillna(0.0)
+
     pct_gap = max_numeric_gap(
         sec["prior1_same_team_offense_pct"],
-        sec["bridge_prior1_same_team_offense_pct"],
+        bridge_pct_materialized,
     )
     snap_gap = max_numeric_gap(
         sec["prior1_same_team_offense_snaps"],
-        sec["bridge_prior1_same_team_offense_snaps"],
+        bridge_snaps_materialized,
     )
     mechanical = {
         "frozen_secondary_rows": int(len(sec)),
