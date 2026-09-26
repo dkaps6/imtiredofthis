@@ -38,11 +38,11 @@ jobs:
       - name: Restore preserved pregame artifacts
         run: |
           set -euo pipefail
-          test -s /tmp/week3/data/current_player_availability.csv
-          test -s /tmp/week3/data/player_form_consensus.csv
-          test -s /tmp/week3/data/player_game_logs.csv
-          test -s /tmp/week3/data/model_context_bridge.csv
-          cp -a /tmp/week3/data/. data/
+          test -s /tmp/week3/run_36204768034/data/current_player_availability.csv
+          test -s /tmp/week3/run_36204768034/data/player_form_consensus.csv
+          test -s /tmp/week3/run_36204768034/data/player_game_logs.csv
+          test -s /tmp/week3/run_36204768034/data/model_context_bridge.csv
+          cp -a /tmp/week3/run_36204768034/data/. data/
 
       - name: Run frozen diagnostic
         env:
