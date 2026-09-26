@@ -50,7 +50,28 @@ This explains why a mathematically neat reconciliation back to MC mass failed ba
 
 Current Week-3 production does **not** show the same broad residual signature (29/30 teams sit near the intended 5% simulator residual), so this is treated as a historical-reconstruction/architecture warning, not permission to normalize live Week-3 shares upward.
 
-## 3. Weighting / blending failure investigated
+## 3. Weighting / blending errors investigated
+
+### 3.1 Missing receiving-market ensemble weights — found and partially corrected
+
+A component audit found that production once had calibrated weights only for 'pass_yards', 'rush_att', and 'rush_yards'. 'rec_yards', 'receptions', and 'rush_rec_yards' silently fell back to 100% MC.
+
+This was a genuine architecture gap rather than a code crash.
+
+A clean 2023-fit / blind-2024-2025 holdout showed real point-accuracy improvement for all three previously unweighted markets. The interaction test with the improved empirical probability translator then showed:
+- the heldout mean improvements were real;
+- the old probability translator was also genuinely wrong;
+- combining the two did **not** uniformly improve ROI, so a blanket three-market promotion was not justified.
+
+Current production has since promoted blind-heldout weights for:
+- 'rec_yards': MC 0.659889 / ML 0.292427 / State 0.047684;
+- 'receptions': MC 0.554082 / ML 0.444566 / State 0.001352.
+
+'rush_rec_yards' was **not** given an independent standalone weight. For non-Week-1 RBs it is instead governed by RB Rush+Receiving Conservation V2, which constructs the combined mean from the already-final standalone rushing and receiving components.
+
+Therefore this specific missing-weight seam is **not an unfinished current bug**. Do not reopen the old three-market weight-fit experiment unless a new production defect is found.
+
+### 3.2 Rush post-ensemble reconciliation — contradiction real, repair failed
 
 'RUSH_POST_ENSEMBLE_RECONCILIATION_V1_FAILED_CLOSED'
 
@@ -129,7 +150,7 @@ Do not:
 - retune ensemble weights without a preregistered structural reason;
 - repair one market in isolation if it creates a cross-market contradiction;
 - force conservation to an upstream authority that is itself empirically biased;
-- reopen closed WR participation, Rush Pool, TE Width, or post-ensemble reconciliation families;
+- reopen closed WR participation, Rush Pool, TE Width, old three-market weight-fit, or post-ensemble reconciliation families;
 - use Week-3 outcomes to redesign the already-frozen vacancy transfer;
 - use sportsbook information upstream.
 
