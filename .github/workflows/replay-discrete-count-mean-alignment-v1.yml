@@ -48,7 +48,9 @@ jobs:
         run: |
           test -s /tmp/discrete_count/ref/full_stack_projection_trace_clean_v1.csv
           test -s /tmp/discrete_count/ref/market_archive/historical_market_props.csv
+          test -n "$(find /tmp/discrete_count/ref/distributions -name '*_metadata.csv' -print -quit)"
           test -n "$(find /tmp/discrete_count/distributions -name '*.npz' -print -quit)"
+          cp /tmp/discrete_count/ref/distributions/*_metadata.csv /tmp/discrete_count/distributions/
           echo "authority_run=36275245917"
           echo "compact_artifact=10917407106"
           echo "compact_digest=sha256:35ad18b1a3ea96439558045a12801ea5c30a06247fce94f1ff83f6e3082c5d04"
