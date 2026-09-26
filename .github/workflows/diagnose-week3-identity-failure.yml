@@ -15,7 +15,7 @@ permissions:
   actions: read
 
 env:
-  SOURCE_RUN_ID: '36275289734'
+  SOURCE_RUN_ID: '36276421905'
 
 jobs:
   diagnose:
@@ -50,7 +50,20 @@ jobs:
           python scripts/validate_player_identity_semantics_v1.py 2>&1 | tail -60
           echo "=== exit code: ${PIPESTATUS[0]} ==="
 
-      - name: Re-materialize the compact boundary with the roster-presence rule
+      - name: Confirm the compact boundary and identity audit are clean
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/validate_player_identity_semantics_v1.py
+          python - <<'EOF'
+          import pandas as pd
+          q = pd.read_csv("data/live_odds_placeholder_rows.csv")
+          print("quarantine reasons:", q["quarantine_reason"].value_counts().to_dict())
+          c = pd.read_csv("outputs/props_raw_compact.csv")
+          print("model-facing compact rows:", len(c))
+          EOF
+
+      - name: (skipped) re-materialize
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
@@ -79,10 +92,9 @@ jobs:
           print(f"\nmodel-facing compact rows: {len(c)}")
           EOF
 
-      - name: The gate that killed the paid run must now pass
+      - name: Reproduce the pricing step that failed
         run: |
-          set -euo pipefail
-          export PYTHONPATH="${PWD}"
-          python scripts/validate_player_identity_semantics_v1.py
-          test -s data/player_identity_semantic_audit.json
-          echo "IDENTITY_AUDIT_PASSES_WITH_FIX"
+          set +e
+          export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+          python scripts/run_pricing_with_full_roster_universe_v3.py --season 2026 2>&1 | tail -45
+          echo "=== pricing exit: ${PIPESTATUS[0]} ==="
