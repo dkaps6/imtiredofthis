@@ -11,3 +11,5 @@ No fitted parameters.
 No production mutations.
 
 Allowed cells are exactly A0B0, A1B0, A0B1, A1B1 as preregistered.
+
+Mechanical retry 1: corrected named baseline artifact directory only. Frozen cells, data and methodology unchanged.
