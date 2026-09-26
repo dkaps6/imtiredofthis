@@ -1,0 +1,15 @@
+{
+  "disposition": "PLAYER_TD_RATES_COMPLETE_WITH_EXPLICIT_POSITION_PRIOR_FALLBACK",
+  "player_history_rate_rows": 1,
+  "players": 1,
+  "position_prior_audit": "data/player_scoring_td_position_priors.csv",
+  "position_prior_fallback_rows": 0,
+  "position_priors": {
+    "QB": 1.0,
+    "RB": 1.0,
+    "TE": 1.0,
+    "WR": 1.0
+  },
+  "prior_season": 2025,
+  "sportsbook_inputs_used": false
+}

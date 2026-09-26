@@ -38,15 +38,6 @@ def main() -> int:
     if a.asof_utc:
         timing += ["--asof-utc", a.asof_utc]
     run(*timing)
-    # NOT WIRED IN. apply_manual_game_exclusions_v1.py exists and is tested, but
-    # inserting it here regressed the downstream coverage seam: 2026 Week 3 run
-    # 36276421905 passed "Apply certified availability-aware current-output
-    # coverage seams" and runs 36278356889 and 36278745625 both failed it, with
-    # the only difference being that this step had rewritten the certification
-    # CSV. That holds whether or not any exclusion matched, so the seam is
-    # sensitive to the certification's serialization and not merely to the slate
-    # being smaller. Until that is understood, the default path must not rewrite
-    # the certification. Run the script deliberately, not from here.
     run("scripts/build/build_current_player_availability_v1.py")
     run("scripts/build/build_reconciled_active_roles_v1.py")
     run("scripts/build/build_production_eligible_active_roles_v1.py")
