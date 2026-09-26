@@ -1,0 +1,121 @@
+name: Diagnose Week 3 Full Slate
+
+# Reproduces a Full Slate failure against odds a paid run already preserved,
+# so debugging costs no OddsAPI credits.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nice-cori-4qkwqs]
+    paths: ['.github/workflows/diagnose-week3-identity-failure.yml']
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  SOURCE_RUN_ID: '36276421905'
+  SEASON: '2026'
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy
+
+      - name: Restore the preserved paid run verbatim
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/fs && mkdir -p /tmp/fs
+          gh run download "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --name "run_${SOURCE_RUN_ID}" --dir /tmp/fs
+          rm -rf data outputs && mkdir -p data outputs
+          cp -a /tmp/fs/data/. data/
+          cp -a /tmp/fs/outputs/. outputs/
+          echo "restored $(find data outputs -type f | wc -l) files"
+
+      - name: Dump the rows the two paths disagree about
+        run: |
+          set +e
+          export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+          export UNIVERSE_DRIFT_DUMP=/tmp/universe_drift.csv
+          python scripts/run_pricing_with_full_roster_universe_v3.py --season "${SEASON}" 2>&1 | tail -45
+          echo "=== exit: ${PIPESTATUS[0]} ==="
+          set -e
+          test -s /tmp/universe_drift.csv
+          python - <<'PY'
+          import pandas as pd
+          from scripts._opponent_map import canon_team
+          d = pd.read_csv("/tmp/universe_drift.csv")
+          print(f"\ndrifting rows: {len(d)}   teams: {d['team'].nunique()}")
+          if "position" in d.columns:
+              print("  by position:", d["position"].value_counts().to_dict())
+          print("  by team:", d["team"].value_counts().to_dict())
+          cert = pd.read_csv("data/current_player_availability_game_certification.csv")
+          el = pd.to_numeric(cert.production_eligible, errors="coerce").fillna(0).eq(1)
+          played = {canon_team(t) for t in [*cert.loc[~el,"away_team"], *cert.loc[~el,"home_team"]]}
+          print(f"  drifting teams that are Thursday teams: {sorted(set(d['team']) & played) or 'NONE'}")
+          PY
+
+      - name: Is the target-share drift about the Thursday game
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python - <<'PY'
+          import pandas as pd
+          from scripts._opponent_map import canon_team
+
+          cert = pd.read_csv("data/current_player_availability_game_certification.csv")
+          cert["away_team"] = cert.away_team.map(canon_team)
+          cert["home_team"] = cert.home_team.map(canon_team)
+          el = pd.to_numeric(cert.production_eligible, errors="coerce").fillna(0).eq(1)
+          played = sorted(set(cert.loc[~el, "away_team"]) | set(cert.loc[~el, "home_team"]))
+          slate = sorted(set(cert.loc[el, "away_team"]) | set(cert.loc[el, "home_team"]))
+          print(f"games in schedule      : {len(cert)}")
+          print(f"production-eligible    : {int(el.sum())}  ({len(slate)} teams)")
+          print(f"already kicked off     : {int((~el).sum())}  teams={played}")
+
+          form = pd.read_csv("data/player_form_consensus.csv", low_memory=False)
+          form["team"] = form.team.map(canon_team)
+          print(f"\nplayer_form_consensus teams: {form.team.nunique()}")
+          resid = sorted(set(form.team) & set(played))
+          print(f"  Thursday teams still present in the football universe: {resid or 'NONE'}")
+
+          metrics = pd.read_csv("data/metrics_ready.csv", low_memory=False)
+          metrics["team"] = metrics.team.map(canon_team)
+          print(f"metrics_ready teams        : {metrics.team.nunique()}")
+          print(f"  Thursday teams in priced metrics: {sorted(set(metrics.team) & set(played)) or 'NONE'}")
+
+          key = ["team", "player_clean_key"]
+          col = "rules_tgt_share"
+          if col not in form.columns or col not in metrics.columns:
+              print(f"\n{col} not on both sides: form={col in form.columns} metrics={col in metrics.columns}")
+              raise SystemExit(0)
+          f = form[[*key, col]].dropna(subset=key).drop_duplicates(key)
+          m = (metrics[[*key, col]].dropna(subset=key)
+               .sort_values(key).drop_duplicates(key, keep="last"))
+          j = f.merge(m, on=key, suffixes=("_football", "_priced"))
+          j["diff"] = (pd.to_numeric(j[f"{col}_football"], errors="coerce")
+                       - pd.to_numeric(j[f"{col}_priced"], errors="coerce")).abs()
+          bad = j[j["diff"] > 1e-9].sort_values("diff", ascending=False)
+          print(f"\ncompared rows: {len(j)}   drifting rows: {len(bad)}   max: {j['diff'].max():.6f}")
+          if len(bad):
+              print(f"\ndrifting teams ({bad.team.nunique()} of {j.team.nunique()}):")
+              print(bad.groupby("team")["diff"].agg(["count", "max"]).sort_values("max", ascending=False).to_string())
+              print("\nworst 25 rows:")
+              print(bad.head(25).to_string(index=False))
+              overlap = sorted(set(bad.team) & set(played))
+              print(f"\nVERDICT: drifting teams that are Thursday teams: {overlap or 'NONE'}")
+              print("  -> if NONE, removing the Thursday game cannot explain this drift")
+          PY
