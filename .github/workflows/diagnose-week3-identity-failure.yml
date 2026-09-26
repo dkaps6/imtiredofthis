@@ -1,8 +1,7 @@
 name: Diagnose Week 3 Full Slate
 
 # Reproduces a Full Slate failure against odds a paid run already preserved,
-# so debugging costs no OddsAPI credits. Restores the artifact verbatim and
-# re-runs only the step under investigation.
+# so debugging costs no OddsAPI credits.
 
 on:
   workflow_dispatch:
@@ -41,44 +40,59 @@ jobs:
           rm -rf /tmp/fs && mkdir -p /tmp/fs
           gh run download "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
             --name "run_${SOURCE_RUN_ID}" --dir /tmp/fs
-          test -d /tmp/fs/data && test -d /tmp/fs/outputs
           rm -rf data outputs && mkdir -p data outputs
           cp -a /tmp/fs/data/. data/
           cp -a /tmp/fs/outputs/. outputs/
           echo "restored $(find data outputs -type f | wc -l) files"
 
-      - name: State of the boundary this run reached
-        run: |
-          export PYTHONPATH="${PWD}"
-          python - <<'EOF'
-          import pandas as pd, pathlib
-          q = pathlib.Path("data/live_odds_placeholder_rows.csv")
-          if q.exists():
-              d = pd.read_csv(q)
-              print("quarantine reasons:", d["quarantine_reason"].value_counts().to_dict())
-              un = d[d["quarantine_reason"].eq("UNROSTERED_NONCORE_PLAYER")]
-              if len(un):
-                  cols = [c for c in ("player","team_abbr","market") if c in un.columns]
-                  print("unrostered non-core:")
-                  print(un[cols].drop_duplicates().to_string(index=False))
-          for f in ("outputs/props_raw_compact.csv", "data/metrics_ready.csv",
-                    "outputs/props_pricing_offers.csv", "outputs/props_priced_clean.csv"):
-              p = pathlib.Path(f)
-              print(f"  {f}: {'ABSENT' if not p.exists() else str(len(pd.read_csv(p, low_memory=False))) + ' rows'}")
-          EOF
-      - name: Price the preserved slate and prove a board comes out
+      - name: Is the target-share drift about the Thursday game
         run: |
           set -euo pipefail
-          export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
-          python scripts/run_pricing_with_full_roster_universe_v3.py --season "${SEASON}"
-          test -s outputs/props_priced_clean.csv
+          export PYTHONPATH="${PWD}"
           python - <<'PY'
-          import json
           import pandas as pd
-          b = pd.read_csv("outputs/props_priced_clean.csv", low_memory=False)
-          print(f"PRICED BOARD: {len(b)} rows | {b['player'].nunique()} players | {b['team'].nunique()} teams")
-          print("  markets:", b["market"].value_counts().to_dict())
-          a = json.load(open("data/football_simulation_universe_audit.json", encoding="utf-8"))
-          for k in ("certified_slate_teams", "full_league_slate", "football_teams", "canonical_games"):
-              print(f"  {k}: {a.get(k)}")
+          from scripts._opponent_map import canon_team
+
+          cert = pd.read_csv("data/current_player_availability_game_certification.csv")
+          cert["away_team"] = cert.away_team.map(canon_team)
+          cert["home_team"] = cert.home_team.map(canon_team)
+          el = pd.to_numeric(cert.production_eligible, errors="coerce").fillna(0).eq(1)
+          played = sorted(set(cert.loc[~el, "away_team"]) | set(cert.loc[~el, "home_team"]))
+          slate = sorted(set(cert.loc[el, "away_team"]) | set(cert.loc[el, "home_team"]))
+          print(f"games in schedule      : {len(cert)}")
+          print(f"production-eligible    : {int(el.sum())}  ({len(slate)} teams)")
+          print(f"already kicked off     : {int((~el).sum())}  teams={played}")
+
+          form = pd.read_csv("data/player_form_consensus.csv", low_memory=False)
+          form["team"] = form.team.map(canon_team)
+          print(f"\nplayer_form_consensus teams: {form.team.nunique()}")
+          resid = sorted(set(form.team) & set(played))
+          print(f"  Thursday teams still present in the football universe: {resid or 'NONE'}")
+
+          metrics = pd.read_csv("data/metrics_ready.csv", low_memory=False)
+          metrics["team"] = metrics.team.map(canon_team)
+          print(f"metrics_ready teams        : {metrics.team.nunique()}")
+          print(f"  Thursday teams in priced metrics: {sorted(set(metrics.team) & set(played)) or 'NONE'}")
+
+          key = ["team", "player_clean_key"]
+          col = "rules_tgt_share"
+          if col not in form.columns or col not in metrics.columns:
+              print(f"\n{col} not on both sides: form={col in form.columns} metrics={col in metrics.columns}")
+              raise SystemExit(0)
+          f = form[[*key, col]].dropna(subset=key).drop_duplicates(key)
+          m = (metrics[[*key, col]].dropna(subset=key)
+               .sort_values(key).drop_duplicates(key, keep="last"))
+          j = f.merge(m, on=key, suffixes=("_football", "_priced"))
+          j["diff"] = (pd.to_numeric(j[f"{col}_football"], errors="coerce")
+                       - pd.to_numeric(j[f"{col}_priced"], errors="coerce")).abs()
+          bad = j[j["diff"] > 1e-9].sort_values("diff", ascending=False)
+          print(f"\ncompared rows: {len(j)}   drifting rows: {len(bad)}   max: {j['diff'].max():.6f}")
+          if len(bad):
+              print(f"\ndrifting teams ({bad.team.nunique()} of {j.team.nunique()}):")
+              print(bad.groupby("team")["diff"].agg(["count", "max"]).sort_values("max", ascending=False).to_string())
+              print("\nworst 25 rows:")
+              print(bad.head(25).to_string(index=False))
+              overlap = sorted(set(bad.team) & set(played))
+              print(f"\nVERDICT: drifting teams that are Thursday teams: {overlap or 'NONE'}")
+              print("  -> if NONE, removing the Thursday game cannot explain this drift")
           PY
