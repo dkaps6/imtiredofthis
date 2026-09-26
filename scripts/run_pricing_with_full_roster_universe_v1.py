@@ -18,6 +18,7 @@ separate frozen promotion gates.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -231,6 +232,20 @@ def _build_full_universe(pricing_metrics: pd.DataFrame) -> tuple[pd.DataFrame, d
         max_diff = float((av.loc[both] - bv.loc[both]).abs().max()) if both.any() else 0.0
         max_diffs[col] = max_diff
         if max_diff > 1e-9:
+            # Diagnostic escape hatch: dump the disagreeing rows so the cause can
+            # be identified from data rather than inferred from one max value.
+            # Off unless explicitly requested, and it still raises either way, so
+            # production behaviour is unchanged.
+            if os.getenv("UNIVERSE_DRIFT_DUMP"):
+                cols = [*[c for c in ("team", "player", "player_clean_key", "position") if c in compare.columns], a, b]
+                dump = compare.loc[(av - bv).abs() > 1e-9, cols].copy()
+                dump["abs_diff"] = (av - bv).abs()
+                dump = dump.sort_values("abs_diff", ascending=False)
+                out = Path(os.environ["UNIVERSE_DRIFT_DUMP"])
+                out.parent.mkdir(parents=True, exist_ok=True)
+                dump.to_csv(out, index=False)
+                print(f"[universe_drift] {col}: {len(dump)} rows over tolerance -> {out}")
+                print(dump.head(30).to_string(index=False))
             raise RuntimeError(f"full-universe football assumption drift for {col}: max_abs_diff={max_diff}")
 
     priced_keys = set(zip(priced["team"].astype(str), priced["player_clean_key"].astype(str)))

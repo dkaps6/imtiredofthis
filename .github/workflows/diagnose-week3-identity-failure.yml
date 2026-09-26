@@ -45,6 +45,29 @@ jobs:
           cp -a /tmp/fs/outputs/. outputs/
           echo "restored $(find data outputs -type f | wc -l) files"
 
+      - name: Dump the rows the two paths disagree about
+        run: |
+          set +e
+          export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+          export UNIVERSE_DRIFT_DUMP=/tmp/universe_drift.csv
+          python scripts/run_pricing_with_full_roster_universe_v3.py --season "${SEASON}" 2>&1 | tail -45
+          echo "=== exit: ${PIPESTATUS[0]} ==="
+          set -e
+          test -s /tmp/universe_drift.csv
+          python - <<'PY'
+          import pandas as pd
+          from scripts._opponent_map import canon_team
+          d = pd.read_csv("/tmp/universe_drift.csv")
+          print(f"\ndrifting rows: {len(d)}   teams: {d['team'].nunique()}")
+          if "position" in d.columns:
+              print("  by position:", d["position"].value_counts().to_dict())
+          print("  by team:", d["team"].value_counts().to_dict())
+          cert = pd.read_csv("data/current_player_availability_game_certification.csv")
+          el = pd.to_numeric(cert.production_eligible, errors="coerce").fillna(0).eq(1)
+          played = {canon_team(t) for t in [*cert.loc[~el,"away_team"], *cert.loc[~el,"home_team"]]}
+          print(f"  drifting teams that are Thursday teams: {sorted(set(d['team']) & played) or 'NONE'}")
+          PY
+
       - name: Is the target-share drift about the Thursday game
         run: |
           set -euo pipefail
