@@ -1,0 +1,94 @@
+name: Diagnose Week 3 Identity Failure
+
+# Reproduces the Full Slate step-28 identity-semantics failure against the
+# odds already fetched and preserved by run 36275289734. No OddsAPI request
+# is made here, so this costs no credits.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nice-cori-4qkwqs]
+    paths: ['.github/workflows/diagnose-week3-identity-failure.yml']
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  SOURCE_RUN_ID: '36275289734'
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Restore the preserved paid run
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/fs && mkdir -p /tmp/fs
+          gh run download "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --name "run_${SOURCE_RUN_ID}" --dir /tmp/fs
+          cp -r /tmp/fs/data/. data/ 2>/dev/null || true
+          mkdir -p outputs && cp -r /tmp/fs/outputs/. outputs/ 2>/dev/null || true
+          echo "restored: $(find /tmp/fs -type f | wc -l) files"
+
+      - name: Reproduce the identity-semantics validator
+        run: |
+          set +e
+          export PYTHONPATH="${PWD}"
+          python scripts/validate_player_identity_semantics_v1.py 2>&1 | tail -60
+          echo "=== exit code: ${PIPESTATUS[0]} ==="
+
+      - name: Show what the two roster authorities actually disagree about
+        run: |
+          export PYTHONPATH="${PWD}"
+          python - <<'EOF'
+          import pandas as pd
+          from scripts._opponent_map import canon_team
+          from scripts.utils.canonical_names import player_name_key
+
+          def key(df, pcol, tcol):
+              d = df.copy()
+              d["_t"] = d[tcol].map(canon_team)
+              d["_n"] = d[pcol].map(lambda v: player_name_key(v, strip_suffix=True))
+              return d
+
+          form = key(pd.read_csv("data/player_form.csv", low_memory=False),
+                     "player", "team")
+          fk = set(zip(form["_t"], form["_n"]))
+          print(f"player_form rows={len(form)} unique team/name keys={len(fk)}")
+
+          for path, pcol, tcol in [
+              ("data/player_identity_slate.csv", "player", "team"),
+              ("outputs/props_raw_compact.csv", "player", "team_abbr"),
+          ]:
+              try:
+                  d = key(pd.read_csv(path, low_memory=False), pcol, tcol)
+              except Exception as e:
+                  print(f"\n{path}: could not read -- {e}")
+                  continue
+              dk = set(zip(d["_t"], d["_n"]))
+              print(f"\n=== {path}: rows={len(d)} unique keys={len(dk)} ===")
+              missing = sorted(dk - fk)
+              extra = sorted(fk - dk)
+              print(f"  in this source but NOT in player_form: {len(missing)}")
+              for t, n in missing[:40]:
+                  sub = d[(d['_t'] == t) & (d['_n'] == n)]
+                  nm = sub[pcol].iloc[0] if len(sub) else n
+                  mk = sorted(set(sub['market'])) if 'market' in sub.columns else []
+                  print(f"    {t:<4} {nm:<28} {','.join(mk)}")
+              if len(missing) > 40:
+                  print(f"    ... and {len(missing)-40} more")
+              print(f"  in player_form but NOT in this source: {len(extra)}")
+          EOF
