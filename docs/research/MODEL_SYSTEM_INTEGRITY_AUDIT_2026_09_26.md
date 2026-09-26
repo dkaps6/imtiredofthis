@@ -189,3 +189,31 @@ Move one layer upstream to **availability -> opportunity propagation**:
 - diagnostic first, no candidate variants and no Week-3 outcome use.
 
 This directly complements, but must not alter, the already-frozen RB Vacancy Opportunity V1 Week-3 experiment.
+
+
+## 10. Availability -> opportunity rule-order gap — CONFIRMED
+
+Authoritative diagnostic:
+- run `36275905038`
+- artifact `10917451964`
+- digest `sha256:340b5992a58ff591baf7a4ccf92c36482c1e22a082fabdc14e2f4e7dbcb1f6fb`
+- result: `AVAILABILITY_OPPORTUNITY_RULE_ORDER_GAP_CONFIRMED`
+
+Frozen Week-3 evidence:
+- 30 current eligible teams;
+- 11 definitive-unavailable RB/FB/WR/TE players;
+- 0 survive eligible roles;
+- 0 survive PlayerForm;
+- 0 survive ModelContext;
+- 0 production-reachable `rules_injury_redistribution` rows.
+
+The production ordering therefore makes the legacy definitive-WR injury redistribution rule unreachable for an OUT/IR/PUP player removed by canonical availability.
+
+The exact replay corrected an initially plausible but incomplete hypothesis: missing opportunity does not expand the Week-3 residual bucket because every affected team already exceeds the finite allocator's 0.95 explicit-player cap. The generic allocator normalizes surviving target and rush shares to 0.95.
+
+Confirmed structural behavior:
+`definitive unavailable -> remove player -> vacancy-specific rule cannot observe player -> generic survivor normalization/cap`.
+
+Thus the open problem is not team-volume conservation. It is **successor identity and concentration**.
+
+No repair is authorized. A separate prospective Week-3 receiving-vacancy evaluation must be frozen before outcomes; RB Vacancy Opportunity V1 remains separate and unchanged.
