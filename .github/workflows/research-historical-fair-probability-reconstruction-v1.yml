@@ -6,6 +6,8 @@ on:
     paths:
       - "scripts/research/persist_historical_simulated_outcomes_v1.py"
       - "scripts/research/grade_empirical_fair_prob_v1.py"
+      - "scripts/research/discrete_count_mean_alignment_v1.py"
+      - "docs/research/DISCRETE_COUNT_MEAN_ALIGNMENT_V1_PLAN.md"
       - "scripts/research/summarize_empirical_fair_prob_segments_v1.py"
       - "scripts/research/fit_and_apply_strong_gate_probability_calibration_v1.py"
       - "tests/test_empirical_fair_prob_v1.py"
@@ -146,6 +148,17 @@ jobs:
             --distribution-dir /tmp/fair_prob/distributions \
             --out-dir /tmp/fair_prob/grade
 
+      - name: Run frozen discrete-count mean-alignment A/B
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p /tmp/fair_prob/discrete_count
+          python scripts/research/discrete_count_mean_alignment_v1.py \
+            --projection-file /tmp/fair_prob/full_stack_projection_trace_clean_v1.csv \
+            --props /tmp/fair_prob/market_archive/historical_market_props.csv \
+            --distribution-dir /tmp/fair_prob/distributions \
+            --out-dir /tmp/fair_prob/discrete_count
+
       - name: Fit and apply STRONG-gate probability calibration (two-directional holdout)
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -186,6 +199,7 @@ jobs:
             /tmp/fair_prob/distributions/*_metadata.csv
             /tmp/fair_prob/grade/*.csv
             /tmp/fair_prob/calibration/*.csv
+            /tmp/fair_prob/discrete_count/*
           if-no-files-found: warn
           retention-days: 14
 

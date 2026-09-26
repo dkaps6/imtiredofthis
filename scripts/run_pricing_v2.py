@@ -29,6 +29,7 @@ import pandas as pd
 
 from scripts.modeling.bayesian_v2 import apply_bayesian_to_metrics
 from scripts.modeling.ensemble_v2 import apply_ensemble, load_weights
+from scripts.modeling.discrete_count_alignment_v1 import align_outcomes as align_discrete_count_outcomes
 from scripts.modeling.ml_v2 import apply_ml_to_metrics
 from scripts.modeling.qb_pass_synthesis_v1 import (
     attempt_conversion,
@@ -359,15 +360,16 @@ def price(season: int) -> pd.DataFrame:
                     f"team={row.get('team')} opponent={row.get('opponent')}: {exc}"
                 ) from exc
 
-        # Preserve Monte Carlo's non-negative distribution shape while aligning
-        # its mean to the final football projection. For promoted QB pass_yards
-        # and eligible RB/FB rush_yards this is the position-specific synthesis
-        # mean; for every other market it remains the canonical ensemble mean.
-        # Sportsbook information still enters only after this step.
-        if np.isfinite(mc_proj) and mc_proj > 0 and np.isfinite(target_mean):
-            adjusted_outcomes = base_outcomes * max(0.0, target_mean / mc_proj)
-        else:
-            adjusted_outcomes = base_outcomes
+        # Preserve current continuous mean-alignment semantics for yardage/TD
+        # markets, while the research-qualified V1 adapter restores integer
+        # support for receptions and rush-attempt counts. The helper preserves
+        # the existing zero/nonfinite-MC no-op guard exactly.
+        adjusted_outcomes, discrete_count_meta = align_discrete_count_outcomes(
+            base_outcomes,
+            market=market,
+            mc_proj=mc_proj,
+            target_mean=target_mean,
+        )
 
         if shadow is not None:
             shadow.observe_pricing_row(
@@ -447,6 +449,11 @@ def price(season: int) -> pd.DataFrame:
             "rb_rush_rec_conservation_v2_target_mean": float(rb_rush_rec_v2_meta["target_mean"]) if rb_rush_rec_v2_meta is not None else np.nan,
             "rb_rush_rec_conservation_v2_rush_mean": float(rb_rush_rec_v2_meta["rush_target_mean"]) if rb_rush_rec_v2_meta is not None else np.nan,
             "rb_rush_rec_conservation_v2_rec_mean": float(rb_rush_rec_v2_meta["rec_target_mean"]) if rb_rush_rec_v2_meta is not None else np.nan,
+            "discrete_count_alignment_applied": int(discrete_count_meta["discrete_count_alignment_applied"]),
+            "discrete_count_alignment_version": discrete_count_meta["discrete_count_alignment_version"],
+            "discrete_count_alignment_pre_fractional_rate": discrete_count_meta["discrete_count_alignment_pre_fractional_rate"],
+            "discrete_count_alignment_post_integer_max_gap": discrete_count_meta["discrete_count_alignment_post_integer_max_gap"],
+            "discrete_count_alignment_target_mean_gap": discrete_count_meta["discrete_count_alignment_target_mean_gap"],
             "season": int(season),
             "week": row.get("week"),
             "book": row.get("book"),

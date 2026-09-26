@@ -1,0 +1,107 @@
+name: Discrete Count Mean Alignment V1 Integration
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-discrete-count-mean-alignment-v1
+    paths:
+      - "scripts/modeling/discrete_count_alignment_v1.py"
+      - "scripts/run_pricing_v2.py"
+      - "scripts/research/validate_discrete_count_production_integration_v1.py"
+      - "tests/test_discrete_count_mean_alignment_v1.py"
+      - "docs/production/DISCRETE_COUNT_MEAN_ALIGNMENT_V1_INTEGRATION_PLAN.md"
+      - ".github/workflows/integrate-discrete-count-mean-alignment-v1.yml"
+
+jobs:
+  integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run focused production helper tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_discrete_count_mean_alignment_v1.py
+
+      - name: Download immutable compact authority
+        uses: actions/download-artifact@v4
+        with:
+          name: historical-fair-probability-reconstruction-v1
+          path: /tmp/discrete_integration/ref
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 36275245917
+
+      - name: Download immutable raw shards
+        uses: actions/download-artifact@v4
+        with:
+          name: historical-simulated-outcome-shards-v1
+          path: /tmp/discrete_integration/distributions
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 36275245917
+
+      - name: Download frozen qualified result
+        uses: actions/download-artifact@v4
+        with:
+          name: discrete-count-mean-alignment-v1-result
+          path: /tmp/discrete_integration/result
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 36276366140
+
+      - name: Join immutable metadata with raw shards
+        run: |
+          cp /tmp/discrete_integration/ref/distributions/*_metadata.csv /tmp/discrete_integration/distributions/
+          test -s /tmp/discrete_integration/ref/full_stack_projection_trace_clean_v1.csv
+          test -s /tmp/discrete_integration/result/discrete_count_alignment_detail.csv
+          test -n "$(find /tmp/discrete_integration/distributions -name '*.npz' -print -quit)"
+
+      - name: Prove exact research parity and non-count invariance
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p /tmp/discrete_integration/out
+          python scripts/research/validate_discrete_count_production_integration_v1.py \
+            --projection-file /tmp/discrete_integration/ref/full_stack_projection_trace_clean_v1.csv \
+            --distribution-dir /tmp/discrete_integration/distributions \
+            --research-detail /tmp/discrete_integration/result/discrete_count_alignment_detail.csv \
+            --out /tmp/discrete_integration/out/integration_result.json
+
+      - name: Static production routing audit
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path("scripts/run_pricing_v2.py").read_text()
+          required = [
+              "align_discrete_count_outcomes",
+              "discrete_count_alignment_applied",
+              "discrete_count_alignment_version",
+          ]
+          missing = [x for x in required if x not in text]
+          if missing:
+              raise SystemExit(f"missing production routing markers: {missing}")
+          print("production routing markers PASS")
+          PY
+
+      - name: Upload integration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: discrete-count-mean-alignment-v1-integration
+          path: /tmp/discrete_integration/out/*
+          if-no-files-found: warn
+          retention-days: 14
