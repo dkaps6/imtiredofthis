@@ -5,7 +5,9 @@ on:
   pull_request:
     paths:
       - "scripts/research/persist_historical_simulated_outcomes_v1.py"
-      - "scripts/research/grade_empirical_fair_prob_v1.py"\n      - "scripts/research/discrete_count_mean_alignment_v1.py"\n      - "docs/research/DISCRETE_COUNT_MEAN_ALIGNMENT_V1_PLAN.md"
+      - "scripts/research/grade_empirical_fair_prob_v1.py"
+      - "scripts/research/discrete_count_mean_alignment_v1.py"
+      - "docs/research/DISCRETE_COUNT_MEAN_ALIGNMENT_V1_PLAN.md"
       - "scripts/research/summarize_empirical_fair_prob_segments_v1.py"
       - "scripts/research/fit_and_apply_strong_gate_probability_calibration_v1.py"
       - "tests/test_empirical_fair_prob_v1.py"
@@ -196,7 +198,8 @@ jobs:
             /tmp/fair_prob/distributions/*_distribution_rebuild_audit.csv
             /tmp/fair_prob/distributions/*_metadata.csv
             /tmp/fair_prob/grade/*.csv
-            /tmp/fair_prob/calibration/*.csv\n            /tmp/fair_prob/discrete_count/*
+            /tmp/fair_prob/calibration/*.csv
+            /tmp/fair_prob/discrete_count/*
           if-no-files-found: warn
           retention-days: 14
 
