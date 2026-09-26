@@ -155,3 +155,37 @@ Do not:
 - use sportsbook information upstream.
 
 The goal is no longer "find another correlated feature." The goal is to identify where correct football information is lost, distorted, double-counted, or inconsistently recombined before final projections.
+
+
+## 9. Post-ensemble routing/order audit — 2026-09-26
+
+Disposition: **NO NEW LIVE ROUTING BUG FOUND / DUPLICATE SEAMS CLOSED**
+
+The current production wrapper chain was read directly from main:
+- stable V3 entrypoint -> V6 production wrapper;
+- V6 -> V5 -> V4 -> V3 promoted entitlement/C2 stack -> V1 football-universe wrapper -> run_pricing_v2;
+- non-Week-1 RB Rush+Receiving Conservation V2 is activated around the V5 parent and stamped after pricing.
+
+Verified:
+- Week-3 RB rush+receiving V2 rebuilds the combo draw from final-mean-aligned standalone rush and receiving draws before sportsbook comparison;
+- V6 asserts final model_proj equals the V2 target and target equals rush+receiving component sum;
+- Week-1-only RB P3/R22/R26 routes explicitly no-op outside Week 1 rather than silently reusing Week-1 science;
+- TE-R5P and WR-R15 are applied upstream of joint MC, then the existing ensemble is applied downstream exactly as production documents;
+- the possibility that receiving specialists are diluted by downstream ML/State blending was already tested in the frozen PR #549 production-order historical replay, so it is not a new untested seam;
+- the football simulation universe intentionally remains full-league / football-only while kickoff eligibility narrows downstream pricing. The visible 32-team requirement is therefore not, by itself, a current modeling defect.
+
+Historical benchmark warning preserved:
+- prior research infrastructure did contain a real post-ensemble injection bug for QB synthesis: an early unified historical benchmark wrote QB synthesis into mc_proj and re-blended it, unlike production where synthesis replaces the final ensemble mean. That benchmark bug was repaired before interpretation and is not present in current production run_pricing_v2.
+
+Conclusion:
+The current post-ensemble routing/order path does not justify a new repair candidate. Do not reopen this seam without new contradictory evidence.
+
+### Next systems-integrity seam
+
+Move one layer upstream to **availability -> opportunity propagation**:
+- does definitive unavailability remove the player from the correct football competition state?
+- does vacated target/carry mass become residual, normalize mechanically, or reach plausible successors?
+- are different positions/markets handling vacancy consistently?
+- diagnostic first, no candidate variants and no Week-3 outcome use.
+
+This directly complements, but must not alter, the already-frozen RB Vacancy Opportunity V1 Week-3 experiment.
