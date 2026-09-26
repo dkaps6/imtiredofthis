@@ -25,6 +25,7 @@ outputs/**/*.json
 # Keep intentional static schedules/model calibration/weather metadata.
 !data/schedules/
 !data/schedules/**
+!data/manual_game_exclusions.csv
 !data/model_ensemble_weights.csv
 !data/stadiums.csv
 !data/*.json

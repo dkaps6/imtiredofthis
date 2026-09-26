@@ -108,3 +108,23 @@ def test_missing_certification_fails_closed(mod, tmp_path):
     _excl(tmp_path, [_row("LAR")])
     with pytest.raises(RuntimeError, match="game certification missing"):
         mod.apply(season=2026, week=3)
+
+
+def test_a_noop_does_not_rewrite_the_certification(mod, tmp_path):
+    """A no-op that rewrites the file is not a no-op.
+
+    2026 Week 3 run 36278356889: an absent exclusions file still reserialized
+    the certification, and a coverage seam that had passed in the previous run
+    failed. Byte-identical or nothing.
+    """
+    _cert(tmp_path)
+    path = tmp_path / "data" / "current_player_availability_game_certification.csv"
+    before = path.read_bytes()
+    mod.apply(season=2026, week=3)
+    assert path.read_bytes() == before
+
+    # and the same when an exclusions file exists but matches no game this week
+    _excl(tmp_path, [_row("LAR", week=2)])
+    before = path.read_bytes()
+    mod.apply(season=2026, week=3)
+    assert path.read_bytes() == before

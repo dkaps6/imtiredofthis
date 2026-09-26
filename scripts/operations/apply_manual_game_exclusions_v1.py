@@ -120,7 +120,14 @@ def apply(*, season: int, week: int) -> dict:
             "manual game exclusions would leave zero production-eligible games; "
             "that is not a partial slate, it is no slate"
         )
-    cert.to_csv(CERTIFICATION, index=False)
+    # Only rewrite when something was actually excluded. A "no-op" that still
+    # rewrites the file is not a no-op: it reserializes booleans and empty
+    # fields, and a downstream consumer that parses the certification can then
+    # behave differently for a run that changed nothing. Observed on 2026 Week
+    # 3 run 36278356889, where an empty exclusions file still rewrote the
+    # certification and broke a coverage seam that had passed moments before.
+    if applied:
+        cert.to_csv(CERTIFICATION, index=False)
 
     el = pd.to_numeric(cert["production_eligible"], errors="coerce").fillna(0).eq(1)
     teams = sorted({
