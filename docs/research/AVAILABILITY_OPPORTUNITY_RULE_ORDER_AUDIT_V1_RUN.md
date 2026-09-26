@@ -15,3 +15,5 @@ This marker triggers the diagnostic workflow only. It does not alter production 
 Mechanical retry 1: corrected actions/download-artifact's artifact-name directory nesting only. No methodology or data change.
 
 Mechanical retry 2: carry preserved canonical game identity as production event_id before entitlement materialization. No methodology/data change.
+
+Mechanical retry 3: JSON-serialize numpy scalar outputs after successful computation. No methodology/data change.
