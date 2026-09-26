@@ -26,11 +26,11 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: pytest -q tests/test_rb_vacancy_opportunity_v1.py
-      - name: Download frozen Week-2 pregame Full Slate artifact
+      - name: Download prospective Week-3 pregame Full Slate artifact
         uses: actions/download-artifact@v4
         with:
-          name: run_35263557385
-          run-id: 35263557385
+          name: run_36204768034
+          run-id: 36204768034
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: staged
       - name: Verify frozen pregame provenance
@@ -42,7 +42,7 @@ jobs:
           import pandas as pd
           a=pd.read_csv('staged/data/current_player_availability.csv')
           assert len(a)>0
-          assert a['availability_generated_at_utc'].astype(str).str.startswith('2026-09-17').all()
+          assert a['availability_generated_at_utc'].astype(str).str.startswith('2026-09-26').all()
           assert pd.to_numeric(a['official_inactive_section_complete'],errors='coerce').fillna(0).eq(1).all()
           print('availability_rows',len(a),'definitive_unavailable',int(pd.to_numeric(a.definitive_unavailable,errors='coerce').fillna(0).sum()))
           PY
@@ -67,14 +67,14 @@ jobs:
               parts.append(x[['season','week','team','player_clean_key','offense_pct']])
           pd.concat(parts,ignore_index=True).to_csv('snaps_strict_prior.csv',index=False)
           PY
-      - name: Materialize no-outcome Week-2 vacancy state
+      - name: Materialize no-outcome Week-3 vacancy state
         run: |
           python scripts/research/rb_vacancy_opportunity_v1.py \
             --availability staged/data/current_player_availability.csv \
             --roles staged/data/roles_current_production_eligible_v1.csv \
             --logs staged/data/player_game_logs.csv \
             --snaps snaps_strict_prior.csv \
-            --season 2026 --week 2 --outdir rb_vacancy_v1
+            --season 2026 --week 3 --outdir rb_vacancy_v1
           python - <<'PY'
           import pandas as pd
           p='rb_vacancy_v1/rb_vacancy_state_no_outcomes.csv'
@@ -86,6 +86,6 @@ jobs:
       - name: Upload no-outcome artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rb-vacancy-opportunity-v1-no-outcome-w2
+          name: rb-vacancy-opportunity-v1-no-outcome-w3-2026-09-26
           path: rb_vacancy_v1/
           if-no-files-found: error
