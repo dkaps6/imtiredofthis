@@ -209,6 +209,12 @@ def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     vacancy.to_csv(OUT / "vacancy_rows.csv", index=False)
     team_audit.to_csv(OUT / "team_opportunity_mass.csv", index=False)
+    entitlement[[
+        "event_id", "team", "player", "player_clean_key", "position",
+        "rules_tgt_share", "entitlement_tgt_share", "entitlement_raw_team_sum",
+        "entitlement_post_m38_team_sum", "entitlement_team_scale",
+        "entitlement_residual_share", "entitlement_version",
+    ]].to_csv(OUT / "target_entitlement_rows.csv", index=False)
     rule_players[[
         "team", "player", "player_clean_key", "position",
         "rules_tgt_share", "rules_rush_share", "rules_injury_redistribution",
