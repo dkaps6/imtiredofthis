@@ -25,7 +25,7 @@ from scripts.modeling.target_entitlement_v1 import materialize_target_entitlemen
 
 DATA = Path("data")
 OUT = Path("outputs/receiving_rule_semantics_integrity_v1_stage1")
-BASELINE_AUTH = Path("/tmp/baseline_authority/run_36276121522/target_entitlement_rows.csv")
+BASELINE_AUTH = Path("/tmp/baseline_authority/availability-opportunity-rule-order-v1/target_entitlement_rows.csv")
 
 NON_TARGET_RULE_COLS = [
     "rules_plays_est", "rules_pass_rate", "rules_rush_share",
