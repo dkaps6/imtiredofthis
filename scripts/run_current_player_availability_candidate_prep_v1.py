@@ -38,6 +38,11 @@ def main() -> int:
     if a.asof_utc:
         timing += ["--asof-utc", a.asof_utc]
     run(*timing)
+    # Verified game exclusions are applied to the certification before anything
+    # consumes it, so the eligible roles, PlayerForm, the model bridges and the
+    # simulation universe are all built from one reduced slate rather than
+    # disagreeing about which games are in play.
+    run("scripts/operations/apply_manual_game_exclusions_v1.py", "--season", str(a.season), "--week", str(week))
     run("scripts/build/build_current_player_availability_v1.py")
     run("scripts/build/build_reconciled_active_roles_v1.py")
     run("scripts/build/build_production_eligible_active_roles_v1.py")
@@ -46,6 +51,7 @@ def main() -> int:
         Path("data/roles_ourlads_status_v1.csv"),
         Path("data/official_inactives_v1.csv"),
         Path("data/current_player_availability_game_certification.csv"),
+        Path("data/manual_game_exclusion_audit.json"),
         Path("data/current_player_availability.csv"),
         Path("data/roles_ourlads_active_v1.csv"),
         Path("data/roles_current_production_eligible_v1.csv"),
