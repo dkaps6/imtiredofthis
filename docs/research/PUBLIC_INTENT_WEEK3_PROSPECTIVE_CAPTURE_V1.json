@@ -1,0 +1,76 @@
+{
+  "study": "PUBLIC_INTENT_WEEK3_PROSPECTIVE_CAPTURE_V1",
+  "capture_date": "2026-09-26",
+  "target_season": 2026,
+  "target_week": 3,
+  "pregame": true,
+  "target_game_outcomes_read": 0,
+  "sportsbook_inputs_used": 0,
+  "candidate_variants_scored": 0,
+  "parameters_fit": 0,
+  "production_mutations": 0,
+  "teams": [
+    {
+      "team": "DEN",
+      "unavailable_player": "Jonah Coleman",
+      "unavailable_status": "OUT",
+      "available_primary_backs": [
+        "J.K. Dobbins",
+        "RJ Harvey"
+      ],
+      "intent_label": "ROTATION_PRESERVED_NO_CLEAR_SUCCESSOR_CONCENTRATION",
+      "lead_identity": null,
+      "concentration_confidence": "MEDIUM_HIGH_NO_CONCENTRATION",
+      "tier_a_sources": [
+        {
+          "publisher": "Denver Broncos",
+          "date": "2026-09-25",
+          "title": "Injury Report: RBs RJ Harvey and J.K. Dobbins not assigned game statuses, RB Jonah Coleman ruled out for Week 3 game vs. Rams",
+          "url": "https://www.denverbroncos.com/news/injuryreport/injury-report-rbs-rj-harvey-and-j-k-dobbins-not-assigned-game-statuses-rb-jonah-coleman-ruled-out-for-week-3-game-vs-rams"
+        }
+      ],
+      "tier_b_sources": [
+        {
+          "publisher": "Denver Gazette",
+          "date": "2026-09-25",
+          "title": "Broncos get good news on running backs J.K. Dobbins, RJ Harvey",
+          "url": "https://www.denvergazette.com/2026/09/25/broncos-get-good-news-on-running-backs-j-k-dobbins-rj-harvey-5/"
+        }
+      ]
+    },
+    {
+      "team": "PIT",
+      "unavailable_player": "Rico Dowdle",
+      "unavailable_status": "OUT",
+      "available_primary_backs": [
+        "Jaylen Warren"
+      ],
+      "intent_label": "WARREN_LEAD_BACK_LEAN_WITH_DEPTH_SUPPORT",
+      "lead_identity": "Jaylen Warren",
+      "concentration_confidence": "MEDIUM",
+      "tier_a_sources": [
+        {
+          "publisher": "Pittsburgh Steelers",
+          "date": "2026-09-25",
+          "title": "Week 3 Injury Report (Bengals)",
+          "url": "https://www.steelers.com/news/week-3-injury-report-bengals-x2555"
+        },
+        {
+          "publisher": "Pittsburgh Steelers",
+          "date": "2026-08-10",
+          "title": "Whatever it takes to win",
+          "url": "https://www.steelers.com/news/whatever-it-takes-to-win"
+        }
+      ],
+      "tier_b_sources": [
+        {
+          "publisher": "93.7 The Fan / Audacy",
+          "date": "2026-09-25",
+          "title": "‘I’m excited to go get it’ Warren leads running game Sunday",
+          "url": "https://www.audacy.com/937thefan/sports/pittsburgh-steelers/im-excited-to-go-get-it-warren-leads-running-game-sunday"
+        }
+      ]
+    }
+  ],
+  "postgame_rule": "Grade only after frozen RB Vacancy V1 evaluation; never rewrite pregame labels; do not fit from two teams."
+}
