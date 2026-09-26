@@ -1,0 +1,85 @@
+name: Discrete Count Mean Alignment V1 Replay
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-discrete-count-mean-alignment-v1
+    paths:
+      - "scripts/research/discrete_count_mean_alignment_v1.py"
+      - "docs/research/DISCRETE_COUNT_MEAN_ALIGNMENT_V1_MECHANICAL_AMENDMENT.md"
+      - ".github/workflows/replay-discrete-count-mean-alignment-v1.yml"
+
+jobs:
+  replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Download immutable compact authority
+        uses: actions/download-artifact@v4
+        with:
+          name: historical-fair-probability-reconstruction-v1
+          path: /tmp/discrete_count/ref
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 36275245917
+
+      - name: Download immutable raw distribution authority
+        uses: actions/download-artifact@v4
+        with:
+          name: historical-simulated-outcome-shards-v1
+          path: /tmp/discrete_count/distributions
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 36275245917
+
+      - name: Verify frozen authority identity
+        run: |
+          test -s /tmp/discrete_count/ref/full_stack_projection_trace_clean_v1.csv
+          test -s /tmp/discrete_count/ref/market_archive/historical_market_props.csv
+          test -n "$(find /tmp/discrete_count/distributions -name '*.npz' -print -quit)"
+          echo "authority_run=36275245917"
+          echo "compact_artifact=10917407106"
+          echo "compact_digest=sha256:35ad18b1a3ea96439558045a12801ea5c30a06247fce94f1ff83f6e3082c5d04"
+          echo "shards_artifact=10917506697"
+          echo "shards_digest=sha256:acd6bc80aaaf64872d2d3c752346d636e9480e2f2a4077f143a8fd8d5dfe2ec1"
+
+      - name: Run corrected frozen discrete-count evaluator only
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p /tmp/discrete_count/result
+          python scripts/research/discrete_count_mean_alignment_v1.py \
+            --projection-file /tmp/discrete_count/ref/full_stack_projection_trace_clean_v1.csv \
+            --props /tmp/discrete_count/ref/market_archive/historical_market_props.csv \
+            --distribution-dir /tmp/discrete_count/distributions \
+            --out-dir /tmp/discrete_count/result
+
+      - name: Show result
+        if: always()
+        run: |
+          cat /tmp/discrete_count/result/discrete_count_alignment_football_summary.csv 2>/dev/null || true
+          echo "--- receptions probability ---"
+          cat /tmp/discrete_count/result/discrete_count_alignment_receptions_probability_summary.csv 2>/dev/null || true
+          echo "--- disposition ---"
+          cat /tmp/discrete_count/result/discrete_count_alignment_result.json 2>/dev/null || true
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: discrete-count-mean-alignment-v1-result
+          path: /tmp/discrete_count/result/*
+          if-no-files-found: warn
+          retention-days: 14
