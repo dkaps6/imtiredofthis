@@ -245,8 +245,14 @@ def main() -> int:
             "a vacancy-specific transfer. The frozen RB Vacancy V1 candidate is not included here."
         ),
     }
-    (OUT / "summary.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps(payload, indent=2, sort_keys=True))
+    def _json_default(value):
+        if isinstance(value, np.generic):
+            return value.item()
+        raise TypeError(f"not JSON serializable: {type(value).__name__}")
+
+    rendered = json.dumps(payload, indent=2, sort_keys=True, default=_json_default)
+    (OUT / "summary.json").write_text(rendered + "\n", encoding="utf-8")
+    print(rendered)
     return 0
 
 
