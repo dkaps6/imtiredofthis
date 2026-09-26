@@ -157,3 +157,33 @@ Parameters fit: **0**
 Sportsbook inputs: **0**  
 Target-game outcomes: **0**  
 Production mutations: **0**
+
+
+## Pre-run readiness thresholds
+
+Frozen before source-audit execution:
+
+`RB_OPPONENT_DEFENDER_INJURY_SOURCE_READY` requires all of:
+
+1. injury source returns nonzero rows for 2024, 2025 and 2026;
+2. snap source returns nonzero rows for 2023, 2024, 2025 and 2026;
+3. live 2026 defensive injury source represents at least **30 NFL teams**;
+4. strictly-prior snap join coverage among all defensive injury rows is >= **90%**;
+5. strictly-prior snap join coverage among OUT/DOUBTFUL defensive rows is >= **90%**;
+6. strictly-prior snap join coverage among OUT/DOUBTFUL FRONT7 rows is >= **90%**;
+7. same/future snap violations = **0**;
+8. unresolved identity collisions = **0**;
+9. at least **80%** of matched defensive rows use a stable-ID or roster-mediated
+   identity path rather than raw name/team fallback;
+10. all integrity gates pass.
+
+`RB_OPPONENT_DEFENDER_INJURY_SOURCE_PARTIAL` requires:
+- all source seasons present;
+- chronology/integrity clean;
+- all-defensive strictly-prior join coverage >= **70%**;
+- but one or more READY gates fail.
+
+Otherwise:
+`RB_OPPONENT_DEFENDER_INJURY_SOURCE_NOT_READY`.
+
+These are deployment-readiness thresholds only; they are not predictive-performance gates.
