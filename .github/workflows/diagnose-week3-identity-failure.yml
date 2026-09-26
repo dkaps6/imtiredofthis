@@ -53,7 +53,7 @@ jobs:
       - name: Re-materialize the compact boundary with the roster-presence rule
         run: |
           set -euo pipefail
-          export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+          export PYTHONPATH="${PWD}"
           # Clear the idempotent-reuse short circuit so the rule actually runs
           # against the preserved provider rows rather than replaying the
           # compact layer the failed run already wrote.

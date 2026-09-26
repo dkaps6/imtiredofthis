@@ -29,8 +29,8 @@ def _write_slate(root: Path, rows: list[dict], roster: list[tuple[str, str]] | N
     pd.DataFrame(rows).to_csv(root / "outputs" / "props_raw.csv", index=False)
     if roster is not None:
         pd.DataFrame(
-            [{"team": t, "player": p, "role": "WR3", "position": "WR"} for t, p in roster]
-        ).to_csv(root / "data" / "roles_current_production_eligible_v1.csv", index=False)
+            [{"team": t, "player": p, "position": "WR"} for t, p in roster]
+        ).to_csv(root / "data" / "player_form.csv", index=False)
 
 
 def _row(player: str, market: str, team: str = "NO") -> dict:
@@ -48,7 +48,7 @@ def _row(player: str, market: str, team: str = "NO") -> dict:
 @pytest.fixture()
 def slate(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("ACTIVE_ROLES_CSV", raising=False)
+    monkeypatch.delenv("PLAYER_FORM_CSV", raising=False)
     return tmp_path
 
 
@@ -83,7 +83,7 @@ def test_unrostered_priced_market_row_still_fails_closed(slate):
         [_row("Chris Olave", "player_reception_yds"), _row("Barion Brown", "player_rush_yds")],
         roster=[("NO", "Chris Olave")],
     )
-    with pytest.raises(RuntimeError, match="absent from the production roster authority"):
+    with pytest.raises(RuntimeError, match="absent from PlayerForm"):
         _materialize()
 
 
@@ -99,8 +99,27 @@ def test_rostered_players_are_untouched(slate):
     assert "UNROSTERED_NONCORE_PLAYER" not in result.get("quarantine_reasons", {})
 
 
+def test_playerform_is_the_authority_not_the_raw_roles_file(slate):
+    """Ourlads supplies "Amon-Ra Brown"; PlayerForm carries the canonical name
+    after the verified override. Keying off the roles file reported him as
+    unrostered on two priced markets and raised -- observed for real on the
+    Week 3 slate. PlayerForm is the authority the identity audit uses."""
+    _write_slate(
+        slate,
+        [_row("Amon-Ra St. Brown", "player_reception_yds", team="DET"),
+         _row("Amon-Ra St. Brown", "player_receptions", team="DET")],
+        roster=[("DET", "Amon-Ra St. Brown")],
+    )
+    pd.DataFrame([{"team": "DET", "player": "Amon-Ra Brown", "position": "WR"}]).to_csv(
+        slate / "data" / "roles_current_production_eligible_v1.csv", index=False)
+    mod, result = _materialize()
+    compact = pd.read_csv(slate / "outputs" / "props_raw_compact.csv")
+    assert len(compact) == 2
+    assert "UNROSTERED_NONCORE_PLAYER" not in result.get("quarantine_reasons", {})
+
+
 def test_suffix_and_team_alias_differences_do_not_count_as_unrostered(slate):
-    # The roster spells him with the suffix and uses the alternate team code;
+    # PlayerForm spells him with the suffix and uses the alternate team code;
     # the book does neither. Keying must agree with the identity audit, which
     # strips suffixes and canonicalizes the team.
     _write_slate(
@@ -114,7 +133,7 @@ def test_suffix_and_team_alias_differences_do_not_count_as_unrostered(slate):
     assert "UNROSTERED_NONCORE_PLAYER" not in result.get("quarantine_reasons", {})
 
 
-def test_absent_roster_authority_skips_the_rule_rather_than_crashing(slate):
+def test_absent_playerform_skips_the_rule_rather_than_crashing(slate):
     _write_slate(slate, [_row("Barion Brown", "player_anytime_td")], roster=None)
     mod, result = _materialize()
     compact = pd.read_csv(slate / "outputs" / "props_raw_compact.csv")

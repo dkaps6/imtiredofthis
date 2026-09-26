@@ -48,23 +48,29 @@ STRICT_PLAYER_MARKETS = {
     "player_rush_reception_yds",
 }
 
-DEFAULT_ACTIVE_ROLES = DATA / "roles_current_production_eligible_v1.csv"
+PLAYER_FORM = DATA / "player_form.csv"
 
 
 def _roster_keys() -> set[tuple[str, str]] | None:
-    """(team, base name key) for the production roster authority, or None.
+    """(team, base name key) for the roster authority, or None if unavailable.
 
-    Keyed exactly as validate_player_identity_semantics_v1.py keys PlayerForm,
-    so a row this module lets through is a row that audit can map.
+    Deliberately reads player_form.csv rather than the raw eligible-roles file.
+    PlayerForm is the artifact validate_player_identity_semantics_v1.py maps
+    sportsbook rows against, and it is built after the verified name overrides
+    are applied -- the roles file still carries the provider's spelling, so
+    keying off it reports players as unrostered who are in fact present under
+    their canonical name (observed on Amon-Ra St. Brown, whom Ourlads supplies
+    as "Amon-Ra Brown"). Keying off the same artifact as the audit is what makes
+    "a row this module admits is a row audit can map" actually true.
     """
-    path = Path(os.getenv("ACTIVE_ROLES_CSV", str(DEFAULT_ACTIVE_ROLES)))
+    path = Path(os.getenv("PLAYER_FORM_CSV", str(PLAYER_FORM)))
     if not path.exists() or not path.stat().st_size:
         return None
-    roles = pd.read_csv(path, low_memory=False)
-    if roles.empty or not {"team", "player"}.issubset(roles.columns):
+    form = pd.read_csv(path, low_memory=False)
+    if form.empty or not {"team", "player"}.issubset(form.columns):
         return None
-    team = roles["team"].map(canon_team).astype("string").fillna("")
-    name = roles["player"].map(lambda v: player_name_key(v, strip_suffix=True))
+    team = form["team"].map(canon_team).astype("string").fillna("")
+    name = form["player"].map(lambda v: player_name_key(v, strip_suffix=True))
     return {(str(t), str(n)) for t, n in zip(team, name) if str(t) and str(n)}
 
 
@@ -292,10 +298,10 @@ def materialize() -> dict:
                 [c for c in ("event_id", "market", "player", "team_abbr") if c in model.columns],
             ].head(30)
             raise RuntimeError(
-                "priced-market sportsbook rows name players absent from the production "
-                "roster authority; this is a real roster/source gap and must be resolved "
-                f"rather than quarantined; rows={int(strict_unrostered.sum())} "
-                f"sample={sample.to_dict('records')}"
+                "priced-market sportsbook rows name players absent from PlayerForm; "
+                "this is a real roster/identity gap that would fail the downstream "
+                "identity audit anyway, so it must be resolved rather than quarantined; "
+                f"rows={int(strict_unrostered.sum())} sample={sample.to_dict('records')}"
             )
         _append_quarantine(
             quarantine_parts,
