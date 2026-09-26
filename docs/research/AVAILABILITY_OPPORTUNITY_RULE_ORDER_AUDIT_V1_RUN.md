@@ -13,3 +13,5 @@ Immutable pregame authority:
 This marker triggers the diagnostic workflow only. It does not alter production or the frozen RB Vacancy Opportunity V1 experiment.
 
 Mechanical retry 1: corrected actions/download-artifact's artifact-name directory nesting only. No methodology or data change.
+
+Mechanical retry 2: carry preserved canonical game identity as production event_id before entitlement materialization. No methodology/data change.
