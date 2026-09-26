@@ -1,0 +1,86 @@
+name: Research Receiving Rule Semantics Integrity V1 Stage1
+
+on:
+  push:
+    branches:
+      - research-public-intent-week3-prospective-v1
+    paths:
+      - 'docs/research/RECEIVING_RULE_SEMANTICS_INTEGRITY_V1_RUN.md'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  stage1:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Download immutable Week-3 no-odds authority
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 36204768034
+          path: /tmp/week3
+
+      - name: Download accepted entitlement replay authority
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 36276121522
+          path: /tmp/baseline_authority
+
+      - name: Restore preserved pregame data
+        run: |
+          set -euo pipefail
+          test -s /tmp/week3/run_36204768034/data/player_form_consensus.csv
+          test -s /tmp/week3/run_36204768034/data/model_context_bridge.csv
+          test -s /tmp/week3/run_36204768034/data/team_context_v3.csv
+          test -s /tmp/baseline_authority/run_36276121522/target_entitlement_rows.csv
+          cp -a /tmp/week3/run_36204768034/data/. data/
+
+      - name: Run frozen no-outcome structural ablation
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          SEASON: '2026'
+          PRIOR_SEASON: '2025'
+          NFL_WEEK: '3'
+          NFL_RUNTIME_WEEK: '3'
+          FETCH_LIVE_ODDS: 'false'
+          ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
+        run: |
+          python scripts/research/run_receiving_rule_semantics_integrity_v1_stage1.py
+
+      - name: Static contract assertions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          pf=Path('scripts/run_player_form_v2.py').read_text()
+          cb=Path('scripts/modeling/context_bridge.py').read_text()
+          sr=Path('scripts/modeling/simulation_rules.py').read_text()
+          rv=Path('scripts/modeling/rules_v2.py').read_text()
+          assert 'alignment_position' in pf
+          assert 'position=_text(row, ["position"]).upper()' in cb
+          assert 'alignment_position' not in cb
+          assert 'str(p.position).upper() == "SWR"' in sr
+          assert 'middle >= 0.50' in rv
+          print('STATIC_SEMANTIC_DEFECT_ASSERTIONS_PASS')
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: receiving-rule-semantics-integrity-v1-stage1
+          path: outputs/receiving_rule_semantics_integrity_v1_stage1/
