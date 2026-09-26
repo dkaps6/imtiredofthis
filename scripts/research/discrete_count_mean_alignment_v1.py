@@ -185,18 +185,26 @@ def build_count_detail(
             )
 
         target = float(r.ensemble_proj)
+        alignment_eligible = bool(np.isfinite(raw_mean) and raw_mean > 0 and np.isfinite(target))
         a0 = continuous_align(raw, target)
         a1 = discrete_largest_remainder(a0)
 
-        a0_mean_gap = abs(float(np.mean(a0)) - target)
-        a1_mean_gap = abs(float(np.mean(a1)) - target)
+        a0_mean_gap = abs(float(np.mean(a0)) - target) if np.isfinite(target) else np.nan
+        a1_mean_gap = abs(float(np.mean(a1)) - target) if np.isfinite(target) else np.nan
         max_allowed = 0.5 / float(expected_draws) + ATOL
-        if a0_mean_gap > 1e-8:
-            raise RuntimeError(f"A0 failed exact production mean alignment: {a0_mean_gap}")
-        if a1_mean_gap > max_allowed:
-            raise RuntimeError(
-                f"A1 mean alignment exceeds frozen bound: {a1_mean_gap} > {max_allowed}"
-            )
+        if alignment_eligible:
+            if a0_mean_gap > 1e-8:
+                raise RuntimeError(f"A0 failed exact production mean alignment: {a0_mean_gap}")
+            if a1_mean_gap > max_allowed:
+                raise RuntimeError(
+                    f"A1 mean alignment exceeds frozen bound: {a1_mean_gap} > {max_allowed}"
+                )
+        else:
+            # Exact production semantics: if the MC mean is non-positive,
+            # run_pricing_v2 leaves the raw distribution untouched even when
+            # another ensemble component implies a nonzero target mean.
+            if not np.array_equal(a0, raw) or not np.array_equal(a1, raw):
+                raise RuntimeError("zero/nonfinite-MC row must be an exact no-op in both arms")
         a1_integer_gap = float(np.max(np.abs(a1 - np.rint(a1)))) if len(a1) else np.inf
         if a1_integer_gap > ATOL or (a1 < -ATOL).any():
             raise RuntimeError("A1 violated nonnegative integer support")
@@ -212,6 +220,7 @@ def build_count_detail(
                 "target_mean": target,
                 "a0_mean": float(np.mean(a0)),
                 "a1_mean": float(np.mean(a1)),
+                "alignment_eligible": int(alignment_eligible),
                 "a0_mean_gap": a0_mean_gap,
                 "a1_mean_gap": a1_mean_gap,
                 "a0_fractional_draw_rate": frac_current,
@@ -255,7 +264,11 @@ def summarize_football(detail: pd.DataFrame) -> pd.DataFrame:
                     "a0_cov90_abs_error": abs(float(g.a0_cov90.mean()) - 0.90),
                     "a1_cov90_abs_error": abs(float(g.a1_cov90.mean()) - 0.90),
                     "mean_fractional_draw_rate_a0": float(g.a0_fractional_draw_rate.mean()),
-                    "max_a1_mean_gap": float(g.a1_mean_gap.max()),
+                    "max_a1_mean_gap": float(
+                        g.loc[g.alignment_eligible.eq(1), "a1_mean_gap"].max()
+                    ) if int(g.alignment_eligible.sum()) else 0.0,
+                    "alignment_eligible_rows": int(g.alignment_eligible.sum()),
+                    "production_noop_rows": int(g.alignment_eligible.eq(0).sum()),
                 }
             )
     return pd.DataFrame(rows)
@@ -351,7 +364,26 @@ def disposition(football: pd.DataFrame, probability: pd.DataFrame, detail: pd.Da
     mechanics = {
         "raw_counts_integer": bool(detail.raw_integer_max_gap.max() <= ATOL),
         "candidate_counts_integer": bool(detail.a1_integer_max_gap.max() <= ATOL),
-        "candidate_mean_bound": bool(detail.a1_mean_gap.max() <= 0.5 / EXPECTED_DRAWS + ATOL),
+        "candidate_mean_bound": bool(
+            detail.loc[detail.alignment_eligible.eq(1), "a1_mean_gap"].max()
+            <= 0.5 / EXPECTED_DRAWS + ATOL
+        ) if int(detail.alignment_eligible.sum()) else True,
+        "production_noop_rows_exact": bool(
+            np.allclose(
+                detail.loc[detail.alignment_eligible.eq(0), "a0_mean"],
+                detail.loc[detail.alignment_eligible.eq(0), "mc_proj"],
+                atol=ATOL,
+                rtol=0.0,
+                equal_nan=True,
+            )
+            and np.allclose(
+                detail.loc[detail.alignment_eligible.eq(0), "a1_mean"],
+                detail.loc[detail.alignment_eligible.eq(0), "mc_proj"],
+                atol=ATOL,
+                rtol=0.0,
+                equal_nan=True,
+            )
+        ),
         "current_fractional_support_observed": bool(detail.a0_fractional_draw_rate.mean() > 0),
         "sportsbook_inputs_to_football_zero": True,
     }
