@@ -127,10 +127,12 @@ def main() -> int:
 
     # Target entitlement requires event_id. Use the already-materialized canonical
     # model-context game identity from the same immutable Full Slate artifact.
-    identity = context_key[["team", "player_clean_key", "game_id"]].drop_duplicates()
+    identity = context_key[["team", "player_clean_key", "game_id"]].drop_duplicates().rename(
+        columns={"game_id": "event_id"}
+    )
     metrics = metrics.merge(identity, on=["team", "player_clean_key"], how="left", validate="many_to_one")
-    if metrics["game_id"].isna().any():
-        sample = metrics.loc[metrics["game_id"].isna(), ["team", "player", "player_clean_key"]].head(20)
+    if metrics["event_id"].isna().any():
+        sample = metrics.loc[metrics["event_id"].isna(), ["team", "player", "player_clean_key"]].head(20)
         raise RuntimeError(f"missing game identity before rule audit: {sample.to_dict('records')}")
 
     rules = apply_rules_to_metrics(metrics)
