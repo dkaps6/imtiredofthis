@@ -4,6 +4,52 @@ GitHub is canonical; chat memory is secondary.
 
 ---
 
+## ACTIVE CHECKPOINT — 2026-09-25 — WR ROLE-TRANSMISSION CLOSED / RB VACANCY PROSPECTIVE NEXT
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-09-25_WR_ROLE_TRANSMISSION_CLOSED_CURRENT.md`
+
+This supersedes older checkpoints for immediate execution.
+
+### Current state in one screen
+
+- production behavior unchanged
+- Receiver Room Targets-Per-Play V1 2024-2025 confirmation: **FAILED CLOSED**
+- Offensive Regime Boundary Room History V1 Stage A: **FAILED CLOSED**
+- WR Anchor / Role-Transmission Audit V1: **`WR_ANCHOR_ROLE_TRANSMISSION_NO_GAP_CLOSED`**
+- authoritative WR role-transmission run: `36203881629`
+- artifact: `10893281689`
+- digest: `sha256:33b12fd521196838054f4ee4240d8cea8f66c2fce5b5bfc9eb902bc67d730adb`
+- on 530 anchor/participation mismatch team-games, strict-prior participation leader was **-25.47 pp** worse than M38 anchor at identifying the actual top-target WR and averaged **1.498 fewer actual targets**
+- no WR hierarchy candidate is authorized; do not rescue with alternate participation thresholds/windows/blends
+- next active science is the **already-frozen** `research-rb-vacancy-opportunity-v1` prospective lane
+- Week-2 preserved pregame evidence contained zero qualifying definitive-unavailable RB/FB events; the RB vacancy hypothesis remains open awaiting a legitimate prospective event
+
+### Exact next action
+
+Continue `research-rb-vacancy-opportunity-v1` without redesign:
+
+1. inspect the current pregame 2026 availability/slate authority;
+2. if at least one RB/FB is canonical `definitive_unavailable == 1` with the frozen strict-prior evidence contract, materialize and lock the no-outcome vacancy state **before kickoff**;
+3. if none qualify, record `NO_EVENT`;
+4. do not broaden to DOUBTFUL/QUESTIONABLE, infer absence from postgame participation, reopen M96, alter YPC, or use sportsbook information upstream.
+
+### Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-09-25_WR_ROLE_TRANSMISSION_CLOSED_CURRENT.md`
+4. latest Issue #535 comments
+5. live `main` and `research-rb-vacancy-opportunity-v1` state
+
+Then work. Do not recursively load older handoffs.
+
+
+
+---
+
 ## ACTIVE CHECKPOINT — 2026-09-25 — RECEIVER ROOM TARGETS-PER-PLAY FAILED CLOSED / WR REGIME DIAGNOSTIC NEXT
 
 **Read this detailed handoff next:**
