@@ -19,3 +19,5 @@ Mechanical retry 2: carry preserved canonical game identity as production event_
 Mechanical retry 3: JSON-serialize numpy scalar outputs after successful computation. No methodology/data change.
 
 Output-only replay: persist exact per-player target-entitlement rows from the same frozen Week-3 authority for the prospective receiving-vacancy baseline. No methodology/data/model change.
+
+Retry note: mechanical artifact-restore path corrected; frozen scientific contract unchanged.
