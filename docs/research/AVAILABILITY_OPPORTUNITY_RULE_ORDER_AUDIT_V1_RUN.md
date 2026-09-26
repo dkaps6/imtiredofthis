@@ -11,3 +11,5 @@ Immutable pregame authority:
 - target outcomes unavailable/unread
 
 This marker triggers the diagnostic workflow only. It does not alter production or the frozen RB Vacancy Opportunity V1 experiment.
+
+Mechanical retry 1: corrected actions/download-artifact's artifact-name directory nesting only. No methodology or data change.
