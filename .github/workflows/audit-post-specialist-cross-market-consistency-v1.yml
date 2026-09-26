@@ -1,0 +1,98 @@
+name: Post-Specialist Cross-Market Consistency Audit V1
+
+on:
+  push:
+    branches:
+      - research-post-specialist-cross-market-consistency-v1
+    paths:
+      - "scripts/research/audit_post_specialist_cross_market_consistency_v1.py"
+      - ".github/workflows/audit-post-specialist-cross-market-consistency-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout diagnostic branch
+        uses: actions/checkout@v4
+
+      - name: Checkout exact production source
+        uses: actions/checkout@v4
+        with:
+          ref: f7d2011b73950488ea209124ba895b92c401b2b1
+          path: production_source
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install exact production dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r production_source/requirements.txt
+          pip install nflreadpy pyyaml beautifulsoup4 lxml pytest
+
+      - name: Download immutable no-odds Week-3 Full Slate
+        uses: actions/download-artifact@v4
+        with:
+          name: run_36204768034
+          path: staged
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 36204768034
+
+      - name: Verify frozen authority files
+        run: |
+          set -euo pipefail
+          test -s staged/data/player_form_consensus.csv
+          test -s staged/data/model_ml_diagnostics.csv
+          test -s staged/data/model_state_diagnostics.csv
+          test -s staged/data/model_ensemble_weights.csv
+          python - <<'PY'
+          import pandas as pd
+          x=pd.read_csv("staged/data/player_form_consensus.csv")
+          assert pd.to_numeric(x["season"],errors="raise").eq(2026).all()
+          assert pd.to_numeric(x["week"],errors="raise").eq(3).all()
+          print("AUTHORITY_PASS rows=",len(x),"teams=",x["team"].nunique())
+          PY
+
+      - name: Install frozen Full Slate data over exact production source
+        run: |
+          set -euo pipefail
+          rsync -a staged/data/ production_source/data/
+
+      - name: Compile diagnostic
+        run: python -m py_compile scripts/research/audit_post_specialist_cross_market_consistency_v1.py
+
+      - name: Run diagnostic-only audit
+        run: |
+          set -euo pipefail
+          cd production_source
+          export PYTHONPATH="${PWD}"
+          python ../scripts/research/audit_post_specialist_cross_market_consistency_v1.py \
+            --out-dir ../post_specialist_cross_market_audit \
+            --source-run 36204768034 \
+            --source-artifact 10892728623 \
+            --source-digest sha256:f52b36fb7a9c929fadca473bd8303823fb9f63bd42c884341cd6c3b52c26ed67 \
+            --source-sha f7d2011b73950488ea209124ba895b92c401b2b1
+          test -s ../post_specialist_cross_market_audit/summary.json
+          test -s ../post_specialist_cross_market_audit/RESULT.md
+          cat ../post_specialist_cross_market_audit/RESULT.md
+
+      - name: Upload diagnostic artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: post-specialist-cross-market-consistency-v1
+          path: post_specialist_cross_market_audit/
+          if-no-files-found: warn
+          retention-days: 90
