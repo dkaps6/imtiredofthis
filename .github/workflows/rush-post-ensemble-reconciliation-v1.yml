@@ -1,0 +1,83 @@
+name: Rush Post-Ensemble Reconciliation V1 Historical Test
+
+on:
+  push:
+    branches:
+      - research-rush-post-ensemble-reconciliation-v1
+    paths:
+      - "scripts/research/evaluate_rush_post_ensemble_reconciliation_v1.py"
+      - ".github/workflows/rush-post-ensemble-reconciliation-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout frozen research branch
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install scoring dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy
+
+      - name: Download preserved full-stack historical authority
+        uses: actions/download-artifact@v4
+        with:
+          name: rush-pool-evidence-guard-v1-full-stack
+          path: authority
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 36049144898
+
+      - name: Verify immutable authority
+        run: |
+          set -euo pipefail
+          test -s authority/detail_2024.csv
+          test -s authority/detail_2025.csv
+          python - <<'PY'
+          import pandas as pd
+          for y in (2024,2025):
+              x=pd.read_csv(f"authority/detail_{y}.csv",low_memory=False)
+              assert set(x["season"].astype(int).unique())=={y}
+              assert x["week"].astype(int).min()==2
+              assert x["week"].astype(int).max()==18
+              assert {"baseline_mc_proj","baseline_proj","actual","candidate_mc_proj","candidate_proj"}.issubset(x.columns)
+              print(y,"rows",len(x),"teams",x["team"].nunique())
+          PY
+
+      - name: Compile frozen scorer
+        run: python -m py_compile scripts/research/evaluate_rush_post_ensemble_reconciliation_v1.py
+
+      - name: Score frozen candidate
+        run: |
+          set -euo pipefail
+          rm -rf rush_post_ensemble_reconciliation_v1
+          python scripts/research/evaluate_rush_post_ensemble_reconciliation_v1.py \
+            --artifact-dir authority \
+            --out-dir rush_post_ensemble_reconciliation_v1
+          test -s rush_post_ensemble_reconciliation_v1/summary.json
+          test -s rush_post_ensemble_reconciliation_v1/RESULT.md
+          cat rush_post_ensemble_reconciliation_v1/RESULT.md
+
+      - name: Upload immutable result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rush-post-ensemble-reconciliation-v1
+          path: rush_post_ensemble_reconciliation_v1/
+          if-no-files-found: warn
+          retention-days: 90
