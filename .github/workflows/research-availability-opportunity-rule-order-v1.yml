@@ -1,0 +1,77 @@
+name: Research Availability Opportunity Rule Order V1
+
+on:
+  push:
+    branches:
+      - research-public-intent-week3-prospective-v1
+    paths:
+      - 'docs/research/AVAILABILITY_OPPORTUNITY_RULE_ORDER_AUDIT_V1_RUN.md'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Download immutable Week-3 no-odds Full Slate authority
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 36204768034
+          path: /tmp/week3
+
+      - name: Restore preserved pregame artifacts
+        run: |
+          set -euo pipefail
+          test -s /tmp/week3/data/current_player_availability.csv
+          test -s /tmp/week3/data/player_form_consensus.csv
+          test -s /tmp/week3/data/player_game_logs.csv
+          test -s /tmp/week3/data/model_context_bridge.csv
+          cp -a /tmp/week3/data/. data/
+
+      - name: Run frozen diagnostic
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          SEASON: '2026'
+          PRIOR_SEASON: '2025'
+          NFL_WEEK: '3'
+          NFL_RUNTIME_WEEK: '3'
+          FETCH_LIVE_ODDS: 'false'
+          ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
+        run: |
+          python scripts/research/audit_availability_opportunity_rule_order_v1.py
+
+      - name: Static no-outcome source assertions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          av = Path('scripts/build/build_reconciled_active_roles_v1.py').read_text()
+          rules = Path('scripts/modeling/simulation_rules.py').read_text()
+          ent = Path('scripts/modeling/target_entitlement_v1.py').read_text()
+          sim = Path('scripts/simulation_v2.py').read_text()
+          assert 'definitive_unavailable' in av and '.eq(0)' in av
+          assert '_injury_target_overrides(players' in rules
+          assert 'residual = max(0.0, 1.0 - final_sum)' in ent
+          assert '_top_n_shares(raw_rush_shares,5)' in sim
+          print('STATIC_RULE_ORDER_ASSERTIONS_PASS')
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: availability-opportunity-rule-order-v1
+          path: outputs/availability_opportunity_rule_order_audit_v1/
