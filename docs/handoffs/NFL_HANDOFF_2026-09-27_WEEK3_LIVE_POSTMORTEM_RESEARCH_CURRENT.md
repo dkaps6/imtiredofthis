@@ -10,12 +10,23 @@ Repository:
 `dkaps6/imtiredofthis`
 
 Current main:
-`d2a1366f04d38cfd1a4ad3a10a49d8f2102afafd`
+`29e5df40a5693b3ccb7135c2bcf7c1bd3688955d`
 
-Current-main verification:
-- Repo CI `36332026225` = **SUCCESS**
-- no-live Full Slate `36332026072` = **SUCCESS**
-- Archive Market Track Record `36332250341` = **SUCCESS**
+This is a docs-only continuity descendant of production/research main
+`d2a1366f04d38cfd1a4ad3a10a49d8f2102afafd`.
+
+Continuity PR:
+- PR #658 — Week-3 live postmortem / research continuity — **MERGED**
+- merge/current main `29e5df40a5693b3ccb7135c2bcf7c1bd3688955d`
+
+Exact current-main verification:
+- Repo CI `36357199470` = **SUCCESS**
+- no-live Full Slate `36357199471` = **SUCCESS**
+- Archive Market Track Record `36357434393` = **SUCCESS**
+- no OddsAPI acquisition occurred in these docs-only verification runs
+
+Known PR-check noise:
+- Replay Paid Full Slate Artifact Once `36357123169` failed only because legacy artifact `run_35282021679` is expired/not found; this is stale Week-2 replay infrastructure and is not evidence against the current continuity head.
 
 Recent merged research / mechanical lineage:
 - PR #656 — QB M89/M90 opportunity-efficiency decomposition — **MERGED**
@@ -482,6 +493,8 @@ Read only:
    - `5857495417` Week-3 RB-PD2 lock + QB decomposition
    - `5857596405` Opportunity Authority launch
    - `5860608905` Opportunity Authority FAILED CLOSED result
+   - `5860655436` final handoff checkpoint
+   - `5860668958` final verified continuity state
 5. query GitHub live for current main, PRs, branches, and Actions before acting
 
 Do **not** recursively load older handoffs unless this handoff explicitly points to one for a specific frozen authority.
