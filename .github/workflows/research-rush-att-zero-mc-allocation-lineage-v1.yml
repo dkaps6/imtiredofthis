@@ -47,9 +47,9 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          rm -rf /tmp/rush_lineage /tmp/hist_2023 /tmp/hist_2024 /tmp/hist_2025
+          rm -rf /tmp/rush_lineage /tmp/hist_2024 /tmp/hist_2025
           mkdir -p /tmp/rush_lineage
-          python scripts/backtest/build_historical_inputs.py --season 2023 --prior-season 2022 --weeks '1-18' --out-dir /tmp/hist_2023
+          # Exact source-build parity with authoritative run 36275245917.
           python scripts/backtest/build_historical_inputs.py --season 2024 --prior-season 2023 --weeks '1-18' --out-dir /tmp/hist_2024
           python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks '1-18' --out-dir /tmp/hist_2025
 
@@ -59,7 +59,7 @@ jobs:
           from pathlib import Path
           import pandas as pd
 
-          roots=[Path('/tmp/hist_2023'),Path('/tmp/hist_2024'),Path('/tmp/hist_2025')]
+          roots=[Path('/tmp/hist_2024'),Path('/tmp/hist_2025')]
           out=Path('/tmp/rush_lineage')
           for name in ['schedule_history.csv','team_weekly_history.csv']:
               x=pd.concat([pd.read_csv(p/name) for p in roots],ignore_index=True,sort=False)
@@ -69,12 +69,6 @@ jobs:
                   raise RuntimeError(f'duplicate combined rows in {name}')
               x.to_csv(out/name,index=False)
           PY
-
-      - name: Enrich historical team authority
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/backtest/enrich_historical_defense.py             --team-weekly /tmp/rush_lineage/team_weekly_history.csv             --seasons 2023,2024,2025             --audit /tmp/rush_lineage/historical_defense_enrichment_audit.csv             --observations /tmp/rush_lineage/historical_defense_observations.csv
 
       - name: Build historical player authority
         env:
@@ -138,4 +132,3 @@ jobs:
             /tmp/rush_lineage/result_2024/**
             /tmp/rush_lineage/result_2025/**
             /tmp/rush_lineage/combined/**
-            /tmp/rush_lineage/historical_defense_enrichment_audit.csv

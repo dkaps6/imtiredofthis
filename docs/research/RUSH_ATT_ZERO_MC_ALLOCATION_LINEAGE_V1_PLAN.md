@@ -108,3 +108,7 @@ Hard reproduction gate before interpretation:
 
 If those counts do not reproduce exactly, the lineage run is mechanical-fail and
 its scientific output must not be interpreted.
+
+- exact workflow parity also requires the same two historical-input roots
+  (2024/prior-2023 and 2025/prior-2024) and **no separate defense-enrichment
+  mutation** before the component rebuild, matching run `36275245917`.
