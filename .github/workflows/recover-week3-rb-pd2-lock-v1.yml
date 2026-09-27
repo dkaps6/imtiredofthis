@@ -157,7 +157,7 @@ jobs:
           python scripts/research/assemble_rb_pd2_forward_locks_v1.py \
             --session-dir "${SESSION_DIR}" \
             --history-state /tmp/rb_pd2_history/history/rb_pd2_forward_history_state.csv \
-            --history-manifest /tmp/rb_pd2_history/history/rb_pd2_forward_history_manifest.json \
+            --history-manifest /tmp/rb_pd2_history/history/rb_pd2_forward_history_manifest_recovery.json \
             --prospective-start-utc "${PROSPECTIVE_START_UTC}" \
             --out-dir data/research/rb_pd2_forward/recovered_week3_lock
 
