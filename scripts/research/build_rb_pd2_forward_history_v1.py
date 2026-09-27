@@ -185,14 +185,37 @@ def build_artifacts(
 
     history = pd.concat(parts, ignore_index=True, sort=False)
     state = build_history_state(history)
+
+    # The forward-history artifact is consumed from CSV in later live runs.
+    # Hash the persisted/round-tripped representation rather than the
+    # pre-serialization DataFrame so the producer and consumer prove the same
+    # bytes-to-DataFrame contract. This is provenance-only; no science row,
+    # feature, outcome, or difficulty value is changed.
+    out_dir.mkdir(parents=True, exist_ok=True)
+    state_path = out_dir / "rb_pd2_forward_history_state.csv"
+    manifest_path = out_dir / "rb_pd2_forward_history_manifest.json"
+    state.to_csv(state_path, index=False)
+    persisted_state = pd.read_csv(state_path, low_memory=False)
+    persisted_state.columns = [str(col).strip().lower() for col in persisted_state.columns]
+    if len(persisted_state) != len(state):
+        raise RuntimeError(
+            f"history CSV roundtrip row-count drift: before={len(state)} after={len(persisted_state)}"
+        )
+
     manifest = build_history_manifest(
-        state,
+        persisted_state,
         root=Path("."),
         source_label="2025 leakage-safe components + explicitly certified completed 2026 history",
     )
+    manifest["history_state_serialization_contract"] = "PERSISTED_CSV_ROUNDTRIP_V1"
+    manifest["history_state_file_sha256"] = _file_sha256(state_path)
+
     completed_2026_weeks = sorted(
         pd.to_numeric(
-            state.loc[pd.to_numeric(state["season"], errors="coerce").eq(2026), "week"],
+            persisted_state.loc[
+                pd.to_numeric(persisted_state["season"], errors="coerce").eq(2026),
+                "week",
+            ],
             errors="coerce",
         ).dropna().astype(int).unique().tolist()
     )
@@ -216,15 +239,13 @@ def build_artifacts(
         "zero_prospective_outcomes_used": True,
     })
 
-    out_dir.mkdir(parents=True, exist_ok=True)
-    state_path = out_dir / "rb_pd2_forward_history_state.csv"
-    manifest_path = out_dir / "rb_pd2_forward_history_manifest.json"
-    state.to_csv(state_path, index=False)
     manifest_path.write_text(
         json.dumps(manifest, indent=2, sort_keys=True, allow_nan=False),
         encoding="utf-8",
     )
-    return state, manifest
+    # Return the exact persisted representation so callers/tests see the same
+    # state the live lock consumer will read.
+    return persisted_state, manifest
 
 
 def main() -> int:
