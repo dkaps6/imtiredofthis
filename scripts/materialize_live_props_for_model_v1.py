@@ -17,7 +17,12 @@ import json
 import re
 from pathlib import Path
 
+import os
+
 import pandas as pd
+
+from scripts._opponent_map import canon_team
+from scripts.utils.player_identity_v3 import player_name_key
 
 DATA = Path("data")
 OUTPUTS = Path("outputs")
@@ -42,6 +47,31 @@ STRICT_PLAYER_MARKETS = {
     "player_receptions",
     "player_rush_reception_yds",
 }
+
+PLAYER_FORM = DATA / "player_form.csv"
+
+
+def _roster_keys() -> set[tuple[str, str]] | None:
+    """(team, base name key) for the roster authority, or None if unavailable.
+
+    Deliberately reads player_form.csv rather than the raw eligible-roles file.
+    PlayerForm is the artifact validate_player_identity_semantics_v1.py maps
+    sportsbook rows against, and it is built after the verified name overrides
+    are applied -- the roles file still carries the provider's spelling, so
+    keying off it reports players as unrostered who are in fact present under
+    their canonical name (observed on Amon-Ra St. Brown, whom Ourlads supplies
+    as "Amon-Ra Brown"). Keying off the same artifact as the audit is what makes
+    "a row this module admits is a row audit can map" actually true.
+    """
+    path = Path(os.getenv("PLAYER_FORM_CSV", str(PLAYER_FORM)))
+    if not path.exists() or not path.stat().st_size:
+        return None
+    form = pd.read_csv(path, low_memory=False)
+    if form.empty or not {"team", "player"}.issubset(form.columns):
+        return None
+    team = form["team"].map(canon_team).astype("string").fillna("")
+    name = form["player"].map(lambda v: player_name_key(v, strip_suffix=True))
+    return {(str(t), str(n)) for t, n in zip(team, name) if str(t) and str(n)}
 
 
 def _text(s: pd.Series) -> pd.Series:
@@ -240,6 +270,50 @@ def materialize() -> dict:
         "UNMODELED_NONCORE_PLAYER_IDENTITY",
     )
     model = model.loc[~noncore_bad].copy()
+
+    # A sportsbook may price a player the production roster authority does not
+    # carry -- a real signing or elevation the Ourlads scrape has not picked up.
+    # The downstream identity audit maps every model-facing row against that
+    # same authority, so leaving such a row here fails the whole slate closed
+    # after the odds have already been paid for.
+    #
+    # Apply this file's existing core/non-core split to it: on a priced market
+    # an unmappable player is a real blocker and still raises, but on a
+    # non-priced market (anytime_td) it is quarantined with a reason and
+    # counted in the status artifact, exactly like the other identity defects
+    # above. That keeps the gate strict everywhere the board is actually
+    # priced, and keeps one unpriced row from destroying a paid slate.
+    roster_keys = _roster_keys()
+    if roster_keys:
+        strict_mask = _text(model["market"]).isin(STRICT_PLAYER_MARKETS)
+        row_keys = [
+            (str(canon_team(t)), str(player_name_key(pl, strip_suffix=True)))
+            for t, pl in zip(model["team_abbr"], model["player"])
+        ]
+        unrostered = pd.Series([k not in roster_keys for k in row_keys], index=model.index)
+        strict_unrostered = unrostered & strict_mask
+        if strict_unrostered.any():
+            sample = model.loc[
+                strict_unrostered,
+                [c for c in ("event_id", "market", "player", "team_abbr") if c in model.columns],
+            ].head(30)
+            raise RuntimeError(
+                "priced-market sportsbook rows name players absent from PlayerForm; "
+                "this is a real roster/identity gap that would fail the downstream "
+                "identity audit anyway, so it must be resolved rather than quarantined; "
+                f"rows={int(strict_unrostered.sum())} sample={sample.to_dict('records')}"
+            )
+        _append_quarantine(
+            quarantine_parts,
+            model.loc[unrostered & ~strict_mask],
+            "UNROSTERED_NONCORE_PLAYER",
+        )
+        model = model.loc[~unrostered].copy()
+        if model.empty:
+            raise RuntimeError(
+                "every model-facing sportsbook row was quarantined as unrostered; "
+                "the roster authority is almost certainly broken rather than merely stale"
+            )
 
     for col in ("event_id", "market", "player", "team_abbr", "opponent_abbr", "offers_json"):
         if col not in model.columns:

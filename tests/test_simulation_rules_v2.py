@@ -77,3 +77,48 @@ def test_simulation_prefers_rule_adjusted_inputs():
     base_yards = lookup(a, base.iloc[0], "pass_yards")
     adj_yards = lookup(b, adjusted.iloc[0], "pass_yards")
     assert float(np.mean(adj_yards)) > float(np.mean(base_yards))
+
+
+def test_full_bayesian_authority_removes_sportsbook_shape_from_injury_redistribution(monkeypatch):
+    ind = _team("IND")
+    hou = _team("HOU")
+    players = [
+        PlayerContext("Alpha", "IND", "HOU", 2026, 3, "LWR", "WR1", "g1", {"tgt_share": 0.30, "injury_status": "OUT"}, ind, hou),
+        PlayerContext("WR2", "IND", "HOU", 2026, 3, "RWR", "WR2", "g1", {"tgt_share": 0.20}, ind, hou),
+        PlayerContext("Slot", "IND", "HOU", 2026, 3, "SWR", "WR3", "g1", {"tgt_share": 0.18}, ind, hou),
+        PlayerContext("Tight End", "IND", "HOU", 2026, 3, "TE", "TE1", "g1", {"tgt_share": 0.12}, ind, hou),
+        PlayerContext("Back", "IND", "HOU", 2026, 3, "RB", "RB1", "g1", {"tgt_share": 0.10}, ind, hou),
+    ]
+    monkeypatch.setattr(simulation_rules, "load_model_contexts", lambda: ({"IND": ind, "HOU": hou}, players))
+
+    bayes = pd.DataFrame([
+        {"player": "Alpha", "player_clean_key": "alpha", "team": "IND", "bayes_tgt_share": 0.24},
+        {"player": "WR2", "player_clean_key": "wr2", "team": "IND", "bayes_tgt_share": 0.21},
+        {"player": "Slot", "player_clean_key": "slot", "team": "IND", "bayes_tgt_share": 0.17},
+        {"player": "Tight End", "player_clean_key": "tightend", "team": "IND", "bayes_tgt_share": 0.11},
+        {"player": "Back", "player_clean_key": "back", "team": "IND", "bayes_tgt_share": 0.09},
+    ])
+    full = pd.DataFrame([
+        {"player": r["player"], "player_clean_key": r["player_clean_key"], "team": "IND", "opponent": "HOU",
+         "position": next(p.position for p in players if p.player == r["player"]), "bayes_tgt_share": r["bayes_tgt_share"]}
+        for r in bayes.to_dict("records")
+    ])
+    partial = full.loc[~full["player"].eq("Alpha")].copy()
+
+    full_out = simulation_rules.apply_rules_to_metrics(full, bayes_baseline=bayes).set_index("player")
+    partial_out = simulation_rules.apply_rules_to_metrics(partial, bayes_baseline=bayes).set_index("player")
+    recipients = ["WR2", "Slot", "Tight End", "Back"]
+    assert np.allclose(
+        full_out.loc[recipients, "rules_tgt_share"].to_numpy(float),
+        partial_out.loc[recipients, "rules_tgt_share"].to_numpy(float),
+        rtol=0,
+        atol=1e-12,
+    )
+
+    legacy_partial = simulation_rules.apply_rules_to_metrics(partial).set_index("player")
+    assert not np.allclose(
+        partial_out.loc[recipients, "rules_tgt_share"].to_numpy(float),
+        legacy_partial.loc[recipients, "rules_tgt_share"].to_numpy(float),
+        rtol=0,
+        atol=1e-12,
+    )
