@@ -45,6 +45,57 @@ def _largest_remainder(z: np.ndarray) -> np.ndarray:
     return out.astype(float)
 
 
+def align_prealigned_outcomes(
+    continuous_outcomes: np.ndarray,
+    *,
+    market: str,
+    eligible: bool,
+    target_mean: float,
+) -> tuple[np.ndarray, dict]:
+    """Restore integer support after the legacy mean-alignment step.
+
+    This entry point lets production preserve its pre-existing draw-array
+    binding/guard semantics while applying the exact qualified V1 transform.
+    It never constructs a football mean or makes a zero-MC row eligible.
+    """
+    continuous = np.asarray(continuous_outcomes, dtype=float)
+    if continuous.ndim != 1 or len(continuous) == 0:
+        raise RuntimeError(f"{VERSION} requires a non-empty 1-D outcome array")
+
+    canonical_market = str(market or "").lower().strip()
+    target = float(target_mean) if np.isfinite(target_mean) else np.nan
+    applied = int(bool(eligible) and canonical_market in COUNT_MARKETS)
+
+    if applied:
+        adjusted = _largest_remainder(continuous)
+        integer_gap = float(np.max(np.abs(adjusted - np.rint(adjusted))))
+        if integer_gap > ATOL or (adjusted < -ATOL).any():
+            raise RuntimeError(f"{VERSION} failed integer-support invariant")
+        target_gap = abs(float(np.mean(adjusted)) - target)
+        max_gap = 0.5 / float(len(adjusted)) + ATOL
+        if target_gap > max_gap:
+            raise RuntimeError(
+                f"{VERSION} target-mean gap {target_gap} exceeds {max_gap}"
+            )
+        frac_rate = float(np.mean(np.abs(continuous - np.rint(continuous)) > ATOL))
+        meta = {
+            "discrete_count_alignment_applied": 1,
+            "discrete_count_alignment_version": VERSION,
+            "discrete_count_alignment_pre_fractional_rate": frac_rate,
+            "discrete_count_alignment_post_integer_max_gap": integer_gap,
+            "discrete_count_alignment_target_mean_gap": target_gap,
+        }
+        return adjusted, meta
+
+    meta = {
+        "discrete_count_alignment_applied": 0,
+        "discrete_count_alignment_version": "",
+        "discrete_count_alignment_pre_fractional_rate": np.nan,
+        "discrete_count_alignment_post_integer_max_gap": np.nan,
+        "discrete_count_alignment_target_mean_gap": np.nan,
+    }
+    return continuous, meta
+
 def align_outcomes(
     base_outcomes: np.ndarray,
     *,
@@ -71,35 +122,9 @@ def align_outcomes(
     else:
         continuous = base.copy()
 
-    applied = int(eligible and canonical_market in COUNT_MARKETS)
-    if applied:
-        adjusted = _largest_remainder(continuous)
-        integer_gap = float(np.max(np.abs(adjusted - np.rint(adjusted))))
-        if integer_gap > ATOL or (adjusted < -ATOL).any():
-            raise RuntimeError(f"{VERSION} failed integer-support invariant")
-        target_gap = abs(float(np.mean(adjusted)) - target)
-        max_gap = 0.5 / float(len(adjusted)) + ATOL
-        if target_gap > max_gap:
-            raise RuntimeError(
-                f"{VERSION} target-mean gap {target_gap} exceeds {max_gap}"
-            )
-        frac_rate = float(np.mean(np.abs(continuous - np.rint(continuous)) > ATOL))
-        meta = {
-            "discrete_count_alignment_applied": 1,
-            "discrete_count_alignment_version": VERSION,
-            "discrete_count_alignment_pre_fractional_rate": frac_rate,
-            "discrete_count_alignment_post_integer_max_gap": integer_gap,
-            "discrete_count_alignment_target_mean_gap": target_gap,
-        }
-        return adjusted, meta
-
-    # Non-count markets and production-ineligible zero/nonfinite-MC rows preserve
-    # exact pre-V1 semantics.
-    meta = {
-        "discrete_count_alignment_applied": 0,
-        "discrete_count_alignment_version": "",
-        "discrete_count_alignment_pre_fractional_rate": np.nan,
-        "discrete_count_alignment_post_integer_max_gap": np.nan,
-        "discrete_count_alignment_target_mean_gap": np.nan,
-    }
-    return continuous, meta
+    return align_prealigned_outcomes(
+        continuous,
+        market=canonical_market,
+        eligible=eligible,
+        target_mean=target,
+    )

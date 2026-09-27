@@ -29,7 +29,7 @@ import pandas as pd
 
 from scripts.modeling.bayesian_v2 import apply_bayesian_to_metrics
 from scripts.modeling.ensemble_v2 import apply_ensemble, load_weights
-from scripts.modeling.discrete_count_alignment_v1 import align_outcomes as align_discrete_count_outcomes
+from scripts.modeling.discrete_count_alignment_v1 import align_prealigned_outcomes
 from scripts.modeling.ml_v2 import apply_ml_to_metrics
 from scripts.modeling.qb_pass_synthesis_v1 import (
     attempt_conversion,
@@ -360,14 +360,24 @@ def price(season: int) -> pd.DataFrame:
                     f"team={row.get('team')} opponent={row.get('opponent')}: {exc}"
                 ) from exc
 
-        # Preserve current continuous mean-alignment semantics for yardage/TD
-        # markets, while the research-qualified V1 adapter restores integer
-        # support for receptions and rush-attempt counts. The helper preserves
-        # the existing zero/nonfinite-MC no-op guard exactly.
-        adjusted_outcomes, discrete_count_meta = align_discrete_count_outcomes(
-            base_outcomes,
+        # Preserve Monte Carlo's non-negative distribution shape while aligning
+        # its mean to the final football projection. Keep this original binding
+        # structure intact because RB-PD2 shadow capture explicitly guards that
+        # the shadow hook cannot mutate or rebind the priced draw array.
+        count_alignment_eligible = bool(
+            np.isfinite(mc_proj) and mc_proj > 0 and np.isfinite(target_mean)
+        )
+        if count_alignment_eligible:
+            adjusted_outcomes = base_outcomes * max(0.0, target_mean / mc_proj)
+        else:
+            adjusted_outcomes = base_outcomes
+
+        # V1 is representation-only: after the existing football mean is
+        # aligned, restore integer support for qualified count markets.
+        adjusted_outcomes, discrete_count_meta = align_prealigned_outcomes(
+            adjusted_outcomes,
             market=market,
-            mc_proj=mc_proj,
+            eligible=count_alignment_eligible,
             target_mean=target_mean,
         )
 

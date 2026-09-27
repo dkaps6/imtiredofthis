@@ -3,6 +3,7 @@ import numpy as np
 from scripts.modeling.discrete_count_alignment_v1 import (
     VERSION,
     align_outcomes,
+    align_prealigned_outcomes,
 )
 
 
@@ -70,6 +71,30 @@ def test_noncount_zero_mc_is_exact_legacy_noop():
         market="rec_yards",
         mc_proj=0.0,
         target_mean=17.5,
+    )
+    assert np.array_equal(out, raw)
+    assert meta["discrete_count_alignment_applied"] == 0
+
+
+def test_prealigned_adapter_matches_full_helper_exactly():
+    raw = np.array([0, 1, 2, 3, 4, 5], dtype=float)
+    mc = float(raw.mean())
+    target = 2.91
+    continuous = raw * (target / mc)
+    full, full_meta = align_outcomes(
+        raw, market="receptions", mc_proj=mc, target_mean=target
+    )
+    adapted, adapted_meta = align_prealigned_outcomes(
+        continuous, market="receptions", eligible=True, target_mean=target
+    )
+    assert np.array_equal(adapted, full)
+    assert adapted_meta == full_meta
+
+
+def test_prealigned_adapter_preserves_zero_mc_noop():
+    raw = np.zeros(2000, dtype=float)
+    out, meta = align_prealigned_outcomes(
+        raw, market="rush_att", eligible=False, target_mean=2.5
     )
     assert np.array_equal(out, raw)
     assert meta["discrete_count_alignment_applied"] == 0

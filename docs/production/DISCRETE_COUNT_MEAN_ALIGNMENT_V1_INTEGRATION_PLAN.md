@@ -159,3 +159,22 @@ Do not:
 - combine with the zero-MC transmission repair.
 
 No production promotion occurs from this plan itself.
+
+
+## Mechanical integration compatibility amendment — 2026-09-26
+
+The first full Repo CI on the integration head exposed one pre-existing RB-PD2
+shadow-safety AST guard that deliberately requires the legacy
+`adjusted_outcomes` if/else binding to remain present and outside the shadow
+hook. The count integration had replaced that syntax with a tuple-return helper,
+so the guard failed even though exact integration parity passed.
+
+The mechanical correction preserves the original production mean-alignment
+if/else unchanged in behavior, then sends the already-aligned draw array through
+a versioned pre-aligned V1 adapter. The adapter delegates to the exact same
+largest-remainder implementation and retains the same eligibility boolean.
+
+This amendment changes no research formula, count-market scope, target mean,
+ensemble weight, zero-MC behavior, sportsbook boundary, shadow behavior, or
+candidate variant. Acceptance remains the original integration workflow plus
+full Repo CI.
