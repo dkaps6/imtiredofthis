@@ -27,7 +27,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from scripts.modeling.bayesian_v2 import apply_bayesian_to_metrics
+from scripts.modeling.bayesian_v2 import apply_bayesian_to_metrics, load_bayesian_baseline
 from scripts.modeling.ensemble_v2 import apply_ensemble, load_weights
 from scripts.modeling.ml_v2 import apply_ml_to_metrics
 from scripts.modeling.qb_pass_synthesis_v1 import (
@@ -128,12 +128,13 @@ def price(season: int) -> pd.DataFrame:
     if state_rows == 0:
         raise RuntimeError("State v2 matched 0 supported pricing rows; refusing legacy 0.5 fallback behavior")
 
-    df = apply_bayesian_to_metrics(df)
+    bayes_baseline = load_bayesian_baseline()
+    df = apply_bayesian_to_metrics(df, baseline=bayes_baseline)
     bayes_rows = int(pd.to_numeric(df.get("bayes_applied", 0), errors="coerce").fillna(0).sum())
     if bayes_rows == 0:
         raise RuntimeError("Bayesian adapter matched 0 metrics rows; refusing baseline-only production pricing")
 
-    df = apply_rules_to_metrics(df)
+    df = apply_rules_to_metrics(df, bayes_baseline=bayes_baseline)
     rule_rows = int(pd.to_numeric(df.get("rules_applied", 0), errors="coerce").fillna(0).sum())
     if rule_rows == 0:
         raise RuntimeError("Canonical rule adapter matched 0 rows; refusing untracked production pricing")
