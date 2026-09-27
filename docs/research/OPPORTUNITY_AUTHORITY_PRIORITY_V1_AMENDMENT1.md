@@ -44,6 +44,16 @@ The 2025 WR downstream gates remain binding. They now mean:
 
 No 2025 WR gate is removed, weakened, or replaced.
 
+## Position-family fidelity
+
+Production Bayesian grouping defines `RB/HB/FB` as one RB family. Therefore the
+research selector must normalize `FB` into the RB family before applying the
+frozen fast-state rush-share authority. A pre-score implementation review found
+the first selector draft preserved `FB` as a separate label; this was corrected
+before any candidate result was computed or inspected.
+
+A focused unit test locks this normalization.
+
 ## Monte Carlo opportunity trace
 
 The candidate evaluator may record realized mean targets/carries from the
