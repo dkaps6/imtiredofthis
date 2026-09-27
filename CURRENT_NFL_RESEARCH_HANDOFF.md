@@ -1,6 +1,56 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 GitHub is canonical; chat memory is secondary.
 
+---
+
+## ACTIVE CHECKPOINT — 2026-09-26 — WEEK-3 FULL SLATE REPAIRED / SYSTEMS-AUDIT + PROSPECTIVE LOCKS CURRENT
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-09-26_FULL_SLATE_REPAIRED_SYSTEMS_CURRENT.md`
+
+**Compact next-chat bootstrap:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-09-26_FULL_SLATE_REPAIRED_SYSTEMS.md`
+
+This supersedes older checkpoints for immediate execution.
+
+### Current state in one screen
+
+- production-code authority merged in PR #645 at `4c0e9e25f0957877820cade6897cf977d265533a`;
+- canonical no-live-odds Full Slate run `36283114203`: **SUCCESS**;
+- Repo CI `36283114216`: **SUCCESS**;
+- Week-3 partial slate = 30 teams / 15 games and is mechanically green;
+- confirmed live blockers fixed:
+  1. unrostered non-core sportsbook rows quarantine instead of killing a paid slate;
+  2. injury target redistribution now consumes complete PlayerForm Bayesian football authority rather than sportsbook-shaped row presence;
+- exact failed-artifact replay `36281702615`: **SUCCESS**, all protected football-assumption diffs 0.0;
+- earlier 32-team theory is superseded for the live Week-3 failure;
+- next actual-board gate is one controlled `fetch_live_odds=true` Full Slate; this consumes OddsAPI credits and requires explicit user authorization;
+- no post-repair paid live-odds run has been launched yet;
+- RB Rush+Receiving Conservation V2 remains production-active/protected;
+- Availability -> Opportunity Rule-Order Gap is confirmed;
+- RB Vacancy V1 DEN/PIT is frozen pregame and must not change before outcomes;
+- DEN/PIT public-intent labels are frozen and grade only after Vacancy V1;
+- Receiving Rule Semantics Stage 1 confirmed middle-open unit mismatch + lost SWR alignment;
+- retrospective Stage 2 closed as `HISTORICAL_SOURCE_UNAVAILABLE_PROSPECTIVE_ONLY`;
+- exact Week-3 receiving A/B cells are frozen prospectively for postgame grading;
+- Discrete Count Mean Alignment V1 is research-qualified for integration but not production-promoted;
+- rush-att zero-MC ensemble transmission remains a separate unresolved systems-integrity lane;
+- closed research families remain closed; no rescue/retest loops.
+
+### Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-09-26_FULL_SLATE_REPAIRED_SYSTEMS_CURRENT.md`
+4. Issue #535 comments `5851005226`, `5851180199`, `5851353477`, then newer comments only
+5. live main / branch / Actions state
+
+Then work. Do not recursively load older handoffs.
+
+
 
 ---
 
