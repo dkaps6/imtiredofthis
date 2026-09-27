@@ -2,6 +2,66 @@
 GitHub is canonical; chat memory is secondary.
 
 ---
+## ACTIVE CHECKPOINT — 2026-09-27 — PAID WEEK-3 BOARD CERTIFIED / RB LINEAGE SEMANTICS CURRENT
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-09-27_PAID_WEEK3_BOARD_CERTIFIED_CURRENT.md`
+
+**Compact next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-09-27_PAID_WEEK3_BOARD_CERTIFIED.md`
+
+This supersedes all older checkpoints for immediate execution.
+
+### Current state in one screen
+
+- production code main before this docs-only continuity update: `6a1de05842a03272e51269d35a7a01ca8dd1ab12`;
+- Repo CI `36321552702` = SUCCESS;
+- no-live Full Slate `36321552693` = SUCCESS;
+- Archive Market Track Record `36321720427` = SUCCESS;
+- canonical successful paid Week-3 Full Slate `36293274478` = SUCCESS;
+- paid artifact `10923570170`, digest `sha256:5a3d4f64592c70553e66dd51bb3bff45263d2900f4d270e370353fa60ea1c480`;
+- PR #650 Zach Ertz live-prop quarantine = MERGED;
+- PR #651 post-registry verified player identity aliases = MERGED;
+- PR #652 week-aware RB market-lineage/workbook semantics = MERGED;
+- exact paid-snapshot identity certification `36294114610` = SUCCESS, blockers = 0;
+- exact paid-snapshot RB-lineage verification `36321385122` = SUCCESS;
+- Week-3 standalone RB rush yards are generic canonical; P3 is Week-1-only and not active;
+- Week-3 RB rush+receiving correctly consumes RB Rush+Receiving Conservation V2;
+- raw workbook edge is not a validated confidence tier or staking policy;
+- 2026 W1-2 descriptive QB pass-yards record = 36-16 (69.23%, +15.99 units);
+- RB rush-yards / rush+rec live-season results are approximately coin-flip and do not justify blindly promoting the giant Week-3 RB raw edges;
+- no fresh OddsAPI spend is authorized by this checkpoint.
+
+### Exact next action
+
+Use the preserved paid artifact for Week-3 board analysis without refetching odds.
+
+Treat QB passing yards as the strongest current **descriptive** live-season evidence lane, but do not create a post-hoc selection threshold from Weeks 1-2.
+
+Treat the giant RB raw edges cautiously. If a concrete implementation/weighting/data-lineage contradiction is found, freeze it before scoring and audit it mechanically. Do not alter science merely because the sportsbook gap is large.
+
+Preserve all frozen Week-3 prospective lanes until outcomes are final:
+- RB Vacancy Opportunity V1 / DEN + PIT public-intent labels;
+- Receiving Rule Semantics A0B0/A1B0/A0B1/A1B1;
+- Availability -> Opportunity rule-order finding.
+
+A fresh `fetch_live_odds=true` Full Slate requires new explicit user authorization.
+
+### Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-09-27_PAID_WEEK3_BOARD_CERTIFIED_CURRENT.md`
+4. Issue #535 comments from `5852547875` onward, especially `5856067868` and `5856188328`
+5. live main / PR #642 / relevant Actions state
+
+Then work. Do not recursively load older handoffs.
+
+---
+
 ## ACTIVE CHECKPOINT — 2026-09-26 — SYSTEMS AUDIT CLOSED / DISCRETE COUNT V1 PROMOTED CURRENT
 
 **Read this detailed handoff next:**
