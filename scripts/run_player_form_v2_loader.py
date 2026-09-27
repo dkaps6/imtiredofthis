@@ -138,7 +138,7 @@ def attach_schedule_with_game_identity(logs: pd.DataFrame, schedule: pd.DataFram
 
 
 PERSISTENT_IDENTITY_ALIASES = Path("data/player_identity_aliases.csv")
-CURRENT_IDENTITY_ALIASES = Path("data/player_identity_current_aliases.csv")
+CURRENT_IDENTITY_ALIASES = Path("config/player_identity_current_aliases_v1.csv")
 
 
 def _identity_position(value) -> str:
