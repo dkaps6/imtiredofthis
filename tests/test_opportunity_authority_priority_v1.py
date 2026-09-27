@@ -85,6 +85,26 @@ def test_fast_state_authority_changes_only_frozen_opportunity_cells(monkeypatch)
         )
 
 
+def test_fullback_uses_rb_fast_state_authority(monkeypatch):
+    off, deff, _ = _contexts()
+    fb = PlayerContext(
+        player="FB One", team="AAA", opponent="BBB", season=2025, week=3,
+        position="FB", role="FB1", offense=off, defense=deff,
+        features={"rush_share": 0.14, "tgt_share": 0.05, "ypc": 3.8, "ypt": 5.0},
+    )
+    monkeypatch.setattr(sr, "load_model_contexts", lambda: ({}, [fb]))
+    metrics = pd.DataFrame([{
+        "player": "FB One", "player_clean_key": "fbone", "team": "AAA",
+        "position": "FB", "rush_share": 0.14, "tgt_share": 0.05,
+        "bayes_rush_share": 0.06, "bayes_tgt_share": 0.04,
+        "bayes_ypc": 3.8, "bayes_ypt": 5.0,
+    }])
+    out = sr.apply_rules_to_metrics(
+        metrics, opportunity_authority=sr.OPPORTUNITY_AUTHORITY_PLAYERFORM_FAST_STATE
+    )
+    assert out.loc[0, "rules_rush_share"] == pytest.approx(0.14)
+
+
 def test_unknown_authority_fails_closed(monkeypatch):
     _, _, players = _contexts()
     monkeypatch.setattr(sr, "load_model_contexts", lambda: ({}, players))
