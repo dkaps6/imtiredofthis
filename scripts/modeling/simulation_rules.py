@@ -41,6 +41,58 @@ def _is_wr(position: str, role: str) -> bool:
     return p in {"WR", "LWR", "RWR", "SWR"} or "WR" in r
 
 
+OPPORTUNITY_AUTHORITY_BASELINE = "bayes"
+OPPORTUNITY_AUTHORITY_PLAYERFORM_FAST_STATE = "playerform_fast_state"
+
+
+def _position_family_from_row(row: pd.Series, ctx: PlayerContext | None = None) -> str:
+    for col in ("position_group", "position", "alignment_position"):
+        value = row.get(col)
+        if value is None or pd.isna(value):
+            continue
+        p = str(value).upper().strip()
+        if p in {"HB", "TB"} or p.startswith("RB"):
+            return "RB"
+        if p.startswith("FB"):
+            return "FB"
+        if p.startswith("WR") or p in {"LWR", "RWR", "SWR"}:
+            return "WR"
+        if p.startswith("TE"):
+            return "TE"
+        if p.startswith("QB"):
+            return "QB"
+        if p:
+            return p
+    if ctx is not None:
+        p = str(ctx.position or "").upper().strip()
+        if p in {"HB", "TB"} or p.startswith("RB"):
+            return "RB"
+        if p.startswith("WR") or p in {"LWR", "RWR", "SWR"}:
+            return "WR"
+        if p.startswith("TE"):
+            return "TE"
+        if p.startswith("FB"):
+            return "FB"
+        if p.startswith("QB"):
+            return "QB"
+    return ""
+
+
+def _fast_state_target_share(row: pd.Series, ctx: PlayerContext | None = None) -> float:
+    return _num(
+        row.get(
+            "tgt_share",
+            row.get("target_share", ctx.features.get("tgt_share") if ctx is not None else np.nan),
+        )
+    )
+
+
+def _fast_state_rush_share(row: pd.Series, ctx: PlayerContext | None = None) -> float:
+    return _num(
+        row.get("rush_share", ctx.features.get("rush_share") if ctx is not None else np.nan)
+    )
+
+
 def _wr_role_labels(players: list[PlayerContext]) -> Dict[tuple[str, str], str]:
     out: Dict[tuple[str, str], str] = {}
     by_team: Dict[str, list[PlayerContext]] = {}
@@ -109,9 +161,20 @@ def _injury_target_overrides(
     return overrides
 
 
-def apply_rules_to_metrics(metrics: pd.DataFrame, bayes_baseline: pd.DataFrame | None = None) -> pd.DataFrame:
+def apply_rules_to_metrics(
+    metrics: pd.DataFrame,
+    bayes_baseline: pd.DataFrame | None = None,
+    *,
+    opportunity_authority: str = OPPORTUNITY_AUTHORITY_BASELINE,
+) -> pd.DataFrame:
     if metrics is None or metrics.empty:
         return metrics.copy() if isinstance(metrics, pd.DataFrame) else pd.DataFrame()
+
+    if opportunity_authority not in {
+        OPPORTUNITY_AUTHORITY_BASELINE,
+        OPPORTUNITY_AUTHORITY_PLAYERFORM_FAST_STATE,
+    }:
+        raise RuntimeError(f"unsupported opportunity authority: {opportunity_authority}")
 
     _, players = load_model_contexts()
     by_player = {(p.team, _key(p.player)): p for p in players}
@@ -160,6 +223,18 @@ def apply_rules_to_metrics(metrics: pd.DataFrame, bayes_baseline: pd.DataFrame |
             v = _num(r.get("bayes_tgt_share"))
             if np.isfinite(v):
                 bayes_share_by_player[(str(r.get("team", "")).upper().strip(), str(r["_bridge_key"]))] = v
+
+    if opportunity_authority == OPPORTUNITY_AUTHORITY_PLAYERFORM_FAST_STATE:
+        unique = out.drop_duplicates(["team", "_bridge_key"])
+        for _, r in unique.iterrows():
+            team = str(r.get("team", "")).upper().strip()
+            pkey = str(r["_bridge_key"])
+            ctx = by_player.get((team, pkey))
+            family = _position_family_from_row(r, ctx)
+            if family in {"WR", "TE"}:
+                v = _fast_state_target_share(r, ctx)
+                if np.isfinite(v):
+                    bayes_share_by_player[(team, pkey)] = v
     injury_overrides = _injury_target_overrides(players, role_labels, bayes_share_by_player)
 
     for col in (
@@ -183,10 +258,19 @@ def apply_rules_to_metrics(metrics: pd.DataFrame, bayes_baseline: pd.DataFrame |
         mods = matchup_multipliers(ctx.offense, ctx.defense)
         role = role_labels.get((team, pkey), "")
 
-        # Bayesian posterior is the preferred baseline. Raw/blended PlayerForm
-        # remains an explicit fallback if a posterior metric is unavailable.
-        base_tgt = _num(row.get("bayes_tgt_share", row.get("target_share", row.get("tgt_share", ctx.features.get("tgt_share")))))
-        base_rush = _num(row.get("bayes_rush_share", row.get("rush_share", ctx.features.get("rush_share"))))
+        # Production baseline prefers the empirical-Bayes posterior. The
+        # research-only fast-state authority changes only the three opportunity
+        # cells frozen by OPPORTUNITY_AUTHORITY_PRIORITY_V1; efficiencies remain
+        # Bayesian and the default production route is byte-for-byte unchanged.
+        family = _position_family_from_row(row, ctx)
+        if opportunity_authority == OPPORTUNITY_AUTHORITY_PLAYERFORM_FAST_STATE and family in {"WR", "TE"}:
+            base_tgt = _fast_state_target_share(row, ctx)
+        else:
+            base_tgt = _num(row.get("bayes_tgt_share", row.get("target_share", row.get("tgt_share", ctx.features.get("tgt_share")))))
+        if opportunity_authority == OPPORTUNITY_AUTHORITY_PLAYERFORM_FAST_STATE and family == "RB":
+            base_rush = _fast_state_rush_share(row, ctx)
+        else:
+            base_rush = _num(row.get("bayes_rush_share", row.get("rush_share", ctx.features.get("rush_share"))))
         base_ypt = _num(row.get("bayes_ypt", row.get("ypt", ctx.features.get("ypt"))))
         base_ypc = _num(row.get("bayes_ypc", row.get("ypc", ctx.features.get("ypc"))))
         base_ypa = _num(row.get("bayes_ypa", row.get("ypa", ctx.features.get("ypa"))))
