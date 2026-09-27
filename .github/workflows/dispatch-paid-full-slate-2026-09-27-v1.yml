@@ -1,0 +1,45 @@
+name: Dispatch Paid Full Slate 2026-09-27 Once
+
+on:
+  push:
+    branches:
+      - ops-dispatch-paid-full-slate-2026-09-27-v1
+    paths:
+      - '.github/workflows/dispatch-paid-full-slate-2026-09-27-v1.yml'
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - name: Dispatch canonical paid Full Slate on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BEFORE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run full-slate.yml \
+            --repo "${GITHUB_REPOSITORY}" \
+            --ref main \
+            -f season=2026 \
+            -f prior_season=2025 \
+            -f date=2026-09-27 \
+            -f fetch_live_odds=true \
+            -f rb_pd2_shadow_capture=false
+          sleep 8
+          RID=$(gh run list \
+            --repo "${GITHUB_REPOSITORY}" \
+            --workflow full-slate.yml \
+            --branch main \
+            --event workflow_dispatch \
+            --limit 20 \
+            --json databaseId,createdAt \
+            --jq "[.[] | select(.createdAt >= \"${BEFORE}\")][0].databaseId")
+          test -n "${RID}" && test "${RID}" != "null"
+          echo "PAID_FULL_SLATE_RUN_ID=${RID}"
+          gh run watch "${RID}" --repo "${GITHUB_REPOSITORY}" --exit-status
+          gh run view "${RID}" --repo "${GITHUB_REPOSITORY}" --json databaseId,status,conclusion,headSha,headBranch,url
