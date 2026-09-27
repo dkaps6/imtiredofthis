@@ -39,6 +39,7 @@ jobs:
 
       - name: Run focused regression tests
         run: |
+          export PYTHONPATH="${PWD}"
           pytest -q tests/test_market_lineage_week_aware_rb_v1.py
 
       - name: Restore successful paid Week-3 artifact without OddsAPI
