@@ -54,7 +54,7 @@ def _position_family_from_row(row: pd.Series, ctx: PlayerContext | None = None) 
         if p in {"HB", "TB"} or p.startswith("RB"):
             return "RB"
         if p.startswith("FB"):
-            return "FB"
+            return "RB"
         if p.startswith("WR") or p in {"LWR", "RWR", "SWR"}:
             return "WR"
         if p.startswith("TE"):
@@ -72,7 +72,7 @@ def _position_family_from_row(row: pd.Series, ctx: PlayerContext | None = None) 
         if p.startswith("TE"):
             return "TE"
         if p.startswith("FB"):
-            return "FB"
+            return "RB"
         if p.startswith("QB"):
             return "QB"
     return ""
