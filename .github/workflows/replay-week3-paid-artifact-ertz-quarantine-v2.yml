@@ -130,6 +130,14 @@ jobs:
           assert not c['player'].astype(str).str.strip().eq('Zach Ertz').any()
           print('MODEL_LIVE_PROPS_READY',len(c),s.get('production_quarantine_reasons'))
           PY
+      - name: Reapply locked current-availability runtime seams
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+          python scripts/operations/apply_current_availability_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_primary_team_seam_v1.py
+          python -m py_compile scripts/run_pricing_with_full_roster_universe_v1.py scripts/modeling/qb_c2_production_adapter_v1.py
       - name: Validate live identity and data quality
         run: |
           set -euo pipefail
