@@ -232,6 +232,11 @@ jobs:
           assert len(manifest['roles_ourlads_sha256']) == 64
           assert len(manifest['additional_history_sha256']) == 64
           assert manifest['additional_history_path'].endswith('certified_completed_2026_history.csv')
+          assert manifest['history_state_serialization_contract'] == 'PERSISTED_CSV_ROUNDTRIP_V1'
+          from scripts.research.rb_pd2_forward_shadow_v1 import history_state_digest
+          assert history_state_digest(state) == manifest['history_state_sha256']
+          import hashlib
+          assert hashlib.sha256((root / 'rb_pd2_forward_history_state.csv').read_bytes()).hexdigest() == manifest['history_state_file_sha256']
 
           scoreable = state[
               (pd.to_numeric(state.prior_games, errors='coerce') >= 4)
