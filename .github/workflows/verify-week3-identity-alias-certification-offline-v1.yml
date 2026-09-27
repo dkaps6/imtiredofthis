@@ -56,7 +56,7 @@ jobs:
           cp -a replay_source/outputs/. outputs/
           git show HEAD:data/player_identity_aliases.csv > data/player_identity_aliases.csv
           mkdir -p config
-git show HEAD:config/player_identity_current_aliases_v1.csv > config/player_identity_current_aliases_v1.csv
+          git show HEAD:config/player_identity_current_aliases_v1.csv > config/player_identity_current_aliases_v1.csv
           git show HEAD:data/manual_name_overrides.csv > data/manual_name_overrides.csv
           git show HEAD:data/manual_prop_quarantine.csv > data/manual_prop_quarantine.csv
           echo "OFFLINE SNAPSHOT ONLY: no OddsAPI fetch"
