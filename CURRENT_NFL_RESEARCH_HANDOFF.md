@@ -16,10 +16,13 @@ This supersedes all older checkpoints for immediate execution.
 
 ### Current state in one screen
 
-- canonical main before this docs-only continuity update: `d2a1366f04d38cfd1a4ad3a10a49d8f2102afafd`;
-- Repo CI `36332026225` SUCCESS;
-- no-live Full Slate `36332026072` SUCCESS;
-- Archive Market Track Record `36332250341` SUCCESS;
+- canonical current main: `29e5df40a5693b3ccb7135c2bcf7c1bd3688955d`;
+- docs-only continuity descendant of production/research main `d2a1366f04d38cfd1a4ad3a10a49d8f2102afafd`;
+- continuity PR #658 = MERGED;
+- Repo CI `36357199470` SUCCESS;
+- no-live Full Slate `36357199471` SUCCESS;
+- Archive Market Track Record `36357434393` SUCCESS;
+- no OddsAPI acquisition occurred in those verification runs;
 - canonical paid Week-3 betting board remains `36293274478` / artifact `10923570170`;
 - user reports Week-3 live performance looked very poor: **freeze production and grade objectively before changing science**;
 - Week-3 RB-PD2 prospective lock is VALID: 46 locked rows; Week 3 = Observation Week #1; no science PASS/FAIL before >=8 weeks and >=400 eligible player-games;
@@ -42,7 +45,7 @@ Read only:
 1. `AGENTS.md`
 2. this top checkpoint
 3. `docs/handoffs/NFL_HANDOFF_2026-09-27_WEEK3_LIVE_POSTMORTEM_RESEARCH_CURRENT.md`
-4. Issue #535 from comment `5857262166` onward, especially `5857330835`, `5857337113`, `5857495417`, `5857596405`, and `5860608905`
+4. Issue #535 from comment `5857262166` onward, especially `5857330835`, `5857337113`, `5857495417`, `5857596405`, `5860608905`, `5860655436`, and `5860668958`
 5. live main / relevant branches / PRs / Actions
 
 Then work. Do not recursively load older handoffs.
