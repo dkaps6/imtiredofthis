@@ -1,0 +1,100 @@
+name: Export Week 3 Board
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/nice-cori-4qkwqs]
+    paths: ['.github/workflows/export-week3-board.yml']
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  SOURCE_RUN_ID: '36293274478'
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: pip install --upgrade pip && pip install pandas numpy
+
+      - name: Download the live board
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/b && mkdir -p /tmp/b
+          gh run download "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --name "run_${SOURCE_RUN_ID}" --dir /tmp/b
+          test -s /tmp/b/outputs/props_priced_clean.csv
+          echo "board rows: $(wc -l < /tmp/b/outputs/props_priced_clean.csv)"
+
+      - name: Board shape and slate
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          import pandas as pd
+          b = pd.read_csv("/tmp/b/outputs/props_priced_clean.csv", low_memory=False)
+          print(f"=== BOARD: {len(b)} rows | {b['player'].nunique()} players | {b['team'].nunique()} teams ===")
+          print("markets:", b["market"].value_counts().to_dict())
+          print("books  :", b["book"].value_counts().to_dict() if "book" in b else "n/a")
+          print("sides  :", b["side"].value_counts().to_dict())
+          for f in ("data/football_simulation_universe_audit.json",
+                    "data/model_ensemble_diagnostics.csv",
+                    "data/rb_rush_synthesis_context.csv"):
+              p = pathlib.Path("/tmp/b") / f
+              if p.exists() and p.suffix == ".json":
+                  a = json.loads(p.read_text())
+                  print(f"\n{f}:")
+                  for k in ("certified_slate_teams","full_league_slate","football_teams",
+                            "canonical_games","football_players"):
+                      if k in a: print(f"  {k}: {a[k]}")
+              elif p.exists():
+                  d = pd.read_csv(p, low_memory=False)
+                  print(f"\n{f}: {len(d)} rows")
+          cols = [c for c in b.columns if "synthesis" in c or "rb_" in c]
+          print("\nRB/synthesis columns present:", sorted(cols)[:20])
+          PY
+
+      - name: The decision board, one row per player-market
+        run: |
+          python - <<'PY'
+          import numpy as np
+          import pandas as pd
+          b = pd.read_csv("/tmp/b/outputs/props_priced_clean.csv", low_memory=False)
+          PRICED = ["pass_yards","rush_yards","rec_yards","receptions","rush_rec_yards"]
+          b = b[b["market"].isin(PRICED)].copy()
+
+          def prof(o):
+              o = pd.to_numeric(o, errors="coerce")
+              return np.where(o > 0, o/100.0, 100.0/o.abs())
+
+          b["profit"] = prof(b["vegas_odds"])
+          b["fp"] = pd.to_numeric(b["fair_prob"], errors="coerce")
+          # production decision: highest-EV real offer per player-market
+          b["ev"] = b["fp"] * b["profit"] - (1 - b["fp"])
+          key = ["player","market"]
+          b = b.sort_values(key + ["ev"], ascending=[True,True,False])
+          d = b.drop_duplicates(key, keep="first")
+          d = d[d["ev"] > 0].copy()
+          print(f"=== positive-EV decisions: {len(d)} of {b.groupby(key).ngroups} player-markets ===\n")
+
+          show = [c for c in ["market","player","team","opponent","side","vegas_line",
+                              "model_proj","fp","vegas_odds","ev","book","position"] if c in d.columns]
+          for m in PRICED:
+              s = d[d["market"].eq(m)].sort_values("ev", ascending=False)
+              if s.empty: continue
+              print(f"----- {m}  ({len(s)} bets) -----")
+              o = s[show].drop(columns=["market"]).copy()
+              o["model_proj"] = o["model_proj"].round(1)
+              o["fp"] = o["fp"].round(3); o["ev"] = o["ev"].round(3)
+              print(o.to_string(index=False))
+              print()
+          PY
