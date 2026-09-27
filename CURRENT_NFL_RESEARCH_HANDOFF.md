@@ -2,6 +2,48 @@
 GitHub is canonical; chat memory is secondary.
 
 ---
+## ACTIVE CHECKPOINT — 2026-09-26 — SYSTEMS AUDIT CLOSED / DISCRETE COUNT V1 PROMOTED CURRENT
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-09-26_SYSTEMS_AUDIT_COUNT_PROMOTED_CURRENT.md`
+
+This supersedes all older checkpoints for immediate execution.
+
+### Current state in one screen
+
+- production code main before this docs-only continuity commit: `d658a176d86654e3c153d09d2fcf1e69eca4aaec`;
+- PR #645 Week-3 Full Slate repair = MERGED;
+- PR #646 rush-att zero-MC lineage closure = MERGED;
+- PR #647 Discrete Count Mean Alignment V1 promotion = MERGED;
+- post-promotion Repo CI `36286648937` = SUCCESS;
+- post-promotion no-live Full Slate `36286648933` = SUCCESS;
+- **no paid `fetch_live_odds=true` run has been launched; explicit user authorization remains required**;
+- rush-att zero-MC is CLOSED: all 7,137 frozen blocked rows first fail at `TOP5_EXCLUDED`; no RNG/lookup/allocation plumbing bug and no repair authorized;
+- Discrete Count Mean Alignment V1 is production-active for receptions + rush_att, with zero/nonfinite-MC exact no-op and non-count invariance;
+- RB Vacancy/Public Intent and Receiving Rule Semantics remain frozen prospective Week-3 lanes awaiting outcomes;
+- Availability -> Opportunity rule-order gap remains confirmed; do not fit vacancy coefficients from Week-3;
+- RB Rush+Receiving Conservation V2 remains production-active and locked.
+
+### Exact next action
+
+The only current operational betting-board gate is the controlled live-odds Full Slate, and it requires explicit user authorization because it spends OddsAPI credits.
+
+Without that authorization, preserve the frozen Week-3 prospective science until games are final and do not invent rescue variants.
+
+### Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-09-26_SYSTEMS_AUDIT_COUNT_PROMOTED_CURRENT.md`
+4. Issue #535 from comment `5851689287` onward
+5. live main / relevant PRs / Actions state
+
+Then work. Do not recursively load older handoffs.
+
+---
+
 
 ## ACTIVE CHECKPOINT — 2026-09-26 — WEEK-3 FULL SLATE REPAIRED / SYSTEMS-AUDIT LOCKS CURRENT
 
