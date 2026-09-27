@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from scripts.research.audit_specialist_nontarget_mc_invariance_v1 import (
     TOL,
@@ -47,7 +48,7 @@ def _te():
 
 def test_entitlement_states_define_protection_by_exact_stage_delta():
     s = build_entitlement_states(_target(), _te()).set_index("player_clean_key")
-    assert s.loc["te1", "te_entitlement_delta"] == 0.02
+    assert s.loc["te1", "te_entitlement_delta"] == pytest.approx(0.02)
     assert not bool(s.loc["te1", "te_protected"])
     assert bool(s.loc["rb1", "te_protected"])
     assert bool(s.loc["wr1", "te_protected"])
