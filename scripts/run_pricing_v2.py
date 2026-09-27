@@ -27,7 +27,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from scripts.modeling.bayesian_v2 import apply_bayesian_to_metrics, load_bayesian_baseline
+import scripts.modeling.bayesian_v2 as bayesian_v2
+from scripts.modeling.bayesian_v2 import apply_bayesian_to_metrics
 from scripts.modeling.ensemble_v2 import apply_ensemble, load_weights
 from scripts.modeling.ml_v2 import apply_ml_to_metrics
 from scripts.modeling.qb_pass_synthesis_v1 import (
@@ -128,7 +129,7 @@ def price(season: int) -> pd.DataFrame:
     if state_rows == 0:
         raise RuntimeError("State v2 matched 0 supported pricing rows; refusing legacy 0.5 fallback behavior")
 
-    bayes_baseline = load_bayesian_baseline()
+    bayes_baseline = bayesian_v2.load_bayesian_baseline(DATA / "player_form_consensus.csv")
     df = apply_bayesian_to_metrics(df, baseline=bayes_baseline)
     bayes_rows = int(pd.to_numeric(df.get("bayes_applied", 0), errors="coerce").fillna(0).sum())
     if bayes_rows == 0:
