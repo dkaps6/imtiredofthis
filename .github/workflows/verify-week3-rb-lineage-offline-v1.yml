@@ -1,0 +1,118 @@
+name: Verify Week3 RB Lineage Offline V1
+
+on:
+  push:
+    branches:
+      - fix-week3-rb-lineage-workbook-semantics-v1
+    paths:
+      - 'scripts/audit_market_model_lineage_v1.py'
+      - 'tests/test_market_lineage_week_aware_rb_v1.py'
+      - '.github/workflows/verify-week3-rb-lineage-offline-v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  SEASON: "2026"
+  PRIOR_SEASON: "2025"
+  FETCH_LIVE_ODDS: "true"
+  FULL_SLATE_SOURCE_RUN_ID: "36293274478"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml beautifulsoup4 lxml pytest
+
+      - name: Run focused regression tests
+        run: |
+          pytest -q tests/test_market_lineage_week_aware_rb_v1.py
+
+      - name: Restore successful paid Week-3 artifact without OddsAPI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/week3_paid
+          mkdir -p /tmp/week3_paid
+          gh run download "${FULL_SLATE_SOURCE_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name "run_${FULL_SLATE_SOURCE_RUN_ID}" \
+            --dir /tmp/week3_paid
+          test -s /tmp/week3_paid/outputs/props_priced_clean.csv
+          test -s /tmp/week3_paid/data/rb_rush_rec_conservation_v2_production_audit.json
+          rm -rf data outputs
+          mkdir -p data outputs
+          cp -a /tmp/week3_paid/data/. data/
+          cp -a /tmp/week3_paid/outputs/. outputs/
+          echo "OFFLINE SNAPSHOT RESTORED; NO ODDSAPI FETCH"
+
+      - name: Regenerate canonical market lineage
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/audit_market_model_lineage_v2.py
+          python - <<'PY'
+          import json
+          import pandas as pd
+
+          x=pd.read_csv('data/market_model_lineage_current.csv',low_memory=False)
+          rb=x[(x.market=='player_rush_yds') & (x.position_family=='RB/FB')]
+          combo=x[(x.market=='player_rush_reception_yds') & (x.position_family=='RB/FB')]
+          assert len(rb)==1, rb
+          assert len(combo)==1, combo
+          r=rb.iloc[0]
+          c=combo.iloc[0]
+          assert int(r.specialist_model_active)==0, r.to_dict()
+          assert r.scientific_status=='GENERIC_CANONICAL_ACTIVE', r.to_dict()
+          assert 'P3' not in str(r.final_mean_owner), r.to_dict()
+          assert int(c.specialist_model_active)==1, c.to_dict()
+          assert c.scientific_status=='PROMOTED_RB_RUSH_REC_CONSERVATION_V2_ACTIVE', c.to_dict()
+          assert 'RB_RUSH_REC_CONSERVATION_V2' in str(c.final_mean_owner), c.to_dict()
+          assert 'P3' not in str(c.final_mean_owner), c.to_dict()
+          j=json.load(open('data/market_model_lineage_current.json',encoding='utf-8'))
+          assert int(j['priced_week'])==3,j
+          assert j['rb_p3_consumed_this_week'] is False,j
+          assert j['rb_rush_rec_conservation_v2_consumed_this_week'] is True,j
+          print('WEEK3_RB_LINEAGE_SEMANTICS_PASS')
+          print(rb.to_string(index=False))
+          print(combo.to_string(index=False))
+          PY
+
+      - name: Rebuild master workbook from preserved paid board
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/build_master_betting_workbook_v1.py \
+            --root . \
+            --out outputs/NFL_BETTING_MODEL_MASTER_RB_LINEAGE_FIXED.xlsx \
+            --run-id "${FULL_SLATE_SOURCE_RUN_ID}" \
+            --sha "${GITHUB_SHA}" \
+            --ref-name "${GITHUB_REF_NAME}" \
+            --fetch-live-odds true
+          test -s outputs/NFL_BETTING_MODEL_MASTER_RB_LINEAGE_FIXED.xlsx
+          test -s data/master_betting_workbook_audit.json
+
+      - name: Upload offline lineage evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: week3-rb-lineage-fixed-${{ github.run_id }}
+          retention-days: 14
+          path: |
+            data/market_model_lineage_current.csv
+            data/market_model_lineage_current.json
+            data/master_betting_workbook_audit.json
+            outputs/NFL_BETTING_MODEL_MASTER_RB_LINEAGE_FIXED.xlsx
