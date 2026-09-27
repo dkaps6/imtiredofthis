@@ -1,0 +1,184 @@
+name: QB M89 Opportunity Efficiency Decomposition V1
+
+on:
+  push:
+    branches:
+      - research-qb-m89-opportunity-efficiency-decomposition-v1
+    paths:
+      - 'scripts/research/audit_qb_m89_opportunity_efficiency_v1.py'
+      - 'tests/test_qb_m89_opportunity_efficiency_v1.py'
+      - 'docs/research/QB_M89_M90_OPPORTUNITY_EFFICIENCY_DECOMPOSITION_V1_PLAN.md'
+      - '.github/workflows/research-qb-m89-opportunity-efficiency-decomposition-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  decompose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml pyarrow tabulate
+
+      - name: Focused tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_qb_m89_opportunity_efficiency_v1.py
+
+      - name: Build leakage-safe historical inputs 2022-2025
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/hist_2022 /tmp/hist_2023 /tmp/hist_2024 /tmp/hist_2025 /tmp/qb_opp_eff
+          mkdir -p /tmp/qb_opp_eff
+          for season in 2022 2023 2024 2025; do
+            prior=$((season - 1))
+            python scripts/backtest/build_historical_inputs.py \
+              --season "${season}" --prior-season "${prior}" --weeks 1-18 \
+              --out-dir "/tmp/hist_${season}"
+          done
+
+      - name: Combine authoritative schedule and team-week history
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+
+          out=Path('/tmp/qb_opp_eff')
+          for name in ['schedule_history.csv','team_weekly_history.csv']:
+              parts=[pd.read_csv(f'/tmp/hist_{s}/'+name) for s in (2022,2023,2024,2025)]
+              x=pd.concat(parts,ignore_index=True)
+              keys=['season','week','team']
+              x=x.sort_values(keys).drop_duplicates(keys,keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined historical identity rows in {name}')
+              x.to_csv(out/name,index=False)
+          PY
+
+      - name: Apply frozen M89 team-semantics correction
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/correct_m89_team_semantics.py \
+            --team-weekly /tmp/qb_opp_eff/team_weekly_history.csv \
+            --seasons 2022,2023,2024,2025 \
+            --observations /tmp/qb_opp_eff/m89_team_semantics_observations.csv \
+            --audit /tmp/qb_opp_eff/m89_team_semantics_audit.csv
+
+      - name: Split corrected team-weekly by season
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          x=pd.read_csv('/tmp/qb_opp_eff/team_weekly_history.csv')
+          for season in (2022,2023,2024,2025):
+              x.loc[x.season.eq(season)].to_csv(f'/tmp/qb_opp_eff/team_weekly_{season}.csv',index=False)
+          PY
+
+      - name: Build canonical 2022-2025 player game logs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2022,2023,2024,2025 \
+            --schedule /tmp/qb_opp_eff/schedule_history.csv \
+            --out /tmp/qb_opp_eff/player_game_logs_history.csv
+
+      - name: Split player logs by season
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          x=pd.read_csv('/tmp/qb_opp_eff/player_game_logs_history.csv')
+          for season in (2022,2023,2024,2025):
+              x.loc[x.season.eq(season)].to_csv(f'/tmp/qb_opp_eff/player_logs_{season}.csv',index=False)
+          PY
+
+      - name: Build canonical QB component traces 2023-2025
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          for season in 2023 2024 2025; do
+            prior=$((season - 1))
+            python scripts/backtest/build_qb_synthesis_confirmation_inputs_v1.py \
+              --season "${season}" --prior-season "${prior}" --weeks 1-18 --iterations 2000 \
+              --player-logs /tmp/qb_opp_eff/player_game_logs_history.csv \
+              --team-weekly "/tmp/qb_opp_eff/team_weekly_${season}.csv" \
+              --schedule /tmp/qb_opp_eff/schedule_history.csv \
+              --universe-dir "/tmp/hist_${season}/pregame_universe" \
+              --out "/tmp/qb_opp_eff/qb_trace_${season}.csv"
+          done
+
+      - name: Combine M89 evaluation trace
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          a=pd.read_csv('/tmp/qb_opp_eff/qb_trace_2024.csv')
+          b=pd.read_csv('/tmp/qb_opp_eff/qb_trace_2025.csv')
+          pd.concat([a,b],ignore_index=True).to_csv('/tmp/qb_opp_eff/qb_trace_2024_2025.csv',index=False)
+          PY
+
+      - name: Rebuild frozen M89 football synthesis
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/run_m89_pregame_synthesis.py \
+            --trace-2023 /tmp/qb_opp_eff/qb_trace_2023.csv \
+            --trace-2024-2025 /tmp/qb_opp_eff/qb_trace_2024_2025.csv \
+            --team-2023 /tmp/qb_opp_eff/team_weekly_2023.csv \
+            --logs-2023 /tmp/qb_opp_eff/player_logs_2023.csv \
+            --team-2024 /tmp/qb_opp_eff/team_weekly_2024.csv \
+            --logs-2024 /tmp/qb_opp_eff/player_logs_2024.csv \
+            --team-2025 /tmp/qb_opp_eff/team_weekly_2025.csv \
+            --logs-2025 /tmp/qb_opp_eff/player_logs_2025.csv \
+            --out-dir /tmp/qb_opp_eff/m89_out
+
+      - name: Run frozen diagnostic decomposition
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/audit_qb_m89_opportunity_efficiency_v1.py \
+            --trace /tmp/qb_opp_eff/m89_out/m89_2024_2025_synthesis_trace.csv \
+            --player-logs /tmp/qb_opp_eff/player_game_logs_history.csv \
+            --out-dir /tmp/qb_opp_eff/result
+
+      - name: Verify diagnostic-only contract
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/qb_opp_eff/result/qb_m89_opp_eff_result.json',encoding='utf-8'))
+          assert p['disposition']=='QB_M89_OPP_EFF_DECOMPOSITION_COMPLETE',p
+          assert p['evaluation_seasons']==[2024,2025],p
+          assert p['sportsbook_inputs_used'] is False,p
+          assert p['candidate_models_fit']==0,p
+          assert p['production_changed'] is False,p
+          assert p['next_candidate_authorized'] is False,p
+          assert float(p['max_decomposition_identity_gap']) <= 1e-8,p
+          print('QB_M89_OPP_EFF_DIAGNOSTIC_CERTIFIED')
+          PY
+
+      - name: Upload diagnostic artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-m89-opportunity-efficiency-decomposition-v1
+          retention-days: 30
+          path: |
+            /tmp/qb_opp_eff/result/**
+            /tmp/qb_opp_eff/m89_out/m89_synthesis_scoreboard.csv
+            /tmp/qb_opp_eff/m89_out/m89_synthesis_gates.json
+            /tmp/qb_opp_eff/m89_team_semantics_audit.csv
+          if-no-files-found: warn
