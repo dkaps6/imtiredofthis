@@ -1,0 +1,140 @@
+name: Recover Week3 RB PD2 Lock V1
+
+on:
+  push:
+    branches:
+      - ops-recover-rb-pd2-week3-lock-v1
+    paths:
+      - '.github/workflows/recover-week3-rb-pd2-lock-v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  SOURCE_FULL_SLATE_RUN_ID: "36330757181"
+  SOURCE_CAPTURE_ARTIFACT: "rb-pd2-forward-lock-36330757181"
+  SOURCE_PRODUCTION_SHA: "37deff5b51b5ec48117556b91d12dba1d4ca1fad"
+  HISTORY_RUN_ID: "35732782075"
+  HISTORY_ARTIFACT: "rb-pd2-forward-history-v1"
+  HISTORY_ARTIFACT_ID: "10696312599"
+  HISTORY_ARTIFACT_DIGEST: "sha256:1205ea152b4702e19d12379c79e29ff7fc20fd2a632a61f7c519980f64b648fb"
+  PROSPECTIVE_START_UTC: "2026-09-22T12:00:00Z"
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml beautifulsoup4 lxml pytest
+
+      - name: Download exact pregame capture and pinned history
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/rb_pd2_capture /tmp/rb_pd2_history
+          mkdir -p /tmp/rb_pd2_capture /tmp/rb_pd2_history
+
+          gh run download "${SOURCE_FULL_SLATE_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name "${SOURCE_CAPTURE_ARTIFACT}" \
+            --dir /tmp/rb_pd2_capture
+
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${HISTORY_RUN_ID}/artifacts?per_page=100" \
+            > /tmp/rb_pd2_history_meta.json
+          python - <<'PY'
+          import json, os
+          meta=json.load(open('/tmp/rb_pd2_history_meta.json',encoding='utf-8'))
+          want_id=int(os.environ['HISTORY_ARTIFACT_ID'])
+          want_name=os.environ['HISTORY_ARTIFACT']
+          want_digest=os.environ['HISTORY_ARTIFACT_DIGEST']
+          matches=[a for a in meta.get('artifacts',[]) if int(a.get('id',-1))==want_id]
+          assert len(matches)==1, matches
+          a=matches[0]
+          assert a.get('name')==want_name, a
+          assert a.get('digest')==want_digest, a
+          assert not bool(a.get('expired')), a
+          print('PINNED_HISTORY_AUTHORITY_VERIFIED', a['id'], a['digest'])
+          PY
+
+          gh run download "${HISTORY_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name "${HISTORY_ARTIFACT}" \
+            --dir /tmp/rb_pd2_history
+
+          test -s /tmp/rb_pd2_history/history/rb_pd2_forward_history_state.csv
+          test -s /tmp/rb_pd2_history/history/rb_pd2_forward_history_manifest.json
+
+      - name: Verify exact captured session provenance
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          receipts=list(Path('/tmp/rb_pd2_capture/rb_pd2_shadow').glob('*/session_receipt.json'))
+          assert len(receipts)==1, receipts
+          r=json.load(open(receipts[0],encoding='utf-8'))
+          p=r.get('provenance') or {}
+          assert r.get('valid') is True, r
+          assert str(p.get('workflow_run_id'))==os.environ['SOURCE_FULL_SLATE_RUN_ID'], p
+          assert str(p.get('code_sha')).lower()==os.environ['SOURCE_PRODUCTION_SHA'].lower(), p
+          assert int(r.get('rows_written',0))>0, r
+          print('EXACT_PREGAME_CAPTURE_VERIFIED', receipts[0], 'rows', r['rows_written'])
+          PY
+
+      - name: Assemble frozen candidate from captured bytes
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          SESSION_DIR=$(dirname "$(find /tmp/rb_pd2_capture/rb_pd2_shadow -name session_receipt.json -print -quit)")
+          test -n "${SESSION_DIR}"
+          rm -rf data/research/rb_pd2_forward/recovered_week3_lock
+          python scripts/research/assemble_rb_pd2_forward_locks_v1.py \
+            --session-dir "${SESSION_DIR}" \
+            --history-state /tmp/rb_pd2_history/history/rb_pd2_forward_history_state.csv \
+            --history-manifest /tmp/rb_pd2_history/history/rb_pd2_forward_history_manifest.json \
+            --prospective-start-utc "${PROSPECTIVE_START_UTC}" \
+            --out-dir data/research/rb_pd2_forward/recovered_week3_lock
+
+      - name: Certify recovered lock contract
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          root=Path('data/research/rb_pd2_forward/recovered_week3_lock')
+          r=json.load(open(root/'rb_pd2_forward_lock_receipt.json',encoding='utf-8'))
+          assert r.get('valid') is True, r
+          assert int(r.get('target_season',-1))==2026, r
+          assert int(r.get('target_week',-1))==3, r
+          assert int(r.get('history_completed_through_week',-1))==2, r
+          assert int(r.get('locked_rows',0))>0, r
+          assert len(r.get('integrity_failures') or [])==0, r
+          assert r.get('production_changed') is False, r
+          assert r.get('sportsbook_inputs_used_in_candidate') is False, r
+          assert r.get('outcome_present_at_lock') is False, r
+          assert (root/'rb_pd2_forward_locks.jsonl').stat().st_size>0
+          assert (root/'rb_pd2_forward_lock_arrays.npz').stat().st_size>0
+          print('WEEK3_RB_PD2_RECOVERED_LOCK_VALID')
+          print(json.dumps(r,indent=2,sort_keys=True))
+          PY
+
+      - name: Upload recovered prospective lock immediately
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-pd2-forward-lock-36330757181-mechanical-recovery-v1
+          retention-days: 90
+          compression-level: 0
+          path: |
+            /tmp/rb_pd2_capture/rb_pd2_shadow/**
+            data/research/rb_pd2_forward/recovered_week3_lock/**
