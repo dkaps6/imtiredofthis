@@ -87,7 +87,7 @@ jobs:
           from pathlib import Path
           text = Path("scripts/run_pricing_v2.py").read_text()
           required = [
-              "align_discrete_count_outcomes",
+              "align_prealigned_outcomes",
               "discrete_count_alignment_applied",
               "discrete_count_alignment_version",
           ]
