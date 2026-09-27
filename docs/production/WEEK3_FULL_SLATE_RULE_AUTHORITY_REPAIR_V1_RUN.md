@@ -10,3 +10,4 @@ Replay authority:
 - no Week-3 outcomes used
 
 This marker launches the exact prepared-artifact pricing replay after the frozen rule-authority repair.
+\nMechanical retry: workflow now installs pytest; frozen repair/code/science unchanged.\n
