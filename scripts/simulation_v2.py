@@ -139,10 +139,33 @@ def simulate(metrics: pd.DataFrame, *, iterations: int | None=None, seed: int | 
             raw_target_shares=np.array([_num(r,"rules_tgt_share","bayes_tgt_share","target_share","tgt_share",default=0.0) for _,r in team_df.iterrows()]); target_shares=_sharpen_wr_target_shares(team_df,raw_target_shares); raw_rush_shares=np.array([_num(r,"rules_rush_share","bayes_rush_share","rush_share",default=0.0) for _,r in team_df.iterrows()]); rush_shares=_top_n_shares(raw_rush_shares,5)
             targets=_allocate_counts(rng,pass_att,target_shares); carries=_allocate_counts(rng,rush_att,rush_shares)
             if allocation_trace is not None:
+                # Research/diagnostic trace only.  These calculations consume no
+                # RNG and therefore cannot alter the simulated arrays.  Target
+                # opportunity is recorded alongside the existing rushing trace
+                # so authority-order experiments can score the exact finite
+                # simulated opportunity state rather than infer it from yards.
                 clean=np.clip(np.nan_to_num(rush_shares.astype(float),nan=0.0,posinf=0.0,neginf=0.0),0.0,0.95); raw_sum=float(clean.sum()); used=clean.copy()
                 if raw_sum>0.95: used*=0.95/raw_sum
                 residual=max(0.0,1.0-float(used.sum())); probs=np.append(used,residual); probs=probs/probs.sum(); team_rush_mean=float(np.mean(rush_att)) if len(rush_att) else np.nan
-                for j,(_,trace_row) in enumerate(team_df.iterrows()): allocation_trace.append({"event_id":str(game),"team":str(team),"player_clean_key":_player_key(trace_row),"sim_selected_market":str(trace_row.get("market","")),"raw_player_rush_share":float(clean[j]),"raw_team_rush_share_sum":raw_sum,"final_player_probability":float(probs[j]),"residual_probability":float(probs[-1]),"team_rush_total_mean":team_rush_mean,"expected_carries_from_final_probability":team_rush_mean*float(probs[j]),"realized_multinomial_mean_carries":float(carries[:,j].mean())})
+
+                clean_tgt=np.clip(np.nan_to_num(target_shares.astype(float),nan=0.0,posinf=0.0,neginf=0.0),0.0,0.95); raw_tgt_sum=float(clean_tgt.sum()); used_tgt=clean_tgt.copy()
+                if raw_tgt_sum>0.95: used_tgt*=0.95/raw_tgt_sum
+                tgt_residual=max(0.0,1.0-float(used_tgt.sum())); tgt_probs=np.append(used_tgt,tgt_residual); tgt_probs=tgt_probs/tgt_probs.sum(); team_target_total_mean=float(np.mean(pass_att)) if len(pass_att) else np.nan
+                for j,(_,trace_row) in enumerate(team_df.iterrows()):
+                    allocation_trace.append({
+                        "event_id":str(game),"team":str(team),"player_clean_key":_player_key(trace_row),
+                        "sim_selected_market":str(trace_row.get("market","")),
+                        "raw_player_rush_share":float(clean[j]),"raw_team_rush_share_sum":raw_sum,
+                        "final_player_probability":float(probs[j]),"residual_probability":float(probs[-1]),
+                        "team_rush_total_mean":team_rush_mean,
+                        "expected_carries_from_final_probability":team_rush_mean*float(probs[j]),
+                        "realized_multinomial_mean_carries":float(carries[:,j].mean()),
+                        "raw_player_target_share":float(clean_tgt[j]),"raw_team_target_share_sum":raw_tgt_sum,
+                        "final_target_probability":float(tgt_probs[j]),"target_residual_probability":float(tgt_probs[-1]),
+                        "team_target_total_mean":team_target_total_mean,
+                        "expected_targets_from_final_probability":team_target_total_mean*float(tgt_probs[j]),
+                        "realized_multinomial_mean_targets":float(targets[:,j].mean()),
+                    })
             for j,(_,row) in enumerate(team_df.iterrows()):
                 pkey=_player_key(row)
                 if not pkey: continue
