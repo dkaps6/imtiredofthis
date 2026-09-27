@@ -62,6 +62,44 @@ def test_2025_history_builder_rejects_nonpregame_lineage():
         history_builder.build_2025_seed(row, weights)
 
 
+def test_history_builder_manifest_digest_survives_persisted_csv_roundtrip(tmp_path):
+    weights = pd.DataFrame([{
+        "market": "rush_yards",
+        "mc_weight": fwd.RUSH_YARDS_MC_WEIGHT,
+        "ml_weight": fwd.RUSH_YARDS_ML_WEIGHT,
+        "state_weight": 0.0,
+        "fit_scope": fwd.RUSH_YARDS_FIT_SCOPE,
+        "promotion_lineage": fwd.RUSH_YARDS_PROMOTION_LINEAGE,
+    }])
+    components = []
+    for week in range(1, 7):
+        components.append({
+            "season": 2025, "week": week, "team": "CHI", "opponent": "GB",
+            "event_id": f"g{week}", "player": "Alpha Back",
+            "player_clean_key": "alphaback", "position": "RB",
+            "market": "rush_yards", "mc_proj": 50.123456789 + week / 1000,
+            "ml_proj": 40.987654321 + week / 1000,
+            "state_proj": 0.0, "actual": 45.333333333 + week / 1000,
+            "prediction_cutoff": f"2025-W{week:02d} pregame", "prior_season": 2024,
+        })
+    components_path = tmp_path / "components.csv"
+    weights_path = tmp_path / "weights.csv"
+    out_dir = tmp_path / "history"
+    pd.DataFrame(components).to_csv(components_path, index=False)
+    weights.to_csv(weights_path, index=False)
+
+    state, manifest = history_builder.build_artifacts(
+        components_path=components_path,
+        weights_path=weights_path,
+        out_dir=out_dir,
+    )
+    persisted = pd.read_csv(out_dir / "rb_pd2_forward_history_state.csv", low_memory=False)
+    assert len(state) == len(persisted)
+    assert manifest["history_state_serialization_contract"] == "PERSISTED_CSV_ROUNDTRIP_V1"
+    assert len(manifest["history_state_file_sha256"]) == 64
+    assert fwd.history_state_digest(persisted) == manifest["history_state_sha256"]
+
+
 def test_week1_2026_additional_history_recomputes_p3_stack1_parity():
     row = pd.DataFrame([{
         "season": 2026, "week": 1, "team": "CHI", "player_clean_key": "x",
@@ -403,6 +441,7 @@ def test_full_slate_shadow_activation_is_opt_in_and_locks_before_postprocessing(
     history_block = source[source.index("Restore pinned RB PD2 forward-history artifact"):assemble]
     lock_block = source[assemble:upload]
     upload_block = source[upload:quarantine]
+    assert "always() && env.FETCH_LIVE_ODDS" in history_block
     assert "continue-on-error: true" in history_block
     assert "continue-on-error: true" in lock_block
     assert "continue-on-error: true" in upload_block
