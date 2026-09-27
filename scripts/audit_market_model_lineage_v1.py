@@ -49,6 +49,97 @@ def _pos(value) -> str:
     return p or "OTHER"
 
 
+def _single_priced_week(priced: pd.DataFrame) -> int:
+    if "week" not in priced.columns:
+        raise RuntimeError("priced output missing week for market-lineage audit")
+    weeks = pd.to_numeric(priced["week"], errors="coerce").dropna().astype(int).unique().tolist()
+    if len(weeks) != 1:
+        raise RuntimeError(f"market-lineage audit expected exactly one priced week, got {sorted(weeks)}")
+    return int(weeks[0])
+
+
+def _rb_market_lineage_specs(p: pd.DataFrame, week: int) -> tuple[tuple, tuple]:
+    """Return RB rushing and rush+rec lineage that matches the priced week.
+
+    RB_P3_SYNTHESIS_V1 is Week-1-only.  Outside Week 1, standalone RB rushing
+    must remain on the generic calibrated rush-yards ensemble, while the
+    promoted RB_RUSH_REC_CONSERVATION_V2 owns the combined rush+receiving
+    market by summing the already-final standalone component authorities.
+    """
+    rb_rush = p.loc[
+        p["source_market"].astype(str).eq("player_rush_yds")
+        & p["position_family"].eq("RB/FB")
+    ].copy()
+    rb_combo = p.loc[
+        p["source_market"].astype(str).eq("player_rush_reception_yds")
+        & p["position_family"].eq("RB/FB")
+    ].copy()
+
+    if int(week) == 1:
+        return (
+            (
+                "RB_P3_SYNTHESIS_V1 / WEEK1_STACK_OVERRIDE",
+                "P3-scaled canonical rushing distribution",
+                True,
+                "PROMOTED_SPECIALIST_ACTIVE",
+                "multiseason shared-room RB entitlement remains research",
+                "Week-1 route only; room entitlement beyond P3 still pending",
+            ),
+            (
+                "RB P3-conserved rushing component + finite-pool canonical receiving joint MC",
+                "P3-scaled rushing distribution + finite-pool canonical receiving distribution",
+                True,
+                "PARTIAL_SPECIALIST_ACTIVE_FINITE_POOL_CERTIFIED",
+                "dedicated RB receiving entitlement; joint-market calibration later",
+                "rushing is P3-consistent and receiving pool is finite; receiving allocation specialist remains pending",
+            ),
+        )
+
+    if not rb_rush.empty:
+        applied = pd.to_numeric(rb_rush.get("rb_synthesis_applied", 0), errors="coerce").fillna(0)
+        if not applied.eq(0).all():
+            raise RuntimeError(
+                f"non-Week-1 RB rush-yards rows unexpectedly claim P3 synthesis week={week}"
+            )
+
+    if not rb_combo.empty:
+        applied = pd.to_numeric(
+            rb_combo.get("rb_rush_rec_conservation_v2_applied", 0), errors="coerce"
+        ).fillna(0)
+        if not applied.eq(1).all():
+            raise RuntimeError(
+                f"non-Week-1 RB rush+rec rows do not all consume RB Rush+Receiving Conservation V2 week={week}"
+            )
+        versions = set(
+            rb_combo.get("rb_rush_rec_conservation_v2_version", pd.Series("", index=rb_combo.index))
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .tolist()
+        )
+        if versions != {"RB_RUSH_REC_CONSERVATION_V2"}:
+            raise RuntimeError(f"RB rush+rec V2 version drift week={week}: {sorted(versions)}")
+
+    return (
+        (
+            "canonical calibrated rush-yards ensemble + joint MC",
+            "canonical joint MC rushing distribution",
+            False,
+            "GENERIC_CANONICAL_ACTIVE",
+            "multiseason shared-room RB entitlement remains research; Week-1 P3 is not active outside Week 1",
+            "RB_P3_SYNTHESIS_V1 is Week-1-only and is correctly not applied this week",
+        ),
+        (
+            "RB_RUSH_REC_CONSERVATION_V2 sum of final standalone rushing + receiving authorities",
+            "RB_RUSH_REC_CONSERVATION_V2 pathwise sum of final-mean-aligned rushing + receiving draws",
+            True,
+            "PROMOTED_RB_RUSH_REC_CONSERVATION_V2_ACTIVE",
+            "dedicated RB receiving entitlement remains open; joint-market calibration can be studied separately",
+            "V2 preserves the standalone rushing and receiving authorities and enforces exact combined-market conservation",
+        ),
+    )
+
+
 def _validate_qb_c2_coverage_contract(c2: dict, stamp: dict, *, priced_qbs: int | None = None, selected_priced_qbs: int | None = None) -> dict:
     """Validate football-universe coverage separately from sportsbook coverage.
 
@@ -260,6 +351,8 @@ def main() -> int:
     p = priced.merge(positions[["player", "team", "position_family"]], on=["player", "team"], how="left", validate="many_to_one")
     if p["position_family"].isna().any():
         raise RuntimeError("lineage audit could not attach position to every priced player")
+    current_week = _single_priced_week(p)
+    rb_rush_spec, rb_combo_spec = _rb_market_lineage_specs(p, current_week)
 
     rows: list[dict] = []
     def add(market, position, mean_owner, distribution_owner, specialist, science, active_research, limitation):
@@ -286,14 +379,7 @@ def main() -> int:
         "shared QB-receiver C2 conservation remains a separate future integration; continue QB mean/distribution prospective scoring",
         "M89/M90 owns the point mean; C2 currently changes only selected QB pass-yard distribution shape, not receiver arrays",
     )
-    add(
-        "player_rush_yds", "RB/FB",
-        "RB_P3_SYNTHESIS_V1 / WEEK1_STACK_OVERRIDE",
-        "P3-scaled canonical rushing distribution",
-        True, "PROMOTED_SPECIALIST_ACTIVE",
-        "multiseason shared-room RB entitlement remains research",
-        "Week-1 route only; room entitlement beyond P3 still pending",
-    )
+    add("player_rush_yds", "RB/FB", *rb_rush_spec)
     for position in ("QB", "WR", "TE"):
         add(
             "player_rush_yds", position,
@@ -328,14 +414,7 @@ def main() -> int:
             "dedicated finite RB receiving-room entitlement while preserving P3 rushing",
             "team opportunity is finite, but RB receiving-room allocation has no promoted specialist yet",
         )
-    add(
-        "player_rush_reception_yds", "RB/FB",
-        "RB P3-conserved rushing component + finite-pool canonical receiving joint MC",
-        "P3-scaled rushing distribution + finite-pool canonical receiving distribution",
-        True, "PARTIAL_SPECIALIST_ACTIVE_FINITE_POOL_CERTIFIED",
-        "dedicated RB receiving entitlement; joint-market calibration later",
-        "rushing is P3-consistent and receiving pool is finite; receiving allocation specialist remains pending",
-    )
+    add("player_rush_reception_yds", "RB/FB", *rb_combo_spec)
     add(
         "player_anytime_td", "ALL",
         "generic joint MC offensive_td_rate + red-zone modifiers",
@@ -398,6 +477,11 @@ def main() -> int:
         "c2_full_stack_consumed": False,
         "anytime_td_dedicated_science_certified": False,
         "sportsbook_inputs_used_to_define_lineage": False,
+        "priced_week": int(current_week),
+        "rb_p3_week1_only": True,
+        "rb_p3_consumed_this_week": bool(int(current_week) == 1),
+        "rb_rush_rec_conservation_v2_consumed_this_week": bool(int(current_week) != 1),
+        "rb_rush_rec_conservation_v2_version": "RB_RUSH_REC_CONSERVATION_V2",
         "audit": str(OUT_CSV),
     }
     OUT_JSON.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
