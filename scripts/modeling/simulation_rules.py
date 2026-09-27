@@ -109,7 +109,7 @@ def _injury_target_overrides(
     return overrides
 
 
-def apply_rules_to_metrics(metrics: pd.DataFrame) -> pd.DataFrame:
+def apply_rules_to_metrics(metrics: pd.DataFrame, bayes_baseline: pd.DataFrame | None = None) -> pd.DataFrame:
     if metrics is None or metrics.empty:
         return metrics.copy() if isinstance(metrics, pd.DataFrame) else pd.DataFrame()
 
@@ -122,10 +122,39 @@ def apply_rules_to_metrics(metrics: pd.DataFrame) -> pd.DataFrame:
     source_key = out["player_clean_key"] if "player_clean_key" in out.columns else out["player"]
     out["_bridge_key"] = source_key.map(_key)
 
-    # When Bayesian baselines are present, injury redistribution uses the same
-    # posterior opportunity assumptions that will feed simulation.
+    # Injury redistribution is a football-opportunity rule and must not depend
+    # on which players happen to have sportsbook offers. Production may supply
+    # the complete PlayerForm-derived Bayesian baseline so an injured alpha who
+    # has no pricing row still contributes the same posterior target share used
+    # by the full-football simulation path. Historical/other callers that do
+    # not supply the complete authority retain the legacy row-local fallback.
     bayes_share_by_player: Dict[tuple[str, str], float] = {}
-    if "bayes_tgt_share" in out.columns:
+    if bayes_baseline is not None:
+        auth = bayes_baseline.copy()
+        auth.columns = [str(c).strip().lower() for c in auth.columns]
+        if "team" not in auth.columns or "bayes_tgt_share" not in auth.columns:
+            raise RuntimeError("full Bayesian rule authority missing team/bayes_tgt_share")
+        if "player_clean_key" in auth.columns:
+            auth_source = auth["player_clean_key"]
+        elif "player" in auth.columns:
+            auth_source = auth["player"]
+        else:
+            raise RuntimeError("full Bayesian rule authority missing player identity")
+        auth["team"] = auth["team"].astype(str).str.upper().str.strip()
+        auth["_bridge_key"] = auth_source.map(_key)
+        if auth.duplicated(["team", "_bridge_key"]).any():
+            sample = auth.loc[
+                auth.duplicated(["team", "_bridge_key"], keep=False),
+                [c for c in ("player", "team", "_bridge_key") if c in auth.columns],
+            ].head(20).to_dict("records")
+            raise RuntimeError(f"full Bayesian rule authority duplicate player/team identities: {sample}")
+        for _, r in auth.iterrows():
+            v = _num(r.get("bayes_tgt_share"))
+            if np.isfinite(v):
+                bayes_share_by_player[(str(r["team"]), str(r["_bridge_key"]))] = v
+        if not bayes_share_by_player:
+            raise RuntimeError("full Bayesian rule authority produced zero finite target-share rows")
+    elif "bayes_tgt_share" in out.columns:
         unique = out.drop_duplicates(["team", "_bridge_key"])
         for _, r in unique.iterrows():
             v = _num(r.get("bayes_tgt_share"))
