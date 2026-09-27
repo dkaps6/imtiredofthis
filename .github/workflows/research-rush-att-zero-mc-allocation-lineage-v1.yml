@@ -76,25 +76,25 @@ jobs:
         run: |
           python scripts/backtest/enrich_historical_defense.py             --team-weekly /tmp/rush_lineage/team_weekly_history.csv             --seasons 2023,2024,2025             --audit /tmp/rush_lineage/historical_defense_enrichment_audit.csv             --observations /tmp/rush_lineage/historical_defense_observations.csv
 
-      - name: Build historical player, injury, and weather authority
+      - name: Build historical player authority
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
+          # Exact provenance parity with run 36275245917: the authoritative
+          # component trace did not pass historical injury/weather enrichments.
           python scripts/backtest/historical_player_logs.py             --seasons 2023,2024,2025             --schedule /tmp/rush_lineage/schedule_history.csv             --out /tmp/rush_lineage/player_game_logs_history.csv
-          python scripts/backtest/build_historical_injuries.py             --seasons 2023,2024,2025             --out /tmp/rush_lineage/injuries_history.csv
-          python scripts/backtest/build_historical_weather.py             --schedule /tmp/rush_lineage/schedule_history.csv             --out /tmp/rush_lineage/weather_history.csv
 
       - name: Run frozen 2024 lineage audit
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/research/rush_att_zero_mc_allocation_lineage_v1.py             --season 2024             --prior-season 2023             --weeks '1-18'             --iterations 2000             --player-logs /tmp/rush_lineage/player_game_logs_history.csv             --team-weekly /tmp/rush_lineage/team_weekly_history.csv             --schedule /tmp/rush_lineage/schedule_history.csv             --universe-dir /tmp/hist_2024/pregame_universe             --injuries /tmp/rush_lineage/injuries_history.csv             --weather /tmp/rush_lineage/weather_history.csv             --out-dir /tmp/rush_lineage/result_2024
+          python scripts/research/rush_att_zero_mc_allocation_lineage_v1.py             --season 2024             --prior-season 2023             --weeks '1-18'             --iterations 2000             --player-logs /tmp/rush_lineage/player_game_logs_history.csv             --team-weekly /tmp/rush_lineage/team_weekly_history.csv             --schedule /tmp/rush_lineage/schedule_history.csv             --universe-dir /tmp/hist_2024/pregame_universe             --out-dir /tmp/rush_lineage/result_2024
 
       - name: Run frozen 2025 lineage audit
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/research/rush_att_zero_mc_allocation_lineage_v1.py             --season 2025             --prior-season 2024             --weeks '1-18'             --iterations 2000             --player-logs /tmp/rush_lineage/player_game_logs_history.csv             --team-weekly /tmp/rush_lineage/team_weekly_history.csv             --schedule /tmp/rush_lineage/schedule_history.csv             --universe-dir /tmp/hist_2025/pregame_universe             --injuries /tmp/rush_lineage/injuries_history.csv             --weather /tmp/rush_lineage/weather_history.csv             --out-dir /tmp/rush_lineage/result_2025
+          python scripts/research/rush_att_zero_mc_allocation_lineage_v1.py             --season 2025             --prior-season 2024             --weeks '1-18'             --iterations 2000             --player-logs /tmp/rush_lineage/player_game_logs_history.csv             --team-weekly /tmp/rush_lineage/team_weekly_history.csv             --schedule /tmp/rush_lineage/schedule_history.csv             --universe-dir /tmp/hist_2025/pregame_universe             --out-dir /tmp/rush_lineage/result_2025
 
       - name: Combine and summarize both seasons
         env:
@@ -110,6 +110,19 @@ jobs:
           out=Path('/tmp/rush_lineage/combined')
           out.mkdir(parents=True,exist_ok=True)
           x.to_csv(out/'rush_att_allocation_lineage.csv',index=False)
+
+          blocked=x.loc[pd.to_numeric(x['zero_mc_nonzero_ensemble'],errors='coerce').fillna(0).eq(1)].copy()
+          expected={
+              (2024,'QB'):271,(2024,'RB'):74,(2024,'TE'):1087,(2024,'WR'):2117,
+              (2025,'QB'):249,(2025,'RB'):87,(2025,'TE'):1122,(2025,'WR'):2130,
+          }
+          got=blocked.groupby(['season','position_family']).size().to_dict()
+          if len(blocked) != 7137 or got != expected:
+              raise RuntimeError(
+                  f'frozen zero-MC cohort reproduction failed: rows={len(blocked)} '
+                  f'expected=7137 counts={got} expected_counts={expected}'
+              )
+
           _summaries(x,out)
           print((out/'RESULT.md').read_text())
           PY

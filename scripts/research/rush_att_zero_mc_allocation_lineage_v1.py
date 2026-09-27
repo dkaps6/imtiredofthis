@@ -31,8 +31,8 @@ def _read(path: Path, label: str) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
-def _optional(path: Path) -> pd.DataFrame:
-    return pd.read_csv(path) if path.exists() and path.stat().st_size else pd.DataFrame()
+def _optional(path: Path | None) -> pd.DataFrame:
+    return pd.read_csv(path) if path is not None and path.exists() and path.stat().st_size else pd.DataFrame()
 
 
 def _selected_authority(metrics: pd.DataFrame) -> pd.DataFrame:
@@ -297,12 +297,19 @@ def _run_week(
         - pd.to_numeric(trace["realized_multinomial_mean_carries"], errors="coerce")
     ).abs()
 
+    # The frozen 7,137-row finding came from component_predictions, whose
+    # historical contract keeps only rows with an observed postgame actual.
+    # Keep the full pregame roster in this trace for selector context, but
+    # classify the blocked cohort only on that exact evaluation subset.
+    trace["evaluation_cohort"] = pd.to_numeric(trace["actual"], errors="coerce").notna().astype(int)
     trace["zero_mc_nonzero_ensemble"] = (
-        pd.to_numeric(trace["canonical_mc_proj"], errors="coerce").fillna(0.0).abs().le(TOL)
+        trace["evaluation_cohort"].eq(1)
+        & pd.to_numeric(trace["canonical_mc_proj"], errors="coerce").fillna(0.0).abs().le(TOL)
         & pd.to_numeric(trace["ensemble_proj"], errors="coerce").fillna(0.0).gt(TOL)
     ).astype(int)
     trace["positive_output_share_zero_mc"] = (
-        pd.to_numeric(trace["rush_att_row_rules_rush_share"], errors="coerce").fillna(0.0).gt(TOL)
+        trace["evaluation_cohort"].eq(1)
+        & pd.to_numeric(trace["rush_att_row_rules_rush_share"], errors="coerce").fillna(0.0).gt(TOL)
         & pd.to_numeric(trace["canonical_mc_proj"], errors="coerce").fillna(0.0).abs().le(TOL)
     ).astype(int)
     trace["first_zero_stage"] = ""
@@ -350,7 +357,8 @@ def _summaries(trace: pd.DataFrame, out_dir: Path) -> None:
     selected_market.to_csv(out_dir / "selected_market_summary.csv", index=False)
 
     rank_frame = trace.loc[
-        pd.to_numeric(trace["rush_att_row_rules_rush_share"], errors="coerce").fillna(0.0).gt(TOL)
+        trace["evaluation_cohort"].eq(1)
+        & pd.to_numeric(trace["rush_att_row_rules_rush_share"], errors="coerce").fillna(0.0).gt(TOL)
     ].copy()
     rank_frame["mc_positive"] = (
         pd.to_numeric(rank_frame["canonical_mc_proj"], errors="coerce").fillna(0.0).gt(TOL)
@@ -424,8 +432,8 @@ def main() -> int:
     p.add_argument("--team-weekly", type=Path, required=True)
     p.add_argument("--schedule", type=Path, required=True)
     p.add_argument("--universe-dir", type=Path, required=True)
-    p.add_argument("--injuries", type=Path, required=True)
-    p.add_argument("--weather", type=Path, required=True)
+    p.add_argument("--injuries", type=Path, default=None)
+    p.add_argument("--weather", type=Path, default=None)
     p.add_argument("--out-dir", type=Path, required=True)
     a = p.parse_args()
 

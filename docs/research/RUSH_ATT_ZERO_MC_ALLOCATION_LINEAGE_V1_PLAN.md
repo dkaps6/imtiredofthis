@@ -82,3 +82,29 @@ Diagnostic only:
 - no repair design until the lineage result is known.
 
 A mechanical failure may be repaired only to execute this exact frozen audit. The science/query itself may not be changed after results are observed.
+
+
+## Mechanical provenance amendment — before authoritative result review
+
+The first launched workflow was found to differ mechanically from the exact
+authority that produced the frozen 7,137-row zero-MC finding. This amendment
+does not change the diagnostic question or any football science.
+
+Exact authority parity is now required:
+
+- run `36275245917` built the authoritative component traces without historical
+  injury/weather enrichments, so this lineage replay must use the same empty
+  injury/weather inputs;
+- `component_predictions` retains only rows with an observed postgame
+  `actual`, so the blocked 7,137-row cohort must be classified only on that
+  exact evaluation subset;
+- the full pregame roster remains present in the trace solely to reconstruct the
+  simulator selector/top-five authority.
+
+Hard reproduction gate before interpretation:
+- total blocked rows = **7,137**;
+- 2024: QB 271 / RB 74 / TE 1,087 / WR 2,117;
+- 2025: QB 249 / RB 87 / TE 1,122 / WR 2,130.
+
+If those counts do not reproduce exactly, the lineage run is mechanical-fail and
+its scientific output must not be interpreted.
