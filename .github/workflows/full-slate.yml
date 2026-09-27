@@ -495,7 +495,7 @@ jobs:
 
       - name: Restore pinned RB PD2 forward-history artifact
         id: rb_pd2_history
-        if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' && env.RB_PD2_SHADOW_CAPTURE == 'true' }}
+        if: ${{ always() && env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' && env.RB_PD2_SHADOW_CAPTURE == 'true' }}
         continue-on-error: true
         run: |
           set -euo pipefail
