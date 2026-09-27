@@ -1,0 +1,134 @@
+name: Rush-Att Zero-MC Allocation Lineage V1
+
+on:
+  push:
+    branches: [research-rush-att-allocation-lineage-v1]
+    paths:
+      - 'docs/research/RUSH_ATT_ZERO_MC_ALLOCATION_LINEAGE_V1_PLAN.md'
+      - 'scripts/research/rush_att_zero_mc_allocation_lineage_v1.py'
+      - 'tests/test_rush_att_zero_mc_allocation_lineage_v1.py'
+      - '.github/workflows/research-rush-att-zero-mc-allocation-lineage-v1.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: research-rush-att-zero-mc-allocation-lineage-v1
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  lineage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml scikit-learn joblib tabulate
+
+      - name: Compile and test frozen diagnostic
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/rush_att_zero_mc_allocation_lineage_v1.py
+          pytest -q tests/test_rush_att_zero_mc_allocation_lineage_v1.py tests/test_simulation_v2.py
+
+      - name: Build leakage-safe historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/rush_lineage /tmp/hist_2024 /tmp/hist_2025
+          mkdir -p /tmp/rush_lineage
+          # Exact source-build parity with authoritative run 36275245917.
+          python scripts/backtest/build_historical_inputs.py --season 2024 --prior-season 2023 --weeks '1-18' --out-dir /tmp/hist_2024
+          python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks '1-18' --out-dir /tmp/hist_2025
+
+      - name: Combine historical schedule and team authority
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+
+          roots=[Path('/tmp/hist_2024'),Path('/tmp/hist_2025')]
+          out=Path('/tmp/rush_lineage')
+          for name in ['schedule_history.csv','team_weekly_history.csv']:
+              x=pd.concat([pd.read_csv(p/name) for p in roots],ignore_index=True,sort=False)
+              keys=['season','week','team']
+              x=x.sort_values(keys).drop_duplicates(keys,keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined rows in {name}')
+              x.to_csv(out/name,index=False)
+          PY
+
+      - name: Build historical player authority
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          # Exact provenance parity with run 36275245917: the authoritative
+          # component trace did not pass historical injury/weather enrichments.
+          python scripts/backtest/historical_player_logs.py             --seasons 2023,2024,2025             --schedule /tmp/rush_lineage/schedule_history.csv             --out /tmp/rush_lineage/player_game_logs_history.csv
+
+      - name: Run frozen 2024 lineage audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/rush_att_zero_mc_allocation_lineage_v1.py             --season 2024             --prior-season 2023             --weeks '1-18'             --iterations 2000             --player-logs /tmp/rush_lineage/player_game_logs_history.csv             --team-weekly /tmp/rush_lineage/team_weekly_history.csv             --schedule /tmp/rush_lineage/schedule_history.csv             --universe-dir /tmp/hist_2024/pregame_universe             --out-dir /tmp/rush_lineage/result_2024
+
+      - name: Run frozen 2025 lineage audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/rush_att_zero_mc_allocation_lineage_v1.py             --season 2025             --prior-season 2024             --weeks '1-18'             --iterations 2000             --player-logs /tmp/rush_lineage/player_game_logs_history.csv             --team-weekly /tmp/rush_lineage/team_weekly_history.csv             --schedule /tmp/rush_lineage/schedule_history.csv             --universe-dir /tmp/hist_2025/pregame_universe             --out-dir /tmp/rush_lineage/result_2025
+
+      - name: Combine and summarize both seasons
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          from scripts.research.rush_att_zero_mc_allocation_lineage_v1 import _summaries
+
+          roots=[Path('/tmp/rush_lineage/result_2024'),Path('/tmp/rush_lineage/result_2025')]
+          x=pd.concat([pd.read_csv(p/'rush_att_allocation_lineage.csv') for p in roots],ignore_index=True,sort=False)
+          out=Path('/tmp/rush_lineage/combined')
+          out.mkdir(parents=True,exist_ok=True)
+          x.to_csv(out/'rush_att_allocation_lineage.csv',index=False)
+
+          blocked=x.loc[pd.to_numeric(x['zero_mc_nonzero_ensemble'],errors='coerce').fillna(0).eq(1)].copy()
+          expected={
+              (2024,'QB'):271,(2024,'RB'):74,(2024,'TE'):1087,(2024,'WR'):2117,
+              (2025,'QB'):249,(2025,'RB'):87,(2025,'TE'):1122,(2025,'WR'):2130,
+          }
+          got=blocked.groupby(['season','position_family']).size().to_dict()
+          if len(blocked) != 7137 or got != expected:
+              raise RuntimeError(
+                  f'frozen zero-MC cohort reproduction failed: rows={len(blocked)} '
+                  f'expected=7137 counts={got} expected_counts={expected}'
+              )
+
+          _summaries(x,out)
+          print((out/'RESULT.md').read_text())
+          PY
+
+      - name: Upload frozen diagnostic artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rush-att-zero-mc-allocation-lineage-v1
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            /tmp/rush_lineage/result_2024/**
+            /tmp/rush_lineage/result_2025/**
+            /tmp/rush_lineage/combined/**
