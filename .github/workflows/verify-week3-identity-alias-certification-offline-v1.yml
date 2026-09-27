@@ -7,7 +7,7 @@ on:
     paths:
       - '.github/workflows/verify-week3-identity-alias-certification-offline-v1.yml'
       - 'scripts/run_player_form_v2_loader.py'
-      - 'data/player_identity_current_aliases.csv'
+      - 'config/player_identity_current_aliases_v1.csv'
       - 'tests/test_player_identity_post_registry_alias_v1.py'
 
 permissions:
@@ -55,7 +55,8 @@ jobs:
           cp -a replay_source/data/. data/
           cp -a replay_source/outputs/. outputs/
           git show HEAD:data/player_identity_aliases.csv > data/player_identity_aliases.csv
-          git show HEAD:data/player_identity_current_aliases.csv > data/player_identity_current_aliases.csv
+          mkdir -p config
+git show HEAD:config/player_identity_current_aliases_v1.csv > config/player_identity_current_aliases_v1.csv
           git show HEAD:data/manual_name_overrides.csv > data/manual_name_overrides.csv
           git show HEAD:data/manual_prop_quarantine.csv > data/manual_prop_quarantine.csv
           echo "OFFLINE SNAPSHOT ONLY: no OddsAPI fetch"
