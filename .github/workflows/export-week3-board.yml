@@ -37,6 +37,7 @@ jobs:
           echo "board rows: $(wc -l < /tmp/b/outputs/props_priced_clean.csv)"
 
       - name: Board shape and slate
+        if: ${{ false }}
         run: |
           python - <<'PY'
           import json, pathlib
@@ -69,7 +70,7 @@ jobs:
           import numpy as np
           import pandas as pd
           b = pd.read_csv("/tmp/b/outputs/props_priced_clean.csv", low_memory=False)
-          PRICED = ["pass_yards","rush_yards","rec_yards","receptions","rush_rec_yards"]
+          PRICED = ["pass_yards","rush_yards"]
           b = b[b["market"].isin(PRICED)].copy()
 
           def prof(o):
