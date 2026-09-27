@@ -11,3 +11,4 @@ Replay authority:
 
 This marker launches the exact prepared-artifact pricing replay after the frozen rule-authority repair.
 \nMechanical retry: workflow now installs pytest; frozen repair/code/science unchanged.\n
+Mechanical retry: Bayesian loader now resolves through the runtime DATA path/module hook; frozen football repair unchanged.
