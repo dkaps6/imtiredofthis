@@ -2,6 +2,52 @@
 GitHub is canonical; chat memory is secondary.
 
 ---
+## ACTIVE CHECKPOINT — 2026-09-27 — WEEK-3 PAID BOARD CERTIFIED CURRENT
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-09-27_WEEK3_PAID_BOARD_CERTIFIED_CURRENT.md`
+
+This supersedes all older checkpoints for immediate execution.
+
+### Current state in one screen
+
+- current main before this docs-only continuity update: `6a1de05842a03272e51269d35a7a01ca8dd1ab12`;
+- canonical paid Week-3 Full Slate `36293274478` = **SUCCESS**;
+- paid artifact `10923570170`, digest `sha256:5a3d4f64592c70553e66dd51bb3bff45263d2900f4d270e370353fa60ea1c480`;
+- PR #650 Ertz live-prop quarantine = MERGED;
+- PR #651 verified identity-registry alias repair = MERGED;
+- exact paid-snapshot identity certification `36294114610` = SUCCESS with **0 blockers**;
+- PR #652 Week-3 RB workbook/market-lineage semantics repair = MERGED;
+- exact paid-snapshot lineage verifier `36321385122` = SUCCESS;
+- current-main Repo CI `36321552702` = SUCCESS;
+- current-main no-live Full Slate `36321552693` = SUCCESS;
+- **no further OddsAPI spend is needed merely to inspect/certify the preserved Week-3 paid board**;
+- paid board is mechanically generated and `FULL_SLATE_DATA_QUALITY_PASS_WITH_DECLARED_LIMITATIONS`;
+- Week-3 RB rush yards correctly use generic calibrated ensemble, not Week-1 P3;
+- Week-3 RB rush+rec correctly reports `RB_RUSH_REC_CONSERVATION_V2`;
+- ATD remains execution-capable but **not dedicated-science certified**;
+- frozen RB Vacancy/Public Intent, Receiving Rule Semantics, Availability -> Opportunity, zero-MC closure, and all do-not-rescue rules remain unchanged.
+
+### Exact next action
+
+Use the preserved successful paid artifact / corrected workbook for Week-3 board analysis. Do not buy the same odds snapshot again just to analyze it.
+
+Before games, preserve all frozen prospective Week-3 labels/cells unchanged. After games, grade those frozen authorities exactly as specified in the detailed handoff.
+
+### Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-09-27_WEEK3_PAID_BOARD_CERTIFIED_CURRENT.md`
+4. Issue #535 from comment `5852547875` onward
+5. live main / relevant PRs / Actions state
+
+Then work. Do not recursively load older handoffs.
+
+---
+
 ## ACTIVE CHECKPOINT — 2026-09-26 — SYSTEMS AUDIT CLOSED / DISCRETE COUNT V1 PROMOTED CURRENT
 
 **Read this detailed handoff next:**
