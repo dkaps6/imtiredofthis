@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pandas as pd
 
 import scripts.run_player_form_v2 as runner
 from scripts.player_identity_roster_history_v1 import load_identity_roster_history
+from scripts._opponent_map import canon_team
+from scripts.utils.player_identity_v3 import clean_player_id, player_name_key
 from scripts.player_stats_loader_v2 import load_weekly_player_stats
 from scripts.repair_injuries_nflcom_v1 import repair_if_needed as repair_injury_identity
 from scripts.runtime_context import resolve_prior_season
@@ -133,6 +136,154 @@ def attach_schedule_with_game_identity(logs: pd.DataFrame, schedule: pd.DataFram
     return out
 
 
+
+PERSISTENT_IDENTITY_ALIASES = Path("data/player_identity_aliases.csv")
+CURRENT_IDENTITY_ALIASES = Path("config/player_identity_current_aliases_v1.csv")
+
+
+def _identity_position(value) -> str:
+    text = "" if value is None or pd.isna(value) else str(value).upper().strip()
+    if text in {"HB", "TB"} or text.startswith("RB"):
+        return "RB"
+    if text.startswith("WR") or text in {"LWR", "RWR", "SWR"}:
+        return "WR"
+    if text.startswith("TE"):
+        return "TE"
+    if text.startswith("QB"):
+        return "QB"
+    if text.startswith("FB"):
+        return "FB"
+    return text
+
+
+def _load_post_registry_aliases() -> pd.DataFrame:
+    """Load verified name aliases that must remain addressable after registry collapse.
+
+    `player_identity_aliases.csv` contains aliases anchored by prior roster history.
+    `player_identity_current_aliases.csv` is reserved for current-season aliases
+    whose stable GSIS anchor exists only in strict-prior eligible usage evidence.
+    Both are identity metadata only and may not supply football features.
+    """
+    frames: list[pd.DataFrame] = []
+    required = {
+        "current_name", "player_id", "current_team", "position",
+        "reason", "verified_source", "verified_date",
+    }
+    for path in (PERSISTENT_IDENTITY_ALIASES, CURRENT_IDENTITY_ALIASES):
+        if not path.exists() or path.stat().st_size == 0:
+            continue
+        df = pd.read_csv(path, dtype="string").fillna("")
+        missing = required - set(df.columns)
+        if missing:
+            raise RuntimeError(f"identity alias config {path} missing columns: {sorted(missing)}")
+        if df.empty:
+            continue
+        if df[list(required)].apply(lambda s: s.str.strip().eq("")).any().any():
+            raise RuntimeError(f"identity alias config {path} contains blank required values")
+        df = df.copy()
+        df["alias_source_file"] = str(path)
+        frames.append(df)
+    if not frames:
+        return pd.DataFrame(columns=[*sorted(required), "alias_source_file"])
+    aliases = pd.concat(frames, ignore_index=True, sort=False).fillna("")
+    name_keys = aliases["current_name"].map(lambda v: player_name_key(v, strip_suffix=True))
+    if aliases["player_id"].duplicated().any() or name_keys.duplicated().any():
+        raise RuntimeError("post-registry identity aliases contain duplicate player IDs or current names")
+    return aliases
+
+
+def _apply_post_registry_verified_aliases(registry: pd.DataFrame) -> pd.DataFrame:
+    """Append verified live-name keys after latest-observation registry collapse.
+
+    The registry intentionally collapses each stable identity/team to its latest
+    observation. That can erase a verified current-name alias when newer strict-
+    prior usage logs use an older name variant (for example Joshua/Josh Palmer).
+    Re-appending the verified alias *after* collapse changes identity lookup only;
+    it never adds targets/carries/yards or changes PlayerForm's evidence window.
+    """
+    aliases = _load_post_registry_aliases()
+    if aliases.empty:
+        return registry
+    if registry is None or registry.empty:
+        raise RuntimeError("identity registry empty before post-registry alias overlay")
+
+    out = registry.copy()
+    additions: list[dict] = []
+    applied = 0
+    for rec in aliases.to_dict("records"):
+        current_name = str(rec["current_name"]).strip()
+        pid = clean_player_id(rec["player_id"])
+        team = canon_team(rec["current_team"])
+        position = _identity_position(rec["position"])
+        identity = f"gsis:{pid}"
+        anchored = out.loc[
+            out["player_identity_key"].astype(str).eq(identity)
+            & out["player_id"].astype(str).eq(pid)
+        ].copy()
+        if anchored.empty:
+            raise RuntimeError(
+                f"verified post-registry alias stable identity missing: {current_name} -> {identity} "
+                f"source={rec.get('alias_source_file','')}"
+            )
+        anchored_teams = set(anchored["team"].map(canon_team).dropna().astype(str))
+        if team not in anchored_teams:
+            raise RuntimeError(
+                f"verified post-registry alias current-team mismatch {current_name}: "
+                f"alias={team} registry={sorted(anchored_teams)}"
+            )
+        source_positions = set(anchored["position"].map(_identity_position).dropna().astype(str))
+        if position not in source_positions:
+            raise RuntimeError(
+                f"verified post-registry alias position mismatch {current_name}: "
+                f"alias={position} registry={sorted(source_positions)}"
+            )
+
+        full_key = player_name_key(current_name)
+        base_key = player_name_key(current_name, strip_suffix=True)
+        same_name_team = out.loc[
+            out["team"].map(canon_team).astype(str).eq(team)
+            & out["identity_full_name_key"].astype(str).eq(full_key)
+        ]
+        if not same_name_team.empty:
+            identities = set(same_name_team["player_identity_key"].astype(str))
+            if identities != {identity}:
+                raise RuntimeError(
+                    f"verified post-registry alias collides with another identity: "
+                    f"{current_name} team={team} identities={sorted(identities)}"
+                )
+            applied += 1
+            continue
+
+        additions.append({
+            "player_identity_key": identity,
+            "player_id": pid,
+            "player": current_name,
+            "team": team,
+            "position": position,
+            "identity_full_name_key": full_key,
+            "identity_base_name_key": base_key,
+            "last_season": pd.NA,
+            "last_week": pd.NA,
+        })
+        applied += 1
+
+    if additions:
+        out = pd.concat([out, pd.DataFrame(additions)], ignore_index=True, sort=False)
+
+    with_id = out.loc[out["player_id"].astype(str).str.len().gt(0)]
+    collisions = with_id.groupby("player_id")["player_identity_key"].nunique()
+    bad = collisions.loc[collisions.gt(1)]
+    if not bad.empty:
+        raise RuntimeError(f"stable player ID collision after post-registry alias overlay: {bad.to_dict()}")
+
+    print(
+        "[player_identity_v3] post_registry_verified_aliases=1 "
+        f"configured={len(aliases)} applied={applied} added_registry_rows={len(additions)} "
+        "model_prior_window_unchanged=1"
+    )
+    return out.reset_index(drop=True)
+
+
 def _install_identity_only_roster_history() -> None:
     """Broaden person identity history without broadening the model prior."""
     prior = int(resolve_prior_season())
@@ -150,7 +301,8 @@ def _install_identity_only_roster_history() -> None:
             ignore_index=True,
             sort=False,
         )
-        return original_builder(combined)
+        registry = original_builder(combined)
+        return _apply_post_registry_verified_aliases(registry)
 
     runner.pf.build_identity_registry = _identity_registry_with_rosters
     print(
