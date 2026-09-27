@@ -2,6 +2,54 @@
 GitHub is canonical; chat memory is secondary.
 
 ---
+## ACTIVE CHECKPOINT — 2026-09-27 — WEEK-3 LIVE POSTMORTEM / RESEARCH CURRENT
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-09-27_WEEK3_LIVE_POSTMORTEM_RESEARCH_CURRENT.md`
+
+**Compact next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-09-27_WEEK3_POSTMORTEM_RESEARCH.md`
+
+This supersedes all older checkpoints for immediate execution.
+
+### Current state in one screen
+
+- canonical main before this docs-only continuity update: `d2a1366f04d38cfd1a4ad3a10a49d8f2102afafd`;
+- Repo CI `36332026225` SUCCESS;
+- no-live Full Slate `36332026072` SUCCESS;
+- Archive Market Track Record `36332250341` SUCCESS;
+- canonical paid Week-3 betting board remains `36293274478` / artifact `10923570170`;
+- user reports Week-3 live performance looked very poor: **freeze production and grade objectively before changing science**;
+- Week-3 RB-PD2 prospective lock is VALID: 46 locked rows; Week 3 = Observation Week #1; no science PASS/FAIL before >=8 weeks and >=400 eligible player-games;
+- QB M89/M90 diagnostic: remaining error mass = 42.37% opportunity, 34.01% efficiency, 23.62% residual; no candidate authorized;
+- specialist non-target finite-MC path drift is CONFIRMED; only downstream materiality-vs-resampling audit is authorized next, no RNG repair yet;
+- Bayesian current-state transmission mismatch is confirmed, but the first full-stack Opportunity Authority Priority V1 candidate **FAILED CLOSED**;
+- do not rescue Opportunity Authority V1 with RB-only / TE-only post-hoc variants or Bayes retuning;
+- frozen RB Vacancy/Public Intent, Receiving Rule Semantics, Availability -> Opportunity, Discrete Count V1, RB Rush+Receiving V2, and zero-MC closure remain unchanged;
+- no fresh OddsAPI spend without explicit user authorization.
+
+### Exact next action
+
+When Week-3 outcomes are complete, run a brutally objective postmortem of the frozen paid board, grade every frozen Week-3 prospective authority exactly as preregistered, and do not tune thresholds/carveouts from the same outcomes.
+
+If outcomes are not complete, preserve the frozen state. The only directly authorized no-outcome systems follow-up is the specialist RNG/path downstream materiality audit.
+
+### Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-09-27_WEEK3_LIVE_POSTMORTEM_RESEARCH_CURRENT.md`
+4. Issue #535 from comment `5857262166` onward, especially `5857330835`, `5857337113`, `5857495417`, `5857596405`, and `5860608905`
+5. live main / relevant branches / PRs / Actions
+
+Then work. Do not recursively load older handoffs.
+
+---
+
+---
 ## ACTIVE CHECKPOINT — 2026-09-27 — WEEK-3 PAID BOARD CERTIFIED CURRENT
 
 **Read this detailed handoff next:**
