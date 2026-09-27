@@ -92,6 +92,61 @@ jobs:
           print('EXACT_PREGAME_CAPTURE_VERIFIED', receipts[0], 'rows', r['rows_written'])
           PY
 
+      - name: Derive roundtrip-stable recovery manifest without changing history rows
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import pandas as pd
+          from scripts.research.rb_pd2_forward_shadow_v1 import history_state_digest
+
+          root=Path('/tmp/rb_pd2_history/history')
+          state_path=root/'rb_pd2_forward_history_state.csv'
+          original_path=root/'rb_pd2_forward_history_manifest.json'
+          recovery_path=root/'rb_pd2_forward_history_manifest_recovery.json'
+
+          state=pd.read_csv(state_path,low_memory=False)
+          original=json.load(open(original_path,encoding='utf-8'))
+
+          assert len(state)==int(original['row_count']), (len(state),original)
+          weeks=sorted(pd.to_numeric(
+              state.loc[pd.to_numeric(state['season'],errors='coerce').eq(2026),'week'],
+              errors='coerce'
+          ).dropna().astype(int).unique().tolist())
+          assert weeks==[1,2], weeks
+          assert original.get('completed_2026_weeks')==[1,2], original
+          assert int(original.get('completed_2026_through_week',-1))==2, original
+          assert original.get('zero_prospective_outcomes_used') is True, original
+
+          stable_digest=history_state_digest(state)
+          old_digest=str(original.get('history_state_sha256') or '')
+          assert len(old_digest)==64
+          assert len(stable_digest)==64
+          assert old_digest != stable_digest, (old_digest,stable_digest)
+
+          recovery=dict(original)
+          recovery['history_state_sha256']=stable_digest
+          recovery['mechanical_recovery_only']=True
+          recovery['mechanical_recovery_reason']='producer_manifest_hashed_pre_csv_in_memory_state_not_roundtrip_reproducible'
+          recovery['original_manifest_history_state_sha256']=old_digest
+          recovery['source_history_artifact_id']=int(os.environ['HISTORY_ARTIFACT_ID'])
+          recovery['source_history_artifact_digest']=os.environ['HISTORY_ARTIFACT_DIGEST']
+          recovery['history_rows_changed']=False
+          recovery['science_fields_changed']=False
+
+          recovery_path.write_text(json.dumps(recovery,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          reread=pd.read_csv(state_path,low_memory=False)
+          assert history_state_digest(reread)==recovery['history_state_sha256']
+          print('RECOVERY_MANIFEST_READY', {
+              'rows':len(state),
+              'weeks':weeks,
+              'old_digest':old_digest,
+              'stable_digest':stable_digest,
+          })
+          PY
+
       - name: Assemble frozen candidate from captured bytes
         run: |
           set -euo pipefail
@@ -138,3 +193,5 @@ jobs:
           path: |
             /tmp/rb_pd2_capture/rb_pd2_shadow/**
             data/research/rb_pd2_forward/recovered_week3_lock/**
+            /tmp/rb_pd2_history/history/rb_pd2_forward_history_manifest.json
+            /tmp/rb_pd2_history/history/rb_pd2_forward_history_manifest_recovery.json
