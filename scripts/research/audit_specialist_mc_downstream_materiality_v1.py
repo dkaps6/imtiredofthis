@@ -720,7 +720,7 @@ def main() -> int:
     resampling_rows = []
     for seed in ALT_SEEDS:
         _, selected, _ = _simulate_stage(metrics["wr"], starters, seed=seed)
-        _install_provider_aliases(selected, aliases)
+        _install_provider_aliases(selected, aliases, identity_aliases)
         alt_boards = _price_stage(selected, paid, rule_rows, weights, qb_bundle)
         del selected
         for scope in ("TE_R5P_PROTECTED", "WR_R15_PROTECTED"):
