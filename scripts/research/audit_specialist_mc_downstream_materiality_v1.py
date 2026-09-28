@@ -17,7 +17,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from scripts._opponent_map import canon_team\nfrom scripts.modeling.discrete_count_alignment_v1 import align_prealigned_outcomes
+from scripts._opponent_map import canon_team
+from scripts.modeling.discrete_count_alignment_v1 import align_prealigned_outcomes
 from scripts.modeling.ensemble_v2 import apply_ensemble, load_weights
 from scripts.modeling.qb_pass_synthesis_v1 import (
     build_feature_dict,
