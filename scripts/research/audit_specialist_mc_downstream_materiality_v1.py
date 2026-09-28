@@ -607,7 +607,7 @@ def main() -> int:
     ff = final_full.set_index("paid_row_id")
     fs = final_shape.set_index("paid_row_id")
     max_mc_gap = float((pd.to_numeric(ff["stage_mc_proj"]) - pd.to_numeric(pay["mc_proj"])).abs().max())
-    max_target_gap = float((pd.to_numeric(ff["stage_target_mean"]) - pd.to_numeric(pay["model_proj"])).abs().max())
+    max_target_gap = float((pd.to_numeric(ff["stage_model_proj"]) - pd.to_numeric(pay["model_proj"])).abs().max())
     max_full_prob_gap = float((pd.to_numeric(ff["fair_prob"]) - pd.to_numeric(pay["fair_prob"])).abs().max())
     max_shape_prob_gap = float((pd.to_numeric(fs["fair_prob"]) - pd.to_numeric(pay["fair_prob"])).abs().max())
 
