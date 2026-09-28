@@ -1,0 +1,80 @@
+name: GSIS 2026 Source Access Audit V1
+
+on:
+  push:
+    branches:
+      - research-gsis-2026-source-audit-v1
+    paths:
+      - 'docs/research/GSIS_2026_SOURCE_ACCESS_AUDIT_V1_PLAN.md'
+      - 'scripts/research/audit_gsis_2026_source_access_v1.py'
+      - 'tests/test_gsis_2026_source_access_v1.py'
+      - '.github/workflows/research-gsis-2026-source-access-v1.yml'
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NFLGSIS_USER: ${{ secrets.NFLGSIS_USER }}
+      NFLGSIS_PASS: ${{ secrets.NFLGSIS_PASS }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install audit dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Run credential-redaction tests
+        run: |
+          export PYTHONPATH="${PWD}"
+          pytest -q tests/test_gsis_2026_source_access_v1.py
+
+      - name: Verify secret configuration without printing values
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          u=bool(os.environ.get("NFLGSIS_USER","").strip())
+          p=bool(os.environ.get("NFLGSIS_PASS","").strip())
+          print({"NFLGSIS_USER_present":u,"NFLGSIS_PASS_present":p})
+          PY
+
+      - name: Run single-attempt credential-safe GSIS access audit
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          rm -rf data/research/gsis_2026_source_access_v1
+          python scripts/research/audit_gsis_2026_source_access_v1.py             --out-dir data/research/gsis_2026_source_access_v1
+
+      - name: Display sanitized result
+        if: always()
+        run: |
+          if [ -f data/research/gsis_2026_source_access_v1/result.json ]; then
+            cat data/research/gsis_2026_source_access_v1/result.json
+          fi
+
+      - name: Upload sanitized audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gsis-2026-source-access-v1-${{ github.run_id }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            data/research/gsis_2026_source_access_v1/result.json
