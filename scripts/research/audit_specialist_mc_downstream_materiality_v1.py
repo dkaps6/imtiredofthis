@@ -388,11 +388,11 @@ def _compare_boards(
         [(str(e), str(p)) in protected_keys for e, p in zip(right["event_id"], right["player_clean_key"])]
     ].copy()
 
-    if set(l["_paid_row_id"]) != set(r["_paid_row_id"]):
+    if set(l["paid_row_id"]) != set(r["paid_row_id"]):
         raise RuntimeError(f"paid-row universe mismatch {comparison} {surface}")
-    m = l[["_paid_row_id", "fair_prob", "stage_ev_roi", "event_id", "player", "player_clean_key", "team", "market", "book", "vegas_line", "side"]].merge(
-        r[["_paid_row_id", "fair_prob", "stage_ev_roi"]],
-        on="_paid_row_id", how="inner", validate="one_to_one", suffixes=("_left", "_right")
+    m = l[["paid_row_id", "fair_prob", "stage_ev_roi", "event_id", "player", "player_clean_key", "team", "market", "book", "vegas_line", "side"]].merge(
+        r[["paid_row_id", "fair_prob", "stage_ev_roi"]],
+        on="paid_row_id", how="inner", validate="one_to_one", suffixes=("_left", "_right")
     )
     m["abs_prob_delta"] = (m["fair_prob_right"] - m["fair_prob_left"]).abs()
     m["abs_ev_delta"] = (m["stage_ev_roi_right"] - m["stage_ev_roi_left"]).abs()
@@ -536,7 +536,7 @@ def main() -> int:
 
     paid = _read_csv(root / "outputs/props_priced_clean.csv", "paid priced board")
     paid = paid.loc[paid["market"].isin(sorted(SUPPORTED))].copy().reset_index(drop=True)
-    paid["_paid_row_id"] = np.arange(len(paid), dtype=int)
+    paid["paid_row_id"] = np.arange(len(paid), dtype=int)
     if paid.empty:
         raise RuntimeError("no supported paid board rows")
     rule_rows = _representative_rule_rows(root)
@@ -573,9 +573,9 @@ def main() -> int:
 
     final_full = stage_boards["wr"]["FULL_DOWNSTREAM_PROPAGATION"]
     final_shape = stage_boards["wr"]["SHAPE_ONLY_FIXED_FINAL_MEAN"]
-    pay = paid.set_index("_paid_row_id")
-    ff = final_full.set_index("_paid_row_id")
-    fs = final_shape.set_index("_paid_row_id")
+    pay = paid.set_index("paid_row_id")
+    ff = final_full.set_index("paid_row_id")
+    fs = final_shape.set_index("paid_row_id")
     max_mc_gap = float((pd.to_numeric(ff["stage_mc_proj"]) - pd.to_numeric(pay["mc_proj"])).abs().max())
     max_target_gap = float((pd.to_numeric(ff["stage_target_mean"]) - pd.to_numeric(pay["model_proj"])).abs().max())
     max_full_prob_gap = float((pd.to_numeric(ff["fair_prob"]) - pd.to_numeric(pay["fair_prob"])).abs().max())
