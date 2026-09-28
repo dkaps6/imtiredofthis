@@ -196,3 +196,16 @@ The paid artifact itself is the authority for the Week-3 QB C2 selector populati
 For this audit, replay those exact frozen 30 starter/selector decisions and the unchanged lower-level C2 generator (`apply_c2`) for every entitlement stage. Do not re-resolve a different 32-team calendar universe after the fact. The final WR-R15 replay must reproduce the frozen paid C2 mean/SD/quantile audit before pass-yard materiality is accepted.
 
 This amendment changes no scoring rule and is frozen before any materiality result is computed.
+
+
+## Pre-scoring implementation-fidelity amendment — provider event/player lookup aliases
+
+The certified production wrapper simulates on sportsbook-independent canonical game IDs and suffix-safe player keys, then installs provider event IDs and provider player keys only after simulation for exact paid-offer lookup.
+
+This audit must replay both post-simulation lookup layers exactly:
+- canonical schedule game -> frozen provider event ID;
+- suffix-safe canonical player key -> preserved paid provider player_clean_key.
+
+Protection remains defined only on the canonical parent entitlement trace before these aliases. For downstream paid-board comparisons, protected canonical identities are translated through the exact deterministic production lookup alias contract. No sportsbook line/odds or outcome defines protection.
+
+This amendment is implementation fidelity only and is frozen before any materiality result is computed.
