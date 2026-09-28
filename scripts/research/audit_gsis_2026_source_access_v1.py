@@ -218,7 +218,7 @@ def _email_field(page: Page):
     visible = []
     for frame in _frames(page):
         try:
-            loc = frame.locator('input:not([type="hidden"]):not([type="password"])')
+            loc = frame.locator('input:not([type="hidden"]):not([type="password"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"])')
             for i in range(min(loc.count(), 10)):
                 item = loc.nth(i)
                 if item.is_visible():
