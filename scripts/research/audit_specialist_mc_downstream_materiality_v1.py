@@ -41,7 +41,7 @@ PROB_REPLAY_TOL = 1.0 / ITERATIONS + 1e-12
 SUPPORTED = {"pass_yards", "rush_yards", "rec_yards", "receptions"}
 KEY = ["event_id", "player_clean_key", "market"]
 PM_KEY = ["season", "week", "event_id", "player", "market"]
-QUOTE_KEY = ["season", "week", "event_id", "player_clean_key", "market", "book", "vegas_line"]
+QUOTE_KEY = ["season", "week", "event_id", "player_clean_key", "market", "_book_key", "vegas_line"]
 
 
 def _read_csv(path: Path, label: str) -> pd.DataFrame:
@@ -362,6 +362,9 @@ def _price_stage(
 
 def _quote_state(board: pd.DataFrame) -> pd.DataFrame:
     b = board.copy()
+    book = b.get("book", pd.Series("", index=b.index)).astype("string").fillna("").str.strip().str.lower()
+    title = b.get("book_title", pd.Series("", index=b.index)).astype("string").fillna("").str.strip().str.lower()
+    b["_book_key"] = book.mask(book.eq(""), title).mask(lambda s: s.eq(""), "~missing-book")
     b["_ev"] = [
         _ev_roi(p, o) for p, o in zip(pd.to_numeric(b["fair_prob"], errors="coerce"), pd.to_numeric(b["vegas_odds"], errors="coerce"))
     ]
