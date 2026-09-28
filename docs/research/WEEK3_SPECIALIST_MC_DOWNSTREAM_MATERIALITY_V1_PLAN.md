@@ -185,3 +185,14 @@ If ordinary resampling itself produces material BET/PASS/rank instability, that 
 - `top_material_moves.csv`
 
 Production changed = false.
+
+## Pre-scoring implementation-fidelity amendment — QB C2 replay
+
+The paid artifact itself is the authority for the Week-3 QB C2 selector population. It preserves:
+- `data/qb_c2_production_starter_audit.csv` with exactly 30 slate teams;
+- `data/qb_c2_production_integration_audit.csv` with exactly 30 primary QBs;
+- `selected_qb_rows=30` and all 30 paid-slate primary QBs on `C2_SELECTED`.
+
+For this audit, replay those exact frozen 30 starter/selector decisions and the unchanged lower-level C2 generator (`apply_c2`) for every entitlement stage. Do not re-resolve a different 32-team calendar universe after the fact. The final WR-R15 replay must reproduce the frozen paid C2 mean/SD/quantile audit before pass-yard materiality is accepted.
+
+This amendment changes no scoring rule and is frozen before any materiality result is computed.
