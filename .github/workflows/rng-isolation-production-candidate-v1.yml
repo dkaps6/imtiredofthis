@@ -25,7 +25,6 @@ env:
   SOURCE_ARTIFACT_ID: "10923570170"
   SOURCE_ARTIFACT_NAME: "run_36293274478"
   SOURCE_ARTIFACT_DIGEST: "sha256:5a3d4f64592c70553e66dd51bb3bff45263d2900f4d270e370353fa60ea1c480"
-  ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
 
 jobs:
   verify:
@@ -103,6 +102,8 @@ jobs:
           echo "EPHEMERAL_PAID_DATA_STATE_READY"
 
       - name: Replay canonical current-availability QB C2 runtime seams
+        env:
+          ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
@@ -113,6 +114,8 @@ jobs:
           echo "CANONICAL_WEEK3_QB_C2_CURRENT_SCOPE_SEAMS_APPLIED"
 
       - name: Run production-candidate equivalence audit
+        env:
+          ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
