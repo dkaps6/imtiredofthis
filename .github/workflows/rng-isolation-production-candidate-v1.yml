@@ -101,6 +101,16 @@ jobs:
           cp -a replay_source/data data
           echo "EPHEMERAL_PAID_DATA_STATE_READY"
 
+      - name: Replay canonical current-availability QB C2 runtime seams
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+          test -s data/roles_current_production_eligible_v1.csv
+          python scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_primary_team_seam_v1.py
+          python -m py_compile scripts/modeling/qb_c2_production_adapter_v1.py
+          echo "CANONICAL_WEEK3_QB_C2_CURRENT_SCOPE_SEAMS_APPLIED"
+
       - name: Run production-candidate equivalence audit
         run: |
           set -euo pipefail
