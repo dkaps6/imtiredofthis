@@ -58,7 +58,7 @@ jobs:
       - name: Verify audited production code is unchanged from paid head
         run: |
           set -euo pipefail
-          git diff --exit-code "${PAID_HEAD}" --             scripts/simulation_v2.py             scripts/simulation_explicit_entitlement_v1.py             scripts/simulation_c2_qb_candidate.py             scripts/modeling/qb_c2_production_adapter_v1.py             scripts/run_pricing_v2.py             scripts/modeling/discrete_count_alignment_v1.py             scripts/modeling/ensemble_v2.py             scripts/modeling/qb_pass_synthesis_v1.py
+          git diff --exit-code "${PAID_HEAD}" --             scripts/simulation_v2.py             scripts/simulation_explicit_entitlement_v1.py             scripts/simulation_c2_qb_candidate.py             scripts/modeling/qb_c2_production_adapter_v1.py             scripts/run_pricing_v2.py             scripts/modeling/discrete_count_alignment_v1.py             scripts/modeling/ensemble_v2.py             scripts/modeling/qb_pass_synthesis_v1.py             scripts/utils/player_identity_v3.py
           echo "AUDITED_PRODUCTION_CODE_IDENTICAL_TO_PAID_HEAD"
 
       - name: Verify preserved paid artifact authority
