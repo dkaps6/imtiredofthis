@@ -30,6 +30,7 @@ from scripts.modeling.qb_pass_synthesis_v1 import (
 from scripts.operations.grade_market_track_record_v1 import _ev_roi, select_model_bet
 from scripts.simulation_c2_qb_candidate import StateSimulationResult, apply_c2, simulate_with_states
 from scripts.simulation_v2 import MARKET_MAP
+from scripts.utils.player_identity_v3 import player_name_key
 
 ITERATIONS = 25000
 PRODUCTION_SEED = 42
@@ -137,12 +138,43 @@ def _provider_aliases(paid: pd.DataFrame) -> dict[str, str]:
     return aliases
 
 
-def _install_provider_aliases(result: StateSimulationResult, aliases: dict[str, str]) -> None:
+def _provider_identity_aliases(paid: pd.DataFrame, event_aliases: dict[str, str]) -> dict[tuple[str, str], tuple[str, str]]:
+    aliases = {}
+    cols = ["season", "week", "team", "opponent", "event_id", "player", "player_clean_key"]
+    for r in paid[cols].drop_duplicates().itertuples(index=False):
+        a, b = sorted([canon_team(r.team), canon_team(r.opponent)])
+        canonical_game = f"{int(r.season)}_{int(r.week):02d}_{a}_{b}"
+        canonical_player = str(player_name_key(r.player, strip_suffix=True) or "").strip()
+        provider_game = str(r.event_id)
+        provider_player = str(r.player_clean_key)
+        if not canonical_player or not provider_player:
+            raise RuntimeError(f"blank provider/canonical player identity player={r.player}")
+        key = (canonical_game, canonical_player)
+        value = (provider_game, provider_player)
+        prior = aliases.get(key)
+        if prior is not None and prior != value:
+            raise RuntimeError(f"ambiguous provider player identity canonical={key} prior={prior} new={value}")
+        aliases[key] = value
+        if event_aliases.get(canonical_game) != provider_game:
+            raise RuntimeError(f"provider event/player alias disagreement canonical={canonical_game}")
+    return aliases
+
+
+def _install_provider_aliases(
+    result: StateSimulationResult,
+    event_aliases: dict[str, str],
+    identity_aliases: dict[tuple[str, str], tuple[str, str]],
+) -> None:
     additions = {}
     for (game, pkey, market), values in list(result.values.items()):
-        provider = aliases.get(str(game))
+        provider = event_aliases.get(str(game))
         if provider:
             additions[(provider, pkey, market)] = values
+        ident = identity_aliases.get((str(game), str(pkey)))
+        if ident:
+            provider_game, provider_player = ident
+            additions[(str(game), provider_player, market)] = values
+            additions[(provider_game, provider_player, market)] = values
     result.values.update(additions)
 
 
@@ -514,22 +546,30 @@ def _compare_boards(
     return summary, m
 
 
-def _protected_sets(state: pd.DataFrame, aliases: dict[str, str] | None = None) -> dict[str, set[tuple[str, str]]]:
-    aliases = aliases or {}
-    event = state["event_id"].astype(str).map(lambda x: aliases.get(x, x))
+def _protected_sets(
+    state: pd.DataFrame,
+    event_aliases: dict[str, str] | None = None,
+    identity_aliases: dict[tuple[str, str], tuple[str, str]] | None = None,
+) -> dict[str, set[tuple[str, str]]]:
+    event_aliases = event_aliases or {}
+    identity_aliases = identity_aliases or {}
+
+    def mapped(mask: pd.Series) -> set[tuple[str, str]]:
+        out = set()
+        for e, p in zip(
+            state.loc[mask, "event_id"].astype(str),
+            state.loc[mask, "player_clean_key"].astype(str),
+        ):
+            ident = identity_aliases.get((e, p))
+            if ident is not None:
+                out.add((str(ident[0]), str(ident[1])))
+            else:
+                out.add((event_aliases.get(e, e), p))
+        return out
+
     return {
-        "TE_R5P_PROTECTED": set(
-            zip(
-                event.loc[state["te_protected"]],
-                state.loc[state["te_protected"], "player_clean_key"].astype(str),
-            )
-        ),
-        "WR_R15_PROTECTED": set(
-            zip(
-                event.loc[state["wr_protected"]],
-                state.loc[state["wr_protected"], "player_clean_key"].astype(str),
-            )
-        ),
+        "TE_R5P_PROTECTED": mapped(state["te_protected"]),
+        "WR_R15_PROTECTED": mapped(state["wr_protected"]),
     }
 
 
@@ -570,6 +610,7 @@ def main() -> int:
     paid = paid.loc[paid["market"].isin(sorted(SUPPORTED))].copy().reset_index(drop=True)
     paid["paid_row_id"] = np.arange(len(paid), dtype=int)
     aliases = _provider_aliases(paid)
+    identity_aliases = _provider_identity_aliases(paid, aliases)
     if paid.empty:
         raise RuntimeError("no supported paid board rows")
     rule_rows = _representative_rule_rows(root)
@@ -596,7 +637,7 @@ def main() -> int:
     for name in ("m38", "te", "wr"):
         base, selected, c2_diag = _simulate_stage(metrics[name], starters, seed=PRODUCTION_SEED)
         stage_means[name] = _mean_map(base)
-        _install_provider_aliases(selected, aliases)
+        _install_provider_aliases(selected, aliases, identity_aliases)
         stage_boards[name] = _price_stage(selected, paid, rule_rows, weights, qb_bundle)
         if name == "wr":
             c2_final_replay = c2_diag
@@ -657,7 +698,7 @@ def main() -> int:
         (out_dir / "result.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         raise RuntimeError(payload["disposition"])
 
-    protected = _protected_sets(state, aliases)
+    protected = _protected_sets(state, aliases, identity_aliases)
     specialist_rows = []
     specialist_detail = []
     comparisons = [
