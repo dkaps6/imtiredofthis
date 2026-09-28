@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from scripts.modeling.discrete_count_alignment_v1 import align_prealigned_outcomes
+from scripts._opponent_map import canon_team\nfrom scripts.modeling.discrete_count_alignment_v1 import align_prealigned_outcomes
 from scripts.modeling.ensemble_v2 import apply_ensemble, load_weights
 from scripts.modeling.qb_pass_synthesis_v1 import (
     build_feature_dict,
@@ -117,6 +117,32 @@ def _build_entitlement_state(root: Path) -> pd.DataFrame:
     if len(gap) and float(gap.max()) > TOL:
         raise RuntimeError(f"WR trace/final entitlement mismatch max={float(gap.max())}")
     return s
+
+
+def _provider_aliases(paid: pd.DataFrame) -> dict[str, str]:
+    p = paid.copy()
+    p["team"] = p["team"].map(canon_team)
+    p["opponent"] = p["opponent"].map(canon_team)
+    def canonical(r):
+        a, b = sorted([str(r["team"]), str(r["opponent"])])
+        return f"{int(r['season'])}_{int(r['week']):02d}_{a}_{b}"
+    p["_canonical_event_id"] = p.apply(canonical, axis=1)
+    aliases = {}
+    for cg, g in p.groupby("_canonical_event_id", sort=False):
+        ids = sorted(set(g["event_id"].astype(str)))
+        if len(ids) != 1:
+            raise RuntimeError(f"provider event identity ambiguous canonical={cg}: {ids}")
+        aliases[str(cg)] = ids[0]
+    return aliases
+
+
+def _install_provider_aliases(result: StateSimulationResult, aliases: dict[str, str]) -> None:
+    additions = {}
+    for (game, pkey, market), values in list(result.values.items()):
+        provider = aliases.get(str(game))
+        if provider:
+            additions[(provider, pkey, market)] = values
+    result.values.update(additions)
 
 
 def _stage_metrics(universe: pd.DataFrame, state: pd.DataFrame, entitlement_col: str, starters: pd.DataFrame) -> pd.DataFrame:
@@ -488,13 +514,13 @@ def _protected_sets(state: pd.DataFrame) -> dict[str, set[tuple[str, str]]]:
     return {
         "TE_R5P_PROTECTED": set(
             zip(
-                state.loc[state["te_protected"], "event_id"].astype(str),
+                event.loc[state["te_protected"]],
                 state.loc[state["te_protected"], "player_clean_key"].astype(str),
             )
         ),
         "WR_R15_PROTECTED": set(
             zip(
-                state.loc[state["wr_protected"], "event_id"].astype(str),
+                event.loc[state["wr_protected"]],
                 state.loc[state["wr_protected"], "player_clean_key"].astype(str),
             )
         ),
@@ -563,6 +589,7 @@ def main() -> int:
     for name in ("m38", "te", "wr"):
         base, selected, c2_diag = _simulate_stage(metrics[name], starters, seed=PRODUCTION_SEED)
         stage_means[name] = _mean_map(base)
+        _install_provider_aliases(selected, aliases)
         stage_boards[name] = _price_stage(selected, paid, rule_rows, weights, qb_bundle)
         if name == "wr":
             c2_final_replay = c2_diag
@@ -623,7 +650,7 @@ def main() -> int:
         (out_dir / "result.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         raise RuntimeError(payload["disposition"])
 
-    protected = _protected_sets(state)
+    protected = _protected_sets(state, aliases)
     specialist_rows = []
     specialist_detail = []
     comparisons = [
@@ -645,6 +672,7 @@ def main() -> int:
     resampling_rows = []
     for seed in ALT_SEEDS:
         _, selected, _ = _simulate_stage(metrics["wr"], starters, seed=seed)
+        _install_provider_aliases(selected, aliases)
         alt_boards = _price_stage(selected, paid, rule_rows, weights, qb_bundle)
         del selected
         for scope in ("TE_R5P_PROTECTED", "WR_R15_PROTECTED"):
