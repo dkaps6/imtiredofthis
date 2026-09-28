@@ -510,7 +510,9 @@ def _compare_boards(
     return summary, m
 
 
-def _protected_sets(state: pd.DataFrame) -> dict[str, set[tuple[str, str]]]:
+def _protected_sets(state: pd.DataFrame, aliases: dict[str, str] | None = None) -> dict[str, set[tuple[str, str]]]:
+    aliases = aliases or {}
+    event = state["event_id"].astype(str).map(lambda x: aliases.get(x, x))
     return {
         "TE_R5P_PROTECTED": set(
             zip(
@@ -563,6 +565,7 @@ def main() -> int:
     paid = _read_csv(root / "outputs/props_priced_clean.csv", "paid priced board")
     paid = paid.loc[paid["market"].isin(sorted(SUPPORTED))].copy().reset_index(drop=True)
     paid["paid_row_id"] = np.arange(len(paid), dtype=int)
+    aliases = _provider_aliases(paid)
     if paid.empty:
         raise RuntimeError("no supported paid board rows")
     rule_rows = _representative_rule_rows(root)
