@@ -19,15 +19,15 @@ from scripts.modeling.qb_pass_synthesis_v1 import (
     load_team_context as load_qb_team_context,
 )
 from scripts.operations.grade_market_track_record_v1 import _ev_roi
-from scripts.research.audit_specialist_mc_downstream_materiality_v1 import (
+from scripts.operations.rng_isolation_candidate_verify_helpers_v1 import (
     SUPPORTED,
-    _compare_boards,
-    _install_provider_aliases,
-    _price_stage,
-    _provider_aliases,
-    _provider_identity_aliases,
-    _read_csv,
-    _representative_rule_rows,
+    compare_boards,
+    install_provider_aliases,
+    price_stage,
+    provider_aliases,
+    provider_identity_aliases,
+    read_csv,
+    representative_rule_rows,
 )
 from scripts.run_pricing_with_full_roster_universe_v3_rng_isolation_candidate import (
     CANDIDATE_AUDIT,
@@ -62,15 +62,15 @@ EXPECTED = {
 
 
 def _build_candidate_metrics(root: Path) -> pd.DataFrame:
-    universe = _read_csv(
+    universe = read_csv(
         root / "data/football_simulation_universe.csv",
         "football simulation universe",
     )
-    target = _read_csv(
+    target = read_csv(
         root / "data/target_entitlement_v1_trace.csv",
         "target entitlement trace",
     )
-    te = _read_csv(
+    te = read_csv(
         root / "data/te_r5p_full_slate_entitlement_trace.csv",
         "TE-R5P trace",
     )
@@ -231,16 +231,16 @@ def main() -> int:
         and int(qb.get("sportsbook_inputs_to_rng_routing", 0)) == 0
     )
 
-    paid = _read_csv(args.root / "outputs/props_priced_clean.csv", "paid priced board")
+    paid = read_csv(args.root / "outputs/props_priced_clean.csv", "paid priced board")
     paid = paid.loc[paid["market"].isin(sorted(SUPPORTED))].copy().reset_index(drop=True)
     paid["paid_row_id"] = np.arange(len(paid), dtype=int)
     paid_ref = _paid_reference(paid)
 
-    aliases = _provider_aliases(paid)
-    identity_aliases = _provider_identity_aliases(paid, aliases)
-    _install_provider_aliases(selected, aliases, identity_aliases)
+    aliases = provider_aliases(paid)
+    identity_aliases = provider_identity_aliases(paid, aliases)
+    _installprovider_aliases(selected, aliases, identity_aliases)
 
-    rule_rows = _representative_rule_rows(args.root)
+    rule_rows = representative_rule_rows(args.root)
     weights = load_weights(Path("data/model_ensemble_weights.csv"))
     if weights.empty:
         raise RuntimeError("candidate verification missing model ensemble weights")
@@ -252,13 +252,13 @@ def main() -> int:
         if Path("data/weather_week.csv").exists()
         else pd.DataFrame(),
     }
-    boards = _price_stage(selected, paid, rule_rows, weights, qb_bundle)
+    boards = price_stage(selected, paid, rule_rows, weights, qb_bundle)
 
     summaries = []
     equivalence = {}
     keys = _all_player_keys(paid_ref)
     for surface in ("SHAPE_ONLY_FIXED_FINAL_MEAN", "FULL_DOWNSTREAM_PROPAGATION"):
-        summary, _ = _compare_boards(
+        summary, _ = compare_boards(
             paid_ref,
             boards[surface],
             keys,
