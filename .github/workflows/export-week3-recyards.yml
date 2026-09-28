@@ -1,0 +1,65 @@
+name: Export Week 3 Rec Yards
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  SOURCE_RUN_ID: '36293274478'
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install --upgrade pip && pip install pandas numpy
+
+      - name: Download the live board
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/b && mkdir -p /tmp/b
+          gh run download "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --name "run_${SOURCE_RUN_ID}" --dir /tmp/b
+          test -s /tmp/b/outputs/props_priced_clean.csv
+
+      - name: Emit rec_yards decisions as CSV
+        run: |
+          python - <<'PY'
+          import numpy as np
+          import pandas as pd
+          b = pd.read_csv("/tmp/b/outputs/props_priced_clean.csv", low_memory=False)
+          b = b[b["market"].eq("rec_yards")].copy()
+
+          def prof(o):
+              o = pd.to_numeric(o, errors="coerce")
+              return np.where(o > 0, o / 100.0, 100.0 / o.abs())
+
+          b["profit"] = prof(b["vegas_odds"])
+          b["fp"] = pd.to_numeric(b["fair_prob"], errors="coerce")
+          b["ev"] = b["fp"] * b["profit"] - (1 - b["fp"])
+          key = ["player", "market"]
+          b = b.sort_values(key + ["ev"], ascending=[True, True, False])
+          d = b.drop_duplicates(key, keep="first")
+          d = d[d["ev"] > 0].copy()
+          d["gap"] = (d["model_proj"] - d["vegas_line"]).round(1)
+          d["model_proj"] = d["model_proj"].round(1)
+          d["fp"] = d["fp"].round(4)
+          d["ev"] = d["ev"].round(4)
+          cols = [c for c in ["market", "position", "player", "team", "opponent", "side",
+                              "vegas_line", "model_proj", "gap", "fp", "vegas_odds", "ev",
+                              "book"] if c in d.columns]
+          d = d[cols].sort_values("ev", ascending=False)
+          print(f"rec_yards positive-EV decisions: {len(d)}")
+          print("<<<BOARDCSV")
+          print(d.to_csv(index=False).strip())
+          print("BOARDCSV>>>")
+          PY
