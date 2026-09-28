@@ -1,52 +1,73 @@
-"""Emit every player stat line for one NFL week from the public ESPN box scores.
+"""Emit every player stat line for one NFL week, for offline board grading.
 
 This exists because the research container has no general outbound egress -- every
 stats host is refused by the network proxy -- while a CI runner does. Run it in
 Actions and read the CSV back out of the job log.
 
-The output is one row per player per game with the four quantities the betting
-board prices: pass_yards, rush_yards, rec_yards and receptions. Players who did
-not record a stat line are absent, which is itself signal: a priced player with
-no row was inactive or did not play.
+Source order matters. ESPN's site API refuses datacenter IPs (403 from Azure
+runners), so the primary source is the nflverse weekly player-stats release,
+which is served from the same host the runner already talks to. Candidates are
+probed in order and the first one carrying the requested week wins; the probe
+table is printed either way so a miss is diagnosable rather than silent.
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
-import json
+import io
 import sys
 import time
+import urllib.error
 import urllib.request
-from collections import defaultdict
 
-SCOREBOARD = (
-    "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
-    "?dates={season}&seasontype=2&week={week}"
-)
-SUMMARY = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event={event}"
+NFLVERSE = "https://github.com/nflverse/nflverse-data/releases/download"
 
-# ESPN reports each category's stats as a positional list described by its own
-# "labels" array. Read by label rather than by index -- the order is not stable
-# across categories and silently shifts meaning if you hard-code positions.
-WANTED = {
-    "passing": {"YDS": "pass_yards"},
-    "rushing": {"YDS": "rush_yards"},
-    "receiving": {"YDS": "rec_yards", "REC": "receptions"},
+# Release asset naming has changed over the project's life; try both shapes.
+CANDIDATES = [
+    f"{NFLVERSE}/player_stats/stats_player_week_{{season}}.csv",
+    f"{NFLVERSE}/player_stats/player_stats_{{season}}.csv",
+    f"{NFLVERSE}/stats_player/stats_player_week_{{season}}.csv",
+    "https://raw.githubusercontent.com/nflverse/nflverse-data/master/data/"
+    "player_stats/player_stats_{season}.csv",
+]
+
+# nflverse column names, newest first -- resolved against the actual header.
+COLS = {
+    "pass_yards": ["passing_yards"],
+    "rush_yards": ["rushing_yards"],
+    "rec_yards": ["receiving_yards"],
+    "receptions": ["receptions"],
+    "player": ["player_display_name", "player_name", "full_name"],
+    "team": ["recent_team", "team"],
+    "opponent": ["opponent_team", "opponent"],
+    "week": ["week"],
+    "season": ["season"],
+    "position": ["position"],
+    "season_type": ["season_type"],
 }
 
 
-def get(url: str, attempts: int = 4) -> dict:
-    last = None
+def fetch(url: str, attempts: int = 3) -> bytes | None:
     for i in range(attempts):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                return json.loads(resp.read().decode("utf-8"))
-        except Exception as exc:  # noqa: BLE001 - surface the final failure only
-            last = exc
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                return resp.read()
+        except urllib.error.HTTPError as exc:
+            print(f"  {exc.code} {url}", file=sys.stderr)
+            return None
+        except Exception as exc:  # noqa: BLE001
+            print(f"  retry {i + 1} {type(exc).__name__} {url}", file=sys.stderr)
             time.sleep(2 * (i + 1))
-    raise RuntimeError(f"failed to fetch {url}: {last}")
+    return None
+
+
+def pick(header: list[str], names: list[str]) -> str | None:
+    for n in names:
+        if n in header:
+            return n
+    return None
 
 
 def main() -> int:
@@ -55,65 +76,46 @@ def main() -> int:
     ap.add_argument("--week", type=int, required=True)
     args = ap.parse_args()
 
-    board = get(SCOREBOARD.format(season=args.season, week=args.week))
-    events = board.get("events", [])
-    print(f"week {args.week}: {len(events)} games", file=sys.stderr)
-
-    rows: dict[tuple, dict] = {}
-    meta: list[str] = []
-
-    for ev in events:
-        eid = ev["id"]
-        comp = ev["competitions"][0]
-        status = comp["status"]["type"]["name"]
-        teams = {t["homeAway"]: t["team"]["abbreviation"] for t in comp["competitors"]}
-        label = f"{teams.get('away')}@{teams.get('home')}"
-        meta.append(f"{label}\t{status}\t{ev.get('date', '')}")
-        if status != "STATUS_FINAL":
-            print(f"  skip {label}: {status}", file=sys.stderr)
+    print("probing sources:", file=sys.stderr)
+    for tmpl in CANDIDATES:
+        url = tmpl.format(season=args.season)
+        raw = fetch(url)
+        if raw is None:
+            continue
+        text = raw.decode("utf-8", errors="replace")
+        rdr = csv.DictReader(io.StringIO(text))
+        header = rdr.fieldnames or []
+        resolved = {k: pick(header, v) for k, v in COLS.items()}
+        wk = resolved["week"]
+        if not wk:
+            print(f"  no week column in {url}", file=sys.stderr)
+            continue
+        rows = [r for r in rdr if str(r.get(wk)) == str(args.week)]
+        st = resolved.get("season_type")
+        if st:
+            rows = [r for r in rows if str(r.get(st)).upper() in ("REG", "REGULAR")]
+        print(f"  OK {url} -> {len(rows)} rows for week {args.week}", file=sys.stderr)
+        if not rows:
+            print("  week not yet published in this asset", file=sys.stderr)
             continue
 
-        summary = get(SUMMARY.format(event=eid))
-        players = (summary.get("boxscore") or {}).get("players") or []
-        for team_block in players:
-            abbr = team_block["team"]["abbreviation"]
-            for cat in team_block.get("statistics", []):
-                name = cat.get("name")
-                if name not in WANTED:
-                    continue
-                labels = cat.get("labels", [])
-                for ath in cat.get("athletes", []):
-                    who = ath["athlete"]["displayName"]
-                    stats = ath.get("stats", [])
-                    key = (label, abbr, who)
-                    row = rows.setdefault(
-                        key,
-                        {"game": label, "team": abbr, "player": who,
-                         "pass_yards": "", "rush_yards": "", "rec_yards": "", "receptions": ""},
-                    )
-                    for lab, col in WANTED[name].items():
-                        if lab in labels:
-                            v = stats[labels.index(lab)]
-                            row[col] = v
-        print(f"  {label}: ok", file=sys.stderr)
+        print(f"<<<SOURCE\n{url}\nSOURCE>>>")
+        out = csv.writer(sys.stdout, lineterminator="\n")
+        fields = ["player", "team", "opponent", "position",
+                  "pass_yards", "rush_yards", "rec_yards", "receptions"]
+        print("<<<BOXCSV")
+        out.writerow(fields)
+        for r in rows:
+            out.writerow([
+                (r.get(resolved[f]) or "") if resolved.get(f) else ""
+                for f in fields
+            ])
+        print("BOXCSV>>>")
+        print(f"emitted {len(rows)} player rows", file=sys.stderr)
+        return 0
 
-    print("<<<GAMESTATUS")
-    for m in meta:
-        print(m)
-    print("GAMESTATUS>>>")
-
-    print("<<<BOXCSV")
-    w = csv.DictWriter(
-        sys.stdout,
-        fieldnames=["game", "team", "player", "pass_yards", "rush_yards", "rec_yards", "receptions"],
-        lineterminator="\n",
-    )
-    w.writeheader()
-    for key in sorted(rows):
-        w.writerow(rows[key])
-    print("BOXCSV>>>")
-    print(f"total player rows: {len(rows)}", file=sys.stderr)
-    return 0
+    print("no source carried the requested week", file=sys.stderr)
+    return 1
 
 
 if __name__ == "__main__":
