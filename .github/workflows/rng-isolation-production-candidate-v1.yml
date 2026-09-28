@@ -25,6 +25,7 @@ env:
   SOURCE_ARTIFACT_ID: "10923570170"
   SOURCE_ARTIFACT_NAME: "run_36293274478"
   SOURCE_ARTIFACT_DIGEST: "sha256:5a3d4f64592c70553e66dd51bb3bff45263d2900f4d270e370353fa60ea1c480"
+  ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
 
 jobs:
   verify:
