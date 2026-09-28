@@ -2,6 +2,9 @@ name: Export Week 3 Rec Yards
 
 on:
   workflow_dispatch:
+  push:
+    branches: [claude/nice-cori-4qkwqs]
+    paths: ['.github/workflows/export-week3-recyards.yml']
 
 permissions:
   contents: read
