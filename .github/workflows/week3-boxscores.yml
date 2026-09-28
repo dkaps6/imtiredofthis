@@ -1,0 +1,18 @@
+name: Week 3 box scores
+
+on:
+  push:
+    branches: [claude/nice-cori-4qkwqs]
+    paths: ['.github/workflows/week3-boxscores.yml', 'scripts/operations/fetch_week_boxscores_v1.py']
+  workflow_dispatch:
+
+jobs:
+  boxscores:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Fetch every Week 3 player stat line
+        run: python scripts/operations/fetch_week_boxscores_v1.py --season 2026 --week 3
