@@ -238,7 +238,7 @@ def main() -> int:
 
     aliases = provider_aliases(paid)
     identity_aliases = provider_identity_aliases(paid, aliases)
-    _installprovider_aliases(selected, aliases, identity_aliases)
+    install_provider_aliases(selected, aliases, identity_aliases)
 
     rule_rows = representative_rule_rows(args.root)
     weights = load_weights(Path("data/model_ensemble_weights.csv"))
@@ -258,7 +258,7 @@ def main() -> int:
     equivalence = {}
     keys = _all_player_keys(paid_ref)
     for surface in ("SHAPE_ONLY_FIXED_FINAL_MEAN", "FULL_DOWNSTREAM_PROPAGATION"):
-        summary, _ = compare_boards(
+        summary = compare_boards(
             paid_ref,
             boards[surface],
             keys,
