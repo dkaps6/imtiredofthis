@@ -9,6 +9,8 @@ on:
       - 'data/research/week3_postmortem/PRODUCTION_DECISION_GATES_WEEKS1_3_V1.json'
       - 'data/research/week3_postmortem/WEEK3_MANUAL_SETTLEMENT_EVIDENCE_V1.json'
       - 'scripts/operations/backtest_full_report_v1.py'
+      - 'scripts/operations/grade_market_track_record_gsis_v1.py'
+      - 'tests/test_grade_market_track_record_gsis_verified_alias_v1.py'
       - '.github/workflows/weeks1-3-postmortem-diagnostics-v1.yml'
 
 permissions:
@@ -45,6 +47,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install nflreadpy
+
+      - name: Run historical-grader identity regression
+        run: |
+          export PYTHONPATH="${PWD}"
+          pytest -q tests/test_grade_market_track_record_gsis_verified_alias_v1.py
 
       - name: Verify and download immutable paid Week 3 board
         run: |
