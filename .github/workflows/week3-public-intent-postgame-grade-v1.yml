@@ -1,0 +1,86 @@
+name: Week3 Public Intent Postgame Grade V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-week3-postmortem-execution-v1
+    paths:
+      - 'scripts/research/grade_public_intent_week3_v1.py'
+      - '.github/workflows/week3-public-intent-postgame-grade-v1.yml'
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FROZEN_COMMIT: "0170f89a42ca5c10e57c06685cd2736474dd45a2"
+
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy
+
+      - name: Recover exact frozen pregame public-intent capture
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/public_intent
+          git cat-file -e "${FROZEN_COMMIT}^{commit}"
+          git show "${FROZEN_COMMIT}:docs/research/PUBLIC_INTENT_WEEK3_PROSPECTIVE_CAPTURE_V1.json"             > /tmp/public_intent/frozen_capture.json
+          git show "${FROZEN_COMMIT}:docs/research/PUBLIC_INTENT_WEEK3_PROSPECTIVE_CAPTURE_V1_SATURDAY_ADDENDUM.md"             > /tmp/public_intent/saturday_addendum.md
+          python - <<'PY'
+          import json
+          p="/tmp/public_intent/frozen_capture.json"
+          x=json.load(open(p,encoding="utf-8"))
+          assert x["study"]=="PUBLIC_INTENT_WEEK3_PROSPECTIVE_CAPTURE_V1"
+          assert x["target_season"]==2026
+          assert x["target_week"]==3
+          assert x["pregame"] is True
+          assert x["target_game_outcomes_read"]==0
+          assert x["sportsbook_inputs_used"]==0
+          assert x["candidate_variants_scored"]==0
+          assert x["parameters_fit"]==0
+          labels={r["team"]:r["intent_label"] for r in x["teams"]}
+          assert labels=={
+              "DEN":"ROTATION_PRESERVED_NO_CLEAR_SUCCESSOR_CONCENTRATION",
+              "PIT":"WARREN_LEAD_BACK_LEAN_WITH_DEPTH_SUPPORT",
+          }, labels
+          pit=[r for r in x["teams"] if r["team"]=="PIT"][0]
+          assert pit["lead_identity"]=="Jaylen Warren"
+          print("PUBLIC_INTENT_FROZEN_CAPTURE_PASS")
+          PY
+
+      - name: Grade frozen public-intent labels
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/research/grade_public_intent_week3_v1.py             --capture-json /tmp/public_intent/frozen_capture.json             --out-dir data/research/week3_postmortem/public_intent_v1             | tee /tmp/public_intent_grade_stdout.txt
+
+      - name: Upload Week3 public-intent grade
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: week3-public-intent-postgame-grade-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: |
+            data/research/week3_postmortem/public_intent_v1/**
+            /tmp/public_intent/frozen_capture.json
+            /tmp/public_intent/saturday_addendum.md
+            /tmp/public_intent_grade_stdout.txt
