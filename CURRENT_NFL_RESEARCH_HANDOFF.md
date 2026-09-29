@@ -2,6 +2,59 @@
 GitHub is canonical; chat memory is secondary.
 
 ---
+## ACTIVE CHECKPOINT — 2026-09-29 — WEEK-3 POSTMORTEM COMPLETE / PROSPECTIVE RESULTS CURRENT
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-09-29_WEEK3_POSTMORTEM_COMPLETE_CURRENT.md`
+
+**Compact next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-09-29_WEEK3_POSTMORTEM_COMPLETE.md`
+
+This supersedes all older checkpoints for immediate execution.
+
+### Current state in one screen
+
+- canonical main before this pointer update: `0a2d74fe0aae2454acd4de8a7c97f803f1a2b660`;
+- active postmortem branch: `research-week3-postmortem-execution-v1@fb80bb6c4af6c280aee53d3013315632c69a7c9b`;
+- Week 3 is fully settled; Weeks 1-3 cumulative postmortem is complete;
+- cumulative production record: **629-611, 50.7%, -40.72u**;
+- no tested position/market/side slice survived clustered BH-FDR correction;
+- projection-authority result: `MIXED_BY_MARKET_OR_POSITION`;
+- RB Vacancy Week 3: `WEEK3_OBSERVATIONAL_MIXED`;
+- public intent Week 3: `WEEK3_PUBLIC_INTENT_DIRECTIONALLY_INFORMATIVE` (observational only);
+- Receiving Rule Semantics Week 3: no candidate promoted;
+- RB-PD2 Week 3: Observation #1 complete, **46/400 rows and 1/8 weeks**, disposition `NO_FORWARD_CONFIRMATION_INSUFFICIENT_SUPPORT`;
+- latest RB-PD2 verification run `36631186678` = SUCCESS;
+- no Week-3 outcome-driven production change was authorized;
+- immediate unfinished Week-3 item: Availability -> Opportunity postgame closure, but only under its original frozen contract; never invent post-hoc thresholds;
+- specialist RNG production-candidate repair remains a separate open mechanical lane; latest run `36504441918` failed and must be diagnosed from logs before edits;
+- GSIS Lineup Detail + Formation Usage are incrementally descriptive, but temporal use requires repeated immutable snapshots; raw GSIS remains private;
+- no paid OddsAPI pull without explicit user authorization.
+
+### Exact next action
+
+1. Read the original Availability -> Opportunity frozen contract/result and determine whether a valid postgame descriptive grade was preregistered.
+2. If yes, grade it exactly as frozen with no fitting. If no, record no valid postgame grading contract rather than inventing one.
+3. Create one consolidated Week-3 prospective disposition matrix.
+4. Only then choose the next genuinely new science from Weeks 1-3 error, without reopening closed lanes.
+5. Secondary: diagnose RNG run `36504441918` if resuming the mechanical repair lane.
+
+### Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this newest top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-09-29_WEEK3_POSTMORTEM_COMPLETE_CURRENT.md`
+4. Issue #535 from comment `5897966236` onward, plus GSIS checkpoint `5881240970`
+5. live main / relevant branches / PRs / Actions
+
+Then work. Do not recursively load older handoffs.
+
+---
+
+---
 ## ACTIVE CHECKPOINT — 2026-09-27 — WEEK-3 LIVE POSTMORTEM / RESEARCH CURRENT
 
 **Read this detailed handoff next:**
