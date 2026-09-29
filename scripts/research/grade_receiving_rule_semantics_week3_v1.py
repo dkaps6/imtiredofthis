@@ -48,6 +48,31 @@ def _verified_alias_keys() -> dict[tuple[str,str], str]:
             out[(team,hist)]=cur
     return out
 
+def _assert_frozen_games_final(base: pd.DataFrame) -> None:
+    import nflreadpy as nfl
+    sched=_to_pandas(nfl.load_schedules(seasons=[SEASON])).copy()
+    sched.columns=[str(c).strip().lower() for c in sched.columns]
+    if "game_type" in sched.columns:
+        sched=sched.loc[sched["game_type"].astype(str).str.upper().eq("REG")]
+    sched=sched.loc[pd.to_numeric(sched["week"],errors="coerce").eq(WEEK)].copy()
+    if sched.empty:
+        raise RuntimeError("Week-3 schedule unavailable")
+    sched["home_team"]=sched["home_team"].map(canon_team)
+    sched["away_team"]=sched["away_team"].map(canon_team)
+    frozen_teams=set(base["team"].map(canon_team).astype(str))
+    seen=set()
+    for r in sched.itertuples(index=False):
+        if str(r.home_team) in frozen_teams or str(r.away_team) in frozen_teams:
+            hs=pd.to_numeric(pd.Series([r.home_score]),errors="coerce").iloc[0]
+            aws=pd.to_numeric(pd.Series([r.away_score]),errors="coerce").iloc[0]
+            if pd.isna(hs) or pd.isna(aws):
+                raise RuntimeError(f"frozen Week-3 game not final: {r.home_team}-{r.away_team}")
+            seen.update([str(r.home_team),str(r.away_team)])
+    missing=frozen_teams-seen
+    if missing:
+        raise RuntimeError(f"frozen teams missing from final schedule: {sorted(missing)}")
+
+
 def _load_actuals() -> tuple[pd.DataFrame,dict[str,float],pd.DataFrame]:
     stats=load_weekly_player_stats(SEASON).copy()
     stats.columns=[str(c).strip().lower() for c in stats.columns]
@@ -184,6 +209,7 @@ def main()->int:
         cells[cell]=x
 
     base=cells["A0B0"]
+    _assert_frozen_games_final(base)
     actual_base=_attach_actuals(base)
     actual_cols=IDENT+["actual_targets","actual_target_share","actual_receptions","actual_rec_yards","team_actual_targets","actual_source"]
     actual=actual_base[actual_cols].copy()
