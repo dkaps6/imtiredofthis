@@ -1,0 +1,150 @@
+name: Week3 Postmortem Settlement V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-week3-postmortem-execution-v1
+    paths:
+      - 'scripts/research/week3_postmortem_source_gate_v1.py'
+      - '.github/workflows/week3-postmortem-settlement-v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  SEASON: "2026"
+  WEEK: "3"
+  SOURCE_RUN_ID: "36293274478"
+  SOURCE_ARTIFACT_ID: "10923570170"
+  SOURCE_ARTIFACT_NAME: "run_36293274478"
+  SOURCE_ARTIFACT_DIGEST: "sha256:5a3d4f64592c70553e66dd51bb3bff45263d2900f4d270e370353fa60ea1c480"
+
+jobs:
+  settle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy
+
+      - name: Verify Week 3 postgame source completeness
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/research/week3_postmortem_source_gate_v1.py \
+            --out data/research/week3_postmortem/source_gate.json
+
+      - name: Verify canonical paid Week 3 artifact authority
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts?per_page=100" > /tmp/source_artifacts.json
+          python - <<'PY'
+          import json, os
+          obj=json.load(open('/tmp/source_artifacts.json', encoding='utf-8'))
+          want=int(os.environ['SOURCE_ARTIFACT_ID'])
+          matches=[a for a in obj.get('artifacts',[]) if int(a.get('id',-1)) == want]
+          if len(matches) != 1:
+              raise SystemExit(f"FATAL artifact id {want} found {len(matches)} times")
+          a=matches[0]
+          assert a.get('name') == os.environ['SOURCE_ARTIFACT_NAME'], a
+          assert a.get('digest') == os.environ['SOURCE_ARTIFACT_DIGEST'], a
+          assert not bool(a.get('expired')), a
+          print({
+              'id': want,
+              'name': a.get('name'),
+              'digest': a.get('digest'),
+              'expired': a.get('expired'),
+          })
+          PY
+
+      - name: Download immutable paid Week 3 board
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/week3_paid
+          mkdir -p /tmp/week3_paid
+          gh run download "${SOURCE_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name "${SOURCE_ARTIFACT_NAME}" \
+            --dir /tmp/week3_paid
+          test -s /tmp/week3_paid/outputs/props_priced_clean.csv
+
+      - name: Materialize Week 3 board in ephemeral market-track ledger
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/archive_priced_board_v1.py \
+            --priced-file /tmp/week3_paid/outputs/props_priced_clean.csv \
+            --season "${SEASON}" \
+            --week "${WEEK}" \
+            --run-id "${SOURCE_RUN_ID}"
+          find data/market_track_record/boards -type f -maxdepth 1 -print
+
+      - name: Settle canonical Week 3 selected record and fail closed on unresolved rows
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.operations.grade_market_track_record_gsis_v1 import grade
+
+          out=Path("data/research/week3_postmortem")
+          out.mkdir(parents=True, exist_ok=True)
+          detail=out/"week3_selected_graded_detail.csv"
+          summary=grade(2026,[3],detail_out=detail)
+          (out/"week3_selected_settlement_summary.json").write_text(
+              json.dumps(summary, indent=2, sort_keys=True, default=str)+"\n",
+              encoding="utf-8",
+          )
+          print(json.dumps(summary, indent=2, sort_keys=True, default=str))
+          unresolved=int(summary.get("still_unresolved_rows", -1))
+          if unresolved != 0:
+              raise SystemExit(
+                  f"WEEK3_SETTLEMENT_BLOCKED_UNRESOLVED_ROWS={unresolved}; "
+                  "headline metrics intentionally not computed"
+              )
+          print("WEEK3_SELECTED_SETTLEMENT_GATE_PASS")
+          PY
+
+      - name: Generate Week 3 selected-record diagnostics
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/report_weekly_backtest_v1.py \
+            --detail data/research/week3_postmortem/week3_selected_graded_detail.csv \
+            | tee data/research/week3_postmortem/week3_selected_weekly_report.txt
+
+          python scripts/operations/backtest_full_report_v1.py \
+            --season 2026 \
+            --weeks 3 \
+            --out data/research/week3_postmortem/week3_selected_full_graded.csv \
+            | tee data/research/week3_postmortem/week3_selected_full_report.txt
+
+      - name: Upload Week 3 settlement evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: week3-postmortem-settlement-v1-${{ github.run_id }}
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            data/research/week3_postmortem/**
+            data/market_track_record/boards/**
