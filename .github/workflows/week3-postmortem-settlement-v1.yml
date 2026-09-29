@@ -21,6 +21,7 @@ env:
   SEASON: "2026"
   WEEK: "3"
   SOURCE_RUN_ID: "36293274478"
+  SOURCE_GIT_SHA: "0982b62276303403e2ca58b16e6f4fc3e041f65d"
   SOURCE_ARTIFACT_ID: "10923570170"
   SOURCE_ARTIFACT_NAME: "run_36293274478"
   SOURCE_ARTIFACT_DIGEST: "sha256:5a3d4f64592c70553e66dd51bb3bff45263d2900f4d270e370353fa60ea1c480"
@@ -96,7 +97,8 @@ jobs:
             --priced-file /tmp/week3_paid/outputs/props_priced_clean.csv \
             --season "${SEASON}" \
             --week "${WEEK}" \
-            --run-id "${SOURCE_RUN_ID}"
+            --run-id "${SOURCE_RUN_ID}" \
+            --git-sha "${SOURCE_GIT_SHA}"
           find data/market_track_record/boards -type f -maxdepth 1 -print
 
       - name: Settle canonical Week 3 selected record and fail closed on unresolved rows
