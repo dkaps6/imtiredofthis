@@ -25,10 +25,26 @@ def num(s):
     return pd.to_numeric(s, errors="coerce")
 
 
-def truthy(s: pd.Series) -> pd.Series:
-    return s.astype("string").fillna("").str.strip().str.lower().isin(
-        {"1", "true", "yes", "y", "on"}
-    )
+def flag_state(s: pd.Series) -> pd.Series:
+    """Classify stored application flags without conflating missing-era fields."""
+    out = pd.Series("UNAVAILABLE", index=s.index, dtype="string")
+    present = s.notna()
+    numeric = pd.to_numeric(s, errors="coerce")
+    applied_numeric = present & numeric.notna() & numeric.ne(0)
+    not_applied_numeric = present & numeric.notna() & numeric.eq(0)
+
+    text = s.astype("string").fillna("").str.strip().str.lower()
+    applied_text = present & numeric.isna() & text.isin({"true", "yes", "y", "on"})
+    not_applied_text = present & numeric.isna() & text.isin({"false", "no", "n", "off", ""})
+
+    out.loc[applied_numeric | applied_text] = "APPLIED"
+    out.loc[not_applied_numeric | not_applied_text] = "NOT_APPLIED"
+
+    unknown = present & out.eq("UNAVAILABLE")
+    if unknown.any():
+        vals = sorted(set(text.loc[unknown].tolist()))
+        raise RuntimeError(f"unrecognized application-flag values: {vals}")
+    return out
 
 
 def metrics(x: pd.DataFrame, col: str) -> dict:
@@ -143,8 +159,11 @@ def main() -> int:
     for flag in FLAGS:
         if flag not in x.columns:
             continue
-        mask=truthy(x[flag])
-        for state, q in [("APPLIED",x.loc[mask]),("NOT_APPLIED",x.loc[~mask])]:
+        states = flag_state(x[flag])
+        for state in ("APPLIED", "NOT_APPLIED", "UNAVAILABLE"):
+            q = x.loc[states.eq(state)]
+            if q.empty:
+                continue
             m=metrics(q,"model_proj")
             flag_rows.append({"flag":flag,"state":state,**m})
     flag_df=pd.DataFrame(flag_rows)
