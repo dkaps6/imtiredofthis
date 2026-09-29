@@ -50,6 +50,20 @@ def _verified_alias_keys() -> dict[tuple[str,str], str]:
             if cur and hist:
                 out[(team,cur)]=hist
                 out[(team,hist)]=cur
+
+    research=Path("data/research/week3_postmortem/WEEK3_RECEIVING_SEMANTICS_ACTUAL_IDENTITY_ALIASES_V1.json")
+    if research.exists() and research.stat().st_size:
+        payload=json.loads(research.read_text(encoding="utf-8"))
+        if payload.get("version")!="WEEK3_RECEIVING_SEMANTICS_ACTUAL_IDENTITY_ALIASES_V1":
+            raise RuntimeError("unexpected receiving-semantics identity-evidence version")
+        for rec in payload.get("aliases",[]):
+            team=canon_team(str(rec["team"]))
+            _,frozen=canonicalize_player_name_safe(str(rec["frozen_name"]))
+            _,actual=canonicalize_player_name_safe(str(rec["actual_source_name"]))
+            if not frozen or not actual:
+                raise RuntimeError(f"blank research alias key: {rec}")
+            out[(team,frozen)]=actual
+            out[(team,actual)]=frozen
     return out
 
 def _assert_frozen_games_final(base: pd.DataFrame) -> None:
