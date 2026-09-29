@@ -38,6 +38,25 @@ current Ourlads/availability state, PlayerForm, TeamForm, and WR/TE/RB target
 entitlement state. The snap artifact supplies the exact Week-3 strict-prior
 WR/TE snap features built from completed Weeks 1-2.
 
+### Private execution artifacts
+
+The raw access-controlled files are intentionally absent from this public
+repository. Authorized research sessions can resolve these exact private
+filenames from the owner's ChatGPT Library:
+
+- `NFLGSIS_2026_REG_Week03_Point_in_Time_2026-09-28.json.gz`
+  (`sha256:779b1bd6c5d4dbd390c992d1e02e007edb80dac7d5e19b8b9045b161000c8a23`);
+- `NFLGSIS_2026_REG_Week03_Point_in_Time_2026-09-28_manifest.json`;
+- `NFLGSIS_2025_REG_Lineup_Detail_Pilot_2026-09-28.json.gz`
+  (`sha256:166589a5ee5a8e5388818068a18bab0632ca0839b09cc3a35e073701d1d2f5eb`);
+- `NFLGSIS_2025_REG_Lineup_Detail_Pilot_2026-09-28_manifest.json`.
+
+The 2026 snapshot may be used for parser/schema validation, source-information
+research, and as a point-in-time input for prospective Week-4 research. It must
+not be used to simulate pregame Weeks 1-3. The 2025 pilot is completed-season
+aggregate data for extraction/semantic validation only and is not a weekly
+backtest source.
+
 The audit script reads only these GSIS fields:
 
 | Report | Fields read |
@@ -226,12 +245,13 @@ its three measures are redundant. The only non-derivable field is a coarse
 team/mode count, not exact player membership or emergence timing. It cannot
 identify which starting unit was used, when it changed, or why it changed.
 
-Overall disposition: **`MOSTLY_REDUNDANT_ONE_NARROW_FIELD`**. Keep Lineup
-Combinations outside the acquisition scope established by this audit. If a
-future source decision needs a low-cost starting-unit churn count, evaluate only
-`Unique Starting Lineups`; do not build a parallel pipeline for the two
-derivable fields. No report cell values or screenshot were added to the public
-repository.
+Overall disposition: **`MOSTLY_REDUNDANT_ONE_NARROW_FIELD`**. Do not build a
+parallel pipeline for the two derivable fields. Prospectively capture only
+`Unique Starting Lineups` for offense and defense alongside each immutable
+Lineup Detail snapshot. A week-over-week increase establishes that a new
+starting unit appeared, while Lineup Detail supplies the exact-lineup usage
+context; neither report alone identifies which exact lineup started. No report
+cell values or screenshot were added to the public repository.
 
 ## Source-quality findings and next boundary
 
@@ -245,8 +265,8 @@ repository.
 5. Eight defensive lineup rows had an ambiguous 10/12 parsed-player count; they
    were excluded. All 2,118 offensive rows parsed to exactly 11 players.
 6. Lineup Combinations is mostly redundant; only its aggregate `Unique Starting
-   Lineups` field is not derivable from Lineup Detail, and it remains outside
-   the authorized acquisition scope.
+   Lineups` field should be captured prospectively beside Lineup Detail. Its two
+   derivable summary fields should not be duplicated.
 7. No model experiment is proposed or authorized by this document.
 8. PR #662 remains draft. Production and Full Slate remain unchanged.
 
