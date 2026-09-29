@@ -6,6 +6,8 @@
 
 **Acquisition gate:** `GSIS_NOVELTY_EXISTING_SOURCE_AUDIT_V1.md`
 
+**Frozen method:** `GSIS_INCREMENTAL_INFORMATION_AUDIT_V1_PLAN.md`
+
 ## Decision
 
 The bounded source-information audit confirms that both retained A-class GSIS
@@ -85,14 +87,29 @@ offensive line or defensive unit. High WR/TE marginal coverage does not change
 the central result: those sources still cannot identify which players shared a
 specific snap.
 
+The joint-state audit applied the frozen ten-lineup-play minimum to player
+co-occurrence:
+
+- 604 player-team identities had meaningful exposure;
+- those identities formed 5,205 observed player-pair/team relationships;
+- the median meaningful player appeared in 34 distinct exact lineups;
+- median team lineup entropy was 5.29 bits;
+- the 90th-percentile absolute gap between observed pair share and the
+  independence estimate from player marginals was 5.3 percentage points.
+
+These aggregate checks contain no player or team-level raw values. They show
+directly that individual snap/depth marginals do not determine the observed
+joint lineup state.
+
 ### Exact-lineup pass/rush exposure is additional descriptive information
 
-Using only lineups with at least five classified pass/rush plays:
+Using only lineups meeting the frozen threshold of at least ten classified
+pass/rush plays:
 
-- 281 offensive lineup rows qualified;
-- those rows covered a median 49.6% of each team's classified plays;
+- 95 offensive lineup rows qualified;
+- those rows covered a median 26.7% of each team's classified plays;
 - the median within-team, play-weighted absolute deviation from the team's
-  lineup-table pass rate was **17.0 percentage points**.
+  lineup-table pass rate was **11.2 percentage points**.
 
 This proves that lineup identity partitions play choice beyond one team-level
 pass-tendency value. It does not prove persistence or forecast value. The
@@ -144,19 +161,20 @@ and a single team PROE/pass-rate value cannot reconstruct that matrix.
 
 ### Personnel-conditioned play choice adds descriptive information
 
-Using situation/personnel cells with at least five classified pass/rush plays:
+Using situation/personnel cells meeting the frozen threshold of at least ten
+classified pass/rush plays:
 
-- 186 cells qualified;
-- they covered a median 46.4% of each team's classified plays;
+- 87 cells qualified;
+- they covered a median 37.1% of each team's classified plays;
 - the median within-team, play-weighted absolute deviation from the team table's
-  pass rate was **13.7 percentage points**.
+  pass rate was **9.6 percentage points**.
 
 To separate personnel from generic down/distance state, the audit then held
 team, down and yards-to-go bucket fixed and compared multiple personnel groups:
 
-- 66 same-team/same-situation comparisons qualified;
-- 193 personnel cells and 2,480 classified plays were represented;
-- median within-situation personnel pass-rate deviation was **11.4 percentage
+- 31 same-team/same-situation comparisons qualified;
+- 77 personnel cells and 1,921 classified plays were represented;
+- median within-situation personnel pass-rate deviation was **9.3 percentage
   points**.
 
 That is genuine incremental descriptive state beyond team-level pass tendency
@@ -177,6 +195,14 @@ does not authorize coefficients, thresholds, or production use.
 | Personnel-conditioned pass/rush choice | Adds conditional state beyond scalar PROE/pass tendency | **A confirmed descriptive state** |
 | Lineup/personnel gain and scoring outcomes | Excluded from this audit | **B; no use** |
 
+Under the frozen disposition vocabulary:
+
+- Lineup Detail current joint state is
+  **`INCREMENTAL_CURRENT_STATE_CONFIRMED`**;
+- lineup churn and replacement timing are **`NEEDS_PROSPECTIVE_HISTORY`**;
+- Formation Usage current personnel/situation state is
+  **`INCREMENTAL_CURRENT_STATE_CONFIRMED`**.
+
 ## Lineup Combinations schema-only gate
 
 The prior authenticated cloud session was no longer active. A normal NFL login
@@ -186,9 +212,9 @@ credential, session, or access-control workaround was attempted, and no Lineup
 Combinations values were acquired.
 
 Because its columns were not observed, this audit does **not** claim that the
-report is derivable from Lineup Detail. Operationally it remains excluded from
-acquisition and cannot enter A-class scope unless a later authenticated,
-schema-only check proves a field that Lineup Detail cannot derive. If the future
+report is derivable from Lineup Detail. Its disposition is
+**`SCHEMA_BLOCKED_EXCLUDED`**: it receives no A-class credit and remains outside
+acquisition. A later authenticated check may inspect only its schema. If that
 schema contains only combination identity plus counts already present in Lineup
 Detail, classify it **C** and drop it permanently.
 
