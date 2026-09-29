@@ -1,0 +1,31 @@
+{
+  "version": "WEEK3_RECEIVING_SEMANTICS_ACTUAL_IDENTITY_ALIASES_V1",
+  "purpose": "Postgame grading-only identity aliases for frozen Week-3 receiving-semantics cells. These aliases do not alter pregame features, projections, model identity configuration, or production.",
+  "aliases": [
+    {
+      "team": "IND",
+      "frozen_name": "Drew Ogletree",
+      "actual_source_name": "Andrew Ogletree",
+      "position": "TE",
+      "evidence": [
+        {
+          "source": "Indianapolis Colts",
+          "url": "https://www.colts.com/news/drew-ogletree-re-signed-nfl-free-agency-2026-run-blocking-pass-catching-career-touchdowns",
+          "fact": "Official Colts article identifies TE Drew Ogletree #85."
+        },
+        {
+          "source": "Indianapolis Colts",
+          "url": "https://www.colts.com/team/players-roster/andrew-ogletree/",
+          "fact": "Official Colts player page URL and player heading identify Andrew Ogletree, TE #85."
+        },
+        {
+          "source": "NFL",
+          "url": "https://www.nfl.com/players/andrew-ogletree/",
+          "fact": "NFL roster/player page identifies Andrew Ogletree as Indianapolis Colts TE #85."
+        }
+      ]
+    }
+  ],
+  "production_changed": false,
+  "pregame_cells_changed": false
+}
