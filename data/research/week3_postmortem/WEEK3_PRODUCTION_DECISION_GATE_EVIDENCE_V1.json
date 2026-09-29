@@ -1,0 +1,34 @@
+{
+  "version": "PRODUCTION_DECISION_GATES_V1",
+  "purpose": "Preserved pregame publication/eligibility gate evidence for the canonical 2026 Week 3 paid production board, reconstructed only from the original paid Full Slate run logs and immutable artifact authority before using outcomes.",
+  "weeks": {
+    "3": {
+      "source_run_id": "36293274478",
+      "source_git_sha": "0982b62276303403e2ca58b16e6f4fc3e041f65d",
+      "source_job_id": "108547303910",
+      "source_artifact_id": "10923570170",
+      "source_artifact_digest": "sha256:5a3d4f64592c70553e66dd51bb3bff45263d2900f4d270e370353fa60ea1c480",
+      "evidence_basis": "Original paid Week-3 Full Slate run logs plus immutable paid artifact authority. No Week-3 outcomes were consulted to reconstruct these publication gates.",
+      "source_facts": {
+        "availability_asof_utc": "2026-09-27T04:07:03.434276+00:00",
+        "game_count": 16,
+        "eligible_games": 15,
+        "kicked_off_locked_games": 1,
+        "kicked_off_locked_teams": ["ATL", "GB"],
+        "live_event_count": 15,
+        "core_unresolved_player_rows": 0,
+        "strict_market_identity_failures": 0,
+        "manual_prop_quarantine_rows_removed_compact": 5,
+        "manual_prop_quarantine_rows_removed_enriched": 16,
+        "manual_prop_quarantine_rows_removed_raw": 16,
+        "final_priced_board_rows_removed": 0,
+        "final_priced_board_rows_remaining": 3384
+      },
+      "block_rules": [
+        {"scope": "TEAM_ALL", "team": "ATL", "reason": "KICKED_OFF_LOCKED"},
+        {"scope": "TEAM_ALL", "team": "GB", "reason": "KICKED_OFF_LOCKED"}
+      ],
+      "notes": "The original paid run explicitly withheld ATL and GB before opportunity/pricing because their game had kicked off. The sportsbook boundary reported 15 active events and the strict audit proved sportsbook data did not resurrect withheld teams. Manual live-prop quarantines were already applied before the priced board; the final-board-only quarantine removed zero rows."
+    }
+  }
+}
