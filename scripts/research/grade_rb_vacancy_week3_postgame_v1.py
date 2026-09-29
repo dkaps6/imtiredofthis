@@ -261,8 +261,8 @@ def _team_room(detail: pd.DataFrame) -> pd.DataFrame:
                         detail["event_id"].eq(event_id)
                         & detail["team"].eq(team)
                         & detail["market"].astype(str).eq("rush_yards"),
-                        "actual_rush_yards",
-                    ].drop_duplicates().sum()
+                        ["player_clean_key", "actual_rush_yards"],
+                    ].drop_duplicates("player_clean_key")["actual_rush_yards"].sum()
                 ),
                 "baseline_projected_active_room_carries": float(q["baseline_ensemble_proj"].sum()),
                 "candidate_projected_active_room_carries": float(q["candidate_ensemble_proj"].sum()),
