@@ -1,0 +1,112 @@
+name: Week3 RB PD2 Observation Grade V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-week3-postmortem-execution-v1
+    paths:
+      - 'scripts/research/grade_rb_pd2_week3_observation_v1.py'
+      - '.github/workflows/week3-rb-pd2-observation-grade-v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  SOURCE_RUN_ID: "36331514633"
+  SOURCE_ARTIFACT_ID: "10935529140"
+  SOURCE_ARTIFACT_NAME: "rb-pd2-forward-lock-36330757181-mechanical-recovery-v1"
+  SOURCE_ARTIFACT_DIGEST: "sha256:94f168125dc889b6a747da5f3b3e3829d2fd4bf7a9b6b3d9f4d2d79ac0b59b6e"
+
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy
+
+      - name: Verify frozen recovered lock artifact authority
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts?per_page=100" > /tmp/artifacts.json
+          python - <<'PY'
+          import json, os
+          obj=json.load(open('/tmp/artifacts.json',encoding='utf-8'))
+          want=int(os.environ['SOURCE_ARTIFACT_ID'])
+          m=[a for a in obj.get('artifacts',[]) if int(a.get('id',-1))==want]
+          if len(m)!=1:
+              raise SystemExit(f"artifact {want} found {len(m)} times")
+          a=m[0]
+          assert a.get('name')==os.environ['SOURCE_ARTIFACT_NAME'],a
+          assert a.get('digest')==os.environ['SOURCE_ARTIFACT_DIGEST'],a
+          assert not bool(a.get('expired')),a
+          print("RB_PD2_RECOVERED_LOCK_AUTHORITY_PASS")
+          PY
+
+      - name: Download immutable Week3 RB-PD2 lock
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/rb_pd2_week3
+          mkdir -p /tmp/rb_pd2_week3
+          gh run download "${SOURCE_RUN_ID}"             --repo "${GITHUB_REPOSITORY}"             --name "${SOURCE_ARTIFACT_NAME}"             --dir /tmp/rb_pd2_week3
+          find /tmp/rb_pd2_week3 -type f -print
+          test "$(find /tmp/rb_pd2_week3 -name rb_pd2_forward_locks.jsonl | wc -l)" -eq 1
+          test "$(find /tmp/rb_pd2_week3 -name rb_pd2_forward_lock_arrays.npz | wc -l)" -eq 1
+          test "$(find /tmp/rb_pd2_week3 -name rb_pd2_forward_lock_receipt.json | wc -l)" -eq 1
+
+      - name: Verify frozen Week3 lock contract
+        run: |
+          set -euo pipefail
+          RECEIPT="$(find /tmp/rb_pd2_week3 -name rb_pd2_forward_lock_receipt.json)"
+          python - "$RECEIPT" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert x["version"]=="RB_PD2_FORWARD_LOCK_SESSION_V1"
+          assert x["valid"] is True
+          assert x["target_season"]==2026 and x["target_week"]==3
+          assert x["locked_rows"]==46
+          assert x["outcome_present_at_lock"] is False
+          assert x["sportsbook_inputs_used_in_candidate"] is False
+          assert x["production_changed"] is False
+          assert x["history_completed_through_week"]==2
+          assert len(x["population_exclusions"])==8
+          print("RB_PD2_WEEK3_FROZEN_LOCK_CONTRACT_PASS")
+          PY
+
+      - name: Attach Week3 outcomes and score Observation Week 1
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          LOCKS="$(find /tmp/rb_pd2_week3 -name rb_pd2_forward_locks.jsonl)"
+          ARRAYS="$(find /tmp/rb_pd2_week3 -name rb_pd2_forward_lock_arrays.npz)"
+          RECEIPT="$(find /tmp/rb_pd2_week3 -name rb_pd2_forward_lock_receipt.json)"
+          mkdir -p data/research/week3_postmortem/rb_pd2_forward_v1
+          python scripts/research/grade_rb_pd2_week3_observation_v1.py             --locks "$LOCKS"             --arrays "$ARRAYS"             --receipt "$RECEIPT"             --out-dir data/research/week3_postmortem/rb_pd2_forward_v1             | tee data/research/week3_postmortem/rb_pd2_forward_v1/stdout.txt
+
+      - name: Upload RB-PD2 Week3 observation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: week3-rb-pd2-observation-grade-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: |
+            data/research/week3_postmortem/rb_pd2_forward_v1/**
