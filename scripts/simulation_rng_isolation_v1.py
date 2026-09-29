@@ -28,8 +28,10 @@ from scripts.simulation_v2 import (
 )
 
 TOL = 1e-12
-TE_ROOM = "TE_R5P_ROOM"
-WR_ROOM = "WR_R15_ROOM"
+# These literal room labels are part of the frozen deterministic RNG keyspace.
+# Preserve the exact research V1 labels; renaming them changes the substream.
+TE_ROOM = "TE_CHANGED_ROOM"
+WR_ROOM = "WR_CHANGED_ROOM"
 
 
 def _stable_seed(base_seed: int, *parts: object) -> int:
