@@ -222,20 +222,38 @@ def main()->int:
                 rows.append({"cell":cell,"cohort":cohort,"metric":metric,**_score(q,metric)})
     summary=pd.DataFrame(rows)
 
-    # Same-row deltas vs A0B0.
+    # Same-row deltas vs A0B0. For CHANGED, baseline must be evaluated
+    # on the candidate cell's exact changed identities, not A0B0's empty
+    # "changed" set.
     comparisons=[]
+    base_detail_rows=detail.loc[detail["cell"].eq("A0B0")].copy()
     for cell in ("A1B0","A0B1","A1B1"):
+        cand_detail_rows=detail.loc[detail["cell"].eq(cell)].copy()
         for cohort in cohorts:
+            cand_mask=_cohort_mask(cand_detail_rows,cohort,changed.get(cell))
+            cq=cand_detail_rows.loc[cand_mask].copy()
+            if cohort=="CHANGED":
+                keys=set(tuple(x) for x in cq[IDENT].itertuples(index=False,name=None))
+                bmask=pd.Series(
+                    [tuple(x) in keys for x in base_detail_rows[IDENT].itertuples(index=False,name=None)],
+                    index=base_detail_rows.index,
+                )
+            else:
+                bmask=_cohort_mask(base_detail_rows,cohort,changed.get(cell))
+            bq=base_detail_rows.loc[bmask].copy()
+            if set(tuple(x) for x in bq[IDENT].itertuples(index=False,name=None)) != set(
+                tuple(x) for x in cq[IDENT].itertuples(index=False,name=None)
+            ):
+                raise RuntimeError(f"same-row comparison drift cell={cell} cohort={cohort}")
             for metric in METRICS:
-                b=summary.loc[(summary.cell=="A0B0")&(summary.cohort==cohort)&(summary.metric==metric)]
-                c=summary.loc[(summary.cell==cell)&(summary.cohort==cohort)&(summary.metric==metric)]
-                if len(b)!=1 or len(c)!=1: continue
+                bs=_score(bq,metric); cs=_score(cq,metric)
                 comparisons.append({
                     "cell":cell,"cohort":cohort,"metric":metric,
-                    "baseline_mae":float(b.iloc[0].mae),"candidate_mae":float(c.iloc[0].mae),
-                    "mae_delta_candidate_minus_baseline":float(c.iloc[0].mae-b.iloc[0].mae),
-                    "baseline_p90":float(b.iloc[0].p90_ae),"candidate_p90":float(c.iloc[0].p90_ae),
-                    "p90_delta_candidate_minus_baseline":float(c.iloc[0].p90_ae-b.iloc[0].p90_ae),
+                    "baseline_rows":bs["rows"],"candidate_rows":cs["rows"],
+                    "baseline_mae":bs["mae"],"candidate_mae":cs["mae"],
+                    "mae_delta_candidate_minus_baseline":cs["mae"]-bs["mae"] if bs["rows"] else np.nan,
+                    "baseline_p90":bs["p90_ae"],"candidate_p90":cs["p90_ae"],
+                    "p90_delta_candidate_minus_baseline":cs["p90_ae"]-bs["p90_ae"] if bs["rows"] else np.nan,
                 })
     comp=pd.DataFrame(comparisons)
 
