@@ -335,6 +335,56 @@ def apply_postgame_settlement(detail: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+
+def apply_manual_settlement_evidence(
+    detail: pd.DataFrame,
+    evidence: dict | None,
+) -> pd.DataFrame:
+    """Apply exact-row, research-only settlement evidence after normal grading.
+
+    This mechanism exists only for rows that remain UNRESOLVED after the
+    standard stats/roster/snap logic. It is exact-keyed and fail-closed:
+    every evidence row must match exactly one unresolved selected row.
+    """
+    if not evidence:
+        return detail.copy()
+    if str(evidence.get("version", "")) != "WEEK3_MANUAL_SETTLEMENT_EVIDENCE_V1":
+        raise RuntimeError("unexpected manual settlement evidence version")
+
+    out = detail.copy()
+    for rule in evidence.get("rows", []):
+        if str(rule.get("disposition", "")).strip().upper() != "VOID_NONPARTICIPANT":
+            raise RuntimeError(f"unsupported manual settlement disposition: {rule}")
+
+        book = out.get("book", pd.Series("", index=out.index)).astype("string").fillna("").str.strip().str.lower()
+        book_title = out.get("book_title", pd.Series("", index=out.index)).astype("string").fillna("").str.strip().str.lower()
+        book = book.mask(book.eq(""), book_title)
+
+        mask = (
+            pd.to_numeric(out["season"], errors="coerce").eq(int(evidence["season"]))
+            & pd.to_numeric(out["week"], errors="coerce").eq(int(evidence["week"]))
+            & out["team"].astype(str).eq(canon_team(rule["team"]))
+            & out["gsis_id"].astype(str).eq(str(rule["gsis_id"]))
+            & out["market"].astype(str).eq(str(rule["market"]))
+            & book.eq(str(rule["book"]).strip().lower())
+            & pd.to_numeric(out["vegas_line"], errors="coerce").eq(float(rule["vegas_line"]))
+            & out["side"].astype(str).str.upper().eq(str(rule["side"]).strip().upper())
+            & out["settlement_status"].astype(str).eq("UNRESOLVED")
+        )
+        hits = out.index[mask].tolist()
+        if len(hits) != 1:
+            raise RuntimeError(
+                "manual settlement evidence must match exactly one unresolved row; "
+                f"matched={len(hits)} rule={rule}"
+            )
+        row = hits[0]
+        out.loc[row, "actual"] = np.nan
+        out.loc[row, "actual_source"] = "sportsbook_void_nonparticipant_manual_evidence"
+        out.loc[row, "settlement_status"] = "VOID"
+        out.loc[row, "has_verified_actual"] = False
+    return out
+
+
 def build_alias_index(actual: pd.DataFrame, roster: pd.DataFrame) -> dict:
     """team-scoped exact/suffix-stripped alias -> set of GSIS ids, plus a
     global (any-team) index for the fallback tiers, built from the UNION of
@@ -379,6 +429,7 @@ def grade(
     detail_out: Path | None = None,
     *,
     production_gate_evidence: dict | None = None,
+    manual_settlement_evidence: dict | None = None,
 ) -> dict:
     board = apply_final_board_quarantine(load_boards(season, weeks))
     board = apply_production_decision_gates(
@@ -470,6 +521,7 @@ def grade(
     detail["position"] = detail["gsis_id"].map(pos_map).fillna("UNKNOWN")
 
     detail = apply_postgame_settlement(detail)
+    detail = apply_manual_settlement_evidence(detail, manual_settlement_evidence)
     unresolved = detail.loc[detail["settlement_status"].eq("UNRESOLVED")]
     graded = detail.loc[~detail["settlement_status"].eq("UNRESOLVED")].copy()
 
@@ -506,7 +558,7 @@ def grade(
         "verified_actual_rows": int(graded["has_verified_actual"].sum()),
         "verified_via_stats_table": int((graded["actual_source"] == "stats_table").sum()),
         "verified_via_snap_confirmed_zero": int((graded["actual_source"] == "snap_confirmed_verified_zero").sum()),
-        "void_dnp_rows": int((graded["actual_source"] == "sportsbook_void_dnp").sum()),
+        "void_dnp_rows": int(graded["actual_source"].astype(str).str.startswith("sportsbook_void").sum()),
         "still_unresolved_rows": int(len(unresolved)),
         "unresolved_identity_status_counts": unresolved["identity_status"].value_counts().to_dict(),
         "decided_bets": int(len(decided)),
