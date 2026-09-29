@@ -122,30 +122,62 @@ def contrast_row(df: pd.DataFrame, group_type: str, group_value: str) -> dict:
 
 
 def cluster_bootstrap(df: pd.DataFrame) -> dict:
-    keys = sorted(df["event_id"].astype(str).unique().tolist())
-    groups = {k: df.loc[df["event_id"].astype(str).eq(k)].copy() for k in keys}
+    # Resample game clusters by multiplicity, then calculate row-weighted
+    # crossed/non-crossed metrics from pre-aggregated game totals. This is
+    # algebraically equivalent to concatenating each sampled game's rows but
+    # avoids materializing 10,000 full DataFrames.
+    q = df.copy()
+    q["_cross"] = q["authority_state"].eq("CROSSED_LINE")
+    q["_win"] = q["bet_result"].eq("WIN").astype(float)
+    q["_closer"] = q["model_closer_than_vegas"].astype(bool).astype(float)
+    q["_final_abs_err"] = (num(q["model_proj"]) - num(q["actual"])).abs()
+
+    agg = (
+        q.groupby(["event_id", "_cross"], dropna=False)
+        .agg(
+            n=("_win", "size"),
+            wins=("_win", "sum"),
+            closer=("_closer", "sum"),
+            final_abs=("_final_abs_err", "sum"),
+        )
+        .reset_index()
+    )
+    agg["event_id"] = agg["event_id"].astype(str)
+    keys = sorted(q["event_id"].astype(str).unique().tolist())
+    k = len(keys)
+    if k == 0:
+        raise RuntimeError("no game clusters for bootstrap")
+
+    arrays = {}
+    for crossed in (False, True):
+        sub = agg.loc[agg["_cross"].eq(crossed)].set_index("event_id")
+        for col in ("n", "wins", "closer", "final_abs"):
+            arrays[(crossed, col)] = np.array(
+                [float(sub[col].get(key, 0.0)) for key in keys], dtype=float
+            )
+
     rng = np.random.default_rng(BOOT_SEED)
+    weights = rng.multinomial(k, [1.0 / k] * k, size=BOOT_REPS)
 
-    wr = []
-    closer = []
-    mae = []
-    for _ in range(BOOT_REPS):
-        sampled = rng.choice(keys, size=len(keys), replace=True)
-        boot = pd.concat([groups[k] for k in sampled], ignore_index=True)
-        c = boot.loc[boot["authority_state"].eq("CROSSED_LINE")]
-        n = boot.loc[~boot["authority_state"].eq("CROSSED_LINE")]
-        if c.empty or n.empty:
-            continue
-        cm, nm = metrics(c), metrics(n)
-        wr.append(cm["win_rate"] - nm["win_rate"])
-        closer.append(cm["model_closer_rate"] - nm["model_closer_rate"])
-        mae.append(cm["final_mae"] - nm["final_mae"])
+    def rate(crossed: bool, numerator: str) -> np.ndarray:
+        nume = weights @ arrays[(crossed, numerator)]
+        deno = weights @ arrays[(crossed, "n")]
+        return np.divide(
+            nume,
+            deno,
+            out=np.full_like(nume, np.nan, dtype=float),
+            where=deno > 0,
+        )
 
-    if not wr:
-        raise RuntimeError("bootstrap produced no valid primary contrasts")
+    wr = rate(True, "wins") - rate(False, "wins")
+    closer = rate(True, "closer") - rate(False, "closer")
+    mae = rate(True, "final_abs") - rate(False, "final_abs")
 
     def ci(vals):
         arr = np.asarray(vals, dtype=float)
+        arr = arr[np.isfinite(arr)]
+        if not len(arr):
+            raise RuntimeError("bootstrap produced no valid primary contrasts")
         return {
             "mean": float(np.mean(arr)),
             "lo": float(np.quantile(arr, 0.025)),
@@ -158,7 +190,6 @@ def cluster_bootstrap(df: pd.DataFrame) -> dict:
         "model_closer_diff": ci(closer),
         "final_mae_diff": ci(mae),
     }
-
 
 def main() -> int:
     ap = argparse.ArgumentParser()
