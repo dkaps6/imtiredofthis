@@ -120,7 +120,11 @@ def _grade_team(frozen:dict)->tuple[dict,pd.DataFrame]:
             else "LEAD_IDENTITY_LED_NO_DEPTH_PARTICIPATION"
         )
     elif label=="ROTATION_PRESERVED_NO_CLEAR_SUCCESSOR_CONCENTRATION":
-        structural_observation="DESCRIPTIVE_ROTATION_OBSERVED" if len(room)>=2 else "DESCRIPTIVE_SINGLE_BACK_ROOM_OBSERVED"
+        structural_observation=(
+            f"DESCRIPTIVE_ONLY_MULTIPLE_PARTICIPANTS_TOP_CARRY_SHARE_{top_share:.6f}"
+            if len(room)>=2
+            else f"DESCRIPTIVE_ONLY_SINGLE_PARTICIPANT_TOP_CARRY_SHARE_{top_share:.6f}"
+        )
     else:
         structural_observation="DESCRIPTIVE_ONLY"
 
