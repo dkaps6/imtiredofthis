@@ -46,7 +46,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install nflreadpy
+          pip install nflreadpy pytest
 
       - name: Run historical-grader identity regression
         run: |
