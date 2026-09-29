@@ -1,0 +1,115 @@
+name: Week3 Receiving Rule Semantics Grade V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-week3-postmortem-execution-v1
+    paths:
+      - 'scripts/research/grade_receiving_rule_semantics_week3_v1.py'
+      - '.github/workflows/week3-receiving-rule-semantics-grade-v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  SOURCE_RUN_ID: "36276736046"
+  SOURCE_ARTIFACT_ID: "10917254062"
+  SOURCE_ARTIFACT_NAME: "receiving-rule-semantics-integrity-v1-stage1"
+  SOURCE_ARTIFACT_DIGEST: "sha256:c7ff51d17adfaf0f96e18808cec5948fa314f126f5c8b0392c8bed5568fa66fa"
+  FROZEN_CODE_SHA: "52238e3aa8e129db4a632c6e8fe1f80c6a109a52"
+
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy
+
+      - name: Verify frozen simulator semantics unchanged
+        run: |
+          set -euo pipefail
+          git diff --exit-code "${FROZEN_CODE_SHA}" --             scripts/simulation_v2.py             scripts/simulation_explicit_entitlement_v1.py
+          echo RECEIVING_SEMANTICS_SIMULATOR_PARITY_PASS
+
+      - name: Verify frozen Stage1 artifact authority
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts?per_page=100" > /tmp/artifacts.json
+          python - <<'PY'
+          import json, os
+          obj=json.load(open('/tmp/artifacts.json',encoding='utf-8'))
+          want=int(os.environ['SOURCE_ARTIFACT_ID'])
+          m=[a for a in obj.get('artifacts',[]) if int(a.get('id',-1))==want]
+          if len(m)!=1:
+              raise SystemExit(f"artifact {want} found {len(m)} times")
+          a=m[0]
+          assert a.get('name')==os.environ['SOURCE_ARTIFACT_NAME'],a
+          assert a.get('digest')==os.environ['SOURCE_ARTIFACT_DIGEST'],a
+          assert not bool(a.get('expired')),a
+          print("RECEIVING_SEMANTICS_STAGE1_AUTHORITY_PASS")
+          PY
+
+      - name: Download frozen four-cell artifact
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/receiving_semantics
+          mkdir -p /tmp/receiving_semantics
+          gh run download "${SOURCE_RUN_ID}"             --repo "${GITHUB_REPOSITORY}"             --name "${SOURCE_ARTIFACT_NAME}"             --dir /tmp/receiving_semantics
+          for c in A0B0 A1B0 A0B1 A1B1; do
+            test -s "/tmp/receiving_semantics/entitlement_${c}.csv"
+          done
+          test -s /tmp/receiving_semantics/summary.json
+
+      - name: Verify frozen Stage1 no-outcome contract
+        run: |
+          python - <<'PY'
+          import json
+          p='/tmp/receiving_semantics/summary.json'
+          x=json.load(open(p,encoding='utf-8'))
+          assert x['disposition']=='STRUCTURAL_ABLATION_COMPLETE_NO_OUTCOMES'
+          assert x['season']==2026 and x['week']==3
+          assert x['candidate_cells']==['A1B0','A0B1','A1B1']
+          assert x['parameters_fit']==0
+          assert x['sportsbook_inputs_used']==0
+          assert x['target_game_outcomes_read']==0
+          assert x['production_mutations']==0
+          assert x['playerform_wr_rows']==161
+          assert x['playerform_swr_rows']==56
+          print("RECEIVING_SEMANTICS_FROZEN_CELL_CONTRACT_PASS")
+          PY
+
+      - name: Grade frozen Week3 receiving semantic cells
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          mkdir -p data/research/week3_postmortem/receiving_rule_semantics_v1
+          python scripts/research/grade_receiving_rule_semantics_week3_v1.py             --artifact-dir /tmp/receiving_semantics             --out-dir data/research/week3_postmortem/receiving_rule_semantics_v1             | tee data/research/week3_postmortem/receiving_rule_semantics_v1/stdout.txt
+
+      - name: Upload Week3 receiving-semantics evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: week3-receiving-rule-semantics-grade-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: |
+            data/research/week3_postmortem/receiving_rule_semantics_v1/**
