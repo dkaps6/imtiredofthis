@@ -107,6 +107,7 @@ jobs:
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
+          mkdir -p data/research/week3_postmortem/projection_authority_attribution_v1
           python scripts/research/audit_weeks1_3_projection_authority_attribution_v1.py \
             --graded data/research/week3_postmortem/weeks1_3_full_graded.csv \
             --out-dir data/research/week3_postmortem/projection_authority_attribution_v1 \
