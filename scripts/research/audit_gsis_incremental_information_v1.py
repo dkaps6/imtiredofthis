@@ -40,6 +40,9 @@ DOWN_MAP = {
     "THIRD DOWN": 3,
     "FOURTH DOWN": 4,
 }
+MIN_LINEUP_PASS_RUSH_PLAYS = 10
+MIN_FORMATION_PASS_RUSH_PLAYS = 10
+MIN_MEANINGFUL_LINEUP_EXPOSURE = 10
 
 
 def _team(value: Any) -> str:
@@ -162,7 +165,8 @@ def _lineup_summary(rows: list[dict[str, Any]], mode: str) -> dict[str, Any]:
         eligible = [
             item
             for item in ordered
-            if item["passing_plays"] + item["rushing_plays"] >= 5
+            if item["passing_plays"] + item["rushing_plays"]
+            >= MIN_LINEUP_PASS_RUSH_PLAYS
         ]
         eligible_denominator = sum(
             item["passing_plays"] + item["rushing_plays"] for item in eligible
@@ -190,6 +194,9 @@ def _lineup_summary(rows: list[dict[str, Any]], mode: str) -> dict[str, Any]:
                 "top1_share": shares[0],
                 "top3_share": sum(shares[:3]),
                 "effective_lineups": 1.0 / sum(share * share for share in shares),
+                "lineup_entropy_bits": -sum(
+                    share * math.log2(share) for share in shares if share > 0
+                ),
                 "weighted_substitutions": weighted_substitutions,
                 "eligible_rows": float(len(eligible)),
                 "eligible_play_share": eligible_denominator / all_denominator
@@ -209,10 +216,14 @@ def _lineup_summary(rows: list[dict[str, Any]], mode: str) -> dict[str, Any]:
         "median_effective_lineups": _median(
             item["effective_lineups"] for item in team_metrics
         ),
+        "median_lineup_entropy_bits": _median(
+            item["lineup_entropy_bits"] for item in team_metrics
+        ),
         "median_play_weighted_substitutions_from_top_lineup": _median(
             item["weighted_substitutions"] for item in team_metrics
         ),
-        "lineups_with_at_least_5_pass_rush_plays": int(
+        "minimum_pass_rush_plays_per_qualified_lineup": MIN_LINEUP_PASS_RUSH_PLAYS,
+        "qualified_lineup_rows": int(
             sum(item["eligible_rows"] for item in team_metrics)
         ),
         "median_eligible_pass_rush_play_share": _median(
@@ -221,6 +232,83 @@ def _lineup_summary(rows: list[dict[str, Any]], mode: str) -> dict[str, Any]:
         "median_within_team_lineup_pass_rate_mad": _median(
             item["pass_rate_mad"] for item in team_metrics
         ),
+    }
+
+
+def _cooccurrence_summary(offense_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in offense_rows:
+        grouped[row["team"]].append(row)
+
+    player_team_count = 0
+    pair_team_count = 0
+    distinct_lineup_counts: list[float] = []
+    strongest_partner_conditionals: list[float] = []
+    independence_absolute_deltas: list[float] = []
+
+    for team_rows in grouped.values():
+        total_plays = sum(row["plays"] for row in team_rows)
+        if not total_plays:
+            continue
+        player_exposure: Counter[str] = Counter()
+        pair_exposure: Counter[tuple[str, str]] = Counter()
+        player_lineups: Counter[str] = Counter()
+        for row in team_rows:
+            players = sorted(row["players"])
+            for player in players:
+                player_exposure[player] += row["plays"]
+                player_lineups[player] += 1
+            for index, player_a in enumerate(players):
+                for player_b in players[index + 1 :]:
+                    pair_exposure[(player_a, player_b)] += row["plays"]
+
+        meaningful = {
+            player
+            for player, exposure in player_exposure.items()
+            if exposure >= MIN_MEANINGFUL_LINEUP_EXPOSURE
+        }
+        player_team_count += len(meaningful)
+        distinct_lineup_counts.extend(player_lineups[player] for player in meaningful)
+        partner_conditionals: dict[str, list[float]] = defaultdict(list)
+        for (player_a, player_b), shared_plays in pair_exposure.items():
+            if player_a not in meaningful or player_b not in meaningful:
+                continue
+            pair_team_count += 1
+            share_a = player_exposure[player_a] / total_plays
+            share_b = player_exposure[player_b] / total_plays
+            observed_share = shared_plays / total_plays
+            independence_absolute_deltas.append(
+                abs(observed_share - share_a * share_b)
+            )
+            partner_conditionals[player_a].append(
+                shared_plays / player_exposure[player_a]
+            )
+            partner_conditionals[player_b].append(
+                shared_plays / player_exposure[player_b]
+            )
+        strongest_partner_conditionals.extend(
+            max(values) for values in partner_conditionals.values() if values
+        )
+
+    return {
+        "minimum_meaningful_player_lineup_plays": MIN_MEANINGFUL_LINEUP_EXPOSURE,
+        "meaningful_player_team_identities": player_team_count,
+        "observed_meaningful_pair_team_relationships": pair_team_count,
+        "median_distinct_lineups_per_meaningful_player": _median(
+            distinct_lineup_counts
+        ),
+        "median_strongest_partner_conditional_cooccurrence": _median(
+            strongest_partner_conditionals
+        ),
+        "median_absolute_observed_minus_independence_pair_share": _median(
+            independence_absolute_deltas
+        ),
+        "p90_absolute_observed_minus_independence_pair_share": float(
+            np.percentile(independence_absolute_deltas, 90)
+        )
+        if independence_absolute_deltas
+        else None,
+        "recoverable_from_player_marginals_alone": False,
     }
 
 
@@ -294,6 +382,12 @@ def _identity_coverage(
             identity in snap_keys for identity in matched_wr_te
         ),
         "joint_lineup_fields_in_live_stack": False,
+        "numeric_marginal_exposure_reconciliation_performed": False,
+        "numeric_reconciliation_blocker": (
+            "GSIS is cumulative through the capture boundary while the frozen "
+            "snap trace exposes strict-prior rolling/last-game features; no "
+            "definitionally matched exposure window exists"
+        ),
     }
 
 
@@ -383,7 +477,8 @@ def _formation_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         eligible = [
             row
             for row in team_rows
-            if row["passing_plays"] + row["rushing_plays"] >= 5
+            if row["passing_plays"] + row["rushing_plays"]
+            >= MIN_FORMATION_PASS_RUSH_PLAYS
         ]
         eligible_denominator = sum(
             row["passing_plays"] + row["rushing_plays"] for row in eligible
@@ -419,10 +514,13 @@ def _formation_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         )
 
     # Hold team, down and yards-to-go fixed, then measure pass-rate dispersion
-    # across personnel cells with at least three pass/rush plays.
+    # across personnel cells meeting the frozen ten-play pass/rush threshold.
     situations: dict[tuple[str, int, str], list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
-        if row["passing_plays"] + row["rushing_plays"] >= 3:
+        if (
+            row["passing_plays"] + row["rushing_plays"]
+            >= MIN_FORMATION_PASS_RUSH_PLAYS
+        ):
             situations[(row["team"], row["down"], row["yards_to_go"])].append(row)
     team_mad_numerator: Counter[str] = Counter()
     team_mad_denominator: Counter[str] = Counter()
@@ -470,7 +568,8 @@ def _formation_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "median_effective_personnel_groups": _median(
             item["effective_personnel"] for item in team_metrics
         ),
-        "cells_with_at_least_5_pass_rush_plays": int(
+        "minimum_pass_rush_plays_per_qualified_cell": MIN_FORMATION_PASS_RUSH_PLAYS,
+        "qualified_situation_personnel_cells": int(
             sum(item["eligible_rows"] for item in team_metrics)
         ),
         "median_eligible_pass_rush_play_share": _median(
@@ -539,14 +638,18 @@ def build_audit(
             ],
         },
         "lineup_detail": {
+            "source_disposition": "INCREMENTAL_CURRENT_STATE_CONFIRMED",
+            "temporal_change_disposition": "NEEDS_PROSPECTIVE_HISTORY",
             "offense": _lineup_summary(lineups, "Offense"),
             "defense": _lineup_summary(lineups, "Defense"),
+            "offensive_cooccurrence": _cooccurrence_summary(offense),
             "invalid_or_ambiguous_player_count_rows": len(invalid_lineups),
             "identity_coverage_against_live_stack": _identity_coverage(
                 offense, live_stack, snap_trace_path
             ),
         },
         "formation_usage": {
+            "source_disposition": "INCREMENTAL_CURRENT_STATE_CONFIRMED",
             **_formation_summary(formation),
             "source_empty_teams": empty_formation_teams,
             "team_form_comparator": _team_form_summary(live_stack),
