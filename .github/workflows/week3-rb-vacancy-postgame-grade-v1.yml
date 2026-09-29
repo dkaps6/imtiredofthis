@@ -1,0 +1,123 @@
+name: Week3 RB Vacancy Postgame Grade V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research-week3-postmortem-execution-v1
+    paths:
+      - 'scripts/research/grade_rb_vacancy_week3_postgame_v1.py'
+      - '.github/workflows/week3-rb-vacancy-postgame-grade-v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  SOURCE_RUN_ID: "36205758768"
+  SOURCE_ARTIFACT_ID: "10893588588"
+  SOURCE_ARTIFACT_NAME: "rb-vacancy-opportunity-v1-week3-pregame-projection-lock"
+  SOURCE_ARTIFACT_DIGEST: "sha256:54437c69f0a66c2c9bb97c520f3e8d9c933e0203dac39fe1fde5352dafa3eeea"
+
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy
+
+      - name: Verify frozen RB Vacancy artifact authority
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts?per_page=100" > /tmp/artifacts.json
+          python - <<'PY'
+          import json, os
+          obj=json.load(open('/tmp/artifacts.json', encoding='utf-8'))
+          want=int(os.environ['SOURCE_ARTIFACT_ID'])
+          matches=[a for a in obj.get('artifacts',[]) if int(a.get('id',-1)) == want]
+          if len(matches) != 1:
+              raise SystemExit(f"artifact id {want} found {len(matches)} times")
+          a=matches[0]
+          assert a.get('name') == os.environ['SOURCE_ARTIFACT_NAME'], a
+          assert a.get('digest') == os.environ['SOURCE_ARTIFACT_DIGEST'], a
+          assert not bool(a.get('expired')), a
+          print({
+              'id': want,
+              'name': a.get('name'),
+              'digest': a.get('digest'),
+              'expired': a.get('expired'),
+          })
+          PY
+
+      - name: Download frozen RB Vacancy pregame lock
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/rb_vacancy_lock
+          mkdir -p /tmp/rb_vacancy_lock
+          gh run download "${SOURCE_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name "${SOURCE_ARTIFACT_NAME}" \
+            --dir /tmp/rb_vacancy_lock
+          test -s /tmp/rb_vacancy_lock/rb_vacancy_week3_pregame_projection_lock.csv
+          test -s /tmp/rb_vacancy_lock/rb_vacancy_week3_team_allocation_audit.csv
+          test -s /tmp/rb_vacancy_lock/rb_vacancy_week3_pregame_lock_manifest.json
+
+      - name: Verify frozen lock manifest
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          p='/tmp/rb_vacancy_lock/rb_vacancy_week3_pregame_lock_manifest.json'
+          m=json.load(open(p, encoding='utf-8'))
+          assert m['target_season'] == 2026
+          assert m['target_week'] == 3
+          assert m['event_teams'] == ['DEN','PIT']
+          assert m['active_rb_fb_rows'] == 5
+          assert m['projection_rows'] == 10
+          assert m['direct_transfer_rows'] == 4
+          assert m['simulation_iterations'] == 25000
+          assert m['simulation_seed'] == 42
+          assert m['sportsbook_inputs_used'] == 0
+          assert m['target_game_outcomes_attached'] == 0
+          assert m['candidate_variants_scored'] == 1
+          assert m['ypc_efficiency_changed'] is False
+          assert m['ml_state_components_changed'] is False
+          assert m['ensemble_weights_changed'] is False
+          print('RB_VACANCY_FROZEN_LOCK_MANIFEST_PASS')
+          PY
+
+      - name: Grade frozen Week3 RB Vacancy cohort
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/research/grade_rb_vacancy_week3_postgame_v1.py \
+            --lock /tmp/rb_vacancy_lock/rb_vacancy_week3_pregame_projection_lock.csv \
+            --team-audit /tmp/rb_vacancy_lock/rb_vacancy_week3_team_allocation_audit.csv \
+            --out-dir data/research/week3_postmortem/rb_vacancy_v1 \
+            | tee /tmp/rb_vacancy_week3_grade_stdout.txt
+
+      - name: Upload RB Vacancy Week3 postgame evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: week3-rb-vacancy-postgame-grade-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: |
+            data/research/week3_postmortem/rb_vacancy_v1/**
+            /tmp/rb_vacancy_week3_grade_stdout.txt
