@@ -521,7 +521,15 @@ def grade(
     }
     if len(unresolved):
         print("still-unresolved rows after GSIS fix + zero-usage-preserving loader:")
-        cols = [c for c in ["player", "team", "opponent", "market", "identity_status"] if c in unresolved.columns]
+        cols = [
+            c for c in [
+                "player", "team", "opponent", "market", "identity_status",
+                "gsis_id", "roster_confirmed_this_team_week", "roster_status",
+                "snap_participated", "book", "book_title", "vegas_line",
+                "vegas_odds", "side", "actual", "actual_source",
+                "settlement_status",
+            ] if c in unresolved.columns
+        ]
         print(unresolved[cols].drop_duplicates().to_string(index=False))
     if detail_out is not None:
         detail_out.parent.mkdir(parents=True, exist_ok=True)
