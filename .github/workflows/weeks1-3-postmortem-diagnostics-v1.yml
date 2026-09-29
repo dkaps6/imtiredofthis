@@ -101,6 +101,16 @@ jobs:
             --out data/research/week3_postmortem/weeks1_3_full_graded.csv \
             | tee data/research/week3_postmortem/weeks1_3_full_report.txt
 
+      - name: Run clustered slice inference
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/research/slice_graded_track_record_v1.py \
+            --detail data/research/week3_postmortem/weeks1_3_full_graded.csv \
+            --min-n 25 \
+            --fdr-q 0.10 \
+            | tee data/research/week3_postmortem/weeks1_3_clustered_slice_report.txt
+
       - name: Upload cumulative diagnostic evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -111,3 +121,4 @@ jobs:
           path: |
             data/research/week3_postmortem/weeks1_3_full_graded.csv
             data/research/week3_postmortem/weeks1_3_full_report.txt
+            data/research/week3_postmortem/weeks1_3_clustered_slice_report.txt
