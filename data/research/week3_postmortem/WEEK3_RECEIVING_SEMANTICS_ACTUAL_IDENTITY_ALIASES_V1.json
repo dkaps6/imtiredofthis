@@ -24,6 +24,29 @@
           "fact": "NFL roster/player page identifies Andrew Ogletree as Indianapolis Colts TE #85."
         }
       ]
+    },
+    {
+      "team": "PHI",
+      "frozen_name": "Hollywood Brown",
+      "actual_source_name": "Marquise Brown",
+      "position": "WR",
+      "evidence": [
+        {
+          "source": "Philadelphia Eagles",
+          "url": "https://www.philadelphiaeagles.com/news/eagles-hollywood-brown-agree-to-one-year-deal",
+          "fact": "Official Eagles announcement identifies newly signed WR as Hollywood Brown."
+        },
+        {
+          "source": "Philadelphia Eagles",
+          "url": "https://www.philadelphiaeagles.com/team/players-roster/hollywood-brown/logs/",
+          "fact": "Official Eagles player page is routed under Hollywood Brown and identifies the player as Marquise Brown, WR #0."
+        },
+        {
+          "source": "NFL",
+          "url": "https://www.nfl.com/players/marquise-brown/",
+          "fact": "NFL player page identifies Marquise Brown as active Philadelphia Eagles WR."
+        }
+      ]
     }
   ],
   "production_changed": false,
