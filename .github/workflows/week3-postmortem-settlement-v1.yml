@@ -7,6 +7,8 @@ on:
       - research-week3-postmortem-execution-v1
     paths:
       - 'scripts/research/week3_postmortem_source_gate_v1.py'
+      - 'scripts/operations/grade_market_track_record_gsis_v1.py'
+      - 'data/research/week3_postmortem/WEEK3_PRODUCTION_DECISION_GATE_EVIDENCE_V1.json'
       - '.github/workflows/week3-postmortem-settlement-v1.yml'
 
 permissions:
@@ -109,7 +111,8 @@ jobs:
           out=Path("data/research/week3_postmortem")
           out.mkdir(parents=True, exist_ok=True)
           detail=out/"week3_selected_graded_detail.csv"
-          summary=grade(2026,[3],detail_out=detail)
+          evidence=json.loads((out/"WEEK3_PRODUCTION_DECISION_GATE_EVIDENCE_V1.json").read_text(encoding="utf-8"))
+          summary=grade(2026,[3],detail_out=detail,production_gate_evidence=evidence)
           (out/"week3_selected_settlement_summary.json").write_text(
               json.dumps(summary, indent=2, sort_keys=True, default=str)+"\n",
               encoding="utf-8",
