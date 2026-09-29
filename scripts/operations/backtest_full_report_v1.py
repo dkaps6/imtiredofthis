@@ -15,6 +15,7 @@ touches no pricing, projection or model-selection code.
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import numpy as np
@@ -28,12 +29,20 @@ POSITIONS = ["QB", "RB", "WR", "TE"]
 MARKETS = ["pass_yards", "rush_yards", "rec_yards", "receptions", "rush_rec_yards"]
 
 
-def build_graded(season: int, weeks: list[int]) -> pd.DataFrame:
+def build_graded(
+    season: int,
+    weeks: list[int],
+    *,
+    production_gate_evidence: dict | None = None,
+    manual_settlement_evidence: dict | None = None,
+) -> pd.DataFrame:
     board = G.load_boards(season, weeks)
     if board.empty:
         raise SystemExit(f"no archived boards for {season} weeks {weeks}")
     board = G.apply_final_board_quarantine(board)
-    board = G.apply_production_decision_gates(board)
+    board = G.apply_production_decision_gates(
+        board, evidence=production_gate_evidence
+    )
     bets = G.select_model_bet(board)
     if bets.empty:
         return GG.empty_graded_frame(bets)
@@ -94,8 +103,23 @@ def build_graded(season: int, weeks: list[int]) -> pd.DataFrame:
     d = pd.concat(parts, ignore_index=True, sort=False)
 
     d = GG.apply_postgame_settlement(d)
+    d = GG.apply_manual_settlement_evidence(d, manual_settlement_evidence)
 
-    g = d.loc[~d.settlement_status.eq("UNRESOLVED")].copy()
+    unresolved = d.loc[d.settlement_status.eq("UNRESOLVED")].copy()
+    if len(unresolved):
+        cols = [
+            x for x in [
+                "player", "team", "opponent", "market", "gsis_id",
+                "identity_status", "roster_status", "snap_participated",
+                "book", "vegas_line", "side"
+            ] if x in unresolved.columns
+        ]
+        raise RuntimeError(
+            "full report has unresolved settlement rows:\n"
+            + unresolved[cols].drop_duplicates().to_string(index=False)
+        )
+
+    g = d.copy()
     g["vegas_line"] = G.num(g.vegas_line)
     g["model_proj"] = G.num(g.model_proj)
     g["model_error"] = g.model_proj - g.actual
@@ -240,9 +264,24 @@ def main() -> int:
     ap.add_argument("--weeks", default="1,2")
     ap.add_argument("--out", type=Path, default=None,
                     help="write the full graded row set here")
+    ap.add_argument("--production-gate-evidence", type=Path, default=None)
+    ap.add_argument("--manual-settlement-evidence", type=Path, default=None)
     a = ap.parse_args()
     weeks = [int(w) for w in a.weeks.split(",") if w.strip()]
-    g = build_graded(a.season, weeks)
+    gate = (
+        json.loads(a.production_gate_evidence.read_text(encoding="utf-8"))
+        if a.production_gate_evidence else None
+    )
+    manual = (
+        json.loads(a.manual_settlement_evidence.read_text(encoding="utf-8"))
+        if a.manual_settlement_evidence else None
+    )
+    g = build_graded(
+        a.season,
+        weeks,
+        production_gate_evidence=gate,
+        manual_settlement_evidence=manual,
+    )
     if a.out:
         a.out.parent.mkdir(parents=True, exist_ok=True)
         g.to_csv(a.out, index=False)
