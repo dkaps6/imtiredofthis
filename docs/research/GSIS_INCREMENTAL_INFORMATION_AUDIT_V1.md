@@ -205,18 +205,33 @@ Under the frozen disposition vocabulary:
 
 ## Lineup Combinations schema-only gate
 
-The prior authenticated cloud session was no longer active. A normal NFL login
-attempt reached the NFL access-support page before password/MFA, and the already
-provided screenshots do not show the Lineup Combinations table. No account,
-credential, session, or access-control workaround was attempted, and no Lineup
-Combinations values were acquired.
+An authenticated, user-supplied schema view established that Lineup
+Combinations is a league-wide team summary. For both offense and defense it
+contains these fields:
 
-Because its columns were not observed, this audit does **not** claim that the
-report is derivable from Lineup Detail. Its disposition is
-**`SCHEMA_BLOCKED_EXCLUDED`**: it receives no A-class credit and remains outside
-acquisition. A later authenticated check may inspect only its schema. If that
-schema contains only combination identity plus counts already present in Lineup
-Detail, classify it **C** and drop it permanently.
+- `Unique Lineups`;
+- `Pct of Plays Featuring Most Common Lineup`;
+- `Unique Starting Lineups`.
+
+The comparison is field-specific:
+
+| Lineup Combinations field | Derivable from Lineup Detail? | Disposition |
+|---|---|---|
+| Unique Lineups | Yes: count distinct exact-lineup rows within team/mode. | **C — duplicate summary** |
+| Pct of Plays Featuring Most Common Lineup | Yes: maximum lineup `Plays` divided by total lineup `Plays`, subject to the same displayed exclusion denominator. | **C — duplicate summary** |
+| Unique Starting Lineups | No: the season-aggregate Lineup Detail schema has no game identifier or starting-lineup flag. | **A-narrow schema finding; no acquisition authorized** |
+
+Therefore the report is **not wholly derivable** from Lineup Detail, but two of
+its three measures are redundant. The only non-derivable field is a coarse
+team/mode count, not exact player membership or emergence timing. It cannot
+identify which starting unit was used, when it changed, or why it changed.
+
+Overall disposition: **`MOSTLY_REDUNDANT_ONE_NARROW_FIELD`**. Keep Lineup
+Combinations outside the acquisition scope established by this audit. If a
+future source decision needs a low-cost starting-unit churn count, evaluate only
+`Unique Starting Lineups`; do not build a parallel pipeline for the two
+derivable fields. No report cell values or screenshot were added to the public
+repository.
 
 ## Source-quality findings and next boundary
 
@@ -229,8 +244,11 @@ Detail, classify it **C** and drop it permanently.
    missing.
 5. Eight defensive lineup rows had an ambiguous 10/12 parsed-player count; they
    were excluded. All 2,118 offensive rows parsed to exactly 11 players.
-6. No model experiment is proposed or authorized by this document.
-7. PR #662 remains draft. Production and Full Slate remain unchanged.
+6. Lineup Combinations is mostly redundant; only its aggregate `Unique Starting
+   Lineups` field is not derivable from Lineup Detail, and it remains outside
+   the authorized acquisition scope.
+7. No model experiment is proposed or authorized by this document.
+8. PR #662 remains draft. Production and Full Slate remain unchanged.
 
 The reproducible aggregate audit is implemented in
 `scripts/research/audit_gsis_incremental_information_v1.py`. Its output is
