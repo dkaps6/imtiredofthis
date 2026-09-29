@@ -2,6 +2,58 @@
 GitHub is canonical; chat memory is secondary.
 
 ---
+## ACTIVE CHECKPOINT — 2026-09-29 — WEEK-3 CLOSURE COMPLETE / AUTHORITY-MOVE FORWARD SCIENCE FROZEN
+
+This supersedes all older checkpoints for immediate execution.
+
+### Current state in one screen
+
+- canonical `main` verified at `a99be87e5b79985e152ae18f16335c044dde5de4` before this research-branch continuity update;
+- Week 3 and the Weeks 1-3 postmortem are fully settled: **629-611, 50.7%, -40.72u**;
+- no simple position/market/side slice survives game-cluster-aware BH-FDR;
+- projection-authority result remains `MIXED_BY_MARKET_OR_POSITION`;
+- RB Vacancy W3 = `WEEK3_OBSERVATIONAL_MIXED`;
+- Public Intent W3 = `WEEK3_PUBLIC_INTENT_DIRECTIONALLY_INFORMATIVE`, observational only;
+- Receiving Rule Semantics W3 = no cell promoted;
+- RB-PD2 W3 = Observation #1 only, **46/400 rows and 1/8 weeks**, HOLD;
+- Availability -> Opportunity W3 is now closed as `NO_VALID_POSTGAME_GRADING_CONTRACT_DO_NOT_GRADE_POST_HOC`; its structural rule-order gap remains confirmed, but no predictive W3 PASS/FAIL exists;
+- consolidated Week-3 matrix: `docs/research/WEEK3_PROSPECTIVE_DISPOSITION_MATRIX_V1.md`;
+- Weeks 1-3 residual reconciliation: `docs/research/WEEKS1_3_RESIDUAL_SCIENCE_RECONCILIATION_V1.md`;
+- new line-conflict diagnostic primary result = `NO_CLEAR_CURRENT_SEASON_AUTHORITY_LINE_CONFLICT_SIGNAL`; **do not** create a crossed-line exclusion rule;
+- predeclared secondary state pattern is discovery-only:
+  - same-side strengthened: n=250, 44.0%, -38.15u;
+  - same-side weakened: n=471, 55.2%, +24.44u;
+- exact Week-4+ forward confirmation is frozen at `docs/research/WEEK4_PLUS_PROJECTION_AUTHORITY_MOVE_DIRECTION_FORWARD_V1_PLAN.md`;
+- forward support floor = >=8 eligible future weeks plus >=400 strengthened and >=400 weakened rows; before then `FORWARD_OBSERVATION_ONLY_INSUFFICIENT_SUPPORT`;
+- specialist RNG run `36504441918` was diagnosed exactly: isolation/means passed, frozen paid-board fingerprint failed because production renamed semantic RNG seed labels that were part of the deterministic key;
+- narrow RNG patch on `repair-specialist-rng-isolation-v1`: `30333ec2b853d5ba7bd420b74d63c53f097b5fff`, restoring `TE_CHANGED_ROOM` / `WR_CHANGED_ROOM`; **do not call PASS until exact post-patch frozen fingerprint validation is observed**;
+- PR #662 remains open research-only GSIS point-in-time archive work; raw GSIS stays private and Week-3 snapshot remains baseline-only;
+- no paid OddsAPI pull without explicit user authorization;
+- Issue #535 continuity checkpoint: comment `5899500522`.
+
+### Exact next action
+
+1. Do **not** rerun any completed Week-3 settlement/prospective grade.
+2. Preserve the frozen Week-4+ authority-move-direction state on future canonical production boards; no outcome interpretation before the stated support floor.
+3. Secondary mechanical lane: observe/verify the first exact post-patch RNG candidate workflow for commit `30333ec2...`; the frozen equivalence gate must remain unchanged.
+4. Continue only genuinely new mean/opportunity science that does not reopen closed receiving/RB/calibration/width families.
+5. Do not spend OddsAPI credits without explicit user approval.
+
+### Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this newest top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-09-29_WEEK3_POSTMORTEM_COMPLETE_CURRENT.md`
+4. `docs/research/WEEK3_PROSPECTIVE_DISPOSITION_MATRIX_V1.md`
+5. Issue #535 from comment `5899500522` onward, plus GSIS checkpoint `5881240970`
+6. live `main`, `research-week3-postmortem-execution-v1`, `repair-specialist-rng-isolation-v1`, PR #662, and Actions
+
+Then work. Do not recursively load older handoffs.
+
+---
+
+---
 ## ACTIVE CHECKPOINT — 2026-09-27 — WEEK-3 LIVE POSTMORTEM / RESEARCH CURRENT
 
 **Read this detailed handoff next:**
