@@ -355,7 +355,8 @@ def main()->int:
     }
     result={
         "status":"RB_PD2_WEEK3_OBSERVATION_ATTACHED",
-        "disposition":"NO_FORWARD_CONFIRMATION_INSUFFICIENT_SUPPORT",
+        "interim_state":"SUPPORT_ACCUMULATING_OBSERVATION_WEEK_1",
+        "frozen_scientific_disposition_issued":None,
         "support":support,
         "baseline":baseline,
         "candidate":candidate,
@@ -370,6 +371,7 @@ def main()->int:
         "sportsbook_inputs_used":0,
         "production_changed":False,
         "scientific_pass_fail_issued":False,
+        "season_end_insufficient_support_disposition_applicable":False,
     }
 
     a.out_dir.mkdir(parents=True,exist_ok=True)
