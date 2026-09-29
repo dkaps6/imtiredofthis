@@ -11,6 +11,8 @@ on:
       - 'scripts/operations/backtest_full_report_v1.py'
       - 'scripts/operations/grade_market_track_record_gsis_v1.py'
       - 'tests/test_grade_market_track_record_gsis_verified_alias_v1.py'
+      - 'scripts/research/audit_weeks1_3_projection_authority_attribution_v1.py'
+      - 'docs/research/WEEKS1_3_PROJECTION_AUTHORITY_ATTRIBUTION_V1_PLAN.md'
       - '.github/workflows/weeks1-3-postmortem-diagnostics-v1.yml'
 
 permissions:
@@ -101,6 +103,15 @@ jobs:
             --out data/research/week3_postmortem/weeks1_3_full_graded.csv \
             | tee data/research/week3_postmortem/weeks1_3_full_report.txt
 
+      - name: Run projection authority attribution
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/research/audit_weeks1_3_projection_authority_attribution_v1.py \
+            --graded data/research/week3_postmortem/weeks1_3_full_graded.csv \
+            --out-dir data/research/week3_postmortem/projection_authority_attribution_v1 \
+            | tee data/research/week3_postmortem/projection_authority_attribution_v1/stdout.txt
+
       - name: Run clustered slice inference
         run: |
           set -euo pipefail
@@ -121,4 +132,5 @@ jobs:
           path: |
             data/research/week3_postmortem/weeks1_3_full_graded.csv
             data/research/week3_postmortem/weeks1_3_full_report.txt
+            data/research/week3_postmortem/projection_authority_attribution_v1/**
             data/research/week3_postmortem/weeks1_3_clustered_slice_report.txt
