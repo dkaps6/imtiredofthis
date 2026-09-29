@@ -1,0 +1,25 @@
+{
+  "version": "WEEK3_MANUAL_SETTLEMENT_EVIDENCE_V1",
+  "season": 2026,
+  "week": 3,
+  "purpose": "Resolve the single fail-closed Week-3 sportsbook settlement row using independent postgame participation evidence and the captured sportsbook's participation rule. This is settlement-only and does not alter projections, selection, or historical board values.",
+  "rows": [
+    {
+      "team": "CHI",
+      "gsis_id": "00-0038416",
+      "player": "Tyson Bagent",
+      "market": "rush_yards",
+      "book": "draftkings",
+      "vegas_line": 17.5,
+      "side": "UNDER",
+      "disposition": "VOID_NONPARTICIPANT",
+      "evidence": {
+        "participation_fact": "2026 Week 3 vs PHI: Did Not Play; no positive offense/defense/special-teams snap participation in the postgame snap source.",
+        "participation_source": "https://www.footballdb.com/players/tyson-bagent-bagenty01/gamelogs",
+        "sportsbook_rule_fact": "DraftKings general rules void event-specific bets on a selection that does not Participate, unless the market is explicitly all-in/run-or-not/all-bets-action.",
+        "sportsbook_rule_source": "https://sportsbook.draftkings.com/help/general-betting-rules/general-rules",
+        "checked_utc": "2026-09-29"
+      }
+    }
+  ]
+}
