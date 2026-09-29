@@ -142,6 +142,8 @@ jobs:
           python scripts/operations/backtest_full_report_v1.py \
             --season 2026 \
             --weeks 3 \
+            --production-gate-evidence data/research/week3_postmortem/WEEK3_PRODUCTION_DECISION_GATE_EVIDENCE_V1.json \
+            --manual-settlement-evidence data/research/week3_postmortem/WEEK3_MANUAL_SETTLEMENT_EVIDENCE_V1.json \
             --out data/research/week3_postmortem/week3_selected_full_graded.csv \
             | tee data/research/week3_postmortem/week3_selected_full_report.txt
 
