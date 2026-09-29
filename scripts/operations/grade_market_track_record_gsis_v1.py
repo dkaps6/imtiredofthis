@@ -52,6 +52,9 @@ from scripts.operations.grade_market_track_record_v1 import (
 )
 from scripts.utils.canonical_names import canonicalize_player_name_safe
 
+ROOT = Path(__file__).resolve().parents[2]
+VERIFIED_IDENTITY_ALIASES = ROOT / "data" / "player_identity_aliases.csv"
+
 TG = ["season", "week", "team"]
 DNP_VOID_BOOKS = {"draftkings", "fanduel"}
 ACTIVE_ROSTER_STATUSES = {"ACT", "ACTIVE"}
@@ -385,15 +388,34 @@ def apply_manual_settlement_evidence(
     return out
 
 
+def _load_verified_identity_aliases() -> pd.DataFrame:
+    """Load repo-verified current/historical name aliases for identity only."""
+    cols = [
+        "current_name", "historical_name", "player_id", "current_team",
+        "position", "reason", "verified_source", "verified_date",
+    ]
+    if not VERIFIED_IDENTITY_ALIASES.exists() or not VERIFIED_IDENTITY_ALIASES.stat().st_size:
+        return pd.DataFrame(columns=cols)
+    x = pd.read_csv(VERIFIED_IDENTITY_ALIASES, dtype="string").fillna("")
+    missing = [col for col in cols if col not in x.columns]
+    if missing:
+        raise RuntimeError(
+            f"verified identity alias registry missing columns: {missing}"
+        )
+    return x[cols].copy()
+
+
 def build_alias_index(actual: pd.DataFrame, roster: pd.DataFrame) -> dict:
     """team-scoped exact/suffix-stripped alias -> set of GSIS ids, plus a
-    global (any-team) index for the fallback tiers, built from the UNION of
-    stats-table and roster-table identity evidence so a genuinely-inactive
-    player (present on roster, absent from stats) can still resolve.
-    Ambiguous buckets (more than one GSIS under the same alias) are kept
-    as-is so the resolver can fail closed on them."""
+    global (any-team) index for the fallback tiers.
+
+    The base index comes from nflverse stats+roster identity evidence. Repo-
+    verified aliases are then overlaid only when their stable GSIS id and team
+    are anchored in those same postgame sources for the requested window.
+    """
     idx = {"team_exact": {}, "team_base": {}, "global_exact": {}, "global_base": {}}
-    for source in (actual, roster):
+    sources = (actual, roster)
+    for source in sources:
         for r in source.itertuples(index=False):
             key_exact = r.player_clean_key
             key_base = _suffix_strip(key_exact)
@@ -401,8 +423,40 @@ def build_alias_index(actual: pd.DataFrame, roster: pd.DataFrame) -> dict:
             idx["team_base"].setdefault((r.team, key_base), set()).add(r.gsis_id)
             idx["global_exact"].setdefault(key_exact, set()).add(r.gsis_id)
             idx["global_base"].setdefault(key_base, set()).add(r.gsis_id)
-    return idx
 
+    anchors = pd.concat(
+        [
+            actual[["team", "gsis_id"]].copy(),
+            roster[["team", "gsis_id"]].copy(),
+        ],
+        ignore_index=True,
+    ).drop_duplicates()
+    anchored_pairs = set(
+        (canon_team(str(t).strip()), str(g).strip())
+        for t, g in anchors.itertuples(index=False, name=None)
+        if str(t).strip() and str(g).strip()
+    )
+
+    aliases = _load_verified_identity_aliases()
+    for rec in aliases.to_dict("records"):
+        gid = str(rec["player_id"]).strip()
+        team = canon_team(str(rec["current_team"]).strip())
+        if (team, gid) not in anchored_pairs:
+            # Alias metadata may include players outside the requested grading
+            # window. It must not manufacture an identity absent from the
+            # authoritative postgame sources being graded.
+            continue
+        for name in (rec["current_name"], rec["historical_name"]):
+            raw = str(name).strip()
+            if not raw:
+                continue
+            _, key_exact = canonicalize_player_name_safe(raw)
+            key_base = _suffix_strip(key_exact)
+            idx["team_exact"].setdefault((team, key_exact), set()).add(gid)
+            idx["team_base"].setdefault((team, key_base), set()).add(gid)
+            idx["global_exact"].setdefault(key_exact, set()).add(gid)
+            idx["global_base"].setdefault(key_base, set()).add(gid)
+    return idx
 
 def resolve_gsis(player_clean_key: str, team: str, idx: dict) -> tuple[str, str]:
     """Returns (gsis_id_or_empty, status). Deterministic hierarchy, fail
