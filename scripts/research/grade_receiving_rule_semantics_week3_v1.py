@@ -128,6 +128,8 @@ def _attach_actuals(base:pd.DataFrame)->pd.DataFrame:
     stats,team_targets,roster=_load_actuals()
     aliases=_verified_alias_keys()
     rows=[]
+    unresolved=[]
+    ambiguous=[]
     for r in base.itertuples(index=False):
         team=canon_team(str(r.team)); key=str(r.player_clean_key)
         pid=str(getattr(r,"player_id","") or "").strip()
@@ -140,7 +142,11 @@ def _attach_actuals(base:pd.DataFrame)->pd.DataFrame:
             if alt: keys.add(alt)
             q=stats.loc[stats["team"].eq(team)&stats["player_clean_key"].isin(keys)]
         if len(q)>1:
-            raise RuntimeError(f"ambiguous actual identity team={team} player={r.player} key={key} pid={pid} rows={len(q)}")
+            ambiguous.append({
+                "team":team,"player":str(r.player),"player_clean_key":key,
+                "player_id":pid,"stats_rows":int(len(q)),
+            })
+            continue
         if len(q)==1:
             z=q.iloc[0]
             at=float(z["actual_targets"]); ar=float(z["actual_receptions"]); ay=float(z["actual_rec_yards"])
@@ -153,7 +159,12 @@ def _attach_actuals(base:pd.DataFrame)->pd.DataFrame:
                 rq2=roster.loc[roster["team"].eq(team)&roster["player_id_roster"].eq(pid)]
                 if not rq2.empty: rq=rq2
             if len(rq)!=1:
-                raise RuntimeError(f"missing actual lacks exact roster verification team={team} player={r.player} key={key} pid={pid} roster_rows={len(rq)}")
+                unresolved.append({
+                    "team":team,"player":str(r.player),"player_clean_key":key,
+                    "player_id":pid,"roster_rows":int(len(rq)),
+                    "verified_alias":aliases.get((team,key),""),
+                })
+                continue
             at=ar=ay=0.0; source="final_week_exact_roster_verified_zero"
         denom=float(team_targets.get(team,0.0))
         if denom<=0:
@@ -162,6 +173,11 @@ def _attach_actuals(base:pd.DataFrame)->pd.DataFrame:
                      "actual_targets":at,"actual_target_share":at/denom,
                      "actual_receptions":ar,"actual_rec_yards":ay,
                      "team_actual_targets":denom,"actual_source":source})
+    if ambiguous or unresolved:
+        raise RuntimeError(
+            "receiving-semantics actual identity gate failed: "
+            + json.dumps({"ambiguous":ambiguous,"unresolved":unresolved},sort_keys=True)
+        )
     actual=pd.DataFrame(rows)
     return base.merge(actual,on=IDENT,how="left",validate="one_to_one")
 
