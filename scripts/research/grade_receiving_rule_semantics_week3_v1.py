@@ -35,17 +35,21 @@ def _pick(df,names):
     raise RuntimeError(f"none of {names} present; have={sorted(df.columns)}")
 
 def _verified_alias_keys() -> dict[tuple[str,str], str]:
-    p=Path("data/player_identity_aliases.csv")
     out={}
-    if not p.exists(): return out
-    x=pd.read_csv(p,dtype="string").fillna("")
-    for r in x.itertuples(index=False):
-        team=canon_team(str(r.current_team))
-        _,cur=canonicalize_player_name_safe(str(r.current_name))
-        _,hist=canonicalize_player_name_safe(str(r.historical_name))
-        if cur and hist:
-            out[(team,cur)]=hist
-            out[(team,hist)]=cur
+    for p in (
+        Path("data/player_identity_aliases.csv"),
+        Path("config/player_identity_current_aliases_v1.csv"),
+    ):
+        if not p.exists() or not p.stat().st_size:
+            continue
+        x=pd.read_csv(p,dtype="string").fillna("")
+        for r in x.itertuples(index=False):
+            team=canon_team(str(r.current_team))
+            _,cur=canonicalize_player_name_safe(str(r.current_name))
+            _,hist=canonicalize_player_name_safe(str(r.historical_name))
+            if cur and hist:
+                out[(team,cur)]=hist
+                out[(team,hist)]=cur
     return out
 
 def _assert_frozen_games_final(base: pd.DataFrame) -> None:
