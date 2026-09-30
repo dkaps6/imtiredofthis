@@ -43,9 +43,9 @@ def _validate_url_and_title(url: str, html: str, season: int, week: int) -> None
     if og and og.get("content"):
         titles.append(str(og["content"]))
     title = " ".join(titles)
-    if not re.search(r"\\b" + str(season) + r"\\b", title):
+    if not re.search(r"\b" + str(season) + r"\b", title):
         raise ValueError("source title does not verify season")
-    if not re.search(r"\\bweek[\\s-]*0?" + str(week) + r"\\b", title, re.I):
+    if not re.search(r"\bweek[\s-]*0?" + str(week) + r"\b", title, re.I):
         raise ValueError("source title does not verify exact week")
 
 
