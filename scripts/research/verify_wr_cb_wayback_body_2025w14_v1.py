@@ -137,7 +137,7 @@ def execute(out_dir:Path)->dict:
                     merged=rows.merge(sched,on=["season","week","wr_team"],how="left",validate="many_to_one")
                     pub=pd.to_datetime(source_publish,utc=True,errors="coerce")
                     good=merged.loc[
-                      pub.notna()
+                      (not pd.isna(pub))
                       & (pub<=pd.Timestamp(ARCHIVED_UTC))
                       & (pd.Timestamp(ARCHIVED_UTC)<pd.to_datetime(merged["kickoff_utc"],utc=True,errors="coerce"))
                       & merged["opponent"].astype(str).eq(merged["scheduled_opponent"].astype(str))
