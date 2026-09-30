@@ -28,7 +28,7 @@ jobs:
           path: outputs/existing
           repository: dkaps6/imtiredofthis
           run-id: 36735087776
-          github-token: \${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Measure gate with existing source and current public weekly rosters
         env:
           PYTHONPATH: .
