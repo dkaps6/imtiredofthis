@@ -512,7 +512,7 @@ def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[p
     published = _publication_time(soup)
     rows: list[dict] = []
     table_audit: list[dict] = []
-    structured_six_field_rows = 0
+    structured_table_rows = 0
 
     for table_index, table in enumerate(soup.find_all("table")):
         # 2022-24 articles use real HTML rows with a stable six-field factual
@@ -549,7 +549,7 @@ def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[p
             )
             if len(rows) > before:
                 structured_emitted += 1
-                structured_six_field_rows += 1
+                structured_table_rows += 1
         if structured_emitted:
             table_audit.append({
                 "table_index": table_index,
@@ -560,6 +560,73 @@ def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[p
             # This historical table is fully parsed from its own cells; do not
             # re-parse it through pandas/text token streams.
             continue
+        # 2025 pages use alternating three-cell WR and CB cards. Recover the
+        # pair from neighboring table rows so player names and provider IDs stay
+        # attached to their exact cells; narrative prose is never parsed.
+        split_alignment = "UNKNOWN_ALIGNMENT"
+        split_emitted = 0
+        split_trs = table.find_all("tr")
+        i = 0
+        while i < len(split_trs):
+            nodes = split_trs[i].find_all(["td", "th"])
+            vals = [_norm_text(x.get_text(" ", strip=True)) for x in nodes]
+            if len(vals) == 1:
+                maybe_alignment = _alignment_token(vals[0])
+                if maybe_alignment:
+                    split_alignment = maybe_alignment
+                i += 1
+                continue
+            if (
+                split_alignment != "UNKNOWN_ALIGNMENT"
+                and len(vals) >= 2
+                and vals[0].lower() == "wide receiver"
+                and vals[1].lower() == "team"
+                and i + 3 < len(split_trs)
+            ):
+                wr_nodes = split_trs[i + 1].find_all(["td", "th"])
+                cb_head_nodes = split_trs[i + 2].find_all(["td", "th"])
+                cb_nodes = split_trs[i + 3].find_all(["td", "th"])
+                wr_vals = [_norm_text(x.get_text(" ", strip=True)) for x in wr_nodes]
+                cb_head = [_norm_text(x.get_text(" ", strip=True)).lower() for x in cb_head_nodes]
+                cb_vals = [_norm_text(x.get_text(" ", strip=True)) for x in cb_nodes]
+                if (
+                    len(wr_vals) >= 2
+                    and len(cb_head) >= 3
+                    and cb_head[0] == "cornerback"
+                    and cb_head[1] in {"opp", "opponent"}
+                    and cb_head[2] == "matchup"
+                    and len(cb_vals) >= 3
+                    and _is_team(wr_vals[1])
+                    and _is_team(cb_vals[1])
+                    and _is_matchup_label(cb_vals[2])
+                ):
+                    before = len(rows)
+                    _emit_text_pair(
+                        rows,
+                        season=season, week=week, source_url=source_url,
+                        published=published, alignment=split_alignment,
+                        wr_raw=wr_vals[0], team_raw=wr_vals[1],
+                        cb_raw=cb_vals[0], opp_raw=cb_vals[1],
+                        matchup_raw=cb_vals[2],
+                        source_layout="HTML_TABLE_SPLIT_WR_CB_CARDS",
+                        wr_source_player_id=_source_player_id(wr_nodes[0]) if wr_nodes else "",
+                        cb_source_player_id=_source_player_id(cb_nodes[0]) if cb_nodes else "",
+                    )
+                    if len(rows) > before:
+                        split_emitted += 1
+                        structured_table_rows += 1
+                    i += 4
+                    continue
+            i += 1
+        if split_emitted:
+            table_audit.append({
+                "table_index": table_index,
+                "status": "PARSED_STRUCTURED_SPLIT_WR_CB_ROWS",
+                "alignment": split_alignment,
+                "rows_emitted": split_emitted,
+            })
+            continue
+
         # 2021 archive tables use TD cells for the first-row labels rather than
         # semantic TH headers. Parse those explicit cells directly before
         # falling back to pandas table inference.
@@ -751,7 +818,7 @@ def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[p
     # Text-card parsing is needed for 2025 split-card pages, but must not
     # duplicate 2022-24 pages already recovered from exact HTML table cells.
     text_rows = []
-    if structured_six_field_rows == 0:
+    if structured_table_rows == 0:
         text_rows = _parse_text_cards(
             soup,
             season=season,
