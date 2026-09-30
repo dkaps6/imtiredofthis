@@ -122,3 +122,42 @@ def test_full_bayesian_authority_removes_sportsbook_shape_from_injury_redistribu
         rtol=0,
         atol=1e-12,
     )
+
+
+
+def test_wr_cb_assignment_flags_no_longer_modify_rules_ypt_or_target_share(monkeypatch):
+    ind = _team("IND")
+    hou = _team("HOU", coverage_man_rate=0.30, coverage_zone_rate=0.65)
+
+    def run(primary_cb: str):
+        wr = PlayerContext(
+            "Alpha Receiver", "IND", "HOU", 2026, 4, "LWR", "WR1", "g1",
+            {
+                "tgt_share": 0.25,
+                "ypt": 10.0,
+                "matchup_available": 1,
+                "team_coverage_available": 1,
+                "primary_cb": primary_cb,
+            },
+            ind, hou,
+        )
+        monkeypatch.setattr(
+            simulation_rules,
+            "load_model_contexts",
+            lambda: ({"IND": ind, "HOU": hou}, [wr]),
+        )
+        metrics = pd.DataFrame([{
+            "player": "Alpha Receiver",
+            "team": "IND",
+            "opponent": "HOU",
+            "position": "WR",
+            "tgt_share": 0.25,
+            "ypt": 10.0,
+        }])
+        return simulation_rules.apply_rules_to_metrics(metrics).iloc[0]
+
+    shadow = run("Corner One")
+    no_shadow = run("")
+
+    assert shadow["rules_tgt_share"] == no_shadow["rules_tgt_share"]
+    assert shadow["rules_ypt"] == no_shadow["rules_ypt"]
