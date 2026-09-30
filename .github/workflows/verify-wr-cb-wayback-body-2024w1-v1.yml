@@ -1,0 +1,39 @@
+name: Verify one WR-CB 2024W1 Wayback archived body V1
+on:
+  push:
+    branches: ["research-wr-cb-historical-snapshot-discovery-v1"]
+    paths:
+      - "scripts/research/verify_wr_cb_wayback_body_2024w1_v1.py"
+      - "tests/test_verify_wr_cb_wayback_body_2024w1_v1.py"
+      - ".github/workflows/verify-wr-cb-wayback-body-2024w1-v1.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-one-snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt pytest
+      - name: Pure digest and per-WR kickoff unit tests
+        env:
+          PYTHONPATH: .
+        run: pytest -q tests/test_verify_wr_cb_wayback_body_2024w1_v1.py
+      - name: Exact one archived public article body provenance check
+        env:
+          PYTHONPATH: .
+        run: |
+          python scripts/research/verify_wr_cb_wayback_body_2024w1_v1.py \
+            --out-dir outputs/wayback_2024w1_exact_body_v1
+      - name: Preserve only hashes/status/sanitized factual candidates
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-cb-2024w1-exact-body-v1
+          path: outputs/wayback_2024w1_exact_body_v1/wayback_exact_body_verification.json
+          if-no-files-found: warn
+          retention-days: 30
