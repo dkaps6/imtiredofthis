@@ -5,6 +5,8 @@ on:
     paths:
       - "scripts/research/acquire_fantasyalarm_wr_cb_archive_v1.py"
       - "scripts/research/audit_fantasyalarm_wr_cb_source_quality_v1.py"
+      - "scripts/research/cb_week_opponent_roster_guard_v1.py"
+      - "tests/test_cb_week_opponent_roster_guard_v1.py"
       - "scripts/research/capture_fantasyalarm_wr_cb_pregame_v1.py"
       - "tests/test_capture_fantasyalarm_wr_cb_pregame_v1.py"
       - "data/research/wr_cb_pregame_capture_request_v1.csv"
@@ -35,7 +37,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          pytest -q tests/test_acquire_fantasyalarm_wr_cb_archive_v1.py tests/test_fantasyalarm_wr_cb_source_quality_v1.py tests/test_capture_fantasyalarm_wr_cb_pregame_v1.py
+          pytest -q tests/test_acquire_fantasyalarm_wr_cb_archive_v1.py tests/test_fantasyalarm_wr_cb_source_quality_v1.py tests/test_capture_fantasyalarm_wr_cb_pregame_v1.py tests/test_cb_week_opponent_roster_guard_v1.py
       - name: Capture one explicitly requested prospective article
         env:
           PYTHONPATH: ${{ github.workspace }}

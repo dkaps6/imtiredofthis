@@ -353,17 +353,28 @@ def audit(assignments: pd.DataFrame, page_audit: pd.DataFrame, out_dir: Path) ->
         x.loc[eligible, gsis_col] = bridged.loc[eligible]
         x.loc[eligible, method_col] = "FANTASYALARM_STABLE_ID_BRIDGE"
 
+    # Independent CB *opponent-week roster* check; GSIS identity alone does not
+    # prove this CB was on the opposing defense in the specific game.
+    # Calls a pure helper; no new data acquisition (rosters already loaded).
+    from scripts.research.cb_week_opponent_roster_guard_v1 import assess_cb_week_opponent
+    x = assess_cb_week_opponent(x, rosters)
+
     x["stable_identity_ready"] = x["wr_gsis_id"].astype(str).str.len().gt(0) & x["cb_gsis_id"].astype(str).str.len().gt(0)
     # This is a SOURCE-quality eligibility flag only. It is not a model input
     # and does not authorize a matchup candidate. Rows must be explicitly
     # observed, pre-kickoff, schedule-consistent, stably identified, and aligned.
-    x["source_quality_row_ready"] = (
+    x["source_quality_pre_cb_week_ready"] = (
         x["publication_timing_status"].eq("PRE_KICKOFF")
         & x["schedule_match"]
         & x["stable_identity_ready"]
         & x["alignment_bucket"].ne("UNKNOWN_ALIGNMENT")
         & ~x["wr_clean_key"].astype(str).str.contains("/", regex=False)
         & ~x["cb_clean_key"].astype(str).str.contains("/", regex=False)
+    )
+
+    x["source_quality_row_ready"] = (
+        x["source_quality_pre_cb_week_ready"]
+        & x["cb_week_roster_status"].eq("WEEK_EXACT_DEFENDER_OPPONENT_CONFIRMED")
     )
 
     # Person-key stability: a canonical source name may never map to >1 stable ID.
@@ -392,6 +403,10 @@ def audit(assignments: pd.DataFrame, page_audit: pd.DataFrame, out_dir: Path) ->
             "stable_identity_rows": int(g["stable_identity_ready"].sum()),
             "stable_identity_rate": float(g["stable_identity_ready"].mean()),
             "source_quality_ready_rows": int(g["source_quality_row_ready"].sum()),
+            "source_quality_pre_cb_week_ready_rows": int(g["source_quality_pre_cb_week_ready"].sum()),
+            "newly_quarantined_cb_wrong_or_missing_week_team_rows": int(
+                (g["source_quality_pre_cb_week_ready"] & ~g["source_quality_row_ready"]).sum()
+            ),
             "content_version_metadata_pregame_compatible_rows": int(g["content_version_metadata_pregame_compatible"].sum()),
             "modified_after_game_kickoff_rows": int(g["content_version_timing_status"].eq("MODIFIED_AFTER_GAME_KICKOFF_UNVERIFIED").sum()),
             "source_quality_ready_rate": float(g["source_quality_row_ready"].mean()),
@@ -416,6 +431,10 @@ def audit(assignments: pd.DataFrame, page_audit: pd.DataFrame, out_dir: Path) ->
             "stable_identity_rate": float(g["stable_identity_ready"].mean()),
             "schedule_mismatch_rows": int((~g["schedule_match"]).sum()),
             "source_quality_ready_rows": int(g["source_quality_row_ready"].sum()),
+            "source_quality_pre_cb_week_ready_rows": int(g["source_quality_pre_cb_week_ready"].sum()),
+            "newly_quarantined_cb_wrong_or_missing_week_team_rows": int(
+                (g["source_quality_pre_cb_week_ready"] & ~g["source_quality_row_ready"]).sum()
+            ),
             "source_quality_ready_rate": float(g["source_quality_row_ready"].mean()),
             "content_version_metadata_pregame_compatible_rows": int(g["content_version_metadata_pregame_compatible"].sum()),
             "modified_after_game_kickoff_rows": int(g["content_version_timing_status"].eq("MODIFIED_AFTER_GAME_KICKOFF_UNVERIFIED").sum()),
@@ -448,6 +467,13 @@ def audit(assignments: pd.DataFrame, page_audit: pd.DataFrame, out_dir: Path) ->
         "schedule_match_rows": int(x["schedule_match"].sum()),
         "schedule_mismatch_rows": int((~x["schedule_match"]).sum()),
         "source_quality_ready_rows": int(x["source_quality_row_ready"].sum()),
+        "source_quality_pre_cb_week_ready_rows": int(x["source_quality_pre_cb_week_ready"].sum()),
+        "newly_quarantined_cb_wrong_or_missing_week_team_rows": int(
+            (x["source_quality_pre_cb_week_ready"] & ~x["source_quality_row_ready"]).sum()
+        ),
+        "cb_week_roster_status_counts_on_pre_guard_eligible": x.loc[
+            x["source_quality_pre_cb_week_ready"], "cb_week_roster_status"
+        ].value_counts().to_dict(),
         "source_quality_ready_means_publication_eligibility_only": True,
         "content_version_status_counts": x["content_version_timing_status"].value_counts().to_dict(),
         "content_version_metadata_pregame_compatible_rows": int(x["content_version_metadata_pregame_compatible"].sum()),
