@@ -3,7 +3,7 @@ name: RNG Isolation Production Candidate V1
 on:
   push:
     branches:
-      - repair-specialist-rng-isolation-v1
+      - repair-specialist-rng-isolation-current-main-v1
     paths:
       - 'docs/production/SPECIALIST_RNG_ISOLATION_PRODUCTION_REPAIR_V1_FROZEN_PLAN.md'
       - 'scripts/simulation_rng_isolation_v1.py'
@@ -55,7 +55,7 @@ jobs:
       - name: Prove canonical live workflow and legacy simulator remain untouched
         run: |
           set -euo pipefail
-          git diff --exit-code 8a965f2754b4ccfa960a2a05517fd40861f49a3d --             .github/workflows/full-slate.yml             scripts/simulation_v2.py             scripts/simulation_explicit_entitlement_v1.py             scripts/simulation_c2_qb_candidate.py             scripts/modeling/qb_c2_production_adapter_v1.py             scripts/run_pricing_with_full_roster_universe_v3_core.py
+          git diff --exit-code e5ef917536458cd6032f4bb93ee3068aa510c7e6 --             .github/workflows/full-slate.yml             scripts/simulation_v2.py             scripts/simulation_explicit_entitlement_v1.py             scripts/simulation_c2_qb_candidate.py             scripts/modeling/qb_c2_production_adapter_v1.py             scripts/run_pricing_with_full_roster_universe_v3_core.py
           echo "CANONICAL_LIVE_PATH_UNTOUCHED"
 
       - name: Verify preserved paid artifact authority
