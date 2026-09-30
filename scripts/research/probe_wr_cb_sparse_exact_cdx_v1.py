@@ -90,7 +90,7 @@ def query_exact(source_url:str, start_utc, end_utc)->tuple[list[dict],str]:
     return [],last or "UNKNOWN_QUERY_FAILURE"
 
 def execute(targets:Path,out_dir:Path)->dict:
-    df=pd.read_csv(targets)
+    df=pd.read_csv(targets,dtype={"control_expected_timestamp":"string"})
     seasons=sorted(df.season.astype(int).unique().tolist())
     schedule=_load_schedule(seasons)
     results=[]
