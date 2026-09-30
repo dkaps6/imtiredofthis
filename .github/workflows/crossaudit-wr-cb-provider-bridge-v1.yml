@@ -1,14 +1,16 @@
 name: Cross-audit WR-CB provider bridge V1
 
-# Read-only cross-audit of PR #665's source-quality output, requested on #535.
-# It downloads that lane's existing artifact and re-analyses it. It never
-# re-acquires the archive, so it cannot interfere with the acquisition lane.
+# Read-only cross-audits requested on #535. Both jobs consume artifacts that
+# already exist and re-analyse them. Neither re-acquires the WR-CB archive nor
+# regrades Week 3, so neither can disturb the lane it is auditing.
 
 on:
   push:
     branches: [claude/nice-cori-4qkwqs]
     paths:
       - 'scripts/research/crossaudit_fantasyalarm_provider_bridge_v1.py'
+      - 'scripts/research/crossaudit_provider_id_collision_census_v1.py'
+      - 'scripts/research/reconcile_week3_dnp_against_postmortem_v1.py'
       - '.github/workflows/crossaudit-wr-cb-provider-bridge-v1.yml'
   workflow_dispatch:
     inputs:
@@ -39,13 +41,45 @@ jobs:
           path: evidence
       - name: Cross-audit the provider-ID bridge anchor set
         run: |
-          ls -la evidence
           python scripts/research/crossaudit_fantasyalarm_provider_bridge_v1.py \
             --rows evidence/fantasyalarm_wr_cb_source_quality_rows.csv \
             --out outputs/crossaudit/provider_bridge_v1.json
+      - name: Unanchored provider-ID collision census
+        run: |
+          python scripts/research/crossaudit_provider_id_collision_census_v1.py \
+            --rows evidence/fantasyalarm_wr_cb_source_quality_rows.csv \
+            --out outputs/crossaudit/provider_id_collision_census_v1.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: wr-cb-provider-bridge-crossaudit-v1
-          path: outputs/crossaudit/provider_bridge_v1.json
+          path: outputs/crossaudit/
+          if-no-files-found: warn
+
+  week3-dnp-provenance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pandas
+      - name: Download the canonical Weeks1-3 postmortem evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: weeks1-3-postmortem-diagnostics-v1-36622608145
+          run-id: '36622608145'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: postmortem
+      - name: Reconcile the seven zero-snap rows against canonical settlement
+        run: |
+          python scripts/research/reconcile_week3_dnp_against_postmortem_v1.py \
+            --evidence postmortem \
+            --out outputs/crossaudit/week3_dnp_provenance_v1.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: week3-dnp-provenance-v1
+          path: outputs/crossaudit/week3_dnp_provenance_v1.json
           if-no-files-found: warn
