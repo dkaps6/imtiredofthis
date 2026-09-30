@@ -101,8 +101,17 @@ def archive(*, priced_path: Path, season: int, week: int, run_id: str, git_sha: 
         }
 
     board = board.copy()
-    board["season"] = season
-    board["week"] = week
+    # Fail closed if caller provenance disagrees with the priced artifact.
+    # The archive workflow can run later than the source Full Slate; resolving
+    # the "current" runtime week here would silently misfile an old board.
+    for col, expected in (("season", season), ("week", week)):
+        if col in board.columns:
+            vals = pd.to_numeric(board[col], errors="coerce").dropna().unique()
+            if len(vals) != 1 or int(vals[0]) != int(expected):
+                raise RuntimeError(
+                    f"priced board {col} provenance mismatch: artifact={vals.tolist()} expected={expected}"
+                )
+        board[col] = int(expected)
     stamped = stamp_provenance(board, run_id=run_id, git_sha=git_sha)
 
     LEDGER_DIR.mkdir(parents=True, exist_ok=True)
