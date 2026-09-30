@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "scripts/research/acquire_fantasyalarm_wr_cb_archive_v1.py"
+      - "scripts/research/audit_fantasyalarm_wr_cb_source_quality_v1.py"
       - "tests/test_acquire_fantasyalarm_wr_cb_archive_v1.py"
       - "data/research/wr_cb_free_archive_seed_manifest_v1.csv"
       - "docs/research/WR_CB_FREE_HISTORICAL_ARCHIVE_SOURCE_READINESS_V1.md"
@@ -32,7 +33,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           pytest -q tests/test_acquire_fantasyalarm_wr_cb_archive_v1.py
-      - name: Acquire verified public seed archive
+      - name: Acquire verified public archive
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
@@ -40,14 +41,25 @@ jobs:
           python scripts/research/acquire_fantasyalarm_wr_cb_archive_v1.py \
             --manifest data/research/wr_cb_free_archive_seed_manifest_v1.csv \
             --out-dir outputs/wr_cb_free_archive_v1
+      - name: Audit timing coverage and stable identity
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/audit_fantasyalarm_wr_cb_source_quality_v1.py \
+            --assignments outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_assignments.csv \
+            --page-audit outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_page_audit.csv \
+            --out-dir outputs/wr_cb_free_archive_v1
       - name: Source audit summary
         run: |
           cat outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_summary.json
+          cat outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_source_quality_summary.json
           python - <<'PY'
           import pandas as pd
-          p="outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_page_audit.csv"
+          p="outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_source_quality_pages.csv"
           x=pd.read_csv(p)
-          print(x[["season","week","rows_emitted","identity_quarantine_rows"]].to_string(index=False))
+          print(x.to_string(index=False))
+          print("\nSEASON COVERAGE")
+          print(pd.read_csv("outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_source_quality_seasons.csv").to_string(index=False))
           PY
       - name: Upload source evidence
         if: always()
@@ -59,6 +71,10 @@ jobs:
             outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_page_audit.csv
             outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_full_audit.json
             outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_summary.json
+            outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_source_quality_rows.csv
+            outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_source_quality_pages.csv
+            outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_source_quality_seasons.csv
+            outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_source_quality_summary.json
             outputs/wr_cb_free_archive_v1/pages/
           if-no-files-found: warn
           retention-days: 30
