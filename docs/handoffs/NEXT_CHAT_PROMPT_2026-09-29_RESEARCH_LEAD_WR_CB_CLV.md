@@ -17,6 +17,7 @@ Start by reading, in this exact order:
    - 5901422664
    - 5901433362
    - 5901608387
+   - 5902638669
    - and anything newer
 5. Query GitHub live for current main, PR #663, PR #665, PR #662, research-week3-postmortem-execution-v1, repair-specialist-rng-isolation-v1, and current Actions before doing anything.
 
@@ -38,7 +39,9 @@ WR/CB CURRENT STATE — IMPORTANT:
 - PR #664 is MERGED on main. The grandfathered coverage_penalty() heuristic and its static 0.92/0.94/1.06/1.04 multipliers were removed from production.
 - Do NOT restore coverage_penalty().
 - Issue comment 5901927972 contains a stale statement that the team-level heuristic is still active. Trust current main and the new handoff instead.
-- We then found a potentially useful FREE historical FantasyAlarm WR/CB archive spanning 2021-2026.
+- We then confirmed a FREE historical FantasyAlarm WR/CB archive spanning 2021-2026.
+- Latest source disposition: `FREE_HISTORICAL_WR_CB_ASSIGNMENT_ARCHIVE_CONFIRMED_SOURCE_QUALITY_AUDIT_PENDING`.
+- Older 2021/2022 vintages have incomplete slot coverage; missing slot rows are NOT zero/no-matchup. Use explicitly observed pairings only.
 - PR #665 is the research-only source-acquisition/audit lane. It extracts factual pairings/alignment only; editorial Safe/Moderate/Risky grades are NOT model-eligible.
 - Do not promote WR-CB science until PR #665 proves source completeness, timing, identity, and semantic stability.
 - If that gate clears, the next legitimate science is the previously source-blocked TOP_WEAPON_ESCAPE_HATCH using strictly prior observed assignments and untouched confirmation data. No paid source required.
