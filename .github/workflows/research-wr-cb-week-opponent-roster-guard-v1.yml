@@ -1,0 +1,46 @@
+name: Research WR-CB Week Opponent Roster Guard V1
+on:
+  push:
+    branches: ["research-wr-cb-week-opponent-roster-guard-v1"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install existing dependencies
+        run: pip install -r requirements.txt pytest
+      - name: Test guard with synthetic wrong-team source row
+        env:
+          PYTHONPATH: .
+        run: pytest -q tests/test_cb_week_opponent_roster_guard_v1.py
+      - name: Retrieve existing source-quality artifact (no archive re-fetch)
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-cb-free-archive-v1
+          path: outputs/existing
+          repository: dkaps6/imtiredofthis
+          run-id: 36735087776
+          github-token: \${{ secrets.GITHUB_TOKEN }}
+      - name: Measure gate with existing source and current public weekly rosters
+        env:
+          PYTHONPATH: .
+        run: |
+          python scripts/research/cb_week_opponent_roster_guard_v1.py \
+            --rows outputs/existing/fantasyalarm_wr_cb_source_quality_rows.csv \
+            --out-dir outputs/cb_week_opponent_guard_v1
+      - name: Preserve source-only audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-cb-week-opponent-roster-guard-v1
+          path: outputs/cb_week_opponent_guard_v1/
+          if-no-files-found: warn
+          retention-days: 30
