@@ -129,14 +129,32 @@ def main() -> int:
         unanchored_only_gsis = [k for k in gsis_collisions if k not in anchored_ids]
 
         # One provider ID appearing for two different teams in the SAME week is
-        # not explainable as an alias.
-        same_week_multi_team = []
-        for sid, tws in by_team_week.items():
-            seen: dict = defaultdict(set)
-            for se, wk, t in tws:
-                seen[(se, wk)].add(t)
-            if any(len(v) > 1 for v in seen.values()):
-                same_week_multi_team.append(sid)
+        # not explainable as an alias -- but a row whose opponent contradicts the
+        # schedule supplies a bogus team, so the check is run twice: once over
+        # every row, and once over schedule-consistent rows only. Only the second
+        # is evidence about the provider ID itself.
+        def _multi_team(mask) -> tuple[list, dict]:
+            acc: dict = defaultdict(set)
+            for sid, t, se, wk, keep in zip(
+                src.loc[has_id], team.loc[has_id], season.loc[has_id],
+                week.loc[has_id], mask.loc[has_id]
+            ):
+                if t and keep:
+                    acc[sid].add((se, wk, _team(t)))
+            out, detail = [], {}
+            for sid, tws in acc.items():
+                seen: dict = defaultdict(set)
+                for se, wk, t in tws:
+                    seen[(se, wk)].add(t)
+                bad = {f"{se}w{wk}": sorted(v) for (se, wk), v in seen.items() if len(v) > 1}
+                if bad:
+                    out.append(sid)
+                    detail[sid] = bad
+            return sorted(out), detail
+
+        all_rows = pd.Series(True, index=x.index)
+        same_week_multi_team, _detail_all = _multi_team(all_rows)
+        sched_only, detail_sched = _multi_team(sched)
 
         multi = sorted(buckets.get("MULTI_PERSON", []))
         report["sides"][side] = {
@@ -154,6 +172,13 @@ def main() -> int:
             "gsis_collisions_full_population": len(gsis_collisions),
             "gsis_collisions_invisible_to_anchored_audit": len(unanchored_only_gsis),
             "same_season_week_multi_team_ids": len(same_week_multi_team),
+            "same_season_week_multi_team_ids_schedule_consistent_only": len(sched_only),
+            "multi_team_explained_by_schedule_mismatch": sorted(
+                set(same_week_multi_team) - set(sched_only)
+            ),
+            "multi_team_surviving_schedule_filter": {
+                sid: detail_sched[sid] for sid in sched_only
+            },
             "same_season_week_multi_team_examples": [
                 {"provider_id": sid, "name_keys": sorted(by_key.get(sid, []))}
                 for sid in sorted(same_week_multi_team)[:8]
@@ -171,7 +196,13 @@ def main() -> int:
               f"MULTI_PERSON={d['classified_MULTI_PERSON']} "
               f"gsis_coll_full={d['gsis_collisions_full_population']} "
               f"gsis_coll_hidden={d['gsis_collisions_invisible_to_anchored_audit']} "
-              f"same_week_multi_team={d['same_season_week_multi_team_ids']}")
+              f"same_week_multi_team={d['same_season_week_multi_team_ids']} "
+              f"-> schedule_consistent_only={d['same_season_week_multi_team_ids_schedule_consistent_only']}")
+        for sid, bad in d.get("multi_team_surviving_schedule_filter", {}).items():
+            print(f"    SURVIVES    {sid}: {bad}")
+        if d.get("multi_team_explained_by_schedule_mismatch"):
+            print(f"    EXPLAINED BY SCHEDULE MISMATCH: "
+                  f"{len(d['multi_team_explained_by_schedule_mismatch'])} ids")
         for e in d["multi_person_examples"]:
             print(f"    MULTI_PERSON {e['provider_id']}: {', '.join(e['name_keys'])}")
         for e in d["same_season_week_multi_team_examples"]:
