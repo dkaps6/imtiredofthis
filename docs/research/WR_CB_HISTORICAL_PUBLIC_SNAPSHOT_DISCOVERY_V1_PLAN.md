@@ -1,0 +1,7 @@
+# WR-CB Historical Public-Archive Snapshot Discovery V1
+
+Bounded **index-only** study of the exact 2023 W8, 2024 W1, 2025 W4 and W14 FantasyAlarm source URLs. These were selected because their currently published article metadata shows modification after some/all games; 2025 remains reserved as the intended untouched confirmation population.
+
+Use the free public Wayback CDX and a maximum of three time-adjacent Common Crawl CDX indices per exact URL. Persist exact lookup status, timestamp, digest, source URL and week-level kickoff windows. HTTP blocks, missing indices and empty bounded searches must never be interpreted as proof no snapshot exists. A pregame index hit is a **candidate** requiring retrieval and hash/provenance confirmation that the exact public factual matchup table was present at that time; a between-games hit requires per-WR kickoff isolation. No raw archived article text is acquired by this lane.
+
+The collector runs on its dedicated **separate research branch** to avoid racing PR #665 or duplicating Claude's player-ID census. No sportsbook queries, no outcome grades, no source/model promotion, no retrospective repair from current page text. Next if candidate exists: freeze a *separate* bounded exact-content verification plan before downloading any archived public body; if indexes are blocked or have no matches, report the access limitation and prioritize true current-season prospective captures.

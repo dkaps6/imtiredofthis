@@ -1,0 +1,45 @@
+name: Research WR-CB Historical Public Snapshot Index V1
+
+on:
+  push:
+    branches: ["research-wr-cb-historical-snapshot-discovery-v1"]
+    paths:
+      - "scripts/research/discover_wr_cb_archive_snapshots_v1.py"
+      - "tests/test_discover_wr_cb_archive_snapshots_v1.py"
+      - ".github/workflows/research-wr-cb-public-snapshot-index-v1.yml"
+      - "data/research/wr_cb_free_archive_seed_manifest_v1.csv"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  index-discovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install existing research dependencies
+        run: pip install -r requirements.txt pytest
+      - name: Pure index-parser regression tests
+        env:
+          PYTHONPATH: .
+        run: pytest -q tests/test_discover_wr_cb_archive_snapshots_v1.py
+      - name: Query four public archive metadata targets only
+        env:
+          PYTHONPATH: .
+        run: |
+          python scripts/research/discover_wr_cb_archive_snapshots_v1.py \
+            --manifest data/research/wr_cb_free_archive_seed_manifest_v1.csv \
+            --out-dir outputs/wr_cb_public_snapshot_index_v1
+      - name: Upload sanitized candidate metadata and lookup failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-cb-public-snapshot-index-v1
+          path: outputs/wr_cb_public_snapshot_index_v1/snapshot_index_candidates.json
+          if-no-files-found: warn
+          retention-days: 14
