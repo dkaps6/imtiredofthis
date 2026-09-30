@@ -29,11 +29,22 @@ jobs:
         run: |
           python scripts/research/verify_wr_cb_wayback_body_2024w1_v1.py \
             --out-dir outputs/wayback_2024w1_exact_body_v1
+      - name: Strict exact-week WR and CB opponent-roster audit
+        env:
+          PYTHONPATH: .
+        run: |
+          pytest -q tests/test_audit_verified_wr_cb_snapshot_rows_2024w1_v1.py
+          python scripts/research/audit_verified_wr_cb_snapshot_rows_2024w1_v1.py \
+            --snapshot-json outputs/wayback_2024w1_exact_body_v1/wayback_exact_body_verification.json \
+            --out-dir outputs/wayback_2024w1_exact_body_v1
       - name: Preserve only hashes/status/sanitized factual candidates
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: wr-cb-2024w1-exact-body-v1
-          path: outputs/wayback_2024w1_exact_body_v1/wayback_exact_body_verification.json
+          path: |
+            outputs/wayback_2024w1_exact_body_v1/wayback_exact_body_verification.json
+            outputs/wayback_2024w1_exact_body_v1/verified_snapshot_identity_audit.csv
+            outputs/wayback_2024w1_exact_body_v1/verified_snapshot_identity_summary.json
           if-no-files-found: warn
           retention-days: 30
