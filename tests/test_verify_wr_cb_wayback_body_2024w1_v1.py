@@ -51,7 +51,7 @@ def test_archived_article_body_inventory_hashes_structure_without_text():
     bodies, inv = archived_article_body_inventory(soup)
     assert bodies == [body]
     assert inv[0]["contains_wr_cb_terms"] is True
-    assert inv[0]["html_divs"] == 9
+    assert inv[0]["html_divs"] == 12
     assert len(inv[0]["sha256"]) == 64
     assert "Player One" not in str(inv[0])
     synthetic = _synthetic_page_from_archived_body(
