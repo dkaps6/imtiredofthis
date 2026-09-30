@@ -37,6 +37,62 @@ def pregame_row_timestamp_eligible(source_publish, kickoff, archived=ARCHIVED_UT
         return False
     return bool(pub <= pd.Timestamp(archived) < game)
 
+
+SCRIPT_MARKERS = (
+    "cornerback", "wide receiver", "wr vs", "matchup",
+    "articlebody", "article_body", "__next_data__", "__initial_state__",
+    "apollo", "preloadedstate", "/nfl/players/",
+)
+
+def _walk_json_keys(value, out: set[str]) -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            out.add(str(key).lower())
+            _walk_json_keys(child, out)
+    elif isinstance(value, list):
+        for child in value:
+            _walk_json_keys(child, out)
+
+def script_structure_inventory(soup: BeautifulSoup) -> list[dict]:
+    """Hash/marker-only script inventory; never preserve script body text."""
+    items: list[dict] = []
+    for idx, node in enumerate(soup.find_all("script")):
+        body = node.string if node.string is not None else node.get_text("", strip=False)
+        text = str(body or "")
+        low = text.lower()
+        record = {
+            "index": idx,
+            "type": str(node.get("type") or ""),
+            "id": str(node.get("id") or ""),
+            "has_src": bool(node.get("src")),
+            "characters": len(text),
+            "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            "markers": [m for m in SCRIPT_MARKERS if m in low],
+            "json_parseable": False,
+            "json_root_type": "",
+            "json_key_count": 0,
+            "json_keys_of_interest": [],
+        }
+        if text.strip():
+            try:
+                payload = json.loads(text)
+            except (ValueError, TypeError):
+                payload = None
+            if payload is not None:
+                record["json_parseable"] = True
+                record["json_root_type"] = type(payload).__name__
+                keys: set[str] = set()
+                _walk_json_keys(payload, keys)
+                record["json_key_count"] = len(keys)
+                interests = (
+                    "articlebody", "article_body", "content", "body", "html",
+                    "description", "matchup", "cornerback", "receiver", "players",
+                    "props", "pageprops", "data",
+                )
+                record["json_keys_of_interest"] = [k for k in interests if k in keys]
+        items.append(record)
+    return items
+
 def execute(out_dir: Path) -> dict:
     result = {
         "contract":"WR_CB_2024W1_EXACT_ARCHIVED_BODY_CANDIDATE_V1",
@@ -93,6 +149,25 @@ def execute(out_dir: Path) -> dict:
                     "has_next_data_script": soup.find("script",id="__NEXT_DATA__") is not None,
                     "json_like_script_count": sum("json" in str(x.get("type",""))
                                                   for x in soup.find_all("script")),
+                }
+                scripts = script_structure_inventory(soup)
+                result["archived_script_structure"] = {
+                    "script_count": len(scripts),
+                    "scripts_with_matchup_markers": sum(
+                        bool(set(x["markers"]) & {"cornerback","wide receiver","wr vs","matchup"})
+                        for x in scripts
+                    ),
+                    "scripts_with_player_link_marker": sum(
+                        "/nfl/players/" in x["markers"] for x in scripts
+                    ),
+                    "json_parseable_scripts": sum(x["json_parseable"] for x in scripts),
+                    "json_scripts_with_content_like_keys": sum(
+                        bool(set(x["json_keys_of_interest"]) & {
+                            "articlebody","article_body","content","body","html","matchup","players"
+                        }) for x in scripts
+                    ),
+                    "scripts": scripts,
+                    "raw_script_text_saved": False,
                 }
                 rows, page = parse_page(
                     raw.decode(response.encoding or "utf-8", errors="replace"),
