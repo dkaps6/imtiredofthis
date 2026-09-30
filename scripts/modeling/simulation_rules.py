@@ -13,7 +13,7 @@ import pandas as pd
 
 from scripts.modeling.context_bridge import load_model_contexts
 from scripts.modeling.contracts import PlayerContext
-from scripts.modeling.rules_v2 import coverage_penalty, matchup_multipliers, project_game_script
+from scripts.modeling.rules_v2 import matchup_multipliers, project_game_script
 from scripts.utils.canonical_names import canonicalize_player_name_safe
 
 
@@ -209,20 +209,12 @@ def apply_rules_to_metrics(metrics: pd.DataFrame, bayes_baseline: pd.DataFrame |
         elif pos in {"RB", "FB"}:
             tgt_mult *= mods.rb_rec_target_mult
 
-        if np.isfinite(base_ypt) and np.isfinite(base_tgt) and _is_wr(pos, ctx.role):
-            matchup_available = int(_num(ctx.features.get("matchup_available"), 0.0)) == 1
-            coverage_available = int(_num(ctx.features.get("team_coverage_available"), 0.0)) == 1
-            tough_shadow = matchup_available and bool(str(ctx.features.get("primary_cb") or "").strip())
-            man = _num(ctx.defense.coverage_man_rate, 0.0) >= 0.50 if coverage_available else False
-            zone = _num(ctx.defense.coverage_zone_rate, 0.0) >= 0.60 if coverage_available else False
-            base_ypt, base_tgt = coverage_penalty(
-                base_ypt,
-                base_tgt * tgt_mult,
-                tough_shadow=tough_shadow,
-                heavy_man=man and tough_shadow,
-                heavy_zone=zone and not tough_shadow,
-            )
-        elif np.isfinite(base_tgt):
+        # Legacy WR coverage_penalty() retired 2026-09-29.
+        # We do not have a free, reproducible full-slate WR<->CB assignment
+        # source, and the historical static heuristic was never empirically
+        # qualified. Keep target/YPT construction source-faithful here; any
+        # future WR-CB signal must enter through a separately frozen lane.
+        if np.isfinite(base_tgt):
             base_tgt *= tgt_mult
 
         if _injury_limited(ctx) and (team, pkey) not in injury_overrides:
