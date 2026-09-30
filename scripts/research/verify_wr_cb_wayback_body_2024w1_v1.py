@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 
 import pandas as pd
 import requests
+from bs4 import BeautifulSoup
 
 from scripts.research.acquire_fantasyalarm_wr_cb_archive_v1 import parse_page
 from scripts.research.audit_fantasyalarm_wr_cb_source_quality_v1 import _load_schedule
@@ -70,6 +71,29 @@ def execute(out_dir: Path) -> dict:
                 result["status"] = "REPLAY_BODY_DIGEST_MISMATCH_UNVERIFIED"
             else:
                 result["archived_body_digest_verified"] = True
+                # Structure-only probe of cryptographically verified exact
+                # 2024 replay bytes. Do not persist/copy copyrighted HTML.
+                soup = BeautifulSoup(raw, "html.parser")
+                plain = soup.get_text(" ", strip=True).lower()
+                result["archived_body_structure"] = {
+                    "bytes": len(raw),
+                    "html_tables": len(soup.find_all("table")),
+                    "html_rows": len(soup.find_all("tr")),
+                    "wr_cb_alignment_headings": sum(
+                        bool("wr" in x.get_text(" ", strip=True).lower()
+                             or "wide receiver" in x.get_text(" ", strip=True).lower())
+                        for x in soup.find_all(["h2","h3","h4"])
+                    ),
+                    "script_nodes": len(soup.find_all("script")),
+                    "json_ld_scripts": len(soup.find_all("script", attrs={"type":"application/ld+json"})),
+                    "body_text_characters": len(plain),
+                    "contains_cornerback_term": "cornerback" in plain,
+                    "contains_receiver_term": ("wide receiver" in plain or "wr vs" in plain),
+                    "contains_matchup_term": "matchup" in plain,
+                    "has_next_data_script": soup.find("script",id="__NEXT_DATA__") is not None,
+                    "json_like_script_count": sum("json" in str(x.get("type",""))
+                                                  for x in soup.find_all("script")),
+                }
                 rows, page = parse_page(
                     raw.decode(response.encoding or "utf-8", errors="replace"),
                     season=2024, week=1, source_url=ARTICLE,
