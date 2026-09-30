@@ -253,8 +253,8 @@ def test_structured_six_field_table_preserves_suffix_names():
       <table>
         <tr><td>Left WR vs Right CB</td></tr>
         <tr><td>Wide Receiver</td><td>Team</td><td>DK / FD $</td><td>Cornerback</td><td>Opp</td><td>Matchup</td></tr>
-        <tr><td>DJ Chark Jr.</td><td>DET</td><td>$4800 / $5600</td><td>Jalen Mills</td><td>NE</td><td>Moderate</td></tr>
-        <tr><td>Allen Robinson II</td><td>LAR</td><td>$5300 / $5700</td><td>Trevon Diggs</td><td>DAL</td><td>Risky</td></tr>
+        <tr><td><a href="/nfl/players/111/DJ-Chark">DJ Chark Jr.</a></td><td>DET</td><td>$4800 / $5600</td><td><a href="/nfl/players/222/Jalen-Mills">Jalen Mills</a></td><td>NE</td><td>Moderate</td></tr>
+        <tr><td><a href="/nfl/players/333/Allen-Robinson">Allen Robinson II</a></td><td>LAR</td><td>$5300 / $5700</td><td><a href="/nfl/players/444/Trevon-Diggs">Trevon Diggs</a></td><td>DAL</td><td>Risky</td></tr>
       </table>
     </body></html>
     """
@@ -264,6 +264,8 @@ def test_structured_six_field_table_preserves_suffix_names():
     )
     assert len(rows) == 2
     assert set(rows["wr_raw"]) == {"DJ Chark Jr.", "Allen Robinson II"}
+    assert set(rows["wr_source_player_id"]) == {"111", "333"}
+    assert set(rows["cb_source_player_id"]) == {"222", "444"}
     assert rows["source_layout"].eq("HTML_TABLE_EXPLICIT_SIX_FIELD").all()
 
 
@@ -283,3 +285,27 @@ def test_shifted_editorial_table_without_opponent_team_fails_closed():
     )
     assert rows.empty
     assert audit["rows_emitted"] == 0
+
+
+def test_structured_2025_split_cards_preserve_provider_ids():
+    html = """
+    <html><body><table>
+      <tr><td>Left WR vs Right CB</td></tr>
+      <tr><td>Wide Receiver</td><td>Team</td><td>DK / FD PPG</td></tr>
+      <tr><td><a href="/nfl/players/555/Marvin-Harrison">Marvin Harrison</a></td><td>ARI</td><td>12 / 10.1</td></tr>
+      <tr><td>Cornerback</td><td>Opp</td><td>Matchup</td></tr>
+      <tr><td><a href="/nfl/players/666/Kool-Aid-McKinstry">Kool-Aid McKinstry</a></td><td>NO</td><td>Moderate</td></tr>
+      <tr><td>Narrative prose that must not become a matchup.</td></tr>
+    </table></body></html>
+    """
+    rows, _ = parse_page(
+        html, season=2025, week=1,
+        source_url="https://www.fantasyalarm.com/example-2025-structured",
+    )
+    assert len(rows) == 1
+    row = rows.iloc[0]
+    assert row["wr_raw"] == "Marvin Harrison"
+    assert row["cb_raw"] == "Kool-Aid McKinstry"
+    assert row["wr_source_player_id"] == "555"
+    assert row["cb_source_player_id"] == "666"
+    assert row["source_layout"] == "HTML_TABLE_SPLIT_WR_CB_CARDS"
