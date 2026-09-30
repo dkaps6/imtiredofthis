@@ -166,3 +166,52 @@ def test_combined_stream_recovers_multiple_rows_after_one_header():
     assert set(rows["wr_raw"]) == {"Michael Wilson", "Darnell Mooney", "Rashod Bateman"}
     assert set(rows["cb_raw"]) == {"D.J. Reed", "Alontae Taylor", "Cam Taylor-Britt"}
     assert rows["alignment_bucket"].eq("LWR_VS_RCB").all()
+
+
+
+def test_parse_2021_embedded_team_table():
+    html = """
+    <html><body>
+      <h2>Left WR vs Right CB</h2>
+      <table>
+        <thead><tr><th>Left WR</th><th>Right CB</th><th>Analysis</th></tr></thead>
+        <tbody>
+          <tr><td>DeAndre Hopkins ARI</td><td>Emmanuel Moseley SF</td><td>analysis</td></tr>
+          <tr><td>Marquez Callaway NO</td><td>William Jackson WFT</td><td>analysis</td></tr>
+        </tbody>
+      </table>
+    </body></html>
+    """
+    rows, _ = parse_page(
+        html, season=2021, week=5,
+        source_url="https://www.fantasyalarm.com/example-2021",
+    )
+    assert len(rows) == 2
+    assert rows["alignment_bucket"].eq("LWR_VS_RCB").all()
+    assert set(rows["opponent"]) == {"SF", "WAS"}
+    assert rows["source_layout"].eq("HTML_TABLE_2021_EMBEDDED_TEAM").all()
+
+
+def test_parse_2026_inline_pair_layout():
+    html = """
+    <html><body>
+      <h3>Left Wide Receiver (LWR) vs. Right Cornerback (RCB)</h3>
+      <p>Each team's outside receiver on the left side.</p>
+      <div>Marvin Harrison (ARI)</div>
+      <div>vs. Deommodore Lenoir (SF) • Matchup: Risky</div>
+      <p>Narrative.</p>
+      <div>Drake London (ATL)</div>
+      <div>vs. Brandon Cisse (GB) • Matchup: Moderate</div>
+      <h3>Right Wide Receiver (RWR) vs. Left Cornerback (LCB)</h3>
+      <div>Michael Wilson (ARI)</div>
+      <div>vs. Renardo Green (SF) • Matchup: Risky</div>
+    </body></html>
+    """
+    rows, _ = parse_page(
+        html, season=2026, week=3,
+        source_url="https://www.fantasyalarm.com/example-2026",
+    )
+    assert len(rows) == 3
+    assert set(rows["alignment_bucket"]) == {"LWR_VS_RCB", "RWR_VS_LCB"}
+    assert set(rows["wr_raw"]) == {"Marvin Harrison", "Drake London", "Michael Wilson"}
+    assert rows["source_layout"].eq("TEXT_2026_INLINE_PAIR").all()
