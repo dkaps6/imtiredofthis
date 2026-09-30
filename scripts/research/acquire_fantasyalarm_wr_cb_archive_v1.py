@@ -135,7 +135,7 @@ def _normalize_matchup(value) -> str:
 
 
 def _norm_text(value) -> str:
-    return re.sub(r"\\s+", " ", str(value or "").replace("\\xa0", " ")).strip()
+    return re.sub(r"\s+", " ", str(value or "").replace("\xa0", " ")).strip()
 
 
 TEAM_ABBRS = {
@@ -151,11 +151,11 @@ MATCHUP_LABELS = {
 
 def _alignment_token(value: str) -> str | None:
     x = _norm_text(value).lower().replace(".", "")
-    if re.search(r"left (?:wr|wide receiver)\\s+vs\\s+right (?:cb|cornerback)", x):
+    if re.search(r"left (?:wr|wide receiver)\s+vs\s+right (?:cb|cornerback)", x):
         return "LWR_VS_RCB"
-    if re.search(r"right (?:wr|wide receiver)\\s+vs\\s+left (?:cb|cornerback)", x):
+    if re.search(r"right (?:wr|wide receiver)\s+vs\s+left (?:cb|cornerback)", x):
         return "RWR_VS_LCB"
-    if re.search(r"slot (?:wr|wide receiver)\\s+vs\\s+slot (?:cb|cornerback)", x):
+    if re.search(r"slot (?:wr|wide receiver)\s+vs\s+slot (?:cb|cornerback)", x):
         return "SWR_VS_SCB"
     return None
 
