@@ -168,6 +168,17 @@ def _is_matchup_label(value: str) -> bool:
     return _norm_text(value).lower() in MATCHUP_LABELS
 
 
+def _source_player_id(node) -> str:
+    """Return FantasyAlarm's stable numeric player ID from one source cell/node."""
+    if node is None or not hasattr(node, "find"):
+        return ""
+    a = node.find("a", href=True)
+    if not a:
+        return ""
+    m = re.search(r"/nfl/players/(\d+)(?:/|$)", str(a.get("href") or ""))
+    return m.group(1) if m else ""
+
+
 def _emit_text_pair(
     rows: list[dict],
     *,
@@ -182,6 +193,8 @@ def _emit_text_pair(
     opp_raw: str,
     matchup_raw: str,
     source_layout: str,
+    wr_source_player_id: str = "",
+    cb_source_player_id: str = "",
 ) -> None:
     wr_raw = _norm_text(wr_raw)
     cb_raw = _norm_text(cb_raw)
@@ -212,10 +225,12 @@ def _emit_text_pair(
         "wr": wr_name,
         "wr_clean_key": wr_key,
         "wr_team": canon_team(team_raw),
+        "wr_source_player_id": str(wr_source_player_id or "").strip(),
         "cb_raw": cb_raw,
         "cb": cb_name,
         "cb_clean_key": cb_key,
         "opponent": canon_team(opp_raw),
+        "cb_source_player_id": str(cb_source_player_id or "").strip(),
         "editorial_matchup_raw": matchup_raw,
         "editorial_matchup_model_eligible": False,
         "identity_status": "READY" if wr_key and cb_key else "QUARANTINE_IDENTITY",
