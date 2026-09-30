@@ -21,6 +21,35 @@ DEF_POSITIONS = {"CB", "DB", "S", "FS", "SS"}
 WR_POSITIONS = {"WR", "LWR", "RWR", "SWR"}
 
 
+
+def _content_version_timing(x: pd.DataFrame) -> pd.Series:
+    """Classify article-version timing; metadata is not archived-table proof."""
+    out = pd.Series("UNVERIFIED_NO_MODIFICATION_METADATA", index=x.index, dtype="string")
+    pub = pd.to_datetime(x["published_at_utc"], utc=True, errors="coerce")
+    kickoff = pd.to_datetime(x["kickoff_utc"], utc=True, errors="coerce")
+    modified = pd.to_datetime(
+        x["modified_at_utc"] if "modified_at_utc" in x else pd.Series("", index=x.index),
+        utc=True, errors="coerce",
+    )
+    meta = (
+        x["modification_metadata_status"].astype("string").fillna("")
+        if "modification_metadata_status" in x
+        else pd.Series("", index=x.index, dtype="string")
+    )
+    out.loc[meta.eq("CONFLICTING_MODIFICATION_METADATA")] = "UNVERIFIED_CONFLICTING_MODIFICATION_METADATA"
+    out.loc[meta.eq("INVALID_MODIFICATION_METADATA")] = "UNVERIFIED_INVALID_MODIFICATION_METADATA"
+    valid = (
+        meta.eq("UNAMBIGUOUS_MODIFICATION_METADATA")
+        & pub.notna() & kickoff.notna() & modified.notna()
+    )
+    out.loc[valid & modified.lt(pub)] = "UNVERIFIED_MODIFIED_BEFORE_PUBLICATION"
+    out.loc[valid & modified.ge(pub) & modified.le(kickoff)] = "METADATA_PRE_KICKOFF_COMPATIBLE_NOT_SNAPSHOT_PROOF"
+    out.loc[valid & modified.ge(pub) & modified.gt(kickoff)] = "MODIFIED_AFTER_GAME_KICKOFF_UNVERIFIED"
+    out.loc[kickoff.isna()] = "MISSING_KICKOFF"
+    out.loc[pub.isna()] = "MISSING_PUBLICATION_TIME"
+    return out
+
+
 def _provider_bridge(x: pd.DataFrame, source_col: str, gsis_col: str) -> tuple[dict[str, str], set[str]]:
     """Use only pre-kickoff, schedule-consistent anchor identities.
 
@@ -214,6 +243,14 @@ def audit(assignments: pd.DataFrame, page_audit: pd.DataFrame, out_dir: Path) ->
         & x["opponent"].astype(str).eq(x["scheduled_opponent"].astype(str))
     )
     x["published_utc"] = pd.to_datetime(x["published_at_utc"], utc=True, errors="coerce")
+    x["content_version_timing_status"] = _content_version_timing(x)
+    x["content_version_metadata_pregame_compatible"] = x["content_version_timing_status"].eq(
+        "METADATA_PRE_KICKOFF_COMPATIBLE_NOT_SNAPSHOT_PROOF"
+    )
+    # Neither original publication nor site-reported last edit proves archived
+    # factual tables existed unchanged before kickoff. Requires independent
+    # contemporaneous snapshot evidence; NOT available in this acquisition.
+    x["historical_content_snapshot_verified"] = False
     x["publication_timing_status"] = "PRE_KICKOFF"
     x.loc[x["published_utc"].isna(), "publication_timing_status"] = "MISSING_PUBLICATION_TIME"
     x.loc[x["kickoff_utc"].isna(), "publication_timing_status"] = "MISSING_KICKOFF"
@@ -301,6 +338,8 @@ def audit(assignments: pd.DataFrame, page_audit: pd.DataFrame, out_dir: Path) ->
             "stable_identity_rows": int(g["stable_identity_ready"].sum()),
             "stable_identity_rate": float(g["stable_identity_ready"].mean()),
             "source_quality_ready_rows": int(g["source_quality_row_ready"].sum()),
+            "content_version_metadata_pregame_compatible_rows": int(g["content_version_metadata_pregame_compatible"].sum()),
+            "modified_after_game_kickoff_rows": int(g["content_version_timing_status"].eq("MODIFIED_AFTER_GAME_KICKOFF_UNVERIFIED").sum()),
             "source_quality_ready_rate": float(g["source_quality_row_ready"].mean()),
         })
     pages = pd.DataFrame(page_rows)
@@ -324,6 +363,8 @@ def audit(assignments: pd.DataFrame, page_audit: pd.DataFrame, out_dir: Path) ->
             "schedule_mismatch_rows": int((~g["schedule_match"]).sum()),
             "source_quality_ready_rows": int(g["source_quality_row_ready"].sum()),
             "source_quality_ready_rate": float(g["source_quality_row_ready"].mean()),
+            "content_version_metadata_pregame_compatible_rows": int(g["content_version_metadata_pregame_compatible"].sum()),
+            "modified_after_game_kickoff_rows": int(g["content_version_timing_status"].eq("MODIFIED_AFTER_GAME_KICKOFF_UNVERIFIED").sum()),
             "after_kickoff_rows": int(g["publication_timing_status"].eq("AFTER_KICKOFF").sum()),
             "missing_timing_rows": int(g["publication_timing_status"].isin(["MISSING_PUBLICATION_TIME", "MISSING_KICKOFF"]).sum()),
         })
@@ -353,6 +394,10 @@ def audit(assignments: pd.DataFrame, page_audit: pd.DataFrame, out_dir: Path) ->
         "schedule_match_rows": int(x["schedule_match"].sum()),
         "schedule_mismatch_rows": int((~x["schedule_match"]).sum()),
         "source_quality_ready_rows": int(x["source_quality_row_ready"].sum()),
+        "source_quality_ready_means_publication_eligibility_only": True,
+        "content_version_status_counts": x["content_version_timing_status"].value_counts().to_dict(),
+        "content_version_metadata_pregame_compatible_rows": int(x["content_version_metadata_pregame_compatible"].sum()),
+        "historical_content_snapshot_verified_rows": 0,
         "source_quality_ready_rate": float(x["source_quality_row_ready"].mean()),
         "wr_name_to_stable_id_collisions": int(len(wr_bad)),
         "cb_name_to_stable_id_collisions": int(len(cb_bad)),
@@ -367,7 +412,7 @@ def audit(assignments: pd.DataFrame, page_audit: pd.DataFrame, out_dir: Path) ->
         "model_candidates_scored": 0,
         "parameters_fit": 0,
         "missing_rows_interpreted_as_zero": False,
-        "note": "Gate remains closed until historical archive coverage, timing, identity, and parser semantics are fully reconciled.",
+        "note": "Publication-eligible source-quality rows are provisional: source dateModified can be post-kickoff, and even pre-kickoff metadata alone does not prove archived table contents. Historical snapshot proof + coverage/identity/parsing required. Gate CLOSED.",
     }
     (out_dir / "fantasyalarm_wr_cb_source_quality_summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"

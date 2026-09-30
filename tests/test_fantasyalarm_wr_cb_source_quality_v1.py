@@ -29,3 +29,23 @@ def test_provider_bridge_ignores_after_kickoff_and_schedule_mismatched_anchors()
     mapping, collisions = _provider_bridge(rows, "source_id", "gsis_id")
     assert mapping == {"A": "GS1"}
     assert collisions == {"D"}
+
+
+def test_article_content_version_timing_distinguishes_publication_from_edits():
+    from scripts.research.audit_fantasyalarm_wr_cb_source_quality_v1 import _content_version_timing
+    x = pd.DataFrame([
+        {"published_at_utc": "2023-10-27T16:00:00Z", "kickoff_utc": "2023-10-29T17:00:00Z",
+         "modified_at_utc": "2024-08-21T13:00:00Z", "modification_metadata_status": "UNAMBIGUOUS_MODIFICATION_METADATA"},
+        {"published_at_utc": "2023-10-27T16:00:00Z", "kickoff_utc": "2023-10-29T17:00:00Z",
+         "modified_at_utc": "2023-10-28T13:00:00Z", "modification_metadata_status": "UNAMBIGUOUS_MODIFICATION_METADATA"},
+        {"published_at_utc": "2023-10-27T16:00:00Z", "kickoff_utc": "2023-10-29T17:00:00Z",
+         "modified_at_utc": "", "modification_metadata_status": "MISSING_MODIFICATION_METADATA"},
+        {"published_at_utc": "2023-10-27T16:00:00Z", "kickoff_utc": "2023-10-29T17:00:00Z",
+         "modified_at_utc": "", "modification_metadata_status": "CONFLICTING_MODIFICATION_METADATA"},
+    ])
+    assert _content_version_timing(x).tolist() == [
+        "MODIFIED_AFTER_GAME_KICKOFF_UNVERIFIED",
+        "METADATA_PRE_KICKOFF_COMPATIBLE_NOT_SNAPSHOT_PROOF",
+        "UNVERIFIED_NO_MODIFICATION_METADATA",
+        "UNVERIFIED_CONFLICTING_MODIFICATION_METADATA",
+    ]

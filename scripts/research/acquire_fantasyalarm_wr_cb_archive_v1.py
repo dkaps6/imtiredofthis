@@ -101,6 +101,56 @@ def _publication_time(soup: BeautifulSoup) -> str:
     return ""
 
 
+
+def _modification_evidence(soup: BeautifulSoup) -> tuple[str, str]:
+    """Extract machine-readable article modification evidence, never infer from publish date.
+
+    Conflicting or malformed metadata is unverified. A modification timestamp
+    alone cannot prove the factual table was unchanged since the original post.
+    """
+    values: list[str] = []
+    raw_values: list[str] = []
+    selectors = [
+        ("meta", {"property": "article:modified_time"}, "content"),
+        ("meta", {"name": "dateModified"}, "content"),
+        ("meta", {"itemprop": "dateModified"}, "content"),
+    ]
+    for tag, attrs, field in selectors:
+        for node in soup.find_all(tag, attrs=attrs):
+            if node.get(field):
+                raw_values.append(str(node.get(field)).strip())
+    for node in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        try:
+            payload = json.loads(node.get_text(" ", strip=True))
+        except (ValueError, TypeError):
+            continue
+        def scan(obj):
+            if isinstance(obj, list):
+                for item in obj:
+                    scan(item)
+            elif isinstance(obj, dict):
+                article_types = obj.get("@type", [])
+                if isinstance(article_types, str):
+                    article_types = [article_types]
+                if "datePublished" in obj or any("Article" in str(t) for t in article_types):
+                    if obj.get("dateModified"):
+                        raw_values.append(str(obj["dateModified"]).strip())
+                if "@graph" in obj:
+                    scan(obj["@graph"])
+        scan(payload)
+    if not raw_values:
+        return "", "MISSING_MODIFICATION_METADATA"
+    for value in raw_values:
+        try:
+            ts = pd.to_datetime(value, utc=True, errors="raise")
+            values.append(ts.isoformat().replace("+00:00", "Z"))
+        except (ValueError, TypeError, OverflowError):
+            return "", "INVALID_MODIFICATION_METADATA"
+    if len(set(values)) != 1:
+        return "", "CONFLICTING_MODIFICATION_METADATA"
+    return values[0], "UNAMBIGUOUS_MODIFICATION_METADATA"
+
+
 def _alignment_for_table(table) -> str:
     heading = table.find_previous(["h1", "h2", "h3", "h4", "h5", "strong"])
     text = heading.get_text(" ", strip=True).lower() if heading else ""
@@ -510,6 +560,7 @@ def _parse_inline_2026_pairs(
 def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[pd.DataFrame, dict]:
     soup = BeautifulSoup(html, "html.parser")
     published = _publication_time(soup)
+    modified, modification_metadata_status = _modification_evidence(soup)
     rows: list[dict] = []
     table_audit: list[dict] = []
     structured_table_rows = 0
@@ -846,11 +897,17 @@ def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[p
             keep="last",
         ).reset_index(drop=True)
 
+    if not out.empty:
+        out["modified_at_utc"] = modified
+        out["modification_metadata_status"] = modification_metadata_status
+
     audit = {
         "season": int(season),
         "week": int(week),
         "source_url": source_url,
         "published_at_utc": published,
+        "modified_at_utc": modified,
+        "modification_metadata_status": modification_metadata_status,
         "html_sha256": _sha256_text(html),
         "html_bytes": len(html.encode("utf-8")),
         "tables_seen": len(soup.find_all("table")),

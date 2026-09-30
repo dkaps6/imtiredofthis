@@ -309,3 +309,38 @@ def test_structured_2025_split_cards_preserve_provider_ids():
     assert row["wr_source_player_id"] == "555"
     assert row["cb_source_player_id"] == "666"
     assert row["source_layout"] == "HTML_TABLE_SPLIT_WR_CB_CARDS"
+
+
+def test_article_modification_metadata_is_separate_from_publication():
+    html = """
+    <html><head>
+      <meta property="article:published_time" content="2023-10-27T12:00:00-04:00">
+      <meta property="article:modified_time" content="2024-08-21T09:00:00-04:00">
+    </head><body>
+    <h2>Left WR vs Right CB</h2>
+    <table><thead><tr><th>Wide Receiver</th><th>Team</th><th>Cornerback</th><th>Opp</th><th>Matchup</th></tr></thead>
+    <tbody><tr><td>Michael Pittman Jr.</td><td>IND</td><td>Mike Hughes</td><td>ATL</td><td>Moderate</td></tr></tbody></table>
+    </body></html>
+    """
+    rows, page = parse_page(
+        html, season=2023, week=8,
+        source_url="https://www.fantasyalarm.com/example-versioned",
+    )
+    assert len(rows) == 1
+    assert rows.iloc[0]["published_at_utc"] == "2023-10-27T16:00:00Z"
+    assert rows.iloc[0]["modified_at_utc"] == "2024-08-21T13:00:00Z"
+    assert page["modification_metadata_status"] == "UNAMBIGUOUS_MODIFICATION_METADATA"
+
+
+def test_missing_or_conflicting_article_modification_metadata_is_unverified():
+    from scripts.research.acquire_fantasyalarm_wr_cb_archive_v1 import _modification_evidence
+    from bs4 import BeautifulSoup
+    missing = BeautifulSoup("<html><body>Article</body></html>", "html.parser")
+    assert _modification_evidence(missing) == ("", "MISSING_MODIFICATION_METADATA")
+    conflicting = BeautifulSoup("""
+    <html><head>
+    <meta property="article:modified_time" content="2025-09-01T12:00:00Z"/>
+    <script type="application/ld+json">{"@type":"Article","dateModified":"2025-09-02T12:00:00Z"}</script>
+    </head></html>
+    """, "html.parser")
+    assert _modification_evidence(conflicting) == ("", "CONFLICTING_MODIFICATION_METADATA")
