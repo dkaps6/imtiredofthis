@@ -97,8 +97,10 @@ def _load_schedule(seasons: list[int]) -> pd.DataFrame:
         base = raw[["season", "week", "kickoff_utc"]].copy()
         h = base.copy()
         h["team"] = home
+        h["scheduled_opponent"] = away
         a = base.copy()
         a["team"] = away
+        a["scheduled_opponent"] = home
         frames.extend([h, a])
 
     out = pd.concat(frames, ignore_index=True, sort=False)
@@ -185,6 +187,10 @@ def audit(assignments: pd.DataFrame, page_audit: pd.DataFrame, out_dir: Path) ->
     schedule = _load_schedule(seasons)
     schedule = schedule.rename(columns={"team": "wr_team"})
     x = x.merge(schedule, on=["season", "week", "wr_team"], how="left", validate="many_to_one")
+    x["schedule_match"] = (
+        x["scheduled_opponent"].astype(str).str.len().gt(0)
+        & x["opponent"].astype(str).eq(x["scheduled_opponent"].astype(str))
+    )
     x["published_utc"] = pd.to_datetime(x["published_at_utc"], utc=True, errors="coerce")
     x["publication_timing_status"] = "PRE_KICKOFF"
     x.loc[x["published_utc"].isna(), "publication_timing_status"] = "MISSING_PUBLICATION_TIME"
@@ -209,6 +215,15 @@ def audit(assignments: pd.DataFrame, page_audit: pd.DataFrame, out_dir: Path) ->
     x["cb_gsis_id"] = cb_ids
     x["cb_identity_method"] = cb_methods
     x["stable_identity_ready"] = x["wr_gsis_id"].astype(str).str.len().gt(0) & x["cb_gsis_id"].astype(str).str.len().gt(0)
+    # This is a SOURCE-quality eligibility flag only. It is not a model input
+    # and does not authorize a matchup candidate. Rows must be explicitly
+    # observed, pre-kickoff, schedule-consistent, stably identified, and aligned.
+    x["source_quality_row_ready"] = (
+        x["publication_timing_status"].eq("PRE_KICKOFF")
+        & x["schedule_match"]
+        & x["stable_identity_ready"]
+        & x["alignment_bucket"].ne("UNKNOWN_ALIGNMENT")
+    )
 
     # Person-key stability: a canonical source name may never map to >1 stable ID.
     wr_collision = x.loc[x["wr_gsis_id"].astype(str).str.len().gt(0)].groupby("wr_clean_key")["wr_gsis_id"].nunique()
@@ -231,8 +246,12 @@ def audit(assignments: pd.DataFrame, page_audit: pd.DataFrame, out_dir: Path) ->
             "pre_kickoff_rows": int(g["publication_timing_status"].eq("PRE_KICKOFF").sum()),
             "after_kickoff_rows": int(g["publication_timing_status"].eq("AFTER_KICKOFF").sum()),
             "missing_timing_rows": int(g["publication_timing_status"].isin(["MISSING_PUBLICATION_TIME", "MISSING_KICKOFF"]).sum()),
+            "schedule_match_rows": int(g["schedule_match"].sum()),
+            "schedule_mismatch_rows": int((~g["schedule_match"]).sum()),
             "stable_identity_rows": int(g["stable_identity_ready"].sum()),
             "stable_identity_rate": float(g["stable_identity_ready"].mean()),
+            "source_quality_ready_rows": int(g["source_quality_row_ready"].sum()),
+            "source_quality_ready_rate": float(g["source_quality_row_ready"].mean()),
         })
     pages = pd.DataFrame(page_rows)
 
@@ -252,6 +271,9 @@ def audit(assignments: pd.DataFrame, page_audit: pd.DataFrame, out_dir: Path) ->
             "outside_rows": int(g["alignment_bucket"].isin(["LWR_VS_RCB", "RWR_VS_LCB"]).sum()),
             "slot_rows": int(g["alignment_bucket"].eq("SWR_VS_SCB").sum()),
             "stable_identity_rate": float(g["stable_identity_ready"].mean()),
+            "schedule_mismatch_rows": int((~g["schedule_match"]).sum()),
+            "source_quality_ready_rows": int(g["source_quality_row_ready"].sum()),
+            "source_quality_ready_rate": float(g["source_quality_row_ready"].mean()),
             "after_kickoff_rows": int(g["publication_timing_status"].eq("AFTER_KICKOFF").sum()),
             "missing_timing_rows": int(g["publication_timing_status"].isin(["MISSING_PUBLICATION_TIME", "MISSING_KICKOFF"]).sum()),
         })
@@ -278,6 +300,10 @@ def audit(assignments: pd.DataFrame, page_audit: pd.DataFrame, out_dir: Path) ->
         "missing_timing_rows": int(x["publication_timing_status"].isin(["MISSING_PUBLICATION_TIME", "MISSING_KICKOFF"]).sum()),
         "stable_identity_rows": int(x["stable_identity_ready"].sum()),
         "stable_identity_rate": float(x["stable_identity_ready"].mean()),
+        "schedule_match_rows": int(x["schedule_match"].sum()),
+        "schedule_mismatch_rows": int((~x["schedule_match"]).sum()),
+        "source_quality_ready_rows": int(x["source_quality_row_ready"].sum()),
+        "source_quality_ready_rate": float(x["source_quality_row_ready"].mean()),
         "wr_name_to_stable_id_collisions": int(len(wr_bad)),
         "cb_name_to_stable_id_collisions": int(len(cb_bad)),
         "unknown_alignment_rows": int(x["alignment_bucket"].eq("UNKNOWN_ALIGNMENT").sum()),
