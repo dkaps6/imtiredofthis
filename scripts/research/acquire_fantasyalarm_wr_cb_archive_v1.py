@@ -374,7 +374,7 @@ def _source_team(value: str) -> str:
 
 def _split_embedded_team(value: str) -> tuple[str, str] | None:
     x = _norm_text(value)
-    m = re.match(r"^(.+?)\\s+([A-Z]{2,3})$", x)
+    m = re.match(r"^(.+?)\s+([A-Z]{2,3})$", x)
     if not m:
         return None
     name, team = m.group(1).strip(), m.group(2).strip().upper()
@@ -398,10 +398,10 @@ def _parse_inline_2026_pairs(
     alignment = "UNKNOWN_ALIGNMENT"
     pending: tuple[str,str] | None = None
 
-    wr_re = re.compile(r"^(.+?)\\s*\\(([A-Z]{2,3})\\)\\s*$")
+    wr_re = re.compile(r"^(.+?)\s*\(([A-Z]{2,3})\)\s*$")
     pair_re = re.compile(
-        r"^vs\\.?\\s*(.+?)\\s*\\(([A-Z]{2,3})\\)"
-        r".*?Matchup\\s*:\\s*(Safe|Moderate|Risky|Upgrade|Neutral|Downgrade)\\b",
+        r"^vs\.?\s*(.+?)\s*\(([A-Z]{2,3})\)"
+        r".*?Matchup\s*:\s*(Safe|Moderate|Risky|Upgrade|Neutral|Downgrade)\b",
         re.I,
     )
 
