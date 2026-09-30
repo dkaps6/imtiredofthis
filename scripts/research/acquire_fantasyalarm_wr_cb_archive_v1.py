@@ -252,6 +252,41 @@ def _parse_text_cards(
             i += 1
             continue
 
+        # Historical 2022-24 layouts print the combined header once, then
+        # emit many six-field rows beneath it. Recover each explicit row by
+        # anchoring on the standalone matchup label and validating the two NFL
+        # team abbreviations immediately around the WR/CB cells. Narrative prose
+        # cannot satisfy this shape.
+        if alignment != "UNKNOWN_ALIGNMENT" and _is_matchup_label(tokens[i]):
+            emitted = False
+            if i >= 5 and _is_team(tokens[i - 4]) and _is_team(tokens[i - 1]):
+                _emit_text_pair(
+                    rows,
+                    season=season, week=week, source_url=source_url,
+                    published=published, alignment=alignment,
+                    wr_raw=tokens[i - 5], team_raw=tokens[i - 4],
+                    cb_raw=tokens[i - 2], opp_raw=tokens[i - 1],
+                    matchup_raw=tokens[i],
+                    source_layout="TEXT_COMBINED_SIX_FIELD_STREAM",
+                )
+                emitted = True
+            elif i >= 4 and _is_team(tokens[i - 3]) and _is_team(tokens[i - 1]):
+                # Some rows have an empty salary cell; stripped_strings removes
+                # the blank and leaves a five-value row.
+                _emit_text_pair(
+                    rows,
+                    season=season, week=week, source_url=source_url,
+                    published=published, alignment=alignment,
+                    wr_raw=tokens[i - 4], team_raw=tokens[i - 3],
+                    cb_raw=tokens[i - 2], opp_raw=tokens[i - 1],
+                    matchup_raw=tokens[i],
+                    source_layout="TEXT_COMBINED_FIVE_FIELD_STREAM",
+                )
+                emitted = True
+            if emitted:
+                i += 1
+                continue
+
         if tokens[i].lower() != "wide receiver":
             i += 1
             continue
