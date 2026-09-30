@@ -497,8 +497,51 @@ def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[p
     published = _publication_time(soup)
     rows: list[dict] = []
     table_audit: list[dict] = []
+    structured_six_field_rows = 0
 
     for table_index, table in enumerate(soup.find_all("table")):
+        # 2022-24 articles use real HTML rows with a stable six-field factual
+        # schema, but often without semantic TH elements. Parse the actual TD
+        # cells rather than soup.stripped_strings so suffixes/hyphenated names
+        # cannot be split into fake players such as "Jr.", "ton", or "-Ikhine".
+        current_alignment = "UNKNOWN_ALIGNMENT"
+        structured_emitted = 0
+        for tr in table.find_all("tr"):
+            cells = [_norm_text(x.get_text(" ", strip=True)) for x in tr.find_all(["td", "th"])]
+            if len(cells) == 1:
+                maybe_alignment = _alignment_token(cells[0])
+                if maybe_alignment:
+                    current_alignment = maybe_alignment
+                continue
+            if len(cells) < 6 or current_alignment == "UNKNOWN_ALIGNMENT":
+                continue
+            # Exact historical row shape:
+            # WR | TEAM | salary | CB | OPP | editorial matchup.
+            if not _is_team(cells[1]) or not _is_team(cells[4]) or not _is_matchup_label(cells[5]):
+                continue
+            before = len(rows)
+            _emit_text_pair(
+                rows,
+                season=season, week=week, source_url=source_url,
+                published=published, alignment=current_alignment,
+                wr_raw=cells[0], team_raw=cells[1],
+                cb_raw=cells[3], opp_raw=cells[4],
+                matchup_raw=cells[5],
+                source_layout="HTML_TABLE_EXPLICIT_SIX_FIELD",
+            )
+            if len(rows) > before:
+                structured_emitted += 1
+                structured_six_field_rows += 1
+        if structured_emitted:
+            table_audit.append({
+                "table_index": table_index,
+                "status": "PARSED_STRUCTURED_SIX_FIELD_WR_CB_ROWS",
+                "alignment": current_alignment,
+                "rows_emitted": structured_emitted,
+            })
+            # This historical table is fully parsed from its own cells; do not
+            # re-parse it through pandas/text token streams.
+            continue
         # 2021 archive tables use TD cells for the first-row labels rather than
         # semantic TH headers. Parse those explicit cells directly before
         # falling back to pandas table inference.
@@ -676,13 +719,17 @@ def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[p
             "invalid_team_rows_skipped": invalid_team_rows,
         })
 
-    text_rows = _parse_text_cards(
-        soup,
-        season=season,
-        week=week,
-        source_url=source_url,
-        published=published,
-    )
+    # Text-card parsing is needed for 2025 split-card pages, but must not
+    # duplicate 2022-24 pages already recovered from exact HTML table cells.
+    text_rows = []
+    if structured_six_field_rows == 0:
+        text_rows = _parse_text_cards(
+            soup,
+            season=season,
+            week=week,
+            source_url=source_url,
+            published=published,
+        )
     if text_rows:
         rows.extend(text_rows)
 
