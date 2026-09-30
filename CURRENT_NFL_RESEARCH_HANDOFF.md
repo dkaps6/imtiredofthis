@@ -2,6 +2,67 @@
 GitHub is canonical; chat memory is secondary.
 
 ---
+## ACTIVE CHECKPOINT — 2026-09-29 — RESEARCH LEAD / WR-CB SOURCE FRONTIER
+
+Read this checkpoint, then:
+`docs/handoffs/NFL_HANDOFF_2026-09-29_RESEARCH_LEAD_WR_CB_CURRENT.md`
+
+Next-chat prompt:
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-09-29_RESEARCH_LEAD_WR_CB.md`
+
+### Production truth to preserve
+
+- canonical production code includes merged PR #664 at `deea0f68202c9ab6e85fa616f7444d0008ee10af`; later main descendants may be docs-only continuity commits;
+- legacy `coverage_penalty()` and static 0.92/0.94/1.06/1.04 WR coverage multipliers are **removed** from production;
+- direct player-level WR-CB assignment remains fail-closed/gated off when unavailable;
+- do not pay for WR-CB data;
+- do not restore the deleted heuristic from stale Issue wording.
+
+### Immediate next action
+
+Resolve PR #665 live:
+`research-wr-cb-free-archive-v1`
+
+Issue #535 contains contradictory concurrent-chat narratives:
+- comment `5901608387` says a free FantasyAlarm 2021-2026 WR/CB archive may unblock true assignment research;
+- comment `5901927972` says the historical machine-reproducible source gate is not yet cleared.
+
+Do not resolve this by comment chronology. Inspect PR #665 branch, source-audit output and CI directly.
+
+If source gate clears:
+- factual pairing/alignment only;
+- freeze new true-assignment science before outcome inspection;
+- editorial Safe/Moderate/Risky grades are not model features;
+- do not restore the old heuristic.
+
+If source gate fails:
+- close source lane cleanly;
+- keep production WR-CB assignment gated off;
+- spend $0.
+
+### Parallel coordination
+
+- Claude-owned branch exists: `research-rb-opponent-defender-injury-readiness-v1`; inspect before duplicating work.
+- PR #663 = append-only downstream market snapshots / T30 CLV; query live before editing because concurrent fixes may exist.
+- specialist RNG branch still requires exact frozen fingerprint validation; do not weaken gates.
+- GSIS PR #662 stays research-only; raw GSIS private.
+- RB-PD2 stays HOLD at 1/8 weeks and 46/400 rows.
+- Weeks 1-3 postmortem remains closed: 629-611, 50.7%, -40.72u.
+- no paid OddsAPI without explicit user approval.
+
+### Concurrent-chat rule
+
+When Issue comments disagree:
+1. live `main` code is canonical for production;
+2. live branch/PR code is canonical for that lane;
+3. newest frozen plan/result on that branch beats stale narrative;
+4. query Actions before editing.
+
+Do not recursively read older handoffs.
+
+---
+
+---
 ## ACTIVE CHECKPOINT — 2026-09-29 — WEEK-3 POSTMORTEM COMPLETE / PROSPECTIVE RESULTS CURRENT
 
 **Read this detailed handoff next:**
