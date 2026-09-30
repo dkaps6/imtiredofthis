@@ -13,3 +13,9 @@ Purpose: future free-source point-in-time capture so the current public HTML can
 - The existing 2021-26 retrospective pages collected after their games are not retroactively pregame snapshots. Historical `dateModified` timestamp alone is not sufficient to recover the original pairings.
 
 No scheduled scraping/recurring GitHub Actions job is installed. No prospectively locked Week-4 data exists at this checkpoint.
+
+## Usable while PR #665 remains draft
+
+The preexisting `research-wr-cb-free-archive-v1.yml` PR validation workflow now also checks `data/research/wr_cb_pregame_capture_request_v1.csv`. Its default state contains **only the CSV header**, so no prospective fetch occurs and no extra paid resource is used. Once a new, externally verified current-week public article is actually live, put **exactly one** `season,week,url` row in that request file and push the research branch before the applicable game's kickoff. The PR source-validation workflow will execute the one-article time-stamped capture and upload a separate `wr-cb-prospective-exact-capture` artifact. The unrelated historical source audit remains unchanged.
+
+This pull-request-triggered mechanism avoids assuming GitHub can dispatch a brand-new workflow before that workflow exists on `main`. It does NOT autonomously watch article release or automatically make the factual lock durable; after capture, inspect the result and commit the sanitized factual lock/hash to GitHub before kickoff. Remove the request row after the specific capture to avoid repeat fetches on unrelated PR updates. Never enter a guessed URL, merge the model, or label absent slots as zero.

@@ -7,6 +7,7 @@ on:
       - "scripts/research/audit_fantasyalarm_wr_cb_source_quality_v1.py"
       - "scripts/research/capture_fantasyalarm_wr_cb_pregame_v1.py"
       - "tests/test_capture_fantasyalarm_wr_cb_pregame_v1.py"
+      - "data/research/wr_cb_pregame_capture_request_v1.csv"
       - "tests/test_acquire_fantasyalarm_wr_cb_archive_v1.py"
       - "data/research/wr_cb_free_archive_seed_manifest_v1.csv"
       - "docs/research/WR_CB_FREE_HISTORICAL_ARCHIVE_SOURCE_READINESS_V1.md"
@@ -35,6 +36,41 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           pytest -q tests/test_acquire_fantasyalarm_wr_cb_archive_v1.py tests/test_fantasyalarm_wr_cb_source_quality_v1.py tests/test_capture_fantasyalarm_wr_cb_pregame_v1.py
+      - name: Capture one explicitly requested prospective article
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import pandas as pd
+          from scripts.research.capture_fantasyalarm_wr_cb_pregame_v1 import run_capture
+
+          req_path = Path("data/research/wr_cb_pregame_capture_request_v1.csv")
+          req = pd.read_csv(req_path)
+          required = {"season", "week", "url"}
+          if not required.issubset(req.columns):
+              raise RuntimeError("prospective request must have season,week,url")
+          if req.empty:
+              print("No explicitly requested prospective article. No fetch.")
+          elif len(req) != 1:
+              raise RuntimeError("one prospective URL per immutable capture run")
+          else:
+              record = req.iloc[0]
+              run_capture(
+                  season=int(record.season), week=int(record.week),
+                  url=str(record.url).strip(),
+                  out_dir=Path("outputs/wr_cb_prospective") / os.environ["GITHUB_RUN_ID"],
+              )
+          PY
+      - name: Upload any prospective exact capture evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-cb-prospective-exact-capture
+          path: outputs/wr_cb_prospective/
+          retention-days: 90
+          if-no-files-found: ignore
       - name: Acquire verified public archive
         env:
           PYTHONPATH: ${{ github.workspace }}
