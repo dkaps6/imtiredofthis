@@ -171,15 +171,6 @@ def redistribute_alpha_usage(alpha_share: float, wr2_share: float, slot_te_share
     return alpha_share - give, wr2_share + give * 0.60, slot_te_share + give * 0.30, rb_share + give * 0.10
 
 
-def coverage_penalty(yards_per_target: float, target_share: float, *, tough_shadow: bool = False, heavy_man: bool = False, heavy_zone: bool = False) -> tuple[float, float]:
-    ypt = float(yards_per_target); share = float(target_share)
-    if tough_shadow or heavy_man:
-        ypt *= 0.94; share *= 0.92
-    if heavy_zone:
-        ypt *= 1.04; share *= 1.06
-    return ypt, share
-
-
 def widen_volatility(sigma: float, *, pressure_mismatch: bool = False, qb_inconsistent: bool = False) -> float:
     widen = 0.10 * int(bool(pressure_mismatch)) + 0.10 * int(bool(qb_inconsistent))
     return float(sigma) * (1.0 + widen)
