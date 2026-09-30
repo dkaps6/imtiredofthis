@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -49,7 +50,7 @@ def query_exact(url:str,season:int)->tuple[list[dict],str]:
     last_status=""
     for attempt in range(2):
         try:
-            r=requests.get(CDX,params=params,headers=HEADERS,timeout=16)
+            r=requests.get(CDX,params=params,headers=HEADERS,timeout=10)
             if r.status_code!=200:
                 last_status=f"HTTP_{r.status_code}"
             else:
@@ -79,52 +80,72 @@ def query_exact(url:str,season:int)->tuple[list[dict],str]:
                                 "NO_EXACT_INDEX_MATCH_NOT_PROOF_OF_ABSENCE")
         except requests.RequestException as exc:
             last_status="NETWORK_"+type(exc).__name__
-        if attempt==0: time.sleep(1.0)
+        if attempt==0: time.sleep(0.35)
     return [],last_status or "UNKNOWN_QUERY_FAILURE"
+
+def _prepare_target(rec, schedule: pd.DataFrame) -> dict:
+    season,week,url=int(rec.season),int(rec.week),str(rec.url)
+    ks=pd.to_datetime(
+      schedule.loc[schedule["season"].eq(season)&schedule["week"].eq(week),"kickoff_utc"],
+      utc=True,errors="coerce"
+    ).dropna().sort_values()
+    if ks.empty:
+        return {"season":season,"week":week,"source_url":url,
+                "query_status":"SCHEDULE_MISSING","captures":[]}
+    return {
+      "season":season,"week":week,"source_url":url,
+      "first_game_utc":ks.iloc[0].to_pydatetime().isoformat(),
+      "last_game_utc":ks.iloc[-1].to_pydatetime().isoformat(),
+    }
+
+def _query_target(target: dict) -> dict:
+    if target.get("query_status")=="SCHEDULE_MISSING":
+        return target
+    season,week,url=target["season"],target["week"],target["source_url"]
+    first=datetime.fromisoformat(target["first_game_utc"])
+    last=datetime.fromisoformat(target["last_game_utc"])
+    captures,status=query_exact(url,season)
+    enriched=[]
+    for c in captures:
+        when=ts(c["timestamp"])
+        enriched.append({**c,"time_class":classify(when,first,last)})
+    useful=[x for x in enriched if x["time_class"]!="POST_WEEK_INDEX_ONLY"]
+    full=[x for x in useful if x["time_class"]=="FULL_WEEK_PREGAME_INDEX_CANDIDATE"]
+    partial=[x for x in useful if x["time_class"]=="PARTIAL_WEEK_PREGAME_INDEX_CANDIDATE"]
+    preferred=(sorted(full,key=lambda x:x["timestamp"])[-1] if full
+               else sorted(partial,key=lambda x:x["timestamp"])[0] if partial else None)
+    return {**target,
+      "query_status":status,
+      "capture_count":len(enriched),
+      "full_week_pregame_candidates":len(full),
+      "partial_week_pregame_candidates":len(partial),
+      "preferred_candidate":preferred,
+      "captures":enriched,
+    }
 
 def run(manifest_path:Path,out_dir:Path)->dict:
     manifest=pd.read_csv(manifest_path)
     manifest=manifest.loc[manifest["season"].isin(SEASONS)].copy()
     if manifest.empty: raise RuntimeError("no 2024-2025 manifest rows")
     schedule=_load_schedule(sorted(SEASONS))
+    targets=[_prepare_target(rec,schedule)
+             for rec in manifest.sort_values(["season","week"]).itertuples(index=False)]
+    # Bounded parallel exact-URL metadata queries. This only reduces wall-clock
+    # exposure to public-index timeouts; it does not broaden scope or body fetch.
     results=[]
-    for rec in manifest.sort_values(["season","week"]).itertuples(index=False):
-        season,week,url=int(rec.season),int(rec.week),str(rec.url)
-        ks=pd.to_datetime(
-          schedule.loc[schedule["season"].eq(season)&schedule["week"].eq(week),"kickoff_utc"],
-          utc=True,errors="coerce"
-        ).dropna().sort_values()
-        if ks.empty:
-            results.append({"season":season,"week":week,"source_url":url,
-                            "query_status":"SCHEDULE_MISSING","captures":[]})
-            continue
-        first,last=ks.iloc[0].to_pydatetime(),ks.iloc[-1].to_pydatetime()
-        captures,status=query_exact(url,season)
-        enriched=[]
-        for c in captures:
-            when=ts(c["timestamp"])
-            enriched.append({**c,"time_class":classify(when,first,last)})
-        useful=[x for x in enriched if x["time_class"]!="POST_WEEK_INDEX_ONLY"]
-        # Choose one preferred verification target per article. Latest before
-        # first kickoff is best; otherwise earliest between-games snapshot.
-        full=[x for x in useful if x["time_class"]=="FULL_WEEK_PREGAME_INDEX_CANDIDATE"]
-        partial=[x for x in useful if x["time_class"]=="PARTIAL_WEEK_PREGAME_INDEX_CANDIDATE"]
-        preferred=None
-        if full:
-            preferred=sorted(full,key=lambda x:x["timestamp"])[-1]
-        elif partial:
-            preferred=sorted(partial,key=lambda x:x["timestamp"])[0]
-        results.append({
-          "season":season,"week":week,"source_url":url,
-          "first_game_utc":first.isoformat(),"last_game_utc":last.isoformat(),
-          "query_status":status,
-          "capture_count":len(enriched),
-          "full_week_pregame_candidates":len(full),
-          "partial_week_pregame_candidates":len(partial),
-          "preferred_candidate":preferred,
-          "captures":enriched,
-        })
-        time.sleep(0.55)
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        futures={pool.submit(_query_target,t): (t["season"],t["week"]) for t in targets}
+        for future in as_completed(futures):
+            season,week=futures[future]
+            try:
+                results.append(future.result())
+            except Exception as exc:
+                original=next(t for t in targets if t["season"]==season and t["week"]==week)
+                results.append({**original,"query_status":"WORKER_"+type(exc).__name__,
+                                "captures":[],"preferred_candidate":None,
+                                "full_week_pregame_candidates":0,
+                                "partial_week_pregame_candidates":0})
+    results=sorted(results,key=lambda x:(x["season"],x["week"]))
     target_count=len(results)
     with_useful=sum(bool(x.get("preferred_candidate")) for x in results)
     full_weeks=sum(bool(x.get("full_week_pregame_candidates")) for x in results)
@@ -140,6 +161,7 @@ def run(manifest_path:Path,out_dir:Path)->dict:
     output={
       "contract":"WR_CB_WAYBACK_2024_2025_EXACT_URL_INDEX_V1",
       "metadata_only":True,
+      "parallel_workers":5,
       "article_targets":target_count,
       "articles_with_any_usable_pregame_index_candidate":with_useful,
       "articles_with_full_week_pregame_candidate":full_weeks,
@@ -160,7 +182,6 @@ def run(manifest_path:Path,out_dir:Path)->dict:
     )
     print(json.dumps({k:v for k,v in output.items() if k!="results"},
                      indent=2,sort_keys=True))
-    # Print compact candidate inventory only; no article body/content.
     for x in results:
         if x.get("preferred_candidate"):
             p=x["preferred_candidate"]
