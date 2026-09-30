@@ -12,4 +12,19 @@
 ## Implementation in this PR
 The pure `assess_cb_week_opponent` helper requires `(season,week,cb_gsis_id)` to have **exactly one** weekly defensive roster membership, matching the source row's actual WR opponent. Other team / ambiguous multi-team / missing weekly membership / unknown GSIS => fail closed. Existing prior publication/schedule/identity/composite/slot guards remain intact. The helper works both on a standalone preserved existing-artifact counterfactual and before `source_quality_row_ready` is calculated in the production-independent source audit.
 
-Draft PR #665 CI/source rerun on the integrated version must still pass; no production or football-model code is changed. Original Week-3 settlement remains CLOSED and unchanged; no OddsAPI calls.
+**Integrated PR #665 validation complete:** source gate implementation commit
+`2f09c696592aa05718ed1f858bea6a4c0eceb88d`; fresh Repo CI
+`36742368817` **SUCCESS** and 71-page source audit
+`36742368919` **SUCCESS**, artifact `11110249961`, SHA-256
+`7caba3f2a0e791bd821a178495d5c6563995fc60b3f0af584cdbb4620b142061`.
+The integrated audit reproduces **4,034** pre-CB-week provisional rows and
+quarantines exactly **35**, leaving **3,999**. Of those 35, **33** are confirmed
+on another weekly defensive roster and **2** are weekly-roster-unobserved.
+Historical current-page content remains separately unproven; after this guard
+**3,526** of the 3,999 are only timestamp-compatible with pregame and **473**
+still come from pages carrying post-kickoff modification metadata. Neither
+category is point-in-time snapshot proof.
+
+No production or football-model code is changed. The independent preserved
+Week-2 replay check remains red only because its pinned artifact is expired;
+that is unchanged and unrelated to this source gate. Original Week-3 settlement remains CLOSED and unchanged; no OddsAPI calls.
