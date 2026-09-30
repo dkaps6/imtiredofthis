@@ -134,6 +134,202 @@ def _normalize_matchup(value) -> str:
     return x
 
 
+def _norm_text(value) -> str:
+    return re.sub(r"\\s+", " ", str(value or "").replace("\\xa0", " ")).strip()
+
+
+TEAM_ABBRS = {
+    "ARI","ATL","BAL","BUF","CAR","CHI","CIN","CLE","DAL","DEN","DET","GB",
+    "HOU","IND","JAX","KC","LV","LAC","LAR","MIA","MIN","NE","NO","NYG","NYJ",
+    "PHI","PIT","SEA","SF","TB","TEN","WAS",
+}
+MATCHUP_LABELS = {
+    "safe","moderate","risky","upgrade","neutral","downgrade",
+    "great","good","average","bad","poor","n/a","#n/a",
+}
+
+
+def _alignment_token(value: str) -> str | None:
+    x = _norm_text(value).lower().replace(".", "")
+    if re.search(r"left (?:wr|wide receiver)\\s+vs\\s+right (?:cb|cornerback)", x):
+        return "LWR_VS_RCB"
+    if re.search(r"right (?:wr|wide receiver)\\s+vs\\s+left (?:cb|cornerback)", x):
+        return "RWR_VS_LCB"
+    if re.search(r"slot (?:wr|wide receiver)\\s+vs\\s+slot (?:cb|cornerback)", x):
+        return "SWR_VS_SCB"
+    return None
+
+
+def _is_team(value: str) -> bool:
+    return _norm_text(value).upper() in TEAM_ABBRS
+
+
+def _is_matchup_label(value: str) -> bool:
+    return _norm_text(value).lower() in MATCHUP_LABELS
+
+
+def _emit_text_pair(
+    rows: list[dict],
+    *,
+    season: int,
+    week: int,
+    source_url: str,
+    published: str,
+    alignment: str,
+    wr_raw: str,
+    team_raw: str,
+    cb_raw: str,
+    opp_raw: str,
+    matchup_raw: str,
+    source_layout: str,
+) -> None:
+    wr_raw = _norm_text(wr_raw)
+    cb_raw = _norm_text(cb_raw)
+    team_raw = _norm_text(team_raw).upper()
+    opp_raw = _norm_text(opp_raw).upper()
+    matchup_raw = _normalize_matchup(matchup_raw)
+
+    # Bye / no-assignment rows remain missing rather than becoming a fake pair.
+    if not wr_raw or not cb_raw:
+        return
+    if wr_raw.lower() in {"wide receiver","wr","n/a","#n/a","bye"}:
+        return
+    if cb_raw.lower() in {"cornerback","cb","n/a","#n/a","bye"}:
+        return
+    if not _is_team(team_raw) or not _is_team(opp_raw):
+        return
+
+    wr_name, wr_key = _canon_name(wr_raw)
+    cb_name, cb_key = _canon_name(cb_raw)
+    rows.append({
+        "season": int(season),
+        "week": int(week),
+        "source": "fantasyalarm",
+        "source_url": source_url,
+        "published_at_utc": published,
+        "alignment_bucket": alignment,
+        "wr_raw": wr_raw,
+        "wr": wr_name,
+        "wr_clean_key": wr_key,
+        "wr_team": canon_team(team_raw),
+        "cb_raw": cb_raw,
+        "cb": cb_name,
+        "cb_clean_key": cb_key,
+        "opponent": canon_team(opp_raw),
+        "editorial_matchup_raw": matchup_raw,
+        "editorial_matchup_model_eligible": False,
+        "identity_status": "READY" if wr_key and cb_key else "QUARANTINE_IDENTITY",
+        "source_table_index": -1,
+        "source_layout": source_layout,
+    })
+
+
+def _parse_text_cards(
+    soup: BeautifulSoup,
+    *,
+    season: int,
+    week: int,
+    source_url: str,
+    published: str,
+) -> list[dict]:
+    """Parse explicit card/grid layouts used by older FantasyAlarm articles.
+
+    2023-24 commonly render one six-field WR/team/price/CB/opp/grade row.
+    2025 commonly renders a WR three-field card followed by a CB three-field
+    card. Only explicit labeled structure is used; prose is never mined.
+    """
+    tokens = [_norm_text(x) for x in soup.stripped_strings]
+    tokens = [x for x in tokens if x]
+    rows: list[dict] = []
+    alignment = "UNKNOWN_ALIGNMENT"
+    i = 0
+    n = len(tokens)
+
+    while i < n:
+        maybe_alignment = _alignment_token(tokens[i])
+        if maybe_alignment:
+            alignment = maybe_alignment
+            i += 1
+            continue
+
+        if tokens[i].lower() != "wide receiver":
+            i += 1
+            continue
+        if i + 2 >= n or tokens[i + 1].lower() != "team":
+            i += 1
+            continue
+
+        # Look for a combined Cornerback/Opp/Matchup header before row values.
+        corner_header = next(
+            (j for j in range(i + 2, min(i + 7, n))
+             if tokens[j].lower() == "cornerback"),
+            None,
+        )
+
+        if (
+            corner_header is not None
+            and corner_header + 2 < n
+            and tokens[corner_header + 1].lower() in {"opp","opponent"}
+            and tokens[corner_header + 2].lower() == "matchup"
+        ):
+            value_start = corner_header + 3
+            window = tokens[value_start:min(value_start + 10, n)]
+            team_idx = next((k for k,v in enumerate(window[:4]) if _is_team(v)), None)
+            grade_idx = next((k for k,v in enumerate(window) if _is_matchup_label(v)), None)
+            if team_idx is not None and grade_idx is not None:
+                wr_idx = team_idx - 1
+                opp_idx = grade_idx - 1
+                cb_idx = grade_idx - 2
+                if wr_idx >= 0 and cb_idx > team_idx and opp_idx >= 0 and _is_team(window[opp_idx]):
+                    _emit_text_pair(
+                        rows,
+                        season=season, week=week, source_url=source_url,
+                        published=published, alignment=alignment,
+                        wr_raw=window[wr_idx], team_raw=window[team_idx],
+                        cb_raw=window[cb_idx], opp_raw=window[opp_idx],
+                        matchup_raw=window[grade_idx],
+                        source_layout="TEXT_COMBINED_SIX_FIELD",
+                    )
+                    i = value_start + grade_idx + 1
+                    continue
+
+        # Split-card layout: WR header/value, then explicit CB header/value.
+        wr_value_start = i + 3
+        if wr_value_start + 1 < n:
+            wr_raw = tokens[wr_value_start]
+            team_raw = tokens[wr_value_start + 1]
+            if _is_team(team_raw):
+                cb_head = next(
+                    (j for j in range(wr_value_start + 2, min(wr_value_start + 7, n))
+                     if tokens[j].lower() == "cornerback"),
+                    None,
+                )
+                if (
+                    cb_head is not None
+                    and cb_head + 5 < n
+                    and tokens[cb_head + 1].lower() in {"opp","opponent"}
+                    and tokens[cb_head + 2].lower() == "matchup"
+                ):
+                    cb_raw = tokens[cb_head + 3]
+                    opp_raw = tokens[cb_head + 4]
+                    grade = tokens[cb_head + 5]
+                    if _is_team(opp_raw) and _is_matchup_label(grade):
+                        _emit_text_pair(
+                            rows,
+                            season=season, week=week, source_url=source_url,
+                            published=published, alignment=alignment,
+                            wr_raw=wr_raw, team_raw=team_raw,
+                            cb_raw=cb_raw, opp_raw=opp_raw,
+                            matchup_raw=grade,
+                            source_layout="TEXT_SPLIT_WR_CB_CARDS",
+                        )
+                        i = cb_head + 6
+                        continue
+        i += 1
+
+    return rows
+
+
 def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[pd.DataFrame, dict]:
     soup = BeautifulSoup(html, "html.parser")
     published = _publication_time(soup)
@@ -207,6 +403,7 @@ def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[p
                 "editorial_matchup_model_eligible": False,
                 "identity_status": "READY" if identity_ok else "QUARANTINE_IDENTITY",
                 "source_table_index": int(table_index),
+                "source_layout": "HTML_TABLE",
             })
             emitted += 1
 
@@ -217,6 +414,16 @@ def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[p
             "alignment": alignment,
             "rows_emitted": emitted,
         })
+
+    text_rows = _parse_text_cards(
+        soup,
+        season=season,
+        week=week,
+        source_url=source_url,
+        published=published,
+    )
+    if text_rows:
+        rows.extend(text_rows)
 
     out = pd.DataFrame(rows)
     if not out.empty:
@@ -237,6 +444,10 @@ def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[p
         "alignment_counts": (
             out["alignment_bucket"].value_counts(dropna=False).to_dict()
             if not out.empty else {}
+        ),
+        "layout_counts": (
+            out["source_layout"].value_counts(dropna=False).to_dict()
+            if not out.empty and "source_layout" in out.columns else {}
         ),
         "identity_quarantine_rows": (
             int(out["identity_status"].ne("READY").sum()) if not out.empty else 0
