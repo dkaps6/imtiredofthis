@@ -1,5 +1,7 @@
 # WR-CB 2022 Week 5 Verified Archived Snapshot Result — 2026-09-30
 
+> **2026-09-30 lock correction:** the first manually materialized v1 CSV contained one transcription error after the successful verifier. Do not use v1. The authoritative artifact-exact lock is `data/research/wr_cb_verified_snapshot_lock_2022w05_v2.csv`, SHA-256 `4eb261dac8b45f04b93ac427fce8666fb72625fbd1cf67c2f4351bfe0e501425`. See `docs/research/WR_CB_2022W5_VERIFIED_ARCHIVE_LOCK_CORRECTION_V2.md`.
+
 **Disposition: 36 STRICT PRE-KICKOFF, EXACT-WEEK IDENTITY-VERIFIED FACTUAL PAIRINGS RECOVERED. DISCOVERY SOURCE ONLY; SOURCE/MODEL GATE REMAINS CLOSED.**
 
 ## Provenance authority
@@ -36,7 +38,7 @@ Result:
 - provider bridge used: **false**.
 
 The durable sanitized lock is:
-`data/research/wr_cb_verified_snapshot_lock_2022w05_v1.csv`
+`data/research/wr_cb_verified_snapshot_lock_2022w05_v2.csv`
 
 Lock SHA-256:
 `4eb261dac8b45f04b93ac427fce8666fb72625fbd1cf67c2f4351bfe0e501425`
