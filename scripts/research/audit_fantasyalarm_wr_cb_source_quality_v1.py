@@ -21,6 +21,28 @@ DEF_POSITIONS = {"CB", "DB", "S", "FS", "SS"}
 WR_POSITIONS = {"WR", "LWR", "RWR", "SWR"}
 
 
+def _provider_bridge(x: pd.DataFrame, source_col: str, gsis_col: str) -> tuple[dict[str, str], set[str]]:
+    """Use only pre-kickoff, schedule-consistent anchor identities.
+
+    Quarantined page rows must not teach provider-ID mappings used to declare
+    other pre-kickoff source rows ready. Identity metadata, not football input.
+    """
+    anchor = x.loc[
+        x["schedule_match"]
+        & x["publication_timing_status"].eq("PRE_KICKOFF")
+        & x[source_col].astype(str).str.len().gt(0)
+        & x[gsis_col].astype(str).str.len().gt(0),
+        [source_col, gsis_col],
+    ].drop_duplicates()
+    grouped = anchor.groupby(source_col)[gsis_col].agg(
+        lambda z: tuple(sorted(set(str(v) for v in z if str(v))))
+    )
+    collisions = {str(k) for k, ids in grouped.items() if len(ids) != 1}
+    mapping = {str(k): ids[0] for k, ids in grouped.items() if len(ids) == 1}
+    return mapping, collisions
+
+
+
 def _to_pd(obj) -> pd.DataFrame:
     if isinstance(obj, pd.DataFrame):
         return obj.copy()
@@ -224,22 +246,8 @@ def audit(assignments: pd.DataFrame, page_audit: pd.DataFrame, out_dir: Path) ->
             x[col] = ""
         x[col] = x[col].astype("string").fillna("").str.strip()
 
-    def _provider_bridge(source_col: str, gsis_col: str) -> tuple[dict[str, str], set[str]]:
-        anchor = x.loc[
-            x["schedule_match"]
-            & x[source_col].astype(str).str.len().gt(0)
-            & x[gsis_col].astype(str).str.len().gt(0),
-            [source_col, gsis_col],
-        ].drop_duplicates()
-        grouped = anchor.groupby(source_col)[gsis_col].agg(
-            lambda z: tuple(sorted(set(str(v) for v in z if str(v))))
-        )
-        collisions = {str(k) for k, ids in grouped.items() if len(ids) != 1}
-        mapping = {str(k): ids[0] for k, ids in grouped.items() if len(ids) == 1}
-        return mapping, collisions
-
-    wr_provider_map, wr_provider_collisions = _provider_bridge("wr_source_player_id", "wr_gsis_id")
-    cb_provider_map, cb_provider_collisions = _provider_bridge("cb_source_player_id", "cb_gsis_id")
+    wr_provider_map, wr_provider_collisions = _provider_bridge(x, "wr_source_player_id", "wr_gsis_id")
+    cb_provider_map, cb_provider_collisions = _provider_bridge(x, "cb_source_player_id", "cb_gsis_id")
 
     for source_col, gsis_col, method_col, mapping, collisions in [
         ("wr_source_player_id", "wr_gsis_id", "wr_identity_method", wr_provider_map, wr_provider_collisions),
