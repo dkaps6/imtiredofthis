@@ -195,6 +195,14 @@ Purpose:
 
 This is **not yet production-grade or model-qualified**.
 
+Latest source reconciliation (Issue #535 comment `5902638669`):
+- free historical WR↔CB assignment pages are confirmed across 2021-2026;
+- disposition: `FREE_HISTORICAL_WR_CB_ASSIGNMENT_ARCHIVE_CONFIRMED_SOURCE_QUALITY_AUDIT_PENDING`;
+- older 2021/2022 vintages describe all outside matchups but only selected/favorite slot matchups;
+- missing historical slot rows are **NOT** zero / no-matchup and must remain missing;
+- model science may use only explicitly observed assignment rows;
+- editorial Safe/Moderate/Risky labels remain **NOT_MODEL_ELIGIBLE**.
+
 Exact next source question:
 - does the archive have sufficient completeness, temporal integrity, alignment semantics, identity stability, and week coverage to support a strict-prior historical test?
 
