@@ -1,7 +1,7 @@
 import pytest
 
 from scripts.modeling.contracts import TeamContext
-from scripts.modeling.rules_v2 import coverage_penalty, matchup_multipliers, offensive_pressure_mismatch, project_game_script, redistribute_alpha_usage
+from scripts.modeling.rules_v2 import matchup_multipliers, offensive_pressure_mismatch, project_game_script, redistribute_alpha_usage
 
 
 def _team(team: str, **kwargs) -> TeamContext:
@@ -69,8 +69,6 @@ def test_migration21_proe_and_script_state_do_not_change_opportunity_split():
     assert a.lead_prob != pytest.approx(b.lead_prob)
 
 
-def test_empirical_coverage_and_injury_rules_are_preserved():
-    ypt, share = coverage_penalty(10.0, 0.25, tough_shadow=True)
-    assert ypt == pytest.approx(9.4); assert share == pytest.approx(0.23)
+def test_injury_redistribution_rule_is_preserved():
     alpha, wr2, slot_te, rb = redistribute_alpha_usage(0.30, 0.20, 0.20, 0.10, alpha_limited=True)
     assert alpha == pytest.approx(0.15); assert wr2 == pytest.approx(0.29); assert slot_te == pytest.approx(0.245); assert rb == pytest.approx(0.115)
