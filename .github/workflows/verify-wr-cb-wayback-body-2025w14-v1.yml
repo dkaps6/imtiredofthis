@@ -1,0 +1,47 @@
+name: Verify protected 2025W14 WR-CB Wayback body V1
+on:
+  push:
+    branches: ["research-wr-cb-historical-snapshot-discovery-v1"]
+    paths:
+      - "scripts/research/verify_wr_cb_wayback_body_2025w14_v1.py"
+      - "tests/test_verify_wr_cb_wayback_body_2025w14_v1.py"
+      - ".github/workflows/verify-wr-cb-wayback-body-2025w14-v1.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-protected-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install -r requirements.txt pytest
+      - env: {PYTHONPATH: .}
+        run: pytest -q tests/test_verify_wr_cb_wayback_body_2025w14_v1.py
+      - name: Verify exact archived source without confirmation outcomes
+        env: {PYTHONPATH: .}
+        continue-on-error: true
+        run: |
+          python scripts/research/verify_wr_cb_wayback_body_2025w14_v1.py \
+            --out-dir outputs/wr_cb_2025w14_protected_source_v1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wr-cb-2025w14-protected-source-v1
+          path: outputs/wr_cb_2025w14_protected_source_v1/protected_2025w14_snapshot_verification.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Require cryptographic + strict-source success
+        env: {PYTHONPATH: .}
+        run: |
+          python - <<'PY'
+          import json
+          p="outputs/wr_cb_2025w14_protected_source_v1/protected_2025w14_snapshot_verification.json"
+          x=json.load(open(p))
+          assert x["confirmation_outcomes_accessed"] is False
+          assert x["target_game_outcomes"] is False
+          assert x["status"]=="ARCHIVE_BODY_HASH_MATCH_WITH_STRICT_PROTECTED_SOURCE_ROWS", x["status"]
+          assert x["strict_exact_week_identity_rows"]>0
+          PY
