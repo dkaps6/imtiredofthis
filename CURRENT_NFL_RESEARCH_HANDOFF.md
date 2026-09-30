@@ -20,7 +20,7 @@ This supersedes all older checkpoints for immediate execution.
 - PR #664 is MERGED: unsupported grandfathered `coverage_penalty()` heuristic retired from production;
 - do **not** restore static 0.92/0.94/1.06/1.04 coverage multipliers;
 - direct player-level WR-CB assignment remains fail-closed/gated off unless a validated source exists;
-- free FantasyAlarm historical WR/CB archive has been found and is being audited in draft PR #665; research-only until completeness/timing/identity/semantics clear;
+- free FantasyAlarm historical WR/CB archive is confirmed across 2021-2026 and is being audited in draft PR #665; older 2021/2022 vintages have incomplete slot coverage, so missing slot rows are NOT zero/no-matchup; research-only until completeness/timing/identity/semantics clear;
 - PR #663 is the append-only market-snapshot/CLV architecture; still draft/open and must be made green before merge;
 - only same-book <=30-minutes-before-kickoff snapshots may be labeled CLV;
 - no paid OddsAPI pull solely for CLV or WR-CB research;
@@ -47,7 +47,7 @@ Read only:
 1. `AGENTS.md`
 2. this newest top checkpoint
 3. `docs/handoffs/NFL_HANDOFF_2026-09-29_RESEARCH_LEAD_WR_CB_CLV_CURRENT.md`
-4. Issue #535 from `5899500522` onward, especially `5899645764`, `5899710345`, `5899966307`, `5900122307`, `5901422664`, `5901433362`, `5901608387`, plus anything newer
+4. Issue #535 from `5899500522` onward, especially `5899645764`, `5899710345`, `5899966307`, `5900122307`, `5901422664`, `5901433362`, `5901608387`, `5902638669`, plus anything newer
 5. live main / PRs / branches / Actions
 
 Then work. Do not recursively load older handoffs.
