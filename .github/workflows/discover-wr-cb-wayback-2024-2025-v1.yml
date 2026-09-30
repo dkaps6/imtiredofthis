@@ -1,0 +1,41 @@
+name: Research WR-CB Wayback 2024-2025 Exact URL Index V1
+on:
+  push:
+    branches: ["research-wr-cb-historical-snapshot-discovery-v1"]
+    paths:
+      - "scripts/research/discover_wr_cb_wayback_2024_2025_v1.py"
+      - "tests/test_discover_wr_cb_wayback_2024_2025_v1.py"
+      - ".github/workflows/discover-wr-cb-wayback-2024-2025-v1.yml"
+      - "data/research/wr_cb_free_archive_seed_manifest_v1.csv"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-url-index:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt pytest
+      - name: Pure index regression tests
+        env:
+          PYTHONPATH: .
+        run: pytest -q tests/test_discover_wr_cb_wayback_2024_2025_v1.py
+      - name: Query exact 2024-2025 article URLs at Wayback CDX
+        env:
+          PYTHONPATH: .
+        run: |
+          python scripts/research/discover_wr_cb_wayback_2024_2025_v1.py \
+            --manifest data/research/wr_cb_free_archive_seed_manifest_v1.csv \
+            --out-dir outputs/wr_cb_wayback_2024_2025_v1
+      - name: Preserve metadata only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-cb-wayback-2024-2025-index-v1
+          path: outputs/wr_cb_wayback_2024_2025_v1/wayback_2024_2025_index.json
+          if-no-files-found: warn
+          retention-days: 21
