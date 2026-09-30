@@ -604,16 +604,17 @@ def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[p
         matchup_col = _find_col(cols, ["matchup"])
         alignment = _alignment_for_table(table)
 
-        if not wr_col or not cb_col:
+        if not wr_col or not cb_col or not team_col or not opp_col:
             table_audit.append({
                 "table_index": table_index,
-                "status": "SKIP_NO_EXPLICIT_WR_CB_COLUMNS",
+                "status": "SKIP_NO_EXPLICIT_WR_CB_TEAM_OPP_COLUMNS",
                 "columns": cols,
                 "alignment": alignment,
             })
             continue
 
         emitted = 0
+        invalid_team_rows = 0
         for _, r in df.iterrows():
             wr_raw = str(r.get(wr_col, "") or "").strip()
             cb_raw = str(r.get(cb_col, "") or "").strip()
@@ -624,10 +625,23 @@ def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[p
             if cb_raw.lower() in {"cornerback", "cb", "nan", "n/a", "bye"}:
                 continue
 
+            team_raw = _norm_text(r.get(team_col, "")).upper()
+            opp_raw = _norm_text(r.get(opp_col, "")).upper()
+            # A factual matchup row must contain actual NFL team abbreviations
+            # in BOTH team fields. Newer FantasyAlarm DOM tables can visually
+            # resemble the old schema while shifting CB names into the Opp cell;
+            # fail closed instead of manufacturing a player-as-team matchup.
+            if not _is_team(team_raw) or not _is_team(opp_raw):
+                invalid_team_rows += 1
+                continue
+
             wr_name, wr_key = _canon_name(wr_raw)
             cb_name, cb_key = _canon_name(cb_raw)
-            team = canon_team(str(r.get(team_col, "") or "")) if team_col else ""
-            opponent = canon_team(str(r.get(opp_col, "") or "")) if opp_col else ""
+            team = _source_team(team_raw)
+            opponent = _source_team(opp_raw)
+            if not team or not opponent or team == opponent:
+                invalid_team_rows += 1
+                continue
             identity_ok = bool(wr_key and cb_key)
 
             rows.append({
@@ -659,6 +673,7 @@ def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[p
             "columns": cols,
             "alignment": alignment,
             "rows_emitted": emitted,
+            "invalid_team_rows_skipped": invalid_team_rows,
         })
 
     text_rows = _parse_text_cards(
