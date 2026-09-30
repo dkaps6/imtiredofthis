@@ -214,6 +214,48 @@ def audit(assignments: pd.DataFrame, page_audit: pd.DataFrame, out_dir: Path) ->
     x["wr_identity_method"] = wr_methods
     x["cb_gsis_id"] = cb_ids
     x["cb_identity_method"] = cb_methods
+
+    # Provider-stable player IDs are identity metadata, never football features.
+    # Learn a bridge ONLY from schedule-consistent rows where our roster join
+    # already identified exactly one GSIS person. Then propagate that identity
+    # only when one FantasyAlarm ID maps to exactly one GSIS ID.
+    for col in ["wr_source_player_id", "cb_source_player_id"]:
+        if col not in x.columns:
+            x[col] = ""
+        x[col] = x[col].astype("string").fillna("").str.strip()
+
+    def _provider_bridge(source_col: str, gsis_col: str) -> tuple[dict[str, str], set[str]]:
+        anchor = x.loc[
+            x["schedule_match"]
+            & x[source_col].astype(str).str.len().gt(0)
+            & x[gsis_col].astype(str).str.len().gt(0),
+            [source_col, gsis_col],
+        ].drop_duplicates()
+        grouped = anchor.groupby(source_col)[gsis_col].agg(
+            lambda z: tuple(sorted(set(str(v) for v in z if str(v))))
+        )
+        collisions = {str(k) for k, ids in grouped.items() if len(ids) != 1}
+        mapping = {str(k): ids[0] for k, ids in grouped.items() if len(ids) == 1}
+        return mapping, collisions
+
+    wr_provider_map, wr_provider_collisions = _provider_bridge("wr_source_player_id", "wr_gsis_id")
+    cb_provider_map, cb_provider_collisions = _provider_bridge("cb_source_player_id", "cb_gsis_id")
+
+    for source_col, gsis_col, method_col, mapping, collisions in [
+        ("wr_source_player_id", "wr_gsis_id", "wr_identity_method", wr_provider_map, wr_provider_collisions),
+        ("cb_source_player_id", "cb_gsis_id", "cb_identity_method", cb_provider_map, cb_provider_collisions),
+    ]:
+        unresolved = x[gsis_col].astype(str).str.len().eq(0)
+        bridged = x[source_col].map(mapping).astype("string").fillna("")
+        eligible = (
+            unresolved
+            & x[source_col].astype(str).str.len().gt(0)
+            & ~x[source_col].isin(collisions)
+            & bridged.str.len().gt(0)
+        )
+        x.loc[eligible, gsis_col] = bridged.loc[eligible]
+        x.loc[eligible, method_col] = "FANTASYALARM_STABLE_ID_BRIDGE"
+
     x["stable_identity_ready"] = x["wr_gsis_id"].astype(str).str.len().gt(0) & x["cb_gsis_id"].astype(str).str.len().gt(0)
     # This is a SOURCE-quality eligibility flag only. It is not a model input
     # and does not authorize a matchup candidate. Rows must be explicitly
@@ -306,6 +348,10 @@ def audit(assignments: pd.DataFrame, page_audit: pd.DataFrame, out_dir: Path) ->
         "source_quality_ready_rate": float(x["source_quality_row_ready"].mean()),
         "wr_name_to_stable_id_collisions": int(len(wr_bad)),
         "cb_name_to_stable_id_collisions": int(len(cb_bad)),
+        "wr_provider_id_to_gsis_collisions": int(len(wr_provider_collisions)),
+        "cb_provider_id_to_gsis_collisions": int(len(cb_provider_collisions)),
+        "wr_provider_id_bridge_rows": int(x["wr_identity_method"].eq("FANTASYALARM_STABLE_ID_BRIDGE").sum()),
+        "cb_provider_id_bridge_rows": int(x["cb_identity_method"].eq("FANTASYALARM_STABLE_ID_BRIDGE").sum()),
         "unknown_alignment_rows": int(x["alignment_bucket"].eq("UNKNOWN_ALIGNMENT").sum()),
         "editorial_matchup_used_as_model_feature": False,
         "sportsbook_inputs_used": False,
