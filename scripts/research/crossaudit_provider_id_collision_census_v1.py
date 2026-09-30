@@ -30,7 +30,12 @@ from pathlib import Path
 import pandas as pd
 
 BRIDGE = "FANTASYALARM_STABLE_ID_BRIDGE"
-SUFFIX = re.compile(r"\b(jr|sr|ii|iii|iv|v)\.?$")
+# clean_key arrives with separators already stripped ("michaelpittmanjr"), so a
+# \b-anchored suffix pattern never fires. Peel known suffixes off the raw tail.
+SUFFIXES = ("iii", "iv", "ii", "jr", "sr", "v")
+TEAM_ALIAS = {"LA": "LAR", "STL": "LAR", "SD": "LAC", "OAK": "LV",
+              "WSH": "WAS", "JAC": "JAX", "ARZ": "ARI", "CLV": "CLE",
+              "BLT": "BAL", "HST": "HOU"}
 SIDES = [
     ("wr", "wr_source_player_id", "wr_clean_key", "wr_gsis_id", "wr_identity_method", "wr_team"),
     ("cb", "cb_source_player_id", "cb_clean_key", "cb_gsis_id", "cb_identity_method", "opponent"),
@@ -39,19 +44,25 @@ SIDES = [
 
 def _norm(v: str) -> str:
     s = unicodedata.normalize("NFKD", str(v or "")).encode("ascii", "ignore").decode()
-    s = s.lower().replace(".", "").replace("'", "").replace("-", " ")
-    s = re.sub(r"[^a-z ]", "", s)
-    return re.sub(r"\s+", " ", SUFFIX.sub("", s.strip())).strip()
+    s = s.lower().replace(".", "").replace("'", "").replace("-", "")
+    s = re.sub(r"[^a-z]", "", s)
+    for suf in SUFFIXES:
+        if s.endswith(suf) and len(s) - len(suf) >= 6:
+            return s[: -len(suf)]
+    return s
+
+
+def _team(v: str) -> str:
+    t = str(v or "").strip().upper()
+    return TEAM_ALIAS.get(t, t)
 
 
 def _classify(keys: list[str]) -> str:
-    norms = {_norm(k) for k in keys if _norm(k)}
+    norms = sorted({_norm(k) for k in keys if _norm(k)})
     if len(norms) <= 1:
         return "ALIAS"
-    parts = [n.split() for n in norms if n.split()]
-    surnames = {p[-1] for p in parts}
-    initials = {p[0][:1] for p in parts}
-    if len(surnames) == 1 and len(initials) == 1:
+    if all(a == norms[0] or a.startswith(norms[0]) or norms[0].startswith(a)
+           for a in norms):
         return "ALIAS_LIKELY"
     return "MULTI_PERSON"
 
@@ -107,7 +118,7 @@ def main() -> int:
             if g:
                 by_gsis[sid].add(g)
             if t:
-                by_team_week[sid].add((se, wk, t))
+                by_team_week[sid].add((se, wk, _team(t)))
 
         buckets: dict[str, list] = defaultdict(list)
         for sid, keys in by_key.items():
@@ -138,14 +149,14 @@ def main() -> int:
             "classified_ALIAS_LIKELY": len(buckets.get("ALIAS_LIKELY", [])),
             "classified_MULTI_PERSON": len(multi),
             "multi_person_examples": [
-                {"provider_id": sid, "name_keys": sorted(by_key[sid])} for sid in multi[:12]
+                {"provider_id": sid, "name_keys": sorted(by_key[sid])} for sid in multi
             ],
             "gsis_collisions_full_population": len(gsis_collisions),
             "gsis_collisions_invisible_to_anchored_audit": len(unanchored_only_gsis),
             "same_season_week_multi_team_ids": len(same_week_multi_team),
             "same_season_week_multi_team_examples": [
                 {"provider_id": sid, "name_keys": sorted(by_key.get(sid, []))}
-                for sid in sorted(same_week_multi_team)[:12]
+                for sid in sorted(same_week_multi_team)[:8]
             ],
         }
 
