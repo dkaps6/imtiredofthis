@@ -1,0 +1,33 @@
+name: Probe exact 2022W5 Wayback replay modes V1
+on:
+  push:
+    branches: ["research-wr-cb-historical-snapshot-discovery-v1"]
+    paths:
+      - "scripts/research/probe_wr_cb_wayback_replay_2022w5_v1.py"
+      - "tests/test_probe_wr_cb_wayback_replay_2022w5_v1.py"
+      - ".github/workflows/probe-wr-cb-wayback-replay-2022w5-v1.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  replay-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install -r requirements.txt pytest
+      - env: {PYTHONPATH: .}
+        run: pytest -q tests/test_probe_wr_cb_wayback_replay_2022w5_v1.py
+      - env: {PYTHONPATH: .}
+        run: |
+          python scripts/research/probe_wr_cb_wayback_replay_2022w5_v1.py \
+            --out-dir outputs/wr_cb_2022w5_replay_probe_v1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wr-cb-2022w5-replay-probe-v1
+          path: outputs/wr_cb_2022w5_replay_probe_v1/wayback_2022w5_replay_mode_probe.json
+          if-no-files-found: error
+          retention-days: 14
