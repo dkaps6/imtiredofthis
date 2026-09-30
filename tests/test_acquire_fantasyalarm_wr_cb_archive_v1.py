@@ -189,7 +189,7 @@ def test_parse_2021_embedded_team_table():
     assert len(rows) == 2
     assert rows["alignment_bucket"].eq("LWR_VS_RCB").all()
     assert set(rows["opponent"]) == {"SF", "WAS"}
-    assert rows["source_layout"].eq("HTML_TABLE_2021_EMBEDDED_TEAM").all()
+    assert rows["source_layout"].eq("HTML_TABLE_2021_RAW_TD").all()
 
 
 def test_parse_2026_inline_pair_layout():
@@ -215,3 +215,33 @@ def test_parse_2026_inline_pair_layout():
     assert set(rows["alignment_bucket"]) == {"LWR_VS_RCB", "RWR_VS_LCB"}
     assert set(rows["wr_raw"]) == {"Marvin Harrison", "Drake London", "Michael Wilson"}
     assert rows["source_layout"].eq("TEXT_2026_INLINE_PAIR").all()
+
+
+
+def test_parse_actual_2026_split_node_server_markup():
+    html = """
+    <html><body>
+      <h3>Left Wide Receiver (LWR) vs. Right Cornerback (RCB)</h3>
+      <p>Marvin Harrison</p>
+      <p>(ARI)</p>
+      <p>vs.</p>
+      <p>Deommodore Lenoir</p>
+      <p>(SF) • Matchup:</p>
+      <p>Risky</p>
+      <p>Drake London</p>
+      <p>(ATL)</p>
+      <p>vs.</p>
+      <p>Brandon Cisse</p>
+      <p>(GB) • Matchup:</p>
+      <p>Moderate</p>
+    </body></html>
+    """
+    rows, _ = parse_page(
+        html, season=2026, week=3,
+        source_url="https://www.fantasyalarm.com/example-2026-split",
+    )
+    assert len(rows) == 2
+    assert set(rows["wr_raw"]) == {"Marvin Harrison", "Drake London"}
+    assert set(rows["cb_raw"]) == {"Deommodore Lenoir", "Brandon Cisse"}
+    assert rows["alignment_bucket"].eq("LWR_VS_RCB").all()
+    assert rows["source_layout"].eq("TEXT_2026_SPLIT_NODES").all()
