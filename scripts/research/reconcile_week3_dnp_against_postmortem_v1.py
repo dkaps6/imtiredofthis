@@ -92,7 +92,21 @@ def main() -> int:
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps(report, indent=2, sort_keys=True)[:6000])
+
+    print("<<<RECON")
+    print(f"{'player':<20}{'mkt':<16}{'side':<6}{'line':>6}{'actual':>8}"
+          f"{'result':>8}{'units':>8}  {'settlement'}")
+    for m in sorted(report["matches"], key=lambda r: (str(r.get("player")), str(r.get("market")))):
+        print(f"{str(m.get('player'))[:19]:<20}{str(m.get('market'))[:15]:<16}"
+              f"{str(m.get('side'))[:5]:<6}{str(m.get('vegas_line')):>6}"
+              f"{str(m.get('actual')):>8}{str(m.get('bet_result')):>8}"
+              f"{str(m.get('unit_result')):>8}  {m.get('settlement_status')}")
+    print(f"found:   {report['dnp_players_found_in_postmortem']}")
+    print(f"absent:  {report['dnp_players_absent_from_postmortem']}")
+    rs = [str(m.get("bet_result")) for m in report["matches"]]
+    from collections import Counter
+    print(f"buckets: {dict(Counter(rs))}")
+    print("RECON>>>")
     return 0
 
 

@@ -162,7 +162,21 @@ def main() -> int:
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps(report, indent=2, sort_keys=True))
+    print("<<<CENSUS")
+    for side, d in report["sides"].items():
+        print(f"[{side}] ids={d['distinct_provider_ids']} anchored={d['anchored_provider_ids']} "
+              f"never_anchored={d['provider_ids_never_anchored']} "
+              f"multi_name={d['ids_with_multiple_name_keys']} "
+              f"ALIAS={d['classified_ALIAS']} ALIAS_LIKELY={d['classified_ALIAS_LIKELY']} "
+              f"MULTI_PERSON={d['classified_MULTI_PERSON']} "
+              f"gsis_coll_full={d['gsis_collisions_full_population']} "
+              f"gsis_coll_hidden={d['gsis_collisions_invisible_to_anchored_audit']} "
+              f"same_week_multi_team={d['same_season_week_multi_team_ids']}")
+        for e in d["multi_person_examples"]:
+            print(f"    MULTI_PERSON {e['provider_id']}: {', '.join(e['name_keys'])}")
+        for e in d["same_season_week_multi_team_examples"]:
+            print(f"    MULTI_TEAM   {e['provider_id']}: {', '.join(e['name_keys'])}")
+    print("CENSUS>>>")
     return 0
 
 
