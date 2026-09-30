@@ -93,6 +93,65 @@ def script_structure_inventory(soup: BeautifulSoup) -> list[dict]:
         items.append(record)
     return items
 
+
+def _collect_article_bodies(value, out: list[str]) -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if str(key).lower() == "articlebody" and isinstance(child, str) and child.strip():
+                out.append(child)
+            else:
+                _collect_article_bodies(child, out)
+    elif isinstance(value, list):
+        for child in value:
+            _collect_article_bodies(child, out)
+
+def archived_article_body_inventory(soup: BeautifulSoup) -> tuple[list[str], list[dict]]:
+    """Return in-memory JSON-LD article bodies plus non-text structural evidence.
+
+    Body strings may be processed only in-memory. The caller must never persist
+    or print them; only hashes, structure and sanitized factual pairing rows.
+    """
+    bodies: list[str] = []
+    for node in soup.find_all("script", attrs={"type":"application/ld+json"}):
+        text = node.string if node.string is not None else node.get_text("", strip=False)
+        try:
+            payload = json.loads(str(text or ""))
+        except (ValueError, TypeError):
+            continue
+        _collect_article_bodies(payload, bodies)
+    inventory = []
+    for idx, body in enumerate(bodies):
+        bs = BeautifulSoup(body, "html.parser")
+        inventory.append({
+            "index": idx,
+            "characters": len(body),
+            "sha256": hashlib.sha256(body.encode("utf-8")).hexdigest(),
+            "html_tag_count": len(bs.find_all()),
+            "html_tables": len(bs.find_all("table")),
+            "html_rows": len(bs.find_all("tr")),
+            "html_divs": len(bs.find_all("div")),
+            "html_paragraphs": len(bs.find_all("p")),
+            "newline_count": body.count("\n"),
+            "contains_wr_cb_terms": (
+                "wide receiver" in body.lower()
+                and "cornerback" in body.lower()
+                and "matchup" in body.lower()
+            ),
+            "contains_player_links": "/nfl/players/" in body.lower(),
+        })
+    return bodies, inventory
+
+def _synthetic_page_from_archived_body(body: str, published_at_utc: str) -> str:
+    """Supply source publication metadata without changing archived body markup."""
+    pub = str(published_at_utc or "")
+    return (
+        '<html><head><meta property="article:published_time" content="'
+        + pub.replace('"', "&quot;")
+        + '"></head><body>'
+        + body
+        + "</body></html>"
+    )
+
 def execute(out_dir: Path) -> dict:
     result = {
         "contract":"WR_CB_2024W1_EXACT_ARCHIVED_BODY_CANDIDATE_V1",
@@ -150,6 +209,12 @@ def execute(out_dir: Path) -> dict:
                     "json_like_script_count": sum("json" in str(x.get("type",""))
                                                   for x in soup.find_all("script")),
                 }
+                bodies, body_inventory = archived_article_body_inventory(soup)
+                result["archived_article_body_structure"] = {
+                    "candidate_count": len(bodies),
+                    "candidates": body_inventory,
+                    "raw_article_body_saved": False,
+                }
                 scripts = script_structure_inventory(soup)
                 result["archived_script_structure"] = {
                     "script_count": len(scripts),
@@ -169,10 +234,35 @@ def execute(out_dir: Path) -> dict:
                     "scripts": scripts,
                     "raw_script_text_saved": False,
                 }
+                full_html = raw.decode(response.encoding or "utf-8", errors="replace")
                 rows, page = parse_page(
-                    raw.decode(response.encoding or "utf-8", errors="replace"),
-                    season=2024, week=1, source_url=ARTICLE,
+                    full_html, season=2024, week=1, source_url=ARTICLE,
                 )
+                result["parsed_outer_html_pairing_rows"] = len(rows)
+                source_publish = page["published_at_utc"]
+                embedded_frames = []
+                for body in bodies:
+                    candidate_rows, _ = parse_page(
+                        _synthetic_page_from_archived_body(body, source_publish),
+                        season=2024, week=1, source_url=ARTICLE,
+                    )
+                    if not candidate_rows.empty:
+                        embedded_frames.append(candidate_rows)
+                embedded = (
+                    pd.concat(embedded_frames, ignore_index=True).drop_duplicates(
+                        ["season","week","alignment_bucket","wr_clean_key","cb_clean_key"],
+                        keep="last",
+                    )
+                    if embedded_frames else pd.DataFrame()
+                )
+                result["parsed_embedded_articlebody_pairing_rows"] = len(embedded)
+                if rows.empty and not embedded.empty:
+                    rows = embedded
+                    result["pairing_parse_source"] = "ARCHIVED_JSON_LD_ARTICLEBODY"
+                elif not rows.empty:
+                    result["pairing_parse_source"] = "ARCHIVED_OUTER_HTML"
+                else:
+                    result["pairing_parse_source"] = "NONE"
                 result["parsed_factual_pairing_rows"] = len(rows)
                 if rows.empty:
                     result["status"] = "MATCHED_BODY_NO_EXPLICIT_PARSEABLE_PAIRINGS"
@@ -185,7 +275,7 @@ def execute(out_dir: Path) -> dict:
                     good = merged.loc[
                         merged.apply(
                             lambda r: pregame_row_timestamp_eligible(
-                                r["published_at_utc"],r["kickoff_utc"]), axis=1)
+                                source_publish,r["kickoff_utc"]), axis=1)
                         & merged["opponent"].astype(str).eq(
                             merged["scheduled_opponent"].astype(str))
                         & merged["alignment_bucket"].ne("UNKNOWN_ALIGNMENT")
@@ -196,11 +286,14 @@ def execute(out_dir: Path) -> dict:
                         "season","week","wr_raw","wr_team","cb_raw",
                         "opponent","alignment_bucket",
                     ]].drop_duplicates().to_dict("records")
-                    result["verified_pregame_factual_rows"] = len(good)
-                    result["source_publication_utc"] = page["published_at_utc"]
+                    result["verified_pregame_factual_rows"] = len(
+                        result["factual_pregame_rows"]
+                    )
+                    result["source_publication_utc"] = source_publish
                     result["status"] = (
                         "ARCHIVE_BODY_HASH_MATCH_WITH_STRICT_PREGAME_ROW_CANDIDATES"
-                        if len(good) else "ARCHIVE_BODY_HASH_MATCH_NO_ELIGIBLE_PREGAME_ROWS"
+                        if result["verified_pregame_factual_rows"]
+                        else "ARCHIVE_BODY_HASH_MATCH_NO_ELIGIBLE_PREGAME_ROWS"
                     )
     except requests.RequestException as e:
         result["status"] = "BODY_LOOKUP_NETWORK_" + type(e).__name__
