@@ -161,7 +161,7 @@ def _alignment_token(value: str) -> str | None:
 
 
 def _is_team(value: str) -> bool:
-    return _norm_text(value).upper() in TEAM_ABBRS
+    return _norm_text(value).upper() in TEAM_ABBRS.union({"WFT","WSH"})
 
 
 def _is_matchup_label(value: str) -> bool:
@@ -365,6 +365,108 @@ def _parse_text_cards(
     return rows
 
 
+def _source_team(value: str) -> str:
+    x = _norm_text(value).upper()
+    if x in {"WFT", "WSH"}:
+        return "WAS"
+    return canon_team(x)
+
+
+def _split_embedded_team(value: str) -> tuple[str, str] | None:
+    x = _norm_text(value)
+    m = re.match(r"^(.+?)\\s+([A-Z]{2,3})$", x)
+    if not m:
+        return None
+    name, team = m.group(1).strip(), m.group(2).strip().upper()
+    if team not in TEAM_ABBRS and team not in {"WFT","WSH"}:
+        return None
+    return name, _source_team(team)
+
+
+def _parse_inline_2026_pairs(
+    soup: BeautifulSoup,
+    *,
+    season: int,
+    week: int,
+    source_url: str,
+    published: str,
+) -> list[dict]:
+    """Parse 2026 inline cards: WR (TEAM) / vs. CB (TEAM) • Matchup: grade."""
+    lines = [_norm_text(x) for x in soup.get_text("\n", strip=True).splitlines()]
+    lines = [x for x in lines if x]
+    rows: list[dict] = []
+    alignment = "UNKNOWN_ALIGNMENT"
+    pending: tuple[str,str] | None = None
+
+    wr_re = re.compile(r"^(.+?)\\s*\\(([A-Z]{2,3})\\)\\s*$")
+    pair_re = re.compile(
+        r"^vs\\.?\\s*(.+?)\\s*\\(([A-Z]{2,3})\\)"
+        r".*?Matchup\\s*:\\s*(Safe|Moderate|Risky|Upgrade|Neutral|Downgrade)\\b",
+        re.I,
+    )
+
+    for idx, line in enumerate(lines):
+        # New 2026 headings include parenthetical abbreviations.
+        low = line.lower()
+        if (
+            ("left wide receiver" in low or "left wr" in low)
+            and ("right cornerback" in low or "right cb" in low)
+            and "vs" in low
+        ):
+            alignment = "LWR_VS_RCB"
+            pending = None
+            continue
+        if (
+            ("right wide receiver" in low or "right wr" in low)
+            and ("left cornerback" in low or "left cb" in low)
+            and "vs" in low
+        ):
+            alignment = "RWR_VS_LCB"
+            pending = None
+            continue
+        if (
+            ("slot wide receiver" in low or "slot wr" in low)
+            and ("slot cornerback" in low or "slot cb" in low)
+            and "vs" in low
+        ):
+            alignment = "SWR_VS_SCB"
+            pending = None
+            continue
+
+        m = wr_re.match(line)
+        if m and _is_team(m.group(2)):
+            # Only arm a WR candidate when the next bounded text contains an
+            # explicit vs/Matchup card; this prevents unrelated NAME (TEAM)
+            # article prose from being treated as a matchup.
+            pending = (m.group(1).strip(), m.group(2).strip().upper())
+            continue
+
+        if pending and line.lower().startswith("vs"):
+            chunk = line
+            # Some DOM versions split the CB name/team/Matchup across adjacent
+            # text nodes. Join only a tiny bounded window.
+            for extra in range(1, 4):
+                mm = pair_re.match(chunk)
+                if mm:
+                    break
+                if idx + extra < len(lines):
+                    chunk += " " + lines[idx + extra]
+            mm = pair_re.match(chunk)
+            if mm and _is_team(mm.group(2)):
+                _emit_text_pair(
+                    rows,
+                    season=season, week=week, source_url=source_url,
+                    published=published, alignment=alignment,
+                    wr_raw=pending[0], team_raw=pending[1],
+                    cb_raw=mm.group(1).strip(), opp_raw=mm.group(2).strip(),
+                    matchup_raw=mm.group(3).strip(),
+                    source_layout="TEXT_2026_INLINE_PAIR",
+                )
+            pending = None
+
+    return rows
+
+
 def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[pd.DataFrame, dict]:
     soup = BeautifulSoup(html, "html.parser")
     published = _publication_time(soup)
@@ -386,6 +488,45 @@ def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[p
         df = dfs[0].copy()
         df.columns = [_clean_col(c) for c in df.columns]
         cols = list(df.columns)
+
+        # 2021 legacy tables use columns such as "Left WR" / "Right CB" and
+        # embed team abbreviation inside each cell ("Christian Kirk ARZ").
+        legacy_wr_col = next((c for c in cols if c in {"left wr","right wr","slot wr"}), None)
+        legacy_cb_col = next((c for c in cols if c in {"left cb","right cb","slot cb"}), None)
+        if legacy_wr_col and legacy_cb_col:
+            if legacy_wr_col == "left wr" and legacy_cb_col == "right cb":
+                legacy_alignment = "LWR_VS_RCB"
+            elif legacy_wr_col == "right wr" and legacy_cb_col == "left cb":
+                legacy_alignment = "RWR_VS_LCB"
+            elif legacy_wr_col == "slot wr" and legacy_cb_col == "slot cb":
+                legacy_alignment = "SWR_VS_SCB"
+            else:
+                legacy_alignment = "UNKNOWN_ALIGNMENT"
+            emitted = 0
+            for _, r in df.iterrows():
+                wr_pair = _split_embedded_team(r.get(legacy_wr_col, ""))
+                cb_pair = _split_embedded_team(r.get(legacy_cb_col, ""))
+                if not wr_pair or not cb_pair:
+                    continue
+                _emit_text_pair(
+                    rows,
+                    season=season, week=week, source_url=source_url,
+                    published=published, alignment=legacy_alignment,
+                    wr_raw=wr_pair[0], team_raw=wr_pair[1],
+                    cb_raw=cb_pair[0], opp_raw=cb_pair[1],
+                    matchup_raw="",
+                    source_layout="HTML_TABLE_2021_EMBEDDED_TEAM",
+                )
+                emitted += 1
+            table_audit.append({
+                "table_index": table_index,
+                "status": "PARSED_LEGACY_EXPLICIT_WR_CB_TABLE",
+                "columns": cols,
+                "alignment": legacy_alignment,
+                "rows_emitted": emitted,
+            })
+            continue
+
         wr_col = _find_col(cols, ["wide receiver", "receiver", "wr"])
         cb_col = _find_col(cols, ["cornerback", "right cb", "left cb", "slot cb", "cb"])
         team_col = _find_col(cols, ["team"])
@@ -459,6 +600,16 @@ def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[p
     )
     if text_rows:
         rows.extend(text_rows)
+
+    inline_rows = _parse_inline_2026_pairs(
+        soup,
+        season=season,
+        week=week,
+        source_url=source_url,
+        published=published,
+    )
+    if inline_rows:
+        rows.extend(inline_rows)
 
     out = pd.DataFrame(rows)
     if not out.empty:
