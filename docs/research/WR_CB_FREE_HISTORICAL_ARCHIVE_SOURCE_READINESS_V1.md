@@ -173,9 +173,10 @@ The exact preserved Week-3 artifact showed:
 Therefore current Week-3 behavior was effectively a broad team-zone tilt, not
 player-level WR-CB matchup modeling.
 
-That legacy rule remains governed by the separately frozen
-Week-4+ remove-only shadow. The newly identified free WR-CB source must not be
-used to rescue or rationalize the old coefficients.
+That legacy rule has since been **retired from production on main via PR #664**.
+The newly identified free WR-CB source must not be used to restore, rescue, or
+rationalize the deleted static coefficients. Any future WR-CB contribution must
+be introduced under a new frozen contract after this source gate clears.
 
 ## Next source actions
 
