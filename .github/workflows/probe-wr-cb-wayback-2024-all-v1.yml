@@ -1,0 +1,35 @@
+name: Probe all known 2024 WR-CB Wayback availability V1
+on:
+  push:
+    branches: ["research-wr-cb-historical-snapshot-discovery-v1"]
+    paths:
+      - "data/research/wr_cb_wayback_2024_all_targets_v1.csv"
+      - ".github/workflows/probe-wr-cb-wayback-2024-all-v1.yml"
+      - "scripts/research/probe_wr_cb_wayback_available_v1.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  availability-2024:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install -r requirements.txt pytest
+      - env: {PYTHONPATH: .}
+        run: pytest -q tests/test_probe_wr_cb_wayback_available_v1.py
+      - name: Query all 17 exact 2024 article URLs via availability API
+        env: {PYTHONPATH: .}
+        run: |
+          python scripts/research/probe_wr_cb_wayback_available_v1.py \
+            --targets data/research/wr_cb_wayback_2024_all_targets_v1.csv \
+            --out-dir outputs/wr_cb_wayback_2024_all_v1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wr-cb-wayback-2024-all-v1
+          path: outputs/wr_cb_wayback_2024_all_v1/wayback_available_api_pilot.json
+          if-no-files-found: error
+          retention-days: 14
