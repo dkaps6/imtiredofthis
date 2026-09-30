@@ -1,0 +1,51 @@
+name: Cross-audit WR-CB provider bridge V1
+
+# Read-only cross-audit of PR #665's source-quality output, requested on #535.
+# It downloads that lane's existing artifact and re-analyses it. It never
+# re-acquires the archive, so it cannot interfere with the acquisition lane.
+
+on:
+  push:
+    branches: [claude/nice-cori-4qkwqs]
+    paths:
+      - 'scripts/research/crossaudit_fantasyalarm_provider_bridge_v1.py'
+      - '.github/workflows/crossaudit-wr-cb-provider-bridge-v1.yml'
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Source run id holding the wr-cb-free-archive-v1 artifact
+        default: '36661097285'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  crossaudit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pandas
+      - name: Download the source-quality evidence from the archive lane
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-cb-free-archive-v1
+          run-id: ${{ github.event.inputs.run_id || '36661097285' }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: evidence
+      - name: Cross-audit the provider-ID bridge anchor set
+        run: |
+          ls -la evidence
+          python scripts/research/crossaudit_fantasyalarm_provider_bridge_v1.py \
+            --rows evidence/fantasyalarm_wr_cb_source_quality_rows.csv \
+            --out outputs/crossaudit/provider_bridge_v1.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wr-cb-provider-bridge-crossaudit-v1
+          path: outputs/crossaudit/provider_bridge_v1.json
+          if-no-files-found: warn
