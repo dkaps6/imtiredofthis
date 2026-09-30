@@ -245,3 +245,41 @@ def test_parse_actual_2026_split_node_server_markup():
     assert set(rows["cb_raw"]) == {"Deommodore Lenoir", "Brandon Cisse"}
     assert rows["alignment_bucket"].eq("LWR_VS_RCB").all()
     assert rows["source_layout"].eq("TEXT_2026_SPLIT_NODES").all()
+
+
+def test_structured_six_field_table_preserves_suffix_names():
+    html = """
+    <html><body>
+      <table>
+        <tr><td>Left WR vs Right CB</td></tr>
+        <tr><td>Wide Receiver</td><td>Team</td><td>DK / FD $</td><td>Cornerback</td><td>Opp</td><td>Matchup</td></tr>
+        <tr><td>DJ Chark Jr.</td><td>DET</td><td>$4800 / $5600</td><td>Jalen Mills</td><td>NE</td><td>Moderate</td></tr>
+        <tr><td>Allen Robinson II</td><td>LAR</td><td>$5300 / $5700</td><td>Trevon Diggs</td><td>DAL</td><td>Risky</td></tr>
+      </table>
+    </body></html>
+    """
+    rows, _ = parse_page(
+        html, season=2022, week=5,
+        source_url="https://www.fantasyalarm.com/example-structured",
+    )
+    assert len(rows) == 2
+    assert set(rows["wr_raw"]) == {"DJ Chark Jr.", "Allen Robinson II"}
+    assert rows["source_layout"].eq("HTML_TABLE_EXPLICIT_SIX_FIELD").all()
+
+
+def test_shifted_editorial_table_without_opponent_team_fails_closed():
+    html = """
+    <html><body>
+      <h2>WR upgrades</h2>
+      <table>
+        <tr><th>WR</th><th>Team</th><th>Opposing CB</th><th>Matchup</th></tr>
+        <tr><td>CeeDee Lamb</td><td>DAL</td><td>Deonte Banks</td><td>Safe</td></tr>
+      </table>
+    </body></html>
+    """
+    rows, audit = parse_page(
+        html, season=2026, week=1,
+        source_url="https://www.fantasyalarm.com/example-shifted",
+    )
+    assert rows.empty
+    assert audit["rows_emitted"] == 0
