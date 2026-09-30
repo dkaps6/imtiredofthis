@@ -2,6 +2,59 @@
 GitHub is canonical; chat memory is secondary.
 
 ---
+## ACTIVE CHECKPOINT — 2026-09-29 — RESEARCH LEAD / WR-CB SOURCE / CLV CURRENT
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-09-29_RESEARCH_LEAD_WR_CB_CLV_CURRENT.md`
+
+**Compact next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-09-29_RESEARCH_LEAD_WR_CB_CLV.md`
+
+This supersedes all older checkpoints for immediate execution.
+
+### Current state in one screen
+
+- canonical production main before these docs-only continuity commits: `deea0f68202c9ab6e85fa616f7444d0008ee10af`;
+- PR #664 is MERGED: unsupported grandfathered `coverage_penalty()` heuristic retired from production;
+- do **not** restore static 0.92/0.94/1.06/1.04 coverage multipliers;
+- direct player-level WR-CB assignment remains fail-closed/gated off unless a validated source exists;
+- free FantasyAlarm historical WR/CB archive has been found and is being audited in draft PR #665; research-only until completeness/timing/identity/semantics clear;
+- PR #663 is the append-only market-snapshot/CLV architecture; still draft/open and must be made green before merge;
+- only same-book <=30-minutes-before-kickoff snapshots may be labeled CLV;
+- no paid OddsAPI pull solely for CLV or WR-CB research;
+- Week 3 / Weeks 1-3 postmortem remains closed at **629-611, 50.7%, -40.72u**;
+- projection line-cross primary hypothesis failed; Week-4+ authority-move direction is forward-only;
+- RB-PD2 remains 1/8 weeks and 46/400 rows;
+- RB route-volume is live-source-ready but historical/live weekly parity remains uncleared; prospective capture only;
+- specialist RNG patch `30333ec2...` still requires exact frozen fingerprint validation;
+- Claude owns opponent-injury propagation / cross-audit in Issue #535; read newer comments before duplicating work;
+- Issue #535 comment `5901927972` contains a stale statement that the legacy team-level coverage heuristic is still active; current main and the detailed handoff supersede that statement.
+
+### Exact next action
+
+1. Query live main / PR #663 / PR #665 / PR #662 / RNG repair branch / Actions.
+2. Finish PR #663 mechanically without changing its frozen CLV contract or spending odds credits.
+3. Continue PR #665 source-readiness validation; do not fit or promote WR-CB science until its source gate clears.
+4. Cross-audit Claude's opponent-injury result if posted.
+5. Verify specialist RNG exact-parity repair.
+6. Preserve Week-4+ forward locks/captures; do not recycle closed Weeks 1-3 science.
+
+### Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this newest top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-09-29_RESEARCH_LEAD_WR_CB_CLV_CURRENT.md`
+4. Issue #535 from `5899500522` onward, especially `5899645764`, `5899710345`, `5899966307`, `5900122307`, `5901422664`, `5901433362`, `5901608387`, plus anything newer
+5. live main / PRs / branches / Actions
+
+Then work. Do not recursively load older handoffs.
+
+---
+
+---
 ## ACTIVE CHECKPOINT — 2026-09-29 — RESEARCH LEAD / WR-CB SOURCE FRONTIER
 
 Read this checkpoint, then:
