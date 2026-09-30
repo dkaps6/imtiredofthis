@@ -1,0 +1,63 @@
+name: Research WR-CB Free Archive V1
+
+on:
+  pull_request:
+    paths:
+      - "scripts/research/acquire_fantasyalarm_wr_cb_archive_v1.py"
+      - "tests/test_acquire_fantasyalarm_wr_cb_archive_v1.py"
+      - "data/research/wr_cb_free_archive_seed_manifest_v1.csv"
+      - "docs/research/WR_CB_FREE_HISTORICAL_ARCHIVE_SOURCE_READINESS_V1.md"
+      - ".github/workflows/research-wr-cb-free-archive-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+      - name: Parser unit tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_acquire_fantasyalarm_wr_cb_archive_v1.py
+      - name: Acquire verified public seed archive
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf outputs/wr_cb_free_archive_v1
+          python scripts/research/acquire_fantasyalarm_wr_cb_archive_v1.py \
+            --manifest data/research/wr_cb_free_archive_seed_manifest_v1.csv \
+            --out-dir outputs/wr_cb_free_archive_v1
+      - name: Source audit summary
+        run: |
+          cat outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_summary.json
+          python - <<'PY'
+          import pandas as pd
+          p="outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_page_audit.csv"
+          x=pd.read_csv(p)
+          print(x[["season","week","rows_emitted","identity_quarantine_rows"]].to_string(index=False))
+          PY
+      - name: Upload source evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-cb-free-archive-v1
+          path: |
+            outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_assignments.csv
+            outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_page_audit.csv
+            outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_full_audit.json
+            outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_summary.json
+          if-no-files-found: warn
+          retention-days: 30
