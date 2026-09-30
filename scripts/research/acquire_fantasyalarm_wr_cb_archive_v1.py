@@ -647,10 +647,18 @@ def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[p
         matchup_col = _find_col(cols, ["matchup"])
         alignment = _alignment_for_table(table)
 
-        if not wr_col or not cb_col or not team_col or not opp_col:
+        if not wr_col or not cb_col:
             table_audit.append({
                 "table_index": table_index,
-                "status": "SKIP_NO_EXPLICIT_WR_CB_TEAM_OPP_COLUMNS",
+                "status": "SKIP_NO_EXPLICIT_WR_CB_COLUMNS",
+                "columns": cols,
+                "alignment": alignment,
+            })
+            continue
+        if not team_col or not opp_col:
+            table_audit.append({
+                "table_index": table_index,
+                "status": "SKIP_NO_EXPLICIT_TEAM_OPP_COLUMNS",
                 "columns": cols,
                 "alignment": alignment,
             })
