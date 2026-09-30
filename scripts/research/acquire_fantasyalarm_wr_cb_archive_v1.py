@@ -405,7 +405,32 @@ def _parse_inline_2026_pairs(
         re.I,
     )
 
+    team_only_re = re.compile(r"^\\(([A-Z]{2,3})\\)\\s*$")
+    opp_match_re = re.compile(r"^\\(([A-Z]{2,3})\\)\\s*[•·]\\s*Matchup\\s*:\\s*(.*)$", re.I)
+
     for idx, line in enumerate(lines):
+        # Actual 2026 server HTML splits one pairing into:
+        # WR name / (TEAM) / vs. / CB name / (OPP) • Matchup: / grade.
+        if idx + 5 < len(lines):
+            tm = team_only_re.match(lines[idx + 1])
+            om = opp_match_re.match(lines[idx + 4])
+            if (
+                tm and _is_team(tm.group(1))
+                and lines[idx + 2].lower() in {"vs.", "vs"}
+                and om and _is_team(om.group(1))
+            ):
+                grade = _norm_text(om.group(2)) or _norm_text(lines[idx + 5])
+                if _is_matchup_label(grade):
+                    _emit_text_pair(
+                        rows,
+                        season=season, week=week, source_url=source_url,
+                        published=published, alignment=alignment,
+                        wr_raw=line, team_raw=tm.group(1),
+                        cb_raw=lines[idx + 3], opp_raw=om.group(1),
+                        matchup_raw=grade,
+                        source_layout="TEXT_2026_SPLIT_NODES",
+                    )
+
         # New 2026 headings include parenthetical abbreviations.
         low = line.lower()
         if (
@@ -474,6 +499,51 @@ def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[p
     table_audit: list[dict] = []
 
     for table_index, table in enumerate(soup.find_all("table")):
+        # 2021 archive tables use TD cells for the first-row labels rather than
+        # semantic TH headers. Parse those explicit cells directly before
+        # falling back to pandas table inference.
+        trs = table.find_all("tr")
+        if trs:
+            header_cells = [_norm_text(x.get_text(" ", strip=True)).lower()
+                            for x in trs[0].find_all(["td","th"])]
+            legacy_alignment = None
+            if len(header_cells) >= 2:
+                if header_cells[0] == "left wr" and header_cells[1] == "right cb":
+                    legacy_alignment = "LWR_VS_RCB"
+                elif header_cells[0] == "right wr" and header_cells[1] == "left cb":
+                    legacy_alignment = "RWR_VS_LCB"
+                elif header_cells[0] == "slot wr" and header_cells[1] == "slot cb":
+                    legacy_alignment = "SWR_VS_SCB"
+            if legacy_alignment:
+                emitted = 0
+                for tr in trs[1:]:
+                    cells = [_norm_text(x.get_text(" ", strip=True))
+                             for x in tr.find_all(["td","th"])]
+                    if len(cells) < 2:
+                        continue
+                    wr_pair = _split_embedded_team(cells[0])
+                    cb_pair = _split_embedded_team(cells[1])
+                    if not wr_pair or not cb_pair:
+                        continue
+                    _emit_text_pair(
+                        rows,
+                        season=season, week=week, source_url=source_url,
+                        published=published, alignment=legacy_alignment,
+                        wr_raw=wr_pair[0], team_raw=wr_pair[1],
+                        cb_raw=cb_pair[0], opp_raw=cb_pair[1],
+                        matchup_raw="",
+                        source_layout="HTML_TABLE_2021_RAW_TD",
+                    )
+                    emitted += 1
+                table_audit.append({
+                    "table_index": table_index,
+                    "status": "PARSED_LEGACY_RAW_TD_WR_CB_TABLE",
+                    "columns": header_cells,
+                    "alignment": legacy_alignment,
+                    "rows_emitted": emitted,
+                })
+                continue
+
         try:
             dfs = pd.read_html(str(table))
         except Exception as exc:
