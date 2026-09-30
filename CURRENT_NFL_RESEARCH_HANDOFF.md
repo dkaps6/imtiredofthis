@@ -2,6 +2,61 @@
 GitHub is canonical; chat memory is secondary.
 
 ---
+## ACTIVE CHECKPOINT — 2026-09-30 — WR/CB ARCHIVE BREAKTHROUGH / SOURCE INTEGRITY CURRENT
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-09-30_WR_CB_ARCHIVE_BREAKTHROUGH_CURRENT.md`
+
+**Compact next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-09-30_WR_CB_ARCHIVE_BREAKTHROUGH.md`
+
+This supersedes all older checkpoints for immediate execution.
+
+### Current state in one screen
+
+- live main at checkpoint preparation: `50f6624be68fcac3af88fe40a258b43eec71402c` (verify live before editing);
+- Week 3 / Weeks 1-3 is CLOSED: **W3 233-208 +2.26u; W1-3 629-611, 50.7%, -40.72u**;
+- Claude's extra-DNP theory is closed: canonical 20 voids stand because snap-count participation proves the disputed players appeared;
+- PR #665 draft head at checkpoint: `1a39b519d472d68a10096f2d9faa992d69e27d60`;
+- #665 fail-closed repairs are integrated: provider-ID reuse guard + exact-week opponent-CB roster guard; live-page provisional source-ready **3,999**, source/model gate still CLOSED;
+- historical public archive point-in-time recovery is now PROVEN:
+  - 2024W1: **46 strict** verified rows + immutable lock;
+  - protected 2025W14: **47 strict** verified rows + immutable lock, **no 2025 outcomes accessed**;
+  - latest 2022W5 run `36773818193` SUCCESS: **41 verified pregame factual / 36 strict exact-week identity** rows, artifact `11124612896`;
+- archive branch at checkpoint: `research-wr-cb-historical-snapshot-discovery-v1@ca29322430a2600eef195ca7fc2704c6e94fe13c`;
+- broad Wayback scans are ACCESS-INCONCLUSIVE and can false-negative known captures; use sparse exact discovery only;
+- do not restore retired `coverage_penalty()`;
+- FantasyAlarm pairings are projected pregame alignments, NOT observed route responsibility; editorial grades are never football features;
+- PR #663 CLV is still draft; Repo CI green; frozen Week2 replay red only because its pinned artifact expired;
+- RNG candidate `30333ec2...` exact validation passed but is not production-promoted;
+- PR #662 GSIS remains research-only; never upload private raw GSIS;
+- no paid WR/CB data and no paid OddsAPI without explicit approval.
+
+### Exact next action
+
+1. Query live main / Issue #535 / #665 / archive branch / #663 / #662 / RNG Actions.
+2. Freeze the successful **2022W5** archive result and immutable sanitized source lock/hash if still missing.
+3. Continue sparse historical source recovery in discovery years only.
+4. Keep protected 2025 outcomes untouched until source population + preregistered scientific test are frozen.
+5. Prospectively capture verified 2026 WR/CB reports before kickoff if/when a real URL appears.
+6. Do not rerun or retune closed Weeks 1-3 science.
+
+### Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this newest top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-09-30_WR_CB_ARCHIVE_BREAKTHROUGH_CURRENT.md`
+4. Issue #535 from comment `5913566949` onward
+5. live branches/PRs/Actions
+
+Then work. Do not recursively load older handoffs.
+
+---
+
+---
 ## ACTIVE CHECKPOINT — 2026-09-29 — RESEARCH LEAD / WR-CB SOURCE / CLV CURRENT
 
 **Read this detailed handoff next:**
