@@ -70,3 +70,72 @@ def test_tables_without_explicit_cb_are_skipped_not_inferred():
     assert rows.empty
     assert audit["rows_emitted"] == 0
     assert any(x["status"] == "SKIP_NO_EXPLICIT_WR_CB_COLUMNS" for x in audit["table_audit"])
+
+
+
+def test_parse_2024_combined_card_layout_without_html_table():
+    html = """
+    <html><head><meta property="article:published_time" content="2024-11-09T12:00:00-05:00"></head>
+    <body>
+      <h2>Left WR vs Right CB</h2>
+      <div>Wide Receiver</div><div>Team</div><div>DK / FD $</div>
+      <div>Cornerback</div><div>Opp</div><div>Matchup</div>
+      <div>Michael Wilson</div><div>ARI</div><div>$4600 / $5500</div>
+      <div>D.J. Reed</div><div>NYJ</div><div>Downgrade</div>
+      <p>Long narrative that must never be parsed as a second matchup.</p>
+    </body></html>
+    """
+    rows, audit = parse_page(
+        html, season=2024, week=10,
+        source_url="https://www.fantasyalarm.com/example-2024",
+    )
+    assert len(rows) == 1
+    row = rows.iloc[0]
+    assert row["wr_raw"] == "Michael Wilson"
+    assert row["cb_raw"] == "D.J. Reed"
+    assert row["alignment_bucket"] == "LWR_VS_RCB"
+    assert row["source_layout"] == "TEXT_COMBINED_SIX_FIELD"
+    assert audit["rows_emitted"] == 1
+
+
+def test_parse_2025_split_card_layout_without_html_table():
+    html = """
+    <html><head><meta property="article:published_time" content="2025-10-05T12:00:00-04:00"></head>
+    <body>
+      <h2>Left WR vs Right CB</h2>
+      <div>Wide Receiver</div><div>Team</div><div>DK / FD PPG</div>
+      <div>Marvin Harrison</div><div>ARI</div><div>12.2 / 10.2</div>
+      <div>Cornerback</div><div>Opp</div><div>Matchup</div>
+      <div>L'Jarius Sneed</div><div>TEN</div><div>Safe</div>
+      <p>Narrative text.</p>
+    </body></html>
+    """
+    rows, audit = parse_page(
+        html, season=2025, week=5,
+        source_url="https://www.fantasyalarm.com/example-2025",
+    )
+    assert len(rows) == 1
+    row = rows.iloc[0]
+    assert row["wr_raw"] == "Marvin Harrison"
+    assert row["cb_raw"] == "L'Jarius Sneed"
+    assert row["alignment_bucket"] == "LWR_VS_RCB"
+    assert row["source_layout"] == "TEXT_SPLIT_WR_CB_CARDS"
+    assert bool(row["editorial_matchup_model_eligible"]) is False
+    assert audit["rows_emitted"] == 1
+
+
+def test_split_card_bye_row_is_missing_not_fake_assignment():
+    html = """
+    <html><body>
+      <h2>Left WR vs Right CB</h2>
+      <div>Wide Receiver</div><div>Team</div><div>DK / FD PPG</div>
+      <div>Darnell Mooney</div><div>ATL</div>
+      <div>Cornerback</div><div>Opp</div><div>Matchup</div>
+      <div>N/A</div><div>N/A</div><div>N/A</div>
+    </body></html>
+    """
+    rows, _ = parse_page(
+        html, season=2025, week=5,
+        source_url="https://www.fantasyalarm.com/example-bye",
+    )
+    assert rows.empty
