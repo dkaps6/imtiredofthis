@@ -405,8 +405,8 @@ def _parse_inline_2026_pairs(
         re.I,
     )
 
-    team_only_re = re.compile(r"^\\(([A-Z]{2,3})\\)\\s*$")
-    opp_match_re = re.compile(r"^\\(([A-Z]{2,3})\\)\\s*[•·]\\s*Matchup\\s*:\\s*(.*)$", re.I)
+    team_only_re = re.compile(r"^\(([A-Z]{2,3})\)\s*$")
+    opp_match_re = re.compile(r"^\(([A-Z]{2,3})\)\s*[•·]\s*Matchup\s*:\s*(.*)$", re.I)
 
     for idx, line in enumerate(lines):
         # Actual 2026 server HTML splits one pairing into:
