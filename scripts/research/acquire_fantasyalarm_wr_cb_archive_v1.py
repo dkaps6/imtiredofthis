@@ -522,7 +522,8 @@ def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[p
         current_alignment = "UNKNOWN_ALIGNMENT"
         structured_emitted = 0
         for tr in table.find_all("tr"):
-            cells = [_norm_text(x.get_text(" ", strip=True)) for x in tr.find_all(["td", "th"])]
+            cell_nodes = tr.find_all(["td", "th"])
+            cells = [_norm_text(x.get_text(" ", strip=True)) for x in cell_nodes]
             if len(cells) == 1:
                 maybe_alignment = _alignment_token(cells[0])
                 if maybe_alignment:
@@ -543,6 +544,8 @@ def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[p
                 cb_raw=cells[3], opp_raw=cells[4],
                 matchup_raw=cells[5],
                 source_layout="HTML_TABLE_EXPLICIT_SIX_FIELD",
+                wr_source_player_id=_source_player_id(cell_nodes[0]),
+                cb_source_player_id=_source_player_id(cell_nodes[3]),
             )
             if len(rows) > before:
                 structured_emitted += 1
@@ -575,8 +578,9 @@ def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[p
             if legacy_alignment:
                 emitted = 0
                 for tr in trs[1:]:
+                    legacy_nodes = tr.find_all(["td","th"])
                     cells = [_norm_text(x.get_text(" ", strip=True))
-                             for x in tr.find_all(["td","th"])]
+                             for x in legacy_nodes]
                     if len(cells) < 2:
                         continue
                     wr_pair = _split_embedded_team(cells[0])
@@ -591,6 +595,8 @@ def parse_page(html: str, *, season: int, week: int, source_url: str) -> tuple[p
                         cb_raw=cb_pair[0], opp_raw=cb_pair[1],
                         matchup_raw="",
                         source_layout="HTML_TABLE_2021_RAW_TD",
+                        wr_source_player_id=_source_player_id(legacy_nodes[0]),
+                        cb_source_player_id=_source_player_id(legacy_nodes[1]),
                     )
                     emitted += 1
                 table_audit.append({
