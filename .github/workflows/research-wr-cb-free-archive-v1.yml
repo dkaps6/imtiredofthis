@@ -59,5 +59,6 @@ jobs:
             outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_page_audit.csv
             outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_full_audit.json
             outputs/wr_cb_free_archive_v1/fantasyalarm_wr_cb_summary.json
+            outputs/wr_cb_free_archive_v1/pages/
           if-no-files-found: warn
           retention-days: 30
