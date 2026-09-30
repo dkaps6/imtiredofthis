@@ -139,3 +139,30 @@ def test_split_card_bye_row_is_missing_not_fake_assignment():
         source_url="https://www.fantasyalarm.com/example-bye",
     )
     assert rows.empty
+
+
+
+def test_combined_stream_recovers_multiple_rows_after_one_header():
+    html = """
+    <html><body>
+      <h2>Left WR vs Right CB</h2>
+      <div>Wide Receiver</div><div>Team</div><div>DK / FD $</div>
+      <div>Cornerback</div><div>Opp</div><div>Matchup</div>
+      <div>Michael Wilson</div><div>ARI</div><div>$4600 / $5500</div>
+      <div>D.J. Reed</div><div>NYJ</div><div>Downgrade</div>
+      <p>Narrative text one.</p>
+      <div>Darnell Mooney</div><div>ATL</div><div>$6500 / $7500</div>
+      <div>Alontae Taylor</div><div>NO</div><div>Upgrade</div>
+      <p>Narrative text two.</p>
+      <div>Rashod Bateman</div><div>BAL</div><div>$4300 / $5400</div>
+      <div>Cam Taylor-Britt</div><div>CIN</div><div>Upgrade</div>
+    </body></html>
+    """
+    rows, _ = parse_page(
+        html, season=2024, week=10,
+        source_url="https://www.fantasyalarm.com/example-stream",
+    )
+    assert len(rows) == 3
+    assert set(rows["wr_raw"]) == {"Michael Wilson", "Darnell Mooney", "Rashod Bateman"}
+    assert set(rows["cb_raw"]) == {"D.J. Reed", "Alontae Taylor", "Cam Taylor-Britt"}
+    assert rows["alignment_bucket"].eq("LWR_VS_RCB").all()
