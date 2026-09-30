@@ -50,6 +50,45 @@ def _content_version_timing(x: pd.DataFrame) -> pd.Series:
     return out
 
 
+def _provider_person_family(clean_key: str) -> str:
+    """Only explicitly known name aliases/suffixes; uncertain names stay distinct.
+
+    This key is solely a NEGATIVE provider-ID reuse screen, never a new
+    positive GSIS identity source. Composite projected CBs are not people.
+    """
+    key = str(clean_key or "").strip().lower()
+    known_aliases = {
+        "robbiechosen": "robbieanderson",
+        "robbyanderson": "robbieanderson",
+        "joshpalmer": "joshuapalmer",
+        "mikejackson": "michaeljackson",
+        "jayceehorne": "jayceehorn",
+        "hollywoodbrown": "marquisebrown",
+    }
+    key = known_aliases.get(key, key)
+    if "/" in key or not key:
+        return ""  # ambiguous / composite, cannot anchor one CB identity
+    for suffix in ("iii", "jr", "sr", "ii", "iv", "v"):
+        if key.endswith(suffix) and len(key) > len(suffix) + 3:
+            return known_aliases.get(key[:-len(suffix)], key[:-len(suffix)])
+    return key
+
+
+def _provider_reused_ids(x: pd.DataFrame, source_col: str, name_col: str) -> set[str]:
+    """Fail closed if one provider ID appears for different people ANYWHERE.
+
+    All observed source rows may VETO an unsafe ID, including after-kickoff
+    rows. Only strictly pre-kickoff + schedule-consistent independent roster
+    joins may TEACH a positive mapping via _provider_bridge().
+    """
+    ids = x[source_col].astype("string").fillna("").str.strip()
+    families = x[name_col].astype("string").fillna("").map(_provider_person_family)
+    evidence = pd.DataFrame({"provider_id": ids, "family": families})
+    evidence = evidence.loc[evidence["provider_id"].ne("")]
+    groups = evidence.groupby("provider_id")["family"].agg(lambda z: set(z))
+    return {str(pid) for pid, fam in groups.items() if len(fam) != 1 or "" in fam}
+
+
 def _provider_bridge(x: pd.DataFrame, source_col: str, gsis_col: str) -> tuple[dict[str, str], set[str]]:
     """Use only pre-kickoff, schedule-consistent anchor identities.
 
@@ -283,19 +322,32 @@ def audit(assignments: pd.DataFrame, page_audit: pd.DataFrame, out_dir: Path) ->
             x[col] = ""
         x[col] = x[col].astype("string").fillna("").str.strip()
 
+    # Anchored unique-GSIS detection alone misses reused IDs when the second
+    # person's roster name fails to resolve: 2022 Allen Robinson II was
+    # incorrectly bridged to 2021 Marquise Goodwin's GSIS via ID 300936.
+    # Independently veto every multi-person/uncertain provider ID before ANY
+    # bridge; preserve exact independent roster resolutions unchanged.
+    wr_provider_reused_ids = _provider_reused_ids(x, "wr_source_player_id", "wr_clean_key")
+    cb_provider_reused_ids = _provider_reused_ids(x, "cb_source_player_id", "cb_clean_key")
     wr_provider_map, wr_provider_collisions = _provider_bridge(x, "wr_source_player_id", "wr_gsis_id")
     cb_provider_map, cb_provider_collisions = _provider_bridge(x, "cb_source_player_id", "cb_gsis_id")
+    provider_reuse_veto_counts = {}
 
-    for source_col, gsis_col, method_col, mapping, collisions in [
-        ("wr_source_player_id", "wr_gsis_id", "wr_identity_method", wr_provider_map, wr_provider_collisions),
-        ("cb_source_player_id", "cb_gsis_id", "cb_identity_method", cb_provider_map, cb_provider_collisions),
+    for source_col, gsis_col, method_col, mapping, collisions, reused_ids in [
+        ("wr_source_player_id", "wr_gsis_id", "wr_identity_method", wr_provider_map, wr_provider_collisions, wr_provider_reused_ids),
+        ("cb_source_player_id", "cb_gsis_id", "cb_identity_method", cb_provider_map, cb_provider_collisions, cb_provider_reused_ids),
     ]:
         unresolved = x[gsis_col].astype(str).str.len().eq(0)
         bridged = x[source_col].map(mapping).astype("string").fillna("")
+        ambiguous_reuse = x[source_col].isin(reused_ids)
+        provider_reuse_veto_counts[source_col] = int(
+            (unresolved & ambiguous_reuse & bridged.str.len().gt(0)).sum()
+        )
         eligible = (
             unresolved
             & x[source_col].astype(str).str.len().gt(0)
             & ~x[source_col].isin(collisions)
+            & ~ambiguous_reuse
             & bridged.str.len().gt(0)
         )
         x.loc[eligible, gsis_col] = bridged.loc[eligible]
@@ -310,6 +362,8 @@ def audit(assignments: pd.DataFrame, page_audit: pd.DataFrame, out_dir: Path) ->
         & x["schedule_match"]
         & x["stable_identity_ready"]
         & x["alignment_bucket"].ne("UNKNOWN_ALIGNMENT")
+        & ~x["wr_clean_key"].astype(str).str.contains("/", regex=False)
+        & ~x["cb_clean_key"].astype(str).str.contains("/", regex=False)
     )
 
     # Person-key stability: a canonical source name may never map to >1 stable ID.
@@ -403,6 +457,14 @@ def audit(assignments: pd.DataFrame, page_audit: pd.DataFrame, out_dir: Path) ->
         "cb_name_to_stable_id_collisions": int(len(cb_bad)),
         "wr_provider_id_to_gsis_collisions": int(len(wr_provider_collisions)),
         "cb_provider_id_to_gsis_collisions": int(len(cb_provider_collisions)),
+        "wr_provider_id_uncertain_person_reuse_quarantined": int(len(wr_provider_reused_ids)),
+        "cb_provider_id_uncertain_person_reuse_quarantined": int(len(cb_provider_reused_ids)),
+        "wr_provider_bridge_rows_blocked_by_reuse": int(provider_reuse_veto_counts["wr_source_player_id"]),
+        "cb_provider_bridge_rows_blocked_by_reuse": int(provider_reuse_veto_counts["cb_source_player_id"]),
+        "composite_projected_assignment_rows": int((
+            x["wr_clean_key"].astype(str).str.contains("/", regex=False)
+            | x["cb_clean_key"].astype(str).str.contains("/", regex=False)
+        ).sum()),
         "wr_provider_id_bridge_rows": int(x["wr_identity_method"].eq("FANTASYALARM_STABLE_ID_BRIDGE").sum()),
         "cb_provider_id_bridge_rows": int(x["cb_identity_method"].eq("FANTASYALARM_STABLE_ID_BRIDGE").sum()),
         "unknown_alignment_rows": int(x["alignment_bucket"].eq("UNKNOWN_ALIGNMENT").sum()),
