@@ -23,7 +23,7 @@ from scripts.research.verify_wr_cb_wayback_body_2024w1_v1 import (
 )
 
 ARTICLE=("https://www.fantasyalarm.com/articles/nfl/wide-receivers/"
-         "2022-fantasy-football-wr-cb-matchup-report-week-5-tyreek-hill-to-burn-the-jets-in-week-5/134887")
+         "2022-fantasy-football-wr-cb-match-up-report-week-5-tyreek-hill-to-burn-the-jets-in-week-5/134887")
 TS="20221005195142"
 ARCHIVED_UTC=datetime.strptime(TS,"%Y%m%d%H%M%S").replace(tzinfo=timezone.utc)
 REPLAY=f"https://web.archive.org/web/{TS}id_/{ARTICLE}"
