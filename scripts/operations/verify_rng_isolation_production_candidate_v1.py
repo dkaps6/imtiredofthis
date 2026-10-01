@@ -29,6 +29,7 @@ from scripts.operations.rng_isolation_candidate_verify_helpers_v1 import (
     read_csv,
     representative_rule_rows,
 )
+from scripts.modeling.qb_c2_production_adapter_v1 import AUDIT_JSON as QB_C2_AUDIT_JSON
 from scripts.run_pricing_with_full_roster_universe_v3_rng_isolation_candidate import (
     CANDIDATE_AUDIT,
     _simulate_promoted_stack,
@@ -230,6 +231,18 @@ def main() -> int:
         and float(qb["max_nonselected_element_gap"]) == 0.0
         and int(qb.get("sportsbook_inputs_to_rng_routing", 0)) == 0
     )
+    if not QB_C2_AUDIT_JSON.exists():
+        raise RuntimeError("candidate did not persist canonical QB C2 integration audit")
+    canonical_qb_audit = json.loads(QB_C2_AUDIT_JSON.read_text(encoding="utf-8"))
+    canonical_qb_audit_pass = bool(
+        int(canonical_qb_audit.get("state_capture_changed_arrays", -1)) == 0
+        and float(canonical_qb_audit.get("state_capture_max_mean_gap", np.inf)) <= 1e-12
+        and float(canonical_qb_audit.get("state_capture_max_element_gap", np.inf)) <= 1e-12
+        and bool(canonical_qb_audit.get("te_r5p_consumed_before_c2"))
+        and bool(canonical_qb_audit.get("wr_r15_consumed_before_c2"))
+        and bool(canonical_qb_audit.get("explicit_entitlement_consumed_before_c2"))
+        and str(canonical_qb_audit.get("wr_r15_model_version", "")) == "WR_R15_PRODUCTION_MODEL_V1"
+    )
 
     paid = read_csv(args.root / "outputs/props_priced_clean.csv", "paid priced board")
     paid = paid.loc[paid["market"].isin(sorted(SUPPORTED))].copy().reset_index(drop=True)
@@ -273,7 +286,7 @@ def main() -> int:
     summary_df.to_csv(args.out_dir / "candidate_vs_paid_summary.csv", index=False)
 
     equivalence_pass = all(v["all_pass"] for v in equivalence.values())
-    all_pass = bool(frozen_scope_pass and frozen_c2_pass and equivalence_pass)
+    all_pass = bool(frozen_scope_pass and frozen_c2_pass and canonical_qb_audit_pass and equivalence_pass)
     disposition = (
         "RNG_ISOLATION_PRODUCTION_CANDIDATE_PASS"
         if all_pass
@@ -290,6 +303,8 @@ def main() -> int:
         "production_main_changed": False,
         "frozen_scope_equivalence_pass": frozen_scope_pass,
         "frozen_c2_equivalence_pass": frozen_c2_pass,
+        "canonical_qb_audit_pass": canonical_qb_audit_pass,
+        "canonical_qb_audit": canonical_qb_audit,
         "paid_board_research_equivalence_pass": equivalence_pass,
         "paid_board_equivalence": equivalence,
         "candidate_audit": candidate_audit,
