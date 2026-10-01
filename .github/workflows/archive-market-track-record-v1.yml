@@ -29,6 +29,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+      SOURCE_GIT_SHA: ${{ github.event.workflow_run.head_sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -70,20 +71,35 @@ jobs:
             echo "no priced board in this run's artifact (no-live-odds run) -- nothing to archive"
             exit 0
           fi
-          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
+          SOURCE_SEASON=$(python -c "import pandas as pd; x=pd.read_csv('$SRC', usecols=['season']); v=pd.to_numeric(x['season'], errors='coerce').dropna().unique(); assert len(v)==1, v; print(int(v[0]))")
+          SOURCE_WEEK=$(python -c "import pandas as pd; x=pd.read_csv('$SRC', usecols=['week']); v=pd.to_numeric(x['week'], errors='coerce').dropna().unique(); assert len(v)==1, v; print(int(v[0]))")
           python scripts/operations/archive_priced_board_v1.py \
             --priced-file "$SRC" \
-            --season "${SEASON}" \
-            --week "${WEEK_RESOLVED}" \
-            --run-id "${SOURCE_RUN_ID}"
+            --season "${SOURCE_SEASON}" \
+            --week "${SOURCE_WEEK}" \
+            --run-id "${SOURCE_RUN_ID}" \
+            --git-sha "${SOURCE_GIT_SHA}"
+
+          RAW=/tmp/fs_artifact/data/props_raw.csv
+          if [ -s "$RAW" ]; then
+            python scripts/operations/archive_market_snapshot_history_v1.py \
+              --priced-file "$SRC" \
+              --raw-props-file "$RAW" \
+              --source-run-id "${SOURCE_RUN_ID}" \
+              --source-git-sha "${SOURCE_GIT_SHA}" \
+              --season "${SOURCE_SEASON}" \
+              --week "${SOURCE_WEEK}"
+          else
+            echo "::warning::priced board exists but raw props timestamp authority is missing; latest ledger archived, immutable CLV snapshot skipped"
+          fi
 
       - name: Snapshot recoverable ledger before git mutation
         run: |
           set -euo pipefail
           rm -rf /tmp/market_track_record_ledger
-          if [ -d data/market_track_record/boards ]; then
+          if [ -d data/market_track_record ]; then
             mkdir -p /tmp/market_track_record_ledger
-            cp -a data/market_track_record/boards/. /tmp/market_track_record_ledger/
+            cp -a data/market_track_record/. /tmp/market_track_record_ledger/
           fi
 
       - name: Commit archived board to the durable ledger
@@ -94,13 +110,13 @@ jobs:
           # archive run in this workflow's history died here on
           # "pathspec did not match any files" under set -e, which is why the
           # committed ledger was empty for the whole 2026 season to date.
-          if [ ! -d data/market_track_record/boards ]; then
-            echo "no ledger directory -- this run archived nothing"
+          if [ ! -d data/market_track_record ]; then
+            echo "no market-track-record directory -- this run archived nothing"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/market_track_record/boards/
+          git add data/market_track_record/
           if git diff --cached --quiet; then
             echo "no market track record changes to commit"
             exit 0
