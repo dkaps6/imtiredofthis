@@ -89,12 +89,33 @@ def quarantine_final_priced_props(
         raise RuntimeError("priced output missing player/team columns")
 
     quarantine_keys = _load_quarantine_keys(quarantine_path, season=season, week=week)
+
+    # Dynamic QB starter-conflict quarantine is downstream-only. If the C2
+    # lineage stamper saw a live pass-yard offer for a QB who is not the
+    # certified football starter identity, quarantine that entire QB identity
+    # from the published board (all of that player's markets), while preserving
+    # the upstream football/pricing universe and every other player.
+    dynamic_qb_keys: set[tuple[str, str]] = set()
+    if {"qb_distribution_route", "qb_distribution_starter_authority_source"} <= set(df.columns):
+        q = df.loc[
+            df["qb_distribution_route"].fillna("").astype(str).eq("FINAL_BOARD_QUARANTINE")
+            & df["qb_distribution_starter_authority_source"].fillna("").astype(str).eq(
+                "LIVE_OFFER_NOT_CERTIFIED_STARTER"
+            ),
+            ["team", "player"],
+        ].drop_duplicates()
+        for row in q.itertuples(index=False):
+            team = canon_team(row.team)
+            for k in _name_keys(row.player):
+                dynamic_qb_keys.add((team, k))
+
+    all_quarantine_keys = quarantine_keys | dynamic_qb_keys
     removed = 0
-    if quarantine_keys:
+    if all_quarantine_keys:
         teams = df["team"].map(canon_team)
         name_keys = df["player"].map(_name_keys)
         mask = [
-            bool({(team, key) for key in keys} & quarantine_keys)
+            bool({(team, key) for key in keys} & all_quarantine_keys)
             for team, keys in zip(teams, name_keys)
         ]
         mask = pd.Series(mask, index=df.index)
@@ -105,7 +126,9 @@ def quarantine_final_priced_props(
 
     status = {
         "quarantine_source": str(quarantine_path),
-        "quarantined_team_name_keys": sorted(f"{team}:{key}" for team, key in quarantine_keys),
+        "quarantined_team_name_keys": sorted(f"{team}:{key}" for team, key in all_quarantine_keys),
+        "manual_quarantined_team_name_keys": sorted(f"{team}:{key}" for team, key in quarantine_keys),
+        "dynamic_qb_starter_conflict_team_name_keys": sorted(f"{team}:{key}" for team, key in dynamic_qb_keys),
         "rows_removed": removed,
         "rows_remaining": int(len(df)),
     }
