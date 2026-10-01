@@ -1,0 +1,166 @@
+name: Verify Week4 QB Live Starter Conflict Repair
+
+on:
+  push:
+    branches:
+      - repair-week4-qb-live-starter-conflict-v1
+    paths:
+      - 'scripts/stamp_qb_c2_pricing_lineage_v1.py'
+      - 'scripts/operations/quarantine_final_priced_props_v1.py'
+      - 'tests/test_quarantine_final_priced_props_v1.py'
+      - '.github/workflows/verify-week4-qb-live-starter-conflict-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  SOURCE_RUN_ID: "36934563481"
+  SOURCE_ARTIFACT_NAME: "run_36934563481"
+  SOURCE_ARTIFACT_ID: "11197726111"
+  SOURCE_ARTIFACT_DIGEST: "sha256:202aa5205e71ad0acedf1910f505c2b362f564d8593a0f82dd0928fb45175aae"
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml beautifulsoup4 lxml pytest
+
+      - name: Run focused quarantine regression tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_quarantine_final_priced_props_v1.py
+
+      - name: Verify preserved paid artifact identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          raw=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts?per_page=100")
+          python - <<'PY'
+          import json, os
+          arts=json.loads(os.environ["RAW"])
+          want_id=int(os.environ["SOURCE_ARTIFACT_ID"])
+          found=[a for a in arts.get("artifacts",[]) if int(a.get("id",-1))==want_id]
+          if len(found)!=1:
+              raise SystemExit(f"FATAL expected artifact id={want_id}, got {len(found)}")
+          a=found[0]
+          if a.get("name")!=os.environ["SOURCE_ARTIFACT_NAME"]:
+              raise SystemExit(f"FATAL artifact name drift: {a}")
+          if a.get("digest")!=os.environ["SOURCE_ARTIFACT_DIGEST"]:
+              raise SystemExit(f"FATAL artifact digest drift: {a.get('digest')}")
+          if a.get("expired"):
+              raise SystemExit("FATAL paid artifact expired")
+          print("PAID_ARTIFACT_IDENTITY_PASS",a["id"],a["digest"])
+          PY
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RAW: ${{ steps.meta.outputs.raw }}
+
+      - name: Download exact paid Week4 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.SOURCE_ARTIFACT_NAME }}
+          path: /tmp/paid
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ env.SOURCE_RUN_ID }}
+
+      - name: Restore preserved paid data and outputs
+        run: |
+          set -euo pipefail
+          rm -rf data outputs
+          cp -a /tmp/paid/data ./data
+          cp -a /tmp/paid/outputs ./outputs
+          test -s outputs/props_priced_clean.csv
+          test -s data/qb_c2_production_integration_audit.csv
+          test -s data/qb_c2_production_integration_audit.json
+          python - <<'PY'
+          import pandas as pd
+          p=pd.read_csv("outputs/props_priced_clean.csv",low_memory=False)
+          assert len(p)==3480, len(p)
+          print("PAID_PRICED_SOURCE_ROWS",len(p))
+          PY
+
+      - name: Stamp C2 lineage with downstream starter-conflict quarantine
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/stamp_qb_c2_pricing_lineage_v1.py
+          python - <<'PY'
+          import json
+          a=json.load(open("data/qb_c2_pricing_lineage_stamp_audit.json"))
+          got={(x["team"],x["player_key"]) for x in a["live_offer_not_certified_starter_identities"]}
+          want={("CHI","tysonbagent"),("WAS","marcusmariota")}
+          if got != want:
+              raise SystemExit(f"FATAL unexpected dynamic QB quarantine identities got={got} want={want}")
+          if int(a["quarantined_pass_yard_side_rows"]) != 6:
+              raise SystemExit(f"FATAL expected 6 quarantined pass-yard side rows, got {a['quarantined_pass_yard_side_rows']}")
+          print("QB_STARTER_CONFLICT_STAMP_PASS",sorted(got))
+          PY
+
+      - name: Re-run certified pricing governance
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/validate_rb_rush_rec_conservation_v1.py
+          python scripts/audit_market_model_lineage_v2.py
+          python scripts/validate_anytime_td_model_status_v1.py
+          python scripts/validate_team_target_pool_full_universe_v2.py
+          python scripts/validate_certified_full_slate_stack_v2.py
+
+      - name: Apply final-board dynamic QB quarantine
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/operations/quarantine_final_priced_props_v1.py
+          python - <<'PY'
+          import json, pandas as pd
+          p=pd.read_csv("outputs/props_priced_clean.csv",low_memory=False)
+          s=json.load(open("data/final_priced_props_quarantine_status.json"))
+          if int(s["rows_removed"]) != 20:
+              raise SystemExit(f"FATAL expected 20 QB-conflict rows removed, got {s['rows_removed']}")
+          if set(s["dynamic_qb_starter_conflict_team_name_keys"]) != {"CHI:tysonbagent","WAS:marcusmariota"}:
+              raise SystemExit(f"FATAL dynamic QB quarantine key drift: {s}")
+          bad=p[p["player"].astype(str).isin(["Tyson Bagent","Marcus Mariota"])]
+          if len(bad):
+              raise SystemExit(f"FATAL uncertified QB rows survived final board: {len(bad)}")
+          if len(p) != 3460:
+              raise SystemExit(f"FATAL expected 3460 preserved priced rows after quarantine, got {len(p)}")
+          print("FINAL_BOARD_QB_CONFLICT_QUARANTINE_PASS rows=",len(p))
+          PY
+
+      - name: Build repaired Week4 master workbook without new odds fetch
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/build_master_betting_workbook_v1.py             --root .             --out outputs/NFL_BETTING_MODEL_MASTER.xlsx             --run-id "${SOURCE_RUN_ID}"             --sha "${GITHUB_SHA}"             --ref-name "${GITHUB_REF_NAME}"             --fetch-live-odds true
+          test -s outputs/NFL_BETTING_MODEL_MASTER.xlsx
+
+      - name: Upload repaired paid-board evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: week4-live-board-qb-starter-conflict-repair-v1
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            outputs/props_priced_clean.csv
+            outputs/NFL_BETTING_MODEL_MASTER.xlsx
+            data/qb_c2_pricing_lineage_stamp_audit.json
+            data/final_priced_props_quarantine_status.json
+            data/live_odds_status.json
+            data/live_pricing_offer_audit.json
+            data/full_slate_data_quality_audit.json
