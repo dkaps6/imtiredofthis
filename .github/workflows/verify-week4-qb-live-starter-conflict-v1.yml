@@ -49,10 +49,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          raw=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts?per_page=100")
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts?per_page=100" > /tmp/artifacts.json
           python - <<'PY'
           import json, os
-          arts=json.loads(os.environ["RAW"])
+          arts=json.load(open("/tmp/artifacts.json",encoding="utf-8"))
           want_id=int(os.environ["SOURCE_ARTIFACT_ID"])
           found=[a for a in arts.get("artifacts",[]) if int(a.get("id",-1))==want_id]
           if len(found)!=1:
@@ -66,9 +66,6 @@ jobs:
               raise SystemExit("FATAL paid artifact expired")
           print("PAID_ARTIFACT_IDENTITY_PASS",a["id"],a["digest"])
           PY
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RAW: ${{ steps.meta.outputs.raw }}
 
       - name: Download exact paid Week4 artifact
         uses: actions/download-artifact@v4
