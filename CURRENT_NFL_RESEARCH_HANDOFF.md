@@ -2,6 +2,60 @@
 GitHub is canonical; chat memory is secondary.
 
 ---
+## ACTIVE CHECKPOINT — 2026-10-01 — WEEK 4 LIVE BOARD RECOVERED / GAME-DAY CURRENT
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-01_WEEK4_LIVE_BOARD_RECOVERED_CURRENT.md`
+
+**Compact next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-01_WEEK4_LIVE_BOARD_RECOVERED.md`
+
+This supersedes all older checkpoints for immediate execution.
+
+### Current state in one screen
+
+- production main before this docs-only continuity commit: `0e6d8ab63c395b6bb9e88b0d55844083ac3221a5`;
+- ONE paid Week-4 live-odds run was explicitly authorized;
+- dispatcher `36934550541` SUCCESS;
+- paid Full Slate `36934563481` acquired live odds and reached pricing, then failed on QB-C2 live-offer/starter identity conflict only;
+- exact paid artifact `11197726111`, digest `sha256:202aa5205e71ad0acedf1910f505c2b362f564d8593a0f82dd0928fb45175aae`;
+- failure identities: CHI Tyson Bagent and WAS Marcus Mariota; sportsbook is not allowed to choose upstream football starter;
+- offline recovery `36935917903` SUCCESS using the same paid artifact with **no second OddsAPI fetch**;
+- authoritative recovered live board artifact `11197776900`, digest `sha256:3f058570037ca016a5cbf1fa79e6e6abc4d845384de4dbdfaf477c8f0a3160a8`;
+- recovered board = 3,460 side rows / 1,730 priced offers / 873 player-market rows / pricing status CURRENT;
+- PR #671 merged final-board Bagent/Mariota quarantine; latest no-live main Full Slate `36936244158` SUCCESS;
+- unfinished dynamic QB conflict branch `repair-week4-qb-live-starter-conflict-v1@d1003a5809bb17b02592b533eb1f42bc247fb88c` still fails verifier `36937252724` because quarantine-authority marker is missing from lineage governance;
+- do **not** refetch live odds to continue today's board; use recovered artifact first;
+- raw edge is not validated confidence: scalar fair-line selector and offer-level residual selector both closed null;
+- GSIS RB V1 Week-4 V2 private lock remains sealed prospectively at 1/6 weeks, 2/10 vacancy team-games, 5/20 successor player-games;
+- ESPN availability semantics repair #670 merged;
+- RNG candidate #666 merged as validated candidate code but not silently production-activated;
+- WR/CB source-blocked, CLV passive, RB-PD2 HOLD;
+- Weeks 1-3 postmortem remains CLOSED at 629-611, 50.7%, -40.72u.
+
+### Exact next action
+
+1. Query live main / Issue #535 / #669 / Actions.
+2. Pull **recovered Week-4 artifact `11197776900`** and inspect the live board/workbook.
+3. Do not spend OddsAPI again unless the user explicitly reauthorizes.
+4. If continuing dynamic QB plumbing, fix the quarantine-authority marker and replay exact paid artifact `11197726111`; no new sportsbook acquisition.
+5. Preserve all frozen research stop rules.
+
+### Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this newest top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-10-01_WEEK4_LIVE_BOARD_RECOVERED_CURRENT.md`
+4. Issue #535 from `5936680436` onward
+5. live main / relevant PRs / branches / Actions
+
+Then work. Do not recursively load older handoffs.
+
+
+---
 ## ACTIVE CHECKPOINT — 2026-09-30 — WR/CB ARCHIVE BREAKTHROUGH / SOURCE INTEGRITY CURRENT
 
 **Read this detailed handoff next:**
