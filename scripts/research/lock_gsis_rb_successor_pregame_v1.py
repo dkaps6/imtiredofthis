@@ -76,6 +76,7 @@ def build_lock(
     vacancy:pd.DataFrame,
     events:pd.DataFrame,
     successor_pool:pd.DataFrame,
+    lock_finalized_at_utc:Any|None=None,
 )->tuple[pd.DataFrame,dict[str,Any]]:
     _no_forbidden(vacancy,"vacancy state")
     _no_forbidden(events,"event schedule")
@@ -218,9 +219,43 @@ def build_lock(
         event_status.append({"status":"LOCKED","team":team,"successors":len(ldf)})
 
     private=pd.DataFrame(out)
+
+    # A scientifically prospective lock must itself be finalized before kickoff;
+    # a historical pre-kickoff source snapshot is not enough. Capture this only
+    # after all lock computation is complete, immediately before persistence.
+    finalized_at=(
+        _iso(lock_finalized_at_utc)
+        if lock_finalized_at_utc is not None
+        else datetime.now(timezone.utc)
+    )
+    late_teams=set()
+    if not private.empty:
+        for team,g in private.groupby("team",sort=False):
+            kickoffs={_iso(v) for v in g["kickoff_utc"].astype(str)}
+            if len(kickoffs)!=1:
+                raise RuntimeError(f"ambiguous kickoff inside locked team {team}: {sorted(str(x) for x in kickoffs)}")
+            kickoff=next(iter(kickoffs))
+            if not finalized_at < kickoff:
+                late_teams.add(str(team))
+        if late_teams:
+            private=private.loc[~private["team"].astype(str).isin(late_teams)].copy()
+            event_status=[
+                (
+                    {"status":"LOCK_FINALIZATION_TIMING_INVALID","team":str(x["team"])}
+                    if x["status"]=="LOCKED" and str(x["team"]) in late_teams
+                    else x
+                )
+                for x in event_status
+            ]
+        if not private.empty:
+            private["lock_finalized_at_utc"]=finalized_at.isoformat()
+
     locked_events=[x for x in event_status if x["status"]=="LOCKED"]
     disposition="GSIS_RB_SUCCESSOR_LINEUP_V1_PREGAME_ALLOCATION_LOCKED" if locked_events else (
-        "SOURCE_TIMING_INVALID" if any(x["status"]=="SOURCE_TIMING_INVALID" for x in event_status)
+        "LOCK_FINALIZATION_TIMING_INVALID"
+        if any(x["status"]=="LOCK_FINALIZATION_TIMING_INVALID" for x in event_status)
+        else "SOURCE_TIMING_INVALID"
+        if any(x["status"]=="SOURCE_TIMING_INVALID" for x in event_status)
         else "NO_GSIS_SUCCESSOR_EXPOSURE"
     )
     audit={
@@ -234,6 +269,8 @@ def build_lock(
         "events_locked":len(locked_events),
         "candidate_rows_private":len(private),
         "events_source_timing_invalid":sum(x["status"]=="SOURCE_TIMING_INVALID" for x in event_status),
+        "events_lock_finalization_timing_invalid":sum(x["status"]=="LOCK_FINALIZATION_TIMING_INVALID" for x in event_status),
+        "lock_finalized_at_utc":finalized_at.isoformat(),
         "events_no_team_lineup_capture":sum(x["status"]=="NO_TEAM_LINEUP_CAPTURE" for x in event_status),
         "events_no_gsis_successor_exposure":sum(x["status"]=="NO_GSIS_SUCCESSOR_EXPOSURE" for x in event_status),
         "max_snap_conservation_gap":0.0 if private.empty else float(
@@ -272,6 +309,7 @@ def main()->int:
         vacancy=pd.read_csv(a.vacancy_state,low_memory=False),
         events=pd.read_csv(a.events,low_memory=False),
         successor_pool=pd.read_csv(a.successor_pool,low_memory=False),
+        lock_finalized_at_utc=None,
     )
     a.public_manifest_out.parent.mkdir(parents=True,exist_ok=True)
     a.public_manifest_out.write_text(json.dumps(audit,indent=2,sort_keys=True)+"\n",encoding="utf-8")
