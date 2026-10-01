@@ -1,0 +1,147 @@
+name: RNG Isolation Production Candidate V1
+
+on:
+  push:
+    branches:
+      - repair-specialist-rng-isolation-current-main-v1
+    paths:
+      - 'docs/production/SPECIALIST_RNG_ISOLATION_PRODUCTION_REPAIR_V1_FROZEN_PLAN.md'
+      - 'scripts/simulation_rng_isolation_v1.py'
+      - 'scripts/simulation_c2_rng_isolation_v1.py'
+      - 'scripts/modeling/qb_c2_production_adapter_rng_isolation_v1.py'
+      - 'scripts/run_pricing_with_full_roster_universe_v3_rng_isolation_candidate.py'
+      - 'scripts/operations/verify_rng_isolation_production_candidate_v1.py'
+      - 'scripts/operations/rng_isolation_candidate_verify_helpers_v1.py'
+      - 'scripts/research/audit_specialist_mc_downstream_materiality_v1.py'
+      - 'tests/test_simulation_rng_isolation_v1.py'
+      - '.github/workflows/rng-isolation-production-candidate-v1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  SOURCE_RUN_ID: "36293274478"
+  SOURCE_ARTIFACT_ID: "10923570170"
+  SOURCE_ARTIFACT_NAME: "run_36293274478"
+  SOURCE_ARTIFACT_DIGEST: "sha256:5a3d4f64592c70553e66dd51bb3bff45263d2900f4d270e370353fa60ea1c480"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run candidate and adjacent regression tests
+        run: |
+          export PYTHONPATH="${PWD}"
+          pytest -q             tests/test_simulation_rng_isolation_v1.py             tests/test_target_pool_full_universe_team_scope.py             tests/test_qb_c2_lineage_current_scope.py             tests/test_full_slate_data_quality_scope.py
+
+      - name: Prove canonical live workflow and legacy simulator remain untouched
+        run: |
+          set -euo pipefail
+          git diff --exit-code e5ef917536458cd6032f4bb93ee3068aa510c7e6 --             .github/workflows/full-slate.yml             scripts/simulation_v2.py             scripts/simulation_explicit_entitlement_v1.py             scripts/simulation_c2_qb_candidate.py             scripts/modeling/qb_c2_production_adapter_v1.py             scripts/run_pricing_with_full_roster_universe_v3_core.py
+          echo "CANONICAL_LIVE_PATH_UNTOUCHED"
+
+      - name: Verify preserved paid artifact authority
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts?per_page=100" > /tmp/source_artifacts.json
+          python - <<'PY'
+          import json, os
+          obj=json.load(open('/tmp/source_artifacts.json',encoding='utf-8'))
+          want=int(os.environ['SOURCE_ARTIFACT_ID'])
+          matches=[a for a in obj.get('artifacts',[]) if int(a.get('id',-1))==want]
+          if len(matches)!=1:
+              raise SystemExit(f'FATAL artifact id {want} found {len(matches)} times')
+          a=matches[0]
+          assert a.get('name') == os.environ['SOURCE_ARTIFACT_NAME'], a
+          assert a.get('digest') == os.environ['SOURCE_ARTIFACT_DIGEST'], a
+          assert not bool(a.get('expired')), a
+          print({'id':want,'name':a.get('name'),'digest':a.get('digest'),'expired':a.get('expired')})
+          PY
+
+      - name: Download preserved Week-3 paid artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: run_36293274478
+          path: replay_source
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 36293274478
+
+      - name: Verify candidate source files from paid artifact
+        run: |
+          set -euo pipefail
+          for f in             replay_source/outputs/props_priced_clean.csv             replay_source/data/football_simulation_universe.csv             replay_source/data/target_entitlement_v1_trace.csv             replay_source/data/target_entitlement_v1_audit.json             replay_source/data/te_r5p_full_slate_entitlement_trace.csv             replay_source/data/wr_r15_full_slate_entitlement_trace.csv             replay_source/data/qb_distribution_state_context.csv             replay_source/data/qb_c2_production_starter_audit.csv             replay_source/data/model_rule_simulation_inputs.csv             replay_source/data/model_ensemble_weights.csv             replay_source/data/qb_promoted_team_context.csv             replay_source/data/player_game_logs.csv             replay_source/data/weather_week.csv; do
+              test -s "$f"
+          done
+          echo "PAID_ARTIFACT_PRODUCTION_CANDIDATE_SOURCE_READY"
+
+      - name: Install exact paid data state into ephemeral working tree
+        run: |
+          set -euo pipefail
+          rm -rf data
+          cp -a replay_source/data data
+          echo "EPHEMERAL_PAID_DATA_STATE_READY"
+
+      - name: Replay canonical current-availability QB C2 runtime seams
+        env:
+          ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+          test -s data/roles_current_production_eligible_v1.csv
+          python scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_primary_team_seam_v1.py
+          python -m py_compile scripts/modeling/qb_c2_production_adapter_v1.py
+          echo "CANONICAL_WEEK3_QB_C2_CURRENT_SCOPE_SEAMS_APPLIED"
+
+      - name: Run production-candidate equivalence audit
+        env:
+          ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          rm -rf data/research/rng_isolation_production_candidate_v1
+          python scripts/operations/verify_rng_isolation_production_candidate_v1.py             --root replay_source             --out-dir data/research/rng_isolation_production_candidate_v1             --source-run-id "${SOURCE_RUN_ID}"             --source-artifact-id "${SOURCE_ARTIFACT_ID}"             --source-artifact-digest "${SOURCE_ARTIFACT_DIGEST}"
+
+      - name: Display result
+        if: always()
+        run: |
+          for f in             data/research/rng_isolation_production_candidate_v1/result.json             data/research/rng_isolation_production_candidate_v1/candidate_vs_paid_summary.csv             data/specialist_rng_isolation_production_candidate_audit.json; do
+              if [ -f "$f" ]; then
+                echo "===== $f ====="
+                cat "$f"
+              fi
+          done
+
+      - name: Upload candidate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rng-isolation-production-candidate-v1-${{ github.run_id }}
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            data/research/rng_isolation_production_candidate_v1/**
+            data/specialist_rng_isolation_production_candidate_audit.json
+            data/rng_isolation_*.csv
