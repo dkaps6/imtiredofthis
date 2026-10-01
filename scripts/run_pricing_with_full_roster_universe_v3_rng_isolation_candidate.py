@@ -20,6 +20,7 @@ import scripts.run_pricing_with_full_roster_universe_v3_core as core
 from scripts.modeling.qb_c2_production_adapter_rng_isolation_v1 import (
     apply_qb_c2_selector,
 )
+from scripts.modeling.qb_c2_production_adapter_v1 import AUDIT_JSON as QB_C2_AUDIT_JSON
 from scripts.simulation_explicit_entitlement_v1 import simulate as reference_explicit_simulate
 from scripts.simulation_rng_isolation_v1 import (
     simulate as isolated_simulate,
@@ -299,6 +300,22 @@ def _simulate_promoted_stack(
         season=int(seasons[0]),
         week=int(weeks[0]),
     )
+    qb_payload.update({
+        "state_capture_parity_keys": state_parity["keys"],
+        "state_capture_changed_arrays": state_parity["changed_arrays"],
+        "state_capture_max_mean_gap": state_parity["max_mean_gap"],
+        "state_capture_max_element_gap": state_parity["max_element_gap"],
+        "state_capture_parity_audit": str(CANDIDATE_STATE_PARITY),
+        "te_r5p_consumed_before_c2": True,
+        "wr_r15_consumed_before_c2": True,
+        "wr_r15_model_version": "WR_R15_PRODUCTION_MODEL_V1",
+        "explicit_entitlement_consumed_before_c2": True,
+    })
+    QB_C2_AUDIT_JSON.write_text(
+        json.dumps(qb_payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    selected.qb_distribution_audit = qb_payload
 
     payload = {
         "disposition": "RNG_ISOLATION_PRODUCTION_CANDIDATE_SIMULATION_READY",
