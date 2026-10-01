@@ -52,7 +52,7 @@ def _pool(extra=False):
 def test_future_lock_conserves_both_arms(tmp_path):
     p=tmp_path/"s.json.gz"; sha=_snapshot(p)
     events=pd.DataFrame([{"target_season":2026,"target_week":5,"team":"DEN","event_id":"g","kickoff_utc":"2026-10-02T00:00:00Z"}])
-    out,audit=build_lock(snapshot_path=p,expected_snapshot_sha256=sha,vacancy=_vacancy(),events=events,successor_pool=_pool())
+    out,audit=build_lock(snapshot_path=p,expected_snapshot_sha256=sha,vacancy=_vacancy(),events=events,successor_pool=_pool(),lock_finalized_at_utc="2026-10-01T12:30:00Z")
     assert audit["events_locked"]==1
     assert abs(out.snap_transfer_rush_share.sum()-0.20)<1e-12
     assert abs(out.gsis_transfer_rush_share.sum()-0.20)<1e-12
@@ -63,7 +63,7 @@ def test_future_lock_conserves_both_arms(tmp_path):
 def test_postkickoff_snapshot_fails_closed_without_private_rows(tmp_path):
     p=tmp_path/"s.json.gz"; sha=_snapshot(p,capture="2026-10-03T12:00:00Z")
     events=pd.DataFrame([{"target_season":2026,"target_week":5,"team":"DEN","event_id":"g","kickoff_utc":"2026-10-02T00:00:00Z"}])
-    out,audit=build_lock(snapshot_path=p,expected_snapshot_sha256=sha,vacancy=_vacancy(),events=events,successor_pool=_pool())
+    out,audit=build_lock(snapshot_path=p,expected_snapshot_sha256=sha,vacancy=_vacancy(),events=events,successor_pool=_pool(),lock_finalized_at_utc="2026-10-01T12:30:00Z")
     assert out.empty
     assert audit["disposition"]=="SOURCE_TIMING_INVALID"
     assert audit["events_source_timing_invalid"]==1
@@ -72,7 +72,7 @@ def test_snapshot_hash_is_fail_closed(tmp_path):
     p=tmp_path/"s.json.gz"; _snapshot(p)
     events=pd.DataFrame([{"target_season":2026,"target_week":5,"team":"DEN","event_id":"g","kickoff_utc":"2026-10-02T00:00:00Z"}])
     try:
-        build_lock(snapshot_path=p,expected_snapshot_sha256="0"*64,vacancy=_vacancy(),events=events,successor_pool=_pool())
+        build_lock(snapshot_path=p,expected_snapshot_sha256="0"*64,vacancy=_vacancy(),events=events,successor_pool=_pool(),lock_finalized_at_utc="2026-10-01T12:30:00Z")
     except RuntimeError as e:
         assert "SHA mismatch" in str(e)
     else:
@@ -101,10 +101,39 @@ def test_active_successor_without_snap_weight_can_receive_gsis_mass(tmp_path):
     import hashlib
     sha=hashlib.sha256(p.read_bytes()).hexdigest()
     events=pd.DataFrame([{"target_season":2026,"target_week":5,"team":"DEN","event_id":"g","kickoff_utc":"2026-10-02T00:00:00Z"}])
-    out,audit=build_lock(snapshot_path=p,expected_snapshot_sha256=sha,vacancy=_vacancy(),events=events,successor_pool=_pool(extra=True))
+    out,audit=build_lock(snapshot_path=p,expected_snapshot_sha256=sha,vacancy=_vacancy(),events=events,successor_pool=_pool(extra=True),lock_finalized_at_utc="2026-10-01T12:30:00Z")
     c_row=out.loc[out.successor_player_clean_key.eq("c")].iloc[0]
     assert c_row.snap_successor_weight==0.0
     assert c_row.snap_transfer_rush_share==0.0
     assert c_row.gsis_successor_weight>0.0
     assert c_row.gsis_transfer_rush_share>0.0
     assert audit["successor_pool_mode"]=="EXPLICIT_ACTIVE_POOL"
+
+def test_lock_finalized_after_kickoff_is_rejected_even_with_pregame_snapshot(tmp_path):
+    p=tmp_path/"s.json.gz"; sha=_snapshot(p,capture="2026-10-01T12:00:00Z")
+    events=pd.DataFrame([{"target_season":2026,"target_week":5,"team":"DEN","event_id":"g","kickoff_utc":"2026-10-02T00:00:00Z"}])
+    out,audit=build_lock(
+        snapshot_path=p,
+        expected_snapshot_sha256=sha,
+        vacancy=_vacancy(),
+        events=events,
+        successor_pool=_pool(),
+        lock_finalized_at_utc="2026-10-02T00:00:01Z",
+    )
+    assert out.empty
+    assert audit["disposition"]=="LOCK_FINALIZATION_TIMING_INVALID"
+    assert audit["events_lock_finalization_timing_invalid"]==1
+
+def test_lock_records_finalized_timestamp_on_private_rows(tmp_path):
+    p=tmp_path/"s.json.gz"; sha=_snapshot(p,capture="2026-10-01T12:00:00Z")
+    events=pd.DataFrame([{"target_season":2026,"target_week":5,"team":"DEN","event_id":"g","kickoff_utc":"2026-10-02T00:00:00Z"}])
+    out,audit=build_lock(
+        snapshot_path=p,
+        expected_snapshot_sha256=sha,
+        vacancy=_vacancy(),
+        events=events,
+        successor_pool=_pool(),
+        lock_finalized_at_utc="2026-10-01T12:30:00Z",
+    )
+    assert set(out["lock_finalized_at_utc"])=={"2026-10-01T12:30:00+00:00"}
+    assert audit["lock_finalized_at_utc"]=="2026-10-01T12:30:00+00:00"
