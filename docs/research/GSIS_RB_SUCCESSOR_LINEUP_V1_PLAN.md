@@ -67,14 +67,17 @@ do not reveal access-controlled raw tables.
 
 ## Frozen successor score
 
-For unavailable RB/FB `u`, surviving successor `j`, and the immutable
-pregame lineup table for team `t`:
+For the frozen unavailable RB/FB set `U_g`, surviving successor `j`, and
+the immutable pregame lineup table for team `t`:
 
 `gsis_absent_exposure_j = sum(Plays_l)`
 
 over every exact offensive lineup `l` such that:
-- `u` is NOT in lineup `l`;
+- **none** of the unavailable identities in `U_g` is in lineup `l`;
 - successor `j` IS in lineup `l`.
+
+This same definition applies whether one or multiple RB/FB teammates are
+definitive-unavailable; no separate multi-vacancy formula is fit.
 
 No minimum-play threshold is tuned in V1. Every positive-play source row is
 used exactly as displayed after parser/source-quality validation.
