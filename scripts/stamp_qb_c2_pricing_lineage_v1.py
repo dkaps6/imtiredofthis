@@ -240,7 +240,15 @@ def main() -> int:
             continue
         cr = lookup.get(identity)
         if cr is None:
-            missing_rows.append({"team": row.get("team"), "player": row.get("player")})
+            # Sportsbooks may post an alternate/backup QB offer while the
+            # football-only starter authority still certifies a different QB.
+            # That downstream market conflict must never redefine the upstream
+            # C2 starter universe. Fail closed at the final-board layer instead:
+            # mark this QB identity for quarantine and continue stamping the
+            # rest of the slate.
+            quarantined_identities.add(identity)
+            priced.at[idx, "qb_distribution_starter_authority_source"] = "LIVE_OFFER_NOT_CERTIFIED_STARTER"
+            priced.at[idx, "qb_distribution_route"] = FINAL_BOARD_QUARANTINE_ROUTE
             continue
         matched_identities.add(identity)
         selected = int(cr.get("selector_c2_selected"))
@@ -253,9 +261,6 @@ def main() -> int:
         priced.at[idx, "qb_distribution_route"] = "C2_SELECTED" if selected else CANONICAL_FALLBACK
         priced.at[idx, "qb_distribution_raw_mean_gap"] = float(cr.get("raw_mean_gap"))
 
-    if missing_rows:
-        raise RuntimeError(f"priced pass-yard rows missing QB C2 audit identity: {missing_rows[:20]}")
-
     pass_rows = priced.loc[pass_mask].copy()
     quarantined_pass = pass_rows.loc[pass_rows["qb_distribution_route"].astype(str).eq(FINAL_BOARD_QUARANTINE_ROUTE)].copy()
     certified_pass = pass_rows.loc[~pass_rows["qb_distribution_route"].astype(str).eq(FINAL_BOARD_QUARANTINE_ROUTE)].copy()
@@ -267,8 +272,12 @@ def main() -> int:
         for col in ("qb_distribution_specialist_version", "qb_distribution_candidate_version", "qb_distribution_selector_version"):
             if quarantined_pass[col].fillna("").astype(str).str.strip().ne("").any():
                 raise RuntimeError(f"final-board-quarantined QB rows incorrectly contain C2 lineage field {col}")
-        if not quarantined_pass["qb_distribution_starter_authority_source"].astype(str).eq("FINAL_BOARD_QUARANTINE").all():
-            raise RuntimeError("final-board-quarantined QB rows missing quarantine authority marker")
+        allowed_quarantine_authority = {
+            "FINAL_BOARD_QUARANTINE",
+            "LIVE_OFFER_NOT_CERTIFIED_STARTER",
+        }
+        if not quarantined_pass["qb_distribution_starter_authority_source"].astype(str).isin(allowed_quarantine_authority).all():
+            raise RuntimeError("final-board-quarantined QB rows missing approved quarantine authority marker")
     selected_players = int(
         certified_pass.loc[pd.to_numeric(certified_pass["qb_distribution_specialist_applied"], errors="coerce").eq(1), ["team", "player"]]
         .drop_duplicates().shape[0]
@@ -327,6 +336,14 @@ def main() -> int:
         "quarantined_pass_yard_qbs": int(len(quarantined_identities)),
         "quarantined_pass_yard_side_rows": int(len(quarantined_pass)),
         "quarantined_pass_yard_identities": [{"team": team, "player_key": player_key} for team, player_key in sorted(quarantined_identities)],
+        "live_offer_not_certified_starter_identities": [
+            {"team": canon_team(r.get("team")), "player_key": _key(r.get("player"))}
+            for _, r in priced.loc[
+                pass_mask
+                & priced["qb_distribution_route"].astype(str).eq(FINAL_BOARD_QUARANTINE_ROUTE)
+                & priced["qb_distribution_starter_authority_source"].astype(str).eq("LIVE_OFFER_NOT_CERTIFIED_STARTER")
+            ].drop_duplicates(["team", "player"]).iterrows()
+        ],
         "football_qbs": int(priced_scope["football_qbs"]),
         "football_qbs_without_priced_pass_yard_offer": int(priced_scope["football_qbs_without_priced_pass_yard_offer"]),
         "football_qbs_without_priced_pass_yard_offer_identities": priced_scope["football_qbs_without_priced_pass_yard_offer_identities"],
