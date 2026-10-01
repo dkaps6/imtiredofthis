@@ -75,28 +75,37 @@ def build_lock(
     expected_snapshot_sha256:str,
     vacancy:pd.DataFrame,
     events:pd.DataFrame,
+    successor_pool:pd.DataFrame,
 )->tuple[pd.DataFrame,dict[str,Any]]:
     _no_forbidden(vacancy,"vacancy state")
     _no_forbidden(events,"event schedule")
+    _no_forbidden(successor_pool,"successor pool")
     req_v={
         "target_season","target_week","team","successor_player_clean_key",
         "vacated_rush_share","successor_weight","transfer_rush_share",
         "unavailable_players",
     }
     req_e={"target_season","target_week","team","event_id","kickoff_utc"}
+    req_p={"target_season","target_week","team","successor_player_clean_key"}
     if req_v-set(vacancy.columns):
         raise RuntimeError(f"vacancy state missing {sorted(req_v-set(vacancy.columns))}")
     if req_e-set(events.columns):
         raise RuntimeError(f"event schedule missing {sorted(req_e-set(events.columns))}")
+    if req_p-set(successor_pool.columns):
+        raise RuntimeError(f"successor pool missing {sorted(req_p-set(successor_pool.columns))}")
 
     v=vacancy.copy()
     e=events.copy()
-    for x in (v,e):
+    p=successor_pool.copy()
+    for x in (v,e,p):
         x["team"]=x["team"].map(team_key)
         x["target_season"]=pd.to_numeric(x["target_season"],errors="raise").astype(int)
         x["target_week"]=pd.to_numeric(x["target_week"],errors="raise").astype(int)
+    p["successor_player_clean_key"]=p["successor_player_clean_key"].astype(str).str.strip()
     if e.duplicated(["target_season","target_week","team"]).any():
         raise RuntimeError("event schedule has duplicate season/week/team")
+    if p.duplicated(["target_season","target_week","team","successor_player_clean_key"]).any():
+        raise RuntimeError("successor pool has duplicate identities")
     if v.empty:
         return pd.DataFrame(),{
             "disposition":"NO_QUALIFYING_VACANCY_EVENT",
@@ -114,7 +123,7 @@ def build_lock(
         raise RuntimeError("GSIS snapshot season != target season")
     rows=parse_offense_lineups(payload)
     capture=_capture_by_team(payload)
-    gsis,mech=build_private_candidate(rows,v)
+    gsis,mech=build_private_candidate(rows,v,successor_pool=p)
 
     # One frozen event row per vacancy team.
     event_base=v[["target_season","target_week","team","vacated_rush_share","unavailable_players"]].copy()
@@ -147,6 +156,9 @@ def build_lock(
             continue
 
         g=v.loc[v.target_season.eq(season)&v.target_week.eq(week)&v.team.eq(team)].copy()
+        pool_event=p.loc[p.target_season.eq(season)&p.target_week.eq(week)&p.team.eq(team)].copy()
+        if pool_event.empty:
+            raise RuntimeError(f"active successor pool empty for {team}")
         gc=gsis.loc[
             pd.to_numeric(gsis.get("target_season"),errors="coerce").eq(season)
             &pd.to_numeric(gsis.get("target_week"),errors="coerce").eq(week)
@@ -168,10 +180,19 @@ def build_lock(
         if abs(float(snap_w.sum())-1.0)>TOL or abs(float(snap_t.sum())-V)>TOL:
             raise RuntimeError(f"Vacancy V1 conservation failed for {team}")
 
+        snap_map={
+            str(r.successor_player_clean_key):(float(r.successor_weight),float(r.transfer_rush_share))
+            for _,r in g.iterrows()
+        }
+        snap_successors=set(snap_map)
+        active_successors=set(pool_event.successor_player_clean_key.astype(str))
+        if not snap_successors.issubset(active_successors):
+            raise RuntimeError(f"Vacancy V1 successor missing from active pool for {team}")
         locked=[]
-        for _,r in g.iterrows():
-            p=str(r.successor_player_clean_key)
-            gw,gt=gsis_map.get(p,(0.0,0.0))
+        for _,r in pool_event.iterrows():
+            pk=str(r.successor_player_clean_key)
+            sw,st=snap_map.get(pk,(0.0,0.0))
+            gw,gt=gsis_map.get(pk,(0.0,0.0))
             locked.append({
                 "target_season":season,
                 "target_week":week,
@@ -180,11 +201,11 @@ def build_lock(
                 "kickoff_utc":kickoff.isoformat(),
                 "gsis_team_capture_utc":cap.isoformat(),
                 "gsis_snapshot_sha256":digest,
-                "successor_player_clean_key":p,
+                "successor_player_clean_key":pk,
                 "unavailable_players":str(er.unavailable_players),
                 "vacated_rush_share":V,
-                "snap_successor_weight":float(r.successor_weight),
-                "snap_transfer_rush_share":float(r.transfer_rush_share),
+                "snap_successor_weight":sw,
+                "snap_transfer_rush_share":st,
                 "gsis_successor_weight":gw,
                 "gsis_transfer_rush_share":gt,
             })
@@ -231,6 +252,7 @@ def build_lock(
         "player_identifiers_emitted_publicly":False,
         "private_rows_must_not_be_committed":True,
         "candidate_mechanics_events_seen":int(mech.get("events_seen",0)),
+        "successor_pool_mode":str(mech.get("successor_pool_mode","")),
     }
     return private,audit
 
@@ -240,6 +262,7 @@ def main()->int:
     ap.add_argument("--expected-snapshot-sha256",required=True)
     ap.add_argument("--vacancy-state",type=Path,required=True)
     ap.add_argument("--events",type=Path,required=True)
+    ap.add_argument("--successor-pool",type=Path,required=True)
     ap.add_argument("--private-lock-out",type=Path,required=True)
     ap.add_argument("--public-manifest-out",type=Path,required=True)
     a=ap.parse_args()
@@ -248,6 +271,7 @@ def main()->int:
         expected_snapshot_sha256=a.expected_snapshot_sha256,
         vacancy=pd.read_csv(a.vacancy_state,low_memory=False),
         events=pd.read_csv(a.events,low_memory=False),
+        successor_pool=pd.read_csv(a.successor_pool,low_memory=False),
     )
     a.public_manifest_out.parent.mkdir(parents=True,exist_ok=True)
     a.public_manifest_out.write_text(json.dumps(audit,indent=2,sort_keys=True)+"\n",encoding="utf-8")
