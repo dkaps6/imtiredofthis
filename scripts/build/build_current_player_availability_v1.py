@@ -70,12 +70,49 @@ def build(depth:pd.DataFrame,injuries:pd.DataFrame,official:pd.DataFrame|None=No
         o.columns=[str(c).lower() for c in o.columns]
         for req in ["team","section_complete"]:
             if req not in o: raise RuntimeError(f"official inactive source missing {req}")
-        o["team"]=o.team.map(canon_team); o["player_clean_key"]=o.get("player",pd.Series("",index=o.index)).map(key)
-        # One complete section ledger row may have blank player; listed player rows have identity.
-        teams_complete=set(o.loc[pd.to_numeric(o.section_complete,errors="coerce").fillna(0).eq(1),"team"])
-        inactive_keys=set(zip(o.loc[o.player_clean_key.ne(""),"team"],o.loc[o.player_clean_key.ne(""),"player_clean_key"]))
+        o["team"]=o.team.map(canon_team)
+        o["player_clean_key"]=o.get("player",pd.Series("",index=o.index)).map(key)
+
+        # ESPN core team injuries is an injury-status proxy, not an official
+        # game-day inactive section. Normalize listed OUT rows into reported
+        # unavailability and explicitly exclude them from official completeness.
+        semantics=(
+            o["source_semantics"].astype("string").fillna("").str.upper().str.strip()
+            if "source_semantics" in o.columns
+            else pd.Series("",index=o.index,dtype="string")
+        )
+        proxy_mask=semantics.eq("INJURY_STATUS_OUT")
+        proxy_keys=set(zip(
+            o.loc[proxy_mask & o.player_clean_key.ne(""),"team"],
+            o.loc[proxy_mask & o.player_clean_key.ne(""),"player_clean_key"],
+        ))
+        if proxy_keys:
+            for idx,(team,pkey) in enumerate(zip(d.team,d.player_clean_key)):
+                if (team,pkey) not in proxy_keys:
+                    continue
+                cur=norm_status(d.at[d.index[idx],"injury_status"] if "injury_status" in d.columns else "")
+                if not cur:
+                    d.at[d.index[idx],"injury_status"]="OUT"
+                if "designation" in d.columns and not norm_status(d.at[d.index[idx],"designation"]):
+                    d.at[d.index[idx],"designation"]="OUT"
+                d.at[d.index[idx],"injury_source"]="espn_core_injury_status_out"
+
+        # Only true official-inactive semantics can certify a complete game-day
+        # section. Legacy files without source_semantics retain old behavior.
+        actual_official=~proxy_mask
+        teams_complete=set(o.loc[
+            actual_official & pd.to_numeric(o.section_complete,errors="coerce").fillna(0).eq(1),
+            "team"
+        ])
+        inactive_keys=set(zip(
+            o.loc[actual_official & o.player_clean_key.ne(""),"team"],
+            o.loc[actual_official & o.player_clean_key.ne(""),"player_clean_key"],
+        ))
         d["official_inactive_section_complete"]=d.team.isin(teams_complete).astype(int)
-        d["official_inactive"]=[bool((t,k) in inactive_keys) if t in teams_complete else pd.NA for t,k in zip(d.team,d.player_clean_key)]
+        d["official_inactive"]=[
+            bool((t,k) in inactive_keys) if t in teams_complete else pd.NA
+            for t,k in zip(d.team,d.player_clean_key)
+        ]
     else:
         d["official_inactive_section_complete"]=0; d["official_inactive"]=pd.NA
     states=[]
