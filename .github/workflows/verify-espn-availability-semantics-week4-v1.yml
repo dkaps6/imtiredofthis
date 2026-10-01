@@ -1,0 +1,107 @@
+name: Verify ESPN Availability Semantics Week4 V1
+
+on:
+  push:
+    branches:
+      - repair-espn-availability-semantics-v1
+    paths:
+      - 'scripts/providers/espn_official_inactives_v1.py'
+      - 'scripts/build/build_current_player_availability_v1.py'
+      - 'tests/test_espn_availability_semantics_repair_v1.py'
+      - '.github/workflows/verify-espn-availability-semantics-week4-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest
+
+      - name: Download preserved Week4 no-odds source state
+        uses: actions/download-artifact@v4
+        with:
+          name: run_36800721395
+          path: /tmp/source
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 36800721395
+
+      - name: Fetch live ESPN OUT proxy with repaired semantics
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p /tmp/verify
+          python scripts/providers/espn_official_inactives_v1.py             --out /tmp/verify/espn_out_proxy.csv             --status /tmp/verify/espn_out_proxy_status.json
+
+      - name: Build corrected current availability
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/build/build_current_player_availability_v1.py             --depth /tmp/source/data/roles_ourlads_status_v1.csv             --injuries /tmp/source/data/injuries.csv             --official /tmp/verify/espn_out_proxy.csv             --out /tmp/verify/current_player_availability_repaired.csv             --status /tmp/verify/current_player_availability_repaired_status.json
+
+      - name: Verify live proxy never impersonates official inactive
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+
+          proxy=pd.read_csv('/tmp/verify/espn_out_proxy.csv',keep_default_na=False)
+          status=json.load(open('/tmp/verify/espn_out_proxy_status.json'))
+          avail=pd.read_csv('/tmp/verify/current_player_availability_repaired.csv')
+
+          if status.get('official_inactive_source') is not False:
+              raise SystemExit('FATAL proxy claims official inactive authority')
+          if int(status.get('complete_team_sections',-1)) != 0:
+              raise SystemExit('FATAL injury proxy certifies official inactive completeness')
+          if pd.to_numeric(proxy['section_complete'],errors='coerce').fillna(0).ne(0).any():
+              raise SystemExit('FATAL proxy emitted official-complete row')
+
+          listed=proxy.loc[proxy.player.astype(str).str.strip().ne('')].copy()
+          listed['player_clean_key']=listed.player.astype(str).str.lower().str.replace(r'[^a-z0-9]','',regex=True)
+          check=avail.merge(
+              listed[['team','player_clean_key']].drop_duplicates(),
+              on=['team','player_clean_key'],how='inner'
+          )
+          if len(check):
+              if not check.final_availability_state.eq('UNAVAILABLE_REPORTED').all():
+                  bad=check.loc[~check.final_availability_state.eq('UNAVAILABLE_REPORTED'),
+                                ['team','player','final_availability_state','availability_authority','injury_status']]
+                  raise SystemExit('FATAL proxy OUT not normalized as reported unavailable: '+bad.to_json(orient='records'))
+              if pd.to_numeric(check.official_inactive_section_complete,errors='coerce').fillna(0).ne(0).any():
+                  raise SystemExit('FATAL proxy OUT contaminated official completeness')
+              if not check.injury_status.astype(str).str.upper().eq('OUT').all():
+                  raise SystemExit('FATAL proxy OUT did not override stale uncertainty')
+
+          focus=avail.loc[
+              avail.player_clean_key.astype(str).isin(['ricodowdle','travisetienne']),
+              ['team','player','injury_status','injury_source','final_availability_state',
+               'availability_authority','official_inactive_section_complete','definitive_unavailable']
+          ]
+          print('LIVE_PROXY_ROWS',len(listed))
+          print('NORMALIZED_PROXY_MATCHES',len(check))
+          print(focus.to_string(index=False))
+          print(json.dumps(status,indent=2,sort_keys=True))
+          PY
+
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: espn-availability-semantics-week4-v1
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            /tmp/verify/espn_out_proxy_status.json
+            /tmp/verify/current_player_availability_repaired_status.json
