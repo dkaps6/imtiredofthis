@@ -136,7 +136,11 @@ def build_private_candidate(rows:list[dict[str,Any]], vacancy:pd.DataFrame)->tup
         V=float(vacated.iloc[0])
         unavailable=set()
         for value in g["unavailable_players"].astype(str):
-            unavailable.update(x.strip() for x in value.split(",") if x.strip())
+            unavailable.update(
+                x.strip()
+                for x in re.split(r"[|,]", value)
+                if x.strip()
+            )
         successors=g["successor_player_clean_key"].astype(str).tolist()
         w=successor_weights(rows,team=team,unavailable=unavailable,successors=successors)
         if not w:
