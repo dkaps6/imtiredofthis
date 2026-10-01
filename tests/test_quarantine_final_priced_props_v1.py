@@ -188,3 +188,38 @@ def test_tracked_manual_final_board_quarantine_file_scopes_week2_wentz():
         ("MIN", "carsonwentz"),
     }
     assert _load_quarantine_keys(path, season=2026, week=3) == set()
+
+
+def test_dynamic_qb_starter_conflict_removes_all_props_for_that_qb(tmp_path):
+    out_path = tmp_path / "props_priced_clean.csv"
+    quarantine_path = tmp_path / "quarantine.csv"
+    pd.DataFrame([
+        {
+            "player":"Tyson Bagent","team":"CHI","source_market":"player_pass_yds",
+            "model_proj":208.0,"qb_distribution_route":"FINAL_BOARD_QUARANTINE",
+            "qb_distribution_starter_authority_source":"LIVE_OFFER_NOT_CERTIFIED_STARTER",
+        },
+        {
+            "player":"Tyson Bagent","team":"CHI","source_market":"player_pass_tds",
+            "model_proj":1.4,"qb_distribution_route":"",
+            "qb_distribution_starter_authority_source":"",
+        },
+        {
+            "player":"Braelon Allen","team":"NYJ","source_market":"player_rush_yds",
+            "model_proj":45.0,"qb_distribution_route":"",
+            "qb_distribution_starter_authority_source":"",
+        },
+    ]).to_csv(out_path,index=False)
+
+    status = quarantine_final_priced_props(
+        out_path=out_path,
+        quarantine_path=quarantine_path,
+        status_path=tmp_path/"status.json",
+        season=2026,
+        week=4,
+    )
+
+    assert status["rows_removed"] == 2
+    assert status["dynamic_qb_starter_conflict_team_name_keys"] == ["CHI:tysonbagent"]
+    remaining=pd.read_csv(out_path)
+    assert list(remaining["player"]) == ["Braelon Allen"]
