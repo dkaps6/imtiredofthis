@@ -86,15 +86,26 @@ def test_current_out_skips_items_with_no_athlete_ref():
 def test_build_writes_ledger_row_plus_player_rows_for_complete_team():
     records = [{"team": "ATL", "section_complete": True, "players": ["Tua Tagovailoa", "Kyle Pitts"]}]
     frame, status = espn.build(records)
-    assert list(frame.columns) == ["team", "player", "listed_position", "section_complete", "source_url", "source_asof_utc"]
-    assert len(frame) == 3  # 1 ledger row + 2 player rows
+    assert list(frame.columns) == [
+        "team", "player", "listed_position", "section_complete",
+        "source_semantics", "provider_status", "source_fetch_complete",
+        "source_url", "source_asof_utc",
+    ]
+    assert len(frame) == 3
     ledger = frame[frame["player"] == ""]
     assert len(ledger) == 1
     assert ledger.iloc[0]["team"] == "ATL"
-    assert ledger.iloc[0]["section_complete"] == 1
-    assert set(frame.loc[frame["player"] != "", "player"]) == {"Tua Tagovailoa", "Kyle Pitts"}
-    assert status["complete_teams"] == ["ATL"]
-    assert status["complete_team_sections"] == 1
+    assert ledger.iloc[0]["section_complete"] == 0
+    assert ledger.iloc[0]["source_fetch_complete"] == 1
+    listed = frame.loc[frame["player"] != ""]
+    assert set(listed["player"]) == {"Tua Tagovailoa", "Kyle Pitts"}
+    assert listed["source_semantics"].eq("INJURY_STATUS_OUT").all()
+    assert listed["provider_status"].eq("OUT").all()
+    assert status["complete_teams"] == []
+    assert status["complete_team_sections"] == 0
+    assert status["fetched_teams"] == ["ATL"]
+    assert status["source_fetch_complete_teams"] == 1
+    assert status["official_inactive_source"] is False
     assert status["listed_players"] == 2
     assert status["payload_valid"] is True
 
@@ -104,8 +115,10 @@ def test_build_incomplete_team_has_ledger_row_but_no_players_and_not_marked_comp
     frame, status = espn.build(records)
     assert len(frame) == 1
     assert frame.iloc[0]["section_complete"] == 0
+    assert frame.iloc[0]["source_fetch_complete"] == 0
     assert status["complete_teams"] == []
     assert status["complete_team_sections"] == 0
+    assert status["fetched_teams"] == []
     assert status["listed_players"] == 0
     assert status["payload_valid"] is False
 
@@ -164,11 +177,14 @@ def test_main_end_to_end_with_mocked_fetchers(tmp_path, monkeypatch):
     frame = pd.read_csv(out, keep_default_na=False)
     atl_rows = frame[frame["team"] == "ATL"]
     pit_rows = frame[frame["team"] == "PIT"]
-    assert (atl_rows["section_complete"] == 1).all()
+    assert (atl_rows["section_complete"] == 0).all()
+    assert (atl_rows["source_fetch_complete"] == 1).all()
     assert "Tua Tagovailoa" in set(atl_rows["player"])
     assert (pit_rows["section_complete"] == 0).all()
+    assert (pit_rows["source_fetch_complete"] == 0).all()
     assert pit_rows["player"].eq("").all()
 
     status = json.loads(status_path.read_text())
-    assert status["complete_teams"] == ["ATL"]
+    assert status["complete_teams"] == []
+    assert status["fetched_teams"] == ["ATL"]
     assert status["listed_players"] == 1
