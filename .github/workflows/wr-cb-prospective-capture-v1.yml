@@ -1,0 +1,51 @@
+name: WR-CB prospective pregame public-source capture
+
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Current NFL season (2026 or later)"
+        required: true
+        type: number
+      week:
+        description: "Current NFL regular-season week 1-18"
+        required: true
+        type: number
+      article_url:
+        description: "Verified newly published FantasyAlarm WR-CB article URL"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install existing dependencies
+        run: pip install -r requirements.txt
+      - name: Capture exactly one point-in-time article
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          SOURCE_URL: ${{ inputs.article_url }}
+          SOURCE_SEASON: ${{ inputs.season }}
+          SOURCE_WEEK: ${{ inputs.week }}
+        run: |
+          python scripts/research/capture_fantasyalarm_wr_cb_pregame_v1.py \
+            --season "$SOURCE_SEASON" --week "$SOURCE_WEEK" \
+            --url "$SOURCE_URL" \
+            --out-dir "outputs/wr_cb_prospective/${{ github.run_id }}"
+      - name: Upload ephemeral exact HTML and compact factual lock
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-cb-prospective-exact-capture
+          path: outputs/wr_cb_prospective/
+          retention-days: 90
+          if-no-files-found: warn

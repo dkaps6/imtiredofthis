@@ -1,0 +1,30 @@
+# WR-CB Opponent-Week Defender Roster Repair V1 — Independent validation
+
+**Source-quality repair, NOT a model promotion.** Claude's 14-provider-ID cross-audit exposed a missing mechanical guard: source `schedule_match` checked the WR's scheduled opponent, but an otherwise stable CB identity could be mapped into an opponent game where that CB was not on the defensive roster.
+
+## Frozen existing-artifact counterfactual (no duplicate archive acquisition)
+- Existing #665 **provider-reuse-repaired** source run `36735087776`, artifact `11105928635` `sha256:83f6b4ff20bf12ef5628de0f5a4e983aac695c5652429df1241c743cdba65ac4` / 4,459 source pairings / **4,034** provisionally publication+schedule+identity+alignment-ready.
+- Source-only conservative precheck from same-week `WEEK_EXACT` anchors inside that artifact: **10** demonstrably wrong-opponent *previously eligible* bridge rows, **322** other previously eligible rows without an exact-week anchor in the observed article corpus (UNKNOWN, not proof wrong). Eight of those 10 wrong rows passed site-reported pre-kickoff edit timing.
+- Full exact-week defensive roster check reuses the **same public nflverse weekly rosters already used by #665**. Candidate branch `research-wr-cb-week-opponent-roster-guard-v1` commit `e02555e8ee80e0a291f43c34f0f1e4d655cc975c`: GitHub Actions `36741822792` **SUCCESS**, frozen source artifact consumed without fresh FantasyAlarm calls, output artifact `11111240446` digest `sha256:5cbc7430cf4bce5ca477017f1735845368015f73e847eb6d0f347e04b214d6f9`, 2 synthetic tests PASS.
+- **35 newly quarantined** from 4,034 provisional ready: **33 confirmed defender on another team that exact week**, **2 unobserved in the exact-week defensive roster** (quarantine/UNKNOWN, not independently called wrong). Id methods: 34 provider-ID bridges, 1 season-unique fallback. Seasons: 2022 5, 2023 2, 2024 24, 2025 4.
+- Provisional source-quality ready after this ADDITIVE defender-opponent guard: **3,999**. This is **NOT** a historically point-in-time-verified eligible model sample; zero independently proven original content snapshots under the separate archive-content gate.
+
+## Implementation in this PR
+The pure `assess_cb_week_opponent` helper requires `(season,week,cb_gsis_id)` to have **exactly one** weekly defensive roster membership, matching the source row's actual WR opponent. Other team / ambiguous multi-team / missing weekly membership / unknown GSIS => fail closed. Existing prior publication/schedule/identity/composite/slot guards remain intact. The helper works both on a standalone preserved existing-artifact counterfactual and before `source_quality_row_ready` is calculated in the production-independent source audit.
+
+**Integrated PR #665 validation complete:** source gate implementation commit
+`2f09c696592aa05718ed1f858bea6a4c0eceb88d`; fresh Repo CI
+`36742368817` **SUCCESS** and 71-page source audit
+`36742368919` **SUCCESS**, artifact `11110249961`, SHA-256
+`7caba3f2a0e791bd821a178495d5c6563995fc60b3f0af584cdbb4620b142061`.
+The integrated audit reproduces **4,034** pre-CB-week provisional rows and
+quarantines exactly **35**, leaving **3,999**. Of those 35, **33** are confirmed
+on another weekly defensive roster and **2** are weekly-roster-unobserved.
+Historical current-page content remains separately unproven; after this guard
+**3,526** of the 3,999 are only timestamp-compatible with pregame and **473**
+still come from pages carrying post-kickoff modification metadata. Neither
+category is point-in-time snapshot proof.
+
+No production or football-model code is changed. The independent preserved
+Week-2 replay check remains red only because its pinned artifact is expired;
+that is unchanged and unrelated to this source gate. Original Week-3 settlement remains CLOSED and unchanged; no OddsAPI calls.
