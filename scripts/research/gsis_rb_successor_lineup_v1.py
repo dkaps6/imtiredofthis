@@ -118,7 +118,11 @@ def successor_weights(
         return {}
     return {s:exposure[s]/den for s in successors if exposure[s]>0}
 
-def build_private_candidate(rows:list[dict[str,Any]], vacancy:pd.DataFrame)->tuple[pd.DataFrame,dict[str,Any]]:
+def build_private_candidate(
+    rows:list[dict[str,Any]],
+    vacancy:pd.DataFrame,
+    successor_pool:pd.DataFrame|None=None,
+)->tuple[pd.DataFrame,dict[str,Any]]:
     required={
       "target_season","target_week","team","successor_player_clean_key",
       "vacated_rush_share","unavailable_players"
@@ -126,6 +130,20 @@ def build_private_candidate(rows:list[dict[str,Any]], vacancy:pd.DataFrame)->tup
     miss=sorted(required-set(vacancy.columns))
     if miss: raise RuntimeError(f"vacancy state missing columns: {miss}")
     key=["target_season","target_week","team"]
+    pool=None
+    if successor_pool is not None:
+        pool=successor_pool.copy()
+        pool.columns=[str(x).strip().lower() for x in pool.columns]
+        need_pool={*key,"successor_player_clean_key"}
+        missing=need_pool-set(pool.columns)
+        if missing:
+            raise RuntimeError(f"successor pool missing columns: {sorted(missing)}")
+        pool["team"]=pool["team"].map(team_key)
+        pool["target_season"]=pd.to_numeric(pool["target_season"],errors="raise").astype(int)
+        pool["target_week"]=pd.to_numeric(pool["target_week"],errors="raise").astype(int)
+        pool["successor_player_clean_key"]=pool["successor_player_clean_key"].astype(str).map(player_key)
+        if pool.duplicated([*key,"successor_player_clean_key"]).any():
+            raise RuntimeError("duplicate explicit successor-pool identity")
     private=[]
     event_audits=[]
     for ident,g in vacancy.groupby(key,sort=True):
@@ -141,7 +159,20 @@ def build_private_candidate(rows:list[dict[str,Any]], vacancy:pd.DataFrame)->tup
                 for x in re.split(r"[|,]", value)
                 if x.strip()
             )
-        successors=g["successor_player_clean_key"].astype(str).tolist()
+        if pool is None:
+            successors=g["successor_player_clean_key"].astype(str).tolist()
+        else:
+            q=pool.loc[
+                pool.target_season.eq(int(season))
+                & pool.target_week.eq(int(week))
+                & pool.team.eq(team_key(team))
+            ]
+            successors=q["successor_player_clean_key"].astype(str).tolist()
+            snap_successors=set(g["successor_player_clean_key"].astype(str).map(player_key))
+            active_successors=set(successors)
+            if not snap_successors.issubset(active_successors):
+                missing=sorted(snap_successors-active_successors)
+                raise RuntimeError(f"Vacancy V1 successors absent from active successor pool: {missing}")
         w=successor_weights(rows,team=team,unavailable=unavailable,successors=successors)
         if not w:
             event_audits.append({"status":"NO_GSIS_SUCCESSOR_EXPOSURE","successors":len(successors)})
@@ -167,6 +198,7 @@ def build_private_candidate(rows:list[dict[str,Any]], vacancy:pd.DataFrame)->tup
       "target_outcomes_read":False,
       "sportsbook_inputs_read":False,
       "raw_lineups_emitted_publicly":False,
+      "successor_pool_mode":"EXPLICIT_ACTIVE_POOL" if pool is not None else "VACANCY_STATE_ONLY_SCHEMA_COMPAT",
     }
     return out,audit
 
@@ -198,13 +230,15 @@ def main()->int:
     ap.add_argument("--public-audit",type=Path,required=True)
     ap.add_argument("--vacancy-state",type=Path)
     ap.add_argument("--private-candidate-out",type=Path)
+    ap.add_argument("--successor-pool",type=Path)
     a=ap.parse_args()
     payload,digest=load_snapshot(a.snapshot)
     rows=parse_offense_lineups(payload)
     audit=public_schema_audit(payload,digest,rows)
     if a.vacancy_state:
         vacancy=pd.read_csv(a.vacancy_state,low_memory=False)
-        candidate,cand_audit=build_private_candidate(rows,vacancy)
+        successor_pool=pd.read_csv(a.successor_pool,low_memory=False) if a.successor_pool else None
+        candidate,cand_audit=build_private_candidate(rows,vacancy,successor_pool=successor_pool)
         audit["candidate_mechanics"]=cand_audit
         if a.private_candidate_out:
             a.private_candidate_out.parent.mkdir(parents=True,exist_ok=True)
