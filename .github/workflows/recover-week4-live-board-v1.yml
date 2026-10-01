@@ -61,9 +61,11 @@ jobs:
           gh run download "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" --name "${SOURCE_ARTIFACT_NAME}" --dir /tmp/source
           test -s /tmp/source/outputs/props_priced_clean.csv
           test -s /tmp/source/data/qb_c2_production_integration_audit.csv
+          cp data/manual_final_board_quarantine.csv /tmp/manual_final_board_quarantine.csv
           rm -rf data outputs
           cp -a /tmp/source/data ./data
           cp -a /tmp/source/outputs ./outputs
+          cp /tmp/manual_final_board_quarantine.csv data/manual_final_board_quarantine.csv
 
       - name: Stamp QB lineage with Week4 final-board quarantines
         run: |
