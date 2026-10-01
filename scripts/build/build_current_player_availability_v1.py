@@ -90,10 +90,11 @@ def build(depth:pd.DataFrame,injuries:pd.DataFrame,official:pd.DataFrame|None=No
             for idx,(team,pkey) in enumerate(zip(d.team,d.player_clean_key)):
                 if (team,pkey) not in proxy_keys:
                     continue
-                cur=norm_status(d.at[d.index[idx],"injury_status"] if "injury_status" in d.columns else "")
-                if not cur:
-                    d.at[d.index[idx],"injury_status"]="OUT"
-                if "designation" in d.columns and not norm_status(d.at[d.index[idx],"designation"]):
+                # ESPN's latest injury-log fact is definitively OUT. It must
+                # override older/non-definitive QUESTIONABLE/DOUBTFUL/DNP
+                # rows rather than merely filling blanks.
+                d.at[d.index[idx],"injury_status"]="OUT"
+                if "designation" in d.columns:
                     d.at[d.index[idx],"designation"]="OUT"
                 d.at[d.index[idx],"injury_source"]="espn_core_injury_status_out"
 
