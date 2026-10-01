@@ -6,7 +6,7 @@ def test_implied_prob():
     assert abs(implied_prob(120)-100/220)<1e-12
 
 def test_offer_features_and_weights():
-    src=pd.DataFrame([{"game_id":"g","player_clean_key":"p","market":"pass_yards","season":2024,"week":1,"team":"A","opponent":"B","model_projection":260.0,"actual":270.0}])
+    src=pd.DataFrame([{"game_id":"g","player_clean_key":"p","market":"pass_yards","season":2024,"week":1,"team":"A","opponent":"B","player":"QB","model_projection":260.0,"actual":270.0,"model_authority":"QB_PASS_SYNTHESIS_V1","authority_scope":"exact"}])
     props=pd.DataFrame([
       {"game_id":"g","player_clean_key":"p","market":"pass_yards","book":"DK","line":250.5,"over_odds":-110,"under_odds":-110},
       {"game_id":"g","player_clean_key":"p","market":"pass_yards","book":"FD","line":252.5,"over_odds":-105,"under_odds":-115},
