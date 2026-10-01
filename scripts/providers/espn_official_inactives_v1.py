@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Acquire current-week official-ish NFL inactive status from ESPN's core API.
+"""Acquire current-week definitive injury-status OUT facts from ESPN's core API.
 
-Replaces the dead nfl.com/inactives scraper (nfl_official_inactives_v1.py):
-that page has shipped a "Please check back soon" placeholder with zero
-structured content all 2026 season -- confirmed empty across every game on
-a live game day, well past the point official inactives should exist.
-Same output contract as the script it replaces, so downstream consumers
-(build_current_player_availability_v1.py) need no changes:
+IMPORTANT SEMANTICS:
+This endpoint is a TEAM INJURY LOG, not an official game-day inactive list.
+Rows emitted here may support UNAVAILABLE_REPORTED, but MUST NOT satisfy the
+T-75 official-inactives certification gate and MUST NOT be labeled
+UNAVAILABLE_OFFICIAL_INACTIVE downstream.
+
+The historical filename is retained temporarily for pipeline compatibility:
 data/official_inactives_v1.csv + data/official_inactives_v1_status.json.
 
 Source: ESPN's core API team injuries endpoint
@@ -131,40 +132,61 @@ def current_out_athlete_ids(items: list[dict], *, now: datetime) -> list[dict]:
 
 
 def build(team_records: list[dict]) -> tuple[pd.DataFrame, dict]:
-    """team_records: [{'team': abbr, 'section_complete': bool, 'players': [name, ...]}, ...]"""
+    """Build an injury-OUT proxy ledger without impersonating official inactives.
+
+    team_records:
+      [{'team': abbr, 'section_complete': bool, 'players': [name, ...]}, ...]
+
+    Here section_complete means only that the ESPN injury endpoint was fetched
+    successfully for that team. It is NOT an official inactive-section
+    completeness fact, so emitted section_complete is always 0.
+    """
     now = datetime.now(timezone.utc).isoformat()
     rows: list[dict] = []
-    complete_teams: list[str] = []
+    fetched_teams: list[str] = []
     for rec in team_records:
         team = canon_team(rec["team"])
-        complete = bool(rec["section_complete"])
-        if complete:
-            complete_teams.append(team)
-        # Ledger row: one per team so "no listed players" is distinguishable
-        # from "we never checked this team."
+        fetched = bool(rec["section_complete"])
+        if fetched:
+            fetched_teams.append(team)
         rows.append({
             "team": team, "player": "", "listed_position": "",
-            "section_complete": int(complete),
+            "section_complete": 0,
+            "source_semantics": "INJURY_STATUS_OUT",
+            "provider_status": "",
+            "source_fetch_complete": int(fetched),
             "source_url": TEAM_INJURIES_URL,
             "source_asof_utc": now,
         })
         for name in rec.get("players", []):
             rows.append({
                 "team": team, "player": name, "listed_position": "",
-                "section_complete": int(complete),
+                "section_complete": 0,
+                "source_semantics": "INJURY_STATUS_OUT",
+                "provider_status": "OUT",
+                "source_fetch_complete": int(fetched),
                 "source_url": TEAM_INJURIES_URL,
                 "source_asof_utc": now,
             })
-    frame = pd.DataFrame(rows, columns=["team", "player", "listed_position", "section_complete", "source_url", "source_asof_utc"])
+    cols = [
+        "team", "player", "listed_position", "section_complete",
+        "source_semantics", "provider_status", "source_fetch_complete",
+        "source_url", "source_asof_utc",
+    ]
+    frame = pd.DataFrame(rows, columns=cols)
     listed_players = int(frame["player"].astype(str).str.strip().ne("").sum())
     status = {
         "generated_at_utc": now,
-        "source": "espn_official_inactives_core_api",
+        "source": "espn_core_injury_status_out_proxy",
+        "source_semantics": "INJURY_STATUS_OUT",
+        "official_inactive_source": False,
         "endpoint_reachable": True,
-        "complete_team_sections": len(complete_teams),
-        "complete_teams": sorted(complete_teams),
+        "source_fetch_complete_teams": len(fetched_teams),
+        "fetched_teams": sorted(fetched_teams),
+        "complete_team_sections": 0,
+        "complete_teams": [],
         "listed_players": listed_players,
-        "payload_valid": bool(complete_teams),
+        "payload_valid": bool(fetched_teams),
     }
     return frame, status
 
@@ -179,11 +201,23 @@ def main() -> int:
     try:
         teams = fetch_scoreboard_teams()
     except Exception as exc:
-        frame = pd.DataFrame(columns=["team", "player", "listed_position", "section_complete", "source_url", "source_asof_utc"])
+        frame = pd.DataFrame(columns=[
+            "team", "player", "listed_position", "section_complete",
+            "source_semantics", "provider_status", "source_fetch_complete",
+            "source_url", "source_asof_utc",
+        ])
         status = {
-            "generated_at_utc": now.isoformat(), "source": "espn_official_inactives_core_api",
-            "endpoint_reachable": False, "complete_team_sections": 0, "complete_teams": [],
-            "listed_players": 0, "payload_valid": False, "error": f"{type(exc).__name__}:{exc}",
+            "generated_at_utc": now.isoformat(),
+            "source": "espn_core_injury_status_out_proxy",
+            "source_semantics": "INJURY_STATUS_OUT",
+            "official_inactive_source": False,
+            "endpoint_reachable": False,
+            "source_fetch_complete_teams": 0,
+            "fetched_teams": [],
+            "complete_team_sections": 0,
+            "complete_teams": [],
+            "listed_players": 0, "payload_valid": False,
+            "error": f"{type(exc).__name__}:{exc}",
         }
         a.out.parent.mkdir(parents=True, exist_ok=True)
         frame.to_csv(a.out, index=False)
