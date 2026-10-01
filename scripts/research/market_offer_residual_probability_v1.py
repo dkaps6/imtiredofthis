@@ -52,7 +52,23 @@ def prepare_offers(source: pd.DataFrame, props: pd.DataFrame) -> pd.DataFrame:
                   offer_count=("book","nunique")))
     p=p.merge(stats,on=g,how="left",validate="many_to_one")
     p["line_range"]=p.line_max-p.line_min
-    z=p.merge(s,on=g,how="inner",validate="many_to_one")
+    # Football authority owns season/week/team/opponent/player and all model lineage.
+    # The market archive may carry same-named convenience metadata; retaining both
+    # would suffix canonical source columns (e.g. season_x/season_y). Keep only
+    # offer-specific fields from the sportsbook side before the identity join.
+    source_owned = {
+        "season", "week", "team", "opponent", "player",
+        "model_projection", "actual", "model_authority", "authority_scope",
+    }
+    market_keep = [col for col in p.columns if col not in source_owned]
+    z=p[market_keep].merge(s,on=g,how="inner",validate="many_to_one")
+    required_source = {
+        "season", "week", "team", "opponent", "model_projection", "actual",
+        "model_authority", "authority_scope",
+    }
+    missing_source = sorted(required_source - set(z.columns))
+    if missing_source:
+        raise RuntimeError(f"market-offer join lost football authority columns: {missing_source}")
     for c in ["model_projection","actual"]: z[c]=pd.to_numeric(z[c],errors="coerce")
     z=z.loc[z[["model_projection","actual","line"]].notna().all(axis=1)].copy()
     z=z.loc[~np.isclose(z.actual,z.line,rtol=0,atol=1e-12)].copy()
