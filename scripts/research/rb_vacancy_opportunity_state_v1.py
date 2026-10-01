@@ -82,24 +82,42 @@ def build_state(availability: pd.DataFrame, roles: pd.DataFrame, logs: pd.DataFr
     rows=[]; exclusions=[]
     teams = sorted(unavailable.team.unique())
     for team in teams:
-        u = unavailable.loc[unavailable.team.eq(team)].copy()
-        missing_u = u.loc[u.rush_share_game.isna()]
-        for _, r in missing_u.iterrows(): exclusions.append({"team":team,"player_clean_key":r.player_clean_key,"reason":"NO_PRIOR_RUSH_SHARE"})
-        u = u.loc[u.rush_share_game.notna()].copy()
-        if u.empty: continue
+        # Keep the full definitive-unavailable identity set for downstream
+        # GSIS lineup conditioning even when one unavailable back lacks a
+        # strict-prior rush-share observation. The frozen Vacancy V1 transfer
+        # mass remains the sum of the qualified prior rush shares only; missing
+        # history is recorded as an exclusion, not silently treated as zero.
+        u_all = unavailable.loc[unavailable.team.eq(team)].copy()
+        missing_u = u_all.loc[u_all.rush_share_game.isna()]
+        for _, r in missing_u.iterrows():
+            exclusions.append({"team":team,"player_clean_key":r.player_clean_key,"reason":"NO_PRIOR_RUSH_SHARE"})
+        u_qualified = u_all.loc[u_all.rush_share_game.notna()].copy()
+        if u_qualified.empty:
+            continue
         a = active.loc[active.team.eq(team) & active.offense_pct.notna() & active.offense_pct.gt(0)].copy()
         if a.empty:
             exclusions.append({"team":team,"player_clean_key":"","reason":"NO_SUCCESSOR_PRIOR_SNAP_WEIGHT"}); continue
-        v = float(u.rush_share_game.clip(lower=0).sum())
+        v = float(u_qualified.rush_share_game.clip(lower=0).sum())
         denom = float(a.offense_pct.sum())
-        if denom <= 0: exclusions.append({"team":team,"player_clean_key":"","reason":"NO_SUCCESSOR_PRIOR_SNAP_WEIGHT"}); continue
+        if denom <= 0:
+            exclusions.append({"team":team,"player_clean_key":"","reason":"NO_SUCCESSOR_PRIOR_SNAP_WEIGHT"}); continue
+
+        unavailable_ids = sorted(u_all.player_clean_key.astype(str))
+        prior_share_by_player = {
+            str(r.player_clean_key): r.rush_share_game
+            for r in u_all.itertuples(index=False)
+        }
+        unavailable_share_trace = "|".join(
+            "NA" if pd.isna(prior_share_by_player[p]) else f"{float(prior_share_by_player[p]):.12g}"
+            for p in unavailable_ids
+        )
         for _, r in a.iterrows():
             w=float(r.offense_pct/denom)
             rows.append({"target_season":target_season,"target_week":target_week,"team":team,"successor_player_clean_key":r.player_clean_key,
                          "prior_offense_pct":float(r.offense_pct),"snap_source_season":int(r.offense_pct_source_season),"snap_source_week":int(r.offense_pct_source_week),
                          "vacated_rush_share":v,"successor_weight":w,"transfer_rush_share":v*w,
-                         "unavailable_players":"|".join(sorted(u.player_clean_key.astype(str))),
-                         "unavailable_prior_rush_shares":"|".join(f"{x:.12g}" for x in u.rush_share_game)})
+                         "unavailable_players":"|".join(unavailable_ids),
+                         "unavailable_prior_rush_shares":unavailable_share_trace})
     # Keep zero-event artifacts parseable and schema-stable. A legitimate NO_EVENT
     # cohort is scientific state, not an exceptional/empty-file condition.
     out=pd.DataFrame(rows, columns=STATE_COLUMNS); exc=pd.DataFrame(exclusions, columns=EXCLUSION_COLUMNS)
