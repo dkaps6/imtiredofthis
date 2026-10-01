@@ -11,6 +11,7 @@ on:
       - 'scripts/modeling/qb_c2_production_adapter_rng_isolation_v1.py'
       - 'scripts/run_pricing_with_full_roster_universe_v3_rng_isolation_candidate.py'
       - 'scripts/operations/verify_rng_isolation_production_candidate_v1.py'
+      - 'scripts/operations/rng_isolation_candidate_verify_helpers_v1.py'
       - 'scripts/research/audit_specialist_mc_downstream_materiality_v1.py'
       - 'tests/test_simulation_rng_isolation_v1.py'
       - '.github/workflows/rng-isolation-production-candidate-v1.yml'
