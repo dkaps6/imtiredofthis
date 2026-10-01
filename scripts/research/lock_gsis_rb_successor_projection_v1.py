@@ -15,12 +15,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from scripts.modeling.bayesian_v2 import apply_bayesian_to_metrics
 from scripts.modeling.discrete_count_alignment_v1 import align_prealigned_outcomes
 from scripts.modeling.ensemble_v2 import apply_ensemble
-from scripts.modeling.simulation_rules import apply_rules_to_metrics
+import scripts.run_pricing_with_full_roster_universe_v1 as production_base
+import scripts.run_pricing_with_full_roster_universe_v2 as production_v2
+import scripts.run_pricing_with_full_roster_universe_v3_core as production_v3
 from scripts.run_pricing_with_full_roster_universe_v1 import _canonical_game
-from scripts.simulation_v2 import lookup, simulate
+from scripts.simulation_v2 import lookup
 
 DATA=Path("data")
 ITERATIONS=25000
@@ -122,7 +123,7 @@ def apply_transfer_arm(
     out.attrs["applied_nonzero_transfers"]=applied_nonzero
     return out
 
-def _prepare(allocation:pd.DataFrame)->tuple[pd.DataFrame,pd.DataFrame,pd.DataFrame,pd.DataFrame]:
+def _prepare(allocation:pd.DataFrame)->tuple[pd.DataFrame,pd.DataFrame,pd.DataFrame,pd.DataFrame,dict]:
     consensus=_read(DATA/"player_form_consensus.csv","pregame PlayerForm consensus")
     ml=_read(DATA/"model_ml_diagnostics.csv","pregame ML diagnostics")
     state=_read(DATA/"model_state_diagnostics.csv","pregame State diagnostics")
@@ -145,26 +146,34 @@ def _prepare(allocation:pd.DataFrame)->tuple[pd.DataFrame,pd.DataFrame,pd.DataFr
         raise RuntimeError("GSIS successor projection V1 is frozen for Week > 1 current generic RB mean route")
 
     consensus["team"]=consensus.team.astype(str).str.upper().str.strip()
-    consensus["player_clean_key"]=_key(consensus.player_clean_key)
-    consensus["position_family"]=_pos_family(consensus.position)
-    target=consensus.loc[
+    target_seed=consensus.loc[
         pd.to_numeric(consensus.season,errors="coerce").eq(season)
         & pd.to_numeric(consensus.week,errors="coerce").eq(week)
     ].copy()
-    if target.empty:
+    if target_seed.empty:
         raise RuntimeError(f"PlayerForm consensus has no season={season} week={week} rows")
 
-    target["event_id"]=[
+    # Enter through the exact current Full Slate V3/V6 Week>1 football universe
+    # seam: suffix-safe identity, M38 explicit entitlement, TE-R5P, WR-R15 and
+    # QB C2. V4/V5 Week-1-only RB adapters are no-ops here; V6 changes only
+    # rush_rec_yards downstream, not rush_att/rush_yards.
+    target_seed["event_id"]=[
         _canonical_game(t,o,s,w)
-        for t,o,s,w in zip(target.team,target.opponent,target.season,target.week)
+        for t,o,s,w in zip(target_seed.team,target_seed.opponent,target_seed.season,target_seed.week)
     ]
-    target["market"]="football_universe"
-    target=apply_bayesian_to_metrics(target)
-    target=apply_rules_to_metrics(target)
+    target_seed["market"]="football_universe"
+    production_base._identity_frame=production_v2._canonical_identity_frame
+    production_base._validate_priced_distribution_coverage=(
+        production_v2._install_provider_player_aliases_and_validate
+    )
+    target,_,production_audit=production_v3._build_with_promoted_entitlement_specialists(target_seed)
+
     if not pd.to_numeric(target.get("rules_applied",0),errors="coerce").fillna(0).eq(1).all():
-        raise RuntimeError("canonical rules failed on projection-lock football universe")
+        raise RuntimeError("promoted production universe missing canonical rules")
     if "team_wp" in target.columns:
         raise RuntimeError("market-derived team_wp leaked into projection lock")
+    if target["team"].nunique()!=32:
+        raise RuntimeError(f"promoted production universe expected 32 teams, got {target['team'].nunique()}")
 
     # Unavailable RB/FBs must already be absent from the active football universe.
     availability["team"]=availability.team.astype(str).str.upper().str.strip()
@@ -181,12 +190,26 @@ def _prepare(allocation:pd.DataFrame)->tuple[pd.DataFrame,pd.DataFrame,pd.DataFr
             "player_clean_key"
         ].astype(str),
     ))
-    active=set(zip(target.team.astype(str),target.player_clean_key.astype(str)))
+    active=set(zip(target.team.astype(str),_key(target.player_clean_key).astype(str)))
     leak=sorted(unavailable&active)
     if leak:
         raise RuntimeError(f"definitive unavailable RB/FB leaked into active universe: {leak[:20]}")
 
-    return target,ml,state,weights
+    return target,ml,state,weights,production_audit
+
+def _simulate_current_week_gt1_production(
+    frame:pd.DataFrame,
+    *,
+    iterations:int,
+    seed:int,
+    allocation_trace:list[dict],
+):
+    return production_v3._simulate_promoted_stack(
+        frame,
+        iterations=iterations,
+        seed=seed,
+        allocation_trace=allocation_trace,
+    )
 
 def build_projection_lock(allocation:pd.DataFrame)->tuple[pd.DataFrame,dict]:
     bad=_forbidden(allocation)
@@ -206,7 +229,7 @@ def build_projection_lock(allocation:pd.DataFrame)->tuple[pd.DataFrame,dict]:
     if lock.duplicated(["target_season","target_week","team","successor_player_clean_key"]).any():
         raise RuntimeError("duplicate allocation-lock successor identity")
 
-    prepared,ml,state,weights=_prepare(lock)
+    prepared,ml,state,weights,production_audit=_prepare(lock)
     event_teams=sorted(lock.team.unique())
 
     cohort=prepared.loc[
@@ -232,7 +255,9 @@ def build_projection_lock(allocation:pd.DataFrame)->tuple[pd.DataFrame,dict]:
     traces={}; sims={}
     for name,frame in [("BASELINE",baseline),("VACANCY_V1_SNAP",snap),("GSIS_LINEUP_V1",gsis)]:
         trace=[]
-        sims[name]=simulate(frame,iterations=ITERATIONS,seed=SEED,allocation_trace=trace)
+        sims[name]=_simulate_current_week_gt1_production(
+            frame,iterations=ITERATIONS,seed=SEED,allocation_trace=trace
+        )
         traces[name]=pd.DataFrame(trace)
 
     rows=[]
@@ -335,6 +360,10 @@ def build_projection_lock(allocation:pd.DataFrame)->tuple[pd.DataFrame,dict]:
         "ml_state_components_changed":False,
         "ensemble_weights_changed":False,
         "week1_rb_p3_override_used":False,
+        "production_simulation_seam":"run_pricing_with_full_roster_universe_v3_core._simulate_promoted_stack",
+        "production_entitlement_version":production_audit.get("explicit_target_entitlement_version"),
+        "te_r5p_full_slate_consumed":bool(production_audit.get("te_r5p_full_slate_consumed")),
+        "wr_r15_full_slate_consumed":bool(production_audit.get("wr_r15_full_slate_consumed")),
         "sportsbook_inputs_used":0,
         "target_game_outcomes_attached":0,
         "raw_gsis_rows_emitted_publicly":False,
