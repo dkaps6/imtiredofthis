@@ -57,11 +57,30 @@ Public-safe counts:
 - target outcomes read: **false**
 - sportsbook inputs read: **false**
 
-Private immutable allocation-lock SHA256:
-`0a6c7b066152748313d89d4b52d8a522616cda3144d8220320812a440e1c9153`
+Corrected private V2 allocation-lock SHA256:
+`38a79c295a85f5f58c7a77473aae9ea62122da0c5f06d99920f868f1ef3e6b4e`
 
-Private event-audit SHA256:
-`cd7832519d0c335ab44d9a29215e8fc8bf8e355c4e02ee3873e81c11d942d33e`
+Corrected private V2 event-audit SHA256:
+`2d01fa956319210a420ac0617e9d2a422abb7dbc101e8610974df8c5536c0461`
+
+Lock finalization timestamp:
+`2026-10-01T17:14:21.114582+00:00`
+
+The V2 lock was finalized strictly before both target kickoffs and records the
+lock-finalization timestamp on the private rows. It supersedes the earlier
+private allocation hash
+`0a6c7b066152748313d89d4b52d8a522616cda3144d8220320812a440e1c9153`,
+which did not itself record finalization time.
+
+The corrected lock contract also:
+- preserves the complete definitive-unavailable identity set for multi-vacancy
+  GSIS conditioning even when one unavailable back lacks prior rush-share
+  history;
+- routes three-arm projection work through the current promoted Week>1 Full
+  Slate simulator seam rather than directly through the legacy simulator.
+
+Repo CI on corrected head `1732ab8c089182dd8cdb6d42266227b66862a11f`:
+- run `36897711324` — SUCCESS.
 
 The private files are preserved outside the public repository.
 
