@@ -48,3 +48,20 @@ def test_no_exposure_abstains():
     out,audit=build_private_candidate(rows,vacancy)
     assert out.empty
     assert audit["events_no_gsis_successor_exposure"]==1
+
+def test_private_candidate_splits_pipe_delimited_multi_vacancy():
+    rows=[
+      row("PIT",{"u1","a","1","2","3","4","5","6","7","8","9"},50),
+      row("PIT",{"u2","b","1","2","3","4","5","6","7","8","9"},50),
+      row("PIT",{"a","1","2","3","4","5","6","7","8","9","0"},30),
+      row("PIT",{"b","1","2","3","4","5","6","7","8","9","0"},10),
+    ]
+    vacancy=pd.DataFrame([
+      {"target_season":2026,"target_week":9,"team":"PIT","successor_player_clean_key":"a","vacated_rush_share":0.25,"unavailable_players":"u1|u2"},
+      {"target_season":2026,"target_week":9,"team":"PIT","successor_player_clean_key":"b","vacated_rush_share":0.25,"unavailable_players":"u1|u2"},
+    ])
+    out,audit=build_private_candidate(rows,vacancy)
+    assert audit["events_candidate_ready"]==1
+    got=dict(zip(out.successor_player_clean_key,out.gsis_successor_weight))
+    assert abs(got["a"]-0.75)<1e-12
+    assert abs(got["b"]-0.25)<1e-12
