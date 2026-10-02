@@ -1,0 +1,131 @@
+name: Research Shared Pass State Coherence V1
+
+on:
+  push:
+    branches: [research-shared-pass-state-coherence-v1]
+    paths:
+      - 'docs/research/SHARED_PASS_STATE_COHERENCE_V1_AUDIT_PLAN.md'
+      - 'scripts/research/audit_shared_pass_state_coherence_v1.py'
+      - '.github/workflows/research-shared-pass-state-coherence-v1.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/research/SHARED_PASS_STATE_COHERENCE_V1_AUDIT_PLAN.md'
+      - 'scripts/research/audit_shared_pass_state_coherence_v1.py'
+      - '.github/workflows/research-shared-pass-state-coherence-v1.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: research-shared-pass-state-coherence-v1
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  SEASON: '2026'
+  PRIOR_SEASON: '2025'
+  SLATE_DATE: ''
+  FETCH_LIVE_ODDS: 'false'
+  ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml beautifulsoup4 lxml pytest
+
+      - name: Build football-only current roster and schedule
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/providers/ourlads_depth.py --season "${SEASON}"
+          python scripts/utils/build_team_week_map_v2.py --season "${SEASON}" --out data/team_week_map.csv
+          python scripts/build/build_weather_week_v2.py --season "${SEASON}" --date "${SLATE_DATE}"
+          python scripts/build/build_injuries_weekly.py data/injuries.csv --season "${SEASON}"
+          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
+          echo "resolved_week=${WEEK_RESOLVED}"
+          python scripts/run_current_player_availability_candidate_prep_v1.py --season "${SEASON}" --week "${WEEK_RESOLVED}"
+          test -s data/roles_current_production_eligible_v1.csv
+
+      - name: Build strict-prior team and player football context
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+          python scripts/run_sharpfootball_v2.py --season "${SEASON}" --dump-html
+          python scripts/team_form_prior_bridge.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}"
+          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
+          if [ "${WEEK_RESOLVED}" = '1' ]; then
+            python scripts/run_team_form_context_week1_prior_v1.py --season "${SEASON}" --box-backfill-prev
+          else
+            python scripts/run_team_form_context.py --season "${SEASON}" --box-backfill-prev
+          fi
+          python scripts/run_qb_promoted_context.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}"
+          python scripts/run_coverage_v2.py --season "${SEASON}"
+          python scripts/build/pbp_features.py --season "${SEASON}" || true
+          python scripts/run_player_form_current_roles_v1.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
+          python scripts/enrich_player_scoring_v2.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
+          python scripts/operations/validate_playerform_runtime_strict_prior_v1.py --season "${SEASON}" --week "${WEEK_RESOLVED}"
+          FETCH_LIVE_ODDS=false python scripts/run_model_context_bridge.py
+          test -s data/player_form_consensus.csv
+          test -s data/model_context_bridge.csv
+
+      - name: Build current C2 football-only state
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
+          python scripts/run_qb_distribution_state_context.py --season "${SEASON}" --week "${WEEK_RESOLVED}"
+          python scripts/operations/apply_current_availability_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_primary_team_seam_v1.py
+          test -s data/qb_distribution_state_context.csv
+
+      - name: Run read-only split-state audit
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/research/audit_shared_pass_state_coherence_v1.py
+          test -s data/research/shared_pass_state_coherence_v1/summary.json
+          test -s data/research/shared_pass_state_coherence_v1/team_draw_coherence.csv
+          test -s data/research/shared_pass_state_coherence_v1/player_shadow_divergence.csv
+          python - <<'PY'
+          import json
+          p=json.load(open('data/research/shared_pass_state_coherence_v1/summary.json',encoding='utf-8'))
+          if p.get('sportsbook_inputs_used') is not False: raise SystemExit('sportsbook leakage')
+          if p.get('target_game_outcomes_used') is not False: raise SystemExit('target-game outcome leakage')
+          if p.get('production_changed') is not False: raise SystemExit('production changed')
+          if float(p.get('shadow_capture_vs_installed_c2_max_gap',1.0)) > 1e-10: raise SystemExit('shadow capture parity failed')
+          if float(p.get('c2_shadow_identity_max_gap',1.0)) > 1e-10: raise SystemExit('C2 identity failed')
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Upload audit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: shared-pass-state-coherence-v1
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            data/research/shared_pass_state_coherence_v1/
+            data/qb_c2_production_integration_audit.csv
+            data/qb_c2_production_integration_audit.json
+            data/qb_c2_production_starter_audit.csv
+            data/target_entitlement_v1_audit.json
+            data/te_r5p_full_slate_entitlement_audit.json
+            data/wr_r15_full_slate_entitlement_audit.json
