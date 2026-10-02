@@ -1,0 +1,178 @@
+name: Shared Pass State Receiver Integration V1
+
+on:
+  push:
+    branches:
+      - research-shared-pass-state-integration-v1
+    paths:
+      - ".github/workflows/research-shared-pass-state-receiver-integration-v1.yml"
+      - "docs/research/SHARED_PASS_STATE_RECEIVER_INTEGRATION_V1_PLAN.md"
+      - "scripts/research/evaluate_shared_pass_state_receiver_integration_v1.py"
+      - "scripts/research/audit_shared_pass_state_coherence_v1.py"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/research-shared-pass-state-receiver-integration-v1.yml"
+      - "docs/research/SHARED_PASS_STATE_RECEIVER_INTEGRATION_V1_PLAN.md"
+      - "scripts/research/evaluate_shared_pass_state_receiver_integration_v1.py"
+      - "scripts/research/audit_shared_pass_state_coherence_v1.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: shared-pass-state-receiver-integration-v1
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyyaml pyarrow scikit-learn joblib
+
+      - name: Verify frozen implementation compiles
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_shared_pass_state_coherence_v1.py
+          python -m py_compile scripts/research/evaluate_shared_pass_state_receiver_integration_v1.py
+
+      - name: Create workspace
+        run: |
+          rm -rf /tmp/pass_state_v1 /tmp/hist_2024 /tmp/hist_2025 /tmp/wr_model /tmp/te_model /tmp/phasej
+          mkdir -p /tmp/pass_state_v1 /tmp/hist_2024 /tmp/hist_2025 /tmp/wr_model /tmp/te_model /tmp/phasej
+
+      - name: Download WR-R15 fold-safe OOS authority
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-r15-wr1-anchor-participation-v1
+          path: /tmp/wr_model
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34238301577
+
+      - name: Download TE-R5P production-contract OOS authority
+        uses: actions/download-artifact@v4
+        with:
+          name: te-r5p-production-contract-refit-v1
+          path: /tmp/te_model
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34152797603
+
+      - name: Download frozen Phase-J walk-forward routing authority
+        uses: actions/download-artifact@v4
+        with:
+          name: cross-position-phase-j-v1
+          path: /tmp/phasej
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34151640191
+
+      - name: Verify frozen external authorities
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from pathlib import Path
+
+          wr_root=Path('/tmp/wr_model/backtests/wr_r15_wr1_anchor_v1')
+          te_root=Path('/tmp/te_model/data/backtests/te_r5p_production_contract_refit_v1')
+          phase=Path('/tmp/phasej/data/backtests/cross_position_phase_j_v1/phase_j_qb_distribution_casebook.csv')
+
+          wr=pd.read_csv(wr_root/'wr_r15_fold_coefficients.csv')
+          te=pd.read_csv(te_root/'te_r5p_coefficients.csv')
+          wr_result=json.loads((wr_root/'wr_r15_result.json').read_text())
+          te_result=json.loads((te_root/'te_r5p_result.json').read_text())
+          q=pd.read_csv(phase,usecols=['season','week','team','use_c2'])
+
+          if sorted(wr['test_season'].astype(int).unique().tolist()) != [2023,2024]:
+              raise RuntimeError('WR-R15 fold authority drifted')
+          if sorted(te['test_season'].astype(int).unique().tolist()) != [2023,2024,2025]:
+              raise RuntimeError('TE-R5P fold authority drifted')
+          if not bool(wr_result.get('design_motivated_by_2025_but_2025_confirmation_forbidden')):
+              raise RuntimeError('WR-R15 2025 exclusion contract missing')
+          if te_result.get('disposition') != 'TE_R5P_PRODUCTION_CONTRACT_REFIT_ELIGIBLE':
+              raise RuntimeError('TE-R5P authority is not eligible')
+          use=q['use_c2'].astype(str).str.lower().isin({'1','true','yes'})
+          if len(q)!=440 or int(use.sum())!=412 or set(q['season'].astype(int))!={2025}:
+              raise RuntimeError(f'Phase-J routing drift rows={len(q)} selected={int(use.sum())}')
+          print('frozen authorities PASS')
+          PY
+
+      - name: Build independent historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_historical_inputs.py --season 2024 --prior-season 2023 --weeks "1-18" --out-dir /tmp/hist_2024
+          python scripts/backtest/build_historical_inputs.py --season 2025 --prior-season 2024 --weeks "1-18" --out-dir /tmp/hist_2025
+
+      - name: Combine historical schedule and team state
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out=Path('/tmp/pass_state_v1')
+          for name in ['schedule_history.csv','team_weekly_history.csv']:
+              x=pd.concat([
+                  pd.read_csv('/tmp/hist_2024/'+name),
+                  pd.read_csv('/tmp/hist_2025/'+name),
+              ],ignore_index=True)
+              keys=['season','week','team']
+              x=x.sort_values(keys).drop_duplicates(keys,keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined rows in {name}')
+              x.to_csv(out/name,index=False)
+          PY
+
+      - name: Build canonical historical player injury weather inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py --seasons 2023,2024,2025 --schedule /tmp/pass_state_v1/schedule_history.csv --out /tmp/pass_state_v1/player_game_logs_history.csv
+          python scripts/backtest/build_historical_injuries.py --seasons 2023,2024,2025 --out /tmp/pass_state_v1/injuries_history.csv
+          python scripts/backtest/build_historical_weather.py --schedule /tmp/pass_state_v1/schedule_history.csv --out /tmp/pass_state_v1/weather_history.csv
+
+      - name: Run frozen full-stack receiver integration A/B
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/evaluate_shared_pass_state_receiver_integration_v1.py \
+            --player-logs /tmp/pass_state_v1/player_game_logs_history.csv \
+            --team-weekly /tmp/pass_state_v1/team_weekly_history.csv \
+            --schedule /tmp/pass_state_v1/schedule_history.csv \
+            --universe-2024 /tmp/hist_2024/pregame_universe \
+            --universe-2025 /tmp/hist_2025/pregame_universe \
+            --injuries /tmp/pass_state_v1/injuries_history.csv \
+            --weather /tmp/pass_state_v1/weather_history.csv \
+            --te-coefficients /tmp/te_model/data/backtests/te_r5p_production_contract_refit_v1/te_r5p_coefficients.csv \
+            --wr-coefficients /tmp/wr_model/backtests/wr_r15_wr1_anchor_v1/wr_r15_fold_coefficients.csv \
+            --phasej-casebook /tmp/phasej/data/backtests/cross_position_phase_j_v1/phase_j_qb_distribution_casebook.csv \
+            --weights data/model_ensemble_weights.csv \
+            --weeks "1-18" \
+            --iterations 2000 \
+            --out-dir /tmp/pass_state_v1/result
+          cat /tmp/pass_state_v1/result/RESULT.md
+
+      - name: Upload frozen result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shared-pass-state-receiver-integration-v1
+          path: |
+            /tmp/pass_state_v1/result/**
+          if-no-files-found: warn
+          retention-days: 30
