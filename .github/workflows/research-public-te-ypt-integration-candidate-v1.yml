@@ -1,0 +1,126 @@
+name: Research Public TE YPT Integration Candidate V1
+
+on:
+  push:
+    branches:
+      - research-public-te-ypt-integration-candidate-v1
+    paths:
+      - 'docs/research/PUBLIC_TE_YPT_INTEGRATION_CANDIDATE_V1_CONTRACT.md'
+      - 'scripts/research/score_public_te_ypt_integration_candidate_v1.py'
+      - 'tests/test_public_te_ypt_integration_candidate_v1.py'
+      - '.github/workflows/research-public-te-ypt-integration-candidate-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  score:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest scipy
+
+      - name: Run frozen candidate safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest -q tests/test_public_te_ypt_integration_candidate_v1.py
+
+      - name: Prepare authorities
+        run: |
+          rm -rf /tmp/pub_tey
+          mkdir -p /tmp/pub_tey/baseline /tmp/pub_tey/logs /tmp/pub_tey/phase /tmp/pub_tey/result
+
+      - name: Download corrected 2022-2025 baseline authority
+        uses: actions/download-artifact@v4
+        with:
+          name: football-matchup-integration-candidate-corrected-inputs-37531333007
+          path: /tmp/pub_tey/baseline
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37531333007
+
+      - name: Download preserved 2021-2025 player-log authority
+        uses: actions/download-artifact@v4
+        with:
+          name: football-matchup-integration-candidate-inputs-37527077327
+          path: /tmp/pub_tey/logs
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37527077327
+
+      - name: Download frozen Phase B-C feature authority
+        uses: actions/download-artifact@v4
+        with:
+          name: football-matchup-transmission-phase-bc-v1-37514137803
+          path: /tmp/pub_tey/phase
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37514137803
+
+      - name: Resolve frozen files
+        run: |
+          set -euo pipefail
+          BASE="$(find /tmp/pub_tey/baseline -type f -name 'composite_projection_trace_2022_2025.csv' -print -quit)"
+          LOGS="$(find /tmp/pub_tey/logs -type f -name 'player_game_logs_history.csv' -print -quit)"
+          PHASE="$(find /tmp/pub_tey/phase -type f -name 'football_matchup_phase_bc_team_features.csv' -print -quit)"
+          for p in "$BASE" "$LOGS" "$PHASE"; do test -n "$p" && test -s "$p"; done
+          {
+            echo "BASE=$BASE"
+            echo "LOGS=$LOGS"
+            echo "PHASE=$PHASE"
+          } >> "$GITHUB_ENV"
+
+      - name: Score frozen PUB-TEY1
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/score_public_te_ypt_integration_candidate_v1.py             --composite-baseline "$BASE"             --player-logs "$LOGS"             --phase-bc-team-features "$PHASE"             --out-dir /tmp/pub_tey/result
+
+      - name: Verify candidate boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('/tmp/pub_tey/result/public_te_ypt_candidate_result.json').read_text())
+          assert p['candidate_id']=='PUB-TEY1',p
+          assert p['train_season']==2022,p
+          assert p['primary_confirmation_season']==2023,p
+          assert p['secondary_consistency_seasons']==[2024,2025],p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['outcomes_2026_read']==0,p
+          assert p['production_changed'] is False,p
+          assert p['wr_candidate_scored'] is False,p
+          assert p['rb_candidate_scored'] is False,p
+          assert p['posthoc_rescue_scored'] is False,p
+          assert p['integrity']['chronology_violations_2022_2023']==0,p
+          assert p['disposition'] in {'PUB_TEY1_CONFIRMED','PUB_TEY1_CLOSED'},p
+          print('PUBLIC_TE_YPT_CANDIDATE_CONTRACT_CERTIFIED')
+          PY
+
+      - name: Display result
+        if: always()
+        run: cat /tmp/pub_tey/result/public_te_ypt_candidate_result.json || true
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-te-ypt-integration-candidate-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/pub_tey/result/**
