@@ -240,6 +240,7 @@ jobs:
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
+          mkdir -p data/research/week4_postmortem/failure_mode_atlas_v1
           python scripts/research/analyze_weeks1_4_failure_modes_v1.py \
             --graded data/research/week4_postmortem/weeks1_4_full_graded.csv \
             --out-dir data/research/week4_postmortem/failure_mode_atlas_v1 \
