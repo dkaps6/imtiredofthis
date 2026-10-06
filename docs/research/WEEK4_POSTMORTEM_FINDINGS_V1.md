@@ -1,6 +1,6 @@
 # 2026 Week 4 Production Postmortem — Initial Canonical Findings V1
 
-Status: **CORE FULL-BOARD BACKTEST COMPLETE; FROZEN RESEARCH-LANE CLOSURE IN PROGRESS**  
+Status: **CORE FULL-BOARD BACKTEST COMPLETE; CURRENT FROZEN WEEK-4 LANES RECONCILED**  
 Date: 2026-10-06  
 Research branch: `research-week4-postmortem-execution-v1`
 
@@ -20,6 +20,8 @@ No new OddsAPI acquisition was used.
 Canonical successful postmortem execution:
 - run `37482840038`
 - head `8c6225c4aae9876d6f3220d38424c57685613140`
+- artifact `11421298874`
+- digest `sha256:1b323783d6d3cc7fe172c84f11b89d10bee5e92773264a8d4c615b4489124d21`
 - all Week-4 source-completeness gates passed
 - all 16 games final
 - player stats / roster / snap coverage: 32 / 32 teams
