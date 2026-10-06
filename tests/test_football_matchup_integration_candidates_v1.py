@@ -145,3 +145,40 @@ def test_build_team_features_uses_only_prior_rows():
     assert atl["def_pass_rate_faced"] == 0.40
     assert atl["def_pass_success_allowed"] == 0.60
     assert np.isfinite(atl["off_true_proe__z"])
+
+
+def test_attach_position_replaces_preexisting_trace_position_without_suffixes():
+    frame = pd.DataFrame(
+        [
+            {
+                "season": 2022,
+                "week": 2,
+                "game_id": "2022_02_ATL_NO",
+                "team": "ATL",
+                "opponent": "NO",
+                "player_clean_key": "bijanrobinson",
+                "market": "rush_yards",
+                "actual": 80.0,
+                "ensemble_proj": 75.0,
+                "position": "WR",
+                "player_identity_key": "stale_identity",
+            }
+        ]
+    )
+    logs = pd.DataFrame(
+        [
+            {
+                "season": 2022,
+                "week": 2,
+                "team": "ATL",
+                "player_clean_key": "bijanrobinson",
+                "player_identity_key": "canonical_identity",
+                "position": "RB",
+            }
+        ]
+    )
+    out = m.attach_position(frame, logs, projection_col="ensemble_proj")
+    assert out.loc[0, "position"] == "RB"
+    assert out.loc[0, "player_identity_key"] == "canonical_identity"
+    assert "position_x" not in out.columns
+    assert "position_y" not in out.columns

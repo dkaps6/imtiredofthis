@@ -133,6 +133,18 @@ jobs:
           done
           python scripts/backtest/build_full_stack_vegas_projection_trace_v2.py             --component-file /tmp/fmt_candidate/work/component_predictions_2022.csv             --component-file /tmp/fmt_candidate/work/component_predictions_2023.csv             --component-file /tmp/fmt_candidate/work/component_predictions_2024.csv             --component-file /tmp/fmt_candidate/work/component_predictions_2025.csv             --schedule /tmp/fmt_candidate/work/schedule_history.csv             --weights data/model_ensemble_weights.csv             --out /tmp/fmt_candidate/work/full_stack_projection_trace_2022_2025.csv
 
+      - name: Preserve prepared candidate scoring inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: football-matchup-integration-candidate-inputs-${{ github.run_id }}
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            /tmp/fmt_candidate/work/full_stack_projection_trace_2022_2025.csv
+            /tmp/fmt_candidate/work/team_weekly_matchup.csv
+            /tmp/fmt_candidate/work/player_game_logs_history.csv
+            /tmp/fmt_candidate/work/schedule_history.csv
+
       - name: Score frozen integration candidates
         env:
           PYTHONPATH: ${{ github.workspace }}

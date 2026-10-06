@@ -202,6 +202,13 @@ def attach_position(
         ]
     ].drop_duplicates()
 
+    # The rebuilt full-stack trace may already carry position/identity columns.
+    # Canonicalize those fields from historical player logs rather than allowing
+    # pandas to silently suffix them to position_x/position_y.
+    x = x.drop(
+        columns=["position", "player_identity_key"],
+        errors="ignore",
+    )
     x = x.merge(
         meta,
         on=["season", "week", "team", "player_clean_key"],
