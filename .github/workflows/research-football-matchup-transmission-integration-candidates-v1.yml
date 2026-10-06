@@ -1,0 +1,166 @@
+name: Research Football Matchup Transmission Integration Candidates V1
+
+on:
+  push:
+    branches:
+      - research-football-matchup-transmission-v1
+    paths:
+      - 'docs/research/FOOTBALL_MATCHUP_TRANSMISSION_V1_PHASE_BC_RESULT.md'
+      - 'docs/research/FOOTBALL_MATCHUP_TRANSMISSION_V1_INTEGRATION_CANDIDATES_FREEZE.md'
+      - 'scripts/research/score_football_matchup_transmission_candidates_v1.py'
+      - 'tests/test_football_matchup_transmission_candidates_v1.py'
+      - '.github/workflows/research-football-matchup-transmission-integration-candidates-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  score:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy pytest pyyaml pyarrow tabulate
+
+      - name: Run frozen candidate tests
+        env:
+          PYTHONPATH: \${{ github.workspace }}
+        run: |
+          pytest -q tests/test_football_matchup_transmission_candidates_v1.py
+
+      - name: Create isolated workspace
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/fmt_int /tmp/fmt_hist_2024 /tmp/fmt_hist_2025 /tmp/fmt_ref
+          mkdir -p /tmp/fmt_int /tmp/fmt_hist_2024 /tmp/fmt_hist_2025 /tmp/fmt_ref
+
+      - name: Download exact right-tail baseline authority
+        uses: actions/download-artifact@v4
+        with:
+          name: distribution-right-tail-asymmetry-v1-37493425352
+          path: /tmp/fmt_ref
+          github-token: \${{ secrets.GITHUB_TOKEN }}
+          repository: \${{ github.repository }}
+          run-id: 37493425352
+
+      - name: Build leakage-safe historical inputs
+        env:
+          PYTHONPATH: \${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --out-dir /tmp/fmt_hist_2024
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --out-dir /tmp/fmt_hist_2025
+
+      - name: Combine baseline schedule and team-week history
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out=Path('/tmp/fmt_int')
+          for name in ['schedule_history.csv','team_weekly_history.csv']:
+              x=pd.concat([
+                  pd.read_csv('/tmp/fmt_hist_2024/'+name),
+                  pd.read_csv('/tmp/fmt_hist_2025/'+name),
+              ],ignore_index=True)
+              keys=['season','week','team']
+              x=x.sort_values(keys).drop_duplicates(keys,keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined rows in {name}')
+              x.to_csv(out/name,index=False)
+          (out/'team_weekly_corrected.csv').write_bytes((out/'team_weekly_history.csv').read_bytes())
+          PY
+
+      - name: Build exact corrected candidate feature history
+        env:
+          PYTHONPATH: \${{ github.workspace }}
+        run: |
+          python scripts/backtest/correct_m89_team_semantics.py \
+            --team-weekly /tmp/fmt_int/team_weekly_corrected.csv \
+            --seasons 2023,2024,2025 \
+            --observations /tmp/fmt_int/m89_team_semantics_observations.csv \
+            --audit /tmp/fmt_int/m89_team_semantics_audit.csv
+
+      - name: Build canonical historical player logs
+        env:
+          PYTHONPATH: \${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2023,2024,2025 \
+            --schedule /tmp/fmt_int/schedule_history.csv \
+            --out /tmp/fmt_int/player_game_logs_history.csv
+
+      - name: Resolve frozen baseline file
+        run: |
+          set -euo pipefail
+          RIGHT_TAIL_DETAIL="$(find /tmp/fmt_ref -type f -name 'distribution_right_tail_asymmetry_detail.csv' -print -quit)"
+          test -n "$RIGHT_TAIL_DETAIL" && test -s "$RIGHT_TAIL_DETAIL"
+          echo "RIGHT_TAIL_DETAIL=$RIGHT_TAIL_DETAIL" >> "$GITHUB_ENV"
+
+      - name: Score frozen integration candidates
+        env:
+          PYTHONPATH: \${{ github.workspace }}
+        run: |
+          python scripts/research/score_football_matchup_transmission_candidates_v1.py \
+            --team-weekly-base /tmp/fmt_int/team_weekly_history.csv \
+            --team-weekly-corrected /tmp/fmt_int/team_weekly_corrected.csv \
+            --player-logs /tmp/fmt_int/player_game_logs_history.csv \
+            --schedule /tmp/fmt_int/schedule_history.csv \
+            --universe-dir-2024 /tmp/fmt_hist_2024/pregame_universe \
+            --universe-dir-2025 /tmp/fmt_hist_2025/pregame_universe \
+            --right-tail-detail "$RIGHT_TAIL_DETAIL" \
+            --weights data/model_ensemble_weights.csv \
+            --iterations 2000 \
+            --out-dir /tmp/fmt_int/result
+
+      - name: Verify frozen governance
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/fmt_int/result/integration_candidate_result.json',encoding='utf-8'))
+          assert p['evaluation_seasons']==[2024,2025],p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['oddsapi_calls']==0,p
+          assert p['outcomes_2026_used']==0,p
+          assert p['candidate_coefficients_fit']==0,p
+          assert p['threshold_searches']==0,p
+          assert p['target_game_usage_used'] is False,p
+          assert p['production_change_authorized'] is False,p
+          assert p['baseline_authority_reproduction']['max_abs_gap'] <= 1e-8,p
+          print('FOOTBALL_MATCHUP_TRANSMISSION_INTEGRATION_GOVERNANCE_PASS')
+          PY
+
+      - name: Display candidate result
+        if: always()
+        run: |
+          cat /tmp/fmt_int/result/integration_candidate_result.json || true
+          echo
+          cat /tmp/fmt_int/result/integration_candidate_summary.csv || true
+          echo
+          cat /tmp/fmt_int/result/integration_candidate_cells.csv || true
+
+      - name: Upload candidate result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: football-matchup-transmission-integration-candidates-v1-\${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/fmt_int/result/**
+            /tmp/fmt_int/m89_team_semantics_audit.csv
