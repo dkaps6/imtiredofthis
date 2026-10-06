@@ -1,6 +1,73 @@
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 GitHub is canonical; chat memory is secondary.
 
+
+---
+## ACTIVE CHECKPOINT — 2026-10-06 — WEEK 4 POSTMORTEM / FOOTBALL MATCHUP TRANSMISSION CURRENT
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-06_WEEK4_POSTMORTEM_MATCHUP_TRANSMISSION_CURRENT.md`
+
+**Compact next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-06_WEEK4_POSTMORTEM_MATCHUP_TRANSMISSION.md`
+
+This supersedes all older checkpoints for immediate execution.
+
+### Current state in one screen
+
+- Week 4 is fully settled: **220-207, 51.52%, -3.38u**.
+- Weeks 1-4 cumulative: **849-818, 50.93%, -44.10u**.
+- no simple position/market/side/edge slice survives clustered BH-FDR; raw edge/fair probability remains non-validated confidence.
+- failure-mode atlas found a severe asymmetric high-side miss problem: 270 rows >2 model SD, 93.33% actual-above-model, 83.70% selected UNDER, 82.59% loss rate.
+- rush+receiving remains a separate center problem: RB mean error -16.60 yards, median -8.82, driven primarily by rushing.
+- Opportunity State Conflict Uncertainty V1 is **NULL/CLOSED**; do not widen based on PlayerForm-vs-Bayes disagreement.
+- historical Distribution Right-Tail Asymmetry V1 is **CONFIRMED** for rush_yards, rec_yards, receptions, and rush_rec_yards in both 2024 and 2025; pass_yards did not replicate.
+- opponent-defender injury source-readiness V1 is CLOSED / parity not cleared.
+- **primary active lane is Football Matchup Transmission V1**, based on the user's explicit football-layer concern.
+- Phase A run `37504432928` SUCCESS confirmed the generic RB/WR/TE stack drops or weakly transmits meaningful pregame matchup state:
+  - def_rush_epa present but unused by generic rules;
+  - explosive-play rate allowed present but unused;
+  - WR/TE/RB YPT allowed and outside/slot YPT dropped before TeamContext;
+  - YBC/stuff run-defense fields dropped;
+  - generic game-script pass share hardcoded to 0.57;
+  - rules_pass_rate normally bypasses PROE/pass-tendency fallback;
+  - lead/trail probabilities do not alter the simulation pass/rush split;
+  - RB matchup is mainly coarse light/heavy-box YPC thresholds.
+- Bijan Week-4 trace is architecture evidence only: ATL neutral pass rate 46.5%, PlayerForm rush share .6158, Bayes/rules .5421, production pass rate .57, NO box rules yielded rush-efficiency multiplier exactly 1.0. Do not tune to Bijan's outcome.
+- M95A/M95B already tested generic role x defense ideas; do not create a post-hoc "bad run defense => boost RB" rule.
+- no paid OddsAPI pull without explicit user authorization.
+
+### Exact next action
+
+1. Query live main / research branches / Issue #535 / Actions.
+2. **Do not rerun Football Matchup Transmission Phase A.**
+3. Continue `research-football-matchup-transmission-v1` into the already-frozen Phase B/C historical audit:
+   - leakage-safe 2024 W2-18 and 2025 W2-18;
+   - zero 2026 outcomes;
+   - zero sportsbook inputs;
+   - no coefficient/threshold fitting;
+   - test predeclared defensive matchup families conditional on existing role/opportunity;
+   - then test continuous usage x matchup interactions.
+4. Require expected-sign replication in BOTH 2024 and 2025 + clustered support + incremental information + live semantic parity before any candidate can advance.
+5. If a family passes, freeze a separate integration candidate BEFORE scoring it.
+6. Secondary: write canonical RESULT docs for Right-Tail Asymmetry V1 and Matchup Transmission Phase A if still absent.
+7. Preserve all closed-family anti-retest rules.
+
+### Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this newest top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-10-06_WEEK4_POSTMORTEM_MATCHUP_TRANSMISSION_CURRENT.md`
+4. `docs/research/FOOTBALL_MATCHUP_TRANSMISSION_V1_PLAN.md`
+5. Issue #535 from comment `6021335699` onward, especially `6021798748` and `6022435377`
+6. live main / relevant research branches / Actions
+
+Then immediately continue Phase B/C. Do not recursively load older handoffs unless a targeted anti-retest question requires one.
+
+
 ---
 ## ACTIVE CHECKPOINT — 2026-10-01 — WEEK 4 LIVE BOARD RECOVERED / GAME-DAY CURRENT
 
