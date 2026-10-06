@@ -12,6 +12,7 @@ on:
       - 'data/research/week4_postmortem/WEEK4_MANUAL_SETTLEMENT_EVIDENCE_V1.json'
       - 'scripts/operations/grade_market_track_record_gsis_v1.py'
       - 'scripts/research/grade_week4_projection_authority_move_direction_v1.py'
+      - 'scripts/research/analyze_weeks1_4_failure_modes_v1.py'
 
 permissions:
   contents: read
@@ -234,6 +235,15 @@ jobs:
             --detail data/research/week4_postmortem/weeks1_4_full_graded.csv \
             --min-n 25 --fdr-q 0.10 \
             | tee data/research/week4_postmortem/weeks1_4_clustered_slice_report.txt
+
+      - name: Build Weeks 1-4 failure-mode atlas
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/research/analyze_weeks1_4_failure_modes_v1.py \
+            --graded data/research/week4_postmortem/weeks1_4_full_graded.csv \
+            --out-dir data/research/week4_postmortem/failure_mode_atlas_v1 \
+            | tee data/research/week4_postmortem/failure_mode_atlas_v1/stdout.txt
 
       - name: Upload Week 4 postmortem evidence
         if: always()
