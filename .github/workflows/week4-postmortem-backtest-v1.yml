@@ -11,6 +11,7 @@ on:
       - 'data/research/week4_postmortem/WEEK4_PRODUCTION_DECISION_GATE_EVIDENCE_V1.json'
       - 'data/research/week4_postmortem/WEEK4_MANUAL_SETTLEMENT_EVIDENCE_V1.json'
       - 'scripts/operations/grade_market_track_record_gsis_v1.py'
+      - 'scripts/research/grade_week4_projection_authority_move_direction_v1.py'
 
 permissions:
   contents: read
@@ -168,6 +169,15 @@ jobs:
             --detail data/research/week4_postmortem/week4_selected_full_graded.csv \
             --min-n 25 --fdr-q 0.10 \
             | tee data/research/week4_postmortem/week4_clustered_slice_report.txt
+
+      - name: Grade frozen Week 4+ projection-authority move-direction shadow
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/research/grade_week4_projection_authority_move_direction_v1.py \
+            --graded data/research/week4_postmortem/week4_selected_full_graded.csv \
+            --out data/research/week4_postmortem/week4_projection_authority_move_direction_v1.json \
+            | tee data/research/week4_postmortem/week4_projection_authority_move_direction_v1.txt
 
       - name: Download frozen Weeks 1-3 canonical graded artifact
         run: |
