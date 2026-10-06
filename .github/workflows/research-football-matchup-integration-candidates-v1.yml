@@ -63,6 +63,7 @@ jobs:
           set -euo pipefail
           RIGHT_TAIL_DETAIL="$(find /tmp/fmt_candidate/ref/right_tail -type f -name 'distribution_right_tail_asymmetry_detail.csv' -print -quit)"
           test -n "${RIGHT_TAIL_DETAIL}" && test -s "${RIGHT_TAIL_DETAIL}"
+          export RIGHT_TAIL_DETAIL
           echo "RIGHT_TAIL_DETAIL=${RIGHT_TAIL_DETAIL}" >> "${GITHUB_ENV}"
           python - <<'PY'
           import os, pandas as pd
