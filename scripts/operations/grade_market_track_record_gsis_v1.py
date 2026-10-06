@@ -351,7 +351,7 @@ def apply_manual_settlement_evidence(
     """
     if not evidence:
         return detail.copy()
-    if str(evidence.get("version", "")) != "WEEK3_MANUAL_SETTLEMENT_EVIDENCE_V1":
+    if str(evidence.get("version", "")) not in {"WEEK3_MANUAL_SETTLEMENT_EVIDENCE_V1", "WEEK4_MANUAL_SETTLEMENT_EVIDENCE_V1"}:
         raise RuntimeError("unexpected manual settlement evidence version")
 
     out = detail.copy()
