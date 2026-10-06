@@ -64,32 +64,46 @@ def _quartile_masks(q: pd.DataFrame) -> tuple[pd.Series, pd.Series, float, float
 
 
 def _cluster_bootstrap(q: pd.DataFrame, q25: float, q75: float) -> dict:
-    players = np.array(sorted(q["player_identity_key"].astype(str).unique().tolist()), dtype=object)
+    players = sorted(q["player_identity_key"].astype(str).unique().tolist())
     if len(players) < 2:
         return {"reps": 0, "valid_reps": 0, "ci_low": None, "ci_high": None}
 
-    groups = {p: g.copy() for p, g in q.groupby("player_identity_key", sort=False)}
-    rng = np.random.default_rng(SEED)
-    vals = []
-    for _ in range(REPS):
-        sample = rng.choice(players, size=len(players), replace=True)
-        z = pd.concat([groups[p] for p in sample], ignore_index=True)
+    # Preserve each player's complete row cluster, but summarize its fixed Q1/Q4
+    # contributions once so 10k bootstrap replicates do not repeatedly concat
+    # thousands of rows. This is mathematically identical to resampling player
+    # clusters with replacement under the frozen original Q1/Q4 thresholds.
+    stats = []
+    for p in players:
+        z = q.loc[q["player_identity_key"].astype(str).eq(p)]
         low = z["state_conflict"].le(q25)
         high = z["state_conflict"].ge(q75)
-        if not low.any() or not high.any():
-            continue
-        vals.append(
-            float(
-                z.loc[high, "bayes_abs_error"].mean()
-                - z.loc[low, "bayes_abs_error"].mean()
-            )
-        )
-    if not vals:
+        stats.append([
+            float(z.loc[high, "bayes_abs_error"].sum()),
+            float(high.sum()),
+            float(z.loc[low, "bayes_abs_error"].sum()),
+            float(low.sum()),
+        ])
+    a = np.asarray(stats, dtype=float)
+
+    rng = np.random.default_rng(SEED)
+    counts = rng.multinomial(
+        len(players),
+        [1.0 / len(players)] * len(players),
+        size=REPS,
+    ).astype(float)
+
+    high_sum = counts @ a[:, 0]
+    high_n = counts @ a[:, 1]
+    low_sum = counts @ a[:, 2]
+    low_n = counts @ a[:, 3]
+    valid = (high_n > 0) & (low_n > 0)
+    if not valid.any():
         return {"reps": REPS, "valid_reps": 0, "ci_low": None, "ci_high": None}
-    arr = np.asarray(vals, dtype=float)
+
+    arr = (high_sum[valid] / high_n[valid]) - (low_sum[valid] / low_n[valid])
     return {
         "reps": REPS,
-        "valid_reps": int(len(arr)),
+        "valid_reps": int(valid.sum()),
         "ci_low": float(np.quantile(arr, 0.025)),
         "ci_high": float(np.quantile(arr, 0.975)),
         "p_effect_gt_0": float((arr > 0).mean()),
