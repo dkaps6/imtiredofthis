@@ -1,0 +1,100 @@
+name: Research Public Position YPT Parity V1
+
+on:
+  push:
+    branches:
+      - research-public-position-ypt-parity-v1
+    paths:
+      - 'docs/research/PUBLIC_POSITION_YPT_ALLOWED_PARITY_V1_PLAN.md'
+      - 'scripts/research/audit_public_position_ypt_parity_v1.py'
+      - 'tests/test_public_position_ypt_parity_v1.py'
+      - '.github/workflows/research-public-position-ypt-parity-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyarrow
+
+      - name: Run frozen source tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest -q tests/test_public_position_ypt_parity_v1.py
+
+      - name: Download frozen Phase B-C authority
+        uses: actions/download-artifact@v4
+        with:
+          name: football-matchup-transmission-phase-bc-v1-37514137803
+          path: /tmp/phase_bc
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37514137803
+
+      - name: Resolve authority
+        run: |
+          set -euo pipefail
+          PHASE="$(find /tmp/phase_bc -type f -name 'football_matchup_phase_bc_team_features.csv' -print -quit)"
+          test -n "$PHASE" && test -s "$PHASE"
+          echo "PHASE=$PHASE" >> "$GITHUB_ENV"
+
+      - name: Audit public historical-live parity
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/public_ypt
+          mkdir -p /tmp/public_ypt
+          python scripts/research/audit_public_position_ypt_parity_v1.py             --phase-bc-features "$PHASE"             --out-dir /tmp/public_ypt
+
+      - name: Verify research boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('/tmp/public_ypt/public_position_ypt_parity_result.json').read_text())
+          assert p['predictive_candidates_scored']==0,p
+          assert p['parameters_fit']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['target_week5_outcomes_read']==0,p
+          assert p['production_changed'] is False,p
+          assert p['live_2026_week5']['chronology_violations']==0,p
+          assert p['disposition'] in {
+            'PUBLIC_POSITION_YPT_EXACT_PARITY_READY',
+            'PUBLIC_POSITION_YPT_HISTORICAL_PARITY_ONLY',
+            'PUBLIC_POSITION_YPT_PARITY_FAILED',
+          },p
+          print('PUBLIC_POSITION_YPT_PARITY_CONTRACT_CERTIFIED')
+          PY
+
+      - name: Display result
+        if: always()
+        run: |
+          cat /tmp/public_ypt/public_position_ypt_parity_result.json || true
+          echo
+          cat /tmp/public_ypt/public_position_ypt_historical_parity.csv || true
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-position-ypt-parity-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/public_ypt/**
