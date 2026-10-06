@@ -1,0 +1,162 @@
+name: Research Distribution Right-Tail Asymmetry V1
+
+on:
+  push:
+    branches:
+      - research-distribution-right-tail-asymmetry-v1
+    paths:
+      - 'docs/research/DISTRIBUTION_RIGHT_TAIL_ASYMMETRY_V1_PLAN.md'
+      - 'scripts/research/audit_distribution_right_tail_asymmetry_v1.py'
+      - 'tests/test_distribution_right_tail_asymmetry_v1.py'
+      - '.github/workflows/research-distribution-right-tail-asymmetry-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy pytest pyyaml pyarrow tabulate
+
+      - name: Run frozen-contract tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q \
+            tests/test_distribution_right_tail_asymmetry_v1.py \
+            tests/test_empirical_fair_prob_v1.py \
+            tests/test_benchmark_identity_v1.py
+
+      - name: Build independent historical inputs for 2024 and 2025
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/hist_2024 /tmp/hist_2025 /tmp/right_tail
+          mkdir -p /tmp/hist_2024 /tmp/hist_2025 /tmp/right_tail/distributions
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --out-dir /tmp/hist_2024
+          python scripts/backtest/build_historical_inputs.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --out-dir /tmp/hist_2025
+
+      - name: Combine schedule and team-week history
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          out=Path('/tmp/right_tail')
+          for name in ['schedule_history.csv','team_weekly_history.csv']:
+              x=pd.concat([
+                  pd.read_csv('/tmp/hist_2024/'+name),
+                  pd.read_csv('/tmp/hist_2025/'+name),
+              ],ignore_index=True)
+              keys=['season','week','team']
+              x=x.sort_values(keys).drop_duplicates(keys,keep='last').reset_index(drop=True)
+              if x.duplicated(keys).any():
+                  raise RuntimeError(f'duplicate combined rows in {name}')
+              x.to_csv(out/name,index=False)
+          PY
+
+      - name: Build canonical 2023-2025 player game logs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/historical_player_logs.py \
+            --seasons 2023,2024,2025 \
+            --schedule /tmp/right_tail/schedule_history.csv \
+            --out /tmp/right_tail/player_game_logs_history.csv
+
+      - name: Build exact historical component traces
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/walk_forward.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/right_tail/player_game_logs_history.csv \
+            --team-weekly /tmp/right_tail/team_weekly_history.csv \
+            --schedule /tmp/right_tail/schedule_history.csv \
+            --universe-dir /tmp/hist_2024/pregame_universe \
+            --out /tmp/right_tail/component_predictions_2024.csv
+          python scripts/backtest/walk_forward.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/right_tail/player_game_logs_history.csv \
+            --team-weekly /tmp/right_tail/team_weekly_history.csv \
+            --schedule /tmp/right_tail/schedule_history.csv \
+            --universe-dir /tmp/hist_2025/pregame_universe \
+            --out /tmp/right_tail/component_predictions_2025.csv
+
+      - name: Reconstruct football-only historical simulation arrays
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/persist_historical_simulated_outcomes_v1.py \
+            --season 2024 --prior-season 2023 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/right_tail/player_game_logs_history.csv \
+            --team-weekly /tmp/right_tail/team_weekly_history.csv \
+            --schedule /tmp/right_tail/schedule_history.csv \
+            --universe-dir /tmp/hist_2024/pregame_universe \
+            --component-file /tmp/right_tail/component_predictions_2024.csv \
+            --out-dir /tmp/right_tail/distributions
+          python scripts/research/persist_historical_simulated_outcomes_v1.py \
+            --season 2025 --prior-season 2024 --weeks 1-18 --iterations 2000 \
+            --player-logs /tmp/right_tail/player_game_logs_history.csv \
+            --team-weekly /tmp/right_tail/team_weekly_history.csv \
+            --schedule /tmp/right_tail/schedule_history.csv \
+            --universe-dir /tmp/hist_2025/pregame_universe \
+            --component-file /tmp/right_tail/component_predictions_2025.csv \
+            --out-dir /tmp/right_tail/distributions
+
+      - name: Apply frozen ensemble and authoritative game identity
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/backtest/build_full_stack_vegas_projection_trace_v2.py \
+            --component-file /tmp/right_tail/component_predictions_2024.csv \
+            --component-file /tmp/right_tail/component_predictions_2025.csv \
+            --schedule /tmp/right_tail/schedule_history.csv \
+            --weights data/model_ensemble_weights.csv \
+            --out /tmp/right_tail/full_stack_projection_trace.csv
+
+      - name: Run frozen right-tail asymmetry diagnostic
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/audit_distribution_right_tail_asymmetry_v1.py \
+            --projection-file /tmp/right_tail/full_stack_projection_trace.csv \
+            --distribution-dir /tmp/right_tail/distributions \
+            --out-dir /tmp/right_tail/result
+
+      - name: Display result
+        if: always()
+        run: |
+          cat /tmp/right_tail/result/distribution_right_tail_asymmetry_result.json || true
+          echo
+          cat /tmp/right_tail/result/distribution_right_tail_asymmetry_cells.csv || true
+
+      - name: Upload frozen research result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: distribution-right-tail-asymmetry-v1-${{ github.run_id }}
+          retention-days: 90
+          path: |
+            /tmp/right_tail/result/
+            /tmp/right_tail/distributions/*_distribution_rebuild_audit.csv
