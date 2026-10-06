@@ -1,0 +1,36 @@
+{
+  "version": "PRODUCTION_DECISION_GATES_V1",
+  "purpose": "Preserved pregame publication/eligibility gate evidence for the canonical recovered 2026 Week 4 live production board. Reconstructed only from the paid/recovery run logs and immutable artifact authority; no Week-4 outcomes were used.",
+  "weeks": {
+    "4": {
+      "source_run_id": "36935917903",
+      "source_git_sha": "88698538814669a83ce65aabe431b894e93c057c",
+      "source_artifact_id": "11197776900",
+      "source_artifact_name": "week4-live-recovered-36935917903",
+      "source_artifact_digest": "sha256:3f058570037ca016a5cbf1fa79e6e6abc4d845384de4dbdfaf477c8f0a3160a8",
+      "paid_source_run_id": "36934563481",
+      "paid_source_git_sha": "b8e233192033a8fa44742b7c069ad2a42968ceec",
+      "paid_source_artifact_id": "11197726111",
+      "paid_source_artifact_digest": "sha256:202aa5205e71ad0acedf1910f505c2b362f564d8593a0f82dd0928fb45175aae",
+      "evidence_basis": "Exact paid Week-4 Full Slate artifact plus the exact offline recovered final-board artifact. The recovery reused the paid sportsbook snapshot, changed no pricing/projection values, quarantined unresolved backup-QB offers from the final board only, and rebuilt the published workbook with no second OddsAPI acquisition.",
+      "source_facts": {
+        "game_count": 16,
+        "pricing_status": "CURRENT",
+        "paid_priced_side_rows_before_final_quarantine": 3480,
+        "recovered_priced_side_rows": 3460,
+        "recovered_priced_offers": 1730,
+        "recovered_player_market_rows": 873,
+        "final_board_quarantine_rows_removed": 20,
+        "final_board_quarantine_identities": [
+          "CHI Tyson Bagent",
+          "WAS Marcus Mariota"
+        ],
+        "unresolved_position_rows": 0,
+        "sportsbook_defines_football_starter": false,
+        "second_oddsapi_fetch_used": false
+      },
+      "block_rules": [],
+      "notes": "Artifact 11197776900 is the authoritative Week-4 published board and already excludes Tyson Bagent and Marcus Mariota. No additional post-hoc outcome-based publication blocks are permitted."
+    }
+  }
+}
