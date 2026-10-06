@@ -36,7 +36,7 @@ jobs:
 
       - name: Run source-readiness audit
         env:
-          PYTHONPATH: \${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           rm -rf data/research/rb_opponent_defender_injury_source_v1
           python scripts/research/audit_rb_opponent_defender_injury_source_v1.py \
@@ -53,6 +53,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rb-opponent-defender-injury-source-v1-\${{ github.run_id }}
+          name: rb-opponent-defender-injury-source-v1-${{ github.run_id }}
           retention-days: 90
           path: data/research/rb_opponent_defender_injury_source_v1/
