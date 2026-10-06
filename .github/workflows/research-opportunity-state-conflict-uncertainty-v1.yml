@@ -1,0 +1,66 @@
+name: Research Opportunity State Conflict Uncertainty V1
+
+on:
+  push:
+    branches:
+      - research-opportunity-state-conflict-uncertainty-v1
+    paths:
+      - 'docs/research/OPPORTUNITY_STATE_CONFLICT_UNCERTAINTY_V1_PLAN.md'
+      - 'scripts/research/audit_opportunity_state_conflict_uncertainty_v1.py'
+      - 'tests/test_opportunity_state_conflict_uncertainty_v1.py'
+      - '.github/workflows/research-opportunity-state-conflict-uncertainty-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy scipy pytest
+
+      - name: Run frozen-contract tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_opportunity_state_conflict_uncertainty_v1.py
+
+      - name: Run frozen state-conflict uncertainty audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf data/research/opportunity_state_conflict_uncertainty_v1
+          python scripts/research/audit_opportunity_state_conflict_uncertainty_v1.py \
+            --out-dir data/research/opportunity_state_conflict_uncertainty_v1
+
+      - name: Display result
+        if: always()
+        run: |
+          cat data/research/opportunity_state_conflict_uncertainty_v1/opportunity_state_conflict_uncertainty_result.json || true
+          echo
+          cat data/research/opportunity_state_conflict_uncertainty_v1/opportunity_state_conflict_uncertainty_cells.csv || true
+
+      - name: Upload frozen audit artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opportunity-state-conflict-uncertainty-v1-${{ github.run_id }}
+          retention-days: 90
+          path: |
+            data/research/opportunity_state_conflict_uncertainty_v1/
