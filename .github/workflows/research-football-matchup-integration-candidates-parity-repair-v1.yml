@@ -1,0 +1,136 @@
+name: Research Football Matchup Candidate Parity Repair V1
+
+on:
+  push:
+    branches:
+      - research-football-matchup-integration-candidates-v1
+    paths:
+      - 'docs/research/FOOTBALL_MATCHUP_TRANSMISSION_V1_CANDIDATE_PARITY_REPAIR.md'
+      - 'scripts/research/rescore_football_matchup_integration_candidates_v1.py'
+      - 'tests/test_football_matchup_integration_candidates_parity_repair_v1.py'
+      - '.github/workflows/research-football-matchup-integration-candidates-parity-repair-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  rescore:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install scipy pytest
+
+      - name: Run parity-repair safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q             tests/test_football_matchup_integration_candidates_v1.py             tests/test_football_matchup_integration_candidates_parity_repair_v1.py
+
+      - name: Prepare workspace
+        run: |
+          rm -rf /tmp/fmt_repair
+          mkdir -p /tmp/fmt_repair/input /tmp/fmt_repair/right_tail /tmp/fmt_repair/phase_bc /tmp/fmt_repair/result
+
+      - name: Download preserved 2022-2025 candidate preparation
+        uses: actions/download-artifact@v4
+        with:
+          name: football-matchup-integration-candidate-inputs-37527077327
+          path: /tmp/fmt_repair/input
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37527077327
+
+      - name: Download frozen right-tail baseline authority
+        uses: actions/download-artifact@v4
+        with:
+          name: distribution-right-tail-asymmetry-v1-37493425352
+          path: /tmp/fmt_repair/right_tail
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37493425352
+
+      - name: Download frozen Phase B-C feature authority
+        uses: actions/download-artifact@v4
+        with:
+          name: football-matchup-transmission-phase-bc-v1-37514137803
+          path: /tmp/fmt_repair/phase_bc
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37514137803
+
+      - name: Resolve frozen files
+        run: |
+          set -euo pipefail
+          PROJ="$(find /tmp/fmt_repair/input -type f -name 'full_stack_projection_trace_2022_2025.csv' -print -quit)"
+          TEAM="$(find /tmp/fmt_repair/input -type f -name 'team_weekly_matchup.csv' -print -quit)"
+          LOGS="$(find /tmp/fmt_repair/input -type f -name 'player_game_logs_history.csv' -print -quit)"
+          SCHED="$(find /tmp/fmt_repair/input -type f -name 'schedule_history.csv' -print -quit)"
+          RIGHT="$(find /tmp/fmt_repair/right_tail -type f -name 'distribution_right_tail_asymmetry_detail.csv' -print -quit)"
+          PHASE="$(find /tmp/fmt_repair/phase_bc -type f -name 'football_matchup_phase_bc_team_features.csv' -print -quit)"
+          for p in "$PROJ" "$TEAM" "$LOGS" "$SCHED" "$RIGHT" "$PHASE"; do test -n "$p" && test -s "$p"; done
+          {
+            echo "PROJ=$PROJ"
+            echo "TEAM=$TEAM"
+            echo "LOGS=$LOGS"
+            echo "SCHED=$SCHED"
+            echo "RIGHT=$RIGHT"
+            echo "PHASE=$PHASE"
+          } >> "$GITHUB_ENV"
+
+      - name: Run artifact-anchored repaired score
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/rescore_football_matchup_integration_candidates_v1.py             --projection-trace "$PROJ"             --parent-right-tail-detail "$RIGHT"             --frozen-phase-bc-team-features "$PHASE"             --team-weekly-matchup "$TEAM"             --player-logs "$LOGS"             --schedule "$SCHED"             --out-dir /tmp/fmt_repair/result
+
+      - name: Verify repaired contract
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('/tmp/fmt_repair/result/football_matchup_integration_candidate_repair_result.json').read_text())
+          assert p['train_season']==2022, p
+          assert p['primary_confirmation_season']==2023, p
+          assert p['secondary_consistency_seasons']==[2024,2025], p
+          assert p['sportsbook_inputs_used']==0, p
+          assert p['production_changed'] is False, p
+          assert p['combined_candidate_scored'] is False, p
+          assert p['secondary_baseline_method']=='DIRECT_FROZEN_RIGHT_TAIL_AUTHORITY', p
+          assert p['secondary_feature_method']=='DIRECT_FROZEN_PHASE_BC_FEATURE_AUTHORITY', p
+          assert p['secondary_direct_authority_parity']['status']=='PASS', p
+          assert p['independent_rebuild_drift_audit']['independent_rebuild_drift_detected'] is True, p
+          ids=[c['candidate_id'] for c in p['candidates']]
+          assert ids==['FMT-RB1','FMT-WR1','FMT-TE1'], ids
+          print('FOOTBALL_MATCHUP_CANDIDATE_PARITY_REPAIR_CERTIFIED')
+          PY
+
+      - name: Display repaired result
+        if: always()
+        run: |
+          cat /tmp/fmt_repair/result/football_matchup_integration_candidate_repair_result.json || true
+          echo
+          cat /tmp/fmt_repair/result/football_matchup_integration_candidate_repair_scorecard.csv || true
+
+      - name: Upload repaired score
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: football-matchup-integration-candidate-parity-repair-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/fmt_repair/result/**
