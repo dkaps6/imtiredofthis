@@ -75,6 +75,7 @@ jobs:
           QB_CONTROL_TRACE="$(find /tmp/matchup/ref/qb -type f -name 'qb_m89_opp_eff_player_trace.csv' -print -quit)"
           test -n "${RIGHT_TAIL_DETAIL}" && test -s "${RIGHT_TAIL_DETAIL}"
           test -n "${QB_CONTROL_TRACE}" && test -s "${QB_CONTROL_TRACE}"
+          export RIGHT_TAIL_DETAIL QB_CONTROL_TRACE
           echo "RIGHT_TAIL_DETAIL=${RIGHT_TAIL_DETAIL}" >> "${GITHUB_ENV}"
           echo "QB_CONTROL_TRACE=${QB_CONTROL_TRACE}" >> "${GITHUB_ENV}"
           python - <<'PY'
