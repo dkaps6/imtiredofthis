@@ -1,0 +1,84 @@
+name: Research Football Matchup Transmission V1
+
+on:
+  push:
+    branches:
+      - research-football-matchup-transmission-v1
+    paths:
+      - 'docs/research/FOOTBALL_MATCHUP_TRANSMISSION_V1_PLAN.md'
+      - 'scripts/research/audit_football_matchup_transmission_v1.py'
+      - '.github/workflows/research-football-matchup-transmission-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PAID_RUN_ID: "36934563481"
+  PAID_ARTIFACT_NAME: "run_36934563481"
+  PAID_ARTIFACT_ID: "11197726111"
+  PAID_ARTIFACT_DIGEST: "sha256:202aa5205e71ad0acedf1910f505c2b362f564d8593a0f82dd0928fb45175aae"
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas numpy
+
+      - name: Verify frozen Week-4 source artifact
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${PAID_RUN_ID}/artifacts?per_page=100" > /tmp/artifacts.json
+          python - <<'PY'
+          import json, os
+          obj=json.load(open('/tmp/artifacts.json',encoding='utf-8'))
+          want=int(os.environ['PAID_ARTIFACT_ID'])
+          a=[x for x in obj.get('artifacts',[]) if int(x.get('id',-1))==want]
+          assert len(a)==1, a
+          a=a[0]
+          assert a.get('name')==os.environ['PAID_ARTIFACT_NAME'], a
+          assert a.get('digest')==os.environ['PAID_ARTIFACT_DIGEST'], a
+          assert not bool(a.get('expired')), a
+          print({'id':a['id'],'name':a['name'],'digest':a['digest'],'expired':a['expired']})
+          PY
+
+      - name: Download frozen source artifact without OddsAPI
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/week4_source
+          mkdir -p /tmp/week4_source
+          gh run download "${PAID_RUN_ID}"             --repo "${GITHUB_REPOSITORY}"             --name "${PAID_ARTIFACT_NAME}"             --dir /tmp/week4_source
+          test -s /tmp/week4_source/data/team_form.csv
+          test -s /tmp/week4_source/data/model_rule_simulation_inputs.csv
+          test -s /tmp/week4_source/data/model_rule_diagnostics.csv
+
+      - name: Run deterministic Phase A transmission audit
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/research/audit_football_matchup_transmission_v1.py             --artifact-root /tmp/week4_source             --out-dir data/research/football_matchup_transmission_v1
+
+      - name: Upload Phase A evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: football-matchup-transmission-v1-${{ github.run_id }}
+          retention-days: 90
+          path: |
+            data/research/football_matchup_transmission_v1/
