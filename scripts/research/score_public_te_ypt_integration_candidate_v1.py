@@ -142,6 +142,10 @@ def prepare_rows(baseline:pd.DataFrame, logs:pd.DataFrame, phase:pd.DataFrame)->
     b["actual"]=_num(b["actual"])
     b["baseline_projection"]=_num(b["ensemble_proj"])
     b=b.loc[b["season"].isin([2022,2023,2024,2025])&b["week"].isin(WEEKS)].copy()
+    # Player position/identity must come from the preserved canonical player-log
+    # authority only. The composite projection trace may carry ambient metadata;
+    # discard it before the authoritative merge to avoid suffix ambiguity.
+    b=b.drop(columns=["position","player_identity_key"],errors="ignore")
 
     m=logs.copy()
     for c in ("season","week"):
