@@ -1,0 +1,58 @@
+name: Research RB Opponent Defender Injury Source V1
+
+on:
+  push:
+    branches:
+      - research-rb-opponent-defender-injury-source-v1
+    paths:
+      - 'docs/research/RB_OPPONENT_DEFENDER_INJURY_SOURCE_READINESS_V1_PLAN.md'
+      - 'scripts/research/audit_rb_opponent_defender_injury_source_v1.py'
+      - '.github/workflows/research-rb-opponent-defender-injury-source-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy
+
+      - name: Run source-readiness audit
+        env:
+          PYTHONPATH: \${{ github.workspace }}
+        run: |
+          rm -rf data/research/rb_opponent_defender_injury_source_v1
+          python scripts/research/audit_rb_opponent_defender_injury_source_v1.py \
+            --out-dir data/research/rb_opponent_defender_injury_source_v1
+
+      - name: Display result
+        if: always()
+        run: |
+          cat data/research/rb_opponent_defender_injury_source_v1/opponent_defender_injury_source_result.json || true
+          echo
+          cat data/research/rb_opponent_defender_injury_source_v1/opponent_defender_injury_season_coverage.csv || true
+
+      - name: Upload audit artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-opponent-defender-injury-source-v1-\${{ github.run_id }}
+          retention-days: 90
+          path: data/research/rb_opponent_defender_injury_source_v1/
