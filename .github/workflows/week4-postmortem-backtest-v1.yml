@@ -9,6 +9,8 @@ on:
       - '.github/workflows/week4-postmortem-backtest-v1.yml'
       - 'scripts/research/week4_postmortem_source_gate_v1.py'
       - 'data/research/week4_postmortem/WEEK4_PRODUCTION_DECISION_GATE_EVIDENCE_V1.json'
+      - 'data/research/week4_postmortem/WEEK4_MANUAL_SETTLEMENT_EVIDENCE_V1.json'
+      - 'scripts/operations/grade_market_track_record_gsis_v1.py'
 
 permissions:
   contents: read
@@ -125,11 +127,12 @@ jobs:
           out=Path("data/research/week4_postmortem")
           detail=out/"week4_selected_graded_detail.csv"
           evidence=json.loads((out/"WEEK4_PRODUCTION_DECISION_GATE_EVIDENCE_V1.json").read_text(encoding="utf-8"))
+          manual=json.loads((out/"WEEK4_MANUAL_SETTLEMENT_EVIDENCE_V1.json").read_text(encoding="utf-8"))
           summary=grade(
               2026,[4],
               detail_out=detail,
               production_gate_evidence=evidence,
-              manual_settlement_evidence=None,
+              manual_settlement_evidence=manual,
           )
           (out/"week4_selected_settlement_summary.json").write_text(
               json.dumps(summary, indent=2, sort_keys=True, default=str)+"\n",
@@ -157,6 +160,7 @@ jobs:
             --season 2026 \
             --weeks 4 \
             --production-gate-evidence data/research/week4_postmortem/WEEK4_PRODUCTION_DECISION_GATE_EVIDENCE_V1.json \
+            --manual-settlement-evidence data/research/week4_postmortem/WEEK4_MANUAL_SETTLEMENT_EVIDENCE_V1.json \
             --out data/research/week4_postmortem/week4_selected_full_graded.csv \
             | tee data/research/week4_postmortem/week4_selected_full_report.txt
 
