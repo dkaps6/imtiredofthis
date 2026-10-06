@@ -1,0 +1,55 @@
+{
+  "version": "WEEK4_MANUAL_SETTLEMENT_EVIDENCE_V1",
+  "season": 2026,
+  "week": 4,
+  "purpose": "Exact-row fail-closed settlement evidence for Jadarian Price Week-4 DraftKings player props. Price was ruled OUT before SEA-LAC, placed on injured reserve before the game, and recorded no snaps. These rows are sportsbook void/nonparticipant outcomes, not zero-stat UNDER wins.",
+  "evidence": {
+    "team": "SEA",
+    "player": "Jadarian Price",
+    "gsis_id": "00-0041512",
+    "official_game_status": "OUT",
+    "injured_reserve_before_game": true,
+    "snap_participated": false,
+    "source_1": "https://www.seahawks.com/news/week-4-injury-report-seahawks-vs-chargers",
+    "source_2": "https://www.seahawks.com/news/seahawks-vs-chargers-week-4-inactives",
+    "source_3": "https://www.nfl.com/injuries/league/2026/reg4"
+  },
+  "rows": [
+    {
+      "team": "SEA",
+      "gsis_id": "00-0041512",
+      "market": "rush_yards",
+      "book": "draftkings",
+      "vegas_line": 41.5,
+      "side": "UNDER",
+      "disposition": "VOID_NONPARTICIPANT"
+    },
+    {
+      "team": "SEA",
+      "gsis_id": "00-0041512",
+      "market": "rec_yards",
+      "book": "draftkings",
+      "vegas_line": 10.5,
+      "side": "UNDER",
+      "disposition": "VOID_NONPARTICIPANT"
+    },
+    {
+      "team": "SEA",
+      "gsis_id": "00-0041512",
+      "market": "receptions",
+      "book": "draftkings",
+      "vegas_line": 1.5,
+      "side": "UNDER",
+      "disposition": "VOID_NONPARTICIPANT"
+    },
+    {
+      "team": "SEA",
+      "gsis_id": "00-0041512",
+      "market": "rush_rec_yards",
+      "book": "draftkings",
+      "vegas_line": 56.5,
+      "side": "UNDER",
+      "disposition": "VOID_NONPARTICIPANT"
+    }
+  ]
+}
