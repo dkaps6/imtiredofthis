@@ -1,0 +1,124 @@
+name: Research RB Opponent Defender Injury Candidate V1
+
+on:
+  push:
+    branches:
+      - research-rb-opponent-defender-injury-candidate-v1
+    paths:
+      - 'docs/research/RB_OPPONENT_DEFENDER_INJURY_CANDIDATE_V1_CONTRACT.md'
+      - 'scripts/research/score_rb_opponent_defender_injury_candidate_v1.py'
+      - 'tests/test_rb_opponent_defender_injury_candidate_v1.py'
+      - '.github/workflows/research-rb-opponent-defender-injury-candidate-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  score:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyarrow
+
+      - name: Run frozen candidate safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_rb_opponent_defender_injury_candidate_v1.py
+
+      - name: Prepare authorities
+        run: |
+          rm -rf /tmp/rbdi
+          mkdir -p /tmp/rbdi/right_tail /tmp/rbdi/injury /tmp/rbdi/preserved /tmp/rbdi/result
+
+      - name: Download frozen right-tail baseline authority
+        uses: actions/download-artifact@v4
+        with:
+          name: distribution-right-tail-asymmetry-v1-37493425352
+          path: /tmp/rbdi/right_tail
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37493425352
+
+      - name: Download frozen opponent-injury readiness authority
+        uses: actions/download-artifact@v4
+        with:
+          name: rb-opponent-defender-injury-readiness-v1-37534490584
+          path: /tmp/rbdi/injury
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37534490584
+
+      - name: Download preserved player-history identity authority
+        uses: actions/download-artifact@v4
+        with:
+          name: football-matchup-integration-candidate-inputs-37527077327
+          path: /tmp/rbdi/preserved
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37527077327
+
+      - name: Resolve frozen files
+        run: |
+          set -euo pipefail
+          RIGHT="$(find /tmp/rbdi/right_tail -type f -name 'distribution_right_tail_asymmetry_detail.csv' -print -quit)"
+          INJURY="$(find /tmp/rbdi/injury -type f -name 'rb_opponent_defender_injury_readiness_rows.csv' -print -quit)"
+          LOGS="$(find /tmp/rbdi/preserved -type f -name 'player_game_logs_history.csv' -print -quit)"
+          for p in "$RIGHT" "$INJURY" "$LOGS"; do test -n "$p" && test -s "$p"; done
+          {
+            echo "RIGHT=$RIGHT"
+            echo "INJURY=$INJURY"
+            echo "LOGS=$LOGS"
+          } >> "$GITHUB_ENV"
+
+      - name: Score frozen RBDI-F7-1
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/score_rb_opponent_defender_injury_candidate_v1.py             --right-tail-detail "$RIGHT"             --player-logs "$LOGS"             --injury-evidence "$INJURY"             --out-dir /tmp/rbdi/result
+
+      - name: Verify candidate boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('/tmp/rbdi/result/rb_opponent_defender_injury_candidate_result.json').read_text())
+          assert p['candidate_id']=='RBDI-F7-1',p
+          assert p['train_season']==2024,p
+          assert p['confirmation_season']==2025,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['outcomes_2026_read']==0,p
+          assert p['production_changed'] is False,p
+          assert p['posthoc_subgroups_scored']==0,p
+          assert p['confirmation']['zero_burden_max_abs_gap']<=1e-10,p
+          assert p['disposition'] in {'RBDI_F7_1_CONFIRMED','RBDI_F7_1_CLOSED'},p
+          print('RBDI_F7_1_CONTRACT_CERTIFIED')
+          PY
+
+      - name: Display candidate result
+        if: always()
+        run: |
+          cat /tmp/rbdi/result/rb_opponent_defender_injury_candidate_result.json || true
+
+      - name: Upload candidate result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-opponent-defender-injury-candidate-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/rbdi/result/**
