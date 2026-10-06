@@ -39,7 +39,7 @@ jobs:
 
       - name: Run frozen candidate tests
         env:
-          PYTHONPATH: \${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           pytest -q tests/test_football_matchup_transmission_candidates_v1.py
 
@@ -54,13 +54,13 @@ jobs:
         with:
           name: distribution-right-tail-asymmetry-v1-37493425352
           path: /tmp/fmt_ref
-          github-token: \${{ secrets.GITHUB_TOKEN }}
-          repository: \${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
           run-id: 37493425352
 
       - name: Build leakage-safe historical inputs
         env:
-          PYTHONPATH: \${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/backtest/build_historical_inputs.py \
             --season 2024 --prior-season 2023 --weeks 1-18 --out-dir /tmp/fmt_hist_2024
@@ -88,7 +88,7 @@ jobs:
 
       - name: Build exact corrected candidate feature history
         env:
-          PYTHONPATH: \${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/backtest/correct_m89_team_semantics.py \
             --team-weekly /tmp/fmt_int/team_weekly_corrected.csv \
@@ -98,7 +98,7 @@ jobs:
 
       - name: Build canonical historical player logs
         env:
-          PYTHONPATH: \${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/backtest/historical_player_logs.py \
             --seasons 2023,2024,2025 \
@@ -114,7 +114,7 @@ jobs:
 
       - name: Score frozen integration candidates
         env:
-          PYTHONPATH: \${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/research/score_football_matchup_transmission_candidates_v1.py \
             --team-weekly-base /tmp/fmt_int/team_weekly_history.csv \
@@ -158,7 +158,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: football-matchup-transmission-integration-candidates-v1-\${{ github.run_id }}
+          name: football-matchup-transmission-integration-candidates-v1-${{ github.run_id }}
           retention-days: 90
           if-no-files-found: warn
           path: |
