@@ -68,6 +68,11 @@ def load_logs(season:int,schedule:pd.DataFrame)->pd.DataFrame:
     import nflreadpy as nfl
     raw=nfl.load_player_stats(seasons=[int(season)],summary_level="week")
     x=_normalize_weekly(_pd(raw),int(season))
+    # Canonical historical-player-log semantics: nflreadpy can expose
+    # postseason rows as Weeks 19+, so retain only regular-season weeks
+    # represented by the validated schedule before opponent attachment.
+    valid_weeks=sorted(schedule["week"].dropna().astype(int).unique().tolist())
+    x=x.loc[_num(x["week"]).isin(valid_weeks)].copy()
     x=x.merge(
         schedule[["season","week","team","opponent","game_id"]],
         on=["season","week","team"],
