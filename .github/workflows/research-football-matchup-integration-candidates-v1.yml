@@ -6,6 +6,7 @@ on:
       - research-football-matchup-integration-candidates-v1
     paths:
       - 'docs/research/FOOTBALL_MATCHUP_TRANSMISSION_V1_INTEGRATION_CANDIDATE_CONTRACT.md'
+      - 'docs/research/FOOTBALL_MATCHUP_TRANSMISSION_V1_CANDIDATE_BASELINE_EXECUTION_NOTE.md'
       - 'scripts/research/score_football_matchup_integration_candidates_v1.py'
       - 'tests/test_football_matchup_integration_candidates_v1.py'
       - '.github/workflows/research-football-matchup-integration-candidates-v1.yml'
@@ -22,7 +23,7 @@ env:
 jobs:
   score:
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
@@ -45,9 +46,9 @@ jobs:
       - name: Create isolated workspace
         run: |
           set -euo pipefail
-          rm -rf /tmp/fmt_hist_2022 /tmp/fmt_hist_2023 /tmp/fmt_hist_2024 /tmp/fmt_hist_2025 /tmp/fmt_candidate
-          mkdir -p /tmp/fmt_hist_2022 /tmp/fmt_hist_2023 /tmp/fmt_hist_2024 /tmp/fmt_hist_2025
-          mkdir -p /tmp/fmt_candidate/ref/right_tail /tmp/fmt_candidate/work /tmp/fmt_candidate/result
+          rm -rf /tmp/fmt_hist_2022 /tmp/fmt_hist_2023 /tmp/fmt_candidate
+          mkdir -p /tmp/fmt_hist_2022 /tmp/fmt_hist_2023
+          mkdir -p /tmp/fmt_candidate/ref/right_tail /tmp/fmt_candidate/preserved                    /tmp/fmt_candidate/work /tmp/fmt_candidate/result
 
       - name: Download frozen 2024-2025 parent baseline authority
         uses: actions/download-artifact@v4
@@ -58,99 +59,151 @@ jobs:
           repository: ${{ github.repository }}
           run-id: 37493425352
 
-      - name: Resolve parent authority
+      - name: Download preserved candidate inputs
+        uses: actions/download-artifact@v4
+        with:
+          name: football-matchup-integration-candidate-inputs-37527077327
+          path: /tmp/fmt_candidate/preserved
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37527077327
+
+      - name: Resolve frozen authorities and preserved inputs
         run: |
           set -euo pipefail
           RIGHT_TAIL_DETAIL="$(find /tmp/fmt_candidate/ref/right_tail -type f -name 'distribution_right_tail_asymmetry_detail.csv' -print -quit)"
-          test -n "${RIGHT_TAIL_DETAIL}" && test -s "${RIGHT_TAIL_DETAIL}"
-          export RIGHT_TAIL_DETAIL
+          PRESERVED_PLAYER_LOGS="$(find /tmp/fmt_candidate/preserved -type f -name 'player_game_logs_history.csv' -print -quit)"
+          PRESERVED_TEAM_MATCHUP="$(find /tmp/fmt_candidate/preserved -type f -name 'team_weekly_matchup.csv' -print -quit)"
+          PRESERVED_SCHEDULE="$(find /tmp/fmt_candidate/preserved -type f -name 'schedule_history.csv' -print -quit)"
+          for p in "${RIGHT_TAIL_DETAIL}" "${PRESERVED_PLAYER_LOGS}" "${PRESERVED_TEAM_MATCHUP}" "${PRESERVED_SCHEDULE}"; do
+            test -n "${p}" && test -s "${p}"
+          done
+          export RIGHT_TAIL_DETAIL PRESERVED_PLAYER_LOGS PRESERVED_TEAM_MATCHUP PRESERVED_SCHEDULE
           echo "RIGHT_TAIL_DETAIL=${RIGHT_TAIL_DETAIL}" >> "${GITHUB_ENV}"
+          echo "PRESERVED_PLAYER_LOGS=${PRESERVED_PLAYER_LOGS}" >> "${GITHUB_ENV}"
+          echo "PRESERVED_TEAM_MATCHUP=${PRESERVED_TEAM_MATCHUP}" >> "${GITHUB_ENV}"
+          echo "PRESERVED_SCHEDULE=${PRESERVED_SCHEDULE}" >> "${GITHUB_ENV}"
           python - <<'PY'
           import os, pandas as pd
-          p = os.environ["RIGHT_TAIL_DETAIL"]
-          x = pd.read_csv(p, nrows=5)
+          parent = pd.read_csv(os.environ["RIGHT_TAIL_DETAIL"], nrows=5)
           need = {"season","week","game_id","team","opponent","player_clean_key","market","actual","final_mean"}
-          if not need.issubset({str(c).lower() for c in x.columns}):
-              raise RuntimeError("parent right-tail authority schema drift")
-          print("PARENT_RIGHT_TAIL_AUTHORITY_RESOLVED")
+          if not need.issubset({str(c).lower() for c in parent.columns}):
+              raise RuntimeError("frozen parent baseline schema drift")
+          logs = pd.read_csv(os.environ["PRESERVED_PLAYER_LOGS"], usecols=["season"], low_memory=False)
+          seasons = set(pd.to_numeric(logs["season"], errors="coerce").dropna().astype(int))
+          if not {2021,2022,2023,2024,2025}.issubset(seasons):
+              raise RuntimeError(f"preserved player-log seasons incomplete: {sorted(seasons)}")
+          print("FROZEN_AND_PRESERVED_AUTHORITIES_RESOLVED")
           PY
 
-      - name: Build leakage-safe historical inputs 2022-2025
+      - name: Build only 2022-2023 leakage-safe source inputs
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          for season in 2022 2023 2024 2025; do
-            prior=$((season - 1))
-            python scripts/backtest/build_historical_inputs.py               --season "${season}" --prior-season "${prior}" --weeks 1-18               --out-dir "/tmp/fmt_hist_${season}"
-          done
+          python scripts/backtest/build_historical_inputs.py             --season 2022 --prior-season 2021 --weeks 1-18             --out-dir /tmp/fmt_hist_2022
+          python scripts/backtest/build_historical_inputs.py             --season 2023 --prior-season 2022 --weeks 1-18             --out-dir /tmp/fmt_hist_2023
 
-      - name: Combine canonical schedule and baseline team history
+      - name: Build parent-analogous shared 2021-2023 baseline history
         run: |
           set -euo pipefail
           python - <<'PY'
-          import pandas as pd
+          import os
           from pathlib import Path
+          import pandas as pd
+
           out = Path("/tmp/fmt_candidate/work")
-          for name in ["schedule_history.csv", "team_weekly_history.csv"]:
-              parts = [pd.read_csv(f"/tmp/fmt_hist_{s}/{name}") for s in (2022, 2023, 2024, 2025)]
-              x = pd.concat(parts, ignore_index=True)
+          for name in ("schedule_history.csv", "team_weekly_history.csv"):
+              x = pd.concat(
+                  [
+                      pd.read_csv("/tmp/fmt_hist_2022/" + name),
+                      pd.read_csv("/tmp/fmt_hist_2023/" + name),
+                  ],
+                  ignore_index=True,
+              )
               keys = ["season", "week", "team"]
               x = x.sort_values(keys).drop_duplicates(keys, keep="last").reset_index(drop=True)
+              seasons = set(pd.to_numeric(x["season"], errors="coerce").dropna().astype(int))
+              if seasons != {2021, 2022, 2023}:
+                  raise RuntimeError(f"baseline {name} scope drift: {sorted(seasons)}")
               if x.duplicated(keys).any():
-                  raise RuntimeError(f"duplicate combined historical rows in {name}")
-              seasons = sorted(pd.to_numeric(x["season"], errors="coerce").dropna().astype(int).unique().tolist())
-              if not {2021, 2022, 2023, 2024, 2025}.issubset(set(seasons)):
-                  raise RuntimeError(f"historical seasons incomplete in {name}: {seasons}")
-              target = out / ("team_weekly_base.csv" if name == "team_weekly_history.csv" else name)
+                  raise RuntimeError(f"duplicate baseline rows in {name}")
+              target = out / ("team_weekly_base_2021_2023.csv" if name == "team_weekly_history.csv" else "schedule_base_2021_2023.csv")
               x.to_csv(target, index=False)
-              print(target, len(x), seasons)
+
+          logs = pd.read_csv(os.environ["PRESERVED_PLAYER_LOGS"], low_memory=False)
+          s = pd.to_numeric(logs["season"], errors="coerce")
+          logs = logs.loc[s.isin([2021, 2022, 2023])].copy()
+          got = set(pd.to_numeric(logs["season"], errors="coerce").dropna().astype(int))
+          if got != {2021, 2022, 2023}:
+              raise RuntimeError(f"player-log baseline scope drift: {sorted(got)}")
+          logs.to_csv(out / "player_game_logs_2021_2023.csv", index=False)
+          print("BASELINE_HISTORY_SCOPE_CERTIFIED_2021_2023")
           PY
 
-      - name: Build exact matchup-context history copy
+      - name: Rebuild parent-analogous football-only baselines 2022-2023
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          cp /tmp/fmt_candidate/work/team_weekly_base.csv /tmp/fmt_candidate/work/team_weekly_matchup.csv
-          python scripts/backtest/correct_m89_team_semantics.py             --team-weekly /tmp/fmt_candidate/work/team_weekly_matchup.csv             --seasons 2021,2022,2023,2024,2025             --observations /tmp/fmt_candidate/work/m89_team_semantics_observations.csv             --audit /tmp/fmt_candidate/work/m89_team_semantics_audit.csv
-
-      - name: Build canonical 2021-2025 player logs
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          set -euo pipefail
-          python scripts/backtest/historical_player_logs.py             --seasons 2021,2022,2023,2024,2025             --schedule /tmp/fmt_candidate/work/schedule_history.csv             --out /tmp/fmt_candidate/work/player_game_logs_history.csv
-
-      - name: Rebuild canonical football-only baselines 2022-2025
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          set -euo pipefail
-          for season in 2022 2023 2024 2025; do
+          for season in 2022 2023; do
             prior=$((season - 1))
-            python scripts/backtest/walk_forward.py               --season "${season}" --prior-season "${prior}" --weeks 1-18 --iterations 2000               --player-logs /tmp/fmt_candidate/work/player_game_logs_history.csv               --team-weekly /tmp/fmt_candidate/work/team_weekly_base.csv               --schedule /tmp/fmt_candidate/work/schedule_history.csv               --universe-dir "/tmp/fmt_hist_${season}/pregame_universe"               --out "/tmp/fmt_candidate/work/component_predictions_${season}.csv"
+            python scripts/backtest/walk_forward.py               --season "${season}" --prior-season "${prior}" --weeks 1-18 --iterations 2000               --player-logs /tmp/fmt_candidate/work/player_game_logs_2021_2023.csv               --team-weekly /tmp/fmt_candidate/work/team_weekly_base_2021_2023.csv               --schedule /tmp/fmt_candidate/work/schedule_base_2021_2023.csv               --universe-dir "/tmp/fmt_hist_${season}/pregame_universe"               --out "/tmp/fmt_candidate/work/component_predictions_${season}.csv"
           done
-          python scripts/backtest/build_full_stack_vegas_projection_trace_v2.py             --component-file /tmp/fmt_candidate/work/component_predictions_2022.csv             --component-file /tmp/fmt_candidate/work/component_predictions_2023.csv             --component-file /tmp/fmt_candidate/work/component_predictions_2024.csv             --component-file /tmp/fmt_candidate/work/component_predictions_2025.csv             --schedule /tmp/fmt_candidate/work/schedule_history.csv             --weights data/model_ensemble_weights.csv             --out /tmp/fmt_candidate/work/full_stack_projection_trace_2022_2025.csv
+          python scripts/backtest/build_full_stack_vegas_projection_trace_v2.py             --component-file /tmp/fmt_candidate/work/component_predictions_2022.csv             --component-file /tmp/fmt_candidate/work/component_predictions_2023.csv             --schedule /tmp/fmt_candidate/work/schedule_base_2021_2023.csv             --weights data/model_ensemble_weights.csv             --out /tmp/fmt_candidate/work/full_stack_projection_trace_2022_2023.csv
 
-      - name: Preserve prepared candidate scoring inputs
+      - name: Compose frozen-authority candidate baseline
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import pandas as pd
+
+          early = pd.read_csv("/tmp/fmt_candidate/work/full_stack_projection_trace_2022_2023.csv", low_memory=False)
+          parent = pd.read_csv(os.environ["RIGHT_TAIL_DETAIL"], low_memory=False)
+          parent.columns = [str(c).strip().lower() for c in parent.columns]
+          parent = parent.loc[pd.to_numeric(parent["season"], errors="coerce").isin([2024, 2025])].copy()
+          parent["ensemble_proj"] = pd.to_numeric(parent["final_mean"], errors="coerce")
+          parent["baseline_authority"] = "FROZEN_RIGHT_TAIL_FINAL_MEAN"
+          early["baseline_authority"] = "PARENT_ANALOGOUS_SHARED_2021_2023_WALK_FORWARD"
+
+          need = ["season","week","game_id","team","opponent","player_clean_key","market","actual","ensemble_proj"]
+          for label, x in (("early", early), ("parent", parent)):
+              missing = [c for c in need if c not in x.columns]
+              if missing:
+                  raise RuntimeError(f"{label} baseline missing columns: {missing}")
+
+          composite = pd.concat([early, parent], ignore_index=True, sort=False)
+          keys = ["season","week","game_id","team","opponent","player_clean_key","market"]
+          if composite.duplicated(keys).any():
+              sample = composite.loc[composite.duplicated(keys, keep=False), keys].head(20).to_dict("records")
+              raise RuntimeError(f"composite baseline duplicate identities: {sample}")
+          seasons = set(pd.to_numeric(composite["season"], errors="coerce").dropna().astype(int))
+          if seasons != {2022, 2023, 2024, 2025}:
+              raise RuntimeError(f"composite baseline season drift: {sorted(seasons)}")
+          composite.to_csv("/tmp/fmt_candidate/work/composite_projection_trace_2022_2025.csv", index=False)
+          print(composite.groupby(["season","baseline_authority"]).size().rename("rows").reset_index().to_string(index=False))
+          print("COMPOSITE_BASELINE_AUTHORITY_CERTIFIED")
+          PY
+
+      - name: Preserve corrected candidate baseline inputs
         uses: actions/upload-artifact@v4
         with:
-          name: football-matchup-integration-candidate-inputs-${{ github.run_id }}
-          retention-days: 14
+          name: football-matchup-integration-candidate-corrected-inputs-${{ github.run_id }}
+          retention-days: 30
           if-no-files-found: error
           path: |
-            /tmp/fmt_candidate/work/full_stack_projection_trace_2022_2025.csv
-            /tmp/fmt_candidate/work/team_weekly_matchup.csv
-            /tmp/fmt_candidate/work/player_game_logs_history.csv
-            /tmp/fmt_candidate/work/schedule_history.csv
+            /tmp/fmt_candidate/work/composite_projection_trace_2022_2025.csv
+            /tmp/fmt_candidate/work/full_stack_projection_trace_2022_2023.csv
+            /tmp/fmt_candidate/work/player_game_logs_2021_2023.csv
 
       - name: Score frozen integration candidates
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          python scripts/research/score_football_matchup_integration_candidates_v1.py             --projection-trace /tmp/fmt_candidate/work/full_stack_projection_trace_2022_2025.csv             --parent-right-tail-detail "${RIGHT_TAIL_DETAIL}"             --team-weekly-matchup /tmp/fmt_candidate/work/team_weekly_matchup.csv             --player-logs /tmp/fmt_candidate/work/player_game_logs_history.csv             --schedule /tmp/fmt_candidate/work/schedule_history.csv             --out-dir /tmp/fmt_candidate/result
+          python scripts/research/score_football_matchup_integration_candidates_v1.py             --projection-trace /tmp/fmt_candidate/work/composite_projection_trace_2022_2025.csv             --parent-right-tail-detail "${RIGHT_TAIL_DETAIL}"             --team-weekly-matchup "${PRESERVED_TEAM_MATCHUP}"             --player-logs "${PRESERVED_PLAYER_LOGS}"             --schedule "${PRESERVED_SCHEDULE}"             --out-dir /tmp/fmt_candidate/result
 
       - name: Verify frozen candidate contract
         run: |
@@ -167,6 +220,7 @@ jobs:
           assert p["production_changed"] is False, p
           assert p["combined_candidate_scored"] is False, p
           assert p["parent_2024_2025_baseline_parity"]["status"] == "PASS", p
+          assert p["parent_2024_2025_baseline_parity"]["max_gap"] <= 1e-10, p
           ids = [c["candidate_id"] for c in p["candidates"]]
           assert ids == ["FMT-RB1", "FMT-WR1", "FMT-TE1"], ids
           print("FOOTBALL_MATCHUP_INTEGRATION_CANDIDATE_CONTRACT_CERTIFIED")
@@ -188,4 +242,3 @@ jobs:
           if-no-files-found: warn
           path: |
             /tmp/fmt_candidate/result/**
-            /tmp/fmt_candidate/work/m89_team_semantics_audit.csv
