@@ -1,0 +1,189 @@
+name: Research Historical Availability Parity Diagnostic V1
+
+on:
+  push:
+    branches:
+      - research-historical-availability-parity-diagnostic-v1
+    paths:
+      - 'docs/research/HISTORICAL_AVAILABILITY_PARITY_DIAGNOSTIC_V1_CONTRACT.md'
+      - 'scripts/research/build_historical_availability_parity_universe_v1.py'
+      - 'scripts/research/compare_historical_availability_parity_v1.py'
+      - 'tests/test_historical_availability_parity_diagnostic_v1.py'
+      - '.github/workflows/research-historical-availability-parity-diagnostic-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyarrow pyyaml
+
+      - name: Run frozen parity diagnostic tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_historical_availability_parity_diagnostic_v1.py
+          pytest -q tests/test_player_opportunity_allocation_audit_v1.py
+
+      - name: Build baseline leakage-safe Weeks 1-4 inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/historical_availability_parity
+          mkdir -p /tmp/historical_availability_parity/baseline_input                    /tmp/historical_availability_parity/act_universe                    /tmp/historical_availability_parity/parent                    /tmp/historical_availability_parity/baseline_output                    /tmp/historical_availability_parity/act_output                    /tmp/historical_availability_parity/output
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.backtest.historical_inputs import build_all_historical_inputs
+          out=build_all_historical_inputs(
+              season=2026,
+              prior_season=2025,
+              out_dir=Path('/tmp/historical_availability_parity/baseline_input'),
+              weeks=range(1,5),
+          )
+          print(out)
+          PY
+          python scripts/backtest/historical_player_logs.py             --seasons 2025,2026             --schedule /tmp/historical_availability_parity/baseline_input/schedule_history.csv             --out /tmp/historical_availability_parity/baseline_input/player_game_logs_history.csv
+
+      - name: Build exact ACT-only diagnostic universes
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/build_historical_availability_parity_universe_v1.py             --baseline-dir /tmp/historical_availability_parity/baseline_input/pregame_universe             --out-dir /tmp/historical_availability_parity/act_universe             --status-out /tmp/historical_availability_parity/output/historical_availability_status_map.csv             --summary-out /tmp/historical_availability_parity/output/historical_availability_universe_summary.json
+          python - <<'PY'
+          import json, pandas as pd
+          from pathlib import Path
+          root=Path('/tmp/historical_availability_parity')
+          s=json.loads((root/'output/historical_availability_universe_summary.json').read_text())
+          assert s['sportsbook_inputs_used'] is False
+          assert s['outcome_inputs_used_for_selection'] is False
+          assert s['ina_rows_removed'] > 0
+          status=pd.read_csv(root/'output/historical_availability_status_map.csv')
+          assert set(status.status.unique()).issubset({'ACT','INA'})
+          assert status.status.eq('INA').any()
+          for w in range(1,5):
+              b=pd.read_csv(root/f'baseline_input/pregame_universe/2026_week_{w:02d}.csv')
+              a=pd.read_csv(root/f'act_universe/2026_week_{w:02d}.csv')
+              assert len(a) < len(b), (w,len(a),len(b))
+              assert a.team.nunique() == b.team.nunique(), w
+          print(s)
+          PY
+
+      - name: Recover frozen parent all-player scoreboard
+        run: |
+          gh run download 37683439543             --repo "${GITHUB_REPOSITORY}"             --name "all-player-all-position-replay-v1-37683439543"             --dir /tmp/historical_availability_parity/parent
+          test -s /tmp/historical_availability_parity/parent/all_players_point_scoreboard.csv
+
+      - name: Run baseline ACT+INA player opportunity audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/run_player_opportunity_allocation_audit_v1.py             --player-logs /tmp/historical_availability_parity/baseline_input/player_game_logs_history.csv             --team-weekly /tmp/historical_availability_parity/baseline_input/team_weekly_history.csv             --schedule /tmp/historical_availability_parity/baseline_input/schedule_history.csv             --universe-dir /tmp/historical_availability_parity/baseline_input/pregame_universe             --point-scoreboard /tmp/historical_availability_parity/parent/all_players_point_scoreboard.csv             --iterations 5000             --out-dir /tmp/historical_availability_parity/baseline_output
+          test -s /tmp/historical_availability_parity/baseline_output/player_opportunity_allocation_rows.csv
+          cp /tmp/historical_availability_parity/baseline_output/player_opportunity_allocation_rows.csv              /tmp/historical_availability_parity/output/baseline_player_opportunity_rows.csv
+
+      - name: Run ACT-only player opportunity audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/run_player_opportunity_allocation_audit_v1.py             --player-logs /tmp/historical_availability_parity/baseline_input/player_game_logs_history.csv             --team-weekly /tmp/historical_availability_parity/baseline_input/team_weekly_history.csv             --schedule /tmp/historical_availability_parity/baseline_input/schedule_history.csv             --universe-dir /tmp/historical_availability_parity/act_universe             --point-scoreboard /tmp/historical_availability_parity/parent/all_players_point_scoreboard.csv             --iterations 5000             --out-dir /tmp/historical_availability_parity/act_output
+          test -s /tmp/historical_availability_parity/act_output/player_opportunity_allocation_rows.csv
+          cp /tmp/historical_availability_parity/act_output/player_opportunity_allocation_rows.csv              /tmp/historical_availability_parity/output/act_only_player_opportunity_rows.csv
+
+      - name: Compare baseline and ACT-only reconstruction
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/compare_historical_availability_parity_v1.py             --baseline-rows /tmp/historical_availability_parity/output/baseline_player_opportunity_rows.csv             --act-rows /tmp/historical_availability_parity/output/act_only_player_opportunity_rows.csv             --status-map /tmp/historical_availability_parity/output/historical_availability_status_map.csv             --group-out /tmp/historical_availability_parity/output/historical_availability_parity_group_comparison.csv             --mass-out /tmp/historical_availability_parity/output/historical_availability_parity_mass_audit.csv             --summary-out /tmp/historical_availability_parity/output/historical_availability_parity_summary.json
+
+      - name: Certify diagnostic boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          root=Path('/tmp/historical_availability_parity/output')
+          required=[
+              'historical_availability_status_map.csv',
+              'baseline_player_opportunity_rows.csv',
+              'act_only_player_opportunity_rows.csv',
+              'historical_availability_parity_group_comparison.csv',
+              'historical_availability_parity_mass_audit.csv',
+              'historical_availability_parity_summary.json',
+          ]
+          for name in required:
+              p=root/name
+              assert p.exists() and p.stat().st_size>0, name
+          s=json.loads((root/'historical_availability_parity_summary.json').read_text())
+          g=pd.read_csv(root/'historical_availability_parity_group_comparison.csv')
+          m=pd.read_csv(root/'historical_availability_parity_mass_audit.csv')
+          b=pd.read_csv(root/'baseline_player_opportunity_rows.csv',low_memory=False)
+          a=pd.read_csv(root/'act_only_player_opportunity_rows.csv',low_memory=False)
+          assert s['version']=='HISTORICAL_AVAILABILITY_PARITY_DIAGNOSTIC_V1'
+          assert s['parameters_fit']==0
+          assert s['automatic_promotion'] is False
+          assert s['sportsbook_inputs_used_upstream'] is False
+          assert s['paid_odds_api_used'] is False
+          assert s['baseline_ina_rows'] > 0
+          assert s['paired_act_rows'] > 0
+          assert len(a) <= len(b)
+          expected={('QB','pass_attempts'),('RB','carries'),('RB','targets'),('WR','targets'),('TE','targets')}
+          got=set(zip(g.position_family,g.opportunity_type))
+          assert expected.issubset(got), got
+          assert m['ina_predicted_opportunity_mass'].sum() > 0
+          assert m['ina_share_of_modeled_player_opportunity'].between(0,1).all()
+          print(json.dumps({
+              'baseline_rows':s['baseline_rows'],
+              'act_only_rows':s['act_only_rows'],
+              'baseline_ina_rows':s['baseline_ina_rows'],
+              'paired_act_rows':s['paired_act_rows'],
+              'qb_identity_change_count':s['qb_identity_change_count'],
+              'groups':g[[
+                  'position_family','opportunity_type','paired_rows',
+                  'baseline_mae','act_mae','mae_improvement_baseline_minus_act',
+                  'baseline_bias','act_bias','baseline_active_bias','act_active_bias',
+                  'baseline_high_bin_bias','act_high_bin_bias'
+              ]].to_dict('records'),
+              'inactive_mass':m.to_dict('records'),
+          },indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/utils/audit_repo.py --strict
+
+      - name: Display parity summary
+        if: always()
+        run: |
+          cat /tmp/historical_availability_parity/output/historical_availability_parity_summary.json || true
+
+      - name: Upload parity evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-availability-parity-diagnostic-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/historical_availability_parity/output/**
