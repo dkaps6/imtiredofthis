@@ -1,0 +1,166 @@
+name: Research RB Receiving Room Share Week5 Lock V1
+
+on:
+  push:
+    branches:
+      - research-rb-receiving-room-share-week5-lock-v1
+    paths:
+      - 'scripts/research/lock_rb_receiving_room_share_week5_v1.py'
+      - 'scripts/modeling/rb_receiving_room_share_shadow_v1.py'
+      - 'tests/test_rb_receiving_room_share_shadow_v1.py'
+      - '.github/workflows/research-rb-receiving-room-share-week5-lock-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  lock:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyarrow pyyaml
+
+      - name: Run frozen receiving-room transform tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_rb_receiving_room_share_shadow_v1.py
+
+      - name: Build Week-5 leakage-safe football inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/rb_room_w5
+          mkdir -p /tmp/rb_room_w5/input /tmp/rb_room_w5/parent /tmp/rb_room_w5/output
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.backtest.historical_inputs import build_all_historical_inputs
+          out=build_all_historical_inputs(
+              season=2026,
+              prior_season=2025,
+              out_dir=Path('/tmp/rb_room_w5/input'),
+              weeks=[5],
+          )
+          print(out)
+          PY
+          python scripts/backtest/historical_player_logs.py             --seasons 2025,2026             --schedule /tmp/rb_room_w5/input/schedule_history.csv             --out /tmp/rb_room_w5/input/player_game_logs_history.csv
+          python - <<'PY'
+          import pandas as pd
+          p='/tmp/rb_room_w5/input/player_game_logs_history.csv'
+          x=pd.read_csv(p,low_memory=False)
+          cur=x.loc[pd.to_numeric(x.season,errors='coerce').eq(2026)].copy()
+          if not cur.empty:
+              assert pd.to_numeric(cur.week,errors='coerce').max() < 5, cur[['week','player']].tail()
+          print({'2026_completed_player_rows':len(cur),'max_completed_week':None if cur.empty else int(pd.to_numeric(cur.week,errors='coerce').max())})
+          PY
+
+      - name: Recover frozen Week-5 RB player-state identity lock
+        run: |
+          gh run download 37560824479             --repo "${GITHUB_REPOSITORY}"             --name "rb-player-state-allocation-shadow-v1-week5-37560824479"             --dir /tmp/rb_room_w5/parent
+          test -s /tmp/rb_room_w5/parent/rb_player_state_allocation_week5_lock.csv
+          python - <<'PY'
+          import pandas as pd
+          p='/tmp/rb_room_w5/parent/rb_player_state_allocation_week5_lock.csv'
+          x=pd.read_csv(p,low_memory=False)
+          assert len(x)==98, len(x)
+          assert x.team.nunique()==30, x.team.nunique()
+          assert pd.to_numeric(x.week,errors='coerce').eq(5).all()
+          print({'parent_players':len(x),'parent_teams':x.team.nunique()})
+          PY
+
+      - name: Freeze Week-5 RB receiving-room share lock
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/lock_rb_receiving_room_share_week5_v1.py             --player-logs /tmp/rb_room_w5/input/player_game_logs_history.csv             --team-weekly /tmp/rb_room_w5/input/team_weekly_history.csv             --schedule /tmp/rb_room_w5/input/schedule_history.csv             --universe /tmp/rb_room_w5/input/pregame_universe/2026_week_05.csv             --parent-rb-lock /tmp/rb_room_w5/parent/rb_player_state_allocation_week5_lock.csv             --out-dir /tmp/rb_room_w5/output             --iterations 1000
+
+      - name: Certify Week-5 pregame lock
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+
+          root=Path('/tmp/rb_room_w5/output')
+          required=[
+              'rb_receiving_room_share_week5_lock.csv',
+              'rb_receiving_room_share_week5_team_summary.csv',
+              'rb_receiving_room_share_week5_lock.json',
+          ]
+          for name in required:
+              p=root/name
+              assert p.exists() and p.stat().st_size>0, name
+
+          s=json.loads((root/'rb_receiving_room_share_week5_lock.json').read_text())
+          r=pd.read_csv(root/'rb_receiving_room_share_week5_lock.csv',low_memory=False)
+          t=pd.read_csv(root/'rb_receiving_room_share_week5_team_summary.csv',low_memory=False)
+
+          assert s['version']=='RB_RECEIVING_ROOM_SHARE_SHADOW_V1_WEEK5_LOCK'
+          assert s['status']=='WEEK5_PREGAME_LOCK_FROZEN'
+          assert s['season']==2026 and s['week']==5
+          assert s['players']==98 and s['teams']==30
+          assert s['parameters_fit']==0
+          assert s['sportsbook_inputs_used']==0
+          assert s['week5_outcomes_read']==0
+          assert s['production_changed'] is False
+          assert s['retrospective_w1_w4_impact_run']==37703522415
+          assert s['retrospective_result_used_to_change_rule'] is False
+
+          assert len(r)==98 and r.team.nunique()==30
+          assert set(pd.to_numeric(r.week,errors='coerce').unique())=={5}
+          assert r.candidate_rb_receiving_room_share.between(0,1).all()
+          assert r.current_rb_room_share.between(0,1).all()
+          assert (t.current_sum-1).abs().max() <= 1e-10
+          assert (t.candidate_sum-1).abs().max() <= 1e-10
+          assert s['max_team_current_conservation_gap'] <= 1e-10
+          assert s['max_team_candidate_conservation_gap'] <= 1e-10
+          assert s['rooms_applied'] > 0
+
+          print(json.dumps({
+              'players':s['players'],
+              'teams':s['teams'],
+              'rooms_applied':s['rooms_applied'],
+              'history_available_players':s['history_available_players'],
+              'history_available_rate':s['history_available_rate'],
+              'median_team_max_abs_player_share_change':s['median_team_max_abs_player_share_change'],
+              'row_csv_sha256':s['row_csv_sha256'],
+          },indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/utils/audit_repo.py --strict
+
+      - name: Display Week-5 lock summary
+        if: always()
+        run: |
+          cat /tmp/rb_room_w5/output/rb_receiving_room_share_week5_lock.json || true
+
+      - name: Upload Week-5 lock evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-receiving-room-share-week5-lock-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/rb_room_w5/output/**
