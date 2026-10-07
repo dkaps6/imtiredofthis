@@ -8,6 +8,7 @@ on:
       - 'scripts/research/lock_rb_receiving_room_share_week5_v1.py'
       - 'scripts/modeling/rb_receiving_room_share_shadow_v1.py'
       - 'tests/test_rb_receiving_room_share_shadow_v1.py'
+      - 'tests/test_rb_receiving_room_share_week5_lock_v1.py'
       - '.github/workflows/research-rb-receiving-room-share-week5-lock-v1.yml'
   workflow_dispatch:
 
@@ -37,59 +38,60 @@ jobs:
           pip install -r requirements.txt
           pip install nflreadpy pytest pyarrow pyyaml
 
-      - name: Run frozen receiving-room transform tests
+      - name: Run frozen receiving-room lock tests
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           pytest -q tests/test_rb_receiving_room_share_shadow_v1.py
+          pytest -q tests/test_rb_receiving_room_share_week5_lock_v1.py
 
-      - name: Build Week-5 leakage-safe football inputs
-        env:
-          PYTHONPATH: ${{ github.workspace }}
+      - name: Recover frozen Week-5 RB identity lock
         run: |
           rm -rf /tmp/rb_room_w5
-          mkdir -p /tmp/rb_room_w5/input /tmp/rb_room_w5/parent /tmp/rb_room_w5/output
-          python - <<'PY'
-          from pathlib import Path
-          from scripts.backtest.historical_inputs import build_all_historical_inputs
-          out=build_all_historical_inputs(
-              season=2026,
-              prior_season=2025,
-              out_dir=Path('/tmp/rb_room_w5/input'),
-              weeks=[5],
-          )
-          print(out)
-          PY
-          python scripts/backtest/historical_player_logs.py             --seasons 2025,2026             --schedule /tmp/rb_room_w5/input/schedule_history.csv             --out /tmp/rb_room_w5/input/player_game_logs_history.csv
+          mkdir -p /tmp/rb_room_w5/parent /tmp/rb_room_w5/output
+          gh run download 37560824479             --repo "${GITHUB_REPOSITORY}"             --name "rb-player-state-allocation-shadow-v1-week5-37560824479"             --dir /tmp/rb_room_w5/parent/rb_lock
+          test -s /tmp/rb_room_w5/parent/rb_lock/rb_player_state_allocation_week5_lock.csv
           python - <<'PY'
           import pandas as pd
-          p='/tmp/rb_room_w5/input/player_game_logs_history.csv'
-          x=pd.read_csv(p,low_memory=False)
-          cur=x.loc[pd.to_numeric(x.season,errors='coerce').eq(2026)].copy()
-          if not cur.empty:
-              assert pd.to_numeric(cur.week,errors='coerce').max() < 5, cur[['week','player']].tail()
-          print({'2026_completed_player_rows':len(cur),'max_completed_week':None if cur.empty else int(pd.to_numeric(cur.week,errors='coerce').max())})
-          PY
-
-      - name: Recover frozen Week-5 RB player-state identity lock
-        run: |
-          gh run download 37560824479             --repo "${GITHUB_REPOSITORY}"             --name "rb-player-state-allocation-shadow-v1-week5-37560824479"             --dir /tmp/rb_room_w5/parent
-          test -s /tmp/rb_room_w5/parent/rb_player_state_allocation_week5_lock.csv
-          python - <<'PY'
-          import pandas as pd
-          p='/tmp/rb_room_w5/parent/rb_player_state_allocation_week5_lock.csv'
+          p='/tmp/rb_room_w5/parent/rb_lock/rb_player_state_allocation_week5_lock.csv'
           x=pd.read_csv(p,low_memory=False)
           assert len(x)==98, len(x)
           assert x.team.nunique()==30, x.team.nunique()
           assert pd.to_numeric(x.week,errors='coerce').eq(5).all()
+          assert x.state_key.astype(str).nunique()==98
           print({'parent_players':len(x),'parent_teams':x.team.nunique()})
+          PY
+
+      - name: Recover certified Week-5 live player-state parent
+        run: |
+          gh run download 37560311001             --repo "${GITHUB_REPOSITORY}"             --name "player-state-live-coverage-v1-37560311001"             --dir /tmp/rb_room_w5/parent/live_state
+          test -s /tmp/rb_room_w5/parent/live_state/player_state_live_week5_rows.csv
+          python - <<'PY'
+          import pandas as pd
+          lock=pd.read_csv('/tmp/rb_room_w5/parent/rb_lock/rb_player_state_allocation_week5_lock.csv',low_memory=False)
+          live=pd.read_csv('/tmp/rb_room_w5/parent/live_state/player_state_live_week5_rows.csv',low_memory=False)
+          assert len(live)>0
+          assert not live.state_key.astype(str).duplicated().any()
+          subset=live.loc[live.state_key.astype(str).isin(set(lock.state_key.astype(str)))].copy()
+          assert len(subset)==98, (len(subset),98)
+          assert subset.team.nunique()==30
+          truth=subset.chronology_valid.astype(str).str.lower().isin({'true','1','yes'})
+          assert truth.all()
+          for c in ('last3_source_max_week','snap_source_max_week'):
+              v=pd.to_numeric(subset[c],errors='coerce').dropna()
+              assert (v<5).all(), (c,v[v>=5].tolist())
+          print({
+              'live_parent_rows':len(live),
+              'locked_identity_rows_found':len(subset),
+              'locked_identity_teams':subset.team.nunique(),
+          })
           PY
 
       - name: Freeze Week-5 RB receiving-room share lock
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/research/lock_rb_receiving_room_share_week5_v1.py             --player-logs /tmp/rb_room_w5/input/player_game_logs_history.csv             --team-weekly /tmp/rb_room_w5/input/team_weekly_history.csv             --schedule /tmp/rb_room_w5/input/schedule_history.csv             --universe /tmp/rb_room_w5/input/pregame_universe/2026_week_05.csv             --parent-rb-lock /tmp/rb_room_w5/parent/rb_player_state_allocation_week5_lock.csv             --out-dir /tmp/rb_room_w5/output             --iterations 1000
+          python scripts/research/lock_rb_receiving_room_share_week5_v1.py             --parent-rb-lock /tmp/rb_room_w5/parent/rb_lock/rb_player_state_allocation_week5_lock.csv             --parent-live-rows /tmp/rb_room_w5/parent/live_state/player_state_live_week5_rows.csv             --out-dir /tmp/rb_room_w5/output
 
       - name: Certify Week-5 pregame lock
         run: |
@@ -116,30 +118,34 @@ jobs:
           assert s['status']=='WEEK5_PREGAME_LOCK_FROZEN'
           assert s['season']==2026 and s['week']==5
           assert s['players']==98 and s['teams']==30
+          assert s['history_available_players']==98
+          assert s['history_available_rate']==1.0
+          assert s['rooms_locked']==30
           assert s['parameters_fit']==0
           assert s['sportsbook_inputs_used']==0
           assert s['week5_outcomes_read']==0
           assert s['production_changed'] is False
           assert s['retrospective_w1_w4_impact_run']==37703522415
           assert s['retrospective_result_used_to_change_rule'] is False
+          assert s['parent_rb_player_state_run']==37560824479
+          assert s['parent_live_player_state_run']==37560311001
+          assert s['receiving_state']=='prior_rb_room_share'
 
           assert len(r)==98 and r.team.nunique()==30
           assert set(pd.to_numeric(r.week,errors='coerce').unique())=={5}
+          assert r.prior_rb_room_share.notna().all()
           assert r.candidate_rb_receiving_room_share.between(0,1).all()
-          assert r.current_rb_room_share.between(0,1).all()
-          assert (t.current_sum-1).abs().max() <= 1e-10
+          assert r.chronology_valid.astype(str).str.lower().isin({'true','1','yes'}).all()
           assert (t.candidate_sum-1).abs().max() <= 1e-10
-          assert s['max_team_current_conservation_gap'] <= 1e-10
-          assert s['max_team_candidate_conservation_gap'] <= 1e-10
-          assert s['rooms_applied'] > 0
+          assert s['max_candidate_conservation_gap'] <= 1e-10
 
           print(json.dumps({
               'players':s['players'],
               'teams':s['teams'],
-              'rooms_applied':s['rooms_applied'],
               'history_available_players':s['history_available_players'],
               'history_available_rate':s['history_available_rate'],
-              'median_team_max_abs_player_share_change':s['median_team_max_abs_player_share_change'],
+              'rooms_locked':s['rooms_locked'],
+              'median_candidate_hhi':s['median_candidate_hhi'],
               'row_csv_sha256':s['row_csv_sha256'],
           },indent=2,sort_keys=True))
           PY
