@@ -20,10 +20,7 @@ import numpy as np
 import pandas as pd
 
 from scripts._opponent_map import canon_team
-from scripts.modeling.rb_receiving_identity_runtime_v1 import (
-    _snapshot_queries,
-    identity_atlas,
-)
+from scripts.modeling.rb_receiving_identity_runtime_v1 import identity_atlas
 
 SEASON = 2026
 WEEK = 5
@@ -55,6 +52,56 @@ def _sha256(path: Path) -> str:
 
 def _bool_series(s: pd.Series) -> pd.Series:
     return s.astype(str).str.lower().isin({"true", "1", "yes"})
+
+
+def _snapshot_prior_room_share_by_gsis(
+    queries: pd.DataFrame,
+    states: pd.DataFrame,
+) -> pd.DataFrame:
+    """Strict-prior long-run RB room-share snapshot keyed by exact GSIS ID."""
+    q = queries.copy()
+    q["gsis_id"] = q["gsis_id"].fillna("").astype(str).str.strip()
+    if q["gsis_id"].eq("").any():
+        bad = q.loc[q["gsis_id"].eq(""), ["team", "player", "state_key"]]
+        raise RuntimeError(f"Week-5 frozen RB missing GSIS ID: {bad.to_dict('records')}")
+    q["time_key"] = SEASON * 100 + WEEK
+    q["_qrow"] = np.arange(len(q))
+
+    st = states.copy()
+    if "player_id" not in st.columns:
+        raise RuntimeError("RB receiving identity states missing player_id")
+    st["gsis_id"] = st["player_id"].fillna("").astype(str).str.strip()
+    st = st.loc[st["gsis_id"].ne("")].copy()
+    required = {"time_key", "after_rb_room_share", "after_games"}
+    missing = required - set(st.columns)
+    if missing:
+        raise RuntimeError(f"RB receiving identity states missing columns: {sorted(missing)}")
+
+    # One weekly state observation per exact GSIS identity/time key is required.
+    dup = st.duplicated(["gsis_id", "time_key"], keep=False)
+    if dup.any():
+        bad = st.loc[dup, ["gsis_id", "time_key", "team"]].head(20)
+        raise RuntimeError(f"duplicate GSIS/time receiving state: {bad.to_dict('records')}")
+
+    hist = st[
+        ["gsis_id", "time_key", "after_rb_room_share", "after_games"]
+    ].copy().rename(
+        columns={
+            "after_rb_room_share": "prior_rb_room_share",
+            "after_games": "prior_games",
+        }
+    )
+    hist = hist.sort_values(["time_key", "gsis_id"])
+    qsort = q.sort_values(["time_key", "gsis_id"])
+    snap = pd.merge_asof(
+        qsort,
+        hist,
+        on="time_key",
+        by="gsis_id",
+        direction="backward",
+        allow_exact_matches=False,
+    )
+    return snap.sort_values("_qrow").drop(columns=["_qrow", "time_key"]).reset_index(drop=True)
 
 
 def _attach_prior_room_share(lock: pd.DataFrame, live: pd.DataFrame) -> pd.DataFrame:
@@ -128,44 +175,24 @@ def _attach_prior_room_share(lock: pd.DataFrame, live: pd.DataFrame) -> pd.DataF
             bad = parent.loc[vals.ge(WEEK), ["team", "player", c]]
             raise RuntimeError(f"target/future chronology in {c}: {bad.to_dict('records')}")
 
-    # name_key is the certified parent alias used to bridge into the same
-    # canonical weekly-stat name key produced by player_form_v2.
-    queries = pd.DataFrame(
-        {
-            "player_clean_key": parent["name_key"].astype(str),
-            "team": parent["team"].astype(str),
-            "season": SEASON,
-            "week": WEEK,
-        }
-    )
-    states, prev = identity_atlas(2013, SEASON)
-    feat = _snapshot_queries(queries, states, prev)
-    keep = ["player_clean_key", "team", "season", "week"]
-    for c in ("prior_rb_room_share", "prior_games", "same_team_prior_rb_room_share"):
-        if c in feat.columns:
-            keep.append(c)
-    feat = feat[keep].copy()
-    if "prior_rb_room_share" not in feat.columns:
-        feat["prior_rb_room_share"] = np.nan
-    if "prior_games" not in feat.columns:
-        feat["prior_games"] = np.nan
-    if "same_team_prior_rb_room_share" not in feat.columns:
-        feat["same_team_prior_rb_room_share"] = np.nan
-
-    feat = feat.rename(columns={"player_clean_key": "name_key"})
+    # Exact GSIS identity is the primary history bridge. This avoids suffix/name
+    # alias failures (Jr./II/III) while preserving the already-frozen player set.
+    states, _prev = identity_atlas(2013, SEASON)
+    queries = parent[
+        ["state_key", "team", "player", "gsis_id"]
+    ].copy()
+    feat = _snapshot_prior_room_share_by_gsis(queries, states)
     out = parent.merge(
-        feat[
-            [
-                "name_key", "team", "prior_rb_room_share", "prior_games",
-                "same_team_prior_rb_room_share",
-            ]
-        ],
-        on=["name_key", "team"],
+        feat[["state_key", "gsis_id", "prior_rb_room_share", "prior_games"]],
+        on=["state_key", "gsis_id"],
         how="left",
         validate="one_to_one",
     )
-    for c in ("prior_rb_room_share", "prior_games", "same_team_prior_rb_room_share"):
-        out[c] = pd.to_numeric(out[c], errors="coerce")
+    out["prior_rb_room_share"] = pd.to_numeric(
+        out["prior_rb_room_share"], errors="coerce"
+    )
+    out["prior_games"] = pd.to_numeric(out["prior_games"], errors="coerce")
+    out["identity_history_route"] = "EXACT_GSIS_STRICT_PRIOR"
 
     # This prospective lock intentionally fails closed if a frozen live RB lacks
     # genuine strict-prior receiving-room history. Do not silently substitute the
@@ -242,8 +269,8 @@ def build_candidate(lock: pd.DataFrame, live: pd.DataFrame) -> tuple[pd.DataFram
             "room_size": x["room_size"],
             "prior_games": x["prior_games"],
             "prior_rb_room_share": x["prior_rb_room_share"],
-            "same_team_prior_rb_room_share": x["same_team_prior_rb_room_share"],
             "candidate_rb_receiving_room_share": x["candidate_rb_receiving_room_share"],
+            "identity_history_route": x["identity_history_route"],
             "reference_control_recent_carry_share": x["control_recent_carry_share"],
             "reference_carry_snap_shadow_share": x["shadow_player_state_share"],
             "current_games": x["current_games"],
