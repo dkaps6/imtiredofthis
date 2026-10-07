@@ -1,0 +1,171 @@
+name: Research RB Receiving Share State Coverage V1
+
+on:
+  push:
+    branches:
+      - research-rb-receiving-share-state-coverage-v1
+    paths:
+      - 'docs/research/RB_RECEIVING_SHARE_STATE_COVERAGE_V1_CONTRACT.md'
+      - 'scripts/research/run_rb_receiving_share_state_coverage_v1.py'
+      - 'tests/test_rb_receiving_share_state_coverage_v1.py'
+      - '.github/workflows/research-rb-receiving-share-state-coverage-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyarrow pyyaml
+
+      - name: Run RB receiving share-state tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_rb_receiving_share_state_coverage_v1.py
+
+      - name: Recover frozen parent decomposition rows
+        run: |
+          rm -rf /tmp/rb_receiving_share_state
+          mkdir -p /tmp/rb_receiving_share_state/parent /tmp/rb_receiving_share_state/output
+          gh run download 37694474836             --repo "${GITHUB_REPOSITORY}"             --name "player-opportunity-volume-vs-share-decomposition-v1-37694474836"             --dir /tmp/rb_receiving_share_state/parent
+          test -s /tmp/rb_receiving_share_state/parent/player_opportunity_volume_share_rows.csv
+          python - <<'PY'
+          import pandas as pd
+          p='/tmp/rb_receiving_share_state/parent/player_opportunity_volume_share_rows.csv'
+          x=pd.read_csv(p,low_memory=False)
+          assert len(x)==2106, len(x)
+          assert set(x.week.unique())=={1,2,3,4}
+          assert not x.sportsbook_inputs_used_upstream.astype(bool).any()
+          rb=x.loc[x.position_family.astype(str).isin({'RB','FB'}) & x.opportunity_type.eq('targets')]
+          assert len(rb)>0
+          print({
+              'parent_rows':len(x),
+              'rb_target_rows':len(rb),
+              'rb_target_player_weeks':rb[['week','team','player_clean_key']].drop_duplicates().shape[0],
+          })
+          PY
+
+      - name: Run frozen RB receiving share-state coverage audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/run_rb_receiving_share_state_coverage_v1.py             --rows /tmp/rb_receiving_share_state/parent/player_opportunity_volume_share_rows.csv             --out-dir /tmp/rb_receiving_share_state/output             --repo-root "${GITHUB_WORKSPACE}"
+
+      - name: Certify RB receiving share-state boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+
+          root=Path('/tmp/rb_receiving_share_state/output')
+          required=[
+              'rb_receiving_share_state_rows.csv',
+              'rb_receiving_share_state_feature_audit.csv',
+              'rb_receiving_share_state_proxy_scoreboard.csv',
+              'rb_receiving_share_state_leader_audit.csv',
+              'rb_receiving_share_state_consumption_audit.csv',
+              'rb_receiving_share_state_summary.json',
+          ]
+          for name in required:
+              p=root/name
+              assert p.exists() and p.stat().st_size>0, name
+
+          s=json.loads((root/'rb_receiving_share_state_summary.json').read_text())
+          r=pd.read_csv(root/'rb_receiving_share_state_rows.csv',low_memory=False)
+          f=pd.read_csv(root/'rb_receiving_share_state_feature_audit.csv')
+          p=pd.read_csv(root/'rb_receiving_share_state_proxy_scoreboard.csv')
+          c=pd.read_csv(root/'rb_receiving_share_state_consumption_audit.csv')
+
+          assert s['version']=='RB_RECEIVING_SHARE_STATE_COVERAGE_V1'
+          assert s['season']==2026 and s['weeks']==[1,2,3,4]
+          assert s['parameters_fit']==0
+          assert s['automatic_promotion'] is False
+          assert s['sportsbook_inputs_used'] is False
+          assert s['paid_odds_api_used'] is False
+          assert s['r26_week1_identity_state_specialist_exists'] is True
+          assert s['r26_general_weeks2plus_target_allocator'] is False
+          assert s['r22_changes_receptions_mean'] is False
+
+          assert len(r)>0
+          assert set(r.week.unique())=={1,2,3,4}
+          assert set(r.position_family.astype(str).unique()).issubset({'RB','FB'})
+          assert set(r.opportunity_type.unique())=={'targets'}
+          assert not r.sportsbook_inputs_used_upstream.astype(bool).any()
+          assert r.model_rb_room_share.dropna().between(0,1).all()
+          assert r.actual_rb_room_share.dropna().between(0,1).all()
+
+          required_fields={
+              'prior_rb_room_share','last8_rb_room_share',
+              'prev_season_rb_room_share','same_team_prior_rb_room_share',
+              'prior_targets_pg','last8_targets_pg','prev_season_targets_pg',
+              'same_team_prior_targets_pg','prior_target_share',
+              'last8_target_share','prev_season_target_share',
+          }
+          assert required_fields.issubset(set(f.field))
+          assert {'prior_rb_room_share','last8_rb_room_share',
+                  'prev_season_rb_room_share','same_team_prior_rb_room_share'} == set(p.field)
+
+          generic=['generic_bayesian_mentions','generic_rules_mentions',
+                   'generic_entitlement_mentions','te_r5p_mentions','wr_r15_mentions']
+          rich=c.loc[c.field.eq('prior_rb_room_share')].iloc[0]
+          assert not any(bool(rich[g]) for g in generic)
+          assert bool(rich.rb_r26_mentions)
+
+          print(json.dumps({
+              'rows':s['rows'],
+              'scoreable_rows':s['scoreable_rows'],
+              'team_rooms':s['team_rooms'],
+              'scoreable_team_rooms':s['scoreable_team_rooms'],
+              'current_model_room_share_mae':s['current_model_room_share_mae'],
+              'current_model_leader_match_rate':s['current_model_leader_match_rate'],
+              'history_coverage':{
+                  'any_prior':s['any_prior_history_coverage_rate'],
+                  'same_team':s['same_team_history_coverage_rate'],
+                  'prev_season':s['prev_season_history_coverage_rate'],
+              },
+              'proxy_scoreboard':s['proxy_scoreboard'],
+              'state_leader_match_rates':s['state_leader_match_rates'],
+          },indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/utils/audit_repo.py --strict
+
+      - name: Display RB receiving share summary
+        if: always()
+        run: |
+          cat /tmp/rb_receiving_share_state/output/rb_receiving_share_state_summary.json || true
+
+      - name: Upload RB receiving share evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-receiving-share-state-coverage-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/rb_receiving_share_state/output/**
