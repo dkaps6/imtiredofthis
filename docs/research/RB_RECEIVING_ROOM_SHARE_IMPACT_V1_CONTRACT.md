@@ -91,7 +91,7 @@ No target/future-week outcomes may enter the transform.
 ## Weeks 1-4 retrospective impact replay
 
 Run both baseline and candidate using the same:
-- leakage-safe pregame universes
+- **ACT-only historical availability-parity pregame universes**
 - schedule/team history/player history
 - seeds and iterations
 - M38
