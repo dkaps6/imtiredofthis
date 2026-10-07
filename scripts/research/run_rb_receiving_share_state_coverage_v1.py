@@ -72,6 +72,11 @@ def _source_consumption_audit(repo_root:Path)->pd.DataFrame:
         "rb_r22": repo_root/"scripts/modeling/rb_receiving_tail_production_adapter_v1.py",
     }
     text={k:p.read_text(encoding="utf-8") for k,p in files.items()}
+    # R26/R22 consume the frozen identity FEATURE bundle indirectly through
+    # attach_identity()/FEATURES imports, so literal field-name grep alone would
+    # under-report specialist consumption. Detect that bundle wiring explicitly.
+    r26_bundle = ("attach_identity" in text["rb_r26"] and "FEATURES" in text["rb_r26"])
+    r22_bundle = ("_attach_identity" in text["rb_r22"] and "FEATURES" in text["rb_r22"])
     rows=[]
     for field in ALL_FIELDS:
         rows.append({
@@ -81,8 +86,10 @@ def _source_consumption_audit(repo_root:Path)->pd.DataFrame:
             "generic_entitlement_mentions":field in text["target_entitlement_v1"],
             "te_r5p_mentions":field in text["te_r5p"],
             "wr_r15_mentions":field in text["wr_r15"],
-            "rb_r26_mentions":field in text["rb_r26"],
-            "rb_r22_mentions":field in text["rb_r22"],
+            "rb_r26_mentions":bool(field in text["rb_r26"] or r26_bundle),
+            "rb_r22_mentions":bool(field in text["rb_r22"] or r22_bundle),
+            "rb_r26_identity_bundle_consumed":bool(r26_bundle),
+            "rb_r22_identity_bundle_consumed":bool(r22_bundle),
         })
     return pd.DataFrame(rows)
 
