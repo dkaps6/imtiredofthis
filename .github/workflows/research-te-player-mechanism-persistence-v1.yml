@@ -1,0 +1,92 @@
+name: Research TE Player Mechanism Persistence V1
+
+on:
+  push:
+    branches:
+      - research-te-player-mechanism-persistence-v1
+    paths:
+      - 'docs/research/TE_PLAYER_MECHANISM_PERSISTENCE_V1_PLAN.md'
+      - 'scripts/research/evaluate_te_player_mechanism_persistence_v1.py'
+      - 'tests/test_te_player_mechanism_persistence_v1.py'
+      - '.github/workflows/research-te-player-mechanism-persistence-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest scipy
+      - name: Run frozen safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest -q tests/test_te_player_mechanism_persistence_v1.py
+      - name: Download exact promoted TE-R5P OOS authority
+        uses: actions/download-artifact@v4
+        with:
+          name: te-r5p-production-contract-refit-v1
+          path: /tmp/te_r5p
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34152797603
+      - name: Resolve exact casebook
+        run: |
+          set -euo pipefail
+          CASEBOOK="$(find /tmp/te_r5p -type f -name 'te_r5p_oos_player_casebook.csv' -print -quit)"
+          test -n "$CASEBOOK" && test -s "$CASEBOOK"
+          echo "CASEBOOK=$CASEBOOK" >> "$GITHUB_ENV"
+      - name: Evaluate frozen mechanism diagnostic
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/te_mech
+          mkdir -p /tmp/te_mech
+          python scripts/research/evaluate_te_player_mechanism_persistence_v1.py             --casebook "$CASEBOOK"             --out-dir /tmp/te_mech
+      - name: Verify boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('/tmp/te_mech/te_player_mechanism_persistence_result.json').read_text())
+          assert p['max_decomposition_identity_gap']<=1e-9,p
+          assert p['candidate_models_fit']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['outcomes_2026_read']==0,p
+          assert p['production_changed'] is False,p
+          assert p['same_or_future_history_violations']==0,p
+          assert p['disposition'] in {
+            'TE_PLAYER_PERSISTENCE_EFFICIENCY_DOMINANT',
+            'TE_PLAYER_PERSISTENCE_OPPORTUNITY_DOMINANT',
+            'TE_PLAYER_PERSISTENCE_MIXED_MECHANISM',
+            'TE_PLAYER_PERSISTENCE_MECHANISM_UNRESOLVED',
+            'TE_PLAYER_PERSISTENCE_MECHANISM_SOURCE_LIMITED',
+          },p
+          print('TE_PLAYER_MECHANISM_PERSISTENCE_V1_CONTRACT_CERTIFIED')
+          PY
+      - name: Display result
+        if: always()
+        run: cat /tmp/te_mech/te_player_mechanism_persistence_result.json || true
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: te-player-mechanism-persistence-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/te_mech/**
