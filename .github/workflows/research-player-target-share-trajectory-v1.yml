@@ -1,0 +1,101 @@
+name: Research Player Target Share Trajectory V1
+
+on:
+  push:
+    branches:
+      - research-player-target-share-trajectory-v1
+    paths:
+      - 'docs/research/PLAYER_TARGET_SHARE_TRAJECTORY_V1_PLAN.md'
+      - 'scripts/research/evaluate_player_target_share_trajectory_v1.py'
+      - 'tests/test_player_target_share_trajectory_v1.py'
+      - '.github/workflows/research-player-target-share-trajectory-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest scipy pyarrow
+      - name: Run frozen safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest -q tests/test_player_target_share_trajectory_v1.py
+      - name: Download exact promoted WR authority
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-r15-wr1-anchor-participation-v1
+          path: /tmp/wr_r15
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34238301577
+      - name: Download exact promoted TE authority
+        uses: actions/download-artifact@v4
+        with:
+          name: te-r5p-production-contract-refit-v1
+          path: /tmp/te_r5p
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34152797603
+      - name: Resolve exact parents
+        run: |
+          set -euo pipefail
+          WR="$(find /tmp/wr_r15 -type f -name 'wr_r15_confirmation_predictions.csv' -print -quit)"
+          TE="$(find /tmp/te_r5p -type f -name 'te_r5p_oos_player_casebook.csv' -print -quit)"
+          test -n "$WR" && test -s "$WR"
+          test -n "$TE" && test -s "$TE"
+          echo "WR=$WR" >> "$GITHUB_ENV"
+          echo "TE=$TE" >> "$GITHUB_ENV"
+      - name: Run frozen trajectory diagnostic
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/player_traj
+          mkdir -p /tmp/player_traj
+          python scripts/research/evaluate_player_target_share_trajectory_v1.py             --wr "$WR" --te "$TE" --out-dir /tmp/player_traj
+      - name: Verify boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('/tmp/player_traj/player_target_share_trajectory_result.json').read_text())
+          assert p['same_or_future_feature_violations']==0,p
+          assert p['candidate_models_fit']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['outcomes_2026_read']==0,p
+          assert p['target_game_feature_rows_read']==0,p
+          assert p['production_changed'] is False,p
+          assert p['disposition'] in {
+            'PLAYER_TARGET_SHARE_TRAJECTORY_SIGNAL_CONFIRMED',
+            'NO_ACTIONABLE_PLAYER_TARGET_SHARE_TRAJECTORY_SIGNAL',
+            'PLAYER_TARGET_SHARE_TRAJECTORY_SOURCE_LIMITED',
+          },p
+          print('PLAYER_TARGET_SHARE_TRAJECTORY_V1_CONTRACT_CERTIFIED')
+          PY
+      - name: Display result
+        if: always()
+        run: cat /tmp/player_traj/player_target_share_trajectory_result.json || true
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-target-share-trajectory-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/player_traj/**
