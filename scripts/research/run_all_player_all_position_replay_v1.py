@@ -64,6 +64,7 @@ from scripts.research.lock_player_target_depth_distribution_shadow_v1 import (
 from scripts.backtest.run_m89_pregame_synthesis import add_history_features
 from scripts.simulation_explicit_entitlement_v1 import simulate as explicit_simulate
 from scripts.simulation_v2 import MARKET_MAP, lookup
+from scripts.utils.player_identity_v3 import player_name_key
 
 SEASON = 2026
 PRIOR_SEASON = 2025
@@ -131,6 +132,29 @@ def _canonical_market(v) -> str:
 
 def _required_market(position_family: str, market: str) -> bool:
     return market in REQUIRED_MARKETS.get(position_family, set())
+
+
+def _rb_p3_player_in_scope(row: pd.Series, rb_context: pd.DataFrame) -> bool:
+    """True only for an exact player identity frozen into the Week-1 P3 parent."""
+    if rb_context is None or rb_context.empty:
+        return False
+    key = str(player_name_key(row.get("player"), strip_suffix=True) or "").strip()
+    if not key:
+        return False
+    season = int(_num(row.get("season"), -1))
+    week = int(_num(row.get("week"), -1))
+    team = canon_team(row.get("team"))
+    q = rb_context.loc[
+        pd.to_numeric(rb_context["season"], errors="coerce").eq(season)
+        & pd.to_numeric(rb_context["week"], errors="coerce").eq(week)
+        & rb_context["team"].astype(str).eq(team)
+        & rb_context["player_base_key"].astype(str).eq(key)
+    ]
+    if len(q) > 1:
+        raise RuntimeError(
+            f"duplicate Week-1 P3 player scope player={row.get('player')} team={team} matches={len(q)}"
+        )
+    return len(q) == 1
 
 
 def _historical_outcomes(sims, row: pd.Series) -> np.ndarray | None:
@@ -299,16 +323,18 @@ def _apply_rb_authorities(
     out["rb_p3_applied"] = False
     out["rb_p3_route"] = ""
     out["rb_rush_rec_v2_applied"] = False
-    p3_teams = rb_context_teams(rb_context) if rb_context is not None else set()
+    # Week-1 P3 is player-scoped, not merely team-scoped. The frozen parent
+    # contains 107 exact player identities. Roster players absent from that
+    # parent remain on the generic calibrated production mean.
 
-    # Week-1 P3 rush_yards: only the frozen context's own team scope is eligible.
+    # Week-1 P3 rush_yards: only exact frozen player identities are eligible.
     mask = (
         out["week"].eq(1)
         & out["position_family"].isin({"RB", "FB"})
         & out["market"].eq("rush_yards")
     )
     for idx, row in out.loc[mask].iterrows():
-        if str(row.get("team")) not in p3_teams:
+        if not _rb_p3_player_in_scope(row, rb_context):
             continue
         meta = lookup_rb_projection(row, rb_context)
         out.loc[idx, "projection_mean"] = float(meta["rb_synthesis_proj"])
@@ -346,7 +372,7 @@ def _apply_rb_authorities(
         & out["market"].eq("rush_rec_yards")
     ].copy()
     for idx, row in week1_combo.iterrows():
-        if str(row.get("team")) not in p3_teams:
+        if not _rb_p3_player_in_scope(row, rb_context):
             continue
         rush = lookup(sims, row, "rush_yards")
         rec = lookup(sims, row, "rec_yards")
