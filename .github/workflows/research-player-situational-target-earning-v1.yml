@@ -1,0 +1,78 @@
+name: Research Player Situational Target Earning V1
+
+on:
+  push:
+    branches:
+      - research-player-situational-target-earning-v1
+    paths:
+      - 'docs/research/PLAYER_SITUATIONAL_TARGET_EARNING_V1_PLAN.md'
+      - 'scripts/research/audit_player_situational_target_earning_v1.py'
+      - 'tests/test_player_situational_target_earning_v1.py'
+      - '.github/workflows/research-player-situational-target-earning-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest scipy pyarrow
+      - name: Run frozen safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest -q tests/test_player_situational_target_earning_v1.py
+      - name: Run source and nonredundancy audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/player_target_state
+          mkdir -p /tmp/player_target_state
+          python scripts/research/audit_player_situational_target_earning_v1.py --out-dir /tmp/player_target_state
+      - name: Verify boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('/tmp/player_target_state/player_situational_target_earning_result.json').read_text())
+          assert p['target_season']==2026 and p['target_week']==5,p
+          assert p['max_2026_source_week']<=4,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['week5_outcomes_read']==0,p
+          assert p['candidate_models_fit']==0,p
+          assert p['production_changed'] is False,p
+          assert p['disposition'] in {
+            'PLAYER_SITUATIONAL_TARGET_EARNING_SOURCE_READY',
+            'PLAYER_SITUATIONAL_TARGET_EARNING_SOURCE_PARTIAL',
+            'PLAYER_SITUATIONAL_TARGET_EARNING_SOURCE_NOT_READY',
+          },p
+          print('PLAYER_SITUATIONAL_TARGET_EARNING_V1_CONTRACT_CERTIFIED')
+          PY
+      - name: Display result
+        if: always()
+        run: |
+          cat /tmp/player_target_state/player_situational_target_earning_result.json || true
+          echo
+          cat /tmp/player_target_state/player_situational_target_earning_nonredundancy.csv || true
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-situational-target-earning-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/player_target_state/**
