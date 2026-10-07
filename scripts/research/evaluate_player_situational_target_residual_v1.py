@@ -220,21 +220,35 @@ def scope_metrics(df,ctx):
     return {"rows":int(len(z)),"players":int(z["player_clean_key"].nunique()),"rho":rho(z,ctx)}
 
 def bootstrap(df,ctx,scope):
-    z=df[[f"{ctx.lower()}_delta","opportunity_error","player_clean_key","position_group"]].dropna().copy()
+    xcol=f"{ctx.lower()}_delta"
+    z=df[[xcol,"opportunity_error","player_clean_key","position_group"]].dropna().copy()
     if scope=="WR": z=z.loc[z["position_group"].eq("WR")].copy()
     elif scope=="TE": z=z.loc[z["position_group"].eq("TE")].copy()
     z["cluster"]=z["position_group"].astype(str)+"|"+z["player_clean_key"].astype(str)
     clusters=sorted(z["cluster"].unique().tolist())
-    if len(clusters)<2: return {"valid_reps":0,"p_negative":np.nan,"ci_low":np.nan,"ci_high":np.nan}
-    groups={c:z.loc[z["cluster"].eq(c)] for c in clusters}
+    if len(clusters)<2:
+        return {"valid_reps":0,"p_negative":np.nan,"ci_low":np.nan,"ci_high":np.nan}
+    # Mechanical performance optimization only: preserve the exact cluster
+    # resample and exact scipy Spearman statistic without rebuilding pandas
+    # frames inside each replicate.
+    groups=[]
+    for c in clusters:
+        q=z.loc[z["cluster"].eq(c)]
+        groups.append((
+            num(q[xcol]).to_numpy(float),
+            num(q["opportunity_error"]).to_numpy(float),
+        ))
     rng=np.random.default_rng(BOOT_SEED)
-    vals=[]
-    for _ in range(BOOT_REPS):
-        samp=rng.choice(clusters,size=len(clusters),replace=True)
-        q=pd.concat([groups[c] for c in samp],ignore_index=True)
-        v=rho(q,ctx)
-        if np.isfinite(v): vals.append(v)
-    a=np.asarray(vals,float)
+    vals=np.empty(BOOT_REPS,dtype=float)
+    vals.fill(np.nan)
+    ncl=len(groups)
+    for rep in range(BOOT_REPS):
+        idx=rng.integers(0,ncl,size=ncl)
+        xa=np.concatenate([groups[i][0] for i in idx])
+        ya=np.concatenate([groups[i][1] for i in idx])
+        if len(xa)>=3 and np.unique(xa).size>=2 and np.unique(ya).size>=2:
+            vals[rep]=float(spearmanr(xa,ya).statistic)
+    a=vals[np.isfinite(vals)]
     return {
       "valid_reps":int(len(a)),
       "p_negative":float((a<0).mean()) if len(a) else np.nan,
