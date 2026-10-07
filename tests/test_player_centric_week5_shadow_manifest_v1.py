@@ -132,10 +132,21 @@ def test_target_family_overlap_fails_closed():
         m.build_manifest(_universe(), pd.concat([_wrte(), collision]), rb, _rb_carry())
 
 
-def test_unlocked_rb_remains_explicit_without_rush_shadow():
-    carry = _rb_carry().iloc[[0]].copy()
-    # Parent rushing shadow is defined only on its immutable locked cohort.
-    # A partial synthetic room fails its own conservation before it can be
-    # treated as a valid parent lock.
-    with pytest.raises(RuntimeError, match="room conservation"):
-        m.build_manifest(_universe(), _wrte(), _rb_target(), carry)
+def test_source_locked_rb_absent_from_public_universe_is_preserved_as_unmapped():
+    carry = pd.concat([
+        _rb_carry() * 1,
+        pd.DataFrame([{
+            "season":2026,"week":5,"team":"HOU","player":"Source Only RB",
+            "control_recent_carry_share":1.0,"shadow_player_state_share":1.0,
+        }]),
+    ], ignore_index=True)
+    out, audit, summary = m.build_manifest(_universe(), _wrte(), _rb_target(), carry)
+    assert summary["rb_carry_source_lock_rows"] == 3
+    assert summary["rb_carry_shadow_rows"] == 2
+    assert summary["rb_carry_unmapped_source_rows"] == 1
+    assert summary["rb_carry_unmapped_source_identities"] == [
+        {"team":"HOU","player_base_key":"sourceonlyrb"}
+    ]
+    row = audit.loc[audit["check"].eq("rb_carry_unmapped_source_identities_preserved")].iloc[0]
+    assert bool(row["passed"])
+    assert int(row["value"]) == 1
