@@ -1,0 +1,152 @@
+name: Research Player Opportunity Volume vs Share Decomposition V1
+
+on:
+  push:
+    branches:
+      - research-player-opportunity-volume-vs-share-decomposition-v1
+    paths:
+      - 'docs/research/PLAYER_OPPORTUNITY_VOLUME_VS_SHARE_DECOMPOSITION_V1_CONTRACT.md'
+      - 'scripts/research/run_player_opportunity_volume_vs_share_decomposition_v1.py'
+      - 'tests/test_player_opportunity_volume_vs_share_decomposition_v1.py'
+      - '.github/workflows/research-player-opportunity-volume-vs-share-decomposition-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  decompose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyarrow pyyaml
+
+      - name: Run decomposition tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_player_opportunity_volume_vs_share_decomposition_v1.py
+
+      - name: Recover frozen ACT-only opportunity rows
+        run: |
+          rm -rf /tmp/player_volume_share
+          mkdir -p /tmp/player_volume_share/parent /tmp/player_volume_share/output
+          gh run download 37687979574             --repo "${GITHUB_REPOSITORY}"             --name "historical-availability-parity-diagnostic-v1-37687979574"             --dir /tmp/player_volume_share/parent
+          test -s /tmp/player_volume_share/parent/act_only_player_opportunity_rows.csv
+          python - <<'PY'
+          import pandas as pd
+          p='/tmp/player_volume_share/parent/act_only_player_opportunity_rows.csv'
+          x=pd.read_csv(p,low_memory=False)
+          assert len(x)==2106, len(x)
+          assert set(x.week.unique())=={1,2,3,4}
+          assert not x.sportsbook_inputs_used_upstream.astype(bool).any()
+          print({
+              'rows':len(x),
+              'player_weeks':x[['week','team','player_clean_key']].drop_duplicates().shape[0],
+              'families':x.groupby(['position_family','opportunity_type']).size().to_dict(),
+          })
+          PY
+
+      - name: Run frozen volume vs share decomposition
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/run_player_opportunity_volume_vs_share_decomposition_v1.py             --rows /tmp/player_volume_share/parent/act_only_player_opportunity_rows.csv             --out-dir /tmp/player_volume_share/output
+
+      - name: Certify decomposition boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+
+          root=Path('/tmp/player_volume_share/output')
+          required=[
+              'player_opportunity_volume_share_rows.csv',
+              'player_opportunity_volume_share_group_summary.csv',
+              'player_opportunity_volume_share_high_workload_summary.csv',
+              'player_opportunity_volume_share_decomposition_summary.json',
+          ]
+          for name in required:
+              p=root/name
+              assert p.exists() and p.stat().st_size>0, name
+
+          s=json.loads((root/'player_opportunity_volume_share_decomposition_summary.json').read_text())
+          r=pd.read_csv(root/'player_opportunity_volume_share_rows.csv',low_memory=False)
+          g=pd.read_csv(root/'player_opportunity_volume_share_group_summary.csv',low_memory=False)
+
+          assert s['version']=='PLAYER_OPPORTUNITY_VOLUME_VS_SHARE_DECOMPOSITION_V1'
+          assert s['rows']==2106, s['rows']
+          assert s['parameters_fit']==0
+          assert s['automatic_promotion'] is False
+          assert s['sportsbook_inputs_used_upstream'] is False
+          assert s['paid_odds_api_used'] is False
+          assert s['max_deterministic_expectation_parity_gap'] <= 1e-10
+          assert s['max_sampled_allocation_gap'] <= 0.25
+          assert s['max_full_identity_gap'] <= 1e-10
+          assert not r.sportsbook_inputs_used_upstream.astype(bool).any()
+          assert not r.duplicated(
+              ['season','week','team','player_clean_key','opportunity_type']
+          ).any()
+
+          overall=g.loc[g.scope.eq('ALL')]
+          expected={
+              ('QB','pass_attempts'),
+              ('RB','carries'),
+              ('RB','targets'),
+              ('WR','targets'),
+              ('TE','targets'),
+          }
+          got=set(zip(overall.position_family,overall.opportunity_type))
+          assert expected.issubset(got), got
+
+          print(json.dumps({
+              'rows':len(r),
+              'groups':overall[[
+                  'position_family','opportunity_type','rows',
+                  'model_mae','actual_volume_mae','actual_share_mae',
+                  'mae_improvement_actual_volume','mae_improvement_actual_share',
+                  'fraction_mae_removed_actual_volume','fraction_mae_removed_actual_share',
+                  'team_volume_mae','player_share_mae',
+                  'share_error_vs_opportunity_error_pearson',
+                  'team_volume_error_vs_opportunity_error_pearson'
+              ]].to_dict('records')
+          },indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/utils/audit_repo.py --strict
+
+      - name: Display decomposition summary
+        if: always()
+        run: |
+          cat /tmp/player_volume_share/output/player_opportunity_volume_share_decomposition_summary.json || true
+
+      - name: Upload decomposition evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-opportunity-volume-vs-share-decomposition-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/player_volume_share/output/**
