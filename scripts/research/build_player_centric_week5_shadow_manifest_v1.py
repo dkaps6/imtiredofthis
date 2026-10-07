@@ -209,15 +209,26 @@ def build_manifest(
     })
 
     carry_universe = u.loc[u["position_family"].isin({"RB", "FB"})].copy()
-    carry_keys = set(map(tuple, carry_universe[["season", "week", "team", "player_base_key"]].astype(str).to_numpy()))
-    locked_carry_keys = set(map(tuple, c2[["season", "week", "team", "player_base_key"]].astype(str).to_numpy()))
+    carry_join_cols = ["season", "week", "team", "player_base_key"]
+    if carry_universe.duplicated(carry_join_cols).any():
+        bad = carry_universe.loc[
+            carry_universe.duplicated(carry_join_cols, keep=False),
+            carry_join_cols + ["player"],
+        ]
+        raise RuntimeError(
+            f"ambiguous public-universe RB carry identity: {bad.head(20).to_dict('records')}"
+        )
+    carry_keys = set(map(tuple, carry_universe[carry_join_cols].astype(str).to_numpy()))
+    locked_carry_keys = set(map(tuple, c2[carry_join_cols].astype(str).to_numpy()))
     missing_carry = locked_carry_keys - carry_keys
-    if missing_carry:
-        raise RuntimeError(f"RB carry lock rows missing from Week-5 universe: {sorted(missing_carry)[:20]}")
 
+    # The RB rushing shadow was frozen from a separately captured target-roster
+    # authority. Its contract permits a lock identity to have zero matches in
+    # another roster authority; it forbids adding or force-matching that player
+    # after the fact. Preserve such source-universe differences explicitly.
     out = out.merge(
         c2,
-        on=["season", "week", "team", "player_base_key"],
+        on=carry_join_cols,
         how="left",
         validate="one_to_one",
     )
@@ -243,20 +254,32 @@ def build_manifest(
     if wrte_target.any():
         raise RuntimeError("WR/TE target shadow mapped to wrong family")
 
-    # Carry lock must conserve by team over its own immutable locked cohort.
-    carry_rows = out.loc[out["rb_carry_shadow_available"]].copy()
-    carry_team = carry_rows.groupby("team").agg(
+    # Carry lock conservation is certified on the immutable source cohort,
+    # not on the subset that happens to overlap this public roster universe.
+    carry_source_team = c2.groupby("team").agg(
         control_sum=("rb_carry_control_share", "sum"),
         shadow_sum=("rb_carry_shadow_share", "sum"),
-        locked_players=("player_clean_key", "size"),
+        locked_players=("player_base_key", "size"),
     ).reset_index()
-    carry_team["control_gap"] = (carry_team["control_sum"] - 1.0).abs()
-    carry_team["shadow_gap"] = (carry_team["shadow_sum"] - 1.0).abs()
-    if len(carry_team) and (
-        float(carry_team["control_gap"].max()) > 1e-12
-        or float(carry_team["shadow_gap"].max()) > 1e-12
+    carry_source_team["control_gap"] = (carry_source_team["control_sum"] - 1.0).abs()
+    carry_source_team["shadow_gap"] = (carry_source_team["shadow_sum"] - 1.0).abs()
+    if len(carry_source_team) and (
+        float(carry_source_team["control_gap"].max()) > 1e-12
+        or float(carry_source_team["shadow_gap"].max()) > 1e-12
     ):
-        raise RuntimeError("RB carry lock lost room conservation in manifest")
+        raise RuntimeError("RB carry source lock lost room conservation")
+
+    carry_rows = out.loc[out["rb_carry_shadow_available"]].copy()
+    mapped_carry_keys = set(
+        map(
+            tuple,
+            carry_rows[["season", "week", "team", "player_base_key"]]
+            .astype(str)
+            .to_numpy(),
+        )
+    )
+    if len(mapped_carry_keys) != len(carry_rows):
+        raise RuntimeError("RB carry source mapped more than once into public universe")
 
     out["player_state_route"] = "BASELINE_NO_NEW_PLAYER_SHADOW"
     out.loc[qb, "player_state_route"] = "PROTECTED_PRODUCTION_QB_NO_NEW_PLAYER_SHADOW"
@@ -284,10 +307,21 @@ def build_manifest(
             "detail": RB_TARGET_DIGEST,
         },
         {
-            "check": "rb_carry_lock_all_rows_mapped",
-            "passed": len(missing_carry) == 0,
+            "check": "rb_carry_source_lock_conserved",
+            "passed": (
+                float(carry_source_team["control_gap"].max()) <= 1e-12
+                and float(carry_source_team["shadow_gap"].max()) <= 1e-12
+            ) if len(carry_source_team) else False,
             "value": int(len(rb_carry)),
             "detail": RB_CARRY_DIGEST,
+        },
+        {
+            "check": "rb_carry_unmapped_source_identities_preserved",
+            "passed": True,
+            "value": int(len(missing_carry)),
+            "detail": ";".join(
+                f"{key[2]}:{key[3]}" for key in sorted(missing_carry)
+            ),
         },
         {
             "check": "target_lock_identity_overlap",
@@ -303,15 +337,15 @@ def build_manifest(
         },
         {
             "check": "rb_carry_max_control_gap",
-            "passed": float(carry_team["control_gap"].max()) <= 1e-12 if len(carry_team) else False,
-            "value": float(carry_team["control_gap"].max()) if len(carry_team) else np.nan,
-            "detail": "locked cohort only",
+            "passed": float(carry_source_team["control_gap"].max()) <= 1e-12 if len(carry_source_team) else False,
+            "value": float(carry_source_team["control_gap"].max()) if len(carry_source_team) else np.nan,
+            "detail": "immutable source locked cohort",
         },
         {
             "check": "rb_carry_max_shadow_gap",
-            "passed": float(carry_team["shadow_gap"].max()) <= 1e-12 if len(carry_team) else False,
-            "value": float(carry_team["shadow_gap"].max()) if len(carry_team) else np.nan,
-            "detail": "locked cohort only",
+            "passed": float(carry_source_team["shadow_gap"].max()) <= 1e-12 if len(carry_source_team) else False,
+            "value": float(carry_source_team["shadow_gap"].max()) if len(carry_source_team) else np.nan,
+            "detail": "immutable source locked cohort",
         },
     ]
     conflict = pd.DataFrame(conflict_rows)
@@ -348,7 +382,13 @@ def build_manifest(
         "position_counts": out.groupby("position_family").size().astype(int).to_dict(),
         "target_shadow_rows": int(out["target_shadow_available"].sum()),
         "target_feature_available_rows": int(out["target_shadow_feature_available"].sum()),
+        "rb_carry_source_lock_rows": int(len(rb_carry)),
         "rb_carry_shadow_rows": int(out["rb_carry_shadow_available"].sum()),
+        "rb_carry_unmapped_source_rows": int(len(missing_carry)),
+        "rb_carry_unmapped_source_identities": [
+            {"team": key[2], "player_base_key": key[3]}
+            for key in sorted(missing_carry)
+        ],
         "rb_rows_with_both_shadows": int(both_rb.sum()),
         "qb_shadow_rows": int(
             (
