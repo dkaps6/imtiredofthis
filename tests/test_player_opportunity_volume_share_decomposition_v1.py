@@ -8,49 +8,56 @@ import scripts.research.run_player_opportunity_volume_share_decomposition_v1 as 
 
 
 def _parent() -> pd.DataFrame:
-    return pd.DataFrame([
-        {
-            "season": 2026, "week": 1, "event_id": "G1", "team": "IND", "opponent": "HOU",
-            "player": "QB One", "player_clean_key": "qbone", "position_family": "QB",
-            "opportunity_type": "pass_attempts",
-            "predicted_team_opportunity_mean": 30.0, "final_player_probability": 0.9,
-            "expected_opportunities_from_probability": 27.0,
-            "actual_opportunities": 32.0, "actual_opportunity_bin": "31_40",
-            "sportsbook_inputs_used_upstream": False,
-            "rb_week5_room_allocation_shadow_applied": False,
-            "linked_yards_error": -40.0, "linked_count_error": np.nan,
-        },
-        {
-            "season": 2026, "week": 1, "event_id": "G1", "team": "IND", "opponent": "HOU",
-            "player": "WR One", "player_clean_key": "wrone", "position_family": "WR",
-            "opportunity_type": "targets",
-            "predicted_team_opportunity_mean": 30.0, "final_player_probability": 0.2,
-            "expected_opportunities_from_probability": 6.0,
-            "actual_opportunities": 8.0, "actual_opportunity_bin": "06_08",
-            "sportsbook_inputs_used_upstream": False,
-            "rb_week5_room_allocation_shadow_applied": False,
-            "linked_yards_error": -20.0, "linked_count_error": -2.0,
-        },
-        {
-            "season": 2026, "week": 1, "event_id": "G1", "team": "IND", "opponent": "HOU",
-            "player": "RB One", "player_clean_key": "rbone", "position_family": "RB",
-            "opportunity_type": "carries",
-            "predicted_team_opportunity_mean": 25.0, "final_player_probability": 0.4,
-            "expected_opportunities_from_probability": 10.0,
-            "actual_opportunities": 12.0, "actual_opportunity_bin": "09_14",
-            "sportsbook_inputs_used_upstream": False,
-            "rb_week5_room_allocation_shadow_applied": False,
-            "linked_yards_error": -12.0, "linked_count_error": np.nan,
-        },
-    ])
+    rows = []
+    for week in (1, 2, 3, 4):
+        event = f"G{week}"
+        rows.extend([
+            {
+                "season": 2026, "week": week, "event_id": event, "team": "IND", "opponent": "HOU",
+                "player": "QB One", "player_clean_key": "qbone", "position_family": "QB",
+                "opportunity_type": "pass_attempts",
+                "predicted_team_opportunity_mean": 30.0, "final_player_probability": 0.9,
+                "expected_opportunities_from_probability": 27.0,
+                "actual_opportunities": 32.0, "actual_opportunity_bin": "31_40",
+                "sportsbook_inputs_used_upstream": False,
+                "rb_week5_room_allocation_shadow_applied": False,
+                "linked_yards_error": -40.0, "linked_count_error": np.nan,
+            },
+            {
+                "season": 2026, "week": week, "event_id": event, "team": "IND", "opponent": "HOU",
+                "player": "WR One", "player_clean_key": "wrone", "position_family": "WR",
+                "opportunity_type": "targets",
+                "predicted_team_opportunity_mean": 30.0, "final_player_probability": 0.2,
+                "expected_opportunities_from_probability": 6.0,
+                "actual_opportunities": 8.0, "actual_opportunity_bin": "06_08",
+                "sportsbook_inputs_used_upstream": False,
+                "rb_week5_room_allocation_shadow_applied": False,
+                "linked_yards_error": -20.0, "linked_count_error": -2.0,
+            },
+            {
+                "season": 2026, "week": week, "event_id": event, "team": "IND", "opponent": "HOU",
+                "player": "RB One", "player_clean_key": "rbone", "position_family": "RB",
+                "opportunity_type": "carries",
+                "predicted_team_opportunity_mean": 25.0, "final_player_probability": 0.4,
+                "expected_opportunities_from_probability": 10.0,
+                "actual_opportunities": 12.0, "actual_opportunity_bin": "09_14",
+                "sportsbook_inputs_used_upstream": False,
+                "rb_week5_room_allocation_shadow_applied": False,
+                "linked_yards_error": -12.0, "linked_count_error": np.nan,
+            },
+        ])
+    return pd.DataFrame(rows)
 
 
 def _actual_team() -> pd.DataFrame:
-    return pd.DataFrame([{
-        "week": 1, "team": "IND",
-        "actual_team_official_pass_attempts": 40,
-        "actual_team_rush_attempts": 30,
-    }])
+    return pd.DataFrame([
+        {
+            "week": week, "team": "IND",
+            "actual_team_official_pass_attempts": 40,
+            "actual_team_rush_attempts": 30,
+        }
+        for week in (1, 2, 3, 4)
+    ])
 
 
 def test_decomposition_arithmetic_and_full_oracle_identity():
