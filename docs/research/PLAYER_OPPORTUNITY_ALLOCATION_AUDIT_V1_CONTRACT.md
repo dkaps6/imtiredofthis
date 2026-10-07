@@ -73,7 +73,8 @@ By position + opportunity type:
 - correlation of prediction vs actual
 - zero-opportunity rate
 - mean prediction when actual opportunity = zero
-- actual-zero precision/recall diagnostics using only the model's continuous prediction distribution descriptively; **do not select a threshold**
+- actual-zero separation diagnostics using the continuous prediction distribution
+- fixed descriptive zero-state cutpoints at predicted opportunities <0.5 and <1.0; report both precision/recall pairs, select neither, and do not promote either cutpoint
 - low/middle/high realized-opportunity bins as descriptive failure localization only
 
 Also report the relationship between opportunity error and the corresponding yard/reception error from the frozen all-player replay where identities overlap.
