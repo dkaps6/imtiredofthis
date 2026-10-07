@@ -1,0 +1,179 @@
+name: Research Player Opportunity Volume Share Decomposition V1
+
+on:
+  push:
+    branches:
+      - research-player-opportunity-volume-share-decomposition-v1
+    paths:
+      - 'docs/research/PLAYER_OPPORTUNITY_VOLUME_VS_SHARE_DECOMPOSITION_V1_CONTRACT.md'
+      - 'scripts/research/run_player_opportunity_volume_share_decomposition_v1.py'
+      - 'tests/test_player_opportunity_volume_share_decomposition_v1.py'
+      - '.github/workflows/research-player-opportunity-volume-share-decomposition-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  decomposition:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyarrow pyyaml
+
+      - name: Run frozen decomposition tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_player_opportunity_volume_share_decomposition_v1.py
+          pytest -q tests/test_historical_availability_parity_diagnostic_v1.py
+
+      - name: Recover and certify frozen ACT-only parent
+        run: |
+          rm -rf /tmp/player_volume_share
+          mkdir -p /tmp/player_volume_share/parent /tmp/player_volume_share/output
+
+          META=$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/11511927864")
+          echo "${META}" > /tmp/player_volume_share/parent_artifact_metadata.json
+          python - <<'PY'
+          import json
+          m=json.load(open('/tmp/player_volume_share/parent_artifact_metadata.json'))
+          assert int(m['id']) == 11511927864, m
+          assert m['name'] == 'historical-availability-parity-diagnostic-v1-37687979574', m
+          assert m['digest'] == 'sha256:6bcbf63f8dfc5b2b0362e16fbd612653d6f813e5c2d9aec79e9d49c98cb0303b', m
+          assert m['expired'] is False, m
+          assert int(m['workflow_run']['id']) == 37687979574, m
+          print({
+              'artifact_id':m['id'],
+              'run_id':m['workflow_run']['id'],
+              'digest':m['digest'],
+          })
+          PY
+
+          gh run download 37687979574             --repo "${GITHUB_REPOSITORY}"             --name "historical-availability-parity-diagnostic-v1-37687979574"             --dir /tmp/player_volume_share/parent
+
+          test -s /tmp/player_volume_share/parent/act_only_player_opportunity_rows.csv
+          test -s /tmp/player_volume_share/parent/historical_availability_parity_summary.json
+
+          python - <<'PY'
+          import json, pandas as pd
+          root='/tmp/player_volume_share/parent'
+          s=json.load(open(root+'/historical_availability_parity_summary.json'))
+          x=pd.read_csv(root+'/act_only_player_opportunity_rows.csv',low_memory=False)
+          assert s['version']=='HISTORICAL_AVAILABILITY_PARITY_DIAGNOSTIC_V1', s
+          assert len(x)==2106, len(x)
+          assert set(x['week'].unique())=={1,2,3,4}
+          assert not x['sportsbook_inputs_used_upstream'].astype(bool).any()
+          assert not x['rb_week5_room_allocation_shadow_applied'].astype(bool).any()
+          expected={('QB','pass_attempts'),('RB','carries'),('RB','targets'),('WR','targets'),('TE','targets')}
+          got=set(zip(x.position_family,x.opportunity_type))
+          assert expected.issubset(got),got
+          print({'act_only_rows':len(x),'groups':sorted(map(list,got))})
+          PY
+
+      - name: Run frozen volume-vs-share decomposition
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/run_player_opportunity_volume_share_decomposition_v1.py             --parent /tmp/player_volume_share/parent/act_only_player_opportunity_rows.csv             --out-dir /tmp/player_volume_share/output
+
+      - name: Certify decomposition boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+
+          root=Path('/tmp/player_volume_share/output')
+          required=[
+              'player_opportunity_volume_share_rows.csv',
+              'player_opportunity_volume_share_summary.csv',
+              'player_opportunity_volume_share_high_workload.csv',
+              'player_opportunity_volume_share_summary.json',
+          ]
+          for name in required:
+              p=root/name
+              assert p.exists() and p.stat().st_size>0,name
+
+          s=json.loads((root/'player_opportunity_volume_share_summary.json').read_text())
+          r=pd.read_csv(root/'player_opportunity_volume_share_rows.csv',low_memory=False)
+          q=pd.read_csv(root/'player_opportunity_volume_share_summary.csv',low_memory=False)
+          h=pd.read_csv(root/'player_opportunity_volume_share_high_workload.csv',low_memory=False)
+
+          assert s['version']=='PLAYER_OPPORTUNITY_VOLUME_VS_SHARE_DECOMPOSITION_V1',s
+          assert s['season']==2026 and s['weeks']==[1,2,3,4],s
+          assert s['rows']==2106,s
+          assert s['parameters_fit']==0,s
+          assert s['automatic_promotion'] is False,s
+          assert s['sportsbook_inputs_used_upstream'] is False,s
+          assert s['paid_odds_api_used'] is False,s
+          assert s['actual_team_volume_loaded_after_parent_freeze'] is True,s
+          assert s['max_baseline_parent_gap'] <= 1e-10,s
+          assert s['max_full_oracle_actual_gap'] <= 1e-10,s
+
+          assert r['actual_team_volume'].gt(0).all()
+          assert r['predicted_player_share'].between(-1e-10,1+1e-10).all()
+          assert r['actual_player_share'].between(-1e-10,1+1e-10).all()
+          assert not r['sportsbook_inputs_used_upstream'].astype(bool).any()
+          assert r['actual_team_volume_loaded_after_parent_freeze'].astype(bool).all()
+
+          expected={('QB','pass_attempts'),('RB','carries'),('RB','targets'),('WR','targets'),('TE','targets')}
+          overall=q.loc[q['subset'].eq('ALL')]
+          got=set(zip(overall.position_family,overall.opportunity_type))
+          assert expected.issubset(got),got
+          assert expected.issubset(set(zip(h.position_family,h.opportunity_type))),h
+
+          print(json.dumps({
+              'rows':len(r),
+              'overall':overall[[
+                  'position_family','opportunity_type','rows',
+                  'baseline_mae','oracle_team_mae','oracle_share_mae',
+                  'team_oracle_mae_improvement','share_oracle_mae_improvement',
+                  'team_oracle_fraction_baseline_mae_removed',
+                  'share_oracle_fraction_baseline_mae_removed',
+                  'team_volume_mae','player_share_mae'
+              ]].to_dict('records'),
+              'high_workload':h[[
+                  'position_family','opportunity_type','high_bin','rows',
+                  'baseline_mae','oracle_team_mae','oracle_share_mae',
+                  'team_oracle_mae_improvement','share_oracle_mae_improvement'
+              ]].to_dict('records'),
+          },indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/utils/audit_repo.py --strict
+
+      - name: Display decomposition summary
+        if: always()
+        run: |
+          cat /tmp/player_volume_share/output/player_opportunity_volume_share_summary.json || true
+
+      - name: Upload decomposition evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-opportunity-volume-share-decomposition-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/player_volume_share/output/**
