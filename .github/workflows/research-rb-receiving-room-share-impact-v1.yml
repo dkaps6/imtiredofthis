@@ -1,0 +1,196 @@
+name: Research RB Receiving Room Share Impact V1
+
+on:
+  push:
+    branches:
+      - research-rb-receiving-room-share-impact-v1
+    paths:
+      - 'docs/research/RB_RECEIVING_ROOM_SHARE_IMPACT_V1_CONTRACT.md'
+      - 'scripts/modeling/rb_receiving_room_share_shadow_v1.py'
+      - 'scripts/research/run_rb_receiving_room_share_impact_v1.py'
+      - 'tests/test_rb_receiving_room_share_shadow_v1.py'
+      - 'tests/test_rb_receiving_room_share_impact_v1.py'
+      - '.github/workflows/research-rb-receiving-room-share-impact-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  impact:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyarrow pyyaml
+
+      - name: Run frozen RB receiving-room impact tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_rb_receiving_room_share_shadow_v1.py
+          pytest -q tests/test_rb_receiving_room_share_impact_v1.py
+
+      - name: Build leakage-safe Weeks 1-4 historical inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/rb_room_impact
+          mkdir -p /tmp/rb_room_impact/base_input                    /tmp/rb_room_impact/act_universe                    /tmp/rb_room_impact/rb_week1                    /tmp/rb_room_impact/output
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.backtest.historical_inputs import build_all_historical_inputs
+          out=build_all_historical_inputs(
+              season=2026,
+              prior_season=2025,
+              out_dir=Path('/tmp/rb_room_impact/base_input'),
+              weeks=range(1,5),
+          )
+          print(out)
+          PY
+          python scripts/backtest/historical_player_logs.py             --seasons 2025,2026             --schedule /tmp/rb_room_impact/base_input/schedule_history.csv             --out /tmp/rb_room_impact/base_input/player_game_logs_history.csv
+
+      - name: Build ACT-only historical availability-parity universes
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/build_historical_availability_parity_universe_v1.py             --baseline-dir /tmp/rb_room_impact/base_input/pregame_universe             --out-dir /tmp/rb_room_impact/act_universe             --status-out /tmp/rb_room_impact/output/historical_availability_status_map.csv             --summary-out /tmp/rb_room_impact/output/historical_availability_universe_summary.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('/tmp/rb_room_impact')
+          s=json.loads((root/'output/historical_availability_universe_summary.json').read_text())
+          assert s['sportsbook_inputs_used'] is False
+          assert s['outcome_inputs_used_for_selection'] is False
+          assert s['ina_rows_removed'] > 0
+          print(s)
+          PY
+
+      - name: Recover certified Week-1 P3 context
+        run: |
+          gh run download 35619889214             --repo "${GITHUB_REPOSITORY}"             --name "rb-pd2-completed-2026-week1-history-v1"             --dir /tmp/rb_room_impact/rb_week1
+          test -s /tmp/rb_room_impact/rb_week1/rb_pd2_completed_2026_week1_history.csv
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+          src=Path('/tmp/rb_room_impact/rb_week1/rb_pd2_completed_2026_week1_history.csv')
+          out=Path('/tmp/rb_room_impact/rb_week1/rb_rush_synthesis_context.csv')
+          x=pd.read_csv(src,low_memory=False)
+          required={
+              'season','week','player','team','opponent','projection_mean',
+              'pregame_lineage_certified','week1_p3_stack1_parity_pass',
+          }
+          missing=required-set(x.columns)
+          assert not missing, missing
+          assert len(x)==107, len(x)
+          assert x.pregame_lineage_certified.astype(bool).all()
+          assert x.week1_p3_stack1_parity_pass.astype(bool).all()
+          pd.DataFrame({
+              'season':x.season,
+              'week':x.week,
+              'player':x.player,
+              'team':x.team,
+              'opponent':x.opponent,
+              'rb_synthesis_proj':pd.to_numeric(x.projection_mean,errors='raise'),
+              'rb_synthesis_route':'WEEK1_STACK_OVERRIDE',
+              'rb_synthesis_version':'RB_P3_SYNTHESIS_V1',
+              'rb_synthesis_applied':1,
+              'football_only_no_odds':1,
+              'sportsbook_inputs_used':0,
+          }).to_csv(out,index=False)
+          print({'rows':len(x),'teams':x.team.nunique()})
+          PY
+
+      - name: Run W1-W4 retrospective RB receiving-room impact replay
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/run_rb_receiving_room_share_impact_v1.py             --player-logs /tmp/rb_room_impact/base_input/player_game_logs_history.csv             --team-weekly /tmp/rb_room_impact/base_input/team_weekly_history.csv             --schedule /tmp/rb_room_impact/base_input/schedule_history.csv             --universe-dir /tmp/rb_room_impact/act_universe             --rb-week1-context /tmp/rb_room_impact/rb_week1/rb_rush_synthesis_context.csv             --iterations 5000             --out-dir /tmp/rb_room_impact/output
+
+      - name: Certify impact replay boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+
+          root=Path('/tmp/rb_room_impact/output')
+          required=[
+              'rb_receiving_room_share_point_impact.csv',
+              'rb_receiving_room_share_target_impact.csv',
+              'rb_receiving_room_share_point_summary.csv',
+              'rb_receiving_room_share_target_summary.csv',
+              'rb_receiving_room_share_transform_audit.csv',
+              'rb_receiving_room_share_impact_summary.json',
+          ]
+          for name in required:
+              p=root/name
+              assert p.exists() and p.stat().st_size>0, name
+
+          s=json.loads((root/'rb_receiving_room_share_impact_summary.json').read_text())
+          p=pd.read_csv(root/'rb_receiving_room_share_point_impact.csv',low_memory=False)
+          t=pd.read_csv(root/'rb_receiving_room_share_target_impact.csv',low_memory=False)
+          a=pd.read_csv(root/'rb_receiving_room_share_transform_audit.csv',low_memory=False)
+
+          assert s['version']=='RB_RECEIVING_ROOM_SHARE_IMPACT_V1'
+          assert s['season']==2026 and s['weeks']==[1,2,3,4]
+          assert s['interpretation_boundary']=='RETROSPECTIVE_MECHANISM_IMPACT__NOT_OOS_PROMOTION_EVIDENCE'
+          assert s['parameters_fit']==0
+          assert s['automatic_promotion'] is False
+          assert s['sportsbook_inputs_used_upstream'] is False
+          assert s['paid_odds_api_used'] is False
+          assert s['rush_yards_projection_max_abs_gap'] <= 1e-10
+
+          assert set(p.week.unique())=={1,2,3,4}
+          assert set(p.market.unique())=={'rush_yards','rec_yards','receptions','rush_rec_yards'}
+          assert set(t.week.unique())=={1,2,3,4}
+          assert (a.rb_entitlement_mass_before-a.rb_entitlement_mass_after).abs().max() <= 1e-10
+          assert a.shadow_applied.any()
+
+          rush=p.loc[p.market.eq('rush_yards')]
+          assert (rush.baseline_projection-rush.candidate_projection).abs().max() <= 1e-10
+
+          print(json.dumps({
+              'transform_rooms':s['transform_rooms'],
+              'transform_applied_rooms':s['transform_applied_rooms'],
+              'target_summary':s['target_summary'],
+              'point_summary':s['point_summary'],
+              'high_workload_summary':s['high_workload_summary'],
+          },indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/utils/audit_repo.py --strict
+
+      - name: Display impact summary
+        if: always()
+        run: |
+          cat /tmp/rb_room_impact/output/rb_receiving_room_share_impact_summary.json || true
+
+      - name: Upload impact evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-receiving-room-share-impact-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/rb_room_impact/output/**
