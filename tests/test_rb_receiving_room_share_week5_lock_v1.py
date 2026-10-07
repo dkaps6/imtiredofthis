@@ -77,3 +77,30 @@ def test_build_candidate_fails_closed_on_nonpositive_room_state(monkeypatch):
     monkeypatch.setattr(lock,"_attach_prior_room_share",fake_attach)
     with pytest.raises(RuntimeError,match="nonpositive Week-5 prior RB receiving-room mass"):
         lock.build_candidate(parent,pd.DataFrame())
+
+
+def test_gsis_snapshot_ignores_name_suffix_aliases():
+    queries=pd.DataFrame([
+        {
+            "team":"JAX","player":"Chris Rodriguez Jr.","state_key":"gsis:00-1",
+            "gsis_id":"00-1",
+        },
+        {
+            "team":"MIA","player":"Ollie Gordon II","state_key":"gsis:00-2",
+            "gsis_id":"00-2",
+        },
+    ])
+    states=pd.DataFrame([
+        {"player_id":"00-1","time_key":202604,"team":"JAX","after_rb_room_share":0.70,"after_games":4.0},
+        {"player_id":"00-2","time_key":202603,"team":"MIA","after_rb_room_share":0.35,"after_games":3.0},
+        # Exact target week must not be consumed.
+        {"player_id":"00-1","time_key":202605,"team":"JAX","after_rb_room_share":0.99,"after_games":5.0},
+    ])
+    out=lock._snapshot_prior_room_share_by_gsis(queries,states)
+    a=out.loc[out.gsis_id.eq("00-1")].iloc[0]
+    b=out.loc[out.gsis_id.eq("00-2")].iloc[0]
+    assert a.prior_rb_room_share==pytest.approx(0.70)
+    assert a.prior_games==pytest.approx(4.0)
+    assert b.prior_rb_room_share==pytest.approx(0.35)
+    assert b.prior_games==pytest.approx(3.0)
+\n
