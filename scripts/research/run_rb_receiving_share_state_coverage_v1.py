@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 from scripts.modeling.rb_receiving_identity_runtime_v1 import (
-    attach_identity,
+    _snapshot_queries,
     identity_atlas,
 )
 
@@ -110,16 +110,43 @@ def run(*,rows_path:Path,out_dir:Path,repo_root:Path)->dict:
     states,prev=identity_atlas(2013,SEASON)
     pieces=[]
     for week,g in x.groupby("week",sort=True):
-        q=g.copy()
+        q=g[["player_clean_key","team"]].copy()
         q["season"]=SEASON
         q["week"]=int(week)
-        attached=attach_identity(q,SEASON,int(week),states,prev)
+        # Use the raw snapshot helper, not attach_identity(). attach_identity()
+        # intentionally zero-fills missing production features; a coverage audit
+        # must preserve missing history as missing rather than treating it as a
+        # real zero.
+        feat=_snapshot_queries(q,states,prev)
+        keep=["player_clean_key","team","season","week",*[
+            c for c in [
+                *ALL_FIELDS,
+                "prior_games","same_team_prior_games","prev_season_games"
+            ] if c in feat.columns
+        ]]
+        feat=feat[keep].copy()
+        attached=g.merge(
+            feat,
+            on=["player_clean_key","team","season","week"],
+            how="left",
+            validate="one_to_one",
+        )
         pieces.append(attached)
     a=pd.concat(pieces,ignore_index=True,sort=False)
     for c in ALL_FIELDS:
         if c not in a.columns:
             a[c]=np.nan
         a[c]=pd.to_numeric(a[c],errors="coerce")
+    for c in ("prior_games","same_team_prior_games","prev_season_games"):
+        if c not in a.columns:
+            a[c]=np.nan
+        a[c]=pd.to_numeric(a[c],errors="coerce")
+
+    # Explicit availability flags preserve the distinction between no history
+    # and a genuine historical zero.
+    a["any_prior_history_available"]=a["prior_games"].fillna(0).gt(0)
+    a["same_team_history_available"]=a["same_team_prior_games"].fillna(0).gt(0)
+    a["prev_season_history_available"]=a["prev_season_games"].fillna(0).gt(0)
 
     # Within-current-room shares remove team volume and total RB target-pool size.
     a["model_rb_room_share"]=np.nan
@@ -243,6 +270,9 @@ def run(*,rows_path:Path,out_dir:Path,repo_root:Path)->dict:
         "weeks":list(WEEKS),
         "rows":int(len(a)),
         "scoreable_rows":int(len(scored)),
+        "any_prior_history_coverage_rate":float(a["any_prior_history_available"].mean()),
+        "same_team_history_coverage_rate":float(a["same_team_history_available"].mean()),
+        "prev_season_history_coverage_rate":float(a["prev_season_history_available"].mean()),
         "team_rooms":int(a[["week","event_id","team"]].drop_duplicates().shape[0]),
         "scoreable_team_rooms":int(len(leader_df)),
         "current_model_room_share_mae":model_mae,
