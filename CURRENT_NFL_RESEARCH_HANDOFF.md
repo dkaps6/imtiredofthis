@@ -3,6 +3,108 @@ GitHub is canonical; chat memory is secondary.
 
 
 ---
+## ACTIVE CHECKPOINT — 2026-10-07 — PLAYER-CENTRIC ALL-POSITIONS CURRENT
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-07_PLAYER_CENTRIC_ALL_POSITIONS_CURRENT.md`
+
+**Compact next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-07_PLAYER_CENTRIC_ALL_POSITIONS.md`
+
+This supersedes all older checkpoints for immediate execution.
+
+### Current state in one screen
+
+- The current research priority is **individual-player modeling as a complement to the validated stack**, not replacing prior team/opponent/position science.
+- Player Individualization Audit V1 = `PLAYER_INDIVIDUALIZATION_PARTIAL`: real player history exists, but position shrinkage/shared weekly transforms remain material.
+- Full-stack correction:
+  - QB mean already strongly individualized by M89/M90; do not reopen generic QB mean.
+  - WR has M38 + WR-R15 individual entitlement.
+  - TE has TE-R5P individual entitlement.
+  - non-Week-1 RB remains the largest individual room-allocation gap.
+- RB Week-5 prospective allocation shadow is frozen:
+  - run `37560824479` SUCCESS
+  - 98 RB/HB/FB identities across 30 teams
+  - 30/30 rooms changed
+  - frozen 50/50 recent carry-share + snap-fraction allocation
+  - no Week-5 outcomes / no sportsbook / no production change.
+- QB-receiver pair source is live-ready, but raw pair-specific YPT is **CLOSED**; do not rescue.
+- WR mechanism persistence = `WR_PLAYER_PERSISTENCE_MIXED_MECHANISM`.
+- TE mechanism persistence = `TE_PLAYER_PERSISTENCE_MIXED_MECHANISM`.
+- Both WR and TE show:
+  - persistent individual opportunity error/difficulty;
+  - persistent individual efficiency **difficulty**;
+  - no stable signed efficiency bias.
+- Situational third-down/red-zone/two-minute target earning is real/nonredundant source state but **CLOSED** as an explanation of opportunity residual.
+- Individual target-share trajectory is **CONFIRMED** across WR and TE:
+  - run `37638269235` SUCCESS
+  - WR pooled rho -0.07646
+  - TE pooled rho -0.09876
+  - combined rho -0.08496.
+- Week-5 target-share trajectory shadow is immutably frozen:
+  - run `37654382316` SUCCESS
+  - artifact `11497153776`
+  - row digest `sha256:afbfd7f360c50fcd4850c0967be40f9a333da1bd5f835cdc676c2e88d777c1f3`
+  - 277 WR/TE rows; 247 changed; M38 WR1 frozen; WR2+/TE pools and team target mass conserved.
+- Individual target-depth dispersion is **CONFIRMED** as a player-specific efficiency-difficulty signal:
+  - run `37655282486` SUCCESS
+  - WR pooled rho +0.08499
+  - TE pooled rho +0.05414
+  - combined rho +0.18412.
+- Branch `research-player-target-depth-distribution-shadow-v1` exists but has **no contract/code/run yet**.
+- User's immediate priority: **button up all QB/RB/WR/TE player-level work before starting the all-player/all-position replay**.
+- Position readiness:
+  - QB: ready for this phase;
+  - RB: main unfinished position;
+  - WR: opportunity ready, distribution layer unfinished;
+  - TE: opportunity ready, distribution layer unfinished.
+- Exact trajectory V1 cannot operate in 2026 Weeks 1–4 because it requires 4 prior same-season games. Do not weaken the frozen rule after seeing outcomes.
+- Target-depth dispersion can potentially replay 2026 Weeks 1–4 using strictly-prior 2025 history.
+- no paid OddsAPI pull without explicit user authorization.
+- no relevant run is active at checkpoint time; do not claim otherwise.
+
+### Exact next action
+
+1. Query live main / Issue #535 / relevant research branches / Actions.
+2. Answer the user's position-status question immediately:
+   - QB ready;
+   - RB is the main unfinished position;
+   - WR/TE opportunity ready but player-specific distribution shadow unfinished.
+3. Freeze and implement `research-player-target-depth-distribution-shadow-v1` as a **mean-neutral** uncertainty/distribution candidate:
+   - preserve exact receiving-yard means;
+   - preserve target entitlement;
+   - preserve M38 / WR-R15 / TE-R5P;
+   - preserve team pass/target volume;
+   - no sportsbook inputs.
+4. Then resolve RB's remaining legal/open player-level scope without violating M96 or reopening closed RB mean/width families.
+5. Only when QB/RB/WR/TE are explicitly buttoned up, start the all-position replay.
+6. For 2026 W1–4:
+   - trajectory V1 is ineligible under its exact frozen contract;
+   - target-depth distribution can potentially be replayed with strictly-prior 2025 history;
+   - historical Week-5+ seasons can integration-test the exact trajectory transform.
+7. Preserve all prior closures / anti-retest rules.
+
+### Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this newest top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-10-07_PLAYER_CENTRIC_ALL_POSITIONS_CURRENT.md`
+4. `docs/research/PLAYER_INDIVIDUALIZATION_AUDIT_V1_FULL_STACK_ADDENDUM.md`
+5. `docs/research/RB_PLAYER_STATE_ALLOCATION_SHADOW_V1_WEEK5_LOCK.md`
+6. `docs/research/PLAYER_TARGET_SHARE_TRAJECTORY_V1_RESULT.md`
+7. `docs/research/PLAYER_TARGET_SHARE_TRAJECTORY_SHADOW_V1_WEEK5_LOCK.md`
+8. `docs/research/PLAYER_TARGET_DEPTH_DISPERSION_V1_RESULT.md`
+9. Issue #535 from comment `6029157126` onward
+10. live main / relevant branches / Actions
+
+Then work. Do not recursively load older handoffs unless a targeted anti-retest question requires one.
+
+
+
+---
 ## ACTIVE CHECKPOINT — 2026-10-06 — WEEK 4 POSTMORTEM / FOOTBALL MATCHUP TRANSMISSION CURRENT
 
 **Read this detailed handoff next:**
