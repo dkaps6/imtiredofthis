@@ -1,0 +1,160 @@
+name: Research Player-Centric Week-5 Shadow Manifest V1
+
+on:
+  push:
+    branches:
+      - research-player-centric-week5-shadow-manifest-v1
+    paths:
+      - 'docs/research/PLAYER_CENTRIC_WEEK5_SHADOW_MANIFEST_V1_CONTRACT.md'
+      - 'scripts/research/build_player_centric_week5_shadow_manifest_v1.py'
+      - 'tests/test_player_centric_week5_shadow_manifest_v1.py'
+      - '.github/workflows/research-player-centric-week5-shadow-manifest-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  manifest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyarrow pyyaml
+
+      - name: Run manifest safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_player_centric_week5_shadow_manifest_v1.py
+
+      - name: Build Week-5 public pregame universe
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/playercentricw5
+          mkdir -p /tmp/playercentricw5/hist                    /tmp/playercentricw5/components/rb_carry                    /tmp/playercentricw5/components/wrte                    /tmp/playercentricw5/components/rb_target                    /tmp/playercentricw5/output
+          python scripts/backtest/build_historical_inputs.py             --season 2026             --prior-season 2025             --weeks 5             --out-dir /tmp/playercentricw5/hist
+
+      - name: Recover immutable Week-5 component locks
+        run: |
+          gh run download 37560824479             --repo "${GITHUB_REPOSITORY}"             --name "rb-player-state-allocation-shadow-v1-week5-37560824479"             --dir /tmp/playercentricw5/components/rb_carry
+          gh run download 37654382316             --repo "${GITHUB_REPOSITORY}"             --name "player-target-share-trajectory-shadow-v1-week5-37654382316"             --dir /tmp/playercentricw5/components/wrte
+          gh run download 37696979325             --repo "${GITHUB_REPOSITORY}"             --name "rb-target-share-trajectory-shadow-v1-week5-37696979325"             --dir /tmp/playercentricw5/components/rb_target
+
+          test -s /tmp/playercentricw5/components/rb_carry/rb_player_state_allocation_week5_lock.csv
+          test -s /tmp/playercentricw5/components/wrte/player_target_share_trajectory_shadow_week5_lock.csv
+          test -s /tmp/playercentricw5/components/rb_target/rb_target_share_trajectory_shadow_week5_lock.csv
+
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+
+          checks={
+            '/tmp/playercentricw5/components/rb_carry/rb_player_state_allocation_week5_lock.csv':
+              '66a428f0c19ee1dc356db117fa8e39092204896356461358667224826826e90a',
+            '/tmp/playercentricw5/components/wrte/player_target_share_trajectory_shadow_week5_lock.csv':
+              'afbfd7f360c50fcd4850c0967be40f9a333da1bd5f835cdc676c2e88d777c1f3',
+            '/tmp/playercentricw5/components/rb_target/rb_target_share_trajectory_shadow_week5_lock.csv':
+              '23ed4317a9e5acb12207a1f6cb67947f71a6fed50d915c711b08b08a1276d94e',
+          }
+          for p,expected in checks.items():
+              got=hashlib.sha256(Path(p).read_bytes()).hexdigest()
+              assert got==expected,(p,got,expected)
+          print('IMMUTABLE_COMPONENT_DIGESTS_CERTIFIED')
+          PY
+
+      - name: Build immutable all-player Week-5 manifest
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/build_player_centric_week5_shadow_manifest_v1.py             --universe /tmp/playercentricw5/hist/pregame_universe/2026_week_05.csv             --wrte-target-lock /tmp/playercentricw5/components/wrte/player_target_share_trajectory_shadow_week5_lock.csv             --rb-target-lock /tmp/playercentricw5/components/rb_target/rb_target_share_trajectory_shadow_week5_lock.csv             --rb-carry-lock /tmp/playercentricw5/components/rb_carry/rb_player_state_allocation_week5_lock.csv             --out-dir /tmp/playercentricw5/output
+
+      - name: Certify manifest boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+
+          root=Path('/tmp/playercentricw5/output')
+          for name in [
+              'player_centric_week5_shadow_manifest.csv',
+              'player_centric_week5_shadow_manifest_summary.json',
+              'player_centric_week5_shadow_conflict_audit.csv',
+          ]:
+              p=root/name
+              assert p.exists() and p.stat().st_size>0,name
+
+          s=json.loads((root/'player_centric_week5_shadow_manifest_summary.json').read_text())
+          x=pd.read_csv(root/'player_centric_week5_shadow_manifest.csv',low_memory=False)
+          a=pd.read_csv(root/'player_centric_week5_shadow_conflict_audit.csv')
+
+          assert s['status']=='WEEK5_PLAYER_CENTRIC_MANIFEST_FROZEN',s
+          assert s['season']==2026 and s['week']==5,s
+          assert s['parameters_fit']==0,s
+          assert s['sportsbook_inputs_used']==0,s
+          assert s['week5_outcomes_read']==0,s
+          assert s['production_changed'] is False,s
+          assert s['automatic_promotion'] is False,s
+          assert s['target_depth_distribution_included'] is False,s
+
+          assert set(x['position_family'].unique()).issuperset({'QB','RB','WR','TE'})
+          assert x['week'].eq(5).all()
+          assert not x['production_changed'].astype(bool).any()
+          assert not pd.to_numeric(x['sportsbook_inputs_used'],errors='coerce').fillna(1).astype(bool).any()
+          assert s['target_shadow_rows']==385,(s['target_shadow_rows'],385)
+          assert s['rb_carry_shadow_rows']==98,(s['rb_carry_shadow_rows'],98)
+          assert s['qb_shadow_rows']==0,s
+          assert a['passed'].astype(bool).all(),a.loc[~a['passed'].astype(bool)].to_dict('records')
+
+          qb=x[x.position_family.eq('QB')]
+          assert qb.player_state_route.eq('PROTECTED_PRODUCTION_QB_NO_NEW_PLAYER_SHADOW').all()
+          assert not qb.target_shadow_available.astype(bool).any()
+          assert not qb.rb_carry_shadow_available.astype(bool).any()
+
+          print(json.dumps({
+              'players':s['players'],
+              'position_counts':s['position_counts'],
+              'target_shadow_rows':s['target_shadow_rows'],
+              'target_feature_available_rows':s['target_feature_available_rows'],
+              'rb_carry_shadow_rows':s['rb_carry_shadow_rows'],
+              'rb_rows_with_both_shadows':s['rb_rows_with_both_shadows'],
+              'manifest_row_digest':s['manifest_row_digest'],
+          },indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/utils/audit_repo.py --strict
+
+      - name: Display manifest summary
+        if: always()
+        run: |
+          cat /tmp/playercentricw5/output/player_centric_week5_shadow_manifest_summary.json || true
+
+      - name: Upload immutable manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-centric-week5-shadow-manifest-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/playercentricw5/output/**
