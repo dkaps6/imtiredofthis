@@ -78,7 +78,8 @@ def _target_allocator_equivalent(frame: pd.DataFrame, column: str) -> pd.Series:
 
     No M38 or specialist redistribution is applied here. This only performs the
     canonical finite player-mass cap so all stages are compared on the same
-    per-official-pass-attempt probability scale as the realized parent share.
+    per-dropback target-allocation probability scale as the corrected realized
+    parent share.
     """
     out = pd.Series(np.nan, index=frame.index, dtype=float)
     for (_, _), idx in frame.groupby(["event_id", "team"], sort=False).groups.items():
@@ -283,16 +284,24 @@ def _attach_parent(stage: pd.DataFrame, parent_path: Path) -> pd.DataFrame:
     parent = _read(parent_path, "frozen volume/share parent")
     required = {
         "season", "week", "event_id", "team", "player_clean_key", "position_family",
-        "opportunity_type", "actual_player_opportunity", "actual_team_volume",
+        "opportunity_type", "actual_opportunities", "actual_team_volume",
         "actual_player_share", "actual_opportunity_bin",
-        "linked_yards_error", "linked_count_error",
+        "linked_yards_error", "linked_count_error", "final_player_probability",
         "sportsbook_inputs_used_upstream",
     }
     missing = required - set(parent.columns)
     if missing:
-        raise RuntimeError(f"frozen parent missing columns: {sorted(missing)}")
+        raise RuntimeError(f"corrected frozen parent missing columns: {sorted(missing)}")
     if parent["sportsbook_inputs_used_upstream"].astype(bool).any():
         raise RuntimeError("frozen parent contains sportsbook input")
+    parent["actual_player_opportunity"] = pd.to_numeric(
+        parent["actual_opportunities"], errors="coerce"
+    )
+    parent["predicted_player_share"] = pd.to_numeric(
+        parent["final_player_probability"], errors="coerce"
+    )
+    if parent["actual_player_opportunity"].isna().any() or parent["predicted_player_share"].isna().any():
+        raise RuntimeError("corrected frozen parent has non-finite opportunity/share")
 
     rows = []
     # Build carry + target player rows from deterministic share trace.
