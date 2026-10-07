@@ -1,0 +1,192 @@
+name: Research Player Share Input Coverage Residual Audit V1
+
+on:
+  push:
+    branches:
+      - research-player-share-input-coverage-residual-audit-v1
+    paths:
+      - 'docs/research/PLAYER_SHARE_INPUT_COVERAGE_AND_RESIDUAL_AUDIT_V1_CONTRACT.md'
+      - 'docs/research/PLAYER_SHARE_INPUT_COVERAGE_AND_RESIDUAL_AUDIT_V1_AMENDMENT1.md'
+      - 'docs/research/PLAYER_OPPORTUNITY_DECOMPOSITION_TO_EXISTING_SHADOWS_V1.md'
+      - 'scripts/research/run_player_share_input_coverage_residual_audit_v1.py'
+      - 'tests/test_player_share_input_coverage_residual_audit_v1.py'
+      - '.github/workflows/research-player-share-input-coverage-residual-audit-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyarrow pyyaml
+
+      - name: Run frozen share-audit tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_player_share_input_coverage_residual_audit_v1.py
+
+      - name: Build leakage-safe baseline Weeks 1-4 inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/player_share_audit
+          mkdir -p /tmp/player_share_audit/input                    /tmp/player_share_audit/act_universe                    /tmp/player_share_audit/parent                    /tmp/player_share_audit/output
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.backtest.historical_inputs import build_all_historical_inputs
+          out = build_all_historical_inputs(
+              season=2026,
+              prior_season=2025,
+              out_dir=Path('/tmp/player_share_audit/input'),
+              weeks=range(1,5),
+          )
+          print(out)
+          PY
+          python scripts/backtest/historical_player_logs.py             --seasons 2025,2026             --schedule /tmp/player_share_audit/input/schedule_history.csv             --out /tmp/player_share_audit/input/player_game_logs_history.csv
+
+      - name: Build exact ACT-only historical universes
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/build_historical_availability_parity_universe_v1.py             --baseline-dir /tmp/player_share_audit/input/pregame_universe             --out-dir /tmp/player_share_audit/act_universe             --status-out /tmp/player_share_audit/status_map.csv             --summary-out /tmp/player_share_audit/status_summary.json
+          python - <<'PY'
+          import json
+          s=json.load(open('/tmp/player_share_audit/status_summary.json'))
+          assert s['outcome_inputs_used_for_selection'] is False
+          assert s['sportsbook_inputs_used'] is False
+          assert s['ina_rows_removed'] > 0
+          print(s)
+          PY
+
+      - name: Recover corrected dropback-semantics parent
+        run: |
+          gh run download 37694474836             --repo "${GITHUB_REPOSITORY}"             --name "player-opportunity-volume-vs-share-decomposition-v1-37694474836"             --dir /tmp/player_share_audit/parent
+          test -s /tmp/player_share_audit/parent/player_opportunity_volume_share_rows.csv
+          python - <<'PY'
+          import pandas as pd
+          p='/tmp/player_share_audit/parent/player_opportunity_volume_share_rows.csv'
+          x=pd.read_csv(p,low_memory=False)
+          assert len(x)==2106, len(x)
+          assert set(x.week.unique())=={1,2,3,4}
+          assert not x.sportsbook_inputs_used_upstream.astype(bool).any()
+          scoped=x[x.position_family.isin(['RB','WR','TE'])].copy()
+          assert len(scoped)>1900, len(scoped)
+          assert {'actual_player_share','actual_team_volume','actual_opportunities',
+                  'final_player_probability'}.issubset(x.columns)
+          print({
+              'parent_rows':len(x),
+              'scoped_rows':len(scoped),
+              'families':scoped.groupby(['position_family','opportunity_type']).size().to_dict(),
+          })
+          PY
+
+      - name: Run frozen player-share stage audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/run_player_share_input_coverage_residual_audit_v1.py             --player-logs /tmp/player_share_audit/input/player_game_logs_history.csv             --team-weekly /tmp/player_share_audit/input/team_weekly_history.csv             --schedule /tmp/player_share_audit/input/schedule_history.csv             --universe-dir /tmp/player_share_audit/act_universe             --parent /tmp/player_share_audit/parent/player_opportunity_volume_share_rows.csv             --out-dir /tmp/player_share_audit/output
+
+      - name: Certify share-audit boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+
+          root=Path('/tmp/player_share_audit/output')
+          required=[
+              'player_share_stage_rows.csv',
+              'player_share_stage_error_summary.csv',
+              'player_share_evidence_coverage_summary.csv',
+              'player_share_specialist_effect_summary.csv',
+              'player_share_input_coverage_residual_summary.json',
+          ]
+          for name in required:
+              p=root/name
+              assert p.exists() and p.stat().st_size>0, name
+
+          s=json.loads((root/'player_share_input_coverage_residual_summary.json').read_text())
+          rows=pd.read_csv(root/'player_share_stage_rows.csv',low_memory=False)
+          stages=pd.read_csv(root/'player_share_stage_error_summary.csv',low_memory=False)
+          specialists=pd.read_csv(root/'player_share_specialist_effect_summary.csv',low_memory=False)
+
+          parent=pd.read_csv('/tmp/player_share_audit/parent/player_opportunity_volume_share_rows.csv',low_memory=False)
+          expected=len(parent[parent.position_family.isin(['RB','WR','TE'])])
+
+          assert s['version']=='PLAYER_SHARE_INPUT_COVERAGE_AND_RESIDUAL_AUDIT_V1'
+          assert s['rows']==expected, (s['rows'],expected)
+          assert s['parameters_fit']==0
+          assert s['automatic_promotion'] is False
+          assert s['sportsbook_inputs_used_upstream'] is False
+          assert s['paid_odds_api_used'] is False
+          assert s['target_share_trajectory_applied_rows']==0
+          assert s['rb_week5_room_shadow_rows']==0
+          assert s['outcomes_loaded_after_pregame_trace_freeze'] is True
+          assert s['final_parent_share_max_abs_gap'] <= 1e-10
+
+          expected_families={
+              ('RB','carries'),('RB','targets'),('WR','targets'),('TE','targets')
+          }
+          got=set(zip(rows.position_family,rows.opportunity_type))
+          assert expected_families.issubset(got), got
+          assert not rows.sportsbook_inputs_used_upstream.astype(bool).any()
+          assert not rows.rb_week5_room_allocation_shadow_applied.astype(bool).any()
+          assert rows.target_share_trajectory_status.eq('FROZEN_FEATURE_NOT_YET_ELIGIBLE').all()
+
+          high=stages[stages.subset.eq('HIGH_WORKLOAD')]
+          assert expected_families.issubset(set(zip(high.position_family,high.opportunity_type)))
+          assert {'WR','TE'}.issubset(set(specialists.position_family.unique()))
+
+          print(json.dumps({
+              'rows':len(rows),
+              'stage_rows':len(stages),
+              'specialist_rows':len(specialists),
+              'final_parent_share_max_abs_gap':s['final_parent_share_max_abs_gap'],
+              'high_workload':high[[
+                  'position_family','opportunity_type','stage','rows',
+                  'share_mae','share_bias','mean_predicted_share','mean_actual_share'
+              ]].to_dict('records'),
+              'specialists':specialists.to_dict('records'),
+          },indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/utils/audit_repo.py --strict
+
+      - name: Display audit summary
+        if: always()
+        run: |
+          cat /tmp/player_share_audit/output/player_share_input_coverage_residual_summary.json || true
+
+      - name: Upload share-audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-share-input-coverage-residual-audit-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/player_share_audit/output/**
