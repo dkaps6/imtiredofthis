@@ -1,0 +1,115 @@
+name: Research Player Target Depth Distribution Shadow V1
+
+on:
+  push:
+    branches:
+      - research-player-target-depth-distribution-shadow-v1
+    paths:
+      - 'docs/research/PLAYER_TARGET_DEPTH_DISTRIBUTION_SHADOW_V1_CONTRACT.md'
+      - 'scripts/research/lock_player_target_depth_distribution_shadow_v1.py'
+      - 'tests/test_player_target_depth_distribution_shadow_v1.py'
+      - '.github/workflows/research-player-target-depth-distribution-shadow-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  lock:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyarrow
+
+      - name: Run frozen safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_player_target_depth_distribution_shadow_v1.py
+
+      - name: Download immutable Week-5 WR TE parent lock
+        uses: actions/download-artifact@v4
+        with:
+          name: player-target-share-trajectory-shadow-v1-week5-37654382316
+          path: /tmp/trajectory_parent
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37654382316
+
+      - name: Resolve and verify parent
+        run: |
+          set -euo pipefail
+          PARENT="$(find /tmp/trajectory_parent -type f -name 'player_target_share_trajectory_shadow_week5_lock.csv' -print -quit)"
+          test -n "$PARENT" && test -s "$PARENT"
+          echo "PARENT=$PARENT" >> "$GITHUB_ENV"
+          ACTUAL="$(sha256sum "$PARENT" | awk '{print $1}')"
+          test "$ACTUAL" = "afbfd7f360c50fcd4850c0967be40f9a333da1bd5f835cdc676c2e88d777c1f3"
+
+      - name: Freeze Week-5 target-depth distribution scales
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/target_depth_distribution_lock
+          mkdir -p /tmp/target_depth_distribution_lock
+          python scripts/research/lock_player_target_depth_distribution_shadow_v1.py             --parent-lock "$PARENT"             --out-dir /tmp/target_depth_distribution_lock
+
+      - name: Verify pregame and mean-neutral boundary
+        run: |
+          python - <<'PY'
+          import json
+          import numpy as np
+          import pandas as pd
+          from pathlib import Path
+
+          root = Path('/tmp/target_depth_distribution_lock')
+          p = json.loads((root / 'player_target_depth_distribution_shadow_week5_lock.json').read_text())
+          x = pd.read_csv(root / 'player_target_depth_distribution_shadow_week5_lock.csv')
+
+          assert p['status'] == 'WEEK5_PREGAME_DISTRIBUTION_LOCK_FROZEN', p
+          assert p['season'] == 2026 and p['week'] == 5, p
+          assert p['parent_run'] == 37654382316, p
+          assert p['parent_row_digest'] == 'sha256:afbfd7f360c50fcd4850c0967be40f9a333da1bd5f835cdc676c2e88d777c1f3', p
+          assert p['locked_players'] == 277, p
+          assert p['locked_wr'] == 167 and p['locked_te'] == 110, p
+          assert p['same_or_future_feature_violations'] == 0, p
+          assert p['parameters_fit'] == 0, p
+          assert p['sportsbook_inputs_used'] == 0, p
+          assert p['week5_outcomes_read'] == 0, p
+          assert p['football_means_changed'] is False, p
+          assert p['target_entitlement_changed'] is False, p
+          assert p['team_volume_changed'] is False, p
+          assert p['production_changed'] is False, p
+          assert p['feature_available_players'] > 0, p
+          scale = pd.to_numeric(x['depth_distribution_scale'], errors='coerce')
+          assert np.isfinite(scale).all() and (scale > 0).all()
+          print('PLAYER_TARGET_DEPTH_DISTRIBUTION_SHADOW_V1_WEEK5_LOCK_CERTIFIED')
+          PY
+
+      - name: Display frozen lock
+        if: always()
+        run: |
+          cat /tmp/target_depth_distribution_lock/player_target_depth_distribution_shadow_week5_lock.json || true
+
+      - name: Upload immutable Week-5 distribution lock
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-target-depth-distribution-shadow-v1-week5-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/target_depth_distribution_lock/**
