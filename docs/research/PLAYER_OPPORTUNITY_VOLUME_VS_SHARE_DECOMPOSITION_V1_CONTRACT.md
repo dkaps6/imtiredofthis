@@ -45,16 +45,28 @@ Deterministic expected opportunity:
 Use completed 2026 Weeks 1-4 regular-season nflverse PBP only after loading the
 frozen model rows.
 
-- official pass attempts: pass_attempt=1, sack!=1, two_point_attempt!=1
-- rush attempts: rush_attempt=1, two_point_attempt!=1
+The comparator must match the canonical simulator's exact volume semantics:
+
+- QB pass attempts: official pass attempts =
+  pass_attempt=1, sack!=1, two_point_attempt!=1
+- target allocation volume: team dropbacks = qb_dropback=1 within canonical
+  offensive plays, excluding two-point attempts
+- carry allocation volume: canonical non-dropback offensive plays =
+  off_play(qb_dropback=1 OR rush_attempt=1) minus dropback plays, excluding
+  two-point attempts
+
+This distinction is binding. The explicit simulator samples
+`pass_att ~ Binomial(plays, dropback_rate)` for target allocation and uses
+`rush_att = plays - pass_att`; therefore official pass attempts are not the
+correct team-volume comparator for target allocation.
 
 No sportsbook source.
 
 ## Actual player share
 
-- QB: player pass attempts / team pass attempts
-- RB carry: player carries / team rush attempts
-- RB/WR/TE target: player targets / team pass attempts
+- QB: player official pass attempts / team official pass attempts
+- RB carry: player carries / canonical team non-dropback opportunity volume
+- RB/WR/TE target: player targets / canonical team dropback opportunity volume
 
 Rows with zero realized team volume have undefined actual share and fail closed
 for share diagnostics.
@@ -87,7 +99,8 @@ By position and opportunity type report:
 - actual-share diagnostic MAE and bias
 - MAE improvement from each diagnostic
 - fraction of model MAE removed by each diagnostic
-- predicted vs actual team-volume MAE
+- predicted vs actual team-volume MAE, using the exact simulator-matched
+  volume definition for each opportunity family
 - predicted vs actual player-share MAE
 - correlation between share error and individual opportunity error
 - high-workload-bin bias under model, actual-volume diagnostic, and
