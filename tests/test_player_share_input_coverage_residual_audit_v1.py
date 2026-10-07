@@ -98,3 +98,35 @@ def test_specialist_effect_reports_direction_without_fitting():
     te=out.loc[out.position_family.eq("TE")].iloc[0]
     assert wr.rules_to_final_mae_improvement==pytest.approx(0.10)
     assert te.rules_to_final_mae_improvement==pytest.approx(0.08)
+
+
+def test_attach_parent_uses_corrected_dropback_parent_schema(tmp_path):
+    stage = pd.DataFrame([{
+        "season": 2026, "week": 2, "event_id": "G1", "team": "IND",
+        "opponent": "HOU", "player": "WR One", "player_clean_key": "wrone",
+        "position": "WR", "position_family": "WR",
+        "raw_target_allocator_share": 0.10,
+        "bayes_target_allocator_share": 0.11,
+        "rules_target_allocator_share": 0.12,
+        "post_m38_entitlement_tgt_share": 0.13,
+        "final_target_allocator_share": 0.14,
+        "final_rush_allocator_share": 0.0,
+    }])
+    parent = pd.DataFrame([{
+        "season": 2026, "week": 2, "event_id": "G1", "team": "IND",
+        "player_clean_key": "wrone", "position_family": "WR",
+        "opportunity_type": "targets", "actual_opportunities": 7.0,
+        "actual_team_volume": 35.0, "actual_player_share": 0.20,
+        "actual_opportunity_bin": "06_08", "linked_yards_error": -20.0,
+        "linked_count_error": -2.0, "final_player_probability": 0.14,
+        "sportsbook_inputs_used_upstream": False,
+    }])
+    p = tmp_path / "parent.csv"
+    parent.to_csv(p, index=False)
+    out = a._attach_parent(stage, p)
+    assert len(out) == 1
+    row = out.iloc[0]
+    assert row["actual_player_opportunity"] == pytest.approx(7.0)
+    assert row["actual_player_share"] == pytest.approx(0.20)
+    assert row["predicted_player_share"] == pytest.approx(0.14)
+
