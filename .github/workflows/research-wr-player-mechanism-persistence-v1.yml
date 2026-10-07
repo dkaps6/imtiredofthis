@@ -1,0 +1,92 @@
+name: Research WR Player Mechanism Persistence V1
+
+on:
+  push:
+    branches:
+      - research-wr-player-mechanism-persistence-v1
+    paths:
+      - 'docs/research/WR_PLAYER_MECHANISM_PERSISTENCE_V1_PLAN.md'
+      - 'scripts/research/evaluate_wr_player_mechanism_persistence_v1.py'
+      - 'tests/test_wr_player_mechanism_persistence_v1.py'
+      - '.github/workflows/research-wr-player-mechanism-persistence-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest scipy
+      - name: Run frozen safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest -q tests/test_wr_player_mechanism_persistence_v1.py
+      - name: Download exact promoted WR authority
+        uses: actions/download-artifact@v4
+        with:
+          name: wr-r15-wr1-anchor-participation-v1
+          path: /tmp/wr_r15
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 34238301577
+      - name: Resolve exact confirmation predictions
+        run: |
+          set -euo pipefail
+          PRED="$(find /tmp/wr_r15 -type f -name 'wr_r15_confirmation_predictions.csv' -print -quit)"
+          test -n "$PRED" && test -s "$PRED"
+          echo "PRED=$PRED" >> "$GITHUB_ENV"
+      - name: Evaluate frozen WR mechanism diagnostic
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/wr_mech
+          mkdir -p /tmp/wr_mech
+          python scripts/research/evaluate_wr_player_mechanism_persistence_v1.py             --predictions "$PRED"             --out-dir /tmp/wr_mech
+      - name: Verify boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('/tmp/wr_mech/wr_player_mechanism_persistence_result.json').read_text())
+          assert p['max_decomposition_identity_gap']<=1e-9,p
+          assert p['candidate_models_fit']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['outcomes_2026_read']==0,p
+          assert p['production_changed'] is False,p
+          assert p['same_or_future_history_violations']==0,p
+          assert p['disposition'] in {
+            'WR_PLAYER_PERSISTENCE_EFFICIENCY_DOMINANT',
+            'WR_PLAYER_PERSISTENCE_OPPORTUNITY_DOMINANT',
+            'WR_PLAYER_PERSISTENCE_MIXED_MECHANISM',
+            'WR_PLAYER_PERSISTENCE_MECHANISM_UNRESOLVED',
+            'WR_PLAYER_PERSISTENCE_MECHANISM_SOURCE_LIMITED',
+          },p
+          print('WR_PLAYER_MECHANISM_PERSISTENCE_V1_CONTRACT_CERTIFIED')
+          PY
+      - name: Display result
+        if: always()
+        run: cat /tmp/wr_mech/wr_player_mechanism_persistence_result.json || true
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wr-player-mechanism-persistence-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/wr_mech/**
