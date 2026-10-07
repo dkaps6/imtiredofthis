@@ -1,0 +1,73 @@
+name: Research QB Receiver Pair Efficiency V1
+
+on:
+  push:
+    branches:
+      - research-qb-receiver-pair-efficiency-v1
+    paths:
+      - 'docs/research/QB_RECEIVER_PAIR_EFFICIENCY_V1_CONTRACT.md'
+      - 'scripts/research/evaluate_qb_receiver_pair_efficiency_v1.py'
+      - 'tests/test_qb_receiver_pair_efficiency_v1.py'
+      - '.github/workflows/research-qb-receiver-pair-efficiency-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest scipy pyarrow
+      - name: Run frozen safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest -q tests/test_qb_receiver_pair_efficiency_v1.py
+      - name: Evaluate frozen pair-efficiency signal
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/qb_pair_eff
+          mkdir -p /tmp/qb_pair_eff
+          python scripts/research/evaluate_qb_receiver_pair_efficiency_v1.py --out-dir /tmp/qb_pair_eff
+      - name: Verify boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('/tmp/qb_pair_eff/qb_receiver_pair_efficiency_result.json').read_text())
+          assert p['models_fit']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['outcomes_2026_read']==0,p
+          assert p['production_changed'] is False,p
+          assert p['target_seasons']==[2023,2024,2025],p
+          assert p['disposition'] in {
+            'QB_RECEIVER_PAIR_EFFICIENCY_SIGNAL_CONFIRMED',
+            'QB_RECEIVER_PAIR_EFFICIENCY_SIGNAL_CLOSED',
+          },p
+          print('QB_RECEIVER_PAIR_EFFICIENCY_V1_CONTRACT_CERTIFIED')
+          PY
+      - name: Display result
+        if: always()
+        run: cat /tmp/qb_pair_eff/qb_receiver_pair_efficiency_result.json || true
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-receiver-pair-efficiency-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/qb_pair_eff/**
