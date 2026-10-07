@@ -1,0 +1,100 @@
+name: Research Player Individualization Audit V1
+
+on:
+  push:
+    branches:
+      - research-player-individualization-audit-v1
+    paths:
+      - 'docs/research/PLAYER_INDIVIDUALIZATION_AUDIT_V1_PLAN.md'
+      - 'scripts/research/audit_player_individualization_v1.py'
+      - 'tests/test_player_individualization_v1.py'
+      - '.github/workflows/research-player-individualization-audit-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyarrow
+      - name: Run audit safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest -q tests/test_player_individualization_v1.py
+      - name: Prepare authority inputs
+        run: |
+          rm -rf /tmp/player_individualization
+          mkdir -p /tmp/player_individualization/logs /tmp/player_individualization/baseline /tmp/player_individualization/result
+      - name: Download preserved player history
+        uses: actions/download-artifact@v4
+        with:
+          name: football-matchup-integration-candidate-inputs-37527077327
+          path: /tmp/player_individualization/logs
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37527077327
+      - name: Download corrected football baseline
+        uses: actions/download-artifact@v4
+        with:
+          name: football-matchup-integration-candidate-corrected-inputs-37531333007
+          path: /tmp/player_individualization/baseline
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37531333007
+      - name: Resolve authorities
+        run: |
+          set -euo pipefail
+          LOGS="$(find /tmp/player_individualization/logs -type f -name 'player_game_logs_history.csv' -print -quit)"
+          BASE="$(find /tmp/player_individualization/baseline -type f -name 'composite_projection_trace_2022_2025.csv' -print -quit)"
+          test -n "$LOGS" && test -s "$LOGS"
+          test -n "$BASE" && test -s "$BASE"
+          echo "LOGS=$LOGS" >> "$GITHUB_ENV"
+          echo "BASE=$BASE" >> "$GITHUB_ENV"
+      - name: Run frozen player-individualization audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/audit_player_individualization_v1.py             --player-logs "$LOGS"             --baseline "$BASE"             --out-dir /tmp/player_individualization/result
+      - name: Verify diagnostic boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('/tmp/player_individualization/result/player_individualization_result.json').read_text())
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['candidate_models_fit']==0,p
+          assert p['production_changed'] is False,p
+          assert p['outcomes_2026_read']==0,p
+          assert p['disposition'] in {'PLAYER_INDIVIDUALIZATION_SUFFICIENT','PLAYER_INDIVIDUALIZATION_PARTIAL','PLAYER_INDIVIDUALIZATION_WEAK'},p
+          print('PLAYER_INDIVIDUALIZATION_AUDIT_CONTRACT_CERTIFIED')
+          PY
+      - name: Display result
+        if: always()
+        run: |
+          cat /tmp/player_individualization/result/player_individualization_result.json || true
+          cat /tmp/player_individualization/result/player_individualization_mechanical_thresholds.csv || true
+          cat /tmp/player_individualization/result/player_individualization_error_summary.csv || true
+      - name: Upload audit result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-individualization-audit-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/player_individualization/result/**
