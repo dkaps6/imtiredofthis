@@ -140,7 +140,7 @@ def test_week1_rb_combo_uses_p3_path_then_combo_ensemble(monkeypatch):
         },
     ])
 
-    monkeypatch.setattr(replay, "rb_context_teams", lambda ctx: {"IND"})
+    monkeypatch.setattr(replay, "_rb_p3_player_in_scope", lambda row, ctx: True)
     monkeypatch.setattr(
         replay,
         "lookup_rb_projection",
@@ -202,3 +202,33 @@ def test_rostered_player_missing_weekly_stats_is_verified_zero():
     out = replay._attach_actuals(frame, player_logs=logs, pregame_universe=universe, week=1)
     assert out.iloc[0]["actual"] == 0.0
     assert out.iloc[0]["actual_source"] == "PREGAME_ROSTER_NO_WEEKLY_STAT_ROW_ZERO"
+
+
+def test_week1_p3_scope_is_exact_player_identity_not_team_only():
+    key = replay.player_name_key("Ameer Abdullah", strip_suffix=True)
+    context = pd.DataFrame([{
+        "season": 2026,
+        "week": 1,
+        "team": "JAX",
+        "player_base_key": replay.player_name_key("Bhayshul Tuten", strip_suffix=True),
+    }])
+    row = pd.Series({
+        "season": 2026,
+        "week": 1,
+        "team": "JAX",
+        "player": "Ameer Abdullah",
+    })
+    assert key != context.iloc[0]["player_base_key"]
+    assert replay._rb_p3_player_in_scope(row, context) is False
+
+    context2 = pd.concat([
+        context,
+        pd.DataFrame([{
+            "season": 2026,
+            "week": 1,
+            "team": "JAX",
+            "player_base_key": key,
+        }]),
+    ], ignore_index=True)
+    assert replay._rb_p3_player_in_scope(row, context2) is True
+\n
