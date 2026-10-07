@@ -1,0 +1,92 @@
+name: Research RB Player State Allocation Shadow V1 Lock
+
+on:
+  push:
+    branches:
+      - research-rb-player-state-allocation-shadow-v1
+    paths:
+      - 'docs/research/RB_PLAYER_STATE_ALLOCATION_SHADOW_V1_CONTRACT.md'
+      - 'scripts/research/lock_rb_player_state_allocation_shadow_v1.py'
+      - 'tests/test_rb_player_state_allocation_shadow_v1.py'
+      - '.github/workflows/research-rb-player-state-allocation-shadow-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  lock:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+      - name: Run frozen lock safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest -q tests/test_rb_player_state_allocation_shadow_v1.py
+      - name: Download frozen Week-5 player-state parent
+        uses: actions/download-artifact@v4
+        with:
+          name: player-state-live-coverage-v1-37560311001
+          path: /tmp/player_state_parent
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37560311001
+      - name: Resolve frozen parent rows
+        run: |
+          set -euo pipefail
+          PARENT="$(find /tmp/player_state_parent -type f -name 'player_state_live_week5_rows.csv' -print -quit)"
+          test -n "$PARENT" && test -s "$PARENT"
+          echo "PARENT=$PARENT" >> "$GITHUB_ENV"
+      - name: Create immutable Week-5 shadow lock
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/rb_player_state_lock
+          mkdir -p /tmp/rb_player_state_lock
+          python scripts/research/lock_rb_player_state_allocation_shadow_v1.py             --parent-rows "$PARENT"             --out-dir /tmp/rb_player_state_lock
+      - name: Verify pregame boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('/tmp/rb_player_state_lock/rb_player_state_allocation_week5_lock.json').read_text())
+          assert p['season']==2026 and p['week']==5,p
+          assert p['status']=='WEEK5_PREGAME_LOCK_FROZEN',p
+          assert p['week5_outcomes_read']==0,p
+          assert p['sportsbook_inputs_used']==0,p
+          assert p['parameters_fit']==0,p
+          assert p['production_changed'] is False,p
+          assert p['locked_teams']>=20,p
+          assert p['locked_players']>=40,p
+          assert p['max_team_control_sum_gap']<=1e-12,p
+          assert p['max_team_shadow_sum_gap']<=1e-12,p
+          print('RB_PLAYER_STATE_ALLOCATION_WEEK5_LOCK_CERTIFIED')
+          PY
+      - name: Display lock
+        if: always()
+        run: |
+          cat /tmp/rb_player_state_lock/rb_player_state_allocation_week5_lock.json || true
+          echo
+          cat /tmp/rb_player_state_lock/rb_player_state_allocation_week5_team_summary.csv || true
+      - name: Upload immutable lock
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-player-state-allocation-shadow-v1-week5-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/rb_player_state_lock/**
