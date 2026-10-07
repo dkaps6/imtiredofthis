@@ -141,12 +141,18 @@ def passer_proxy(pbp,team_id,season,week):
     c=c.sort_values(["attempts","passer_id"],ascending=[False,True])
     return str(c.iloc[0]["passer_id"])
 
-def receiver_history_window(pbp,receiver_id,season,week,n=8):
-    q=pbp.loc[
-        pbp["target_event"]
-        & pbp["receiver_id"].eq(receiver_id)
-        & chrono_before(pbp,season,week)
-    ].copy()
+def build_receiver_event_index(pbp):
+    x=pbp.loc[pbp["target_event"]].copy()
+    out={}
+    for rid,g in x.groupby("receiver_id",sort=False):
+        out[str(rid)]=g.sort_values(["season","week","game_id"]).copy()
+    return out
+
+def receiver_history_window(receiver_events,receiver_id,season,week,n=8):
+    base=receiver_events.get(str(receiver_id))
+    if base is None or base.empty:
+        return pd.DataFrame()
+    q=base.loc[chrono_before(base,season,week)].copy()
     if q.empty: return q
     games=(q[["season","week","game_id"]].drop_duplicates()
            .sort_values(["season","week","game_id"]).tail(n))
@@ -158,6 +164,7 @@ def receiver_history_window(pbp,receiver_id,season,week,n=8):
     return q.loc[mask].copy()
 
 def build_rows(pbp,positions):
+    receiver_events=build_receiver_event_index(pbp)
     target=pbp.loc[
         pbp["target_event"]
         & pbp["season"].isin(TARGET_SEASONS)
@@ -176,7 +183,7 @@ def build_rows(pbp,positions):
         proxy=proxy_cache[key]
         if not proxy: continue
 
-        h=receiver_history_window(pbp,r.receiver_id,int(r.season),int(r.week),8)
+        h=receiver_history_window(receiver_events,r.receiver_id,int(r.season),int(r.week),8)
         if h.empty: continue
         recv_targets=int(len(h))
         recv_yards=float(h["_yards"].sum())
