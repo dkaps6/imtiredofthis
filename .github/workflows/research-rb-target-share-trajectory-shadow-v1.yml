@@ -1,0 +1,137 @@
+name: Research RB Target Share Trajectory Shadow V1 Lock
+
+on:
+  push:
+    branches:
+      - research-rb-target-share-trajectory-shadow-v1
+    paths:
+      - 'docs/research/RB_TARGET_SHARE_TRAJECTORY_SHADOW_V1_CONTRACT.md'
+      - 'scripts/research/lock_rb_target_share_trajectory_shadow_v1.py'
+      - 'tests/test_rb_target_share_trajectory_shadow_v1.py'
+      - '.github/workflows/research-rb-target-share-trajectory-shadow-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  lock:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest scipy pyarrow pyyaml
+
+      - name: Run frozen RB target-share safeguards
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_rb_target_share_trajectory_shadow_v1.py
+
+      - name: Build Week-5 public pregame inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/rbtargettraj
+          mkdir -p /tmp/rbtargettraj/hist /tmp/rbtargettraj/lock
+          python scripts/backtest/build_historical_inputs.py             --season 2026             --prior-season 2025             --weeks 5             --out-dir /tmp/rbtargettraj/hist
+          python scripts/backtest/historical_player_logs.py             --seasons 2025,2026             --schedule /tmp/rbtargettraj/hist/schedule_history.csv             --out /tmp/rbtargettraj/player_game_logs_history.csv
+
+      - name: Create immutable Week-5 RB target-share lock
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/lock_rb_target_share_trajectory_shadow_v1.py             --player-logs /tmp/rbtargettraj/player_game_logs_history.csv             --team-weekly /tmp/rbtargettraj/hist/team_weekly_history.csv             --schedule /tmp/rbtargettraj/hist/schedule_history.csv             --universe /tmp/rbtargettraj/hist/pregame_universe/2026_week_05.csv             --out-dir /tmp/rbtargettraj/lock
+
+      - name: Certify prospective boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+
+          root=Path('/tmp/rbtargettraj/lock')
+          required=[
+              'rb_target_share_trajectory_shadow_week5_lock.csv',
+              'rb_target_share_trajectory_shadow_week5_rooms.csv',
+              'rb_target_share_trajectory_shadow_week5_lock.json',
+          ]
+          for name in required:
+              p=root/name
+              assert p.exists() and p.stat().st_size>0, name
+
+          s=json.loads((root/'rb_target_share_trajectory_shadow_week5_lock.json').read_text())
+          rows=pd.read_csv(root/'rb_target_share_trajectory_shadow_week5_lock.csv',low_memory=False)
+          rooms=pd.read_csv(root/'rb_target_share_trajectory_shadow_week5_rooms.csv',low_memory=False)
+
+          assert s['status']=='WEEK5_PREGAME_RB_TARGET_SHARE_LOCK_FROZEN',s
+          assert s['version']=='RB_TARGET_SHARE_TRAJECTORY_SHADOW_V1',s
+          assert s['season']==2026 and s['week']==5,s
+          assert s['same_or_future_feature_violations']==0,s
+          assert s['sportsbook_inputs_used']==0,s
+          assert s['week5_outcomes_read']==0,s
+          assert s['parameters_fit']==0,s
+          assert s['production_changed'] is False,s
+          assert s['r22_applicable_week5'] is False,s
+          assert s['r26_applicable_week5'] is False,s
+          assert s['max_rb_room_pool_gap']<=1e-12,s
+          assert s['max_team_modeled_target_mass_gap']<=1e-12,s
+          assert s['max_non_rb_entitlement_delta']<=1e-12,s
+          assert s['locked_players']>=50,s
+          assert s['locked_teams']>=25,s
+          assert s['trajectory_available_players']>0,s
+          assert s['changed_players']>0,s
+          assert s['changed_rooms']>0,s
+
+          assert set(rows['position_family'].astype(str)) == {'RB'}
+          assert rows['week'].eq(5).all()
+          assert pd.to_numeric(rows['trajectory_feature_max_week'],errors='coerce').dropna().lt(5).all()
+          assert rooms['room'].eq('RB_FB').all()
+          assert pd.to_numeric(rooms['pool_gap'],errors='coerce').max()<=1e-12
+
+          print(json.dumps({
+              'locked_players':s['locked_players'],
+              'locked_teams':s['locked_teams'],
+              'trajectory_available_players':s['trajectory_available_players'],
+              'trajectory_available_fraction':s['trajectory_available_fraction'],
+              'stable_id_coverage':s['stable_id_coverage'],
+              'changed_players':s['changed_players'],
+              'changed_rooms':s['changed_rooms'],
+              'median_abs_player_change':s['median_abs_player_change'],
+              'max_abs_player_change':s['max_abs_player_change'],
+              'row_csv_digest':s['row_csv_digest'],
+          },indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/utils/audit_repo.py --strict
+
+      - name: Display lock
+        if: always()
+        run: |
+          cat /tmp/rbtargettraj/lock/rb_target_share_trajectory_shadow_week5_lock.json || true
+
+      - name: Upload immutable lock
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rb-target-share-trajectory-shadow-v1-week5-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/rbtargettraj/lock/**
