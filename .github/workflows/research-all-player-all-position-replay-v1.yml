@@ -1,0 +1,195 @@
+name: Research All Player All Position Replay V1
+
+on:
+  push:
+    branches:
+      - research-all-player-all-position-replay-v1
+    paths:
+      - 'docs/research/ALL_PLAYER_ALL_POSITION_REPLAY_V1_PLAN.md'
+      - 'scripts/research/run_all_player_all_position_replay_v1.py'
+      - 'tests/test_all_player_all_position_replay_v1.py'
+      - '.github/workflows/research-all-player-all-position-replay-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyarrow pyyaml
+
+      - name: Run replay contract tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_all_player_all_position_replay_v1.py
+          pytest -q tests/test_player_target_depth_distribution_shadow_v1.py
+
+      - name: Build leakage-safe Weeks 1-4 historical football inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/all_player_replay
+          mkdir -p /tmp/all_player_replay/input /tmp/all_player_replay/live /tmp/all_player_replay/output
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.backtest.historical_inputs import build_all_historical_inputs
+          out = build_all_historical_inputs(
+              season=2026,
+              prior_season=2025,
+              out_dir=Path('/tmp/all_player_replay/input'),
+              weeks=range(1, 5),
+          )
+          print(out)
+          PY
+          python scripts/backtest/historical_player_logs.py             --seasons 2025,2026             --schedule /tmp/all_player_replay/input/schedule_history.csv             --out /tmp/all_player_replay/input/player_game_logs_history.csv
+
+      - name: Recover frozen Week-1 P3 player means from certified history
+        run: |
+          mkdir -p /tmp/all_player_replay/rb_week1
+          gh run download 35619889214             --repo "${GITHUB_REPOSITORY}"             --name "rb-pd2-completed-2026-week1-history-v1"             --dir /tmp/all_player_replay/rb_week1
+          test -s /tmp/all_player_replay/rb_week1/rb_pd2_completed_2026_week1_history.csv
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+
+          src = Path('/tmp/all_player_replay/rb_week1/rb_pd2_completed_2026_week1_history.csv')
+          out = Path('/tmp/all_player_replay/rb_week1/rb_rush_synthesis_context.csv')
+          x = pd.read_csv(src, low_memory=False)
+          required = {
+              'season','week','player','team','opponent','projection_mean',
+              'pregame_lineage_certified','week1_p3_stack1_parity_pass',
+          }
+          missing = required - set(x.columns)
+          if missing:
+              raise SystemExit(f'certified Week-1 history missing columns: {sorted(missing)}')
+          if len(x) != 107:
+              raise SystemExit(f'certified Week-1 history row drift: {len(x)} != 107')
+          if not x['pregame_lineage_certified'].astype(bool).all():
+              raise SystemExit('Week-1 certified history lineage flag failed')
+          if not x['week1_p3_stack1_parity_pass'].astype(bool).all():
+              raise SystemExit('Week-1 P3/STACK1 parity flag failed')
+
+          ctx = pd.DataFrame({
+              'season': x['season'],
+              'week': x['week'],
+              'player': x['player'],
+              'team': x['team'],
+              'opponent': x['opponent'],
+              'rb_synthesis_proj': pd.to_numeric(x['projection_mean'], errors='raise'),
+              'rb_synthesis_route': 'WEEK1_STACK_OVERRIDE',
+              'rb_synthesis_version': 'RB_P3_SYNTHESIS_V1',
+              'rb_synthesis_applied': 1,
+              'football_only_no_odds': 1,
+              'sportsbook_inputs_used': 0,
+          })
+          ctx.to_csv(out, index=False)
+          print({'recovered_week1_p3_rows': len(ctx), 'teams': ctx.team.nunique()})
+          PY
+
+      - name: Gather preserved live-board evidence for downstream overlap only
+        run: |
+          cp data/market_track_record/graded/2026_wk01_wk02_graded.csv /tmp/all_player_replay/live/ || true
+          mkdir -p /tmp/all_player_replay/live/w1_w2 /tmp/all_player_replay/live/w1_w3_postmortem /tmp/all_player_replay/live/w4_postmortem
+          gh run download 35740684289             --repo "${GITHUB_REPOSITORY}"             --name "backtest_weeks_1_2_graded"             --dir /tmp/all_player_replay/live/w1_w2
+          gh run download 36622608145             --repo "${GITHUB_REPOSITORY}"             --name "weeks1-3-postmortem-diagnostics-v1-36622608145"             --dir /tmp/all_player_replay/live/w1_w3_postmortem
+          gh run download 37485600879             --repo "${GITHUB_REPOSITORY}"             --name "week4-postmortem-backtest-v1-37485600879"             --dir /tmp/all_player_replay/live/w4_postmortem
+          find /tmp/all_player_replay/live -type f | sort
+
+      - name: Run frozen individual-player Weeks 1-4 replay
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/run_all_player_all_position_replay_v1.py             --player-logs /tmp/all_player_replay/input/player_game_logs_history.csv             --team-weekly /tmp/all_player_replay/input/team_weekly_history.csv             --schedule /tmp/all_player_replay/input/schedule_history.csv             --universe-dir /tmp/all_player_replay/input/pregame_universe             --rb-week1-context /tmp/all_player_replay/rb_week1/rb_rush_synthesis_context.csv             --live-board-root /tmp/all_player_replay/live             --iterations 5000             --out-dir /tmp/all_player_replay/output
+
+      - name: Certify replay boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+
+          root = Path('/tmp/all_player_replay/output')
+          required = [
+              'all_players_point_scoreboard.csv',
+              'wr_te_rec_yards_distribution_scoreboard.csv',
+              'feature_eligibility_audit.csv',
+              'live_board_overlap_audit.csv',
+              'replay_summary.json',
+          ]
+          for name in required:
+              p = root / name
+              assert p.exists() and p.stat().st_size > 0, name
+
+          s = json.loads((root / 'replay_summary.json').read_text())
+          p = pd.read_csv(root / 'all_players_point_scoreboard.csv')
+          d = pd.read_csv(root / 'wr_te_rec_yards_distribution_scoreboard.csv')
+          f = pd.read_csv(root / 'feature_eligibility_audit.csv')
+
+          assert s['version'] == 'ALL_PLAYER_ALL_POSITION_REPLAY_V1', s
+          assert s['season'] == 2026 and s['weeks'] == [1,2,3,4], s
+          assert s['paid_odds_api_used'] is False, s
+          assert s['sportsbook_inputs_used_upstream'] is False, s
+          assert s['automatic_promotion'] is False, s
+          assert s['trajectory_eligible_rows'] == 0, s
+          assert s['rb_week5_room_shadow_rows'] == 0, s
+          assert s['target_depth_mean_invariance_max_abs_gap'] <= 1e-10, s
+          assert set(p['position_family'].unique()).issuperset({'QB','RB','WR','TE'}), p.position_family.value_counts().to_dict()
+          assert set(p['week'].unique()) == {1,2,3,4}, p.week.value_counts().to_dict()
+          assert not p['sportsbook_inputs_used_upstream'].astype(bool).any()
+          assert not p['rb_week5_room_allocation_shadow_applied'].astype(bool).any()
+          assert (f['target_share_trajectory_status'] == 'FROZEN_FEATURE_NOT_YET_ELIGIBLE').all()
+          assert not f['target_share_trajectory_eligible'].astype(bool).any()
+          assert not f['same_or_future_feature_violation'].astype(bool).any()
+          assert d['mean_gap_shadow_minus_baseline'].abs().max() <= 1e-10
+          assert set(d['depth_scale_quantile'].dropna().unique()).issubset(
+              {'UNAVAILABLE','Q1_LOW','Q2','Q3','Q4_HIGH'}
+          )
+          print(json.dumps({
+              'point_rows': len(p),
+              'unique_player_weeks': s['unique_player_weeks'],
+              'position_counts': s['position_counts'],
+              'target_depth_feature_available_rows': s['target_depth_feature_available_rows'],
+              'live_overlap_rows': s['live_overlap_rows'],
+          }, indent=2, sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/utils/audit_repo.py --strict
+
+      - name: Display replay summary
+        if: always()
+        run: |
+          cat /tmp/all_player_replay/output/replay_summary.json || true
+
+      - name: Upload replay evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-player-all-position-replay-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/all_player_replay/output/**
