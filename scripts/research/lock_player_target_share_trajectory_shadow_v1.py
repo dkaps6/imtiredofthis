@@ -259,6 +259,7 @@ def main():
     enriched,violations,idcov=add_trajectory(final)
     lock,room_audit,team_gap=apply_shadow(enriched)
     target=lock.loc[lock["position_family"].isin(["WR","TE"])].copy()
+    target_idcov=float(target["identity_ok"].mean()) if len(target) else 0.0
     payload=canonical_lock_bytes(target)
     digest="sha256:"+hashlib.sha256(payload).hexdigest()
 
@@ -271,7 +272,8 @@ def main():
       "locked_te":int(target["position_family"].eq("TE").sum()),
       "trajectory_available_players":int(target["trajectory_available"].sum()),
       "trajectory_available_fraction":float(target["trajectory_available"].mean()) if len(target) else 0.0,
-      "stable_id_coverage":idcov,
+      "stable_id_coverage":target_idcov,
+      "full_universe_stable_id_coverage":idcov,
       "changed_players":changed,
       "changed_rooms":int(room_audit["max_player_abs_change"].gt(1e-12).sum()) if len(room_audit) else 0,
       "median_abs_player_change":float(target["entitlement_delta"].abs().median()) if len(target) else 0.0,
