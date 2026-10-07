@@ -252,6 +252,9 @@ def _apply_qb_synthesis(
         raise RuntimeError("all-player replay produced zero QB pass_yards rows")
 
     q = out.loc[qb_mask].copy()
+    # add_history_features resets its row index. Carry the source row explicitly
+    # so every synthesized QB result is written back to the exact player-game.
+    q["_source_index"] = q.index.astype(int)
     q["base_proj"] = pd.to_numeric(q["ensemble_proj"], errors="coerce")
     comps = q[["mc_proj", "ml_proj", "state_proj"]].apply(pd.to_numeric, errors="coerce")
     q["component_sd"] = comps.std(axis=1, skipna=True)
@@ -274,7 +277,7 @@ def _apply_qb_synthesis(
     for idx, r in enriched.iterrows():
         features = {name: r.get(name, np.nan) for name in feature_names}
         pred, corr, version = predict_qb_correction(features, artifact=artifact)
-        src_idx = q.index[idx] if idx not in q.index else idx
+        src_idx = int(r["_source_index"])
         out.loc[src_idx, "projection_mean"] = float(pred)
         out.loc[src_idx, "qb_synthesis_applied"] = True
         out.loc[src_idx, "qb_synthesis_version"] = str(version)
@@ -331,33 +334,54 @@ def _apply_rb_authorities(
             out.loc[idx, "projection_mean"] = float(meta["target_mean"])
             out.loc[idx, "rb_rush_rec_v2_applied"] = True
 
-    # Week-1 rush+rec P3 conservation: promoted rush mean + the standalone
-    # receiving mean. This is the exact mean identity enforced by production's
-    # Week-1 pathwise conservation adapter.
+    # Week-1 rush+rec exact production ordering:
+    #   1) scale the raw rush MC path to the frozen P3 rush mean;
+    #   2) add the *raw* receiving MC path;
+    #   3) treat that conserved path as the combo MC component;
+    #   4) apply the frozen rush_rec_yards ensemble weights.
+    # run_pricing_v2 then mean-aligns that conserved path to this ensemble mean.
     week1_combo = out.loc[
         out["week"].eq(1)
         & out["position_family"].isin({"RB", "FB"})
         & out["market"].eq("rush_rec_yards")
     ].copy()
-    if not week1_combo.empty:
-        lookup_mean = {
-            (int(r.week), str(r.team), str(r.player_clean_key), str(r.market)): float(r.projection_mean)
-            for r in out.itertuples(index=False)
-        }
-        for idx, row in week1_combo.iterrows():
-            rush = lookup_mean.get((1, str(row["team"]), str(row["player_clean_key"]), "rush_yards"))
-            rec = lookup_mean.get((1, str(row["team"]), str(row["player_clean_key"]), "rec_yards"))
-            rush_row = out.loc[
-                out["week"].eq(1)
-                & out["team"].eq(row["team"])
-                & out["player_clean_key"].eq(row["player_clean_key"])
-                & out["market"].eq("rush_yards")
-            ]
-            p3 = bool(rush_row["rb_p3_applied"].iloc[0]) if len(rush_row) == 1 else False
-            if p3 and rush is not None and rec is not None:
-                out.loc[idx, "projection_mean"] = float(rush + rec)
-                out.loc[idx, "rb_p3_applied"] = True
-                out.loc[idx, "rb_p3_route"] = "WEEK1_P3_RUSH_PLUS_REC_CONSERVED"
+    for idx, row in week1_combo.iterrows():
+        if str(row.get("team")) not in p3_teams:
+            continue
+        rush = lookup(sims, row, "rush_yards")
+        rec = lookup(sims, row, "rec_yards")
+        if rush is None or rec is None:
+            raise RuntimeError(
+                f"Week-1 P3 rush+rec missing component draws player={row.get('player')} team={row.get('team')}"
+            )
+        rush = np.asarray(rush, dtype=float)
+        rec = np.asarray(rec, dtype=float)
+        if len(rush) != len(rec) or not np.isfinite(rush).all() or not np.isfinite(rec).all():
+            raise RuntimeError("Week-1 P3 rush+rec component arrays are invalid")
+        meta = lookup_rb_projection(row, rb_context)
+        p3_mean = float(meta["rb_synthesis_proj"])
+        raw_rush_mean = float(np.mean(rush))
+        if raw_rush_mean > 0:
+            scaled_rush = rush * (p3_mean / raw_rush_mean)
+        elif abs(p3_mean) <= SCORE_TOL:
+            scaled_rush = np.zeros_like(rush)
+        else:
+            raise RuntimeError("cannot align positive Week-1 P3 rush mean from zero raw rush distribution")
+        conserved = scaled_rush + rec
+        combo_mc = float(np.mean(conserved))
+        component = pd.DataFrame([{
+            "market": "rush_rec_yards",
+            "mc_proj": combo_mc,
+            "ml_proj": row.get("ml_proj"),
+            "state_proj": row.get("state_proj"),
+        }])
+        ens = apply_ensemble(component, weights=weights).iloc[0]
+        out.loc[idx, "mc_proj"] = combo_mc
+        out.loc[idx, "ensemble_proj"] = float(ens["ensemble_proj"])
+        out.loc[idx, "ensemble_status"] = str(ens["ensemble_status"])
+        out.loc[idx, "projection_mean"] = float(ens["ensemble_proj"])
+        out.loc[idx, "rb_p3_applied"] = True
+        out.loc[idx, "rb_p3_route"] = "WEEK1_P3_PATHWISE_CONSERVATION_THEN_COMBO_ENSEMBLE"
 
     return out
 
@@ -602,6 +626,44 @@ def _build_distribution_rows(
     return pd.DataFrame(dist_rows), pd.DataFrame(feat_rows)
 
 
+def _add_depth_scale_quantiles(dist: pd.DataFrame) -> pd.DataFrame:
+    """Attach pooled diagnostic quartiles to feature-available depth scales.
+
+    This is reporting only: quartile membership is never used to change a
+    projection, distribution, threshold, or promotion decision.
+    """
+    out = dist.copy()
+    out["depth_scale_quantile"] = "UNAVAILABLE"
+    available = out["feature_available"].fillna(False).astype(bool)
+    if available.any():
+        ranks = out.loc[available, "depth_distribution_scale"].rank(method="first", pct=True)
+        labels = pd.cut(
+            ranks,
+            bins=[0.0, 0.25, 0.50, 0.75, 1.0],
+            labels=["Q1_LOW", "Q2", "Q3", "Q4_HIGH"],
+            include_lowest=True,
+        )
+        out.loc[available, "depth_scale_quantile"] = labels.astype(str).to_numpy()
+    return out
+
+
+def _depth_quantile_summary(dist: pd.DataFrame) -> list[dict]:
+    usable = dist.loc[dist["feature_available"].fillna(False).astype(bool)].copy()
+    rows = []
+    for label, g in usable.groupby("depth_scale_quantile", sort=False):
+        rows.append({
+            "depth_scale_quantile": str(label),
+            "rows": int(len(g)),
+            "scale_min": float(g["depth_distribution_scale"].min()),
+            "scale_max": float(g["depth_distribution_scale"].max()),
+            "mean_absolute_point_error": float(g["absolute_point_error"].mean()),
+            "baseline_crps_mean": float(g["baseline_crps"].mean()),
+            "shadow_crps_mean": float(g["shadow_crps"].mean()),
+            "crps_mean_improvement": float(g["crps_improvement"].mean()),
+        })
+    return rows
+
+
 def _score_point_rows(point: pd.DataFrame) -> pd.DataFrame:
     x = point.copy()
     x["error"] = pd.to_numeric(x["projection_mean"], errors="coerce") - pd.to_numeric(x["actual"], errors="coerce")
@@ -810,6 +872,7 @@ def run_replay(
     events = _target_events()
     identity = _identity_history(player_logs)
     dist, feature = _build_distribution_rows(point, sims_by_week_game, events=events, identity=identity)
+    dist = _add_depth_scale_quantiles(dist)
     if not feature["target_share_trajectory_eligible"].eq(False).all():
         raise RuntimeError("trajectory illegally became eligible in Weeks 1-4")
     if feature["same_or_future_feature_violation"].any():
@@ -853,6 +916,14 @@ def run_replay(
         "point_rows": int(len(point)),
         "unique_player_weeks": int(point[["week", "team", "player_clean_key"]].drop_duplicates().shape[0]),
         "position_counts": point.groupby("position_family").size().astype(int).to_dict(),
+        "unique_player_weeks_by_position": (
+            point[["week", "team", "player_clean_key", "position_family"]]
+            .drop_duplicates()
+            .groupby("position_family")
+            .size()
+            .astype(int)
+            .to_dict()
+        ),
         "market_counts": point.groupby("market").size().astype(int).to_dict(),
         "point_summary": _group_point_summary(point),
         "wr_te_distribution_rows": int(len(dist)),
@@ -862,6 +933,7 @@ def run_replay(
         "target_depth_crps_baseline_mean": float(dist["baseline_crps"].mean()),
         "target_depth_crps_shadow_mean": float(dist["shadow_crps"].mean()),
         "target_depth_crps_mean_improvement": float(dist["crps_improvement"].mean()),
+        "target_depth_scale_quantile_summary": _depth_quantile_summary(dist),
         "trajectory_eligible_rows": int(feature["target_share_trajectory_eligible"].sum()),
         "trajectory_status": "FROZEN_FEATURE_NOT_YET_ELIGIBLE",
         "rb_week5_room_shadow_rows": int(point["rb_week5_room_allocation_shadow_applied"].sum()),
