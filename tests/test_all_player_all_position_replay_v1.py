@@ -231,4 +231,3 @@ def test_week1_p3_scope_is_exact_player_identity_not_team_only():
         }]),
     ], ignore_index=True)
     assert replay._rb_p3_player_in_scope(row, context2) is True
-\n
