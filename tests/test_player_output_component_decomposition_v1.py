@@ -153,4 +153,3 @@ def test_pbp_target_authority_repairs_impossible_weekly_zero_target_case():
     assert r.actual_opportunity_source=="COMPLETED_GAME_PBP_TARGETS"
     assert bool(r.actual_opportunity_discrepancy)
     assert r.actual_efficiency==pytest.approx(80.0/7.0)
-\n
