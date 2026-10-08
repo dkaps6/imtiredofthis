@@ -135,7 +135,8 @@ def restore(source_root: Path, source_run_id: int, source_artifact_id: int) -> d
             continue
         if pd.isna(src_minutes) or float(src_minutes) < MIN_SOURCE_MINUTES:
             continue
-        if str(src["certification_state"]) != "NOT_YET_REQUIRED":
+        source_state = str(src["certification_state"])
+        if source_state not in {"NOT_YET_REQUIRED", LOCK_STATE}:
             continue
         if bool(src["official_required"]):
             continue
