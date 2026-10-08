@@ -123,3 +123,34 @@ def test_nonzero_output_with_zero_actual_opportunity_fails_closed():
 def test_string_false_is_not_truthy():
     assert not d._truthy(pd.Series(["False","false","0","no"])).any()
     assert d._truthy(pd.Series(["True"])).all()
+
+
+def test_pbp_target_authority_repairs_impossible_weekly_zero_target_case():
+    points=pd.DataFrame([{
+        "season":2026,"week":1,"event_id":"G1","team":"SF","player":"Receiver A",
+        "player_clean_key":"receivera","position_family":"WR","market":"rec_yards",
+        "projection_mean":30.0,"actual":80.0,"actual_opportunities":0.0,
+        "sportsbook_inputs_used_upstream":False,
+    }])
+    opp=pd.DataFrame([{
+        "season":2026,"week":1,"event_id":"G1","team":"SF","player":"Receiver A",
+        "player_clean_key":"receivera","position_family":"WR","opportunity_type":"targets",
+        "predicted_opportunities":4.0,"actual_opportunities":0.0,
+        "sportsbook_inputs_used_upstream":False,
+    }])
+    pbp=pd.DataFrame([{
+        "season":2026,"week":1,"team":"SF","player_clean_key":"receivera",
+        "receiver_player_id":"00-TEST","pbp_actual_targets":7.0,
+        "pbp_target_identity_resolved":True,
+    }])
+    rows=d.build_rows(
+        points,opp,pbp_targets=pbp,require_full_weeks=False
+    )
+    r=rows.iloc[0]
+    assert r.predicted_opportunities==pytest.approx(4.0)
+    assert r.artifact_actual_opportunities==pytest.approx(0.0)
+    assert r.actual_opportunities==pytest.approx(7.0)
+    assert r.actual_opportunity_source=="COMPLETED_GAME_PBP_TARGETS"
+    assert bool(r.actual_opportunity_discrepancy)
+    assert r.actual_efficiency==pytest.approx(80.0/7.0)
+\n
