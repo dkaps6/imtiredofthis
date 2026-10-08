@@ -99,17 +99,24 @@ A player with zero targets and zero receiving output may legitimately have no
 receiver identity in PBP because he never participated in a target event.
 Those rows receive source `FROZEN_ZERO_NO_RECEIVING_USAGE`.
 
-If either artifact targets or receiving output is nonzero, unresolved PBP
-identity fails closed. A receiver-name fallback may not resolve an ambiguous
-same-name multi-ID or multi-offense week.
+If either artifact targets or receiving output is nonzero and PBP receiver
+identity still cannot be resolved after the validated GSIS/roster path, the
+entire player-week is retained in evidence but excluded from oracle scoring as
+`GRADING_SOURCE_CONFLICT_UNRESOLVED_PBP_TARGET`.
+
+This is a fail-closed grading exclusion: the diagnostic may not substitute the
+artifact target count, infer a target count, or score any market from that
+player-week. A receiver-name fallback may not resolve an ambiguous same-name
+multi-ID or multi-offense week.
 
 For every resolved player with at least one PBP target, the PBP offense/team is
 also compared to the replay's projected team. If they differ, the entire
 player-week is marked `HISTORICAL_TEAM_IDENTITY_MISMATCH` and excluded from
 oracle scoring across all of that player's markets.
 
-This is an identity-validity exclusion, not an outcome-error filter. The
-mismatched rows and player-weeks must be reported.
+Both exclusion families are identity/grading-validity exclusions, not
+outcome-error filters. All excluded rows remain in the row-level evidence and
+the summary must report exclusion rows, unique player-weeks, and reason counts.
 
 Do not rebuild or refit predicted opportunity science in this diagnostic.
 
@@ -240,11 +247,13 @@ Fail closed if:
 - sportsbook fields are used upstream;
 - baseline algebraic reconstruction gap exceeds `1e-10`;
 - full actual identity gap exceeds `1e-10`;
-- a target-based row has nonzero receiving evidence with unresolved PBP
-  receiver identity;
-- a target-based row has nonzero receiving output with zero graded targets;
+- a target-based row with nonzero receiving evidence and unresolved PBP
+  receiver identity is silently scored instead of explicitly excluded;
+- an identity-valid target-based row has nonzero receiving output with zero
+  graded targets;
 - a resolved PBP receiver appears for multiple offenses in the same week;
-- a team-identity mismatch is silently scored rather than explicitly excluded;
+- any grading-source conflict or team-identity mismatch is silently scored
+  rather than explicitly excluded across the entire player-week;
 - a market maps to the wrong opportunity family;
 - any parameter is fit;
 - any target-game outcome is used to construct baseline predictions.
