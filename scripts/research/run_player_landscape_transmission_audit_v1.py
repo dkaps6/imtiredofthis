@@ -548,8 +548,22 @@ def _build_dynamic_trace(
 
     selected=[]
     for pos in ("QB","RB","WR","TE"):
-        q=p.loc[p["position_family"].eq(pos)].copy()
-        if q.empty: raise RuntimeError(f"Week5 dynamic trace has zero {pos}")
+        # Select only from players who actually own at least one required
+        # projected market for this position. This matters most for QB, where
+        # the pregame roster can contain backups but only the frozen
+        # projection-eligible QB receives pass_yards.
+        elig = market.loc[
+            market["position_family"].eq(pos)
+            & market["market"].isin(MARKETS[pos]),
+            ["team","player_clean_key"],
+        ].drop_duplicates()
+        q=p.loc[p["position_family"].eq(pos)].merge(
+            elig,on=["team","player_clean_key"],how="inner",validate="one_to_one"
+        )
+        if len(q) < 3:
+            raise RuntimeError(
+                f"Week5 dynamic trace has fewer than 3 projected {pos} players: {len(q)}"
+            )
         q=q.sort_values(["workload_score","team","player_clean_key"],kind="mergesort").reset_index(drop=True)
         picks=[
             ("LOW",0),
@@ -587,10 +601,19 @@ def _build_dynamic_trace(
         ),
     )
 
+    selected_identity_tiers=trace[
+        ["position_family","workload_tier","team","player_clean_key"]
+    ].drop_duplicates()
+    if len(selected_identity_tiers) != 12:
+        raise RuntimeError(
+            f"dynamic trace lost selected position/workload tiers: {len(selected_identity_tiers)} != 12"
+        )
+
     payload={
         "season":SEASON,"week":WEEK,
         "pregame_players":int(len(p)),
-        "trace_players":int(sp[["team","player_clean_key"]].drop_duplicates().shape[0]),
+        "trace_players":int(trace[["team","player_clean_key"]].drop_duplicates().shape[0]),
+        "trace_position_tiers":int(len(selected_identity_tiers)),
         "trace_rows":int(len(trace)),
         "positions":sorted(trace["position_family"].unique().tolist()),
         "te_r5p_audit_disposition":str(te_audit.get("disposition","")),
