@@ -30,6 +30,9 @@ def test_full_slate_live_pricing_requires_active_slate_odds_gate():
 def test_full_slate_preserved_replay_is_no_credit_and_noncurrent():
     text = Path('.github/workflows/full-slate.yml').read_text(encoding='utf-8')
     assert 'Restore pinned previously-paid sportsbook snapshot' in text
+    assert 'Restore acquisition-time pregame football locks for preserved replay' in text
+    assert 'scripts/operations/restore_preserved_pregame_game_lock_v1.py' in text
+    assert text.index('Restore acquisition-time pregame football locks for preserved replay') < text.index('Build PlayerForm from production-eligible current roles')
     assert 'REUSE_PAID_ODDS_RUN_ID' in text
     assert 'odds_api_refetched' in text
     assert 'PRESERVED_REPLAY' in text
