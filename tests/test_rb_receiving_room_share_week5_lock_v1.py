@@ -40,6 +40,7 @@ def test_build_candidate_normalizes_only_frozen_prior_room_state(monkeypatch):
         out["snap_source_max_week"]=4
         out["chronology_valid"]=True
         out["roster_source_week"]=5
+        out["identity_history_route"]="EXACT_GSIS_STRICT_PRIOR"
         return out
 
     monkeypatch.setattr(lock,"_attach_prior_room_share",fake_attach)
