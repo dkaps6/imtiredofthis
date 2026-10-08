@@ -18,11 +18,23 @@ It is not a fitted model and cannot promote any feature.
 
 ## Frozen population
 
-Use the ACT-only historical-availability population from:
+Use the exact **baseline opportunity rows** from the historical-availability
+parity artifact:
 - run `37687979574`
+- file `baseline_player_opportunity_rows.csv`
 
-Pair to the exact all-player point-scoreboard authority from:
+Pair them to the exact all-player point-scoreboard authority from:
 - run `37683439543`
+
+These two parents represent the same baseline replay state.
+
+Do **not** pair the ACT-only opportunity rows to the baseline point scoreboard.
+The availability-parity diagnostic changed six QB identities and reallocated
+active-player opportunity mass, so that would mix two different model variants.
+
+The ACT-only availability result remains a separate completed diagnostic. A
+future ACT-only final-point decomposition would require rebuilding final point
+projections on that exact ACT-only universe first.
 
 Weeks:
 - 2026 W1-W4
@@ -53,7 +65,7 @@ parity audit.
 - TE rec_yards -> targets
 - TE receptions -> targets
 
-Use the already-frozen ACT-only opportunity rows:
+Use the already-frozen replay-matched baseline opportunity rows:
 - `predicted_opportunities`
 - `actual_opportunities`
 
@@ -180,7 +192,8 @@ No threshold or promotion is implied by the label.
 
 Fail closed if:
 
-- ACT-only identity population cannot be paired exactly to final point rows;
+- replay-matched baseline opportunity identity population cannot be paired
+  exactly to final point rows;
 - Weeks outside 1-4 appear;
 - sportsbook fields are used upstream;
 - baseline algebraic reconstruction gap exceeds `1e-10`;
