@@ -187,96 +187,60 @@ def _name_key(value)->str:
     return "".join(ch.lower() for ch in str(value or "") if ch.isalnum())
 
 
-def _restrict_receiving_identity_population(w:pd.DataFrame)->pd.DataFrame:
-    pos_col=next((c for c in ("position","position_group","pos") if c in w.columns),None)
-    if pos_col is None:
-        return w.copy()
-    pos=w[pos_col].fillna("").astype(str).str.upper().str.strip()
-    receiving_pos={"RB","FB","HB","TB","WR","LWR","RWR","SWR","TE"}
-    return w.loc[pos.isin(receiving_pos)].copy()
+def _to_pandas(obj)->pd.DataFrame:
+    if isinstance(obj,pd.DataFrame):
+        return obj.copy()
+    if hasattr(obj,"to_pandas"):
+        return obj.to_pandas()
+    return pd.DataFrame(obj)
 
 
-def _receiver_identity_candidates(w:pd.DataFrame, counts:pd.DataFrame)->pd.DataFrame:
-    """Receiving-position identities plus any weekly ID observed as a PBP receiver."""
-    base=_restrict_receiving_identity_population(w)
-    pairs=counts[["week","receiver_player_id"]].drop_duplicates()
-    targeted=w.merge(
-        pairs,
-        on=["week","receiver_player_id"],
-        how="inner",
-        validate="many_to_one",
-    )
-    return pd.concat([base,targeted],ignore_index=True,sort=False).drop_duplicates()
-
-
-def _expand_counts_across_roster_aliases(
-    counts:pd.DataFrame,id_aliases:pd.DataFrame
+def _resolve_pbp_target_identity_rows(
+    target_events:pd.DataFrame,
+    roster_rows:pd.DataFrame,
 )->pd.DataFrame:
-    """Cross per-week PBP counts onto every validated alias of the stable GSIS ID."""
-    count_keys=["week","receiver_player_id"]
-    alias_keys=["receiver_player_id","roster_player_clean_key"]
-    if counts.duplicated(count_keys).any():
-        raise RuntimeError("duplicate PBP target counts before roster-alias expansion")
-    if id_aliases.duplicated(alias_keys).any():
-        raise RuntimeError("duplicate validated roster alias before PBP expansion")
+    """Resolve completed-game receiver IDs to canonical full-name aliases.
 
-    # receiver_player_id legitimately repeats on the left across target weeks
-    # and on the right across validated aliases. The intentional raw-key shape
-    # is therefore many-to-many. Scientific uniqueness is enforced immediately
-    # afterward at week + canonical player (one GSIS ID, one offense).
-    out=counts.merge(
-        id_aliases,
-        on="receiver_player_id",
-        how="left",
-        validate="many_to_many",
-    )
-    if out.duplicated(["week","receiver_player_id","roster_player_clean_key"]).any():
-        raise RuntimeError("duplicate week/GSIS/alias after PBP roster expansion")
-    return out
+    Receiver GSIS ID is primary. Weekly roster aliases are identity-only and may
+    expose multiple validated names for the same stable ID. PBP receiver-name
+    fallback is allowed only when a targeted ID has no eligible roster alias.
+    """
+    t=target_events.copy()
+    r=roster_rows.copy()
 
+    required_t={"week","team","receiver_player_id"}
+    missing_t=required_t-set(t.columns)
+    if missing_t:
+        raise RuntimeError(f"target events missing columns: {sorted(missing_t)}")
+    if "receiver_player_name" not in t.columns:
+        t["receiver_player_name"]=""
 
-def build_pbp_target_actuals()->pd.DataFrame:
-    """Completed-game PBP target counts mapped through validated roster GSIS identity."""
-    import nflreadpy as nfl
+    required_r={"week","receiver_player_id","player_clean_key"}
+    missing_r=required_r-set(r.columns)
+    if missing_r:
+        raise RuntimeError(f"roster identity rows missing columns: {sorted(missing_r)}")
 
-    pbp=nfl.load_pbp(seasons=[SEASON])
-    x=pbp.to_pandas() if hasattr(pbp,"to_pandas") else pd.DataFrame(pbp)
-    x.columns=[str(c).strip().lower() for c in x.columns]
-    required={"week","posteam","receiver_player_id","pass_attempt","sack"}
-    missing=required-set(x.columns)
-    if missing:
-        raise RuntimeError(f"PBP target authority missing columns: {sorted(missing)}")
-    if "receiver_player_name" not in x.columns:
-        x["receiver_player_name"]=""
-    if "season_type" in x.columns:
-        reg=x["season_type"].astype(str).str.upper().eq("REG")
-        if reg.any():
-            x=x.loc[reg].copy()
-    if "two_point_attempt" not in x.columns:
-        x["two_point_attempt"]=0.0
+    t["week"]=_num(t["week"])
+    t["team"]=t["team"].map(canon_team)
+    t["receiver_player_id"]=t["receiver_player_id"].fillna("").astype(str).str.strip()
+    t["pbp_receiver_name_key"]=t["receiver_player_name"].map(_name_key)
+    r["week"]=_num(r["week"])
+    r["receiver_player_id"]=r["receiver_player_id"].fillna("").astype(str).str.strip()
+    r["player_clean_key"]=r["player_clean_key"].fillna("").astype(str).str.strip()
 
-    x["week"]=_num(x["week"])
-    x=x.loc[x["week"].isin(WEEKS)].copy()
-    x["team"]=x["posteam"].map(canon_team)
-    x["receiver_player_id"]=x["receiver_player_id"].fillna("").astype(str).str.strip()
-    x["pbp_receiver_name_key"]=x["receiver_player_name"].map(_name_key)
-
-    target=(
-        _num(x["pass_attempt"]).fillna(0).eq(1)
-        & ~_num(x["sack"]).fillna(0).eq(1)
-        & ~_num(x["two_point_attempt"]).fillna(0).eq(1)
-        & x["receiver_player_id"].ne("")
-        & x["team"].astype(str).ne("")
-    )
-    ev=x.loc[
-        target,
-        ["week","team","receiver_player_id","pbp_receiver_name_key"],
+    t=t.loc[
+        t["week"].isin(WEEKS)
+        & t["team"].astype(str).ne("")
+        & t["receiver_player_id"].ne("")
     ].copy()
-    if ev.empty:
-        raise RuntimeError("PBP target authority produced zero target events")
+    r=r.loc[
+        r["week"].notna()
+        & r["receiver_player_id"].ne("")
+        & r["player_clean_key"].ne("")
+    ].copy()
 
     multi_team=(
-        ev.groupby(["week","receiver_player_id"])["team"]
+        t.groupby(["week","receiver_player_id"])["team"]
         .nunique()
         .reset_index(name="offense_count")
     )
@@ -286,123 +250,135 @@ def build_pbp_target_actuals()->pd.DataFrame:
             f"receiver appeared for multiple PBP offenses in one week: {bad.to_dict('records')}"
         )
 
-    counts=(
-        ev.groupby(["week","receiver_player_id"],as_index=False)
-        .agg(
-            pbp_actual_targets=("team","size"),
-            pbp_actual_team=("team","first"),
-            pbp_receiver_name_key=("pbp_receiver_name_key","first"),
-        )
-    )
+    grouped=[]
+    for (week,pid),g in t.groupby(["week","receiver_player_id"],sort=True):
+        names=sorted({x for x in g["pbp_receiver_name_key"].astype(str) if x})
+        if len(names)>1:
+            raise RuntimeError(
+                f"PBP receiver ID has multiple canonical names week={int(week)} "
+                f"player_id={pid} names={names}"
+            )
+        grouped.append({
+            "week":int(week),
+            "receiver_player_id":str(pid),
+            "pbp_actual_targets":float(len(g)),
+            "pbp_actual_team":str(g["team"].iloc[0]),
+            "pbp_receiver_name_key":names[0] if names else "",
+        })
+    counts=pd.DataFrame(grouped)
+    if counts.empty:
+        return pd.DataFrame(columns=[
+            "season","week","player_clean_key","receiver_player_id",
+            "pbp_actual_team","pbp_actual_targets",
+            "pbp_target_identity_resolved","pbp_identity_route",
+        ])
 
-    roster=load_roster_identity(SEASON,sorted(WEEKS)).copy()
-    roster.columns=[str(c).strip().lower() for c in roster.columns]
-    required_roster={"gsis_id","player_clean_key"}
-    miss=required_roster-set(roster.columns)
-    if miss:
-        raise RuntimeError(f"validated roster identity missing columns: {sorted(miss)}")
-    roster["gsis_id"]=roster["gsis_id"].fillna("").astype(str).str.strip()
-    roster["player_clean_key"]=roster["player_clean_key"].fillna("").astype(str).str.strip()
+    rows=[]
+    for rec in counts.to_dict("records"):
+        week=int(rec["week"]); pid=str(rec["receiver_player_id"])
+        aliases=sorted(set(
+            r.loc[
+                r["receiver_player_id"].eq(pid) & r["week"].le(week),
+                "player_clean_key",
+            ].astype(str)
+        ))
+        aliases=[a for a in aliases if a]
+        route="ROSTER_GSIS_ALIAS"
+        if not aliases:
+            fallback=str(rec.get("pbp_receiver_name_key","") or "")
+            if not fallback:
+                raise RuntimeError(
+                    f"PBP target receiver has no roster alias or unique PBP name "
+                    f"week={week} player_id={pid}"
+                )
+            aliases=[fallback]
+            route="PBP_UNIQUE_NAME_FALLBACK"
+        for key in aliases:
+            rows.append({
+                "season":SEASON,
+                "week":week,
+                "player_clean_key":key,
+                "receiver_player_id":pid,
+                "pbp_actual_team":rec["pbp_actual_team"],
+                "pbp_actual_targets":rec["pbp_actual_targets"],
+                "pbp_target_identity_resolved":True,
+                "pbp_identity_route":route,
+            })
+
+    out=pd.DataFrame(rows).drop_duplicates()
+    dup=out.duplicated(["season","week","player_clean_key"],keep=False)
+    if dup.any():
+        bad=out.loc[dup,[
+            "week","player_clean_key","receiver_player_id","pbp_actual_team"
+        ]].head(20)
+        raise RuntimeError(
+            f"ambiguous PBP target identity after GSIS alias resolution: {bad.to_dict('records')}"
+        )
+    return out.sort_values(
+        ["season","week","player_clean_key","receiver_player_id"],
+        kind="mergesort",
+    ).reset_index(drop=True)
+
+
+def build_pbp_target_actuals()->pd.DataFrame:
+    """Completed-game target counts for grading only, never prediction input."""
+    import nflreadpy as nfl
+
+    pbp=_to_pandas(nfl.load_pbp(seasons=[SEASON]))
+    pbp.columns=[str(c).strip().lower() for c in pbp.columns]
+    required={"week","posteam","receiver_player_id","pass_attempt","sack"}
+    missing=required-set(pbp.columns)
+    if missing:
+        raise RuntimeError(f"PBP target authority missing columns: {sorted(missing)}")
+    if "season_type" in pbp.columns:
+        reg=pbp["season_type"].astype(str).str.upper().eq("REG")
+        if reg.any():
+            pbp=pbp.loc[reg].copy()
+    if "two_point_attempt" not in pbp.columns:
+        pbp["two_point_attempt"]=0.0
+    if "receiver_player_name" not in pbp.columns:
+        pbp["receiver_player_name"]=""
+
+    pbp["week"]=_num(pbp["week"])
+    pbp=pbp.loc[pbp["week"].isin(WEEKS)].copy()
+    pbp["team"]=pbp["posteam"].map(canon_team)
+    pbp["receiver_player_id"]=pbp["receiver_player_id"].fillna("").astype(str).str.strip()
+    target=(
+        _num(pbp["pass_attempt"]).fillna(0).eq(1)
+        & ~_num(pbp["sack"]).fillna(0).eq(1)
+        & ~_num(pbp["two_point_attempt"]).fillna(0).eq(1)
+        & pbp["receiver_player_id"].ne("")
+        & pbp["team"].astype(str).ne("")
+    )
+    target_events=pbp.loc[
+        target,
+        ["week","team","receiver_player_id","receiver_player_name"],
+    ].copy()
+
+    raw_roster=_to_pandas(nfl.load_rosters_weekly(SEASON))
+    if raw_roster.empty:
+        raise RuntimeError("weekly roster identity source returned zero rows")
+    raw_roster.columns=[str(c).strip().lower() for c in raw_roster.columns]
+    rid_col=next((c for c in ("gsis_id","player_id") if c in raw_roster.columns),None)
+    name_col=next((
+        c for c in ("full_name","football_name","player_name","player","name")
+        if c in raw_roster.columns
+    ),None)
+    if rid_col is None or name_col is None or "week" not in raw_roster.columns:
+        raise RuntimeError("weekly roster source cannot bridge PBP receiver GSIS identities")
+
+    roster=pd.DataFrame({
+        "week":_num(raw_roster["week"]),
+        "receiver_player_id":raw_roster[rid_col].fillna("").astype(str).str.strip(),
+        "player_clean_key":raw_roster[name_col].map(_name_key),
+    })
     roster=roster.loc[
-        roster["gsis_id"].ne("") & roster["player_clean_key"].ne(""),
-        ["gsis_id","player_clean_key"],
+        roster["week"].isin(WEEKS)
+        & roster["receiver_player_id"].ne("")
+        & roster["player_clean_key"].astype(str).ne("")
     ].drop_duplicates()
 
-    # Preserve every validated roster alias for the stable GSIS identity.
-    # A single GSIS ID can legitimately appear with suffix/name-form variants
-    # across roster weeks; each alias inherits the same PBP target count.
-    id_aliases=roster.rename(columns={
-        "gsis_id":"receiver_player_id",
-        "player_clean_key":"roster_player_clean_key",
-    }).drop_duplicates(["receiver_player_id","roster_player_clean_key"])
-
-    out=_expand_counts_across_roster_aliases(counts,id_aliases)
-    out["roster_player_clean_key"]=out["roster_player_clean_key"].fillna("").astype(str)
-
-    # Roster GSIS mapping is primary. PBP-name fallback is permitted only for
-    # IDs absent from the validated roster identity table, and only when that
-    # canonical PBP name is unique to one receiver ID/offense in the week.
-    fallback_candidates=out.loc[
-        out["roster_player_clean_key"].eq("")
-        & out["pbp_receiver_name_key"].astype(str).ne("")
-    ].drop_duplicates(
-        ["week","receiver_player_id","pbp_actual_team","pbp_receiver_name_key"]
-    ).copy()
-    fallback_keys=set()
-    if not fallback_candidates.empty:
-        meta=(
-            fallback_candidates.groupby(["week","pbp_receiver_name_key"],as_index=False)
-            .agg(
-                id_count=("receiver_player_id","nunique"),
-                offense_count=("pbp_actual_team","nunique"),
-            )
-        )
-        for _,r in meta.loc[
-            meta["id_count"].eq(1) & meta["offense_count"].eq(1)
-        ].iterrows():
-            fallback_keys.add((int(r["week"]),str(r["pbp_receiver_name_key"])))
-
-    routes=[]
-    player_keys=[]
-    for _,r in out.iterrows():
-        roster_key=str(r["roster_player_clean_key"] or "").strip()
-        name_key=str(r["pbp_receiver_name_key"] or "").strip()
-        k=(int(r["week"]),name_key)
-        if roster_key:
-            player_keys.append(roster_key)
-            routes.append("PBP_GSIS_TO_VALIDATED_ROSTER_ALIAS")
-        elif name_key and k in fallback_keys:
-            player_keys.append(name_key)
-            routes.append("PBP_UNIQUE_RECEIVER_NAME_FALLBACK")
-        else:
-            player_keys.append("")
-            routes.append("UNRESOLVED")
-    out["player_clean_key"]=player_keys
-    out["pbp_identity_route"]=routes
-
-    unresolved=out["player_clean_key"].eq("")
-    if unresolved.any():
-        # Keep unresolved receiver IDs out of the merge; any replay row with
-        # receiving evidence and no resolved PBP identity will still fail
-        # closed later in build_rows.
-        pass
-    out=out.loc[~unresolved].copy()
-
-    ambiguity=(
-        out.groupby(["week","player_clean_key"],as_index=False)
-        .agg(
-            receiver_id_count=("receiver_player_id","nunique"),
-            offense_count=("pbp_actual_team","nunique"),
-        )
-    )
-    if (
-        ambiguity["receiver_id_count"].gt(1)
-        | ambiguity["offense_count"].gt(1)
-    ).any():
-        bad=ambiguity.loc[
-            ambiguity["receiver_id_count"].gt(1)
-            | ambiguity["offense_count"].gt(1)
-        ].head(20)
-        raise RuntimeError(
-            f"ambiguous PBP receiver identity after roster bridge: {bad.to_dict('records')}"
-        )
-
-    out=(
-        out.groupby(["week","player_clean_key"],as_index=False)
-        .agg(
-            receiver_player_id=("receiver_player_id","first"),
-            pbp_actual_targets=("pbp_actual_targets","sum"),
-            pbp_actual_team=("pbp_actual_team","first"),
-            pbp_identity_route=("pbp_identity_route","first"),
-        )
-    )
-    out["season"]=SEASON
-    out["pbp_target_identity_resolved"]=True
-    return out[
-        ["season","week","player_clean_key","receiver_player_id",
-         "pbp_actual_team","pbp_identity_route",
-         "pbp_actual_targets","pbp_target_identity_resolved"]
-    ].drop_duplicates(["season","week","player_clean_key"])
+    return _resolve_pbp_target_identity_rows(target_events,roster)
 
 
 def build_rows(
