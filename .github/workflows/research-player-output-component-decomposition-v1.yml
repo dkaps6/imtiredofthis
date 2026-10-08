@@ -36,7 +36,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pyarrow pyyaml
+          pip install nflreadpy pytest pyarrow pyyaml
 
       - name: Run frozen decomposition tests
         env:
@@ -122,6 +122,8 @@ jobs:
           assert s['automatic_promotion'] is False
           assert s['max_baseline_reconstruction_gap'] <= 1e-10
           assert s['max_full_actual_identity_gap'] <= 1e-10
+          assert s['target_rows_graded_by_pbp'] > 0
+          assert s['actual_opportunity_discrepancy_rows'] >= 2
 
           expected={
               ('QB','pass_yards'),
@@ -150,6 +152,11 @@ jobs:
               q=r.loc[(r.position_family.eq(pos)) & (r.market.eq(market))]
               assert not q.empty, (pos,market)
               assert set(q.opportunity_type.astype(str).unique())=={opp}, (pos,market)
+              if opp=='targets':
+                  assert q.actual_opportunity_source.eq('COMPLETED_GAME_PBP_TARGETS').all()
+                  assert q.pbp_target_identity_resolved.astype(str).str.lower().isin({'true','1','yes'}).all()
+              else:
+                  assert q.actual_opportunity_source.eq('FROZEN_REPLAY_MATCHED_ARTIFACT').all()
 
           valid_bins={
               'ZERO','01_20','21_30','31_40','41_PLUS',
@@ -163,6 +170,8 @@ jobs:
               'paired_rows':s['paired_rows'],
               'scoreable_rows':s['scoreable_rows'],
               'model_efficiency_unavailable_rows':s['model_efficiency_unavailable_rows'],
+              'actual_opportunity_discrepancy_rows':s['actual_opportunity_discrepancy_rows'],
+              'target_rows_graded_by_pbp':s['target_rows_graded_by_pbp'],
               'descriptive_dominance':s['descriptive_dominance'],
               'market_summary':s['market_summary'],
           },indent=2,sort_keys=True))
