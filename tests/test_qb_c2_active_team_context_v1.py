@@ -50,3 +50,35 @@ def test_duplicate_team_fails():
     frame,active=sample(32)
     with pytest.raises(RuntimeError,match="duplicate"):
         active_qb_c2_schedule(pd.concat([frame,frame.iloc[[0]]]),season=2026,week=5,expected_teams=active)
+
+
+def test_full_schedule_can_narrow_to_complete_current_eligible_games(tmp_path):
+    frame, scheduled=sample(30)
+    eligible=scheduled-{"ARI","ATL"}
+    slate=active_qb_c2_schedule(
+        frame,season=2026,week=5,expected_teams=eligible)
+    assert len(slate)==28
+    assert set(slate.team)==eligible
+    assert not set(slate.team)&{"ARI","ATL"}
+    schedule=tmp_path/"map.csv";frame.to_csv(schedule,index=False)
+    state=slate[["season","week","team","opponent"]].copy()
+    state["sportsbook_inputs_used"]=0
+    for col in ["pass_opportunity_spot","pass_efficiency_spot","rush_opportunity_spot","rush_efficiency_spot"]:
+        state[col]=0.1
+    audit=validate_qb_c2_state_context(
+        state,season=2026,week=5,schedule_path=schedule,expected_teams=eligible)
+    assert audit["teams"]==28
+
+
+def test_half_game_in_eligible_set_fails():
+    frame, scheduled=sample(30)
+    eligible=scheduled-{"ARI"}
+    with pytest.raises(RuntimeError,match="odd-sized|half a game"):
+        active_qb_c2_schedule(frame,season=2026,week=5,expected_teams=eligible)
+
+
+def test_eligible_team_not_on_authoritative_schedule_fails():
+    frame, scheduled=sample(30)
+    with pytest.raises(RuntimeError,match="absent from schedule"):
+        active_qb_c2_schedule(
+            frame,season=2026,week=5,expected_teams=scheduled|{"TEN","WAS"})

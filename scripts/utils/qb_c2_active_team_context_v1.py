@@ -55,11 +55,22 @@ def active_qb_c2_schedule(
             raise RuntimeError("QB C2 bye-week schedule requires ACTIVE_ROLES_CSV authority")
     else:
         expected = {canon_team(t) for t in reference}
-        if set(mapping) != expected:
+        if not expected or len(expected) % 2:
+            raise RuntimeError("QB C2 certified eligible game set empty or odd-sized")
+        extra = sorted(expected - set(mapping))
+        if extra:
             raise RuntimeError(
-                f"QB C2 schedule differs from certified active roles missing={sorted(expected-set(mapping))} "
-                f"extra={sorted(set(mapping)-expected)}"
+                f"QB C2 certified active roles contain team absent from schedule: {extra}"
             )
+        # T-75/started-game eligibility correctly withholds BOTH teams of a
+        # game, but the authoritative entire-week schedule must stay intact.
+        # Scope only to the certified games after validating the whole week.
+        partial = sorted(t for t in expected if mapping[t] not in expected)
+        if partial:
+            raise RuntimeError(
+                f"QB C2 certified eligible set includes half a game: {partial}"
+            )
+        x = x.loc[x["team"].isin(expected)].copy()
     return x
 
 

@@ -35,7 +35,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           python -m py_compile scripts/utils/qb_c2_active_team_context_v1.py scripts/run_qb_distribution_state_context.py scripts/operations/apply_qb_c2_active_schedule_context_seam_v1.py
-          pytest -q tests/test_qb_c2_active_team_context_v1.py
+          pytest -q tests/test_qb_c2_active_team_context_v1.py tests/test_full_slate_data_quality_scope.py
       - name: Verify original availability seams precede C2 source seam
         env:
           PYTHONPATH: ${{ github.workspace }}

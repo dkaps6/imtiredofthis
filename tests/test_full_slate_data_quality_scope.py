@@ -109,3 +109,28 @@ def test_positive_row_injury_scope_rejects_off_schedule_team():
             ALL_TEAMS,
             source="nflverse",
         )
+
+
+def test_week5_raw_32_roster_allows_only_certified_carolina_kc_byes():
+    byes={"CAR","KC"}
+    scheduled=ALL_TEAMS-byes
+    role_teams,live_teams=_validate_current_roster_scope(
+        scheduled,_roles(ALL_TEAMS),_game_odds(scheduled),off_week_teams=byes)
+    assert role_teams==ALL_TEAMS
+    assert live_teams==scheduled
+
+
+def test_week5_rejects_outside_schedule_without_verified_bye_provenance():
+    byes={"CAR","KC"}
+    scheduled=ALL_TEAMS-byes
+    with pytest.raises(RuntimeError,match="unauthorized off-schedule"):
+        _validate_current_roster_scope(
+            scheduled,_roles(ALL_TEAMS),_game_odds(scheduled),off_week_teams=set())
+
+
+def test_week5_rejects_unknown_raw_roster_team_even_when_valid_byes():
+    byes={"CAR","KC"}
+    scheduled=ALL_TEAMS-byes
+    with pytest.raises(RuntimeError,match="unauthorized off-schedule"):
+        _validate_current_roster_scope(
+            scheduled,_roles(ALL_TEAMS|{"XYZ"}),_game_odds(scheduled),off_week_teams=byes)
