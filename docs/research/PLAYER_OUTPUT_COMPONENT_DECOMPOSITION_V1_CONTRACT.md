@@ -71,8 +71,10 @@ Use the already-frozen replay-matched baseline opportunity rows for:
 Actual opportunity grading authority:
 - QB pass attempts: frozen replay-matched opportunity row
 - RB carries: frozen replay-matched opportunity row
-- RB / WR / TE targets: completed-game nflverse PBP target counts keyed by
-  exact week / team / receiver identity
+- RB / WR / TE targets:
+  - completed-game nflverse PBP target counts when a receiver identity resolves;
+  - exact zero fallback only when the frozen artifact has zero targets **and**
+    the final actual receiving output is zero.
 
 Why target actuals use PBP:
 the first fail-closed run exposed impossible weekly-stat combinations
@@ -83,6 +85,13 @@ model.
 
 The frozen weekly target count is retained as an audit column and every
 discrepancy versus PBP must be reported.
+
+A player with zero targets and zero receiving output may legitimately have no
+receiver identity in PBP because he never participated in a target event.
+Those rows receive source `FROZEN_ZERO_NO_RECEIVING_USAGE`.
+
+If either artifact targets or receiving output is nonzero, unresolved PBP
+identity fails closed.
 
 Do not rebuild or refit predicted opportunity science in this diagnostic.
 
@@ -213,8 +222,9 @@ Fail closed if:
 - sportsbook fields are used upstream;
 - baseline algebraic reconstruction gap exceeds `1e-10`;
 - full actual identity gap exceeds `1e-10`;
-- a target-based row has nonzero receiving output, zero graded PBP targets,
-  or an unresolved PBP receiver identity;
+- a target-based row has nonzero receiving evidence with unresolved PBP
+  receiver identity;
+- a target-based row has nonzero receiving output with zero graded targets;
 - a market maps to the wrong opportunity family;
 - any parameter is fit;
 - any target-game outcome is used to construct baseline predictions.
