@@ -188,6 +188,52 @@ jobs:
           print('AVAILABILITY_BEFORE_OPPORTUNITY_PASS', {'availability_rows':len(a),'eligible_role_rows':len(r),'eligible_teams':r.team.nunique()})
           EOF
 
+      - name: Restore pinned pre-T75 whole-game football state for replay
+        if: ${{ env.REUSE_PAID_ODDS_RUN_ID != '' }}
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          rm -rf /tmp/preserved_pret75_source
+          mkdir -p /tmp/preserved_pret75_source
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${REUSE_PAID_ODDS_ARTIFACT_ID}" > /tmp/preserved_pret75_meta.json
+          python - <<'PY'
+          import json, os
+          p=json.load(open('/tmp/preserved_pret75_meta.json',encoding='utf-8'))
+          want_run=int(os.environ['REUSE_PAID_ODDS_RUN_ID'])
+          want_id=int(os.environ['REUSE_PAID_ODDS_ARTIFACT_ID'])
+          want_digest=os.environ['REUSE_PAID_ODDS_ARTIFACT_DIGEST'].strip()
+          if int(p.get('id',-1)) != want_id: raise SystemExit(f'FATAL: artifact id drift {p.get("id")} != {want_id}')
+          if p.get('name') != f'run_{want_run}': raise SystemExit(f'FATAL: artifact name drift {p.get("name")!r}')
+          if p.get('digest') != want_digest: raise SystemExit(f'FATAL: artifact digest drift {p.get("digest")!r}')
+          if int((p.get('workflow_run') or {}).get('id',-1)) != want_run: raise SystemExit('FATAL: artifact/run binding mismatch')
+          if bool(p.get('expired')): raise SystemExit('FATAL: preserved source artifact expired')
+          print('PRE_T75_SOURCE_ARTIFACT_VERIFIED',{'run':want_run,'artifact_id':want_id,'digest':want_digest})
+          PY
+          gh run download "${REUSE_PAID_ODDS_RUN_ID}" --repo "${GITHUB_REPOSITORY}" --name "run_${REUSE_PAID_ODDS_RUN_ID}" --dir /tmp/preserved_pret75_source
+
+          python scripts/operations/restore_preserved_pret75_game_state_v1.py \
+            --source-root /tmp/preserved_pret75_source \
+            --source-run-id "${REUSE_PAID_ODDS_RUN_ID}"
+          test -s data/preserved_pret75_game_state_audit.json
+          cat data/preserved_pret75_game_state_audit.json
+
+          # The replay seam is authoritative before opportunity/model construction.
+          cp data/current_player_availability.csv outputs/current_player_availability.csv
+          cp data/current_player_availability_game_certification.csv outputs/current_player_availability_game_certification.csv
+          cp data/roles_current_production_eligible_v1.csv outputs/roles_current_production_eligible_v1.csv
+          python - <<'PY'
+          import json, pandas as pd
+          a=json.load(open('data/preserved_pret75_game_state_audit.json',encoding='utf-8'))
+          c=pd.read_csv('data/current_player_availability_game_certification.csv',low_memory=False)
+          r=pd.read_csv('data/roles_current_production_eligible_v1.csv',low_memory=False)
+          eligible=pd.to_numeric(c['production_eligible'],errors='coerce').fillna(0).eq(1)
+          if int(eligible.sum())*2 != r['team'].nunique():
+              raise SystemExit('FATAL: replay-restored eligible role team count does not match certification')
+          if int(a.get('sportsbook_inputs_used',-1)) != 0:
+              raise SystemExit(f'FATAL: pre-T75 replay restore used sportsbook inputs: {a}')
+          print('PRE_T75_REPLAY_FOOTBALL_STATE_READY',a)
+          PY
+
       - name: Build TeamForm with runtime strict-prior authority
         run: |
           export PYTHONPATH="${PWD}"
