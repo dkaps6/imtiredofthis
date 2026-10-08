@@ -173,7 +173,7 @@ def _summary(g:pd.DataFrame)->dict:
     return out
 
 
-def build_rows(points:pd.DataFrame,opps:pd.DataFrame)->pd.DataFrame:
+def build_rows(points:pd.DataFrame,opps:pd.DataFrame,*,require_full_weeks:bool=True)->pd.DataFrame:
     p=points.copy()
     o=opps.copy()
 
@@ -200,10 +200,11 @@ def build_rows(points:pd.DataFrame,opps:pd.DataFrame)->pd.DataFrame:
     o["season"]=_num(o["season"]); o["week"]=_num(o["week"])
     p=p.loc[p["season"].eq(SEASON)&p["week"].isin(WEEKS)].copy()
     o=o.loc[o["season"].eq(SEASON)&o["week"].isin(WEEKS)].copy()
-    if set(p["week"].dropna().astype(int).unique())!=WEEKS:
-        raise RuntimeError("point parent does not cover exact W1-W4")
-    if set(o["week"].dropna().astype(int).unique())!=WEEKS:
-        raise RuntimeError("opportunity parent does not cover exact W1-W4")
+    if require_full_weeks:
+        if set(p["week"].dropna().astype(int).unique())!=WEEKS:
+            raise RuntimeError("point parent does not cover exact W1-W4")
+        if set(o["week"].dropna().astype(int).unique())!=WEEKS:
+            raise RuntimeError("opportunity parent does not cover exact W1-W4")
 
     p["position_family"]=p["position_family"].map(_pos)
     o["position_family"]=o["position_family"].map(_pos)
