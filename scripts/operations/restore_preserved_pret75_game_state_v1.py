@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
-"""Restore whole-game football state from a pinned pre-T75 Full Slate artifact.
+"""Restore whole-game eligibility from a pinned pre-T75 Full Slate artifact.
 
 Replay-only operational seam. A later canonical run can cross the T-75 official
 inactive boundary after the paid snapshot was acquired. If that later run
 withholds an otherwise-scheduled game only because required official inactive
-sections are missing, this seam may restore the exact football-only state from
-the pinned source run provided that source certified the whole game as
+sections are missing, this seam may restore *game eligibility* from the pinned
+source run provided that source certified the exact same game as
 NOT_YET_REQUIRED before T-75.
 
-This never reads sportsbook files, never changes odds, and never restores games
-that have kicked off.
+Important: player-level availability is NOT rolled back. After game eligibility
+is restored, production-eligible roles are rebuilt from the current
+football-only active-role artifact, so any newer definitive-unavailable facts
+remain authoritative.
+
+No sportsbook file is read. No odds are changed. Kicked-off games are never
+restored.
 """
 from __future__ import annotations
 
@@ -21,6 +26,7 @@ from pathlib import Path
 import pandas as pd
 
 from scripts._opponent_map import canon_team
+from scripts.build.build_production_eligible_active_roles_v1 import build as build_eligible_roles
 
 DATA = Path("data")
 AUDIT = DATA / "preserved_pret75_game_state_audit.json"
@@ -32,45 +38,24 @@ def _read(path: Path) -> pd.DataFrame:
     return pd.read_csv(path, low_memory=False)
 
 
-def _bool_series(s: pd.Series) -> pd.Series:
-    if pd.api.types.is_bool_dtype(s):
-        return s.fillna(False)
-    return s.astype(str).str.strip().str.lower().isin({"1", "true", "yes", "y"})
+def _bool_value(v) -> bool:
+    return str(v).strip().lower() in {"1", "true", "yes", "y"}
 
 
 def _game_key(row) -> tuple[str, str]:
     return tuple(sorted((canon_team(row["away_team"]), canon_team(row["home_team"]))))
 
 
-def _replace_team_rows(current: pd.DataFrame, source: pd.DataFrame, teams: set[str], *, label: str) -> pd.DataFrame:
-    if "team" not in current.columns or "team" not in source.columns:
-        raise RuntimeError(f"{label} missing team column")
-    cur = current.copy()
-    src = source.copy()
-    cur["team"] = cur["team"].map(canon_team)
-    src["team"] = src["team"].map(canon_team)
-    src_rows = src[src["team"].isin(teams)].copy()
-    missing = teams - set(src_rows["team"].dropna().astype(str))
-    if missing:
-        raise RuntimeError(f"{label} source missing restored teams: {sorted(missing)}")
-    cols = list(dict.fromkeys(list(cur.columns) + list(src_rows.columns)))
-    cur = cur.reindex(columns=cols)
-    src_rows = src_rows.reindex(columns=cols)
-    out = pd.concat([cur[~cur["team"].isin(teams)], src_rows], ignore_index=True)
-    return out
-
-
 def restore(source_root: Path, source_run_id: int) -> dict:
     current_cert_path = DATA / "current_player_availability_game_certification.csv"
     current_meta_path = DATA / "current_player_availability_game_certification.json"
     current_avail_path = DATA / "current_player_availability.csv"
+    current_active_roles_path = DATA / "roles_ourlads_active_v1.csv"
     current_roles_path = DATA / "roles_current_production_eligible_v1.csv"
     current_roles_status_path = DATA / "roles_current_production_eligible_v1_status.json"
 
     source_cert_path = source_root / "data/current_player_availability_game_certification.csv"
     source_meta_path = source_root / "data/current_player_availability_game_certification.json"
-    source_avail_path = source_root / "data/current_player_availability.csv"
-    source_roles_path = source_root / "data/roles_current_production_eligible_v1.csv"
 
     if not source_meta_path.exists() or source_meta_path.stat().st_size <= 0:
         raise RuntimeError("pinned source availability certification metadata missing")
@@ -81,9 +66,7 @@ def restore(source_root: Path, source_run_id: int) -> dict:
     cur_cert = _read(current_cert_path)
     src_cert = _read(source_cert_path)
     cur_avail = _read(current_avail_path)
-    src_avail = _read(source_avail_path)
-    cur_roles = _read(current_roles_path)
-    src_roles = _read(source_roles_path)
+    current_active_roles = _read(current_active_roles_path)
 
     for df, label in ((cur_cert, "current certification"), (src_cert, "source certification")):
         need = {"season", "week", "away_team", "home_team", "kickoff_utc", "certification_state", "production_eligible"}
@@ -113,9 +96,21 @@ def restore(source_root: Path, source_run_id: int) -> dict:
     restored: list[dict] = []
     restored_teams: set[str] = set()
 
+    # Snapshot the current player-level unavailable set so we can prove this seam
+    # never weakens it.
+    if not {"team", "player_clean_key", "definitive_unavailable"}.issubset(cur_avail.columns):
+        raise RuntimeError("current availability missing player-level unavailability columns")
+    current_unavailable = {
+        (canon_team(t), str(k))
+        for t, k, u in zip(
+            cur_avail["team"], cur_avail["player_clean_key"], cur_avail["definitive_unavailable"]
+        )
+        if _bool_value(u)
+    }
+
     for idx, row in cur_cert.iterrows():
         state = str(row.get("certification_state", ""))
-        eligible = bool(_bool_series(pd.Series([row.get("production_eligible")])).iloc[0])
+        eligible = _bool_value(row.get("production_eligible"))
         if state != "REQUIRED_MISSING_FAIL_CLOSED" or eligible:
             continue
 
@@ -127,7 +122,8 @@ def restore(source_root: Path, source_run_id: int) -> dict:
         src = src_by_game.get(key)
         if src is None:
             raise RuntimeError(f"withheld game absent from pinned source certification: {key}")
-        src_eligible = bool(_bool_series(pd.Series([src.get("production_eligible")])).iloc[0])
+
+        src_eligible = _bool_value(src.get("production_eligible"))
         src_state = str(src.get("certification_state", ""))
         src_asof = pd.to_datetime(src.get("asof_utc"), utc=True, errors="coerce")
         src_kickoff = pd.to_datetime(src.get("kickoff_utc"), utc=True, errors="coerce")
@@ -147,17 +143,23 @@ def restore(source_root: Path, source_run_id: int) -> dict:
         if abs((src_kickoff - kickoff).total_seconds()) > 1:
             raise RuntimeError(f"kickoff drift between current and source certification for game={key}")
 
-        preserved = src.copy()
-        preserved["certification_state"] = "PRESERVED_PRE_T75_REPLAY"
-        preserved["production_eligible"] = True
-        preserved["failure_reason"] = ""
-        preserved["replay_source_run_id"] = int(source_run_id)
-        preserved["replay_source_certification_state"] = src_state
-        preserved["replay_restored_at_utc"] = now.isoformat()
-        for col in preserved.index:
+        # Preserve the source's pre-T75 authority, but mark this as a replay
+        # restoration rather than pretending current official inactives exist.
+        for col in (
+            "replay_source_run_id",
+            "replay_source_certification_state",
+            "replay_source_asof_utc",
+            "replay_restored_at_utc",
+        ):
             if col not in cur_cert.columns:
                 cur_cert[col] = pd.NA
-        cur_cert.loc[idx, preserved.index] = preserved.values
+        cur_cert.loc[idx, "certification_state"] = "PRESERVED_PRE_T75_REPLAY"
+        cur_cert.loc[idx, "production_eligible"] = True
+        cur_cert.loc[idx, "failure_reason"] = ""
+        cur_cert.loc[idx, "replay_source_run_id"] = int(source_run_id)
+        cur_cert.loc[idx, "replay_source_certification_state"] = src_state
+        cur_cert.loc[idx, "replay_source_asof_utc"] = src_asof.isoformat()
+        cur_cert.loc[idx, "replay_restored_at_utc"] = now.isoformat()
 
         teams = {key[0], key[1]}
         restored_teams |= teams
@@ -183,33 +185,40 @@ def restore(source_root: Path, source_run_id: int) -> dict:
         print("[pret75_replay_restore] " + json.dumps(result, sort_keys=True))
         return result
 
-    # Restore the exact football-only player availability and eligible-role rows
-    # for every restored team from the pinned pre-T75 run.
-    cur_avail = _replace_team_rows(cur_avail, src_avail, restored_teams, label="availability")
-    cur_roles = _replace_team_rows(cur_roles, src_roles, restored_teams, label="eligible roles")
+    # Rebuild eligible roles from *current* football-only active roles. This is
+    # the key safety rule: pinned source authorizes the game, not stale player
+    # participation. Newer definitive-unavailable information remains in force.
+    rebuilt_roles, role_status = build_eligible_roles(current_active_roles, cur_cert)
 
-    # Whole-game invariant: both teams must now be present and every restored
-    # game must be production eligible.
-    role_teams = set(cur_roles["team"].map(canon_team).dropna().astype(str))
+    role_teams = set(rebuilt_roles["team"].map(canon_team).dropna().astype(str))
     if not restored_teams.issubset(role_teams):
-        raise RuntimeError(f"restored teams missing from eligible roles: {sorted(restored_teams-role_teams)}")
-    elig = _bool_series(cur_cert["production_eligible"])
-    expected_team_count = int(elig.sum()) * 2
+        raise RuntimeError(f"restored teams missing from rebuilt eligible roles: {sorted(restored_teams-role_teams)}")
+
+    # Prove no currently definitive-unavailable player was resurrected.
+    role_keys = {
+        (canon_team(t), str(k))
+        for t, k in zip(rebuilt_roles["team"], rebuilt_roles["player_clean_key"])
+    }
+    resurrected = sorted(current_unavailable & role_keys)
+    if resurrected:
+        raise RuntimeError(
+            f"pre-T75 game restore resurrected current definitive-unavailable players: {resurrected[:20]}"
+        )
+
+    elig = cur_cert["production_eligible"].map(_bool_value)
     cert_teams = set(cur_cert.loc[elig, "away_team"]) | set(cur_cert.loc[elig, "home_team"])
-    if len(cert_teams) != expected_team_count:
-        raise RuntimeError("patched certification is not exactly two teams per eligible game")
     if role_teams != cert_teams:
         raise RuntimeError(
-            f"patched eligible role teams differ from certification: "
+            f"rebuilt eligible role teams differ from patched certification: "
             f"roles_only={sorted(role_teams-cert_teams)} cert_only={sorted(cert_teams-role_teams)}"
         )
 
     cur_cert.to_csv(current_cert_path, index=False)
-    cur_avail.to_csv(current_avail_path, index=False)
-    cur_roles.to_csv(current_roles_path, index=False)
+    rebuilt_roles.to_csv(current_roles_path, index=False)
 
     counts = cur_cert["certification_state"].astype(str).value_counts().to_dict()
     withheld = set(cur_cert.loc[~elig, "away_team"]) | set(cur_cert.loc[~elig, "home_team"])
+
     meta = json.loads(current_meta_path.read_text(encoding="utf-8")) if current_meta_path.exists() else {}
     meta.update({
         "games": int(len(cur_cert)),
@@ -224,31 +233,29 @@ def restore(source_root: Path, source_run_id: int) -> dict:
     })
     current_meta_path.write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
-    role_status = json.loads(current_roles_status_path.read_text(encoding="utf-8")) if current_roles_status_path.exists() else {}
     role_status.update({
-        "output_active_rows": int(len(cur_roles)),
-        "eligible_games": int(elig.sum()),
-        "withheld_games": int((~elig).sum()),
-        "eligible_teams": sorted(role_teams),
-        "withheld_teams": sorted(withheld),
-        "certification_state_counts": {str(k): int(v) for k, v in counts.items()},
         "replay_preserved_pre_t75_games": int(len(restored)),
         "replay_source_run_id": int(source_run_id),
+        "newer_definitive_unavailable_preserved": int(len(current_unavailable)),
         "sportsbook_inputs_used": 0,
     })
     current_roles_status_path.write_text(json.dumps(role_status, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     result = {
-        "disposition": "PRESERVED_PRE_T75_GAME_STATE_RESTORED",
+        "disposition": "PRESERVED_PRE_T75_GAME_ELIGIBILITY_RESTORED_CURRENT_PLAYER_STATE_PRESERVED",
         "season": season,
         "week": week,
         "source_run_id": int(source_run_id),
         "restored_games": int(len(restored)),
         "restored_teams": sorted(restored_teams),
         "games": restored,
+        "current_definitive_unavailable_count": int(len(current_unavailable)),
+        "current_definitive_unavailable_resurrected": 0,
         "sportsbook_inputs_used": 0,
         "sportsbook_files_read": [],
-        "player_availability_source": "pinned_pre_t75_full_slate_artifact",
+        "game_eligibility_source": "pinned_pre_t75_full_slate_artifact",
+        "player_availability_source": "current_football_only_availability",
+        "eligible_roles_source": "current_roles_ourlads_active_v1_plus_restored_game_certification",
     }
     AUDIT.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print("[pret75_replay_restore] " + json.dumps(result, sort_keys=True))
