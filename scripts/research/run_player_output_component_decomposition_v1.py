@@ -282,27 +282,19 @@ def build_pbp_target_actuals()->pd.DataFrame:
         ["gsis_id","player_clean_key"],
     ].drop_duplicates()
 
-    id_amb=(
-        roster.groupby("gsis_id")["player_clean_key"]
-        .nunique()
-        .reset_index(name="name_count")
-    )
-    if id_amb["name_count"].gt(1).any():
-        bad=id_amb.loc[id_amb["name_count"].gt(1)].head(20)
-        raise RuntimeError(
-            f"roster GSIS identity maps to multiple canonical players: {bad.to_dict('records')}"
-        )
-    id_map=roster.sort_values(["gsis_id","player_clean_key"]).drop_duplicates("gsis_id")
-    id_map=id_map.rename(columns={
+    # Preserve every validated roster alias for the stable GSIS identity.
+    # A single GSIS ID can legitimately appear with suffix/name-form variants
+    # across roster weeks; each alias inherits the same PBP target count.
+    id_aliases=roster.rename(columns={
         "gsis_id":"receiver_player_id",
         "player_clean_key":"roster_player_clean_key",
-    })
+    }).drop_duplicates(["receiver_player_id","roster_player_clean_key"])
 
     out=counts.merge(
-        id_map,
+        id_aliases,
         on="receiver_player_id",
         how="left",
-        validate="many_to_one",
+        validate="one_to_many",
     )
     out["roster_player_clean_key"]=out["roster_player_clean_key"].fillna("").astype(str)
 
@@ -312,7 +304,9 @@ def build_pbp_target_actuals()->pd.DataFrame:
     fallback_candidates=out.loc[
         out["roster_player_clean_key"].eq("")
         & out["pbp_receiver_name_key"].astype(str).ne("")
-    ].copy()
+    ].drop_duplicates(
+        ["week","receiver_player_id","pbp_actual_team","pbp_receiver_name_key"]
+    ).copy()
     fallback_keys=set()
     if not fallback_candidates.empty:
         meta=(
@@ -335,7 +329,7 @@ def build_pbp_target_actuals()->pd.DataFrame:
         k=(int(r["week"]),name_key)
         if roster_key:
             player_keys.append(roster_key)
-            routes.append("PBP_GSIS_TO_VALIDATED_ROSTER")
+            routes.append("PBP_GSIS_TO_VALIDATED_ROSTER_ALIAS")
         elif name_key and k in fallback_keys:
             player_keys.append(name_key)
             routes.append("PBP_UNIQUE_RECEIVER_NAME_FALLBACK")
