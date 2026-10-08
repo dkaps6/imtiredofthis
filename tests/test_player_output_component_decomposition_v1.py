@@ -210,3 +210,16 @@ def test_pbp_team_mismatch_excludes_entire_player_week():
     assert not rows.grading_identity_valid.any()
     assert set(rows.grading_exclusion_reason)=={"HISTORICAL_TEAM_IDENTITY_MISMATCH"}
     assert not rows.component_decomposition_eligible.any()
+
+
+def test_receiving_identity_scope_drops_defensive_same_name_collision():
+    frame=pd.DataFrame([
+        {"player_name":"Byron Young","position":"WR","player_id":"00-WR"},
+        {"player_name":"Byron Young","position":"DE","player_id":"00-DE"},
+        {"player_name":"Marcus Harris","position":"DT","player_id":"00-DT"},
+        {"player_name":"Marcus Harris","position":"TE","player_id":"00-TE"},
+    ])
+    out=d._restrict_receiving_identity_population(frame)
+    assert set(out.position)=={"WR","TE"}
+    assert set(out.player_id)=={"00-WR","00-TE"}
+
