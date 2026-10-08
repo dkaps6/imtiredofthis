@@ -33,8 +33,13 @@ def _write_fixture(root: Path, current_state: str, current_eligible: bool, sourc
     }))
     pd.DataFrame([
         {"team":"TB","player":"Current TB","player_clean_key":"currenttb","definitive_unavailable":0},
+        {"team":"TB","player":"Current TB Out","player_clean_key":"currenttbout","definitive_unavailable":1},
         {"team":"DAL","player":"Current DAL","player_clean_key":"currentdal","definitive_unavailable":0},
     ]).to_csv(data/"current_player_availability.csv",index=False)
+    pd.DataFrame([
+        {"team":"TB","player":"Current TB","role":"QB1","position":"QB","player_clean_key":"currenttb"},
+        {"team":"DAL","player":"Current DAL","role":"QB1","position":"QB","player_clean_key":"currentdal"},
+    ]).to_csv(data/"roles_ourlads_active_v1.csv",index=False)
     pd.DataFrame(columns=["team","player","role","position","player_clean_key"]).to_csv(
         data/"roles_current_production_eligible_v1.csv",index=False
     )
@@ -71,12 +76,15 @@ def test_restores_whole_game_from_pinned_pre_t75_source(tmp_path, monkeypatch):
     avail = pd.read_csv(data/"current_player_availability.csv")
     meta = json.loads((data/"current_player_availability_game_certification.json").read_text())
 
-    assert result["disposition"] == "PRESERVED_PRE_T75_GAME_STATE_RESTORED"
+    assert result["disposition"] == "PRESERVED_PRE_T75_GAME_ELIGIBILITY_RESTORED_CURRENT_PLAYER_STATE_PRESERVED"
     assert result["restored_teams"] == ["DAL","TB"]
     assert cert.loc[0,"certification_state"] == "PRESERVED_PRE_T75_REPLAY"
     assert bool(cert.loc[0,"production_eligible"])
     assert set(roles.team) == {"DAL","TB"}
-    assert set(avail.player) == {"Preserved DAL","Preserved TB"}
+    assert set(roles.player) == {"Current DAL","Current TB"}
+    assert set(avail.player) == {"Current DAL","Current TB","Current TB Out"}
+    assert "Current TB Out" not in set(roles.player)
+    assert result["current_definitive_unavailable_resurrected"] == 0
     assert meta["withheld_games"] == 0
     assert meta["eligible_games"] == 1
     assert meta["sportsbook_inputs_used"] == 0
@@ -117,4 +125,20 @@ def test_rejects_source_with_sportsbook_availability_provenance(tmp_path, monkey
     monkeypatch.setattr(mod, "AUDIT", data/"preserved_pret75_game_state_audit.json")
 
     with pytest.raises(RuntimeError, match="not football-only"):
+        mod.restore(src_root, 37852811339)
+
+
+def test_current_definitive_unavailable_cannot_be_resurrected(tmp_path, monkeypatch):
+    data, src_root = _write_fixture(tmp_path, "REQUIRED_MISSING_FAIL_CLOSED", False)
+    # Deliberately poison the active-role input with a player that current
+    # availability already marks definitively unavailable. The seam must fail.
+    active = pd.read_csv(data/"roles_ourlads_active_v1.csv")
+    active = pd.concat([active, pd.DataFrame([{
+        "team":"TB","player":"Current TB Out","role":"WR3","position":"WR","player_clean_key":"currenttbout"
+    }])], ignore_index=True)
+    active.to_csv(data/"roles_ourlads_active_v1.csv",index=False)
+
+    monkeypatch.setattr(mod, "DATA", data)
+    monkeypatch.setattr(mod, "AUDIT", data/"preserved_pret75_game_state_audit.json")
+    with pytest.raises(RuntimeError, match="resurrected current definitive-unavailable"):
         mod.restore(src_root, 37852811339)
