@@ -139,14 +139,18 @@ def feature_specs()->list[dict]:
             ["QB","RB","WR","TE"],opportunity=False,mean=True,
             historical="OOS_ENSEMBLE_COMPONENT",current="CURRENT_W5_TRACE",
             notes="Player-specific recent outcome regime; no opponent features."),
-      _spec("route_rate","INDIVIDUAL_RECENT_USAGE","PLAYER","AVAILABLE_BUT_NOT_CONSUMED",
-            "PlayerContext.features","generic rules/MC",
+      _spec("route_rate","INDIVIDUAL_RECENT_USAGE","PLAYER","SOURCE_PARITY_BLOCKED",
+            "PlayerForm route schema / public route-volume source frontier","generic rules/MC",
             ["RB","WR","TE"],["rec_yards","receptions"],
-            notes="Present in player context; not consumed by generic rules_v2/simulation_v2."),
-      _spec("yprr","INDIVIDUAL_RECENT_USAGE","PLAYER","AVAILABLE_BUT_NOT_CONSUMED",
-            "PlayerContext.features","generic rules/MC",
+            historical="HISTORICAL_WEEKLY_ROUTE_PARITY_NOT_CLEARED",
+            reopen="Clear a reproducible weekly routes-run source with historical/live semantic parity first.",
+            notes="The schema supports route rate, but canonical Week-5 parity reconstruction has no populated route values; do not treat an empty column as available player state."),
+      _spec("yprr","INDIVIDUAL_RECENT_USAGE","PLAYER","SOURCE_PARITY_BLOCKED",
+            "PlayerForm route schema / public route-volume source frontier","generic rules/MC",
             ["WR","TE"],["rec_yards"],
-            notes="Present in player context but generic receiving mean uses target allocation + YPT."),
+            historical="HISTORICAL_WEEKLY_ROUTE_PARITY_NOT_CLEARED",
+            reopen="Clear the same routes-run source gate before any YPRR transmission candidate.",
+            notes="YPRR requires real routes run. Target/dropback counts may not be relabeled as routes."),
       _spec("rb_prior_receiving_room_share","INDIVIDUAL_RECENT_USAGE","PLAYER","PROSPECTIVE_ONLY_FROZEN",
             "rb_receiving_identity_runtime_v1.py","RB_RECEIVING_ROOM_SHARE_SHADOW_V1",
             ["RB"],["rec_yards","receptions","rush_rec_yards"],opportunity=True,mean=True,
@@ -609,9 +613,29 @@ def _build_dynamic_trace(
             f"dynamic trace lost selected position/workload tiers: {len(selected_identity_tiers)} != 12"
         )
 
+    dynamic_fields=[
+        "player_tgt_share","player_rush_share","player_route_rate","player_yprr",
+        "player_ypt","player_ypc","player_catch_rate","off_plays_est","off_proe",
+        "off_success_rate","opp_success_rate_def","opp_pressure_generated",
+        "opp_def_pass_epa","opp_def_rush_epa","opp_explosive_allowed",
+        "opp_man_rate","opp_zone_rate","opp_middle_open_rate",
+        "opp_light_box_rate","opp_heavy_box_rate",
+    ]
+    dynamic_coverage={}
+    for c in dynamic_fields:
+        if c in p.columns:
+            dynamic_coverage[c]={
+                "nonnull_rows":int(p[c].notna().sum()),
+                "rows":int(len(p)),
+                "nonnull_rate":float(p[c].notna().mean()),
+            }
+
     payload={
         "season":SEASON,"week":WEEK,
         "pregame_players":int(len(p)),
+        "context_provenance":"HISTORICAL_AVAILABILITY_PARITY_WEEK5_RECONSTRUCTION",
+        "live_supplemental_team_sources_included":False,
+        "dynamic_feature_coverage":dynamic_coverage,
         "trace_players":int(trace[["team","player_clean_key"]].drop_duplicates().shape[0]),
         "trace_position_tiers":int(len(selected_identity_tiers)),
         "trace_rows":int(len(trace)),
