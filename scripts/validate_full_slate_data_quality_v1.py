@@ -109,6 +109,30 @@ def _validate_current_roster_scope(
     return role_teams, live_event_teams
 
 
+def _validate_team_coverage_scope(team_cov: pd.DataFrame, scheduled_teams: set[str]) -> int:
+    """All and only current scheduled teams must have production coverage."""
+    required={"team","coverage_available"}
+    missing=required-set(team_cov.columns)
+    if missing:
+        raise RuntimeError(f"team coverage missing required fields {sorted(missing)}")
+    teams=team_cov["team"].map(canon_team).astype("string").fillna("").str.strip()
+    if teams.eq("").any() or teams.duplicated().any():
+        raise RuntimeError("team coverage contains blank or duplicated team identity")
+    covered=set(teams)
+    if covered != scheduled_teams:
+        raise RuntimeError(
+            f"team coverage schedule mismatch missing={sorted(scheduled_teams-covered)} "
+            f"extra={sorted(covered-scheduled_teams)}"
+        )
+    flags=pd.to_numeric(team_cov["coverage_available"],errors="coerce")
+    if not flags.eq(1).all():
+        raise RuntimeError(
+            f"team coverage unavailable for scheduled teams: "
+            f"{sorted(set(teams.loc[~flags.eq(1)]))}"
+        )
+    return len(covered)
+
+
 def _derive_positive_row_injury_scope(
     injuries: pd.DataFrame,
     scheduled_teams: set[str],
@@ -314,11 +338,9 @@ def audit() -> dict:
     # direct feature is explicitly gated off, not silently imputed.
     team_cov = _read(DATA / "cb_coverage_team.csv")
     exposure = _read(DATA / "wr_cb_exposure.csv")
-    team_available = int(pd.to_numeric(team_cov.get("coverage_available", 0), errors="coerce").fillna(0).eq(1).sum())
+    team_available = _validate_team_coverage_scope(team_cov, scheduled_teams)
     direct_flags = pd.to_numeric(exposure.get("matchup_available", 0), errors="coerce").fillna(0)
     direct = int(direct_flags.eq(1).sum())
-    if team_available != 32:
-        raise RuntimeError(f"team coverage incomplete teams={team_available}/32")
     if direct <= 0:
         if not direct_flags.eq(0).all():
             raise RuntimeError("WR/CB exposure contains nonzero/non-one matchup flags")
@@ -336,13 +358,13 @@ def audit() -> dict:
             raise RuntimeError(f"direct WR/CB payload present while matchup_available=0: {meaningful}")
         rows.append(_row(
             "coverage_v2", "DIRECT_MATCHUP_UNAVAILABLE_GATED_OFF",
-            f"team_coverage={team_available}/32 wr_rows={len(exposure)} direct_matchups=0 "
+            f"team_coverage={team_available}/{len(scheduled_teams)} wr_rows={len(exposure)} direct_matchups=0 "
             "direct_matchup_consumption_eligible_rows=0; team_scheme_coverage_remains_available",
         ))
     else:
         rows.append(_row(
             "coverage_v2", "CERTIFIED_WITH_DIRECT_MATCHUPS",
-            f"team_coverage={team_available}/32 wr_rows={len(exposure)} direct_matchups={direct}",
+            f"team_coverage={team_available}/{len(scheduled_teams)} wr_rows={len(exposure)} direct_matchups={direct}",
         ))
 
     out = pd.DataFrame(rows)
