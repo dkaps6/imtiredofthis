@@ -257,7 +257,7 @@ def build_rows(points:pd.DataFrame,opps:pd.DataFrame,*,require_full_weeks:bool=T
     missing=joined["projection_mean"].isna()
     if missing.any():
         bad=joined.loc[missing,keys+["opportunity_player"]].head(30)
-        raise RuntimeError(f"ACT-only opportunity identities missing final point rows: {bad.to_dict('records')}")
+        raise RuntimeError(f"replay-matched opportunity identities missing final point rows: {bad.to_dict('records')}")
 
     gap=(joined["opportunity_actual_opportunities"]-joined["actual_opportunities"]).abs()
     if float(gap.max())>TOL:
@@ -351,7 +351,7 @@ def build_rows(points:pd.DataFrame,opps:pd.DataFrame,*,require_full_weeks:bool=T
 def run(*,points_path:Path,opportunity_path:Path,out_dir:Path)->dict:
     out_dir.mkdir(parents=True,exist_ok=True)
     points=_read(points_path,"all-player point scoreboard")
-    opps=_read(opportunity_path,"ACT-only opportunity rows")
+    opps=_read(opportunity_path,"replay-matched opportunity rows")
     rows=build_rows(points,opps)
 
     scoreable=rows.loc[rows["model_efficiency_eligible"]].copy()
