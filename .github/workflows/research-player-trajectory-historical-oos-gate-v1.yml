@@ -8,6 +8,8 @@ on:
       - 'docs/research/PLAYER_TARGET_SHARE_TRAJECTORY_HISTORICAL_INTEGRATION_V1_GATE.md'
       - 'scripts/research/audit_player_trajectory_historical_oos_gate_v1.py'
       - 'tests/test_player_trajectory_historical_oos_gate_v1.py'
+      - 'tests/test_wr_r15_fold_archive_provenance_v1.py'
+      - 'docs/research/authority_snapshots/wr_r15_fold_coefficients_original_10061328722.csv'
       - '.github/workflows/research-player-trajectory-historical-oos-gate-v1.yml'
   workflow_dispatch:
 
@@ -30,7 +32,7 @@ jobs:
       - name: Frozen Gate-0 unit tests
         env:
           PYTHONPATH: .
-        run: pytest -q tests/test_player_trajectory_historical_oos_gate_v1.py
+        run: pytest -q tests/test_player_trajectory_historical_oos_gate_v1.py tests/test_wr_r15_fold_archive_provenance_v1.py
       - name: Audit committed specialist training-seasons
         env:
           PYTHONPATH: .
