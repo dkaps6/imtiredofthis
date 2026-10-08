@@ -4,6 +4,7 @@ import pytest
 from scripts.validate_full_slate_data_quality_v1 import (
     _derive_positive_row_injury_scope,
     _validate_current_roster_scope,
+    _validate_team_coverage_scope,
 )
 
 
@@ -134,3 +135,37 @@ def test_week5_rejects_unknown_raw_roster_team_even_when_valid_byes():
     with pytest.raises(RuntimeError,match="unauthorized off-schedule"):
         _validate_current_roster_scope(
             scheduled,_roles(ALL_TEAMS|{"XYZ"}),_game_odds(scheduled),off_week_teams=byes)
+
+
+def _coverage(teams):
+    return pd.DataFrame([{"team":t,"coverage_available":1} for t in sorted(teams)])
+
+
+def test_coverage_scope_certifies_all_30_week5_teams():
+    scheduled=ALL_TEAMS-{"CAR","KC"}
+    assert _validate_team_coverage_scope(_coverage(scheduled),scheduled)==30
+
+
+def test_coverage_scope_certifies_all_32_no_bye_teams():
+    assert _validate_team_coverage_scope(_coverage(ALL_TEAMS),ALL_TEAMS)==32
+
+
+def test_coverage_scope_rejects_missing_week5_team():
+    scheduled=ALL_TEAMS-{"CAR","KC"}
+    missing=next(iter(sorted(scheduled)))
+    with pytest.raises(RuntimeError,match="schedule mismatch"):
+        _validate_team_coverage_scope(_coverage(scheduled-{missing}),scheduled)
+
+
+def test_coverage_scope_rejects_extra_bye_team():
+    scheduled=ALL_TEAMS-{"CAR","KC"}
+    with pytest.raises(RuntimeError,match="schedule mismatch"):
+        _validate_team_coverage_scope(_coverage(scheduled|{"CAR"}),scheduled)
+
+
+def test_coverage_scope_rejects_unavailable_scheduled_team():
+    scheduled=ALL_TEAMS-{"CAR","KC"}
+    frame=_coverage(scheduled)
+    frame.loc[frame.team.eq("ARI"),"coverage_available"]=0
+    with pytest.raises(RuntimeError,match="unavailable"):
+        _validate_team_coverage_scope(frame,scheduled)
