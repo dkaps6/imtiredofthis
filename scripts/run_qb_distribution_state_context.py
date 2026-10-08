@@ -15,6 +15,7 @@ import pandas as pd
 from scripts._opponent_map import canon_team
 from scripts.runtime_context import resolve_season, resolve_week
 from scripts.utils.pbp import get_pbp
+from scripts.utils.qb_c2_active_team_context_v1 import active_qb_c2_schedule
 
 TEAM_MAP=Path('data/team_week_map.csv')
 OUT=Path('data/qb_distribution_state_context.csv')
@@ -103,10 +104,7 @@ def main()->int:
     if not TEAM_MAP.exists(): raise RuntimeError(f'missing {TEAM_MAP}')
     tm=pd.read_csv(TEAM_MAP,low_memory=False);tm.columns=[str(c).lower() for c in tm.columns]
     tm['team']=tm['team'].map(canon_team);tm['opponent']=tm['opponent'].map(canon_team)
-    slate=tm[(pd.to_numeric(tm['season'],errors='coerce')==season)&(pd.to_numeric(tm['week'],errors='coerce')==week)].copy()
-    if 'bye' in slate.columns: slate=slate[~slate['bye'].fillna(False).astype(bool)]
-    slate=slate[slate.team.ne('')&slate.opponent.ne('')].drop_duplicates('team')
-    if len(slate)!=32: raise RuntimeError(f'expected 32 active team rows, got {len(slate)}')
+    slate=active_qb_c2_schedule(tm,season=season,week=week)
 
     seasons=list(range(2019,season))
     hist=pd.concat([aggregate_season(s) for s in seasons],ignore_index=True,sort=False)
