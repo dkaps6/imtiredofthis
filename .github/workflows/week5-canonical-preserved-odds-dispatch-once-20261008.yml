@@ -1,0 +1,106 @@
+name: Week5 Canonical Preserved Odds Dispatch Once 20261008
+
+on:
+  push:
+    branches:
+      - ops/week5-canonical-preserved-odds-dispatch-once-20261008
+
+permissions:
+  contents: read
+  actions: write
+
+env:
+  VALIDATION_RUN_ID: "37860224986"
+  VALIDATED_MAIN_SHA: "24704e5f1ef872ec86c36446d2c73f6d377c824c"
+  SOURCE_RUN_ID: "37852811339"
+  SOURCE_ARTIFACT_ID: "11582178322"
+  SOURCE_ARTIFACT_DIGEST: "sha256:4948e08003fcab0f519b35bd4b23d8c895554e4faced993238575acdc5d2e765"
+
+jobs:
+  dispatch_once:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Wait for exact canonical no-odds validation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 90); do
+            STATUS=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${VALIDATION_RUN_ID}" --jq .status)
+            CONCLUSION=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${VALIDATION_RUN_ID}" --jq '.conclusion // ""')
+            HEAD=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${VALIDATION_RUN_ID}" --jq .head_sha)
+            echo "validation attempt=${i} status=${STATUS} conclusion=${CONCLUSION} head=${HEAD}"
+            if [ "${HEAD}" != "${VALIDATED_MAIN_SHA}" ]; then
+              echo "FATAL: validation head drift"
+              exit 2
+            fi
+            if [ "${STATUS}" = "completed" ]; then
+              if [ "${CONCLUSION}" != "success" ]; then
+                echo "FATAL: canonical no-odds validation did not succeed"
+                exit 3
+              fi
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "FATAL: timed out waiting for canonical no-odds validation"
+          exit 4
+
+      - name: Verify main and preserved source are still exact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          MAIN_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/branches/main" --jq .commit.sha)
+          test "${MAIN_SHA}" = "${VALIDATED_MAIN_SHA}"
+
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}" > /tmp/source_meta.json
+          python - <<'PY'
+          import json, os
+          p=json.load(open('/tmp/source_meta.json',encoding='utf-8'))
+          assert int(p['id']) == int(os.environ['SOURCE_ARTIFACT_ID']), p
+          assert p['name'] == f"run_{os.environ['SOURCE_RUN_ID']}", p
+          assert p['digest'] == os.environ['SOURCE_ARTIFACT_DIGEST'], p
+          assert int((p.get('workflow_run') or {}).get('id',-1)) == int(os.environ['SOURCE_RUN_ID']), p
+          assert p.get('expired') is False, p
+          print('PINNED_SOURCE_VERIFIED', {'run':p['workflow_run']['id'],'artifact':p['id'],'digest':p['digest']})
+          PY
+
+      - name: Fail closed on duplicate exact-head replay dispatch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          EXISTING=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/full-slate.yml/runs?branch=main&event=workflow_dispatch&per_page=30"             --jq "[.workflow_runs[] | select(.head_sha == \"${VALIDATED_MAIN_SHA}\")] | length")
+          if [ "${EXISTING}" != "0" ]; then
+            echo "FATAL: exact-head Full Slate workflow_dispatch already exists; refusing duplicate replay"
+            exit 5
+          fi
+
+      - name: Dispatch canonical Full Slate with preserved paid odds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          MARKER=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "dispatch_marker=${MARKER}" >> "${GITHUB_ENV}"
+          gh workflow run full-slate.yml             --repo "${GITHUB_REPOSITORY}"             --ref main             -f season=2026             -f prior_season=2025             -f date=2026-10-08             -f fetch_live_odds=false             -f reuse_paid_odds_run_id="${SOURCE_RUN_ID}"             -f reuse_paid_odds_artifact_id="${SOURCE_ARTIFACT_ID}"             -f reuse_paid_odds_artifact_digest="${SOURCE_ARTIFACT_DIGEST}"             -f rb_pd2_shadow_capture=false
+          echo "CANONICAL_PRESERVED_ODDS_DISPATCH_SENT"
+
+      - name: Resolve dispatched canonical run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            RUN_ID=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/full-slate.yml/runs?branch=main&event=workflow_dispatch&per_page=20"               --jq "[.workflow_runs[] | select(.head_sha == \"${VALIDATED_MAIN_SHA}\" and .created_at >= \"${dispatch_marker}\")] | sort_by(.created_at) | last | .id // empty")
+            if [ -n "${RUN_ID}" ]; then
+              echo "CANONICAL_REPLAY_RUN_ID=${RUN_ID}"
+              echo "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "FATAL: dispatched canonical replay run not found"
+          exit 6
