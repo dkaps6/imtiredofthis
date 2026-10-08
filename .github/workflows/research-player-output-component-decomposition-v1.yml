@@ -124,6 +124,8 @@ jobs:
           assert s['max_full_actual_identity_gap'] <= 1e-10
           assert s['target_rows_graded_by_pbp'] > 0
           assert s['actual_opportunity_discrepancy_rows'] >= 2
+          assert s['grading_identity_mismatch_rows'] > 0
+          assert s['grading_identity_mismatch_player_weeks'] > 0
 
           expected={
               ('QB','pass_yards'),
@@ -137,6 +139,10 @@ jobs:
           identity=['season','week','event_id','team','player_clean_key','position_family','market']
           assert not r.duplicated(identity).any()
           assert set(pd.to_numeric(r.week,errors='coerce').astype(int).unique())=={1,2,3,4}
+          bad_id=r.loc[~r.grading_identity_valid.astype(str).str.lower().isin({'true','1','yes'})]
+          assert not bad_id.empty
+          assert bad_id.grading_exclusion_reason.eq('HISTORICAL_TEAM_IDENTITY_MISMATCH').all()
+          assert not bad_id.component_decomposition_eligible.astype(str).str.lower().isin({'true','1','yes'}).any()
 
           mapping={
               ('QB','pass_yards'):'pass_attempts',
@@ -178,6 +184,8 @@ jobs:
               'paired_rows':s['paired_rows'],
               'scoreable_rows':s['scoreable_rows'],
               'model_efficiency_unavailable_rows':s['model_efficiency_unavailable_rows'],
+              'grading_identity_mismatch_rows':s['grading_identity_mismatch_rows'],
+              'grading_identity_mismatch_player_weeks':s['grading_identity_mismatch_player_weeks'],
               'actual_opportunity_discrepancy_rows':s['actual_opportunity_discrepancy_rows'],
               'target_rows_graded_by_pbp':s['target_rows_graded_by_pbp'],
               'target_zero_usage_fallback_rows':s['target_zero_usage_fallback_rows'],
