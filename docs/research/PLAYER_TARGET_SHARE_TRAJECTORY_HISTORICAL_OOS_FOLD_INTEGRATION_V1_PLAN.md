@@ -77,10 +77,14 @@ Baseline:
 - use only WR-R15 candidate-variant parent rows;
 - baseline opportunity = `pred_targets`;
 - baseline receiving mean = `mc_rec_yards`;
-- M38 WR1 = row with `wr_rank == 1`.
+- M38/WR-R15 protected anchor uses the **exact original WR-R15 OOS-fold
+  semantics** from `apply_wr_fold`: within each event/team WR room, freeze the
+  row with maximum baseline `entitlement_tgt_share` (the original code's
+  `idxmax` anchor). Historical `wr_rank` is descriptive and is not the
+  anchor authority.
 
 For each event/team:
-- WR1 target opportunity is frozen exactly;
+- that exact WR-R15/M38 protected anchor target opportunity is frozen exactly;
 - only WR2+ rows are reweighted by `exp(trajectory_delta)`;
 - normalize the WR2+ weights to preserve the exact baseline WR2+ target pool;
 - exact total WR target pool therefore remains unchanged.
@@ -206,3 +210,29 @@ prospective acceptance requirement:
 - >=120 distinct identities;
 - >=80 scoreable team-position rooms.
 
+
+
+## Pre-score source-semantics amendment — 2026-10-08
+
+Integration run `37783235618` stopped before candidate scoring because the
+initial implementation incorrectly required a historical row with
+`wr_rank == 1` in every WR room. The frozen parent contains 21 2024 W5+
+rooms without such a label.
+
+Targeted inspection of the already-existing fold-safe production-order code
+`scripts/research/persist_wr_te_production_order_historical_v1.py::apply_wr_fold`
+proved that WR-R15 never used `wr_rank == 1` as its anchor authority. It
+selects the maximum baseline `entitlement_tgt_share` row per event/team and
+freezes that exact row.
+
+This amendment therefore corrects parent-source semantics to the original
+WR-R15 implementation. It does **not** alter:
+- the trajectory formula;
+- the trajectory window or eligibility;
+- any scoring gate;
+- any cohort;
+- any threshold;
+- any outcome treatment.
+
+Run `37783235618` produced no integration result and no performance metrics
+before this correction. The next run is the first eligible scoring run.
