@@ -76,6 +76,11 @@ jobs:
           mkdir -p data outputs
           cp -a replay_source/data/. data/
           cp -a replay_source/outputs/. outputs/
+          # Week-specific verified final-board quarantine is a newer football
+          # authority than the archived paid source; restore only this scoped
+          # immutable published-board ledger from the exact research head.
+          git show HEAD:data/manual_final_board_quarantine.csv > data/manual_final_board_quarantine.csv
+          grep -q '^Tyler Huntley,BAL,2026,5,' data/manual_final_board_quarantine.csv
           python - <<'PY'
           import json
           from pathlib import Path
