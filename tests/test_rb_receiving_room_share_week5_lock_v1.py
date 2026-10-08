@@ -103,4 +103,3 @@ def test_gsis_snapshot_ignores_name_suffix_aliases():
     assert a.prior_games==pytest.approx(4.0)
     assert b.prior_rb_room_share==pytest.approx(0.35)
     assert b.prior_games==pytest.approx(3.0)
-\n
