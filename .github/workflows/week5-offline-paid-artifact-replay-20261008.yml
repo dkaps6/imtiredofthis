@@ -109,7 +109,10 @@ jobs:
           test -s data/roles_current_production_eligible_v1.csv
           test -s data/qb_distribution_state_context.csv
 
-          sha256sum outputs/props_raw.csv outputs/props_raw_compact.csv outputs/odds_game.csv > /tmp/preserved_odds.sha256
+          # props_raw.csv is deliberately repurposed downstream as the expanded
+          # pricing-offer input. The immutable paid sportsbook boundary is the
+          # compact player-market snapshot plus game odds.
+          sha256sum outputs/props_raw_compact.csv outputs/odds_game.csv > /tmp/preserved_odds.sha256
 
           python - <<'PY'
           import json, os
