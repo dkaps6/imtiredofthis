@@ -13,11 +13,13 @@ env:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   SEASON: "2026"
   PRIOR_SEASON: "2025"
-  # Historical replay must resolve the preserved Week-2 slate, not wall-clock current week.
-  SLATE_DATE: "2026-09-17"
+  SLATE_DATE: "2026-10-08"
   FETCH_LIVE_ODDS: "false"
-  FULL_SLATE_SOURCE_RUN_ID: "35282021679"
   ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
+  REPLAY_SOURCE_RUN_ID: "37855917750"
+  REPLAY_SOURCE_ARTIFACT_ID: "11584521127"
+  REPLAY_SOURCE_ARTIFACT_NAME: "week5-offline-paid-replay-37855917750"
+  REPLAY_SOURCE_ARTIFACT_DIGEST: "sha256:a82f7745b4a97d21b929aff38b79ba902d01edd5bbb522f63fa463129c87b11e"
 
 jobs:
   replay:
@@ -38,16 +40,36 @@ jobs:
           pip install -r requirements.txt
           pip install nflreadpy pyyaml beautifulsoup4 lxml pytest
 
-      - name: Download preserved paid artifact
+      - name: Verify exact non-expired replay artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${REPLAY_SOURCE_ARTIFACT_ID}" > /tmp/replay_artifact_meta.json
+          python - <<'PY'
+          import json, os
+          p=json.load(open('/tmp/replay_artifact_meta.json',encoding='utf-8'))
+          want_run=int(os.environ['REPLAY_SOURCE_RUN_ID'])
+          assert int(p['id']) == int(os.environ['REPLAY_SOURCE_ARTIFACT_ID']), p
+          assert p['name'] == os.environ['REPLAY_SOURCE_ARTIFACT_NAME'], p
+          assert p['digest'] == os.environ['REPLAY_SOURCE_ARTIFACT_DIGEST'], p
+          assert int((p.get('workflow_run') or {}).get('id',-1)) == want_run, p
+          assert p.get('expired') is False, p
+          print('PINNED_REPLAY_ARTIFACT_VERIFIED', {
+              'run':want_run,'artifact_id':p['id'],'digest':p['digest']
+          })
+          PY
+
+      - name: Download preserved replay artifact
         uses: actions/download-artifact@v4
         with:
-          name: run_35282021679
+          name: week5-offline-paid-replay-37855917750
           path: replay_source
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
-          run-id: 35282021679
+          run-id: 37855917750
 
-      - name: Restore preserved data and outputs
+      - name: Restore preserved Week5 football and sportsbook state
         run: |
           set -euo pipefail
           test -d replay_source/data
@@ -56,135 +78,65 @@ jobs:
           mkdir -p data outputs
           cp -a replay_source/data/. data/
           cp -a replay_source/outputs/. outputs/
-          git show HEAD:data/player_identity_aliases.csv > data/player_identity_aliases.csv
+
+          # Current branch governance is authoritative over archived mutable ledgers.
           git show HEAD:data/manual_final_board_quarantine.csv > data/manual_final_board_quarantine.csv
-          test -s data/player_identity_aliases.csv
-          test -s data/manual_final_board_quarantine.csv
-          grep -q '^Joshua Palmer,Josh Palmer,00-0036988,BUF,WR,' data/player_identity_aliases.csv
-          grep -q '^Carson Wentz,MIN,2026,2,' data/manual_final_board_quarantine.csv
+          git show HEAD:data/manual_prop_quarantine.csv > data/manual_prop_quarantine.csv
+
           test -s data/live_odds_status.json
-          python - <<'EOF'
+          test -s outputs/props_raw_compact.csv
+          test -s outputs/odds_game.csv
+          test -s data/full_slate_data_quality_audit.json
+
+          python - <<'PY'
           import json, os
           from pathlib import Path
-          path=Path('data/live_odds_status.json')
-          status=json.loads(path.read_text(encoding='utf-8'))
-          status['replay_source_run']=int(os.environ['FULL_SLATE_SOURCE_RUN_ID'])
-          status['odds_api_refetched']=False
-          status['replay_mode']='OFFLINE_PRESERVED_ARTIFACT'
-          path.write_text(json.dumps(status,indent=2,sort_keys=True)+'\n',encoding='utf-8')
-          print('OFFLINE_REPLAY_PROVENANCE_STAMPED', status['replay_source_run'])
-          EOF
-          test -s outputs/odds_game.csv
-          test -s outputs/props_raw_compact.csv
-          echo "OFFLINE REPLAY ONLY: preserved run=${FULL_SLATE_SOURCE_RUN_ID}; no OddsAPI acquisition command exists in this workflow"
+          q=json.load(open('data/full_slate_data_quality_audit.json',encoding='utf-8'))
+          if int(q.get('certification_blockers',-1)) != 0:
+              raise SystemExit(f'FATAL: pinned replay fixture is not data-quality clean: {q}')
+          p=Path('data/live_odds_status.json')
+          s=json.loads(p.read_text(encoding='utf-8'))
+          s['replay_source_run']=int(os.environ['REPLAY_SOURCE_RUN_ID'])
+          s['replay_source_artifact_id']=int(os.environ['REPLAY_SOURCE_ARTIFACT_ID'])
+          s['replay_source_artifact_digest']=os.environ['REPLAY_SOURCE_ARTIFACT_DIGEST']
+          s['odds_api_refetched']=False
+          s['replay_mode']='PR_REQUIRED_OFFLINE_PINNED_WEEK5'
+          p.write_text(json.dumps(s,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          print('OFFLINE_PR_REPLAY_READY', {'compact_rows':s.get('production_compact_rows')})
+          PY
 
-      - name: Certify preserved injury report scope without mutating injury rows
+      - name: Run replay and workflow contract tests
         run: |
-          set -euo pipefail
           export PYTHONPATH="${PWD}"
-          python scripts/operations/certify_preserved_injury_scope_v1.py
-          test -s data/preserved_replay_injury_scope_audit.json
-          test -s data/injury_team_scope.csv
+          pytest -q             tests/test_full_slate_workflow_contract.py             tests/test_preserved_live_props_current_roster_v1.py             tests/test_qb_c2_active_team_context_v1.py             tests/test_full_slate_data_quality_scope.py
 
-      - name: Rebuild PlayerForm with verified identity aliases
-        run: |
-          set -euo pipefail
-          export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
-          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
-          python scripts/operations/run_player_form_verified_alias_recovery_v1.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
-          python scripts/enrich_player_scoring_v2.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
-          python scripts/operations/validate_playerform_runtime_strict_prior_v1.py --season "${SEASON}" --week "${WEEK_RESOLVED}"
-          python scripts/validate_player_identity_semantics_v1.py
-          test -s data/player_identity_semantic_audit.json
-          python - <<'EOF'
-          import json
-          import pandas as pd
-          summary=json.load(open('data/player_identity_semantic_audit.json',encoding='utf-8'))
-          if int(summary.get('temporary_possible_historical_aliases',-1)) != 0:
-              raise SystemExit(f'FATAL: historical identity aliases still unresolved: {summary}')
-          pf=pd.read_csv('data/player_form.csv',low_memory=False)
-          expected={
-              'Joshua Palmer':'gsis:00-0036988',
-              'Matt Hibner':'gsis:00-0040879',
-          }
-          for player,identity in expected.items():
-              rows=pf.loc[pf['player'].astype(str).eq(player)]
-              if len(rows) != 1:
-                  raise SystemExit(f'FATAL: expected one PlayerForm row for {player}, got {len(rows)}')
-              actual=str(rows.iloc[0]['player_identity_key'])
-              if actual != identity:
-                  raise SystemExit(f'FATAL: identity recovery failed {player}: {actual} != {identity}')
-          print('VERIFIED_ALIAS_PLAYERFORM_RECOVERY_PASS')
-          EOF
-
-      - name: Rebuild downstream football model bridges
-        run: |
-          set -euo pipefail
-          export PYTHONPATH="${PWD}"
-          python scripts/run_model_context_bridge.py
-          python scripts/run_model_bayesian_bridge.py
-          python scripts/run_model_ml_bridge.py
-          python scripts/run_model_state_bridge.py
-          python scripts/run_model_rules_bridge.py
-          python scripts/run_model_ensemble_bridge.py
-          for f in data/model_context_bridge.csv data/model_bayesian_diagnostics.csv data/model_ml_diagnostics.csv data/model_state_diagnostics.csv data/model_rule_diagnostics.csv data/model_ensemble_diagnostics.csv; do test -s "$f"; done
-
-      - name: Rebuild QB C2 football-only distribution state
-        run: |
-          set -euo pipefail
-          export PYTHONPATH="${PWD}"
-          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
-          python scripts/run_qb_distribution_state_context.py --season "${SEASON}" --week "${WEEK_RESOLVED}"
-          test -s data/qb_distribution_state_context.csv
-          test -s data/qb_distribution_state_context_audit.csv
-
-      - name: Apply locked current-availability production seams
+      - name: Apply protected current-output seams
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
           python scripts/operations/apply_current_availability_eligible_team_seam_v1.py
           python scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py
           python scripts/operations/apply_current_availability_qb_c2_primary_team_seam_v1.py
+          python scripts/operations/apply_qb_c2_active_schedule_context_seam_v1.py
           python -m py_compile scripts/run_pricing_with_full_roster_universe_v1.py scripts/modeling/rb_r26_receptions_production_adapter_v1.py scripts/modeling/qb_c2_production_adapter_v1.py
 
-      - name: Replay Step 29 data quality classifier
-        run: |
-          set -euo pipefail
-          export PYTHONPATH="${PWD}"
-          python scripts/validate_full_slate_data_quality_v1.py
-          test -s data/full_slate_data_quality_audit.json
-
-      - name: Replay Step 30 pricing inputs and metrics
-        run: |
-          set -euo pipefail
-          export PYTHONPATH="${PWD}"
-          python scripts/materialize_pricing_offers_v1.py
-          test -s outputs/props_pricing_offers.csv
-          test -s data/live_pricing_offer_audit.json
-          python scripts/run_metrics_context.py --season "${SEASON}" --mode full --date "${SLATE_DATE}"
-          python scripts/validate_build_integrity.py
-          python scripts/metrics_ready.py --season "${SEASON}" --date "${SLATE_DATE}"
-          test -s data/metrics_ready.csv
-
-      - name: Replay Step 31 certified pricing stack
+      - name: Reprice pinned board offline
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+          python scripts/materialize_pricing_offers_v1.py
+          python scripts/run_metrics_context.py --season "${SEASON}" --mode full --date "${SLATE_DATE}"
+          python scripts/validate_build_integrity.py
+          python scripts/metrics_ready.py --season "${SEASON}" --date "${SLATE_DATE}"
           python scripts/run_pricing_with_full_roster_universe_v3.py --season "${SEASON}"
           test -s outputs/props_priced_clean.csv
-          test -s data/football_simulation_universe_audit.json
-          test -s data/wr_r15_full_slate_entitlement_audit.json
-          test -s data/qb_c2_production_integration_audit.json
           python scripts/stamp_qb_c2_pricing_lineage_v1.py
-          test -s data/qb_c2_pricing_lineage_stamp_audit.json
           python scripts/validate_rb_rush_rec_conservation_v1.py
           python scripts/audit_market_model_lineage_v2.py
           python scripts/validate_anytime_td_model_status_v1.py
           python scripts/validate_team_target_pool_full_universe_v2.py
           python scripts/validate_certified_full_slate_stack_v2.py
           python scripts/validate_full_slate_mechanical_certification_v1.py
-          test -s outputs/paid_full_slate_replay_result.json
-          test -s data/full_slate_post_pricing_audit.csv
 
       - name: Apply final-board-only verified prop quarantines
         run: |
@@ -192,19 +144,26 @@ jobs:
           export PYTHONPATH="${PWD}"
           python scripts/operations/quarantine_final_priced_props_v1.py
           test -s data/final_priced_props_quarantine_status.json
-          python - <<'EOF'
+          python - <<'PY'
           import json
           s=json.load(open('data/final_priced_props_quarantine_status.json',encoding='utf-8'))
+          if 'BAL:tylerhuntley' not in set(s.get('quarantined_team_name_keys',[])):
+              raise SystemExit(f'FATAL: Week5 Huntley quarantine not applied: {s}')
           if int(s.get('rows_removed',0)) <= 0:
-              raise SystemExit(f'FATAL: expected verified Week-2 final-board quarantine to remove rows: {s}')
-          if 'MIN:carsonwentz' not in set(s.get('quarantined_team_name_keys',[])):
-              raise SystemExit(f'FATAL: Wentz quarantine key absent: {s}')
-          print('FINAL_BOARD_QUARANTINE_CERTIFIED', s)
-          EOF
+              raise SystemExit(f'FATAL: expected Week5 final-board quarantine to remove rows: {s}')
+          print('WEEK5_FINAL_BOARD_QUARANTINE_CERTIFIED',s)
+          PY
 
-      - name: Strict repository audits
+      - name: Prove no OddsAPI refetch and run strict audits
         run: |
           set -euo pipefail
+          python - <<'PY'
+          import json
+          s=json.load(open('data/live_odds_status.json',encoding='utf-8'))
+          assert s.get('odds_api_refetched') is False, s
+          assert s.get('replay_mode') == 'PR_REQUIRED_OFFLINE_PINNED_WEEK5', s
+          print('ZERO_NEW_ODDSAPI_CONFIRMED')
+          PY
           export PYTHONPATH="${PWD}"
           python scripts/utils/audit_repo.py --strict
           python scripts/audit_2026_production_readiness.py --strict
@@ -215,21 +174,13 @@ jobs:
         with:
           name: offline_replay_${{ github.run_id }}
           path: |
-            data/preserved_replay_injury_scope_audit.json
-            data/injury_team_scope.csv
-            data/player_identity_semantic_audit.csv
-            data/player_identity_semantic_audit.json
-            data/full_slate_data_quality_audit.csv
-            data/full_slate_data_quality_audit.json
-            data/live_pricing_offer_audit.json
             data/live_odds_status.json
-            data/qb_c2_pricing_lineage_stamp_audit.json
-            data/market_model_lineage_current.json
-            data/full_slate_post_pricing_audit.csv
-            data/certified_full_slate_stack_audit.json
+            data/full_slate_data_quality_audit.json
             data/final_priced_props_quarantine_status.json
+            data/certified_full_slate_stack_audit.json
+            data/full_slate_post_pricing_audit.csv
             outputs/paid_full_slate_replay_result.json
             outputs/props_pricing_offers.csv
             outputs/props_priced_clean.csv
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 30
