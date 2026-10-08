@@ -124,8 +124,10 @@ jobs:
           assert s['max_full_actual_identity_gap'] <= 1e-10
           assert s['target_rows_graded_by_pbp'] > 0
           assert s['actual_opportunity_discrepancy_rows'] >= 2
-          assert s['grading_identity_mismatch_rows'] > 0
-          assert s['grading_identity_mismatch_player_weeks'] > 0
+          assert s['grading_exclusion_rows'] > 0
+          assert s['grading_exclusion_player_weeks'] > 0
+          assert s['grading_source_conflict_rows'] > 0
+          assert s['grading_source_conflict_player_weeks'] > 0
 
           expected={
               ('QB','pass_yards'),
@@ -141,8 +143,20 @@ jobs:
           assert set(pd.to_numeric(r.week,errors='coerce').astype(int).unique())=={1,2,3,4}
           bad_id=r.loc[~r.grading_identity_valid.astype(str).str.lower().isin({'true','1','yes'})]
           assert not bad_id.empty
-          assert bad_id.grading_exclusion_reason.eq('HISTORICAL_TEAM_IDENTITY_MISMATCH').all()
+          allowed_exclusions={
+              'HISTORICAL_TEAM_IDENTITY_MISMATCH',
+              'GRADING_SOURCE_CONFLICT_UNRESOLVED_PBP_TARGET',
+          }
+          assert set(bad_id.grading_exclusion_reason.astype(str).unique()).issubset(allowed_exclusions)
           assert not bad_id.component_decomposition_eligible.astype(str).str.lower().isin({'true','1','yes'}).any()
+          for _,g in bad_id.groupby(['season','week','player_clean_key']):
+              # An exclusion applies to the entire player-week, never one market only.
+              full=r.loc[
+                  r.season.eq(g.season.iloc[0])
+                  & r.week.eq(g.week.iloc[0])
+                  & r.player_clean_key.eq(g.player_clean_key.iloc[0])
+              ]
+              assert not full.grading_identity_valid.astype(str).str.lower().isin({'true','1','yes'}).any()
 
           mapping={
               ('QB','pass_yards'):'pass_attempts',
@@ -159,7 +173,11 @@ jobs:
               assert not q.empty, (pos,market)
               assert set(q.opportunity_type.astype(str).unique())=={opp}, (pos,market)
               if opp=='targets':
-                  allowed={'COMPLETED_GAME_PBP_TARGETS','FROZEN_ZERO_NO_RECEIVING_USAGE'}
+                  allowed={
+                      'COMPLETED_GAME_PBP_TARGETS',
+                      'FROZEN_ZERO_NO_RECEIVING_USAGE',
+                      'GRADING_SOURCE_CONFLICT_UNRESOLVED_PBP_TARGET',
+                  }
                   assert set(q.actual_opportunity_source.astype(str).unique()).issubset(allowed)
                   z=q.loc[q.actual_opportunity_source.eq('FROZEN_ZERO_NO_RECEIVING_USAGE')]
                   if not z.empty:
@@ -184,8 +202,13 @@ jobs:
               'paired_rows':s['paired_rows'],
               'scoreable_rows':s['scoreable_rows'],
               'model_efficiency_unavailable_rows':s['model_efficiency_unavailable_rows'],
+              'grading_exclusion_rows':s['grading_exclusion_rows'],
+              'grading_exclusion_player_weeks':s['grading_exclusion_player_weeks'],
+              'grading_exclusion_reason_counts':s['grading_exclusion_reason_counts'],
               'grading_identity_mismatch_rows':s['grading_identity_mismatch_rows'],
               'grading_identity_mismatch_player_weeks':s['grading_identity_mismatch_player_weeks'],
+              'grading_source_conflict_rows':s['grading_source_conflict_rows'],
+              'grading_source_conflict_player_weeks':s['grading_source_conflict_player_weeks'],
               'actual_opportunity_discrepancy_rows':s['actual_opportunity_discrepancy_rows'],
               'target_rows_graded_by_pbp':s['target_rows_graded_by_pbp'],
               'target_zero_usage_fallback_rows':s['target_zero_usage_fallback_rows'],
