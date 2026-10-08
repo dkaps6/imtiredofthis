@@ -61,8 +61,10 @@ def _scheduled_teams(season: int, week: int) -> set[str]:
         & pd.to_numeric(sched["week"], errors="coerce").eq(int(week))
     ].copy()
     teams = set(active["team"].map(canon_team).dropna().astype(str))
-    if len(teams) != 32:
-        raise RuntimeError(f"injury scope requires 32 scheduled teams; got {len(teams)}")
+    if not teams or len(teams) % 2:
+        raise RuntimeError(
+            f"injury scope requires an even, nonzero active scheduled-team set; got {len(teams)}"
+        )
     return teams
 
 
@@ -162,8 +164,8 @@ def _parse_team_scope(html: str, season: int, week: int, injuries: pd.DataFrame)
     scope = pd.DataFrame(records)
     if unresolved:
         raise RuntimeError(f"NFL.com injury scope unresolved scheduled teams: {unresolved}")
-    if len(scope) != 32 or set(scope["team"]) != scheduled:
-        raise RuntimeError("NFL.com injury scope ledger does not exactly match scheduled teams")
+    if len(scope) != len(scheduled) or set(scope["team"]) != scheduled:
+        raise RuntimeError("NFL.com injury scope ledger does not exactly match active scheduled teams")
     if report_teams - scheduled:
         raise RuntimeError(f"NFL.com injury rows include non-scheduled teams: {sorted(report_teams - scheduled)}")
     scope.to_csv(SCOPE, index=False)

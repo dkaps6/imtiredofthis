@@ -331,6 +331,11 @@ def parse_args():
     p.add_argument('--sha',default=os.getenv('GITHUB_SHA',''))
     p.add_argument('--ref-name',default=os.getenv('GITHUB_REF_NAME',''))
     p.add_argument('--fetch-live-odds',default=os.getenv('FETCH_LIVE_ODDS','false'))
+    p.add_argument(
+        '--pricing-provenance',
+        default=os.getenv('PRICING_PROVENANCE','AUTO'),
+        choices=['AUTO','PRESERVED_REPLAY'],
+    )
     return p.parse_args()
 
 
@@ -346,7 +351,15 @@ def main():
     lineage=csvp(root/'data/market_model_lineage_current.csv')
     live=jsonp(root/'data/live_odds_status.json')
     requested=bol(a.fetch_live_odds)
-    status='CURRENT' if requested and bol(live.get('available')) and not pr.empty else ('NO_LIVE_ODDS_REQUESTED' if not requested else 'NO_ACTIVE_MARKETS')
+    replay=str(a.pricing_provenance).strip().upper()=='PRESERVED_REPLAY'
+    if replay and not pr.empty:
+        status='PRESERVED_REPLAY'
+    elif requested and bol(live.get('available')) and not pr.empty:
+        status='CURRENT'
+    elif not requested:
+        status='NO_LIVE_ODDS_REQUESTED'
+    else:
+        status='NO_ACTIVE_MARKETS'
     rows=build_offer_rows(pr,av,pf,roles,cert,lineage,totals,logs)
     current=status=='CURRENT'
     unresolved=sum(1 for r in rows if r['pos']=='UNRESOLVED')
@@ -354,7 +367,14 @@ def main():
     wb=Workbook(); wb.calculation.fullCalcOnLoad=True; wb.calculation.forceFullCalc=True; wb.calculation.calcMode='auto'
     dash=wb.active; dash.title='Dashboard'; dash.merge_cells('A1:H2'); dash['A1']='NFL BETTING MODEL MASTER'; dash['A1'].fill=PatternFill('solid',fgColor=NAVY); dash['A1'].font=Font(bold=True,color=WHITE,size=16)
     dash.merge_cells('A4:H5')
-    dash['A4']='CURRENT sportsbook prices are attached to this same Full Slate run.' if current else ('Live odds were not requested; football outputs are current and betting decisions are suppressed.' if not requested else 'Live odds were requested but no active pricing was available; betting decisions are suppressed.')
+    if current:
+        dash['A4']='CURRENT sportsbook prices are attached to this same Full Slate run.'
+    elif replay:
+        dash['A4']='PRESERVED sportsbook snapshot replayed from a prior paid run. Prices are not asserted current; Bettable Now is suppressed.'
+    elif not requested:
+        dash['A4']='Live odds were not requested; football outputs are current and betting decisions are suppressed.'
+    else:
+        dash['A4']='Live odds were requested but no active pricing was available; betting decisions are suppressed.'
     dash['A4'].fill=PatternFill('solid',fgColor=GREEN if current else YELLOW); dash['A4'].font=Font(bold=True,color=GD if current else YD); dash['A4'].alignment=Alignment(wrap_text=True)
     kpis=[('Sportsbook Offers',len(rows)),('Unique Player-Markets',len({(r['key'],r['market']) for r in rows})),('Priced Players',len({r['key'] for r in rows if r['key']})),('Eligible Games',sum(bol(x) for x in cert.get('production_eligible',pd.Series(dtype=object)))),('Locked Games',sum(str(x)=='KICKED_OFF_LOCKED' for x in cert.get('certification_state',pd.Series(dtype=object)))),('Unresolved Position Rows',unresolved)]
     for i,(label,value) in enumerate(kpis):
@@ -401,13 +421,13 @@ def main():
     frame(wb,'Availability & Roles',av,'AvailabilityRoles')
     frame(wb,'Market Science',lineage,'MarketScience')
     notes=wb.create_sheet('Lineage & Notes'); notes.append(['NFL BETTING MODEL MASTER — RUN LINEAGE','']); notes.merge_cells('A1:B1'); notes['A1'].fill=PatternFill('solid',fgColor=NAVY); notes['A1'].font=Font(bold=True,color=WHITE,size=15)
-    for k,v in [('Workbook builder','scripts/build_master_betting_workbook_v1.py -> master_betting_workbook_core_v2.py'),('GitHub Run ID',a.run_id),('GitHub SHA',a.sha),('GitHub Ref',a.ref_name),('Live odds requested',requested),('Pricing status',status),('Live odds status',live.get('status','')),('Unresolved position rows',unresolved),('Position resolution','Exact current identity -> suffix-insensitive current identity -> historical player position -> deterministic model/market inference -> UNRESOLVED fail-closed.'),('Architecture','Sportsbook is downstream only; workbook generation cannot alter football projections.'),('Decision policy','Snapshot Signal/Decision show a raw EV-derived HAS EDGE/NO EDGE status and best side (or PASS/BLOCKED/RESEARCH ONLY); this is not a calibrated confidence tier or staking policy. Both betting sheets sort by Best EV ROI descending.')]:
+    for k,v in [('Workbook builder','scripts/build_master_betting_workbook_v1.py -> master_betting_workbook_core_v2.py'),('GitHub Run ID',a.run_id),('GitHub SHA',a.sha),('GitHub Ref',a.ref_name),('Live odds requested',requested),('Pricing provenance',a.pricing_provenance),('Pricing status',status),('Replay source run',live.get('replay_source_run','')),('Replay source artifact',live.get('replay_source_artifact_id','')),('Live odds status',live.get('status','')),('Unresolved position rows',unresolved),('Position resolution','Exact current identity -> suffix-insensitive current identity -> historical player position -> deterministic model/market inference -> UNRESOLVED fail-closed.'),('Architecture','Sportsbook is downstream only; workbook generation cannot alter football projections.'),('Decision policy','Snapshot Signal/Decision show a raw EV-derived HAS EDGE/NO EDGE status and best side (or PASS/BLOCKED/RESEARCH ONLY); this is not a calibrated confidence tier or staking policy. Both betting sheets sort by Best EV ROI descending.')]:
         notes.append([k,v]); notes.cell(notes.max_row,1).fill=PatternFill('solid',fgColor=LBLUE); notes.cell(notes.max_row,1).font=Font(bold=True,color=NAVY)
     notes.column_dimensions['A'].width=34; notes.column_dimensions['B'].width=105
 
     wb._sheets=[wb[n] for n in ['Dashboard','Best Snapshot Edges','Master Betting Board','Game Certification','Availability & Roles','Market Science','Lineage & Notes']]
     wb.save(out)
-    audit={'disposition':'MASTER_BETTING_WORKBOOK_PUBLISHED','output':str(out),'pricing_status':status,'priced_offer_rows':len(rows),'player_market_rows':len({(r['key'],r['market']) for r in rows}),'availability_rows':len(av),'game_certification_rows':len(cert),'unresolved_position_rows':unresolved,'position_resolution_version':'suffix_historical_model_fallback_v2','sportsbook_downstream_only':True}
+    audit={'disposition':'MASTER_BETTING_WORKBOOK_PUBLISHED','output':str(out),'pricing_status':status,'pricing_provenance':a.pricing_provenance,'priced_offer_rows':len(rows),'player_market_rows':len({(r['key'],r['market']) for r in rows}),'availability_rows':len(av),'game_certification_rows':len(cert),'unresolved_position_rows':unresolved,'position_resolution_version':'suffix_historical_model_fallback_v2','sportsbook_downstream_only':True}
     audit_path=root/'data/master_betting_workbook_audit.json'; audit_path.parent.mkdir(parents=True,exist_ok=True); json.dump(audit,open(audit_path,'w',encoding='utf-8'),indent=2,sort_keys=True)
     print(json.dumps(audit,sort_keys=True))
 

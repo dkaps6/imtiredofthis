@@ -22,6 +22,18 @@ on:
         required: false
         type: boolean
         default: false
+      reuse_paid_odds_run_id:
+        description: "Existing Full Slate run ID whose paid sportsbook artifact should be reused (NO OddsAPI fetch)"
+        required: false
+        default: ""
+      reuse_paid_odds_artifact_id:
+        description: "Pinned artifact ID belonging to reuse_paid_odds_run_id"
+        required: false
+        default: ""
+      reuse_paid_odds_artifact_digest:
+        description: "Pinned sha256:... digest for the preserved artifact"
+        required: false
+        default: ""
       rb_pd2_shadow_capture:
         description: "Research only: capture and pregame-lock frozen RB PD2 distributions"
         required: false
@@ -45,6 +57,9 @@ env:
   PRIOR_SEASON: ${{ github.event.inputs.prior_season || '2025' }}
   SLATE_DATE: ${{ github.event.inputs.date || '' }}
   FETCH_LIVE_ODDS: ${{ github.event.inputs.fetch_live_odds || 'false' }}
+  REUSE_PAID_ODDS_RUN_ID: ${{ github.event.inputs.reuse_paid_odds_run_id || '' }}
+  REUSE_PAID_ODDS_ARTIFACT_ID: ${{ github.event.inputs.reuse_paid_odds_artifact_id || '' }}
+  REUSE_PAID_ODDS_ARTIFACT_DIGEST: ${{ github.event.inputs.reuse_paid_odds_artifact_digest || '' }}
   RB_PD2_SHADOW_CAPTURE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.rb_pd2_shadow_capture == 'true' && 'true' || '' }}
   # Pinned green history build: 2025 leakage-safe seed + certified completed 2026 Weeks 1-2.
   RB_PD2_FORWARD_HISTORY_RUN_ID: "35732782075"
@@ -90,7 +105,16 @@ jobs:
 
       - name: Live odds mode status
         run: |
-          if [ "${FETCH_LIVE_ODDS}" = "true" ]; then
+          set -euo pipefail
+          if [ "${FETCH_LIVE_ODDS}" = "true" ] && [ -n "${REUSE_PAID_ODDS_RUN_ID}" ]; then
+            echo "FATAL: fetch_live_odds and reuse_paid_odds_run_id are mutually exclusive"
+            exit 2
+          fi
+          if [ -n "${REUSE_PAID_ODDS_RUN_ID}" ]; then
+            test -n "${REUSE_PAID_ODDS_ARTIFACT_ID}"
+            test -n "${REUSE_PAID_ODDS_ARTIFACT_DIGEST}"
+            echo "PRESERVED ODDS REPLAY ENABLED — canonical football model will rebuild; OddsAPI acquisition is disabled"
+          elif [ "${FETCH_LIVE_ODDS}" = "true" ]; then
             echo "LIVE ODDS ENABLED — sportsbook acquisition will occur only after football eligibility is resolved"
           else
             echo "LIVE ODDS PAUSED — football model builds with zero sportsbook fetches"
@@ -121,6 +145,23 @@ jobs:
           test -s data/weather_week.csv
           test -s data/injuries.csv
           test -s data/injuries_source_status.json
+
+      - name: Certify current NFL.com injury scope for priced Full Slate
+        if: ${{ env.FETCH_LIVE_ODDS == 'true' || env.REUSE_PAID_ODDS_RUN_ID != '' }}
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/refresh_current_injuries_nflcom_v1.py
+          test -s data/injuries.csv
+          test -s data/injury_team_scope.csv
+          test -s data/current_injury_nflcom_refresh_audit.json
+          python - <<'PY'
+          import json
+          p=json.load(open('data/current_injury_nflcom_refresh_audit.json',encoding='utf-8'))
+          if p.get('disposition') != 'CURRENT_NFLCOM_INJURY_REFRESH_CERTIFIED':
+              raise SystemExit(f"FATAL: current injury scope not certified: {p}")
+          print('CURRENT_NFLCOM_INJURY_SCOPE_READY',p)
+          PY
 
       - name: Resolve current availability before opportunity
         run: |
@@ -332,8 +373,95 @@ jobs:
               print('No current active-slate player prop markets are posted; sportsbook pricing will be skipped cleanly.')
           EOF
 
+      - name: Restore pinned previously-paid sportsbook snapshot
+        id: replay_odds
+        if: ${{ env.FETCH_LIVE_ODDS != 'true' && env.REUSE_PAID_ODDS_RUN_ID != '' }}
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          rm -rf /tmp/preserved_paid_odds
+          mkdir -p /tmp/preserved_paid_odds
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${REUSE_PAID_ODDS_ARTIFACT_ID}" > /tmp/preserved_paid_odds_meta.json
+          python - <<'PY'
+          import json, os
+          p=json.load(open('/tmp/preserved_paid_odds_meta.json',encoding='utf-8'))
+          want_run=int(os.environ['REUSE_PAID_ODDS_RUN_ID'])
+          want_id=int(os.environ['REUSE_PAID_ODDS_ARTIFACT_ID'])
+          want_digest=os.environ['REUSE_PAID_ODDS_ARTIFACT_DIGEST'].strip()
+          if int(p.get('id',-1)) != want_id:
+              raise SystemExit(f"FATAL: preserved odds artifact id drift: {p.get('id')} != {want_id}")
+          if p.get('name') != f"run_{want_run}":
+              raise SystemExit(f"FATAL: preserved odds artifact name drift: {p.get('name')!r} != run_{want_run!s}")
+          if p.get('digest') != want_digest:
+              raise SystemExit(f"FATAL: preserved odds artifact digest drift: {p.get('digest')!r} != {want_digest!r}")
+          artifact_run=int((p.get('workflow_run') or {}).get('id',-1))
+          if artifact_run != want_run:
+              raise SystemExit(f"FATAL: preserved artifact belongs to run {artifact_run}, expected {want_run}")
+          if bool(p.get('expired')):
+              raise SystemExit('FATAL: preserved odds artifact expired')
+          print('PINNED_PAID_ODDS_ARTIFACT_VERIFIED',{'run':want_run,'artifact_id':want_id,'digest':want_digest})
+          PY
+          gh run download "${REUSE_PAID_ODDS_RUN_ID}" --repo "${GITHUB_REPOSITORY}" --name "run_${REUSE_PAID_ODDS_RUN_ID}" --dir /tmp/preserved_paid_odds
+
+          for f in             outputs/props_raw.csv             outputs/props_raw_compact.csv             outputs/odds_game.csv             data/props_raw.csv             data/odds_game.csv             data/opponent_map_from_props.csv             data/live_odds_status.json             data/live_odds_placeholder_rows.csv             data/live_odds_artifact_hardening.json             data/live_prop_identity_audit.csv             data/live_prop_identity_status.json
+          do
+            test -s "/tmp/preserved_paid_odds/${f}"
+            mkdir -p "$(dirname "${f}")"
+            cp "/tmp/preserved_paid_odds/${f}" "${f}"
+          done
+
+          mkdir -p data/replay_source_paid
+          cp /tmp/preserved_paid_odds/outputs/props_raw_compact.csv data/replay_source_paid/props_raw_compact_paid.csv
+          cp /tmp/preserved_paid_odds/outputs/odds_game.csv data/replay_source_paid/odds_game_paid.csv
+          sha256sum data/replay_source_paid/props_raw_compact_paid.csv data/replay_source_paid/odds_game_paid.csv > /tmp/preserved_paid_odds_boundary.sha256
+
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from scripts.runtime_context import resolve_week
+          p=Path('data/live_odds_status.json')
+          s=json.loads(p.read_text(encoding='utf-8'))
+          season=int(os.environ['SEASON'])
+          week=int(resolve_week())
+          if not bool(s.get('available')):
+              raise SystemExit(f"FATAL: preserved paid artifact has no available sportsbook markets: {s}")
+          if int(s.get('season',-1)) != season or int(s.get('week',-1)) != week:
+              raise SystemExit(f"FATAL: preserved sportsbook scope mismatch artifact={(s.get('season'),s.get('week'))} runtime={(season,week)}")
+          s['replay_mode']='CANONICAL_FULL_SLATE_PINNED_PAID_ODDS'
+          s['replay_source_run']=int(os.environ['REUSE_PAID_ODDS_RUN_ID'])
+          s['replay_source_artifact_id']=int(os.environ['REUSE_PAID_ODDS_ARTIFACT_ID'])
+          s['replay_source_artifact_digest']=os.environ['REUSE_PAID_ODDS_ARTIFACT_DIGEST']
+          s['odds_api_refetched']=False
+          p.write_text(json.dumps(s,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          print('CANONICAL_PRESERVED_ODDS_READY',{'season':season,'week':week,'compact_rows':s.get('production_compact_rows')})
+          PY
+
+          python scripts/operations/reconcile_preserved_live_props_current_roster_v1.py
+          test -s data/preserved_live_props_current_roster_reconciliation.json
+
+          echo "available=true" >> "${GITHUB_OUTPUT}"
+          echo "status=preserved_paid_artifact" >> "${GITHUB_OUTPUT}"
+
+      - name: Resolve sportsbook availability
+        id: sportsbook
+        run: |
+          set -euo pipefail
+          if [ "${FETCH_LIVE_ODDS}" = "true" ]; then
+            AVAILABLE="${{ steps.live_odds.outputs.available }}"
+            STATUS="${{ steps.live_odds.outputs.status }}"
+          elif [ -n "${REUSE_PAID_ODDS_RUN_ID}" ]; then
+            AVAILABLE="${{ steps.replay_odds.outputs.available }}"
+            STATUS="${{ steps.replay_odds.outputs.status }}"
+          else
+            AVAILABLE="false"
+            STATUS="not_requested"
+          fi
+          echo "available=${AVAILABLE}" >> "${GITHUB_OUTPUT}"
+          echo "status=${STATUS}" >> "${GITHUB_OUTPUT}"
+          echo "sportsbook availability: ${STATUS} available=${AVAILABLE}"
+
       - name: Validate and compact live sportsbook boundary
-        if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' }}
+        if: ${{ steps.sportsbook.outputs.available == 'true' }}
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
@@ -353,7 +481,7 @@ jobs:
           EOF
 
       - name: Validate live opponent map
-        if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' }}
+        if: ${{ steps.sportsbook.outputs.available == 'true' }}
         run: |
           export PYTHONPATH="${PWD}"
           python - <<'EOF'
@@ -365,21 +493,21 @@ jobs:
           EOF
 
       - name: Audit live player identity semantics
-        if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' }}
+        if: ${{ steps.sportsbook.outputs.available == 'true' }}
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/validate_player_identity_semantics_v1.py
           test -s data/player_identity_semantic_audit.json
 
       - name: Classify live Full Slate data quality
-        if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' }}
+        if: ${{ steps.sportsbook.outputs.available == 'true' }}
         run: |
           export PYTHONPATH="${PWD}"
           python scripts/validate_full_slate_data_quality_v1.py
           test -s data/full_slate_data_quality_audit.json
 
       - name: Assemble exact bookmaker offers and deterministic metrics
-        if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' }}
+        if: ${{ steps.sportsbook.outputs.available == 'true' }}
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
@@ -392,7 +520,7 @@ jobs:
           test -s data/metrics_ready.csv
 
       - name: Price from certified football-first Full Slate stack
-        if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' }}
+        if: ${{ steps.sportsbook.outputs.available == 'true' }}
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
@@ -561,12 +689,26 @@ jobs:
           retention-days: 90
 
       - name: Apply final-board-only verified prop quarantines
-        if: ${{ env.FETCH_LIVE_ODDS == 'true' && steps.live_odds.outputs.available == 'true' }}
+        if: ${{ steps.sportsbook.outputs.available == 'true' }}
         run: |
           set -euo pipefail
           export PYTHONPATH="${PWD}"
           python scripts/operations/quarantine_final_priced_props_v1.py
           test -s data/final_priced_props_quarantine_status.json
+
+      - name: Verify preserved sportsbook boundary remained immutable
+        if: ${{ env.REUSE_PAID_ODDS_RUN_ID != '' && steps.sportsbook.outputs.available == 'true' }}
+        run: |
+          set -euo pipefail
+          sha256sum -c /tmp/preserved_paid_odds_boundary.sha256
+          python - <<'PY'
+          import json, os
+          s=json.load(open('data/live_odds_status.json',encoding='utf-8'))
+          assert s.get('odds_api_refetched') is False, s
+          assert s.get('replay_mode') == 'CANONICAL_FULL_SLATE_PINNED_PAID_ODDS', s
+          assert int(s.get('replay_source_run',0)) == int(os.environ['REUSE_PAID_ODDS_RUN_ID']), s
+          print('ZERO_NEW_ODDSAPI_CONFIRMED',s['replay_mode'])
+          PY
 
       - name: Strict repository audits
         run: |
@@ -586,7 +728,8 @@ jobs:
             --run-id "${GITHUB_RUN_ID}" \
             --sha "${GITHUB_SHA}" \
             --ref-name "${GITHUB_REF_NAME}" \
-            --fetch-live-odds "${FETCH_LIVE_ODDS}"
+            --fetch-live-odds "${FETCH_LIVE_ODDS}" \
+            --pricing-provenance "${{ env.REUSE_PAID_ODDS_RUN_ID != '' && 'PRESERVED_REPLAY' || 'AUTO' }}"
           test -s outputs/NFL_BETTING_MODEL_MASTER.xlsx
           echo "MASTER BETTING WORKBOOK: outputs/NFL_BETTING_MODEL_MASTER.xlsx"
 
