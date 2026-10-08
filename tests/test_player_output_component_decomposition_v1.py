@@ -262,3 +262,40 @@ def test_multiweek_gsis_alias_expansion_is_intentional_not_ambiguous():
         q=out.loc[out.roster_player_clean_key.eq(alias)].sort_values("week")
         assert q.pbp_actual_targets.tolist()==[4.0,7.0]
 
+
+def test_unresolved_pbp_receiving_conflict_excludes_entire_player_week():
+    points=pd.DataFrame([
+        {
+            "season":2026,"week":1,"event_id":"G1","team":"SF","player":"WR X",
+            "player_clean_key":"wrx","position_family":"WR","market":"rec_yards",
+            "projection_mean":35.0,"actual":80.0,"actual_opportunities":0.0,
+            "sportsbook_inputs_used_upstream":False,
+        },
+        {
+            "season":2026,"week":1,"event_id":"G1","team":"SF","player":"WR X",
+            "player_clean_key":"wrx","position_family":"WR","market":"receptions",
+            "projection_mean":3.0,"actual":5.0,"actual_opportunities":0.0,
+            "sportsbook_inputs_used_upstream":False,
+        },
+    ])
+    opp=pd.DataFrame([{
+        "season":2026,"week":1,"event_id":"G1","team":"SF","player":"WR X",
+        "player_clean_key":"wrx","position_family":"WR","opportunity_type":"targets",
+        "predicted_opportunities":5.0,"actual_opportunities":0.0,
+        "sportsbook_inputs_used_upstream":False,
+    }])
+    pbp=pd.DataFrame(columns=[
+        "season","week","player_clean_key","pbp_actual_targets","pbp_actual_team",
+        "pbp_identity_route","pbp_target_identity_resolved",
+    ])
+    rows=d.build_rows(points,opp,pbp_targets=pbp,require_full_weeks=False)
+    assert len(rows)==2
+    assert not rows.grading_identity_valid.any()
+    assert set(rows.grading_exclusion_reason)=={
+        "GRADING_SOURCE_CONFLICT_UNRESOLVED_PBP_TARGET"
+    }
+    assert not rows.component_decomposition_eligible.any()
+    assert rows.opportunity_oracle.isna().all()
+    assert rows.efficiency_oracle.isna().all()
+    assert rows.full_oracle.isna().all()
+
