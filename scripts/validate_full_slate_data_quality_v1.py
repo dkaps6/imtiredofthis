@@ -51,6 +51,8 @@ def _validate_current_roster_scope(
     scheduled_teams: set[str],
     roles: pd.DataFrame,
     game_odds: pd.DataFrame,
+    *,
+    off_week_teams: set[str] | None = None,
 ) -> tuple[set[str], set[str]]:
     """Require roster coverage for the already-gated live event universe.
 
@@ -89,10 +91,14 @@ def _validate_current_roster_scope(
         raise RuntimeError(
             f"live odds event scope contains teams outside active schedule: {off_schedule_events}"
         )
-    off_schedule_roster = sorted(role_teams - scheduled_teams)
-    if off_schedule_roster:
+    # Raw Ourlads is a league-wide provider snapshot. It can legitimately
+    # include bye teams even when the certified slate/eligible-role roster does
+    # not. Only externally verified off-week league teams may be present.
+    off_schedule_roster = role_teams - scheduled_teams
+    invalid_off_schedule = sorted(off_schedule_roster - (off_week_teams or set()))
+    if invalid_off_schedule:
         raise RuntimeError(
-            f"current Ourlads roster contains teams outside active schedule: {off_schedule_roster}"
+            f"current Ourlads roster contains unauthorized off-schedule teams: {invalid_off_schedule}"
         )
     missing_live = sorted(live_event_teams - role_teams)
     if missing_live:
@@ -157,6 +163,13 @@ def audit() -> dict:
         raise RuntimeError(f"team_week_map has no active rows season={season} week={week}")
     active["team"] = active["team"].map(canon_team)
     scheduled_teams = set(active["team"].dropna().astype(str))
+    league_teams = set(
+        schedule.loc[pd.to_numeric(schedule["season"], errors="coerce").eq(season), "team"]
+        .dropna().map(canon_team).astype(str)
+    )
+    if len(league_teams) != 32 or not scheduled_teams.issubset(league_teams):
+        raise RuntimeError("full-season authoritative league-team scope incomplete")
+    off_week_teams = league_teams - scheduled_teams
     # Bye weeks legitimately shrink the active schedule below 32 teams from
     # roughly Week 4 onward; only an odd/zero count is actually invalid.
     if not scheduled_teams or len(scheduled_teams) % 2:
@@ -169,12 +182,14 @@ def audit() -> dict:
         scheduled_teams,
         roles,
         game_odds,
+        off_week_teams=off_week_teams,
     )
     rows.append(_row(
         "current_roster",
         "LIVE_PROVIDER_ROSTER_PRESENT",
         f"source=ourlads rows={len(roles)} teams={len(role_teams)} "
-        f"live_event_teams={len(live_event_teams)} scheduled_teams={len(scheduled_teams)} players={roles['player'].nunique()}",
+        f"live_event_teams={len(live_event_teams)} scheduled_teams={len(scheduled_teams)} "
+        f"verified_off_week_roster_teams={sorted(role_teams & off_week_teams)} players={roles['player'].nunique()}",
     ))
 
     identity = _json(DATA / "player_identity_semantic_audit.json")
