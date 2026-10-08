@@ -319,8 +319,10 @@ def audit() -> dict:
     team_available = int(pd.to_numeric(team_cov.get("coverage_available", 0), errors="coerce").fillna(0).eq(1).sum())
     direct_flags = pd.to_numeric(exposure.get("matchup_available", 0), errors="coerce").fillna(0)
     direct = int(direct_flags.eq(1).sum())
-    if team_available != 32:
-        raise RuntimeError(f"team coverage incomplete teams={team_available}/32")
+    if team_available != len(scheduled_teams):
+        raise RuntimeError(
+            f"team coverage incomplete teams={team_available}/{len(scheduled_teams)}"
+        )
     if direct <= 0:
         if not direct_flags.eq(0).all():
             raise RuntimeError("WR/CB exposure contains nonzero/non-one matchup flags")
@@ -338,13 +340,13 @@ def audit() -> dict:
             raise RuntimeError(f"direct WR/CB payload present while matchup_available=0: {meaningful}")
         rows.append(_row(
             "coverage_v2", "DIRECT_MATCHUP_UNAVAILABLE_GATED_OFF",
-            f"team_coverage={team_available}/32 wr_rows={len(exposure)} direct_matchups=0 "
+            f"team_coverage={team_available}/{len(scheduled_teams)} wr_rows={len(exposure)} direct_matchups=0 "
             "direct_matchup_consumption_eligible_rows=0; team_scheme_coverage_remains_available",
         ))
     else:
         rows.append(_row(
             "coverage_v2", "CERTIFIED_WITH_DIRECT_MATCHUPS",
-            f"team_coverage={team_available}/32 wr_rows={len(exposure)} direct_matchups={direct}",
+            f"team_coverage={team_available}/{len(scheduled_teams)} wr_rows={len(exposure)} direct_matchups={direct}",
         ))
 
     out = pd.DataFrame(rows)
