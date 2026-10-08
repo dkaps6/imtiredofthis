@@ -394,6 +394,9 @@ jobs:
               raise SystemExit(f"FATAL: preserved odds artifact name drift: {p.get('name')!r} != run_{want_run!s}")
           if p.get('digest') != want_digest:
               raise SystemExit(f"FATAL: preserved odds artifact digest drift: {p.get('digest')!r} != {want_digest!r}")
+          artifact_run=int((p.get('workflow_run') or {}).get('id',-1))
+          if artifact_run != want_run:
+              raise SystemExit(f"FATAL: preserved artifact belongs to run {artifact_run}, expected {want_run}")
           if bool(p.get('expired')):
               raise SystemExit('FATAL: preserved odds artifact expired')
           print('PINNED_PAID_ODDS_ARTIFACT_VERIFIED',{'run':want_run,'artifact_id':want_id,'digest':want_digest})
@@ -725,7 +728,8 @@ jobs:
             --run-id "${GITHUB_RUN_ID}" \
             --sha "${GITHUB_SHA}" \
             --ref-name "${GITHUB_REF_NAME}" \
-            --fetch-live-odds "${{ steps.sportsbook.outputs.available == 'true' && 'true' || 'false' }}"
+            --fetch-live-odds "${FETCH_LIVE_ODDS}" \
+            --pricing-provenance "${{ env.REUSE_PAID_ODDS_RUN_ID != '' && 'PRESERVED_REPLAY' || 'AUTO' }}"
           test -s outputs/NFL_BETTING_MODEL_MASTER.xlsx
           echo "MASTER BETTING WORKBOOK: outputs/NFL_BETTING_MODEL_MASTER.xlsx"
 
