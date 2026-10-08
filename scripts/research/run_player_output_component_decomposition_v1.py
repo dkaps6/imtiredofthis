@@ -243,6 +243,17 @@ def build_pbp_target_actuals()->pd.DataFrame:
         raise RuntimeError("weekly identity source cannot bridge PBP receiver IDs")
     w["week"]=_num(w["week"])
     w=w.loc[w["week"].isin(WEEKS)].copy()
+
+    # This bridge exists only to grade target-based output rows. Restrict the
+    # weekly identity source to offensive receiving positions before checking
+    # name->GSIS uniqueness so unrelated defensive players with the same
+    # canonical name (for example Byron Young) cannot create false ambiguity.
+    pos_col=next((c for c in ("position","position_group","pos") if c in w.columns),None)
+    if pos_col is not None:
+        pos=w[pos_col].fillna("").astype(str).str.upper().str.strip()
+        receiving_pos={"RB","FB","HB","TB","WR","LWR","RWR","SWR","TE"}
+        w=w.loc[pos.isin(receiving_pos)].copy()
+
     w["weekly_reported_team"]=w[team_col].map(canon_team)
     w["receiver_player_id"]=w[id_col].fillna("").astype(str).str.strip()
     w["player_clean_key"]=w[name_col].map(_name_key)
