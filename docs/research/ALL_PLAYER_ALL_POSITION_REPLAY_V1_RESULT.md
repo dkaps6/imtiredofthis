@@ -218,3 +218,93 @@ The purpose is to determine whether the compression is created at:
 - or downstream efficiency.
 
 Do not open a new generic position-level calibration lane before this player opportunity audit is resolved.
+
+## Follow-up RB receiving-room impact resolution
+
+After this global replay identified cross-position workload compression, the RB
+receiving allocation lane was isolated and tested separately using the completed
+2026 Weeks 1-4 outcomes.
+
+Authority:
+- impact run: `37703522415` — SUCCESS
+- impact artifact: `11518826839`
+- Week-5 prospective lock run: `37705464974` — SUCCESS
+- Week-5 lock artifact: `11518604971`
+
+Frozen no-fit mechanism:
+- state: strict-prior `prior_rb_room_share`
+- preserve exact total RB receiving-room target entitlement
+- redistribute only within the RB/FB room
+- no coefficient fit
+- no threshold search
+- no sportsbook inputs
+- rushing held exactly unchanged
+
+### Weeks 1-4 retrospective individual-player impact
+
+Across 436 RB/FB player-games:
+
+- target MAE: **1.3863 -> 1.2810** (**7.60% better**)
+- receptions MAE: **1.1906 -> 1.1451** (**3.83% better**)
+- receiving-yards MAE: **10.7223 -> 10.4121** (**2.89% better**)
+- rush+receiving-yards MAE: **24.0169 -> 23.6176** (**1.66% better**)
+- rush-yards projections: **exactly unchanged**
+
+The target and receiving-yard MAE improved in **all four completed weeks**.
+
+Player-by-player closer counts:
+- targets: candidate 242 / baseline 193 / tie 1
+- receptions: candidate 247 / baseline 189
+- receiving yards: candidate 251 / baseline 185
+- rush+receiving yards: candidate 248 / baseline 188
+
+High-workload player-games with 6+ realized targets improved more:
+- target MAE: **10.52% better**
+- receptions MAE: **6.06% better**
+- receiving-yards MAE: **5.12% better**
+
+Disposition:
+
+`RB_RECEIVING_SHARE_RETROSPECTIVE_IMPACT_CONFIRMED__PROSPECTIVE_VALIDATION_FROZEN`
+
+This is real individual-player projection improvement, not only an intermediate
+share metric.
+
+### Week-5 prospective lock
+
+The exact same rule is frozen prospectively before Week-5 outcomes:
+
+- exact frozen RB identities: **98**
+- RB rooms: **30**
+- strict-prior receiving-history coverage: **98 / 98**
+- identity authority: frozen Week-5 RB player-state lock
+- history bridge: exact GSIS identity
+- parameters fit: **0**
+- Week-5 outcomes read: **0**
+- sportsbook inputs: **0**
+- production changed: **false**
+- canonical row digest:
+  `sha256:4c5d325a552673d64c91e21b812dd05f5b15adb28c479640e382d4b4baf4ffd7`
+
+The Week-5 lock is confirmation evidence only and does not by itself authorize
+production promotion.
+
+## Updated position interpretation
+
+The all-player replay's cross-position workload-compression finding remains the
+main organizing result.
+
+However, RB is no longer merely an unresolved example of that problem:
+the receiving-room component now has a concrete, no-fit player-level mechanism
+that improves completed current-season projections and is frozen prospectively.
+
+For WR/TE:
+- the full symmetric target-depth distribution transform remains unconfirmed;
+- target-share trajectory remains ineligible in W1-4 under its exact contract;
+- opportunity allocation / participation remains the unresolved player-level
+  mechanism family.
+
+For QB:
+- the replay still indicates participation / attempt-volume compression is more
+  important to audit next than opening another generic positional mean lane.
+
