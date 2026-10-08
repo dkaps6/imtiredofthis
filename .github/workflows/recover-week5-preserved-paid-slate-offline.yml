@@ -1,0 +1,190 @@
+name: Recover Week5 Preserved Paid Full Slate Offline
+
+on:
+  push:
+    branches:
+      - ops/week5-20261008-paid-artifact-offline-recovery
+    paths:
+      - '.github/workflows/recover-week5-preserved-paid-slate-offline.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  SEASON: "2026"
+  PRIOR_SEASON: "2025"
+  SLATE_DATE: "2026-10-08"
+  FETCH_LIVE_ODDS: "false"
+  ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
+  GH_TOKEN: ${{ github.token }}
+  PARENT_PAID_RUN: "37852811339"
+  PARENT_PAID_ARTIFACT_ID: "11582178322"
+  PARENT_PAID_ARTIFACT_DIGEST: "sha256:4948e08003fcab0f519b35bd4b23d8c895554e4faced993238575acdc5d2e765"
+
+jobs:
+  replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install canonical production dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml beautifulsoup4 lxml pytest
+
+      - name: Verify the exact expired-proof paid artifact authority
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${PARENT_PAID_ARTIFACT_ID}" > /tmp/week5_parent_artifact_meta.json
+          python - <<'PY'
+          import json, os
+          p=json.load(open('/tmp/week5_parent_artifact_meta.json'))
+          assert p['id']==int(os.environ['PARENT_PAID_ARTIFACT_ID'])
+          assert p['name']=='run_37852811339'
+          assert p['expired'] is False
+          assert p['digest']==os.environ['PARENT_PAID_ARTIFACT_DIGEST']
+          print('PINNED_WEEK5_PAID_ARTIFACT_VERIFIED',p['id'],p['digest'])
+          PY
+
+      - name: Download only previously paid Week5 evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: run_37852811339
+          path: replay_source
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 37852811339
+
+      - name: Restore original football and book artifacts with no refetch
+        run: |
+          set -euo pipefail
+          test -s replay_source/data/live_odds_status.json
+          test -s replay_source/outputs/props_raw_compact.csv
+          test -s replay_source/outputs/odds_game.csv
+          test -s replay_source/data/roles_current_production_eligible_v1.csv
+          test -s replay_source/data/team_week_map.csv
+          rm -rf data outputs
+          mkdir -p data outputs
+          cp -a replay_source/data/. data/
+          cp -a replay_source/outputs/. outputs/
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          f=Path('data/live_odds_status.json')
+          p=json.loads(f.read_text())
+          assert p['available'] is True and p['season']==2026 and p['week']==5
+          assert p['production_compact_rows']==757
+          p['replay_mode']='OFFLINE_PINNED_PAID_WEEK5'
+          p['replay_source_run']=37852811339
+          p['odds_api_refetched']=False
+          p['production_changed']=False
+          f.write_text(json.dumps(p,indent=2,sort_keys=True)+'\n')
+          print('PAID_WEEK5_REPLAY_OFFLINE_ONLY',p['production_compact_rows'])
+          PY
+
+      - name: Apply original protected current-output seams then C2 source seam
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/apply_current_availability_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py
+          python scripts/operations/apply_current_availability_qb_c2_primary_team_seam_v1.py
+          python scripts/operations/apply_qb_c2_active_schedule_context_seam_v1.py
+          python -m py_compile scripts/modeling/qb_c2_production_adapter_v1.py
+
+      - name: Verify frozen sources and classifier mechanics
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          pytest -q tests/test_qb_c2_active_team_context_v1.py tests/test_full_slate_data_quality_scope.py
+          python scripts/validate_player_identity_semantics_v1.py
+          python scripts/validate_full_slate_data_quality_v1.py
+          test -s data/full_slate_data_quality_audit.json
+          python - <<'PY'
+          import json
+          p=json.load(open('data/full_slate_data_quality_audit.json'))
+          print('OFFLINE_CLASSIFIER_DISPOSITION',p['disposition'],
+                'blockers',p['certification_blockers'])
+          # Preserve truthful unqualified statuses; never downgrade any blocker.
+          assert p['disposition'] in (
+              'FULL_SLATE_DATA_QUALITY_CERTIFIED',
+              'FULL_SLATE_DATA_QUALITY_PASS_WITH_DECLARED_LIMITATIONS',
+              'FULL_SLATE_DATA_QUALITY_NOT_CERTIFIED',
+          )
+          PY
+
+      - name: Materialize exact preserved offers and deterministic metrics
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/materialize_pricing_offers_v1.py
+          test -s outputs/props_pricing_offers.csv
+          test -s data/live_pricing_offer_audit.json
+          python scripts/run_metrics_context.py --season "${SEASON}" --mode full --date "${SLATE_DATE}"
+          python scripts/validate_build_integrity.py
+          python scripts/metrics_ready.py --season "${SEASON}" --date "${SLATE_DATE}"
+          test -s data/metrics_ready.csv
+
+      - name: Run canonical certified football-first pricing stack offline
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}" ACTIVE_ROLES_CSV=data/roles_current_production_eligible_v1.csv
+          python scripts/run_pricing_with_full_roster_universe_v3.py --season "${SEASON}"
+          test -s outputs/props_priced_clean.csv
+          test -s data/football_simulation_universe_audit.json
+          test -s data/wr_r15_full_slate_entitlement_audit.json
+          test -s data/qb_c2_production_integration_audit.json
+          test -s data/rb_rush_rec_conservation_v2_production_audit.json
+          python scripts/stamp_qb_c2_pricing_lineage_v1.py
+          python scripts/validate_rb_rush_rec_conservation_v1.py
+          python scripts/audit_market_model_lineage_v2.py
+          python scripts/validate_anytime_td_model_status_v1.py
+          python scripts/validate_team_target_pool_full_universe_v2.py
+          python scripts/validate_certified_full_slate_stack_v2.py
+
+      - name: Apply final-board-only verified prop quarantines
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/quarantine_final_priced_props_v1.py
+          test -s data/final_priced_props_quarantine_status.json
+
+      - name: Preserve end-to-end audit flags
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/utils/audit_repo.py --strict
+          python scripts/audit_2026_production_readiness.py --strict
+
+      - name: Build master Week5 model workbook from preserved priced data
+        if: always()
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          mkdir -p outputs
+          python scripts/build_master_betting_workbook_v1.py \
+            --root . \
+            --out outputs/NFL_BETTING_MODEL_MASTER.xlsx \
+            --run-id "${GITHUB_RUN_ID}" \
+            --sha "${GITHUB_SHA}" \
+            --ref-name "${GITHUB_REF_NAME}" \
+            --fetch-live-odds true
+          test -s outputs/NFL_BETTING_MODEL_MASTER.xlsx
+
+      - name: Upload offline recovery outputs even on blocked certification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: week5_offline_paid_recovery_${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            outputs/**
+            data/**
