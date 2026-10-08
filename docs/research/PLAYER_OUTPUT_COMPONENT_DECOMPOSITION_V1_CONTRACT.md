@@ -93,6 +93,14 @@ Those rows receive source `FROZEN_ZERO_NO_RECEIVING_USAGE`.
 If either artifact targets or receiving output is nonzero, unresolved PBP
 identity fails closed.
 
+For every resolved player with at least one PBP target, the PBP offense/team is
+also compared to the replay's projected team. If they differ, the entire
+player-week is marked `HISTORICAL_TEAM_IDENTITY_MISMATCH` and excluded from
+oracle scoring across all of that player's markets.
+
+This is an identity-validity exclusion, not an outcome-error filter. The
+mismatched rows and player-weeks must be reported.
+
 Do not rebuild or refit predicted opportunity science in this diagnostic.
 
 ## Effective final-model efficiency
@@ -225,6 +233,8 @@ Fail closed if:
 - a target-based row has nonzero receiving evidence with unresolved PBP
   receiver identity;
 - a target-based row has nonzero receiving output with zero graded targets;
+- a resolved PBP receiver appears for multiple offenses in the same week;
+- a team-identity mismatch is silently scored rather than explicitly excluded;
 - a market maps to the wrong opportunity family;
 - any parameter is fit;
 - any target-game outcome is used to construct baseline predictions.
