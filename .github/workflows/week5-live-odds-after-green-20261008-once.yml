@@ -1,0 +1,73 @@
+name: One-shot Week5 Live Odds After Green Validation
+
+on:
+  push:
+    branches:
+      - ops/week5-live-odds-after-green-20261008-once
+    paths:
+      - '.github/workflows/week5-live-odds-after-green-20261008-once.yml'
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch_live_board_once:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_MAIN_SHA: 66c22026880178e60d8011ea2400127249be83ac
+      VALIDATION_RUN: "37852305029"
+    steps:
+      - name: Wait for exact production Week5 no-odds run to finish successfully
+        run: |
+          set -euo pipefail
+          echo "Waiting for exact no-odds Full Slate run ${VALIDATION_RUN}, zero OddsAPI use while waiting."
+          ready=false
+          for attempt in $(seq 1 135); do
+            data=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${VALIDATION_RUN}")
+            run_status=$(printf '%s' "$data" | jq -r '.status')
+            conclusion=$(printf '%s' "$data" | jq -r '.conclusion // ""')
+            run_sha=$(printf '%s' "$data" | jq -r '.head_sha')
+            run_event=$(printf '%s' "$data" | jq -r '.event')
+            [ "$run_sha" = "$EXPECTED_MAIN_SHA" ] || { echo "Validation SHA drifted"; exit 1; }
+            [ "$run_event" = "push" ] || { echo "Validation was not main push"; exit 1; }
+            echo "validation attempt=${attempt} status=${run_status} conclusion=${conclusion}"
+            if [ "$run_status" = "completed" ]; then
+              if [ "$conclusion" = "success" ]; then
+                ready=true
+                break
+              fi
+              echo "No-odds production validation failed; NO live paid odds dispatch."
+              exit 1
+            fi
+            sleep 45
+          done
+          [ "$ready" = true ] || { echo "Validation did not succeed before timeout; no paid odds dispatch"; exit 1; }
+
+      - name: Verify production source SHA and prevent duplicate Week5 dispatch
+        run: |
+          set -euo pipefail
+          actual_sha=$(gh api "repos/${GITHUB_REPOSITORY}/branches/main" --jq '.commit.sha')
+          [ "$actual_sha" = "$EXPECTED_MAIN_SHA" ] || {
+            echo "main moved from validated head; no paid odds dispatch"; exit 1;
+          }
+          # Only one odds-enabled workflow_dispatch request is authorized by this one-shot.
+          # If an operator already manually dispatched Full Slate today, fail closed.
+          count=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/full-slate.yml/runs?event=workflow_dispatch&branch=main&per_page=25" \
+             --jq '[.workflow_runs[] | select(.created_at >= "2026-10-08T00:00:00Z")] | length')
+          [ "$count" = "0" ] || { echo "Existing manual Full Slate run today: ${count}; avoid duplicate spend"; exit 1; }
+          echo "Verified exactly one eligible paid live Week5 acquisition opportunity."
+
+      - name: Dispatch one live-odds Week5 canonical Full Slate
+        run: |
+          set -euo pipefail
+          gh workflow run full-slate.yml --repo "${GITHUB_REPOSITORY}" --ref main \
+            -f season=2026 \
+            -f prior_season=2025 \
+            -f date=2026-10-08 \
+            -f fetch_live_odds=true \
+            -f rb_pd2_shadow_capture=false
+          echo "ONE_SHOT_WEEK5_LIVE_ODDS_DISPATCH_SUBMITTED"
+          echo "The canonical workflow carries its own team/game/availability gates and sportsbook separation."
