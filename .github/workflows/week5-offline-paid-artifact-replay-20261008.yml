@@ -148,14 +148,65 @@ jobs:
           test -s data/current_player_availability_game_certification.csv
           test -s data/roles_current_production_eligible_v1.csv
 
-      - name: Rebuild football-only PlayerForm identity with current verified aliases
+      - name: Rebuild canonical football-only model stack from refreshed current roles
         env:
           PYTHONPATH: ${{ github.workspace }}
           FETCH_LIVE_ODDS: "false"
+          ACTIVE_ROLES_CSV: data/roles_current_production_eligible_v1.csv
         run: |
-          python scripts/run_player_form_v2_loader.py
+          set -euo pipefail
+          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
+
+          python scripts/run_player_form_current_roles_v1.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
+          python scripts/enrich_player_scoring_v2.py --season "${SEASON}" --prior-season "${PRIOR_SEASON}" --date "${SLATE_DATE}"
+          python scripts/operations/validate_playerform_runtime_strict_prior_v1.py --season "${SEASON}" --week "${WEEK_RESOLVED}"
           python scripts/validate_player_identity_semantics_v1.py
           test -s data/player_identity_semantic_audit.json
+
+          python scripts/run_model_context_bridge.py
+          test -s data/provider_readiness_v3.csv
+          test -s data/team_context_v3.csv
+          test -s data/team_context_v3_provenance.csv
+          test -s data/model_context_bridge.csv
+
+          python scripts/run_model_bayesian_bridge.py
+          test -s data/model_bayesian_diagnostics.csv
+
+          python scripts/run_model_ml_bridge.py
+          test -s data/model_ml_diagnostics.csv
+          test -s data/model_ml_v2.joblib
+
+          python scripts/run_model_state_bridge.py
+          test -s data/model_state_diagnostics.csv
+          test -s data/model_state_v2.joblib
+          python - <<'PY'
+          import pandas as pd
+          df=pd.read_csv('data/model_state_diagnostics.csv')
+          if df.empty or int(df['state_available'].sum()) == 0:
+              raise SystemExit('FATAL: state v2 produced no available predictions')
+          print(f"state v2 players={len(df)} available={int(df['state_available'].sum())}")
+          PY
+
+          python scripts/run_model_rules_bridge.py
+          test -s data/model_rule_diagnostics.csv
+
+          python scripts/run_model_ensemble_bridge.py
+          test -s data/model_ensemble_diagnostics.csv
+          python - <<'PY'
+          import pandas as pd
+          df=pd.read_csv('data/model_ensemble_diagnostics.csv')
+          if df.empty:
+              raise SystemExit('FATAL: ensemble diagnostics empty')
+          sums=(df['mc_weight']+df['ml_weight']+df['state_weight']).round(9)
+          if not sums.eq(1.0).all():
+              raise SystemExit('FATAL: ensemble weights do not sum to one')
+          print('ensemble status:',df['ensemble_status'].value_counts().to_dict())
+          PY
+
+          rm -f data/rb_rush_synthesis_context.csv
+          python scripts/run_qb_distribution_state_context.py --season "${SEASON}" --week "${WEEK_RESOLVED}"
+          test -s data/qb_distribution_state_context.csv
+          test -s data/qb_distribution_state_context_audit.csv
 
       - name: Certify bye-week data-quality repair
         env:
