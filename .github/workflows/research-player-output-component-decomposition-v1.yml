@@ -1,0 +1,190 @@
+name: Research Player Output Component Decomposition V1
+
+on:
+  push:
+    branches:
+      - research-player-output-component-decomposition-v1
+    paths:
+      - 'docs/research/PLAYER_LANDSCAPE_GAP_DISPOSITION_V1.md'
+      - 'docs/research/PLAYER_OUTPUT_COMPONENT_DECOMPOSITION_V1_CONTRACT.md'
+      - 'scripts/research/run_player_output_component_decomposition_v1.py'
+      - 'tests/test_player_output_component_decomposition_v1.py'
+      - '.github/workflows/research-player-output-component-decomposition-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  decompose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyarrow pyyaml
+
+      - name: Run frozen decomposition tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_player_output_component_decomposition_v1.py
+
+      - name: Recover frozen all-player point scoreboard
+        run: |
+          rm -rf /tmp/player_output_component_v1
+          mkdir -p /tmp/player_output_component_v1/points                    /tmp/player_output_component_v1/opportunity                    /tmp/player_output_component_v1/output
+          gh run download 37683439543             --repo "${GITHUB_REPOSITORY}"             --name "all-player-all-position-replay-v1-37683439543"             --dir /tmp/player_output_component_v1/points
+          test -s /tmp/player_output_component_v1/points/all_players_point_scoreboard.csv
+          python - <<'PY'
+          import pandas as pd
+          p='/tmp/player_output_component_v1/points/all_players_point_scoreboard.csv'
+          x=pd.read_csv(p,low_memory=False)
+          assert len(x)==4488, len(x)
+          assert set(pd.to_numeric(x.week,errors='coerce').dropna().astype(int).unique())=={1,2,3,4}
+          assert not x.sportsbook_inputs_used_upstream.astype(str).str.lower().isin({'true','1','yes'}).any()
+          print({
+              'point_rows':len(x),
+              'player_weeks':x[['week','team','player_clean_key']].drop_duplicates().shape[0],
+              'markets':x.groupby(['position_family','market']).size().to_dict(),
+          })
+          PY
+
+      - name: Recover frozen ACT-only opportunity rows
+        run: |
+          gh run download 37687979574             --repo "${GITHUB_REPOSITORY}"             --name "historical-availability-parity-diagnostic-v1-37687979574"             --dir /tmp/player_output_component_v1/opportunity
+          test -s /tmp/player_output_component_v1/opportunity/act_only_player_opportunity_rows.csv
+          python - <<'PY'
+          import pandas as pd
+          p='/tmp/player_output_component_v1/opportunity/act_only_player_opportunity_rows.csv'
+          x=pd.read_csv(p,low_memory=False)
+          assert len(x)==2106, len(x)
+          assert set(pd.to_numeric(x.week,errors='coerce').dropna().astype(int).unique())=={1,2,3,4}
+          assert not x.sportsbook_inputs_used_upstream.astype(str).str.lower().isin({'true','1','yes'}).any()
+          print({
+              'opportunity_rows':len(x),
+              'player_weeks':x[['week','team','player_clean_key']].drop_duplicates().shape[0],
+              'families':x.groupby(['position_family','opportunity_type']).size().to_dict(),
+          })
+          PY
+
+      - name: Run frozen player-output component decomposition
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/run_player_output_component_decomposition_v1.py             --points /tmp/player_output_component_v1/points/all_players_point_scoreboard.csv             --opportunity-rows /tmp/player_output_component_v1/opportunity/act_only_player_opportunity_rows.csv             --out-dir /tmp/player_output_component_v1/output
+
+      - name: Certify decomposition boundary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+
+          root=Path('/tmp/player_output_component_v1/output')
+          required=[
+              'player_output_component_rows.csv',
+              'player_output_component_market_summary.csv',
+              'player_output_component_week_summary.csv',
+              'player_output_component_workload_summary.csv',
+              'player_output_component_summary.json',
+          ]
+          for name in required:
+              p=root/name
+              assert p.exists() and p.stat().st_size>0, name
+
+          s=json.loads((root/'player_output_component_summary.json').read_text())
+          r=pd.read_csv(root/'player_output_component_rows.csv',low_memory=False)
+          m=pd.read_csv(root/'player_output_component_market_summary.csv',low_memory=False)
+          w=pd.read_csv(root/'player_output_component_week_summary.csv',low_memory=False)
+          b=pd.read_csv(root/'player_output_component_workload_summary.csv',low_memory=False)
+
+          assert s['version']=='PLAYER_OUTPUT_COMPONENT_DECOMPOSITION_V1'
+          assert s['season']==2026 and s['weeks']==[1,2,3,4]
+          assert s['parameters_fit']==0
+          assert s['threshold_searches']==0
+          assert s['sportsbook_inputs_used_upstream'] is False
+          assert s['paid_odds_api_used'] is False
+          assert s['automatic_promotion'] is False
+          assert s['max_baseline_reconstruction_gap'] <= 1e-10
+          assert s['max_full_actual_identity_gap'] <= 1e-10
+
+          expected={
+              ('QB','pass_yards'),
+              ('RB','rush_yards'),('RB','rec_yards'),('RB','receptions'),
+              ('WR','rec_yards'),('WR','receptions'),
+              ('TE','rec_yards'),('TE','receptions'),
+          }
+          got=set(zip(m.position_family.astype(str),m.market.astype(str)))
+          assert got==expected, (got,expected)
+
+          identity=['season','week','event_id','team','player_clean_key','position_family','market']
+          assert not r.duplicated(identity).any()
+          assert set(pd.to_numeric(r.week,errors='coerce').astype(int).unique())=={1,2,3,4}
+
+          mapping={
+              ('QB','pass_yards'):'pass_attempts',
+              ('RB','rush_yards'):'carries',
+              ('RB','rec_yards'):'targets',
+              ('RB','receptions'):'targets',
+              ('WR','rec_yards'):'targets',
+              ('WR','receptions'):'targets',
+              ('TE','rec_yards'):'targets',
+              ('TE','receptions'):'targets',
+          }
+          for (pos,market),opp in mapping.items():
+              q=r.loc[(r.position_family.eq(pos)) & (r.market.eq(market))]
+              assert not q.empty, (pos,market)
+              assert set(q.opportunity_type.astype(str).unique())=={opp}, (pos,market)
+
+          valid_bins={
+              'ZERO','01_20','21_30','31_40','41_PLUS',
+              '01_03','04_08','09_14','15_PLUS',
+              '01_02','03_05','06_08','09_PLUS',
+          }
+          assert set(b.actual_workload_bin.astype(str).unique()).issubset(valid_bins)
+          assert set(pd.to_numeric(w.week,errors='coerce').astype(int).unique())=={1,2,3,4}
+
+          print(json.dumps({
+              'paired_rows':s['paired_rows'],
+              'scoreable_rows':s['scoreable_rows'],
+              'model_efficiency_unavailable_rows':s['model_efficiency_unavailable_rows'],
+              'descriptive_dominance':s['descriptive_dominance'],
+              'market_summary':s['market_summary'],
+          },indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/utils/audit_repo.py --strict
+
+      - name: Display component summary
+        if: always()
+        run: |
+          cat /tmp/player_output_component_v1/output/player_output_component_summary.json || true
+
+      - name: Upload decomposition evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-output-component-decomposition-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/player_output_component_v1/output/**
