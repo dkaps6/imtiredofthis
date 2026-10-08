@@ -113,6 +113,8 @@ jobs:
           PY
 
       - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: python scripts/utils/audit_repo.py --strict
 
       - name: Upload frozen integration result
