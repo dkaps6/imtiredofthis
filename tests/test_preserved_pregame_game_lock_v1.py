@@ -96,6 +96,8 @@ def _wire(tmp_path, monkeypatch):
     monkeypatch.setattr(mod,"CUR_AVAIL",data/"current_player_availability.csv")
     monkeypatch.setattr(mod,"CUR_ROLES",data/"roles_current_production_eligible_v1.csv")
     monkeypatch.setattr(mod,"AUDIT",data/"preserved_pregame_game_lock_audit.json")
+    monkeypatch.setattr(mod,"CERT_META",data/"current_player_availability_game_certification.json")
+    monkeypatch.setattr(mod,"AVAIL_STATUS",data/"current_player_availability_status.json")
     return data,outputs,source,source_data
 
 
