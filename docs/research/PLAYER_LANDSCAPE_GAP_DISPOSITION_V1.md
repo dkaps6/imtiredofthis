@@ -113,8 +113,11 @@ mechanism.
 
 `PLAYER_OUTPUT_COMPONENT_DECOMPOSITION_V1`
 
-Use the already-completed 2026 Weeks 1-4 ACT-only player population and exact
-final player projections.
+Use the already-completed 2026 Weeks 1-4 replay-matched baseline opportunity
+population and exact baseline final player projections.
+
+Historical ACT-only availability parity remains a separate completed diagnostic;
+do not mix that variant's opportunities with baseline point projections.
 
 No new model fit.
 No feature selection.
