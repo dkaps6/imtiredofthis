@@ -126,12 +126,20 @@ def test_string_false_is_not_truthy():
 
 
 def test_pbp_target_authority_repairs_impossible_weekly_zero_target_case():
-    points=pd.DataFrame([{
-        "season":2026,"week":1,"event_id":"G1","team":"SF","player":"Receiver A",
-        "player_clean_key":"receivera","position_family":"WR","market":"rec_yards",
-        "projection_mean":30.0,"actual":80.0,"actual_opportunities":0.0,
-        "sportsbook_inputs_used_upstream":False,
-    }])
+    points=pd.DataFrame([
+        {
+            "season":2026,"week":1,"event_id":"G1","team":"SF","player":"Receiver A",
+            "player_clean_key":"receivera","position_family":"WR","market":"rec_yards",
+            "projection_mean":30.0,"actual":80.0,"actual_opportunities":0.0,
+            "sportsbook_inputs_used_upstream":False,
+        },
+        {
+            "season":2026,"week":1,"event_id":"G1","team":"SF","player":"Receiver A",
+            "player_clean_key":"receivera","position_family":"WR","market":"receptions",
+            "projection_mean":3.0,"actual":5.0,"actual_opportunities":0.0,
+            "sportsbook_inputs_used_upstream":False,
+        },
+    ])
     opp=pd.DataFrame([{
         "season":2026,"week":1,"event_id":"G1","team":"SF","player":"Receiver A",
         "player_clean_key":"receivera","position_family":"WR","opportunity_type":"targets",
