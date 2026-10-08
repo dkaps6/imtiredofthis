@@ -3,6 +3,30 @@ GitHub is canonical; chat memory is secondary.
 
 
 ---
+## ACTIVE CHECKPOINT — 2026-10-08 — INDIVIDUAL OPPORTUNITY ROADMAP / HISTORICAL OOS SOURCE GATE
+
+This is the latest checkpoint. The prior 2026-10-08 opportunity-dominant scientific conclusion immediately below remains authoritative and is **not** superseded scientifically.
+
+- Current decision: `OPPORTUNITY_DOMINANT_ACROSS_ALL_PRIMARY_MARKETS__INDIVIDUAL_ROLE_SHARE_ALLOCATION_NEXT`.
+- Current research draft PR: [#672](https://github.com/dkaps6/imtiredofthis/pull/672).
+- Branch: `research-individual-opportunity-roadmap-2026-10-08`.
+- Reconciled roadmap: `docs/research/INDIVIDUAL_OPPORTUNITY_ALLOCATION_ROADMAP_V1.md` **on that branch**.
+- Frozen historical WR/TE gate: `docs/research/PLAYER_TARGET_SHARE_TRAJECTORY_HISTORICAL_INTEGRATION_V1_GATE.md` on that branch.
+- Frozen gate result: `docs/research/PLAYER_TARGET_SHARE_TRAJECTORY_HISTORICAL_OOS_GATE_V1_RESULT.md` on that branch.
+- Gate-0 exact source-head run: [37780057649](https://github.com/dkaps6/imtiredofthis/actions/runs/37780057649) **completed SUCCESS**, 6 tests passed, artifact **11551681180**.
+- Gate-0 disposition: `HISTORICAL_INTEGRATION_DIAGNOSTIC_ONLY__SPECIALIST_TRAINING_OVERLAP`. Both current TE-R5P and WR-R15 model assets list 2022–2025 as training seasons, so a 2023–2025 replay of the deployed specialists **is not independent out-of-sample confirmation**. This was caught before historical scoring; it is NOT a model-performance failure.
+- W1–W4 opportunity audits already completed; corrected ACT-only decomposition shows QB **team volume** dominant, RB/WR/TE **player share** dominant. Do not repeat these audits. RB receiving share impact is already confirmed and Week-5 locked; RB carry/snap and WR/TE trajectory Week-5 locks remain frozen.
+- Original WR/TE trajectory requires >=4 strictly prior same-season team games, WR1 anchor stays fixed, room/team target mass must be preserved. No W1–W4 eligibility rescue, no Week-5 premature grading.
+- QB same-data attempt-volume repackaging remains closed without genuinely new pregame intent. Do not reopen closed QB means/YPA, M96, WR-R3, coverage, WR-CB, generic Vegas/game-script, failed FMT or M95A/M95B.
+- No paid OddsAPI, no sportsbook upstream, no outcomes used by new gate, no new model parameters, no production change.
+- **Next exact action:** targeted inventory of reproducible point-in-time/out-of-fold TE-R5P and WR-R15 historical baseline entitlements; if absent, any exact 2023–2025 integration test must be clearly *retrospective compatibility only*, never OOS qualification. Original future prospective 4-week/400-player-game/120-identity/80-room acceptance rules remain binding.
+- Issue #535 latest continuity update includes this result.
+- Research PR stays draft; source gate is certified but no model mechanism has been promoted.
+- Separately: automatic Full Slate 37778827288 on doc-only main 5ce513f... completed **failure** at QB C2 football-only distribution context; CI 37778827423 passed. Keep that operational failure visible and separate. Verify Actions live before any active-status statement.
+
+**Resume rule:** AGENTS.md -> this top checkpoint -> PR #672 roadmap/gate/result -> previous top opportunity-dominant checkpoint if needed -> Issue #535 newest comment -> live main/branches/Actions. Do not recursively reread old handoffs.
+
+---
 ## ACTIVE CHECKPOINT — 2026-10-08 — PLAYER LANDSCAPE / OPPORTUNITY-DOMINANT CURRENT
 
 **Read this detailed handoff next:**
