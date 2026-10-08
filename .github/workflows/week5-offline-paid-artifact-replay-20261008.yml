@@ -82,10 +82,20 @@ jobs:
           set -euo pipefail
           test -d replay_source/data
           test -d replay_source/outputs
+
+          # Preserve current-repo governance controls. The paid artifact supplies
+          # runtime state/odds, but must not roll back newly certified quarantine
+          # policy committed after that source run failed.
+          cp data/manual_final_board_quarantine.csv /tmp/manual_final_board_quarantine.csv
+          cp data/manual_prop_quarantine.csv /tmp/manual_prop_quarantine.csv
+
           rm -rf data outputs
           mkdir -p data outputs
           cp -a replay_source/data/. data/
           cp -a replay_source/outputs/. outputs/
+
+          cp /tmp/manual_final_board_quarantine.csv data/manual_final_board_quarantine.csv
+          cp /tmp/manual_prop_quarantine.csv data/manual_prop_quarantine.csv
 
           test -s outputs/props_raw.csv
           test -s outputs/props_raw_compact.csv
