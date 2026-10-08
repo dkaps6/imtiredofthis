@@ -29,7 +29,7 @@ jobs:
       - name: Install focused dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pandas==1.5.3 numpy==1.26.4 pytest
+          pip install pandas==1.5.3 numpy==1.26.4 pytest pyyaml
 
       - name: Verify immutable parent artifact metadata
         env:
