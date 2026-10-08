@@ -13,6 +13,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from scripts._opponent_map import canon_team
+from scripts.utils.canonical_names import canonicalize_player_name_safe
+
 SEASON=2026
 WEEKS={1,2,3,4}
 TOL=1e-10
@@ -173,7 +176,101 @@ def _summary(g:pd.DataFrame)->dict:
     return out
 
 
-def build_rows(points:pd.DataFrame,opps:pd.DataFrame,*,require_full_weeks:bool=True)->pd.DataFrame:
+def _name_key(value)->str:
+    try:
+        _, key=canonicalize_player_name_safe(value)
+        if key:
+            return str(key)
+    except Exception:
+        pass
+    return "".join(ch.lower() for ch in str(value or "") if ch.isalnum())
+
+
+def build_pbp_target_actuals()->pd.DataFrame:
+    """Completed-game target counts for grading only, never prediction input."""
+    import nflreadpy as nfl
+
+    pbp=nfl.load_pbp(seasons=[SEASON])
+    x=pbp.to_pandas() if hasattr(pbp,"to_pandas") else pd.DataFrame(pbp)
+    x.columns=[str(c).strip().lower() for c in x.columns]
+    required={"week","posteam","receiver_player_id","pass_attempt","sack"}
+    missing=required-set(x.columns)
+    if missing:
+        raise RuntimeError(f"PBP target authority missing columns: {sorted(missing)}")
+    if "season_type" in x.columns:
+        reg=x["season_type"].astype(str).str.upper().eq("REG")
+        if reg.any():
+            x=x.loc[reg].copy()
+    if "two_point_attempt" not in x.columns:
+        x["two_point_attempt"]=0.0
+    x["week"]=_num(x["week"])
+    x=x.loc[x["week"].isin(WEEKS)].copy()
+    x["team"]=x["posteam"].map(canon_team)
+    x["receiver_player_id"]=x["receiver_player_id"].fillna("").astype(str).str.strip()
+    target=(
+        _num(x["pass_attempt"]).fillna(0).eq(1)
+        & ~_num(x["sack"]).fillna(0).eq(1)
+        & ~_num(x["two_point_attempt"]).fillna(0).eq(1)
+        & x["receiver_player_id"].ne("")
+        & x["team"].astype(str).ne("")
+    )
+    counts=(
+        x.loc[target]
+        .groupby(["week","team","receiver_player_id"],as_index=False)
+        .size()
+        .rename(columns={"size":"pbp_actual_targets"})
+    )
+
+    weekly=nfl.load_player_stats(seasons=[SEASON],summary_level="week")
+    w=weekly.to_pandas() if hasattr(weekly,"to_pandas") else pd.DataFrame(weekly)
+    w.columns=[str(c).strip().lower() for c in w.columns]
+    id_col=next((c for c in ("player_id","gsis_id","player_gsis_id") if c in w.columns),None)
+    name_col=next((c for c in ("player_display_name","player_name","display_name","name") if c in w.columns),None)
+    team_col=next((c for c in ("recent_team","team","posteam") if c in w.columns),None)
+    if id_col is None or name_col is None or team_col is None or "week" not in w.columns:
+        raise RuntimeError("weekly identity source cannot bridge PBP receiver IDs")
+    w["week"]=_num(w["week"])
+    w=w.loc[w["week"].isin(WEEKS)].copy()
+    w["team"]=w[team_col].map(canon_team)
+    w["receiver_player_id"]=w[id_col].fillna("").astype(str).str.strip()
+    w["player_clean_key"]=w[name_col].map(_name_key)
+    ident=w.loc[
+        w["receiver_player_id"].ne("")
+        & w["player_clean_key"].ne("")
+        & w["team"].astype(str).ne(""),
+        ["week","team","receiver_player_id","player_clean_key"],
+    ].drop_duplicates()
+
+    if ident.duplicated(["week","team","receiver_player_id"]).any():
+        bad=ident.loc[
+            ident.duplicated(["week","team","receiver_player_id"],keep=False)
+        ].head(20)
+        raise RuntimeError(f"ambiguous weekly receiver identity bridge: {bad.to_dict('records')}")
+
+    # Retain every identified weekly player so a genuine zero-target game is a
+    # real zero rather than an unresolved merge.
+    out=ident.merge(
+        counts,
+        on=["week","team","receiver_player_id"],
+        how="left",
+        validate="one_to_one",
+    )
+    out["pbp_actual_targets"]=_num(out["pbp_actual_targets"]).fillna(0.0)
+    out["season"]=SEASON
+    out["pbp_target_identity_resolved"]=True
+    return out[
+        ["season","week","team","player_clean_key","receiver_player_id",
+         "pbp_actual_targets","pbp_target_identity_resolved"]
+    ].drop_duplicates(["season","week","team","player_clean_key"])
+
+
+def build_rows(
+    points:pd.DataFrame,
+    opps:pd.DataFrame,
+    *,
+    pbp_targets:pd.DataFrame|None=None,
+    require_full_weeks:bool=True,
+)->pd.DataFrame:
     p=points.copy()
     o=opps.copy()
 
@@ -275,10 +372,59 @@ def build_rows(points:pd.DataFrame,opps:pd.DataFrame,*,require_full_weeks:bool=T
         "market":joined["market"],
         "opportunity_type":joined["opportunity_type"],
         "predicted_opportunities":joined["predicted_opportunities"],
-        "actual_opportunities":joined["actual_opportunities"],
+        "artifact_actual_opportunities":joined["actual_opportunities"],
         "baseline_projection":joined["projection_mean"],
         "actual_output":joined["actual"],
     })
+
+    out["actual_opportunities"]=out["artifact_actual_opportunities"]
+    out["actual_opportunity_source"]="FROZEN_REPLAY_MATCHED_ARTIFACT"
+    out["pbp_actual_targets"]=np.nan
+    out["pbp_target_identity_resolved"]=False
+    out["actual_opportunity_discrepancy"]=False
+
+    target_rows=out["opportunity_type"].eq("targets")
+    if pbp_targets is not None:
+        pt=pbp_targets.copy()
+        required_pt={
+            "season","week","team","player_clean_key","pbp_actual_targets",
+            "pbp_target_identity_resolved",
+        }
+        missing_pt=required_pt-set(pt.columns)
+        if missing_pt:
+            raise RuntimeError(f"PBP target authority missing columns: {sorted(missing_pt)}")
+        if pt.duplicated(["season","week","team","player_clean_key"]).any():
+            raise RuntimeError("duplicate PBP target identity")
+        out=out.merge(
+            pt[[
+                "season","week","team","player_clean_key","pbp_actual_targets",
+                "pbp_target_identity_resolved"
+            ]].rename(columns={
+                "pbp_actual_targets":"_pbp_actual_targets",
+                "pbp_target_identity_resolved":"_pbp_target_identity_resolved",
+            }),
+            on=["season","week","team","player_clean_key"],
+            how="left",
+            validate="many_to_one",
+        )
+        unresolved=target_rows & ~out["_pbp_target_identity_resolved"].fillna(False).astype(bool)
+        if unresolved.any():
+            bad=out.loc[
+                unresolved,
+                ["week","team","player","player_clean_key","market"]
+            ].drop_duplicates().head(30)
+            raise RuntimeError(f"unresolved PBP target identities: {bad.to_dict('records')}")
+        out.loc[target_rows,"pbp_actual_targets"]=_num(
+            out.loc[target_rows,"_pbp_actual_targets"]
+        ).to_numpy()
+        out.loc[target_rows,"pbp_target_identity_resolved"]=True
+        out.loc[target_rows,"actual_opportunities"]=out.loc[target_rows,"pbp_actual_targets"]
+        out.loc[target_rows,"actual_opportunity_source"]="COMPLETED_GAME_PBP_TARGETS"
+        out.loc[target_rows,"actual_opportunity_discrepancy"]=(
+            out.loc[target_rows,"artifact_actual_opportunities"]
+            - out.loc[target_rows,"actual_opportunities"]
+        ).abs().gt(TOL)
+        out.drop(columns=["_pbp_actual_targets","_pbp_target_identity_resolved"],inplace=True)
     if out[["predicted_opportunities","actual_opportunities","baseline_projection","actual_output"]].isna().any().any():
         raise RuntimeError("missing numeric value in paired decomposition rows")
 
@@ -352,7 +498,8 @@ def run(*,points_path:Path,opportunity_path:Path,out_dir:Path)->dict:
     out_dir.mkdir(parents=True,exist_ok=True)
     points=_read(points_path,"all-player point scoreboard")
     opps=_read(opportunity_path,"replay-matched opportunity rows")
-    rows=build_rows(points,opps)
+    pbp_targets=build_pbp_target_actuals()
+    rows=build_rows(points,opps,pbp_targets=pbp_targets)
 
     scoreable=rows.loc[rows["model_efficiency_eligible"]].copy()
     if scoreable.empty:
@@ -412,6 +559,8 @@ def run(*,points_path:Path,opportunity_path:Path,out_dir:Path)->dict:
         "paired_rows":int(len(rows)),
         "scoreable_rows":int(len(scoreable)),
         "model_efficiency_unavailable_rows":int((~rows["model_efficiency_eligible"]).sum()),
+        "actual_opportunity_discrepancy_rows":int(rows["actual_opportunity_discrepancy"].sum()),
+        "target_rows_graded_by_pbp":int(rows["opportunity_type"].eq("targets").sum()),
         "max_baseline_reconstruction_gap":float(
             (scoreable["baseline_reconstructed"]-scoreable["baseline_projection"]).abs().max()
         ),
