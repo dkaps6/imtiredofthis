@@ -11,6 +11,8 @@ on:
       - 'scripts/run_qb_distribution_state_context.py'
       - 'scripts/operations/apply_qb_c2_active_schedule_context_seam_v1.py'
       - 'tests/test_qb_c2_active_team_context_v1.py'
+      - 'scripts/validate_full_slate_data_quality_v1.py'
+      - 'tests/test_full_slate_data_quality_scope.py'
       - '.github/workflows/full-slate.yml'
       - '.github/workflows/test-week5-qb-c2-active-schedule-hotfix.yml'
 
