@@ -64,15 +64,15 @@ jobs:
           })
           PY
 
-      - name: Recover frozen ACT-only opportunity rows
+      - name: Recover replay-matched baseline opportunity rows
         run: |
           gh run download 37687979574             --repo "${GITHUB_REPOSITORY}"             --name "historical-availability-parity-diagnostic-v1-37687979574"             --dir /tmp/player_output_component_v1/opportunity
-          test -s /tmp/player_output_component_v1/opportunity/act_only_player_opportunity_rows.csv
+          test -s /tmp/player_output_component_v1/opportunity/baseline_player_opportunity_rows.csv
           python - <<'PY'
           import pandas as pd
-          p='/tmp/player_output_component_v1/opportunity/act_only_player_opportunity_rows.csv'
+          p='/tmp/player_output_component_v1/opportunity/baseline_player_opportunity_rows.csv'
           x=pd.read_csv(p,low_memory=False)
-          assert len(x)==2106, len(x)
+          assert len(x)==2308, len(x)
           assert set(pd.to_numeric(x.week,errors='coerce').dropna().astype(int).unique())=={1,2,3,4}
           assert not x.sportsbook_inputs_used_upstream.astype(str).str.lower().isin({'true','1','yes'}).any()
           print({
@@ -86,7 +86,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/research/run_player_output_component_decomposition_v1.py             --points /tmp/player_output_component_v1/points/all_players_point_scoreboard.csv             --opportunity-rows /tmp/player_output_component_v1/opportunity/act_only_player_opportunity_rows.csv             --out-dir /tmp/player_output_component_v1/output
+          python scripts/research/run_player_output_component_decomposition_v1.py             --points /tmp/player_output_component_v1/points/all_players_point_scoreboard.csv             --opportunity-rows /tmp/player_output_component_v1/opportunity/baseline_player_opportunity_rows.csv             --out-dir /tmp/player_output_component_v1/output
 
       - name: Certify decomposition boundary
         run: |
