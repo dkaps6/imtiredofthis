@@ -564,17 +564,32 @@ def build_rows(
             & out["actual_output"].abs().le(TOL)
         )
         bad_unresolved=unresolved & ~safe_zero
-        if bad_unresolved.any():
-            bad=out.loc[
-                bad_unresolved,
-                [
-                    "week","team","player","player_clean_key","market",
-                    "artifact_actual_opportunities","actual_output"
-                ]
-            ].drop_duplicates().head(30)
-            raise RuntimeError(
-                f"unresolved PBP target identity with receiving evidence: {bad.to_dict('records')}"
+        conflict_keys=out.loc[
+            bad_unresolved,["season","week","player_clean_key"]
+        ].drop_duplicates()
+        if not conflict_keys.empty:
+            conflict_keys["_grading_source_conflict"]=True
+            out=out.merge(
+                conflict_keys,
+                on=["season","week","player_clean_key"],
+                how="left",
+                validate="many_to_one",
             )
+            conflict_all=out["_grading_source_conflict"].fillna(False).astype(bool)
+            out.loc[conflict_all,"grading_identity_valid"]=False
+            out.loc[
+                conflict_all,"grading_exclusion_reason"
+            ]="GRADING_SOURCE_CONFLICT_UNRESOLVED_PBP_TARGET"
+            conflict_target=(
+                out["opportunity_type"].eq("targets")
+                & out["grading_exclusion_reason"].eq(
+                    "GRADING_SOURCE_CONFLICT_UNRESOLVED_PBP_TARGET"
+                )
+            )
+            out.loc[
+                conflict_target,"actual_opportunity_source"
+            ]="GRADING_SOURCE_CONFLICT_UNRESOLVED_PBP_TARGET"
+            out.drop(columns=["_grading_source_conflict"],inplace=True)
 
         out.loc[resolved,"pbp_actual_targets"]=_num(
             out.loc[resolved,"_pbp_actual_targets"]
@@ -651,19 +666,20 @@ def build_rows(
         ]].head(20)
         raise RuntimeError(f"nonzero output with zero actual opportunity: {bad.to_dict('records')}")
 
+    valid_grade=out["grading_identity_valid"].fillna(False).astype(bool)
     out["actual_efficiency"]=np.where(
-        ~zero_actual,
+        valid_grade & (~zero_actual),
         out["actual_output"]/out["actual_opportunities"],
-        0.0,
+        np.where(valid_grade & zero_actual,0.0,np.nan),
     )
     out["component_decomposition_eligible"]=(
-        out["model_efficiency_eligible"] & out["grading_identity_valid"]
+        out["model_efficiency_eligible"] & valid_grade
     )
     out["efficiency_oracle_eligible"]=(
         out["component_decomposition_eligible"] & (~zero_actual)
     )
     out["opportunity_oracle"]=np.where(
-        out["model_efficiency_eligible"],
+        out["component_decomposition_eligible"],
         out["actual_opportunities"]*out["model_effective_efficiency"],
         np.nan,
     )
@@ -672,9 +688,13 @@ def build_rows(
         out["predicted_opportunities"]*out["actual_efficiency"],
         np.nan,
     )
-    out["full_oracle"]=out["actual_opportunities"]*out["actual_efficiency"]
-    full_gap=(out["full_oracle"]-out["actual_output"]).abs()
-    if float(full_gap.max())>TOL:
+    out["full_oracle"]=np.where(
+        valid_grade,
+        out["actual_opportunities"]*out["actual_efficiency"],
+        np.nan,
+    )
+    full_gap=(out.loc[valid_grade,"full_oracle"]-out.loc[valid_grade,"actual_output"]).abs()
+    if len(full_gap) and float(full_gap.max())>TOL:
         raise RuntimeError(f"full actual identity failed max_gap={float(full_gap.max())}")
 
     out["baseline_error"]=out["baseline_projection"]-out["actual_output"]
@@ -761,10 +781,36 @@ def run(*,points_path:Path,opportunity_path:Path,out_dir:Path)->dict:
         "paired_rows":int(len(rows)),
         "scoreable_rows":int(len(scoreable)),
         "model_efficiency_unavailable_rows":int((~rows["model_efficiency_eligible"]).sum()),
-        "grading_identity_mismatch_rows":int((~rows["grading_identity_valid"]).sum()),
-        "grading_identity_mismatch_player_weeks":int(
+        "grading_exclusion_rows":int((~rows["grading_identity_valid"]).sum()),
+        "grading_exclusion_player_weeks":int(
             rows.loc[~rows["grading_identity_valid"],["week","player_clean_key"]]
             .drop_duplicates().shape[0]
+        ),
+        "grading_exclusion_reason_counts":(
+            rows.loc[~rows["grading_identity_valid"],"grading_exclusion_reason"]
+            .value_counts(dropna=False).astype(int).to_dict()
+        ),
+        "grading_identity_mismatch_rows":int(
+            rows["grading_exclusion_reason"].eq("HISTORICAL_TEAM_IDENTITY_MISMATCH").sum()
+        ),
+        "grading_identity_mismatch_player_weeks":int(
+            rows.loc[
+                rows["grading_exclusion_reason"].eq("HISTORICAL_TEAM_IDENTITY_MISMATCH"),
+                ["week","player_clean_key"]
+            ].drop_duplicates().shape[0]
+        ),
+        "grading_source_conflict_rows":int(
+            rows["grading_exclusion_reason"].eq(
+                "GRADING_SOURCE_CONFLICT_UNRESOLVED_PBP_TARGET"
+            ).sum()
+        ),
+        "grading_source_conflict_player_weeks":int(
+            rows.loc[
+                rows["grading_exclusion_reason"].eq(
+                    "GRADING_SOURCE_CONFLICT_UNRESOLVED_PBP_TARGET"
+                ),
+                ["week","player_clean_key"]
+            ].drop_duplicates().shape[0]
         ),
         "actual_opportunity_discrepancy_rows":int(rows["actual_opportunity_discrepancy"].sum()),
         "target_rows_graded_by_pbp":int(rows["actual_opportunity_source"].eq("COMPLETED_GAME_PBP_TARGETS").sum()),
@@ -773,7 +819,10 @@ def run(*,points_path:Path,opportunity_path:Path,out_dir:Path)->dict:
             (scoreable["baseline_reconstructed"]-scoreable["baseline_projection"]).abs().max()
         ),
         "max_full_actual_identity_gap":float(
-            (rows["full_oracle"]-rows["actual_output"]).abs().max()
+            (
+                rows.loc[rows["grading_identity_valid"],"full_oracle"]
+                - rows.loc[rows["grading_identity_valid"],"actual_output"]
+            ).abs().max()
         ),
         "market_summary":market.to_dict("records"),
         "descriptive_dominance":dispositions,
