@@ -37,6 +37,8 @@ CUR_CERT = DATA / "current_player_availability_game_certification.csv"
 CUR_AVAIL = DATA / "current_player_availability.csv"
 CUR_ROLES = DATA / "roles_current_production_eligible_v1.csv"
 AUDIT = DATA / "preserved_pregame_game_lock_audit.json"
+CERT_META = DATA / "current_player_availability_game_certification.json"
+AVAIL_STATUS = DATA / "current_player_availability_status.json"
 
 LOCK_STATE = "PRESERVED_PAID_ACQUISITION_LOCK"
 CURRENT_WITHHELD_STATE = "REQUIRED_MISSING_FAIL_CLOSED"
@@ -223,6 +225,72 @@ def restore(source_root: Path, source_run_id: int, source_artifact_id: int) -> d
     cur_cert.to_csv(CUR_CERT, index=False)
     cur_avail.to_csv(CUR_AVAIL, index=False)
     cur_roles.to_csv(CUR_ROLES, index=False)
+
+    # Keep the companion status ledgers internally consistent with the
+    # acquisition-time lock.  The distinct state makes the provenance visible
+    # while production_eligible remains mechanically coherent.
+    old_cert_meta = {}
+    if CERT_META.exists() and CERT_META.stat().st_size:
+        old_cert_meta = json.loads(CERT_META.read_text(encoding="utf-8"))
+    eligible_mask = _truthy(cur_cert["production_eligible"])
+    withheld_rows = cur_cert.loc[~eligible_mask]
+    withheld_meta_teams = sorted({
+        canon_team(t)
+        for col in ("away_team", "home_team")
+        for t in withheld_rows[col]
+        if canon_team(t)
+    })
+    cert_meta = {
+        "asof_utc": old_cert_meta.get("asof_utc", ""),
+        "eligible_games": int(eligible_mask.sum()),
+        "games": int(len(cur_cert)),
+        "require_minutes_before_kickoff": old_cert_meta.get(
+            "require_minutes_before_kickoff", MIN_SOURCE_MINUTES
+        ),
+        "sportsbook_inputs_used": 0,
+        "state_counts": {
+            str(k): int(v)
+            for k, v in cur_cert["certification_state"].value_counts().to_dict().items()
+        },
+        "withheld_games": int((~eligible_mask).sum()),
+        "withheld_teams": withheld_meta_teams,
+        "preserved_acquisition_lock_games": sorted(locked_game_ids),
+        "preserved_acquisition_lock_teams": sorted(locked_teams),
+        "preserved_source_run_id": int(source_run_id),
+        "preserved_source_artifact_id": int(source_artifact_id),
+    }
+    CERT_META.write_text(
+        json.dumps(cert_meta, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+    old_status = {}
+    if AVAIL_STATUS.exists() and AVAIL_STATUS.stat().st_size:
+        old_status = json.loads(AVAIL_STATUS.read_text(encoding="utf-8"))
+    definitive = pd.to_numeric(
+        cur_avail["definitive_unavailable"], errors="coerce"
+    ).fillna(0)
+    complete = pd.to_numeric(
+        cur_avail["official_inactive_section_complete"], errors="coerce"
+    ).fillna(0)
+    status_meta = dict(old_status)
+    status_meta.update({
+        "rows": int(len(cur_avail)),
+        "teams": int(cur_avail["team"].map(canon_team).nunique()),
+        "definitive_unavailable": int(definitive.sum()),
+        "uncertain": int(cur_avail["final_availability_state"].astype(str).eq("UNCERTAIN").sum()),
+        "unknown": int(cur_avail["final_availability_state"].astype(str).eq("UNKNOWN").sum()),
+        "official_complete_teams": int(
+            cur_avail.loc[complete.eq(1), "team"].map(canon_team).nunique()
+        ),
+        "sportsbook_inputs_used": 0,
+        "preserved_acquisition_lock_games": sorted(locked_game_ids),
+        "preserved_acquisition_lock_teams": sorted(locked_teams),
+        "preserved_source_run_id": int(source_run_id),
+        "preserved_source_artifact_id": int(source_artifact_id),
+    })
+    AVAIL_STATUS.write_text(
+        json.dumps(status_meta, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
     OUTPUTS.mkdir(parents=True, exist_ok=True)
     cur_avail.to_csv(OUTPUTS / "current_player_availability.csv", index=False)
