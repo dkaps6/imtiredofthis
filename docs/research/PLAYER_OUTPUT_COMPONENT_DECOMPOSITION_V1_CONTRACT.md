@@ -73,10 +73,12 @@ Actual opportunity grading authority:
 - RB carries: frozen replay-matched opportunity row
 - RB / WR / TE targets:
   - completed-game nflverse PBP target counts;
-  - receiver identity resolution is exact GSIS ID first;
-  - if the exact weekly-ID bridge has zero PBP receiver events but receiving
-    evidence exists, a fallback is allowed only when completed-game PBP has one
-    unique canonical receiver-name identity for that week;
+  - receiver identity resolution is PBP receiver GSIS ID -> validated
+    nflreadpy weekly-roster identity -> canonical player key;
+  - the weekly player-stats table is not an identity authority for PBP targets;
+  - if a PBP receiver GSIS ID has no roster identity, a fallback is allowed
+    only when completed-game PBP has one unique canonical receiver-name identity
+    for that week;
   - exact zero fallback only when the frozen artifact has zero targets **and**
     the final actual receiving output is zero.
 
