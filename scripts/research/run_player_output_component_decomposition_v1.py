@@ -518,11 +518,13 @@ def build_rows(
         pt=pbp_targets.copy()
         required_pt={
             "season","week","player_clean_key","pbp_actual_targets",
-            "pbp_actual_team","pbp_identity_route","pbp_target_identity_resolved",
+            "pbp_actual_team","pbp_target_identity_resolved",
         }
         missing_pt=required_pt-set(pt.columns)
         if missing_pt:
             raise RuntimeError(f"PBP target authority missing columns: {sorted(missing_pt)}")
+        if "pbp_identity_route" not in pt.columns:
+            pt["pbp_identity_route"]="INJECTED_PBP_TARGET_AUTHORITY"
         if pt.duplicated(["season","week","player_clean_key"]).any():
             raise RuntimeError("duplicate PBP target identity")
         out=out.merge(
