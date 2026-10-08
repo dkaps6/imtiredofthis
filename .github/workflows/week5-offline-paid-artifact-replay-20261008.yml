@@ -9,6 +9,8 @@ on:
       - 'scripts/validate_full_slate_data_quality_v1.py'
       - 'tests/test_full_slate_data_quality_scope.py'
       - 'data/manual_final_board_quarantine.csv'
+      - 'config/player_identity_current_aliases_v1.csv'
+      - 'scripts/operations/certify_current_injury_scope_nflcom_v1.py'
   workflow_dispatch:
 
 permissions:
@@ -128,6 +130,25 @@ jobs:
           PY
 
           echo "NO ODDS API ACQUISITION COMMAND EXISTS IN THIS WORKFLOW"
+
+      - name: Rebuild football-only PlayerForm identity with current verified aliases
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          FETCH_LIVE_ODDS: "false"
+        run: |
+          python scripts/run_player_form_v2_loader.py
+          python scripts/validate_player_identity_semantics_v1.py
+          test -s data/player_identity_semantic_audit.json
+
+      - name: Certify complete active-team injury scope without changing preserved rows
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          sha256sum data/injuries.csv > /tmp/injuries.before.sha256
+          python scripts/operations/certify_current_injury_scope_nflcom_v1.py
+          sha256sum -c /tmp/injuries.before.sha256
+          test -s data/injury_team_scope.csv
+          test -s data/current_injury_scope_nflcom_audit.json
 
       - name: Certify bye-week data-quality repair
         env:
