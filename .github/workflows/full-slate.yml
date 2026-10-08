@@ -188,6 +188,66 @@ jobs:
           print('AVAILABILITY_BEFORE_OPPORTUNITY_PASS', {'availability_rows':len(a),'eligible_role_rows':len(r),'eligible_teams':r.team.nunique()})
           EOF
 
+      - name: Restore acquisition-time pregame football locks for preserved replay
+        if: ${{ env.FETCH_LIVE_ODDS != 'true' && env.REUSE_PAID_ODDS_RUN_ID != '' }}
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          rm -rf /tmp/preserved_pregame_source
+          mkdir -p /tmp/preserved_pregame_source
+
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${REUSE_PAID_ODDS_ARTIFACT_ID}" > /tmp/preserved_pregame_meta.json
+          python - <<'PY'
+          import json, os
+          p=json.load(open('/tmp/preserved_pregame_meta.json',encoding='utf-8'))
+          want_run=int(os.environ['REUSE_PAID_ODDS_RUN_ID'])
+          want_id=int(os.environ['REUSE_PAID_ODDS_ARTIFACT_ID'])
+          want_digest=os.environ['REUSE_PAID_ODDS_ARTIFACT_DIGEST'].strip()
+          if int(p.get('id',-1)) != want_id:
+              raise SystemExit(f"FATAL: preserved replay artifact id drift: {p.get('id')} != {want_id}")
+          if p.get('name') != f"run_{want_run}":
+              raise SystemExit(f"FATAL: preserved replay artifact name drift: {p.get('name')!r}")
+          if p.get('digest') != want_digest:
+              raise SystemExit(f"FATAL: preserved replay artifact digest drift: {p.get('digest')!r}")
+          if int((p.get('workflow_run') or {}).get('id',-1)) != want_run:
+              raise SystemExit('FATAL: preserved replay artifact is not bound to requested source run')
+          if bool(p.get('expired')):
+              raise SystemExit('FATAL: preserved replay artifact expired')
+          print('PREGAME_LOCK_SOURCE_ARTIFACT_VERIFIED', {
+              'run':want_run,'artifact_id':want_id,'digest':want_digest
+          })
+          PY
+
+          gh run download "${REUSE_PAID_ODDS_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name "run_${REUSE_PAID_ODDS_RUN_ID}" \
+            --dir /tmp/preserved_pregame_source
+
+          for f in \
+            data/current_player_availability.csv \
+            data/current_player_availability_game_certification.csv \
+            data/roles_current_production_eligible_v1.csv
+          do
+            test -s "/tmp/preserved_pregame_source/${f}"
+          done
+
+          python scripts/operations/restore_preserved_pregame_game_lock_v1.py \
+            --source-root /tmp/preserved_pregame_source \
+            --source-run-id "${REUSE_PAID_ODDS_RUN_ID}" \
+            --source-artifact-id "${REUSE_PAID_ODDS_ARTIFACT_ID}"
+
+          test -s data/preserved_pregame_game_lock_audit.json
+          python - <<'PY'
+          import json, pandas as pd
+          a=json.load(open('data/preserved_pregame_game_lock_audit.json',encoding='utf-8'))
+          c=pd.read_csv('data/current_player_availability_game_certification.csv',low_memory=False)
+          r=pd.read_csv('data/roles_current_production_eligible_v1.csv',low_memory=False)
+          eligible=pd.to_numeric(c['production_eligible'],errors='coerce').fillna(0).astype(int)
+          if int(eligible.sum())*2 != r['team'].astype(str).nunique():
+              raise SystemExit('FATAL: preserved pregame lock broke certified game/team parity')
+          print('PREGAME_LOCK_REPLAY_SCOPE_READY', a)
+          PY
+
       - name: Build TeamForm with runtime strict-prior authority
         run: |
           export PYTHONPATH="${PWD}"
