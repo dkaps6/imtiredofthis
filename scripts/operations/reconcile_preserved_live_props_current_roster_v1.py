@@ -27,6 +27,7 @@ COMPACT=OUTPUTS/"props_raw_compact.csv"
 MODEL_PROPS=OUTPUTS/"props_raw.csv"
 QUARANTINE=DATA/"live_odds_placeholder_rows.csv"
 AUDIT=DATA/"preserved_live_props_current_roster_reconciliation.json"
+GAME_CERT=DATA/"current_player_availability_game_certification.csv"
 
 STRICT_MARKETS={
     "player_pass_yds",
@@ -57,6 +58,27 @@ def _roster_keys()->set[tuple[str,str]]:
     }
 
 
+def _withheld_teams()->set[str]:
+    cert=_read(GAME_CERT)
+    required={"away_team","home_team","production_eligible","certification_state"}
+    missing=required-set(cert.columns)
+    if missing:
+        raise RuntimeError(
+            f"availability game certification missing replay scope columns: {sorted(missing)}"
+        )
+    flags=cert["production_eligible"].astype(str).str.strip().str.lower()
+    eligible=flags.isin({"1","true","yes","y"})
+    withheld=cert.loc[~eligible].copy()
+    teams:set[str]=set()
+    for col in ("away_team","home_team"):
+        for value in withheld[col]:
+            team=canon_team(value)
+            if not team:
+                raise RuntimeError("withheld game contains unresolved team identity")
+            teams.add(team)
+    return teams
+
+
 def reconcile()->dict:
     status=json.loads(STATUS.read_text(encoding="utf-8"))
     compact=_read(COMPACT)
@@ -69,6 +91,11 @@ def reconcile()->dict:
         raise RuntimeError(f"preserved compact props missing columns: {sorted(missing)}")
 
     roster=_roster_keys()
+    withheld_teams=_withheld_teams()
+    teams=compact["team_abbr"].map(canon_team)
+    if teams.eq("").any():
+        raise RuntimeError("preserved compact props contain unresolved team identity")
+
     keys=[
         (canon_team(t),player_name_key(p,strip_suffix=True))
         for t,p in zip(compact["team_abbr"],compact["player"])
@@ -76,16 +103,23 @@ def reconcile()->dict:
     unrostered=pd.Series([k not in roster for k in keys],index=compact.index)
     markets=compact["market"].astype(str)
     strict=markets.isin(STRICT_MARKETS)
+    withheld=teams.isin(withheld_teams)
 
-    strict_bad=unrostered & strict
+    # Whole games that failed the current football-only availability gate are
+    # removed from the model-facing replay board regardless of market type.
+    # That is not an identity exception: the game itself is not production
+    # eligible. Outside that explicit scope, strict markets remain fail-closed.
+    strict_bad=unrostered & strict & ~withheld
     if strict_bad.any():
         sample=compact.loc[strict_bad,["player","team_abbr","market"]].head(30).to_dict("records")
         raise RuntimeError(
-            "preserved replay contains strict-market players absent from current PlayerForm; "
+            "preserved replay contains strict-market players absent from current PlayerForm "
+            "outside explicitly withheld games; "
             f"rows={int(strict_bad.sum())} sample={sample}"
         )
 
-    removable=unrostered & ~strict
+    removable_noncore=unrostered & ~strict & ~withheld
+    removable=withheld | removable_noncore
     removed=compact.loc[removable].copy()
     kept=compact.loc[~removable].copy().reset_index(drop=True)
 
@@ -94,8 +128,12 @@ def reconcile()->dict:
         q=pd.read_csv(QUARANTINE,low_memory=False)
     else:
         q=pd.DataFrame(columns=qcols)
-    if not removed.empty:
-        add=removed.copy()
+    if withheld.any():
+        add=compact.loc[withheld].copy()
+        add["quarantine_reason"]="WITHHELD_GAME_CURRENT_AVAILABILITY"
+        q=pd.concat([q,add],ignore_index=True,sort=False)
+    if removable_noncore.any():
+        add=compact.loc[removable_noncore].copy()
         add["quarantine_reason"]="UNROSTERED_NONCORE_PLAYER"
         q=pd.concat([q,add],ignore_index=True,sort=False)
 
@@ -116,7 +154,9 @@ def reconcile()->dict:
     status["production_quarantine_reasons"]=reasons
     status["production_market_rows"]=market_counts
     status["preserved_replay_current_roster_reconciled"]=True
-    status["preserved_replay_noncore_rows_quarantined"]=int(len(removed))
+    status["preserved_replay_noncore_rows_quarantined"]=int(removable_noncore.sum())
+    status["preserved_replay_withheld_game_rows_quarantined"]=int(withheld.sum())
+    status["preserved_replay_withheld_teams"]=sorted(withheld_teams)
     STATUS.write_text(json.dumps(status,indent=2,sort_keys=True)+"\n",encoding="utf-8")
 
     result={
@@ -127,7 +167,10 @@ def reconcile()->dict:
         "quarantined_players":sorted(
             {f"{canon_team(t)}:{p}" for t,p in zip(removed.get("team_abbr",[]),removed.get("player",[]))}
         ),
-        "strict_market_rows_removed":0,
+        "withheld_teams":sorted(withheld_teams),
+        "withheld_game_rows_removed":int(withheld.sum()),
+        "strict_market_rows_removed_due_withheld_game":int((withheld & strict).sum()),
+        "strict_market_rows_removed_outside_withheld_games":0,
         "model_facing_row_set_changed":bool(len(removed)),
         "paid_source_artifact_mutated":False,
         "lines_or_odds_changed":False,
