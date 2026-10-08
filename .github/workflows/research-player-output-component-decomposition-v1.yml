@@ -153,8 +153,16 @@ jobs:
               assert not q.empty, (pos,market)
               assert set(q.opportunity_type.astype(str).unique())=={opp}, (pos,market)
               if opp=='targets':
-                  assert q.actual_opportunity_source.eq('COMPLETED_GAME_PBP_TARGETS').all()
-                  assert q.pbp_target_identity_resolved.astype(str).str.lower().isin({'true','1','yes'}).all()
+                  allowed={'COMPLETED_GAME_PBP_TARGETS','FROZEN_ZERO_NO_RECEIVING_USAGE'}
+                  assert set(q.actual_opportunity_source.astype(str).unique()).issubset(allowed)
+                  z=q.loc[q.actual_opportunity_source.eq('FROZEN_ZERO_NO_RECEIVING_USAGE')]
+                  if not z.empty:
+                      assert z.artifact_actual_opportunities.abs().max() <= 1e-10
+                      assert z.actual_output.abs().max() <= 1e-10
+                      assert z.actual_opportunities.abs().max() <= 1e-10
+                  pb=q.loc[q.actual_opportunity_source.eq('COMPLETED_GAME_PBP_TARGETS')]
+                  assert not pb.empty
+                  assert pb.pbp_target_identity_resolved.astype(str).str.lower().isin({'true','1','yes'}).all()
               else:
                   assert q.actual_opportunity_source.eq('FROZEN_REPLAY_MATCHED_ARTIFACT').all()
 
@@ -172,6 +180,7 @@ jobs:
               'model_efficiency_unavailable_rows':s['model_efficiency_unavailable_rows'],
               'actual_opportunity_discrepancy_rows':s['actual_opportunity_discrepancy_rows'],
               'target_rows_graded_by_pbp':s['target_rows_graded_by_pbp'],
+              'target_zero_usage_fallback_rows':s['target_zero_usage_fallback_rows'],
               'descriptive_dominance':s['descriptive_dominance'],
               'market_summary':s['market_summary'],
           },indent=2,sort_keys=True))
