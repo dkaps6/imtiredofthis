@@ -407,23 +407,41 @@ def build_rows(
             how="left",
             validate="many_to_one",
         )
-        unresolved=target_rows & ~out["_pbp_target_identity_resolved"].fillna(False).astype(bool)
-        if unresolved.any():
+        resolved=target_rows & out["_pbp_target_identity_resolved"].fillna(False).astype(bool)
+        unresolved=target_rows & ~resolved
+        safe_zero=(
+            unresolved
+            & out["artifact_actual_opportunities"].abs().le(TOL)
+            & out["actual_output"].abs().le(TOL)
+        )
+        bad_unresolved=unresolved & ~safe_zero
+        if bad_unresolved.any():
             bad=out.loc[
-                unresolved,
-                ["week","team","player","player_clean_key","market"]
+                bad_unresolved,
+                [
+                    "week","team","player","player_clean_key","market",
+                    "artifact_actual_opportunities","actual_output"
+                ]
             ].drop_duplicates().head(30)
-            raise RuntimeError(f"unresolved PBP target identities: {bad.to_dict('records')}")
-        out.loc[target_rows,"pbp_actual_targets"]=_num(
-            out.loc[target_rows,"_pbp_actual_targets"]
+            raise RuntimeError(
+                f"unresolved PBP target identity with receiving evidence: {bad.to_dict('records')}"
+            )
+
+        out.loc[resolved,"pbp_actual_targets"]=_num(
+            out.loc[resolved,"_pbp_actual_targets"]
         ).to_numpy()
-        out.loc[target_rows,"pbp_target_identity_resolved"]=True
-        out.loc[target_rows,"actual_opportunities"]=out.loc[target_rows,"pbp_actual_targets"]
-        out.loc[target_rows,"actual_opportunity_source"]="COMPLETED_GAME_PBP_TARGETS"
-        out.loc[target_rows,"actual_opportunity_discrepancy"]=(
-            out.loc[target_rows,"artifact_actual_opportunities"]
-            - out.loc[target_rows,"actual_opportunities"]
+        out.loc[resolved,"pbp_target_identity_resolved"]=True
+        out.loc[resolved,"actual_opportunities"]=out.loc[resolved,"pbp_actual_targets"]
+        out.loc[resolved,"actual_opportunity_source"]="COMPLETED_GAME_PBP_TARGETS"
+        out.loc[resolved,"actual_opportunity_discrepancy"]=(
+            out.loc[resolved,"artifact_actual_opportunities"]
+            - out.loc[resolved,"actual_opportunities"]
         ).abs().gt(TOL)
+
+        out.loc[safe_zero,"pbp_target_identity_resolved"]=False
+        out.loc[safe_zero,"actual_opportunities"]=0.0
+        out.loc[safe_zero,"actual_opportunity_source"]="FROZEN_ZERO_NO_RECEIVING_USAGE"
+        out.loc[safe_zero,"actual_opportunity_discrepancy"]=False
         out.drop(columns=["_pbp_actual_targets","_pbp_target_identity_resolved"],inplace=True)
     if out[["predicted_opportunities","actual_opportunities","baseline_projection","actual_output"]].isna().any().any():
         raise RuntimeError("missing numeric value in paired decomposition rows")
@@ -560,7 +578,8 @@ def run(*,points_path:Path,opportunity_path:Path,out_dir:Path)->dict:
         "scoreable_rows":int(len(scoreable)),
         "model_efficiency_unavailable_rows":int((~rows["model_efficiency_eligible"]).sum()),
         "actual_opportunity_discrepancy_rows":int(rows["actual_opportunity_discrepancy"].sum()),
-        "target_rows_graded_by_pbp":int(rows["opportunity_type"].eq("targets").sum()),
+        "target_rows_graded_by_pbp":int(rows["actual_opportunity_source"].eq("COMPLETED_GAME_PBP_TARGETS").sum()),
+        "target_zero_usage_fallback_rows":int(rows["actual_opportunity_source"].eq("FROZEN_ZERO_NO_RECEIVING_USAGE").sum()),
         "max_baseline_reconstruction_gap":float(
             (scoreable["baseline_reconstructed"]-scoreable["baseline_projection"]).abs().max()
         ),
