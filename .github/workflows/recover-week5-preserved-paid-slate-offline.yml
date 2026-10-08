@@ -1,4 +1,5 @@
 name: Recover Week5 Preserved Paid Full Slate Offline
+# Retry after exact schedule-scoped coverage certification correction; paid source unchanged.
 
 on:
   push:
