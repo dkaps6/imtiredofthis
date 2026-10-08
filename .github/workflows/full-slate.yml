@@ -407,7 +407,10 @@ jobs:
             cp "/tmp/preserved_paid_odds/${f}" "${f}"
           done
 
-          sha256sum outputs/props_raw_compact.csv outputs/odds_game.csv > /tmp/preserved_paid_odds_boundary.sha256
+          mkdir -p data/replay_source_paid
+          cp /tmp/preserved_paid_odds/outputs/props_raw_compact.csv data/replay_source_paid/props_raw_compact_paid.csv
+          cp /tmp/preserved_paid_odds/outputs/odds_game.csv data/replay_source_paid/odds_game_paid.csv
+          sha256sum data/replay_source_paid/props_raw_compact_paid.csv data/replay_source_paid/odds_game_paid.csv > /tmp/preserved_paid_odds_boundary.sha256
 
           python - <<'PY'
           import json, os
@@ -429,6 +432,10 @@ jobs:
           p.write_text(json.dumps(s,indent=2,sort_keys=True)+'\n',encoding='utf-8')
           print('CANONICAL_PRESERVED_ODDS_READY',{'season':season,'week':week,'compact_rows':s.get('production_compact_rows')})
           PY
+
+          python scripts/operations/reconcile_preserved_live_props_current_roster_v1.py
+          test -s data/preserved_live_props_current_roster_reconciliation.json
+
           echo "available=true" >> "${GITHUB_OUTPUT}"
           echo "status=preserved_paid_artifact" >> "${GITHUB_OUTPUT}"
 
