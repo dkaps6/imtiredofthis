@@ -219,6 +219,8 @@ def build_pbp_target_actuals()->pd.DataFrame:
     missing=required-set(x.columns)
     if missing:
         raise RuntimeError(f"PBP target authority missing columns: {sorted(missing)}")
+    if "receiver_player_name" not in x.columns:
+        x["receiver_player_name"]=""
     if "season_type" in x.columns:
         reg=x["season_type"].astype(str).str.upper().eq("REG")
         if reg.any():
@@ -236,7 +238,10 @@ def build_pbp_target_actuals()->pd.DataFrame:
         & x["receiver_player_id"].ne("")
         & x["team"].astype(str).ne("")
     )
-    target_events=x.loc[target,["week","team","receiver_player_id"]].copy()
+    target_events=x.loc[
+        target,["week","team","receiver_player_id","receiver_player_name"]
+    ].copy()
+    target_events["pbp_receiver_name_key"]=target_events["receiver_player_name"].map(_name_key)
     multi_team=(
         target_events.groupby(["week","receiver_player_id"])["team"]
         .nunique()
@@ -254,6 +259,41 @@ def build_pbp_target_actuals()->pd.DataFrame:
             pbp_actual_team=("team","first"),
         )
     )
+
+    name_events=target_events.loc[target_events["pbp_receiver_name_key"].ne("")].copy()
+    if name_events.empty:
+        unique_name_counts=pd.DataFrame(columns=[
+            "week","player_clean_key","name_fallback_receiver_player_id",
+            "name_fallback_actual_targets","name_fallback_actual_team"
+        ])
+    else:
+        name_meta=(
+            name_events.groupby(["week","pbp_receiver_name_key"],as_index=False)
+            .agg(
+                receiver_id_count=("receiver_player_id","nunique"),
+                offense_count=("team","nunique"),
+            )
+        )
+        good_names=name_meta.loc[
+            name_meta["receiver_id_count"].eq(1)
+            & name_meta["offense_count"].eq(1),
+            ["week","pbp_receiver_name_key"],
+        ]
+        q=name_events.merge(
+            good_names,
+            on=["week","pbp_receiver_name_key"],
+            how="inner",
+            validate="many_to_one",
+        )
+        unique_name_counts=(
+            q.groupby(["week","pbp_receiver_name_key"],as_index=False)
+            .agg(
+                name_fallback_receiver_player_id=("receiver_player_id","first"),
+                name_fallback_actual_targets=("team","size"),
+                name_fallback_actual_team=("team","first"),
+            )
+            .rename(columns={"pbp_receiver_name_key":"player_clean_key"})
+        )
 
     weekly=nfl.load_player_stats(seasons=[SEASON],summary_level="week")
     w=weekly.to_pandas() if hasattr(weekly,"to_pandas") else pd.DataFrame(weekly)
@@ -306,11 +346,46 @@ def build_pbp_target_actuals()->pd.DataFrame:
     )
     out["pbp_actual_targets"]=_num(out["pbp_actual_targets"]).fillna(0.0)
     out["pbp_actual_team"]=out["pbp_actual_team"].fillna("").map(canon_team)
+    out["pbp_identity_route"]=np.where(
+        out["pbp_actual_targets"].gt(0),"GSIS_EXACT","WEEKLY_ID_ZERO"
+    )
+
+    # When the weekly full-name -> GSIS bridge has no PBP event, permit a
+    # strictly unique PBP receiver-name recovery. This remains outcome-only
+    # grading and never touches predicted opportunities.
+    out=out.merge(
+        unique_name_counts,
+        on=["week","player_clean_key"],
+        how="left",
+        validate="many_to_one",
+    )
+    fallback=(
+        out["pbp_actual_targets"].le(0)
+        & _num(out["name_fallback_actual_targets"]).fillna(0).gt(0)
+    )
+    out.loc[fallback,"pbp_actual_targets"]=_num(
+        out.loc[fallback,"name_fallback_actual_targets"]
+    ).to_numpy()
+    out.loc[fallback,"pbp_actual_team"]=out.loc[
+        fallback,"name_fallback_actual_team"
+    ].fillna("").map(canon_team)
+    out.loc[fallback,"receiver_player_id"]=out.loc[
+        fallback,"name_fallback_receiver_player_id"
+    ].astype(str)
+    out.loc[fallback,"pbp_identity_route"]="PBP_UNIQUE_RECEIVER_NAME_FALLBACK"
+    out.drop(
+        columns=[
+            "name_fallback_receiver_player_id","name_fallback_actual_targets",
+            "name_fallback_actual_team"
+        ],
+        inplace=True,
+    )
+
     out["season"]=SEASON
     out["pbp_target_identity_resolved"]=True
     return out[
         ["season","week","player_clean_key","receiver_player_id",
-         "weekly_reported_team","pbp_actual_team",
+         "weekly_reported_team","pbp_actual_team","pbp_identity_route",
          "pbp_actual_targets","pbp_target_identity_resolved"]
     ].drop_duplicates(["season","week","player_clean_key"])
 
@@ -434,6 +509,7 @@ def build_rows(
     out["pbp_target_identity_resolved"]=False
     out["actual_opportunity_discrepancy"]=False
     out["pbp_actual_team"]=""
+    out["pbp_identity_route"]=""
     out["grading_identity_valid"]=True
     out["grading_exclusion_reason"]=""
 
@@ -442,7 +518,7 @@ def build_rows(
         pt=pbp_targets.copy()
         required_pt={
             "season","week","player_clean_key","pbp_actual_targets",
-            "pbp_actual_team","pbp_target_identity_resolved",
+            "pbp_actual_team","pbp_identity_route","pbp_target_identity_resolved",
         }
         missing_pt=required_pt-set(pt.columns)
         if missing_pt:
@@ -452,10 +528,11 @@ def build_rows(
         out=out.merge(
             pt[[
                 "season","week","player_clean_key","pbp_actual_targets",
-                "pbp_actual_team","pbp_target_identity_resolved"
+                "pbp_actual_team","pbp_identity_route","pbp_target_identity_resolved"
             ]].rename(columns={
                 "pbp_actual_targets":"_pbp_actual_targets",
                 "pbp_actual_team":"_pbp_actual_team",
+                "pbp_identity_route":"_pbp_identity_route",
                 "pbp_target_identity_resolved":"_pbp_target_identity_resolved",
             }),
             on=["season","week","player_clean_key"],
@@ -486,6 +563,7 @@ def build_rows(
             out.loc[resolved,"_pbp_actual_targets"]
         ).to_numpy()
         out.loc[resolved,"pbp_actual_team"]=out.loc[resolved,"_pbp_actual_team"].fillna("").map(canon_team)
+        out.loc[resolved,"pbp_identity_route"]=out.loc[resolved,"_pbp_identity_route"].fillna("").astype(str)
         out.loc[resolved,"pbp_target_identity_resolved"]=True
         out.loc[resolved,"actual_opportunities"]=out.loc[resolved,"pbp_actual_targets"]
         out.loc[resolved,"actual_opportunity_source"]="COMPLETED_GAME_PBP_TARGETS"
@@ -520,7 +598,13 @@ def build_rows(
         out.loc[safe_zero,"actual_opportunities"]=0.0
         out.loc[safe_zero,"actual_opportunity_source"]="FROZEN_ZERO_NO_RECEIVING_USAGE"
         out.loc[safe_zero,"actual_opportunity_discrepancy"]=False
-        out.drop(columns=["_pbp_actual_targets","_pbp_actual_team","_pbp_target_identity_resolved"],inplace=True)
+        out.drop(
+            columns=[
+                "_pbp_actual_targets","_pbp_actual_team","_pbp_identity_route",
+                "_pbp_target_identity_resolved"
+            ],
+            inplace=True,
+        )
     if out[["predicted_opportunities","actual_opportunities","baseline_projection","actual_output"]].isna().any().any():
         raise RuntimeError("missing numeric value in paired decomposition rows")
 
