@@ -55,7 +55,7 @@ def _opp_rows():
 
 
 def test_build_rows_separates_opportunity_and_efficiency_oracles():
-    rows=d.build_rows(_point_rows(),_opp_rows())
+    rows=d.build_rows(_point_rows(),_opp_rows(),require_full_weeks=False)
 
     a=rows.loc[(rows.player.eq("WR A")) & (rows.market.eq("rec_yards"))].iloc[0]
     assert a.model_effective_efficiency==pytest.approx(10.0)
@@ -71,7 +71,7 @@ def test_build_rows_separates_opportunity_and_efficiency_oracles():
 
 
 def test_summary_identifies_expected_mae_reduction():
-    rows=d.build_rows(_point_rows(),_opp_rows())
+    rows=d.build_rows(_point_rows(),_opp_rows(),require_full_weeks=False)
     rec=rows.loc[rows.market.eq("rec_yards")]
     s=d._summary(rec)
     assert s["baseline_mae"]==pytest.approx(30.0)
@@ -95,7 +95,7 @@ def test_zero_actual_opportunity_requires_zero_output():
         "predicted_opportunities":3.0,"actual_opportunities":0.0,
         "sportsbook_inputs_used_upstream":False,
     }])
-    rows=d.build_rows(points,opp)
+    rows=d.build_rows(points,opp,require_full_weeks=False)
     r=rows.iloc[0]
     assert r.actual_efficiency==pytest.approx(0.0)
     assert not bool(r.efficiency_oracle_eligible)
@@ -117,7 +117,7 @@ def test_nonzero_output_with_zero_actual_opportunity_fails_closed():
         "sportsbook_inputs_used_upstream":False,
     }])
     with pytest.raises(RuntimeError,match="nonzero output with zero actual opportunity"):
-        d.build_rows(points,opp)
+        d.build_rows(points,opp,require_full_weeks=False)
 
 
 def test_string_false_is_not_truthy():
