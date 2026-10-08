@@ -128,7 +128,8 @@ def reconcile()->dict:
             {f"{canon_team(t)}:{p}" for t,p in zip(removed.get("team_abbr",[]),removed.get("player",[]))}
         ),
         "strict_market_rows_removed":0,
-        "sportsbook_inputs_changed":False,
+        "model_facing_row_set_changed":bool(len(removed)),
+        "paid_source_artifact_mutated":False,
         "lines_or_odds_changed":False,
         "provider_requests_used":False,
     }
