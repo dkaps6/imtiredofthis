@@ -74,7 +74,10 @@ Actual opportunity grading authority:
 - RB / WR / TE targets:
   - completed-game nflverse PBP target counts;
   - receiver identity resolution is PBP receiver GSIS ID -> validated
-    nflreadpy weekly-roster identity -> canonical player key;
+    nflreadpy weekly-roster identity aliases -> canonical player key;
+  - one stable GSIS ID may expose multiple validated name aliases across roster
+    weeks; those aliases inherit the same PBP target count and are not treated
+    as separate players;
   - the weekly player-stats table is not an identity authority for PBP targets;
   - if a PBP receiver GSIS ID has no roster identity, a fallback is allowed
     only when completed-game PBP has one unique canonical receiver-name identity
