@@ -2,10 +2,10 @@
 
 Date: 2026-10-07  
 Branch: `research-player-landscape-transmission-audit-v1`  
-Successful head: `da14d833e9dcd6de1c942bba817e07f3bf01e368`  
-GitHub Actions run: `37716318460` — **SUCCESS**  
-Artifact: `11523478868`  
-Artifact digest: `sha256:6819afa38d0cadaa3bca4c0ba2bdf623f122f4e04d5bbde23d22a6ad6d1e4a70`
+Successful head: `35820953a255ce0f8413c2c468501df7f267fa96`  
+GitHub Actions run: `37717016519` — **SUCCESS**  
+Artifact: `11524296325`  
+Artifact digest: `sha256:e043133d4b9a48ce472dde8810d4d77d636f4ce2fbcee14708b23fe0ea35f6a0`
 
 ## Disposition
 
@@ -109,10 +109,10 @@ Total actively consumed:
 **143 / 227 = 63.0%**
 
 Non-current / incomplete rows:
-- available but not consumed: **43**
+- available but not consumed: **35**
 - available but dropped: **5**
 - prospective-only frozen: **17**
-- source-parity blocked: **9**
+- source-parity blocked: **17**
 - tested and closed: **8**
 - not available: **2**
 
@@ -207,19 +207,27 @@ Therefore it would be incorrect to describe the model as ignoring opponents.
 
 ### 1. Individual route participation / YPRR
 
-Player context contains:
+The PlayerForm schema supports:
 - route rate;
 - YPRR.
 
-But generic RB/WR/TE receiving simulation does not directly consume route rate,
-and receiving mean ultimately uses target allocation + YPT/catch-rate rather
-than YPRR.
+But the certified Week-5 historical-availability-parity reconstruction had:
 
-This is a concrete player-level transmission gap.
+- player route-rate coverage: **0 / 467**
+- player YPRR coverage: **0 / 467**
 
-It does **not** automatically authorize adding route rate or YPRR. Prior WR
-research contains relevant negative/closed work and must be cross-audited before
-any candidate is opened.
+Therefore these fields are **SOURCE_PARITY_BLOCKED**, not merely
+available-but-unused.
+
+Existing RB source-readiness work independently reached:
+
+`LIVE_RB_ROUTE_VOLUME_CONFIRMED_HISTORICAL_WEEKLY_PARITY_NOT_CLEARED`
+
+Public live route-volume sources exist, but canonical nflverse weekly history
+does not supply total routes run with the required historical/live semantic
+parity. Targets or primary-receiver route labels may not be relabeled as routes.
+
+No route-rate/YPRR model candidate is authorized until that source gate clears.
 
 ### 2. Team game-environment state
 
@@ -287,6 +295,40 @@ Protected results:
 - target-depth dispersion is a real player difficulty signal;
 - the frozen universal symmetric target-depth transform did **not** improve
   W1-4 pooled CRPS and remains unpromoted.
+
+## Dynamic context provenance
+
+The dynamic trace used:
+
+`HISTORICAL_AVAILABILITY_PARITY_WEEK5_RECONSTRUCTION`
+
+It intentionally used zero target-week outcomes and zero sportsbook inputs.
+
+It did **not** include supplemental live-only team coverage / box source
+artifacts. This distinction matters.
+
+Non-null coverage across the 467-player parity universe:
+
+- expected plays: **467 / 467**
+- offensive PROE: **467 / 467**
+- offensive success rate: **467 / 467**
+- opponent defensive success rate: **467 / 467**
+- opponent pressure: **467 / 467**
+- opponent defensive pass EPA: **467 / 467**
+- opponent defensive rush EPA: **467 / 467**
+- opponent explosive-play allowed: **467 / 467**
+- player target share: **421 / 467**
+- player rush share: **421 / 467**
+- player YPT / catch rate: **357 / 467**
+- player YPC: **262 / 467**
+- player route rate: **0 / 467**
+- player YPRR: **0 / 467**
+- supplemental man / zone / middle-open / light-box / heavy-box fields:
+  **0 / 467 in this parity reconstruction**
+
+The static production matrix still records code paths that consume coverage/box
+fields when live production sources populate them. The parity trace does not
+pretend those supplemental live sources were present.
 
 ## Dynamic Week-5 trace
 
