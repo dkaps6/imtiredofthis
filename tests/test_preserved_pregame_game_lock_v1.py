@@ -34,6 +34,26 @@ def _cert_row(*, minutes, eligible, state, official_required, failure_reason="")
     }
 
 
+def _other_game_row():
+    return {
+        "season":2026,
+        "week":5,
+        "game_id":"2026_5_NYG_PHI",
+        "away_team":"NYG",
+        "home_team":"PHI",
+        "kickoff_utc":"2026-10-11T17:00:00+00:00",
+        "asof_utc":"2026-10-08T23:18:22+00:00",
+        "minutes_to_kickoff":2500.0,
+        "official_required":False,
+        "away_official_section_complete":False,
+        "home_official_section_complete":False,
+        "official_snapshot_asof_utc":"",
+        "certification_state":"NOT_YET_REQUIRED",
+        "production_eligible":True,
+        "failure_reason":"",
+    }
+
+
 def _role(team, player):
     return {
         "player":player,
@@ -104,20 +124,26 @@ def _wire(tmp_path, monkeypatch):
 def test_restores_whole_upcoming_game_from_paid_acquisition_lock(tmp_path, monkeypatch):
     data,outputs,source,source_data=_wire(tmp_path,monkeypatch)
 
-    pd.DataFrame([_cert_row(
-        minutes=56.6,
-        eligible=False,
-        state="REQUIRED_MISSING_FAIL_CLOSED",
-        official_required=True,
-        failure_reason="missing_complete_section:DAL|missing_complete_section:TB",
-    )],columns=CERT_COLS).to_csv(data/"current_player_availability_game_certification.csv",index=False)
+    pd.DataFrame([
+        _cert_row(
+            minutes=56.6,
+            eligible=False,
+            state="REQUIRED_MISSING_FAIL_CLOSED",
+            official_required=True,
+            failure_reason="missing_complete_section:DAL|missing_complete_section:TB",
+        ),
+        _other_game_row(),
+    ],columns=CERT_COLS).to_csv(data/"current_player_availability_game_certification.csv",index=False)
 
-    pd.DataFrame([_cert_row(
-        minutes=112.5,
-        eligible=True,
-        state="NOT_YET_REQUIRED",
-        official_required=False,
-    )],columns=CERT_COLS).to_csv(source_data/"current_player_availability_game_certification.csv",index=False)
+    pd.DataFrame([
+        _cert_row(
+            minutes=112.5,
+            eligible=True,
+            state="NOT_YET_REQUIRED",
+            official_required=False,
+        ),
+        _other_game_row(),
+    ],columns=CERT_COLS).to_csv(source_data/"current_player_availability_game_certification.csv",index=False)
 
     # Current replay universe has already withheld both teams.
     pd.DataFrame([_avail("NYG","Malik Nabers"),_avail("PHI","Jalen Hurts")]).to_csv(
