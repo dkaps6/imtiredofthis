@@ -1,0 +1,153 @@
+name: Week5 Canonical Preserved Odds Replay Dispatch 20261008
+
+on:
+  push:
+    branches:
+      - ops/week5-canonical-replay-dispatch-20261008
+    paths:
+      - '.github/workflows/week5-canonical-replay-dispatch-20261008.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Wait for exact canonical no-credit validation to succeed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VALIDATION_RUN_ID: "37858050907"
+          EXPECTED_MAIN_SHA: "d36daa45db38f667bdb6566ed13e835df391227f"
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 120); do
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${VALIDATION_RUN_ID}" > /tmp/validation.json
+            STATUS=$(python - <<'PY'
+          import json
+          p=json.load(open('/tmp/validation.json'))
+          print(p['status'])
+          PY
+            )
+            CONCLUSION=$(python - <<'PY'
+          import json
+          p=json.load(open('/tmp/validation.json'))
+          print(p.get('conclusion') or '')
+          PY
+            )
+            SHA=$(python - <<'PY'
+          import json
+          p=json.load(open('/tmp/validation.json'))
+          print(p['head_sha'])
+          PY
+            )
+            if [ "${SHA}" != "${EXPECTED_MAIN_SHA}" ]; then
+              echo "FATAL: validation run sha drift ${SHA} != ${EXPECTED_MAIN_SHA}"
+              exit 2
+            fi
+            echo "canonical validation status=${STATUS} conclusion=${CONCLUSION}"
+            if [ "${STATUS}" = "completed" ]; then
+              if [ "${CONCLUSION}" != "success" ]; then
+                echo "FATAL: canonical no-credit Full Slate did not succeed"
+                exit 3
+              fi
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "FATAL: timed out waiting for canonical validation"
+          exit 4
+
+      - name: Confirm main still equals validated SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_MAIN_SHA: "d36daa45db38f667bdb6566ed13e835df391227f"
+        run: |
+          set -euo pipefail
+          MAIN_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/branches/main" --jq '.commit.sha')
+          test "${MAIN_SHA}" = "${EXPECTED_MAIN_SHA}"
+          echo "main remains validated at ${MAIN_SHA}"
+
+      - name: Fail closed if another post-merge Full Slate workflow_dispatch already exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/full-slate.yml/runs?event=workflow_dispatch&branch=main&per_page=20" > /tmp/manual_runs.json
+          python - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          runs=json.load(open('/tmp/manual_runs.json')).get('workflow_runs',[])
+          cutoff=datetime.fromisoformat('2026-10-08T23:11:45+00:00')
+          newer=[]
+          for r in runs:
+              created=datetime.fromisoformat(r['created_at'].replace('Z','+00:00'))
+              if created > cutoff:
+                  newer.append({
+                      'id':r['id'],
+                      'status':r['status'],
+                      'conclusion':r.get('conclusion'),
+                      'head_sha':r['head_sha'],
+                      'created_at':r['created_at'],
+                  })
+          if newer:
+              raise SystemExit(f'FATAL: post-merge manual Full Slate already exists; refusing duplicate dispatch: {newer}')
+          print('NO_DUPLICATE_POST_MERGE_MANUAL_FULL_SLATE')
+          PY
+
+      - name: Dispatch canonical Full Slate with preserved paid odds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run full-slate.yml             --repo "${GITHUB_REPOSITORY}"             --ref main             -f season=2026             -f prior_season=2025             -f date=2026-10-08             -f fetch_live_odds=false             -f reuse_paid_odds_run_id=37852811339             -f reuse_paid_odds_artifact_id=11582178322             -f reuse_paid_odds_artifact_digest='sha256:4948e08003fcab0f519b35bd4b23d8c895554e4faced993238575acdc5d2e765'             -f rb_pd2_shadow_capture=false
+          echo "DISPATCHED_CANONICAL_FULL_SLATE_PRESERVED_ODDS_REPLAY"
+
+      - name: Prove exactly one new canonical replay run was created
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_MAIN_SHA: "d36daa45db38f667bdb6566ed13e835df391227f"
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 20); do
+            gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/full-slate.yml/runs?event=workflow_dispatch&branch=main&per_page=20" > /tmp/after.json
+            COUNT=$(python - <<'PY'
+          import json
+          from datetime import datetime
+          p=json.load(open('/tmp/after.json'))
+          cutoff=datetime.fromisoformat('2026-10-08T23:11:45+00:00')
+          rows=[]
+          for r in p.get('workflow_runs',[]):
+              created=datetime.fromisoformat(r['created_at'].replace('Z','+00:00'))
+              if created > cutoff:
+                  rows.append(r)
+          print(len(rows))
+          PY
+            )
+            if [ "${COUNT}" = "1" ]; then
+              python - <<'PY'
+          import json
+          from datetime import datetime
+          p=json.load(open('/tmp/after.json'))
+          cutoff=datetime.fromisoformat('2026-10-08T23:11:45+00:00')
+          rows=[r for r in p.get('workflow_runs',[]) if datetime.fromisoformat(r['created_at'].replace('Z','+00:00')) > cutoff]
+          r=rows[0]
+          print('CANONICAL_REPLAY_RUN_CREATED', {
+              'id':r['id'],'status':r['status'],'head_sha':r['head_sha'],'created_at':r['created_at']
+          })
+          if r['head_sha'] != 'd36daa45db38f667bdb6566ed13e835df391227f':
+              raise SystemExit('FATAL: canonical replay did not start on validated main SHA')
+          PY
+              exit 0
+            fi
+            if [ "${COUNT}" -gt 1 ]; then
+              echo "FATAL: duplicate manual Full Slate runs detected after dispatch"
+              exit 5
+            fi
+            sleep 3
+          done
+          echo "FATAL: canonical replay run not observed"
+          exit 6
