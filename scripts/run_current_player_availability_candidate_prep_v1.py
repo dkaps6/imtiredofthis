@@ -33,7 +33,17 @@ def main() -> int:
     week = int(a.week if a.week is not None else resolve_week())
 
     run("scripts/providers/ourlads_depth_status_v1.py")
-    run("scripts/providers/espn_official_inactives_v1.py")
+    run(
+        "scripts/providers/espn_official_inactives_v1.py",
+        "--out", "data/espn_injury_out_proxy_v1.csv",
+        "--status", "data/espn_injury_out_proxy_v1_status.json",
+    )
+    run(
+        "scripts/providers/nfl_official_inactives_v1.py",
+        "--out", "data/nfl_official_inactives_v1.csv",
+        "--status", "data/nfl_official_inactives_v1_status.json",
+    )
+    run("scripts/operations/compose_official_inactives_with_espn_proxy_v1.py")
     timing = ["scripts/validate_current_player_availability_timing_v1.py", "--season", str(a.season), "--week", str(week)]
     if a.asof_utc:
         timing += ["--asof-utc", a.asof_utc]
@@ -44,6 +54,8 @@ def main() -> int:
 
     required = [
         Path("data/roles_ourlads_status_v1.csv"),
+        Path("data/espn_injury_out_proxy_v1.csv"),
+        Path("data/nfl_official_inactives_v1.csv"),
         Path("data/official_inactives_v1.csv"),
         Path("data/current_player_availability_game_certification.csv"),
         Path("data/current_player_availability.csv"),
