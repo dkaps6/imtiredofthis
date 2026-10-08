@@ -72,7 +72,11 @@ Actual opportunity grading authority:
 - QB pass attempts: frozen replay-matched opportunity row
 - RB carries: frozen replay-matched opportunity row
 - RB / WR / TE targets:
-  - completed-game nflverse PBP target counts when a receiver identity resolves;
+  - completed-game nflverse PBP target counts;
+  - receiver identity resolution is exact GSIS ID first;
+  - if the exact weekly-ID bridge has zero PBP receiver events but receiving
+    evidence exists, a fallback is allowed only when completed-game PBP has one
+    unique canonical receiver-name identity for that week;
   - exact zero fallback only when the frozen artifact has zero targets **and**
     the final actual receiving output is zero.
 
@@ -91,7 +95,8 @@ receiver identity in PBP because he never participated in a target event.
 Those rows receive source `FROZEN_ZERO_NO_RECEIVING_USAGE`.
 
 If either artifact targets or receiving output is nonzero, unresolved PBP
-identity fails closed.
+identity fails closed. A receiver-name fallback may not resolve an ambiguous
+same-name multi-ID or multi-offense week.
 
 For every resolved player with at least one PBP target, the PBP offense/team is
 also compared to the replay's projected team. If they differ, the entire
