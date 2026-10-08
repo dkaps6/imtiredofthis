@@ -291,12 +291,12 @@ jobs:
           test -s data/qb_distribution_state_context_audit.csv
           python - <<'EOF'
           import pandas as pd
+          from pathlib import Path
+          from scripts.runtime_context import resolve_week
+          from scripts.utils.qb_c2_active_team_context_v1 import validate_qb_c2_state_context
           x=pd.read_csv('data/qb_distribution_state_context.csv',low_memory=False)
-          if len(x) != 32 or x['team'].nunique() != 32:
-              raise SystemExit(f'FATAL: QB C2 state context expected 32 teams, got rows={len(x)} teams={x["team"].nunique()}')
-          if not pd.to_numeric(x['sportsbook_inputs_used'],errors='coerce').eq(0).all():
-              raise SystemExit('FATAL: QB C2 state context reports sportsbook input')
-          print('QB C2 football state context OK teams=32')
+          audit=validate_qb_c2_state_context(x,season=int(__import__('os').environ['SEASON']),week=int(resolve_week()))
+          print('QB C2 football state context certified',audit)
           EOF
 
       - name: Apply certified availability-aware current-output coverage seams
@@ -306,6 +306,7 @@ jobs:
           python scripts/operations/apply_current_availability_eligible_team_seam_v1.py
           python scripts/operations/apply_current_availability_qb_c2_eligible_team_seam_v1.py
           python scripts/operations/apply_current_availability_qb_c2_primary_team_seam_v1.py
+          python scripts/operations/apply_qb_c2_active_schedule_context_seam_v1.py
           python -m py_compile scripts/run_pricing_with_full_roster_universe_v1.py scripts/modeling/rb_r26_receptions_production_adapter_v1.py scripts/modeling/qb_c2_production_adapter_v1.py
 
       - name: Fetch and gate player props and game odds after football eligibility
