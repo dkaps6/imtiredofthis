@@ -19,9 +19,21 @@ def test_full_slate_uses_validated_2026_production_wiring():
 
 def test_full_slate_live_pricing_requires_active_slate_odds_gate():
     text = Path('.github/workflows/full-slate.yml').read_text(encoding='utf-8')
-    guard = "steps.live_odds.outputs.available == 'true'"
-    assert text.count(guard) >= 4
+    live_guard = "steps.live_odds.outputs.available"
+    sportsbook_guard = "steps.sportsbook.outputs.available == 'true'"
+    assert live_guard in text
+    assert text.count(sportsbook_guard) >= 6
+    assert 'Resolve sportsbook availability' in text
     assert 'No current active-slate player prop markets are posted' in text
+
+
+def test_full_slate_preserved_replay_is_no_credit_and_noncurrent():
+    text = Path('.github/workflows/full-slate.yml').read_text(encoding='utf-8')
+    assert 'Restore pinned previously-paid sportsbook snapshot' in text
+    assert 'REUSE_PAID_ODDS_RUN_ID' in text
+    assert 'odds_api_refetched' in text
+    assert 'PRESERVED_REPLAY' in text
+    assert 'fetch_live_odds and reuse_paid_odds_run_id are mutually exclusive' in text
 
 
 def test_full_slate_main_push_defaults_to_no_credit_mode():
