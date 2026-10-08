@@ -72,6 +72,12 @@ def restore(source_root: Path, source_run_id: int) -> dict:
     source_avail_path = source_root / "data/current_player_availability.csv"
     source_roles_path = source_root / "data/roles_current_production_eligible_v1.csv"
 
+    if not source_meta_path.exists() or source_meta_path.stat().st_size <= 0:
+        raise RuntimeError("pinned source availability certification metadata missing")
+    source_meta = json.loads(source_meta_path.read_text(encoding="utf-8"))
+    if int(source_meta.get("sportsbook_inputs_used", -1)) != 0:
+        raise RuntimeError(f"pinned source availability is not football-only: {source_meta}")
+
     cur_cert = _read(current_cert_path)
     src_cert = _read(source_cert_path)
     cur_avail = _read(current_avail_path)
