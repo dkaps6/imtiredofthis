@@ -209,6 +209,32 @@ def _receiver_identity_candidates(w:pd.DataFrame, counts:pd.DataFrame)->pd.DataF
     return pd.concat([base,targeted],ignore_index=True,sort=False).drop_duplicates()
 
 
+def _expand_counts_across_roster_aliases(
+    counts:pd.DataFrame,id_aliases:pd.DataFrame
+)->pd.DataFrame:
+    """Cross per-week PBP counts onto every validated alias of the stable GSIS ID."""
+    count_keys=["week","receiver_player_id"]
+    alias_keys=["receiver_player_id","roster_player_clean_key"]
+    if counts.duplicated(count_keys).any():
+        raise RuntimeError("duplicate PBP target counts before roster-alias expansion")
+    if id_aliases.duplicated(alias_keys).any():
+        raise RuntimeError("duplicate validated roster alias before PBP expansion")
+
+    # receiver_player_id legitimately repeats on the left across target weeks
+    # and on the right across validated aliases. The intentional raw-key shape
+    # is therefore many-to-many. Scientific uniqueness is enforced immediately
+    # afterward at week + canonical player (one GSIS ID, one offense).
+    out=counts.merge(
+        id_aliases,
+        on="receiver_player_id",
+        how="left",
+        validate="many_to_many",
+    )
+    if out.duplicated(["week","receiver_player_id","roster_player_clean_key"]).any():
+        raise RuntimeError("duplicate week/GSIS/alias after PBP roster expansion")
+    return out
+
+
 def build_pbp_target_actuals()->pd.DataFrame:
     """Completed-game PBP target counts mapped through validated roster GSIS identity."""
     import nflreadpy as nfl
@@ -290,12 +316,7 @@ def build_pbp_target_actuals()->pd.DataFrame:
         "player_clean_key":"roster_player_clean_key",
     }).drop_duplicates(["receiver_player_id","roster_player_clean_key"])
 
-    out=counts.merge(
-        id_aliases,
-        on="receiver_player_id",
-        how="left",
-        validate="one_to_many",
-    )
+    out=_expand_counts_across_roster_aliases(counts,id_aliases)
     out["roster_player_clean_key"]=out["roster_player_clean_key"].fillna("").astype(str)
 
     # Roster GSIS mapping is primary. PBP-name fallback is permitted only for
