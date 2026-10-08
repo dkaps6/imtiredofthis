@@ -11,9 +11,9 @@ Diagnostic only. No production promotion.
 
 ## Evidence authority
 
-Successful exact-head workflow:
-- run: `37771878672`
-- head: `84c80c41b0eb88fe26618a02a50c43ce2cc784f1`
+Canonical latest exact-head workflow:
+- run: `37777319154`
+- head: `cb1e511adcb58e40fc41d0949306083a304e83dd`
 - conclusion: SUCCESS
 - tests: SUCCESS
 - decomposition: SUCCESS
@@ -21,10 +21,15 @@ Successful exact-head workflow:
 - strict repository audit: SUCCESS
 
 Artifact:
-- id: `11547772528`
-- name: `player-output-component-decomposition-v1-37771878672`
-- digest: `sha256:3eb525a4e4a9b804b2bee4e26af72de625b446640aa8e11b516a834e0b29fc2c`
+- id: `11550446909`
+- name: `player-output-component-decomposition-v1-37777319154`
+- digest: `sha256:7acfc453258a49f3aadf0d0ea386b13827eb715f1dfb055b96505f733320d204`
 - retention expiry: 2027-01-06
+
+Earlier successful scientific authority `37771878672` is superseded for
+continuity by the later exact-head rerun above. The scientific disposition is
+unchanged; the later run aligns the final target-identity regression tests with
+the GSIS-roster resolver.
 
 Frozen parents:
 - all-player W1-W4 point replay run `37683439543`
