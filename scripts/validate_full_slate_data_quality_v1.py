@@ -51,6 +51,8 @@ def _validate_current_roster_scope(
     scheduled_teams: set[str],
     roles: pd.DataFrame,
     game_odds: pd.DataFrame,
+    *,
+    season_teams: set[str] | None = None,
 ) -> tuple[set[str], set[str]]:
     """Require roster coverage for the already-gated live event universe.
 
@@ -89,10 +91,11 @@ def _validate_current_roster_scope(
         raise RuntimeError(
             f"live odds event scope contains teams outside active schedule: {off_schedule_events}"
         )
-    off_schedule_roster = sorted(role_teams - scheduled_teams)
-    if off_schedule_roster:
+    allowed_roster_teams = scheduled_teams if season_teams is None else season_teams
+    off_season_roster = sorted(role_teams - allowed_roster_teams)
+    if off_season_roster:
         raise RuntimeError(
-            f"current Ourlads roster contains teams outside active schedule: {off_schedule_roster}"
+            f"current Ourlads roster contains teams outside season schedule: {off_season_roster}"
         )
     missing_live = sorted(live_event_teams - role_teams)
     if missing_live:
@@ -163,12 +166,26 @@ def audit() -> dict:
         raise RuntimeError(f"active schedule must contain an even, nonzero team count; got {len(scheduled_teams)}")
     rows.append(_row("schedule", "CERTIFIED", f"teams={len(scheduled_teams)} games={len(scheduled_teams) // 2}"))
 
+    season_teams = {
+        canon_team(x)
+        for x in schedule.loc[
+            pd.to_numeric(schedule["season"], errors="coerce").eq(season),
+            "team",
+        ].dropna().astype(str)
+    }
+    season_teams.discard("")
+    if len(season_teams) != 32:
+        raise RuntimeError(
+            f"season schedule must contain 32 canonical teams, got {len(season_teams)}"
+        )
+
     roles = _read(DATA / "roles_ourlads.csv")
     game_odds = _read(OUTPUTS / "odds_game.csv")
     role_teams, live_event_teams = _validate_current_roster_scope(
         scheduled_teams,
         roles,
         game_odds,
+        season_teams=season_teams,
     )
     rows.append(_row(
         "current_roster",
