@@ -188,3 +188,14 @@ def test_tracked_manual_final_board_quarantine_file_scopes_week2_wentz():
         ("MIN", "carsonwentz"),
     }
     assert _load_quarantine_keys(path, season=2026, week=3) == set()
+
+
+def test_tracked_week5_ravens_quarantine_is_scoped_and_does_not_change_week6():
+    from pathlib import Path
+
+    path = Path("data/manual_final_board_quarantine.csv")
+    assert _load_quarantine_keys(path, season=2026, week=5) == {
+        ("BAL", "tylerhuntley"),
+    }
+    assert _load_quarantine_keys(path, season=2026, week=6) == set()
+    assert _load_quarantine_keys(path, season=2027, week=5) == set()
