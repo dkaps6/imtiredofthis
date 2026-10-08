@@ -39,6 +39,12 @@ def _num(s)->pd.Series:
     return pd.to_numeric(s,errors="coerce")
 
 
+def _truthy(s:pd.Series)->pd.Series:
+    if pd.api.types.is_bool_dtype(s):
+        return s.fillna(False).astype(bool)
+    return s.astype(str).str.strip().str.lower().isin({"true","1","yes","y"})
+
+
 def _pos(v)->str:
     p=str(v or "").upper().strip()
     if p in {"FB","HB","TB"} or p.startswith("RB"):
@@ -185,9 +191,9 @@ def build_rows(points:pd.DataFrame,opps:pd.DataFrame)->pd.DataFrame:
     if mp: raise RuntimeError(f"point scoreboard missing columns: {sorted(mp)}")
     if mo: raise RuntimeError(f"opportunity rows missing columns: {sorted(mo)}")
 
-    if p["sportsbook_inputs_used_upstream"].astype(bool).any():
+    if _truthy(p["sportsbook_inputs_used_upstream"]).any():
         raise RuntimeError("sportsbook leakage in point parent")
-    if o["sportsbook_inputs_used_upstream"].astype(bool).any():
+    if _truthy(o["sportsbook_inputs_used_upstream"]).any():
         raise RuntimeError("sportsbook leakage in opportunity parent")
 
     p["season"]=_num(p["season"]); p["week"]=_num(p["week"])
