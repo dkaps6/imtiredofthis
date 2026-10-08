@@ -1,0 +1,118 @@
+name: T75 Official Inactives Plus ESPN Proxy Gate 20261008
+
+on:
+  push:
+    branches:
+      - hotfix/t75-official-inactives-plus-espn-proxy-20261008
+    paths:
+      - 'scripts/run_current_player_availability_candidate_prep_v1.py'
+      - 'scripts/operations/compose_official_inactives_with_espn_proxy_v1.py'
+      - 'tests/test_compose_official_inactives_with_espn_proxy_v1.py'
+      - '.github/workflows/test-t75-official-inactives-plus-espn-proxy-20261008.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  SEASON: "2026"
+  PRIOR_SEASON: "2025"
+  SLATE_DATE: "2026-10-08"
+  FETCH_LIVE_ODDS: "false"
+  TEAM_WEEK_MAP_CSV: data/team_week_map.csv
+
+jobs:
+  certify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pyyaml beautifulsoup4 lxml pytest
+
+      - name: Run focused unit tests
+        run: |
+          export PYTHONPATH="${PWD}"
+          pytest -q             tests/test_compose_official_inactives_with_espn_proxy_v1.py             tests/test_espn_official_inactives_v1.py             tests/test_espn_availability_semantics_repair_v1.py
+
+      - name: Build current football inputs
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/utils/build_team_week_map_v2.py --season "${SEASON}" --out data/team_week_map.csv
+          python scripts/build/build_injuries_weekly.py data/injuries.csv --season "${SEASON}"
+          test -s data/team_week_map.csv
+          test -s data/injuries.csv
+
+      - name: Run repaired current availability prep
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          WEEK_RESOLVED=$(python -c "from scripts.runtime_context import resolve_week; print(resolve_week())")
+          test "${WEEK_RESOLVED}" = "5"
+          python scripts/run_current_player_availability_candidate_prep_v1.py             --season "${SEASON}"             --week "${WEEK_RESOLVED}"
+
+      - name: Require tonight DAL-TB official certification
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python - <<'PY'
+          import json
+          import pandas as pd
+
+          cert=pd.read_csv('data/current_player_availability_game_certification.csv',low_memory=False)
+          mask=(
+              cert['away_team'].astype(str).isin(['DAL','TB'])
+              & cert['home_team'].astype(str).isin(['DAL','TB'])
+          )
+          rows=cert.loc[mask]
+          if len(rows) != 1:
+              raise SystemExit(f'FATAL: expected exactly one DAL-TB certification row, got {len(rows)}')
+          r=rows.iloc[0]
+          fields={
+              'away_team':r['away_team'],
+              'home_team':r['home_team'],
+              'minutes_to_kickoff':float(r['minutes_to_kickoff']),
+              'official_required':bool(r['official_required']),
+              'away_official_section_complete':bool(r['away_official_section_complete']),
+              'home_official_section_complete':bool(r['home_official_section_complete']),
+              'certification_state':r['certification_state'],
+              'production_eligible':bool(r['production_eligible']),
+              'failure_reason':str(r.get('failure_reason','')),
+          }
+          print('DAL_TB_CERTIFICATION',fields)
+          if fields['certification_state'] != 'REQUIRED_AND_CERTIFIED':
+              raise SystemExit(f'FATAL: DAL/TB not certified tonight: {fields}')
+          if not fields['production_eligible']:
+              raise SystemExit(f'FATAL: DAL/TB still withheld: {fields}')
+          if not fields['away_official_section_complete'] or not fields['home_official_section_complete']:
+              raise SystemExit(f'FATAL: DAL/TB official sections incomplete: {fields}')
+
+          status=json.load(open('data/official_inactives_v1_status.json',encoding='utf-8'))
+          complete=set(status.get('complete_teams',[]))
+          if not {'DAL','TB'} <= complete:
+              raise SystemExit(f'FATAL: composite status missing DAL/TB official sections: {status}')
+          if int(status.get('sportsbook_inputs_used',1)) != 0:
+              raise SystemExit('FATAL: sportsbook input leaked into availability certification')
+
+          roles=pd.read_csv('data/roles_current_production_eligible_v1.csv',low_memory=False)
+          role_teams=set(roles['team'].astype(str))
+          if not {'DAL','TB'} <= role_teams:
+              raise SystemExit(f'FATAL: DAL/TB missing from production-eligible roles: {sorted(role_teams)}')
+          print('DAL_TB_T75_OFFICIAL_CERTIFICATION_PASS')
+          PY
+
+      - name: Strict repo audit
+        run: |
+          export PYTHONPATH="${PWD}"
+          python scripts/utils/audit_repo.py --strict
