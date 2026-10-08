@@ -223,3 +223,17 @@ def test_receiving_identity_scope_drops_defensive_same_name_collision():
     assert set(out.position)=={"WR","TE"}
     assert set(out.player_id)=={"00-WR","00-TE"}
 
+
+def test_pbp_observed_two_way_player_survives_receiving_identity_scope():
+    weekly=pd.DataFrame([
+        {"week":1,"player_name":"Travis Hunter","position":"CB","receiver_player_id":"00-TH"},
+        {"week":1,"player_name":"Byron Young","position":"DE","receiver_player_id":"00-BY"},
+        {"week":1,"player_name":"Receiver C","position":"WR","receiver_player_id":"00-WR"},
+    ])
+    counts=pd.DataFrame([
+        {"week":1,"receiver_player_id":"00-TH","pbp_actual_targets":1.0,"pbp_actual_team":"JAX"},
+        {"week":1,"receiver_player_id":"00-WR","pbp_actual_targets":4.0,"pbp_actual_team":"IND"},
+    ])
+    out=d._receiver_identity_candidates(weekly,counts)
+    assert set(out.receiver_player_id)=={"00-TH","00-WR"}
+
