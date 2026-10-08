@@ -3,6 +3,113 @@ GitHub is canonical; chat memory is secondary.
 
 
 ---
+## ACTIVE CHECKPOINT — 2026-10-08 — PLAYER LANDSCAPE / OPPORTUNITY-DOMINANT CURRENT
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-08_PLAYER_LANDSCAPE_OPPORTUNITY_DOMINANT_CURRENT.md`
+
+**Compact next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-08_PLAYER_LANDSCAPE_OPPORTUNITY_DOMINANT.md`
+
+This supersedes all older checkpoints for immediate execution.
+
+### Current state in one screen
+
+- The model is now proven to have a **real individual-player core**; it is not a
+  position model with names attached.
+- Player Landscape Transmission Audit V1 is complete:
+  `INDIVIDUAL_PLAYER_CORE_CONFIRMED__LANDSCAPE_TRANSMISSION_INCOMPLETE`.
+- The full 2026 W1-W4 all-player replay is complete.
+- The newest decisive result is Player Output Component Decomposition V1:
+  `OPPORTUNITY_DOMINANT_ACROSS_ALL_PRIMARY_MARKETS__INDIVIDUAL_ROLE_SHARE_ALLOCATION_NEXT`.
+- Exact latest successful decomposition authority:
+  - run `37777319154` SUCCESS
+  - scientific head `cb1e511adcb58e40fc41d0949306083a304e83dd`
+  - artifact `11550446909`
+  - digest `sha256:7acfc453258a49f3aadf0d0ea386b13827eb715f1dfb055b96505f733320d204`
+  - result doc:
+    `docs/research/PLAYER_OUTPUT_COMPONENT_DECOMPOSITION_V1_RESULT.md`
+    on branch `research-player-output-component-decomposition-v1`.
+- Opportunity oracle beats efficiency oracle in **all 8** tested cells:
+  - QB pass yards: 23.9% vs 12.7% MAE removed
+  - RB rush yards: 45.1% vs 7.2%
+  - RB rec yards: 45.1% vs 27.5%
+  - RB receptions: 57.2% vs -2.4%
+  - WR rec yards: 42.8% vs 28.2%
+  - WR receptions: 54.4% vs 11.6%
+  - TE rec yards: 55.0% vs 23.5%
+  - TE receptions: 68.3% vs 8.1%.
+- Therefore the next model-development work must stay inside **individual
+  pregame opportunity / role / share allocation**, not another generic
+  efficiency/matchup multiplier.
+- RB receiving-room share already improved real W1-W4 individual projections:
+  targets 7.60%, receptions 3.83%, rec yards 2.89%, rush+rec 1.66%.
+- RB receiving-room and RB carry/snap Week-5 locks are frozen prospectively.
+- WR/TE target-share trajectory is historically confirmed and Week-5 shadow is
+  frozen. Exact trajectory is ineligible in 2026 W1-W4 because it requires four
+  prior same-season games; do not weaken the rule.
+- The universal symmetric target-depth distribution transform did not improve
+  W1-W4 CRPS and remains unpromoted.
+- Route participation/YPRR historical predictive testing is source-parity
+  blocked; do not fabricate routes from nflverse participation labels.
+- WR-R3 combined calibration was already built/run and is CLOSED:
+  `NO_ACTIONABLE_WR_R3_COMBINED_CALIBRATION`.
+- Coverage-v2 team man/zone is near-null; player WR-CB historical assignment is
+  source blocked.
+- Generic game-script/Vegas confirmation produced no actionable pregame state.
+- All three simple Football Matchup Transmission V1 integration formulas failed
+  closed.
+- M95A/M95B generic RB role x defense remains closed.
+- No paid OddsAPI without explicit user authorization.
+- Week-5 prospective locks remain outcome-blind at this morning checkpoint;
+  do not grade them prematurely.
+- No relevant run should be assumed active; verify live Actions.
+
+### Exact next action
+
+1. Verify live main / active branches / Issue #535 / Actions.
+2. Do **not** rerun the completed all-player replay, landscape audit, or output
+   component decomposition.
+3. Build a bounded next-step roadmap for **individual opportunity allocation**,
+   explicitly separating:
+   - participation / active-role probability;
+   - team opportunity volume;
+   - room share / player allocation.
+4. Reconcile against all completed opportunity research before opening a new
+   candidate; do not duplicate closed/source-blocked lanes.
+5. WR/TE: the clean legal validation path is an exact frozen historical
+   Week-5+ integration test of Target Share Trajectory V1 while preserving
+   M38 / WR-R15 / TE-R5P and team target mass.
+6. QB: prioritize attempt/starter/team-volume allocation, not generic YPA/mean.
+7. RB: preserve M96 stop; do not back-apply Week-5 carry/snap shadow to W1-W4.
+   RB receiving-room share is already retrospectively confirmed.
+8. If considering participation/zero-state, first reconcile the completed
+   historical-availability parity and opportunity audits. No outcome-selected
+   cutoff.
+9. Freeze any exact new mechanism before scoring it.
+10. Keep efficiency/matchup work secondary until opportunity allocation for the
+    relevant market is resolved.
+
+### Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this newest top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-10-08_PLAYER_LANDSCAPE_OPPORTUNITY_DOMINANT_CURRENT.md`
+4. `docs/research/PLAYER_OUTPUT_COMPONENT_DECOMPOSITION_V1_RESULT.md`
+   on branch `research-player-output-component-decomposition-v1`
+5. `docs/research/PLAYER_LANDSCAPE_GAP_DISPOSITION_V1.md`
+6. `docs/research/PLAYER_LANDSCAPE_TRANSMISSION_AUDIT_V1_RESULT.md`
+7. `docs/research/ALL_PLAYER_ALL_POSITION_REPLAY_V1_RESULT.md`
+8. newest Issue #535 continuity comment
+9. live main / relevant branches / Actions
+
+Then continue execution immediately. Do not recursively load older handoffs
+unless a targeted anti-retest question requires one.
+
+---
 ## ACTIVE CHECKPOINT — 2026-10-07 — PLAYER-CENTRIC ALL-POSITIONS CURRENT
 
 **Read this detailed handoff next:**
