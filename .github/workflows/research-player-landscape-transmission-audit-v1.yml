@@ -1,0 +1,188 @@
+name: Research Player Landscape Transmission Audit V1
+
+on:
+  push:
+    branches:
+      - research-player-landscape-transmission-audit-v1
+    paths:
+      - 'docs/research/PLAYER_LANDSCAPE_TRANSMISSION_AUDIT_V1_CONTRACT.md'
+      - 'scripts/research/run_player_landscape_transmission_audit_v1.py'
+      - 'tests/test_player_landscape_transmission_audit_v1.py'
+      - '.github/workflows/research-player-landscape-transmission-audit-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nflreadpy pytest pyarrow pyyaml
+
+      - name: Run player-landscape governance tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          pytest -q tests/test_player_landscape_transmission_audit_v1.py
+
+      - name: Build leakage-safe Week-5 football inputs
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/player_landscape_v1
+          mkdir -p /tmp/player_landscape_v1/input /tmp/player_landscape_v1/output
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.backtest.historical_inputs import build_all_historical_inputs
+          out=build_all_historical_inputs(
+              season=2026,
+              prior_season=2025,
+              out_dir=Path('/tmp/player_landscape_v1/input'),
+              weeks=[5],
+          )
+          print(out)
+          PY
+          python scripts/backtest/historical_player_logs.py             --seasons 2025,2026             --schedule /tmp/player_landscape_v1/input/schedule_history.csv             --out /tmp/player_landscape_v1/input/player_game_logs_history.csv
+          python - <<'PY'
+          import pandas as pd
+          p='/tmp/player_landscape_v1/input/player_game_logs_history.csv'
+          x=pd.read_csv(p,low_memory=False)
+          cur=x.loc[pd.to_numeric(x.season,errors='coerce').eq(2026)].copy()
+          assert not cur.empty
+          maxw=int(pd.to_numeric(cur.week,errors='coerce').max())
+          assert maxw < 5, f'Week-5/future outcome leakage max_week={maxw}'
+          u=pd.read_csv('/tmp/player_landscape_v1/input/pregame_universe/2026_week_05.csv',low_memory=False)
+          print({
+              'completed_2026_max_week':maxw,
+              'week5_pregame_players':len(u),
+              'week5_teams':u.team.nunique(),
+              'positions':sorted(u.position.astype(str).str.upper().unique().tolist()),
+          })
+          PY
+
+      - name: Run player landscape transmission audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/research/run_player_landscape_transmission_audit_v1.py             --player-logs /tmp/player_landscape_v1/input/player_game_logs_history.csv             --team-weekly /tmp/player_landscape_v1/input/team_weekly_history.csv             --schedule /tmp/player_landscape_v1/input/schedule_history.csv             --universe /tmp/player_landscape_v1/input/pregame_universe/2026_week_05.csv             --iterations 1200             --out-dir /tmp/player_landscape_v1/output
+
+      - name: Certify audit boundary and completeness
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+
+          root=Path('/tmp/player_landscape_v1/output')
+          required=[
+              'player_landscape_feature_inventory.csv',
+              'player_landscape_transmission_matrix.csv',
+              'player_landscape_position_market_summary.csv',
+              'player_landscape_trace_examples.csv',
+              'player_landscape_week5_player_state.csv',
+              'player_landscape_audit_summary.json',
+          ]
+          for name in required:
+              p=root/name
+              assert p.exists() and p.stat().st_size>0, name
+
+          s=json.loads((root/'player_landscape_audit_summary.json').read_text())
+          m=pd.read_csv(root/'player_landscape_transmission_matrix.csv',low_memory=False)
+          p=pd.read_csv(root/'player_landscape_position_market_summary.csv',low_memory=False)
+          t=pd.read_csv(root/'player_landscape_trace_examples.csv',low_memory=False)
+
+          assert s['version']=='PLAYER_LANDSCAPE_TRANSMISSION_AUDIT_V1'
+          assert s['season']==2026 and s['week']==5
+          assert s['parameters_fit']==0
+          assert s['threshold_searches']==0
+          assert s['sportsbook_inputs_used'] is False
+          assert s['paid_odds_api_used'] is False
+          assert s['week5_outcomes_used'] is False
+          assert s['production_changed'] is False
+
+          expected={
+              ('QB','pass_yards'),
+              ('RB','rush_yards'),('RB','rec_yards'),('RB','receptions'),('RB','rush_rec_yards'),
+              ('WR','rec_yards'),('WR','receptions'),
+              ('TE','rec_yards'),('TE','receptions'),
+          }
+          assert set(map(tuple,p[['position_family','market']].to_records(index=False)))==expected
+          assert p.individualized_usage.astype(bool).all()
+          assert p.individualized_efficiency.astype(bool).all()
+          assert p.opponent_materially_consumed.astype(bool).all()
+          assert (pd.to_numeric(p.gap_feature_rows,errors='raise')>0).all()
+
+          assert set(t.position_family.unique())=={'QB','RB','WR','TE'}
+          assert set(t.workload_tier.unique())=={'LOW','MEDIAN','HIGH'}
+          chosen=t[['position_family','workload_tier','team','player_clean_key']].drop_duplicates()
+          assert len(chosen)==12, len(chosen)
+          assert not t.projection_mean.isna().any()
+          assert not t.workload_score.isna().any()
+          assert not t.trace_chain.isna().any()
+          assert not t.sportsbook_inputs_used.astype(bool).any()
+          assert not t.week5_outcomes_used.astype(bool).any()
+
+          closed=m.loc[m.feature.isin([
+              'fmt_rb_pass_rate_faced_candidate',
+              'fmt_wr_true_proe_candidate',
+              'fmt_te_pass_success_candidate',
+          ])]
+          assert not closed.empty
+          assert closed.production_consumption_status.eq('TESTED_AND_CLOSED').all()
+
+          prospective=m.loc[m.feature.isin([
+              'rb_prior_receiving_room_share',
+              'wr_te_target_share_trajectory',
+              'rb_carry_snap_room_state',
+          ])]
+          assert not prospective.empty
+          assert prospective.production_consumption_status.eq('PROSPECTIVE_ONLY_FROZEN').all()
+
+          print(json.dumps({
+              'feature_inventory_rows':s['feature_inventory_rows'],
+              'transmission_matrix_rows':s['transmission_matrix_rows'],
+              'position_market_rows':s['position_market_rows'],
+              'trace_players':s['trace_players'],
+              'trace_rows':s['trace_rows'],
+              'status_counts':s['status_counts'],
+              'layer_gap_counts':s['layer_gap_counts'],
+              'dynamic_trace':s['dynamic_trace'],
+          },indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/utils/audit_repo.py --strict
+
+      - name: Display landscape summary
+        if: always()
+        run: |
+          cat /tmp/player_landscape_v1/output/player_landscape_audit_summary.json || true
+
+      - name: Upload landscape evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-landscape-transmission-audit-v1-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/player_landscape_v1/output/**
