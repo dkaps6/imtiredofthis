@@ -252,3 +252,51 @@ def test_does_not_override_non_timing_failure(tmp_path, monkeypatch):
 
     result=mod.restore(source,37852811339,11582178322)
     assert result["disposition"]=="NO_PREGAME_ACQUISITION_LOCK_NEEDED"
+
+
+def test_accepts_already_restored_lock_as_source(tmp_path, monkeypatch):
+    data,outputs,source,source_data=_wire(tmp_path,monkeypatch)
+
+    pd.DataFrame([
+        _cert_row(
+            minutes=56.6,
+            eligible=False,
+            state="REQUIRED_MISSING_FAIL_CLOSED",
+            official_required=True,
+            failure_reason="missing_complete_section:DAL|missing_complete_section:TB",
+        ),
+        _other_game_row(),
+    ],columns=CERT_COLS).to_csv(data/"current_player_availability_game_certification.csv",index=False)
+
+    source_locked=_cert_row(
+        minutes=112.5,
+        eligible=True,
+        state=mod.LOCK_STATE,
+        official_required=False,
+    )
+    pd.DataFrame([source_locked,_other_game_row()],columns=CERT_COLS).to_csv(
+        source_data/"current_player_availability_game_certification.csv",index=False
+    )
+
+    pd.DataFrame([_avail("NYG","Malik Nabers"),_avail("PHI","Jalen Hurts")]).to_csv(
+        data/"current_player_availability.csv",index=False
+    )
+    pd.DataFrame([_role("NYG","Malik Nabers"),_role("PHI","Jalen Hurts")]).to_csv(
+        data/"roles_current_production_eligible_v1.csv",index=False
+    )
+    pd.DataFrame([
+        _avail("TB","Jalon Daniels"),_avail("DAL","Dak Prescott"),
+        _avail("NYG","Malik Nabers"),_avail("PHI","Jalen Hurts"),
+    ]).to_csv(source_data/"current_player_availability.csv",index=False)
+    pd.DataFrame([
+        _role("TB","Jalon Daniels"),_role("DAL","Dak Prescott"),
+        _role("NYG","Malik Nabers"),_role("PHI","Jalen Hurts"),
+    ]).to_csv(source_data/"roles_current_production_eligible_v1.csv",index=False)
+
+    result=mod.restore(source,37858437447,11585311124)
+    assert result["disposition"]=="PRESERVED_PREGAME_ACQUISITION_LOCK_RESTORED"
+    assert result["locked_teams"]==["DAL","TB"]
+    cert=pd.read_csv(data/"current_player_availability_game_certification.csv")
+    row=cert.loc[cert["game_id"].eq("2026_5_TB_DAL")].iloc[0]
+    assert row["certification_state"]==mod.LOCK_STATE
+    assert bool(row["production_eligible"]) is True
