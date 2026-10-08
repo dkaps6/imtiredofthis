@@ -109,3 +109,31 @@ def test_positive_row_injury_scope_rejects_off_schedule_team():
             ALL_TEAMS,
             source="nflverse",
         )
+
+
+BYE_TEAMS = {"CAR", "KC"}
+WEEK5_TEAMS = ALL_TEAMS - BYE_TEAMS
+
+
+def test_current_roster_scope_accepts_full_32_team_provider_roster_on_30_team_bye_week():
+    role_teams, live_event_teams = _validate_current_roster_scope(
+        WEEK5_TEAMS,
+        _roles(ALL_TEAMS),
+        _game_odds(WEEK5_TEAMS),
+        season_teams=ALL_TEAMS,
+    )
+
+    assert role_teams == ALL_TEAMS
+    assert live_event_teams == WEEK5_TEAMS
+
+
+def test_current_roster_scope_rejects_unknown_provider_team_even_on_bye_week():
+    bad_roles = _roles(ALL_TEAMS)
+    bad_roles.loc[len(bad_roles)] = {"team": "XYZ", "player": "Unknown Example"}
+    with pytest.raises(RuntimeError, match="outside season schedule"):
+        _validate_current_roster_scope(
+            WEEK5_TEAMS,
+            bad_roles,
+            _game_odds(WEEK5_TEAMS),
+            season_teams=ALL_TEAMS,
+        )
