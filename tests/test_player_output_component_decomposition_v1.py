@@ -212,55 +212,71 @@ def test_pbp_team_mismatch_excludes_entire_player_week():
     assert not rows.component_decomposition_eligible.any()
 
 
-def test_receiving_identity_scope_drops_defensive_same_name_collision():
-    frame=pd.DataFrame([
-        {"player_name":"Byron Young","position":"WR","player_id":"00-WR"},
-        {"player_name":"Byron Young","position":"DE","player_id":"00-DE"},
-        {"player_name":"Marcus Harris","position":"DT","player_id":"00-DT"},
-        {"player_name":"Marcus Harris","position":"TE","player_id":"00-TE"},
-    ])
-    out=d._restrict_receiving_identity_population(frame)
-    assert set(out.position)=={"WR","TE"}
-    assert set(out.player_id)=={"00-WR","00-TE"}
-
-
-def test_pbp_observed_two_way_player_survives_receiving_identity_scope():
-    weekly=pd.DataFrame([
-        {"week":1,"player_name":"Travis Hunter","position":"CB","receiver_player_id":"00-TH"},
-        {"week":1,"player_name":"Byron Young","position":"DE","receiver_player_id":"00-BY"},
-        {"week":1,"player_name":"Receiver C","position":"WR","receiver_player_id":"00-WR"},
-    ])
-    counts=pd.DataFrame([
-        {"week":1,"receiver_player_id":"00-TH","pbp_actual_targets":1.0,"pbp_actual_team":"JAX"},
-        {"week":1,"receiver_player_id":"00-WR","pbp_actual_targets":4.0,"pbp_actual_team":"IND"},
-    ])
-    out=d._receiver_identity_candidates(weekly,counts)
-    assert set(out.receiver_player_id)=={"00-TH","00-WR"}
-
-
-def test_multiweek_gsis_alias_expansion_is_intentional_not_ambiguous():
-    counts=pd.DataFrame([
+def test_gsis_roster_resolution_handles_two_way_receiver_and_same_name_collision():
+    target_events=pd.DataFrame([
         {
-            "week":1,"receiver_player_id":"00-X","pbp_actual_targets":4.0,
-            "pbp_actual_team":"IND","pbp_receiver_name_key":"playerx",
-        },
-        {
-            "week":2,"receiver_player_id":"00-X","pbp_actual_targets":7.0,
-            "pbp_actual_team":"IND","pbp_receiver_name_key":"playerx",
+            "week":1,"team":"JAX","receiver_player_id":"00-TH",
+            "receiver_player_name":"T.Hunter",
         },
     ])
-    aliases=pd.DataFrame([
-        {"receiver_player_id":"00-X","roster_player_clean_key":"playerx"},
-        {"receiver_player_id":"00-X","roster_player_clean_key":"playerxjr"},
+    roster=pd.DataFrame([
+        {"week":1,"receiver_player_id":"00-TH","player_clean_key":"travishunter"},
+        # Unrelated same-name person cannot contaminate the targeted GSIS ID.
+        {"week":1,"receiver_player_id":"00-OTHER","player_clean_key":"travishunter"},
     ])
-    out=d._expand_counts_across_roster_aliases(counts,aliases)
-    assert len(out)==4
-    assert not out.duplicated(
-        ["week","receiver_player_id","roster_player_clean_key"]
-    ).any()
-    for alias in ("playerx","playerxjr"):
-        q=out.loc[out.roster_player_clean_key.eq(alias)].sort_values("week")
-        assert q.pbp_actual_targets.tolist()==[4.0,7.0]
+    out=d._resolve_pbp_target_identity_rows(target_events,roster)
+    assert len(out)==1
+    r=out.iloc[0]
+    assert r.player_clean_key=="travishunter"
+    assert r.receiver_player_id=="00-TH"
+    assert r.pbp_actual_team=="JAX"
+    assert r.pbp_actual_targets==pytest.approx(1.0)
+    assert r.pbp_identity_route=="ROSTER_GSIS_ALIAS"
+
+
+def test_multiweek_gsis_aliases_inherit_same_pbp_target_count():
+    target_events=pd.DataFrame([
+        {
+            "week":1,"team":"IND","receiver_player_id":"00-X",
+            "receiver_player_name":"P.X",
+        },
+        {
+            "week":2,"team":"IND","receiver_player_id":"00-X",
+            "receiver_player_name":"P.X",
+        },
+        {
+            "week":2,"team":"IND","receiver_player_id":"00-X",
+            "receiver_player_name":"P.X",
+        },
+    ])
+    roster=pd.DataFrame([
+        {"week":1,"receiver_player_id":"00-X","player_clean_key":"playerx"},
+        {"week":2,"receiver_player_id":"00-X","player_clean_key":"playerxjr"},
+    ])
+    out=d._resolve_pbp_target_identity_rows(target_events,roster)
+    w1=out.loc[out.week.eq(1)]
+    assert len(w1)==1
+    assert w1.iloc[0].player_clean_key=="playerx"
+    assert w1.iloc[0].pbp_actual_targets==pytest.approx(1.0)
+
+    w2=out.loc[out.week.eq(2)].sort_values("player_clean_key")
+    assert set(w2.player_clean_key)=={"playerx","playerxjr"}
+    assert set(w2.pbp_actual_targets)=={2.0}
+
+
+def test_unique_pbp_name_fallback_only_when_roster_alias_missing():
+    target_events=pd.DataFrame([
+        {
+            "week":1,"team":"LV","receiver_player_id":"00-MISSING",
+            "receiver_player_name":"Receiver C",
+        },
+    ])
+    roster=pd.DataFrame(columns=["week","receiver_player_id","player_clean_key"])
+    out=d._resolve_pbp_target_identity_rows(target_events,roster)
+    assert len(out)==1
+    r=out.iloc[0]
+    assert r.player_clean_key=="receiverc"
+    assert r.pbp_identity_route=="PBP_UNIQUE_NAME_FALLBACK"
 
 
 def test_unresolved_pbp_receiving_conflict_excludes_entire_player_week():
