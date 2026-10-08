@@ -63,3 +63,12 @@ def test_static_summary_distinguishes_usage_efficiency_and_opponent_consumption(
     # while the detailed matrix still preserves missing/dropped matchup features.
     assert s.opponent_materially_consumed.all()
     assert (s.gap_feature_rows>0).all()
+
+def test_route_state_remains_source_parity_blocked():
+    matrix=audit._expand_matrix(audit.feature_specs())
+    for feature in ("route_rate","yprr"):
+        q=matrix.loc[matrix.feature.eq(feature)]
+        assert not q.empty
+        assert q.production_consumption_status.eq("SOURCE_PARITY_BLOCKED").all()
+        assert q.historical_validation_status.eq("HISTORICAL_WEEKLY_ROUTE_PARITY_NOT_CLEARED").all()
+
