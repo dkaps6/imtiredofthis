@@ -8,6 +8,7 @@ on:
       - '.github/workflows/week5-offline-paid-artifact-replay-20261008.yml'
       - 'scripts/validate_full_slate_data_quality_v1.py'
       - 'tests/test_full_slate_data_quality_scope.py'
+      - 'data/manual_final_board_quarantine.csv'
   workflow_dispatch:
 
 permissions:
