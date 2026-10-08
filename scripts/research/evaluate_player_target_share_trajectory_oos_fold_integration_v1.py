@@ -165,8 +165,8 @@ def _prepare_wr(path: Path, traj: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFr
     x.columns = [str(c).strip().lower() for c in x.columns]
     required = {
         "variant", "event_id", "team", "player_clean_key", "player", "wr_rank",
-        "pred_targets", "mc_rec_yards", "season", "train_season", "week",
-        "actual_targets", "actual_rec_yards",
+        "entitlement_tgt_share", "pred_targets", "mc_rec_yards",
+        "season", "train_season", "week", "actual_targets", "actual_rec_yards",
     }
     missing = required - set(x.columns)
     if missing:
@@ -186,12 +186,25 @@ def _prepare_wr(path: Path, traj: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFr
     # Candidate construction sees no realized target-game outcomes.
     base = primary[[
         "season", "week", "event_id", "team", "player_clean_key", "player",
-        "wr_rank", "pred_targets", "mc_rec_yards",
+        "wr_rank", "entitlement_tgt_share", "pred_targets", "mc_rec_yards",
     ]].copy()
-    base = base.rename(columns={"pred_targets": "baseline_targets", "mc_rec_yards": "baseline_rec_yards"})
+    base = base.rename(columns={
+        "entitlement_tgt_share": "baseline_entitlement_tgt_share",
+        "pred_targets": "baseline_targets",
+        "mc_rec_yards": "baseline_rec_yards",
+    })
+    base["baseline_entitlement_tgt_share"] = _num(base["baseline_entitlement_tgt_share"])
     base["baseline_targets"] = _num(base["baseline_targets"])
     base["baseline_rec_yards"] = _num(base["baseline_rec_yards"])
-    base["is_wr1"] = _num(base["wr_rank"]).eq(1)
+    # Exact original WR-R15 OOS-fold semantics: M38/WR-R15 anchor is the
+    # max baseline entitlement row in each event/team room, NOT historical
+    # descriptive wr_rank. This reproduces apply_wr_fold() exactly.
+    base["is_wr1"] = False
+    for _, idx in base.groupby(ROOM_KEYS, sort=False).groups.items():
+        anchor = base.loc[idx, "baseline_entitlement_tgt_share"].idxmax()
+        base.loc[anchor, "is_wr1"] = True
+    if not base.groupby(ROOM_KEYS)["is_wr1"].sum().eq(1).all():
+        raise RuntimeError("WR anchor reconstruction failed")
     base = _attach_trajectory(base, traj, "WR")
     candidate, audit = apply_wr_trajectory(base)
     outcome = primary[KEYS + ["actual_targets", "actual_rec_yards"]].copy()
