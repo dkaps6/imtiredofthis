@@ -146,6 +146,23 @@ jobs:
           test -s data/injuries.csv
           test -s data/injuries_source_status.json
 
+      - name: Certify current NFL.com injury scope for priced Full Slate
+        if: ${{ env.FETCH_LIVE_ODDS == 'true' || env.REUSE_PAID_ODDS_RUN_ID != '' }}
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="${PWD}"
+          python scripts/operations/refresh_current_injuries_nflcom_v1.py
+          test -s data/injuries.csv
+          test -s data/injury_team_scope.csv
+          test -s data/current_injury_nflcom_refresh_audit.json
+          python - <<'PY'
+          import json
+          p=json.load(open('data/current_injury_nflcom_refresh_audit.json',encoding='utf-8'))
+          if p.get('disposition') != 'CURRENT_NFLCOM_INJURY_REFRESH_CERTIFIED':
+              raise SystemExit(f"FATAL: current injury scope not certified: {p}")
+          print('CURRENT_NFLCOM_INJURY_SCOPE_READY',p)
+          PY
+
       - name: Resolve current availability before opportunity
         run: |
           set -euo pipefail
