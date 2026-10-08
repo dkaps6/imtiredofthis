@@ -148,8 +148,8 @@ def test_pbp_target_authority_repairs_impossible_weekly_zero_target_case():
     }])
     pbp=pd.DataFrame([{
         "season":2026,"week":1,"team":"SF","player_clean_key":"receivera",
-        "receiver_player_id":"00-TEST","pbp_actual_targets":7.0,
-        "pbp_target_identity_resolved":True,
+        "receiver_player_id":"00-TEST","pbp_actual_team":"SF",
+        "pbp_actual_targets":7.0,"pbp_target_identity_resolved":True,
     }])
     rows=d.build_rows(
         points,opp,pbp_targets=pbp,require_full_weeks=False
@@ -161,3 +161,53 @@ def test_pbp_target_authority_repairs_impossible_weekly_zero_target_case():
     assert r.actual_opportunity_source=="COMPLETED_GAME_PBP_TARGETS"
     assert bool(r.actual_opportunity_discrepancy)
     assert r.actual_efficiency==pytest.approx(80.0/7.0)
+
+
+def test_pbp_team_mismatch_excludes_entire_player_week():
+    points=pd.DataFrame([
+        {
+            "season":2026,"week":1,"event_id":"G1","team":"HOU","player":"RB A",
+            "player_clean_key":"rba","position_family":"RB","market":"rush_yards",
+            "projection_mean":40.0,"actual":55.0,"actual_opportunities":10.0,
+            "sportsbook_inputs_used_upstream":False,
+        },
+        {
+            "season":2026,"week":1,"event_id":"G1","team":"HOU","player":"RB A",
+            "player_clean_key":"rba","position_family":"RB","market":"rec_yards",
+            "projection_mean":20.0,"actual":19.0,"actual_opportunities":3.0,
+            "sportsbook_inputs_used_upstream":False,
+        },
+        {
+            "season":2026,"week":1,"event_id":"G1","team":"HOU","player":"RB A",
+            "player_clean_key":"rba","position_family":"RB","market":"receptions",
+            "projection_mean":2.0,"actual":2.0,"actual_opportunities":3.0,
+            "sportsbook_inputs_used_upstream":False,
+        },
+    ])
+    opp=pd.DataFrame([
+        {
+            "season":2026,"week":1,"event_id":"G1","team":"HOU","player":"RB A",
+            "player_clean_key":"rba","position_family":"RB","opportunity_type":"carries",
+            "predicted_opportunities":9.0,"actual_opportunities":10.0,
+            "sportsbook_inputs_used_upstream":False,
+        },
+        {
+            "season":2026,"week":1,"event_id":"G1","team":"HOU","player":"RB A",
+            "player_clean_key":"rba","position_family":"RB","opportunity_type":"targets",
+            "predicted_opportunities":2.5,"actual_opportunities":3.0,
+            "sportsbook_inputs_used_upstream":False,
+        },
+    ])
+    pbp=pd.DataFrame([{
+        "season":2026,"week":1,"player_clean_key":"rba",
+        "receiver_player_id":"00-RB","pbp_actual_team":"DET",
+        "pbp_actual_targets":3.0,"pbp_target_identity_resolved":True,
+    }])
+    rows=d.build_rows(
+        points,opp,pbp_targets=pbp,require_full_weeks=False
+    )
+    assert len(rows)==3
+    assert not rows.grading_identity_valid.any()
+    assert set(rows.grading_exclusion_reason)=={"HISTORICAL_TEAM_IDENTITY_MISMATCH"}
+    assert not rows.component_decomposition_eligible.any()
+\n
