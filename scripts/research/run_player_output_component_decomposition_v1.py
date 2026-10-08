@@ -195,6 +195,19 @@ def _restrict_receiving_identity_population(w:pd.DataFrame)->pd.DataFrame:
     return w.loc[pos.isin(receiving_pos)].copy()
 
 
+def _receiver_identity_candidates(w:pd.DataFrame, counts:pd.DataFrame)->pd.DataFrame:
+    """Receiving-position identities plus any weekly ID observed as a PBP receiver."""
+    base=_restrict_receiving_identity_population(w)
+    pairs=counts[["week","receiver_player_id"]].drop_duplicates()
+    targeted=w.merge(
+        pairs,
+        on=["week","receiver_player_id"],
+        how="inner",
+        validate="many_to_one",
+    )
+    return pd.concat([base,targeted],ignore_index=True,sort=False).drop_duplicates()
+
+
 def build_pbp_target_actuals()->pd.DataFrame:
     """Completed-game target counts for grading only, never prediction input."""
     import nflreadpy as nfl
@@ -252,16 +265,16 @@ def build_pbp_target_actuals()->pd.DataFrame:
         raise RuntimeError("weekly identity source cannot bridge PBP receiver IDs")
     w["week"]=_num(w["week"])
     w=w.loc[w["week"].isin(WEEKS)].copy()
-
-    # This bridge exists only to grade target-based output rows. Restrict the
-    # weekly identity source to offensive receiving positions before checking
-    # name->GSIS uniqueness so unrelated defensive players with the same
-    # canonical name (for example Byron Young) cannot create false ambiguity.
-    w=_restrict_receiving_identity_population(w)
-
     w["weekly_reported_team"]=w[team_col].map(canon_team)
     w["receiver_player_id"]=w[id_col].fillna("").astype(str).str.strip()
     w["player_clean_key"]=w[name_col].map(_name_key)
+
+    # Primary identity scope is the standard receiving-position population,
+    # augmented by any GSIS identity that completed-game PBP itself observed
+    # as a receiver in that week. The augmentation is required for legitimate
+    # two-way players (e.g. Travis Hunter) whose weekly position label may be
+    # defensive even though they received an offensive target.
+    w=_receiver_identity_candidates(w,counts)
     ident=w.loc[
         w["receiver_player_id"].ne("")
         & w["player_clean_key"].ne(""),
