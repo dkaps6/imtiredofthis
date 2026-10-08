@@ -186,6 +186,15 @@ def _name_key(value)->str:
     return "".join(ch.lower() for ch in str(value or "") if ch.isalnum())
 
 
+def _restrict_receiving_identity_population(w:pd.DataFrame)->pd.DataFrame:
+    pos_col=next((c for c in ("position","position_group","pos") if c in w.columns),None)
+    if pos_col is None:
+        return w.copy()
+    pos=w[pos_col].fillna("").astype(str).str.upper().str.strip()
+    receiving_pos={"RB","FB","HB","TB","WR","LWR","RWR","SWR","TE"}
+    return w.loc[pos.isin(receiving_pos)].copy()
+
+
 def build_pbp_target_actuals()->pd.DataFrame:
     """Completed-game target counts for grading only, never prediction input."""
     import nflreadpy as nfl
@@ -248,11 +257,7 @@ def build_pbp_target_actuals()->pd.DataFrame:
     # weekly identity source to offensive receiving positions before checking
     # name->GSIS uniqueness so unrelated defensive players with the same
     # canonical name (for example Byron Young) cannot create false ambiguity.
-    pos_col=next((c for c in ("position","position_group","pos") if c in w.columns),None)
-    if pos_col is not None:
-        pos=w[pos_col].fillna("").astype(str).str.upper().str.strip()
-        receiving_pos={"RB","FB","HB","TB","WR","LWR","RWR","SWR","TE"}
-        w=w.loc[pos.isin(receiving_pos)].copy()
+    w=_restrict_receiving_identity_population(w)
 
     w["weekly_reported_team"]=w[team_col].map(canon_team)
     w["receiver_player_id"]=w[id_col].fillna("").astype(str).str.strip()
