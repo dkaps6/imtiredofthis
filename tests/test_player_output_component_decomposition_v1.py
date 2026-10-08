@@ -237,3 +237,28 @@ def test_pbp_observed_two_way_player_survives_receiving_identity_scope():
     out=d._receiver_identity_candidates(weekly,counts)
     assert set(out.receiver_player_id)=={"00-TH","00-WR"}
 
+
+def test_multiweek_gsis_alias_expansion_is_intentional_not_ambiguous():
+    counts=pd.DataFrame([
+        {
+            "week":1,"receiver_player_id":"00-X","pbp_actual_targets":4.0,
+            "pbp_actual_team":"IND","pbp_receiver_name_key":"playerx",
+        },
+        {
+            "week":2,"receiver_player_id":"00-X","pbp_actual_targets":7.0,
+            "pbp_actual_team":"IND","pbp_receiver_name_key":"playerx",
+        },
+    ])
+    aliases=pd.DataFrame([
+        {"receiver_player_id":"00-X","roster_player_clean_key":"playerx"},
+        {"receiver_player_id":"00-X","roster_player_clean_key":"playerxjr"},
+    ])
+    out=d._expand_counts_across_roster_aliases(counts,aliases)
+    assert len(out)==4
+    assert not out.duplicated(
+        ["week","receiver_player_id","roster_player_clean_key"]
+    ).any()
+    for alias in ("playerx","playerxjr"):
+        q=out.loc[out.roster_player_clean_key.eq(alias)].sort_values("week")
+        assert q.pbp_actual_targets.tolist()==[4.0,7.0]
+
