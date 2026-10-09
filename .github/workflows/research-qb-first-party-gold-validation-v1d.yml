@@ -1,0 +1,91 @@
+name: Research QB First-Party Gold Validation V1D
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/QB_TEAM_PASS_INTENT_FIRST_PARTY_GOLD_VALIDATION_V1D_PLAN.md'
+      - 'docs/research/QB_TEAM_PASS_INTENT_V1D_GOLD_PREFIX.csv'
+      - 'scripts/research/audit_qb_team_pass_intent_first_party_archive_transport_v1c.py'
+      - 'scripts/research/audit_qb_team_pass_intent_first_party_gold_validation_v1d.py'
+      - 'tests/test_qb_team_pass_intent_first_party_gold_validation_v1d.py'
+      - '.github/workflows/research-qb-first-party-gold-validation-v1d.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gold-validation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install repository audit dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyyaml nflreadpy
+
+      - name: Compile and run frozen mechanics tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_qb_team_pass_intent_first_party_gold_validation_v1d.py
+          pytest -q tests/test_qb_team_pass_intent_first_party_gold_validation_v1d.py
+
+      - name: Run exact 13-row operational gold validation
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/qb-v1d
+          python scripts/research/audit_qb_team_pass_intent_first_party_gold_validation_v1d.py \
+            --gold docs/research/QB_TEAM_PASS_INTENT_V1D_GOLD_PREFIX.csv \
+            --out-dir /tmp/qb-v1d \
+            --workers 6
+
+      - name: Certify frozen governance and result schema
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open("/tmp/qb-v1d/qb_first_party_gold_validation_v1d_result.json"))
+          assert p["version"]=="QB_TEAM_PASS_INTENT_FIRST_PARTY_GOLD_VALIDATION_V1D", p
+          assert p["gold_rows"]==13, p
+          assert p["official_gold_rows"]==12, p
+          assert p["local_gold_rows"]==1, p
+          assert p["local_fallback_teams"]==["ATL"], p
+          assert p["external_search_engine_html_contacted"] is False, p
+          assert p["football_outcomes_read"]==0, p
+          assert p["model_residuals_read"]==0, p
+          assert p["sportsbook_inputs_used"] is False, p
+          assert p["paid_oddsapi_calls"]==0, p
+          assert p["week5_2026_outcomes_read"]==0, p
+          assert p["predictive_models_fit"]==0, p
+          assert p["production_changed"] is False, p
+          assert p["predictive_candidate_authorized"] is False, p
+          assert p["disposition"] in {
+              "FIRST_PARTY_GOLD_VALIDATION_QUALIFIED_FOR_SEMANTIC_COVERAGE_AUDIT",
+              "FIRST_PARTY_GOLD_VALIDATION_NOT_QUALIFIED",
+          }, p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload frozen gold validation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-first-party-gold-validation-v1d
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/qb-v1d/

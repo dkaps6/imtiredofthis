@@ -1,0 +1,126 @@
+name: Research Player Trajectory OOS Fold Integration V1
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/PLAYER_TARGET_SHARE_TRAJECTORY_HISTORICAL_OOS_FOLD_INTEGRATION_V1_PLAN.md'
+      - 'scripts/research/evaluate_player_target_share_trajectory_oos_fold_integration_v1.py'
+      - 'tests/test_player_target_share_trajectory_oos_fold_integration_v1.py'
+      - '.github/workflows/research-player-trajectory-oos-fold-integration-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  integrate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==1.5.3 numpy==1.26.4 pytest pyyaml
+
+      - name: Verify immutable parent artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess
+          expected = {
+            11552447166: (
+              "wr-te-fold-authorities-recovered-v1",
+              "sha256:94a4bee7011877b1d7a24708d5ba3e86ccc5d29b427bea650af574fc1f09fa24",
+            ),
+            11490707699: (
+              "player-target-share-trajectory-v1-37638269235",
+              "sha256:2f032cb5e68f5e097e30ca56a2ebe30e505f90233bc60774e4318158fad3fafd",
+            ),
+          }
+          repo=os.environ["GITHUB_REPOSITORY"]
+          for aid,(name,digest) in expected.items():
+              doc=json.loads(subprocess.check_output(
+                  ["gh","api",f"repos/{repo}/actions/artifacts/{aid}"], text=True))
+              assert doc["expired"] is False, doc
+              assert doc["name"] == name, doc
+              assert doc.get("digest") == digest, doc
+              print(aid, name, digest)
+          PY
+
+      - name: Download exact recovered OOS specialist parents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/trajectory_oos/parents
+          gh run download 37782189538 --repo "${GITHUB_REPOSITORY}"             --name wr-te-fold-authorities-recovered-v1             --dir /tmp/trajectory_oos/parents
+
+      - name: Download exact frozen trajectory rows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/trajectory_oos/trajectory
+          gh run download 37638269235 --repo "${GITHUB_REPOSITORY}"             --name player-target-share-trajectory-v1-37638269235             --dir /tmp/trajectory_oos/trajectory
+          test -s /tmp/trajectory_oos/trajectory/player_target_share_trajectory_rows.csv
+
+      - name: Compile and run focused mechanics tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/evaluate_player_target_share_trajectory_oos_fold_integration_v1.py
+          pytest -q tests/test_player_target_share_trajectory_oos_fold_integration_v1.py
+
+      - name: Run frozen OOS-fold integration once
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/trajectory_oos/result
+          python scripts/research/evaluate_player_target_share_trajectory_oos_fold_integration_v1.py             --parents-root /tmp/trajectory_oos/parents             --trajectory /tmp/trajectory_oos/trajectory/player_target_share_trajectory_rows.csv             --out-dir /tmp/trajectory_oos/result
+
+      - name: Certify governance and exact result schema
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open("/tmp/trajectory_oos/result/trajectory_oos_fold_integration_result.json"))
+          assert p["version"]=="PLAYER_TARGET_SHARE_TRAJECTORY_HISTORICAL_OOS_FOLD_INTEGRATION_V1"
+          assert p["primary_population"]=="2024_W5PLUS_WR_TE_OOS_FOLD_PARENTS"
+          assert p["candidate_models_fit"]==0
+          assert p["threshold_searches"]==0
+          assert p["fresh_historical_provider_rebuild"] is False
+          assert p["sportsbook_inputs_used"] is False
+          assert p["paid_oddsapi_calls"]==0
+          assert p["outcomes_2026_read"]==0
+          assert p["production_changed"] is False
+          assert p["prospective_week5_contract_unchanged"] is True
+          assert p["automatic_production_promotion"] is False
+          assert p["max_wr1_abs_gap"] <= 1e-12
+          assert p["max_protected_pool_abs_gap"] <= 1e-12
+          assert p["max_room_pool_abs_gap"] <= 1e-12
+          assert p["disposition"] in {
+              "HISTORICAL_OOS_FOLD_TRAJECTORY_INTEGRATION_SUPPORTED",
+              "HISTORICAL_OOS_FOLD_TRAJECTORY_INTEGRATION_NOT_CONFIRMED",
+          }
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload frozen integration result
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-trajectory-oos-fold-integration-v1
+          retention-days: 90
+          if-no-files-found: error
+          path: /tmp/trajectory_oos/result/
