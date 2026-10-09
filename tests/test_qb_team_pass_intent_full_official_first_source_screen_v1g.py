@@ -37,9 +37,10 @@ def test_candidate_ranking_prefers_opponent_then_week_then_source_window():
     ]
     out = _candidate_rows(tw, entries)
     assert len(out) == 3
-    assert out[0].opponent_url_match is True
-    assert out[1].week_url_match is True
-    assert out[1].source_token_match is True
+    assert out[0].week_url_match is True
+    assert out[0].source_token_match is True
+    assert out[0].date_window_match is True
+    assert out[1].opponent_url_match is True
     assert out[2].date_window_match is True
 
 
