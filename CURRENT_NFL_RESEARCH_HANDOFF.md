@@ -3,6 +3,59 @@ GitHub is canonical; chat memory is secondary.
 
 
 ---
+## ACTIVE CHECKPOINT — 2026-10-08 — WEEK 5 PRODUCTION RECOVERED / RESEARCH FRONTIER CURRENT
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-08_WEEK5_PRODUCTION_RECOVERED_RESEARCH_FRONTIER_CURRENT.md`
+
+**Compact next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-08_WEEK5_PRODUCTION_RECOVERED_RESEARCH_FRONTIER.md`
+
+This supersedes older checkpoints for immediate execution while preserving their scientific lineage.
+
+### Current state in one screen
+
+- Canonical Week-5 preserved-odds Full Slate **37860592615 SUCCESS** on production authority `24704e5f1ef872ec86c36446d2c73f6d377c824c`.
+- Final artifact **11585973062**, digest `sha256:bf52aa4bc30bf6e8cc6029a0a86c0f33cdfaa09f587c38a138f23cef6b7436f4`.
+- Original paid source: run **37852811339**, artifact **11582178322**, digest `sha256:4948e08003fcab0f519b35bd4b23d8c895554e4faced993238575acdc5d2e765`.
+- Successful canonical replay used **ZERO new OddsAPI acquisition**; `pricing_status=PRESERVED_REPLAY`, not current live prices.
+- Final board: **1,472 priced offer rows / 754 player-market rows / 0 unresolved positions**; DAL-TB retained with **254 priced rows**.
+- Week-5 30-team bye/QB-C2, raw-32-vs-active-30 quality scope, bye-week injury scope, preserved replay provenance, backup-QB quarantine, stale non-core replay rows, and T-75 acquisition-time lock are operationally closed without model-science changes.
+- PR **#679** is stale/superseded by current main; do not merge it blindly.
+- Research headline remains:
+  `OPPORTUNITY_DOMINANT_ACROSS_ALL_PRIMARY_MARKETS__INDIVIDUAL_ROLE_SHARE_ALLOCATION_NEXT`.
+- Do not rerun the completed all-player W1-W4 replay, Player Landscape Transmission Audit, or Player Output Component Decomposition.
+- WR/TE Target Share Trajectory exact historical OOS-fold integration is completed and supported:
+  - run **37783801061** SUCCESS
+  - artifact **11552284671**
+  - digest `sha256:6d4e9a2a87fc2b364a847e6328d201f42fa4bf63b10f87416001c4fec8de03d2`
+  - disposition `HISTORICAL_OOS_FOLD_TRAJECTORY_INTEGRATION_SUPPORTED`
+  - support is real but small; no retuning/automatic promotion; exact >=4-prior-game rule remains frozen.
+- RB receiving-room retrospective support remains valid; RB receiving + carry/snap Week-5 locks remain frozen; preserve M96 stop.
+- **Next unresolved research seam is QB team pass opportunity / pregame intent / uncertainty.**
+- Do not reopen generic QB mean/YPA, schedule/rest D1, PBP D2, WR-R3, Coverage-v2, WR-CB, route/YPRR parity, generic Vegas/game-script, M95A/B, M96, or failed FMT formulas unchanged.
+- Public-intent manual crawl remains paused; only an automation-first, hard-time-capped V1B is legal if revisited.
+- No paid OddsAPI without explicit user authorization.
+- Verify live Actions before any running/queued status claim.
+
+### Exact next action
+
+1. Read `AGENTS.md`, this checkpoint, then the detailed handoff above.
+2. Reconcile live main, PR #672, stale/superseded #679, newest Issue #535 comments, and Actions.
+3. Do not repull Week-5 odds.
+4. Resume research **before game-day interruption**:
+   - first reconcile the completed QB opportunity/attempt chain and anti-retest stop-rules;
+   - identify whether PD3/internal disagreement remains unfinished;
+   - choose only genuinely new pregame information or a bounded calibration/uncertainty candidate;
+   - freeze contract/cohort/gates before scoring.
+5. Preserve the user's football-layer framing: matchup can matter through actual role/opportunity, but failed generic matchup multipliers are not to be rescued.
+
+**Resume rule:** AGENTS.md -> this newest checkpoint -> detailed 2026-10-08 Week5/research-frontier handoff -> newest Issue #535 comments -> live main/PRs/Actions. Do not recursively reread older handoffs unless a targeted anti-retest question requires one.
+
+
+---
 ## ACTIVE CHECKPOINT — 2026-10-08 — INDIVIDUAL OPPORTUNITY ROADMAP / HISTORICAL OOS SOURCE GATE
 
 This is the latest checkpoint. The prior 2026-10-08 opportunity-dominant scientific conclusion immediately below remains authoritative and is **not** superseded scientifically.
