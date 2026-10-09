@@ -20,6 +20,7 @@ from typing import Any
 import numpy as np
 
 from scripts.build._schedule_utils import get_nfl_schedule
+from scripts._opponent_map import canon_team
 from scripts.research.audit_qb_team_pass_intent_first_party_archive_transport_v1c import (
     DOMAINS,
     MAX_SITEMAPS_PER_TEAM,
@@ -150,8 +151,8 @@ def _build_universe() -> list[TeamWeek]:
         df = df[df["week"].astype(int).isin(SAMPLED_WEEKS)].copy()
         for _, r in df.iterrows():
             week = int(r["week"])
-            home = str(r["home"]).strip().upper()
-            away = str(r["away"]).strip().upper()
+            home = canon_team(str(r["home"]))
+            away = canon_team(str(r["away"]))
             ko = r["kickoff_utc"]
             kickoff = ko.isoformat() if getattr(ko, "isoformat", None) else str(ko)
             if not kickoff or kickoff.lower() in {"nat", "nan", "none"}:
