@@ -1,3 +1,160 @@
+# ACTIVE CHECKPOINT — 2026-10-08 — WEEK 5 CANONICAL PRESERVED-ODDS GREEN / RESEARCH FRONTIER PRESERVED
+
+**Read this detailed handoff next:**
+
+`docs/handoffs/NFL_HANDOFF_2026-10-08_WEEK5_CANONICAL_REPLAY_AND_RESEARCH_FRONTIER_CURRENT.md`
+
+**Compact next-chat prompt:**
+
+`docs/handoffs/NEXT_CHAT_PROMPT_2026-10-08_WEEK5_CANONICAL_REPLAY_AND_RESEARCH_FRONTIER.md`
+
+This supersedes all older checkpoints for immediate execution.
+
+## Current production state
+
+- canonical main at handoff:
+  `24704e5f1ef872ec86c36446d2c73f6d377c824c`
+- final canonical preserved-paid-odds Full Slate:
+  `37860592615` — **SUCCESS**
+- artifact:
+  `11585973062`
+- digest:
+  `sha256:bf52aa4bc30bf6e8cc6029a0a86c0f33cdfaa09f587c38a138f23cef6b7436f4`
+- original paid source:
+  run `37852811339`,
+  artifact `11582178322`,
+  digest `sha256:4948e08003fcab0f519b35bd4b23d8c895554e4faced993238575acdc5d2e765`
+- **ZERO second OddsAPI acquisition**.
+- final workbook:
+  - pricing status `PRESERVED_REPLAY`
+  - 1,472 priced offers
+  - 754 player-markets
+  - 0 unresolved-position rows
+  - sportsbook downstream-only
+- DAL-TB remains in final priced output via the acquisition-time pre-T75 replay lock.
+- replay prices are explicitly **not current** and `Bettable Now` is suppressed.
+- Week-5 bye/T-75/preserved-paid-odds production blocker is closed.
+
+Do not spend another OddsAPI credit unless explicitly authorized.
+
+PR warning:
+- #679 and #677 were still open when this checkpoint was written;
+- current main already contains the final successful replay solution;
+- do not blindly merge stale continuity/hotfix PRs; reconcile first.
+
+## Research state preserved from before Week-5 production urgency
+
+Headline:
+
+`OPPORTUNITY_DOMINANT_ACROSS_ALL_PRIMARY_MARKETS__INDIVIDUAL_ROLE_SHARE_ALLOCATION_NEXT`
+
+Research draft PR:
+- #672
+- branch `research-individual-opportunity-roadmap-2026-10-08`
+- result commit `af913a8bab0b7cbd68d835eb0e22709b46d14e67`
+
+Do not rerun completed all-player replay / landscape / decomposition / historical-availability work.
+
+### Opportunity diagnosis
+
+Corrected ACT-only decomposition:
+- QB team volume dominates: ~60.3% attempt-MAE oracle removal;
+- RB carry share ~64.5%;
+- RB target share ~76.5%;
+- WR target share ~68.6%;
+- TE target share ~77.1%.
+
+Player Output Component Decomposition:
+- opportunity oracle beat efficiency oracle in all 8 position/market cells.
+
+### QB
+
+The remaining QB frontier is team pass-opportunity / intent, **not** generic mean/YPA.
+
+Existing chain evidence:
+- TEAM_PASS_OPPORTUNITY ~68.29% pooled absolute chain mass;
+- ~76.24% dominant-row rate.
+
+Already tested/closed:
+- recycled same-data attempts models;
+- generic QB mean/YPA;
+- generic Vegas/game-script;
+- schedule/rest D1 did not translate to better pass-yard projections;
+- PBP D2 penalty/fourth-down state had no independent survivor.
+
+Only reopen with a genuinely new pregame pass-volume / game-plan / starter-intent source with as-of provenance.
+
+### RB
+
+Receiving-room W1-W4 impact confirmed:
+- targets +7.60%
+- receptions +3.83%
+- rec yards +2.89%
+- rush+rec +1.66%
+
+Week-5 receiving lock remains frozen.
+
+Carry/snap Week-5 lock:
+- run `37560824479`
+- preserve M96 retrospective stop;
+- do not back-apply to W1-W4.
+
+### WR / TE
+
+Target Share Trajectory V1:
+- signal run `37638269235`
+- Week-5 prospective lock `37654382316`
+- artifact `11497153776`
+- four prior same-season same-team target-team games remain mandatory.
+
+Historical OOS-fold integration:
+- `37783801061` SUCCESS
+- artifact `11552284671`
+- digest `sha256:6d4e9a2a87fc2b364a847e6328d201f42fa4bf63b10f87416001c4fec8de03d2`
+- disposition:
+  `HISTORICAL_OOS_FOLD_TRAJECTORY_INTEGRATION_SUPPORTED`
+- effect is real but small;
+- no retune and no automatic production promotion;
+- prospective confirmation remains required.
+
+### Closed/source-blocked
+
+- universal symmetric target-depth transform: failed;
+- route participation/YPRR historical parity: source blocked;
+- WR-R3 combined calibration: closed;
+- Coverage-v2: near-null;
+- direct historical WR-CB assignment: source blocked;
+- generic Vegas/game-script: closed;
+- simple Football Matchup Transmission integrations: failed;
+- M95A/M95B: closed;
+- M96 stop preserved.
+
+## Exact next action
+
+1. Verify live main / open PRs / Issue #535 / Issue #673 / Actions.
+2. If user wants Week-5 output, use artifact `11585973062`; do not call replayed prices current.
+3. If user says continue model research, resume PR #672 at the QB opportunity/source-gate frontier.
+4. Do not invent another same-data attempts model.
+5. Do not pivot to generic defense-vs-position averages; matchup/efficiency work must be incremental to the dominant opportunity/role problem.
+6. Preserve RB and WR/TE prospective locks.
+7. Do not grade Week-5 locks from partial Thursday outcomes unless the user explicitly moves to postgame grading.
+8. No paid OddsAPI without explicit authorization.
+
+## Memory-efficient start rule
+
+Read only:
+1. `AGENTS.md`
+2. this newest top checkpoint
+3. `docs/handoffs/NFL_HANDOFF_2026-10-08_WEEK5_CANONICAL_REPLAY_AND_RESEARCH_FRONTIER_CURRENT.md`
+4. newest Issue #535 comment
+5. newest Issue #673 comment
+6. live main / open PRs / Actions
+7. PR #672 targeted research docs only if resuming research
+
+Do not recursively read older handoffs.
+
+---
+
 # CURRENT NFL RESEARCH HANDOFF — READ FIRST
 GitHub is canonical; chat memory is secondary.
 
