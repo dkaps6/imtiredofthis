@@ -1,0 +1,80 @@
+name: Research QB First-Party Archive Transport V1C
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/QB_TEAM_PASS_INTENT_FIRST_PARTY_ARCHIVE_TRANSPORT_V1C_PLAN.md'
+      - 'scripts/research/audit_qb_team_pass_intent_first_party_archive_transport_v1c.py'
+      - 'tests/test_qb_team_pass_intent_first_party_archive_transport_v1c.py'
+      - '.github/workflows/research-qb-first-party-archive-transport-v1c.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-transport:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install focused audit dependencies
+        run: python -m pip install pytest pyyaml
+
+      - name: Compile source-only audit
+        run: |
+          python -m py_compile scripts/research/audit_qb_team_pass_intent_first_party_archive_transport_v1c.py
+          pytest -q tests/test_qb_team_pass_intent_first_party_archive_transport_v1c.py
+
+      - name: Run frozen 32-club first-party archive transport audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/qb-v1c
+          python scripts/research/audit_qb_team_pass_intent_first_party_archive_transport_v1c.py \
+            --out-dir /tmp/qb-v1c \
+            --workers 8
+
+      - name: Certify source-only governance and result schema
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open("/tmp/qb-v1c/qb_first_party_archive_transport_v1c_result.json"))
+          assert p["version"]=="QB_TEAM_PASS_INTENT_FIRST_PARTY_ARCHIVE_TRANSPORT_V1C", p
+          assert p["attempted_clubs"]==32, p
+          assert p["sportsbook_inputs_used"] is False, p
+          assert p["paid_oddsapi_calls"]==0, p
+          assert p["football_outcomes_read"]==0, p
+          assert p["model_residuals_read"]==0, p
+          assert p["week5_2026_outcomes_read"]==0, p
+          assert p["predictive_models_fit"]==0, p
+          assert p["production_changed"] is False, p
+          assert p["timestamp_safe_rows_certified"]==0, p
+          assert p["predictive_candidate_authorized"] is False, p
+          assert p["disposition"] in {
+              "FIRST_PARTY_ARCHIVE_TRANSPORT_QUALIFIED_FOR_SEMANTIC_AUDIT",
+              "FIRST_PARTY_ARCHIVE_TRANSPORT_NOT_QUALIFIED",
+          }, p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload frozen source audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-first-party-archive-transport-v1c
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/qb-v1c/
