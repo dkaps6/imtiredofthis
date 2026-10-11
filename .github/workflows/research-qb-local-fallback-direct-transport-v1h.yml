@@ -1,0 +1,124 @@
+name: Research QB Local Fallback Direct Transport V1H
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/QB_TEAM_PASS_INTENT_LOCAL_FALLBACK_DIRECT_TRANSPORT_V1H_PLAN.md'
+      - 'scripts/research/audit_qb_team_pass_intent_local_fallback_direct_transport_v1h.py'
+      - 'tests/test_qb_team_pass_intent_local_fallback_direct_transport_v1h.py'
+      - '.github/workflows/research-qb-local-fallback-direct-transport-v1h.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  local-fallback-transport:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install repository test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Compile and test frozen V1H mechanics
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_qb_team_pass_intent_local_fallback_direct_transport_v1h.py
+          pytest -q tests/test_qb_team_pass_intent_local_fallback_direct_transport_v1h.py
+
+      - name: Verify exact preserved V1G artifact authority
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11593130438 --jq '.id')" = "11593130438"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11593130438 --jq '.workflow_run.id')" = "37875606789"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11593130438 --jq '.digest')" = "sha256:385810c787da55f1da6678c4722757f0c20147ef4cf7db32398e50c3d8a0257c"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11593130438 --jq '.expired')" = "false"
+
+      - name: Download exact preserved V1G source screen
+        uses: actions/download-artifact@v4
+        with:
+          name: qb-full-official-first-source-screen-v1g
+          path: /tmp/v1g
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 37875606789
+
+      - name: Certify exact V1G row input
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("/tmp/v1g/qb_intent_full_official_screen_v1g_rows.json")
+          rows=json.loads(p.read_text())
+          assert len(rows)==536, len(rows)
+          states={}
+          for r in rows:
+              states[r["screen_state"]]=states.get(r["screen_state"],0)+1
+          assert states.get("OFFICIAL_AUTO_REVIEW_READY")==378, states
+          assert states.get("OFFICIAL_UNRESOLVED_REQUIRES_FALLBACK_OR_REVIEW")==158, states
+          print(states)
+          PY
+
+      - name: Run frozen direct local-publisher transport audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/qb-v1h
+          python scripts/research/audit_qb_team_pass_intent_local_fallback_direct_transport_v1h.py \
+            --v1g-rows /tmp/v1g/qb_intent_full_official_screen_v1g_rows.json \
+            --out-dir /tmp/qb-v1h \
+            --workers 20
+
+      - name: Certify source-only V1H result contract
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open("/tmp/qb-v1h/qb_intent_local_fallback_transport_v1h_result.json"))
+          assert p["version"]=="QB_TEAM_PASS_INTENT_LOCAL_FALLBACK_DIRECT_TRANSPORT_V1H", p
+          assert p["v1g_rows"]==536, p
+          assert p["v1g_official_auto_review_ready"]==378, p
+          assert p["unresolved_rows"]==158, p
+          assert p["frozen_franchises"]==32, p
+          assert p["frozen_publishers_declared"]==64, p
+          assert p["public_search_engine_html_contacted"] is False, p
+          assert p["external_search_api_used"] is False, p
+          assert p["football_outcomes_read"]==0, p
+          assert p["model_residuals_read"]==0, p
+          assert p["sportsbook_inputs_used"] is False, p
+          assert p["paid_oddsapi_calls"]==0, p
+          assert p["week5_2026_outcomes_read"]==0, p
+          assert p["football_predictive_models_fit"]==0, p
+          assert p["production_changed"] is False, p
+          assert p["final_source_qualification_claimed"] is False, p
+          assert p["predictive_candidate_authorized"] is False, p
+          assert p["disposition"] in {"LOCAL_DIRECT_TRANSPORT_READY","LOCAL_DIRECT_TRANSPORT_PARTIAL"}, p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload frozen V1H transport artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-local-fallback-direct-transport-v1h
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/qb-v1h/
