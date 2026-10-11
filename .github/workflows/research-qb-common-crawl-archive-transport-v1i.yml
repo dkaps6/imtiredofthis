@@ -1,0 +1,125 @@
+name: Research QB Common Crawl Archive Transport V1I
+
+on:
+  push:
+    branches:
+      - research-individual-opportunity-roadmap-2026-10-08
+    paths:
+      - 'docs/research/QB_TEAM_PASS_INTENT_COMMON_CRAWL_ARCHIVE_TRANSPORT_V1I_PLAN.md'
+      - 'scripts/research/audit_qb_team_pass_intent_common_crawl_archive_transport_v1i.py'
+      - 'tests/test_qb_team_pass_intent_common_crawl_archive_transport_v1i.py'
+      - '.github/workflows/research-qb-common-crawl-archive-transport-v1i.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  common-crawl-archive-transport:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install repository test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyyaml
+
+      - name: Compile and test frozen V1I mechanics
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m py_compile scripts/research/audit_qb_team_pass_intent_common_crawl_archive_transport_v1i.py
+          pytest -q tests/test_qb_team_pass_intent_common_crawl_archive_transport_v1i.py
+
+      - name: Verify exact repaired V1H artifact authority
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11714987323 --jq '.id')" = "11714987323"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11714987323 --jq '.workflow_run.id')" = "38172568766"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11714987323 --jq '.digest')" = "sha256:860dda964846625a3a2188acd5951c3092b28ca36aa882a1ab72a32554a1d469"
+          test "$(gh api repos/${{ github.repository }}/actions/artifacts/11714987323 --jq '.expired')" = "false"
+
+      - name: Download exact repaired V1H transport artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: qb-local-fallback-direct-transport-v1h
+          path: /tmp/v1h
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 38172568766
+
+      - name: Certify exact repaired V1H row input
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("/tmp/v1h/qb_intent_local_fallback_transport_v1h_rows.json")
+          rows=json.loads(p.read_text())
+          assert len(rows)==158, len(rows)
+          direct=sum(bool(r["has_reachable_publisher"]) for r in rows)
+          assert direct==123, direct
+          assert len(rows)-direct==35, len(rows)-direct
+          miss={}
+          for r in rows:
+              if not r["has_reachable_publisher"]:
+                  miss[r["team"]]=miss.get(r["team"],0)+1
+          assert miss=={"DAL":18,"GB":14,"SEA":3}, miss
+          print({"rows":len(rows),"direct":direct,"archive_needed":35,"miss":miss})
+          PY
+
+      - name: Run frozen Common Crawl archive transport audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          rm -rf /tmp/qb-v1i
+          python scripts/research/audit_qb_team_pass_intent_common_crawl_archive_transport_v1i.py             --v1h-rows /tmp/v1h/qb_intent_local_fallback_transport_v1h_rows.json             --out-dir /tmp/qb-v1i             --min-request-interval 0.60
+
+      - name: Certify source-only V1I result contract
+        run: |
+          python - <<'PY'
+          import json
+          p=json.load(open("/tmp/qb-v1i/qb_intent_common_crawl_archive_transport_v1i_result.json"))
+          assert p["version"]=="QB_TEAM_PASS_INTENT_COMMON_CRAWL_ARCHIVE_TRANSPORT_V1I", p
+          assert p["unresolved_rows"]==158, p
+          assert p["direct_ready_rows"]==123, p
+          assert p["archive_needed_rows"]==35, p
+          assert p["combined_transport_ready_rows"]>=123, p
+          assert p["publisher_access_control_bypass_attempted"] is False, p
+          assert p["football_outcomes_read"]==0, p
+          assert p["model_residuals_read"]==0, p
+          assert p["sportsbook_inputs_used"] is False, p
+          assert p["paid_oddsapi_calls"]==0, p
+          assert p["week5_2026_outcomes_read"]==0, p
+          assert p["football_predictive_models_fit"]==0, p
+          assert p["production_changed"] is False, p
+          assert p["final_source_qualification_claimed"] is False, p
+          assert p["predictive_candidate_authorized"] is False, p
+          assert p["disposition"] in {
+              "COMMON_CRAWL_ARCHIVE_TRANSPORT_RESCUES_V1H_GATE",
+              "COMMON_CRAWL_ARCHIVE_TRANSPORT_DOES_NOT_RESCUE_V1H_GATE",
+          }, p
+          print(json.dumps(p,indent=2,sort_keys=True))
+          PY
+
+      - name: Strict repository audit
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/utils/audit_repo.py --strict
+
+      - name: Upload frozen V1I archive transport artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qb-common-crawl-archive-transport-v1i
+          retention-days: 90
+          if-no-files-found: warn
+          path: /tmp/qb-v1i/
