@@ -184,7 +184,7 @@ def _parse_sitemap(raw: bytes) -> tuple[str, list[tuple[str, str]]]:
     except ET.ParseError as strict_exc:
         text = raw.decode("utf-8", errors="replace")
         root_match = re.search(
-            r"<(?:[A-Za-z0-9_.-]+:)?(sitemapindex|urlset)\\b",
+            r"<(?:[A-Za-z0-9_.-]+:)?(sitemapindex|urlset)\b",
             text,
             flags=re.IGNORECASE,
         )
@@ -192,8 +192,8 @@ def _parse_sitemap(raw: bytes) -> tuple[str, list[tuple[str, str]]]:
 
         def _field(block: str, name: str) -> str:
             match = re.search(
-                rf"<(?:[A-Za-z0-9_.-]+:)?{name}\\b[^>]*>(.*?)"
-                rf"</(?:[A-Za-z0-9_.-]+:)?{name}\\s*>",
+                rf"<(?:[A-Za-z0-9_.-]+:)?{name}\b[^>]*>(.*?)"
+                rf"</(?:[A-Za-z0-9_.-]+:)?{name}\s*>",
                 block,
                 flags=re.IGNORECASE | re.DOTALL,
             )
@@ -207,8 +207,8 @@ def _parse_sitemap(raw: bytes) -> tuple[str, list[tuple[str, str]]]:
         if kind:
             item = "sitemap" if kind == "sitemapindex" else "url"
             blocks = re.findall(
-                rf"<(?:[A-Za-z0-9_.-]+:)?{item}\\b[^>]*>(.*?)"
-                rf"</(?:[A-Za-z0-9_.-]+:)?{item}\\s*>",
+                rf"<(?:[A-Za-z0-9_.-]+:)?{item}\b[^>]*>(.*?)"
+                rf"</(?:[A-Za-z0-9_.-]+:)?{item}\s*>",
                 text,
                 flags=re.IGNORECASE | re.DOTALL,
             )
@@ -226,8 +226,8 @@ def _parse_sitemap(raw: bytes) -> tuple[str, list[tuple[str, str]]]:
         locs = [
             html.unescape(re.sub(r"<[^>]+>", "", value)).strip()
             for value in re.findall(
-                r"<(?:[A-Za-z0-9_.-]+:)?loc\\b[^>]*>(.*?)"
-                r"</(?:[A-Za-z0-9_.-]+:)?loc\\s*>",
+                r"<(?:[A-Za-z0-9_.-]+:)?loc\b[^>]*>(.*?)"
+                r"</(?:[A-Za-z0-9_.-]+:)?loc\s*>",
                 text,
                 flags=re.IGNORECASE | re.DOTALL,
             )
