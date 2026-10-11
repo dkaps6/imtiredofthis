@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import gzip
+import html
 import json
 import re
 import urllib.error
@@ -172,7 +173,53 @@ def _child_text(elem: ET.Element, name: str) -> str:
 
 
 def _parse_sitemap(raw: bytes) -> tuple[str, list[tuple[str, str]]]:
-    root = ET.fromstring(raw)
+    """Parse standards-compliant XML, with one generic malformed-XML fallback.
+
+    Some attributable publishers expose sitemap-shaped XML with stray invalid
+    characters elsewhere in the document. The fallback remains source-agnostic:
+    it accepts only sitemapindex/urlset roots and extracts loc/lastmod fields.
+    """
+    try:
+        root = ET.fromstring(raw)
+    except ET.ParseError as strict_exc:
+        text = raw.decode("utf-8", errors="replace")
+        root_match = re.search(
+            r"<(?:[A-Za-z0-9_.-]+:)?(sitemapindex|urlset)\\b",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if not root_match:
+            raise strict_exc
+        kind = root_match.group(1).lower()
+        item = "sitemap" if kind == "sitemapindex" else "url"
+        blocks = re.findall(
+            rf"<(?:[A-Za-z0-9_.-]+:)?{item}\\b[^>]*>(.*?)"
+            rf"</(?:[A-Za-z0-9_.-]+:)?{item}\\s*>",
+            text,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+
+        def _field(block: str, name: str) -> str:
+            match = re.search(
+                rf"<(?:[A-Za-z0-9_.-]+:)?{name}\\b[^>]*>(.*?)"
+                rf"</(?:[A-Za-z0-9_.-]+:)?{name}\\s*>",
+                block,
+                flags=re.IGNORECASE | re.DOTALL,
+            )
+            if not match:
+                return ""
+            value = re.sub(r"<[^>]+>", "", match.group(1))
+            return html.unescape(value).strip()
+
+        rows: list[tuple[str, str]] = []
+        for block in blocks:
+            loc = _field(block, "loc")
+            if loc:
+                rows.append((loc, _field(block, "lastmod")))
+        if not rows:
+            raise strict_exc
+        return kind, rows
+
     kind = _tag(root)
     if kind not in {"sitemapindex", "urlset"}:
         raise RuntimeError(f"unsupported_xml_root:{kind}")
@@ -183,7 +230,6 @@ def _parse_sitemap(raw: bytes) -> tuple[str, list[tuple[str, str]]]:
             continue
         rows.append((loc, _child_text(child, "lastmod")))
     return kind, rows
-
 
 def _robots(domain: str) -> tuple[list[str], list[str]]:
     errors: list[str] = []

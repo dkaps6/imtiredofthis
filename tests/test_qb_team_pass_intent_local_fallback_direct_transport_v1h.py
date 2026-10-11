@@ -15,6 +15,7 @@ from scripts.research.audit_qb_team_pass_intent_local_fallback_direct_transport_
     _candidate_urls,
     _evaluate,
     _load_v1g,
+    _parse_sitemap,
 )
 from scripts.research.audit_qb_team_pass_intent_gold_semantic_extractor_v1e import TEAM_SYNONYMS
 
@@ -120,3 +121,20 @@ def test_evaluate_ready_when_frozen_transport_gates_clear():
     assert summary["disposition"] == "LOCAL_DIRECT_TRANSPORT_READY"
     assert summary["gates"]["exact_unresolved_input_158"] is True
     assert summary["gates"]["frozen_map_exactly_32x2"] is True
+
+
+def test_malformed_sitemap_xml_uses_generic_tolerant_fallback():
+    raw = b"""<?xml version="1.0" encoding="UTF-8"?>
+    <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+      <url>
+        <loc>https://www.dallasnews.com/sports/cowboys/2024/10/03/week-5-steelers/</loc>
+        <lastmod>2024-10-03T12:00:00+00:00</lastmod>
+        <news>A & B</news>
+      </url>
+    </urlset>"""
+    kind, rows = _parse_sitemap(raw)
+    assert kind == "urlset"
+    assert rows == [(
+        "https://www.dallasnews.com/sports/cowboys/2024/10/03/week-5-steelers/",
+        "2024-10-03T12:00:00+00:00",
+    )]
