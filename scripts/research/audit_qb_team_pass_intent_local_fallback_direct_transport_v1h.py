@@ -173,36 +173,27 @@ def _child_text(elem: ET.Element, name: str) -> str:
 
 
 def _parse_sitemap(raw: bytes) -> tuple[str, list[tuple[str, str]]]:
-    """Parse standards-compliant XML, with one generic malformed-XML fallback.
+    """Parse sitemap XML with generic malformed-document recovery.
 
-    Some attributable publishers expose sitemap-shaped XML with stray invalid
-    characters elsewhere in the document. The fallback remains source-agnostic:
-    it accepts only sitemapindex/urlset roots and extracts loc/lastmod fields.
+    Recovery is source-agnostic. It never discovers URLs outside the fetched
+    publisher sitemap response: it only extracts sitemap loc/lastmod fields
+    already present in that response.
     """
     try:
         root = ET.fromstring(raw)
     except ET.ParseError as strict_exc:
         text = raw.decode("utf-8", errors="replace")
         root_match = re.search(
-            r"<(?:[A-Za-z0-9_.-]+:)?(sitemapindex|urlset)\b",
+            r"<(?:[A-Za-z0-9_.-]+:)?(sitemapindex|urlset)\\b",
             text,
             flags=re.IGNORECASE,
         )
-        if not root_match:
-            raise strict_exc
-        kind = root_match.group(1).lower()
-        item = "sitemap" if kind == "sitemapindex" else "url"
-        blocks = re.findall(
-            rf"<(?:[A-Za-z0-9_.-]+:)?{item}\b[^>]*>(.*?)"
-            rf"</(?:[A-Za-z0-9_.-]+:)?{item}\s*>",
-            text,
-            flags=re.IGNORECASE | re.DOTALL,
-        )
+        kind = root_match.group(1).lower() if root_match else ""
 
         def _field(block: str, name: str) -> str:
             match = re.search(
-                rf"<(?:[A-Za-z0-9_.-]+:)?{name}\b[^>]*>(.*?)"
-                rf"</(?:[A-Za-z0-9_.-]+:)?{name}\s*>",
+                rf"<(?:[A-Za-z0-9_.-]+:)?{name}\\b[^>]*>(.*?)"
+                rf"</(?:[A-Za-z0-9_.-]+:)?{name}\\s*>",
                 block,
                 flags=re.IGNORECASE | re.DOTALL,
             )
@@ -211,14 +202,49 @@ def _parse_sitemap(raw: bytes) -> tuple[str, list[tuple[str, str]]]:
             value = re.sub(r"<[^>]+>", "", match.group(1))
             return html.unescape(value).strip()
 
-        rows: list[tuple[str, str]] = []
-        for block in blocks:
-            loc = _field(block, "loc")
-            if loc:
-                rows.append((loc, _field(block, "lastmod")))
-        if not rows:
+        # First prefer paired sitemap/url blocks when the malformed document
+        # still preserves them.
+        if kind:
+            item = "sitemap" if kind == "sitemapindex" else "url"
+            blocks = re.findall(
+                rf"<(?:[A-Za-z0-9_.-]+:)?{item}\\b[^>]*>(.*?)"
+                rf"</(?:[A-Za-z0-9_.-]+:)?{item}\\s*>",
+                text,
+                flags=re.IGNORECASE | re.DOTALL,
+            )
+            rows: list[tuple[str, str]] = []
+            for block in blocks:
+                loc = _field(block, "loc")
+                if loc:
+                    rows.append((loc, _field(block, "lastmod")))
+            if rows:
+                return kind, rows
+
+        # Some publisher endpoints return malformed/truncated XML where the
+        # outer root or item closing tags are broken but loc fields survive.
+        # Recover only explicit <loc> values from that same response.
+        locs = [
+            html.unescape(re.sub(r"<[^>]+>", "", value)).strip()
+            for value in re.findall(
+                r"<(?:[A-Za-z0-9_.-]+:)?loc\\b[^>]*>(.*?)"
+                r"</(?:[A-Za-z0-9_.-]+:)?loc\\s*>",
+                text,
+                flags=re.IGNORECASE | re.DOTALL,
+            )
+        ]
+        locs = [u for u in locs if u.startswith(("http://", "https://"))]
+        if not locs:
             raise strict_exc
-        return kind, rows
+
+        # Infer index-vs-urlset generically from the recovered locators. A
+        # sitemap-heavy locator set is an index; otherwise it is a URL set.
+        sitemap_like = sum(
+            1 for u in locs
+            if "sitemap" in urllib.parse.urlparse(u).path.lower()
+            or urllib.parse.urlparse(u).path.lower().endswith((".xml", ".xml.gz"))
+        )
+        inferred_kind = "sitemapindex" if sitemap_like >= max(1, len(locs) // 2) else "urlset"
+        return inferred_kind, [(u, "") for u in locs]
 
     kind = _tag(root)
     if kind not in {"sitemapindex", "urlset"}:
@@ -279,12 +305,17 @@ def _probe_domain(domain: str) -> tuple[bool, list[str]]:
 
 
 def _historical_sitemap_hint(url: str, lastmod: str) -> bool:
-    text = f"{url} {lastmod}".lower()
+    """Keep sitemap traversal based on archive identity, not update timestamp.
+
+    A sitemap index can be updated in 2026 while still containing historical
+    2023-25 article URLs. Therefore child-sitemap lastmod is discovery metadata
+    only and must not exclude an otherwise generic archive path.
+    """
+    text = url.lower()
     if any(y in text for y in ("2023", "2024", "2025")):
         return True
-    # Generic archive indexes without year hints must remain traversable.
+    # Exclude only child sitemap URLs explicitly labeled as a different year.
     return not bool(re.search(r"20(?:1[0-9]|2[0-2]|2[6-9]|3[0-9])", text))
-
 
 def _enumerate_domain(domain: str) -> tuple[PublisherResult, list[SitemapEntry]]:
     probe, probe_errors = _probe_domain(domain)
