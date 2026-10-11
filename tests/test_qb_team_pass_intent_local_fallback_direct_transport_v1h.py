@@ -14,6 +14,7 @@ from scripts.research.audit_qb_team_pass_intent_local_fallback_direct_transport_
     SitemapEntry,
     _candidate_urls,
     _evaluate,
+    _historical_sitemap_hint,
     _load_v1g,
     _parse_sitemap,
 )
@@ -138,3 +139,32 @@ def test_malformed_sitemap_xml_uses_generic_tolerant_fallback():
         "https://www.dallasnews.com/sports/cowboys/2024/10/03/week-5-steelers/",
         "2024-10-03T12:00:00+00:00",
     )]
+
+
+def test_malformed_sitemap_without_valid_outer_root_recovers_explicit_loc_fields():
+    raw = b"""<broken>
+      <loc>https://www.example.com/sitemap-2024.xml</loc>
+      <loc>https://www.example.com/sitemap-2025.xml</loc>
+      <bad>& stray</bad>
+    """
+    kind, rows = _parse_sitemap(raw)
+    assert kind == "sitemapindex"
+    assert rows == [
+        ("https://www.example.com/sitemap-2024.xml", ""),
+        ("https://www.example.com/sitemap-2025.xml", ""),
+    ]
+
+
+def test_historical_sitemap_hint_does_not_reject_generic_archive_for_current_lastmod():
+    assert _historical_sitemap_hint(
+        "https://publisher.test/sitemap-archive.xml",
+        "2026-10-11T12:00:00Z",
+    ) is True
+    assert _historical_sitemap_hint(
+        "https://publisher.test/sitemap-2024.xml",
+        "2026-10-11T12:00:00Z",
+    ) is True
+    assert _historical_sitemap_hint(
+        "https://publisher.test/sitemap-2026.xml",
+        "2026-10-11T12:00:00Z",
+    ) is False
